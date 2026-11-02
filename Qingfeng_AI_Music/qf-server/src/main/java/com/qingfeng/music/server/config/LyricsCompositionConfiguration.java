@@ -1,0 +1,15 @@
+package com.qingfeng.music.server.config;
+import com.qingfeng.music.lyrics.application.*;
+import com.qingfeng.music.lyrics.api.LyricsApi;
+import com.qingfeng.music.work.api.WorkApi;
+import com.qingfeng.music.infrastructure.provider.DeepSeekLyricsWriter;
+import com.qingfeng.music.infrastructure.persistence.lyrics.*;
+import org.springframework.context.annotation.*;
+import org.springframework.core.env.Environment;
+import org.springframework.jdbc.core.JdbcTemplate;
+@Configuration(proxyBeanMethods=false)
+public class LyricsCompositionConfiguration {
+    @Bean LyricsWriter lyricsWriter(Environment env){return new DeepSeekLyricsWriter(env.getProperty("qingfeng.providers.deepseek.api-key",env.getProperty("DEEPSEEK_API_KEY","")),env.getProperty("qingfeng.providers.deepseek.model","deepseek-flash"));}
+    @Bean @Profile({"mysql","test"}) CompositionRequests compositionRequests(JdbcTemplate jdbc){return new JdbcCompositionRequests(jdbc);}
+    @Bean @Profile({"mysql","test"}) LyricsCompositionService lyricsCompositionService(WorkApi works,LyricsApi lyrics,LyricsMapper mapper,LyricsWriter writer,CompositionRequests requests,Environment env){return new LyricsCompositionService(works,lyrics,new MyBatisLyricsRepository(mapper),writer,requests,env.getProperty("qingfeng.lyrics.enabled",Boolean.class,false));}
+}

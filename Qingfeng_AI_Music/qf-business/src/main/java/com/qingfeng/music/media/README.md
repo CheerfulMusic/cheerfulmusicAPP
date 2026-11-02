@@ -1,0 +1,5 @@
+# media
+
+媒体登记与授权访问。
+
+已实现MediaApi上传归档、归属读取、播放/下载内容描述；MediaFileStore由本地文件适配，上传标记IMPORTED。SharedMediaAccess只供sharing校验有效分享后调用，不能直接映射公开接口。模型结果下载归档与OSS尚未实现。持久化和本地文件实现位于infrastructure。

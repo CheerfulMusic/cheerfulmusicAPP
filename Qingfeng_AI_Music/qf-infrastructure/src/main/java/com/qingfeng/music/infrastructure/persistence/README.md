@@ -1,0 +1,1 @@
+各领域Repository实现、Mapper与数据库PO；禁止Web层直接调用。

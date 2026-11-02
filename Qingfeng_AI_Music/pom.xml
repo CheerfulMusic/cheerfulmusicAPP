@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <parent><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-parent</artifactId><version>4.1.2</version><relativePath/></parent>
+  <groupId>com.qingfeng</groupId><artifactId>qingfeng-music-parent</artifactId><version>0.1.0-SNAPSHOT</version><packaging>pom</packaging>
+  <name>Qingfeng Music</name><description>青风音乐模块化单体后端</description>
+  <properties><java.version>17</java.version><mybatis.version>4.0.0</mybatis.version><aliyun-oss.version>3.18.4</aliyun-oss.version><project.build.sourceEncoding>UTF-8</project.build.sourceEncoding></properties>
+  <modules><module>qf-common</module><module>qf-business</module><module>qf-infrastructure</module><module>qf-server</module></modules>
+  <dependencyManagement><dependencies>
+    <dependency><groupId>com.qingfeng</groupId><artifactId>qf-common</artifactId><version>${project.version}</version></dependency>
+    <dependency><groupId>com.qingfeng</groupId><artifactId>qf-business</artifactId><version>${project.version}</version></dependency>
+    <dependency><groupId>com.qingfeng</groupId><artifactId>qf-infrastructure</artifactId><version>${project.version}</version></dependency>
+    <dependency><groupId>org.mybatis.spring.boot</groupId><artifactId>mybatis-spring-boot-starter</artifactId><version>${mybatis.version}</version></dependency>
+    <dependency><groupId>com.aliyun.oss</groupId><artifactId>aliyun-sdk-oss</artifactId><version>${aliyun-oss.version}</version></dependency>
+  </dependencies></dependencyManagement>
+</project>

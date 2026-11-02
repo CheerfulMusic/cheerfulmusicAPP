@@ -1,0 +1,4 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion><parent><groupId>com.qingfeng</groupId><artifactId>qingfeng-music-parent</artifactId><version>0.1.0-SNAPSHOT</version></parent><artifactId>qf-business</artifactId><description>领域规则、应用用例与端口</description>
+  <dependencies><dependency><groupId>com.qingfeng</groupId><artifactId>qf-common</artifactId></dependency><dependency><groupId>org.springframework</groupId><artifactId>spring-tx</artifactId></dependency><dependency><groupId>org.junit.jupiter</groupId><artifactId>junit-jupiter</artifactId><scope>test</scope></dependency></dependencies>
+</project>

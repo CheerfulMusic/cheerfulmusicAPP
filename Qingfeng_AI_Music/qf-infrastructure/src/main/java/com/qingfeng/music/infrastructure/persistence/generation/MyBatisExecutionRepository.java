@@ -1,0 +1,33 @@
+package com.qingfeng.music.infrastructure.persistence.generation;
+
+import com.qingfeng.music.generation.application.ExecutionRepository;
+import java.time.Instant;
+import java.util.*;
+
+public final class MyBatisExecutionRepository implements ExecutionRepository {
+    private final ExecutionMapper mapper;
+    public MyBatisExecutionRepository(ExecutionMapper mapper) { this.mapper=mapper; }
+    public boolean lockProvider(String provider,String token,Instant now,Instant until) { mapper.ensureProvider(provider);return mapper.lock(provider,token,now,until)==1; }
+    public void unlockProvider(String provider,String token) { mapper.unlock(provider,token); }
+    public Optional<Execution> claim(String provider,String token,Instant now,Instant until) {
+        for(String id:mapper.candidates(provider,now)) if(mapper.claim(id,token,now,until)==1) {
+            var row=mapper.find(id);
+            return Optional.of(new Execution(MyBatisTaskRepository.toTask(row),row.providerTaskId,row.audioUrl,row.submitAttempts,row.archiveAttempts,row.queryFailures,token));
+        }
+        return Optional.empty();
+    }
+    public void release(String task,String token) { mapper.release(task,token); }
+    public boolean renew(String provider,String task,String token,Instant now,Instant until){return mapper.renewProvider(provider,token,now,until)==1&&mapper.renewTask(task,token,now,until)==1;}
+    public boolean startSubmission(String task,String token,Instant now) { return mapper.start(task,token,now)==1; }
+    public void accepted(String task,String external,Instant now,Instant next) { mapper.accepted(task,external,now,next); }
+    public void unknown(String task,String token,String code,Instant now) { if(mapper.unknown(task,token,code,now)==1)mapper.interrupted(task,now); }
+    public void running(String task,String token,int failures,String code,Instant now,Instant next) { mapper.running(task,token,failures,code,now,next); }
+    public void saving(String task,String token,String url,Instant now) { mapper.saving(task,token,url,now); }
+    public void refreshAudioUrl(String task,String token,String url){mapper.refreshUrl(task,token,url);}
+    public void archiveFailed(String task,String token,int attempts,boolean terminal,Instant now,Instant next) { mapper.archiveFailed(task,token,attempts,terminal?"FAILED":"SAVING",now,next); }
+    public void succeeded(String task,String token,String asset,Instant now) { mapper.succeeded(task,token,asset,now); }
+    public void failed(String task,String token,String code,Instant now) { mapper.failed(task,token,code,now); }
+    public boolean retryArchive(String work,String task,Instant now) { return mapper.retry(work,task,now)==1; }
+    public String attempt(String task,String phase,Instant now) { String id=UUID.randomUUID().toString();mapper.attempt(id,task,phase,now);return id; }
+    public void finishAttempt(String id,String outcome,String code,Instant now) { mapper.finish(id,outcome,code,now); }
+}

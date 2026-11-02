@@ -1,0 +1,1 @@
+在此实现TextGenerationProvider，不把供应商DTO泄漏到业务层。

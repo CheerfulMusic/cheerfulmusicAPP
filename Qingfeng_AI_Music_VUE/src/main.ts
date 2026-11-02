@@ -1,0 +1,15 @@
+import { createApp } from 'vue'
+import { createPinia } from 'pinia'
+import App from './app/App.vue'
+import { router } from './app/router'
+import './app/styles/theme-base.css'
+import './app/styles/home.css'
+import './app/styles/workspace.css'
+import './app/styles/work-detail.css'
+import './app/styles/consumer.css'
+import './app/styles/i18n.css'
+import './app/styles/generation-dialog.css'
+import { initializeLocale } from './shared/i18n'
+
+initializeLocale()
+createApp(App).use(createPinia()).use(router).mount('#app')

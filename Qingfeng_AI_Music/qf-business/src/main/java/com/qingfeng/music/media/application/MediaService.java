@@ -1,0 +1,53 @@
+package com.qingfeng.music.media.application;
+
+import com.qingfeng.music.media.api.*;
+import com.qingfeng.music.generation.application.port.GeneratedAudioArchive;
+import com.qingfeng.music.work.api.WorkApi;
+import com.qingfeng.music.common.exception.DomainException;
+import java.io.*;
+import java.time.Instant;
+import java.util.*;
+
+public class MediaService implements MediaApi, SharedMediaAccess, GeneratedAudioArchive {
+    private static final long MAX_AUDIO=20L*1024*1024;
+    private final WorkApi works;
+    private final MediaRepository repository;
+    private final MediaFileStore files;
+    private final long capacity;
+    public MediaService(WorkApi works,MediaRepository repository,MediaFileStore files,long capacity){
+        if(capacity<MAX_AUDIO)throw new IllegalArgumentException("个人容量不能小于单文件上限");
+        this.works=works;this.repository=repository;this.files=files;this.capacity=capacity;
+    }
+    public Asset importAudio(String owner,String work,InputStream input){works.get(owner,work);return save(work,"IMPORTED",null,input);}
+    public String store(String task,String work,InputStream input){
+        var existing=repository.findGenerated(task);
+        if(existing.isPresent())return existing.get().asset().id();
+        return save(work,"GENERATED",task,input).id();
+    }
+    private Asset save(String work,String origin,String task,InputStream input){
+        // 先原子预留单文件最大容量，阻止并发上传绕过总量限制；只结算实际登记成功的字节。
+        if(!repository.reserve(work,MAX_AUDIO,capacity))throw new DomainException("STORAGE_QUOTA_EXCEEDED","作品音频容量不足，请联系维护人员扩容");
+        MediaFileStore.Saved saved=null;long committed=0;
+        try{
+            saved=files.save(input);
+            var asset=new Asset(UUID.randomUUID().toString(),work,origin,saved.contentType(),saved.size(),saved.sha256(),Instant.now());
+            if(task==null){repository.insert(asset,saved.key());committed=saved.size();return asset;}
+            var effective=repository.insertGenerated(asset,saved.key(),task);
+            if(effective.storageKey().equals(saved.key()))committed=saved.size();
+            return effective.asset();
+        }catch(IOException e){throw new DomainException("MEDIA_STORAGE_UNAVAILABLE","音频保存失败，可以稍后重试");}
+        finally{
+            try{if(saved!=null&&committed==0)files.discard(saved.key());}
+            catch(IOException cleanup){/* 孤儿文件由停机维护扫描隔离，避免覆盖原始数据库错误。 */}
+            finally{repository.release(work,MAX_AUDIO-committed);}
+        }
+    }
+    public Asset get(String owner,String work,String id){works.get(owner,work);return find(work,id).asset();}
+    public List<Asset> list(String owner,String work){works.get(owner,work);return repository.list(work);}
+    public Content open(String owner,String work,String id){works.get(owner,work);return content(work,id);}
+    public Content content(String work,String id){
+        var stored=find(work,id);if(!files.exists(stored.storageKey()))throw new DomainException("MEDIA_NOT_FOUND","音频文件不存在，请联系维护人员恢复备份");
+        var asset=stored.asset();return new Content(asset.byteSize(),asset.contentType(),asset.id()+(asset.contentType().equals("audio/wav")?".wav":".mp3"),()->files.open(stored.storageKey()));
+    }
+    private MediaRepository.Stored find(String work,String id){return repository.find(work,id).orElseThrow(()->new DomainException("MEDIA_NOT_FOUND","音频不存在"));}
+}

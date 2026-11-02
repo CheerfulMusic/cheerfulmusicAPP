@@ -1,0 +1,12 @@
+package com.qingfeng.music.infrastructure.persistence.work;
+
+import org.apache.ibatis.annotations.*;
+import java.util.List;
+
+@Mapper
+public interface WorkMapper {
+    @Insert("INSERT INTO music_work(id,owner_id,recipient,occasion,story,message,style,title,version,created_at,updated_at) VALUES(#{id},#{ownerId},#{recipient},#{occasion},#{story},#{message},#{style},#{title},#{version},#{createdAt},#{updatedAt})") void insert(WorkRow row);
+    @Update("UPDATE music_work SET recipient=#{row.recipient},occasion=#{row.occasion},story=#{row.story},message=#{row.message},style=#{row.style},title=#{row.title},version=#{row.version},updated_at=#{row.updatedAt} WHERE id=#{row.id} AND owner_id=#{row.ownerId} AND version=#{expected}") int update(@Param("row") WorkRow row,@Param("expected") long expected);
+    @Select("SELECT * FROM music_work WHERE owner_id=#{owner} AND id=#{id}") WorkRow find(@Param("owner") String owner,@Param("id") String id);
+    @Select("SELECT * FROM music_work WHERE owner_id=#{owner} ORDER BY updated_at DESC,id DESC LIMIT #{limit} OFFSET #{offset}") List<WorkRow> list(@Param("owner") String owner,@Param("offset") int offset,@Param("limit") int limit);
+}

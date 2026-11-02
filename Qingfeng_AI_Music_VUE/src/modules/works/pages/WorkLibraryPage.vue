@@ -1,0 +1,10 @@
+<script setup lang="ts">
+import { t, formatDate } from '../../../shared/i18n/index'
+import { onMounted, ref } from 'vue'
+import { listWorks } from '../api/works'
+import type { Work } from '../../studio'
+const works = ref<Work[]>([]), error = ref(''), loading = ref(false), page = ref(0)
+async function load(target = page.value) { loading.value = true; error.value = ''; try { works.value = await listWorks(target); page.value = target } catch (e) { error.value = e instanceof Error ? e.message : '读取作品失败' } finally { loading.value = false } }
+onMounted(() => load())
+</script>
+<template><h1>{{ t('把每一份心意，留在歌里。') }}</h1><p class="backend-state">{{ t('写给TA的故事和歌曲，都收藏在这里。换设备时，可以用找回码继续。') }}</p><div class="actions"><RouterLink class="button" to="/create">{{ t('再写一首送给TA') }}</RouterLink><button class="button secondary" :disabled="loading" @click="load()">{{ t('刷新作品') }}</button></div><p v-if="loading" class="notice" role="status">{{ t('正在读取作品…') }}</p><p v-else-if="error" class="notice error" role="alert">{{ t(error) }}</p><div v-else-if="works.length" class="works-grid"><article v-for="work in works" :key="work.id" class="module-card work-item"><h2>{{ work.title || t("写给{p0}的一首歌", { p0: work.recipient }) }}</h2><p class="meta">{{ t(work.occasion) }} · {{ t(work.style) }} {{ t('· 草稿') }}</p><p class="summary">{{ work.story || t("这个故事，等你慢慢写。") }}</p><p class="meta">{{ t('更新于') }} {{ formatDate(work.updatedAt) }}</p><div class="actions"><RouterLink class="button" :to="`/works/${work.id}`">{{ t('查看作品 ↗') }}</RouterLink><RouterLink class="button secondary" :to="{path:'/create',query:{work:work.id}}">{{ t('修改故事') }}</RouterLink></div></article></div><div v-else class="module-card"><h2>{{ page ? t("这一页还没有作品") : t("第一首歌，从你的故事开始。") }}</h2><p>{{ t('保存草稿后，可以在这里找到它。') }}</p></div><div class="actions"><button v-if="page>0" class="button secondary" :disabled="loading" @click="load(page-1)">{{ t('上一页') }}</button><button v-if="works.length===20" class="button secondary" :disabled="loading" @click="load(page+1)">{{ t('下一页') }}</button></div></template>
