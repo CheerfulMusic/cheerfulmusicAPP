@@ -9,6 +9,8 @@ const paths: Record<string,string> = {
   guide: 'M4 4h6a3 3 0 0 1 3 3v14a4 4 0 0 0-4-3H4V4Zm9 3a3 3 0 0 1 3-3h5v14h-4a4 4 0 0 0-4 3',
   menu: 'M4 6h16M4 12h16M4 18h16',
   close: 'm6 6 12 12M18 6 6 18',
+  account: 'M20 21v-2a8 8 0 0 0-16 0v2M16 7a4 4 0 1 1-8 0 4 4 0 0 1 8 0Z',
+  logout: 'M9 4H4v16h5m5-12 4 4-4 4m-5-4h12',
   arrow: 'M5 12h14m-5-5 5 5-5 5',
 }
 </script>

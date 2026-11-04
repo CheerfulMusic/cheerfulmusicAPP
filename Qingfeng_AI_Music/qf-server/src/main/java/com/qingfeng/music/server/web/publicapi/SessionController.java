@@ -24,6 +24,12 @@ public class SessionController {
     }
     public record RecoveryRequest(@jakarta.validation.constraints.NotBlank @jakarta.validation.constraints.Size(max=100)String code){}
     @PostMapping("/session/recover") public ResponseEntity<Map<String,String>> recover(HttpServletRequest request,@jakarta.validation.Valid @RequestBody RecoveryRequest body){return sessionResponse(identity.recover(body.code()),request);}
+    @PostMapping("/session/logout")public ResponseEntity<Map<String,Boolean>> logout(HttpServletRequest request){
+        identity.logout(CreatorSessionFilter.token(request));
+        var temporary=request.getSession(false);if(temporary!=null)temporary.invalidate();
+        var expired=ResponseCookie.from("QF_SESSION","").httpOnly(true).secure(request.isSecure()).sameSite("Lax").path("/api").maxAge(Duration.ZERO).build();
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).header(HttpHeaders.SET_COOKIE,expired.toString()).body(Map.of("loggedOut",true));
+    }
     private ResponseEntity<Map<String,String>> sessionResponse(IdentityApi.Session created,HttpServletRequest request){
         var cookie=ResponseCookie.from("QF_SESSION",created.token()).httpOnly(true).secure(request.isSecure()).sameSite("Lax").path("/api").maxAge(Duration.ofDays(30)).build();
         return ResponseEntity.ok().cacheControl(CacheControl.noStore()).header(HttpHeaders.SET_COOKIE,cookie.toString()).body(Map.of("creatorId",created.creatorId()));

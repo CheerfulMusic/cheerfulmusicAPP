@@ -25,6 +25,12 @@ public class IdentityService implements IdentityApi {
         if (token == null || !token.matches("[A-Za-z0-9_-]{43}")) return Optional.empty();
         return repository.findCreator(hash(token), Instant.now());
     }
+    @Transactional
+    public void logout(String token){
+        if(token==null||!token.matches("[A-Za-z0-9_-]{43}"))return;
+        resolve(token).ifPresent(repository::lockCreator);
+        repository.deleteSession(hash(token));
+    }
     private static String hash(String token) {
 
         try { return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(token.getBytes(StandardCharsets.UTF_8))); }
@@ -43,5 +49,28 @@ public class IdentityService implements IdentityApi {
         return new Session(token,creator);
     }
     private String randomToken(){byte[] bytes=new byte[32];random.nextBytes(bytes);return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);}
+    public Optional<GoogleIdentity> googleIdentity(String creatorId){return repository.googleIdentity(creatorId);}
+    @Transactional
+    public Session signInWithGoogle(String currentToken,String expectedCreator,String subject,String email,String name){
+        if(subject==null||subject.isBlank()||subject.length()>255||!subject.chars().allMatch(c->c>=33&&c<=126))throw googleFailure("GOOGLE_LOGIN_FAILED");
+        if(expectedCreator==null||!repository.lockCreator(expectedCreator)||resolve(currentToken).filter(expectedCreator::equals).isEmpty())throw googleFailure("GOOGLE_SESSION_CHANGED");
+        // Hashing the issuer/sub key preserves case sensitivity under MySQL's default collation.
+        String subjectHash=hash("https://accounts.google.com\u0000"+subject);
+        var owner=repository.googleCreator(subjectHash);
+        String target=expectedCreator;
+        if(owner.isPresent()){
+            target=owner.get();
+            if(!target.equals(expectedCreator)&&(repository.googleIdentity(expectedCreator).isPresent()||repository.hasContent(expectedCreator)))throw googleFailure("GOOGLE_ACCOUNT_CONFLICT");
+        }else{
+            if(repository.googleIdentity(expectedCreator).isPresent())throw googleFailure("GOOGLE_ACCOUNT_CONFLICT");
+            repository.bindGoogle(expectedCreator,subjectHash,profile(email,320),profile(name,200),Instant.now());
+        }
+        repository.updateGoogle(subjectHash,profile(email,320),profile(name,200),Instant.now());
+        String token=randomToken();repository.addSession(target,hash(token),Instant.now().plus(30,ChronoUnit.DAYS));
+        repository.deleteSession(hash(currentToken));
+        return new Session(token,target);
+    }
+    private String profile(String value,int limit){return value==null?null:value.substring(0,Math.min(value.length(),limit));}
+    private com.qingfeng.music.common.exception.DomainException googleFailure(String code){return new com.qingfeng.music.common.exception.DomainException(code,"Google登录未完成，当前作品和身份已保留");}
     private com.qingfeng.music.common.exception.DomainException invalidRecovery(){return new com.qingfeng.music.common.exception.DomainException("INVALID_RECOVERY_CODE","找回码无效或已使用，请检查后重试");}
 }

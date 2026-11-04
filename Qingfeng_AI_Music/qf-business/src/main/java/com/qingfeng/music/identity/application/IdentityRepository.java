@@ -10,4 +10,11 @@ public interface IdentityRepository {
     boolean hasRecovery(String creator);
     Optional<String> lockRecovery(String hash);
     void addSession(String creator,String hash,Instant expires);
+    boolean lockCreator(String creator);
+    Optional<String> googleCreator(String subjectHash);
+    Optional<com.qingfeng.music.identity.api.IdentityApi.GoogleIdentity> googleIdentity(String creator);
+    void bindGoogle(String creator,String subjectHash,String email,String name,Instant now);
+    void updateGoogle(String subjectHash,String email,String name,Instant now);
+    boolean hasContent(String creator);
+    void deleteSession(String tokenHash);
 }

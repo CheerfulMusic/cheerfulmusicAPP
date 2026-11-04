@@ -7,9 +7,11 @@ import { usePlayer } from '../../shared/player/store'
 import BrandLogo from '../../shared/ui/BrandLogo.vue'
 import NavIcon from '../../shared/ui/NavIcon.vue'
 import LanguageSwitcher from '../../shared/i18n/LanguageSwitcher.vue'
+import UserAccountMenu from '../../shared/ui/UserAccountMenu.vue'
+import { accountState, ensureAccountState, refreshAccountState } from '../../shared/identity/account-state'
 
 const route = useRoute(), player = usePlayer()
-const screen = window.matchMedia('(max-width: 880px)')
+const screen = window.matchMedia('(max-width: 1200px)')
 const mobile = ref(screen.matches), menuOpen = ref(false)
 const menuButton = ref<HTMLButtonElement>(), menu = ref<HTMLElement>()
 const isGift = computed(() => route.name === 'gift')
@@ -36,8 +38,21 @@ watch(menuOpen, async value => {
 })
 watch(() => route.fullPath, () => { menuOpen.value = false })
 watch(() => !!player.current, value => document.body.classList.toggle('has-preview', value), { immediate: true })
-onMounted(() => { screen.addEventListener('change', resize); document.addEventListener('keydown', onKey) })
-onBeforeUnmount(() => { screen.removeEventListener('change', resize); document.removeEventListener('keydown', onKey); document.body.classList.remove('navigation-open', 'has-preview') })
+function refreshAccount() { void refreshAccountState().catch(() => undefined) }
+function visibleAccount() { if (document.visibilityState === 'visible') refreshAccount() }
+onMounted(() => {
+  screen.addEventListener('change', resize); document.addEventListener('keydown', onKey)
+  // The account page owns its initial read after ensuring the creator session.
+  if (route.name !== 'identity') void ensureAccountState().catch(() => undefined)
+  window.addEventListener('qingfeng:identity-changed', refreshAccount)
+  document.addEventListener('visibilitychange', visibleAccount)
+})
+onBeforeUnmount(() => {
+  screen.removeEventListener('change', resize); document.removeEventListener('keydown', onKey)
+  window.removeEventListener('qingfeng:identity-changed', refreshAccount)
+  document.removeEventListener('visibilitychange', visibleAccount)
+  document.body.classList.remove('navigation-open', 'has-preview')
+})
 </script>
 <template>
   <div class="music-shell consumer-shell" :class="{'gift-shell':isGift}">
@@ -50,6 +65,7 @@ onBeforeUnmount(() => { screen.removeEventListener('change', resize); document.r
           <LanguageSwitcher/>
           <RouterLink v-if="!isGift" class="consumer-my-music" :class="{'is-active':route.path.startsWith('/works')}" to="/works"><NavIcon name="music"/><span>{{ t('我的音乐') }}</span></RouterLink>
           <RouterLink class="consumer-create" to="/create">{{ isGift ? t("我也想送一首歌") : t("制作一首歌") }}</RouterLink>
+          <UserAccountMenu :navigation-open="menuOpen" @opened="menuOpen=false" />
           <button v-if="!isGift" ref="menuButton" class="mobile-menu-toggle" :aria-expanded="menuOpen" aria-controls="consumer-navigation" :aria-label="menuOpen?t('关闭导航'):t('打开导航')" @click="menuOpen=!menuOpen"><NavIcon name="menu"/></button>
         </div>
       </div>
@@ -58,14 +74,14 @@ onBeforeUnmount(() => { screen.removeEventListener('change', resize); document.r
       <button class="navigation-backdrop" :aria-label="t('关闭导航')" @click="closeMenu"></button>
       <section id="consumer-navigation" ref="menu" class="consumer-mobile-menu" role="dialog" :aria-label="t('音乐网站导航')" aria-modal="true">
         <div class="consumer-menu-heading"><strong>{{ t('想从哪里开始？') }}</strong><button class="consumer-menu-close" :aria-label="t('关闭导航')" @click="closeMenu"><NavIcon name="close"/></button></div>
-        <nav :aria-label="t('手机导航')"><RouterLink v-for="item in navigation" :key="item.to" :to="item.to" :class="{'is-active':isActive(item.to)}"><NavIcon :name="item.icon"/>{{ t(item.label) }}</RouterLink><RouterLink to="/works"><NavIcon name="music"/>{{ t('我的音乐') }}</RouterLink></nav>
+        <nav :aria-label="t('手机导航')"><RouterLink v-for="item in navigation" :key="item.to" :to="item.to" :class="{'is-active':isActive(item.to)}"><NavIcon :name="item.icon"/>{{ t(item.label) }}</RouterLink><RouterLink to="/works"><NavIcon name="music"/>{{ t('我的音乐') }}</RouterLink><RouterLink to="/account" :class="{'is-active':route.name==='identity'}"><NavIcon name="account"/>{{ accountState.authenticated ? t('账号与登录') : t('登录 / 账号') }}</RouterLink></nav>
         <RouterLink class="consumer-menu-create" to="/create">{{ t('为重要的人，制作一首歌') }} <NavIcon name="arrow"/></RouterLink>
         <RouterLink class="consumer-recovery-link" to="/account">{{ t('找回之前的音乐') }}</RouterLink>
       </section>
     </template>
     <div class="music-shell-body">
       <main id="main-content" :class="{workspace:route.name!=='home'}" tabindex="-1"><slot/></main>
-      <footer class="brand-footer"><div class="footer-brand-message"><RouterLink to="/">Cheerful Music <span>{{ t('青风音乐') }}</span></RouterLink><p>{{ t('把心意，唱给你听。') }}</p></div><nav :aria-label="t('页脚导航')"><RouterLink to="/works">{{ t('我的音乐') }}</RouterLink><RouterLink to="/account">{{ t('找回我的音乐') }}</RouterLink><RouterLink to="/#how">{{ t('如何制作') }}</RouterLink></nav><p class="footer-media-note">{{ t('首页封面为 AI 场景示意，试听为示例歌曲。') }}</p></footer>
+      <footer class="brand-footer"><div class="footer-brand-message"><RouterLink to="/">Cheerful Music <span>{{ t('青风音乐') }}</span></RouterLink><p>{{ t('把心意，唱给你听。') }}</p></div><nav :aria-label="t('页脚导航')"><RouterLink to="/works">{{ t('我的音乐') }}</RouterLink><RouterLink to="/account">{{ t('账号与登录') }}</RouterLink><RouterLink to="/#how">{{ t('如何制作') }}</RouterLink></nav><p class="footer-media-note">{{ t('首页封面为 AI 场景示意，试听为示例歌曲。') }}</p></footer>
     </div>
     <GlobalPlayer/>
   </div>

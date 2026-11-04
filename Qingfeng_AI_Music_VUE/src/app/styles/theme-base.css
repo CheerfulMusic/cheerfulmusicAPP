@@ -46,7 +46,7 @@ a:focus-visible,button:focus-visible,input:focus-visible,textarea:focus-visible,
 .consumer-navigation { display:flex; align-items:center; gap:30px; }
 .consumer-navigation a { color:#a9b2bf; font-size:13px; padding-block:12px; white-space:nowrap; }
 .consumer-navigation a:hover,.consumer-navigation a.is-active { color:var(--ink); }
-.consumer-header-actions { display:flex; align-items:center; gap:23px; }
+.consumer-header-actions { display:flex; align-items:center; gap:17px; }
 .consumer-my-music { display:inline-flex; align-items:center; gap:8px; font-size:13px; color:#bbc4d1; white-space:nowrap; }
 .consumer-my-music svg { width:17px; height:17px; }
 .consumer-my-music:hover,.consumer-my-music.is-active { color:var(--ink); }
@@ -93,8 +93,11 @@ a:focus-visible,button:focus-visible,input:focus-visible,textarea:focus-visible,
 .app-page { padding: 25px 20px 100px; }
 .app-tabbar { position: fixed; z-index: 40; bottom: 0; left: 0; right: 0; display: flex; justify-content: space-around; padding: 18px 10px max(18px,env(safe-area-inset-bottom)); background: var(--surface); border-top: 1px solid var(--line); }
 @media(max-width:1100px) { .consumer-header-inner { width:calc(100% - 60px); gap:22px; } .consumer-navigation { gap:20px; } .consumer-header-actions { gap:17px; } .consumer-my-music { font-size:12px; } }
-@media(max-width:880px) { .consumer-header-inner { height:76px; width:calc(100% - 48px); } .consumer-navigation,.consumer-my-music { display:none; } .mobile-menu-toggle { display:grid; place-items:center; width:38px; height:38px; border:1px solid #313844; border-radius:50%; color:#e0e5ed; } .mobile-menu-toggle svg { width:18px; height:18px; } .navigation-open { overflow:hidden; } }
+@media(max-width:1200px) { .consumer-navigation { display:none; } .mobile-menu-toggle { display:grid; place-items:center; width:38px; height:38px; border:1px solid #313844; border-radius:50%; color:#e0e5ed; } .mobile-menu-toggle svg { width:18px; height:18px; } .navigation-open { overflow:hidden; } }
+@media(max-width:880px) { .consumer-header-inner { height:76px; width:calc(100% - 48px); } .consumer-my-music { display:none; } }
 @media(max-width:700px) { .q-player { flex-wrap:wrap; gap:10px; bottom:12px; width:calc(100% - 24px); padding:11px 12px; } .q-player-info { max-width:none; min-width:70px; } .q-player input { order:10; flex-basis:65%; min-height:20px; } .q-player > span { order:9; } .q-player > span:last-of-type { order:11; } .has-preview .music-shell-body { padding-bottom:165px; } }
 @media(max-width:600px) { .consumer-header-inner { height:72px; width:calc(100% - 40px); gap:15px; } .consumer-create { display:none; } .gift-shell .consumer-create { display:inline-flex; padding:9px 13px; min-height:37px; font-size:11px; } .consumer-header-actions { gap:10px; } .consumer-mobile-menu { top:80px; left:16px; right:16px; } .brand-footer { padding:29px 20px; } .brand-footer nav { gap:22px; } }
 @media(max-width:420px) { .consumer-header-inner { width:calc(100% - 32px); gap:10px; } .brand-logo-compact { gap:9px; } .brand-logo-compact .brand-logo-type strong { font-size:15px; letter-spacing:-.4px; } .brand-logo-compact .brand-logo-type small { font-size:10px; } .gift-shell .consumer-create { padding-inline:11px; font-size:10px; } .brand-footer { padding-inline:16px; } .q-player-info > strong { font-size:11px; } .q-player > img { width:36px; height:36px; } }
+@media(max-width:360px) { .consumer-header .brand-logo-type { display:none; } }
+@media(max-width:600px) { .gift-shell .consumer-header .brand-logo-type { display:none; } }
 @media(prefers-reduced-motion:reduce) { html { scroll-behavior:auto; } *,*::before,*::after { transition:none !important; animation:none !important; } }

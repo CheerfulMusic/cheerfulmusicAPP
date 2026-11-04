@@ -32,3 +32,5 @@ ui-prototype/output/
 # Local generated previews and temporary review artifacts
 /outputs/
 /tmp/
+
+.secrets/

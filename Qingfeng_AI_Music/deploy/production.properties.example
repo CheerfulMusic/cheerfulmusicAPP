@@ -5,6 +5,11 @@
 server.address=127.0.0.1
 server.port=8080
 server.forward-headers-strategy=framework
+# Fill only in /etc/qingfeng-music/application.properties; never commit actual credentials.
+# qingfeng.auth.google.enabled=true
+# qingfeng.auth.google.client-id=
+# qingfeng.auth.google.client-secret=
+# qingfeng.auth.google.redirect-uri=https://cheerfulmusic.com/api/public/auth/google/callback
 spring.datasource.url=jdbc:mysql://127.0.0.1:3306/qingfeng_music?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai
 spring.datasource.username=qingfeng
 spring.datasource.password=REPLACE_ON_SERVER

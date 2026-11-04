@@ -2,6 +2,10 @@ type Row=Record<string,unknown>
 const obj=(v:unknown):v is Row=>!!v&&typeof v==='object'&&!Array.isArray(v)
 const str=(v:unknown)=>typeof v==='string'
 const text=(v:unknown)=>str(v)&&!!(v as string).trim()
+const googleAuthorizationUrl=(v:unknown)=>{
+ if(!text(v))return false
+ try{const url=new URL(v as string);return url.origin==='https://accounts.google.com'&&url.pathname==='/o/oauth2/v2/auth'&&!url.username&&!url.password&&!url.hash}catch{return false}
+}
 const num=(v:unknown)=>typeof v==='number'&&Number.isFinite(v)
 const list=(v:unknown,check:(v:unknown)=>boolean)=>Array.isArray(v)&&v.every(check)
 const work=(v:unknown)=>obj(v)&&text(v.id)&&num(v.version)&&['recipient','occasion','story','message','style','title','vocalGender'].every(k=>str(v[k]))
@@ -21,6 +25,9 @@ export function validResponse(path:string,method:string,value:unknown):boolean{
  if(value==null)return emptyResponseAllowed(path,method)
  if(path==='public/csrf')return obj(value)&&text(value.token)
  if(path==='public/session'||path==='public/session/recover')return obj(value)&&text(value.creatorId)
+ if(path==='public/session/logout')return method==='POST'&&obj(value)&&value.loggedOut===true
+ if(path==='public/auth/google/status')return method==='GET'&&obj(value)&&typeof value.enabled==='boolean'&&typeof value.authenticated==='boolean'&&(!value.authenticated||value.enabled)&&['email','name'].every(k=>!(k in value)||str(value[k]))
+ if(path==='public/auth/google/start')return method==='POST'&&obj(value)&&googleAuthorizationUrl(value.authorizationUrl)
  if(path==='public/system/info')return obj(value)&&text(value.name)&&text(value.version)&&obj(value.capabilities)&&['lyricsGeneration','musicGeneration','giftSharing','workPersistence'].every(k=>typeof (value.capabilities as Row)[k]==='boolean')
  if(path==='app/identity/recovery')return obj(value)&&(method==='GET'?typeof value.configured==='boolean':text(value.code))
  if(path==='app/usage')return obj(value)&&['music','lyrics'].every(k=>obj(value[k])&&num((value[k] as Row).dailyRemaining)&&num((value[k] as Row).active))
