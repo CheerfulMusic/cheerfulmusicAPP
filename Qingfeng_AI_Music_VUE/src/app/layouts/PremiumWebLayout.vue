@@ -65,7 +65,7 @@ onBeforeUnmount(() => { screen.removeEventListener('change', resize); document.r
     </template>
     <div class="music-shell-body">
       <main id="main-content" :class="{workspace:route.name!=='home'}" tabindex="-1"><slot/></main>
-      <footer class="brand-footer"><div class="footer-brand-message"><RouterLink to="/">Cheerful Music <span>{{ t('青风音乐') }}</span></RouterLink><p>{{ t('把心意，唱给你听。') }}</p></div><nav :aria-label="t('页脚导航')"><RouterLink to="/works">{{ t('我的音乐') }}</RouterLink><RouterLink to="/account">{{ t('找回我的音乐') }}</RouterLink><RouterLink to="/#how">{{ t('如何制作') }}</RouterLink></nav><p class="footer-media-note">{{ t('首页封面为 AI 场景示意，试听为原创器乐样曲。') }}</p></footer>
+      <footer class="brand-footer"><div class="footer-brand-message"><RouterLink to="/">Cheerful Music <span>{{ t('青风音乐') }}</span></RouterLink><p>{{ t('把心意，唱给你听。') }}</p></div><nav :aria-label="t('页脚导航')"><RouterLink to="/works">{{ t('我的音乐') }}</RouterLink><RouterLink to="/account">{{ t('找回我的音乐') }}</RouterLink><RouterLink to="/#how">{{ t('如何制作') }}</RouterLink></nav><p class="footer-media-note">{{ t('首页封面为 AI 场景示意，试听为示例歌曲。') }}</p></footer>
     </div>
     <GlobalPlayer/>
   </div>

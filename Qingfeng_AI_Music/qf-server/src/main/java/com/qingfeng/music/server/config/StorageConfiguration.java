@@ -30,6 +30,10 @@ public class StorageConfiguration {
         return new RoutingMediaFileStore(local,oss,mode.equals("oss"));
     }
     private String setting(Environment env,String name){String value=env.getProperty(name,"");return value.isBlank()?env.getProperty(name.replace("qingfeng.oss.","OSS_").replace('-','_').toUpperCase(java.util.Locale.ROOT),""):value;}
+    @Bean @DependsOn("mediaFileStore") com.qingfeng.music.cover.application.CoverFileStore coverFileStore(Environment env)throws IOException{
+        Path defaultRoot=Path.of(env.getProperty("qingfeng.media.directory","./data/audio")).resolveSibling("covers");
+        return new CoverImageStore(Path.of(env.getProperty("qingfeng.cover.directory",defaultRoot.toString())),client,setting(env,"qingfeng.oss.bucket"),env.getProperty("qingfeng.oss.cover-prefix","qingfeng/covers/"),env.getProperty("qingfeng.media.storage","local").equals("oss"));
+    }
     private String required(Environment env,String name){String value=setting(env,name);if(value.isBlank())throw new IllegalArgumentException("缺少存储配置项："+name);return value;}
     @jakarta.annotation.PreDestroy void close(){if(client!=null)client.shutdown();}
 }

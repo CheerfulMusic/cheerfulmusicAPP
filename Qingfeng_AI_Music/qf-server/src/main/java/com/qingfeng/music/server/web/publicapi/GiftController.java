@@ -13,4 +13,5 @@ public class GiftController {
  public GiftController(SharingApi sharing){this.sharing=sharing;}
  @GetMapping public ResponseEntity<SharingApi.Gift> gift(@PathVariable String token){return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(sharing.get(token));}
  @GetMapping("/audio") public ResponseEntity<Resource> audio(@PathVariable String token,@RequestParam(defaultValue="false") boolean download){return AudioResponse.from(sharing.audio(token),download);}
+ @GetMapping("/cover") public ResponseEntity<Resource> cover(@PathVariable String token){return AudioResponse.from(sharing.cover(token),false);}
 }

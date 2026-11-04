@@ -28,6 +28,7 @@ public final class MyBatisExecutionRepository implements ExecutionRepository {
     public void succeeded(String task,String token,String asset,Instant now) { mapper.succeeded(task,token,asset,now); }
     public void failed(String task,String token,String code,Instant now) { mapper.failed(task,token,code,now); }
     public boolean retryArchive(String work,String task,Instant now) { return mapper.retry(work,task,now)==1; }
+    public boolean closeChecking(String work,String task,Instant now){return mapper.closeChecking(work,task,now,now.minusSeconds(180))==1;}
     public String attempt(String task,String phase,Instant now) { String id=UUID.randomUUID().toString();mapper.attempt(id,task,phase,now);return id; }
     public void finishAttempt(String id,String outcome,String code,Instant now) { mapper.finish(id,outcome,code,now); }
 }

@@ -1,0 +1,370 @@
+--- a/Qingfeng_AI_Music/qf-business/src/main/java/com/qingfeng/music/generation/application/ExecutionRepository.java
++++ b/Qingfeng_AI_Music/qf-business/src/main/java/com/qingfeng/music/generation/application/ExecutionRepository.java
+@@ -24,6 +24,7 @@
+     void succeeded(String task, String token, String asset, Instant now);
+     void failed(String task, String token, String code, Instant now);
+     boolean retryArchive(String work, String task, Instant now);
++    default boolean closeChecking(String work,String task,Instant now){return false;}
+     String attempt(String task, String phase, Instant now);
+     void finishAttempt(String id, String outcome, String code, Instant now);
+ }
+--- a/Qingfeng_AI_Music/qf-business/src/main/java/com/qingfeng/music/generation/application/GenerationService.java
++++ b/Qingfeng_AI_Music/qf-business/src/main/java/com/qingfeng/music/generation/application/GenerationService.java
+@@ -31,6 +31,14 @@
+   return checked(repository.insertOrRead(new Task(UUID.randomUUID().toString(),work,revisionId,w.version(),key,revision.title(),revision.lyrics(),w.style(),provider.name(),GenerationStatus.QUEUED,now,null,null,now,now.plusSeconds(5),w.vocalGender())),revisionId);
+  }
+  public List<Task> list(String owner,String work){works.get(owner,work);return repository.list(work);}
++ public Task closeChecking(String owner,String work,String id,boolean acknowledge){
++  works.get(owner,work);
++  var task=repository.list(work).stream().filter(t->t.id().equals(id)).findFirst().orElseThrow(()->new DomainException("TASK_NOT_FOUND","生成任务不存在"));
++  if(!acknowledge)throw new DomainException("INVALID_CHECKING_ACKNOWLEDGEMENT","请先确认：结束等待不会取消平台任务或返还本次创作额度。");
++  if(task.status()==GenerationStatus.FAILED&&"CHECKING_CLOSED".equals(task.errorCode()))return task;
++  if(!execution.closeChecking(work,id,Instant.now()))throw new DomainException("CHECKING_CLOSE_CONFLICT","目前不能结束等待：请至少等待3分钟；已取得平台任务编号的任务会继续自动查询。请刷新状态。");
++  return repository.findRequest(work,task.requestKey()).orElseThrow();
++ }
+  public void retryArchive(String owner,String work,String task){works.get(owner,work);if(!execution.retryArchive(work,task,Instant.now()))throw new DomainException("ARCHIVE_RETRY_CONFLICT","该任务不支持仅重试音频保存，请刷新状态");}
+  public Task cancel(String owner,String work,String id){
+   works.get(owner,work);
+--- a/Qingfeng_AI_Music/qf-business/src/main/java/com/qingfeng/music/generation/api/GenerationApi.java
++++ b/Qingfeng_AI_Music/qf-business/src/main/java/com/qingfeng/music/generation/api/GenerationApi.java
+@@ -7,6 +7,7 @@
+  List<Task> list(String owner,String work);
+  void retryArchive(String owner,String work,String task);
+  Task cancel(String owner,String work,String task);
++ Task closeChecking(String owner,String work,String task,boolean acknowledge);
+  record Task(String id,String workId,String revisionId,long workVersion,String requestKey,String title,String lyrics,String style,String provider,GenerationStatus status,Instant createdAt,String assetId,String errorCode,Instant updatedAt,Instant nextAttemptAt,String vocalGender){
+   public Task{vocalGender=com.qingfeng.music.work.api.VocalGender.normalize(vocalGender);}
+   public Task(String id,String workId,String revisionId,long workVersion,String requestKey,String title,String lyrics,String style,String provider,GenerationStatus status,Instant createdAt){this(id,workId,revisionId,workVersion,requestKey,title,lyrics,style,provider,status,createdAt,"AUTO");}
+--- a/Qingfeng_AI_Music/qf-business/src/main/java/com/qingfeng/music/generation/application/GenerationWorker.java
++++ b/Qingfeng_AI_Music/qf-business/src/main/java/com/qingfeng/music/generation/application/GenerationWorker.java
+@@ -39,7 +39,7 @@
+             switch(execution.task().status()) {
+                 case QUEUED -> submit(execution);
+                 case SUBMITTING -> repository.unknown(taskId,token,"WORKER_INTERRUPTED",now());
+-                case RUNNING -> query(execution);
++                case RUNNING, SUBMISSION_UNKNOWN -> query(execution);
+                 case SAVING -> save(execution);
+                 default -> { }
+             }
+--- a/Qingfeng_AI_Music/qf-infrastructure/src/main/java/com/qingfeng/music/infrastructure/persistence/generation/ExecutionMapper.java
++++ b/Qingfeng_AI_Music/qf-infrastructure/src/main/java/com/qingfeng/music/infrastructure/persistence/generation/ExecutionMapper.java
+@@ -12,9 +12,9 @@
+     int lock(@Param("provider")String provider,@Param("token")String token,@Param("now")Instant now,@Param("until")Instant until);
+     @Update("UPDATE generation_worker_lock SET lease_token=NULL,lease_until=NULL WHERE provider=#{provider} AND lease_token=#{token}")
+     void unlock(@Param("provider")String provider,@Param("token")String token);
+-    @Select("SELECT g.id FROM generation_task g WHERE g.provider=#{provider} AND g.status IN ('QUEUED','SUBMITTING','RUNNING','SAVING') AND g.next_attempt_at<=#{now} AND (g.lease_until IS NULL OR g.lease_until<=#{now}) AND (g.status<>'QUEUED' OR NOT EXISTS(SELECT 1 FROM generation_task busy WHERE busy.provider=#{provider} AND busy.status IN ('SUBMITTING','RUNNING','SAVING','SUBMISSION_UNKNOWN'))) ORDER BY g.next_attempt_at,g.id LIMIT 20")
++    @Select("SELECT g.id FROM generation_task g WHERE g.provider=#{provider} AND (g.status IN ('QUEUED','SUBMITTING','RUNNING','SAVING') OR (g.status='SUBMISSION_UNKNOWN' AND g.provider_task_id IS NOT NULL)) AND g.next_attempt_at<=#{now} AND (g.lease_until IS NULL OR g.lease_until<=#{now}) AND (g.status<>'QUEUED' OR NOT EXISTS(SELECT 1 FROM generation_task busy WHERE busy.provider=#{provider} AND busy.status IN ('SUBMITTING','RUNNING','SAVING'))) ORDER BY g.next_attempt_at,g.id LIMIT 20")
+     List<String> candidates(@Param("provider")String provider,@Param("now")Instant now);
+-    @Update("UPDATE generation_task SET lease_token=#{token},lease_until=#{until} WHERE id=#{id} AND status IN ('QUEUED','SUBMITTING','RUNNING','SAVING') AND next_attempt_at<=#{now} AND (lease_until IS NULL OR lease_until<=#{now})")
++    @Update("UPDATE generation_task SET lease_token=#{token},lease_until=#{until} WHERE id=#{id} AND (status IN ('QUEUED','SUBMITTING','RUNNING','SAVING') OR (status='SUBMISSION_UNKNOWN' AND provider_task_id IS NOT NULL)) AND next_attempt_at<=#{now} AND (lease_until IS NULL OR lease_until<=#{now})")
+     int claim(@Param("id")String id,@Param("token")String token,@Param("now")Instant now,@Param("until")Instant until);
+     @Select("SELECT * FROM generation_task WHERE id=#{id}") TaskRow find(String id);
+     @Update("UPDATE generation_task SET lease_token=NULL,lease_until=NULL WHERE id=#{id} AND lease_token=#{token}")
+@@ -31,9 +31,9 @@
+     int unknown(@Param("id")String id,@Param("token")String token,@Param("code")String code,@Param("now")Instant now);
+     @Update("UPDATE generation_attempt SET outcome='UNKNOWN',error_code='WORKER_INTERRUPTED',ended_at=#{now} WHERE task_id=#{id} AND ended_at IS NULL")
+     void interrupted(@Param("id")String id,@Param("now")Instant now);
+-    @Update("UPDATE generation_task SET status='RUNNING',query_failures=#{failures},last_error_code=#{code},updated_at=#{now},next_attempt_at=#{next} WHERE id=#{id} AND lease_token=#{token} AND status='RUNNING'")
++    @Update("UPDATE generation_task SET status='RUNNING',query_failures=#{failures},last_error_code=#{code},updated_at=#{now},next_attempt_at=#{next} WHERE id=#{id} AND lease_token=#{token} AND status IN ('RUNNING','SUBMISSION_UNKNOWN')")
+     void running(@Param("id")String id,@Param("token")String token,@Param("failures")int failures,@Param("code")String code,@Param("now")Instant now,@Param("next")Instant next);
+-    @Update("UPDATE generation_task SET status='SAVING',audio_url=#{url},last_error_code=NULL,updated_at=#{now},next_attempt_at=#{now} WHERE id=#{id} AND lease_token=#{token} AND status='RUNNING'")
++    @Update("UPDATE generation_task SET status='SAVING',audio_url=#{url},last_error_code=NULL,updated_at=#{now},next_attempt_at=#{now} WHERE id=#{id} AND lease_token=#{token} AND status IN ('RUNNING','SUBMISSION_UNKNOWN')")
+     void saving(@Param("id")String id,@Param("token")String token,@Param("url")String url,@Param("now")Instant now);
+     @Update("UPDATE generation_task SET audio_url=#{url} WHERE id=#{id} AND lease_token=#{token} AND status='SAVING'")
+     void refreshUrl(@Param("id")String id,@Param("token")String token,@Param("url")String url);
+@@ -41,10 +41,12 @@
+     void archiveFailed(@Param("id")String id,@Param("token")String token,@Param("attempts")int attempts,@Param("status")String status,@Param("now")Instant now,@Param("next")Instant next);
+     @Update("UPDATE generation_task SET status='SUCCEEDED',asset_id=#{asset},last_error_code=NULL,updated_at=#{now} WHERE id=#{id} AND lease_token=#{token} AND status='SAVING'")
+     void succeeded(@Param("id")String id,@Param("token")String token,@Param("asset")String asset,@Param("now")Instant now);
+-    @Update("UPDATE generation_task SET status='FAILED',last_error_code=#{code},updated_at=#{now} WHERE id=#{id} AND lease_token=#{token} AND status IN ('SUBMITTING','RUNNING')")
++    @Update("UPDATE generation_task SET status='FAILED',last_error_code=#{code},updated_at=#{now} WHERE id=#{id} AND lease_token=#{token} AND status IN ('SUBMITTING','RUNNING','SUBMISSION_UNKNOWN')")
+     void failed(@Param("id")String id,@Param("token")String token,@Param("code")String code,@Param("now")Instant now);
+     @Update("UPDATE generation_task SET status='SAVING',archive_attempts=0,last_error_code=NULL,next_attempt_at=#{now},updated_at=#{now} WHERE id=#{id} AND work_id=#{work} AND status='FAILED' AND last_error_code='AUDIO_ARCHIVE_FAILED' AND provider_task_id IS NOT NULL AND audio_url IS NOT NULL")
+     int retry(@Param("work")String work,@Param("id")String id,@Param("now")Instant now);
++    @Update("UPDATE generation_task SET status='FAILED',last_error_code='CHECKING_CLOSED',updated_at=#{now},lease_token=NULL,lease_until=NULL WHERE work_id=#{work} AND id=#{id} AND status='SUBMISSION_UNKNOWN' AND provider_task_id IS NULL AND updated_at<=#{cutoff} AND (lease_until IS NULL OR lease_until<=#{now})")
++    int closeChecking(@Param("work")String work,@Param("id")String id,@Param("now")Instant now,@Param("cutoff")Instant cutoff);
+     @Insert("INSERT INTO generation_attempt(id,task_id,phase,outcome,started_at) VALUES(#{id},#{task},#{phase},'STARTED',#{now})")
+     void attempt(@Param("id")String id,@Param("task")String task,@Param("phase")String phase,@Param("now")Instant now);
+     @Update("UPDATE generation_attempt SET outcome=#{outcome},error_code=#{code},ended_at=#{now} WHERE id=#{id}")
+--- a/Qingfeng_AI_Music/qf-infrastructure/src/main/java/com/qingfeng/music/infrastructure/persistence/generation/MyBatisExecutionRepository.java
++++ b/Qingfeng_AI_Music/qf-infrastructure/src/main/java/com/qingfeng/music/infrastructure/persistence/generation/MyBatisExecutionRepository.java
+@@ -28,6 +28,7 @@
+     public void succeeded(String task,String token,String asset,Instant now) { mapper.succeeded(task,token,asset,now); }
+     public void failed(String task,String token,String code,Instant now) { mapper.failed(task,token,code,now); }
+     public boolean retryArchive(String work,String task,Instant now) { return mapper.retry(work,task,now)==1; }
++    public boolean closeChecking(String work,String task,Instant now){return mapper.closeChecking(work,task,now,now.minusSeconds(180))==1;}
+     public String attempt(String task,String phase,Instant now) { String id=UUID.randomUUID().toString();mapper.attempt(id,task,phase,now);return id; }
+     public void finishAttempt(String id,String outcome,String code,Instant now) { mapper.finish(id,outcome,code,now); }
+ }
+--- a/Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/app/GenerationController.java
++++ b/Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/app/GenerationController.java
+@@ -15,5 +15,7 @@
+  @PostMapping public GenerationApi.Task submit(@AuthenticationPrincipal CreatorPrincipal creator,@PathVariable String work,@Valid @RequestBody Request request){return generation.submit(creator.id(),work,request.revisionId(),request.requestKey());}
+  @GetMapping public List<GenerationApi.Task> list(@AuthenticationPrincipal CreatorPrincipal creator,@PathVariable String work){return generation.list(creator.id(),work);}
+  @PostMapping("/{task}/cancel") public GenerationApi.Task cancel(@AuthenticationPrincipal CreatorPrincipal creator,@PathVariable String work,@PathVariable String task){return generation.cancel(creator.id(),work,task);}
++ public record CloseCheckingRequest(@jakarta.validation.constraints.AssertTrue boolean acknowledge){}
++ @PostMapping("/{task}/close-checking") public GenerationApi.Task closeChecking(@AuthenticationPrincipal CreatorPrincipal creator,@PathVariable String work,@PathVariable String task,@Valid @RequestBody CloseCheckingRequest request){return generation.closeChecking(creator.id(),work,task,request.acknowledge());}
+  @PostMapping("/{task}/retry-archive") public void retryArchive(@AuthenticationPrincipal CreatorPrincipal creator,@PathVariable String work,@PathVariable String task){generation.retryArchive(creator.id(),work,task);}
+ }
+--- a/Qingfeng_AI_Music/qf-server/src/test/java/com/qingfeng/music/server/GenerationWorkerIntegrationTest.java
++++ b/Qingfeng_AI_Music/qf-server/src/test/java/com/qingfeng/music/server/GenerationWorkerIntegrationTest.java
+@@ -26,6 +26,7 @@
+ class GenerationWorkerIntegrationTest {
+     @Autowired IdentityApi identity; @Autowired WorkApi works; @Autowired LyricsApi lyrics;
+     @Autowired ExecutionRepository repository; @Autowired TaskMapper mapper; @Autowired MediaService media;
++    @Autowired org.springframework.jdbc.core.JdbcTemplate jdbc;
+     static class Time extends Clock {
+         Instant now=Instant.now().plusSeconds(10);
+         public ZoneId getZone(){return ZoneOffset.UTC;} public Clock withZone(ZoneId z){return this;}
+@@ -57,6 +58,23 @@
+     @Test void unknownSubmissionIsNeverAutomaticallySubmittedAgain(){
+         var f=fixture();f.provider().unknown=true;var w=worker(f,url->new ByteArrayInputStream(wav()));assertTrue(w.runOnce());assertEquals(GenerationStatus.SUBMISSION_UNKNOWN,status(f));f.time().advance(3600);assertFalse(w.runOnce());assertEquals(1,f.provider().submissions.get());
+     }
++    @Test void unknownWithoutExternalIdDoesNotBlockAnotherCreatorsQueuedTask(){
++        var first=fixture();first.provider().unknown=true;var w=worker(first,url->new ByteArrayInputStream(wav()));assertTrue(w.runOnce());
++        var other=fixture();jdbc.update("UPDATE generation_task SET provider=? WHERE id=?",first.provider().name(),other.id());
++        first.provider().unknown=false;assertTrue(w.runOnce());assertEquals(GenerationStatus.RUNNING,status(other));assertEquals(GenerationStatus.SUBMISSION_UNKNOWN,status(first));assertEquals(2,first.provider().submissions.get());
++    }
++    @Test void unknownWithExternalIdResumesReadOnlyQueryAndArchivesWithoutResubmitting(){
++        var f=fixture();var w=worker(f,url->new ByteArrayInputStream(wav()));assertTrue(w.runOnce());
++        jdbc.update("UPDATE generation_task SET status='SUBMISSION_UNKNOWN' WHERE id=?",f.id());f.time().advance(11);
++        assertTrue(w.runOnce());assertEquals(GenerationStatus.SAVING,status(f));assertTrue(w.runOnce());assertEquals(GenerationStatus.SUCCEEDED,status(f));
++        assertEquals(1,f.provider().submissions.get());assertEquals(1,f.provider().queries.get());
++    }
++    @Test void checkingQueryFailureBacksOffWithoutSubmittingAgain(){
++        var f=fixture();var w=worker(f,url->new ByteArrayInputStream(wav()));assertTrue(w.runOnce());
++        jdbc.update("UPDATE generation_task SET status='SUBMISSION_UNKNOWN' WHERE id=?",f.id());f.time().advance(11);f.provider().queryFailure=true;
++        assertTrue(w.runOnce());assertEquals(GenerationStatus.RUNNING,status(f));assertFalse(w.runOnce());f.time().advance(21);assertTrue(w.runOnce());
++        assertEquals(GenerationStatus.SAVING,status(f));assertEquals(1,f.provider().submissions.get());assertEquals(2,f.provider().queries.get());
++    }
+     @Test void expiredSubmittingLeaseBecomesUnknownWithoutCallingProvider(){
+         var f=fixture();String token=UUID.randomUUID().toString();var claimed=repository.claim(f.provider().name(),token,f.time().instant(),f.time().instant().plusSeconds(120));assertTrue(claimed.isPresent());assertTrue(repository.startSubmission(f.id(),token,f.time().instant()));f.time().advance(121);
+         assertTrue(worker(f,url->new ByteArrayInputStream(wav())).runOnce());assertEquals(GenerationStatus.SUBMISSION_UNKNOWN,status(f));assertEquals(0,f.provider().submissions.get());
+--- a/Qingfeng_AI_Music/qf-server/src/test/java/com/qingfeng/music/server/GenerationSubmissionIntegrationTest.java
++++ b/Qingfeng_AI_Music/qf-server/src/test/java/com/qingfeng/music/server/GenerationSubmissionIntegrationTest.java
+@@ -15,6 +15,30 @@
+ 
+ @SpringBootTest(properties="qingfeng.generation.enabled=true") @ActiveProfiles("test") @Import(GenerationSubmissionIntegrationTest.Providers.class)
+ class GenerationSubmissionIntegrationTest {
++ @Autowired com.qingfeng.music.generation.application.ExecutionRepository executions;
++ @Test void closingCheckingRequiresOwnerAcknowledgementAndRetainsUsageAndIdempotency(){
++  var f=fixture();String key=UUID.randomUUID().toString();var task=tasks.submit(f.owner(),f.work(),f.revision(),key);
++  jdbc.update("UPDATE generation_task SET status='SUBMISSION_UNKNOWN',updated_at=TIMESTAMPADD(SECOND,-181,CURRENT_TIMESTAMP) WHERE id=?",task.id());
++  assertThrows(com.qingfeng.music.common.exception.DomainException.class,()->tasks.closeChecking(identity.create().creatorId(),f.work(),task.id(),true));
++  assertThrows(com.qingfeng.music.common.exception.DomainException.class,()->tasks.closeChecking(f.owner(),f.work(),task.id(),false));
++  var ended=tasks.closeChecking(f.owner(),f.work(),task.id(),true);assertEquals("CHECKING_CLOSED",ended.errorCode());assertEquals(com.qingfeng.music.generation.domain.GenerationStatus.FAILED,ended.status());
++  assertEquals(ended.id(),tasks.closeChecking(f.owner(),f.work(),task.id(),true).id());assertEquals(ended.status(),tasks.submit(f.owner(),f.work(),f.revision(),key).status());
++  executions.accepted(task.id(),"late-platform-id",java.time.Instant.now(),java.time.Instant.now());
++  assertEquals(com.qingfeng.music.generation.domain.GenerationStatus.FAILED,tasks.list(f.owner(),f.work()).get(0).status());
++  assertNull(jdbc.queryForObject("SELECT provider_task_id FROM generation_task WHERE id=?",String.class,task.id()));
++  assertEquals(1,jdbc.queryForObject("SELECT COUNT(*) FROM model_usage_reservation WHERE work_id=? AND kind='MUSIC'",Integer.class,f.work()));
++  assertNotEquals(ended.id(),tasks.submit(f.owner(),f.work(),f.revision(),UUID.randomUUID().toString()).id());
++ }
++ @Test void closingCheckingCannotRaceAnActiveLeaseOrDiscardAKnownPlatformTask(){
++  var f=fixture();var task=tasks.submit(f.owner(),f.work(),f.revision(),UUID.randomUUID().toString());
++  jdbc.update("UPDATE generation_task SET status='SUBMISSION_UNKNOWN' WHERE id=?",task.id());
++  assertThrows(com.qingfeng.music.common.exception.DomainException.class,()->tasks.closeChecking(f.owner(),f.work(),task.id(),true));
++  jdbc.update("UPDATE generation_task SET updated_at=TIMESTAMPADD(SECOND,-181,CURRENT_TIMESTAMP),lease_until=TIMESTAMPADD(SECOND,60,CURRENT_TIMESTAMP) WHERE id=?",task.id());
++  assertThrows(com.qingfeng.music.common.exception.DomainException.class,()->tasks.closeChecking(f.owner(),f.work(),task.id(),true));
++  jdbc.update("UPDATE generation_task SET lease_until=NULL,provider_task_id='known-task' WHERE id=?",task.id());
++  assertThrows(com.qingfeng.music.common.exception.DomainException.class,()->tasks.closeChecking(f.owner(),f.work(),task.id(),true));
++  assertEquals(com.qingfeng.music.generation.domain.GenerationStatus.SUBMISSION_UNKNOWN,tasks.list(f.owner(),f.work()).get(0).status());
++ }
+  @TestConfiguration(proxyBeanMethods=false)static class Providers{
+   @Bean @Primary MusicProvider offlineOnly(){return new MusicProvider(){public String name(){return "test-only";}public boolean isConfigured(){return true;}public Submission submit(Request r,String key){throw new AssertionError("测试不得调用供应商");}public Result query(String id){throw new AssertionError("测试不得查询供应商");}};}
+  }
+--- a/Qingfeng_AI_Music_VUE/src/modules/works/api/detail.ts
++++ b/Qingfeng_AI_Music_VUE/src/modules/works/api/detail.ts
+@@ -4,6 +4,7 @@
+ export const getLyricsRequest = (work:string,key:string) => call<LyricsRequestState>(`app/works/${work}/lyrics/requests/${encodeURIComponent(key)}`)
+ export interface AudioAsset { id: string; workId: string; origin: 'IMPORTED' | 'GENERATED'; contentType: string; byteSize: number; createdAt: string }
+ export interface GenerationTask { id: string; revisionId: string; requestKey?:string; status: string; title: string; style?:string; vocalGender?:string; createdAt: string; assetId: string | null; errorCode: string | null; updatedAt: string; nextAttemptAt: string }
++export const closeTaskChecking=(work:string,task:string)=>call<GenerationTask>(`app/works/${work}/generations/${task}/close-checking`,'POST',{acknowledge:true})
+ async function call<T>(path: string, method = 'GET', body?: unknown) { await ensureCreator(); return requestJson<T>(path, method, body) }
+ export const listRevisions = (work: string) => call<Revision[]>(`app/works/${work}/lyrics`)
+ export async function generateLyrics(work: string, workVersion: number, requestKey: string, language: string, instructions = '', baseRevisionId?: string) {
+--- a/Qingfeng_AI_Music_VUE/src/modules/works/pages/WorkDetailPage.vue
++++ b/Qingfeng_AI_Music_VUE/src/modules/works/pages/WorkDetailPage.vue
+@@ -21,6 +21,9 @@
+ import { songSettings } from '../model/song-settings'
+ import { vocalGenderLabel } from '../../studio/model/vocals'
+ import { ApiError } from '../../../shared/http/api-client'
++import GenerationRecovery from '../components/GenerationRecovery.vue'
++import {closeTaskChecking} from '../api/detail'
++import {needsGenerationRefresh} from '../model/generation-recovery'
+ const route = useRoute(), work = ref<Work>(), revision = ref<Revision | null>(null), asset = ref<AudioAsset | null>(null), tasks = ref<GenerationTask[]>([]), error = ref(''), loading = ref(false), lyricDirty = ref(false), modelReady = ref(false), submitting = ref(false), requestKey = ref('')
+ const lyricsPanel=ref<InstanceType<typeof LyricsPanel>>(), lyricsReady=ref(false), allowance=ref<Allowance>(), giftRevision=ref<Revision|null>(null)
+ const lyricRecoverable=ref(false),listenAfterLoad=ref(false),giftStage=ref(false),shared=ref(false),settingsOpen=ref(false),settingsBusy=ref(false),cancelling=ref(false)
+@@ -76,10 +79,17 @@
+   catch (e) { if(work.value?.id === workId) { progressIssue.value = true; error.value = e instanceof Error ? e.message : '进度读取失败，可以刷新重试' } } finally { polling = false }
+ }
+ const coverTimer=window.setInterval(()=>{const id=work.value?.id;if(id&&document.visibilityState==='visible'&&covers.value?.edits.some(e=>['QUEUED','SUBMITTING','RUNNING','SAVING'].includes(e.status)))void loadCovers(id).then(v=>{if(work.value?.id===id)updateCover(v)}).catch(()=>{})},5000)
+-const pollTimer = window.setInterval(() => { if (tasks.value.some(task => ['QUEUED','SUBMITTING','RUNNING','SAVING'].includes(task.status))) void refreshTasks() }, 8000)
++const pollTimer = window.setInterval(() => { if (needsGenerationRefresh(tasks.value,submissionUnknown.value)) void refreshTasks() }, 8000)
+ document.addEventListener('visibilitychange', refreshTasks)
+ onBeforeUnmount(() => { window.clearInterval(pollTimer);window.clearInterval(coverTimer); document.removeEventListener('visibilitychange', refreshTasks); sequence++ })
+ async function retryArchive(task: GenerationTask) { if (!work.value || submitting.value) return; submitting.value = true; error.value = ''; try { await retryTaskArchive(work.value.id, task.id); await refreshTasks() } catch (e) { error.value = e instanceof Error ? e.message : '重试保存失败' } finally { submitting.value = false } }
++async function closeChecking(task:GenerationTask){
++  if(!work.value||submitting.value)return
++  const workId=work.value.id;submitting.value=true;error.value=''
++  try{await closeTaskChecking(workId,task.id);if(work.value?.id!==workId)return;generationOpen.value=false;await refreshTasks();await updateAllowance()}
++  catch(e){if(work.value?.id===workId)error.value=e instanceof Error?e.message:'暂时无法结束等待，请刷新状态。'}
++  finally{submitting.value=false}
++}
+ async function load() { const turn = ++sequence;giftStage.value=false;shared.value=false;settingsOpen.value=false;coverOpen.value=false;covers.value=undefined; generationOpen.value = false; trackedTaskId.value = ''; submissionIssue.value = ''; submissionUnknown.value=false; progressIssue.value = false; submitting.value = false; loading.value = true; error.value = ''; revision.value = null; asset.value = null; tasks.value=[];giftRevision.value=null;work.value = undefined; lyricDirty.value = false; requestKey.value = ''; try { const id = String(route.params.id); const [found, history, system] = await Promise.all([loadWork(id), listTasks(id), getSystemInfo()]); if (turn !== sequence) return; work.value = found; tasks.value = history;void loadCovers(id).then(value=>{if(turn===sequence)updateCover(value)}).catch(e=>{if(turn===sequence)error.value=e instanceof Error?e.message:'封面读取失败'}); trackedTaskId.value = history.find(inProgress)?.id || ''; generationOpen.value = !!trackedTaskId.value; modelReady.value = system.capabilities.musicGeneration;void updateAllowance() } catch (e) { if (turn === sequence) error.value = e instanceof Error ? e.message : '作品读取失败' } finally { if (turn === sequence) loading.value = false } }
+ watch(() => route.params.id, load, { immediate: true })
+ watch(() => revision.value?.id, () => { if (!submitting.value && !submissionUnknown.value) requestKey.value = '' })
+@@ -134,6 +144,7 @@
+     <CreationSteps :current="currentStep"/>
+     <div class="work-detail-top"><div><h1>{{ asset?songTitle:work.title||t('写给{recipient}的歌',{recipient:work.recipient}) }}</h1><p class="detail-muted">{{ t('送给 {recipient}',{recipient:work.recipient}) }} · {{ displayedStyle }}<template v-if="playingSettings?.vocalGender"> · {{ t(vocalGenderLabel(playingSettings.vocalGender)) }}</template></p></div></div>
+     <div class="story-back-actions"><button class="text-button" @click="backToStory">{{ t('返回修改故事') }}</button><button v-if="giftStage" class="text-button" @click="giftStage=false;shared=false">{{ t('返回试听与调整') }}</button></div>
++    <GenerationRecovery v-if="pendingTask?.status==='SUBMISSION_UNKNOWN'" :task="pendingTask" :busy="submitting" @refresh="refreshTasks" @close="closeChecking(pendingTask)"/>
+     <SongResult v-if="asset" :work="work" :asset="asset" :title="songTitle" :cover="artwork" :pending="!!pendingTask" :busy="submitting||settingsBusy||(!pendingTask&&!submissionUnknown&&(!modelReady||!lyricsReady))" :lyrics="giftRevision?.lyrics||''" @gift="sendGift" @adjust="adjustMusic" @regenerate="generate" @cover="openCover"/>
+     <RouterLink v-if="asset" class="recovery-reminder" to="/account">{{ t('第一首歌值得留住。保存找回码，换设备也能找到它。') }}</RouterLink>
+     <CoverEditor v-if="work&&(coverOpen)" :key="work.id" :work-id="work.id" :state="covers" @updated="updateCover" @close="coverOpen=false"/>
+--- a/Qingfeng_AI_Music_VUE/src/shared/i18n/en.ts
++++ b/Qingfeng_AI_Music_VUE/src/shared/i18n/en.ts
+@@ -1,5 +1,16 @@
+ /** Chinese source copy is the stable message key; business option values stay unchanged. */
+ export const english: Record<string, string> = {
++  '核对本次音乐创作': 'Check this song request',
++  '这次提交结果还在核对': 'We are checking this submission',
++  '已有平台任务编号时会自动查询原任务；尚未取得编号时，不会重复提交。你也可以稍后结束本次等待。': 'We automatically check the original task when its platform ID is available. We will not resubmit it without an ID. You can end this wait later.',
++  '结束等待只结束本站追踪，平台可能已经计费，已用额度会保留。再次创作需要你主动发起。': 'Ending the wait only ends tracking here. The platform may already have charged for it, so usage is retained. You must start any new creation yourself.',
++  '结束等待不会取消平台任务，也不会返还本次额度；平台可能已受理或计费。确认结束本次等待？': 'This does not cancel the platform task or refund usage. The platform may already have accepted or charged for it. End this wait?',
++  '刷新核对状态': 'Refresh request status',
++  '结束本次等待': 'End this wait',
++  '至少等待3分钟后可结束无平台任务编号的等待；有编号的任务继续自动查询。': 'After 3 minutes you can end a wait without a platform task ID. Tasks with an ID continue to be checked automatically.',
++  '请先确认：结束等待不会取消平台任务或返还本次创作额度。': 'Please acknowledge that ending the wait does not cancel the platform task or refund usage.',
++  '目前不能结束等待：请至少等待3分钟；已取得平台任务编号的任务会继续自动查询。请刷新状态。': 'The wait cannot be ended yet. Wait at least 3 minutes. Tasks with a platform ID continue automatically. Refresh their status.',
++  '暂时无法结束等待，请刷新状态。': 'Unable to end the wait. Please refresh its status.',
+   '歌词编写已中断，可以重新编写；已有内容仍会保留。': 'Lyric writing was interrupted. You can try again. Your existing work is kept.',
+   '歌词编写超时，可以重新编写；已有内容仍会保留。': 'Lyric writing timed out. You can try again. Your existing work is kept.',
+   '歌词服务连接中断，可以稍后重新编写。': 'The lyric service connection was interrupted. Please try writing again shortly.',
+--- a/README.md
++++ b/README.md
+@@ -1,6 +1,6 @@
+ # 青风音乐
+ 
+-面向电脑与手机网页的音乐礼物创作项目，采用Cheerful Music品牌主题，支持中英双语。当前实现：故事草稿、DeepSeek歌词编写与版本确认、KIE Suno歌曲生成适配、音频上传/试听/下载、作品管理、7天礼物分享与撤销、一次性作品找回。模型能力由后端私有配置开启，外部模型认证已验证，真实付费生成结果尚未实测。
++面向电脑与手机网页的音乐礼物创作项目，采用Cheerful Music品牌主题，支持中英双语。当前实现：故事草稿、DeepSeek歌词编写与版本确认、KIE Suno歌曲生成适配、音频上传/试听/下载、作品管理、7天礼物分享与撤销、一次性作品找回。模型能力由后端私有配置开启。现状、验证范围和发布依据统一见[当前状态](docs/当前状态.md)。阶段验收文档保留当时记录。
+ 
+ ## 本地体验
+ 
+@@ -29,7 +29,7 @@
+ - `docs`：架构、实施计划、配置与各阶段验收证据。
+ - `ui-prototype`：保留已确认的设计原型。
+ 
+-开始操作前可阅读[本地交付与维护](docs/本地交付与维护.md)。当前完成范围与限制见[第三阶段验收](docs/第三阶段验收.md)。
++开始操作前可阅读[本地交付与维护](docs/本地交付与维护.md)。当前完成范围与限制见[当前状态](docs/当前状态.md)；[第三阶段验收](docs/第三阶段验收.md)为历史快照。
+ 
+ 首次创作已调整为「写故事 → 修改歌词 → 生成与试听 → 制作音乐礼物 → 分享」，增加故事/歌词自动保存、本机恢复、歌曲结果试听、作品真实状态与模型创作额度控制。默认歌曲个人每天20次/全站20次，歌词个人每天20次/全站100次，额度与并发数可通过后端私有配置修改；规则和验收见[首次创作体验优化](docs/首次创作体验优化.md)。
+ 
+--- a/docs/第三阶段验收.md
++++ b/docs/第三阶段验收.md
+@@ -1,4 +1,7 @@
+ # 第三阶段：补齐不依赖模型额度的本地能力
++
++> 历史验收快照：下文“当前”“未接入”“未部署”等描述仅代表本阶段验收时点。后续实现与发布已继续推进，请以[当前状态](当前状态.md)和[最新部署记录](阿里云部署.md)为入口。
++
+ 
+ 实施于2026-10-31，交付核对于2026-11-02。用户要求暂停无余额模型调用，先完成其余工作。本阶段未新增歌词/歌曲平台请求。
+ 
+--- /dev/null
++++ b/Qingfeng_AI_Music_VUE/src/modules/works/model/generation-recovery.ts
+@@ -0,0 +1,3 @@
++export function needsGenerationRefresh(tasks: readonly {status:string}[], awaitingResponse=false) {
++  return awaitingResponse || tasks.some(task=>['QUEUED','SUBMITTING','RUNNING','SAVING','SUBMISSION_UNKNOWN'].includes(task.status))
++}
+--- /dev/null
++++ b/Qingfeng_AI_Music_VUE/src/modules/works/components/GenerationRecovery.vue
+@@ -0,0 +1,12 @@
++<script setup lang="ts">
++import {computed,onBeforeUnmount,ref} from 'vue'
++import type {GenerationTask} from '../api/detail'
++import {t} from '../../../shared/i18n'
++const props=defineProps<{task:GenerationTask;busy:boolean}>()
++const emit=defineEmits<{refresh:[];close:[]}>()
++const now=ref(Date.now()),timer=window.setInterval(()=>now.value=Date.now(),1000)
++onBeforeUnmount(()=>window.clearInterval(timer))
++const canClose=computed(()=>Number.isFinite(Date.parse(props.task.updatedAt))&&now.value-Date.parse(props.task.updatedAt)>=180000)
++function finish(){if(window.confirm(t('结束等待不会取消平台任务，也不会返还本次额度；平台可能已受理或计费。确认结束本次等待？')))emit('close')}
++</script>
++<template><section class="notice generation-recovery" role="status" :aria-label="t('核对本次音乐创作')"><strong>{{ t('这次提交结果还在核对') }}</strong><p>{{ t('已有平台任务编号时会自动查询原任务；尚未取得编号时，不会重复提交。你也可以稍后结束本次等待。') }}</p><p>{{ t('结束等待只结束本站追踪，平台可能已经计费，已用额度会保留。再次创作需要你主动发起。') }}</p><div class="actions"><button class="button secondary" :disabled="busy" @click="$emit('refresh')">{{ t('刷新核对状态') }}</button><button class="button secondary" :disabled="busy||!canClose" @click="finish">{{ t('结束本次等待') }}</button></div><small>{{ t('至少等待3分钟后可结束无平台任务编号的等待；有编号的任务继续自动查询。') }}</small></section></template>
+--- /dev/null
++++ b/Qingfeng_AI_Music_VUE/tests/generation-recovery.test.ts
+@@ -0,0 +1,11 @@
++import {expect,it} from 'vitest'
++import {needsGenerationRefresh} from '../src/modules/works/model/generation-recovery'
++it('keeps checking unknown submissions and lost HTTP responses without requiring another live task',()=>{
++ expect(needsGenerationRefresh([{status:'SUBMISSION_UNKNOWN'}])).toBe(true)
++ expect(needsGenerationRefresh([],true)).toBe(true)
++ for(const status of ['QUEUED','SUBMITTING','RUNNING','SAVING'])expect(needsGenerationRefresh([{status}])).toBe(true)
++})
++it('stops automatic reads after all tasks finish or checking is explicitly closed',()=>{
++ expect(needsGenerationRefresh([])).toBe(false)
++ expect(needsGenerationRefresh([{status:'FAILED'},{status:'SUCCEEDED'},{status:'CANCELLED'}])).toBe(false)
++})
+--- /dev/null
++++ b/docs/当前状态.md
+@@ -0,0 +1,32 @@
++# 当前状态
++
++更新日期：2026-11-03。这里是项目现状入口；阶段验收文档记录其验收时点，部署文档记录各次发布。本地改动是否已经上线，必须对应具体发布记录确认。
++
++## 当前代码
++
++| 范围 | 已具备的能力 |
++| --- | --- |
++| Web / H5 | 中英双语、响应式创作页面、自动保存、歌词版本、音乐试听与礼物分享 |
++| 模型 | DeepSeek 歌词、KIE Suno 音乐、KIE 图片编辑适配；由后端私有配置控制 |
++| 媒体 | 完整音频归档、本地/OSS存储适配、上传、试听、下载、封面与同步歌词 |
++| 身份 | 浏览器匿名会话与作品归属、一次性找回码、分享权限与撤销 |
++| 使用控制 | 每日额度、并发控制、请求去重、任务持久化与音频归档重试 |
++
++## 本次音乐任务恢复修复
++
++- 无平台任务编号的待核对记录，不再阻塞同供应商下其他用户的排队任务。
++- 有平台任务编号的待核对记录，后台只查询原任务并继续保存结果，不重新提交生成。
++- 前端每8秒刷新待核对记录；隐藏页面暂停读取，切回后立即刷新。
++- 无编号且等待至少3分钟、任务租约已释放时，作品本人可明确确认“结束本次等待”。这会结束本站追踪并释放并发占用，不取消供应商任务、不退还已用额度，也不自动重新生成。
++- 迟到受理响应与结束等待通过任务状态条件更新协调；关闭后旧请求标识不会再次生成歌曲。
++
++本轮修改在本地工作区，未在本侧聊执行公网发布。恢复机制和边界详见[音乐任务核对与恢复](音乐任务核对与恢复.md)。歌词异常恢复是另一条独立流程，不能代替音乐任务恢复。
++
++## 发布与验证依据
++
++- [阿里云部署记录](阿里云部署.md)：已发布的版本、备份及对应验收，阅读最新的更新条目。
++- [本地交付与维护](本地交付与维护.md)：构建、启动与备份操作。
++- [第三阶段验收](第三阶段验收.md)：历史阶段的范围和当时限制。
++- [本次版本记录](releases/2026-11-03-music-recovery/README.md)：本次补丁、文件校验及验证结果。
++
++仍需持续关注真实手机兼容性、公网带宽、模型费用及输出效果。App和正式账号登录不因本轮修复而自动具备。离线模型测试不代表真实付费模型效果验收。
+--- /dev/null
++++ b/docs/音乐任务核对与恢复.md
+@@ -0,0 +1,25 @@
++# 音乐任务核对与恢复
++
++`SUBMISSION_UNKNOWN` 表示本系统无法确认供应商是否受理。保留原请求标识和已用额度，不自动补发付费请求。
++
++## 用户路径
++
++1. 作品页显示核对提示，并持续读取本站记录。
++2. 已有平台任务编号：Worker查询原任务，成功后继续音频归档；查询失败使用原有退避机制。
++3. 没有平台任务编号：无法安全查询供应商。等待至少3分钟后，用户可明确确认结束本次等待；系统不会因此重新生成歌曲。用户可在平台已计费的情况下仍无法取回结果，界面会在确认前说明。
++4. 结束等待后旧记录变为 `FAILED / CHECKING_CLOSED`。历史、计费预留和请求键保留，新的生成必须由用户主动点击。
++
++## 后端约束
++
++- 排队准入不再把其他待核对任务当作供应商全局忙碌。个人并发限额仍保护同一用户；无编号任务结束等待后才释放该占用。
++- Worker只领取带平台编号的待核对任务，执行查询分支。无编号任务不会自动重提。
++- `POST /api/app/works/{work}/generations/{task}/close-checking` 要求会话、CSRF和作品所有权，并要求请求体 `{ "acknowledge": true }`。
++- 结束操作只适用于无编号、已等待3分钟且没有有效租约的待核对任务；条件更新避免与Worker争抢。重复关闭幂等，已关联平台任务不可由此丢弃。
++- 本轮没有提供任意填写平台任务编号的用户接口，防止将同一API账户下其他用户的供应商结果绑定到自己的作品。
++- 结束等待是用户明确放弃本站追踪，并不证明供应商未计费，也不构成平台任务取消。
++
++## 版本管理
++
++共享工作区仍有主线程和其他历史改动。本轮以修改前快照为基准生成独立补丁及SHA256清单，避免将其他未完成工作一并提交。没有切换共享分支、重置或清理工作区。应用补丁前应确认基线；不能将本补丁误认为整个工程的首次完整提交。
++
++公网发布应在主线程完成当前任务、确认合并后的构建产物后进行，沿用已有备份和回退流程。

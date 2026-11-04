@@ -11,9 +11,12 @@ import org.springframework.transaction.annotation.Transactional;
 
 /** 仅落库任务快照，不在请求线程调用供应商。供应商不可用时不创建虚假排队任务。 */
 public class GenerationService implements GenerationApi {
- private final WorkApi works;private final LyricsApi lyrics;private final MusicProvider provider;private final TaskRepository repository;private final ExecutionRepository execution;private final boolean enabled;
+ private final WorkApi works;private final LyricsApi lyrics;private final MusicProvider provider;private final TaskRepository repository;private final ExecutionRepository execution;private final boolean enabled;private final com.qingfeng.music.usage.UsageBudget budget;
  public GenerationService(WorkApi works,LyricsApi lyrics,MusicProvider provider,TaskRepository repository,ExecutionRepository execution){this(works,lyrics,provider,repository,execution,true);}
- public GenerationService(WorkApi works,LyricsApi lyrics,MusicProvider provider,TaskRepository repository,ExecutionRepository execution,boolean enabled){this.works=works;this.lyrics=lyrics;this.provider=provider;this.repository=repository;this.execution=execution;this.enabled=enabled;}
+ public GenerationService(WorkApi works,LyricsApi lyrics,MusicProvider provider,TaskRepository repository,ExecutionRepository execution,boolean enabled){this(works,lyrics,provider,repository,execution,enabled,(o,w,k,t)->{});}
+ public GenerationService(WorkApi works,LyricsApi lyrics,MusicProvider provider,TaskRepository repository,ExecutionRepository execution,boolean enabled,com.qingfeng.music.usage.UsageBudget budget){this.works=works;this.lyrics=lyrics;this.provider=provider;this.repository=repository;this.execution=execution;this.enabled=enabled;this.budget=budget;}
+ private com.qingfeng.music.settings.MusicSettings settings;
+ public GenerationService withSettings(com.qingfeng.music.settings.MusicSettings value){settings=value;return this;}
  // 并发重复插入后重新读取已提交任务，避免MySQL可重复读快照看不到竞争方的新记录。
  @Transactional(isolation = org.springframework.transaction.annotation.Isolation.READ_COMMITTED)
  public Task submit(String owner,String work,String revisionId,String key){
@@ -24,10 +27,30 @@ public class GenerationService implements GenerationApi {
   if(!revision.confirmed())throw new DomainException("LYRICS_NOT_CONFIRMED","请先确认歌词");
   if(revision.workVersion()!=w.version())throw new DomainException("WORK_VERSION_CONFLICT","作品已修改，请保存并确认当前版本歌词");
   if(!enabled||!provider.isConfigured())throw new DomainException("MUSIC_PROVIDER_UNAVAILABLE","音乐模型暂不可用，未提交生成或创建付费任务");
-  provider.validate(new MusicProvider.Request(revision.title(),revision.lyrics(),w.style()));
-  return checked(repository.insertOrRead(new Task(UUID.randomUUID().toString(),work,revisionId,w.version(),key,revision.title(),revision.lyrics(),w.style(),provider.name(),GenerationStatus.QUEUED,Instant.now())),revisionId);
+  // 与局部编辑保持准入锁→作品锁顺序；后续校验失败会随整个事务回滚占额。
+  budget.reserve(owner,work,key,com.qingfeng.music.usage.UsageBudget.Kind.MUSIC);
+  var direction=settings==null?null:settings.resolve(owner,w);
+  provider.validate(direction==null?new MusicProvider.Request(revision.title(),revision.lyrics(),w.style(),w.vocalGender()):new MusicProvider.Request(revision.title(),revision.lyrics(),direction.style(),w.vocalGender(),direction.negativeTags(),true));
+  Instant now=Instant.now();
+  String id=UUID.randomUUID().toString();var task=checked(repository.insertOrRead(new Task(id,work,revisionId,w.version(),key,revision.title(),revision.lyrics(),w.style(),provider.name(),GenerationStatus.QUEUED,now,null,null,now,now.plusSeconds(5),w.vocalGender())),revisionId);
+  if(settings!=null&&task.id().equals(id))settings.snapshot(id,direction);return task;
  }
  public List<Task> list(String owner,String work){works.get(owner,work);return repository.list(work);}
+ public Task closeChecking(String owner,String work,String id,boolean acknowledge){
+  works.get(owner,work);
+  var task=repository.list(work).stream().filter(t->t.id().equals(id)).findFirst().orElseThrow(()->new DomainException("TASK_NOT_FOUND","生成任务不存在"));
+  if(!acknowledge)throw new DomainException("INVALID_CHECKING_ACKNOWLEDGEMENT","请先确认：结束等待不会取消平台任务或返还本次创作额度。");
+  if(task.status()==GenerationStatus.FAILED&&"CHECKING_CLOSED".equals(task.errorCode()))return task;
+  if(!execution.closeChecking(work,id,Instant.now()))throw new DomainException("CHECKING_CLOSE_CONFLICT","目前不能结束等待：请至少等待3分钟；已取得平台任务编号的任务会继续自动查询。请刷新状态。");
+  return repository.findRequest(work,task.requestKey()).orElseThrow();
+ }
  public void retryArchive(String owner,String work,String task){works.get(owner,work);if(!execution.retryArchive(work,task,Instant.now()))throw new DomainException("ARCHIVE_RETRY_CONFLICT","该任务不支持仅重试音频保存，请刷新状态");}
+ public Task cancel(String owner,String work,String id){
+  works.get(owner,work);
+  var task=repository.list(work).stream().filter(t->t.id().equals(id)).findFirst().orElseThrow(()->new DomainException("TASK_NOT_FOUND","生成任务不存在"));
+  if(task.status()==GenerationStatus.CANCELLED)return task;
+  if(!budget.cancelMusic(work,task.requestKey(),()->repository.cancelQueued(work,id)))throw new DomainException("TASK_ALREADY_SUBMITTED","歌曲已开始提交，无法撤销；请等待结果，避免重复生成。");
+  return repository.findRequest(work,task.requestKey()).orElseThrow();
+ }
  private Task checked(Task task,String revision){if(!task.revisionId().equals(revision))throw new DomainException("REQUEST_KEY_CONFLICT","该请求标识已用于另一个歌词版本，请勿复用");return task;}
 }

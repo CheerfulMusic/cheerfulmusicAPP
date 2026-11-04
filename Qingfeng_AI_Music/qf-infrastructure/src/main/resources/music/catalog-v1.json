@@ -1,0 +1,501 @@
+{
+  "version": 1,
+  "groups": [
+    {
+      "id": "genre",
+      "zh": "音乐风格",
+      "en": "Music style",
+      "max": 2,
+      "options": [
+        {
+          "id": "folk",
+          "zh": "民谣",
+          "en": "Folk",
+          "prompt": "acoustic folk"
+        },
+        {
+          "id": "pop",
+          "zh": "流行",
+          "en": "Pop",
+          "prompt": "melodic pop"
+        },
+        {
+          "id": "rnb",
+          "zh": "R&B",
+          "en": "R&B",
+          "prompt": "soulful R&B"
+        },
+        {
+          "id": "jazz",
+          "zh": "爵士",
+          "en": "Jazz",
+          "prompt": "gentle jazz"
+        },
+        {
+          "id": "chinese",
+          "zh": "国风",
+          "en": "Chinese fusion",
+          "prompt": "Chinese folk fusion"
+        },
+        {
+          "id": "rock",
+          "zh": "摇滚",
+          "en": "Rock",
+          "prompt": "pop rock"
+        },
+        {
+          "id": "electronic",
+          "zh": "电子",
+          "en": "Electronic",
+          "prompt": "melodic electronic"
+        },
+        {
+          "id": "rap",
+          "zh": "说唱",
+          "en": "Rap",
+          "prompt": "melodic hip-hop with rap verses"
+        }
+      ]
+    },
+    {
+      "id": "delivery",
+      "zh": "演唱方式",
+      "en": "Singing style",
+      "max": 2,
+      "options": [
+        {
+          "id": "gentle",
+          "zh": "轻声诉说",
+          "en": "Soft storytelling",
+          "prompt": "soft intimate storytelling vocals"
+        },
+        {
+          "id": "natural",
+          "zh": "自然演唱",
+          "en": "Natural",
+          "prompt": "natural conversational singing"
+        },
+        {
+          "id": "emotional",
+          "zh": "深情演唱",
+          "en": "Expressive",
+          "prompt": "emotionally expressive singing"
+        },
+        {
+          "id": "powerful",
+          "zh": "有力量",
+          "en": "Powerful",
+          "prompt": "powerful controlled singing"
+        },
+        {
+          "id": "airy",
+          "zh": "轻柔气声",
+          "en": "Airy",
+          "prompt": "soft airy singing"
+        },
+        {
+          "id": "husky",
+          "zh": "微沙哑",
+          "en": "Husky",
+          "prompt": "slightly husky vocal delivery"
+        }
+      ]
+    },
+    {
+      "id": "timbre",
+      "zh": "音色偏好",
+      "en": "Vocal tone",
+      "max": 1,
+      "options": [
+        {
+          "id": "clear",
+          "zh": "清亮",
+          "en": "Clear",
+          "prompt": "clear bright vocal tone"
+        },
+        {
+          "id": "warm",
+          "zh": "温暖",
+          "en": "Warm",
+          "prompt": "warm round vocal tone"
+        },
+        {
+          "id": "low",
+          "zh": "低沉",
+          "en": "Deep",
+          "prompt": "deep mellow vocal tone"
+        }
+      ]
+    },
+    {
+      "id": "emotion",
+      "zh": "情绪",
+      "en": "Mood",
+      "max": 2,
+      "options": [
+        {
+          "id": "warm",
+          "zh": "温暖",
+          "en": "Warm",
+          "prompt": "warm reassuring mood"
+        },
+        {
+          "id": "happy",
+          "zh": "开心",
+          "en": "Happy",
+          "prompt": "joyful optimistic mood"
+        },
+        {
+          "id": "longing",
+          "zh": "思念",
+          "en": "Longing",
+          "prompt": "tender longing"
+        },
+        {
+          "id": "romantic",
+          "zh": "浪漫",
+          "en": "Romantic",
+          "prompt": "romantic heartfelt mood"
+        },
+        {
+          "id": "firm",
+          "zh": "坚定",
+          "en": "Determined",
+          "prompt": "hopeful determination"
+        },
+        {
+          "id": "release",
+          "zh": "释怀",
+          "en": "Acceptance",
+          "prompt": "peaceful acceptance"
+        },
+        {
+          "id": "sad",
+          "zh": "伤感",
+          "en": "Melancholic",
+          "prompt": "melancholic reflective mood"
+        }
+      ]
+    },
+    {
+      "id": "instruments",
+      "zh": "乐器",
+      "en": "Instruments",
+      "max": 3,
+      "options": [
+        {
+          "id": "guitar",
+          "zh": "木吉他",
+          "en": "Acoustic guitar",
+          "prompt": "acoustic guitar"
+        },
+        {
+          "id": "piano",
+          "zh": "钢琴",
+          "en": "Piano",
+          "prompt": "piano"
+        },
+        {
+          "id": "epiano",
+          "zh": "电钢琴",
+          "en": "Electric piano",
+          "prompt": "Rhodes electric piano"
+        },
+        {
+          "id": "strings",
+          "zh": "弦乐",
+          "en": "Strings",
+          "prompt": "gentle strings"
+        },
+        {
+          "id": "bass",
+          "zh": "贝斯",
+          "en": "Bass",
+          "prompt": "rounded bass"
+        },
+        {
+          "id": "drums",
+          "zh": "架子鼓",
+          "en": "Drums",
+          "prompt": "acoustic drums"
+        },
+        {
+          "id": "guzheng",
+          "zh": "古筝",
+          "en": "Guzheng",
+          "prompt": "guzheng"
+        },
+        {
+          "id": "flute",
+          "zh": "笛子",
+          "en": "Flute",
+          "prompt": "bamboo flute"
+        }
+      ]
+    },
+    {
+      "id": "tempo",
+      "zh": "速度",
+      "en": "Tempo",
+      "max": 1,
+      "options": [
+        {
+          "id": "slow",
+          "zh": "舒缓",
+          "en": "Slow",
+          "prompt": "slow tempo around 65-80 BPM"
+        },
+        {
+          "id": "medium",
+          "zh": "适中",
+          "en": "Moderate",
+          "prompt": "moderate tempo around 85-105 BPM"
+        },
+        {
+          "id": "bright",
+          "zh": "轻快",
+          "en": "Upbeat",
+          "prompt": "upbeat tempo around 110-130 BPM"
+        }
+      ]
+    },
+    {
+      "id": "groove",
+      "zh": "律动",
+      "en": "Groove",
+      "max": 1,
+      "options": [
+        {
+          "id": "steady",
+          "zh": "平稳",
+          "en": "Steady",
+          "prompt": "steady gentle pulse"
+        },
+        {
+          "id": "swing",
+          "zh": "摇摆",
+          "en": "Swing",
+          "prompt": "light swing groove"
+        },
+        {
+          "id": "bouncy",
+          "zh": "跳跃",
+          "en": "Bouncy",
+          "prompt": "bouncy groove"
+        },
+        {
+          "id": "relaxed",
+          "zh": "松弛",
+          "en": "Relaxed",
+          "prompt": "relaxed laid-back groove"
+        }
+      ]
+    },
+    {
+      "id": "arrangement",
+      "zh": "编曲质感",
+      "en": "Arrangement",
+      "max": 2,
+      "options": [
+        {
+          "id": "clean",
+          "zh": "简单干净",
+          "en": "Simple and clean",
+          "prompt": "sparse clean arrangement with upfront vocals"
+        },
+        {
+          "id": "layered",
+          "zh": "丰富层次",
+          "en": "Layered",
+          "prompt": "gradually layered arrangement"
+        },
+        {
+          "id": "live",
+          "zh": "现场感",
+          "en": "Live feel",
+          "prompt": "intimate live performance feel"
+        },
+        {
+          "id": "retro",
+          "zh": "复古质感",
+          "en": "Retro",
+          "prompt": "warm vintage production"
+        },
+        {
+          "id": "space",
+          "zh": "空间感",
+          "en": "Spacious",
+          "prompt": "subtle spacious reverb"
+        }
+      ]
+    },
+    {
+      "id": "exclude",
+      "zh": "不想要的元素",
+      "en": "Avoid",
+      "max": 4,
+      "options": [
+        {
+          "id": "no_rap",
+          "zh": "不要说唱",
+          "en": "No rap",
+          "prompt": "rap"
+        },
+        {
+          "id": "no_runs",
+          "zh": "不要过度转音",
+          "en": "No excessive vocal runs",
+          "prompt": "excessive vocal runs"
+        },
+        {
+          "id": "no_heavy_drums",
+          "zh": "不要重鼓",
+          "en": "No heavy drums",
+          "prompt": "heavy drums"
+        },
+        {
+          "id": "no_sad",
+          "zh": "不要太悲伤",
+          "en": "Not too sad",
+          "prompt": "overly sad or mournful mood"
+        }
+      ]
+    }
+  ],
+  "recipes": [
+    {
+      "id": "warm-story",
+      "zh": "温暖诉说",
+      "en": "Warm storytelling",
+      "choices": {
+        "genre": [
+          "folk"
+        ],
+        "delivery": [
+          "gentle"
+        ],
+        "timbre": [
+          "warm"
+        ],
+        "emotion": [
+          "warm"
+        ],
+        "instruments": [
+          "guitar"
+        ],
+        "tempo": [
+          "slow"
+        ],
+        "arrangement": [
+          "clean"
+        ]
+      }
+    },
+    {
+      "id": "sweet-pop",
+      "zh": "甜蜜轻快",
+      "en": "Sweet and bright",
+      "choices": {
+        "genre": [
+          "pop"
+        ],
+        "delivery": [
+          "natural"
+        ],
+        "timbre": [
+          "clear"
+        ],
+        "emotion": [
+          "happy"
+        ],
+        "instruments": [
+          "guitar"
+        ],
+        "tempo": [
+          "bright"
+        ]
+      }
+    },
+    {
+      "id": "heartfelt",
+      "zh": "深情告白",
+      "en": "Heartfelt confession",
+      "choices": {
+        "genre": [
+          "pop"
+        ],
+        "delivery": [
+          "emotional"
+        ],
+        "emotion": [
+          "romantic"
+        ],
+        "instruments": [
+          "piano",
+          "strings"
+        ],
+        "tempo": [
+          "slow"
+        ],
+        "arrangement": [
+          "layered"
+        ]
+      }
+    },
+    {
+      "id": "retro",
+      "zh": "复古律动",
+      "en": "Retro groove",
+      "choices": {
+        "genre": [
+          "rnb"
+        ],
+        "delivery": [
+          "natural"
+        ],
+        "timbre": [
+          "warm"
+        ],
+        "instruments": [
+          "epiano",
+          "bass"
+        ],
+        "tempo": [
+          "medium"
+        ],
+        "groove": [
+          "relaxed"
+        ],
+        "arrangement": [
+          "retro"
+        ]
+      }
+    },
+    {
+      "id": "encourage",
+      "zh": "热血鼓励",
+      "en": "A little courage",
+      "choices": {
+        "genre": [
+          "rock"
+        ],
+        "delivery": [
+          "powerful"
+        ],
+        "emotion": [
+          "firm"
+        ],
+        "instruments": [
+          "guitar",
+          "drums"
+        ],
+        "tempo": [
+          "bright"
+        ],
+        "arrangement": [
+          "layered"
+        ]
+      }
+    }
+  ]
+}

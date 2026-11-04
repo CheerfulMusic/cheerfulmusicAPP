@@ -9,6 +9,13 @@ import './app/styles/work-detail.css'
 import './app/styles/consumer.css'
 import './app/styles/i18n.css'
 import './app/styles/generation-dialog.css'
+import './app/styles/creation.css'
+import './app/styles/playback-lyrics.css'
+import './app/styles/studio-refinement.css'
+import './app/styles/audio-preparation.css'
+import './app/styles/section-editor.css'
+import './app/styles/story-focus.css'
+import './app/styles/music-settings.css'
 import { initializeLocale } from './shared/i18n'
 
 initializeLocale()

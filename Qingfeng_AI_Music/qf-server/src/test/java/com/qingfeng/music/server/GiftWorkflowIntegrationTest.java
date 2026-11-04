@@ -51,6 +51,15 @@ class GiftWorkflowIntegrationTest {
   assertEquals(200,call(a,"DELETE","/api/app/works/"+w+"/shares",null).statusCode());
   assertEquals(404,call(null,"GET",publicPath,null).statusCode());assertEquals(404,call(null,"GET",publicPath+"/audio",null).statusCode());
  }
+ @Test void uploadedCoverRemainsPrivateUntilSharedAndGiftRevocationClosesItsRoute()throws Exception{
+  var a=session();var other=session();String w=work(a),r=lyrics(a,w,"中文与 English");call(a,"POST","/api/app/works/"+w+"/lyrics/"+r+"/confirm","{}");String audio=field(text(upload(a,w,wav())),"id");
+  var pixels=new java.awt.image.BufferedImage(48,48,java.awt.image.BufferedImage.TYPE_INT_RGB);var encoded=new java.io.ByteArrayOutputStream();javax.imageio.ImageIO.write(pixels,"png",encoded);
+  String boundary="CoverBoundary";byte[] prefix=("--"+boundary+"\r\nContent-Disposition: form-data; name=\"file\"; filename=\"../../private.svg\"\r\nContent-Type: image/png\r\n\r\n").getBytes(StandardCharsets.UTF_8),suffix=("\r\n--"+boundary+"--\r\n").getBytes(StandardCharsets.UTF_8);byte[] image=encoded.toByteArray();var body=ByteBuffer.allocate(prefix.length+image.length+suffix.length).put(prefix).put(image).put(suffix).array();
+  var uploaded=a.client().send(HttpRequest.newBuilder(URI.create("http://127.0.0.1:"+port+"/api/app/works/"+w+"/covers")).header("X-XSRF-TOKEN",a.csrf()).header("Content-Type","multipart/form-data; boundary="+boundary).POST(HttpRequest.BodyPublishers.ofByteArray(body)).build(),HttpResponse.BodyHandlers.ofByteArray());assertEquals(200,uploaded.statusCode(),text(uploaded));String cover=field(text(uploaded),"id");
+  assertEquals(404,call(other,"GET","/api/app/works/"+w+"/covers/"+cover,null).statusCode());assertEquals(401,call(null,"GET","/api/app/works/"+w+"/covers/"+cover,null).statusCode());assertEquals(200,call(a,"PUT","/api/app/works/"+w+"/covers/selection","{\"coverId\":\""+cover+"\",\"expectedVersion\":0}").statusCode());
+  String token=share(a,w,r,audio),publicPath="/api/public/gifts/"+token+"/cover";var publicCover=call(null,"GET",publicPath,null);assertEquals(200,publicCover.statusCode());assertEquals("image/jpeg",publicCover.headers().firstValue("Content-Type").orElse(""));assertEquals("nosniff",publicCover.headers().firstValue("X-Content-Type-Options").orElse(""));assertEquals(1024,javax.imageio.ImageIO.read(new java.io.ByteArrayInputStream(publicCover.body())).getWidth());
+  call(a,"DELETE","/api/app/works/"+w+"/shares",null);assertEquals(404,call(null,"GET",publicPath,null).statusCode());
+ }
  @Test void unconfirmedLyricsAndInvalidAudioCannotBecomeGift()throws Exception{
   var a=session();String w=work(a),r=lyrics(a,w,"还未确认");
   assertEquals(400,upload(a,w,"<script>not audio</script>".getBytes()).statusCode());assertEquals("[]",text(call(a,"GET","/api/app/works/"+w+"/audio",null)));

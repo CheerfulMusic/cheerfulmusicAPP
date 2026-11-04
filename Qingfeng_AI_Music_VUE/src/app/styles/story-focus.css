@@ -1,0 +1,52 @@
+/* 故事向导：每屏一个问题，延续青风音乐黑底与橙红强调色。 */
+.story-studio{max-width:1080px;margin:auto}
+.story-introduction{display:flex;justify-content:space-between;gap:20px;align-items:center;margin:0 0 24px}
+.workspace .story-introduction h1{font-size:16px;color:var(--muted);font-weight:400;letter-spacing:0;margin:0}
+.story-introduction .autosave-state{padding:0;font-size:12px}
+.story-layout{grid-template-columns:minmax(0,1fr) 238px;gap:32px}
+.story-focus{padding:32px 40px 24px;scroll-margin-top:110px}
+.story-progress{display:flex;flex-wrap:wrap;justify-content:space-between;gap:12px;color:var(--muted);font-size:12px;line-height:1.6;margin-bottom:44px}
+.story-progress>span:first-child{color:var(--accent-text)}
+.story-progress>[role=progressbar]{flex-basis:100%;height:2px;background:#30333b;overflow:hidden}
+.story-progress>[role=progressbar]>span{display:block;height:100%;background:var(--accent);transition:width .2s ease}
+.story-question{min-height:340px;max-width:620px;margin:auto}
+.workspace .story-question h2{font-size:clamp(23px,2.2vw,30px);line-height:1.55;font-weight:650;letter-spacing:-.5px;margin:0 0 15px;text-wrap:pretty;outline:0}
+.story-question-hint{color:var(--muted);font-size:13px;margin:0 0 30px;max-width:50ch}
+.story-question .suggestion-field-heading>label,.story-answer{font-size:12px}
+.story-question .field{margin:26px 0 18px}
+.story-question .field input{min-height:58px;font-size:17px;padding:14px 17px}
+.story-question .suggestion-tags{gap:9px}
+.story-question .suggestion-tag,.story-question .suggestion-more{min-height:44px;padding:9px 17px;font-size:12px}
+.story-question .field textarea{font-size:16px;line-height:1.9;min-height:190px;padding:17px 18px}
+.story-optional{font-weight:400;color:var(--muted);margin-left:10px}
+.story-memory-directions{display:flex;gap:8px;flex-wrap:wrap}
+.story-memory-directions button{border:1px solid var(--line);background:transparent;border-radius:20px;color:var(--muted);font-size:12px;min-height:40px;padding:8px 12px}
+.story-memory-directions button[aria-pressed=true]{color:var(--accent-text);border-color:#9b4c3e;background:#2b1916}
+.story-question .save-info{font-size:11px;color:var(--muted);line-height:1.8}
+.story-language-options{display:grid;gap:12px;margin:24px 0}
+.story-language-options label{position:relative;cursor:pointer}
+.story-language-options input{position:absolute;opacity:0;width:1px;height:1px}
+.story-language-options span{display:block;border:1px solid #353a45;border-radius:12px;padding:17px 20px;background:#0c0e12}
+.story-language-options strong{display:block;color:var(--ink);font-size:16px;font-weight:500}
+.story-language-options small{display:block;color:var(--muted);font-size:12px;line-height:1.7;margin-top:5px}
+.story-language-options input:checked+span{border-color:var(--accent);background:#251714;box-shadow:inset 3px 0 var(--accent)}
+.story-language-options input:focus-visible+span{outline:2px solid var(--accent-text);outline-offset:4px}
+.story-validation{max-width:620px;margin:16px auto;color:#ffafa1;font-size:12px;line-height:1.8}.story-focus [aria-invalid=true]{border-color:#ff9380!important}
+.story-action-bar{max-width:620px;margin:32px auto 0;justify-content:flex-end;padding-top:22px;border-top:1px solid var(--line)}
+.story-action-bar .story-back{margin-right:auto}
+.story-secondary-actions{display:flex;gap:20px;max-width:620px;margin:8px auto 0;min-height:34px;justify-content:flex-end;flex-wrap:wrap}
+.workspace .story-summary{background:transparent;border:0;padding:35px 0 20px;position:sticky;top:120px}
+.story-summary-mark{display:block;color:var(--accent);font-size:28px;margin-bottom:23px}
+.workspace .story-summary h2{font-size:24px;line-height:1.7;margin-bottom:18px;font-weight:600}
+.story-summary>p{font-size:12px;color:var(--muted);max-width:25ch}
+.story-summary dl{margin:34px 0 24px;border-top:1px solid var(--line)}
+.story-summary dl>div{padding:17px 30px 17px 0;border-bottom:1px solid var(--line);position:relative}
+.story-summary dt{color:var(--muted);font-size:11px;margin-bottom:8px}
+.story-summary dd{color:var(--ink);margin:0;font-size:14px;line-height:1.7;overflow-wrap:anywhere;white-space:pre-wrap}
+.story-summary button{position:absolute;top:18px;right:0;border:0;background:transparent;color:var(--muted);font-size:11px;min-height:32px;text-decoration:underline;text-underline-offset:4px}
+.story-summary .story-privacy{font-size:11px;padding-top:18px;max-width:28ch}
+.story-focus button:focus-visible{outline:2px solid var(--accent-text);outline-offset:4px}
+@media(max-width:900px){.story-layout{grid-template-columns:minmax(0,1fr) 180px;gap:24px}.story-focus{padding:28px}.workspace .story-summary h2{font-size:20px}}
+@media(max-width:700px){.story-layout{display:block}.story-summary{display:none}.story-focus{padding:25px 24px 16px}.story-introduction{align-items:flex-start;gap:12px}.workspace .story-introduction h1{font-size:13px;line-height:1.8}.story-introduction .autosave-state{font-size:10px}.story-progress{margin-bottom:35px}.story-question{min-height:310px}.story-question-hint{font-size:12px}}
+@media(max-width:600px){.story-studio{padding-bottom:125px}.story-studio .creation-steps{margin-bottom:25px}.story-focus{padding:25px 20px 12px;border-radius:18px}.story-introduction{margin-bottom:17px}.story-progress{font-size:11px;gap:10px}.workspace .story-question h2{font-size:25px}.story-question .field input{font-size:16px}.story-question .suggestion-tag,.story-question .suggestion-more{padding-inline:13px}.story-studio .story-action-bar{position:fixed;left:0;right:0;bottom:0;z-index:30;margin:0;max-width:none;display:flex;justify-content:flex-end;gap:12px;background:#101217f5;border-top:1px solid #333741;padding:14px 20px calc(14px + env(safe-area-inset-bottom));backdrop-filter:blur(16px)}.story-action-bar .creation-primary{min-width:0;flex:1;max-width:280px;min-height:48px}.story-action-bar .story-back{min-height:48px;flex:0 0 auto}.story-secondary-actions{justify-content:flex-start;margin-top:16px}.story-question .field textarea{min-height:180px}.story-studio .autosave-state{white-space:normal;text-align:right;min-width:72px}.has-preview .story-studio .story-action-bar{bottom:var(--player-clearance,140px)}.has-preview .story-studio{padding-bottom:250px}}
+@media(prefers-reduced-motion:reduce){.story-progress>[role=progressbar]>span{transition:none}}

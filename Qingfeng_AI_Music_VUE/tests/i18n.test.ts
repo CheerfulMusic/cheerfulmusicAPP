@@ -32,11 +32,11 @@ describe('Chinese and English interface', () => {
     const { tracks, usePreviewTracks } = await import('../src/modules/home/model/tracks')
     const localized = usePreviewTracks(), snapshot = JSON.stringify(tracks)
     setLocale('en')
-    expect(localized.value[0]!.title).toBe('Next Time, by the Sea')
+    expect(localized.value.map(track=>track.title)).toEqual(['Love in the Everyday','A Light Left On','Where the Sea Breeze Leads'])
     expect(localized.value[0]!.occasion).toBe('恋爱纪念')
     expect(localized.value[0]!.audio).toBe(tracks[0]!.audio)
     setLocale('zh-CN')
-    expect(localized.value[0]!.title).toBe('下次，一起去看海')
+    expect(localized.value.map(track=>track.title)).toEqual(['把平凡唱给你','留一盏灯等你','去有海风的地方'])
     expect(JSON.stringify(tracks)).toBe(snapshot)
   })
 

@@ -1,0 +1,110 @@
+{
+  "version": "qf-music-recovery-20261103-local",
+  "baseGitHead": "98f7f206e78d3927cba022cbbc77d462f170f10c",
+  "baseline": "working tree before side-conversation fix, not clean HEAD",
+  "patchSha256": "b584d38bde42cd365a1c22e6b803d1ea57f153acce20b5322182cf2666af6413",
+  "files": [
+    {
+      "path": "Qingfeng_AI_Music/qf-business/src/main/java/com/qingfeng/music/generation/application/ExecutionRepository.java",
+      "beforeSha256": "229b7d9e4f2890da3097eed5ff95914e255150a70d83314622d9040e4897f1d5",
+      "afterSha256": "08fc2fe71b239f4596a80cf28f1df70cead9b21c4707e9a6b44e9f2fa82b0c2d"
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-business/src/main/java/com/qingfeng/music/generation/application/GenerationService.java",
+      "beforeSha256": "1e9c3b4f7ab4664a3ed940aa2696dd2e8e420f61d0c51728863ce06468f2889c",
+      "afterSha256": "47a071db72a4f3dfb1844a082e06b34c1dba0f808ad24ce13715a0db41eb9b61"
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-business/src/main/java/com/qingfeng/music/generation/api/GenerationApi.java",
+      "beforeSha256": "633f9368edce8d60619b6b4988ad9e316b36fd4abb27da871a93658c9462831b",
+      "afterSha256": "4653bf8e75e89740556e6722412c8303ae56f173d04e72af5711d2409f0784ad"
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-business/src/main/java/com/qingfeng/music/generation/application/GenerationWorker.java",
+      "beforeSha256": "4f8957bfc56b7b6fbee469b34175022e01c959ef962f1aa36592122cc5c3a268",
+      "afterSha256": "ad6387e3fe715caeb77c826395867d0f0437c1cf8209a7369de623c00f5dd687"
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-infrastructure/src/main/java/com/qingfeng/music/infrastructure/persistence/generation/ExecutionMapper.java",
+      "beforeSha256": "5d1f21fd895a324d79dd25a1991af3fa505e76e1b71b22f1aa1dd7312f5bb7eb",
+      "afterSha256": "831a6048e60884137cb693ce635e33f078b502d0a1276673a7a2a0003e1a31ff"
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-infrastructure/src/main/java/com/qingfeng/music/infrastructure/persistence/generation/MyBatisExecutionRepository.java",
+      "beforeSha256": "b303bdbba3bc428aeacd9a5de0c5d270d819dd43b7fee224b992684af384c131",
+      "afterSha256": "ad593a59468ad624a0843380337713143f2b45929d193317ef12e48465fa6f1f"
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/app/GenerationController.java",
+      "beforeSha256": "06cdea36f772ea7d4598181a4f038581f101b85d7440be8bf69a9a0d38d7bd90",
+      "afterSha256": "89bfb156b01bd2ed698f36ed8034cb898720e96ef672823b277c55ae1da6d7bc"
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/test/java/com/qingfeng/music/server/GenerationWorkerIntegrationTest.java",
+      "beforeSha256": "eb6f323fe823b14f8a7079aabed6edc70d3362fe5f46296d545bb8ef447ce648",
+      "afterSha256": "019f34d9a1ab27c60165c933493344f1653dbc3bbc7f0c192d5e96d7845bc665"
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/test/java/com/qingfeng/music/server/GenerationSubmissionIntegrationTest.java",
+      "beforeSha256": "34b9e0e534ec13728c0b4170beffc4c55b7e5d85e947c5580fcf09dea78bc6df",
+      "afterSha256": "09127dc849e5de72a366f9c69099be865b2f89d97d16138e1b2ddcf7538e89f9"
+    },
+    {
+      "path": "Qingfeng_AI_Music_VUE/src/modules/works/api/detail.ts",
+      "beforeSha256": "8d635b1608c764c4e151b468b639050fb747ab63243b08198558437cd981e8d1",
+      "afterSha256": "113f2d1f38f27c849a6d7971fab75c1c2d20627b44b1fa81eb1dfb84b41c2c4a"
+    },
+    {
+      "path": "Qingfeng_AI_Music_VUE/src/modules/works/pages/WorkDetailPage.vue",
+      "beforeSha256": "d8e96138c14c09ff064c2b069701e132b0703698f122c29ad13295d00a54204d",
+      "afterSha256": "9c6f8785cc5e5af4f32fc27d2ce857b9b958bb64b533eff64762aae964fcfbe7"
+    },
+    {
+      "path": "Qingfeng_AI_Music_VUE/src/shared/i18n/en.ts",
+      "beforeSha256": "3c34894f1332d96c3c10a8fdbda6a163e6d2892d670f1032e1c7a75c4bab41a6",
+      "afterSha256": "777cc79f66c516ca9e4bfb3c92eadc9ce39076fec5b9b787aa34b66d0ffce171"
+    },
+    {
+      "path": "README.md",
+      "beforeSha256": "41f2915640ea0927014b4f8d65794dd7b6f0a3672d59c01ed89a34c1d26bb9a5",
+      "afterSha256": "a36efa7cbac0fc06c2bcd4849c8404f749b31458041fc49cf87603185b90f507"
+    },
+    {
+      "path": "docs/第三阶段验收.md",
+      "beforeSha256": "78851fe0a5a646065068ea3d246c27d7c275b8f247a60b1dbf7b15f6aa4e7de0",
+      "afterSha256": "4de5b09b52d35a398bbde6631cf7e2db02b9f76daf3912c988645cc43d5fa93a"
+    },
+    {
+      "path": "Qingfeng_AI_Music_VUE/src/modules/works/model/generation-recovery.ts",
+      "beforeSha256": null,
+      "afterSha256": "68e17813ce0c3120cf990b86e1636cb2c13637a0440e95e10625afa5651812ef"
+    },
+    {
+      "path": "Qingfeng_AI_Music_VUE/src/modules/works/components/GenerationRecovery.vue",
+      "beforeSha256": null,
+      "afterSha256": "f4a37fe19e07eb30adc350f16bc57c189069e36f5f8267e9b4ab2adb4472fa8d"
+    },
+    {
+      "path": "Qingfeng_AI_Music_VUE/tests/generation-recovery.test.ts",
+      "beforeSha256": null,
+      "afterSha256": "52d0a43e0e126b4d84d6962147cd6bb4316d48c4ac58247c3fed2df874da11fc"
+    },
+    {
+      "path": "docs/当前状态.md",
+      "beforeSha256": null,
+      "afterSha256": "6d094947fb679454faadeb7a7fee84022888f61227cc362244ad30f4bc006dc6"
+    },
+    {
+      "path": "docs/音乐任务核对与恢复.md",
+      "beforeSha256": null,
+      "afterSha256": "4fc671214ff67abfd52998e9517d31c0485c0eca4abcc98aa9274abac5288822"
+    }
+  ],
+  "validation": {
+    "backendTests": 107,
+    "frontendTests": 46,
+    "browserChecks": 9,
+    "paidModelCalls": 0,
+    "deployed": false
+  }
+}

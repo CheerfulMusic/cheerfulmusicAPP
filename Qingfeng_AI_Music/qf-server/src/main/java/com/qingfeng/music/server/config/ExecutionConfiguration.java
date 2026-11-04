@@ -17,7 +17,7 @@ import org.springframework.scheduling.annotation.*;
 public class ExecutionConfiguration {
     @Bean ExecutionRepository executionRepository(ExecutionMapper mapper){return new MyBatisExecutionRepository(mapper);}
     @Bean AudioDownloader audioDownloader(@Value("${qingfeng.generation.audio-hosts:}")String hosts,ProviderAudioUrls audioUrls){return new AllowlistedAudioDownloader(Arrays.stream(hosts.split(",")).map(String::trim).map(String::toLowerCase).filter(s->!s.isEmpty()).collect(Collectors.toSet()),audioUrls);}
-    @Bean GenerationWorker generationWorker(ExecutionRepository repository,MusicProvider provider,AudioDownloader downloader,GeneratedAudioArchive archive){return new GenerationWorker(repository,provider,downloader,archive,Clock.systemUTC(),Duration.ofMinutes(2),5);}
+    @Bean GenerationWorker generationWorker(ExecutionRepository repository,MusicProvider provider,AudioDownloader downloader,GeneratedAudioArchive archive,com.qingfeng.music.generation.application.SectionEditRepository edits,com.qingfeng.music.settings.MusicSettings settings){return new GenerationWorker(repository,provider,downloader,archive,Clock.systemUTC(),Duration.ofMinutes(2),5).withSectionEdits(edits).withSettings(settings);}
     @Bean @ConditionalOnProperty(name={"qingfeng.generation.enabled","qingfeng.generation.scheduler-enabled"},havingValue="true")
     Runner generationRunner(GenerationWorker worker){return new Runner(worker);}
     static class Runner{

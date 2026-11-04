@@ -1,23 +1,34 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { createPinia, setActivePinia } from 'pinia'
-import { usePlayer, type PlayableTrack } from '../src/shared/player/store'
-
+import {afterEach,beforeEach,describe,expect,it,vi} from 'vitest'
+import {createPinia,setActivePinia} from 'pinia'
+import {usePlayer,type PlayableTrack} from '../src/shared/player/store'
 class FakeAudio extends EventTarget {
-  static current: FakeAudio
-  src = ''; preload = ''; paused = true; currentTime = 0; duration = 18; error: object | null = null
-  nextPlay: Promise<void> | undefined
-  constructor() { super(); FakeAudio.current = this }
-  play() { this.paused = false; this.dispatchEvent(new Event('play')); const pending = this.nextPlay; this.nextPlay = undefined; return pending || Promise.resolve() }
-  pause() { this.paused = true; this.dispatchEvent(new Event('pause')) }
-  load() { this.error = null }
-  removeAttribute(name: string) { if (name === 'src') this.src = '' }
+ static instances:FakeAudio[]=[]
+ static nextPlay:Promise<void>|undefined
+ static get current(){return this.instances.at(-1)!}
+ src='';preload='';paused=true;ended=false;currentTime=0;duration=18;readyState=3;error:object|null=null
+ play=vi.fn(()=>{this.paused=false;this.ended=false;this.dispatchEvent(new Event('play'));const result=FakeAudio.nextPlay;FakeAudio.nextPlay=undefined;return result||Promise.resolve()})
+ pause=vi.fn(()=>{this.paused=true;this.dispatchEvent(new Event('pause'))})
+ load=vi.fn(()=>{this.error=null})
+ constructor(){super();FakeAudio.instances.push(this)}
+ removeAttribute(name:string){if(name==='src')this.src=''}
+ getAttribute(name:string){return name==='src'?this.src:null}
 }
-const track = (id: string): PlayableTrack => ({id,title:id,cover:'/cover.svg',audio:`/api/audio/${id}`,provenance:'IMPORTED'})
-beforeEach(() => { setActivePinia(createPinia()); vi.stubGlobal('Audio', FakeAudio) })
-afterEach(() => vi.unstubAllGlobals())
-describe('全站音频状态', () => {
-  it('关闭时停止播放并释放私有音频地址', async () => { const player = usePlayer(); await player.toggle(track('one')); player.close(); expect(player.current).toBeNull(); expect(player.playing).toBe(false); expect(FakeAudio.current.src).toBe('') })
-  it('旧播放请求失败不会覆盖新曲目的状态', async () => { const player = usePlayer(); await player.toggle(track('initial')); let reject!: (reason: Error) => void; FakeAudio.current.nextPlay = new Promise<void>((_, no) => { reject = no }); const first = player.toggle(track('one')); await player.toggle(track('two')); reject(new Error('旧请求中断')); await first; expect(player.current?.id).toBe('two'); expect(player.error).toBe(''); expect(player.playing).toBe(true) })
-  it('文件加载失败给出提示并允许重试', async () => { const player = usePlayer(); await player.toggle(track('one')); FakeAudio.current.error = {code:4}; FakeAudio.current.paused = true; FakeAudio.current.dispatchEvent(new Event('error')); expect(player.error).toContain('无法加载'); await player.toggle(track('one')); expect(player.error).toBe(''); expect(player.playing).toBe(true) })
-  it('切歌复用同一个音频实例并支持返回上一首', async () => { const player = usePlayer(); player.setQueue([track('one'),track('two')]); await player.toggle(track('one')); const audio = FakeAudio.current; await player.next(); expect(player.current?.id).toBe('two'); expect(FakeAudio.current).toBe(audio); await player.next(-1); expect(player.current?.id).toBe('one') })
+const track=(id:string):PlayableTrack=>({id,title:id,cover:'/cover.svg',audio:'/api/audio/'+id,provenance:'GENERATED'})
+beforeEach(()=>{setActivePinia(createPinia());FakeAudio.instances=[];FakeAudio.nextPlay=undefined;vi.stubGlobal('Audio',FakeAudio);vi.stubGlobal('fetch',vi.fn(()=>new Promise(()=>{})))})
+afterEach(()=>{usePlayer().reset();vi.useRealTimers();vi.restoreAllMocks();vi.unstubAllGlobals()})
+describe('分段起播与重复试听',()=>{
+ it('点击内同步play，完全不等待fetch整首，更不要求第二次点击',async()=>{const player=usePlayer(),pending=player.toggle(track('one'));expect(FakeAudio.current.play).toHaveBeenCalledTimes(1);expect(FakeAudio.current.src).toBe('/api/audio/one');expect(fetch).not.toHaveBeenCalled();await pending;expect(player.playing).toBe(true)})
+ it('自然结束后重播同一实例，不重置媒体源或重新load',async()=>{const player=usePlayer();await player.toggle(track('one'));const a=FakeAudio.current;a.currentTime=18;a.ended=true;a.paused=true;a.dispatchEvent(new Event('ended'));await player.toggle(track('one'));expect(FakeAudio.instances).toHaveLength(1);expect(a.currentTime).toBe(0);expect(a.load).not.toHaveBeenCalled();expect(fetch).not.toHaveBeenCalled()})
+ it('关闭再打开保留当前缓冲，身份reset才释放',async()=>{const player=usePlayer();await player.toggle(track('one'));const a=FakeAudio.current;a.currentTime=8;player.close();expect(player.current).toBeNull();expect(a.paused).toBe(true);expect(a.src).toBe('/api/audio/one');await player.toggle(track('one'));expect(FakeAudio.instances).toHaveLength(1);expect(a.currentTime).toBe(8);expect(a.load).not.toHaveBeenCalled();player.reset();expect(a.src).toBe('');await player.toggle(track('one'));expect(FakeAudio.instances).toHaveLength(2)})
+ it('两版对比保留各自实例和进度',async()=>{const player=usePlayer();await player.toggle(track('one'));const a=FakeAudio.current;a.currentTime=8;await player.toggle(track('two'));const b=FakeAudio.current;await player.toggle(track('one'));expect(FakeAudio.instances).toHaveLength(2);expect(player.current?.id).toBe('one');expect(a.currentTime).toBe(8);expect(a.paused).toBe(false);expect(b.paused).toBe(true);expect(a.load).not.toHaveBeenCalled()})
+ it('后台旧媒体事件不覆盖当前曲目或自动播放',async()=>{const player=usePlayer();await player.toggle(track('one'));const a=FakeAudio.current;await player.toggle(track('two'));a.currentTime=16;a.dispatchEvent(new Event('timeupdate'));a.error={};a.dispatchEvent(new Event('error'));a.dispatchEvent(new Event('ended'));expect(player.current?.id).toBe('two');expect(player.time).toBe(0);expect(player.error).toBe('');expect(player.playing).toBe(true)})
+ it('等待起播时再次点击取消意图，旧promise结束也不会再播放',async()=>{let finish!:()=>void;FakeAudio.nextPlay=new Promise<void>(resolve=>{finish=resolve});const player=usePlayer(),pending=player.toggle(track('one'));expect(player.starting).toBe(true);await player.toggle(track('one'));finish();await pending;expect(player.starting).toBe(false);expect(player.playing).toBe(false);expect(FakeAudio.current.paused).toBe(true);expect(FakeAudio.current.play).toHaveBeenCalledTimes(1)})
+ it('关闭后旧play完成不重新显示播放器或播放',async()=>{let finish!:()=>void;FakeAudio.nextPlay=new Promise<void>(resolve=>{finish=resolve});const player=usePlayer(),pending=player.toggle(track('one'));player.close();finish();await pending;expect(player.current).toBeNull();expect(player.playing).toBe(false);expect(FakeAudio.current.paused).toBe(true)})
+ it('旧播放拒绝不能影响新播放',async()=>{let reject!:(e:Error)=>void;FakeAudio.nextPlay=new Promise<void>((_resolve,no)=>{reject=no});const player=usePlayer(),pending=player.toggle(track('one'));await player.toggle(track('two'));reject(new Error('old failure'));await pending;expect(player.current?.id).toBe('two');expect(player.error).toBe('');expect(player.playing).toBe(true)})
+ it('浏览器播放限制给出真实提示，再次点击不重复下载或重置源',async()=>{FakeAudio.nextPlay=Promise.reject(new DOMException('blocked','NotAllowedError'));const player=usePlayer();await player.toggle(track('one'));expect(player.error).toContain('浏览器暂停');await player.toggle(track('one'));expect(player.error).toBe('');expect(FakeAudio.instances).toHaveLength(1);expect(FakeAudio.current.load).not.toHaveBeenCalled();expect(fetch).not.toHaveBeenCalled()})
+ it('缓冲恢复与时间推进清除等待，15秒停滞提供重试',async()=>{const player=usePlayer();await player.toggle(track('one'));const a=FakeAudio.current;vi.useFakeTimers();a.dispatchEvent(new Event('waiting'));expect(player.buffering).toBe(true);a.dispatchEvent(new Event('playing'));expect(player.buffering).toBe(false);a.dispatchEvent(new Event('waiting'));a.currentTime=2;a.dispatchEvent(new Event('timeupdate'));expect(player.buffering).toBe(false);a.dispatchEvent(new Event('waiting'));await vi.advanceTimersByTimeAsync(15000);expect(player.error).toContain('等待时间较长');expect(player.playing).toBe(false)})
+ it('版本对比禁止自动换版，音乐收藏仍可设置连播',async()=>{const player=usePlayer();player.setQueue([track('one'),track('two')],false);await player.toggle(track('one'));FakeAudio.current.paused=true;FakeAudio.current.dispatchEvent(new Event('ended'));expect(player.current?.id).toBe('one');player.setQueue([track('one'),track('two')]);FakeAudio.current.dispatchEvent(new Event('ended'));await Promise.resolve();expect(player.current?.id).toBe('two')})
+ it('元数据更新时长，手动跳转同步歌词并退出循环',async()=>{const player=usePlayer();await player.playSegment(track('one'),3,8);const a=FakeAudio.current;a.currentTime=8.1;a.dispatchEvent(new Event('timeupdate'));expect(a.currentTime).toBe(3);player.seek(12);expect(player.segment).toBeNull();expect(player.time).toBe(12);expect(player.seekVersion).toBeGreaterThan(0);a.duration=20;a.dispatchEvent(new Event('durationchange'));expect(player.duration).toBe(20);player.seek(99);expect(player.time).toBe(20)})
+ it('不循环片段到终点暂停，更换封面不中断音频',async()=>{const player=usePlayer();await player.playSegment(track('one'),3,8,false);const a=FakeAudio.current;a.currentTime=8;a.dispatchEvent(new Event('timeupdate'));expect(a.paused).toBe(true);expect(player.segment).toBeNull();await player.toggle(track('one'));player.updateCover('one','/new.jpg');expect(player.current?.cover).toBe('/new.jpg');expect(a.currentTime).toBe(8);expect(a.paused).toBe(false);expect(a.load).not.toHaveBeenCalled()})
+ it('解码或权限失败显示错误，显式重试才reload',async()=>{const player=usePlayer();await player.toggle(track('one'));const a=FakeAudio.current;a.error={code:4};a.paused=true;a.dispatchEvent(new Event('error'));expect(player.error).toContain('无法加载');await player.toggle(track('one'));expect(a.load).toHaveBeenCalledTimes(1);expect(player.error).toBe('');expect(player.playing).toBe(true)})
 })

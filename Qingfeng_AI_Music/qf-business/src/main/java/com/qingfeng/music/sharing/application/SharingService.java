@@ -14,18 +14,22 @@ public class SharingService implements SharingApi {
     private final WorkApi works;private final LyricsApi lyrics;private final MediaApi media;private final ShareRepository repository;
     private final SecureRandom random=new SecureRandom();
     private final com.qingfeng.music.media.api.SharedMediaAccess audioAccess;
-    public SharingService(WorkApi works,LyricsApi lyrics,MediaApi media,ShareRepository repository,com.qingfeng.music.media.api.SharedMediaAccess audioAccess){this.works=works;this.lyrics=lyrics;this.media=media;this.repository=repository;this.audioAccess=audioAccess;}
+    private final com.qingfeng.music.cover.api.SharedCoverAccess covers;
+    public SharingService(WorkApi works,LyricsApi lyrics,MediaApi media,ShareRepository repository,com.qingfeng.music.media.api.SharedMediaAccess audioAccess,com.qingfeng.music.cover.api.SharedCoverAccess covers){this.works=works;this.lyrics=lyrics;this.media=media;this.repository=repository;this.audioAccess=audioAccess;this.covers=covers;}
     public Created create(String owner,String work,String revisionId,String assetId){
         var w=works.get(owner,work);var revision=lyrics.get(owner,work,revisionId);var asset=media.get(owner,work,assetId);
         if(!revision.confirmed())throw new DomainException("LYRICS_NOT_CONFIRMED","请先确认歌词版本");
-        if(revision.workVersion()!=w.version())throw new DomainException("WORK_VERSION_CONFLICT","作品已修改，请保存并确认当前版本的歌词");
+        if(asset.origin().equals("GENERATED")){
+            if(!media.matchesGenerationRevision(owner,work,assetId,revisionId))throw new DomainException("INVALID_GIFT_SOURCE","请选择这首歌曲生成时使用的歌词版本");
+        }else if(revision.workVersion()!=w.version())throw new DomainException("WORK_VERSION_CONFLICT","作品已修改，请保存并确认当前版本的歌词");
         byte[] bytes=new byte[32];random.nextBytes(bytes);String token=Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
         Instant now=Instant.now();String id=UUID.randomUUID().toString();Instant expires=now.plus(7,ChronoUnit.DAYS);
-        repository.insert(new ShareRepository.Snapshot(id,work,hash(token),assetId,revision.title(),w.recipient(),w.message(),revision.lyrics(),asset.origin(),true,now,expires));
+        repository.insert(new ShareRepository.Snapshot(id,work,hash(token),assetId,revision.title(),w.recipient(),w.message(),revision.lyrics(),asset.origin(),true,now,expires,covers.current(work)));
         return new Created(id,token,expires);
     }
     public void revokeAll(String owner,String work){works.get(owner,work);repository.revokeAll(work);}
-    public Gift get(String token){var share=resolve(token);return new Gift(share.title(),share.recipient(),share.message(),share.lyrics(),share.audioOrigin(),share.createdAt(),share.expiresAt());}
+    public Gift get(String token){var share=resolve(token);return new Gift(share.title(),share.recipient(),share.message(),share.lyrics(),share.audioOrigin(),share.createdAt(),share.expiresAt(),share.coverId()!=null);}
+    public MediaApi.Content cover(String token){var share=resolve(token);if(share.coverId()==null)throw new DomainException("COVER_NOT_FOUND","礼物使用默认封面");return covers.content(share.workId(),share.coverId());}
     public MediaApi.Content audio(String token){var share=resolve(token);return audioAccess.content(share.workId(),share.assetId());}
     private ShareRepository.Snapshot resolve(String token){
         if(token==null||!token.matches("[A-Za-z0-9_-]{43}"))throw notFound();

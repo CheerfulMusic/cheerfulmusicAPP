@@ -14,6 +14,7 @@
   <build>
     <resources>
       <resource><directory>src/main/resources</directory></resource>
+      <resource><directory>${project.basedir}/../config</directory><includes><include>usage-limits.properties</include></includes></resource>
       <resource><directory>${project.basedir}/../../Qingfeng_AI_Music_VUE/dist</directory><targetPath>static</targetPath></resource>
     </resources>
     <plugins><plugin><groupId>org.springframework.boot</groupId><artifactId>spring-boot-maven-plugin</artifactId></plugin></plugins>

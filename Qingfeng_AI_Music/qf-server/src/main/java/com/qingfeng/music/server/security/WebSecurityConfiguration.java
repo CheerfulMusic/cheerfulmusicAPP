@@ -28,7 +28,7 @@ public class WebSecurityConfiguration {
                 .dispatcherTypeMatchers(jakarta.servlet.DispatcherType.ERROR).permitAll()
                 .requestMatchers(org.springframework.http.HttpMethod.GET,"/","/index.html","/assets/**","/brand/**","/media/**","/create","/works","/works/*","/gift/*","/account").permitAll()
                 .requestMatchers("/api/public/system/info", "/api/public/csrf", "/api/public/session", "/api/public/session/recover", "/actuator/health").permitAll()
-                .requestMatchers(org.springframework.http.HttpMethod.GET,"/api/public/gifts/*","/api/public/gifts/*/audio").permitAll()
+                .requestMatchers(org.springframework.http.HttpMethod.GET,"/api/public/gifts/*","/api/public/gifts/*/audio","/api/public/gifts/*/cover").permitAll()
                 .requestMatchers("/api/app/**").hasRole("CREATOR")
                 .anyRequest().denyAll())
             .exceptionHandling(errors -> errors.authenticationEntryPoint((request,response,error)->response.sendError(request.getRequestURI().startsWith("/api/app/")?401:403)))

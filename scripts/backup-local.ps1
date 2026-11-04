@@ -14,9 +14,15 @@ try {
     if($LASTEXITCODE -ne 0){throw '数据库备份失败，未生成完成标记。'}
     $audioRoot=Get-AudioDirectory $context;$mediaDestination=Join-Path $backupRoot 'audio';New-Item -ItemType Directory -Path $mediaDestination | Out-Null
     if(Test-Path -LiteralPath $audioRoot){foreach($file in Get-ChildItem -LiteralPath $audioRoot -File){if($file.Attributes -band [IO.FileAttributes]::ReparsePoint){throw '音频目录包含链接文件，请先检查。'};if($file.Name -match '^[0-9a-f-]{36}\.(wav|mp3)$'){Copy-Item -LiteralPath $file.FullName -Destination $mediaDestination}}}
+    $hasCoverTable=Invoke-MySql $context "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='cover_asset'" $context.database
+    if($hasCoverTable -eq '1'){
+        $coverRoot=Get-CoverDirectory $context;$coverDestination=Join-Path $backupRoot 'covers';New-Item -ItemType Directory -Path $coverDestination | Out-Null
+        $coverRows=(Invoke-MySql $context 'SELECT storage_key,byte_size FROM cover_asset' $context.database) -split "`r?`n"
+        foreach($row in $coverRows){if(-not $row){continue};$parts=$row -split "`t";if($parts[0] -notmatch '^local:([0-9a-f-]{36}\.jpg)$'){throw '存在云端封面或异常引用，请先备份OSS封面对象。'};$file=Join-Path $coverRoot $Matches[1];if(-not(Test-Path -LiteralPath $file) -or (Get-Item -LiteralPath $file).Length -ne [long]$parts[1] -or ((Get-Item -LiteralPath $file).Attributes -band [IO.FileAttributes]::ReparsePoint)){throw '已登记封面缺失或无效，未生成完成标记。'};Copy-Item -LiteralPath $file -Destination $coverDestination}
+    }
     $hashes=@{};foreach($file in Get-ChildItem -LiteralPath $backupRoot -File -Recurse){if($file.Name -eq 'dump.err.log'){continue};$relative=[IO.Path]::GetRelativePath($backupRoot,$file.FullName);$hashes[$relative]=(Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash}
     @{format=1;createdAt=[DateTime]::UtcNow.ToString('o');database=$context.database;hashes=$hashes} | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $backupRoot 'manifest.json') -Encoding utf8
     Write-Host "完整本地备份已生成：$backupRoot"
-    Write-Host '包含私人作品数据和音频，请保密保存；不包含API密钥或数据库密码。'
+    Write-Host '包含私人作品数据、音频和封面，请保密保存；不包含API密钥或数据库密码。'
     if($Online){Write-Host '在线备份仅适用于当前媒体不可变、没有并行文件整理的版本；任务恢复仍以持久化状态为准。'}
 } finally {Close-MySqlContext $context}

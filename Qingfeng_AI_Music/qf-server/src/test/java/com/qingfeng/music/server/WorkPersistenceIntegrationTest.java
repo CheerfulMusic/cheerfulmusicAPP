@@ -31,7 +31,7 @@ class WorkPersistenceIntegrationTest {
     private final String draft="{\"recipient\":\"妈妈\",\"occasion\":\"生日祝福\",\"story\":\"一起做饭的回忆\",\"message\":\"谢谢你\",\"style\":\"民谣\",\"title\":\"回家的风\"}";
     @Test void persistsAndRestoresOwnedDraft() throws Exception {
         var b=browser();var created=send(b.http(),"POST","/api/app/works",draft,b.csrf());assertEquals(200,created.statusCode(),created.body());
-        String id=field(created.body(),"id");var read=send(b.http(),"GET","/api/app/works/"+id,null,null);assertEquals(200,read.statusCode());assertTrue(read.body().contains("一起做饭的回忆"));assertFalse(read.body().contains("ownerId"));
+        String id=field(created.body(),"id");var read=send(b.http(),"GET","/api/app/works/"+id,null,null);assertEquals(200,read.statusCode());assertTrue(read.body().contains("一起做饭的回忆"));assertFalse(read.body().contains("ownerId"));assertEquals("AUTO",field(read.body(),"vocalGender"));
         assertTrue(send(b.http(),"GET","/api/app/works",null,null).body().contains(id));
     }
     @Test void rejectsOtherCreatorAndForgedOwner() throws Exception {
@@ -46,8 +46,19 @@ class WorkPersistenceIntegrationTest {
         assertEquals(200,send(b.http(),"PUT","/api/app/works/"+id,update,b.csrf()).statusCode());
         assertEquals(409,send(b.http(),"PUT","/api/app/works/"+id,update,b.csrf()).statusCode());
     }
+    @Test void persistsVoiceSelectionAndRejectsInvalidValues()throws Exception{
+        var b=browser();String male=draft.replace("}",",\"vocalGender\":\"MALE\"}");var created=send(b.http(),"POST","/api/app/works",male,b.csrf());assertEquals(200,created.statusCode());String id=field(created.body(),"id");assertEquals("MALE",field(send(b.http(),"GET","/api/app/works/"+id,null,null).body(),"vocalGender"));
+        String female=draft.replace("}",",\"vocalGender\":\"FEMALE\",\"expectedVersion\":0}");assertEquals(200,send(b.http(),"PUT","/api/app/works/"+id,female,b.csrf()).statusCode());assertEquals("FEMALE",field(send(b.http(),"GET","/api/app/works/"+id,null,null).body(),"vocalGender"));
+        assertEquals(400,send(b.http(),"POST","/api/app/works",draft.replace("}",",\"vocalGender\":\"ROBOT\"}"),b.csrf()).statusCode());
+    }
     @Test void csrfAndAuthenticationAreRequired() throws Exception {
         var b=browser();assertEquals(403,send(b.http(),"POST","/api/app/works",draft,null).statusCode());
         assertEquals(401,send(HttpClient.newHttpClient(),"GET","/api/app/works",null,null).statusCode());
+    }
+    @Test void initialAutosaveCanReplayAfterLostResponseWithoutCreatingAnotherWork()throws Exception{
+        var a=browser();String key=java.util.UUID.randomUUID().toString();String input=draft.replace("}",",\"draftKey\":\""+key+"\"}");
+        var first=send(a.http(),"POST","/api/app/works",input,a.csrf());assertEquals(200,first.statusCode());assertEquals(key,field(first.body(),"id"));
+        var replay=send(a.http(),"POST","/api/app/works",input,a.csrf());assertEquals(200,replay.statusCode());assertEquals(first.body(),replay.body());
+        var b=browser();var stolen=send(b.http(),"POST","/api/app/works",input,b.csrf());assertEquals(404,stolen.statusCode());assertFalse(stolen.body().contains("一起做饭"));
     }
 }

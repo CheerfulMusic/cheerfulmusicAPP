@@ -6,6 +6,7 @@ public interface SharingApi {
     void revokeAll(String owner,String work);
     Gift get(String token);
     Content audio(String token);
+    Content cover(String token);
     record Created(String id,String token,Instant expiresAt) {}
-    record Gift(String title,String recipient,String message,String lyrics,String audioOrigin,Instant createdAt,Instant expiresAt) {}
+    record Gift(String title,String recipient,String message,String lyrics,String audioOrigin,Instant createdAt,Instant expiresAt,boolean hasCover) {}
 }

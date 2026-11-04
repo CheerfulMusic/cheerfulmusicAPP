@@ -3,3 +3,5 @@
 收礼链接与公开内容投影。
 
 已实现主动创建分享、白名单快照、7天有效期、令牌哈希存储、按作品全部撤销；每次公开信息及音频请求都校验有效性。只通过WorkApi/LyricsApi/MediaApi和SharedMediaAccess交互，ShareRepository由infrastructure适配。已经下载的内容不能通过撤销收回。
+
+分享快照同时绑定封面ID，通过SharedCoverAccess提供授权图片访问；每次公开封面请求也验证令牌有效期和撤销状态。生成音频只允许绑定其原始歌词，后续调整风格不阻止旧歌曲按原稿送礼。导入音频仍要求确认当前作品版本的歌词。

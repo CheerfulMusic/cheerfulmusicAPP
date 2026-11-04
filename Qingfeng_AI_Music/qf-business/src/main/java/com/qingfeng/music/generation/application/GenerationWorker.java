@@ -15,6 +15,10 @@ public final class GenerationWorker {
     private final Clock clock;
     private final Duration lease;
     private final int maxArchiveAttempts;
+    private SectionEditRepository edits;
+    private com.qingfeng.music.settings.MusicSettings settings;
+    public GenerationWorker withSettings(com.qingfeng.music.settings.MusicSettings value){settings=value;return this;}
+    public GenerationWorker withSectionEdits(SectionEditRepository edits){this.edits=edits;return this;}
 
     public GenerationWorker(ExecutionRepository repository, MusicProvider provider,
                             AudioDownloader downloader, GeneratedAudioArchive archive,
@@ -39,7 +43,7 @@ public final class GenerationWorker {
             switch(execution.task().status()) {
                 case QUEUED -> submit(execution);
                 case SUBMITTING -> repository.unknown(taskId,token,"WORKER_INTERRUPTED",now());
-                case RUNNING -> query(execution);
+                case RUNNING, SUBMISSION_UNKNOWN -> query(execution);
                 case SAVING -> save(execution);
                 default -> { }
             }
@@ -56,7 +60,10 @@ public final class GenerationWorker {
         if (!repository.startSubmission(task.id(),token,now())) return;
         String attempt=repository.attempt(task.id(),"SUBMIT",now());
         try {
-            var accepted=provider.submit(new MusicProvider.Request(task.title(),task.lyrics(),task.style()),task.id());
+            var direction=settings==null?null:settings.frozen(task.workId(),task.id()).orElse(null);
+            var request=direction==null?new MusicProvider.Request(task.title(),task.lyrics(),task.style(),task.vocalGender()):new MusicProvider.Request(task.title(),task.lyrics(),direction.style(),task.vocalGender(),direction.negativeTags(),true);
+            var edit=edits==null?java.util.Optional.<SectionEditRepository.Edit>empty():edits.edit(task.id());
+            var accepted=edit.isPresent()?provider.replace(request,edit.get().replacement(),task.id()):provider.submit(request,task.id());
             if (accepted==null || accepted.providerTaskId()==null || accepted.providerTaskId().isBlank()
                 || accepted.providerTaskId().length()>255) throw new IllegalStateException("缺少供应商任务标识");
             // 已知成功的迟到响应也可恢复待核对任务；不能因此再次提交。
@@ -81,6 +88,7 @@ public final class GenerationWorker {
             if (result.status()==GenerationStatus.FAILED) repository.failed(task.id(),token,"PROVIDER_FAILED",now());
             else if (result.status()==GenerationStatus.SAVING || result.status()==GenerationStatus.SUCCEEDED) {
                 if (result.temporaryAudioUrl()==null || result.temporaryAudioUrl().length()>4096) throw new IllegalStateException("缺少音频地址");
+                if(edits!=null&&result.audioInfo()!=null)edits.recordAudio(task.id(),result.audioInfo());
                 repository.saving(task.id(),token,result.temporaryAudioUrl(),now());
             } else repository.running(task.id(),token,0,null,now(),now().plusSeconds(10));
             repository.finishAttempt(attempt,"COMPLETED",null,now());
@@ -101,7 +109,7 @@ public final class GenerationWorker {
         } catch (Exception error) {
             // 临时下载地址可能已过期。只读查询可刷新地址，绝不重新提交生成。
             if(error instanceof java.io.IOException && execution.providerTaskId()!=null){
-                try{var latest=provider.query(execution.providerTaskId());if(latest!=null&&execution.providerTaskId().equals(latest.providerTaskId())&&latest.temporaryAudioUrl()!=null&&latest.temporaryAudioUrl().length()<=4096&&(latest.status()==GenerationStatus.SAVING||latest.status()==GenerationStatus.SUCCEEDED))repository.refreshAudioUrl(task.id(),token,latest.temporaryAudioUrl());}
+                try{var latest=provider.query(execution.providerTaskId());if(latest!=null&&execution.providerTaskId().equals(latest.providerTaskId())&&latest.temporaryAudioUrl()!=null&&latest.temporaryAudioUrl().length()<=4096&&(latest.status()==GenerationStatus.SAVING||latest.status()==GenerationStatus.SUCCEEDED)){if(edits!=null&&latest.audioInfo()!=null)edits.recordAudio(task.id(),latest.audioInfo());repository.refreshAudioUrl(task.id(),token,latest.temporaryAudioUrl());}}
                 catch(RuntimeException ignored){/* 保留失败状态与已有外部任务标识，稍后只重试归档。 */}
             }
             int attempts=execution.archiveAttempts()+1;

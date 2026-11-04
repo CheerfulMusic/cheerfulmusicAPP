@@ -1,0 +1,8 @@
+[Unit]
+Description=Back up Cheerful Music database and audio
+After=mysqld.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/qingfeng-music-backup
+UMask=0077

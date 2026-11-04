@@ -14,6 +14,10 @@ public class ProviderConfiguration {
     @Bean MusicProvider musicProvider(Environment environment,ProviderAudioUrls audioUrls) {
         if (!"kie-suno".equals(environment.getProperty("qingfeng.generation.provider","unconfigured"))) return new UnavailableMusicProvider();
         String key=environment.getProperty("qingfeng.providers.kie.api-key",environment.getProperty("KIE_API_KEY",""));
-        return new KieSunoMusicProvider(key,environment.getProperty("qingfeng.providers.kie.model","V6")).approveAudioWith(audioUrls::approve);
+        var tuning=new KieSunoMusicProvider.Tuning(
+            environment.getProperty("qingfeng.providers.kie.style-weight",Double.class,0.85),
+            environment.getProperty("qingfeng.providers.kie.weirdness-constraint",Double.class,0.25),
+            environment.getProperty("qingfeng.providers.kie.variety",Integer.class,0));
+        return new KieSunoMusicProvider(key,environment.getProperty("qingfeng.providers.kie.model","V6"),tuning).sectionAudioWeight(environment.getProperty("qingfeng.providers.kie.section-audio-weight",Double.class,0.85)).approveAudioWith(audioUrls::approve);
     }
 }

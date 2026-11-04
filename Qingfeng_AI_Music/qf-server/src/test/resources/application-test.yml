@@ -7,6 +7,18 @@ mybatis:
   configuration:
     map-underscore-to-camel-case: true
 qingfeng:
+  cover:
+    directory: ./target/test-covers
+    ai:
+      enabled: false
+      scheduler-enabled: false
+  usage:
+    music:
+      daily-global: 1000
+      concurrent-global: 1000
+    lyrics:
+      daily-global: 1000
+      concurrent-global: 1000
   generation:
     scheduler-enabled: false
   media:

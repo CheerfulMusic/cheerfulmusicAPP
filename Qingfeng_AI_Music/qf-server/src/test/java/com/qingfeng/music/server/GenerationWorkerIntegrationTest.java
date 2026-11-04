@@ -26,16 +26,17 @@ import static org.junit.jupiter.api.Assertions.*;
 class GenerationWorkerIntegrationTest {
     @Autowired IdentityApi identity; @Autowired WorkApi works; @Autowired LyricsApi lyrics;
     @Autowired ExecutionRepository repository; @Autowired TaskMapper mapper; @Autowired MediaService media;
+    @Autowired org.springframework.jdbc.core.JdbcTemplate jdbc;
     static class Time extends Clock {
-        Instant now=Instant.now().plusSeconds(2);
+        Instant now=Instant.now().plusSeconds(10);
         public ZoneId getZone(){return ZoneOffset.UTC;} public Clock withZone(ZoneId z){return this;}
         public Instant instant(){return now;} void advance(long seconds){now=now.plusSeconds(seconds);}
     }
     static class Provider implements MusicProvider {
-        String name="offline-"+UUID.randomUUID(); AtomicInteger submissions=new AtomicInteger(),queries=new AtomicInteger();
+        String name="offline-"+UUID.randomUUID(); AtomicInteger submissions=new AtomicInteger(),queries=new AtomicInteger();Request received;
         boolean unknown,rejected,queryFailure; String audioUrl="https://audio.test/song.wav"; CountDownLatch entered,release;
         public String name(){return name;} public boolean isConfigured(){return true;}
-        public Submission submit(Request request,String key){submissions.incrementAndGet();if(entered!=null){entered.countDown();try{if(!release.await(5,TimeUnit.SECONDS))throw new IllegalStateException();}catch(InterruptedException e){Thread.currentThread().interrupt();throw new IllegalStateException();}}if(unknown)throw new IllegalStateException("模拟断线");if(rejected)throw new Rejected();return new Submission("external-"+key);}
+        public Submission submit(Request request,String key){received=request;submissions.incrementAndGet();if(entered!=null){entered.countDown();try{if(!release.await(5,TimeUnit.SECONDS))throw new IllegalStateException();}catch(InterruptedException e){Thread.currentThread().interrupt();throw new IllegalStateException();}}if(unknown)throw new IllegalStateException("模拟断线");if(rejected)throw new Rejected();return new Submission("external-"+key);}
         public Result query(String id){queries.incrementAndGet();if(queryFailure){queryFailure=false;throw new IllegalStateException("模拟查询断线");}return new Result(id,GenerationStatus.SAVING,audioUrl);}
     }
     record Fixture(String owner,String work,String id,GenerationApi api,Provider provider,Time time){}
@@ -43,7 +44,11 @@ class GenerationWorkerIntegrationTest {
     GenerationWorker worker(Fixture f,AudioDownloader downloader){return new GenerationWorker(repository,f.provider(),downloader,media,f.time(),Duration.ofMinutes(2),2);}
     byte[] wav(){var b=ByteBuffer.allocate(48).order(ByteOrder.LITTLE_ENDIAN);b.put("RIFF".getBytes()).putInt(40).put("WAVEfmt ".getBytes()).putInt(16).putShort((short)1).putShort((short)1).putInt(8000).putInt(16000).putShort((short)2).putShort((short)16).put("data".getBytes()).putInt(4).putInt(0);return b.array();}
     GenerationStatus status(Fixture f){return f.api().list(f.owner(),f.work()).get(0).status();}
+    @Test void workerCannotSubmitDuringTheFiveSecondUndoWindow(){var f=fixture();var task=f.api().list(f.owner(),f.work()).get(0);f.time().now=task.createdAt().plusSeconds(4);var w=worker(f,url->new ByteArrayInputStream(wav()));assertFalse(w.runOnce());assertEquals(0,f.provider().submissions.get());f.time().now=task.createdAt().plusSeconds(6);assertTrue(w.runOnce());assertEquals(1,f.provider().submissions.get());}
 
+    @Test void workerSendsPersistedVoiceAfterWorkChanges(){
+        var provider=new Provider();var time=new Time();String owner=identity.create().creatorId();var work=works.create(owner,new WorkApi.Draft("朋友","毕业","故事","祝福","民谣","歌曲","FEMALE"));var revision=lyrics.save(owner,work.id(),0,"歌名","歌词");lyrics.confirm(owner,work.id(),revision.id());var api=new GenerationService(works,lyrics,provider,new MyBatisTaskRepository(mapper),repository);var accepted=api.submit(owner,work.id(),revision.id(),UUID.randomUUID().toString());works.update(owner,work.id(),0,new WorkApi.Draft("朋友","毕业","新故事","祝福","民谣","歌曲","MALE"));var test=new Fixture(owner,work.id(),accepted.id(),api,provider,time);assertTrue(worker(test,url->new ByteArrayInputStream(wav())).runOnce());assertEquals("FEMALE",provider.received.vocalGender());
+    }
     @Test void freshWorkerResumesQueryAndArchivesExactlyOneResult(){
         var f=fixture();var first=worker(f,url->new ByteArrayInputStream(wav()));assertTrue(first.runOnce());assertEquals(GenerationStatus.RUNNING,status(f));
         f.time().advance(11);var afterRestart=worker(f,url->new ByteArrayInputStream(wav()));assertTrue(afterRestart.runOnce());assertEquals(GenerationStatus.SAVING,status(f));
@@ -52,6 +57,23 @@ class GenerationWorkerIntegrationTest {
     }
     @Test void unknownSubmissionIsNeverAutomaticallySubmittedAgain(){
         var f=fixture();f.provider().unknown=true;var w=worker(f,url->new ByteArrayInputStream(wav()));assertTrue(w.runOnce());assertEquals(GenerationStatus.SUBMISSION_UNKNOWN,status(f));f.time().advance(3600);assertFalse(w.runOnce());assertEquals(1,f.provider().submissions.get());
+    }
+    @Test void unknownWithoutExternalIdDoesNotBlockAnotherCreatorsQueuedTask(){
+        var first=fixture();first.provider().unknown=true;var w=worker(first,url->new ByteArrayInputStream(wav()));assertTrue(w.runOnce());
+        var other=fixture();jdbc.update("UPDATE generation_task SET provider=? WHERE id=?",first.provider().name(),other.id());
+        first.provider().unknown=false;assertTrue(w.runOnce());assertEquals(GenerationStatus.RUNNING,status(other));assertEquals(GenerationStatus.SUBMISSION_UNKNOWN,status(first));assertEquals(2,first.provider().submissions.get());
+    }
+    @Test void unknownWithExternalIdResumesReadOnlyQueryAndArchivesWithoutResubmitting(){
+        var f=fixture();var w=worker(f,url->new ByteArrayInputStream(wav()));assertTrue(w.runOnce());
+        jdbc.update("UPDATE generation_task SET status='SUBMISSION_UNKNOWN' WHERE id=?",f.id());f.time().advance(11);
+        assertTrue(w.runOnce());assertEquals(GenerationStatus.SAVING,status(f));assertTrue(w.runOnce());assertEquals(GenerationStatus.SUCCEEDED,status(f));
+        assertEquals(1,f.provider().submissions.get());assertEquals(1,f.provider().queries.get());
+    }
+    @Test void checkingQueryFailureBacksOffWithoutSubmittingAgain(){
+        var f=fixture();var w=worker(f,url->new ByteArrayInputStream(wav()));assertTrue(w.runOnce());
+        jdbc.update("UPDATE generation_task SET status='SUBMISSION_UNKNOWN' WHERE id=?",f.id());f.time().advance(11);f.provider().queryFailure=true;
+        assertTrue(w.runOnce());assertEquals(GenerationStatus.RUNNING,status(f));assertFalse(w.runOnce());f.time().advance(21);assertTrue(w.runOnce());
+        assertEquals(GenerationStatus.SAVING,status(f));assertEquals(1,f.provider().submissions.get());assertEquals(2,f.provider().queries.get());
     }
     @Test void expiredSubmittingLeaseBecomesUnknownWithoutCallingProvider(){
         var f=fixture();String token=UUID.randomUUID().toString();var claimed=repository.claim(f.provider().name(),token,f.time().instant(),f.time().instant().plusSeconds(120));assertTrue(claimed.isPresent());assertTrue(repository.startSubmission(f.id(),token,f.time().instant()));f.time().advance(121);

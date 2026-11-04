@@ -42,3 +42,5 @@ function Invoke-MySql($context,[string]$sql,[string]$database='',[string]$inputF
     $process.WaitForExit();$result=$output.GetAwaiter().GetResult();[void]$errors.GetAwaiter().GetResult();if($process.ExitCode -ne 0){throw '本机MySQL操作失败，请检查配置、客户端版本和数据库状态。'};return $result.TrimEnd()
 }
 function Get-AudioDirectory($context){$value=$context.config['qingfeng.media.directory'];if(-not $value){$value='./data/audio'};if(-not [IO.Path]::IsPathRooted($value)){$value=Join-Path (Join-Path $script:TaskRoot 'Qingfeng_AI_Music') $value};return [IO.Path]::GetFullPath($value)}
+
+function Get-CoverDirectory($context){$value=$context.config['qingfeng.cover.directory'];if(-not $value){$value=Join-Path ([IO.Path]::GetDirectoryName((Get-AudioDirectory $context))) 'covers'};if(-not [IO.Path]::IsPathRooted($value)){$value=Join-Path (Join-Path $script:TaskRoot 'Qingfeng_AI_Music') $value};return [IO.Path]::GetFullPath($value)}

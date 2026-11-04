@@ -1,0 +1,23 @@
+[Unit]
+Description=Cheerful Music
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=qfmusic
+Group=qfmusic
+WorkingDirectory=/opt/qingfeng-music
+ExecStart=/usr/lib/jvm/java-17-openjdk/bin/java -Xms256m -Xmx768m -jar /opt/qingfeng-music/current/app.jar --spring.profiles.active=mysql --spring.config.additional-location=file:/etc/qingfeng-music/application.properties
+Restart=on-failure
+RestartSec=10
+SuccessExitStatus=143
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/qingfeng-music
+
+[Install]
+WantedBy=multi-user.target

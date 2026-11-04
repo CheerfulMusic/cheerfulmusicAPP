@@ -1,16 +1,63 @@
 <script setup lang="ts">
-import { t, formatDate, defaultCover } from '../../../shared/i18n/index'
+import { t, formatDate } from '../../../shared/i18n/index'
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute } from 'vue-router'
 import { loadWork, type Work } from '../../studio'
+import CoverEditor from '../components/CoverEditor.vue'
+import {coverUrl,loadCovers,type CoverState} from '../api/covers'
+import {usePlayer} from '../../../shared/player/store'
+import MusicSettingsPanel from '../components/MusicSettingsPanel.vue'
+import MusicSettingsSnapshot from '../components/MusicSettingsSnapshot.vue'
+import {saveMusicSettings,type MusicPreferences} from '../api/music-settings'
+import {useRouter} from 'vue-router'
 import { getSystemInfo } from '../../../shared/http/system'
-import { listTasks, submitTask, retryTaskArchive, type Revision, type AudioAsset, type GenerationTask } from '../api/detail'
+import { listTasks, submitTask, retryTaskArchive, cancelTask, getRevision, getUsage, type Allowance, type Revision, type AudioAsset, type GenerationTask } from '../api/detail'
+import CreationSteps from '../../../shared/ui/CreationSteps.vue'
+import SongResult from '../components/SongResult.vue'
+import SectionEditor from '../components/SectionEditor.vue'
+import type {EditHint} from '../model/section-edit'
 import LyricsPanel from '../components/LyricsPanel.vue'
 import AudioPanel from '../components/AudioPanel.vue'
 import SharePanel from '../components/SharePanel.vue'
 import MusicGenerationDialog from '../components/MusicGenerationDialog.vue'
+import { songSettings } from '../model/song-settings'
+import { vocalGenderLabel } from '../../studio/model/vocals'
 import { ApiError } from '../../../shared/http/api-client'
+import GenerationRecovery from '../components/GenerationRecovery.vue'
+import {closeTaskChecking} from '../api/detail'
+import {needsGenerationRefresh} from '../model/generation-recovery'
 const route = useRoute(), work = ref<Work>(), revision = ref<Revision | null>(null), asset = ref<AudioAsset | null>(null), tasks = ref<GenerationTask[]>([]), error = ref(''), loading = ref(false), lyricDirty = ref(false), modelReady = ref(false), submitting = ref(false), requestKey = ref('')
+const lyricsPanel=ref<InstanceType<typeof LyricsPanel>>(), lyricsReady=ref(false), allowance=ref<Allowance>(), giftRevision=ref<Revision|null>(null)
+const lyricRecoverable=ref(false),listenAfterLoad=ref(false),giftStage=ref(false),shared=ref(false),settingsOpen=ref(false),settingsBusy=ref(false),cancelling=ref(false)
+const router=useRouter(),player=usePlayer(),covers=ref<CoverState>(),coverOpen=ref(false)
+const musicSettingsPanel=ref<InstanceType<typeof MusicSettingsPanel>>()
+const sectionOpen=ref(false),sectionHint=ref<EditHint>(),sectionEditor=ref<InstanceType<typeof SectionEditor>>()
+function editSection(hint?:EditHint){if(player.current?.id===asset.value?.id&&(player.playing||player.starting))void player.toggle(player.current!);sectionHint.value=hint;sectionOpen.value=true;generationOpen.value=false}
+function sectionAdopted(){sectionOpen.value=false;giftStage.value=false;shared.value=false;mediaRefresh.value++;void refreshTasks()}
+const artwork=computed(()=>coverUrl(work.value?.id||'',covers.value?.currentCoverId))
+function updateCover(value:CoverState){covers.value=value;if(player.current?.audio.includes(`/app/works/${work.value?.id}/audio/`))player.updateCover(player.current.id,artwork.value)}
+function openCover(){coverOpen.value=true;void nextTick(()=>document.getElementById('cover-editor')?.scrollIntoView({block:'start',behavior:'smooth'}))}
+watch(asset,value=>{if(value&&listenAfterLoad.value){listenAfterLoad.value=false;void viewGeneratedMusic()}})
+const currentStep=computed(()=>shared.value?4:giftStage.value?3:asset.value||pendingTask.value?2:1)
+const songTitle=computed(()=>tasks.value.find(task=>task.assetId===asset.value?.id)?.title||work.value?.title||revision.value?.title||t('我的音乐'))
+const playingSettings=computed(()=>songSettings(asset.value,tasks.value))
+const displayedStyle=computed(()=>!asset.value?t(work.value?.style||''):asset.value.origin==='IMPORTED'?t('导入音频'):t(playingSettings.value?.style||'风格记录暂不可用'))
+const nextSettings=computed(()=>t('生成将使用：{style} · {voice}',{style:t(work.value?.style||''),voice:t(vocalGenderLabel(work.value?.vocalGender))}))
+watch([()=>asset.value?.id,()=>covers.value?.currentCoverId],()=>{shared.value=false})
+let giftSequence=0
+watch([asset,revision,tasks],async()=>{
+  const turn=++giftSequence;giftRevision.value=null
+  if(!asset.value||!work.value)return
+  if(asset.value.origin==='IMPORTED'){giftRevision.value=revision.value;return}
+  const linked=tasks.value.find(task=>task.assetId===asset.value!.id)
+  if(linked)try{const found=await getRevision(work.value.id,linked.revisionId);if(turn===giftSequence)giftRevision.value=found}catch{if(turn===giftSequence)error.value='歌曲对应的歌词暂时无法读取，请刷新后再分享。'}
+})
+async function updateAllowance(){try{allowance.value=(await getUsage()).music}catch{/* 提交时仍会进行后端额度校验。 */}}
+async function sendGift(){
+  giftStage.value=true;shared.value=false;coverOpen.value=true
+  if(asset.value?.origin==='IMPORTED'){try{giftRevision.value=await lyricsPanel.value!.prepareForGeneration()}catch(e){error.value=e instanceof Error?e.message:'请先确认歌词';return}}
+  await nextTick();const section=document.getElementById('work-share');section?.scrollIntoView({behavior:'smooth',block:'start'});section?.focus({preventScroll:true})
+}
 let sequence = 0
 const generationOpen = ref(false), trackedTaskId = ref(''), submissionIssue = ref(''), submissionUnknown = ref(false), progressIssue = ref(false)
 const inProgress = (task: GenerationTask) => ['QUEUED','SUBMITTING','RUNNING','SAVING'].includes(task.status)
@@ -20,38 +67,55 @@ const generationStatus = computed(() => trackedTask.value?.status || (submission
 function showProgress() { if (pendingTask.value) trackedTaskId.value = pendingTask.value.id; generationOpen.value = true }
 async function viewGeneratedMusic() {
   generationOpen.value = false; await nextTick()
-  const section = document.getElementById('work-audio')
+  if(!asset.value)listenAfterLoad.value=true
+  const section = document.getElementById('song-result') || document.getElementById('work-audio')
   section?.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block:'center' })
   section?.focus({preventScroll:true})
 }
 const mediaRefresh = ref(0)
-const statusLabels: Record<string,string> = {QUEUED:'等待处理',SUBMITTING:'正在提交',RUNNING:'音乐创作中',SAVING:'正在保存音频',SUCCEEDED:'创作完成',FAILED:'处理未完成',SUBMISSION_UNKNOWN:'提交结果待核对'}
+const statusLabels: Record<string,string> = {CANCELLED:'已撤销',QUEUED:'等待处理',SUBMITTING:'正在提交',RUNNING:'音乐创作中',SAVING:'正在保存音频',SUCCEEDED:'创作完成',FAILED:'处理未完成',SUBMISSION_UNKNOWN:'提交结果待核对'}
+let settingsOperation=0
 let polling = false
 async function refreshTasks() {
   if (!work.value || polling || document.visibilityState === 'hidden') return
   const workId = work.value.id; polling = true
-  try { const latest = await listTasks(workId); if (work.value?.id !== workId) return; if (latest.some(next => next.status === 'SUCCEEDED' && !tasks.value.some(old => old.id === next.id && old.status === 'SUCCEEDED'))) mediaRefresh.value++; tasks.value = latest; progressIssue.value = false }
+  try { const latest = await listTasks(workId); if (work.value?.id !== workId) return; if (latest.some(next => next.status === 'SUCCEEDED' && !tasks.value.some(old => old.id === next.id && old.status === 'SUCCEEDED'))) {mediaRefresh.value++;void updateAllowance()} tasks.value = latest; progressIssue.value = false
+    const recovered=submissionUnknown.value&&requestKey.value?latest.find(task=>task.requestKey===requestKey.value):undefined
+    if(recovered){trackedTaskId.value=recovered.id;submissionUnknown.value=false;submissionIssue.value='';requestKey.value='';error.value=''}
+  }
   catch (e) { if(work.value?.id === workId) { progressIssue.value = true; error.value = e instanceof Error ? e.message : '进度读取失败，可以刷新重试' } } finally { polling = false }
 }
-const pollTimer = window.setInterval(() => { if (tasks.value.some(task => ['QUEUED','SUBMITTING','RUNNING','SAVING'].includes(task.status))) void refreshTasks() }, 8000)
+const coverTimer=window.setInterval(()=>{const id=work.value?.id;if(id&&document.visibilityState==='visible'&&covers.value?.edits.some(e=>['QUEUED','SUBMITTING','RUNNING','SAVING'].includes(e.status)))void loadCovers(id).then(v=>{if(work.value?.id===id)updateCover(v)}).catch(()=>{})},5000)
+const pollTimer = window.setInterval(() => { if (needsGenerationRefresh(tasks.value,submissionUnknown.value)) void refreshTasks() }, 8000)
 document.addEventListener('visibilitychange', refreshTasks)
-onBeforeUnmount(() => { window.clearInterval(pollTimer); document.removeEventListener('visibilitychange', refreshTasks); sequence++ })
+onBeforeUnmount(() => { window.clearInterval(pollTimer);window.clearInterval(coverTimer); document.removeEventListener('visibilitychange', refreshTasks); sequence++ })
 async function retryArchive(task: GenerationTask) { if (!work.value || submitting.value) return; submitting.value = true; error.value = ''; try { await retryTaskArchive(work.value.id, task.id); await refreshTasks() } catch (e) { error.value = e instanceof Error ? e.message : '重试保存失败' } finally { submitting.value = false } }
-async function load() { const turn = ++sequence; generationOpen.value = false; trackedTaskId.value = ''; submissionIssue.value = ''; progressIssue.value = false; submitting.value = false; loading.value = true; error.value = ''; revision.value = null; asset.value = null; work.value = undefined; lyricDirty.value = false; requestKey.value = ''; try { const id = String(route.params.id); const [found, history, system] = await Promise.all([loadWork(id), listTasks(id), getSystemInfo()]); if (turn !== sequence) return; work.value = found; tasks.value = history; trackedTaskId.value = history.find(inProgress)?.id || ''; generationOpen.value = !!trackedTaskId.value; modelReady.value = system.capabilities.musicGeneration } catch (e) { if (turn === sequence) error.value = e instanceof Error ? e.message : '作品读取失败' } finally { if (turn === sequence) loading.value = false } }
+async function closeChecking(task:GenerationTask){
+  if(!work.value||submitting.value)return
+  const workId=work.value.id;submitting.value=true;error.value=''
+  try{await closeTaskChecking(workId,task.id);if(work.value?.id!==workId)return;generationOpen.value=false;await refreshTasks();await updateAllowance()}
+  catch(e){if(work.value?.id===workId)error.value=e instanceof Error?e.message:'暂时无法结束等待，请刷新状态。'}
+  finally{submitting.value=false}
+}
+async function load() { const turn = ++sequence;settingsOperation++;settingsBusy.value=false;sectionOpen.value=false;giftStage.value=false;shared.value=false;settingsOpen.value=false;coverOpen.value=false;covers.value=undefined; generationOpen.value = false; trackedTaskId.value = ''; submissionIssue.value = ''; submissionUnknown.value=false; progressIssue.value = false; submitting.value = false; loading.value = true; error.value = ''; revision.value = null; asset.value = null; tasks.value=[];giftRevision.value=null;work.value = undefined; lyricDirty.value = false; requestKey.value = ''; try { const id = String(route.params.id); const [found, history, system] = await Promise.all([loadWork(id), listTasks(id), getSystemInfo()]); if (turn !== sequence) return; work.value = found; tasks.value = history;void loadCovers(id).then(value=>{if(turn===sequence)updateCover(value)}).catch(e=>{if(turn===sequence)error.value=e instanceof Error?e.message:'封面读取失败'}); trackedTaskId.value = history.find(inProgress)?.id || ''; generationOpen.value = !!trackedTaskId.value; modelReady.value = system.capabilities.musicGeneration;void updateAllowance() } catch (e) { if (turn === sequence) error.value = e instanceof Error ? e.message : '作品读取失败' } finally { if (turn === sequence) loading.value = false } }
 watch(() => route.params.id, load, { immediate: true })
 watch(() => revision.value?.id, () => { if (!submitting.value && !submissionUnknown.value) requestKey.value = '' })
-const permitLeave = () => !lyricDirty.value || window.confirm(t('歌词还有未保存修改，确定离开吗？'))
-onBeforeRouteLeave(permitLeave); onBeforeRouteUpdate(permitLeave)
-const beforeUnload = (event: BeforeUnloadEvent) => { if (lyricDirty.value) { event.preventDefault(); event.returnValue = '' } }
+const permitLeave = () => !lyricDirty.value || lyricRecoverable.value || window.confirm(t('歌词还有未保存修改，确定离开吗？'))
+onBeforeRouteLeave(permitLeave); onBeforeRouteUpdate(to=>to.params.id===route.params.id||permitLeave())
+const beforeUnload = (event: BeforeUnloadEvent) => { if (lyricDirty.value&&!lyricRecoverable.value) { event.preventDefault(); event.returnValue = '' } }
 window.addEventListener('beforeunload', beforeUnload); onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
 async function generate() {
   if (pendingTask.value) { showProgress(); return }
-  if (!work.value || !revision.value?.confirmed || !modelReady.value || submitting.value) return
+  if(submissionUnknown.value){await refreshTasks();generationOpen.value=true;return}
+  if (!work.value || !lyricsReady.value || !modelReady.value || submitting.value || !lyricsPanel.value) return
   const workId = work.value.id, turn = sequence
   submitting.value = true; error.value = ''; submissionIssue.value = ''; submissionUnknown.value = false
-  trackedTaskId.value = ''; generationOpen.value = true; requestKey.value ||= crypto.randomUUID()
+  trackedTaskId.value = ''
   try {
-    const accepted = await submitTask(workId, revision.value.id, requestKey.value)
+    const confirmed=await lyricsPanel.value.prepareForGeneration()
+    if(turn!==sequence)return
+    revision.value=confirmed;giftStage.value=false;shared.value=false;generationOpen.value=true;requestKey.value ||= crypto.randomUUID()
+    const accepted = await submitTask(workId, confirmed.id, requestKey.value)
     if (turn !== sequence) return
     tasks.value = [accepted, ...tasks.value.filter(task => task.id !== accepted.id)]
     trackedTaskId.value = accepted.id; requestKey.value = ''
@@ -60,8 +124,69 @@ async function generate() {
     error.value = e instanceof Error ? e.message : '提交失败，未自动重试'
     submissionIssue.value = error.value
     submissionUnknown.value = !(e instanceof ApiError) || e.status === 0 || e.status === 408 || (e.status >= 500 && !e.code)
-  } finally { if (turn === sequence) submitting.value = false }
+  } finally { if (turn === sequence) {submitting.value = false;void updateAllowance()} }
 }
 
+
+async function cancelGeneration(){
+ if(!work.value||!trackedTask.value||cancelling.value)return
+ cancelling.value=true
+ try{const cancelled=await cancelTask(work.value.id,trackedTask.value.id);tasks.value=tasks.value.map(t=>t.id===cancelled.id?cancelled:t);await updateAllowance()}catch(e){submissionIssue.value=e instanceof Error?e.message:'撤销失败，请刷新状态';await refreshTasks()}finally{cancelling.value=false}
+}
+async function backToStory(){
+ try{await lyricsPanel.value?.saveForNavigation();await router.push({path:'/create',query:{work:work.value!.id,part:'1',returnRevision:revision.value?.id}})}catch(e){error.value=e instanceof Error?e.message:'请先保存歌词'}
+}
+async function applyMusicSettings(value:{expectedVersion:number;preferences:MusicPreferences}){
+ if(!work.value||settingsBusy.value)return
+ const workId=work.value.id,turn=sequence,operation=++settingsOperation,panel=musicSettingsPanel.value,lyrics=lyricsPanel.value
+ const input=JSON.parse(JSON.stringify(value)) as typeof value
+ const current=()=>turn===sequence&&operation===settingsOperation&&work.value?.id===workId&&musicSettingsPanel.value===panel
+ settingsBusy.value=true;error.value=''
+ try{
+  await lyrics?.saveForNavigation();if(!current())return
+  const saved=await saveMusicSettings(workId,input.expectedVersion,input.preferences);if(!current())return
+  panel?.markSaved();work.value=saved.work;settingsOpen.value=false;void updateAllowance()
+ }catch(e){if(current())error.value=e instanceof Error?e.message:'设置保存失败，请重试'}finally{if(turn===sequence&&operation===settingsOperation)settingsBusy.value=false}
+}
+function adjustMusic(){giftStage.value=false;shared.value=false;settingsOpen.value=true;void nextTick(()=>document.getElementById('music-settings')?.scrollIntoView({block:'center',behavior:'smooth'}))}
+
 </script>
-<template><RouterLink class="detail-back" to="/works">{{ t('← 我的音乐') }}</RouterLink><p v-if="loading" class="notice" role="status">{{ t('正在读取作品…') }}</p><p v-if="error" class="notice error" role="alert">{{ t(error) }}</p><template v-if="work"><div class="work-detail-top"><div><p class="backend-state">{{ t('专属音乐礼物') }}</p><h1>{{ work.title || t("写给{p0}的一首歌", { p0: work.recipient }) }}</h1><p class="detail-muted">{{ t(work.occasion) }} · {{ t(work.style) }}</p></div><RouterLink class="button secondary" :to="{path:'/create',query:{work:work.id}}">{{ t('修改故事与祝福') }}</RouterLink></div><p class="notice">{{ t('先写下歌词，再让这份心意被听见。') }}{{ modelReady ? t("生成服务已就绪。") : t("音乐生成暂不可用，你仍可导入已有音频并制作礼物。") }}</p><div class="work-detail-layout"><div><LyricsPanel :key="work.id" :work="work" @selected="revision=$event" @dirty="lyricDirty=$event"/><AudioPanel id="work-audio" tabindex="-1" :key="`${work.id}-${mediaRefresh}`" :work="work" @selected="asset=$event"/><SharePanel :work-id="work.id" :revision="revision" :asset="asset"/></div><aside class="work-overview"><img :src="defaultCover()" :alt="t('青风音乐品牌封面')"><h2>{{ t('关于这份心意') }}</h2><p>{{ t('收件人：') }}{{ work.recipient }}</p><p class="private-message">{{ work.message || t("还没有填写祝福。") }}</p><small>{{ t('故事和草稿仅本人可见，分享由你主动创建。') }}</small><div class="model-status"><h3>{{ t('音乐生成') }}</h3><p>{{ modelReady ? t("将使用选定的已确认歌词版本。") : t("音乐生成暂不可用，可以先编辑歌词并导入已有音频。") }}</p><button class="button" :disabled="submitting || (!pendingTask && (!modelReady || !revision?.confirmed))" @click="generate">{{ submitting ? t("正在提交…") : pendingTask ? t("查看生成进度") : modelReady ? t("生成歌曲") : t("歌曲生成暂未开放") }}</button><div v-for="task in tasks" :key="task.id" class="task-entry"><strong>{{ task.title }}</strong><span>{{ t(statusLabels[task.status] || task.status) }}</span><p v-if="task.status === 'SUBMISSION_UNKNOWN'">{{ t('这次创作结果还在确认中，请稍后刷新，避免重复提交。') }}</p><p v-if="task.errorCode === 'QUERY_RETRY'">{{ t('查询暂时失败，稍后自动继续查询。') }}</p><button v-if="task.status === 'FAILED' && task.errorCode === 'AUDIO_ARCHIVE_FAILED'" class="button secondary" :disabled="submitting" @click="retryArchive(task)">{{ t('仅重试保存音频') }}</button><small>{{ formatDate(task.createdAt) }}</small></div><p v-if="!tasks.length">{{ t('当前没有生成任务。') }}</p><button v-else class="button secondary" @click="refreshTasks">{{ t('刷新进度') }}</button></div></aside></div></template><MusicGenerationDialog :open="generationOpen" :status="generationStatus" :title="trackedTask?.title || work?.title || ''" :error="submissionIssue" :sync-issue="progressIssue" @close="generationOpen=false" @view="viewGeneratedMusic"/></template>
+<template>
+  <RouterLink class="detail-back" to="/works">{{ t('← 我的音乐') }}</RouterLink>
+  <p v-if="loading" class="notice" role="status">{{ t('正在读取作品…') }}</p><p v-if="error" class="notice error" role="alert">{{ t(error) }}</p>
+  <template v-if="work">
+    <CreationSteps :current="currentStep"/>
+    <div class="work-detail-top"><div><h1>{{ asset?songTitle:work.title||t('写给{recipient}的歌',{recipient:work.recipient}) }}</h1><p class="detail-muted">{{ t('送给 {recipient}',{recipient:work.recipient}) }} · {{ displayedStyle }}<template v-if="playingSettings?.vocalGender"> · {{ t(vocalGenderLabel(playingSettings.vocalGender)) }}</template></p></div></div>
+    <div class="story-back-actions"><button class="text-button" @click="backToStory">{{ t('返回修改故事') }}</button><button v-if="giftStage" class="text-button" @click="giftStage=false;shared=false">{{ t('返回试听与调整') }}</button></div>
+    <GenerationRecovery v-if="pendingTask?.status==='SUBMISSION_UNKNOWN'" :task="pendingTask" :busy="submitting" @refresh="refreshTasks" @close="closeChecking(pendingTask)"/>
+    <SongResult v-if="asset" :work="work" :asset="asset" :title="songTitle" :cover="artwork" :pending="!!pendingTask" :busy="submitting||settingsBusy||(!pendingTask&&!submissionUnknown&&(!modelReady||!lyricsReady))" :lyrics="giftRevision?.lyrics||''" @gift="sendGift" @adjust="adjustMusic" @regenerate="generate" @cover="openCover" @edit="editSection"/>
+    <MusicSettingsSnapshot v-if="asset&&tasks.find(task=>task.assetId===asset?.id)" :work-id="work.id" :task-id="tasks.find(task=>task.assetId===asset?.id)!.id"/>
+    <SectionEditor v-if="asset" ref="sectionEditor" :key="work.id" :work="work" :asset="asset" :title="songTitle" :cover="artwork" :tasks="tasks" :open="sectionOpen" :hint="sectionHint" @close="sectionOpen=false" @refresh="refreshTasks" @adopted="sectionAdopted"/>
+    <RouterLink v-if="asset" class="recovery-reminder" to="/account">{{ t('第一首歌值得留住。保存找回码，换设备也能找到它。') }}</RouterLink>
+    <CoverEditor v-if="work&&(coverOpen)" :key="work.id" :work-id="work.id" :state="covers" @updated="updateCover" @close="coverOpen=false"/>
+    <MusicSettingsPanel ref="musicSettingsPanel" v-if="work&&settingsOpen" :work="work" :busy="settingsBusy" :initial="!asset" @apply="applyMusicSettings" @close="settingsOpen=false"/>
+    <div class="work-detail-layout">
+      <div>
+        <details class="lyrics-editor-fold" :open="!asset"><summary v-show="asset">{{ t('查看或修改歌词') }}</summary><LyricsPanel ref="lyricsPanel" :key="work.id+'-'+work.version" :work="work" @selected="revision=$event" @dirty="lyricDirty=$event" @ready="lyricsReady=$event" @recoverable="lyricRecoverable=$event"/>
+          <p v-if="asset" class="save-info next-song-settings">{{ nextSettings }}<br>{{ t('修改风格只影响下次生成，已有歌曲保持原样。') }}</p>
+          <div v-if="asset" class="actions"><button class="button secondary" :disabled="submitting||(!pendingTask&&!submissionUnknown&&(!modelReady||!lyricsReady))" @click="generate">{{ submissionUnknown?t('核对生成进度'):pendingTask?t('查看生成进度'):t('用这版歌词重新生成歌曲') }}</button><span class="save-info">{{ t('重新生成歌曲会使用一次歌曲创作额度。') }}</span></div>
+        </details>
+        <div class="creation-action-bar work-primary-bar" :class="{'context-editor-open':coverOpen||settingsOpen}">
+          <template v-if="asset"><button class="button secondary" @click="adjustMusic">{{ t('调整歌曲') }}</button><button class="button creation-primary" @click="sendGift">{{ t('满意了，制作礼物') }}</button></template>
+          <template v-else><button class="button secondary" :disabled="submitting||!!pendingTask||submissionUnknown||settingsBusy" @click="adjustMusic">{{ t('选择旋律与声音') }}</button><div><button class="button creation-primary" :disabled="submitting||(!pendingTask&&!submissionUnknown&&(!modelReady||!lyricsReady))" @click="generate">{{ submitting?t('正在准备歌曲…'):submissionUnknown?t('核对生成进度'):pendingTask?t('查看生成进度'):modelReady?t('确认歌词并生成歌曲'):t('歌曲生成暂未开放') }}</button><span class="save-info">{{ t('将自动保存并确认当前歌词，再开始谱曲。') }}</span></div></template>
+        </div>
+        <p v-if="!modelReady&&!asset" class="notice">{{ t('音乐生成暂不可用，可以先编辑歌词并导入已有音频。') }}</p>
+        <AudioPanel id="work-audio" tabindex="-1" :key="work.id+'-'+mediaRefresh" :work="work" :cover="artwork" @selected="asset=$event" @compare="sectionEditor?.compare($event)"/>
+        <SharePanel :cover-id="covers?.currentCoverId" v-if="asset&&giftStage" @created="shared=true" id="work-share" tabindex="-1" :work-id="work.id" :revision="giftRevision" :asset="asset"/>
+      </div>
+      <aside class="work-overview">
+        <h2>{{ t('关于这份心意') }}</h2><p>{{ t('收件人：') }}{{ work.recipient }}</p><p class="private-message">{{ work.message||t('还没有填写祝福。') }}</p><small>{{ t('故事和草稿仅本人可见，分享由你主动创建。') }}</small>
+        <div class="model-status"><h3>{{ t('音乐生成') }}</h3><p class="next-song-settings">{{ nextSettings }}</p><p v-if="allowance">{{ allowance.dailyUnlimited?t('今日歌曲创作不限次数'):t('今日还可创作 {remaining} 次歌曲',{remaining:allowance.dailyRemaining}) }}</p><p>{{ t('保存和修改歌词不消耗歌曲创作次数。') }}</p><p v-if="pendingTask">{{ t(statusLabels[pendingTask.status]||pendingTask.status) }}</p>
+          <details v-if="tasks.length" class="creation-fold task-history"><summary>{{ t('查看创作记录') }}</summary><div v-for="task in tasks" :key="task.id" class="task-entry"><strong>{{ task.title }}</strong><span>{{ t(statusLabels[task.status]||task.status) }}</span><p v-if="task.status==='SUBMISSION_UNKNOWN'">{{ t('这次创作结果还在确认中，请稍后刷新，避免重复提交。') }}</p><p v-if="task.errorCode==='QUERY_RETRY'">{{ t('查询暂时失败，稍后自动继续查询。') }}</p><button v-if="task.status==='FAILED'&&task.errorCode==='AUDIO_ARCHIVE_FAILED'" class="button secondary" :disabled="submitting" @click="retryArchive(task)">{{ t('仅重试保存音频') }}</button><small>{{ formatDate(task.createdAt) }}</small></div></details>
+          <button class="text-button" @click="refreshTasks">{{ t('刷新进度') }}</button>
+        </div>
+      </aside>
+    </div>
+  </template>
+  <MusicGenerationDialog :open="generationOpen" :status="generationStatus" :title="trackedTask?.title||work?.title||''" :error="submissionIssue" :sync-issue="progressIssue||trackedTask?.errorCode==='QUERY_RETRY'" :created-at="trackedTask?.createdAt" :submit-after="trackedTask?.nextAttemptAt" :cancelling="cancelling" :cover="artwork" @cancel="cancelGeneration" @close="generationOpen=false" @view="viewGeneratedMusic"/>
+</template>

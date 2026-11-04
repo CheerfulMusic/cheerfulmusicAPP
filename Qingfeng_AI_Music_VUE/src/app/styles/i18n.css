@@ -1,4 +1,11 @@
 .language-switch { display:inline-flex; align-items:center; gap:2px; flex-shrink:0; font-size:11px; white-space:nowrap; }
+.consumer-shell .p-intro .bilingual-headline { line-height:1.18; letter-spacing:-1px; }
+.bilingual-headline > span { display:block; }
+.consumer-shell .p-intro .headline-translation { color:var(--accent); font-size:clamp(25px,2.65vw,38px); line-height:1.25; letter-spacing:-.5px; margin-top:18px; }
+.consumer-shell .p-intro .bilingual-description { max-width:540px; line-height:1.8; }
+.bilingual-description > span { display:block; }
+.bilingual-description .description-translation { margin-top:10px; font-size:13px; color:var(--muted); line-height:1.7; }
+@media(max-width:600px) { .consumer-shell .p-intro .bilingual-headline { font-size:36px; } .consumer-shell .p-intro .headline-translation { font-size:27px; margin-top:14px; } .bilingual-description .description-translation { font-size:12px; } }
 .language-switch button { min-width:30px; min-height:36px; padding:5px; color:#8995a6; border-radius:8px; }
 .language-switch button:hover { color:var(--ink); background:var(--surface-raised); }
 .language-switch button.selected { color:var(--ink); font-weight:700; }

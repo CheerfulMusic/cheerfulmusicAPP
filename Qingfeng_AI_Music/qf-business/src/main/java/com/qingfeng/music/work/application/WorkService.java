@@ -9,13 +9,18 @@ public class WorkService implements WorkApi {
     private final WorkRepository repository;
     public WorkService(WorkRepository repository) { this.repository = repository; }
     public Work create(String owner, Draft draft) {
+        return create(owner,draft,UUID.randomUUID().toString());
+    }
+    public Work create(String owner,Draft draft,String draftKey) {
+        if(draftKey==null||!draftKey.matches("[0-9a-fA-F-]{36}"))throw new DomainException("INVALID_DRAFT","草稿标识无效，请刷新后重试");
         validate(draft); Instant now = Instant.now();
-        Work work = new Work(UUID.randomUUID().toString(), draft.recipient().trim(), draft.occasion(), draft.story(), draft.message(), draft.style(), draft.title(), 0, now, now);
+        var existing=repository.find(owner,draftKey);if(existing.isPresent())return existing.get();
+        Work work = new Work(draftKey, draft.recipient().trim(), draft.occasion(), draft.story(), draft.message(), draft.style(), draft.title(), 0, now, now,draft.vocalGender());
         repository.insert(owner, work); return get(owner, work.id());
     }
     public Work update(String owner, String id, long expectedVersion, Draft draft) {
         validate(draft); Work current = get(owner, id);
-        Work work = new Work(id, draft.recipient().trim(), draft.occasion(), draft.story(), draft.message(), draft.style(), draft.title(), expectedVersion + 1, current.createdAt(), Instant.now());
+        Work work = new Work(id, draft.recipient().trim(), draft.occasion(), draft.story(), draft.message(), draft.style(), draft.title(), expectedVersion + 1, current.createdAt(), Instant.now(),draft.vocalGender());
         if (!repository.update(owner, work, expectedVersion)) throw new DomainException("WORK_VERSION_CONFLICT", "草稿已被其他页面修改，请重新载入后再保存");
         return get(owner, id);
     }

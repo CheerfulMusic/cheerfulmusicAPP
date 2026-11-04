@@ -1,4 +1,6 @@
 .cache/
+.playwright-cli/
+output/playwright/
 .backups/
 **/target/
 **/node_modules/
@@ -26,3 +28,7 @@ ui-prototype/output/
 **/*.sql.gz
 **/*.dump
 **/hs_err_pid*.log
+
+# Local generated previews and temporary review artifacts
+/outputs/
+/tmp/

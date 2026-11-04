@@ -24,6 +24,7 @@ public interface ExecutionRepository {
     void succeeded(String task, String token, String asset, Instant now);
     void failed(String task, String token, String code, Instant now);
     boolean retryArchive(String work, String task, Instant now);
+    default boolean closeChecking(String work,String task,Instant now){return false;}
     String attempt(String task, String phase, Instant now);
     void finishAttempt(String id, String outcome, String code, Instant now);
 }

@@ -11,6 +11,12 @@ qingfeng.providers.volcengine.api-key=
 # KIE Suno，统一任务API；密钥仅填入实际local.properties或KIE_API_KEY环境变量。
 qingfeng.providers.kie.api-key=
 qingfeng.providers.kie.model=V6
+# 风格遵循0~1、创意偏移0~1、多样性0~4。初始调优值，非听感保证。
+qingfeng.providers.kie.style-weight=0.85
+qingfeng.providers.kie.weirdness-constraint=0.25
+qingfeng.providers.kie.variety=0
+# 局部改词参考原曲的权重0~1；不保证修改片段旋律、音色完全一致。
+qingfeng.providers.kie.section-audio-weight=0.85
 qingfeng.providers.deepseek.api-key=
 qingfeng.providers.deepseek.model=deepseek-flash
 qingfeng.lyrics.enabled=false
@@ -18,6 +24,7 @@ qingfeng.generation.provider=unconfigured
 
 # 示例默认暂停真实音乐执行。KIE在认证查询中登记精确音频URL，固定CDN域名为可选。
 qingfeng.generation.enabled=false
+qingfeng.generation.section-editing-enabled=true
 qingfeng.generation.audio-hosts=
 # 本地归档与每位创建者容量（字节，默认1GB）。
 qingfeng.media.storage=local
@@ -31,3 +38,17 @@ qingfeng.media.creator-capacity-bytes=1073741824
 # qingfeng.oss.prefix=qingfeng/audio/
 # qingfeng.oss.access-key-id=
 # qingfeng.oss.access-key-secret=
+
+# 创作额度统一在 config/usage-limits.properties 配置：-1不限，0禁止新增，正整数限额。
+# 已准入请求失败不自动退额；同一请求重放、进度查询和归档重试不重复占额。
+
+# 播放歌词时间轴。compatible 为当前已验证的官方兼容接口；unified 为统一接口。
+# 默认只读取缓存；未同步的歌曲由用户点击同步。结果未知不自动重试、不重新生成歌曲。
+qingfeng.lyrics.timing.enabled=true
+qingfeng.providers.kie.lyrics-timing-mode=compatible
+
+# 自定义封面。AI加工使用google/nano-banana-edit，复用KIE密钥或配置独立图片密钥。
+qingfeng.cover.directory=./data/covers
+qingfeng.cover.ai.enabled=true
+qingfeng.cover.ai.scheduler-enabled=true
+# qingfeng.providers.kie.image-api-key=

@@ -6,7 +6,12 @@ public interface GenerationApi {
  Task submit(String owner,String work,String revision,String requestKey);
  List<Task> list(String owner,String work);
  void retryArchive(String owner,String work,String task);
- record Task(String id,String workId,String revisionId,long workVersion,String requestKey,String title,String lyrics,String style,String provider,GenerationStatus status,Instant createdAt,String assetId,String errorCode,Instant updatedAt,Instant nextAttemptAt){
-  public Task(String id,String workId,String revisionId,long workVersion,String requestKey,String title,String lyrics,String style,String provider,GenerationStatus status,Instant createdAt){this(id,workId,revisionId,workVersion,requestKey,title,lyrics,style,provider,status,createdAt,null,null,createdAt,createdAt);}
+ Task cancel(String owner,String work,String task);
+ Task closeChecking(String owner,String work,String task,boolean acknowledge);
+ record Task(String id,String workId,String revisionId,long workVersion,String requestKey,String title,String lyrics,String style,String provider,GenerationStatus status,Instant createdAt,String assetId,String errorCode,Instant updatedAt,Instant nextAttemptAt,String vocalGender){
+  public Task{vocalGender=com.qingfeng.music.work.api.VocalGender.normalize(vocalGender);}
+  public Task(String id,String workId,String revisionId,long workVersion,String requestKey,String title,String lyrics,String style,String provider,GenerationStatus status,Instant createdAt){this(id,workId,revisionId,workVersion,requestKey,title,lyrics,style,provider,status,createdAt,"AUTO");}
+  public Task(String id,String workId,String revisionId,long workVersion,String requestKey,String title,String lyrics,String style,String provider,GenerationStatus status,Instant createdAt,String vocalGender){this(id,workId,revisionId,workVersion,requestKey,title,lyrics,style,provider,status,createdAt,null,null,createdAt,createdAt,vocalGender);}
+  public Task(String id,String workId,String revisionId,long workVersion,String requestKey,String title,String lyrics,String style,String provider,GenerationStatus status,Instant createdAt,String assetId,String errorCode,Instant updatedAt,Instant nextAttemptAt){this(id,workId,revisionId,workVersion,requestKey,title,lyrics,style,provider,status,createdAt,assetId,errorCode,updatedAt,nextAttemptAt,"AUTO");}
  }
 }

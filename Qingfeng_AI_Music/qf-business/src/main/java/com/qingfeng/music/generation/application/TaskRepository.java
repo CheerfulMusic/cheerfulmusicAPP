@@ -5,4 +5,5 @@ public interface TaskRepository {
  Task insertOrRead(Task task);
  Optional<Task> findRequest(String work,String requestKey);
  List<Task> list(String work);
+ default boolean cancelQueued(String work,String task){return false;}
 }

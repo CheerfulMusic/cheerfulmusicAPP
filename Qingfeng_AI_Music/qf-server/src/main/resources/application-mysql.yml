@@ -5,6 +5,10 @@ spring:
       - optional:file:./Qingfeng_AI_Music/config/local.properties
       - optional:file:../config/local.properties
       - optional:file:./config/local.properties
+      - optional:file:./Qingfeng_AI_Music/config/usage-limits.properties
+      - optional:file:../config/usage-limits.properties
+      - optional:file:./config/usage-limits.properties
+      - optional:file:/etc/qingfeng-music/usage-limits.properties
   datasource:
     url: ${MYSQL_URL:jdbc:mysql://127.0.0.1:3306/qingfeng_music?serverTimezone=Asia/Shanghai}
     username: ${MYSQL_USERNAME:}

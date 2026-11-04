@@ -9,4 +9,5 @@ public class MediaRow {
     public long byteSize;
     public String sha256;
     public Instant createdAt;
+    public boolean sectionEdit;
 }

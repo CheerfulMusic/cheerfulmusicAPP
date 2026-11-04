@@ -27,23 +27,29 @@ public class MediaService implements MediaApi, SharedMediaAccess, GeneratedAudio
     private Asset save(String work,String origin,String task,InputStream input){
         // 先原子预留单文件最大容量，阻止并发上传绕过总量限制；只结算实际登记成功的字节。
         if(!repository.reserve(work,MAX_AUDIO,capacity))throw new DomainException("STORAGE_QUOTA_EXCEEDED","作品音频容量不足，请联系维护人员扩容");
-        MediaFileStore.Saved saved=null;long committed=0;
+        MediaFileStore.Saved saved=null;boolean registering=false,rollback=false;MediaRepository.Stored effective=null;
         try{
             saved=files.save(input);
             var asset=new Asset(UUID.randomUUID().toString(),work,origin,saved.contentType(),saved.size(),saved.sha256(),Instant.now());
-            if(task==null){repository.insert(asset,saved.key());committed=saved.size();return asset;}
-            var effective=repository.insertGenerated(asset,saved.key(),task);
-            if(effective.storageKey().equals(saved.key()))committed=saved.size();
+            registering=true;
+            try{effective=repository.register(asset,saved.key(),task,MAX_AUDIO);}
+            catch(MediaRepository.RegistrationFailure error){rollback=error.rolledBack();throw error;}
             return effective.asset();
         }catch(IOException e){throw new DomainException("MEDIA_STORAGE_UNAVAILABLE","音频保存失败，可以稍后重试");}
         finally{
-            try{if(saved!=null&&committed==0)files.discard(saved.key());}
+            // 只有从未登记或事务明确回滚时才退额并删文件；提交未知保留文件与预留供核对。
+            boolean compensate=!registering||rollback;
+            try{if(saved!=null&&(compensate||effective!=null&&!effective.storageKey().equals(saved.key())))files.discard(saved.key());}
             catch(IOException cleanup){/* 孤儿文件由停机维护扫描隔离，避免覆盖原始数据库错误。 */}
-            finally{repository.release(work,MAX_AUDIO-committed);}
+            finally{if(compensate)repository.release(work,MAX_AUDIO);}
         }
     }
     public Asset get(String owner,String work,String id){works.get(owner,work);return find(work,id).asset();}
+    public boolean matchesGenerationRevision(String owner,String work,String asset,String revision){works.get(owner,work);return repository.generatedRevision(work,asset).filter(revision::equals).isPresent();}
     public List<Asset> list(String owner,String work){works.get(owner,work);return repository.list(work);}
+    public Selection selection(String owner,String work){works.get(owner,work);var value=repository.selection(work);return new Selection(value.assetId(),value.version(),value.assetId()==null?null:find(work,value.assetId()).asset());}
+    public Selection select(String owner,String work,String asset,long version){works.get(owner,work);find(work,asset);if(!repository.select(work,asset,version))throw new DomainException("AUDIO_SELECTION_CONFLICT","当前歌曲版本已改变，请刷新后再选择。");return selection(owner,work);}
+    public void keepOriginal(String owner,String work,String asset){works.get(owner,work);find(work,asset);repository.keepOriginal(work,asset);}
     public Content open(String owner,String work,String id){works.get(owner,work);return content(work,id);}
     public Content content(String work,String id){
         var stored=find(work,id);if(!files.exists(stored.storageKey()))throw new DomainException("MEDIA_NOT_FOUND","音频文件不存在，请联系维护人员恢复备份");

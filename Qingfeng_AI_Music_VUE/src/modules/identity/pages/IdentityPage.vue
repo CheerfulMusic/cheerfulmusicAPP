@@ -2,7 +2,7 @@
 import { t } from '../../../shared/i18n/index'
 import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { ensureCreator, requestJson } from '../../../shared/http/api-client'
+import { ensureCreator, requestJson, resetCreatorSession } from '../../../shared/http/api-client'
 import { usePlayer } from '../../../shared/player/store'
 const router = useRouter(), player = usePlayer(), busy = ref(true), configured = ref(false), secret = ref(''), restoreCode = ref(''), error = ref(''), notice = ref('')
 onMounted(async () => { try { await ensureCreator(); configured.value = (await requestJson<{configured: boolean}>('app/identity/recovery')).configured } catch (e) { error.value = e instanceof Error ? e.message : '暂时无法读取身份状态' } finally { busy.value = false } })
@@ -20,7 +20,7 @@ async function copy() { try { await navigator.clipboard.writeText(secret.value);
 async function recover() {
   if (!restoreCode.value.trim() || !window.confirm(t('将打开找回码对应的音乐收藏。当前作品不会合并，请先保存自己的找回码，是否继续？'))) return
   busy.value = true; error.value = ''
-  try { await ensureCreator(); await requestJson('public/session/recover', 'POST', {code:restoreCode.value.trim()}); player.close(); secret.value = ''; restoreCode.value = ''; await router.replace('/works') }
+  try { await ensureCreator(); await requestJson('public/session/recover', 'POST', {code:restoreCode.value.trim()}); resetCreatorSession(); player.reset(); secret.value = ''; restoreCode.value = ''; await router.replace('/works') }
   catch (e) { error.value = e instanceof Error ? e.message : '恢复失败，请检查找回码' } finally { busy.value = false }
 }
 </script>

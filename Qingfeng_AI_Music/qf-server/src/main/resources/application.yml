@@ -1,4 +1,6 @@
 spring:
+  config:
+    import: classpath:usage-limits.properties
   application:
     name: qingfeng-music
   profiles:
@@ -17,8 +19,23 @@ server:
     enabled: true
     mime-types: text/html,text/css,application/javascript,application/json,image/svg+xml
 qingfeng:
+  cover:
+    ai:
+      enabled: true
+      scheduler-enabled: true
+  providers:
+    kie:
+      # 初始调优值，实际听感需要付费对照试听验证。
+      style-weight: 0.85
+      weirdness-constraint: 0.25
+      variety: 0
+      section-audio-weight: 0.85
+  lyrics:
+    timing:
+      enabled: true
   generation:
     enabled: false
+    section-editing-enabled: true
     scheduler-enabled: true
 management:
   endpoints:

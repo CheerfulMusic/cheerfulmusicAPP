@@ -1,0 +1,15 @@
+# Merge with the existing private provider configuration on the server.
+# Quotas are configured only in /etc/qingfeng-music/usage-limits.properties.
+# Copy config/usage-limits.properties there; -1 = unlimited, 0 = disabled.
+# Replace database credentials with a dedicated local MySQL account.
+server.address=127.0.0.1
+server.port=8080
+server.forward-headers-strategy=framework
+spring.datasource.url=jdbc:mysql://127.0.0.1:3306/qingfeng_music?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai
+spring.datasource.username=qingfeng
+spring.datasource.password=REPLACE_ON_SERVER
+qingfeng.media.storage=local
+qingfeng.media.directory=/var/lib/qingfeng-music/audio
+
+# 自定义封面独立存储，必须放在systemd允许写入并已备份的目录。
+qingfeng.cover.directory=/var/lib/qingfeng-music/covers

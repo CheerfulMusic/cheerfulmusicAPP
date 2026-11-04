@@ -2,10 +2,12 @@
 import { t, formatDate } from '../../../shared/i18n/index'
 import { ref, watch } from 'vue'
 import { createShare, revokeShares, type Revision, type AudioAsset } from '../api/detail'
-const props = defineProps<{ workId: string; revision: Revision | null; asset: AudioAsset | null }>()
+const props = defineProps<{ workId: string; revision: Revision | null; asset: AudioAsset | null;coverId?:string|null }>()
+const emit=defineEmits<{created:[]}>()
 const link = ref(''), expires = ref(''), busy = ref(false), error = ref(''), notice = ref('')
-watch(() => [props.revision?.id, props.asset?.id], () => { notice.value = ''; error.value = '' })
-async function create() { if (!props.revision?.confirmed || !props.asset) return; busy.value = true; error.value = ''; try { const share = await createShare(props.workId, props.revision.id, props.asset.id); link.value = new URL(`/gift/${share.token}`, location.origin).href; expires.value = share.expiresAt; notice.value = '礼物链接已创建，打开即可试听，不需要登录。' } catch (e) { error.value = e instanceof Error ? e.message : '创建分享失败' } finally { busy.value = false } }
+const context=()=>JSON.stringify([props.workId,props.revision?.id,props.asset?.id,props.coverId])
+watch(context, () => { link.value='';expires.value='';notice.value = ''; error.value = '' })
+async function create() { if (!props.revision?.confirmed || !props.asset) return; busy.value = true; error.value = ''; try { const before=context();const share = await createShare(props.workId, props.revision.id, props.asset.id);if(context()!==before)return; link.value = new URL(`/gift/${share.token}`, location.origin).href; expires.value = share.expiresAt;emit('created'); notice.value = '礼物链接已创建，打开即可试听，不需要登录。' } catch (e) { error.value = e instanceof Error ? e.message : '创建分享失败' } finally { busy.value = false } }
 async function copy() { try { await navigator.clipboard.writeText(link.value); notice.value = '已复制礼物链接。' } catch { notice.value = '请选中下方链接手动复制。' } }
 async function revoke() { if (!window.confirm(t('将关闭这个作品创建过的所有礼物链接，是否继续？'))) return; busy.value = true; error.value = ''; try { await revokeShares(props.workId); link.value = ''; notice.value = '此作品的全部分享已撤销，停止新的礼物与音频访问。' } catch (e) { error.value = e instanceof Error ? e.message : '撤销失败' } finally { busy.value = false } }
 </script>

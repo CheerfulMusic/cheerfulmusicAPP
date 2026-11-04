@@ -10,6 +10,7 @@ public class ShareRow {
     public String message;
     public String lyrics;
     public String audioOrigin;
+    public String coverId;
     public boolean active;
     public Instant createdAt;
     public Instant expiresAt;

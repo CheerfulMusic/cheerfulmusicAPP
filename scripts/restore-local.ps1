@@ -15,9 +15,12 @@ try {
     if($exists -ne '0'){throw '目标数据库已存在，未覆盖。'}
     [void](Invoke-MySql $context ('CREATE DATABASE '+$TargetDatabase+' CHARACTER SET utf8mb4'))
     [void](Invoke-MySql $context '' $TargetDatabase $sqlFile)
+    $hasCoverTable=Invoke-MySql $context "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='cover_asset'" $TargetDatabase
     [void](Invoke-MySql $context 'UPDATE creator SET media_bytes=COALESCE((SELECT SUM(m.byte_size) FROM media_asset m JOIN music_work w ON m.work_id=w.id WHERE w.owner_id=creator.id),0)' $TargetDatabase)
+    if($hasCoverTable -eq '1'){[void](Invoke-MySql $context 'UPDATE creator SET media_bytes=media_bytes+COALESCE((SELECT SUM(c.byte_size) FROM cover_asset c JOIN music_work w ON c.work_id=w.id WHERE w.owner_id=creator.id),0)' $TargetDatabase)}
     $restoreRoot=Join-Path $script:TaskRoot ('.cache\restores\'+$TargetDatabase);if(Test-Path -LiteralPath $restoreRoot){throw '恢复目录已存在，未覆盖。'};New-Item -ItemType Directory -Path $restoreRoot | Out-Null
     Copy-Item -LiteralPath (Join-Path $backupRoot 'audio') -Destination $restoreRoot -Recurse
+    if(Test-Path -LiteralPath (Join-Path $backupRoot 'covers')){Copy-Item -LiteralPath (Join-Path $backupRoot 'covers') -Destination $restoreRoot -Recurse;Write-Host "对应封面目录：$(Join-Path $restoreRoot 'covers')，切换验证时需同时配置qingfeng.cover.directory。"}
     Write-Host "已恢复到独立数据库：$TargetDatabase"
     Write-Host "对应音频目录：$(Join-Path $restoreRoot 'audio')"
     Write-Host '原数据库和原音频保持原样。切换验证时请同时调整数据库URL与音频目录。'
