@@ -42,7 +42,7 @@ public interface ExecutionMapper {
     @Update("UPDATE generation_task SET status='SUCCEEDED',asset_id=#{asset},last_error_code=NULL,updated_at=#{now} WHERE id=#{id} AND lease_token=#{token} AND status='SAVING'")
     void succeeded(@Param("id")String id,@Param("token")String token,@Param("asset")String asset,@Param("now")Instant now);
     @Update("UPDATE generation_task SET status='FAILED',last_error_code=#{code},updated_at=#{now} WHERE id=#{id} AND lease_token=#{token} AND status IN ('SUBMITTING','RUNNING','SUBMISSION_UNKNOWN')")
-    void failed(@Param("id")String id,@Param("token")String token,@Param("code")String code,@Param("now")Instant now);
+    int failed(@Param("id")String id,@Param("token")String token,@Param("code")String code,@Param("now")Instant now);
     @Update("UPDATE generation_task SET status='SAVING',archive_attempts=0,last_error_code=NULL,next_attempt_at=#{now},updated_at=#{now} WHERE id=#{id} AND work_id=#{work} AND status='FAILED' AND last_error_code='AUDIO_ARCHIVE_FAILED' AND provider_task_id IS NOT NULL AND audio_url IS NOT NULL")
     int retry(@Param("work")String work,@Param("id")String id,@Param("now")Instant now);
     @Update("UPDATE generation_task SET status='FAILED',last_error_code='CHECKING_CLOSED',updated_at=#{now},lease_token=NULL,lease_until=NULL WHERE work_id=#{work} AND id=#{id} AND status='SUBMISSION_UNKNOWN' AND provider_task_id IS NULL AND updated_at<=#{cutoff} AND (lease_until IS NULL OR lease_until<=#{now})")

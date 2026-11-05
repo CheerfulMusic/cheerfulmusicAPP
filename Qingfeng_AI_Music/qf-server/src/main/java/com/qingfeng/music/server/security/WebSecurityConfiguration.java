@@ -24,13 +24,15 @@ public class WebSecurityConfiguration {
         var filter=sessionFilter.getIfAvailable();
         if (filter!=null) http.addFilterBefore(filter, AnonymousAuthenticationFilter.class);
         if (filter!=null) http.addFilterAfter(new ApiRateLimitFilter(),CreatorSessionFilter.class);
-        return http.csrf(csrf -> csrf.csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse()).csrfTokenRequestHandler(new CsrfTokenRequestAttributeHandler()))
+        return http.csrf(csrf -> csrf.ignoringRequestMatchers("/api/public/payments/airwallex/webhook", "/api/public/paypal/webhook").csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse()).csrfTokenRequestHandler(new CsrfTokenRequestAttributeHandler()))
             .authorizeHttpRequests(auth -> auth
                 .dispatcherTypeMatchers(jakarta.servlet.DispatcherType.ERROR).permitAll()
                 .requestMatchers(org.springframework.http.HttpMethod.GET,"/","/index.html","/assets/**","/brand/**","/media/**","/create","/works","/works/*","/gift/*","/account").permitAll()
                 .requestMatchers("/api/public/system/info", "/api/public/csrf", "/api/public/session", "/api/public/session/recover", "/actuator/health").permitAll()
                 .requestMatchers(org.springframework.http.HttpMethod.GET,"/api/public/auth/google/status",GoogleOAuthFlow.CALLBACK).permitAll()
                 .requestMatchers(org.springframework.http.HttpMethod.POST,"/api/public/auth/google/start","/api/public/session/logout").permitAll()
+                .requestMatchers(org.springframework.http.HttpMethod.POST,"/api/public/payments/airwallex/webhook").permitAll()
+                .requestMatchers(org.springframework.http.HttpMethod.POST,"/api/public/paypal/webhook").permitAll()
                 .requestMatchers(org.springframework.http.HttpMethod.GET,"/api/public/gifts/*","/api/public/gifts/*/audio","/api/public/gifts/*/cover").permitAll()
                 .requestMatchers("/api/app/**").hasRole("CREATOR")
                 .anyRequest().denyAll())

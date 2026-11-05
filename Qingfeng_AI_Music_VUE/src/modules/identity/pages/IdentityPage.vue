@@ -10,6 +10,7 @@ import { accountLoggingOut, accountState, logoutAccount, refreshAccountState } f
 import { googleLoginFeedback } from '../model/google-login'
 import NavIcon from '../../../shared/ui/NavIcon.vue'
 import GoogleMark from '../components/GoogleMark.vue'
+import CreditsPanel from '../components/CreditsPanel.vue'
 const router = useRouter(), player = usePlayer(), busy = ref(true), configured = ref(false), secret = ref(''), restoreCode = ref(''), error = ref(''), notice = ref('')
 const route = useRoute()
 const googleStatus = accountState
@@ -158,6 +159,7 @@ async function recover() {
       <div class="profile-footer"><NavIcon name="recovery" /><p>{{ t('首次登录会保留当前作品。不同账号的音乐收藏不会自动合并。') }}</p></div>
     </template>
   </section>
+  <CreditsPanel :key="`${googleStatus.authenticated}:${googleStatus.email || ''}`" />
   <section class="recovery-section" :aria-label="t('备用找回方式')">
     <div class="recovery-section-heading"><h2>{{ t('备用找回方式') }}</h2><p>{{ t('多一种找回方式，多一份安心。') }}</p></div>
     <div class="account-recovery-grid">

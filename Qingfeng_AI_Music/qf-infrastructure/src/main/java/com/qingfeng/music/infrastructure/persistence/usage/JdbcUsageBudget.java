@@ -25,6 +25,14 @@ public final class JdbcUsageBudget implements UsageBudget {
     public JdbcUsageBudget(JdbcTemplate jdbc, TransactionTemplate transactions, Map<Kind, Limits> limits, Clock clock, ZoneId zone) {
         this.jdbc=jdbc;this.transactions=transactions;this.limits=Map.copyOf(limits);this.clock=clock;this.zone=zone;
     }
+    private com.qingfeng.music.credits.CreditsLedger credits;
+    private boolean creditsEnabled;
+    private long musicCost;
+    public JdbcUsageBudget withCredits(com.qingfeng.music.credits.CreditsLedger credits, boolean enabled, long musicCost) {
+        if(musicCost<=0) throw new IllegalArgumentException("music cost must be positive");
+        this.credits=credits;this.creditsEnabled=enabled;this.musicCost=musicCost;return this;
+    }
+    private String reference(String work,String key){return "music:"+work+":"+key;}
     public void reserve(String owner, String work, String key, Kind kind) {
         transactions.executeWithoutResult(tx -> {
             jdbc.queryForObject("SELECT kind FROM model_usage_lock WHERE kind=? FOR UPDATE", String.class, kind.name());
@@ -39,6 +47,7 @@ public final class JdbcUsageBudget implements UsageBudget {
                 throw new DomainException("PERSONAL_GENERATION_BUSY","你已有创作正在处理或核对中，请完成后再试。");
             if (cap.concurrentGlobal()>=0 && active(kind,null)>=cap.concurrentGlobal())
                 throw new DomainException("GLOBAL_GENERATION_BUSY","当前创作人数较多，请稍后再试。");
+            if(kind==Kind.MUSIC && creditsEnabled) credits.debit(owner,musicCost,reference(work,key));
             jdbc.update("INSERT INTO model_usage_reservation(kind,work_id,request_key,owner_id,usage_day,created_at) VALUES(?,?,?,?,?,?)",kind.name(),work,key,owner,java.sql.Date.valueOf(day),Timestamp.from(clock.instant()));
         });
     }
@@ -50,7 +59,9 @@ public final class JdbcUsageBudget implements UsageBudget {
     public boolean cancelMusic(String work,String key,java.util.function.BooleanSupplier cancel){
         return Boolean.TRUE.equals(transactions.execute(tx->{
             jdbc.queryForObject("SELECT kind FROM model_usage_lock WHERE kind='MUSIC' FOR UPDATE",String.class);
+            var owners=jdbc.query("SELECT owner_id FROM model_usage_reservation WHERE kind='MUSIC' AND work_id=? AND request_key=?",(rs,n)->rs.getString(1),work,key);
             if(!cancel.getAsBoolean())return false;
+            if(credits!=null && !owners.isEmpty()) credits.refund(owners.get(0),reference(work,key));
             jdbc.update("DELETE FROM model_usage_reservation WHERE kind='MUSIC' AND work_id=? AND request_key=?",work,key);
             return true;
         }));
