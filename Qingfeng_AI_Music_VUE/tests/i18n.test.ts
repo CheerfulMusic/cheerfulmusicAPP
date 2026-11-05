@@ -44,10 +44,10 @@ describe('Chinese and English interface', () => {
     const { setLocale, formatDate, defaultCover, localizedCover } = await import('../src/shared/i18n')
     setLocale('en')
     expect(formatDate('2026-11-02T12:00:00Z')).toContain('Nov')
-    expect(defaultCover()).toBe('/media/brand-cover-en.svg')
+    expect(defaultCover()).toBe('/media/brand-cover-light-en.svg')
     expect(localizedCover('/media/custom.jpg')).toBe('/media/custom.jpg')
     setLocale('zh-CN')
-    expect(localizedCover('/media/brand-cover-en.svg')).toBe('/media/brand-cover.svg')
+    expect(localizedCover('/media/brand-cover-en.svg')).toBe('/media/brand-cover-light.svg')
   })
 
   it('has English copy for every literal interface key and keeps interpolation placeholders', () => {

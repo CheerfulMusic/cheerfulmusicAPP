@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="600" height="600" viewBox="0 0 600 600" fill="none">
+<rect width="600" height="600" fill="#fff7f4"/>
+<circle cx="300" cy="300" r="232" stroke="#efc5bf"/>
+<circle cx="300" cy="300" r="211" stroke="#f4dcd6"/>
+<circle cx="300" cy="300" r="189" stroke="#f4dcd6"/>
+<circle cx="300" cy="300" r="168" stroke="#f4dcd6"/>
+<path d="M100 418a232 232 0 0 0 280 100" stroke="#ff3f27" stroke-width="3"/>
+<g transform="translate(252 150) scale(1.5)"><rect width="64" height="64" rx="20" fill="#FF3F27"/><path fill="#fff" d="M44 26v25h-9v-4.2A17 17 0 1 1 40.4 19L45 14l8 7-9 8v-3Z"/><circle cx="28.5" cy="31" r="5.5" fill="#FF3F27"/></g>
+<text x="300" y="300" text-anchor="middle" font-family="Segoe UI,Arial,sans-serif" font-size="32" font-weight="700" fill="#3a2b2d">Cheerful Music</text>
+<text x="300" y="346" text-anchor="middle" font-family="Microsoft YaHei,PingFang SC,sans-serif" font-size="19" fill="#87656d">一首歌，一份心意</text>
+<text x="300" y="435" text-anchor="middle" font-family="Microsoft YaHei,PingFang SC,sans-serif" font-size="16" fill="#94747a">青风音乐</text>
+</svg>

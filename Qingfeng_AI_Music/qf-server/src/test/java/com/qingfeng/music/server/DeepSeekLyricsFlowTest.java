@@ -19,10 +19,19 @@ class DeepSeekLyricsFlowTest {
   @Bean @Primary FakeWriter fakeWriter(){return new FakeWriter();}
  }
  static class FakeWriter implements LyricsWriter {
+  WorkApi.Work lastWork;String lastLanguage;
   AtomicInteger calls=new AtomicInteger();public boolean isConfigured(){return true;}
-  public Draft write(WorkApi.Work work,String language){calls.incrementAndGet();return new Draft("风中的故事",language.equals("en")?"[Verse]\nA little memory stays with me":"[Verse]\n把你的名字写在风里\n[Chorus]\n每个日落都想起你");}
+  public Draft write(WorkApi.Work work,String language){lastWork=work;lastLanguage=language;calls.incrementAndGet();return new Draft("风中的故事",language.equals("en")?"[Verse]\nA little memory stays with me":"[Verse]\n把你的名字写在风里\n[Chorus]\n每个日落都想起你");}
  }
  @Autowired IdentityApi identity;@Autowired WorkApi works;@Autowired LyricsApi lyrics;@Autowired LyricsCompositionService composer;@Autowired FakeWriter writer;
+ @Test void freeInspirationAndMixedLanguageReachWriterWithoutInventedRecipient(){
+  String owner=identity.create().creatorId();var work=works.create(owner,new WorkApi.Draft("","","海边旅行与重新出发","","流行",""));
+  String key=UUID.randomUUID().toString();int before=writer.calls.get();
+  var generated=composer.compose(owner,work.id(),0,key,"mixed");
+  assertEquals("mixed",writer.lastLanguage);assertEquals("",writer.lastWork.recipient());assertEquals("",writer.lastWork.occasion());
+  assertEquals("海边旅行与重新出发",writer.lastWork.story());assertFalse(generated.confirmed());
+  assertEquals(generated.id(),composer.compose(owner,work.id(),0,key,"mixed").id());assertEquals(before+1,writer.calls.get());
+ }
  @Test void savesUnconfirmedAiVersionAndReusesSuccessfulRequestWithoutCallingAgain(){
   String owner=identity.create().creatorId();var work=works.create(owner,new WorkApi.Draft("小雨","纪念","相识的故事","愿你快乐","民谣","故事"));
   var manual=lyrics.save(owner,work.id(),0,"原歌词","不要替换我的旧歌词");String key=UUID.randomUUID().toString();int before=writer.calls.get();

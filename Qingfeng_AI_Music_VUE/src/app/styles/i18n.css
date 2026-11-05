@@ -6,10 +6,10 @@
 .bilingual-description > span { display:block; }
 .bilingual-description .description-translation { margin-top:10px; font-size:13px; color:var(--muted); line-height:1.7; }
 @media(max-width:600px) { .consumer-shell .p-intro .bilingual-headline { font-size:36px; } .consumer-shell .p-intro .headline-translation { font-size:27px; margin-top:14px; } .bilingual-description .description-translation { font-size:12px; } }
-.language-switch button { min-width:30px; min-height:36px; padding:5px; color:#8995a6; border-radius:8px; }
+.language-switch button { min-width:30px; min-height:36px; padding:5px; color:var(--muted); border-radius:8px; }
 .language-switch button:hover { color:var(--ink); background:var(--surface-raised); }
 .language-switch button.selected { color:var(--ink); font-weight:700; }
-.language-switch > span { color:#414752; }
+.language-switch > span { color:var(--muted); }
 .app-header { display:flex; align-items:center; justify-content:space-between; gap:12px; }
 html[lang="en"] .consumer-header-inner { gap:20px; }
 html[lang="en"] .consumer-navigation { gap:24px; }
@@ -52,8 +52,21 @@ html[lang="en"] .draft-aside h2 { line-height:1.4; }
 }
 @media(max-width:420px) {
   .language-switch > span,.language-switch button.selected { display:none; }
-  .language-switch button { min-width:31px; border:1px solid #313844; }
+  .language-switch button { min-width:31px; border:1px solid var(--line); }
   html[lang="en"] .consumer-shell .p-intro h1 { font-size:36px; }
   html[lang="en"] .consumer-shell .p-button { font-size:12px; }
   html[lang="en"] .draft-steps { gap:7px; font-size:11px; }
 }
+
+.consumer-shell .home-creator-hero { display:block; min-height:0; padding-block:78px 70px; text-align:center; border-bottom:1px solid var(--line); margin-bottom:32px; }
+.home-creator-hero .p-intro { max-width:1040px; margin-inline:auto; }
+.home-creator-hero .creator-invitation { color:var(--muted); font-size:14px; margin-bottom:29px; }
+.consumer-shell .home-creator-hero .p-intro h1 { font-size:clamp(40px,4.5vw,64px); line-height:1.2; letter-spacing:-1.5px; }
+.consumer-shell .home-creator-hero .headline-translation { font-size:clamp(28px,3vw,43px); margin-top:20px; line-height:1.3; }
+.consumer-shell .home-creator-hero .bilingual-description { max-width:900px; font-size:17px; margin:28px auto 0; line-height:1.8; }
+.home-creator-hero .bilingual-description .description-translation { font-size:14px; margin-top:9px; }
+.consumer-shell .home-creator-hero .p-hero-actions { justify-content:center; margin-top:35px; gap:30px; }
+.consumer-shell .home-creator-hero .p-button { min-width:240px; justify-content:space-between; font-size:14px; min-height:54px; }
+.home-creator-hero .p-text-link { font-size:14px; }
+.consumer-shell .home-creator-hero .p-reassurance { margin-top:22px; font-size:12px; line-height:1.8; }
+@media(max-width:600px) { .consumer-shell .home-creator-hero { padding-block:44px 40px; margin-bottom:20px; } .home-creator-hero .creator-invitation { font-size:11px; margin-bottom:22px; } .consumer-shell .home-creator-hero .p-intro h1 { font-size:37px; } .consumer-shell .home-creator-hero .headline-translation { font-size:27px; margin-top:15px; } .consumer-shell .home-creator-hero .bilingual-description { font-size:13px; margin-top:23px; } .home-creator-hero .bilingual-description .description-translation { font-size:11px; } .consumer-shell .home-creator-hero .p-hero-actions { gap:22px; margin-top:28px; } .consumer-shell .home-creator-hero .p-button { min-width:210px; font-size:13px; } .home-creator-hero .p-text-link { font-size:12px; } .consumer-shell .home-creator-hero .p-reassurance { font-size:11px; margin-top:20px; } }

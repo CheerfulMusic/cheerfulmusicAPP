@@ -29,6 +29,20 @@ class WorkPersistenceIntegrationTest {
         return new Browser(http,token);
     }
     private final String draft="{\"recipient\":\"妈妈\",\"occasion\":\"生日祝福\",\"story\":\"一起做饭的回忆\",\"message\":\"谢谢你\",\"style\":\"民谣\",\"title\":\"回家的风\"}";
+    @Test void inspirationDraftDoesNotRequireGiftMetadata() throws Exception {
+        var b=browser();
+        String input="{\"recipient\":\"\",\"occasion\":\"\",\"story\":\"写一首关于海边旅行与自由的歌\",\"message\":\"\",\"style\":\"流行\",\"title\":\"\"}";
+        var created=send(b.http(),"POST","/api/app/works",input,b.csrf());
+        assertEquals(200,created.statusCode(),created.body());
+        String id=field(created.body(),"id");
+        var saved=send(b.http(),"GET","/api/app/works/"+id,null,null);
+        assertTrue(saved.body().contains("\"recipient\":\"\""));
+        assertTrue(saved.body().contains("\"occasion\":\"\""));
+        String updated=input.replace("海边旅行与自由","星空与成长").replace("}",",\"expectedVersion\":0}");
+        assertEquals(200,send(b.http(),"PUT","/api/app/works/"+id,updated,b.csrf()).statusCode());
+        assertEquals(404,send(browser().http(),"GET","/api/app/works/"+id,null,null).statusCode());
+        assertEquals(400,send(b.http(),"POST","/api/app/works",input.replace("写一首关于海边旅行与自由的歌",""),b.csrf()).statusCode());
+    }
     @Test void persistsAndRestoresOwnedDraft() throws Exception {
         var b=browser();var created=send(b.http(),"POST","/api/app/works",draft,b.csrf());assertEquals(200,created.statusCode(),created.body());
         String id=field(created.body(),"id");var read=send(b.http(),"GET","/api/app/works/"+id,null,null);assertEquals(200,read.statusCode());assertTrue(read.body().contains("一起做饭的回忆"));assertFalse(read.body().contains("ownerId"));assertEquals("AUTO",field(read.body(),"vocalGender"));

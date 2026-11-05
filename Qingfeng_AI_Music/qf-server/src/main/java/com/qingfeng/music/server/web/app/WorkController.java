@@ -18,7 +18,7 @@ public class WorkController {
     private final WorkApi works;
     private final com.qingfeng.music.server.query.WorkLibraryQuery library;
     public WorkController(WorkApi works,com.qingfeng.music.server.query.WorkLibraryQuery library) { this.works=works;this.library=library; }
-    public record DraftRequest(@NotBlank @Size(max=80) String recipient,@NotBlank @Size(max=32) String occasion,
+    public record DraftRequest(@NotNull @Size(max=80) String recipient,@NotNull @Size(max=32) String occasion,
         @NotNull @Size(max=4000) String story,@NotNull @Size(max=500) String message,@NotNull @Size(max=80) String style,@NotNull @Size(max=100) String title,
         @PositiveOrZero Long expectedVersion,@Pattern(regexp="[0-9a-fA-F-]{36}") String draftKey,@Pattern(regexp="AUTO|MALE|FEMALE")String vocalGender) {
         WorkApi.Draft draft() { return new WorkApi.Draft(recipient,occasion,story,message,style,title,vocalGender); }

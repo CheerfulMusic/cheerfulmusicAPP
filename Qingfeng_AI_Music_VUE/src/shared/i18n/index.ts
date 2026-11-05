@@ -22,9 +22,7 @@ export function t(message: string, params: Record<string, string | number> = {})
 function updateDocument() {
   if (typeof document === 'undefined') return
   document.documentElement.lang = selected.value
-  document.title = selected.value === 'en'
-    ? 'Cheerful Music · Turn your story into a song'
-    : '青风音乐 · 把你的故事，唱给重要的人'
+  document.title = '青风音乐'
   document.querySelector('meta[name="description"]')?.setAttribute('content', t('把你的故事唱成歌，送给重要的人。用青风音乐记录回忆，制作专属音乐礼物。'))
 }
 export function setLocale(value: Locale) {
@@ -38,8 +36,8 @@ export function formatDate(value: string | number | Date): string {
   return Number.isNaN(date.getTime()) ? '—' : new Intl.DateTimeFormat(selected.value, { dateStyle: 'medium', timeStyle: 'short' }).format(date)
 }
 export function defaultCover(): string {
-  return selected.value === 'en' ? '/media/brand-cover-en.svg' : '/media/brand-cover.svg'
+  return selected.value === 'en' ? '/media/brand-cover-light-en.svg' : '/media/brand-cover-light.svg'
 }
 export function localizedCover(cover: string): string {
-  return /^\/media\/brand-cover(?:-en)?\.svg$/.test(cover) ? defaultCover() : cover
+  return /^\/media\/brand-cover(?:-light)?(?:-en)?\.svg$/.test(cover) ? defaultCover() : cover
 }

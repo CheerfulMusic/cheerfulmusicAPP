@@ -27,6 +27,10 @@ qingfeng:
   auth:
     google:
       enabled: ${GOOGLE_LOGIN_ENABLED:false}
+  inspiration:
+    rewrite:
+      enabled: true
+      concurrent-global: 4
   cover:
     ai:
       enabled: true

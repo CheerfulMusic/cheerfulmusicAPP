@@ -27,7 +27,9 @@ public class WorkService implements WorkApi {
     public Work get(String owner, String id) { return repository.find(owner, id).orElseThrow(() -> new DomainException("WORK_NOT_FOUND", "作品不存在或你无权访问")); }
     public List<Work> list(String owner, int page) { return repository.list(owner, Math.multiplyExact(page, 20), 20); }
     private void validate(Draft d) {
-        if (d == null || d.recipient() == null || d.recipient().isBlank() || d.recipient().length()>80 || d.occasion()==null || d.occasion().isBlank() || d.occasion().length()>32 || d.story()==null || d.story().length()>4000 || d.message()==null || d.message().length()>500 || d.style()==null || d.style().length()>80 || d.title()==null || d.title().length()>100)
+        if (d == null || d.recipient() == null || d.recipient().length()>80 || d.occasion()==null || d.occasion().length()>32 || d.story()==null || d.story().length()>4000 || d.message()==null || d.message().length()>500 || d.style()==null || d.style().length()>80 || d.title()==null || d.title().length()>100)
             throw new DomainException("INVALID_DRAFT", "请检查草稿字段和长度");
+        if (d.recipient().isBlank() && d.occasion().isBlank() && d.story().isBlank() && d.message().isBlank() && d.title().isBlank())
+            throw new DomainException("INVALID_DRAFT", "请先写下一点创作灵感。");
     }
 }

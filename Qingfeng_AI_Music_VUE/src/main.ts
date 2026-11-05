@@ -16,6 +16,10 @@ import './app/styles/audio-preparation.css'
 import './app/styles/section-editor.css'
 import './app/styles/story-focus.css'
 import './app/styles/music-settings.css'
+import './app/styles/explore-music.css'
+import './app/styles/home-creation-guide.css'
+import './app/styles/home-light.css'
+import './app/styles/brand-theme.css'
 import { initializeLocale } from './shared/i18n'
 
 initializeLocale()

@@ -7,6 +7,7 @@ import CoverEditor from '../components/CoverEditor.vue'
 import {coverUrl,loadCovers,type CoverState} from '../api/covers'
 import {usePlayer} from '../../../shared/player/store'
 import MusicSettingsPanel from '../components/MusicSettingsPanel.vue'
+import SoundDirectionEntry from '../components/SoundDirectionEntry.vue'
 import MusicSettingsSnapshot from '../components/MusicSettingsSnapshot.vue'
 import {saveMusicSettings,type MusicPreferences} from '../api/music-settings'
 import {useRouter} from 'vue-router'
@@ -156,7 +157,7 @@ function adjustMusic(){giftStage.value=false;shared.value=false;settingsOpen.val
   <p v-if="loading" class="notice" role="status">{{ t('正在读取作品…') }}</p><p v-if="error" class="notice error" role="alert">{{ t(error) }}</p>
   <template v-if="work">
     <CreationSteps :current="currentStep"/>
-    <div class="work-detail-top"><div><h1>{{ asset?songTitle:work.title||t('写给{recipient}的歌',{recipient:work.recipient}) }}</h1><p class="detail-muted">{{ t('送给 {recipient}',{recipient:work.recipient}) }} · {{ displayedStyle }}<template v-if="playingSettings?.vocalGender"> · {{ t(vocalGenderLabel(playingSettings.vocalGender)) }}</template></p></div></div>
+    <div class="work-detail-top"><div><h1>{{ asset?songTitle:work.title||(work.recipient?t('写给{recipient}的歌',{recipient:work.recipient}):t('我的原创歌曲')) }}</h1><p class="detail-muted"><template v-if="work.recipient">{{ t('送给 {recipient}',{recipient:work.recipient}) }} · </template> {{ displayedStyle }}<template v-if="playingSettings?.vocalGender"> · {{ t(vocalGenderLabel(playingSettings.vocalGender)) }}</template></p></div></div>
     <div class="story-back-actions"><button class="text-button" @click="backToStory">{{ t('返回修改故事') }}</button><button v-if="giftStage" class="text-button" @click="giftStage=false;shared=false">{{ t('返回试听与调整') }}</button></div>
     <GenerationRecovery v-if="pendingTask?.status==='SUBMISSION_UNKNOWN'" :task="pendingTask" :busy="submitting" @refresh="refreshTasks" @close="closeChecking(pendingTask)"/>
     <SongResult v-if="asset" :work="work" :asset="asset" :title="songTitle" :cover="artwork" :pending="!!pendingTask" :busy="submitting||settingsBusy||(!pendingTask&&!submissionUnknown&&(!modelReady||!lyricsReady))" :lyrics="giftRevision?.lyrics||''" @gift="sendGift" @adjust="adjustMusic" @regenerate="generate" @cover="openCover" @edit="editSection"/>
@@ -171,16 +172,17 @@ function adjustMusic(){giftStage.value=false;shared.value=false;settingsOpen.val
           <p v-if="asset" class="save-info next-song-settings">{{ nextSettings }}<br>{{ t('修改风格只影响下次生成，已有歌曲保持原样。') }}</p>
           <div v-if="asset" class="actions"><button class="button secondary" :disabled="submitting||(!pendingTask&&!submissionUnknown&&(!modelReady||!lyricsReady))" @click="generate">{{ submissionUnknown?t('核对生成进度'):pendingTask?t('查看生成进度'):t('用这版歌词重新生成歌曲') }}</button><span class="save-info">{{ t('重新生成歌曲会使用一次歌曲创作额度。') }}</span></div>
         </details>
+        <SoundDirectionEntry v-if="!asset" :style-label="t(work.style)" :voice-label="t(vocalGenderLabel(work.vocalGender))" :disabled="submitting||!!pendingTask||submissionUnknown||settingsBusy" @choose="adjustMusic"/>
         <div class="creation-action-bar work-primary-bar" :class="{'context-editor-open':coverOpen||settingsOpen}">
           <template v-if="asset"><button class="button secondary" @click="adjustMusic">{{ t('调整歌曲') }}</button><button class="button creation-primary" @click="sendGift">{{ t('满意了，制作礼物') }}</button></template>
-          <template v-else><button class="button secondary" :disabled="submitting||!!pendingTask||submissionUnknown||settingsBusy" @click="adjustMusic">{{ t('选择旋律与声音') }}</button><div><button class="button creation-primary" :disabled="submitting||(!pendingTask&&!submissionUnknown&&(!modelReady||!lyricsReady))" @click="generate">{{ submitting?t('正在准备歌曲…'):submissionUnknown?t('核对生成进度'):pendingTask?t('查看生成进度'):modelReady?t('确认歌词并生成歌曲'):t('歌曲生成暂未开放') }}</button><span class="save-info">{{ t('将自动保存并确认当前歌词，再开始谱曲。') }}</span></div></template>
+          <template v-else><button class="button secondary sound-direction-mobile" :disabled="submitting||!!pendingTask||submissionUnknown||settingsBusy" @click="adjustMusic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 9v6M10 4v16M15 7v10M20 10v4"/></svg>{{ t('旋律与声音') }}</button><div><button class="button creation-primary" :disabled="submitting||(!pendingTask&&!submissionUnknown&&(!modelReady||!lyricsReady))" @click="generate">{{ submitting?t('正在准备歌曲…'):submissionUnknown?t('核对生成进度'):pendingTask?t('查看生成进度'):modelReady?t('确认歌词并生成歌曲'):t('歌曲生成暂未开放') }}</button><span class="save-info">{{ t('将自动保存并确认当前歌词，再开始谱曲。') }}</span></div></template>
         </div>
         <p v-if="!modelReady&&!asset" class="notice">{{ t('音乐生成暂不可用，可以先编辑歌词并导入已有音频。') }}</p>
         <AudioPanel id="work-audio" tabindex="-1" :key="work.id+'-'+mediaRefresh" :work="work" :cover="artwork" @selected="asset=$event" @compare="sectionEditor?.compare($event)"/>
         <SharePanel :cover-id="covers?.currentCoverId" v-if="asset&&giftStage" @created="shared=true" id="work-share" tabindex="-1" :work-id="work.id" :revision="giftRevision" :asset="asset"/>
       </div>
       <aside class="work-overview">
-        <h2>{{ t('关于这份心意') }}</h2><p>{{ t('收件人：') }}{{ work.recipient }}</p><p class="private-message">{{ work.message||t('还没有填写祝福。') }}</p><small>{{ t('故事和草稿仅本人可见，分享由你主动创建。') }}</small>
+        <h2>{{ work.recipient?t('关于这份心意'):t('创作灵感') }}</h2><p v-if="work.recipient">{{ t('收件人：') }}{{ work.recipient }}</p><p class="private-message">{{ work.message||work.story }}</p><small>{{ t('故事和草稿仅本人可见，分享由你主动创建。') }}</small>
         <div class="model-status"><h3>{{ t('音乐生成') }}</h3><p class="next-song-settings">{{ nextSettings }}</p><p v-if="allowance">{{ allowance.dailyUnlimited?t('今日歌曲创作不限次数'):t('今日还可创作 {remaining} 次歌曲',{remaining:allowance.dailyRemaining}) }}</p><p>{{ t('保存和修改歌词不消耗歌曲创作次数。') }}</p><p v-if="pendingTask">{{ t(statusLabels[pendingTask.status]||pendingTask.status) }}</p>
           <details v-if="tasks.length" class="creation-fold task-history"><summary>{{ t('查看创作记录') }}</summary><div v-for="task in tasks" :key="task.id" class="task-entry"><strong>{{ task.title }}</strong><span>{{ t(statusLabels[task.status]||task.status) }}</span><p v-if="task.status==='SUBMISSION_UNKNOWN'">{{ t('这次创作结果还在确认中，请稍后刷新，避免重复提交。') }}</p><p v-if="task.errorCode==='QUERY_RETRY'">{{ t('查询暂时失败，稍后自动继续查询。') }}</p><button v-if="task.status==='FAILED'&&task.errorCode==='AUDIO_ARCHIVE_FAILED'" class="button secondary" :disabled="submitting" @click="retryArchive(task)">{{ t('仅重试保存音频') }}</button><small>{{ formatDate(task.createdAt) }}</small></div></details>
           <button class="text-button" @click="refreshTasks">{{ t('刷新进度') }}</button>

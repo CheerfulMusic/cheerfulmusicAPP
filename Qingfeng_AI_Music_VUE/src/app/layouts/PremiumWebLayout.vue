@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { t } from '../../shared/i18n/index'
+import { t, locale } from '../../shared/i18n/index'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import GlobalPlayer from '../../shared/player/GlobalPlayer.vue'
@@ -15,12 +15,14 @@ const screen = window.matchMedia('(max-width: 1200px)')
 const mobile = ref(screen.matches), menuOpen = ref(false)
 const menuButton = ref<HTMLButtonElement>(), menu = ref<HTMLElement>()
 const isGift = computed(() => route.name === 'gift')
+const isHome = computed(() => route.name === 'home')
 const navigation = [
-  { to: '/', label: '发现音乐', icon: 'home' },
-  { to: '/#inspiration', label: '送歌灵感', icon: 'music' },
+  { to: '/', label: '首页', icon: 'home' },
+  { to: '/create', label: '开始创作', icon: 'home' },
+  { to: '/#inspiration', label: '推荐', icon: 'music' },
   { to: '/#how', label: '如何制作', icon: 'guide' },
 ]
-const isActive = (to: string) => to === '/' ? route.name === 'home' && !route.hash : route.name === 'home' && route.hash === to.slice(1)
+const isActive = (to: string) => to.startsWith('/#') ? route.name === 'home' && route.hash === to.slice(1) : route.path === to && !route.hash
 function resize() { mobile.value = screen.matches; if (!mobile.value) menuOpen.value = false }
 async function closeMenu() { menuOpen.value = false; await nextTick(); menuButton.value?.focus() }
 function onKey(event: KeyboardEvent) {
@@ -55,11 +57,11 @@ onBeforeUnmount(() => {
 })
 </script>
 <template>
-  <div class="music-shell consumer-shell" :class="{'gift-shell':isGift}">
+  <div class="music-shell consumer-shell" :class="{'gift-shell':isGift, 'home-light-shell':isHome}">
     <a class="skip-link" href="#main-content">{{ t('跳到主要内容') }}</a>
     <header class="consumer-header">
       <div class="consumer-header-inner">
-        <RouterLink class="consumer-brand" to="/" :aria-label="t('Cheerful Music 青风音乐首页')"><BrandLogo :compact="mobile || isGift"/></RouterLink>
+        <RouterLink class="consumer-brand" to="/" :aria-label="t('Cheerful Music 青风音乐首页')"><BrandLogo :compact="mobile || isGift" standalone/></RouterLink>
         <nav v-if="!isGift" class="consumer-navigation" :aria-label="t('主导航')"><RouterLink v-for="item in navigation" :key="item.to" :to="item.to" :class="{'is-active':isActive(item.to)}" :aria-current="isActive(item.to)?'page':undefined">{{ t(item.label) }}</RouterLink></nav>
         <div class="consumer-header-actions">
           <LanguageSwitcher/>
@@ -81,8 +83,25 @@ onBeforeUnmount(() => {
     </template>
     <div class="music-shell-body">
       <main id="main-content" :class="{workspace:route.name!=='home'}" tabindex="-1"><slot/></main>
-      <footer class="brand-footer"><div class="footer-brand-message"><RouterLink to="/">Cheerful Music <span>{{ t('青风音乐') }}</span></RouterLink><p>{{ t('把心意，唱给你听。') }}</p></div><nav :aria-label="t('页脚导航')"><RouterLink to="/works">{{ t('我的音乐') }}</RouterLink><RouterLink to="/account">{{ t('账号与登录') }}</RouterLink><RouterLink to="/#how">{{ t('如何制作') }}</RouterLink></nav><p class="footer-media-note">{{ t('首页封面为 AI 场景示意，试听为示例歌曲。') }}</p></footer>
+      <footer class="brand-footer"><div class="footer-brand-message"><RouterLink to="/">Cheerful Music <span v-if="locale!=='en'">{{ t('青风音乐') }}</span></RouterLink><p>{{ t('人人都是歌手。') }}</p></div><nav :aria-label="t('页脚导航')"><RouterLink to="/works">{{ t('我的音乐') }}</RouterLink><RouterLink to="/account">{{ t('账号与登录') }}</RouterLink><RouterLink to="/#how">{{ t('如何创作') }}</RouterLink></nav></footer>
     </div>
     <GlobalPlayer/>
   </div>
 </template>
+
+<style scoped>
+.consumer-login { border:0; cursor:pointer; font-family:inherit; }
+@media(max-width:600px) {
+  .consumer-login { display:inline-flex; padding:9px 12px; min-height:37px; font-size:11px; }
+  .home-light-shell .consumer-login { min-width:0; }
+  .consumer-header-actions { gap:8px; }
+}
+@media(max-width:380px) {
+  .consumer-shell .consumer-login { padding-inline:8px; font-size:10px; }
+  .consumer-shell .consumer-header-actions { gap:4px; }
+  .consumer-header-inner { gap:6px; }
+  .consumer-brand :deep(.brand-logo) { gap:6px; }
+  .consumer-brand :deep(.brand-logo > img) { width:30px; height:30px; }
+  .consumer-brand :deep(.brand-logo-type strong) { font-size:13px; }
+}
+</style>

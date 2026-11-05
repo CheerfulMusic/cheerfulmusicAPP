@@ -2,6 +2,10 @@ import { ensureCreator, requestJson, ApiError } from '../../../shared/http/api-c
 import type { VocalGender } from '../model/vocals'
 export interface DraftInput { recipient: string; occasion: string; story: string; message: string; style: string; title: string; vocalGender:VocalGender }
 export interface Work extends DraftInput { id: string; version: number; createdAt: string; updatedAt: string }
+export async function rewriteInspiration(text: string, language: string) {
+  await ensureCreator()
+  return requestJson<{text:string}>('app/inspiration/rewrite', 'POST', {text,language}, 90000)
+}
 export async function loadWork(id: string) { await ensureCreator(); return requestJson<Work>(`app/works/${encodeURIComponent(id)}`) }
 export async function saveWork(draft: DraftInput, existing?: Pick<Work, 'id' | 'version'>, draftKey?: string) {
   await ensureCreator()

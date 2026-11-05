@@ -8,8 +8,8 @@
 .consumer-shell .p-gift-frame { border-radius:22px; }
 .consumer-shell .p-hero-footnote { margin-top:25px; }
 .gift-quick-links { display:flex; gap:8px; flex-wrap:wrap; margin-top:24px; }
-.gift-quick-links a { display:inline-flex; align-items:center; justify-content:center; min-height:33px; padding:6px 12px; border:1px solid #33353c; border-radius:20px; color:#b7bec9; font-size:11px; }
-.gift-quick-links a:hover { color:#f4f6fa; border-color:#8f5145; background:#211614; }
+.gift-quick-links a { display:inline-flex; align-items:center; justify-content:center; min-height:33px; padding:6px 12px; border:1px solid var(--line); border-radius:20px; color:var(--muted); font-size:11px; }
+.gift-quick-links a:hover { color:var(--ink); border-color:var(--accent-border); background:var(--accent-soft); }
 .consumer-shell .p-listen { padding-top:20px; padding-bottom:57px; }
 .consumer-shell .p-gallery-heading { align-items:center; }
 .consumer-shell .p-gallery-heading h2 { font-size:29px; margin-top:8px; }
@@ -22,20 +22,20 @@
 .consumer-shell .p-song-info { padding:18px 21px 5px; }
 .consumer-shell .p-make-similar { padding:10px 21px 18px; }
 .consumer-shell .p-occasions { padding-top:32px; padding-bottom:55px; border-top:1px solid var(--line); }
-.consumer-shell .p-occasion-grid > button { border-radius:17px; background:#101216; }
-.consumer-shell .p-occasion-grid > button:hover { background:#171719; }
-.consumer-shell .p-occasion-icon { color:#f3b1a3; }
+.consumer-shell .p-occasion-grid > button { border-radius:17px; background:var(--surface); }
+.consumer-shell .p-occasion-grid > button:hover { background:var(--surface); }
+.consumer-shell .p-occasion-icon { color:var(--accent-text); }
 .consumer-shell .p-section-heading h2 { font-weight:600; }
-.consumer-shell .p-how { background:#101215; }
+.consumer-shell .p-how { background:var(--surface); }
 .consumer-shell .p-how-steps > li { border-left:0; padding-left:0; }
-.consumer-shell .p-how-steps > li > span { width:30px; height:30px; display:grid; place-items:center; border:1px solid #654239; border-radius:50%; font-size:11px; margin-bottom:14px; }
+.consumer-shell .p-how-steps > li > span { width:30px; height:30px; display:grid; place-items:center; border:1px solid var(--accent-border); border-radius:50%; font-size:11px; margin-bottom:14px; }
 .consumer-shell .p-how-steps { gap:65px; }
 .consumer-shell .p-gift-section { padding-block:65px; }
 .consumer-shell .p-gift-description h2 { font-weight:600; }
 .consumer-shell .p-final { max-width:1200px; margin-inline:auto; border-radius:22px; padding-block:43px; }
 .consumer-shell .p-final h2 { font-weight:600; }
 .consumer-shell .workspace { padding-top:42px; }
-.consumer-shell .work-detail-top .backend-state { color:#b4a39c; }
+.consumer-shell .work-detail-top .backend-state { color:var(--muted); }
 @media(max-width:1280px) { .consumer-shell .p-final { margin-inline:40px; } .consumer-shell .p-hero { gap:50px; } }
 @media(max-width:1000px) { .consumer-shell .p-hero { min-height:580px; gap:35px; } .consumer-shell .p-intro h1 { font-size:40px; } .consumer-shell .p-intro-description { font-size:13px; } .consumer-shell .p-hero-photo { height:320px; } .consumer-shell .p-album-grid { gap:18px; } .consumer-shell .p-song-image-caption > strong { font-size:21px; } }
 @media(max-width:800px) { .consumer-shell .p-width { width:calc(100% - 48px); } .consumer-shell .p-hero { gap:28px; } .consumer-shell .p-intro h1 { font-size:34px; } .consumer-shell .p-hero-photo { height:290px; } .consumer-shell .p-hero-actions { gap:18px; } .consumer-shell .p-button { padding-inline:20px; font-size:12px; } .consumer-shell .p-final { margin-inline:24px; } }

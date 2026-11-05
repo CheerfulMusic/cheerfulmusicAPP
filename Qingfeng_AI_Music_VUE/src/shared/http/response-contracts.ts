@@ -24,6 +24,7 @@ export function validResponse(path:string,method:string,value:unknown):boolean{
  path=path.split('?')[0]!
  if(value==null)return emptyResponseAllowed(path,method)
  if(path==='public/csrf')return obj(value)&&text(value.token)
+ if(path==='app/inspiration/rewrite')return obj(value)&&text(value.text)&&(value.text as string).length<=4000
  if(path==='public/session'||path==='public/session/recover')return obj(value)&&text(value.creatorId)
  if(path==='public/session/logout')return method==='POST'&&obj(value)&&value.loggedOut===true
  if(path==='public/auth/google/status')return method==='GET'&&obj(value)&&typeof value.enabled==='boolean'&&typeof value.authenticated==='boolean'&&(!value.authenticated||value.enabled)&&['email','name'].every(k=>!(k in value)||str(value[k]))

@@ -11,7 +11,7 @@ import type { Work } from '../../studio'
 import { listRevisions, getRevision, getLyricsRequest, saveRevision, confirmRevision, generateLyrics, getUsage, type Revision, type Allowance } from '../api/detail'
 const props=defineProps<{work:Work}>(), emit=defineEmits<{selected:[revision:Revision|null];dirty:[value:boolean];ready:[value:boolean];recoverable:[value:boolean]}>()
 const route=useRoute(),router=useRouter()
-const versions=ref<Revision[]>([]),active=ref<Revision|null>(null),title=ref(props.work.title||t('写给{recipient}的歌',{recipient:props.work.recipient})),text=ref(''),baseline=ref(''),loading=ref(true),saving=ref(false),composing=ref(false),preparing=ref(false),error=ref(''),notice=ref(''),aiReady=ref(false),localSaved=ref(false),allowance=ref<Allowance>()
+const versions=ref<Revision[]>([]),active=ref<Revision|null>(null),title=ref(props.work.title||(props.work.recipient?t('写给{recipient}的歌',{recipient:props.work.recipient}):t('我的原创歌曲'))),text=ref(''),baseline=ref(''),loading=ref(true),saving=ref(false),composing=ref(false),preparing=ref(false),error=ref(''),notice=ref(''),aiReady=ref(false),localSaved=ref(false),allowance=ref<Allowance>()
 const language=ref<string>(['zh-CN','en','mixed'].includes(String(route.query.language))?String(route.query.language):locale.value),instructions=ref(''),requestKey=ref('')
 const errorKind=ref<'load'|'save'|'compose'>('save'),requestWaiting=ref(false),requestChecking=ref(false)
 const writingDirections=[
@@ -49,7 +49,7 @@ function schedule(){remember();clearTimeout(timer);if(dirty.value&&valid.value&&
 watch([title,text,language,instructions,requestKey],schedule,{flush:'sync'})
 watch([dirty,active,composing,preparing,valid,loading],()=>{emit('dirty',dirty.value);emit('selected',dirty.value||composing.value?null:active.value);emit('ready',valid.value&&!loading.value&&!composing.value)},{immediate:true})
 watch(localSaved,value=>emit('recoverable',value),{immediate:true})
-function select(value:Revision|null){active.value=value;title.value=value?.title||props.work.title||t('写给{recipient}的歌',{recipient:props.work.recipient});text.value=value?.lyrics||'';baseline.value=JSON.stringify(draftValue());clearTimeout(timer);remember()}
+function select(value:Revision|null){active.value=value;title.value=value?.title||props.work.title||(props.work.recipient?t('写给{recipient}的歌',{recipient:props.work.recipient}):t('我的原创歌曲'));text.value=value?.lyrics||'';baseline.value=JSON.stringify(draftValue());clearTimeout(timer);remember()}
 async function syncRoute(id:string){await nextTick();if(alive)await router.replace({query:{...route.query,revision:id,language:language.value}})}
 async function choose(event:Event){if(saving.value||blocked.value)return;const target=event.target as HTMLSelectElement;try{if(dirty.value&&valid.value)await persist();else if(dirty.value&&!window.confirm(t('切换版本会放弃未保存的歌词，是否继续？'))){target.value=active.value?.id||'';return}const revision=versions.value.find(v=>v.id===target.value)||null;select(revision);if(revision)await syncRoute(revision.id);error.value='';notice.value=''}catch{target.value=active.value?.id||''}}
 async function updateAllowance(){try{allowance.value=(await getUsage()).lyrics}catch{/* 额度以提交时的后端检查为准。 */}}
