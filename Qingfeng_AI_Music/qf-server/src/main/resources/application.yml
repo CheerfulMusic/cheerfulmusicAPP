@@ -27,6 +27,8 @@ qingfeng:
   auth:
     google:
       enabled: ${GOOGLE_LOGIN_ENABLED:false}
+    logto:
+      enabled: ${LOGTO_LOGIN_ENABLED:false}
   inspiration:
     rewrite:
       enabled: true

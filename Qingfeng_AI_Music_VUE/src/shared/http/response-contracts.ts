@@ -6,6 +6,10 @@ const googleAuthorizationUrl=(v:unknown)=>{
  if(!text(v))return false
  try{const url=new URL(v as string);return url.origin==='https://accounts.google.com'&&url.pathname==='/o/oauth2/v2/auth'&&!url.username&&!url.password&&!url.hash}catch{return false}
 }
+const logtoAuthorizationUrl=(v:unknown)=>{
+ if(!text(v))return false
+ try{const url=new URL(v as string);return ['http://localhost:3001','https://auth.cheerfulmusic.com'].includes(url.origin)&&url.pathname==='/oidc/auth'&&!url.username&&!url.password&&!url.hash}catch{return false}
+}
 const num=(v:unknown)=>typeof v==='number'&&Number.isFinite(v)
 const list=(v:unknown,check:(v:unknown)=>boolean)=>Array.isArray(v)&&v.every(check)
 const work=(v:unknown)=>obj(v)&&text(v.id)&&num(v.version)&&['recipient','occasion','story','message','style','title','vocalGender'].every(k=>str(v[k]))
@@ -29,8 +33,16 @@ export function validResponse(path:string,method:string,value:unknown):boolean{
  if(path==='public/session/logout')return method==='POST'&&obj(value)&&value.loggedOut===true
  if(path==='public/auth/google/status')return method==='GET'&&obj(value)&&typeof value.enabled==='boolean'&&typeof value.authenticated==='boolean'&&(!value.authenticated||value.enabled)&&['email','name'].every(k=>!(k in value)||str(value[k]))
  if(path==='public/auth/google/start')return method==='POST'&&obj(value)&&googleAuthorizationUrl(value.authorizationUrl)
+ if(path==='public/auth/logto/status')return method==='GET'&&obj(value)&&typeof value.enabled==='boolean'&&typeof value.authenticated==='boolean'&&['emailEnabled','phoneEnabled','appleEnabled'].every(k=>!(k in value)||typeof value[k]==='boolean')&&['email','name','phoneMasked'].every(k=>!(k in value)||str(value[k]))
+ if(path==='public/auth/logto/start')return method==='POST'&&obj(value)&&logtoAuthorizationUrl(value.authorizationUrl)
  if(path==='public/system/info')return obj(value)&&text(value.name)&&text(value.version)&&obj(value.capabilities)&&['lyricsGeneration','musicGeneration','giftSharing','workPersistence'].every(k=>typeof (value.capabilities as Row)[k]==='boolean')
  if(path==='app/identity/recovery')return obj(value)&&(method==='GET'?typeof value.configured==='boolean':text(value.code))
+ if(path==='app/credits')return method==='GET'&&obj(value)&&typeof value.enabled==='boolean'&&num(value.balance)&&num(value.musicCost)
+ if(path==='app/payments/catalog'||path==='app/paypal/catalog')return method==='GET'&&obj(value)&&typeof value.enabled==='boolean'&&list(value.packages,p=>obj(p)&&text(p.id)&&str(p.title)&&num(p.amount)&&Number(p.amount)>0&&text(p.currency)&&num(p.credits)&&Number(p.credits)>0)
+ if(path==='app/paypal/sdk-config')return method==='GET'&&obj(value)&&typeof value.enabled==='boolean'&&str(value.clientId)&&['sandbox','production'].includes(String(value.environment))&&(!value.enabled||text(value.clientId))
+ if(path==='app/payments/orders'||path==='app/paypal/orders')return method==='POST'?obj(value)&&text(value.orderId)&&text(value.checkoutUrl)&&(path!=='app/paypal/orders'||value.paypalOrderId===undefined||text(value.paypalOrderId)):method==='GET'&&obj(value)&&list(value.orders,o=>obj(o)&&text(o.orderId)&&['CREATING','PENDING','PAID'].includes(String(o.status))&&num(o.credits)&&text(o.createdAt))
+ if(/^app\/(payments|paypal)\/orders\/[^/]+$/.test(path))return method==='GET'&&obj(value)&&text(value.orderId)&&['CREATING','PENDING','PAID'].includes(String(value.status))&&num(value.credits)
+ if(/^app\/paypal\/orders\/[^/]+\/capture$/.test(path))return method==='POST'&&obj(value)&&text(value.orderId)&&['CREATING','PENDING','PAID'].includes(String(value.status))&&num(value.credits)
  if(path==='app/usage')return obj(value)&&['music','lyrics'].every(k=>obj(value[k])&&num((value[k] as Row).dailyRemaining)&&num((value[k] as Row).active))
  if(path==='app/music-settings/catalog')return obj(value)&&num(value.version)&&list(value.groups,g=>obj(g)&&text(g.id)&&str(g.zh)&&str(g.en)&&num(g.max)&&list(g.options,o=>obj(o)&&text(o.id)&&str(o.zh)&&str(o.en)&&str(o.prompt)))&&list(value.recipes,r=>obj(r)&&text(r.id)&&str(r.zh)&&str(r.en)&&choices(r.choices))
  if(path==='app/music-settings/preview'||/\/generations\/[^/]+\/music-settings$/.test(path))return direction(value)

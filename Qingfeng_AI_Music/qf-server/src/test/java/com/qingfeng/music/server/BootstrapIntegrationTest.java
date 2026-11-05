@@ -29,6 +29,9 @@ class BootstrapIntegrationTest {
         assertEquals(200, get("/actuator/health").statusCode());
         assertEquals(403, get("/actuator/env").statusCode());
     }
+    @Test void rechargePageIsAccessibleOnDirectNavigation() throws Exception {
+        assertEquals(200, get("/recharge").statusCode());
+    }
     @Test void privateBusinessRoutesAreClosedUntilAuthenticationIsImplemented() throws Exception {
         assertEquals(401, get("/api/app/works").statusCode());
     }

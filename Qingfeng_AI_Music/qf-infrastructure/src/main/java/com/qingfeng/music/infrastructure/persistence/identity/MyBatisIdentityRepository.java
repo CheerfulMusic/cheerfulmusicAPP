@@ -19,5 +19,6 @@ public class MyBatisIdentityRepository implements IdentityRepository {
     public void bindGoogle(String creator,String hash,String email,String name,Instant now){mapper.bindGoogle(creator,hash,email,name,now);}
     public void updateGoogle(String hash,String email,String name,Instant now){mapper.updateGoogle(hash,email,name,now);}
     public boolean hasContent(String creator){return mapper.contentCount(creator)>0;}
+    public boolean hasOtherIdentity(String creator){return mapper.otherIdentityCount(creator)>0;}
     public void deleteSession(String hash){mapper.deleteSession(hash);}
 }

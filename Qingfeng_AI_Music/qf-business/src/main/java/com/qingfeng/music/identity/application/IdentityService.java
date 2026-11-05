@@ -60,7 +60,7 @@ public class IdentityService implements IdentityApi {
         String target=expectedCreator;
         if(owner.isPresent()){
             target=owner.get();
-            if(!target.equals(expectedCreator)&&(repository.googleIdentity(expectedCreator).isPresent()||repository.hasContent(expectedCreator)))throw googleFailure("GOOGLE_ACCOUNT_CONFLICT");
+            if(!target.equals(expectedCreator)&&(repository.googleIdentity(expectedCreator).isPresent()||repository.hasOtherIdentity(expectedCreator)||repository.hasContent(expectedCreator)))throw googleFailure("GOOGLE_ACCOUNT_CONFLICT");
         }else{
             if(repository.googleIdentity(expectedCreator).isPresent())throw googleFailure("GOOGLE_ACCOUNT_CONFLICT");
             repository.bindGoogle(expectedCreator,subjectHash,profile(email,320),profile(name,200),Instant.now());

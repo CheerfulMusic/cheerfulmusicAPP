@@ -3,6 +3,26 @@ import {requestJson,uploadForm,resetCreatorSession} from '../src/shared/http/api
 afterEach(()=>{vi.unstubAllGlobals();resetCreatorSession()})
 const reply=(value:unknown,status=200)=>new Response(JSON.stringify(value),{status})
 describe('R1 响应读取与业务结果校验',()=>{
+ it('PayPal SDK 配置必须注明环境，启用时必须有公开 client ID',async()=>{
+  vi.stubGlobal('fetch',vi.fn(async()=>reply({enabled:true,clientId:'',environment:'sandbox'})))
+  await expect(requestJson('app/paypal/sdk-config')).rejects.toMatchObject({code:'INVALID_RESPONSE'})
+  vi.stubGlobal('fetch',vi.fn(async()=>reply({enabled:false,clientId:'',environment:'sandbox'})))
+  await expect(requestJson('app/paypal/sdk-config')).resolves.toMatchObject({enabled:false})
+ })
+ it('购买与积分响应缺少关键字段时不能视为成功',async()=>{
+  vi.stubGlobal('fetch',vi.fn(async()=>reply({enabled:true,packages:[{id:'a',title:'Starter',currency:'GBP',credits:100}]})))
+  await expect(requestJson('app/payments/catalog')).rejects.toMatchObject({code:'INVALID_RESPONSE'})
+  vi.stubGlobal('fetch',vi.fn(async()=>reply({orderId:'order'})))
+  await expect(requestJson('app/payments/orders','POST',{packageId:'a'})).rejects.toMatchObject({code:'INVALID_RESPONSE'})
+  vi.stubGlobal('fetch',vi.fn(async()=>reply({enabled:true,balance:10})))
+  await expect(requestJson('app/credits')).rejects.toMatchObject({code:'INVALID_RESPONSE'})
+ })
+ it('账户订单列表需要明确状态和归属订单信息',async()=>{
+  vi.stubGlobal('fetch',vi.fn(async()=>reply({orders:[{orderId:'order',status:'PENDING',credits:100}]})))
+  await expect(requestJson('app/payments/orders')).rejects.toMatchObject({code:'INVALID_RESPONSE'})
+  vi.stubGlobal('fetch',vi.fn(async()=>reply({orders:[{orderId:'order',status:'PENDING',credits:100,createdAt:'2026-11-05T00:00:00Z'}]})))
+  await expect(requestJson('app/payments/orders')).resolves.toMatchObject({orders:[{status:'PENDING'}]})
+ })
  it('200响应体读取超时仍抛408，写入结果不能伪装成功',async()=>{
   vi.stubGlobal('fetch',vi.fn(async(_url,init:RequestInit)=>({ok:true,status:200,text:()=>new Promise((_resolve,reject)=>init.signal!.addEventListener('abort',()=>reject(new DOMException('aborted','AbortError'))))})))
   await expect(requestJson('audit/body','POST',{},15)).rejects.toMatchObject({status:408})

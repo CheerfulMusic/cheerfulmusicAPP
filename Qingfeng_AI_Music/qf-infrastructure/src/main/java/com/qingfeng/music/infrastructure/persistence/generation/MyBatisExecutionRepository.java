@@ -7,6 +7,10 @@ import java.util.*;
 public final class MyBatisExecutionRepository implements ExecutionRepository {
     private final ExecutionMapper mapper;
     public MyBatisExecutionRepository(ExecutionMapper mapper) { this.mapper=mapper; }
+    private org.springframework.jdbc.core.JdbcTemplate jdbc;
+    private org.springframework.transaction.support.TransactionTemplate transactions;
+    private com.qingfeng.music.credits.CreditsLedger credits;
+    public MyBatisExecutionRepository withCredits(org.springframework.jdbc.core.JdbcTemplate jdbc, org.springframework.transaction.support.TransactionTemplate transactions, com.qingfeng.music.credits.CreditsLedger credits){this.jdbc=jdbc;this.transactions=transactions;this.credits=credits;return this;}
     public boolean lockProvider(String provider,String token,Instant now,Instant until) { mapper.ensureProvider(provider);return mapper.lock(provider,token,now,until)==1; }
     public void unlockProvider(String provider,String token) { mapper.unlock(provider,token); }
     public Optional<Execution> claim(String provider,String token,Instant now,Instant until) {
@@ -26,7 +30,13 @@ public final class MyBatisExecutionRepository implements ExecutionRepository {
     public void refreshAudioUrl(String task,String token,String url){mapper.refreshUrl(task,token,url);}
     public void archiveFailed(String task,String token,int attempts,boolean terminal,Instant now,Instant next) { mapper.archiveFailed(task,token,attempts,terminal?"FAILED":"SAVING",now,next); }
     public void succeeded(String task,String token,String asset,Instant now) { mapper.succeeded(task,token,asset,now); }
-    public void failed(String task,String token,String code,Instant now) { mapper.failed(task,token,code,now); }
+    public void failed(String task,String token,String code,Instant now) {
+        if(transactions==null){mapper.failed(task,token,code,now);return;}
+        transactions.executeWithoutResult(tx->{
+            if(mapper.failed(task,token,code,now)!=1)return;
+            jdbc.query("SELECT r.owner_id,r.work_id,r.request_key FROM generation_task t JOIN model_usage_reservation r ON r.kind='MUSIC' AND r.work_id=t.work_id AND r.request_key=t.request_key WHERE t.id=?",rs->{credits.refund(rs.getString(1),"music:"+rs.getString(2)+":"+rs.getString(3));},task);
+        });
+    }
     public boolean retryArchive(String work,String task,Instant now) { return mapper.retry(work,task,now)==1; }
     public boolean closeChecking(String work,String task,Instant now){return mapper.closeChecking(work,task,now,now.minusSeconds(180))==1;}
     public String attempt(String task,String phase,Instant now) { String id=UUID.randomUUID().toString();mapper.attempt(id,task,phase,now);return id; }

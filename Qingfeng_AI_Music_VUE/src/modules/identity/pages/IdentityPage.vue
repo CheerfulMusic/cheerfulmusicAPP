@@ -7,13 +7,18 @@ import { ensureCreator, requestJson, resetCreatorSession } from '../../../shared
 import { usePlayer } from '../../../shared/player/store'
 import { beginGoogleLogin } from '../api/google-login'
 import { accountLoggingOut, accountState, logoutAccount, refreshAccountState } from '../../../shared/identity/account-state'
+import { logtoState, refreshLogtoState } from '../../../shared/identity/logto-state'
+import { maskedPhoneLabel } from '../../../shared/identity/phone-label'
+import { showLoginDialog } from '../../../shared/identity/login-dialog'
 import { googleLoginFeedback } from '../model/google-login'
 import NavIcon from '../../../shared/ui/NavIcon.vue'
 import GoogleMark from '../components/GoogleMark.vue'
+import CreditsPanel from '../components/CreditsPanel.vue'
 const router = useRouter(), player = usePlayer(), busy = ref(true), configured = ref(false), secret = ref(''), restoreCode = ref(''), error = ref(''), notice = ref('')
 const route = useRoute()
 const googleStatus = accountState
 const googleBusy = ref(false), googleError = ref(''), googleNotice = ref(''), googleNoticeKind = ref<'success' | 'info'>('info')
+const logtoError = ref(''), logtoNotice = ref('')
 const accountBusy = computed(() => busy.value || googleBusy.value || accountLoggingOut.value)
 let identityEpoch = 0, pageReady = false, recoveryRefreshPending = false, restoringIdentity = false
 const accountInitials = computed(() => {
@@ -32,6 +37,12 @@ watch(accountState, (current, previous) => {
     finishRecoveryRefresh()
   }
 })
+watch(logtoState, (current, previous) => {
+  if (current.authenticated === previous.authenticated && current.email === previous.email && current.phoneMasked === previous.phoneMasked && current.name === previous.name) return
+  identityEpoch++
+  secret.value = ''; restoreCode.value = ''; configured.value = false
+  if (pageReady && !accountLoggingOut.value && !restoringIdentity) { recoveryRefreshPending = true; finishRecoveryRefresh() }
+})
 function finishRecoveryRefresh() {
   if (!recoveryRefreshPending || busy.value) return
   busy.value = true
@@ -39,8 +50,12 @@ function finishRecoveryRefresh() {
 }
 onMounted(async () => {
   const result = route.query.google
+  const logtoResult = route.query.logto
   try {
-    if (platform.kind === 'web') await refreshAccountState().catch(() => undefined)
+    if (platform.kind === 'web') await Promise.all([
+      refreshAccountState().catch(() => undefined),
+      refreshLogtoState().catch(() => { logtoError.value = '暂时无法读取 Logto 登录状态，请刷新后重试。' }),
+    ])
     await ensureCreator()
     const recoveryEpoch = identityEpoch
     const recovery = await requestJson<{ configured: boolean }>('app/identity/recovery')
@@ -54,12 +69,17 @@ onMounted(async () => {
       googleNoticeKind.value = 'info'
     }
     if (result === 'success' && googleStatus.value.authenticated) player.reset()
+    if (logtoResult === 'success' && logtoState.value.authenticated) { logtoNotice.value = '登录成功，你的音乐已关联到当前账号。'; player.reset() }
+    else if (logtoResult === 'success') logtoError.value = 'Logto 登录状态尚未确认，请刷新后重试。'
+    else if (logtoResult === 'conflict') logtoError.value = '当前作品属于另一个账号。请先保存找回码，再切换账号。'
+    else if (logtoResult === 'failed') logtoError.value = 'Logto 登录未完成，请重试。'
+    else if (logtoResult === 'cancelled') logtoNotice.value = '已取消登录，当前作品仍在此设备。'
   } catch (e) {
     error.value = e instanceof Error ? e.message : '暂时无法读取身份状态'
   } finally {
     pageReady = true; busy.value = false
-    if ((typeof result === 'string' && googleLoginFeedback(result, false)) || route.query.session === 'signed-out') {
-      const query = { ...route.query }; delete query.google; delete query.session
+    if ((typeof result === 'string' && googleLoginFeedback(result, false)) || typeof logtoResult === 'string' || route.query.session === 'signed-out') {
+      const query = { ...route.query }; delete query.google; delete query.logto; delete query.session
       await router.replace({ query })
     }
     finishRecoveryRefresh()
@@ -108,7 +128,7 @@ async function recover() {
   if (accountBusy.value) return
   if (!restoreCode.value.trim() || !window.confirm(t('将打开找回码对应的音乐收藏。当前作品不会合并，请先保存自己的找回码，是否继续？'))) return
   busy.value = true; restoringIdentity = true; error.value = ''
-  try { await ensureCreator(); await requestJson('public/session/recover', 'POST', {code:restoreCode.value.trim()}); resetCreatorSession(); player.reset(); secret.value = ''; restoreCode.value = ''; await refreshAccountState().catch(() => {}); await router.replace('/works') }
+  try { await ensureCreator(); await requestJson('public/session/recover', 'POST', {code:restoreCode.value.trim()}); resetCreatorSession(); player.reset(); secret.value = ''; restoreCode.value = ''; await Promise.all([refreshAccountState().catch(() => {}), refreshLogtoState().catch(() => {})]); await router.replace('/works') }
   catch (e) { error.value = e instanceof Error ? e.message : '恢复失败，请检查找回码' } finally { restoringIdentity = false; busy.value = false; finishRecoveryRefresh() }
 }
 </script>
@@ -117,18 +137,34 @@ async function recover() {
   <header class="account-intro">
     <p class="account-eyebrow"><span></span>{{ t('我的账号') }}</p>
     <h1>{{ t('账号与登录') }}</h1>
-    <p>{{ t('管理 Google 登录、切换账号，或使用找回码找回音乐。') }}</p>
+    <p>{{ t('使用 Logto 登录，或使用找回码找回音乐。') }}</p>
   </header>
   <p v-if="error" class="notice error" role="alert">{{ t(error) }}</p><p v-if="notice" class="notice success" role="status">{{ t(notice) }}</p>
   <p v-if="googleError" class="notice error" role="alert">{{ t(googleError) }}</p>
   <p v-if="googleNotice" class="notice" :class="googleNoticeKind" role="status">{{ t(googleNotice) }}</p>
+  <p v-if="logtoError" class="notice error" role="alert">{{ t(logtoError) }}</p>
+  <p v-if="logtoNotice" class="notice success" role="status">{{ t(logtoNotice) }}</p>
+  <section class="account-profile" :class="{ 'is-connected': logtoState.authenticated }" :aria-busy="accountBusy" :aria-label="t('使用 Logto 登录')">
+    <div class="profile-main profile-sign-in">
+      <div class="profile-identity">
+        <div class="google-avatar" aria-hidden="true"><NavIcon name="account" /></div>
+        <div class="profile-copy">
+          <p class="profile-provider">Logto</p>
+          <h2>{{ logtoState.authenticated ? (logtoState.name || t('已连接账号')) : t('使用 Logto 登录') }}</h2>
+          <p class="profile-description">{{ logtoState.authenticated ? (logtoState.email || maskedPhoneLabel(logtoState.phoneMasked) || t('可以在其他设备找回你的音乐。')) : t('在 Logto 登录页选择已配置的方式，并保留当前设备的音乐作品。') }}</p>
+        </div>
+      </div>
+      <div class="profile-actions"><span v-if="logtoState.authenticated" class="connection-badge">{{ t('已连接') }}</span><button type="button" class="google-sign-in" @click="showLoginDialog">{{ t('查看登录方式') }}</button></div>
+    </div>
+    <div class="profile-footer"><NavIcon name="recovery" /><p>{{ t('登录由 Logto 提供。不同账号的音乐不会自动合并。') }}</p></div>
+  </section>
   <section v-if="googleStatus.enabled" class="account-profile" :class="{ 'is-connected': googleStatus.authenticated }" :aria-busy="accountBusy" :aria-label="t(googleStatus.authenticated ? '已连接 Google 账号' : '用 Google 找回你的音乐')">
     <template v-if="googleStatus.authenticated">
       <div class="profile-main">
         <div class="profile-identity">
           <div class="account-avatar" aria-hidden="true">{{ accountInitials }}<span class="avatar-provider"><GoogleMark /></span></div>
           <div class="profile-copy">
-            <p class="profile-provider">{{ t('Google 账号') }}</p>
+            <p class="profile-provider">{{ t('旧版 Google 登录') }}</p>
             <h2>{{ googleStatus.name || t('音乐创作者') }}</h2>
             <p v-if="googleStatus.email" class="profile-email">{{ googleStatus.email }}</p>
           </div>
@@ -151,13 +187,14 @@ async function recover() {
       <div class="profile-main profile-sign-in">
         <div class="profile-identity">
           <div class="google-avatar" aria-hidden="true"><GoogleMark /></div>
-          <div class="profile-copy"><p class="profile-provider">{{ t('Google 账号') }}</p><h2>{{ t('你的音乐，随账号一起收藏。') }}</h2><p class="profile-description">{{ t('将当前音乐收藏关联到 Google，换设备后可用同一账号登录。') }}</p></div>
+          <div class="profile-copy"><p class="profile-provider">{{ t('旧版 Google 登录') }}</p><h2>{{ t('你的音乐，随账号一起收藏。') }}</h2><p class="profile-description">{{ t('已有 Google 账号可在此找回原有作品。') }}</p></div>
         </div>
         <button type="button" class="google-sign-in" :disabled="accountBusy" @click="loginWithGoogle"><GoogleMark />{{ googleBusy ? t('正在前往 Google…') : t('使用 Google 账号登录') }}</button>
       </div>
       <div class="profile-footer"><NavIcon name="recovery" /><p>{{ t('首次登录会保留当前作品。不同账号的音乐收藏不会自动合并。') }}</p></div>
     </template>
   </section>
+  <CreditsPanel :key="`${googleStatus.authenticated}:${googleStatus.email || ''}:${logtoState.authenticated}:${logtoState.email || ''}:${logtoState.phoneMasked || ''}:${logtoState.name || ''}`" />
   <section class="recovery-section" :aria-label="t('备用找回方式')">
     <div class="recovery-section-heading"><h2>{{ t('备用找回方式') }}</h2><p>{{ t('多一种找回方式，多一份安心。') }}</p></div>
     <div class="account-recovery-grid">
@@ -195,7 +232,7 @@ async function recover() {
 .avatar-provider svg { width: 14px; height: 14px; }
 .profile-copy { min-width: 0; }
 .profile-copy .profile-provider { margin: 0 0 3px; color: #b2a7a5; font-size: 11px; }
-.profile-copy h2 { margin: 0; font-size: 23px; line-height: 1.35; letter-spacing: -.5px; font-weight: 650; }
+.profile-copy h2 { margin: 0; color: #f1eeea; font-size: 23px; line-height: 1.35; letter-spacing: -.5px; font-weight: 650; }
 .profile-copy .profile-email { margin: 5px 0 0; color: #aeb5c1; font-size: 13px; overflow-wrap: anywhere; }
 .profile-actions { display: flex; align-items: center; gap: 22px; flex-shrink: 0; }
 .connection-badge { display: inline-flex; align-items: center; gap: 5px; color: #addbc8; border: 1px solid #355245; border-radius: 24px; background: #152820; padding: 4px 9px; font-size: 11px; white-space: nowrap; }
@@ -219,7 +256,7 @@ async function recover() {
 .google-avatar { display: grid; place-items: center; width: 64px; height: 64px; flex-shrink: 0; border: 1px solid #ffffff22; border-radius: 18px; background: #f7f7f7; }
 .google-avatar svg { width: 30px; height: 30px; }
 .profile-sign-in .profile-copy h2 { font-size: 20px; }
-.profile-copy .profile-description { max-width: 360px; margin: 6px 0 0; color: var(--muted); font-size: 12px; }
+.profile-copy .profile-description { max-width: 360px; margin: 6px 0 0; color: #aeb5c1; font-size: 12px; }
 .google-sign-in { flex-shrink: 0; }
 .google-sign-in > svg { width: 18px; height: 18px; }
 .google-sign-in:disabled { opacity: .6; transform: none; }
