@@ -27,6 +27,7 @@ public class PayPalPaymentService {
     String provider(){return environment.equals("live")?"PAYPAL_LIVE":"PAYPAL_SANDBOX";}
     PayPalCheckoutGateway gateway(){return new PayPalCheckoutGateway(environment.equals("live")?PayPalCheckoutGateway.Environment.LIVE:PayPalCheckoutGateway.Environment.SANDBOX,clientId,clientSecret,merchantId,webhookId);}
     public Map<String,Object> catalog(){return Map.of("enabled",ready(),"packages",ready()?catalog.packages().stream().map(PaymentCatalog.Package::asMap).toList():List.of());}
+    public Map<String,Object> sdkConfig(){return Map.of("enabled",ready(),"clientId",ready()?clientId:"","environment",environment.equals("live")?"production":"sandbox");}
     public Map<String,Object> create(String owner,String packageId){
         if(!ready()) throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,"PayPal 尚未开放");
         var p=catalog.find(packageId).orElseThrow(()->new ResponseStatusException(HttpStatus.BAD_REQUEST,"套餐不存在"));
@@ -41,7 +42,7 @@ public class PayPalPaymentService {
         });
         var link=gateway().create(id,p.title(),p.amount(),p.currency(),"https://cheerfulmusic.com/account?paypal_order="+id,"https://cheerfulmusic.com/account?paypal_cancel="+id);
         db.update("UPDATE payment_order SET provider_link_id=?,status=CASE WHEN status='CREATING' THEN 'PENDING' ELSE status END WHERE id=? AND provider=? AND (provider_link_id IS NULL OR provider_link_id=?)",link.orderId(),id,type,link.orderId());
-        return Map.of("orderId",id,"checkoutUrl",link.approvalUrl());
+        return Map.of("orderId",id,"checkoutUrl",link.approvalUrl(),"paypalOrderId",link.orderId());
     }
     Map<String,Object> row(String owner,String id){
         var rows=db.queryForList("SELECT * FROM payment_order WHERE id=? AND creator_id=? AND provider=?",id,owner,provider());

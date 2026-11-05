@@ -66,6 +66,7 @@ onBeforeUnmount(() => {
         <div class="consumer-header-actions">
           <LanguageSwitcher/>
           <RouterLink v-if="!isGift" class="consumer-my-music" :class="{'is-active':route.path.startsWith('/works')}" to="/works"><NavIcon name="music"/><span>{{ t('我的音乐') }}</span></RouterLink>
+          <RouterLink v-if="!isGift" class="consumer-recharge" to="/recharge">{{ locale === 'en' ? 'Credits' : '充值' }}</RouterLink>
           <RouterLink class="consumer-create" to="/create">{{ isGift ? t("我也想送一首歌") : t("制作一首歌") }}</RouterLink>
           <UserAccountMenu :navigation-open="menuOpen" @opened="menuOpen=false" />
           <button v-if="!isGift" ref="menuButton" class="mobile-menu-toggle" :aria-expanded="menuOpen" aria-controls="consumer-navigation" :aria-label="menuOpen?t('关闭导航'):t('打开导航')" @click="menuOpen=!menuOpen"><NavIcon name="menu"/></button>
@@ -78,6 +79,7 @@ onBeforeUnmount(() => {
         <div class="consumer-menu-heading"><strong>{{ t('想从哪里开始？') }}</strong><button class="consumer-menu-close" :aria-label="t('关闭导航')" @click="closeMenu"><NavIcon name="close"/></button></div>
         <nav :aria-label="t('手机导航')"><RouterLink v-for="item in navigation" :key="item.to" :to="item.to" :class="{'is-active':isActive(item.to)}"><NavIcon :name="item.icon"/>{{ t(item.label) }}</RouterLink><RouterLink to="/works"><NavIcon name="music"/>{{ t('我的音乐') }}</RouterLink><RouterLink to="/account" :class="{'is-active':route.name==='identity'}"><NavIcon name="account"/>{{ accountState.authenticated ? t('账号与登录') : t('登录 / 账号') }}</RouterLink></nav>
         <RouterLink class="consumer-menu-create" to="/create">{{ t('为重要的人，制作一首歌') }} <NavIcon name="arrow"/></RouterLink>
+        <RouterLink class="consumer-recovery-link" to="/recharge">{{ locale === 'en' ? 'Recharge credits' : '充值创作积分' }}</RouterLink>
         <RouterLink class="consumer-recovery-link" to="/account">{{ t('找回之前的音乐') }}</RouterLink>
       </section>
     </template>
@@ -90,6 +92,7 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+.consumer-recharge { color:#ee5741; font-size:13px; font-weight:700; text-decoration:none; white-space:nowrap; }
 .consumer-login { border:0; cursor:pointer; font-family:inherit; }
 @media(max-width:600px) {
   .consumer-login { display:inline-flex; padding:9px 12px; min-height:37px; font-size:11px; }

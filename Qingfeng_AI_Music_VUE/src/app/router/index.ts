@@ -11,6 +11,7 @@ export const router = createRouter({
     { path: '/works/:id', name: 'work-detail', component: () => import('../../modules/works/pages/WorkDetailPage.vue') },
     { path: '/gift/:token', name: 'gift', component: () => import('../../modules/gift/pages/PublicGiftPage.vue') },
     { path: '/account', name: 'identity', component: () => import('../../modules/identity/pages/IdentityPage.vue') },
+    { path: '/recharge', name: 'recharge', component: () => import('../../modules/identity/pages/RechargePage.vue') },
     { path: '/:pathMatch(.*)*', name: 'not-found', component: () => import('../pages/NotFoundPage.vue') },
   ],
 })

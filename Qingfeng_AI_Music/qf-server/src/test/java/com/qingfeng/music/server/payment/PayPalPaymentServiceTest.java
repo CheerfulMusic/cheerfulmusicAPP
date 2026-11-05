@@ -30,6 +30,8 @@ class PayPalPaymentServiceTest {
     }
     @Test void disabledDoesNotAcceptWebhookOrOrders(){
         assertEquals(false,service.catalog().get("enabled"));
+        assertEquals(false,service.sdkConfig().get("enabled"));
+        assertEquals("",service.sdkConfig().get("clientId"));
         assertThrows(ResponseStatusException.class,()->service.webhook(null,new byte[0]));
         assertThrows(ResponseStatusException.class,()->service.create(identity.create().creatorId(),"starter-GBP"));
     }
