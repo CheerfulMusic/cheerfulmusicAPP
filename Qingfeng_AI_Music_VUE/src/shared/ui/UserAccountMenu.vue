@@ -76,30 +76,33 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', outside))
 </template>
 <style scoped>
 .user-account { position: relative; flex: 0 0 auto; }
-.account-login, .account-trigger { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 40px; padding: 6px 10px; border: 1px solid #333944; border-radius: 24px; background: #14171d; color: #d7dce5; font-size: 12px; white-space: nowrap; }
-.account-login:hover, .account-trigger:hover, .account-login.is-active, .account-trigger.is-active { color: var(--ink); background: #20242c; border-color: #616976; }
-.account-login > svg { width: 17px; height: 17px; }
-.account-login-short { display: none; }
+.account-login, .account-trigger { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 40px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 24px; background: var(--surface); color: var(--ink); font-size: 12px; white-space: nowrap; }
+.account-login:hover, .account-trigger:hover, .account-login.is-active, .account-trigger.is-active { color: var(--ink); background: var(--surface-raised); border-color: var(--accent-border); }
+.account-login { min-width:128px; min-height:43px; padding:11px 24px; border:0; border-radius:28px; background:#ff432d; color:#fff; font-weight:700; }
+.account-login:hover,.account-login.is-active { background:#df3d29; color:#fff; border-color:transparent; }
+.account-login-short { display:none; }
+.account-login > svg { width:16px; height:16px; flex:0 0 auto; }
 .account-trigger { padding: 4px 9px 4px 4px; }
 .account-trigger-avatar { display: grid; place-items: center; width: 30px; height: 30px; flex: 0 0 auto; border: 1px solid #f294784f; border-radius: 50%; background: linear-gradient(145deg, #ff987b, #b7352b); color: #fff3e9; font-size: 11px; font-weight: 650; }
 .account-trigger-name { max-width: 95px; overflow: hidden; text-overflow: ellipsis; }
 .account-chevron { width: 13px; height: 13px; flex: 0 0 auto; color: #99a4b3; }
-.account-popover { position: absolute; z-index: 100; right: 0; top: calc(100% + 12px); width: 260px; max-width: calc(100vw - 32px); max-height: min(420px, calc(100svh - 100px)); overflow-y: auto; padding: 9px; border: 1px solid #363e4b; border-radius: 15px; background: #14171dfc; box-shadow: 0 16px 45px #0008; }
-.account-popover-identity { display: grid; gap: 4px; padding: 10px 12px 13px; margin-bottom: 6px; border-bottom: 1px solid #2d333e; min-width: 0; }
-.account-popover-identity strong { color: #edf0f5; font-size: 13px; overflow-wrap: anywhere; }
-.account-popover-identity span { color: #a3aebb; font-size: 11px; overflow-wrap: anywhere; }
-.account-popover-identity small { color: #848e9d; font-size: 10px; }
+.account-popover { position: absolute; z-index: 100; right: 0; top: calc(100% + 12px); width: 260px; max-width: calc(100vw - 32px); max-height: min(420px, calc(100svh - 100px)); overflow-y: auto; padding: 9px; border: 1px solid var(--line); border-radius: 15px; background: var(--surface); box-shadow: 0 16px 45px #71444f20; }
+.account-popover-identity { display: grid; gap: 4px; padding: 10px 12px 13px; margin-bottom: 6px; border-bottom: 1px solid var(--line); min-width: 0; }
+.account-popover-identity strong { color: var(--ink); font-size: 13px; overflow-wrap: anywhere; }
+.account-popover-identity span { color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }
+.account-popover-identity small { color: var(--muted); font-size: 10px; }
 .account-popover nav { display: grid; gap: 3px; }
-.account-popover nav a, .account-popover nav button { display: flex; align-items: center; gap: 11px; width: 100%; min-height: 42px; padding: 10px 12px; border-radius: 8px; color: #d1d8e3; font-size: 12px; text-align: left; }
-.account-popover nav a:hover, .account-popover nav button:hover { background: #252b35; color: white; }
-.account-popover nav svg { width: 17px; height: 17px; flex: 0 0 auto; color: #a5b0bf; }
-.account-popover nav .account-sign-out { margin-top: 4px; color: #efa99a; }
+.account-popover nav a, .account-popover nav button { display: flex; align-items: center; gap: 11px; width: 100%; min-height: 42px; padding: 10px 12px; border-radius: 8px; color: var(--ink); font-size: 12px; text-align: left; }
+.account-popover nav a:hover, .account-popover nav button:hover { background: var(--accent-soft); color: var(--accent-text); }
+.account-popover nav svg { width: 17px; height: 17px; flex: 0 0 auto; color: var(--muted); }
+.account-popover nav .account-sign-out { margin-top: 4px; color: var(--accent-text); }
 .account-sign-out:disabled { opacity: .5; }
-.account-menu-error { margin: 6px 10px; color: #ffaca2; font-size: 11px; line-height: 1.7; }
+.account-menu-error { margin: 6px 10px; color: var(--danger); font-size: 11px; line-height: 1.7; }
 @media (max-width: 600px) {
-  .account-trigger-name, .account-login-full { display: none; }
-  .account-login-short { display: inline; }
-  .account-login { gap: 5px; padding-inline: 8px; font-size: 11px; }
+  .account-login-full { display:none; }
+  .account-login-short { display:inline; }
+  .account-trigger-name { display: none; }
+  .account-login { min-width:0; min-height:37px; padding:9px 12px; font-size:11px; }
   .account-trigger { gap: 4px; padding-right: 7px; }
   .account-popover { position: fixed; top: 80px; right: 16px; }
 }

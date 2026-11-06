@@ -4,12 +4,21 @@
 .work-detail-top h1 { overflow-wrap: anywhere; margin: 0 0 8px; font-size: 31px; }
 .work-detail-top .backend-state { margin: 0 0 12px; }
 .detail-muted { color: var(--muted); font-size: 12px; line-height: 1.9; }
+.regeneration-music-settings { display:flex; align-items:center; justify-content:space-between; gap:20px; margin:20px 0 16px; padding:18px 20px; border:1px solid var(--line); border-radius:14px; background:var(--surface-raised); }
+.regeneration-music-settings>div { min-width:0; }
+.regeneration-music-settings strong { display:block; font-size:14px; font-weight:600; }
+.regeneration-music-settings .save-info { display:block; margin:6px 0 0; line-height:1.8; }
+.regeneration-music-settings>.button { flex-shrink:0; min-height:44px; }
+@media(max-width:600px) { .regeneration-music-settings { align-items:flex-start; flex-direction:column; gap:12px; padding:16px; } .regeneration-music-settings>.button { width:100%; } }
 .work-detail-layout { display: grid; grid-template-columns: minmax(0,1fr) 250px; gap: 24px; align-items: start; margin-top: 25px; }
 .detail-panel { padding: 26px 27px; border: 1px solid var(--line); background: var(--surface); border-radius: 14px; margin-bottom: 22px; min-width: 0; }
 .detail-heading { display: flex; align-items: center; justify-content: space-between; gap: 15px; }
 .detail-heading h2 { font-size: 22px; line-height: 1.6; font-weight: 600; margin: 0; }
 .origin-tag { color: var(--ink); background: var(--surface-raised); border: 1px solid var(--line); font-size: 10px; line-height: 1.5; padding: 5px 8px; border-radius: 5px; white-space: nowrap; flex-shrink: 0; }
 .workspace .field textarea.lyrics-edit { min-height: 280px; line-height: 2; font-size: 15px; }
+.lyrics-save-bar { display:flex; align-items:center; justify-content:space-between; gap:12px; margin:-8px 0 24px; }
+.lyrics-save-bar .save-info { margin:0; flex:1; }
+.lyrics-save-bar .lyrics-save-button { flex-shrink:0; min-width:88px; min-height:42px; }
 .detail-panel .actions { margin-bottom: 10px; }
 .work-overview { background: var(--surface); border: 1px solid var(--line); padding: 20px; border-radius: 14px; min-width: 0; }
 .work-overview > img { display: block; width: 100%; aspect-ratio: 1; border: 1px solid var(--line); border-radius: 9px; }

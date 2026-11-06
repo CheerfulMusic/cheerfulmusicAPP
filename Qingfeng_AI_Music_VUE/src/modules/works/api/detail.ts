@@ -1,4 +1,4 @@
-import { ensureCreator, requestJson, uploadForm, apiUrl } from '../../../shared/http/api-client'
+import { ensureCreator, requestJson, apiUrl } from '../../../shared/http/api-client'
 export interface Revision { id: string; workId: string; workVersion: number; title: string; lyrics: string; source: string; confirmed: boolean; createdAt: string }
 export interface LyricsRequestState {status:'NOT_FOUND'|'PENDING'|'FAILED'|'SUCCEEDED'|'UNKNOWN';revisionId:string|null;errorCode:string|null}
 export const getLyricsRequest = (work:string,key:string) => call<LyricsRequestState>(`app/works/${work}/lyrics/requests/${encodeURIComponent(key)}`)
@@ -24,7 +24,6 @@ export const listAudio = (work: string) => call<AudioAsset[]>(`app/works/${work}
 export const listTasks = (work: string) => call<GenerationTask[]>(`app/works/${work}/generations`)
 export const submitTask = (work: string, revisionId: string, requestKey: string) => call<GenerationTask>(`app/works/${work}/generations`, 'POST', { revisionId, requestKey })
 export const retryTaskArchive = (work: string, task: string) => call<void>(`app/works/${work}/generations/${task}/retry-archive`, 'POST', {})
-export function importAudio(work: string, file: File) { const form = new FormData(); form.append('file', file); return uploadForm<AudioAsset>(`app/works/${work}/audio`, form) }
 export const audioUrl = (work: string, asset: string, download = false) => apiUrl(`app/works/${work}/audio/${asset}${download ? '?download=true' : ''}`)
 export const createShare = (work: string, revisionId: string, assetId: string) => call<{ id: string; token: string; expiresAt: string }>(`app/works/${work}/shares`, 'POST', { revisionId, assetId })
 export const revokeShares = (work: string) => call<void>(`app/works/${work}/shares`, 'DELETE')

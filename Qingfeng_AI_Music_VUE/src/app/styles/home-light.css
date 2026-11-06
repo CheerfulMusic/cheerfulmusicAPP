@@ -16,11 +16,12 @@
 }
 .home-light-shell .consumer-header { background:#fffaf8ed; border:0; }
 .home-light-shell .consumer-header-inner { height:var(--home-header-height); max-width:1280px; width:calc(100% - 128px); }
-.home-light-shell .brand-logo>img { width:48px; height:48px; }
+.home-light-shell .consumer-header .brand-logo>img { width:48px; height:48px; }
 .home-light-shell .brand-logo-type strong { font-size:24px; letter-spacing:-.8px; color:var(--ink); }
 .home-light-shell .brand-logo-type small { color:#837269; font-size:10px; margin-top:4px; }
 .home-light-shell .consumer-navigation { gap:31px; }
-.home-light-shell .consumer-navigation a,.home-light-shell .consumer-my-music { font-size:14px; color:#292725; }
+.home-light-shell .consumer-navigation a { font-size:16px; color:#292725; }
+.home-light-shell .consumer-my-music { font-size:14px; color:#292725; }
 .home-light-shell .consumer-navigation a.is-active { color:#c73622; position:relative; }
 .home-light-shell .consumer-navigation a.is-active::after { content:""; position:absolute; bottom:1px; left:3px; right:3px; height:3px; border-radius:5px; background:var(--accent); }
 .home-light-shell .consumer-create { background:var(--accent); color:white; min-width:128px; }
@@ -44,19 +45,26 @@
   min-height:calc(100svh - var(--home-header-height));
   min-height:calc(100dvh - var(--home-header-height));
   display:grid;
-  grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);
+  /* Keep the copy and artwork together, then center the whole composition. */
+  grid-template-columns:minmax(0,440px) minmax(0,min(500px,calc(110svh - 270px)));
+  justify-content:center;
   align-items:center;
   align-content:start;
-  gap:24px 20px;
+  gap:24px 0;
   text-align:left;
   padding:20px 0 28px;
   margin:0 auto;
   border:0;
 }
 .home-light-shell .home-creator-hero .p-intro { width:100%; max-width:810px; margin:0; padding:0; z-index:2; position:relative; }
-.home-light-shell .creator-invitation { font-size:13px; letter-spacing:.6px; color:#967469; margin-bottom:18px; }
+@media(min-width:1101px) {
+  .home-light-shell .home-creator-hero .p-intro { left:-32px; }
+}
 .home-light-shell .home-creator-hero .p-intro h1 { font-size:56px; letter-spacing:-2px; font-weight:700; line-height:1.25; margin:0; color:#202020; }
-.home-light-shell .home-creator-hero .headline-translation { font-size:37px; letter-spacing:-1.1px; font-weight:550; color:#f3422c; line-height:1.3; margin-top:12px; }
+.home-light-shell .creator-main-title { display:block; letter-spacing:.01em; }
+.home-light-shell .home-creator-hero .creator-singer-tagline { display:block; margin-top:22px; color:#f93822; font-size:36px; line-height:1.4; letter-spacing:.015em; font-weight:400; }
+.home-light-shell .creator-singer-tagline > span { display:inline; }
+.home-light-shell .creator-singer-tagline strong { font-weight:650; }
 .home-light-shell .home-creator-hero .bilingual-description { font-size:16px; line-height:1.85; max-width:690px; margin:22px 0 0; color:#615652; }
 .home-light-shell .bilingual-description .description-translation { font-size:12px; line-height:1.9; color:#847269; margin-top:8px; }
 .home-light-shell .home-creator-hero .p-hero-actions { margin-top:26px; justify-content:flex-start; gap:18px; flex-wrap:wrap; }
@@ -66,7 +74,7 @@
 .home-light-shell .home-creator-hero .p-reassurance { margin-top:16px!important; font-size:11px!important; line-height:1.8; color:#8f786a; letter-spacing:.3px; }
 
 /* Decorative vector and CSS layers: no extra bitmap download or animation. */
-.light-brand-scene { position:relative; width:calc(100% + 35px); max-width:min(500px,calc(110svh - 270px)); aspect-ratio:550/500; justify-self:end; margin-right:-35px; z-index:0; pointer-events:none; isolation:isolate; }
+.light-brand-scene { position:relative; width:100%; max-width:min(500px,calc(110svh - 270px)); aspect-ratio:550/500; justify-self:start; margin:0; transform:translateX(18px) scale(.9); z-index:0; pointer-events:none; isolation:isolate; }
 .brand-ambient { position:absolute; inset:-14.5% -32.7% -11.3% -9.1%; border-radius:46% 54% 72% 28%; background:linear-gradient(140deg,#ffece966,#fff8f533); transform:rotate(-26deg); }
 .brand-sphere { position:absolute; width:67.27%; aspect-ratio:1; left:17.27%; top:14%; border-radius:50%; background:radial-gradient(circle at 32% 28%,#ffdcbb 0%,#ffb293 26%,#ff8a78 48%,#ffbdb7aa 69%,#fff2e800 85%); box-shadow:inset -16px -18px 60px #ffd4d2,0 0 75px 25px #ffd6c983; }
 .brand-sphere::before { content:""; position:absolute; inset:-13.5%; border-radius:50%; background:linear-gradient(140deg,#ffdacd33,#ffbfa732,#fff8f300); border:1px solid #ffffffa0; }
@@ -110,14 +118,14 @@
 @media(max-width:1100px) and (min-width:701px) {
   .home-light-shell .consumer-header-inner { width:calc(100% - 60px); gap:16px; }
   .home-light-shell .brand-logo-type strong { font-size:19px; }
-  .home-light-shell .brand-logo>img { width:40px; height:40px; }
+  .home-light-shell .consumer-header .brand-logo>img { width:40px; height:40px; }
   .home-light-shell .consumer-navigation { gap:17px; }
   .home-light-shell .consumer-navigation a,.home-light-shell .consumer-my-music { font-size:12px; }
   .home-light-shell .consumer-header-actions { gap:14px; }
   .home-light-shell .consumer-create { min-width:0; }
-  .home-light-shell .home-creator-hero { width:calc(100% - 80px); }
+  .home-light-shell .home-creator-hero { width:calc(100% - 80px); grid-template-columns:minmax(0,360px) minmax(0,min(500px,calc(110svh - 270px))); }
   .home-light-shell .home-creator-hero .p-intro h1 { font-size:46px; }
-  .home-light-shell .home-creator-hero .headline-translation { font-size:30px; }
+  .home-light-shell .home-creator-hero .creator-singer-tagline { font-size:30px; margin-top:18px; }
   .home-light-shell .home-creator-hero .bilingual-description { font-size:14px; }
   .home-light-shell .home-creator-hero .p-button { min-width:215px; }
   .hero-capabilities li { font-size:14px; gap:12px; }
@@ -126,7 +134,7 @@
 @media(max-width:700px) {
   .home-light-shell { --home-header-height:83px; }
   .home-light-shell .consumer-header-inner { width:calc(100% - 36px); }
-  .home-light-shell .brand-logo>img { width:37px; height:37px; }
+  .home-light-shell .consumer-header .brand-logo>img { width:37px; height:37px; }
   .home-light-shell .brand-logo-type strong { font-size:18px; }
   .home-light-shell .brand-logo-type small { font-size:9px; }
   .home-light-shell .mobile-menu-toggle { color:#4d3d36; border-color:#daccbf; }
@@ -134,15 +142,14 @@
   .home-light-shell .consumer-header-actions { gap:12px; }
   .home-light-shell .home-creator-hero { width:calc(100% - 40px); grid-template-columns:minmax(0,1fr); gap:0; padding:28px 0; }
   .home-light-shell .home-creator-hero .p-intro { max-width:none; }
-  .home-light-shell .creator-invitation { font-size:10px; letter-spacing:.4px; margin-bottom:18px; }
   .home-light-shell .home-creator-hero .p-intro h1 { font-size:35px; letter-spacing:-1px; }
-  .home-light-shell .home-creator-hero .headline-translation { font-size:24px; margin-top:13px; letter-spacing:-.7px; }
+  .home-light-shell .home-creator-hero .creator-singer-tagline { font-size:24px; margin-top:18px; }
   .home-light-shell .home-creator-hero .bilingual-description { font-size:12px; margin-top:20px; line-height:1.9; }
   .home-light-shell .bilingual-description .description-translation { font-size:10px; line-height:1.9; max-width:320px; margin-top:7px; }
   .home-light-shell .home-creator-hero .p-hero-actions { gap:12px; margin-top:22px; }
   .home-light-shell .home-creator-hero .p-button { min-width:206px; min-height:51px; font-size:12px; padding-inline:21px; }
   .home-light-shell .home-creator-hero .p-reassurance { font-size:10px!important; letter-spacing:0; margin-top:15px!important; }
-  .light-brand-scene { width:320px; max-width:calc(100% + 40px); aspect-ratio:380/390; justify-self:center; margin:16px 0 0; }
+  .light-brand-scene { width:320px; max-width:calc(100% + 40px); aspect-ratio:380/390; justify-self:center; margin:16px 0 0; transform:translateX(6px) scale(.9); }
   .brand-ambient { inset:-10% -26% -10% -5%; }
   .brand-sphere { width:64.5%; top:16%; left:19.2%; }
   .brand-symbol { width:33.7%; left:34.7%; top:30.3%; }

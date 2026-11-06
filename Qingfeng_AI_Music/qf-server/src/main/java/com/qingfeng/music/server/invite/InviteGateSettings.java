@@ -2,6 +2,7 @@ package com.qingfeng.music.server.invite;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.Locale;
 
 /** 内测邀请码门禁配置。启用时强制要求私有邀请码与签名密钥，避免误把全站开放成内测态。 */
 public record InviteGateSettings(
@@ -15,7 +16,7 @@ public record InviteGateSettings(
     public InviteGateSettings {
         codes = codes == null ? List.of() : codes.stream()
                 .filter(code -> code != null && !code.isBlank())
-                .map(String::trim)
+                .map(code -> code.trim().toUpperCase(Locale.ROOT))
                 .distinct()
                 .toList();
         if (sessionTtl == null) sessionTtl = Duration.ofDays(7);
@@ -24,7 +25,7 @@ public record InviteGateSettings(
                 || attemptsPerMinute < 1 || attemptsPerMinute > 100) {
             throw new IllegalArgumentException("Invalid beta access lifetime or attempt limit");
         }
-        if (enabled && (codes.isEmpty() || signingKey == null || signingKey.length() < 32)) {
+        if (enabled && (codes.isEmpty() || codes.stream().anyMatch(code -> code.length() < 12 || code.length() > 128) || signingKey == null || signingKey.length() < 32)) {
             throw new IllegalArgumentException(
                     "Enabled beta access requires private invitation codes and a signing key of at least 32 characters");
         }

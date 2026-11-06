@@ -1,9 +1,10 @@
 import { createRouter, createWebHashHistory, createWebHistory } from 'vue-router'
 import { platform } from '../../platform'
+import { scrollBehavior } from './scroll'
 
 export const router = createRouter({
   history: platform.kind === 'web' ? createWebHistory() : createWebHashHistory(),
-  scrollBehavior: (to) => to.hash ? { el: to.hash, top: 100, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' } : { top: 0 },
+  scrollBehavior,
   routes: [
     { path: '/', name: 'home', component: () => import('../../modules/home/pages/PremiumHomePage.vue') },
     { path: '/create', name: 'studio', component: () => import('../../modules/studio/pages/DraftStudioPage.vue') },

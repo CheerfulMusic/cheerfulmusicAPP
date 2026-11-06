@@ -6,19 +6,21 @@ import HomeBrandScene from './HomeBrandScene.vue'
 <template>
   <section class="p-hero p-width home-creator-hero" aria-labelledby="home-hero-title">
     <div class="p-intro">
-      <p class="creator-invitation">{{ t('让每一个想法，都有自己的旋律。') }}</p>
-      <h1 id="home-hero-title" class="bilingual-headline">
-        <span :lang="locale === 'en' ? 'en' : 'zh-CN'">{{ t('人人都是歌手。') }}</span>
-        <span v-if="locale !== 'en'" class="headline-translation" lang="en">Everyone Can Be a Singer.</span>
+      <h1 id="home-hero-title" class="bilingual-headline" :class="{ 'chinese-creator-headline': locale !== 'en' }">
+        <template v-if="locale !== 'en'">
+          <span class="creator-main-title" lang="zh-CN">做自己的歌</span>
+          <span class="creator-singer-tagline" lang="zh-CN"><span>人人</span><strong>都是歌手</strong></span>
+        </template>
+        <span v-else lang="en">Everyone Can Be a Singer</span>
       </h1>
       <p class="p-intro-description bilingual-description">
-        <span :lang="locale === 'en' ? 'en' : 'zh-CN'">{{ t('无需音乐基础，简单几步，创作属于你的歌曲。') }}</span>
-        <span v-if="locale !== 'en'" class="description-translation" lang="en">Create your own song in just a few clicks. No music skills needed.</span>
+        <span v-if="locale !== 'en'" lang="zh-CN">无需音乐基础 简单几步 让你的想法变成一首完整的歌</span>
+        <span v-else lang="en">Create your own song in just a few clicks No music skills needed</span>
       </p>
       <div class="p-hero-actions">
         <RouterLink class="p-button" to="/create">{{ t('立即生成我的歌') }} <span aria-hidden="true">↗</span></RouterLink>
       </div>
-      <p class="p-reassurance">{{ t('写下灵感，选择风格，唱出属于你的声音。') }}</p>
+      <p class="p-reassurance">{{ t('写下灵感 选择风格 唱出属于你的声音') }}</p>
     </div>
     <HomeBrandScene/>
     <ul class="hero-capabilities">

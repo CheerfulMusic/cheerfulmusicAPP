@@ -36,6 +36,8 @@ public class MusicSettingsService implements MusicSettings {
         if(!voice.equals("AUTO")){prompt.add(voice.equals("MALE")?"male lead vocals":"female lead vocals");zh.add(voice.equals("MALE")?"男声":"女声");en.add(voice.equals("MALE")?"Male vocals":"Female vocals");}
         else prompt.add("natural sung vocals");
         String style=String.join(", ",prompt)+". "+(free.isEmpty()?"":"User directions take precedence: "+free);
+        var inspiration=InspirationMusicPresets.find(free).filter(preset->preset.matches(choices));
+        if(inspiration.isPresent())style=inspiration.get().promptForVoice(voice);
         if(!negative.isEmpty())excluded.add(negative);String exclusions=String.join(", ",excluded);
         if(style.length()>1000||exclusions.length()>500)throw new DomainException("INVALID_MUSIC_SETTINGS","音乐描述过长，请减少标签或补充要求。");
         String summaryZh=String.join("、",zh)+"。"+(free.isEmpty()?"":"补充："+free)+(excluded.isEmpty()?"":" 避免："+String.join("、",choices.get("exclude").stream().map(id->catalog.groups().stream().filter(g->g.id().equals("exclude")).findFirst().orElseThrow().options().stream().filter(o->o.id().equals(id)).findFirst().orElseThrow().zh()).toList())+(negative.isEmpty()?"":"；"+negative));
@@ -43,7 +45,7 @@ public class MusicSettingsService implements MusicSettings {
         return new Direction(prefs,style.trim(),exclusions,summaryZh,summaryEn,catalog.version());
     }
     public View get(String owner,String work){var w=works.get(owner,work);return new View(w,resolve(owner,w));}
-    public Direction resolve(String owner,WorkApi.Work work){works.get(owner,work.id());if(org.springframework.transaction.support.TransactionSynchronizationManager.isActualTransactionActive()&&repository.lockVersion(work.id())!=work.version())throw new DomainException("WORK_VERSION_CONFLICT","作品已修改，请重新确认音乐设置。");return repository.find(work.id()).filter(s->s.style().equals(work.style())&&s.vocalGender().equals(work.vocalGender())).map(s->preview(s.preferences())).orElse(null);}
+    public Direction resolve(String owner,WorkApi.Work work){works.get(owner,work.id());if(org.springframework.transaction.support.TransactionSynchronizationManager.isActualTransactionActive()&&repository.lockVersion(work.id())!=work.version())throw new DomainException("WORK_VERSION_CONFLICT","作品已修改，请重新确认音乐设置。");return repository.find(work.id()).filter(s->s.style().equals(work.style())&&s.vocalGender().equals(work.vocalGender())).map(s->preview(s.preferences())).orElseGet(()->InspirationMusicPresets.find(work.style()).map(preset->preview(preset.preferences(work.vocalGender()))).orElse(null));}
     @Transactional public View save(String owner,String work,long expectedVersion,Preferences input){
         var current=works.get(owner,work);var direction=preview(input);String genre=input.choices().get("genre").get(0);String label=catalog.groups().stream().filter(g->g.id().equals("genre")).findFirst().orElseThrow().options().stream().filter(o->o.id().equals(genre)).findFirst().orElseThrow().zh();
         var changed=works.update(owner,work,expectedVersion,new WorkApi.Draft(current.recipient(),current.occasion(),current.story(),current.message(),label,current.title(),direction.preferences().vocalGender()));

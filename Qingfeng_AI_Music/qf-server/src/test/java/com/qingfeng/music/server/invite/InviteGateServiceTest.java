@@ -19,7 +19,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class InviteGateServiceTest {
     private static final String KEY = "0123456789abcdef0123456789abcdef";
-    private static final String CODE = "BETA-2026";
+    private static final String CODE = "BETA-TEST-2026";
     private static final Instant NOW = Instant.parse("2026-11-06T00:00:00Z");
 
     private static InviteGateSettings settings() {

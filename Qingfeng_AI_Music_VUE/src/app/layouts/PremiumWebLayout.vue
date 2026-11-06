@@ -42,12 +42,12 @@ watch(menuOpen, async value => {
 })
 watch(() => route.fullPath, () => { menuOpen.value = false })
 watch(() => !!player.current, value => document.body.classList.toggle('has-preview', value), { immediate: true })
-function refreshAccount() { void refreshAccountState().catch(() => undefined); void refreshLogtoState().catch(() => undefined) }
+function refreshAccount() { if (isGift.value) return; void refreshAccountState().catch(() => undefined); void refreshLogtoState().catch(() => undefined) }
 function visibleAccount() { if (document.visibilityState === 'visible') refreshAccount() }
 onMounted(() => {
   screen.addEventListener('change', resize); document.addEventListener('keydown', onKey)
   // The account page owns its initial read after ensuring the creator session.
-  if (route.name !== 'identity') { void ensureAccountState().catch(() => undefined); void refreshLogtoState().catch(() => undefined) }
+  if (route.name !== 'identity' && !isGift.value) { void ensureAccountState().catch(() => undefined); void refreshLogtoState().catch(() => undefined) }
   window.addEventListener('qingfeng:identity-changed', refreshAccount)
   document.addEventListener('visibilitychange', visibleAccount)
 })
@@ -69,8 +69,7 @@ onBeforeUnmount(() => {
           <LanguageSwitcher/>
           <RouterLink v-if="!isGift" class="consumer-my-music" :class="{'is-active':route.path.startsWith('/works')}" to="/works"><NavIcon name="music"/><span>{{ t('我的音乐') }}</span></RouterLink>
           <RouterLink v-if="!isGift" class="consumer-recharge" to="/recharge">{{ locale === 'en' ? 'Credits' : '充值' }}</RouterLink>
-          <RouterLink class="consumer-create" to="/create">{{ isGift ? t("我也想送一首歌") : t("制作一首歌") }}</RouterLink>
-          <UserAccountMenu :navigation-open="menuOpen" @opened="menuOpen=false" />
+          <UserAccountMenu v-if="!isGift" :navigation-open="menuOpen" @opened="menuOpen=false" />
           <button v-if="!isGift" ref="menuButton" class="mobile-menu-toggle" :aria-expanded="menuOpen" aria-controls="consumer-navigation" :aria-label="menuOpen?t('关闭导航'):t('打开导航')" @click="menuOpen=!menuOpen"><NavIcon name="menu"/></button>
         </div>
       </div>
@@ -87,7 +86,7 @@ onBeforeUnmount(() => {
     </template>
     <div class="music-shell-body">
       <main id="main-content" :class="{workspace:route.name!=='home'}" tabindex="-1"><slot/></main>
-      <footer class="brand-footer"><div class="footer-brand-message"><RouterLink to="/">Cheerful Music <span v-if="locale!=='en'">{{ t('青风音乐') }}</span></RouterLink><p>{{ t('人人都是歌手。') }}</p></div><nav :aria-label="t('页脚导航')"><RouterLink to="/works">{{ t('我的音乐') }}</RouterLink><RouterLink to="/account">{{ t('账号与登录') }}</RouterLink><RouterLink to="/#how">{{ t('如何创作') }}</RouterLink></nav></footer>
+      <footer class="brand-footer"><div class="footer-brand-message"><RouterLink to="/" :aria-label="t('Cheerful Music 青风音乐首页')"><BrandLogo compact/></RouterLink><p>{{ t('人人都是歌手') }}</p></div><nav :aria-label="t('页脚导航')"><RouterLink to="/works">{{ t('我的音乐') }}</RouterLink><RouterLink to="/account">{{ t('账号与登录') }}</RouterLink><RouterLink to="/#how">{{ t('如何创作') }}</RouterLink></nav></footer>
     </div>
     <GlobalPlayer/>
   </div>
@@ -100,12 +99,11 @@ onBeforeUnmount(() => {
 .mobile-login-link:hover { background:var(--accent-soft); color:var(--accent-text); }
 .mobile-login-link svg { width:18px; height:18px; }
 @media(max-width:600px) {
-  .consumer-login { display:inline-flex; padding:9px 12px; min-height:37px; font-size:11px; }
-  .home-light-shell .consumer-login { min-width:0; }
   .consumer-header-actions { gap:8px; }
+  /* The recharge entry remains available in the mobile menu. */
+  .consumer-recharge { display:none; }
 }
 @media(max-width:380px) {
-  .consumer-shell .consumer-login { padding-inline:8px; font-size:10px; }
   .consumer-shell .consumer-header-actions { gap:4px; }
   .consumer-header-inner { gap:6px; }
   .consumer-brand :deep(.brand-logo) { gap:6px; }

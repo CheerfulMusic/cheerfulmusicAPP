@@ -2,7 +2,7 @@
 import '../styles/inspiration-studio.css'
 import StudioAtmosphere from '../components/StudioAtmosphere.vue'
 import { t, locale } from '../../../shared/i18n'
-import { onMounted, onBeforeUnmount, reactive, ref, computed, watch } from 'vue'
+import { onMounted, onBeforeUnmount, reactive, ref, computed, watch, nextTick } from 'vue'
 import { useRoute, useRouter, onBeforeRouteLeave, onBeforeRouteUpdate } from 'vue-router'
 import { getSystemInfo } from '../../../shared/http/system'
 import { ApiError, ensureCreator, currentCreatorId, lastKnownCreatorId } from '../../../shared/http/api-client'
@@ -12,6 +12,7 @@ import RecoveryCopies from '../../../shared/drafts/RecoveryCopies.vue'
 import { loadWork, saveWork, rewriteInspiration, type Work, type DraftInput } from '../api/works'
 import { normalizeVocalGender } from '../model/vocals'
 import { styleFromInspiration } from '../model/suggestions'
+import { inspirationPresets, inspirationSelection, type InspirationSelection } from '../model/inspiration-presets'
 import { continuationRequestKey, retireContinuationRequestKey } from '../model/lyrics-continuation'
 import { generateLyrics, getLyricsRequest, getUsage, type Allowance } from '../../works/api/detail'
 
@@ -26,17 +27,26 @@ const language=ref<string>(locale.value)
 const validationError=ref(''), selectedHint=ref(-1)
 const rewriting=ref(false), rewriteError=ref(''), rewriteStatus=ref('')
 const rewriteBackup=ref<{source:string;result:string}>()
-const inspirationExamples=[
-  {label:'感人的故事',hint:'一段让你记住的经历，当时发生了什么，你有什么感受？'},
-  {label:'旅行与自由',hint:'一场旅行、沿途的风景，或一次想要出发的心情。'},
-  {label:'雨夜心绪',hint:'某个安静的夜晚，心里浮现的画面和情绪。'},
-  {label:'治愈与成长',hint:'一次小小的改变、重新出发的勇气，或想对自己说的话。'},
-  {label:'自己的主题',hint:'写下你的故事、情绪、场景或主题……'},
-]
-const inspirationPlaceholder=computed(()=>t(inspirationExamples[selectedHint.value]?.hint||'写下你的故事、情绪、场景或主题……'))
+const inspirationPlaceholder=computed(()=>t('写下你的故事、情绪、场景或主题……'))
+const presetBackup=ref<{before:InspirationSelection;filled:InspirationSelection;previousHint:number}>()
+const canUndoPreset=computed(()=>!!presetBackup.value&&draft.story===presetBackup.value.filled.story&&draft.style===presetBackup.value.filled.style&&draft.vocalGender===presetBackup.value.filled.vocalGender)
 const continuationFailed=ref(false)
 const resetting=ref(false)
 const draft=reactive<DraftInput>({recipient:'',occasion:String(route.query.occasion||''),story:'',message:'',style:styleFromInspiration(route.query.style),title:'',vocalGender:'AUTO'})
+watch(()=>draft.style,style=>{selectedHint.value=inspirationPresets.findIndex((preset,index)=>index<5&&preset.style===style)},{flush:'sync'})
+async function chooseInspiration(index:number) {
+  if(!initialized.value||resetting.value||composing.value||rewriting.value)return
+  const preset=inspirationPresets[index];if(!preset)return
+  const before={story:draft.story,style:draft.style,vocalGender:draft.vocalGender},filled=inspirationSelection(preset,t),previousHint=selectedHint.value
+  checkpointRecovery(cacheKey,recoveryValue())
+  Object.assign(draft,filled);selectedHint.value=index;presetBackup.value={before,filled,previousHint}
+  rewriteBackup.value=undefined;rewriteError.value='';rewriteStatus.value='';validationError.value=''
+  await nextTick();document.querySelector<HTMLTextAreaElement>('#inspiration-input')?.focus()
+}
+function undoInspiration() {
+  const backup=presetBackup.value;if(!backup||!canUndoPreset.value)return
+  Object.assign(draft,backup.before);selectedHint.value=backup.previousHint;presetBackup.value=undefined
+}
 const snapshot=():DraftInput=>({...draft,recipient:draft.recipient.trim()})
 const dirty=computed(()=>initialized.value && JSON.stringify(snapshot())!==baseline.value)
 const valid=computed(()=>!!(draft.story.trim()||draft.message.trim()) && !!draft.style.trim())
@@ -68,6 +78,7 @@ watch([draft,language],schedule,{deep:true,flush:'sync'})
 async function initialize() {
   const turn=++initSequence,query={...route.query}
   rewriting.value=false;rewriteError.value='';rewriteStatus.value='';rewriteBackup.value=undefined
+  presetBackup.value=undefined
   resetting.value=true;ready.value=false;clearTimeout(timer)
   // 切换作品前先收尾正在保存的快照；旧响应不可把新建页面跳回旧作品。
   if(inflight)try{await inflight}catch{/* 旧作品的本机副本仍保留。 */}
@@ -245,20 +256,26 @@ onBeforeUnmount(()=>{remember();alive=false;initSequence++;clearTimeout(timer);w
         <fieldset class="draft-fields" :disabled="!initialized||composing||resetting">
           <div class="inspiration-input-box" :class="{'is-invalid':validationError}">
             <div class="inspiration-rewrite-tools">
-              <button type="button" class="inspiration-label inspiration-rewrite" :disabled="rewriting||!ready||!aiReady||conflict" :aria-busy="rewriting" @click="rewriteIdea"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5L12 3ZM21 2v5m-2.5-2.5h5"/></svg>{{ t(rewriting?'AI改写中…':'AI改写') }}</button>
+              <div class="inspiration-rewrite-action">
+                <button type="button" class="inspiration-label inspiration-rewrite" :disabled="rewriting||!ready||!aiReady||conflict" :aria-busy="rewriting" aria-describedby="inspiration-rewrite-purpose" @click="rewriteIdea"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5L12 3ZM21 2v5m-2.5-2.5h5"/></svg>{{ t(rewriting?'AI改写中…':'AI改写') }}</button>
+                <span id="inspiration-rewrite-purpose" class="inspiration-rewrite-purpose">{{ t('帮你把想法写得更具体') }}</span>
+              </div>
               <button v-if="rewriteBackup&&draft.story===rewriteBackup.result" class="inspiration-restore" type="button" :disabled="rewriting" @click="restoreRewrite">{{ t('恢复原文') }}</button>
             </div>
             <textarea id="inspiration-input" v-model="draft.story" maxlength="4000" :aria-label="t('写下创作灵感')" :placeholder="inspirationPlaceholder" :aria-invalid="!!validationError||undefined" :aria-describedby="validationError?'inspiration-guidance story-validation':'inspiration-guidance'"></textarea>
             <div class="inspiration-input-footer">
               <span class="inspiration-counter">{{ draft.story.length }} / 4000</span>
-              <label class="inspiration-language">{{ t('歌词语言') }}<select v-model="language" name="lyric-language"><option value="zh-CN">{{ t('中文') }}</option><option value="en">English</option><option value="mixed">{{ t('中英混合') }}</option></select></label>
+              <label class="inspiration-language">
+                <span class="inspiration-language-title"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a17 17 0 0 1 0 18 17 17 0 0 1 0-18Z"/></svg>{{ t('歌词语言') }}</span>
+                <span class="inspiration-language-select"><select v-model="language" name="lyric-language" :aria-label="t('歌词语言')"><option value="zh-CN">{{ t('中文') }}</option><option value="en">English</option><option value="mixed">{{ t('中英混合') }}</option></select><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg></span>
+              </label>
             </div>
             <p v-if="rewriteError" class="inspiration-rewrite-message error" role="alert">{{ t(rewriteError) }}</p>
             <p v-else-if="rewriteStatus" class="inspiration-rewrite-message" role="status">{{ t(rewriteStatus) }}</p>
           </div>
           <p v-if="validationError" id="story-validation" class="story-validation" role="alert">{{ t(validationError) }}</p>
-          <div class="inspiration-examples" role="group" :aria-label="t('灵感方向')"><span>{{ t('还没灵感？') }}</span><button v-for="(example,index) in inspirationExamples" :key="example.label" type="button" :aria-pressed="selectedHint===index" @click="selectedHint=selectedHint===index?-1:index">{{ t(example.label) }}</button></div>
-          <p id="inspiration-guidance" class="save-info">{{ t('示例标签只切换提示，不会替换你已经写下的内容。') }}</p>
+          <div class="inspiration-examples" role="group" :aria-label="t('选择创作风格')"><span>{{ t('选一种风格') }}</span><button v-for="(example,index) in inspirationPresets" :key="example.label" type="button" :disabled="rewriting" :aria-pressed="selectedHint===index" @click="chooseInspiration(index)">{{ t(example.label) }}</button></div>
+          <p id="inspiration-guidance" class="save-info">{{ t('点击标签填入创作描述，你可以继续修改，补充想唱的主题。') }} <button v-if="canUndoPreset" type="button" class="text-button" @click="undoInspiration">{{ t('撤销填入') }}</button></p>
           <details v-if="draft.recipient||draft.occasion||draft.message" class="legacy-inspiration-context"><summary>{{ t('已保留的旧版作品信息') }}</summary><p v-if="draft.recipient">{{ t('收件人：') }}{{ draft.recipient }}</p><p v-if="draft.occasion">{{ draft.occasion }}</p><p v-if="draft.message" class="legacy-message">{{ draft.message }}</p></details>
           <div class="creation-action-bar story-action-bar"><button class="button creation-primary" type="submit" :disabled="!initialized||composing||rewriting||resetting||!ready||!aiReady||conflict">{{ composing?t('正在编写歌词…'):t('生成歌词') }}<span v-if="!composing" aria-hidden="true">→</span></button></div>
           <p class="inspiration-next-note">{{ t('先生成歌词，修改满意后再生成音乐。') }}</p>

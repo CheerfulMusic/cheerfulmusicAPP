@@ -189,8 +189,9 @@ async function recover() {
           <div class="google-avatar" aria-hidden="true"><GoogleMark /></div>
           <div class="profile-copy"><p class="profile-provider">{{ t('旧版 Google 登录') }}</p><h2>{{ t('你的音乐，随账号一起收藏。') }}</h2><p class="profile-description">{{ t('已有 Google 账号可在此找回原有作品。') }}</p></div>
         </div>
-        <button type="button" class="google-sign-in" :disabled="accountBusy" @click="loginWithGoogle"><GoogleMark />{{ googleBusy ? t('正在前往 Google…') : t('使用 Google 账号登录') }}</button>
+        <button type="button" class="google-sign-in" :disabled="accountBusy || !googleStatus.enabled" @click="loginWithGoogle"><GoogleMark />{{ googleBusy ? t('正在前往 Google…') : t('使用 Google 账号登录') }}</button>
       </div>
+      <p v-if="!googleStatus.enabled && !busy" class="google-unavailable" role="status">{{ t('Google 登录暂不可用，你仍可使用作品找回码。') }}</p>
       <div class="profile-footer"><NavIcon name="recovery" /><p>{{ t('首次登录会保留当前作品。不同账号的音乐收藏不会自动合并。') }}</p></div>
     </template>
   </section>
@@ -220,70 +221,71 @@ async function recover() {
 <style scoped>
 .account-page { width: 100%; max-width: 960px; margin: 8px auto 0; }
 .account-intro { margin-bottom: 28px; }
-.account-intro .account-eyebrow { display: flex; align-items: center; gap: 9px; margin: 0 0 14px; color: #b4bbc7; font-size: 12px; font-weight: 500; letter-spacing: .04em; }
+.account-intro .account-eyebrow { display: flex; align-items: center; gap: 9px; margin: 0 0 14px; color: var(--muted); font-size: 12px; font-weight: 500; letter-spacing: .04em; }
 .account-eyebrow span { width: 18px; height: 2px; border-radius: 2px; background: var(--accent); }
 .account-intro h1 { margin-bottom: 10px; font-size: clamp(25px, 2.6vw, 31px); letter-spacing: -.8px; }
 .account-intro > p:last-child { margin: 0; color: var(--muted); font-size: 13px; }
-.account-profile { overflow: hidden; border: 1px solid #393035; border-radius: 20px; background: radial-gradient(ellipse at 0 0, #ff674413, transparent 65%), #121418; box-shadow: 0 12px 40px #00000018; }
+.account-profile { overflow: hidden; border: 1px solid var(--line); border-radius: 20px; background: radial-gradient(ellipse at 0 0, #fff0e9, transparent 65%), var(--surface); box-shadow: var(--brand-shadow); }
 .profile-main { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 29px 30px 27px; }
 .profile-identity { display: flex; align-items: center; min-width: 0; gap: 20px; }
 .account-avatar { position: relative; display: grid; place-items: center; width: 68px; height: 68px; flex: 0 0 auto; border: 1px solid #ffa1838c; border-radius: 50%; background: linear-gradient(145deg, #ff997b, #e35740 65%, #b7352b); box-shadow: 0 0 0 5px #ff6a4210; color: #fff3e9; font-size: 24px; font-weight: 650; letter-spacing: -.6px; }
-.avatar-provider { position: absolute; right: -2px; bottom: -2px; display: grid; place-items: center; width: 24px; height: 24px; border: 3px solid #181618; border-radius: 50%; background: white; }
+.avatar-provider { position: absolute; right: -2px; bottom: -2px; display: grid; place-items: center; width: 24px; height: 24px; border: 3px solid var(--surface); border-radius: 50%; background: white; }
 .avatar-provider svg { width: 14px; height: 14px; }
 .profile-copy { min-width: 0; }
-.profile-copy .profile-provider { margin: 0 0 3px; color: #b2a7a5; font-size: 11px; }
-.profile-copy h2 { margin: 0; color: #f1eeea; font-size: 23px; line-height: 1.35; letter-spacing: -.5px; font-weight: 650; }
-.profile-copy .profile-email { margin: 5px 0 0; color: #aeb5c1; font-size: 13px; overflow-wrap: anywhere; }
+.profile-copy .profile-provider { margin: 0 0 3px; color: var(--muted); font-size: 11px; }
+.profile-copy h2 { color:var(--ink); margin: 0; font-size: 23px; line-height: 1.35; letter-spacing: -.5px; font-weight: 650; }
+.profile-copy .profile-email { margin: 5px 0 0; color: var(--muted); font-size: 13px; overflow-wrap: anywhere; }
 .profile-actions { display: flex; align-items: center; gap: 22px; flex-shrink: 0; }
-.connection-badge { display: inline-flex; align-items: center; gap: 5px; color: #addbc8; border: 1px solid #355245; border-radius: 24px; background: #152820; padding: 4px 9px; font-size: 11px; white-space: nowrap; }
+.connection-badge { display: inline-flex; align-items: center; gap: 5px; color: var(--success); border: 1px solid var(--success-border); border-radius: 24px; background: var(--success-soft); padding: 4px 9px; font-size: 11px; white-space: nowrap; }
 .connection-badge svg { width: 14px; height: 14px; }
-.profile-library-link, .google-sign-in { display: inline-flex; align-items: center; justify-content: center; gap: 11px; min-height: 44px; padding: 11px 17px; border: 1px solid #f1eeea; border-radius: 10px; background: #f1eeea; color: #1d1c1c; font-size: 12px; font-weight: 600; white-space: nowrap; transition: background .15s, transform .15s; }
-.profile-library-link:hover, .google-sign-in:hover { background: #fff; transform: translateY(-1px); }
+.profile-library-link, .google-sign-in { display: inline-flex; align-items: center; justify-content: center; gap: 11px; min-height: 44px; padding: 11px 17px; border: 1px solid #dfcbd1; border-radius: 24px; background: #fff; color: var(--ink); font-size: 12px; font-weight: 600; white-space: nowrap; transition: background .15s, transform .15s; }
+.profile-library-link:hover, .google-sign-in:hover { background: var(--accent-soft); transform: translateY(-1px); }
 .profile-library-link svg { width: 17px; height: 17px; }
-.profile-footer { display: flex; align-items: center; gap: 9px; padding: 13px 30px; border-top: 1px solid #ffffff0b; background: #0000000c; }
-.profile-footer > svg { width: 15px; height: 15px; color: #a7b4aa; flex-shrink: 0; }
-.profile-footer p { margin: 0; color: #969eab; font-size: 11px; }
-.profile-footer > span { margin-left: auto; color: #807b7d; font-size: 12px; letter-spacing: -.3px; }
-.profile-login-tools { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 15px 30px; border-top: 1px solid #ffffff0b; background: #0e101370; }
+.profile-footer { display: flex; align-items: center; gap: 9px; padding: 13px 30px; border-top: 1px solid var(--line); background: #fff8f5; }
+.profile-footer > svg { width: 15px; height: 15px; color: var(--success); flex-shrink: 0; }
+.profile-footer p { margin: 0; color: var(--muted); font-size: 11px; }
+.profile-footer > span { margin-left: auto; color: var(--muted); font-size: 12px; letter-spacing: -.3px; }
+.profile-login-tools { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 15px 30px; border-top: 1px solid var(--line); background: var(--surface-raised); }
 .profile-login-tools > div:first-child { display: flex; align-items: center; gap: 10px; }
-.profile-login-tools strong { color: #c9cfd9; font-size: 12px; font-weight: 500; }
-.profile-login-tools span { color: #788391; font-size: 10px; }
+.profile-login-tools strong { color: var(--ink); font-size: 12px; font-weight: 500; }
+.profile-login-tools span { color: var(--muted); font-size: 10px; }
 .session-tools-actions { display: flex; align-items: center; gap: 9px; }
-.session-tools-actions button { padding: 7px 11px; border: 1px solid #343a45; border-radius: 7px; color: #c8d0dc; font-size: 11px; background: #171b22; }
-.session-tools-actions button:hover { color: #fff; background: #252b35; }
-.session-tools-actions .session-logout { color: #d7a399; background: transparent; border-color: transparent; }
+.session-tools-actions button { padding: 7px 11px; border: 1px solid var(--line); border-radius: 20px; color: var(--ink); font-size: 11px; background: var(--surface); }
+.session-tools-actions button:hover { color: var(--accent-text); background: var(--accent-soft); }
+.session-tools-actions .session-logout { color: var(--accent-text); background: transparent; border-color: transparent; }
 .session-tools-actions button:disabled { opacity: .5; cursor: not-allowed; }
-.google-avatar { display: grid; place-items: center; width: 64px; height: 64px; flex-shrink: 0; border: 1px solid #ffffff22; border-radius: 18px; background: #f7f7f7; }
+.google-avatar { display: grid; place-items: center; width: 64px; height: 64px; flex-shrink: 0; border: 1px solid var(--line); border-radius: 18px; background: #fff; }
 .google-avatar svg { width: 30px; height: 30px; }
 .profile-sign-in .profile-copy h2 { font-size: 20px; }
 .profile-copy .profile-description { max-width: 360px; margin: 6px 0 0; color: #aeb5c1; font-size: 12px; }
 .google-sign-in { flex-shrink: 0; }
 .google-sign-in > svg { width: 18px; height: 18px; }
-.google-sign-in:disabled { opacity: .6; transform: none; }
+.google-sign-in:disabled { opacity: .6; transform: none; cursor:not-allowed; }
+.google-unavailable { margin:0; padding:0 30px 20px; color:var(--warning); font-size:12px; line-height:1.8; }
 .recovery-section { margin-top: 34px; }
 .recovery-section-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin-bottom: 15px; }
-.recovery-section-heading h2 { margin: 0; color: #d9dde4; font-size: 15px; font-weight: 550; }
-.recovery-section-heading p { margin: 0; color: #858f9d; font-size: 11px; }
+.recovery-section-heading h2 { margin: 0; color: var(--ink); font-size: 15px; font-weight: 550; }
+.recovery-section-heading p { margin: 0; color: var(--muted); font-size: 11px; }
 .account-recovery-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
-.recovery-card { min-width: 0; padding: 23px 25px 20px; border: 1px solid #292d35; border-radius: 16px; background: #101216; }
+.recovery-card { min-width: 0; padding: 23px 25px 20px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); }
 .recovery-card-heading { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-bottom: 17px; }
-.recovery-icon { display: grid; place-items: center; width: 36px; height: 36px; border: 1px solid #51372e; border-radius: 11px; color: #ec9b85; background: #251c19; }
+.recovery-icon { display: grid; place-items: center; width: 36px; height: 36px; border: 1px solid var(--accent-border); border-radius: 11px; color: var(--accent-text); background: var(--accent-soft); }
 .recovery-icon svg { width: 19px; height: 19px; }
-.recovery-state, .recovery-card-label { color: #9199a5; font-size: 10px; }
-.recovery-state { padding: 3px 8px; border: 1px solid #353943; border-radius: 5px; background: #1a1d23; }
-.recovery-state.configured { border-color: #355245; color: #addbc8; background: #152820; }
-.recovery-card h3 { margin: 0 0 9px; font-size: 18px; font-weight: 600; letter-spacing: -.3px; }
-.recovery-card .recovery-description { min-height: 44px; margin: 0 0 16px; color: #9ca5b2; font-size: 12px; line-height: 1.8; }
-.account-page .recovery-card .button { min-height: 42px; border-color: #3b414c; background: #1b1f26; padding: 10px 15px; color: #e1e5ed; font-size: 12px; gap: 14px; }
-.account-page .recovery-card .button:hover { border-color: #7e5b50; background: #28201e; }
+.recovery-state, .recovery-card-label { color: var(--muted); font-size: 10px; }
+.recovery-state { padding: 3px 8px; border: 1px solid var(--line); border-radius: 5px; background: var(--surface-raised); }
+.recovery-state.configured { border-color: var(--success-border); color: var(--success); background: var(--success-soft); }
+.recovery-card h3 { color:var(--ink); margin: 0 0 9px; font-size: 18px; font-weight: 600; letter-spacing: -.3px; }
+.recovery-card .recovery-description { min-height: 44px; margin: 0 0 16px; color: var(--muted); font-size: 12px; line-height: 1.8; }
+.account-page .recovery-card .button { min-height: 42px; border-color: var(--line); background: #fff8f6; padding: 10px 15px; color: var(--accent-text); font-size: 12px; gap: 14px; }
+.account-page .recovery-card .button:hover { border-color: var(--accent-border); background: var(--accent-soft); }
 .recovery-card .button svg { width: 16px; height: 16px; }
-.recovery-card .recovery-footnote { margin: 19px 0 0; padding-top: 15px; border-top: 1px solid #ffffff09; color: #7f8a9a; font-size: 10px; line-height: 1.8; }
+.recovery-card .recovery-footnote { margin: 19px 0 0; padding-top: 15px; border-top: 1px solid var(--line); color: var(--muted); font-size: 10px; line-height: 1.8; }
 .account-page .recovery-code-field { margin: 15px 0 13px; }
 .account-page .recovery-code-field input { margin-top: 0; min-height: 44px; font-size: 13px; }
 .recovery-submit { width: 100%; justify-content: space-between !important; }
 .recovery-card .field textarea { min-height: 80px; }
-.account-back { display: flex; align-items: center; gap: 8px; width: fit-content; margin: 23px 0 0; color: #8e98a7; font-size: 12px; }
-.account-back:hover { color: #e4e7ed; }
+.account-back { display: flex; align-items: center; gap: 8px; width: fit-content; margin: 23px 0 0; color: var(--muted); font-size: 12px; }
+.account-back:hover { color: var(--accent-text); }
 .account-back svg { width: 16px; height: 16px; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 @media (max-width: 800px) {

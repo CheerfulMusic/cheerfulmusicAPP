@@ -27,7 +27,9 @@ public final class InviteGateFilter extends OncePerRequestFilter {
         String path = request.getServletPath();
         boolean apiLike = path.startsWith("/api/") || path.startsWith("/media/");
         boolean webhook = "POST".equals(request.getMethod()) && WEBHOOKS.contains(path);
-        if (!gate.settings().enabled() || !apiLike || ENTRANCES.contains(path) || webhook
+        boolean publicGift = ("GET".equals(request.getMethod()) || "HEAD".equals(request.getMethod()))
+                && path.matches("/api/public/gifts/[A-Za-z0-9_-]{43}(?:/audio|/cover)?");
+        if (!gate.settings().enabled() || !apiLike || publicGift || ENTRANCES.contains(path) || webhook
                 || gate.expiresAt(request) > 0) {
             chain.doFilter(request, response);
             return;

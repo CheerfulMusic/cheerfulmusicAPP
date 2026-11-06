@@ -14,6 +14,17 @@ import tools.jackson.databind.ObjectMapper;
 import static org.junit.jupiter.api.Assertions.*;
 
 class KieSunoProviderTest {
+    @Test void inspirationBriefsSendTheirServerPromptsAndExplicitVoicesWithoutChangingLyrics(){
+        response="{\"code\":200,\"data\":{\"taskId\":\"inspiration\"}}";
+        for(var preset:com.qingfeng.music.settings.InspirationMusicPresets.all()){
+            provider.submit(new MusicProvider.Request("歌名",request.confirmedLyrics(),preset.label(),preset.voice()),"preset-key");
+            var input=new ObjectMapper().readTree(body).path("input");
+            assertEquals(preset.prompt(),input.path("style").asText());assertEquals(request.confirmedLyrics(),input.path("lyrics").asText());
+            if(preset.voice().equals("AUTO"))assertFalse(input.has("vocal_gender"));
+            else assertEquals(preset.voice().equals("MALE")?"m":"f",input.path("vocal_gender").asText());
+        }
+        assertEquals(5,calls.get());
+    }
     @Test void structuredDirectionIsSentExactlyWithSeparateExclusions(){
         response="{\"code\":200,\"data\":{\"taskId\":\"structured\"}}";
         var prepared=new MusicProvider.Request("title","lyrics","acoustic folk, warm female lead vocals","FEMALE","rap, heavy drums",true);

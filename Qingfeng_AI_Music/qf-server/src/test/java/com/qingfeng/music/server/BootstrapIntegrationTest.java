@@ -10,7 +10,9 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 import static org.junit.jupiter.api.Assertions.*;
 
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+// The scaffold test must not inherit the developer's private beta-gate switch.
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
+    properties = "qingfeng.invite-gate.enabled=false")
 @ActiveProfiles("local")
 class BootstrapIntegrationTest {
     @Value("${local.server.port}") int port;

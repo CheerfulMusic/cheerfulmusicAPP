@@ -44,7 +44,7 @@ a:focus-visible,button:focus-visible,input:focus-visible,textarea:focus-visible,
 .consumer-header-inner { width:min(1240px,calc(100% - 80px)); height:84px; margin-inline:auto; display:flex; align-items:center; justify-content:space-between; gap:28px; }
 .consumer-brand { display:inline-flex; flex-shrink:0; }
 .consumer-navigation { display:flex; align-items:center; gap:30px; }
-.consumer-navigation a { color:var(--muted); font-size:13px; padding-block:12px; white-space:nowrap; }
+.consumer-navigation a { color:var(--muted); font-size:16px; font-weight:500; padding-block:12px; white-space:nowrap; }
 .consumer-navigation a:hover,.consumer-navigation a.is-active { color:var(--ink); }
 .consumer-header-actions { display:flex; align-items:center; gap:17px; }
 .consumer-my-music { display:inline-flex; align-items:center; gap:8px; font-size:13px; color:var(--muted); white-space:nowrap; }

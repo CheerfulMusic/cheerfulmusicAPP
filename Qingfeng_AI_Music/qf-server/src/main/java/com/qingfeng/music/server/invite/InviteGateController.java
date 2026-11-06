@@ -50,7 +50,7 @@ public class InviteGateController {
         }
         String cookie = gate.admit(invitation == null ? null : invitation.code());
         if (cookie == null) {
-            return ResponseEntity.badRequest().cacheControl(CacheControl.noStore())
+            return ResponseEntity.status(403).cacheControl(CacheControl.noStore())
                     .body(Map.of("code", "INVITE_INVALID", "message", "邀请码不正确，请检查后重试。"));
         }
         var access = ResponseCookie.from(InviteGateService.COOKIE, cookie)

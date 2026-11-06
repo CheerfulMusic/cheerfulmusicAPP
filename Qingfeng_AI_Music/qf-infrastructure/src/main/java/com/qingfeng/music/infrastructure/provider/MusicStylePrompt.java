@@ -34,6 +34,8 @@ final class MusicStylePrompt {
 
     static String expand(String style,String vocalGender) {
         String original=style.trim();
+        var inspiration=com.qingfeng.music.settings.InspirationMusicPresets.find(original);
+        if(inspiration.isPresent())return inspiration.get().promptForVoice(vocalGender);
         String result=PRESETS.getOrDefault(original,original);
         // 与独立 vocal_gender 参数保持一致；自动选择时不预设音色或性别。
         return switch(vocalGender) {

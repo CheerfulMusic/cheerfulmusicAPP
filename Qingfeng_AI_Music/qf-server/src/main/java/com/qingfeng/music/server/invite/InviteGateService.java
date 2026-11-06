@@ -14,6 +14,7 @@ import java.time.Clock;
 import java.util.Arrays;
 import java.util.Base64;
 import java.util.List;
+import java.util.Locale;
 
 /** 校验邀请码并签发带 HMAC 签名的临时通行证 Cookie；明文邀请码不写入浏览器。 */
 public final class InviteGateService {
@@ -57,25 +58,26 @@ public final class InviteGateService {
 
     /** 校验成功返回待写入的 Cookie 值，失败返回 null。比较过程不提前退出。 */
     public String admit(String code) {
-        if (!settings.enabled() || code == null) return null;
-        byte[] candidate = tag(code.trim()).getBytes(StandardCharsets.UTF_8);
+        if (!settings.enabled() || code == null || code.length() > 128) return null;
+        String codeTag = tag(code.trim().toUpperCase(Locale.ROOT));
+        byte[] candidate = codeTag.getBytes(StandardCharsets.UTF_8);
         boolean matched = false;
         for (String tag : tags) {
             matched |= MessageDigest.isEqual(tag.getBytes(StandardCharsets.UTF_8), candidate);
         }
         if (!matched) return null;
         long expiry = clock.instant().plus(settings.sessionTtl()).getEpochSecond();
-        byte[] nonce = new byte[12];
+        byte[] nonce = new byte[16];
         random.nextBytes(nonce);
-        String payload = VERSION + "." + expiry + "."
+        String payload = VERSION + "." + codeTag + "." + expiry + "."
                 + Base64.getUrlEncoder().withoutPadding().encodeToString(nonce);
         return payload + "." + Base64.getUrlEncoder().withoutPadding().encodeToString(mac(payload));
     }
 
     private long validUntil(String value) {
-        if (value == null) return 0;
+        if (!settings.enabled() || value == null || value.length() > 512) return 0;
         String[] parts = value.split("\\.", -1);
-        if (parts.length < 3 || !VERSION.equals(parts[0])) return 0;
+        if (parts.length != 5 || !VERSION.equals(parts[0]) || parts[3].length() != 22) return 0;
         String signature = parts[parts.length - 1];
         String payload = String.join(".", Arrays.copyOf(parts, parts.length - 1));
         byte[] actual;
@@ -86,11 +88,16 @@ public final class InviteGateService {
         }
         if (!MessageDigest.isEqual(mac(payload), actual)) return 0;
         try {
-            return Long.parseLong(parts[1]);
+            long expiry = Long.parseLong(parts[2]), now = clock.instant().getEpochSecond();
+            boolean configured = false;
+            for (String tag : tags) configured |= MessageDigest.isEqual(tag.getBytes(StandardCharsets.UTF_8), parts[1].getBytes(StandardCharsets.UTF_8));
+            return configured && expiry > now && expiry <= now + settings.sessionTtl().getSeconds() ? expiry : 0;
         } catch (NumberFormatException invalid) {
             return 0;
         }
     }
+
+    long expiresAt(String token) { return validUntil(token); }
 
     private String tag(String code) {
         return Base64.getUrlEncoder().withoutPadding().encodeToString(mac("code:" + code));
