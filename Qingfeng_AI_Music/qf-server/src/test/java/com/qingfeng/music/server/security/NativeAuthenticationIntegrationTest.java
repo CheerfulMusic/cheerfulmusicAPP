@@ -86,6 +86,35 @@ class NativeAuthenticationIntegrationTest {
     private static String email(){return "user-"+UUID.randomUUID()+"@example.test";}
     private String cookie(Browser browser){return browser.cookies.getCookieStore().getCookies().stream().filter(c->c.getName().equals("QF_SESSION")).map(HttpCookie::getValue).findFirst().orElseThrow();}
 
+    @org.springframework.test.annotation.DirtiesContext(methodMode=org.springframework.test.annotation.DirtiesContext.MethodMode.BEFORE_METHOD)
+    @Test void existingEmailRegistrationDoesNotBlameCorrectCode()throws Exception{
+        var browser=browser();String email=email();USERS.add(email);
+        assertEquals(200,code(browser,"email",email,"register").statusCode());
+        var response=post(browser,"/register",Map.of("email",email,"password","Password123","code","123456"));
+        assertEquals(409,response.statusCode(),response.body());
+        assertEquals("LOGIN_ACCOUNT_EXISTS",JSON.readTree(response.body()).path("code").asText());
+        assertEquals(0,credits.balance(browser.creator));
+    }
+
+    @org.springframework.test.annotation.DirtiesContext(methodMode=org.springframework.test.annotation.DirtiesContext.MethodMode.BEFORE_METHOD)
+    @Test void passwordResetRevokesOldBusinessSession()throws Exception{
+        var loggedIn=browser();String email=email();USERS.add(email);
+        assertEquals(200,post(loggedIn,"/password/sign-in",Map.of("email",email,"password","correct-password")).statusCode());
+        String oldToken=cookie(loggedIn);
+        var recoveryBrowser=browser();
+        assertEquals(200,code(recoveryBrowser,"email",email,"reset").statusCode());
+        assertEquals(200,post(recoveryBrowser,"/password/reset",Map.of("email",email,"password","NewPassword123","code","123456")).statusCode());
+        assertTrue(identity.resolve(oldToken).isEmpty(),"Password reset must revoke existing business sessions");
+    }
+    @org.springframework.test.annotation.DirtiesContext(methodMode=org.springframework.test.annotation.DirtiesContext.MethodMode.BEFORE_METHOD)
+    @Test void failedSendPreservesPreviouslyValidCode()throws Exception{
+        var b=browser();String email=email();
+        assertEquals(200,code(b,"email",email,"register").statusCode());
+        assertEquals(503,code(b,"email","unavailable-"+email,"register").statusCode());
+        var result=post(b,"/register",Map.of("email",email,"password","Password123","code","123456"));
+        assertEquals(200,result.statusCode(),result.body());
+    }
+
     @Test void passwordLoginCompletesOidcRotatesSessionAndGrants100Once()throws Exception{
         var browser=browser();String email=email(),old=cookie(browser);USERS.add(email);
         var response=post(browser,"/password/sign-in",Map.of("email",email,"password","correct-password"));
@@ -188,6 +217,7 @@ class NativeAuthenticationIntegrationTest {
             f.verified=true;f.verification="v-"+f.id;reply(x,200,Map.of("verificationId",f.verification));return;
         }
         if(path.equals("/api/experience/verification/verification-code")){
+            if(body.path("identifier").path("value").asText().startsWith("unavailable-")){reply(x,503,Map.of("code","connector.unavailable"));return;}
             SENT.incrementAndGet();f.channel=body.path("identifier").path("type").asText();f.value=body.path("identifier").path("value").asText();f.verification="v-"+f.id;
             if(f.channel.equals("phone"))assertTrue(f.value.matches("[0-9]+"));reply(x,200,Map.of("verificationId",f.verification));return;
         }
@@ -200,7 +230,7 @@ class NativeAuthenticationIntegrationTest {
         if(path.equals("/api/experience/identification")){
             if(!f.verified||!Objects.equals(f.verification,body.path("verificationId").asText())){reply(x,400,Map.of("code","session.verification_failed"));return;}
             if(f.event.equals("Register")){
-                USERS.add(f.value);f.identified=true;
+                if(!USERS.add(f.value)){reply(x,422,Map.of("code","user.email_already_in_use"));return;}f.identified=true;
                 // Real Logto/Koa responds 201 text/plain Created, rather than a JSON object.
                 byte[] created="Created".getBytes(StandardCharsets.UTF_8);x.getResponseHeaders().set("Content-Type","text/plain; charset=utf-8");
                 x.sendResponseHeaders(201,created.length);x.getResponseBody().write(created);x.close();return;

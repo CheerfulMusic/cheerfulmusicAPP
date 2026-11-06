@@ -42,7 +42,7 @@ public class NativeAuthController {
     public static final class Credentials { public String email,password,code,phone; }
     public static final class CodeRequest { public String channel,identifier,purpose; }
     private static final class Failure extends RuntimeException {
-        final int status; final String code;
+        final int status; final String code; long retryAfter=60;
         Failure(int status,String code,String message){super(message);this.status=status;this.code=code;}
     }
 
@@ -57,7 +57,7 @@ public class NativeAuthController {
     @GetMapping("/status") public ResponseEntity<Map<String,Object>> status(HttpServletRequest request){
         boolean password=false,email=false,phone=false,reset=false;
         var client=clients.getIfAvailable();
-        if(client!=null)try{var c=client.capabilities();password=emailEnabled&&c.emailPassword();email=emailEnabled&&c.emailCode();phone=phoneEnabled&&c.phone();reset=emailEnabled&&c.reset();}catch(RuntimeException unavailable){}
+        if(client!=null)try{var c=client.capabilities();password=emailEnabled&&c.emailPassword();email=emailEnabled&&c.emailCode();phone=phoneEnabled&&c.phone();reset=emailEnabled&&c.reset();}catch(RuntimeException error){throw unavailable();}
         Map<String,Object> result=new LinkedHashMap<>();
         result.put("emailPasswordEnabled",password);result.put("emailCodeEnabled",email);result.put("phoneEnabled",phone);result.put("phoneInternationalEnabled",phoneInternationalEnabled);result.put("passwordResetEnabled",reset);
         var profile=identity.resolve(CreatorSessionFilter.token(request)).flatMap(identities::profile);
@@ -91,7 +91,6 @@ public class NativeAuthController {
         if("email".equals(channel)?!emailEnabled||!caps.emailCode()||("reset".equals(purpose)&&!caps.reset()):!phoneEnabled||!caps.phone())throw unavailable();
         HttpSession browser=request.getSession(true);browser.setMaxInactiveInterval(600);
         synchronized(browser){
-            browser.removeAttribute(PENDING);
             String event="register".equals(purpose)?"Register":"reset".equals(purpose)?"ForgotPassword":"SignIn";
             try{
                 var flow=client.begin(event);
@@ -125,6 +124,7 @@ public class NativeAuthController {
                 client.verifyCode(pending.flow,"email",value,pending.verification,input.code);
                 client.identify(pending.flow,pending.verification);
                 client.resetPassword(pending.flow,input.password);
+                identities.revokeSessionsForVerifiedEmail(value);
                 browser.removeAttribute(PENDING);
                 return ok(Map.of("reset",true));
             }catch(LogtoNativeClient.ProviderFailure error){throw failure(error,true);}
@@ -181,7 +181,7 @@ public class NativeAuthController {
         take((sending?"send-id:":"verify-id:")+hash(identifier.toLowerCase(Locale.ROOT)),sending?5:15,3600000,now);
         if(sending){take("send:"+hash(identifier.toLowerCase(Locale.ROOT)),1,60000,now);take("global:send",200,3600000,now);}
     }
-    private void take(String key,int max,long window,long now){var bucket=limits.computeIfAbsent(key,k->new Bucket(now+window));if(bucket.count++>=max)throw limited();}
+    private void take(String key,int max,long window,long now){var bucket=limits.computeIfAbsent(key,k->new Bucket(now+window));if(bucket.count>=max){var failure=limited();failure.retryAfter=Math.max(1,(bucket.until-now+999)/1000);throw failure;}bucket.count++;}
     private static String email(String value){if(value==null||value.length()>254||!EMAIL.matcher(value.trim()).matches())throw invalid();return value.trim();}
     private static String phone(String value){if(value==null||!PHONE.matcher(value).matches())throw invalid();return value;}
     private static void password(String value,boolean creating){if(value==null||value.length()<(creating?8:1)||value.length()>128)throw invalid();}
@@ -192,13 +192,17 @@ public class NativeAuthController {
     private static Failure unavailable(){return new Failure(503,"LOGIN_UNAVAILABLE","此登录方式暂不可用，请稍后重试");}
     private static Failure limited(){return new Failure(429,"LOGIN_RATE_LIMITED","操作较频繁，请稍后重试");}
     private static Failure failure(LogtoNativeClient.ProviderFailure error,boolean code){
+        org.slf4j.LoggerFactory.getLogger(NativeAuthController.class).warn("Native authentication rejected: status={}, code={}",error.status(),error.code().replaceAll("[^a-zA-Z0-9_.-]","_"));
         if(error.status()>=500||error.status()==403)return unavailable();
+        if(Set.of("user.email_already_in_use","user.phone_already_in_use").contains(error.code()))return new Failure(409,"LOGIN_ACCOUNT_EXISTS","该账号已注册，请登录或找回密码");
         if(error.status()==429||error.code().contains("attempts"))return limited();
         if(error.code().startsWith("password.")||error.code().contains("password_policy")||error.code().contains("same_password"))return new Failure(400,"LOGIN_PASSWORD_REJECTED","密码不符合要求，请尝试其他密码");
+        if(code&&Set.of("session.not_found","session.verification_failed","session.verification_session_not_found").contains(error.code()))return expired();
+        if(code&&!error.code().startsWith("verification_code."))return unavailable();
         return new Failure(code?400:401,code?"LOGIN_CODE_INVALID":"LOGIN_INVALID_CREDENTIALS",code?"验证码无效或操作未完成，请检查后重试":"邮箱或密码不正确，请重试");
     }
     @ExceptionHandler(Failure.class) ResponseEntity<Map<String,Object>> failure(Failure error){
-        var builder=ResponseEntity.status(error.status).cacheControl(CacheControl.noStore());if(error.status==429)builder.header("Retry-After","60");
+        var builder=ResponseEntity.status(error.status).cacheControl(CacheControl.noStore());if(error.status==429)builder.header("Retry-After",Long.toString(error.retryAfter));
         return builder.body(Map.of("code",error.code,"message",error.getMessage()));
     }
     @ExceptionHandler(LogtoNativeClient.ProviderFailure.class) ResponseEntity<Map<String,Object>> providerFailure(LogtoNativeClient.ProviderFailure error){return failure(failure(error,false));}

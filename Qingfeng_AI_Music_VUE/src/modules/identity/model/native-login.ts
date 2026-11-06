@@ -11,6 +11,7 @@ export function resendSeconds(availableAt: number, now = Date.now()) {
 /** Do not display upstream messages: provider details and internal URLs are not user copy. */
 export function nativeLoginError(code?: string, status?: number): string {
   if (code === 'LOGIN_INVALID_CREDENTIALS') return '邮箱或密码不正确，请重新输入。'
+  if (code === 'LOGIN_ACCOUNT_EXISTS') return '该账号已注册，请返回登录；忘记密码可选择找回密码。'
   if (code === 'LOGIN_CODE_INVALID') return '验证码不正确或已过期，请检查后重试。'
   if (code === 'LOGIN_FLOW_EXPIRED') return '验证已过期，请重新发送验证码。'
   if (code === 'LOGIN_PASSWORD_REJECTED') return '密码不符合要求，请使用至少8位字符并包含字母和数字。'

@@ -1,6 +1,6 @@
 import { platform } from '../../platform'
 import {emptyResponseAllowed,validResponse} from './response-contracts'
-export class ApiError extends Error { constructor(message: string, public status: number, public code?: string) { super(message) } }
+export class ApiError extends Error { constructor(message: string, public status: number, public code?: string, public retryAfter?: number) { super(message) } }
 let csrf = '', sessionPromise: Promise<void> | undefined
 let creatorId = ''
 export const currentCreatorId = () => creatorId
@@ -39,7 +39,7 @@ async function decodeResponse<T>(response:Response,path:string,method:string):Pr
     const failure=data&&typeof data==='object'?data as {message?:unknown;code?:unknown}:{}
     const code=typeof failure.code==='string'?failure.code:undefined
     if(code==='INVITE_REQUIRED'&&typeof window!=='undefined')window.dispatchEvent(new Event('qingfeng:invite-required'))
-    throw new ApiError(typeof failure.message==='string'?failure.message:`请求失败（${response.status}），请检查服务状态`,response.status,code)
+    throw new ApiError(typeof failure.message==='string'?failure.message:`请求失败（${response.status}），请检查服务状态`,response.status,code,retryAfterSeconds(response.headers.get('Retry-After')))
   }
   if(!raw.trim()&&!emptyResponseAllowed(path,method)||!validResponse(path,method,data))throw invalidResponse()
   return data as T
@@ -57,3 +57,9 @@ export async function uploadForm<T>(path: string, body: FormData): Promise<T> {
   }
 }
 export const apiUrl = endpoint
+
+export function retryAfterSeconds(value: string | null): number | undefined {
+  if (!value) return undefined
+  const seconds = /^\d+$/.test(value) ? Number(value) : Math.ceil((Date.parse(value) - Date.now()) / 1000)
+  return Number.isFinite(seconds) && seconds > 0 ? seconds : undefined
+}

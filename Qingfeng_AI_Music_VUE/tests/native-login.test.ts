@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { ApiError, resetCreatorSession } from '../src/shared/http/api-client'
+import { ApiError, resetCreatorSession, retryAfterSeconds } from '../src/shared/http/api-client'
 import { readNativeLoginStatus, registerWithEmail, resetEmailPassword, sendLoginCode, signInWithEmail, signInWithEmailCode, signInWithPhone } from '../src/modules/identity/api/native-login'
 import { loginCodeKey, nativeLoginError, resendSeconds } from '../src/modules/identity/model/native-login'
 import { callingCode, countryOptions, internationalPhone, phoneCountries } from '../src/modules/identity/model/international-phone'
@@ -93,4 +93,16 @@ describe('verification form state', () => {
     expect(nativeLoginError(upstream.code,upstream.status)).toBe('当前登录方式暂不可用，请稍后重试。')
     expect(nativeLoginError('UNKNOWN_INTERNAL_ERROR',500)).not.toMatch(/Logto|provider|token|secret/)
   })
+})
+
+ it('guides an existing verified email to login instead of blaming the code', () => {
+   expect(nativeLoginError('LOGIN_ACCOUNT_EXISTS', 409)).toContain('已注册')
+   expect(nativeLoginError('LOGIN_ACCOUNT_EXISTS', 409)).not.toContain('验证码不正确')
+ })
+
+it('honors hour-long retry windows and rejects malformed retry headers', () => {
+  expect(retryAfterSeconds('3600')).toBe(3600)
+  expect(retryAfterSeconds('60')).toBe(60)
+  expect(retryAfterSeconds(null)).toBeUndefined()
+  expect(retryAfterSeconds('invalid')).toBeUndefined()
 })

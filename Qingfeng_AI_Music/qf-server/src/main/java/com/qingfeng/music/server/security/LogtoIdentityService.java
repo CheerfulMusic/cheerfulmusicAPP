@@ -76,6 +76,16 @@ public class LogtoIdentityService {
         return new IdentityApi.Session(token, target);
     }
 
+    /** Call only after the provider has verified this email and completed password reset. */
+    @Transactional
+    public void revokeSessionsForVerifiedEmail(String email) {
+        var owners=db.query("SELECT creator_id FROM creator_oidc_identity WHERE LOWER(email)=LOWER(?)",(rs,n)->rs.getString(1),email);
+        for(String owner:owners.stream().distinct().sorted().toList()) {
+            db.query("SELECT id FROM creator WHERE id=? FOR UPDATE",(rs,n)->rs.getString(1),owner);
+            db.update("DELETE FROM creator_session WHERE creator_id=?",owner);
+        }
+    }
+
     private boolean hasOidcIdentity(String creator) {
         return !db.query("SELECT subject_hash FROM creator_oidc_identity WHERE creator_id=?",
             (rs, n) -> rs.getString(1), creator).isEmpty();

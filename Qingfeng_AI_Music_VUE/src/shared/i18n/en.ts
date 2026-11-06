@@ -1298,6 +1298,7 @@ export const english: Record<string, string> = {
   '使用验证码登录': 'Sign in with a code',
   '重新检查登录服务': 'Check sign-in availability again',
   '邮箱或密码不正确，请重新输入。': 'Your email or password is incorrect. Please try again.',
+  '该账号已注册，请返回登录；忘记密码可选择找回密码。': 'This account is already registered. Sign in or reset your password.',
   '验证码不正确或已过期，请检查后重试。': 'The code is incorrect or has expired. Check it and try again.',
   '验证已过期，请重新发送验证码。': 'Verification expired. Please request a new code.',
   '密码不符合要求，请使用至少8位字符并包含字母和数字。': 'Use at least 8 characters, including letters and numbers.',

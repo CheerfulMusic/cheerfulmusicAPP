@@ -114,7 +114,7 @@ function showFailure(failure: unknown) {
   const api = failure instanceof ApiError ? failure : undefined
   error.value = nativeLoginError(api?.code, api?.status)
   if (api?.code === 'LOGIN_FLOW_EXPIRED') { code.value = ''; sentCodeKey.value = '' }
-  if (api?.status === 429 && codeKey.value) resendAt.value = { ...resendAt.value, [codeKey.value]: Date.now() + 60000 }
+  if (api?.status === 429 && codeKey.value) resendAt.value = { ...resendAt.value, [codeKey.value]: Date.now() + (api.retryAfter || 60) * 1000 }
 }
 async function sendCode() {
   if (locked.value || remaining.value || !channelReady.value || !checkIdentifier()) return
@@ -131,7 +131,7 @@ async function sendCode() {
   } catch (failure) { if (version === epoch && loginDialogOpen.value) showFailure(failure) }
   finally { sending.value = false }
 }
-async function refreshSignedInAccount() {
+async function refreshAccountAfterSessionChange() {
   resetLogtoState()
   resetCreatorSession()
   await ensureCreator().catch(() => undefined)
@@ -156,12 +156,13 @@ async function submit() {
     else if (emailUsesCode.value) await signInWithEmailCode(identifier, code.value.trim())
     else if (emailMode.value === 'reset') {
       await resetEmailPassword(identifier, password.value, code.value.trim())
+      await refreshAccountAfterSessionChange()
       if (version === epoch && loginDialogOpen.value) { emailMode.value = 'sign-in'; clearSensitive(); notice.value = '密码已重设，请使用新密码登录。' }
       return
     } else if (emailMode.value === 'register') await registerWithEmail(identifier, password.value, code.value.trim())
     else await signInWithEmail(identifier, password.value)
     // The session cookie has already changed. Refresh shared state even if the dialog was closed meanwhile.
-    await refreshSignedInAccount()
+    await refreshAccountAfterSessionChange()
     if (version === epoch && loginDialogOpen.value) close()
   } catch (failure) { if (version === epoch && loginDialogOpen.value) showFailure(failure) }
   finally { busy.value = false; password.value = '' }
