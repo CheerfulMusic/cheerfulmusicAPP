@@ -20,7 +20,7 @@ public class UsageConfiguration {
         return new JdbcUsageBudget(jdbc,new TransactionTemplate(manager),Map.of(
             Kind.MUSIC,limits(env,"music"),
             Kind.LYRICS,limits(env,"lyrics"),
-            Kind.TIMING,limits(env,"timing"),Kind.COVER,limits(env,"cover")),Clock.systemUTC(),ZoneId.of(env.getRequiredProperty("qingfeng.usage.zone"))).withCredits(credits, env.getProperty("qingfeng.credits.enabled",Boolean.class,false), env.getProperty("qingfeng.credits.music-cost",Long.class,10L));
+            Kind.TIMING,limits(env,"timing"),Kind.COVER,limits(env,"cover")),Clock.systemUTC(),ZoneId.of(env.getRequiredProperty("qingfeng.usage.zone"))).withCredits(credits, env.getProperty("qingfeng.credits.enabled",Boolean.class,true), env.getProperty("qingfeng.credits.music-cost",Long.class,15L));
     }
     private Limits limits(Environment env,String kind) {
         String prefix="qingfeng.usage."+kind+".";

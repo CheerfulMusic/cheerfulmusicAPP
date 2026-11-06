@@ -19,6 +19,7 @@ const route = useRoute()
 const googleStatus = accountState
 const googleBusy = ref(false), googleError = ref(''), googleNotice = ref(''), googleNoticeKind = ref<'success' | 'info'>('info')
 const logtoError = ref(''), logtoNotice = ref('')
+const inviteLink = ref(''), inviteNotice = ref('')
 const accountBusy = computed(() => busy.value || googleBusy.value || accountLoggingOut.value)
 let identityEpoch = 0, pageReady = false, recoveryRefreshPending = false, restoringIdentity = false
 const accountInitials = computed(() => {
@@ -57,6 +58,13 @@ onMounted(async () => {
       refreshLogtoState().catch(() => { logtoError.value = '暂时无法读取账号状态，请刷新后重试。' }),
     ])
     await ensureCreator()
+    if (typeof route.query.invite === 'string') {
+      try { await requestJson('app/referrals/accept', 'POST', {code:route.query.invite}); inviteNotice.value = '邀请已记录，首次登录成功后邀请人将获得 20 积分。' }
+      catch (e) { inviteNotice.value = e instanceof Error ? e.message : '邀请链接无效' }
+    }
+    if (googleStatus.value.authenticated || logtoState.value.authenticated) {
+      try { const result = await requestJson<{code:string}>('app/referrals'); inviteLink.value = `${window.location.origin}/account?invite=${encodeURIComponent(result.code)}` } catch { /* 登录状态变化时可刷新重试。 */ }
+    }
     const recoveryEpoch = identityEpoch
     const recovery = await requestJson<{ configured: boolean }>('app/identity/recovery')
     if (recoveryEpoch === identityEpoch) configured.value = recovery.configured
@@ -124,6 +132,7 @@ function download() {
   const anchor = document.createElement('a'); anchor.href = url; anchor.download = t('青风音乐-作品找回码.txt'); anchor.click(); setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
 async function copy() { try { await navigator.clipboard.writeText(secret.value); notice.value = '找回码已复制，请保密保存。' } catch { notice.value = '请手动复制，或下载找回码文件。' } }
+async function copyInvite() { try { await navigator.clipboard.writeText(inviteLink.value); inviteNotice.value = '邀请链接已复制' } catch { inviteNotice.value = '请手动复制邀请链接' } }
 async function recover() {
   if (accountBusy.value) return
   if (!restoreCode.value.trim() || !window.confirm(t('将打开找回码对应的音乐收藏。当前作品不会合并，请先保存自己的找回码，是否继续？'))) return
@@ -194,6 +203,11 @@ async function recover() {
       <p v-if="!googleStatus.enabled && !busy" class="google-unavailable" role="status">{{ t('Google 登录暂不可用，你仍可使用作品找回码。') }}</p>
       <div class="profile-footer"><NavIcon name="recovery" /><p>{{ t('首次登录会保留当前作品。不同账号的音乐收藏不会自动合并。') }}</p></div>
     </template>
+  </section>
+  <section v-if="inviteNotice || inviteLink" class="account-profile" aria-label="邀请好友">
+    <h2>邀请好友</h2>
+    <p v-if="inviteNotice">{{ inviteNotice }}</p>
+    <template v-if="inviteLink"><p>邀请一位新用户首次登录，你将获得 20 积分。</p><label class="field">邀请链接<input :value="inviteLink" readonly @focus="($event.target as HTMLInputElement).select()"></label><button class="button secondary" type="button" @click="copyInvite">复制邀请链接</button></template>
   </section>
   <CreditsPanel :key="`${googleStatus.authenticated}:${googleStatus.email || ''}:${logtoState.authenticated}:${logtoState.email || ''}:${logtoState.phoneMasked || ''}:${logtoState.name || ''}`" />
   <section class="recovery-section" :aria-label="t('备用找回方式')">

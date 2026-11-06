@@ -12,7 +12,7 @@ type Catalog = { enabled:boolean; packages:Pack[] }
 const en = computed(() => locale.value === 'en')
 const signedIn = computed(() => accountState.value.authenticated || logtoState.value.authenticated)
 const currency = ref<'GBP'|'USD'>('GBP'), selected = ref(300), busy = ref(false), error = ref('')
-const loading = ref(true), available = ref(false), catalog = ref<Pack[]>([]), blocked = ref(false), balance = ref<number|null>(null)
+const loading = ref(true), available = ref(false), catalog = ref<Pack[]>([]), blocked = ref(false), balance = ref<number|null>(null), musicCost = ref(15)
 const sdk = shallowRef<PaypalCheckout|null>(null)
 const chosen = computed(() => catalog.value.find(p => p.currency===currency.value && p.credits===selected.value))
 const tiers = computed(() => [100,300,700].map((credits, index) => {
@@ -26,10 +26,10 @@ async function refresh() {
   try {
     await ensureCreator(); await Promise.all([refreshAccountState().catch(() => undefined), refreshLogtoState().catch(() => undefined)])
     const [c,b] = await Promise.allSettled([
-      requestJson<Catalog>('app/paypal/catalog'),requestJson<{enabled:boolean;balance:number}>('app/credits')
+      requestJson<Catalog>('app/paypal/catalog'),requestJson<{enabled:boolean;balance:number;musicCost:number}>('app/credits')
     ])
     if(c.status==='fulfilled'){available.value=c.value.enabled;catalog.value=c.value.packages}
-    if(b.status==='fulfilled' && b.value.enabled) balance.value=b.value.balance
+    if(b.status==='fulfilled') { musicCost.value=b.value.musicCost; if(b.value.enabled) balance.value=b.value.balance }
     if(signedIn.value && available.value) {
       const [p,a]=await Promise.all([requestJson<{orders:{status:string}[]}>('app/paypal/orders'), requestJson<{orders:{status:string}[]}>('app/payments/orders')])
       blocked.value=[...p.orders,...a.orders].some(o=>o.status!=='PAID')
@@ -74,7 +74,7 @@ onMounted(refresh)
 </script>
 <template>
   <div class="recharge">
-    <div class="recharge-intro"><div><p class="eyebrow">{{ en ? 'CREDITS FOR YOUR CREATIVITY' : '为每一个灵感，留一首歌' }}</p><h1>{{ en ? 'Recharge credits' : '充值创作积分' }}</h1><p>{{ en ? 'Choose a credit pack and turn your stories into songs.' : '选择适合你的积分套餐，让每个故事都有自己的旋律。' }}</p></div><div class="balance"><span>{{ en ? 'Available credits' : '当前可用积分' }}</span><strong>{{ balance === null ? '—' : balance }}</strong><small>{{ en ? '10 credits per song generation' : '每次生成歌曲消耗 10 积分' }}</small></div></div>
+    <div class="recharge-intro"><div><p class="eyebrow">{{ en ? 'CREDITS FOR YOUR CREATIVITY' : '为每一个灵感，留一首歌' }}</p><h1>{{ en ? 'Recharge credits' : '充值创作积分' }}</h1><p>{{ en ? 'Choose a credit pack and turn your stories into songs.' : '选择适合你的积分套餐，让每个故事都有自己的旋律。' }}</p></div><div class="balance"><span>{{ en ? 'Available credits' : '当前可用积分' }}</span><strong>{{ balance === null ? '—' : balance }}</strong><small>{{ en ? `${musicCost} credits per song generation` : `每次生成歌曲消耗 ${musicCost} 积分` }}</small></div></div>
     <div class="recharge-body"><div class="main-column"><section class="section"><div class="section-head"><div><span class="step">01</span><h2>{{ en ? 'Choose a credit pack' : '选择积分套餐' }}</h2><p>{{ en ? 'Select the pack that fits your creative plans.' : '挑选适合你创作计划的套餐。' }}</p></div><div class="switch" role="group" :aria-label="en?'Choose currency':'选择付款币种'"><button type="button" :aria-pressed="currency==='GBP'" @click="currency='GBP'">GBP £</button><button type="button" :aria-pressed="currency==='USD'" @click="currency='USD'">USD $</button></div></div>
       <div v-if="!available" class="notice">{{ loading ? (en?'Checking payment availability…':'正在检查支付状态…') : (en?'Payments are not open yet. Prices are shown for reference.':'支付暂未开通，以下价格仅供查看。') }}</div>
       <div class="plans"><button v-for="(tier,i) in tiers" :key="tier.credits" type="button" class="plan" :class="{selected:selected===tier.credits}" :aria-pressed="selected===tier.credits" @click="selected=tier.credits"><span v-if="i===1" class="badge">{{ en?'POPULAR':'热门选择' }}</span><span class="plan-name">{{ en?['STARTER','CREATOR','STUDIO'][i]:['灵感起步','创作畅享','灵感满满'][i] }}</span><strong>{{ tier.credits }} <small>{{ en?'credits':'积分' }}</small></strong><span class="plan-price">{{ symbol }}{{ tier.amount.toFixed(2) }}</span><span class="plan-info">{{ en?`About ${tier.credits/10} song generations`:`约可生成 ${tier.credits/10} 次歌曲` }}</span><span class="radio" aria-hidden="true"></span></button></div>

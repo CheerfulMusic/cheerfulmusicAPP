@@ -4,13 +4,16 @@ package com.qingfeng.music.credits;
 public final class FirstLoginCredits {
     public static final long AMOUNT = 100;
     private final CreditsLedger credits;
+    private final ReferralRewards referrals;
 
-    public FirstLoginCredits(CreditsLedger credits) {
+    public FirstLoginCredits(CreditsLedger credits, ReferralRewards referrals) {
         this.credits = credits;
+        this.referrals = referrals;
     }
 
     /** Call only when the creator binds their first verified identity, in the login transaction. */
     public void grant(String creator) {
         credits.credit(creator, AMOUNT, "first-login:" + creator);
+        referrals.rewardForFirstLogin(creator);
     }
 }
