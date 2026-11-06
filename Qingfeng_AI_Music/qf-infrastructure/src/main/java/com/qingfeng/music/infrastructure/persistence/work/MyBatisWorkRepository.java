@@ -7,6 +7,7 @@ import java.util.*;
 public class MyBatisWorkRepository implements WorkRepository {
     private final WorkMapper mapper;
     public MyBatisWorkRepository(WorkMapper mapper) { this.mapper=mapper; }
+    public boolean lockActiveOwner(String owner){return mapper.lockOwner(owner)!=null&&!mapper.activeSessions(owner).isEmpty();}
     public void insert(String owner,Work work) { mapper.insert(row(owner,work)); }
     public boolean update(String owner,Work work,long expected) { return mapper.update(row(owner,work),expected)==1; }
     public Optional<Work> find(String owner,String id) { return Optional.ofNullable(mapper.find(owner,id)).map(this::work); }

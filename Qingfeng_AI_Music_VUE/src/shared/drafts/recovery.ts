@@ -40,3 +40,25 @@ export function createRecoveryStore(writer:string=crypto.randomUUID()){
 }
 const store=createRecoveryStore()
 export const readRecovery=store.read,writeRecovery=store.write,listRecoveryCopies=store.copies,checkpointRecovery=store.checkpoint,removeRecovery=store.remove
+
+/** Copy immutable recovery branches only for a guest association confirmed by the session endpoint. */
+export function migrateRecoveryOwner(source:string,target:string):boolean {
+ if(!source||!target||source===target||source.includes(':')||target.includes(':'))return source===target
+ try{
+  const from=prefix+source+':',to=prefix+target+':',names:string[]=[]
+  for(let n=0;n<localStorage.length;n++){const key=localStorage.key(n);if(key?.startsWith(from))names.push(key)}
+  for(const key of names){
+   const tail=key.slice(from.length);if(!/^(story|lyrics):[^:]+/.test(tail))continue
+   const raw=localStorage.getItem(key);if(!raw)continue
+   let entry:Envelope<unknown>;try{entry=JSON.parse(raw)}catch{continue}
+   if(!entry||typeof entry!=='object'||!Number.isFinite(entry.savedAt)||Date.now()-entry.savedAt>maxAge)continue
+   const split=tail.indexOf(':tab:'),base=split<0?tail:tail.slice(0,split),branch=split<0?'legacy':tail.slice(split+5)
+   let destination=`${to}${base}:tab:claimed-${source}:${branch}:${entry.savedAt}`
+   const existing=localStorage.getItem(destination)
+   if(existing===raw)continue
+   if(existing!==null)destination+=`:copy:${crypto.randomUUID()}`
+   localStorage.setItem(destination,raw) // Retain source, timestamps, and all target branches.
+  }
+  return true
+ }catch{return false}
+}

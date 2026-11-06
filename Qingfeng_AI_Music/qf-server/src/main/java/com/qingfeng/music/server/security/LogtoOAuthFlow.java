@@ -160,6 +160,7 @@ public final class LogtoOAuthFlow {
             String email=Boolean.TRUE.equals(user.getClaim("email_verified"))?user.getEmail():null;
             String phone=Boolean.TRUE.equals(user.getClaim("phone_number_verified"))?user.getClaimAsString("phone_number"):null;
             var session=identities.signIn(token,saved.getAttribute(CREATOR),issuer,user.getSubject(),email,phone,user.getFullName());
+            GuestDraftAssociation.prepare(request,saved.getAttribute(CREATOR),session.creatorId());
             var cookie=ResponseCookie.from("QF_SESSION",session.token()).httpOnly(true).secure(request.isSecure()).sameSite("Lax").path("/api").maxAge(Duration.ofDays(30)).build();
             response.addHeader(HttpHeaders.SET_COOKIE,cookie.toString());outcome="success";
         }catch(com.qingfeng.music.common.exception.DomainException error){log.warn("Logto identity binding rejected: {}",error.code());if("LOGTO_ACCOUNT_CONFLICT".equals(error.code()))outcome="conflict";}
@@ -167,7 +168,7 @@ public final class LogtoOAuthFlow {
         finish(request,response,outcome);
     }
     private void finish(HttpServletRequest request,HttpServletResponse response,String outcome)throws IOException{
-        SecurityContextHolder.clearContext();var session=request.getSession(false);if(session!=null)session.invalidate();
+        SecurityContextHolder.clearContext();GuestDraftAssociation.rotate(request);
         response.setHeader(HttpHeaders.CACHE_CONTROL,"no-store");response.setHeader("Referrer-Policy","no-referrer");
         response.setStatus(HttpServletResponse.SC_FOUND);response.setHeader(HttpHeaders.LOCATION,"/account?logto="+outcome);
     }

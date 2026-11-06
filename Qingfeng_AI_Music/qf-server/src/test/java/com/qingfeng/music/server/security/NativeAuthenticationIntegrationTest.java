@@ -115,6 +115,18 @@ class NativeAuthenticationIntegrationTest {
         assertEquals(200,result.statusCode(),result.body());
     }
 
+    @org.springframework.test.annotation.DirtiesContext(methodMode=org.springframework.test.annotation.DirtiesContext.MethodMode.BEFORE_METHOD)
+    @Test void sessionEndpointConfirmsGuestSourceAfterNativeLogin()throws Exception {
+        String email=email();USERS.add(email);var first=browser();
+        assertEquals(200,post(first,"/password/sign-in",Map.of("email",email,"password","correct-password")).statusCode());
+        var guest=browser();assertEquals(200,code(guest,"email",email,"sign-in").statusCode());
+        assertEquals(200,post(guest,"/email/sign-in",Map.of("email",email,"code","123456")).statusCode());
+        var response=send(guest.client,"POST","/api/public/session",Map.of(),guest.csrf);
+        assertEquals(200,response.statusCode(),response.body());
+        assertEquals(first.creator,JSON.readTree(response.body()).path("creatorId").asText());
+        assertEquals(guest.creator,JSON.readTree(response.body()).path("associatedGuestCreatorId").asText());
+    }
+
     @Test void passwordLoginCompletesOidcRotatesSessionAndGrants100Once()throws Exception{
         var browser=browser();String email=email(),old=cookie(browser);USERS.add(email);
         var response=post(browser,"/password/sign-in",Map.of("email",email,"password","correct-password"));

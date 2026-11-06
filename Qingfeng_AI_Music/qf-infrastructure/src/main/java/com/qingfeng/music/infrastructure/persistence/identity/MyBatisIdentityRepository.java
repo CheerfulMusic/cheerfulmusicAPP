@@ -13,6 +13,7 @@ public class MyBatisIdentityRepository implements IdentityRepository {
     public boolean hasRecovery(String creator){return mapper.hasRecovery(creator)>0;}
     public Optional<String> lockRecovery(String hash){return Optional.ofNullable(mapper.lockRecovery(hash));}
     public void addSession(String creator,String hash,Instant expires){mapper.insertSession(hash,creator,expires);}
+    public boolean hasActiveSessions(String creator){return !mapper.activeSessions(creator).isEmpty();}
     public boolean lockCreator(String creator){return mapper.lockCreator(creator)!=null;}
     public Optional<String> googleCreator(String hash){return Optional.ofNullable(mapper.googleCreator(hash));}
     public Optional<com.qingfeng.music.identity.api.IdentityApi.GoogleIdentity> googleIdentity(String creator){return Optional.ofNullable(mapper.googleIdentity(creator));}

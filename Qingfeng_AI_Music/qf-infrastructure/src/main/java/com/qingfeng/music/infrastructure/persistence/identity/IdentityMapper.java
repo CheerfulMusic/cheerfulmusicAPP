@@ -10,6 +10,7 @@ public interface IdentityMapper {
     @Select("SELECT creator_id FROM creator_session WHERE token_hash=#{hash} AND expires_at>#{now}") String find(@Param("hash") String hash, @Param("now") Instant now);
     @Update("UPDATE creator SET recovery_hash=#{hash} WHERE id=#{id}") void recovery(@Param("id")String id,@Param("hash")String hash);
     @Select("SELECT COUNT(*) FROM creator WHERE id=#{id} AND recovery_hash IS NOT NULL") int hasRecovery(String id);
+    @Select("SELECT token_hash FROM creator_session WHERE creator_id=#{id} AND expires_at>CURRENT_TIMESTAMP FOR UPDATE") java.util.List<String> activeSessions(String id);
     @Select("SELECT id FROM creator WHERE recovery_hash=#{hash} FOR UPDATE") String lockRecovery(String hash);
     @Select("SELECT id FROM creator WHERE id=#{id} FOR UPDATE") String lockCreator(String id);
     @Select("SELECT creator_id FROM creator_google_identity WHERE subject_hash=#{hash}") String googleCreator(String hash);

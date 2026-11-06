@@ -35,6 +35,12 @@ public final class JdbcUsageBudget implements UsageBudget {
     private String reference(String work,String key){return "music:"+work+":"+key;}
     public void reserve(String owner, String work, String key, Kind kind) {
         transactions.executeWithoutResult(tx -> {
+            // Serialize with guest migration before charging or creating an owner-scoped reservation.
+            if(jdbc.queryForList("SELECT id FROM creator WHERE id=? FOR UPDATE",owner).isEmpty()
+                ||jdbc.queryForList("SELECT token_hash FROM creator_session WHERE creator_id=? AND expires_at>CURRENT_TIMESTAMP FOR UPDATE",owner).isEmpty())
+                throw new DomainException("CREATOR_SESSION_CHANGED","登录身份已改变，请刷新后重试；本机草稿已保留");
+            var owners=jdbc.query("SELECT owner_id FROM music_work WHERE id=?",(rs,n)->rs.getString(1),work);
+            if(owners.isEmpty()||!owner.equals(owners.get(0)))throw new DomainException("CREATOR_SESSION_CHANGED","作品归属已改变，请刷新后重试");
             jdbc.queryForObject("SELECT kind FROM model_usage_lock WHERE kind=? FOR UPDATE", String.class, kind.name());
             if(kind==Kind.LYRICS)com.qingfeng.music.infrastructure.persistence.lyrics.JdbcCompositionRequests.expireStale(jdbc);
             if (count("SELECT COUNT(*) FROM model_usage_reservation WHERE kind=? AND work_id=? AND request_key=?", kind.name(),work,key)>0) return;

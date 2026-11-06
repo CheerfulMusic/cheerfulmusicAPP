@@ -88,6 +88,7 @@ public final class GoogleOAuthFlow {
             String token=CreatorSessionFilter.token(request);
             if(!Objects.equals(saved.getAttribute(TOKEN),fingerprint(token)))throw new IllegalStateException("Creator session changed");
             var session=identity.signInWithGoogle(token,saved.getAttribute(CREATOR),user.getSubject(),user.getEmail(),user.getFullName());
+            GuestDraftAssociation.prepare(request,saved.getAttribute(CREATOR),session.creatorId());
             var cookie=ResponseCookie.from("QF_SESSION",session.token()).httpOnly(true).secure(request.isSecure()).sameSite("Lax").path("/api").maxAge(Duration.ofDays(30)).build();
             response.addHeader(HttpHeaders.SET_COOKIE,cookie.toString());outcome="success";
         }catch(DomainException error){if("GOOGLE_ACCOUNT_CONFLICT".equals(error.code()))outcome="conflict";}
@@ -97,7 +98,7 @@ public final class GoogleOAuthFlow {
 
     private void finish(HttpServletRequest request,HttpServletResponse response,String outcome)throws IOException{
         SecurityContextHolder.clearContext();
-        var session=request.getSession(false);if(session!=null)session.invalidate();
+        GuestDraftAssociation.rotate(request);
         response.setHeader(HttpHeaders.CACHE_CONTROL,"no-store");response.setHeader("Referrer-Policy","no-referrer");
         response.setStatus(HttpServletResponse.SC_FOUND);response.setHeader(HttpHeaders.LOCATION,"/account?google="+outcome);
     }

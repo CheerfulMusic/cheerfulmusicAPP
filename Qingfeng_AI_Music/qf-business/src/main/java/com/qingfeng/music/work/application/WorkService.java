@@ -8,12 +8,16 @@ import java.util.*;
 public class WorkService implements WorkApi {
     private final WorkRepository repository;
     public WorkService(WorkRepository repository) { this.repository = repository; }
+    @org.springframework.transaction.annotation.Transactional
     public Work create(String owner, Draft draft) {
         return create(owner,draft,UUID.randomUUID().toString());
     }
+    @org.springframework.transaction.annotation.Transactional
     public Work create(String owner,Draft draft,String draftKey) {
         if(draftKey==null||!draftKey.matches("[0-9a-fA-F-]{36}"))throw new DomainException("INVALID_DRAFT","草稿标识无效，请刷新后重试");
-        validate(draft); Instant now = Instant.now();
+        validate(draft);
+        if(!repository.lockActiveOwner(owner))throw new DomainException("CREATOR_SESSION_CHANGED","登录身份已改变，请刷新后重试；本机草稿已保留");
+        Instant now = Instant.now();
         var existing=repository.find(owner,draftKey);if(existing.isPresent())return existing.get();
         Work work = new Work(draftKey, draft.recipient().trim(), draft.occasion(), draft.story(), draft.message(), draft.style(), draft.title(), 0, now, now,draft.vocalGender());
         repository.insert(owner, work); return get(owner, work.id());

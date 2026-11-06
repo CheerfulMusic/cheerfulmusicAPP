@@ -1,11 +1,13 @@
+import { migrateRecoveryOwner } from '../drafts/recovery'
 import { platform } from '../../platform'
 import {emptyResponseAllowed,validResponse} from './response-contracts'
 export class ApiError extends Error { constructor(message: string, public status: number, public code?: string, public retryAfter?: number) { super(message) } }
 let csrf = '', sessionPromise: Promise<void> | undefined
-let creatorId = ''
+let creatorId = '', associatedGuest = ''
+export const associatedGuestCreatorId = () => associatedGuest
 export const currentCreatorId = () => creatorId
 export function lastKnownCreatorId() { try { return sessionStorage.getItem('qingfeng.lastCreator') || '' } catch { return '' } }
-export function resetCreatorSession() { sessionPromise = undefined; creatorId = ''; try {sessionStorage.removeItem('qingfeng.lastCreator')} catch {/* 恢复身份不依赖存储。 */} }
+export function resetCreatorSession() { sessionPromise = undefined; creatorId = ''; associatedGuest = ''; try {sessionStorage.removeItem('qingfeng.lastCreator')} catch {/* 恢复身份不依赖存储。 */} }
 function endpoint(path: string) {
   const base = import.meta.env.VITE_API_BASE_URL || '/api'
   if (platform.kind !== 'web' && !base.startsWith('https://')) throw new Error('App需要配置HTTPS API地址')
@@ -24,7 +26,9 @@ export async function requestJson<T>(path: string, method = 'GET', body?: unknow
   } finally { clearTimeout(timer) }
 }
 export function ensureCreator(): Promise<void> {
-  sessionPromise ??= (async () => { csrf = (await requestJson<{ token: string }>('public/csrf')).token; creatorId = (await requestJson<{creatorId:string}>('public/session', 'POST', {})).creatorId;try{sessionStorage.setItem('qingfeng.lastCreator',creatorId)}catch{/* 身份依赖服务器 Cookie，不依赖这个本机恢复提示。 */} })().catch(error => { sessionPromise = undefined; throw error })
+  sessionPromise ??= (async () => { csrf = (await requestJson<{ token: string }>('public/csrf')).token; const session = await requestJson<{creatorId:string;associatedGuestCreatorId?:string}>('public/session', 'POST', {});
+    if(session.associatedGuestCreatorId && !migrateRecoveryOwner(session.associatedGuestCreatorId,session.creatorId))throw new ApiError('本机草稿备份失败，请保留当前编辑，恢复浏览器存储后重试。',0,'LOCAL_DRAFT_MIGRATION_FAILED');
+    creatorId = session.creatorId; associatedGuest = session.associatedGuestCreatorId || '';try{sessionStorage.setItem('qingfeng.lastCreator',creatorId)}catch{/* 身份依赖服务器 Cookie，不依赖这个本机恢复提示。 */} })().catch(error => { sessionPromise = undefined; throw error })
   return sessionPromise
 }
 export const getJson = <T>(path: string) => requestJson<T>(path)

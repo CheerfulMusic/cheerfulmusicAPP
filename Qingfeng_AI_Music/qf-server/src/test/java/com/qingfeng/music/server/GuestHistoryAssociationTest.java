@@ -21,11 +21,23 @@ class GuestHistoryAssociationTest {
     @Autowired WorkApi works;
     @Autowired JdbcTemplate db;
     @Autowired CreditsLedger credits;
+    @Autowired com.qingfeng.music.usage.UsageBudget budget;
     @Autowired com.qingfeng.music.infrastructure.persistence.media.MediaMapper media;
     private final WorkApi.Draft draft=new WorkApi.Draft("家人","生日","一起旅行","谢谢","流行","旧歌");
     private IdentityApi.Session login(IdentityApi.Session browser,String subject,boolean google) {
         return google?identity.signInWithGoogle(browser.token(),browser.creatorId(),subject,null,null)
             :logto.signIn(browser.token(),browser.creatorId(),"https://provider.test/oidc",subject,null,null,null);
+    }
+    @Test void retiredGuestCannotReserveQuotaOrIssueAnotherRecoveryCode() {
+        var first=identity.create();String subject=UUID.randomUUID().toString();
+        var account=login(first,subject,true);var guest=identity.create();var song=works.create(guest.creatorId(),draft);
+        login(guest,subject,true);
+        var failure=assertThrows(com.qingfeng.music.common.exception.DomainException.class,
+            ()->budget.reserve(guest.creatorId(),song.id(),UUID.randomUUID().toString(),com.qingfeng.music.usage.UsageBudget.Kind.MUSIC));
+        assertEquals("CREATOR_SESSION_CHANGED",failure.code());
+        assertThrows(com.qingfeng.music.common.exception.DomainException.class,()->identity.issueRecoveryCode(guest.creatorId()));
+        assertEquals(0,db.queryForObject("SELECT COUNT(*) FROM model_usage_reservation WHERE work_id=?",Integer.class,song.id()));
+        assertEquals(song.id(),works.get(account.creatorId(),song.id()).id());
     }
     @Test void bothLoginPathsKeepAccountAndGuestSongsAudioLinksAndUsageWithoutAnotherBonus() {
         for(boolean google:new boolean[]{true,false}) {

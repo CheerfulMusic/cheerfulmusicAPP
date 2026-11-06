@@ -134,8 +134,9 @@ async function sendCode() {
 async function refreshAccountAfterSessionChange() {
   resetLogtoState()
   resetCreatorSession()
-  await ensureCreator().catch(() => undefined)
   await Promise.allSettled([refreshAccountState(), refreshLogtoState()])
+  resetCreatorSession()
+  await ensureCreator().catch(() => undefined)
   window.dispatchEvent(new Event('qingfeng:identity-changed'))
 }
 async function submit() {

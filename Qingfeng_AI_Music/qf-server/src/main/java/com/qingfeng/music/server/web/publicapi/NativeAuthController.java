@@ -161,7 +161,8 @@ public class NativeAuthController {
         IdentityApi.Session signed;
         try{signed=identities.signIn(CreatorSessionFilter.token(request),creator,issuer,verified.subject(),verified.email(),verified.phone(),verified.name());}
         catch(DomainException conflict){throw new Failure(409,"LOGIN_ACCOUNT_CONFLICT","当前账号无法合并，请退出后重新登录");}
-        request.getSession().invalidate();
+        GuestDraftAssociation.prepare(request,creator,signed.creatorId());
+        GuestDraftAssociation.rotate(request);
         response.addHeader(HttpHeaders.SET_COOKIE,ResponseCookie.from("QF_SESSION",signed.token()).httpOnly(true).secure(request.isSecure()).sameSite("Lax").path("/api").maxAge(Duration.ofDays(30)).build().toString());
         return ok(Map.of("authenticated",true));
     }

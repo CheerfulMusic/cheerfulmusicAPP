@@ -5,7 +5,7 @@ import { t, locale } from '../../../shared/i18n'
 import { onMounted, onBeforeUnmount, reactive, ref, computed, watch, nextTick } from 'vue'
 import { useRoute, useRouter, onBeforeRouteLeave, onBeforeRouteUpdate } from 'vue-router'
 import { getSystemInfo } from '../../../shared/http/system'
-import { ApiError, ensureCreator, currentCreatorId, lastKnownCreatorId } from '../../../shared/http/api-client'
+import { ApiError, ensureCreator, currentCreatorId, lastKnownCreatorId, associatedGuestCreatorId } from '../../../shared/http/api-client'
 import { readRecovery, writeRecovery, recoveryKey,checkpointRecovery } from '../../../shared/drafts/recovery'
 import CreationSteps from '../../../shared/ui/CreationSteps.vue'
 import RecoveryCopies from '../../../shared/drafts/RecoveryCopies.vue'
@@ -59,7 +59,9 @@ function recoveryValue():Recovery{return {flowVersion:storyFlowVersion,draft:{..
 function remember() {
   if(!cacheKey||!initialized.value)return
   const value=recoveryValue();localSaved.value=writeRecovery(cacheKey,value)
-  if(existing.value&&cacheKey!==recoveryKey(currentCreatorId(),'story',existing.value.id))writeRecovery(recoveryKey(currentCreatorId(),'story',existing.value.id),value)
+  const owner=currentCreatorId(),source=associatedGuestCreatorId()
+  const belongs=owner&&(cacheKey.startsWith(recoveryKey(owner,'story',''))||source&&cacheKey.startsWith(recoveryKey(source,'story','')))
+  if(existing.value&&belongs&&cacheKey!==recoveryKey(owner,'story',existing.value.id))writeRecovery(recoveryKey(owner,'story',existing.value.id),value)
 }
 function restoreCopy(value:Recovery){
  if(!initialized.value||resetting.value||saving.value||composing.value)return
@@ -133,6 +135,21 @@ async function initialize() {
     }
   }
 }
+async function identityChanged() {
+  if(!initialized.value)return
+  try{await ensureCreator()}catch(e){ready.value=false;error.value=e instanceof Error?e.message:'身份核对失败，请保留当前编辑后重试。';return}
+  const owner=currentCreatorId();if(!owner)return
+  const next=recoveryKey(owner,'story',String(route.query.work||route.query.draft||draftKey))
+  if(cacheKey===next)return
+  clearTimeout(timer);remember()
+  const source=associatedGuestCreatorId()
+  if(source&&cacheKey.startsWith(recoveryKey(source,'story',''))) {
+    if(!checkpointRecovery(next,recoveryValue())){ready.value=false;error.value='本机草稿备份失败，请保留当前编辑，恢复浏览器存储后重试。';return}
+  }
+  await initialize()
+}
+onMounted(()=>window.addEventListener('qingfeng:identity-changed',identityChanged))
+onBeforeUnmount(()=>window.removeEventListener('qingfeng:identity-changed',identityChanged))
 onMounted(initialize)
 watch(()=>contextOf(route.query),context=>{if(context!==internalContext)void initialize()})
 function persist():Promise<Work|undefined> {

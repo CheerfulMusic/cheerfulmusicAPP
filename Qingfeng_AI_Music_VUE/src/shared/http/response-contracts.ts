@@ -31,7 +31,7 @@ export function validResponse(path:string,method:string,value:unknown):boolean{
  if(path==='public/invite/status')return method==='GET'&&obj(value)&&typeof value.enabled==='boolean'&&typeof value.admitted==='boolean'&&str(value.csrfToken)&&str(value.expiresAt)
  if(path==='public/invite/enter')return method==='POST'&&obj(value)&&value.admitted===true
  if(path==='app/inspiration/rewrite')return obj(value)&&text(value.text)&&(value.text as string).length<=4000
- if(path==='public/session'||path==='public/session/recover')return obj(value)&&text(value.creatorId)
+ if(path==='public/session'||path==='public/session/recover')return obj(value)&&text(value.creatorId)&&(value.associatedGuestCreatorId===undefined||text(value.associatedGuestCreatorId))
  if(path==='public/session/logout')return method==='POST'&&obj(value)&&value.loggedOut===true
  if(path==='public/auth/google/status')return method==='GET'&&obj(value)&&typeof value.enabled==='boolean'&&typeof value.authenticated==='boolean'&&(!value.authenticated||value.enabled)&&['email','name'].every(k=>!(k in value)||str(value[k]))
  if(path==='public/auth/google/start')return method==='POST'&&obj(value)&&googleAuthorizationUrl(value.authorizationUrl)

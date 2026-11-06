@@ -41,7 +41,9 @@ public class IdentityService implements IdentityApi {
         try { return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(token.getBytes(StandardCharsets.UTF_8))); }
         catch (java.security.NoSuchAlgorithmException e) { throw new IllegalStateException(e); }
     }
+    @Transactional
     public String issueRecoveryCode(String creator) {
+        if(!repository.lockCreator(creator)||!repository.hasActiveSessions(creator))throw new com.qingfeng.music.common.exception.DomainException("CREATOR_SESSION_CHANGED","登录身份已改变，请刷新后重试");
         String code=randomToken();repository.setRecovery(creator,hash(code));return code;
     }
     public boolean hasRecoveryCode(String creator){return repository.hasRecovery(creator);}

@@ -19,7 +19,12 @@ public class SessionController {
     @GetMapping("/csrf") public Map<String,String> csrf(CsrfToken token) { return Map.of("token",token.getToken()); }
     @PostMapping("/session") public ResponseEntity<Map<String,String>> session(HttpServletRequest request) {
         var existing=identity.resolve(CreatorSessionFilter.token(request));
-        if (existing.isPresent()) return ResponseEntity.ok(Map.of("creatorId",existing.get()));
+        if (existing.isPresent()) {
+            var body=new java.util.LinkedHashMap<String,String>();body.put("creatorId",existing.get());
+            var source=com.qingfeng.music.server.security.GuestDraftAssociation.source(request,existing.get());
+            if(source!=null)body.put("associatedGuestCreatorId",source);
+            return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(body);
+        }
         return sessionResponse(identity.create(),request);
     }
     public record RecoveryRequest(@jakarta.validation.constraints.NotBlank @jakarta.validation.constraints.Size(max=100)String code){}
