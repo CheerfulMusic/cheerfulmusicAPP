@@ -1,0 +1,169 @@
+{
+  "release": "/opt/qingfeng-music/releases/20261106-140618-native-auth",
+  "previous": "/opt/qingfeng-music/releases/20261106-132227-welcome-credits",
+  "backup": "/var/backups/qingfeng-music/20261106T060710Z",
+  "sourceCommit": "47375f7ab4421f4d163c10b1c296b729614ce6aa",
+  "jarSha256": "3f5374b2598537d2654f0ac622ad0da54ea661cfba5ae95dcc5060e2b28fe4e9",
+  "configHashesUnchanged": true,
+  "noDatabaseMigration": true,
+  "countsBefore": {
+    "music_work": 117,
+    "media_asset": 97,
+    "generation_task": 105,
+    "creator": 92,
+    "creator_google_identity": 1,
+    "creator_oidc_identity": 3,
+    "credit_ledger": 0,
+    "payment_order": 0
+  },
+  "countsAfter": {
+    "music_work": 117,
+    "media_asset": 97,
+    "generation_task": 105,
+    "creator": 92,
+    "creator_google_identity": 1,
+    "creator_oidc_identity": 3,
+    "credit_ledger": 0,
+    "payment_order": 0
+  },
+  "health": "UP",
+  "frontendTests": 164,
+  "backendTests": 221,
+  "publicSmoke": {
+    "checksPassed": 38,
+    "checks": [
+      "invite gate blocks API without pass",
+      "existing invitation admits isolated smoke client",
+      "invitation status admitted",
+      "public route /",
+      "public route /account",
+      "public route /recharge",
+      "public route /create",
+      "public route /works",
+      "public static hash /assets/index-DPkU2Q2-.js",
+      "public static hash /assets/i18n-C-CpjsHG.js",
+      "public static hash /assets/index-DfgygiE6.css",
+      "registration welcome offer present",
+      "native authentication API packaged",
+      "Apple and WeChat coming soon labels",
+      "international country selector packaged",
+      "welcome grant implementation packaged",
+      "Google login enabled",
+      "identity service enabled",
+      "email password enabled in native status",
+      "email code enabled in native status",
+      "password reset enabled in native status",
+      "phone code enabled in native status",
+      "HTTPS creator cookie secure and HttpOnly",
+      "anonymous session earns zero credits",
+      "anonymous session creates no ledger entry",
+      "native mutations require CSRF",
+      "native mutations require CSRF no redirect or credential leakage",
+      "native rejects malformed email without delivery",
+      "native rejects malformed email without delivery no redirect or credential leakage",
+      "unconfigured international SMS rejected before provider",
+      "unconfigured international SMS rejected before provider no redirect or credential leakage",
+      "OTP requires a matching pending flow",
+      "OTP requires a matching pending flow no redirect or credential leakage",
+      "real provider rejects nonexistent password credentials",
+      "real provider rejects nonexistent password credentials no redirect or credential leakage",
+      "failed authentication grants no credits",
+      "smoke session logged out",
+      "actuator hidden from public"
+    ],
+    "anonymousSmokeCreator": "66fa4622-ec45-4198-81ac-8128e83b08ea",
+    "googleEnabled": true,
+    "logtoEnabled": true,
+    "creditsChargingEnabled": false,
+    "realOauthSignInPerformed": false,
+    "nativeCapabilities": {
+      "emailPasswordEnabled": true,
+      "emailCodeEnabled": true,
+      "phoneEnabled": true,
+      "phoneInternationalEnabled": false,
+      "passwordResetEnabled": true,
+      "authenticated": false
+    },
+    "realMessageSent": false
+  },
+  "localRealProvider": {
+    "productionAccessed": false,
+    "smtpVerifiedMailpit": true,
+    "checks": [
+      "signup password remains optional",
+      "temporary local email password login enabled",
+      "wrong verification code rejected",
+      "registered verified email with optional password and signed token",
+      "wrong password rejected without email",
+      "wrong password sends no mail",
+      "password login returns same subject",
+      "password reset completed using isolated Mailpit code",
+      "old password rejected after reset",
+      "new password login returns original subject",
+      "all test messages only isolated test mailbox"
+    ],
+    "isolatedTestMailbox": "test-3d0f31eec74842ac9352f010a5df80ea@cheerfulmusic.test",
+    "lastApiStep": "POST /api/experience/submit",
+    "negativeResults": {
+      "wrong verification code rejected": {
+        "status": 400,
+        "code": "verification_code.code_mismatch"
+      },
+      "wrong password rejected without email": {
+        "status": 422,
+        "code": "session.invalid_credentials"
+      },
+      "old password rejected after reset": {
+        "status": 422,
+        "code": "session.invalid_credentials"
+      }
+    },
+    "nonJsonApiResponses": [
+      {
+        "step": "POST /api/experience/identification",
+        "status": 201,
+        "contentType": "text/plain; charset=utf-8",
+        "standardStatusBody": "Created"
+      }
+    ],
+    "idTokenAlgorithm": "ES384",
+    "signedTokenVerified": true,
+    "passed": true,
+    "localSignInConfigurationRestored": true
+  },
+  "internationalSmsDeferredByUser": true,
+  "browserVisualQaPerformed": false,
+  "browserVisualQaUnavailableReason": "Computer Use stopped because the Windows browser URL could not be reliably determined.",
+  "backupArchivesVerified": true,
+  "realPaidGenerationPerformed": false,
+  "localRealProviderOtpFallback": {
+    "productionAccessed": false,
+    "smtpVerifiedMailpit": true,
+    "checks": [
+      "new verified identifier returns user_not_exist",
+      "same verified ID survives SignIn to Register transition",
+      "new passwordless account completes OIDC with signed token",
+      "only one isolated Mailpit email"
+    ],
+    "isolatedTestMailbox": "test-8cd4a4e9f17f432c9e7271432616ebff@cheerfulmusic.test",
+    "scenario": "OTP SignIn auto-register fallback",
+    "lastApiStep": "POST /api/experience/submit",
+    "negativeResults": {
+      "new verified identifier returns user_not_exist": {
+        "status": 404,
+        "code": "user.user_not_exist"
+      }
+    },
+    "nonJsonApiResponses": [
+      {
+        "step": "POST /api/experience/identification",
+        "status": 201,
+        "contentType": "text/plain; charset=utf-8",
+        "standardStatusBody": "Created"
+      }
+    ],
+    "idTokenAlgorithm": "ES384",
+    "signedTokenVerified": true,
+    "passed": true
+  }
+}
