@@ -25,7 +25,9 @@ public interface MusicProvider {
         public Request(String title,String confirmedLyrics,String style){this(title,confirmedLyrics,style,"AUTO");}
     }
     record Submission(String providerTaskId) {}
-    record Result(String providerTaskId, GenerationStatus status, String temporaryAudioUrl,AudioInfo audioInfo) {
+    record Result(String providerTaskId, GenerationStatus status, String temporaryAudioUrl,AudioInfo audioInfo,java.util.List<AudioInfo> candidates) {
+        public Result {candidates=candidates==null?java.util.List.of():java.util.List.copyOf(candidates);}
+        public Result(String task,GenerationStatus status,String url,AudioInfo info){this(task,status,url,info,java.util.List.of());}
         public Result(String task,GenerationStatus status,String url){this(task,status,url,null);}
     }
 }

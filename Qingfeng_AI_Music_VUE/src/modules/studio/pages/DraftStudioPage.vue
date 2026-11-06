@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import LyricsTemplatePicker from '../../works/components/LyricsTemplatePicker.vue'
+import { normalizeLyricsStructure, lyricsStructureKey, type LyricsStructure } from '../../works/model/lyrics-structure'
 import '../styles/inspiration-studio.css'
 import StudioAtmosphere from '../components/StudioAtmosphere.vue'
 import { t, locale } from '../../../shared/i18n'
@@ -17,13 +19,14 @@ import { continuationRequestKey, retireContinuationRequestKey } from '../model/l
 import { generateLyrics, getLyricsRequest, getUsage, type Allowance } from '../../works/api/detail'
 
 const storyFlowVersion = 3
-interface Recovery { flowVersion?:number; draft:DraftInput; language:string; part:number; draftKey:string; workId?:string; version?:number; dirty:boolean; conflict?:boolean }
+interface Recovery { structure?:LyricsStructure; flowVersion?:number; draft:DraftInput; language:string; part:number; draftKey:string; workId?:string; version?:number; dirty:boolean; conflict?:boolean }
 function validRecovery(value:unknown):value is Recovery {
   const v = value as Recovery
   return !!v && !!v.draft && ['recipient','occasion','story','message','style','title'].every(k => typeof v.draft[k as keyof DraftInput] === 'string') && ['zh-CN','en','mixed'].includes(v.language) && /^[0-9a-f-]{36}$/i.test(v.draftKey)
 }
 const route=useRoute(), router=useRouter(), initialized=ref(false), ready=ref(false), aiReady=ref(false), existing=ref<Work>(), baseline=ref(''), saving=ref(false), composing=ref(false), error=ref(''), notice=ref(''), conflict=ref(false), localSaved=ref(false), allowance=ref<Allowance>()
 const language=ref<string>(locale.value)
+const structure=ref<LyricsStructure>(normalizeLyricsStructure())
 const validationError=ref(''), selectedHint=ref(-1)
 const rewriting=ref(false), rewriteError=ref(''), rewriteStatus=ref('')
 const rewriteBackup=ref<{source:string;result:string}>()
@@ -55,7 +58,7 @@ let recoveredVersion:number|undefined,recoveredWorkId:string|undefined
 let initSequence=0,internalContext:string|undefined
 const contextOf=(query:Record<string,unknown>)=>query.work?`work:${String(query.work)}`:query.draft?`draft:${String(query.draft)}`:'new'
 const asDraft=(work:DraftInput):DraftInput=>({recipient:work.recipient,occasion:work.occasion,story:work.story,message:work.message,style:work.style,title:work.title,vocalGender:normalizeVocalGender(work.vocalGender)})
-function recoveryValue():Recovery{return {flowVersion:storyFlowVersion,draft:{...draft},language:language.value,part:0,draftKey,workId:existing.value?.id||recoveredWorkId,version:existing.value?.version??recoveredVersion,dirty:dirty.value,conflict:conflict.value}}
+function recoveryValue():Recovery{return {flowVersion:storyFlowVersion,draft:{...draft},language:language.value,structure:{...structure.value},part:0,draftKey,workId:existing.value?.id||recoveredWorkId,version:existing.value?.version??recoveredVersion,dirty:dirty.value,conflict:conflict.value}}
 function remember() {
   if(!cacheKey||!initialized.value)return
   const value=recoveryValue();localSaved.value=writeRecovery(cacheKey,value)
@@ -67,7 +70,7 @@ function restoreCopy(value:Recovery){
  if(!initialized.value||resetting.value||saving.value||composing.value)return
  if(!checkpointRecovery(cacheKey,recoveryValue())){error.value='无法保留当前编辑，已停止恢复。请先复制内容，或清理浏览器存储后重试。';return}
  clearTimeout(timer)
- Object.assign(draft,asDraft(value.draft));language.value=value.language
+ Object.assign(draft,asDraft(value.draft));language.value=value.language;structure.value=normalizeLyricsStructure(value.structure)
  conflict.value=!!existing.value&&value.version!==undefined&&value.version!==existing.value.version
  error.value=conflict.value?'另一页面已更新故事。本机内容已保留，请先核对再选择保存或载入。':''
  notice.value='已恢复本机副本，替换前的编辑也已另存。';remember();if(!conflict.value)schedule()
@@ -76,7 +79,7 @@ function schedule() {
   remember(); clearTimeout(timer)
   if (dirty.value && valid.value && ready.value && !conflict.value && !composing.value) timer=setTimeout(()=>{void persist().catch(()=>{})},1200)
 }
-watch([draft,language],schedule,{deep:true,flush:'sync'})
+watch([draft,language,structure],schedule,{deep:true,flush:'sync'})
 async function initialize() {
   const turn=++initSequence,query={...route.query}
   rewriting.value=false;rewriteError.value='';rewriteStatus.value='';rewriteBackup.value=undefined
@@ -86,7 +89,7 @@ async function initialize() {
   if(inflight)try{await inflight}catch{/* 旧作品的本机副本仍保留。 */}
   if(turn!==initSequence)return
   clearTimeout(timer); initialized.value=false; error.value=''; notice.value=''; conflict.value=false; ready.value=false;saving.value=false
-  composing.value=false;language.value=locale.value;selectedHint.value=-1;validationError.value='';existing.value=undefined;recoveredVersion=undefined;recoveredWorkId=undefined;cacheKey='';draftKey=crypto.randomUUID()
+  composing.value=false;language.value=locale.value;structure.value=normalizeLyricsStructure();selectedHint.value=-1;validationError.value='';existing.value=undefined;recoveredVersion=undefined;recoveredWorkId=undefined;cacheKey='';draftKey=crypto.randomUUID()
   Object.assign(draft,{recipient:'',occasion:String(query.occasion||''),story:'',message:'',style:styleFromInspiration(query.style),title:'',vocalGender:'AUTO'});baseline.value=JSON.stringify(snapshot())
   try {
     await ensureCreator()
@@ -103,7 +106,7 @@ async function initialize() {
     if (existing.value) {Object.assign(draft,asDraft(existing.value));baseline.value=JSON.stringify(asDraft(existing.value))}
     else {Object.assign(draft,{recipient:'',occasion:String(query.occasion||''),story:'',message:'',style:styleFromInspiration(query.style),title:'',vocalGender:'AUTO'});baseline.value=JSON.stringify(snapshot());draftKey=crypto.randomUUID()}
     if (local) {
-      language.value=local.language;draftKey=local.draftKey
+      language.value=local.language;structure.value=normalizeLyricsStructure(local.structure);draftKey=local.draftKey
       if (local.dirty) {
         Object.assign(draft,asDraft(local.draft));notice.value='已恢复本机尚未保存的内容。'
         conflict.value=!!local.conflict || (!!existing.value && local.version!==undefined && local.version!==existing.value.version)
@@ -118,7 +121,7 @@ async function initialize() {
     if(e instanceof ApiError && (e.status===0||e.status===408||e.status>=500)){
       const owner=currentCreatorId()||lastKnownCreatorId()
       if(owner){cacheKey=recoveryKey(owner,'story',String(query.work||query.draft||draftKey));const local=readRecovery(cacheKey,validRecovery)
-        if(local){Object.assign(draft,asDraft(local.draft));language.value=local.language;draftKey=local.draftKey;recoveredVersion=local.version;recoveredWorkId=local.workId;baseline.value='';notice.value='服务暂时连接不上，已恢复本机内容；连接后可重试保存。'}
+        if(local){Object.assign(draft,asDraft(local.draft));language.value=local.language;structure.value=normalizeLyricsStructure(local.structure);draftKey=local.draftKey;recoveredVersion=local.version;recoveredWorkId=local.workId;baseline.value='';notice.value='服务暂时连接不上，已恢复本机内容；连接后可重试保存。'}
       }
       ready.value=false
     }
@@ -233,13 +236,13 @@ async function continueMaking() {
     const work=await flush()
     if(!work||!alive||turn!==initSequence)return
     writing=true
-    let key=continuationRequestKey(work.id,work.version,language.value)
+    let key=continuationRequestKey(work.id,work.version,language.value,lyricsStructureKey(structure.value))
     const previous=await getLyricsRequest(work.id,key)
-    if(previous.status==='SUCCEEDED'&&previous.revisionId){if(alive&&turn===initSequence)await router.push({path:`/works/${work.id}`,query:{revision:previous.revisionId,language:language.value}});return}
+    if(previous.status==='SUCCEEDED'&&previous.revisionId){if(alive&&turn===initSequence)await router.push({path:`/works/${work.id}`,query:{revision:previous.revisionId,language:language.value,templateId:structure.value.templateId,chorusFirst:String(structure.value.chorusFirst)}});return}
     if(previous.status==='PENDING'||previous.status==='UNKNOWN')throw new Error('歌词仍在编写中，可以稍后刷新编写状态。')
-    if(previous.status==='FAILED'){retireContinuationRequestKey(work.id,work.version,language.value);key=continuationRequestKey(work.id,work.version,language.value)}
-    const revision=await generateLyrics(work.id,work.version,key,language.value)
-    if(alive&&turn===initSequence)await router.push({path:`/works/${work.id}`,query:{revision:revision.id,language:language.value}})
+    if(previous.status==='FAILED'){retireContinuationRequestKey(work.id,work.version,language.value,lyricsStructureKey(structure.value));key=continuationRequestKey(work.id,work.version,language.value,lyricsStructureKey(structure.value))}
+    const revision=await generateLyrics(work.id,work.version,key,language.value,'',undefined,{...structure.value})
+    if(alive&&turn===initSequence)await router.push({path:`/works/${work.id}`,query:{revision:revision.id,language:language.value,templateId:structure.value.templateId,chorusFirst:String(structure.value.chorusFirst)}})
   } catch(e){if(alive&&turn===initSequence){continuationFailed.value=writing;error.value=e instanceof Error?e.message:'歌词生成失败，请稍后再试'}}
   finally{if(turn===initSequence)composing.value=false}
 }
@@ -272,12 +275,15 @@ onBeforeUnmount(()=>{remember();alive=false;initSequence++;clearTimeout(timer);w
       <form @submit.prevent="next" :aria-label="t('写下创作灵感')">
         <fieldset class="draft-fields" :disabled="!initialized||composing||resetting">
           <div class="inspiration-input-box" :class="{'is-invalid':validationError}">
-            <div class="inspiration-rewrite-tools">
-              <div class="inspiration-rewrite-action">
-                <button type="button" class="inspiration-label inspiration-rewrite" :disabled="rewriting||!ready||!aiReady||conflict" :aria-busy="rewriting" aria-describedby="inspiration-rewrite-purpose" @click="rewriteIdea"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5L12 3ZM21 2v5m-2.5-2.5h5"/></svg>{{ t(rewriting?'AI改写中…':'AI改写') }}</button>
-                <span id="inspiration-rewrite-purpose" class="inspiration-rewrite-purpose">{{ t('帮你把想法写得更具体') }}</span>
+            <div class="inspiration-editor-toolbar">
+              <div class="inspiration-rewrite-tools">
+                <div class="inspiration-rewrite-action">
+                  <button type="button" class="inspiration-label inspiration-rewrite" :disabled="rewriting||!ready||!aiReady||conflict" :aria-busy="rewriting" aria-describedby="inspiration-rewrite-purpose" @click="rewriteIdea"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5L12 3ZM21 2v5m-2.5-2.5h5"/></svg>{{ t(rewriting?'AI改写中…':'AI改写') }}</button>
+                  <span id="inspiration-rewrite-purpose" class="inspiration-rewrite-purpose">{{ t('帮你把想法写得更具体') }}</span>
+                </div>
+                <button v-if="rewriteBackup&&draft.story===rewriteBackup.result" class="inspiration-restore" type="button" :disabled="rewriting" @click="restoreRewrite">{{ t('恢复原文') }}</button>
               </div>
-              <button v-if="rewriteBackup&&draft.story===rewriteBackup.result" class="inspiration-restore" type="button" :disabled="rewriting" @click="restoreRewrite">{{ t('恢复原文') }}</button>
+              <LyricsTemplatePicker v-model="structure" :disabled="composing||rewriting||resetting||!initialized"/>
             </div>
             <textarea id="inspiration-input" v-model="draft.story" maxlength="4000" :aria-label="t('写下创作灵感')" :placeholder="inspirationPlaceholder" :aria-invalid="!!validationError||undefined" :aria-describedby="validationError?'inspiration-guidance story-validation':'inspiration-guidance'"></textarea>
             <div class="inspiration-input-footer">

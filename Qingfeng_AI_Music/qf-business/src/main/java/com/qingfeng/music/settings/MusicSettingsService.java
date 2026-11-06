@@ -7,6 +7,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 public class MusicSettingsService implements MusicSettings {
     private final Catalog catalog;private final Repository repository;private final WorkApi works;
+    private CreativePlan.Repository plans;
+    public MusicSettingsService withCreativePlans(CreativePlan.Repository value){plans=value;return this;}
     public MusicSettingsService(Catalog catalog,Repository repository,WorkApi works){this.catalog=catalog;this.repository=repository;this.works=works;}
     public Catalog catalog(){return catalog;}
     public Direction preview(Preferences input){
@@ -45,6 +47,11 @@ public class MusicSettingsService implements MusicSettings {
         return new Direction(prefs,style.trim(),exclusions,summaryZh,summaryEn,catalog.version());
     }
     public View get(String owner,String work){var w=works.get(owner,work);return new View(w,resolve(owner,w));}
+    public Direction forGeneration(String owner,WorkApi.Work work){
+        var base=resolve(owner,work);
+        var plan=plans==null?null:plans.find(work.id(),CreativePlan.sourceHash(work)).orElse(null);
+        return CreativeDirection.compile(work,base,plan);
+    }
     public Direction resolve(String owner,WorkApi.Work work){works.get(owner,work.id());if(org.springframework.transaction.support.TransactionSynchronizationManager.isActualTransactionActive()&&repository.lockVersion(work.id())!=work.version())throw new DomainException("WORK_VERSION_CONFLICT","作品已修改，请重新确认音乐设置。");return repository.find(work.id()).filter(s->s.style().equals(work.style())&&s.vocalGender().equals(work.vocalGender())).map(s->preview(s.preferences())).orElseGet(()->InspirationMusicPresets.find(work.style()).map(preset->preview(preset.preferences(work.vocalGender()))).orElse(null));}
     @Transactional public View save(String owner,String work,long expectedVersion,Preferences input){
         var current=works.get(owner,work);var direction=preview(input);String genre=input.choices().get("genre").get(0);String label=catalog.groups().stream().filter(g->g.id().equals("genre")).findFirst().orElseThrow().options().stream().filter(o->o.id().equals(genre)).findFirst().orElseThrow().zh();

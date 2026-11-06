@@ -1,3 +1,4 @@
+import type {LyricsStructure} from '../model/lyrics-structure'
 import { ensureCreator, requestJson, apiUrl } from '../../../shared/http/api-client'
 export interface Revision { id: string; workId: string; workVersion: number; title: string; lyrics: string; source: string; confirmed: boolean; createdAt: string }
 export interface LyricsRequestState {status:'NOT_FOUND'|'PENDING'|'FAILED'|'SUCCEEDED'|'UNKNOWN';revisionId:string|null;errorCode:string|null}
@@ -7,9 +8,9 @@ export interface GenerationTask { id: string; revisionId: string; requestKey?:st
 export const closeTaskChecking=(work:string,task:string)=>call<GenerationTask>(`app/works/${work}/generations/${task}/close-checking`,'POST',{acknowledge:true})
 async function call<T>(path: string, method = 'GET', body?: unknown) { await ensureCreator(); return requestJson<T>(path, method, body) }
 export const listRevisions = (work: string) => call<Revision[]>(`app/works/${work}/lyrics`)
-export async function generateLyrics(work: string, workVersion: number, requestKey: string, language: string, instructions = '', baseRevisionId?: string) {
+export async function generateLyrics(work: string, workVersion: number, requestKey: string, language: string, instructions = '', baseRevisionId?: string, structure?: LyricsStructure) {
   await ensureCreator()
-  return requestJson<Revision>(`app/works/${work}/lyrics/generate`, 'POST', {workVersion, requestKey, language, instructions, baseRevisionId}, 120000)
+  return requestJson<Revision>(`app/works/${work}/lyrics/generate`, 'POST', {workVersion, requestKey, language, instructions, baseRevisionId, ...structure}, 120000)
 }
 export const getRevision = (work: string, revision: string) => call<Revision>(`app/works/${work}/lyrics/${revision}`)
 export interface Allowance {dailyLimit:number;dailyRemaining:number;concurrentLimit:number;active:number;resetsAt:string;dailyUnlimited?:boolean;concurrentUnlimited?:boolean}

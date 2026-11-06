@@ -24,7 +24,16 @@ public class MediaService implements MediaApi, SharedMediaAccess, GeneratedAudio
         if(existing.isPresent())return existing.get().asset().id();
         return save(work,"GENERATED",task,input).id();
     }
+    public Optional<String> existingCandidate(String task,String candidate){return repository.findGenerated(task,candidate).map(s->s.asset().id());}
+    public String storeCandidate(String task,String work,String candidate,com.qingfeng.music.generation.application.port.MusicProvider.AudioInfo source,InputStream input){
+        var existing=repository.findGenerated(task,candidate);
+        if(existing.isPresent())return existing.get().asset().id();
+        return save(work,"GENERATED",task,input,candidate,source).id();
+    }
     private Asset save(String work,String origin,String task,InputStream input){
+        return save(work,origin,task,input,"primary",null);
+    }
+    private Asset save(String work,String origin,String task,InputStream input,String candidate,com.qingfeng.music.generation.application.port.MusicProvider.AudioInfo source){
         // 先原子预留单文件最大容量，阻止并发上传绕过总量限制；只结算实际登记成功的字节。
         if(!repository.reserve(work,MAX_AUDIO,capacity))throw new DomainException("STORAGE_QUOTA_EXCEEDED","作品音频容量不足，请联系维护人员扩容");
         MediaFileStore.Saved saved=null;boolean registering=false,rollback=false;MediaRepository.Stored effective=null;
@@ -32,7 +41,7 @@ public class MediaService implements MediaApi, SharedMediaAccess, GeneratedAudio
             saved=files.save(input);
             var asset=new Asset(UUID.randomUUID().toString(),work,origin,saved.contentType(),saved.size(),saved.sha256(),Instant.now());
             registering=true;
-            try{effective=repository.register(asset,saved.key(),task,MAX_AUDIO);}
+            try{effective=task==null?repository.register(asset,saved.key(),null,MAX_AUDIO):repository.registerCandidate(asset,saved.key(),task,MAX_AUDIO,candidate,source);}
             catch(MediaRepository.RegistrationFailure error){rollback=error.rolledBack();throw error;}
             return effective.asset();
         }catch(IOException e){throw new DomainException("MEDIA_STORAGE_UNAVAILABLE","音频保存失败，可以稍后重试");}

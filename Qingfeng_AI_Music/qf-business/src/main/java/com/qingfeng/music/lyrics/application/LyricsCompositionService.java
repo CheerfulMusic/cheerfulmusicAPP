@@ -10,6 +10,9 @@ public final class LyricsCompositionService {
     private static final System.Logger LOG=System.getLogger(LyricsCompositionService.class.getName());
     private final WorkApi works;private final LyricsApi lyrics;private final LyricsRepository revisions;
     private final LyricsWriter writer;private final CompositionRequests requests;private final boolean enabled;
+    private com.qingfeng.music.settings.MusicSettings settings;
+    private com.qingfeng.music.settings.CreativePlan.Repository plans;
+    public LyricsCompositionService withCreativePlans(com.qingfeng.music.settings.MusicSettings settings,com.qingfeng.music.settings.CreativePlan.Repository plans){this.settings=settings;this.plans=plans;return this;}
     public LyricsCompositionService(WorkApi works,LyricsApi lyrics,LyricsRepository revisions,LyricsWriter writer,CompositionRequests requests,boolean enabled){this.works=works;this.lyrics=lyrics;this.revisions=revisions;this.writer=writer;this.requests=requests;this.enabled=enabled;}
     public LyricsApi.Revision compose(String owner,String work,long expectedVersion,String key,String language){
         return compose(owner,work,expectedVersion,key,language,"",null);
@@ -21,11 +24,15 @@ public final class LyricsCompositionService {
         return requests.find(work,key).map(e->new RequestState(e.status(),e.revisionId(),e.errorCode())).orElseGet(()->new RequestState("NOT_FOUND",null,null));
     }
     public LyricsApi.Revision compose(String owner,String work,long expectedVersion,String key,String language,String instructions,String baseRevisionId){
+        return compose(owner,work,expectedVersion,key,language,instructions,baseRevisionId,null,false);
+    }
+    public LyricsApi.Revision compose(String owner,String work,long expectedVersion,String key,String language,String instructions,String baseRevisionId,String templateId,boolean chorusFirst){
+        var structure=new LyricsStructure(templateId,chorusFirst);
         var snapshot=works.get(owner,work);
         if(key==null||!key.matches("[0-9a-fA-F-]{36}")||language==null||!java.util.Set.of("zh-CN","en","mixed").contains(language))throw new DomainException("INVALID_LYRICS_REQUEST","歌词生成参数无效，请刷新后重试");
         String requirements=instructions==null?"":instructions.trim();
         if(requirements.length()>1000)throw new DomainException("INVALID_LYRICS_REQUEST","修改要求不能超过1000字");
-        String hash=fingerprint(expectedVersion+"\n"+language+"\n"+requirements+"\n"+(baseRevisionId==null?"":baseRevisionId));
+        String hash=fingerprint(expectedVersion+"\n"+language+"\n"+requirements+"\n"+(baseRevisionId==null?"":baseRevisionId)+structure.instruction());
         var prior=requests.find(work,key);
         if(prior.isPresent()){
             if(prior.get().requestHash()!=null&&!prior.get().requestHash().equals(hash))throw new DomainException("REQUEST_KEY_CONFLICT","该请求标识已用于其他创作要求，请刷新版本列表后重试");
@@ -39,11 +46,16 @@ public final class LyricsCompositionService {
         String previous=baseRevisionId==null?"":lyrics.get(owner,work,baseRevisionId).lyrics();
         if(!requests.claim(owner,work,key,hash))throw new DomainException("LYRICS_REQUEST_PENDING","这次歌词请求已处理或仍在确认中，请先刷新歌词版本，避免重复提交");
         try{
-            var draft=writer.write(snapshot,language,requirements,previous);
+            var direction=settings==null?null:settings.resolve(owner,snapshot);
+            var draft=writer.write(snapshot,language,requirements+structure.instruction(),previous,direction==null?snapshot.style():direction.style());
             if(works.get(owner,work).version()!=expectedVersion)throw new DomainException("WORK_VERSION_CONFLICT","作品已修改，请重新载入后保存歌词");
             if(draft.title()==null||draft.title().isBlank()||draft.title().length()>80||draft.lyrics()==null||draft.lyrics().isBlank()||draft.lyrics().length()>5000)throw new DomainException("LYRICS_RESPONSE_INVALID","歌词生成结果不完整，请稍后重新发起");
+            structure.validate(draft.lyrics());
             var revision=new LyricsApi.Revision(UUID.randomUUID().toString(),work,expectedVersion,draft.title().trim(),draft.lyrics(),"DEEPSEEK",false,Instant.now());
-            requests.completeWithRevision(work,key,revision.id(),()->revisions.insert(revision));return lyrics.get(owner,work,revision.id());
+            requests.completeWithRevision(work,key,revision.id(),()->{
+                revisions.insert(revision);
+                if(plans!=null&&draft.plan()!=null)plans.save(work,revision.id(),com.qingfeng.music.settings.CreativePlan.sourceHash(snapshot),draft.plan());
+            });return lyrics.get(owner,work,revision.id());
         }catch(RuntimeException error){
             String code=error instanceof DomainException domain?domain.code():"LYRICS_INTERNAL_ERROR";
             requests.failed(work,key,code);

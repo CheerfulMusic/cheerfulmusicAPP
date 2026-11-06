@@ -16,6 +16,8 @@ public final class GenerationWorker {
     private final Duration lease;
     private final int maxArchiveAttempts;
     private SectionEditRepository edits;
+    private AudioCandidates candidates;
+    public GenerationWorker withCandidates(AudioCandidates value){candidates=value;return this;}
     private com.qingfeng.music.settings.MusicSettings settings;
     public GenerationWorker withSettings(com.qingfeng.music.settings.MusicSettings value){settings=value;return this;}
     public GenerationWorker withSectionEdits(SectionEditRepository edits){this.edits=edits;return this;}
@@ -89,6 +91,7 @@ public final class GenerationWorker {
             else if (result.status()==GenerationStatus.SAVING || result.status()==GenerationStatus.SUCCEEDED) {
                 if (result.temporaryAudioUrl()==null || result.temporaryAudioUrl().length()>4096) throw new IllegalStateException("缺少音频地址");
                 if(edits!=null&&result.audioInfo()!=null)edits.recordAudio(task.id(),result.audioInfo());
+                if(candidates!=null&&(edits==null||edits.edit(task.id()).isEmpty()))candidates.remember(task.id(),result.candidates());
                 repository.saving(task.id(),token,result.temporaryAudioUrl(),now());
             } else repository.running(task.id(),token,0,null,now(),now().plusSeconds(10));
             repository.finishAttempt(attempt,"COMPLETED",null,now());
@@ -102,14 +105,23 @@ public final class GenerationWorker {
     private void save(ExecutionRepository.Execution execution) {
         var task=execution.task(); String token=execution.leaseToken();
         String attempt=repository.attempt(task.id(),"ARCHIVE",now());
-        try (var input=downloader.open(execution.audioUrl())) {
-            String asset=archive.store(task.id(),task.workId(),input);
+        try {
+            String asset=null;
+            var tracks=candidates==null?java.util.List.<AudioCandidates.Candidate>of():candidates.get(task.id());
+            if(tracks.isEmpty()){
+                try(var input=downloader.open(execution.audioUrl())){asset=archive.store(task.id(),task.workId(),input);}
+            }else for(var track:tracks){
+                String saved=archive.existingCandidate(task.id(),track.key()).orElse(null);
+                if(saved==null)try(var input=downloader.open(track.audio().audioUrl())){saved=archive.storeCandidate(task.id(),task.workId(),track.key(),track.audio(),input);}
+                if(track.key().equals("primary"))asset=saved;
+            }
+            if(asset==null)throw new IllegalStateException("主候选音频未保存");
             repository.succeeded(task.id(),token,asset,now());
             repository.finishAttempt(attempt,"COMPLETED",null,now());
         } catch (Exception error) {
             // 临时下载地址可能已过期。只读查询可刷新地址，绝不重新提交生成。
             if(error instanceof java.io.IOException && execution.providerTaskId()!=null){
-                try{var latest=provider.query(execution.providerTaskId());if(latest!=null&&execution.providerTaskId().equals(latest.providerTaskId())&&latest.temporaryAudioUrl()!=null&&latest.temporaryAudioUrl().length()<=4096&&(latest.status()==GenerationStatus.SAVING||latest.status()==GenerationStatus.SUCCEEDED)){if(edits!=null&&latest.audioInfo()!=null)edits.recordAudio(task.id(),latest.audioInfo());repository.refreshAudioUrl(task.id(),token,latest.temporaryAudioUrl());}}
+                try{var latest=provider.query(execution.providerTaskId());if(latest!=null&&execution.providerTaskId().equals(latest.providerTaskId())&&latest.temporaryAudioUrl()!=null&&latest.temporaryAudioUrl().length()<=4096&&(latest.status()==GenerationStatus.SAVING||latest.status()==GenerationStatus.SUCCEEDED)){if(edits!=null&&latest.audioInfo()!=null)edits.recordAudio(task.id(),latest.audioInfo());if(candidates!=null&&!candidates.get(task.id()).isEmpty())candidates.remember(task.id(),latest.candidates());repository.refreshAudioUrl(task.id(),token,latest.temporaryAudioUrl());}}
                 catch(RuntimeException ignored){/* 保留失败状态与已有外部任务标识，稍后只重试归档。 */}
             }
             int attempts=execution.archiveAttempts()+1;

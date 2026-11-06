@@ -10,7 +10,10 @@ public interface MusicSettings {
     record Group(String id,String zh,String en,int max,List<Option> options){}
     record Recipe(String id,String zh,String en,Map<String,List<String>> choices){}
     record Catalog(int version,List<Group> groups,List<Recipe> recipes){}
-    record Direction(Preferences preferences,String style,String negativeTags,String summaryZh,String summaryEn,int catalogVersion){}
+    record Direction(Preferences preferences,String style,String negativeTags,String summaryZh,String summaryEn,int catalogVersion,CreativePlan creativePlan){
+        public Direction(Preferences preferences,String style,String negativeTags,String zh,String en,int version){this(preferences,style,negativeTags,zh,en,version,null);}
+        public String effectiveVoice(String voice){return voice.equals("AUTO")&&creativePlan!=null?creativePlan.vocalGender():voice;}
+    }
     record View(Work work,Direction direction){}
     record Saved(String style,String vocalGender,Preferences preferences){}
     interface Repository {
@@ -25,6 +28,7 @@ public interface MusicSettings {
     View get(String owner,String work);
     View save(String owner,String work,long expectedVersion,Preferences preferences);
     Direction resolve(String owner,Work work);
+    default Direction forGeneration(String owner,Work work){return resolve(owner,work);}
     void snapshot(String task,Direction direction);
     Optional<Direction> frozen(String work,String task);
     Optional<Direction> task(String owner,String work,String task);

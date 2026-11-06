@@ -12,7 +12,8 @@ public interface MediaApi {
     default Selection select(String owner,String work,String asset,long version){throw new UnsupportedOperationException();}
     default void keepOriginal(String owner,String work,String asset){}
     record Selection(String assetId,long version,Asset asset){}
-    record Asset(String id,String workId,String origin,String contentType,long byteSize,String sha256,Instant createdAt,boolean sectionEdit) {
+    record Asset(String id,String workId,String origin,String contentType,long byteSize,String sha256,Instant createdAt,boolean sectionEdit,String generationTaskId,String candidateKey) {
+        public Asset(String id,String work,String origin,String type,long bytes,String sha,Instant at,boolean sectionEdit){this(id,work,origin,type,bytes,sha,at,sectionEdit,null,null);}
         public Asset(String id,String work,String origin,String type,long bytes,String sha,Instant at){this(id,work,origin,type,bytes,sha,at,false);}
     }
     record Content(long size,String contentType,String filename,Source source) {}

@@ -19,8 +19,14 @@ public final class DeepSeekLyricsWriter implements LyricsWriter {
         return write(work,language,"","");
     }
     public Draft write(WorkApi.Work work,String language,String instructions,String previousLyrics){
+        return write(work,language,instructions,previousLyrics,"");
+    }
+    public Draft write(WorkApi.Work work,String language,String instructions,String previousLyrics,String musicDirection){
         String system=LyricsWritingPrompt.system(language);
-        String context=json.writeValueAsString(Map.of("recipient",work.recipient(),"occasion",work.occasion(),"story",work.story(),"message",work.message(),"style",work.style(),"preferredTitle",work.title(),"revisionInstructions",instructions,"previousLyrics",previousLyrics));
+        var material=new LinkedHashMap<String,Object>();
+        material.putAll(Map.of("recipient",work.recipient(),"occasion",work.occasion(),"story",work.story(),"message",work.message(),"style",work.style(),"preferredTitle",work.title(),"revisionInstructions",instructions,"previousLyrics",previousLyrics));
+        material.put("musicDirection",musicDirection);material.put("vocalGender",work.vocalGender());
+        String context=json.writeValueAsString(material);
         String body=json.writeValueAsString(Map.of("model",model,"messages",List.of(Map.of("role","system","content",system),Map.of("role","user","content",context)),"response_format",Map.of("type","json_object"),"thinking",Map.of("type","disabled"),"max_tokens",2400,"stream",false));
         try{
             var request=HttpRequest.newBuilder(endpoint).timeout(Duration.ofSeconds(90)).header("Authorization","Bearer "+key).header("Content-Type","application/json").POST(HttpRequest.BodyPublishers.ofString(body)).build();
@@ -32,7 +38,9 @@ public final class DeepSeekLyricsWriter implements LyricsWriter {
             var choice=json.readTree(response.body()).path("choices").path(0);
             if(!choice.path("finish_reason").asText().equals("stop"))throw new DomainException("LYRICS_RESPONSE_INVALID","歌词生成结果不完整，请稍后重新发起");
             var result=json.readTree(choice.path("message").path("content").asText());
-            return new Draft(result.path("title").asText(""),result.path("lyrics").asText(""));
+            var plan=result.path("plan");
+            return new Draft(result.path("title").asText(""),result.path("lyrics").asText(""),
+                plan.isObject()?json.treeToValue(plan,com.qingfeng.music.settings.CreativePlan.class):null);
         }catch(InterruptedException interrupted){Thread.currentThread().interrupt();throw new DomainException("LYRICS_REQUEST_INTERRUPTED","歌词编写已中断，可以重新编写；已有内容仍会保留。");}
         catch(java.net.http.HttpTimeoutException timeout){throw new DomainException("LYRICS_PROVIDER_TIMEOUT","歌词编写超时，可以重新编写；已有内容仍会保留。");}
         catch(java.io.IOException network){throw new DomainException("LYRICS_PROVIDER_NETWORK_ERROR","歌词服务连接中断，可以稍后重新编写。");}
