@@ -55,15 +55,15 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', outside))
 </script>
 <template>
   <div ref="root" class="user-account" @focusout="focusOut" @keydown="keyboard">
-    <button v-if="!authenticated" type="button" class="account-login" :class="{ 'is-active': route.name === 'identity' }" :aria-label="t('登录 / 账号')" @click="showLoginDialog">
-      <NavIcon name="account" /><span class="account-login-full">{{ t('登录 / 账号') }}</span><span class="account-login-short">{{ t('账号') }}</span>
+    <button v-if="!authenticated" type="button" class="account-login" :class="{ 'is-active': route.name === 'identity' }" @click="showLoginDialog">
+      {{ t('登录/注册') }}
     </button>
     <template v-else>
       <button ref="trigger" type="button" class="account-trigger" :class="{ 'is-active': route.name === 'identity' }" :aria-label="t('账号与登录')" :aria-expanded="open" aria-controls="user-account-panel" @click="toggle" @keydown.down.prevent="!open && toggle()">
         <span class="account-trigger-avatar" aria-hidden="true">{{ initials }}</span><span class="account-trigger-name">{{ displayName }}</span><svg class="account-chevron" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m4 6 4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </button>
       <div v-if="open" id="user-account-panel" ref="panel" class="account-popover">
-        <div class="account-popover-identity"><strong>{{ displayName }}</strong><span v-if="contact">{{ contact }}</span><small>{{ t(logtoState.authenticated ? 'Logto 账号' : 'Google 账号') }}</small></div>
+        <div class="account-popover-identity"><strong>{{ displayName }}</strong><span v-if="contact">{{ contact }}</span><small>{{ t(logtoState.authenticated ? '音乐账号' : 'Google 账号') }}</small></div>
         <nav :aria-label="t('账号菜单')">
           <RouterLink to="/account"><NavIcon name="account" />{{ t('账号与登录') }}</RouterLink>
           <RouterLink to="/works"><NavIcon name="music" />{{ t('我的音乐') }}</RouterLink>
@@ -76,10 +76,11 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', outside))
 </template>
 <style scoped>
 .user-account { position: relative; flex: 0 0 auto; }
-.account-login, .account-trigger { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 40px; padding: 6px 10px; border: 1px solid #333944; border-radius: 24px; background: #14171d; color: #d7dce5; font-size: 12px; white-space: nowrap; }
-.account-login:hover, .account-trigger:hover, .account-login.is-active, .account-trigger.is-active { color: var(--ink); background: #20242c; border-color: #616976; }
-.account-login > svg { width: 17px; height: 17px; }
-.account-login-short { display: none; }
+.account-login { display:inline-flex; align-items:center; justify-content:center; min-height:44px; min-width:138px; padding:8px 24px; border:0; border-radius:0; background:#cfff00; color:#080b00; font-size:16px; font-weight:500; white-space:nowrap; }
+.account-login:hover, .account-login.is-active { background:#c3ed00; color:#080b00; }
+.account-login:focus-visible { outline:2px solid #101300; outline-offset:3px; }
+.account-trigger { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 40px; padding: 6px 10px; border: 1px solid #333944; border-radius: 24px; background: #14171d; color: #d7dce5; font-size: 12px; white-space: nowrap; }
+.account-trigger:hover, .account-trigger.is-active { color: var(--ink); background: #20242c; border-color: #616976; }
 .account-trigger { padding: 4px 9px 4px 4px; }
 .account-trigger-avatar { display: grid; place-items: center; width: 30px; height: 30px; flex: 0 0 auto; border: 1px solid #f294784f; border-radius: 50%; background: linear-gradient(145deg, #ff987b, #b7352b); color: #fff3e9; font-size: 11px; font-weight: 650; }
 .account-trigger-name { max-width: 95px; overflow: hidden; text-overflow: ellipsis; }
@@ -97,9 +98,8 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', outside))
 .account-sign-out:disabled { opacity: .5; }
 .account-menu-error { margin: 6px 10px; color: #ffaca2; font-size: 11px; line-height: 1.7; }
 @media (max-width: 600px) {
-  .account-trigger-name, .account-login-full { display: none; }
-  .account-login-short { display: inline; }
-  .account-login { gap: 5px; padding-inline: 8px; font-size: 11px; }
+  .account-trigger-name { display: none; }
+  .account-login { min-width:90px; min-height:38px; padding:7px 10px; font-size:12px; }
   .account-trigger { gap: 4px; padding-right: 7px; }
   .account-popover { position: fixed; top: 80px; right: 16px; }
 }

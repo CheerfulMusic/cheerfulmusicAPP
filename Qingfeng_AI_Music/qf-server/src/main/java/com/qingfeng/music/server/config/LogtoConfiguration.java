@@ -14,6 +14,9 @@ import org.springframework.security.oauth2.jwt.JwtDecoderFactory;
 @Profile({"mysql","test"})
 @ConditionalOnProperty(prefix="qingfeng.auth.logto",name="enabled",havingValue="true")
 public class LogtoConfiguration {
+    @Bean LogtoNativeClient logtoNativeClient(LogtoOAuthFlow flow, JwtDecoderFactory<ClientRegistration> decoders){
+        return new LogtoNativeClient(flow,decoders);
+    }
     /** Logto signs ID tokens with ES384; legacy Google sign-in still uses RS256. */
     @Bean JwtDecoderFactory<ClientRegistration> idTokenDecoderFactory(){
         var factory=new OidcIdTokenDecoderFactory();

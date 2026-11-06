@@ -109,6 +109,7 @@ public final class LogtoOAuthFlow {
         return authorization.getAuthorizationRequestUri();
     }
     public boolean supportsApple(){return appleIdpName!=null;}
+    ClientRegistration clientRegistration(){return clients.findByRegistrationId("logto");}
     /** Only configured, validated origins contribute to the Account Center redirect. */
     public URI accountCenterUri(){
         URI issuerUri=URI.create(issuer);

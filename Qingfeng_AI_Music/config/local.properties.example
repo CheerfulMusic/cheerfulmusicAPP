@@ -12,6 +12,8 @@
 # 邮件、短信连接器完成真实发送测试后，再分别将开关设为 true。
 # qingfeng.auth.logto.email-enabled=false
 # qingfeng.auth.logto.phone-enabled=false
+# 仅在国际短信渠道配置并验证后开启；阿里云 MAS 仅支持中国大陆 +86。
+# qingfeng.auth.logto.phone-international-enabled=false
 # Apple 连接器完成登录测试后，填写其 Logto IdP 名称（通常为 apple），不是连接器 UUID。
 # qingfeng.auth.logto.apple-idp-name=
 # 先在本地 MySQL 创建独立数据库 qingfeng_music，禁止指向其他业务库。
