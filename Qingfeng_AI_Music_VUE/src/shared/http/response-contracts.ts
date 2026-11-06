@@ -44,6 +44,8 @@ export function validResponse(path:string,method:string,value:unknown):boolean{
  if(path==='public/system/info')return obj(value)&&text(value.name)&&text(value.version)&&obj(value.capabilities)&&['lyricsGeneration','musicGeneration','giftSharing','workPersistence'].every(k=>typeof (value.capabilities as Row)[k]==='boolean')
  if(path==='app/identity/recovery')return obj(value)&&(method==='GET'?typeof value.configured==='boolean':text(value.code))
  if(path==='app/credits')return method==='GET'&&obj(value)&&typeof value.enabled==='boolean'&&num(value.balance)&&num(value.musicCost)
+ if(path==='app/referrals')return method==='GET'&&obj(value)&&text(value.code)
+ if(path==='app/referrals/accept')return method==='POST'&&obj(value)&&value.accepted===true
  if(path==='app/payments/catalog'||path==='app/paypal/catalog')return method==='GET'&&obj(value)&&typeof value.enabled==='boolean'&&list(value.packages,p=>obj(p)&&text(p.id)&&str(p.title)&&num(p.amount)&&Number(p.amount)>0&&text(p.currency)&&num(p.credits)&&Number(p.credits)>0)
  if(path==='app/paypal/sdk-config')return method==='GET'&&obj(value)&&typeof value.enabled==='boolean'&&str(value.clientId)&&['sandbox','production'].includes(String(value.environment))&&(!value.enabled||text(value.clientId))
  if(path==='app/payments/orders'||path==='app/paypal/orders')return method==='POST'?obj(value)&&text(value.orderId)&&text(value.checkoutUrl)&&(path!=='app/paypal/orders'||value.paypalOrderId===undefined||text(value.paypalOrderId)):method==='GET'&&obj(value)&&list(value.orders,o=>obj(o)&&text(o.orderId)&&['CREATING','PENDING','PAID'].includes(String(o.status))&&num(o.credits)&&text(o.createdAt))

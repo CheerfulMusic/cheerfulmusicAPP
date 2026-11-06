@@ -39,7 +39,7 @@ async function load() {
       { id: `standard-${currency}`, title: '300 Credits', amount: 12.99, currency, credits: 300 },
       { id: `plus-${currency}`, title: '700 Credits', amount: 24.99, currency, credits: 700 },
     ])
-    credits.value = { enabled: true, balance: 0, musicCost: 10 }
+    credits.value = { enabled: true, balance: 0, musicCost: 15 }
     catalogs.value = { airwallex: { enabled: false, packages: [] }, paypal: { enabled: true, packages } }
     catalogError.value = false; loading.value = false
     return

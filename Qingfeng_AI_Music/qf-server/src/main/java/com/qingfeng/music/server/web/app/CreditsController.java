@@ -12,5 +12,5 @@ public class CreditsController {
     private final CreditsLedger credits; private final Environment env;
     public CreditsController(CreditsLedger credits, Environment env){this.credits=credits;this.env=env;}
     public record View(long balance,boolean enabled,long musicCost) {}
-    @GetMapping public View get(@AuthenticationPrincipal CreatorPrincipal creator){return new View(credits.balance(creator.id()),env.getProperty("qingfeng.credits.enabled",Boolean.class,false),env.getProperty("qingfeng.credits.music-cost",Long.class,10L));}
+    @GetMapping public View get(@AuthenticationPrincipal CreatorPrincipal creator){return new View(credits.balance(creator.id()),env.getProperty("qingfeng.credits.enabled",Boolean.class,true),env.getProperty("qingfeng.credits.music-cost",Long.class,15L));}
 }
