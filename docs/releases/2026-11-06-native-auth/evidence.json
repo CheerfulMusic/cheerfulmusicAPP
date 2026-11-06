@@ -135,5 +135,35 @@
   "browserVisualQaPerformed": false,
   "browserVisualQaUnavailableReason": "Computer Use stopped because the Windows browser URL could not be reliably determined.",
   "backupArchivesVerified": true,
-  "realPaidGenerationPerformed": false
+  "realPaidGenerationPerformed": false,
+  "localRealProviderOtpFallback": {
+    "productionAccessed": false,
+    "smtpVerifiedMailpit": true,
+    "checks": [
+      "new verified identifier returns user_not_exist",
+      "same verified ID survives SignIn to Register transition",
+      "new passwordless account completes OIDC with signed token",
+      "only one isolated Mailpit email"
+    ],
+    "isolatedTestMailbox": "test-8cd4a4e9f17f432c9e7271432616ebff@cheerfulmusic.test",
+    "scenario": "OTP SignIn auto-register fallback",
+    "lastApiStep": "POST /api/experience/submit",
+    "negativeResults": {
+      "new verified identifier returns user_not_exist": {
+        "status": 404,
+        "code": "user.user_not_exist"
+      }
+    },
+    "nonJsonApiResponses": [
+      {
+        "step": "POST /api/experience/identification",
+        "status": 201,
+        "contentType": "text/plain; charset=utf-8",
+        "standardStatusBody": "Created"
+      }
+    ],
+    "idTokenAlgorithm": "ES384",
+    "signedTokenVerified": true,
+    "passed": true
+  }
 }
