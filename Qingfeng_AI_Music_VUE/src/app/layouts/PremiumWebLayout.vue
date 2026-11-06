@@ -9,6 +9,8 @@ import NavIcon from '../../shared/ui/NavIcon.vue'
 import LanguageSwitcher from '../../shared/i18n/LanguageSwitcher.vue'
 import UserAccountMenu from '../../shared/ui/UserAccountMenu.vue'
 import { accountState, ensureAccountState, refreshAccountState } from '../../shared/identity/account-state'
+import { logtoState, refreshLogtoState } from '../../shared/identity/logto-state'
+import { showLoginDialog } from '../../shared/identity/login-dialog'
 
 const route = useRoute(), player = usePlayer()
 const screen = window.matchMedia('(max-width: 1200px)')
@@ -40,12 +42,12 @@ watch(menuOpen, async value => {
 })
 watch(() => route.fullPath, () => { menuOpen.value = false })
 watch(() => !!player.current, value => document.body.classList.toggle('has-preview', value), { immediate: true })
-function refreshAccount() { void refreshAccountState().catch(() => undefined) }
+function refreshAccount() { void refreshAccountState().catch(() => undefined); void refreshLogtoState().catch(() => undefined) }
 function visibleAccount() { if (document.visibilityState === 'visible') refreshAccount() }
 onMounted(() => {
   screen.addEventListener('change', resize); document.addEventListener('keydown', onKey)
   // The account page owns its initial read after ensuring the creator session.
-  if (route.name !== 'identity') void ensureAccountState().catch(() => undefined)
+  if (route.name !== 'identity') { void ensureAccountState().catch(() => undefined); void refreshLogtoState().catch(() => undefined) }
   window.addEventListener('qingfeng:identity-changed', refreshAccount)
   document.addEventListener('visibilitychange', visibleAccount)
 })
@@ -77,7 +79,7 @@ onBeforeUnmount(() => {
       <button class="navigation-backdrop" :aria-label="t('关闭导航')" @click="closeMenu"></button>
       <section id="consumer-navigation" ref="menu" class="consumer-mobile-menu" role="dialog" :aria-label="t('音乐网站导航')" aria-modal="true">
         <div class="consumer-menu-heading"><strong>{{ t('想从哪里开始？') }}</strong><button class="consumer-menu-close" :aria-label="t('关闭导航')" @click="closeMenu"><NavIcon name="close"/></button></div>
-        <nav :aria-label="t('手机导航')"><RouterLink v-for="item in navigation" :key="item.to" :to="item.to" :class="{'is-active':isActive(item.to)}"><NavIcon :name="item.icon"/>{{ t(item.label) }}</RouterLink><RouterLink to="/works"><NavIcon name="music"/>{{ t('我的音乐') }}</RouterLink><RouterLink to="/account" :class="{'is-active':route.name==='identity'}"><NavIcon name="account"/>{{ accountState.authenticated ? t('账号与登录') : t('登录 / 账号') }}</RouterLink></nav>
+        <nav :aria-label="t('手机导航')"><RouterLink v-for="item in navigation" :key="item.to" :to="item.to" :class="{'is-active':isActive(item.to)}"><NavIcon :name="item.icon"/>{{ t(item.label) }}</RouterLink><RouterLink to="/works"><NavIcon name="music"/>{{ t('我的音乐') }}</RouterLink><RouterLink v-if="accountState.authenticated || logtoState.authenticated" to="/account" :class="{'is-active':route.name==='identity'}"><NavIcon name="account"/>{{ t('账号与登录') }}</RouterLink><button v-else type="button" class="mobile-login-link" @click="menuOpen=false; showLoginDialog()"><NavIcon name="account"/>{{ t('登录 / 账号') }}</button></nav>
         <RouterLink class="consumer-menu-create" to="/create">{{ t('为重要的人，制作一首歌') }} <NavIcon name="arrow"/></RouterLink>
         <RouterLink class="consumer-recovery-link" to="/recharge">{{ locale === 'en' ? 'Recharge credits' : '充值创作积分' }}</RouterLink>
         <RouterLink class="consumer-recovery-link" to="/account">{{ t('找回之前的音乐') }}</RouterLink>
@@ -94,6 +96,9 @@ onBeforeUnmount(() => {
 <style scoped>
 .consumer-recharge { color:#ee5741; font-size:13px; font-weight:700; text-decoration:none; white-space:nowrap; }
 .consumer-login { border:0; cursor:pointer; font-family:inherit; }
+.mobile-login-link { display:flex; align-items:center; gap:12px; width:100%; padding:13px 14px; border-radius:10px; color:#665259; font-size:14px; text-align:left; }
+.mobile-login-link:hover { background:var(--accent-soft); color:var(--accent-text); }
+.mobile-login-link svg { width:18px; height:18px; }
 @media(max-width:600px) {
   .consumer-login { display:inline-flex; padding:9px 12px; min-height:37px; font-size:11px; }
   .home-light-shell .consumer-login { min-width:0; }

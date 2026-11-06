@@ -33,4 +33,10 @@ class PayPalCheckoutGatewayTest {
         response="{\"verification_status\":\"FAILURE\"}";assertFalse(gateway.verifyWebhook(h,"{}".getBytes(StandardCharsets.UTF_8)));
         assertFalse(gateway.verifyWebhook(null,"{}".getBytes(StandardCharsets.UTF_8)));
     }
+    @Test void resumeAcceptsOnlyPaypalSandboxApprovalUrl() {
+        response="{\"id\":\"ORDER123\",\"status\":\"CREATED\",\"purchase_units\":[{\"custom_id\":\"our-order\",\"payee\":{\"merchant_id\":\"MERCHANT1\"},\"amount\":{\"value\":\"4.99\",\"currency_code\":\"GBP\"}}],\"links\":[{\"rel\":\"payer-action\",\"href\":\"https://www.sandbox.paypal.com/checkoutnow?token=ORDER123\"}]}";
+        assertTrue(gateway.retrieveCheckout("ORDER123").approvalUrl().startsWith("https://www.sandbox.paypal.com/"));
+        response=response.replace("www.sandbox.paypal.com","evil.example");
+        assertThrows(IllegalStateException.class,()->gateway.retrieveCheckout("ORDER123"));
+    }
 }

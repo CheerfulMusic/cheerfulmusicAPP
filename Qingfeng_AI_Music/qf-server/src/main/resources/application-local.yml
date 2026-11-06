@@ -1,5 +1,10 @@
 # 无数据库本地启动配置；业务持久化能力尚未开启。
 spring:
+  config:
+    import:
+      - optional:file:./Qingfeng_AI_Music/config/invite-gate.local.properties
+      - optional:file:../config/invite-gate.local.properties
+      - optional:file:./config/invite-gate.local.properties
   flyway:
     enabled: false
   autoconfigure:

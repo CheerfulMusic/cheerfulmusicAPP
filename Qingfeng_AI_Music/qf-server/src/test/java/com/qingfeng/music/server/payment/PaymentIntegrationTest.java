@@ -63,7 +63,8 @@ class PaymentIntegrationTest {
    assertThrows(org.springframework.web.server.ResponseStatusException.class,()->controller.order(new CreatorPrincipal(owner),otherId));
  }
  @Test void concurrentReservationsAllowOnlyOneUnresolvedOrder() throws Exception {
-   String owner=identity.create().creatorId();
+   var creator=identity.create(); String owner=creator.creatorId();
+   identity.signInWithGoogle(creator.token(),owner,java.util.UUID.randomUUID().toString(),null,null);
    var start=new java.util.concurrent.CountDownLatch(1);
    var executor=java.util.concurrent.Executors.newFixedThreadPool(2);
    java.util.concurrent.Callable<Boolean> create=()->{start.await();try {payments.reserve(owner,java.util.UUID.randomUUID().toString(),"p",new java.math.BigDecimal("1.00"),"USD",10);return true;} catch(org.springframework.web.server.ResponseStatusException e) {assertEquals(409,e.getStatusCode().value());return false;}};

@@ -18,6 +18,7 @@ public interface IdentityMapper {
     void bindGoogle(@Param("id")String id,@Param("hash")String hash,@Param("email")String email,@Param("name")String name,@Param("now")Instant now);
     @Update("UPDATE creator_google_identity SET email=#{email},display_name=#{name},updated_at=#{now} WHERE subject_hash=#{hash}")
     void updateGoogle(@Param("hash")String hash,@Param("email")String email,@Param("name")String name,@Param("now")Instant now);
-    @Select("SELECT (SELECT COUNT(*) FROM music_work WHERE owner_id=#{id}) + (SELECT COUNT(*) FROM model_usage_reservation WHERE owner_id=#{id}) + (SELECT COUNT(*) FROM credit_ledger WHERE owner_id=#{id})") long contentCount(String id);
+    @Select("SELECT (SELECT COUNT(*) FROM music_work WHERE owner_id=#{id}) + (SELECT COUNT(*) FROM model_usage_reservation WHERE owner_id=#{id}) + (SELECT COUNT(*) FROM credit_ledger WHERE owner_id=#{id}) + (SELECT COUNT(*) FROM payment_order WHERE creator_id=#{id})") long contentCount(String id);
+    @Select("SELECT (SELECT COUNT(*) FROM creator_oidc_identity WHERE creator_id=#{id}) + (SELECT COUNT(*) FROM creator_authing_identity WHERE creator_id=#{id})") long otherIdentityCount(String id);
     @Delete("DELETE FROM creator_session WHERE token_hash=#{hash}") void deleteSession(String hash);
 }

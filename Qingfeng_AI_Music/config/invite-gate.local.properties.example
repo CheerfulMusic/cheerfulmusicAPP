@@ -1,0 +1,13 @@
+# 本地启用内测门禁时，复制为 invite-gate.local.properties（已被 .gitignore 排除）。
+# 生产使用 /etc/qingfeng-music/invite-gate.properties，切勿提交真实邀请码或签名密钥。
+qingfeng.invite-gate.enabled=false
+qingfeng.invite-gate.codes=
+qingfeng.invite-gate.signing-key=
+qingfeng.invite-gate.session-ttl=7d
+qingfeng.invite-gate.attempts-per-minute=10
+qingfeng.invite-gate.secure-cookie=false
+
+# 手机/邮箱验证码登录由 Logto 提供，默认关闭；具备资质后再开启。
+qingfeng.auth.logto.enabled=false
+qingfeng.auth.logto.email-enabled=false
+qingfeng.auth.logto.phone-enabled=false

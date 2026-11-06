@@ -3,6 +3,9 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { t } from '../i18n'
 import { accountLoggingOut, accountState, logoutAccount } from '../identity/account-state'
+import { logtoState } from '../identity/logto-state'
+import { maskedPhoneLabel } from '../identity/phone-label'
+import { showLoginDialog } from '../identity/login-dialog'
 import NavIcon from './NavIcon.vue'
 
 const props = defineProps<{ navigationOpen?: boolean }>()
@@ -10,7 +13,11 @@ const emit = defineEmits<{ opened: [] }>()
 const route = useRoute()
 const root = ref<HTMLElement>(), trigger = ref<HTMLButtonElement>(), panel = ref<HTMLElement>()
 const open = ref(false), error = ref('')
-const displayName = computed(() => accountState.value.name?.trim() || accountState.value.email?.split('@')[0] || t('我的账号'))
+const authenticated = computed(() => accountState.value.authenticated || logtoState.value.authenticated)
+const contact = computed(() => logtoState.value.authenticated
+  ? logtoState.value.email || maskedPhoneLabel(logtoState.value.phoneMasked)
+  : accountState.value.email)
+const displayName = computed(() => (logtoState.value.authenticated ? logtoState.value.name?.trim() : accountState.value.name?.trim()) || contact.value?.split('@')[0] || t('我的账号'))
 const initials = computed(() => displayName.value.split(/\s+/).slice(0, 2).map(part => Array.from(part)[0]).join('').toLocaleUpperCase())
 
 async function close(returnFocus = false) {
@@ -42,21 +49,21 @@ async function signOut() {
 }
 watch(() => route.fullPath, () => { void close() })
 watch(() => props.navigationOpen, value => { if (value) void close() })
-watch(() => accountState.value.authenticated, value => { if (!value) void close() })
+watch(authenticated, value => { if (!value) void close() })
 onMounted(() => document.addEventListener('pointerdown', outside))
 onBeforeUnmount(() => document.removeEventListener('pointerdown', outside))
 </script>
 <template>
   <div ref="root" class="user-account" @focusout="focusOut" @keydown="keyboard">
-    <RouterLink v-if="!accountState.authenticated" class="account-login" :class="{ 'is-active': route.name === 'identity' }" to="/account" :aria-label="t('登录 / 账号')">
+    <button v-if="!authenticated" type="button" class="account-login" :class="{ 'is-active': route.name === 'identity' }" :aria-label="t('登录 / 账号')" @click="showLoginDialog">
       <NavIcon name="account" /><span class="account-login-full">{{ t('登录 / 账号') }}</span><span class="account-login-short">{{ t('账号') }}</span>
-    </RouterLink>
+    </button>
     <template v-else>
       <button ref="trigger" type="button" class="account-trigger" :class="{ 'is-active': route.name === 'identity' }" :aria-label="t('账号与登录')" :aria-expanded="open" aria-controls="user-account-panel" @click="toggle" @keydown.down.prevent="!open && toggle()">
         <span class="account-trigger-avatar" aria-hidden="true">{{ initials }}</span><span class="account-trigger-name">{{ displayName }}</span><svg class="account-chevron" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m4 6 4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </button>
       <div v-if="open" id="user-account-panel" ref="panel" class="account-popover">
-        <div class="account-popover-identity"><strong>{{ displayName }}</strong><span v-if="accountState.email">{{ accountState.email }}</span><small>{{ t('Google 账号') }}</small></div>
+        <div class="account-popover-identity"><strong>{{ displayName }}</strong><span v-if="contact">{{ contact }}</span><small>{{ t(logtoState.authenticated ? 'Logto 账号' : 'Google 账号') }}</small></div>
         <nav :aria-label="t('账号菜单')">
           <RouterLink to="/account"><NavIcon name="account" />{{ t('账号与登录') }}</RouterLink>
           <RouterLink to="/works"><NavIcon name="music" />{{ t('我的音乐') }}</RouterLink>

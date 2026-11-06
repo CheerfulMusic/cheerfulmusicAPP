@@ -2,6 +2,7 @@ import { readonly, ref } from 'vue'
 import type { GoogleIdentityStatus } from '../../modules/identity/api/google-login'
 import { ensureCreator, requestJson, resetCreatorSession } from '../http/api-client'
 import { usePlayer } from '../player/store'
+import { resetLogtoState } from './logto-state'
 
 const status = ref<GoogleIdentityStatus>({ enabled: false, authenticated: false })
 const loading = ref(false), loggingOut = ref(false)
@@ -51,6 +52,7 @@ export function logoutAccount(): Promise<void> {
     resetCreatorSession()
     player.reset()
     status.value = { enabled: status.value.enabled, authenticated: false }
+    resetLogtoState()
     loaded = true
     // Logout is already confirmed. A failed follow-up read must not restore stale account data.
     await refreshAccountState().catch(() => undefined)

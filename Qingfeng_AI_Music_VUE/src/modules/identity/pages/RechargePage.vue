@@ -3,13 +3,14 @@ import { computed, onMounted, ref, shallowRef } from 'vue'
 import { locale } from '../../../shared/i18n'
 import { currentCreatorId, ensureCreator, requestJson } from '../../../shared/http/api-client'
 import { accountState, refreshAccountState } from '../../../shared/identity/account-state'
+import { logtoState, refreshLogtoState } from '../../../shared/identity/logto-state'
 import { readPendingOrders, savePendingOrders } from '../model/payment-orders'
 import { preparePaypalCheckout, type PaypalCheckout, type PaypalSdkConfig } from '../api/paypal-sdk'
 
 type Pack = { id:string; title:string; amount:number; currency:string; credits:number }
 type Catalog = { enabled:boolean; packages:Pack[] }
 const en = computed(() => locale.value === 'en')
-const signedIn = computed(() => accountState.value.authenticated)
+const signedIn = computed(() => accountState.value.authenticated || logtoState.value.authenticated)
 const currency = ref<'GBP'|'USD'>('GBP'), selected = ref(300), busy = ref(false), error = ref('')
 const loading = ref(true), available = ref(false), catalog = ref<Pack[]>([]), blocked = ref(false), balance = ref<number|null>(null)
 const sdk = shallowRef<PaypalCheckout|null>(null)
@@ -23,7 +24,7 @@ const price = computed(() => tiers.value.find(t => t.credits===selected.value)?.
 async function refresh() {
   loading.value=true; error.value=''; blocked.value=false
   try {
-    await ensureCreator(); await refreshAccountState().catch(() => undefined)
+    await ensureCreator(); await Promise.all([refreshAccountState().catch(() => undefined), refreshLogtoState().catch(() => undefined)])
     const [c,b] = await Promise.allSettled([
       requestJson<Catalog>('app/paypal/catalog'),requestJson<{enabled:boolean;balance:number}>('app/credits')
     ])

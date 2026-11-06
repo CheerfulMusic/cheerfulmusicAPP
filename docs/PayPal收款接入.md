@@ -1,6 +1,6 @@
 # PayPal 收款接入进度
 
-充值入口为网站导航中的“充值”，路径 `/recharge`。该页面使用 PayPal 官方开源 `@paypal/paypal-js` V6；未配置商户时展示参考套餐并禁用付款。客户端只能获得公开的 client ID，交易仍由服务端创建、核验和捕获。本分支仅供测试；PayPal 正式环境保持禁用。
+充值入口为网站导航中的“充值”，路径 `/recharge`。该页面使用 PayPal 官方开源 `@paypal/paypal-js` V6；未配置商户时展示参考套餐并禁用付款。客户端只能获得公开的 client ID，交易仍由服务端创建、核验和捕获。PayPal 是否开放由环境配置控制。
 
 英国商户先直连 PayPal Checkout；信用卡或借记卡选项能否展示取决于商户资格、付款人和 PayPal 的配置。微信跨境支付不在 PayPal 直连范围，需另行开通相应渠道。
 
@@ -17,7 +17,7 @@
 
 **当前没有真实收款能力。**PayPal 后端固定不允许启用正式环境，默认关闭；尚未登录商户开发者平台，没有进行真实沙箱付款或验证账号的银行卡资格。创建订单结果不明时仍需人工核对；取消、过期、退款、拒付和异常对账尚未完成，禁止将现阶段用于生产销售。
 
-该分支包含 V15–V19 完整迁移链。V17 原样引入现有身份迁移，只创建 `creator_authing_identity` 表，不启用身份登录功能。上线前须备份数据库并确认当前 Flyway 版本、各迁移校验值；已有迁移不得修改。PayPal 正式环境仍保持禁用。
+该分支包含 V15–V20 完整迁移链。V17 原样引入现有身份迁移，只创建 `creator_authing_identity` 表，不启用身份登录功能。上线前须备份数据库并确认当前 Flyway 版本、各迁移校验值；已有迁移不得修改。正式环境启用前须完成商户与回调验收。
 
 ## 待商户配合
 
@@ -25,4 +25,4 @@
 2. 在服务端私有配置中设置沙箱凭证和商户 ID、webhook ID，配置对应的 HTTPS 回调并启用必要事件；先用独立测试数据库和沙箱买家完成端到端测试。
 3. 验证订单中断、重复通知、金额及币种不匹配、不同设备恢复、退款和争议；完成相关业务策略与实现后，才能评估正式环境上线。
 
-配置项为 `qingfeng.paypal.enabled`、`qingfeng.paypal.environment`、`qingfeng.paypal.client-id`、`qingfeng.paypal.client-secret`、`qingfeng.paypal.merchant-id` 和 `qingfeng.paypal.webhook-id`。回调为 `/api/public/paypal/webhook`；目前只处理并核对 `PAYMENT.CAPTURE.COMPLETED`，其他事件验签后返回失败以便重试，必须完成对应处理后再订阅。价格通过 `qingfeng.payments.prices.{gbp,usd}.{starter,standard,plus}` 调整。支付和积分扣费开关相互独立，当前购买要求绑定 Google 账号；Authing 身份尚未接入购买流程。
+配置项为 `qingfeng.paypal.enabled`、`qingfeng.paypal.environment`、`qingfeng.paypal.client-id`、`qingfeng.paypal.client-secret`、`qingfeng.paypal.merchant-id` 和 `qingfeng.paypal.webhook-id`。回调为 `/api/public/paypal/webhook`；目前只处理并核对 `PAYMENT.CAPTURE.COMPLETED`，其他事件验签后返回失败以便重试，必须完成对应处理后再订阅。价格通过 `qingfeng.payments.prices.{gbp,usd}.{starter,standard,plus}` 调整。支付和积分扣费开关相互独立，购买要求绑定 Google 或 Logto 账号。

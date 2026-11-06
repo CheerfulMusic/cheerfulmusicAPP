@@ -27,6 +27,7 @@ public class PayPalPaymentService {
     String provider(){return environment.equals("live")?"PAYPAL_LIVE":"PAYPAL_SANDBOX";}
     PayPalCheckoutGateway gateway(){return new PayPalCheckoutGateway(environment.equals("live")?PayPalCheckoutGateway.Environment.LIVE:PayPalCheckoutGateway.Environment.SANDBOX,clientId,clientSecret,merchantId,webhookId);}
     public Map<String,Object> catalog(){return Map.of("enabled",ready(),"packages",ready()?catalog.packages().stream().map(PaymentCatalog.Package::asMap).toList():List.of());}
+    /** The client ID is public; no server-side secret is returned to the browser. */
     public Map<String,Object> sdkConfig(){return Map.of("enabled",ready(),"clientId",ready()?clientId:"","environment",environment.equals("live")?"production":"sandbox");}
     public Map<String,Object> create(String owner,String packageId){
         if(!ready()) throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,"PayPal 尚未开放");
@@ -34,8 +35,8 @@ public class PayPalPaymentService {
         String id=UUID.randomUUID().toString(), type=provider();
         tx.executeWithoutResult(s->{
             if(db.queryForList("SELECT id FROM creator WHERE id=? FOR UPDATE",owner).isEmpty()) throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
-            Integer identity=db.queryForObject("SELECT COUNT(*) FROM creator_google_identity WHERE creator_id=?",Integer.class,owner);
-            if(identity==null||identity==0) throw new ResponseStatusException(HttpStatus.FORBIDDEN,"请先绑定 Google 账号");
+            Integer identity=db.queryForObject("SELECT (SELECT COUNT(*) FROM creator_google_identity WHERE creator_id=?) + (SELECT COUNT(*) FROM creator_oidc_identity WHERE creator_id=?)",Integer.class,owner,owner);
+            if(identity==null||identity==0) throw new ResponseStatusException(HttpStatus.FORBIDDEN,"请先登录账号");
             Integer pending=db.queryForObject("SELECT COUNT(*) FROM payment_order WHERE creator_id=? AND status IN ('CREATING','PENDING')",Integer.class,owner);
             if(pending!=null && pending>0) throw new ResponseStatusException(HttpStatus.CONFLICT,"已有待核对的订单");
             db.update("INSERT INTO payment_order(id,creator_id,package_id,amount,currency,credits,status,created_at,provider) VALUES(?,?,?,?,?,?,?,CURRENT_TIMESTAMP,?)",id,owner,p.id(),p.amount(),p.currency(),p.credits(),"CREATING",type);
@@ -48,8 +49,38 @@ public class PayPalPaymentService {
         var rows=db.queryForList("SELECT * FROM payment_order WHERE id=? AND creator_id=? AND provider=?",id,owner,provider());
         if(rows.isEmpty()) throw new ResponseStatusException(HttpStatus.NOT_FOUND); return rows.get(0);
     }
-    public Map<String,Object> order(String owner,String id){ var r=row(owner,id); return Map.of("orderId",id,"status",r.get("status"),"credits",r.get("credits")); }
+    public Map<String,Object> order(String owner,String id){
+        var r=row(owner,id);
+        String remote=(String)r.get("provider_link_id");
+        if(ready() && !"PAID".equals(r.get("status")) && remote!=null){
+            PayPalCheckoutGateway.Snapshot snapshot;
+            try { snapshot=gateway().retrieve(remote); }
+            catch (RuntimeException ex) { return Map.of("orderId",id,"status",r.get("status"),"credits",r.get("credits")); }
+            // Query only: never capture an approved order without an explicit user action.
+            check(r,snapshot);
+            if("COMPLETED".equals(snapshot.orderStatus()) && "COMPLETED".equals(snapshot.captureStatus())){
+                settle(id,snapshot);
+                r=row(owner,id);
+            }
+        }
+        return Map.of("orderId",id,"status",r.get("status"),"credits",r.get("credits"));
+    }
     public Map<String,Object> orders(String owner){return Map.of("orders",db.query("SELECT id,status,credits,created_at FROM payment_order WHERE creator_id=? AND provider=? ORDER BY created_at DESC,id DESC LIMIT 50",(rs,n)->Map.of("orderId",rs.getString(1),"status",rs.getString(2),"credits",rs.getLong(3),"createdAt",rs.getTimestamp(4).toInstant().toString()),owner,provider()));}
+    public Map<String,Object> resume(String owner,String id){
+        if(!ready()) throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,"PayPal 尚未开放");
+        var r=row(owner,id);
+        if("PAID".equals(r.get("status"))) return Map.of("orderId",id,"status","PAID");
+        String remote=(String)r.get("provider_link_id");
+        if(remote==null) throw new ResponseStatusException(HttpStatus.CONFLICT,"订单待核对");
+        var view=gateway().retrieveCheckout(remote); var snapshot=view.snapshot(); check(r,snapshot);
+        if("COMPLETED".equals(snapshot.orderStatus()) && "COMPLETED".equals(snapshot.captureStatus())){
+            settle(id,snapshot); return Map.of("orderId",id,"status","PAID");
+        }
+        if("APPROVED".equals(snapshot.orderStatus())) return Map.of("orderId",id,"status","APPROVED");
+        if(("CREATED".equals(snapshot.orderStatus()) || "PAYER_ACTION_REQUIRED".equals(snapshot.orderStatus())) && !view.approvalUrl().isBlank())
+            return Map.of("orderId",id,"status","CHECKOUT","checkoutUrl",view.approvalUrl());
+        throw new ResponseStatusException(HttpStatus.CONFLICT,"订单状态待核对");
+    }
     void check(Map<String,Object> row,PayPalCheckoutGateway.Snapshot s){
         if(!Objects.equals(row.get("provider_link_id"),s.orderId()) || !Objects.equals(row.get("id"),s.reference()) || !Objects.equals(row.get("currency"),s.currency()) || s.amount()==null || ((BigDecimal)row.get("amount")).compareTo(s.amount())!=0 || !merchantId.equals(s.payeeId())) throw new ResponseStatusException(HttpStatus.CONFLICT,"PayPal 订单不匹配");
     }

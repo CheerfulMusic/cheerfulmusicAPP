@@ -36,8 +36,6 @@ public class PaymentService {
     public Map<String,Object> create(CreatorPrincipal creator, OrderRequest req) {
         if(!ready()) throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,"支付尚未开放");
         var selected=catalog.find(req.packageId()).orElseThrow(()->new ResponseStatusException(HttpStatus.BAD_REQUEST,"套餐不存在"));
-        Integer identities=db.queryForObject("SELECT COUNT(*) FROM creator_google_identity WHERE creator_id=?",Integer.class,creator.id());
-        if(identities==null || identities==0) throw new ResponseStatusException(HttpStatus.FORBIDDEN,"请先绑定 Google 账号");
         String id=UUID.randomUUID().toString();
         reserve(creator.id(),id,selected.id(),selected.amount(),selected.currency(),selected.credits());
         // The order exists before contacting the provider so a racing webhook can find it.
@@ -51,6 +49,8 @@ public class PaymentService {
             // Lock the owner even when there are no orders yet; this serializes the empty-set check.
             var creators=db.queryForList("SELECT id FROM creator WHERE id=? FOR UPDATE",owner);
             if(creators.isEmpty()) throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
+            Integer identities=db.queryForObject("SELECT (SELECT COUNT(*) FROM creator_google_identity WHERE creator_id=?) + (SELECT COUNT(*) FROM creator_oidc_identity WHERE creator_id=?)",Integer.class,owner,owner);
+            if(identities==null || identities==0) throw new ResponseStatusException(HttpStatus.FORBIDDEN,"请先登录账号");
             Integer pending=db.queryForObject("SELECT COUNT(*) FROM payment_order WHERE creator_id=? AND status IN ('CREATING','PENDING')",Integer.class,owner);
             if(pending!=null && pending>0) throw new ResponseStatusException(HttpStatus.CONFLICT,"已有待核对的订单，请先查看订单状态");
             db.update("INSERT INTO payment_order(id,creator_id,package_id,amount,currency,credits,status,created_at) VALUES(?,?,?,?,?,?,?,CURRENT_TIMESTAMP)",id,owner,selectedPackage,selectedAmount,selectedCurrency,selectedCredits,"CREATING");

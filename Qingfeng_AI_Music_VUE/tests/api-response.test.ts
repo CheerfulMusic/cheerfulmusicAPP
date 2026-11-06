@@ -3,6 +3,12 @@ import {requestJson,uploadForm,resetCreatorSession} from '../src/shared/http/api
 afterEach(()=>{vi.unstubAllGlobals();resetCreatorSession()})
 const reply=(value:unknown,status=200)=>new Response(JSON.stringify(value),{status})
 describe('R1 响应读取与业务结果校验',()=>{
+ it('PayPal SDK 配置必须注明环境，启用时必须有公开 client ID',async()=>{
+  vi.stubGlobal('fetch',vi.fn(async()=>reply({enabled:true,clientId:'',environment:'sandbox'})))
+  await expect(requestJson('app/paypal/sdk-config')).rejects.toMatchObject({code:'INVALID_RESPONSE'})
+  vi.stubGlobal('fetch',vi.fn(async()=>reply({enabled:false,clientId:'',environment:'sandbox'})))
+  await expect(requestJson('app/paypal/sdk-config')).resolves.toMatchObject({enabled:false})
+ })
  it('购买与积分响应缺少关键字段时不能视为成功',async()=>{
   vi.stubGlobal('fetch',vi.fn(async()=>reply({enabled:true,packages:[{id:'a',title:'Starter',currency:'GBP',credits:100}]})))
   await expect(requestJson('app/payments/catalog')).rejects.toMatchObject({code:'INVALID_RESPONSE'})
