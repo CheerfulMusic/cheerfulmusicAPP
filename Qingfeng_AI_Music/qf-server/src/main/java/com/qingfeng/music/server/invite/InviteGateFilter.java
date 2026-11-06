@@ -14,7 +14,7 @@ public final class InviteGateFilter extends OncePerRequestFilter {
     private static final Set<String> ENTRANCES = Set.of(
             "/api/public/invite/status", "/api/public/invite/enter");
     private static final Set<String> WEBHOOKS = Set.of(
-            "/api/public/payments/airwallex/webhook", "/api/public/paypal/webhook");
+            "/api/public/payments/airwallex/webhook", "/api/public/paypal/webhook", "/api/public/auth/sms/deliver");
     private static final String GOOGLE_CALLBACK = "/api/public/auth/google/callback";
 
     private final InviteGateService gate;
