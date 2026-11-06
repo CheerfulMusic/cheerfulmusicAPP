@@ -1,6 +1,7 @@
 package com.qingfeng.music.cover.application;
 import com.qingfeng.music.cover.api.*;
 import com.qingfeng.music.work.api.WorkApi;
+import com.qingfeng.music.media.api.MediaApi;
 import com.qingfeng.music.media.api.MediaApi.Content;
 import com.qingfeng.music.media.api.MediaCapacity;
 import com.qingfeng.music.usage.UsageBudget;
@@ -26,6 +27,7 @@ public class CoverService implements CoverApi,SharedCoverAccess {
  public String current(String work){return repo.selection(work).id();}
  public Content open(String owner,String work,String id){works.get(owner,work);return content(work,id);}
  public Content content(String work,String id){var stored=find(work,id);return new Content(stored.bytes(),"image/jpeg","cover.jpg",()->files.open(stored.key()));}
+ public MediaApi.MediaRef ref(String work,String id){var stored=find(work,id);return new MediaApi.MediaRef(stored.key(),stored.bytes(),"image/jpeg","cover.jpg");}
  private CoverRepository.Stored find(String work,String id){return repo.find(work,id).orElseThrow(()->new DomainException("COVER_NOT_FOUND","封面不存在"));}
  @Transactional(isolation=org.springframework.transaction.annotation.Isolation.READ_COMMITTED)
  public Edit edit(String owner,String work,String source,String prompt,String key){

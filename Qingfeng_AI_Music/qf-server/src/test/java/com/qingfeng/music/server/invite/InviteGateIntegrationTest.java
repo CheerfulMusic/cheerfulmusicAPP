@@ -44,6 +44,7 @@ class InviteGateIntegrationTest {
         for (String path : List.of("/api/public/system/info", "/api/public/csrf", "/api/public/auth/google/status", "/api/app/works", "/api/public/gifts/some-token", "/media/sample-love-v2.mp3")) {
             var response = send(browser.http(), "GET", path, null, null);
             assertEquals(403, response.statusCode(), path); assertTrue(response.body().contains("INVITE_REQUIRED"), response.body());
+            assertNotEquals(302, response.statusCode(), path + " 门禁下不得签发 302");
         }
         for (String path : List.of("/api/public/session", "/api/public/session/recover", "/api/public/auth/google/start")) {
             var response = send(browser.http(), "POST", path, "{}", browser.csrf());

@@ -61,12 +61,14 @@ class InspirationMusicPresetsIntegrationTest {
         lyrics.confirm(owner, work.id(), revision.id());
         var task = generation.submit(owner, work.id(), revision.id(), UUID.randomUUID().toString());
         var frozen = settings.task(owner, work.id(), task.id()).orElseThrow();
-        String expected = "Mandopop, gentle piano solo and soft cinematic strings, subtle stereo delay on the vocal and piano, slow unhurried tempo, clear gentle female vocal with intimate verses and softly lifted chorus";
-        assertEquals(expected, frozen.style());
+        String brief = "Mandopop, gentle piano solo and soft cinematic strings, subtle stereo delay on the vocal and piano, slow unhurried tempo, clear gentle female vocal with intimate verses and softly lifted chorus";
+        // 895e547 起任务冻结的是 CreativeDirection.compile() 的结构化方向（含 "Current music settings: " 标签）。
+        // 不变量：冻结方向必须完整保留该预设描述，worker 使用同一份冻结值，且不受之后修改作品风格影响。
+        assertTrue(frozen.style().contains(brief), frozen.style());
         works.update(owner, work.id(), 0, new WorkApi.Draft("", "", work.story(), "", "流行摇滚", "雨夜", "MALE"));
         var worker = new GenerationWorker(execution, provider, url -> { throw new AssertionError("No download expected"); }, (id,w,in) -> { throw new AssertionError("No archive expected"); }, Clock.fixed(task.createdAt().plusSeconds(6), ZoneOffset.UTC), Duration.ofMinutes(2), 2).withSettings(settings);
         assertTrue(worker.runOnce()); assertNotNull(provider.received);
-        assertTrue(provider.received.preparedStyle()); assertEquals(expected, provider.received.style()); assertEquals("FEMALE", provider.received.vocalGender());
+        assertTrue(provider.received.preparedStyle()); assertEquals(frozen.style(), provider.received.style()); assertEquals("FEMALE", provider.received.vocalGender());
         assertEquals(frozen, settings.task(owner, work.id(), task.id()).orElseThrow());
     }
     @Test void changingTheVoiceRemovesConflictingGenderButKeepsTheArrangement() {

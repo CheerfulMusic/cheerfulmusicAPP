@@ -7,6 +7,7 @@ public interface MediaApi {
     List<Asset> list(String creator,String work);
     Asset get(String creator,String work,String asset);
     Content open(String creator,String work,String asset);
+    MediaRef locate(String creator,String work,String asset);
     default boolean matchesGenerationRevision(String owner,String work,String asset,String revision){return false;}
     default Selection selection(String owner,String work){return new Selection(null,0,null);}
     default Selection select(String owner,String work,String asset,long version){throw new UnsupportedOperationException();}
@@ -17,5 +18,7 @@ public interface MediaApi {
         public Asset(String id,String work,String origin,String type,long bytes,String sha,Instant at){this(id,work,origin,type,bytes,sha,at,false);}
     }
     record Content(long size,String contentType,String filename,Source source) {}
+    /** 仅含定位媒体对象所需的窄信息；Web 层不得由 filename 推导对象名。 */
+    record MediaRef(String storageKey,long size,String contentType,String filename) {}
     @FunctionalInterface interface Source{InputStream open()throws IOException;}
 }
