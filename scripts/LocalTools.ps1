@@ -13,9 +13,11 @@ function Assert-LocalStopped {
 }
 function New-MySqlContext {
     $values=Read-LocalConfig
+    if($values['qingfeng.database.role'] -eq 'production-main' -or (Test-Path -LiteralPath (Join-Path $script:TaskRoot '.secrets/production-main.manifest.json'))){throw '本项目已统一线上生产主库。本地备份、恢复与清理工具不操作该库，请按服务器上线/备份流程执行。'}
     $url=if($values.ContainsKey('spring.datasource.url')){$values['spring.datasource.url']}elseif($env:MYSQL_URL){$env:MYSQL_URL}else{'jdbc:mysql://127.0.0.1:3306/qingfeng_music'}
     if(-not $url.StartsWith('jdbc:mysql://')){throw '维护脚本仅支持本地MySQL配置。'}
     $uri=[Uri]$url.Substring(5);$database=$uri.AbsolutePath.Trim('/')
+    if($uri.Port -eq 13306){throw '13306 是已确认的生产主库隧道端口，本地维护工具禁止操作。'}
     if($uri.Host -notin @('127.0.0.1','localhost','[::1]') -or $database -ne 'qingfeng_music'){throw '维护工具仅操作本机独立qingfeng_music库。'}
     $username=if($values.ContainsKey('spring.datasource.username')){$values['spring.datasource.username']}else{$env:MYSQL_USERNAME}
     $password=if($values.ContainsKey('spring.datasource.password')){$values['spring.datasource.password']}else{$env:MYSQL_PASSWORD}

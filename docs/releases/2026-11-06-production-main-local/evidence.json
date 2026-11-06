@@ -1,0 +1,63 @@
+{
+  "mode": "production-main",
+  "databaseVerification": {
+    "databaseUuidSha256": "ab0ec14bb9baf9f0b09890362638e36b0570a736668b3d4d06cf4479dc72886d",
+    "database": "qingfeng_music",
+    "schemaVersion": "20",
+    "counts": {
+      "works": 128,
+      "media": 103,
+      "creators": 101,
+      "ledger": 3,
+      "orders": 0
+    },
+    "verifiedAtUtc": "2026-11-06T11:47:49.099818+00:00",
+    "readOnly": true,
+    "databaseUuidMatchesManifest": true,
+    "sourceCommit": "db23772f44c8891ac95c18e658044c92757ac3b7",
+    "jarSha256": "72becbfef12f6b25f230c0c2d792556655c565b284148892ade2a77dca134b74",
+    "connectTimeoutMs": 10000,
+    "socketTimeoutMs": 15000
+  },
+  "httpVerification": {
+    "checks": [
+      {
+        "path": "/",
+        "status": 200
+      },
+      {
+        "path": "/@vite/client",
+        "status": 200
+      },
+      {
+        "path": "/api/public/auth/native/status",
+        "status": 200
+      },
+      {
+        "path": "/api/public/system/info",
+        "status": 200
+      },
+      {
+        "path": "unauthenticated main credits",
+        "status": 401
+      },
+      {
+        "path": "private gateway file blocked",
+        "status": 403
+      }
+    ],
+    "noVerificationDatabaseWrites": true
+  },
+  "frontendApi": "production HTTPS business/media; local shared-main native auth/session",
+  "jarSha256": "72becbfef12f6b25f230c0c2d792556655c565b284148892ade2a77dca134b74",
+  "runtimeSourceCommit": "db23772f44c8891ac95c18e658044c92757ac3b7",
+  "localMigrationEnabled": false,
+  "localBackgroundWorkersEnabled": false,
+  "separatePaymentContainersStopped": true,
+  "oldDatabaseDataRetained": true,
+  "originalWorkspaceEditsRetained": true,
+  "productionApplicationRestarted": false,
+  "verificationCreatedOrders": false,
+  "verificationCreditedPoints": false,
+  "noTemporaryDownloadServerRemaining": true
+}

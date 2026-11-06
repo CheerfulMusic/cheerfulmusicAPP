@@ -4,22 +4,16 @@
 
 ## 本地体验
 
-环境：JDK17、Maven、Node24或兼容版本、MySQL。维护脚本使用PowerShell7。数据库私有配置位于`Qingfeng_AI_Music/config/local.properties`，不要提交到仓库。
-
-首次检出请先安装前端依赖（`cd Qingfeng_AI_Music_VUE` 后运行 `npm ci`），将后端`config/local.properties.example`复制为`config/local.properties`并填入本机数据库配置，在MySQL创建独立的`qingfeng_music`数据库。API密钥按需填入私有文件或环境变量。示例配置默认关闭付费生成；IDEA直接运行MusicApplication默认连接MySQL，Flyway自动执行数据库迁移。
+日常运行已按用户要求统一使用 **cheerfulmusic.com 线上生产主库**，不再启用独立登录/支付测试数据库。正常操作会影响同一套线上数据。环境需要 Java 17、Node、PowerShell 7 与本机已配置的 SSH 访问，不要求启动 Docker 测试库。
 
 ```powershell
-./scripts/build-local.ps1
-./scripts/start-local.ps1 -Port 8081
-```
-
-打开`http://127.0.0.1:8081`。前后端在同一个本地进程运行，详情与礼物页支持直接打开和刷新。8080如有旧进程，不需要覆盖它。停止本脚本启动的服务：
-
-```powershell
+./scripts/start-local.ps1 -Dev
 ./scripts/stop-local.ps1
 ```
 
-需要前端热更新时用`start-local.ps1 -Dev -Port 8081 -WebPort 5173`；同一局域网手机调试加`-Lan`，用电脑的局域网IP访问。Web 已于2026-11-02部署至 https://cheerfulmusic.com ，App未部署。详见[阿里云部署](docs/阿里云部署.md)。
+打开 `http://127.0.0.1:5173`。启动入口固定主库隧道与 8080/5173，认证服务使用线上同版 JAR；业务与媒体接口复用线上后端。私有连接与版本清单位于 `.secrets`，不提交 Git。原工作区未提交修改保留，主库入口的前端目录须与已上线版本匹配。
+
+本地不执行数据库迁移或生产后台任务，不把模拟支付与测试夹具写入主库。后端改动按项目上线流程验证、备份、发布后，再同步本地运行版本。具体位置、边界及旧库保留情况见[主库日常运行](docs/主库日常运行.md)。线上部署见[阿里云部署](docs/阿里云部署.md)。
 
 ## 账号与登录
 
