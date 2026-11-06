@@ -60,6 +60,14 @@ public class MediaService implements MediaApi, SharedMediaAccess, GeneratedAudio
     public Selection select(String owner,String work,String asset,long version){works.get(owner,work);find(work,asset);if(!repository.select(work,asset,version))throw new DomainException("AUDIO_SELECTION_CONFLICT","当前歌曲版本已改变，请刷新后再选择。");return selection(owner,work);}
     public void keepOriginal(String owner,String work,String asset){works.get(owner,work);find(work,asset);repository.keepOriginal(work,asset);}
     public Content open(String owner,String work,String id){works.get(owner,work);return content(work,id);}
+    public MediaRef locate(String creator,String work,String id){works.get(creator,work);return ref(work,id);}
+    public MediaRef ref(String work,String id){
+        var stored=find(work,id);
+        if(!files.exists(stored.storageKey()))throw new DomainException("MEDIA_NOT_FOUND","音频文件不存在，请联系维护人员恢复备份");
+        var asset=stored.asset();
+        return new MediaRef(stored.storageKey(),asset.byteSize(),asset.contentType(),
+            asset.id()+(asset.contentType().equals("audio/wav")?".wav":".mp3"));
+    }
     public Content content(String work,String id){
         var stored=find(work,id);if(!files.exists(stored.storageKey()))throw new DomainException("MEDIA_NOT_FOUND","音频文件不存在，请联系维护人员恢复备份");
         var asset=stored.asset();return new Content(asset.byteSize(),asset.contentType(),asset.id()+(asset.contentType().equals("audio/wav")?".wav":".mp3"),()->files.open(stored.storageKey()));

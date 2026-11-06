@@ -1,4 +1,5 @@
 package com.qingfeng.music.sharing.api;
+import com.qingfeng.music.media.api.MediaApi;
 import com.qingfeng.music.media.api.MediaApi.Content;
 import java.time.Instant;
 public interface SharingApi {
@@ -7,6 +8,8 @@ public interface SharingApi {
     Gift get(String token);
     Content audio(String token);
     Content cover(String token);
+    MediaApi.MediaRef audioRef(String token);
+    MediaApi.MediaRef coverRef(String token);
     record Created(String id,String token,Instant expiresAt) {}
     record Gift(String title,String recipient,String message,String lyrics,String audioOrigin,Instant createdAt,Instant expiresAt,boolean hasCover) {}
 }

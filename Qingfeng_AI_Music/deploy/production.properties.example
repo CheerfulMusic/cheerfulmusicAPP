@@ -31,3 +31,15 @@ qingfeng.media.directory=/var/lib/qingfeng-music/audio
 
 # 自定义封面独立存储，必须放在systemd允许写入并已备份的目录。
 qingfeng.cover.directory=/var/lib/qingfeng-music/covers
+
+# CDN 签名 URL 分发（默认关闭；仅在服务器私有配置中填写真实值，禁止提交密钥）。
+# 启用前须完成：私有 Bucket 回源授权、Range 回源、URL 鉴权方式 A、独立子域、日志脱敏。
+# qingfeng.cdn.enabled=false
+# qingfeng.cdn.domain=https://cdn.example.com
+# qingfeng.cdn.key-primary=
+# qingfeng.cdn.key-backup=
+# qingfeng.cdn.ttl-seconds=600
+# qingfeng.cdn.uid=0
+# 与存储侧保持一致；音频对象名不含 prefix，封面对象名已含 cover-prefix。
+# qingfeng.oss.prefix=qingfeng/audio/
+# qingfeng.oss.cover-prefix=qingfeng/covers/

@@ -31,6 +31,8 @@ public class SharingService implements SharingApi {
     public Gift get(String token){var share=resolve(token);return new Gift(share.title(),share.recipient(),share.message(),share.lyrics(),share.audioOrigin(),share.createdAt(),share.expiresAt(),share.coverId()!=null);}
     public MediaApi.Content cover(String token){var share=resolve(token);if(share.coverId()==null)throw new DomainException("COVER_NOT_FOUND","礼物使用默认封面");return covers.content(share.workId(),share.coverId());}
     public MediaApi.Content audio(String token){var share=resolve(token);return audioAccess.content(share.workId(),share.assetId());}
+    public MediaApi.MediaRef audioRef(String token){var share=resolve(token);return audioAccess.ref(share.workId(),share.assetId());}
+    public MediaApi.MediaRef coverRef(String token){var share=resolve(token);if(share.coverId()==null)throw new DomainException("COVER_NOT_FOUND","礼物使用默认封面");return covers.ref(share.workId(),share.coverId());}
     private ShareRepository.Snapshot resolve(String token){
         if(token==null||!token.matches("[A-Za-z0-9_-]{43}"))throw notFound();
         return repository.active(hash(token),Instant.now()).orElseThrow(this::notFound);
