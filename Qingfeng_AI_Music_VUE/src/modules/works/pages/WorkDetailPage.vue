@@ -15,6 +15,7 @@ import { getSystemInfo } from '../../../shared/http/system'
 import { listTasks, submitTask, retryTaskArchive, cancelTask, getRevision, getUsage, type Allowance, type Revision, type AudioAsset, type GenerationTask } from '../api/detail'
 import CreationSteps from '../../../shared/ui/CreationSteps.vue'
 import SongResult from '../components/SongResult.vue'
+import PremiumStudioDialog from '../components/PremiumStudioDialog.vue'
 import SectionEditor from '../components/SectionEditor.vue'
 import type {EditHint} from '../model/section-edit'
 import LyricsPanel from '../components/LyricsPanel.vue'
@@ -31,6 +32,8 @@ const route = useRoute(), work = ref<Work>(), revision = ref<Revision | null>(nu
 const lyricsPanel=ref<InstanceType<typeof LyricsPanel>>(), lyricsReady=ref(false), allowance=ref<Allowance>(), giftRevision=ref<Revision|null>(null)
 const lyricRecoverable=ref(false),listenAfterLoad=ref(false),giftStage=ref(false),shared=ref(false),settingsOpen=ref(false),settingsBusy=ref(false),cancelling=ref(false)
 const router=useRouter(),player=usePlayer(),covers=ref<CoverState>(),coverOpen=ref(false)
+const premiumOpen=ref(false)
+watch(()=>asset.value?.id,()=>{premiumOpen.value=false})
 const musicSettingsPanel=ref<InstanceType<typeof MusicSettingsPanel>>()
 const sectionOpen=ref(false),sectionHint=ref<EditHint>(),sectionEditor=ref<InstanceType<typeof SectionEditor>>()
 function editSection(hint?:EditHint){if(player.current?.id===asset.value?.id&&(player.playing||player.starting))void player.toggle(player.current!);sectionHint.value=hint;sectionOpen.value=true;generationOpen.value=false}
@@ -98,7 +101,7 @@ async function closeChecking(task:GenerationTask){
   catch(e){if(work.value?.id===workId)error.value=e instanceof Error?e.message:'暂时无法结束等待，请刷新状态。'}
   finally{submitting.value=false}
 }
-async function load() { const turn = ++sequence;settingsOperation++;settingsBusy.value=false;sectionOpen.value=false;giftStage.value=false;shared.value=false;settingsOpen.value=false;coverOpen.value=false;covers.value=undefined; generationOpen.value = false; trackedTaskId.value = ''; submissionIssue.value = ''; submissionUnknown.value=false; progressIssue.value = false; submitting.value = false; loading.value = true; error.value = ''; revision.value = null; asset.value = null; tasks.value=[];giftRevision.value=null;work.value = undefined; lyricDirty.value = false; requestKey.value = ''; try { const id = String(route.params.id); const [found, history, system] = await Promise.all([loadWork(id), listTasks(id), getSystemInfo()]); if (turn !== sequence) return; work.value = found; tasks.value = history;void loadCovers(id).then(value=>{if(turn===sequence)updateCover(value)}).catch(e=>{if(turn===sequence)error.value=e instanceof Error?e.message:'封面读取失败'}); trackedTaskId.value = history.find(inProgress)?.id || ''; generationOpen.value = !!trackedTaskId.value; modelReady.value = system.capabilities.musicGeneration;void updateAllowance() } catch (e) { if (turn === sequence) error.value = e instanceof ApiError && [401,404].includes(e.status) ? '这是私人作品编辑页。如果你是收到分享的朋友，请向作者索取“分享歌曲”中复制的收听链接。' : e instanceof Error ? e.message : '作品读取失败' } finally { if (turn === sequence) loading.value = false } }
+async function load() { const turn = ++sequence;settingsOperation++;settingsBusy.value=false;premiumOpen.value=false;sectionOpen.value=false;giftStage.value=false;shared.value=false;settingsOpen.value=false;coverOpen.value=false;covers.value=undefined; generationOpen.value = false; trackedTaskId.value = ''; submissionIssue.value = ''; submissionUnknown.value=false; progressIssue.value = false; submitting.value = false; loading.value = true; error.value = ''; revision.value = null; asset.value = null; tasks.value=[];giftRevision.value=null;work.value = undefined; lyricDirty.value = false; requestKey.value = ''; try { const id = String(route.params.id); const [found, history, system] = await Promise.all([loadWork(id), listTasks(id), getSystemInfo()]); if (turn !== sequence) return; work.value = found; tasks.value = history;void loadCovers(id).then(value=>{if(turn===sequence)updateCover(value)}).catch(e=>{if(turn===sequence)error.value=e instanceof Error?e.message:'封面读取失败'}); trackedTaskId.value = history.find(inProgress)?.id || ''; generationOpen.value = !!trackedTaskId.value; modelReady.value = system.capabilities.musicGeneration;void updateAllowance() } catch (e) { if (turn === sequence) error.value = e instanceof ApiError && [401,404].includes(e.status) ? '这是私人作品编辑页。如果你是收到分享的朋友，请向作者索取“分享歌曲”中复制的收听链接。' : e instanceof Error ? e.message : '作品读取失败' } finally { if (turn === sequence) loading.value = false } }
 watch(() => route.params.id, load, { immediate: true })
 watch(() => revision.value?.id, () => { if (!submitting.value && !submissionUnknown.value) requestKey.value = '' })
 const permitLeave = () => !lyricDirty.value || lyricRecoverable.value || window.confirm(t('歌词还有未保存修改，确定离开吗？'))
@@ -158,7 +161,7 @@ function adjustMusic(){giftStage.value=false;shared.value=false;settingsOpen.val
   <template v-if="work">
     <CreationSteps :current="currentStep"/>
     <div class="work-detail-top"><div><h1>{{ asset?songTitle:work.title||(work.recipient?t('写给{recipient}的歌',{recipient:work.recipient}):t('我的原创歌曲')) }}</h1><p class="detail-muted"><template v-if="work.recipient">{{ t('送给 {recipient}',{recipient:work.recipient}) }} · </template> {{ displayedStyle }}<template v-if="playingSettings?.vocalGender"> · {{ t(vocalGenderLabel(playingSettings.vocalGender)) }}</template></p></div></div>
-    <div class="story-back-actions"><button class="text-button" @click="backToStory">{{ t('返回修改故事') }}</button><button v-if="giftStage" class="text-button" @click="giftStage=false;shared=false">{{ t('返回试听与调整') }}</button></div>
+    <div class="story-back-actions"><button class="description-back-button" type="button" @click="backToStory"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5m7-7-7 7 7 7"/></svg>{{ t('返回修改描述') }}</button><button v-if="giftStage" class="text-button" @click="giftStage=false;shared=false">{{ t('返回试听与调整') }}</button></div>
     <GenerationRecovery v-if="pendingTask?.status==='SUBMISSION_UNKNOWN'" :task="pendingTask" :busy="submitting" @refresh="refreshTasks" @close="closeChecking(pendingTask)"/>
     <SongResult v-if="asset" :work="work" :asset="asset" :title="songTitle" :cover="artwork" :pending="!!pendingTask" :busy="submitting||settingsBusy||(!pendingTask&&!submissionUnknown&&(!modelReady||!lyricsReady))" :lyrics="giftRevision?.lyrics||''" @gift="sendGift" @regenerate="generate" @cover="openCover" @edit="editSection"/>
     <MusicSettingsSnapshot v-if="asset&&tasks.find(task=>task.assetId===asset?.id)" :work-id="work.id" :task-id="tasks.find(task=>task.assetId===asset?.id)!.id"/>
@@ -177,7 +180,7 @@ function adjustMusic(){giftStage.value=false;shared.value=false;settingsOpen.val
         </details>
         <SoundDirectionEntry v-if="!asset" :style-label="t(work.style)" :voice-label="t(vocalGenderLabel(work.vocalGender))" :disabled="submitting||!!pendingTask||submissionUnknown||settingsBusy" @choose="adjustMusic"/>
         <div class="creation-action-bar work-primary-bar" :class="{'context-editor-open':coverOpen||settingsOpen}">
-          <template v-if="asset"><button class="button creation-primary" @click="sendGift">{{ t('分享歌曲') }}</button></template>
+          <template v-if="asset"><button class="button creation-primary" @click="sendGift">{{ t('分享歌曲') }}</button><button class="button secondary premium-studio-entry" type="button" @click="premiumOpen=true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3v7m0 4v7M12 3v12m0 4v2M19 3v2m0 4v12M2 10h6v4H2zm7 5h6v4H9zm7-10h6v4h-6z"/></svg><span>{{ t('定制化音乐制作') }}</span></button></template>
           <template v-else><button class="button secondary sound-direction-mobile" :disabled="submitting||!!pendingTask||submissionUnknown||settingsBusy" @click="adjustMusic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 9v6M10 4v16M15 7v10M20 10v4"/></svg>{{ t('旋律与声音') }}</button><div><button class="button creation-primary" :disabled="submitting||(!pendingTask&&!submissionUnknown&&(!modelReady||!lyricsReady))" @click="generate">{{ submitting?t('正在准备歌曲…'):submissionUnknown?t('核对生成进度'):pendingTask?t('查看生成进度'):modelReady?t('确认歌词并生成歌曲'):t('歌曲生成暂未开放') }}</button><span class="save-info">{{ lyricDirty?t('请先点击保存，保存当前歌词后再生成歌曲。'):t('确认已保存的歌词后，再开始谱曲。') }}</span></div></template>
         </div>
         <p v-if="!modelReady&&!asset" class="notice">{{ t('音乐生成暂不可用，可以先编辑并保存歌词，稍后再试。') }}</p>
@@ -193,5 +196,24 @@ function adjustMusic(){giftStage.value=false;shared.value=false;settingsOpen.val
       </aside>
     </div>
   </template>
+  <PremiumStudioDialog v-if="work&&asset&&premiumOpen" :open="premiumOpen" :work-id="work.id" :asset="asset" :title="songTitle" :cover="artwork" @close="premiumOpen=false"/>
   <MusicGenerationDialog :open="generationOpen" :status="generationStatus" :title="trackedTask?.title||work?.title||''" :error="submissionIssue" :sync-issue="progressIssue||trackedTask?.errorCode==='QUERY_RETRY'" :created-at="trackedTask?.createdAt" :submit-after="trackedTask?.nextAttemptAt" :cancelling="cancelling" :cover="artwork" @cancel="cancelGeneration" @close="generationOpen=false" @view="viewGeneratedMusic"/>
 </template>
+<style scoped>
+.work-primary-bar > .premium-studio-entry { display:inline-flex; align-items:center; justify-content:center; gap:8px; min-height:50px; padding:12px 22px; border:1px solid #c38a32; border-radius:26px; background:linear-gradient(120deg,#ffe9b5,#f3cd77); color:#704311; box-shadow:0 5px 16px #b9782226; font-size:15px; font-weight:650; line-height:1.4; }
+.premium-studio-entry svg { width:19px; height:19px; flex:none; fill:none; stroke:currentColor; stroke-width:1.6; stroke-linecap:round; stroke-linejoin:round; }
+.premium-studio-entry > span { min-width:0; }
+.work-primary-bar > .premium-studio-entry:hover { background:linear-gradient(120deg,#ffe19b,#edbc59); border-color:#a66b1b; color:#593207; }
+.premium-studio-entry:focus-visible { outline:2px solid #93601a; outline-offset:3px; }
+@media(max-width:600px) {
+ .work-primary-bar:has(.premium-studio-entry) { align-items:stretch; }
+ .work-primary-bar:has(.premium-studio-entry) > .creation-primary { flex:1.1 1 0; width:auto; min-width:0; min-height:50px; }
+ .work-primary-bar > .premium-studio-entry { flex:1 1 0; min-width:0; padding:10px; font-size:12px; gap:6px; }
+ .premium-studio-entry svg { width:18px; height:18px; }
+}
+.story-back-actions .description-back-button { display:inline-flex; align-items:center; justify-content:center; gap:9px; min-height:48px; padding:11px 20px; border:1px solid #ec9e87; border-radius:24px; background:#fff0e8; color:#b93422; font:inherit; font-size:17px; font-weight:600; line-height:1.5; cursor:pointer; text-decoration:none; }
+.description-back-button svg { width:20px; height:20px; flex:none; fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
+.story-back-actions .description-back-button:hover { background:#ffe4d7; border-color:#df6950; }
+.description-back-button:focus-visible { outline:2px solid #f93822; outline-offset:3px; }
+@media(max-width:600px) { .story-back-actions .description-back-button { font-size:16px; padding-inline:17px; } }
+</style>

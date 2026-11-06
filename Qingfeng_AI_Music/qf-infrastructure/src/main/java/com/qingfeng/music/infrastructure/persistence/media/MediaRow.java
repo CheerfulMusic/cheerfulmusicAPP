@@ -10,4 +10,6 @@ public class MediaRow {
     public String sha256;
     public Instant createdAt;
     public boolean sectionEdit;
+    public String generationTaskId,candidateKey,providerAudioId,sourceAudioUrl;
+    public Double durationS;
 }

@@ -19,11 +19,27 @@ class DeepSeekLyricsFlowTest {
   @Bean @Primary FakeWriter fakeWriter(){return new FakeWriter();}
  }
  static class FakeWriter implements LyricsWriter {
-  WorkApi.Work lastWork;String lastLanguage;
+  WorkApi.Work lastWork;String lastLanguage;String instructions;String output;
+  public Draft write(WorkApi.Work work,String language,String instructions,String previous){this.instructions=instructions;return output==null?write(work,language):new Draft("结构测试",output);}
   AtomicInteger calls=new AtomicInteger();public boolean isConfigured(){return true;}
   public Draft write(WorkApi.Work work,String language){lastWork=work;lastLanguage=language;calls.incrementAndGet();return new Draft("风中的故事",language.equals("en")?"[Verse]\nA little memory stays with me":"[Verse]\n把你的名字写在风里\n[Chorus]\n每个日落都想起你");}
  }
  @Autowired IdentityApi identity;@Autowired WorkApi works;@Autowired LyricsApi lyrics;@Autowired LyricsCompositionService composer;@Autowired FakeWriter writer;
+ @Test void templateReachesWriterAndMismatchNeverCreatesRevisionOrRetries(){
+  String owner=identity.create().creatorId();var work=works.create(owner,new WorkApi.Draft("","","一段真实的故事","","民谣",""));
+  var structure=new LyricsStructure("ABC",true);String key=UUID.randomUUID().toString();
+  try{
+   writer.output=String.join("\n",structure.sections().stream().map(s->"["+s+"]"+(s.equals("Interlude")?"":"\n今天仍然有风")).toList());
+   var result=composer.compose(owner,work.id(),0,key,"mixed","保留真实细节",null,"ABC",true);
+   assertTrue(writer.instructions.contains(structure.instruction()));assertTrue(writer.instructions.startsWith("保留真实细节"));
+   assertEquals(result.id(),composer.compose(owner,work.id(),0,key,"mixed","保留真实细节",null,"ABC",true).id());
+   var conflict=assertThrows(DomainException.class,()->composer.compose(owner,work.id(),0,key,"mixed","保留真实细节",null,"ABCD",true));
+   assertEquals("REQUEST_KEY_CONFLICT",conflict.code());
+   int count=lyrics.list(owner,work.id()).size();writer.output="[Verse]\n不符合模板";
+   var failure=assertThrows(DomainException.class,()->composer.compose(owner,work.id(),0,UUID.randomUUID().toString(),"mixed","",null,"ABC",false));
+   assertEquals("LYRICS_STRUCTURE_MISMATCH",failure.code());assertEquals(count,lyrics.list(owner,work.id()).size());
+  }finally{writer.output=null;}
+ }
  @Test void freeInspirationAndMixedLanguageReachWriterWithoutInventedRecipient(){
   String owner=identity.create().creatorId();var work=works.create(owner,new WorkApi.Draft("","","海边旅行与重新出发","","流行",""));
   String key=UUID.randomUUID().toString();int before=writer.calls.get();

@@ -109,7 +109,17 @@ public final class KieSunoMusicProvider implements MusicProvider {
         String audio=firstAudio(result);
         if(audio.isBlank())throw new IllegalStateException("KIE完成任务缺少音频，稍后重新查询");
         audioApproval.accept(audio);
-        return new Result(taskId,GenerationStatus.SAVING,audio,info(result,audio));
+        var candidates=new java.util.ArrayList<AudioInfo>();var seen=new java.util.HashSet<String>();
+        for(var tracks:KieAudioResults.groups(result))for(var track:tracks){
+            String url=track.path("audioUrl").asText(track.path("audio_url").asText(""));
+            if(url.isBlank())continue;
+            var source=info(result,url);
+            // 不悄悄丢弃无法识别的候选，也不把流式预览链接当作完整文件。
+            if(source==null)throw new IllegalStateException("候选音频缺少标识或时长，请稍后重新查询");
+            if(seen.add(source.audioId())){audioApproval.accept(url);candidates.add(source);}
+        }
+        if(candidates.size()>8)throw new IllegalStateException("候选音频数量异常");
+        return new Result(taskId,GenerationStatus.SAVING,audio,info(result,audio),candidates);
     }
     public AudioInfo sourceInfo(String taskId,String archivedUrl){
         var response=send("/api/v1/jobs/recordInfo?taskId="+URLEncoder.encode(taskId,StandardCharsets.UTF_8),null,false);

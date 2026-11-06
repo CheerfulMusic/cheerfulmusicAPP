@@ -10,6 +10,11 @@ public interface MediaRepository extends com.qingfeng.music.media.api.MediaCapac
     Optional<Stored> find(String work,String id);
     List<Asset> list(String work);
     Optional<Stored> findGenerated(String task);
+    default Optional<Stored> findGenerated(String task,String candidate){return candidate.equals("primary")?findGenerated(task):Optional.empty();}
+    default Stored registerCandidate(Asset asset,String key,String task,long reserved,String candidate,com.qingfeng.music.generation.application.port.MusicProvider.AudioInfo source){
+        if(!candidate.equals("primary"))throw new UnsupportedOperationException("候选归档未配置");
+        return register(asset,key,task,reserved);
+    }
     /** 唯一任务键保证归档重复执行最多登记一份；返回最终有效的文件。 */
     Stored insertGenerated(Asset asset,String storageKey,String task);
     boolean reserve(String work,long bytes,long capacity);

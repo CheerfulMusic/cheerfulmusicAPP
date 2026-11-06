@@ -14,7 +14,7 @@ public final class JdbcPlaybackLyricsRepository implements PlaybackLyricsReposit
     private final ObjectMapper json=new ObjectMapper();
     public JdbcPlaybackLyricsRepository(JdbcTemplate jdbc,TransactionTemplate transactions,UsageBudget budget){this.jdbc=jdbc;this.transactions=transactions;this.budget=budget;}
     public Optional<Source> source(String work,String asset){
-        return jdbc.query("SELECT m.id,m.work_id,g.provider,g.provider_task_id,g.audio_url,g.lyrics FROM media_asset m LEFT JOIN generation_task g ON g.id=m.generation_task_id WHERE m.work_id=? AND m.id=?",(r,n)->new Source(r.getString(1),r.getString(2),r.getString(3),r.getString(4),r.getString(5),r.getString(6)),work,asset).stream().findFirst();
+        return jdbc.query("SELECT m.id,m.work_id,g.provider,g.provider_task_id,COALESCE(m.source_audio_url,g.audio_url),g.lyrics FROM media_asset m LEFT JOIN generation_task g ON g.id=m.generation_task_id WHERE m.work_id=? AND m.id=?",(r,n)->new Source(r.getString(1),r.getString(2),r.getString(3),r.getString(4),r.getString(5),r.getString(6)),work,asset).stream().findFirst();
     }
     public Optional<Stored> find(String asset){return jdbc.query("SELECT state,words_json,request_key,updated_at FROM media_lyrics_timeline WHERE asset_id=?",(r,n)->new Stored(r.getString(1),decode(r.getString(2)),r.getString(3),r.getTimestamp(4).toInstant()),asset).stream().findFirst();}
     private List<PlaybackLyrics.Word> decode(String raw){return raw==null?List.of():List.of(json.readValue(raw,PlaybackLyrics.Word[].class));}

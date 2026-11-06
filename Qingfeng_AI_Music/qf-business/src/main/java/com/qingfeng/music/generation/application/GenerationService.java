@@ -29,10 +29,11 @@ public class GenerationService implements GenerationApi {
   if(!enabled||!provider.isConfigured())throw new DomainException("MUSIC_PROVIDER_UNAVAILABLE","音乐模型暂不可用，未提交生成或创建付费任务");
   // 与局部编辑保持准入锁→作品锁顺序；后续校验失败会随整个事务回滚占额。
   budget.reserve(owner,work,key,com.qingfeng.music.usage.UsageBudget.Kind.MUSIC);
-  var direction=settings==null?null:settings.resolve(owner,w);
-  provider.validate(direction==null?new MusicProvider.Request(revision.title(),revision.lyrics(),w.style(),w.vocalGender()):new MusicProvider.Request(revision.title(),revision.lyrics(),direction.style(),w.vocalGender(),direction.negativeTags(),true));
+  var direction=settings==null?null:settings.forGeneration(owner,w);
+  String voice=direction==null?w.vocalGender():direction.effectiveVoice(w.vocalGender());
+  provider.validate(direction==null?new MusicProvider.Request(revision.title(),revision.lyrics(),w.style(),voice):new MusicProvider.Request(revision.title(),revision.lyrics(),direction.style(),voice,direction.negativeTags(),true));
   Instant now=Instant.now();
-  String id=UUID.randomUUID().toString();var task=checked(repository.insertOrRead(new Task(id,work,revisionId,w.version(),key,revision.title(),revision.lyrics(),w.style(),provider.name(),GenerationStatus.QUEUED,now,null,null,now,now.plusSeconds(5),w.vocalGender())),revisionId);
+  String id=UUID.randomUUID().toString();var task=checked(repository.insertOrRead(new Task(id,work,revisionId,w.version(),key,revision.title(),revision.lyrics(),w.style(),provider.name(),GenerationStatus.QUEUED,now,null,null,now,now.plusSeconds(5),voice)),revisionId);
   if(settings!=null&&task.id().equals(id))settings.snapshot(id,direction);return task;
  }
  public List<Task> list(String owner,String work){works.get(owner,work);return repository.list(work);}

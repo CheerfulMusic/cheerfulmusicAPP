@@ -9,5 +9,6 @@ import tools.jackson.databind.ObjectMapper;
 
 @Configuration(proxyBeanMethods=false) @Profile({"mysql","test"})
 public class MusicSettingsConfiguration {
- @Bean MusicSettings musicSettings(JdbcTemplate jdbc,WorkApi works)throws java.io.IOException{try(var in=new ClassPathResource("music/catalog-v1.json").getInputStream()){return new MusicSettingsService(new ObjectMapper().readValue(in,MusicSettings.Catalog.class),new JdbcMusicSettingsRepository(jdbc),works);}}
+ @Bean CreativePlan.Repository creativePlans(JdbcTemplate jdbc){return new com.qingfeng.music.infrastructure.persistence.generation.JdbcCreativePlanRepository(jdbc);}
+ @Bean MusicSettings musicSettings(JdbcTemplate jdbc,WorkApi works,CreativePlan.Repository plans)throws java.io.IOException{try(var in=new ClassPathResource("music/catalog-v1.json").getInputStream()){return new MusicSettingsService(new ObjectMapper().readValue(in,MusicSettings.Catalog.class),new JdbcMusicSettingsRepository(jdbc),works).withCreativePlans(plans);}}
 }

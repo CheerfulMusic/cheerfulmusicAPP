@@ -9,8 +9,8 @@ public final class JdbcSectionEditRepository implements SectionEditRepository {
     private final JdbcTemplate jdbc;
     public JdbcSectionEditRepository(JdbcTemplate jdbc){this.jdbc=jdbc;}
     public Optional<Source> source(String work,String asset){return jdbc.query("""
-        SELECT g.id,g.provider,g.provider_task_id,g.audio_url,s.audio_id,s.duration_s,g.title,g.lyrics,g.style,g.vocal_gender
-        FROM media_asset a JOIN generation_task g ON g.id=a.generation_task_id AND g.asset_id=a.id
+        SELECT g.id,g.provider,g.provider_task_id,COALESCE(a.source_audio_url,g.audio_url),COALESCE(a.provider_audio_id,s.audio_id),COALESCE(a.duration_s,s.duration_s),g.title,g.lyrics,g.style,g.vocal_gender
+        FROM media_asset a JOIN generation_task g ON g.id=a.generation_task_id
         LEFT JOIN generation_audio_source s ON s.task_id=g.id
         WHERE a.work_id=? AND a.id=? AND a.origin='GENERATED' AND g.status='SUCCEEDED'
         """,(r,n)->new Source(r.getString(1),r.getString(2),r.getString(3),r.getString(4),r.getString(5),(Double)r.getObject(6,Double.class),r.getString(7),r.getString(8),r.getString(9),r.getString(10)),work,asset).stream().findFirst();}

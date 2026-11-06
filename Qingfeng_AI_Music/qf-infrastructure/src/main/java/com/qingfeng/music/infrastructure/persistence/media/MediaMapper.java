@@ -13,8 +13,9 @@ public interface MediaMapper {
     @Update("UPDATE work_audio_selection SET asset_id=#{asset},version=version+1 WHERE work_id=#{work} AND version=#{version} AND NOT EXISTS(SELECT 1 FROM media_asset a JOIN section_edit e ON e.task_id=a.generation_task_id JOIN generation_task g ON g.id=e.task_id WHERE a.id=#{asset} AND g.status<>'SUCCEEDED')") int select(@Param("work")String work,@Param("asset")String asset,@Param("version")long version);
     @Update("UPDATE work_audio_selection SET asset_id=#{asset},version=version+1 WHERE work_id=#{work}") void automaticSelection(@Param("work")String work,@Param("asset")String asset);
     @Select("SELECT COUNT(*) FROM section_edit WHERE task_id=#{task}") int section(String task);
-    @Select("SELECT * FROM media_asset WHERE generation_task_id=#{task}") MediaRow generated(String task);
-    @Insert("INSERT INTO media_asset(id,work_id,storage_key,origin,content_type,byte_size,sha256,created_at,generation_task_id) VALUES(#{asset.id},#{asset.workId},#{asset.storageKey},#{asset.origin},#{asset.contentType},#{asset.byteSize},#{asset.sha256},#{asset.createdAt},#{task}) ON DUPLICATE KEY UPDATE generation_task_id=generation_task_id")
+    @Select("SELECT * FROM media_asset WHERE generation_task_id=#{task} AND candidate_key='primary'") MediaRow generated(String task);
+    @Select("SELECT * FROM media_asset WHERE generation_task_id=#{task} AND candidate_key=#{candidate}") MediaRow candidate(@Param("task")String task,@Param("candidate")String candidate);
+    @Insert("INSERT INTO media_asset(id,work_id,storage_key,origin,content_type,byte_size,sha256,created_at,generation_task_id,candidate_key,provider_audio_id,source_audio_url,duration_s) VALUES(#{asset.id},#{asset.workId},#{asset.storageKey},#{asset.origin},#{asset.contentType},#{asset.byteSize},#{asset.sha256},#{asset.createdAt},#{task},#{asset.candidateKey},#{asset.providerAudioId},#{asset.sourceAudioUrl},#{asset.durationS}) ON DUPLICATE KEY UPDATE generation_task_id=generation_task_id")
     void insertGenerated(@Param("asset")MediaRow asset,@Param("task")String task);
     @Update("UPDATE creator SET media_bytes=media_bytes+#{bytes} WHERE id=(SELECT owner_id FROM music_work WHERE id=#{work}) AND media_bytes<=#{capacity}-#{bytes}")
     int reserve(@Param("work")String work,@Param("bytes")long bytes,@Param("capacity")long capacity);
