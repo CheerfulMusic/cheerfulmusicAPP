@@ -20,5 +20,12 @@ public class MyBatisIdentityRepository implements IdentityRepository {
     public void updateGoogle(String hash,String email,String name,Instant now){mapper.updateGoogle(hash,email,name,now);}
     public boolean hasContent(String creator){return mapper.contentCount(creator)>0;}
     public boolean hasOtherIdentity(String creator){return mapper.otherIdentityCount(creator)>0;}
+    public boolean hasFinancialHistory(String creator){return mapper.financialCount(creator)>0;}
+    public void moveGuestWorks(String source,String target){
+        mapper.moveWorks(source,target);mapper.moveUsage(source,target);
+        // Include bytes reserved by an in-flight audio archive, not just registered assets.
+        mapper.addMediaBytes(target,mapper.mediaBytes(source));mapper.clearMediaBytes(source);
+        mapper.recovery(source,null);mapper.deleteCreatorSessions(source);
+    }
     public void deleteSession(String hash){mapper.deleteSession(hash);}
 }

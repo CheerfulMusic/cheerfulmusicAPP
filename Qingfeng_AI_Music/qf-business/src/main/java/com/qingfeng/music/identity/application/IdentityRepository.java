@@ -16,6 +16,8 @@ public interface IdentityRepository {
     void bindGoogle(String creator,String subjectHash,String email,String name,Instant now);
     void updateGoogle(String subjectHash,String email,String name,Instant now);
     boolean hasContent(String creator);
+    boolean hasFinancialHistory(String creator);
+    void moveGuestWorks(String source, String target);
     boolean hasOtherIdentity(String creator);
     void deleteSession(String tokenHash);
 }

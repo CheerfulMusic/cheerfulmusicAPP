@@ -33,15 +33,16 @@ class LogtoIdentityIntegrationTest {
         assertEquals("user@example.test",logto.profile(signed.creatorId()).orElseThrow().email());
         assertEquals("****1234",logto.profile(signed.creatorId()).orElseThrow().phoneMasked());
     }
-    @Test void existingSubjectRestoresEmptyDeviceButNeverSwallowsAnotherCollection(){
+    @Test void existingSubjectRestoresAccountAndAssociatesGuestWorks(){
         String subject=UUID.randomUUID().toString();var first=identity.create();
         var bound=logto.signIn(first.token(),first.creatorId(),issuer,subject,null,null,null);
         var empty=identity.create();var restored=logto.signIn(empty.token(),empty.creatorId(),issuer,subject,null,null,null);
         assertEquals(bound.creatorId(),restored.creatorId());
-        var occupied=identity.create();works.create(occupied.creatorId(),draft);
-        var conflict=assertThrows(DomainException.class,()->logto.signIn(occupied.token(),occupied.creatorId(),issuer,subject,null,null,null));
-        assertEquals("LOGTO_ACCOUNT_CONFLICT",conflict.code());
-        assertEquals(occupied.creatorId(),identity.resolve(occupied.token()).orElseThrow());
+        var occupied=identity.create();var work=works.create(occupied.creatorId(),draft);
+        var merged=logto.signIn(occupied.token(),occupied.creatorId(),issuer,subject,null,null,null);
+        assertEquals(bound.creatorId(),merged.creatorId());assertTrue(identity.resolve(occupied.token()).isEmpty());
+        assertEquals(work.id(),works.get(merged.creatorId(),work.id()).id());
+
     }
     @Test void emailNeverLinksAccountsAndOldTokenCannotBeReused(){
         var a=identity.create();var b=identity.create();String email="same@example.test";

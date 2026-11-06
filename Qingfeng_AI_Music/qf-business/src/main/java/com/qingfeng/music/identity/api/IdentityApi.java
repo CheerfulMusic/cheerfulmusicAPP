@@ -12,6 +12,8 @@ public interface IdentityApi {
     Session recover(String code);
     Optional<GoogleIdentity> googleIdentity(String creatorId);
     Session signInWithGoogle(String currentToken, String expectedCreator, String subject, String email, String name);
+    /** Internal login hook: move only the authenticated browser guest collection to a verified account. */
+    boolean claimGuestWorks(String currentToken, String sourceCreator, String targetCreator);
     record GoogleIdentity(String subjectHash, String email, String name) {}
     record Session(String token, String creatorId) {}
 }

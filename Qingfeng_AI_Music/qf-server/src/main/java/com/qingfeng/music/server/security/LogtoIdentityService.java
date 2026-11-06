@@ -54,7 +54,7 @@ public class LogtoIdentityService {
             (rs, n) -> rs.getString(1), subjectHash).stream().findFirst();
         String target = owner.orElse(expectedCreator);
         if (owner.isPresent() && !target.equals(expectedCreator)) {
-            if (hasContent(expectedCreator) || hasAnyIdentity(expectedCreator)) throw failure("LOGTO_ACCOUNT_CONFLICT");
+            if (!identity.claimGuestWorks(currentToken,expectedCreator,target)) throw failure("LOGTO_ACCOUNT_CONFLICT");
         } else if (owner.isEmpty()) {
             if (hasOidcIdentity(expectedCreator)) throw failure("LOGTO_ACCOUNT_CONFLICT");
             boolean firstLogin = !hasAnyIdentity(expectedCreator);
@@ -95,16 +95,6 @@ public class LogtoIdentityService {
         return hasOidcIdentity(creator)
             || !db.query("SELECT subject_hash FROM creator_google_identity WHERE creator_id=?", (rs, n) -> rs.getString(1), creator).isEmpty()
             || !db.query("SELECT subject_hash FROM creator_authing_identity WHERE creator_id=?", (rs, n) -> rs.getString(1), creator).isEmpty();
-    }
-
-    private boolean hasContent(String creator) {
-        Long count = db.queryForObject("SELECT "
-            + "(SELECT COUNT(*) FROM music_work WHERE owner_id=?) + "
-            + "(SELECT COUNT(*) FROM model_usage_reservation WHERE owner_id=?) + "
-            + "(SELECT COUNT(*) FROM credit_ledger WHERE owner_id=?) + "
-            + "(SELECT COUNT(*) FROM payment_order WHERE creator_id=?)", Long.class,
-            creator, creator, creator, creator);
-        return count != null && count > 0;
     }
 
     private static String maskedPhone(String phone) {

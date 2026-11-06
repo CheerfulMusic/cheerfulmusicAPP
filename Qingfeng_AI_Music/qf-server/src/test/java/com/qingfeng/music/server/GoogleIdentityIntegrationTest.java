@@ -24,14 +24,15 @@ class GoogleIdentityIntegrationTest {
         assertTrue(identity.resolve(anonymous.token()).isEmpty());assertEquals(google.creatorId(),identity.resolve(otherDevice.token()).orElseThrow());
         assertEquals("one@example.test",identity.googleIdentity(google.creatorId()).orElseThrow().email());
     }
-    @Test void existingGoogleCanSignInFromEmptyDeviceButCannotSwallowAnotherCollection(){
+    @Test void existingGoogleLoginAssociatesGuestCollection(){
         String sub=UUID.randomUUID().toString();var first=identity.create();var bound=identity.signInWithGoogle(first.token(),first.creatorId(),sub,"old@example.test","旧名称");
         var empty=identity.create();var restored=identity.signInWithGoogle(empty.token(),empty.creatorId(),sub,"new@example.test","新名称");
         assertEquals(bound.creatorId(),restored.creatorId());assertEquals("new@example.test",identity.googleIdentity(restored.creatorId()).orElseThrow().email());
         var withWork=identity.create();var work=works.create(withWork.creatorId(),draft);
-        var error=assertThrows(DomainException.class,()->identity.signInWithGoogle(withWork.token(),withWork.creatorId(),sub,"new@example.test","新名称"));
-        assertEquals("GOOGLE_ACCOUNT_CONFLICT",error.code());assertEquals(withWork.creatorId(),identity.resolve(withWork.token()).orElseThrow());
-        assertEquals(work.id(),works.get(withWork.creatorId(),work.id()).id());assertTrue(identity.googleIdentity(withWork.creatorId()).isEmpty());
+        var merged=identity.signInWithGoogle(withWork.token(),withWork.creatorId(),sub,"new@example.test","新名称");
+        assertEquals(bound.creatorId(),merged.creatorId());assertTrue(identity.resolve(withWork.token()).isEmpty());
+        assertEquals(work.id(),works.get(merged.creatorId(),work.id()).id());assertTrue(works.list(withWork.creatorId(),0).isEmpty());
+
     }
     @Test void emailDoesNotMergeSubjectsAndSubjectCaseRemainsSignificant(){
         String base=UUID.randomUUID().toString();var a=identity.create();var b=identity.create();

@@ -65,7 +65,7 @@ public class IdentityService implements IdentityApi {
         String target=expectedCreator;
         if(owner.isPresent()){
             target=owner.get();
-            if(!target.equals(expectedCreator)&&(repository.googleIdentity(expectedCreator).isPresent()||repository.hasOtherIdentity(expectedCreator)||repository.hasContent(expectedCreator)))throw googleFailure("GOOGLE_ACCOUNT_CONFLICT");
+            if(!target.equals(expectedCreator)&&!claimGuestWorks(currentToken,expectedCreator,target))throw googleFailure("GOOGLE_ACCOUNT_CONFLICT");
         }else{
             if(repository.googleIdentity(expectedCreator).isPresent())throw googleFailure("GOOGLE_ACCOUNT_CONFLICT");
             boolean firstLogin = !repository.hasOtherIdentity(expectedCreator);
@@ -77,6 +77,17 @@ public class IdentityService implements IdentityApi {
         repository.deleteSession(hash(currentToken));
         return new Session(token,target);
     }
+    @Transactional
+    public boolean claimGuestWorks(String currentToken,String source,String target) {
+        if(source==null||target==null||!repository.lockCreator(source)
+            ||resolve(currentToken).filter(source::equals).isEmpty())return false;
+        if(source.equals(target))return true;
+        if(repository.googleIdentity(source).isPresent()||repository.hasOtherIdentity(source)||repository.hasFinancialHistory(source))return false;
+        if(!repository.lockCreator(target))return false;
+        repository.moveGuestWorks(source,target);
+        return true;
+    }
+
     private String profile(String value,int limit){return value==null?null:value.substring(0,Math.min(value.length(),limit));}
     private com.qingfeng.music.common.exception.DomainException googleFailure(String code){return new com.qingfeng.music.common.exception.DomainException(code,"Google登录未完成，当前作品和身份已保留");}
     private com.qingfeng.music.common.exception.DomainException invalidRecovery(){return new com.qingfeng.music.common.exception.DomainException("INVALID_RECOVERY_CODE","找回码无效或已使用，请检查后重试");}
