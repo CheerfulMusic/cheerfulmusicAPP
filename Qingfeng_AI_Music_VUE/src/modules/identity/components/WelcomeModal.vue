@@ -6,6 +6,7 @@ import { logtoState } from '../../../shared/identity/logto-state'
 import { loginDialogOpen } from '../../../shared/identity/login-dialog'
 import { currentCreatorId, ensureCreator, requestJson } from '../../../shared/http/api-client'
 import { t } from '../../../shared/i18n'
+import musicGiftUrl from '../../../assets/welcome/music-gift.png'
 const route=useRoute(),router=useRouter(),dialog=ref<HTMLDialogElement>(),start=ref<HTMLButtonElement>()
 const authenticated=computed(()=>accountState.value.authenticated||logtoState.value.authenticated)
 const amount=ref(100),claimed=new Set<string>()
@@ -30,7 +31,7 @@ onBeforeUnmount(()=>{alive=false;dialog.value?.close()})
 <template>
  <dialog ref="dialog" class="welcome-modal" aria-labelledby="welcome-heading" aria-describedby="welcome-description" @click="($event.target===dialog)&&close()">
   <button class="welcome-close" type="button" :aria-label="t('关闭')" @click="close"><span aria-hidden="true">×</span></button>
-  <div class="welcome-art"><img src="/illustrations/welcome/music-gift.png" alt="" width="640" height="640"><p>{{ t('用音乐，点亮生活') }}<span aria-hidden="true">♥</span></p></div>
+  <div class="welcome-art"><img :src="musicGiftUrl" alt="" width="640" height="640"><p>{{ t('用音乐，点亮生活') }}<span aria-hidden="true">♥</span></p></div>
   <section class="welcome-copy">
    <p class="welcome-eyebrow">CHEERFUL MUSIC · WELCOME</p>
    <h2 id="welcome-heading">{{ t('欢迎加入') }}<strong>{{ t('青风音乐') }}</strong>！</h2>
