@@ -34,3 +34,10 @@ ui-prototype/output/
 /tmp/
 
 .secrets/
+
+# 私有便签与云凭据目录，任何情况下都不要提交
+/跨境支付/
+/阿里云/
+
+# 助手的跨会话工作记忆，属于本机数据
+.workbuddy-ai/
