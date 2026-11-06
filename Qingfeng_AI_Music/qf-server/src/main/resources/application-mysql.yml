@@ -9,6 +9,9 @@ spring:
       - optional:file:../config/usage-limits.properties
       - optional:file:./config/usage-limits.properties
       - optional:file:/etc/qingfeng-music/usage-limits.properties
+      - optional:file:./Qingfeng_AI_Music/config/invite-gate.local.properties
+      - optional:file:../config/invite-gate.local.properties
+      - optional:file:./config/invite-gate.local.properties
   datasource:
     url: ${MYSQL_URL:jdbc:mysql://127.0.0.1:3306/qingfeng_music?serverTimezone=Asia/Shanghai}
     username: ${MYSQL_USERNAME:}

@@ -45,4 +45,30 @@ class PayPalFlowTest {
   when(gateway.verifyWebhook(any(),any())).thenReturn(false);
   assertEquals(401,assertThrows(ResponseStatusException.class,()->service.webhook(headers,"{}".getBytes())).getStatusCode().value());
  }
+ @Test void resumeUsesExistingOrderAndNeverCapturesWithoutApproval(){
+  String owner=identity.create().creatorId(), other=identity.create().creatorId(), id=UUID.randomUUID().toString();
+  db.update("INSERT INTO payment_order(id,creator_id,package_id,amount,currency,credits,provider_link_id,status,created_at,provider) VALUES(?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP,?)",id,owner,"starter-GBP",new BigDecimal("4.99"),"GBP",100,"REMOTE456","PENDING","PAYPAL_SANDBOX");
+  var gateway=mock(PayPalCheckoutGateway.class);var service=spy(actual);doReturn(gateway).when(service).gateway();
+  var pending=new PayPalCheckoutGateway.Snapshot("REMOTE456",id,"CREATED","TESTMERCHANT","","",new BigDecimal("4.99"),"GBP");
+  when(gateway.retrieveCheckout("REMOTE456")).thenReturn(new PayPalCheckoutGateway.CheckoutView(pending,"https://www.sandbox.paypal.com/checkoutnow?token=REMOTE456"));
+  assertThrows(ResponseStatusException.class,()->service.resume(other,id));
+  var result=service.resume(owner,id); assertEquals("CHECKOUT",result.get("status"));assertEquals("https://www.sandbox.paypal.com/checkoutnow?token=REMOTE456",result.get("checkoutUrl"));
+  var approved=new PayPalCheckoutGateway.Snapshot("REMOTE456",id,"APPROVED","TESTMERCHANT","","",new BigDecimal("4.99"),"GBP");
+  when(gateway.retrieveCheckout("REMOTE456")).thenReturn(new PayPalCheckoutGateway.CheckoutView(approved,""));
+  assertEquals("APPROVED",service.resume(owner,id).get("status")); verify(gateway,never()).capture(anyString(),anyString());assertEquals(0,ledger.balance(owner));
+  var wrong=new PayPalCheckoutGateway.Snapshot("REMOTE456",id,"CREATED","TESTMERCHANT","","",new BigDecimal("0.01"),"GBP");
+  when(gateway.retrieveCheckout("REMOTE456")).thenReturn(new PayPalCheckoutGateway.CheckoutView(wrong,"https://www.sandbox.paypal.com/"));
+  assertThrows(ResponseStatusException.class,()->service.resume(owner,id));
+ }
+ @Test void queryingSettlesOnlyVerifiedCompletedCapture(){
+  String owner=identity.create().creatorId(), id=UUID.randomUUID().toString();
+  db.update("INSERT INTO payment_order(id,creator_id,package_id,amount,currency,credits,provider_link_id,status,created_at,provider) VALUES(?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP,?)",id,owner,"starter-GBP",new BigDecimal("4.99"),"GBP",100,"REMOTE789","PENDING","PAYPAL_SANDBOX");
+  var gateway=mock(PayPalCheckoutGateway.class);var service=spy(actual);doReturn(gateway).when(service).gateway();
+  when(gateway.retrieve("REMOTE789")).thenThrow(new IllegalStateException("unavailable"));assertEquals("PENDING",service.order(owner,id).get("status"));
+  var approved=new PayPalCheckoutGateway.Snapshot("REMOTE789",id,"APPROVED","TESTMERCHANT","","",new BigDecimal("4.99"),"GBP");
+  doReturn(approved).when(gateway).retrieve("REMOTE789");assertEquals("PENDING",service.order(owner,id).get("status"));
+  var completed=new PayPalCheckoutGateway.Snapshot("REMOTE789",id,"COMPLETED","TESTMERCHANT","CAP2","COMPLETED",new BigDecimal("4.99"),"GBP");
+  when(gateway.retrieve("REMOTE789")).thenReturn(completed);assertEquals("PAID",service.order(owner,id).get("status"));assertEquals("PAID",service.order(owner,id).get("status"));
+  assertEquals(100,ledger.balance(owner));verify(gateway,never()).capture(anyString(),anyString());
+ }
 }

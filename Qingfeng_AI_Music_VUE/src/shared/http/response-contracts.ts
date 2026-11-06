@@ -28,6 +28,8 @@ export function validResponse(path:string,method:string,value:unknown):boolean{
  path=path.split('?')[0]!
  if(value==null)return emptyResponseAllowed(path,method)
  if(path==='public/csrf')return obj(value)&&text(value.token)
+ if(path==='public/invite/status')return method==='GET'&&obj(value)&&typeof value.enabled==='boolean'&&typeof value.admitted==='boolean'&&str(value.csrfToken)&&str(value.expiresAt)
+ if(path==='public/invite/enter')return method==='POST'&&obj(value)&&value.admitted===true
  if(path==='app/inspiration/rewrite')return obj(value)&&text(value.text)&&(value.text as string).length<=4000
  if(path==='public/session'||path==='public/session/recover')return obj(value)&&text(value.creatorId)
  if(path==='public/session/logout')return method==='POST'&&obj(value)&&value.loggedOut===true
@@ -42,6 +44,7 @@ export function validResponse(path:string,method:string,value:unknown):boolean{
  if(path==='app/paypal/sdk-config')return method==='GET'&&obj(value)&&typeof value.enabled==='boolean'&&str(value.clientId)&&['sandbox','production'].includes(String(value.environment))&&(!value.enabled||text(value.clientId))
  if(path==='app/payments/orders'||path==='app/paypal/orders')return method==='POST'?obj(value)&&text(value.orderId)&&text(value.checkoutUrl)&&(path!=='app/paypal/orders'||value.paypalOrderId===undefined||text(value.paypalOrderId)):method==='GET'&&obj(value)&&list(value.orders,o=>obj(o)&&text(o.orderId)&&['CREATING','PENDING','PAID'].includes(String(o.status))&&num(o.credits)&&text(o.createdAt))
  if(/^app\/(payments|paypal)\/orders\/[^/]+$/.test(path))return method==='GET'&&obj(value)&&text(value.orderId)&&['CREATING','PENDING','PAID'].includes(String(value.status))&&num(value.credits)
+ if(/^app\/paypal\/orders\/[^/]+\/resume$/.test(path))return method==='POST'&&obj(value)&&text(value.orderId)&&(['APPROVED','PAID'].includes(String(value.status))||value.status==='CHECKOUT'&&text(value.checkoutUrl))
  if(/^app\/paypal\/orders\/[^/]+\/capture$/.test(path))return method==='POST'&&obj(value)&&text(value.orderId)&&['CREATING','PENDING','PAID'].includes(String(value.status))&&num(value.credits)
  if(path==='app/usage')return obj(value)&&['music','lyrics'].every(k=>obj(value[k])&&num((value[k] as Row).dailyRemaining)&&num((value[k] as Row).active))
  if(path==='app/music-settings/catalog')return obj(value)&&num(value.version)&&list(value.groups,g=>obj(g)&&text(g.id)&&str(g.zh)&&str(g.en)&&num(g.max)&&list(g.options,o=>obj(o)&&text(o.id)&&str(o.zh)&&str(o.en)&&str(o.prompt)))&&list(value.recipes,r=>obj(r)&&text(r.id)&&str(r.zh)&&str(r.en)&&choices(r.choices))

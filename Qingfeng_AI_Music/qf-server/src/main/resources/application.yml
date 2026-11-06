@@ -1,6 +1,9 @@
 spring:
   config:
-    import: classpath:usage-limits.properties
+    import:
+      - classpath:usage-limits.properties
+      - classpath:invite-gate.properties
+      - optional:file:/etc/qingfeng-music/invite-gate.properties
   application:
     name: qingfeng-music
   profiles:
@@ -29,6 +32,8 @@ qingfeng:
       enabled: ${GOOGLE_LOGIN_ENABLED:false}
     logto:
       enabled: ${LOGTO_LOGIN_ENABLED:false}
+      email-enabled: ${LOGTO_EMAIL_ENABLED:false}
+      phone-enabled: ${LOGTO_PHONE_ENABLED:false}
   inspiration:
     rewrite:
       enabled: true

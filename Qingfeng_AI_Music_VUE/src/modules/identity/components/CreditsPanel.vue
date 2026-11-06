@@ -6,6 +6,7 @@ import { logtoState } from '../../../shared/identity/logto-state'
 import { t, locale } from '../../../shared/i18n'
 import { readPendingOrders, savePendingOrders } from '../model/payment-orders'
 import { canCapturePaypal, paypalReturn } from '../model/paypal-return'
+import { mergeOrderHistory, trustedCheckoutUrl, type Order, type Provider } from '../model/order-history'
 
 const props = withDefaults(defineProps<{ preview?: boolean }>(), { preview: false })
 // Preview is only reachable in a development build and must never call the payment API.
@@ -14,12 +15,11 @@ const isPreview = import.meta.env.DEV && props.preview
 type Package = { id: string; title: string; amount: number; currency: string; credits: number }
 type Catalog = { enabled: boolean; packages: Package[] }
 type Credits = { enabled: boolean; balance: number; musicCost: number }
-type Provider = 'airwallex'|'paypal'
-type Order = { orderId: string; status: 'CREATING'|'PENDING'|'PAID'; credits: number; createdAt: string; provider?: Provider }
 const catalogs = ref<Record<Provider, Catalog>>({airwallex:{enabled:false,packages:[]},paypal:{enabled:false,packages:[]}}), credits = ref<Credits>(), loading = ref(true), busy = ref(false), error = ref('')
 const purchaseUncertain = ref(false)
 const orderNotice = ref('')
 const unresolvedOrders = ref<Order[]>([])
+const recentOrders = ref<Order[]>([])
 const paypalApproved = ref<string[]>([])
 const catalogError = ref(false)
 const selectedCurrency = ref('GBP')
@@ -32,7 +32,7 @@ watch(availableCurrencies, currencies => { if (currencies.length && !currencies.
 let loadEpoch = 0
 async function load() {
   const epoch = ++loadEpoch
-  loading.value = true; error.value = ''; orderNotice.value = ''; unresolvedOrders.value = []
+  loading.value = true; error.value = ''; orderNotice.value = ''; unresolvedOrders.value = []; recentOrders.value = []
   if (isPreview) {
     const packages = ['GBP', 'USD'].flatMap(currency => [
       { id: `starter-${currency}`, title: '100 Credits', amount: 4.99, currency, credits: 100 },
@@ -50,13 +50,15 @@ async function load() {
     const creatorId = currentCreatorId()
     if (signedIn.value) {
       const stillPending: Order[] = []
+      let recent: Order[] = []
       let paidAny = false
       let historyUnavailable = false
       for (const provider of ['airwallex','paypal'] as const) {
         const base = provider === 'paypal' ? 'app/paypal/orders' : 'app/payments/orders'
-        let history: { orders: Order[] }
-        try { history = await requestJson<{orders:Order[]}>(base) }
+        let history: { orders: Omit<Order, 'provider'>[] }
+        try { history = await requestJson<{orders:Omit<Order, 'provider'>[]}>(base) }
         catch { historyUnavailable = true; continue }
+        recent = mergeOrderHistory(recent, history.orders.map(order => ({ ...order, provider })))
         const unresolved = history.orders.filter(order => order.status !== 'PAID')
         const pending = [...new Set([...unresolved.map(order => order.orderId), ...readPendingOrders(localStorage, creatorId, provider)])]
         const returned = provider === 'paypal' ? paypalReturn(window.location.search) : null
@@ -76,9 +78,11 @@ async function load() {
           try {
             const result = await requestJson<{orderId:string;status:string;credits:number}>(`${base}/${encodeURIComponent(id)}`)
             if (currentCreatorId() !== creatorId || result.orderId !== id) throw new Error('Identity or order changed')
+            const updated: Order = {orderId:id, status:result.status as Order['status'], credits:result.credits, ...(existing?.createdAt ? {createdAt:existing.createdAt} : {}), provider}
+            recent = mergeOrderHistory(recent, [updated])
             if (result.status === 'PAID') { paid.push(id); paidAny = true }
-            else stillPending.push({orderId:id, status:result.status as Order['status'], credits:result.credits, createdAt:existing?.createdAt || '',provider})
-          } catch { stillPending.push({...existing || {orderId:id,status:'CREATING' as const,credits:0,createdAt:''},provider}) }
+            else stillPending.push(updated)
+          } catch { const unknown: Order = {...existing || {orderId:id,status:'UNKNOWN' as const},provider}; stillPending.push(unknown); recent = mergeOrderHistory(recent, [unknown]) }
         }
         if (currentCreatorId() !== creatorId) return
         if (paid.length) savePendingOrders(localStorage, creatorId, readPendingOrders(localStorage, creatorId, provider).filter(id => !paid.includes(id)),provider)
@@ -88,8 +92,9 @@ async function load() {
           paypalApproved.value = approved
         }
       }
-      unresolvedOrders.value = stillPending
       if (epoch !== loadEpoch) return
+      unresolvedOrders.value = stillPending
+      recentOrders.value = recent
       purchaseUncertain.value = historyUnavailable
       if (historyUnavailable) orderNotice.value = '暂时无法核对全部订单，请稍后刷新再购买。'
       else if (stillPending.length) orderNotice.value = '有订单仍待确认，请稍后刷新；请先核对付款记录，避免重复支付。'
@@ -115,9 +120,36 @@ async function retryPaypal(order: Order) {
   finally { busy.value = false }
   if (currentCreatorId() === creatorId) await load()
 }
+async function resumePaypal(order: Order) {
+  if (isPreview || busy.value || order.provider !== 'paypal' || order.status !== 'PENDING') return
+  const creatorId = currentCreatorId()
+  if (!creatorId) return
+  busy.value = true; error.value = ''; orderNotice.value = ''
+  try {
+    const result = await requestJson<{orderId:string;status:'CHECKOUT'|'APPROVED'|'PAID';checkoutUrl?:string}>(`app/paypal/orders/${encodeURIComponent(order.orderId)}/resume`, 'POST', undefined, 60000)
+    if (creatorId !== currentCreatorId() || result.orderId !== order.orderId) throw new Error('Identity or order changed')
+    if (result.status === 'CHECKOUT' && result.checkoutUrl) { window.location.assign(trustedCheckoutUrl(result.checkoutUrl, 'paypal')); return }
+    if (result.status === 'APPROVED') {
+      const approved = [...readPendingOrders(localStorage, creatorId, 'paypal-approved'), order.orderId]
+      savePendingOrders(localStorage, creatorId, approved, 'paypal-approved')
+      paypalApproved.value = approved
+      orderNotice.value = 'PayPal 已授权，请点击重新确认支付以完成付款。'
+    } else if (result.status === 'PAID') {
+      await load()
+    } else { throw new Error('Unknown status') }
+  } catch { orderNotice.value = '暂时无法恢复支付，请稍后刷新并核对订单状态。' }
+  finally { busy.value = false }
+}
 function price(item: Package) {
   try { return new Intl.NumberFormat(locale.value, { style: 'currency', currency: item.currency }).format(item.amount) }
   catch { return `${item.currency} ${item.amount}` }
+}
+function orderTime(value?: string) {
+  if (!value || Number.isNaN(Date.parse(value))) return ''
+  return new Intl.DateTimeFormat(locale.value, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value))
+}
+function orderStatus(status: Order['status']) {
+  return status === 'PAID' ? '支付已确认' : status === 'PENDING' ? '订单等待支付确认' : status === 'CREATING' ? '订单创建状态待核对' : '订单状态暂无法确认'
 }
 async function buy(item: Package, provider: Provider) {
   if (isPreview) { orderNotice.value = '这是界面预览，不会产生订单或扣款。'; return }
@@ -129,10 +161,7 @@ async function buy(item: Package, provider: Provider) {
     const order = await requestJson<{orderId: string; checkoutUrl: string}>(provider === 'paypal' ? 'app/paypal/orders' : 'app/payments/orders', 'POST', {packageId: item.id}, 30000)
     if (currentCreatorId() !== creatorId) throw new Error('Identity changed')
     savePendingOrders(localStorage, creatorId, [...readPendingOrders(localStorage, creatorId, provider), order.orderId],provider)
-    const url = new URL(order.checkoutUrl)
-    const validHost = provider === 'paypal' ? ['www.paypal.com','www.sandbox.paypal.com'].includes(url.hostname) : url.hostname === 'airwallex.com' || url.hostname.endsWith('.airwallex.com')
-    if (url.protocol !== 'https:' || url.username || url.password || !validHost || url.port) throw new Error('Invalid checkout URL')
-    window.location.assign(url.href)
+    window.location.assign(trustedCheckoutUrl(order.checkoutUrl, provider))
   } catch {
     purchaseUncertain.value = true
     error.value = '暂时无法确认订单状态，请刷新账户后核对，避免重复付款。'
@@ -151,7 +180,14 @@ watch(signedIn, (current, previous) => { if (current !== previous) void load() }
       <div v-if="credits?.enabled" class="balance"><span>{{ t('可用积分') }}</span><strong>{{ credits.balance }}</strong><small>{{ t('每次歌曲生成消耗 {count} 积分', {count: credits.musicCost}) }}</small></div>
       <p v-if="orderNotice" class="subtle" role="status">{{ t(orderNotice) }}</p>
       <p v-if="catalogError" class="subtle" role="status">{{ t('部分积分或支付信息暂时无法读取，请稍后刷新。') }}</p>
-      <ul v-if="unresolvedOrders.length" class="orders"><li v-for="order in unresolvedOrders" :key="order.orderId"><span>{{ t(order.status === 'CREATING' ? '订单创建状态待核对' : '订单等待支付确认') }}</span> <code>{{ order.orderId }}</code> <button v-if="order.provider === 'paypal' && paypalApproved.includes(order.orderId)" type="button" class="refresh" :disabled="busy" @click="retryPaypal(order)">{{ t('重新确认支付') }}</button></li></ul>
+      <section v-if="signedIn" class="history" :aria-label="t('最近订单')">
+        <h3>{{ t('最近订单') }}</h3>
+        <p v-if="!recentOrders.length" class="subtle">{{ t(purchaseUncertain ? '订单暂时无法读取，请稍后刷新。' : '暂无订单。') }}</p>
+        <ul v-else class="orders"><li v-for="order in recentOrders" :key="`${order.provider}:${order.orderId}`">
+          <div><strong>{{ t(orderStatus(order.status)) }}</strong> · {{ order.provider === 'paypal' ? 'PayPal' : 'Airwallex' }}<template v-if="order.credits != null"> · {{ order.credits }} {{ t('积分') }}</template><template v-if="orderTime(order.createdAt)"> · {{ orderTime(order.createdAt) }}</template></div>
+          <div>{{ t('订单号') }}：<code>{{ order.orderId }}</code> <button v-if="order.status !== 'PAID' && order.provider === 'paypal' && paypalApproved.includes(order.orderId)" type="button" class="refresh" :disabled="busy" @click="retryPaypal(order)">{{ t('重新确认支付') }}</button><button v-else-if="order.status === 'PENDING' && order.provider === 'paypal'" type="button" class="refresh" :disabled="busy" @click="resumePaypal(order)">{{ t('继续支付') }}</button></div>
+        </li></ul>
+      </section>
       <div v-if="!availableCurrencies.length && !catalogError" class="empty-state"><span class="empty-icon" aria-hidden="true">♪</span><div><strong>{{ t('积分购买暂未开放。') }}</strong><p>{{ t('开放后可在这里选购积分。') }}</p></div></div>
       <template v-else-if="availableCurrencies.length">
         <p v-if="!isPreview && !signedIn" class="subtle">{{ t('请先登录账号，再购买积分。') }}</p>
@@ -170,7 +206,7 @@ watch(signedIn, (current, previous) => { if (current !== previous) void load() }
 .credits-head { display:flex; align-items:start; justify-content:space-between; gap:16px; }
 .credits-head h2 { margin:6px 0; font-size:20px; }.credits-head p,.subtle { color:var(--muted); font-size:13px; line-height:1.7; }.credits-head p { margin:0 0 18px; }.eyebrow { color:var(--accent-text); font-size:11px; font-weight:700; letter-spacing:.08em; }
 .refresh { color:var(--accent-text); font-size:12px; }.balance { display:flex; align-items:baseline; gap:12px; margin:8px 0 20px; }.balance span,.balance small { color:var(--muted); font-size:12px; }.balance strong { color:var(--accent-text); font-size:28px; }
-.orders { padding-left:18px; color:var(--muted); font-size:12px; line-height:1.8; overflow-wrap:anywhere; }
+.history { margin:20px 0; }.history h3 { font-size:15px; margin:0 0 10px; }.orders { list-style:none; padding:0; color:var(--muted); font-size:12px; line-height:1.8; overflow-wrap:anywhere; }.orders li { padding:10px 12px; margin:8px 0; border:1px solid var(--line); border-radius:10px; }.orders strong { color:var(--text); }
 .empty-state { display:flex; gap:15px; align-items:center; padding:18px; background:var(--surface-raised); border:1px solid var(--line); border-radius:14px; }.empty-icon { display:grid; place-items:center; width:42px; height:42px; border-radius:14px; background:#f8e7dd; color:#aa6552; font-size:20px; }.empty-state strong { font-size:13px; }.empty-state p,.selection-head p { margin:5px 0 0; color:var(--muted); font-size:12px; }
 .selection-head { display:flex; justify-content:space-between; align-items:center; gap:16px; margin:24px 0 16px; }.selection-head h3 { margin:0; font-size:15px; }.currency-switch { display:flex; padding:3px; border:1px solid var(--line); border-radius:999px; background:var(--surface-raised); }.currency-switch button { padding:7px 12px; border-radius:999px; font-size:12px; font-weight:700; color:var(--muted); }.currency-switch button[aria-pressed=true] { background:var(--surface); color:var(--accent-text); box-shadow:0 2px 8px #47352a16; }
 .provider-label { margin:14px 0 9px; color:var(--muted); font-size:12px; font-weight:600; }.packages { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; margin-bottom:18px; }.package { padding:18px; border:1px solid var(--line); border-radius:15px; background:var(--surface-raised); }.package-top { display:flex; justify-content:space-between; gap:8px; color:var(--accent-text); margin-bottom:14px; }.package-caption { font-size:12px; }.package strong { font-size:25px; }.package small { font-size:12px; font-weight:400; }.package-price { margin:8px 0 18px; color:var(--muted); font-size:14px; }.buy-button { width:100%; padding:10px 12px; border:1px solid var(--line); border-radius:10px; background:var(--surface); font-size:12px; font-weight:700; }.buy-button:disabled,.refresh:disabled { opacity:.5; cursor:not-allowed; }.error { color:var(--danger); font-size:12px; }

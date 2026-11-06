@@ -18,6 +18,7 @@ import tools.jackson.databind.ObjectMapper;
 public final class PayPalCheckoutGateway {
     public enum Environment { SANDBOX, LIVE }
     public record Created(String orderId, String approvalUrl) {}
+    public record CheckoutView(Snapshot snapshot, String approvalUrl) {}
     public record Snapshot(String orderId, String reference, String orderStatus, String payeeId,
                            String captureId, String captureStatus, BigDecimal amount, String currency) {}
     public record WebhookHeaders(String authAlgo, String certUrl, String transmissionId,
@@ -45,14 +46,25 @@ public final class PayPalCheckoutGateway {
         var body=Map.of("intent","CAPTURE","purchase_units",List.of(purchase),"payment_source",Map.of("paypal",Map.of("experience_context",Map.of("return_url",returnUrl,"cancel_url",cancelUrl,"user_action","PAY_NOW"))));
         JsonNode order=transport.send("POST","/v2/checkout/orders",Map.of("PayPal-Request-Id",reference,"Prefer","return=representation"),JSON.writeValueAsString(body));
         String id=order.path("id").asString(); requireOrderId(id);
+        String approval=approvalUrl(order);
+        return new Created(id,approval);
+    }
+    private String approvalUrl(JsonNode order) {
         String approval="";
         for(JsonNode link:order.path("links")) if("payer-action".equals(link.path("rel").asString()) || "approve".equals(link.path("rel").asString())) { approval=link.path("href").asString(); break; }
         URI uri=URI.create(approval); String host=uri.getHost();
         String expected=environment==Environment.SANDBOX?"www.sandbox.paypal.com":"www.paypal.com";
         if(!"https".equalsIgnoreCase(uri.getScheme()) || !expected.equalsIgnoreCase(host) || uri.getUserInfo()!=null || (uri.getPort()!=-1 && uri.getPort()!=443)) throw new IllegalStateException("Invalid PayPal approval URL");
-        return new Created(id,approval);
+        return approval;
     }
     public Snapshot retrieve(String orderId) { requireOrderId(orderId); return snapshot(transport.send("GET","/v2/checkout/orders/"+orderId,Map.of(),null),orderId); }
+    public CheckoutView retrieveCheckout(String orderId) {
+        requireOrderId(orderId);
+        JsonNode order=transport.send("GET","/v2/checkout/orders/"+orderId,Map.of(),null);
+        Snapshot state=snapshot(order,orderId);
+        String status=state.orderStatus();
+        return new CheckoutView(state, ("CREATED".equals(status)||"PAYER_ACTION_REQUIRED".equals(status)) ? approvalUrl(order) : "");
+    }
     public Snapshot capture(String orderId,String requestId) {
         requireOrderId(orderId); requireReference(requestId);
         return snapshot(transport.send("POST","/v2/checkout/orders/"+orderId+"/capture",Map.of("PayPal-Request-Id",requestId,"Prefer","return=representation"),"{}"),orderId);

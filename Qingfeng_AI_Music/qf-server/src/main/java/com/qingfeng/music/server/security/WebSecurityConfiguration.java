@@ -1,5 +1,6 @@
 package com.qingfeng.music.server.security;
 
+import com.qingfeng.music.server.invite.InviteGateFilter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -19,16 +20,21 @@ public class WebSecurityConfiguration {
         return username -> { throw new UsernameNotFoundException("身份服务尚未接入"); };
     }
 
-    @Bean @org.springframework.core.annotation.Order(2) SecurityFilterChain apiSecurity(HttpSecurity http, ObjectProvider<CreatorSessionFilter> sessionFilter, ObjectProvider<GoogleOAuthFlow> googleFlow) throws Exception {
+    @Bean @org.springframework.core.annotation.Order(2) SecurityFilterChain apiSecurity(HttpSecurity http, ObjectProvider<CreatorSessionFilter> sessionFilter, ObjectProvider<GoogleOAuthFlow> googleFlow, ObjectProvider<InviteGateFilter> inviteGate) throws Exception {
         var google=googleFlow.getIfAvailable();if(google!=null)google.configure(http);
         var filter=sessionFilter.getIfAvailable();
         if (filter!=null) http.addFilterBefore(filter, AnonymousAuthenticationFilter.class);
+        var invite=inviteGate.getIfAvailable();
+        if (invite!=null&&filter!=null) http.addFilterBefore(invite, CreatorSessionFilter.class);
+        else if (invite!=null) http.addFilterBefore(invite, AnonymousAuthenticationFilter.class);
         if (filter!=null) http.addFilterAfter(new ApiRateLimitFilter(),CreatorSessionFilter.class);
         return http.csrf(csrf -> csrf.ignoringRequestMatchers("/api/public/payments/airwallex/webhook", "/api/public/paypal/webhook").csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse()).csrfTokenRequestHandler(new CsrfTokenRequestAttributeHandler()))
             .authorizeHttpRequests(auth -> auth
                 .dispatcherTypeMatchers(jakarta.servlet.DispatcherType.ERROR).permitAll()
                 .requestMatchers(org.springframework.http.HttpMethod.GET,"/","/index.html","/assets/**","/brand/**","/media/**","/create","/works","/works/*","/gift/*","/account","/recharge").permitAll()
                 .requestMatchers("/api/public/system/info", "/api/public/csrf", "/api/public/session", "/api/public/session/recover", "/actuator/health").permitAll()
+                .requestMatchers(org.springframework.http.HttpMethod.GET,"/api/public/invite/status").permitAll()
+                .requestMatchers(org.springframework.http.HttpMethod.POST,"/api/public/invite/enter").permitAll()
                 .requestMatchers(org.springframework.http.HttpMethod.GET,"/api/public/auth/google/status",GoogleOAuthFlow.CALLBACK).permitAll()
                 .requestMatchers(org.springframework.http.HttpMethod.POST,"/api/public/auth/google/start","/api/public/session/logout").permitAll()
                 .requestMatchers(org.springframework.http.HttpMethod.GET,"/api/public/auth/logto/status").permitAll()

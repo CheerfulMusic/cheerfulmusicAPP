@@ -35,7 +35,12 @@ async function decodeResponse<T>(response:Response,path:string,method:string):Pr
     if(!response.ok)throw new ApiError(`请求失败（${response.status}），请检查服务状态`,response.status)
     throw invalidResponse()
   }
-  if(!response.ok){const failure=data&&typeof data==='object'?data as {message?:unknown;code?:unknown}:{};throw new ApiError(typeof failure.message==='string'?failure.message:`请求失败（${response.status}），请检查服务状态`,response.status,typeof failure.code==='string'?failure.code:undefined)}
+  if(!response.ok){
+    const failure=data&&typeof data==='object'?data as {message?:unknown;code?:unknown}:{}
+    const code=typeof failure.code==='string'?failure.code:undefined
+    if(code==='INVITE_REQUIRED'&&typeof window!=='undefined')window.dispatchEvent(new Event('qingfeng:invite-required'))
+    throw new ApiError(typeof failure.message==='string'?failure.message:`请求失败（${response.status}），请检查服务状态`,response.status,code)
+  }
   if(!raw.trim()&&!emptyResponseAllowed(path,method)||!validResponse(path,method,data))throw invalidResponse()
   return data as T
 }
