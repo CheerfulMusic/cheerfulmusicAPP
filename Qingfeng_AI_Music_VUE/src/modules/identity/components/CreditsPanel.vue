@@ -177,7 +177,7 @@ watch(signedIn, (current, previous) => { if (current !== previous) void load() }
     <p v-if="loading" class="subtle" role="status">{{ t('正在读取积分…') }}</p>
     <p v-else-if="error" class="error" role="alert">{{ t(error) }}</p>
     <template v-else>
-      <div v-if="credits?.enabled" class="balance"><span>{{ t('可用积分') }}</span><strong>{{ credits.balance }}</strong><small>{{ t('每次歌曲生成消耗 {count} 积分', {count: credits.musicCost}) }}</small></div>
+      <div v-if="credits && (signedIn || credits.enabled)" class="balance"><span>{{ t('可用积分') }}</span><strong>{{ credits.balance }}</strong><small v-if="credits.enabled">{{ t('每次歌曲生成消耗 {count} 积分', {count: credits.musicCost}) }}</small></div>
       <p v-if="orderNotice" class="subtle" role="status">{{ t(orderNotice) }}</p>
       <p v-if="catalogError" class="subtle" role="status">{{ t('部分积分或支付信息暂时无法读取，请稍后刷新。') }}</p>
       <section v-if="signedIn" class="history" :aria-label="t('最近订单')">

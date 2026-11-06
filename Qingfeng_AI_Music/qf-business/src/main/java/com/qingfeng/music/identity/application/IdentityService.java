@@ -1,6 +1,7 @@
 package com.qingfeng.music.identity.application;
 
 import com.qingfeng.music.identity.api.IdentityApi;
+import com.qingfeng.music.credits.FirstLoginCredits;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
@@ -11,8 +12,12 @@ import org.springframework.transaction.annotation.Transactional;
 
 public class IdentityService implements IdentityApi {
     private final IdentityRepository repository;
+    private final FirstLoginCredits firstLoginCredits;
     private final SecureRandom random = new SecureRandom();
-    public IdentityService(IdentityRepository repository) { this.repository = repository; }
+    public IdentityService(IdentityRepository repository, FirstLoginCredits firstLoginCredits) {
+        this.repository = repository;
+        this.firstLoginCredits = firstLoginCredits;
+    }
     @Transactional
     public Session create() {
         byte[] bytes = new byte[32]; random.nextBytes(bytes);
@@ -63,7 +68,9 @@ public class IdentityService implements IdentityApi {
             if(!target.equals(expectedCreator)&&(repository.googleIdentity(expectedCreator).isPresent()||repository.hasOtherIdentity(expectedCreator)||repository.hasContent(expectedCreator)))throw googleFailure("GOOGLE_ACCOUNT_CONFLICT");
         }else{
             if(repository.googleIdentity(expectedCreator).isPresent())throw googleFailure("GOOGLE_ACCOUNT_CONFLICT");
+            boolean firstLogin = !repository.hasOtherIdentity(expectedCreator);
             repository.bindGoogle(expectedCreator,subjectHash,profile(email,320),profile(name,200),Instant.now());
+            if(firstLogin)firstLoginCredits.grant(expectedCreator);
         }
         repository.updateGoogle(subjectHash,profile(email,320),profile(name,200),Instant.now());
         String token=randomToken();repository.addSession(target,hash(token),Instant.now().plus(30,ChronoUnit.DAYS));

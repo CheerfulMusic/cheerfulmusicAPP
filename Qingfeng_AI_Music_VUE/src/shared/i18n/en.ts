@@ -1148,6 +1148,7 @@ export const english: Record<string, string> = {
   '查看登录方式': 'View sign-in options',
   '欢迎来到 Cheerful Music': 'Welcome to Cheerful Music',
   '登录账号，开启你的音乐创作之旅': 'Sign in to begin your music-making journey',
+  '新用户首次登录赠送100积分，每个账号限领一次。': 'Get 100 credits on your first sign-in. One welcome bonus per account.',
   '社交账号登录': 'Social sign-in',
   '使用 Google 继续': 'Continue with Google',
   '检查中…': 'Checking…',

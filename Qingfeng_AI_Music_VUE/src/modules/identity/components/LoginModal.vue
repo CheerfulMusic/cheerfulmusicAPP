@@ -151,11 +151,12 @@ async function continueWithApple() {
 </script>
 
 <template>
-  <dialog ref="dialog" class="login-modal" aria-modal="true" aria-labelledby="login-title" aria-describedby="login-description" @click="onBackdropClick" @close="onClosed">
+  <dialog ref="dialog" class="login-modal" aria-modal="true" aria-labelledby="login-title" aria-describedby="login-description login-bonus" @click="onBackdropClick" @close="onClosed">
     <div class="login-card">
       <button ref="closeButton" class="close-button" type="button" :aria-label="t('关闭登录弹窗')" @click="close"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></button>
       <h2 id="login-title">{{ t('欢迎来到 Cheerful Music') }}</h2>
       <p id="login-description" class="login-description">{{ t('登录账号，开启你的音乐创作之旅') }}</p>
+      <p id="login-bonus" class="login-bonus">{{ t('新用户首次登录赠送100积分，每个账号限领一次。') }}</p>
 
       <div class="social-options" :aria-label="t('社交账号登录')">
         <button class="social-button" type="button" :disabled="checkingGoogle || !googleReady || !accountState.enabled || openingGoogle || openingLogto" :aria-busy="openingGoogle" @click="continueWithGoogle"><GoogleMark /><span>{{ openingGoogle ? t('正在前往 Google…') : t('使用 Google 继续') }}</span><small v-if="checkingGoogle">{{ t('检查中…') }}</small><small v-else-if="googleStatusError">{{ t('状态未确认') }}</small><small v-else-if="!googleReady">{{ t('当前环境未启用') }}</small></button>
@@ -191,6 +192,7 @@ async function continueWithApple() {
 .close-button svg { width: 18px; height: 18px; }
 .login-card h2 { margin: 0; color: #272320; font-size: clamp(24px, 5vw, 29px); font-weight: 750; letter-spacing: -.045em; line-height: 1.35; }
 .login-description { margin: 7px 0 16px; color: #938983; font-size: 13px; line-height: 1.55; }
+.login-bonus { margin: 0 0 16px; padding: 9px 12px; border-radius: 12px; background: #fff2ed; color: #af523c; font-size: 12px; line-height: 1.6; }
 .social-options { display: grid; gap: 8px; }
 .social-button { display: flex; align-items: center; width: 100%; min-height: 52px; padding: 10px 17px; border: 1px solid #e8e3e0; border-radius: 14px; background: #fff; color: #423d39; text-align: left; opacity: 1; }
 .social-button:not(:disabled):hover { border-color: #e9b5a6; background: #fffaf8; }

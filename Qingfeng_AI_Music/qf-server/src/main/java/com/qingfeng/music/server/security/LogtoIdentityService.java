@@ -2,6 +2,7 @@ package com.qingfeng.music.server.security;
 
 import com.qingfeng.music.common.exception.DomainException;
 import com.qingfeng.music.identity.api.IdentityApi;
+import com.qingfeng.music.credits.FirstLoginCredits;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
@@ -21,11 +22,13 @@ import org.springframework.transaction.annotation.Transactional;
 public class LogtoIdentityService {
     private final JdbcTemplate db;
     private final IdentityApi identity;
+    private final FirstLoginCredits firstLoginCredits;
     private final SecureRandom random = new SecureRandom();
 
-    public LogtoIdentityService(JdbcTemplate db, IdentityApi identity) {
+    public LogtoIdentityService(JdbcTemplate db, IdentityApi identity, FirstLoginCredits firstLoginCredits) {
         this.db = db;
         this.identity = identity;
+        this.firstLoginCredits = firstLoginCredits;
     }
 
     public record Profile(String email, String phoneMasked, String name) {}
@@ -54,10 +57,12 @@ public class LogtoIdentityService {
             if (hasContent(expectedCreator) || hasAnyIdentity(expectedCreator)) throw failure("LOGTO_ACCOUNT_CONFLICT");
         } else if (owner.isEmpty()) {
             if (hasOidcIdentity(expectedCreator)) throw failure("LOGTO_ACCOUNT_CONFLICT");
+            boolean firstLogin = !hasAnyIdentity(expectedCreator);
             Instant now = Instant.now();
             db.update("INSERT INTO creator_oidc_identity(subject_hash,creator_id,email,phone_masked,display_name,created_at,updated_at) VALUES(?,?,?,?,?,?,?)",
                 subjectHash, expectedCreator, trim(verifiedEmail, 320), maskedPhone(verifiedPhone), trim(name, 200),
                 Timestamp.from(now), Timestamp.from(now));
+            if (firstLogin) firstLoginCredits.grant(expectedCreator);
         }
         db.update("UPDATE creator_oidc_identity SET email=?,phone_masked=?,display_name=?,updated_at=? WHERE subject_hash=?",
             trim(verifiedEmail, 320), maskedPhone(verifiedPhone), trim(name, 200), Timestamp.from(Instant.now()), subjectHash);

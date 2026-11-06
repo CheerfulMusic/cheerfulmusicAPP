@@ -2,6 +2,8 @@ package com.qingfeng.music.server.config;
 
 import com.qingfeng.music.identity.api.IdentityApi;
 import com.qingfeng.music.identity.application.IdentityService;
+import com.qingfeng.music.credits.CreditsLedger;
+import com.qingfeng.music.credits.FirstLoginCredits;
 import com.qingfeng.music.infrastructure.persistence.identity.*;
 import com.qingfeng.music.infrastructure.persistence.work.*;
 import com.qingfeng.music.work.api.WorkApi;
@@ -15,6 +17,7 @@ import org.mybatis.spring.annotation.MapperScan;
 @EnableTransactionManagement
 @MapperScan("com.qingfeng.music.infrastructure.persistence")
 public class BusinessConfiguration {
-    @Bean IdentityApi identityApi(IdentityMapper mapper) { return new IdentityService(new MyBatisIdentityRepository(mapper)); }
+    @Bean FirstLoginCredits firstLoginCredits(CreditsLedger credits) { return new FirstLoginCredits(credits); }
+    @Bean IdentityApi identityApi(IdentityMapper mapper, FirstLoginCredits firstLoginCredits) { return new IdentityService(new MyBatisIdentityRepository(mapper), firstLoginCredits); }
     @Bean WorkApi workApi(WorkMapper mapper) { return new WorkService(new MyBatisWorkRepository(mapper)); }
 }
