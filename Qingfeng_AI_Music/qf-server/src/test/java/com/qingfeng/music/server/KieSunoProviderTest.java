@@ -45,7 +45,7 @@ class KieSunoProviderTest {
             assertEquals("clip-first",ready.audioInfo().audioId());assertEquals(183.42,ready.audioInfo().duration());
             var second=provider.sourceInfo("nested-task","https://audio.test/second.mp3");assertNotNull(second);assertEquals("clip-second",second.audioId());
         }
-        assertEquals(java.util.List.of("https://audio.test/first.mp3","https://audio.test/first.mp3"),approved);
+        assertEquals(java.util.List.of("https://audio.test/first.mp3","https://audio.test/second.mp3","https://audio.test/first.mp3","https://audio.test/second.mp3"),approved);
     }
     @Test void nestedStreamingOnlyResultDoesNotBecomeCompletedAudio(){
         response="""

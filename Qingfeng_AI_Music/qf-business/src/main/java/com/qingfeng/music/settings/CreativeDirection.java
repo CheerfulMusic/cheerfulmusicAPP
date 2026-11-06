@@ -19,6 +19,7 @@ public final class CreativeDirection {
     }
     public static MusicSettings.Direction compile(Work work,MusicSettings.Direction base,CreativePlan plan){
         if(plan==null)plan=fallback(work);
+        if(base!=null&&plan.requirements().isBlank()&&plan.suggestedArrangement().isBlank()&&plan.negativeTags().isBlank()&&"AUTO".equals(plan.vocalGender()))return base;
         String explicit=base==null?work.style():base.style();
         String exclusions=String.join(", ",java.util.stream.Stream.of(base==null?"":base.negativeTags(),plan.negativeTags()).filter(s->!s.isBlank()).distinct().toList());
         // 已明确排除的乐器不能仍作为默认主乐器提交；不强删包含段落变化的用户自由描述。

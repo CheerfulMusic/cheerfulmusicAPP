@@ -54,8 +54,8 @@ class SectionEditingIntegrationTest {
     }
     SectionEditingService.Request request(Fixture f,String key){int from=f.text.indexOf("门口的小碗还在");return new SectionEditingService.Request(f.asset,0,key,10,22,from,from+"门口的小碗还在".length(),"门口的灯为我亮");}
     @Test void sectionEditsInheritTheSourceDirectionRatherThanCurrentPreferences(){
-        var f=fixture();var r=musicSettings.catalog().recipes().get(0);
-        var original=musicSettings.preview(new com.qingfeng.music.settings.MusicSettings.Preferences(1,r.id(),r.choices(),"FEMALE","轻柔自然","重鼓"));musicSettings.snapshot(f.task,original);
+        var f=fixture();
+        var original=musicSettings.frozen(f.work,f.task).orElseThrow();
         var edited=editing.submit(f.owner,f.work,request(f,UUID.randomUUID().toString()));
         assertEquals(original,musicSettings.frozen(f.work,edited.id()).orElseThrow());
         musicSettings.save(f.owner,f.work,0,new com.qingfeng.music.settings.MusicSettings.Preferences(1,null,Map.of("genre",List.of("rock")),"MALE","有力量",""));
