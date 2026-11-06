@@ -1,0 +1,108 @@
+{
+  "deploymentType": "private-configuration-prestage",
+  "testedGitHead": "b466da7",
+  "applicationJarReplaced": false,
+  "frontendTests": 188,
+  "backendTests": 252,
+  "buildAndVerifyPassed": true,
+  "enterpriseIdentityVerified": true,
+  "credentialType": "Account",
+  "providerQueries": [
+    {
+      "endpoint": "dysmsapi.aliyuncs.com",
+      "httpStatus": 503,
+      "code": "ServiceUnavailable"
+    },
+    {
+      "endpoint": "dysmsapi.ap-southeast-1.aliyuncs.com",
+      "httpStatus": 200,
+      "code": "INVALID_PARAMETERS"
+    }
+  ],
+  "production": {
+    "release": "/opt/qingfeng-music/releases/20261106-155253-sms-bridge",
+    "sourceCommit": "db23772f44c8891ac95c18e658044c92757ac3b7",
+    "jarSha256": "72becbfef12f6b25f230c0c2d792556655c565b284148892ade2a77dca134b74",
+    "jarUnchanged": true,
+    "backup": "/var/backups/qingfeng-music/20261106T101047Z",
+    "health": "UP",
+    "changedKeys": [
+      "qingfeng.auth.sms-bridge.international.access-key-id",
+      "qingfeng.auth.sms-bridge.international.access-key-secret",
+      "qingfeng.auth.sms-bridge.international.enabled",
+      "qingfeng.auth.sms-bridge.international.sender-id"
+    ],
+    "unrelatedConfigUnchanged": true,
+    "mainlandSmsUnchanged": true,
+    "internationalProviderEnabled": false,
+    "publicInternationalEnabled": false,
+    "senderId": "CheerMusic",
+    "noSmsSent": true,
+    "noSchemaChange": true,
+    "countsBefore": {
+      "music_work": 124,
+      "media_asset": 100,
+      "generation_task": 109,
+      "creator": 98,
+      "creator_google_identity": 1,
+      "creator_oidc_identity": 4,
+      "credit_ledger": 1,
+      "payment_order": 0
+    },
+    "countsAfter": {
+      "music_work": 124,
+      "media_asset": 100,
+      "generation_task": 109,
+      "creator": 98,
+      "creator_google_identity": 1,
+      "creator_oidc_identity": 4,
+      "credit_ledger": 1,
+      "payment_order": 0
+    }
+  },
+  "publicSmoke": {
+    "checksPassed": 30,
+    "checks": [
+      "international provider remains disabled",
+      "public international login remains disabled",
+      "enterprise SenderID stored",
+      "mainland SMS provider remains enabled",
+      "bridge requires Bearer",
+      "bridge requires Bearer sanitized response",
+      "bridge rejects incorrect Bearer",
+      "bridge rejects incorrect Bearer sanitized response",
+      "bridge validates recipient before provider",
+      "bridge validates recipient before provider sanitized response",
+      "bridge validates OTP before provider",
+      "bridge validates OTP before provider sanitized response",
+      "bridge rejects oversized payload",
+      "bridge rejects oversized payload sanitized response",
+      "invite admits isolated verification client",
+      "page /",
+      "page /account",
+      "page /create",
+      "page /works",
+      "page /recharge",
+      "native international login remains disabled",
+      "native email password remains available",
+      "native email OTP remains available",
+      "native password reset remains available",
+      "native phone login remains available",
+      "Google login remains enabled",
+      "Logto identity remains enabled",
+      "application Nginx MySQL active",
+      "application healthy",
+      "runtime application JAR unchanged"
+    ],
+    "noSmsSent": true,
+    "noSessionOrUserCreated": true,
+    "nativeCapabilities": {
+      "emailPasswordEnabled": true,
+      "emailCodeEnabled": true,
+      "phoneEnabled": true,
+      "phoneInternationalEnabled": false,
+      "passwordResetEnabled": true,
+      "authenticated": false
+    }
+  }
+}
