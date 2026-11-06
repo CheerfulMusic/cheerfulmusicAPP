@@ -11,15 +11,15 @@ type Pack = { id:string; title:string; amount:number; currency:string; credits:n
 type Catalog = { enabled:boolean; packages:Pack[] }
 const en = computed(() => locale.value === 'en')
 const signedIn = computed(() => accountState.value.authenticated || logtoState.value.authenticated)
-const currency = ref<'GBP'|'USD'>('GBP'), selected = ref(300), busy = ref(false), error = ref('')
+const currency = 'USD', selected = ref(300), busy = ref(false), error = ref('')
 const loading = ref(true), available = ref(false), catalog = ref<Pack[]>([]), blocked = ref(false), balance = ref<number|null>(null), musicCost = ref(15)
 const sdk = shallowRef<PaypalCheckout|null>(null)
-const chosen = computed(() => catalog.value.find(p => p.currency===currency.value && p.credits===selected.value))
+const chosen = computed(() => catalog.value.find(p => p.currency===currency && p.credits===selected.value))
 const tiers = computed(() => [100,300,700].map((credits, index) => {
-  const real = catalog.value.find(p => p.currency===currency.value && p.credits===credits)
+  const real = catalog.value.find(p => p.currency===currency && p.credits===credits)
   return {credits, amount:real?.amount ?? [4.99,12.99,24.99][index], real:!!real}
 }))
-const symbol = computed(() => currency.value==='GBP' ? '£' : '$')
+const symbol = '$'
 const songCount = (credits:number) => Math.floor(credits / (musicCost.value > 0 ? musicCost.value : 15))
 const price = computed(() => tiers.value.find(t => t.credits===selected.value)?.amount.toFixed(2))
 async function refresh() {
@@ -29,7 +29,7 @@ async function refresh() {
     const [c,b] = await Promise.allSettled([
       requestJson<Catalog>('app/paypal/catalog'),requestJson<{enabled:boolean;balance:number;musicCost:number}>('app/credits')
     ])
-    if(c.status==='fulfilled'){available.value=c.value.enabled;catalog.value=c.value.packages}
+    if(c.status==='fulfilled'){catalog.value=c.value.packages.filter(p=>p.currency===currency);available.value=c.value.enabled && catalog.value.length>0}
     if(b.status==='fulfilled') { musicCost.value=b.value.musicCost; if(b.value.enabled) balance.value=b.value.balance }
     if(signedIn.value && available.value) {
       const [p,a]=await Promise.all([requestJson<{orders:{status:string}[]}>('app/paypal/orders'), requestJson<{orders:{status:string}[]}>('app/payments/orders')])
@@ -76,7 +76,7 @@ onMounted(refresh)
 <template>
   <div class="recharge">
     <div class="recharge-intro"><div><p class="eyebrow">{{ en ? 'CREDITS FOR YOUR CREATIVITY' : '为每一个灵感，留一首歌' }}</p><h1>{{ en ? 'Recharge credits' : '充值创作积分' }}</h1><p>{{ en ? 'Choose a credit pack and turn your stories into songs.' : '选择适合你的积分套餐，让每个故事都有自己的旋律。' }}</p></div><div class="balance"><span>{{ en ? 'Available credits' : '当前可用积分' }}</span><strong>{{ balance === null ? '—' : balance }}</strong><small>{{ en ? `${musicCost} credits per song generation` : `每次生成歌曲消耗 ${musicCost} 积分` }}</small></div></div>
-    <div class="recharge-body"><div class="main-column"><section class="section"><div class="section-head"><div><span class="step">01</span><h2>{{ en ? 'Choose a credit pack' : '选择积分套餐' }}</h2><p>{{ en ? 'Select the pack that fits your creative plans.' : '挑选适合你创作计划的套餐。' }}</p></div><div class="switch" role="group" :aria-label="en?'Choose currency':'选择付款币种'"><button type="button" :aria-pressed="currency==='GBP'" @click="currency='GBP'">GBP £</button><button type="button" :aria-pressed="currency==='USD'" @click="currency='USD'">USD $</button></div></div>
+    <div class="recharge-body"><div class="main-column"><section class="section"><div class="section-head"><div><span class="step">01</span><h2>{{ en ? 'Choose a credit pack' : '选择积分套餐' }}</h2><p>{{ en ? 'Select the pack that fits your creative plans.' : '挑选适合你创作计划的套餐。' }}</p></div><span class="currency-label">USD $</span></div>
       <div v-if="!available" class="notice">{{ loading ? (en?'Checking payment availability…':'正在检查支付状态…') : (en?'Payments are not open yet. Prices are shown for reference.':'支付暂未开通，以下价格仅供查看。') }}</div>
       <div class="plans"><button v-for="(tier,i) in tiers" :key="tier.credits" type="button" class="plan" :class="{selected:selected===tier.credits}" :aria-pressed="selected===tier.credits" @click="selected=tier.credits"><span v-if="i===1" class="badge">{{ en?'POPULAR':'热门选择' }}</span><span class="plan-name">{{ en?['STARTER','CREATOR','STUDIO'][i]:['灵感起步','创作畅享','灵感满满'][i] }}</span><strong>{{ tier.credits }} <small>{{ en?'credits':'积分' }}</small></strong><span class="plan-price">{{ symbol }}{{ tier.amount.toFixed(2) }}</span><span class="plan-info">{{ en?`About ${songCount(tier.credits)} song generations`:`约可生成 ${songCount(tier.credits)} 次歌曲` }}</span><span class="radio" aria-hidden="true"></span></button></div>
     </section><section class="section methods"><div class="section-head"><div><span class="step">02</span><h2>{{ en?'Payment method':'支付方式' }}</h2><p>{{ en?'Your payment is handled by the provider.':'选择支付方式，在支付平台完成付款。' }}</p></div></div><div class="method"><span class="method-logo paypal">P</span><div><strong>PayPal</strong><small>{{ en?'Pay securely with your PayPal account':'使用 PayPal 账户安全支付' }}</small></div><span class="method-status">{{ available?(en?'Available':'可用'):(en?'Not available yet':'暂未开通') }}</span></div><div class="method muted"><span class="method-logo card">▤</span><div><strong>{{ en?'Credit / debit card':'信用卡 / 借记卡' }}</strong><small>{{ en?'Card availability depends on merchant eligibility':'银行卡支付需商户资质审核' }}</small></div><span class="method-status">{{ en?'Not available yet':'暂未开通' }}</span></div><div class="method muted"><span class="method-logo wechat">●</span><div><strong>{{ en?'WeChat Pay':'微信支付' }}</strong><small>{{ en?'International WeChat Pay requires activation':'国际微信支付需单独开通' }}</small></div><span class="method-status">{{ en?'Not available yet':'暂未开通' }}</span></div></section></div>

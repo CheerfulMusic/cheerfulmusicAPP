@@ -76,9 +76,6 @@ qingfeng.paypal.environment=sandbox
 # qingfeng.paypal.merchant-id=
 # qingfeng.paypal.webhook-id=
 # 套餐价格由服务端配置，客户端只能选择对应套餐 ID，不可指定金额。
-# qingfeng.payments.prices.gbp.starter=4.99
-# qingfeng.payments.prices.gbp.standard=12.99
-# qingfeng.payments.prices.gbp.plus=24.99
 # qingfeng.payments.prices.usd.starter=4.99
 # qingfeng.payments.prices.usd.standard=12.99
 # qingfeng.payments.prices.usd.plus=24.99

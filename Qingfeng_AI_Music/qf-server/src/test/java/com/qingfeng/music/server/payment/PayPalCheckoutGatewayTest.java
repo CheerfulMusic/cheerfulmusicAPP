@@ -15,10 +15,11 @@ class PayPalCheckoutGatewayTest {
     private final PayPalCheckoutGateway gateway=new PayPalCheckoutGateway(PayPalCheckoutGateway.Environment.SANDBOX,"MERCHANT1","WEBHOOK1",(method,path,h,body)->{headers.add(h);return json.readTree(response);});
     @Test void createUsesStableRequestIdAndRejectsOtherHosts() {
         response="{\"id\":\"ORDER123\",\"links\":[{\"rel\":\"payer-action\",\"href\":\"https://www.sandbox.paypal.com/checkoutnow?token=ORDER123\"}]}";
-        var created=gateway.create("reference-123","Credits",new BigDecimal("5.00"),"GBP","https://cheerfulmusic.com/account","https://cheerfulmusic.com/account");
+        var created=gateway.create("reference-123","Credits",new BigDecimal("5.00"),"USD","https://cheerfulmusic.com/account","https://cheerfulmusic.com/account");
         assertEquals("ORDER123",created.orderId());assertEquals("reference-123",headers.get(0).get("PayPal-Request-Id"));
+        assertThrows(IllegalArgumentException.class,()->gateway.create("reference-123","Credits",new BigDecimal("5.00"),"GBP","https://cheerfulmusic.com/account","https://cheerfulmusic.com/account"));
         response=response.replace("www.sandbox.paypal.com","evil.example");
-        assertThrows(IllegalStateException.class,()->gateway.create("reference-123","Credits",new BigDecimal("5.00"),"GBP","https://cheerfulmusic.com/account","https://cheerfulmusic.com/account"));
+        assertThrows(IllegalStateException.class,()->gateway.create("reference-123","Credits",new BigDecimal("5.00"),"USD","https://cheerfulmusic.com/account","https://cheerfulmusic.com/account"));
     }
     @Test void captureSnapshotUsesCaptureAmountAndChecksMerchantAndIdentity() {
         response="{\"id\":\"ORDER123\",\"status\":\"COMPLETED\",\"purchase_units\":[{\"custom_id\":\"our-order\",\"payee\":{\"merchant_id\":\"MERCHANT1\"},\"amount\":{\"value\":\"10.00\",\"currency_code\":\"GBP\"},\"payments\":{\"captures\":[{\"id\":\"CAP123\",\"status\":\"COMPLETED\",\"amount\":{\"value\":\"9.00\",\"currency_code\":\"USD\"}}]}}]}";

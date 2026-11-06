@@ -22,19 +22,18 @@ const unresolvedOrders = ref<Order[]>([])
 const recentOrders = ref<Order[]>([])
 const paypalApproved = ref<string[]>([])
 const catalogError = ref(false)
-const selectedCurrency = ref('GBP')
+const selectedCurrency = 'USD'
 const signedIn = computed(() => accountState.value.authenticated || logtoState.value.authenticated)
-const availableCurrencies = computed(() => [...new Set(Object.values(catalogs.value).filter(c => c.enabled).flatMap(c => c.packages.map(p => p.currency)))].sort())
+const availableCurrencies = computed(() => Object.values(catalogs.value).some(c => c.enabled && c.packages.some(p => p.currency === selectedCurrency)) ? ['USD'] : [])
 const visibleProviders = computed(() => (['paypal', 'airwallex'] as const).map(provider => ({
-  provider, packages: catalogs.value[provider].enabled ? catalogs.value[provider].packages.filter(p => p.currency === selectedCurrency.value) : []
+  provider, packages: catalogs.value[provider].enabled ? catalogs.value[provider].packages.filter(p => p.currency === selectedCurrency) : []
 })).filter(group => group.packages.length > 0))
-watch(availableCurrencies, currencies => { if (currencies.length && !currencies.includes(selectedCurrency.value)) selectedCurrency.value = currencies[0] })
 let loadEpoch = 0
 async function load() {
   const epoch = ++loadEpoch
   loading.value = true; error.value = ''; orderNotice.value = ''; unresolvedOrders.value = []; recentOrders.value = []
   if (isPreview) {
-    const packages = ['GBP', 'USD'].flatMap(currency => [
+    const packages = ['USD'].flatMap(currency => [
       { id: `starter-${currency}`, title: '100 Credits', amount: 4.99, currency, credits: 100 },
       { id: `standard-${currency}`, title: '300 Credits', amount: 12.99, currency, credits: 300 },
       { id: `plus-${currency}`, title: '700 Credits', amount: 24.99, currency, credits: 700 },
@@ -191,7 +190,7 @@ watch(signedIn, (current, previous) => { if (current !== previous) void load() }
       <div v-if="!availableCurrencies.length && !catalogError" class="empty-state"><span class="empty-icon" aria-hidden="true">♪</span><div><strong>{{ t('积分购买暂未开放。') }}</strong><p>{{ t('开放后可在这里选购积分。') }}</p></div></div>
       <template v-else-if="availableCurrencies.length">
         <p v-if="!isPreview && !signedIn" class="subtle">{{ t('请先登录账号，再购买积分。') }}</p>
-        <div class="selection-head"><div><h3>{{ t('选择积分套餐') }}</h3><p>{{ t('选择适合你的创作计划。') }}</p></div><div class="currency-switch" role="group" :aria-label="t('选择付款币种')"><button v-for="currency in availableCurrencies" :key="currency" type="button" :aria-pressed="selectedCurrency === currency" @click="selectedCurrency = currency">{{ currency }}</button></div></div>
+        <div class="selection-head"><div><h3>{{ t('选择积分套餐') }}</h3><p>{{ t('选择适合你的创作计划。') }}</p></div><span class="currency-label">USD $</span></div>
         <section v-for="group in visibleProviders" :key="group.provider" class="provider-section" :aria-label="group.provider === 'paypal' ? 'PayPal' : 'Airwallex'">
           <div class="provider-label">{{ t('支付方式') }} · {{ group.provider === 'paypal' ? 'PayPal' : 'Airwallex' }}</div>
           <div class="packages"><article v-for="item in group.packages" :key="item.id" class="package"><div class="package-top"><span class="package-caption">{{ t('创作积分') }}</span><span aria-hidden="true">✦</span></div><strong>{{ item.credits }} <small>{{ t('积分') }}</small></strong><p class="package-price">{{ price(item) }}</p><button type="button" class="buy-button" :disabled="!isPreview && (busy || purchaseUncertain || unresolvedOrders.length > 0 || !signedIn)" @click="buy(item, group.provider)">{{ busy ? t('正在前往支付…') : t('选择此套餐') }}</button></article></div>

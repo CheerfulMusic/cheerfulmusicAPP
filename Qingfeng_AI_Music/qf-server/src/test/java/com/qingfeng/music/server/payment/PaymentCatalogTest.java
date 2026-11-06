@@ -8,14 +8,13 @@ import static org.junit.jupiter.api.Assertions.*;
 class PaymentCatalogTest {
     @Test void publishedPackagesHaveServerControlledCurrencyAndPrice() {
         var catalog=new PaymentCatalog(new MockEnvironment());
-        assertEquals(6,catalog.packages().size());
-        var gbp=catalog.find("starter-GBP").orElseThrow();
+        assertEquals(3,catalog.packages().size());
         var usd=catalog.find("starter-USD").orElseThrow();
-        assertEquals(new BigDecimal("4.99"),gbp.amount());
-        assertEquals("GBP",gbp.currency());
+        assertEquals(new BigDecimal("4.99"),usd.amount());
         assertEquals("USD",usd.currency());
         assertEquals(100,usd.credits());
         assertTrue(catalog.find("starter-EUR").isEmpty());
+        assertTrue(catalog.find("starter-GBP").isEmpty());
         assertTrue(catalog.find("starter-GBP-0.01").isEmpty());
     }
     @Test void invalidPriceFailsClosedAndConfiguredPriceIsUsed() {

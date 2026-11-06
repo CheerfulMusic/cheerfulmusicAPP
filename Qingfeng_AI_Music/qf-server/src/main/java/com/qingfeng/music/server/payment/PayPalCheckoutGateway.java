@@ -46,7 +46,7 @@ public final class PayPalCheckoutGateway {
     }
     public Created create(String reference,String title,BigDecimal amount,String currency,String returnUrl,String cancelUrl) {
         requireReference(reference);
-        if(title==null || title.isBlank() || amount==null || amount.signum()<=0 || amount.scale()>2 || !List.of("GBP","USD").contains(currency)) throw new IllegalArgumentException("Invalid order");
+        if(title==null || title.isBlank() || amount==null || amount.signum()<=0 || amount.scale()>2 || !"USD".equals(currency)) throw new IllegalArgumentException("Invalid order");
         requireReturnUrl(returnUrl); requireReturnUrl(cancelUrl);
         var purchase=Map.of("reference_id",reference,"custom_id",reference,"description",title,
                 "amount",Map.of("currency_code",currency,"value",amount.setScale(2).toPlainString()));

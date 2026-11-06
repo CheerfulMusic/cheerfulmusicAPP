@@ -20,7 +20,6 @@ public final class PaymentCatalog {
     private final List<Package> packages;
     public PaymentCatalog(Environment env) {
         packages=List.of(
-            item(env,"starter","GBP","4.99",100),item(env,"standard","GBP","12.99",300),item(env,"plus","GBP","24.99",700),
             item(env,"starter","USD","4.99",100),item(env,"standard","USD","12.99",300),item(env,"plus","USD","24.99",700));
     }
     private static Package item(Environment env,String tier,String currency,String defaultAmount,long credits) {

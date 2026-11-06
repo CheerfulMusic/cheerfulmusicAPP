@@ -6,7 +6,7 @@
 
 ## 积分商品
 
-用户已确认英镑和美元各三档：4.99 对应 100 积分，12.99 对应 300 积分，24.99 对应 700 积分。每次歌曲生成消耗 10 积分。价格、币种和积分数由服务端目录决定，订单创建时保存快照；客户端只提交商品 ID。上线前仍需在实际付款页面核对币种、费率、税费和销售条款。
+积分套餐只提供美元三档：$4.99 对应 100 积分，$12.99 对应 300 积分，$24.99 对应 700 积分。每次歌曲生成消耗 15 积分。价格、币种和积分数由服务端目录决定，订单创建时保存快照；客户端只提交商品 ID。历史英镑订单仍可核对，但不能创建新的英镑订单。上线前仍需在实际付款页面核对币种、费率、税费和销售条款。
 
 ## 当前实现
 
@@ -25,4 +25,4 @@
 2. 在服务端私有配置中设置沙箱凭证和商户 ID、webhook ID，配置对应的 HTTPS 回调并启用必要事件；先用独立测试数据库和沙箱买家完成端到端测试。
 3. 验证订单中断、重复通知、金额及币种不匹配、不同设备恢复、退款和争议；完成相关业务策略与实现后，才能评估正式环境上线。
 
-配置项为 `qingfeng.paypal.enabled`、`qingfeng.paypal.environment`、`qingfeng.paypal.client-id`、`qingfeng.paypal.client-secret`、`qingfeng.paypal.merchant-id` 和 `qingfeng.paypal.webhook-id`。回调为 `/api/public/paypal/webhook`；目前只处理并核对 `PAYMENT.CAPTURE.COMPLETED`，其他事件验签后返回失败以便重试，必须完成对应处理后再订阅。价格通过 `qingfeng.payments.prices.{gbp,usd}.{starter,standard,plus}` 调整。支付和积分扣费开关相互独立，购买要求绑定 Google 或 Logto 账号。
+配置项为 `qingfeng.paypal.enabled`、`qingfeng.paypal.environment`、`qingfeng.paypal.client-id`、`qingfeng.paypal.client-secret`、`qingfeng.paypal.merchant-id` 和 `qingfeng.paypal.webhook-id`。回调为 `/api/public/paypal/webhook`；目前只处理并核对 `PAYMENT.CAPTURE.COMPLETED`，其他事件验签后返回失败以便重试，必须完成对应处理后再订阅。价格通过 `qingfeng.payments.prices.usd.{starter,standard,plus}` 调整。支付和积分扣费开关相互独立，购买要求绑定 Google 或 Logto 账号。
