@@ -1,5 +1,12 @@
 /** Chinese source copy is the stable message key; business option values stay unchanged. */
 export const english: Record<string, string> = {
+  '关闭': 'Close',
+  '欢迎加入': 'Welcome to ',
+  '恭喜您获得新人专属福利': 'A special gift to begin your music journey',
+  '已自动发放到您的账户中': 'Already added to your account',
+  '开启音乐之旅': 'Start your music journey',
+  '用音乐，点亮生活': 'Let music light up your life',
+
   '最近订单': 'Recent orders',
   '订单号': 'Order ID',
   '支付已确认': 'Payment confirmed',
@@ -599,7 +606,7 @@ export const english: Record<string, string> = {
   '手机导航': 'Mobile navigation',
   '为重要的人，制作一首歌': 'Make a song for someone special',
   '找回之前的音乐': 'Recover your music',
-  '青风音乐': 'Music gifts',
+  '青风音乐': 'Cheerful Music',
   '把心意，唱给你听。': 'Let your heart be heard.',
   '找回我的音乐': 'Recover my music',
   '页脚导航': 'Footer navigation',
