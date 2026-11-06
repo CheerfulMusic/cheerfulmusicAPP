@@ -1,0 +1,56 @@
+===== 所有 release 的源码提交记录 =====
+/opt/qingfeng-music/releases/20261104-225531-session-management -> 2adbc576a50a1ddf4d88cd63409877bda5e11e5a
+
+/opt/qingfeng-music/releases/20261105-lyrics-save-brand -> 00dd521632ad53eb6d1eb11e2f971873e59f4982
+
+/opt/qingfeng-music/releases/20261105-recharge-login-14f10936 -> 4e289875350e57fe3e9f7a966aebd33ac696a2ea
+
+===== release-evidence.json =====
+{
+  "allExpectedEntriesVerified": true,
+  "backup": "/var/backups/qingfeng-music/20261104T150250Z",
+  "baseJarSha256": "1c0dc9d6da6c1a25cb71b21757157e590615f53ef41dabedcd066b57a69bd863",
+  "changedEntryCount": 21,
+  "configurationHashesUnchanged": true,
+  "countsAfter": {
+    "cover_asset": 6,
+    "creator": 40,
+    "creator_google_identity": 1,
+    "generation_task": 31,
+    "media_asset": 31,
+    "music_work": 51
+  },
+  "countsBefore": {
+    "cover_asset": 6,
+    "creator": 40,
+    "creator_google_identity": 1,
+    "generation_task": 31,
+    "media_asset": 31,
+    "music_work": 51
+  },
+  "deletedEntryCount": 16,
+  "deltaSha256": "428aedb1cb4c26474c68d74960c4f844b9d4df9fd9240c25665081d5fdd33054",
+  "entryCount": 318,
+  "googleEnabled": true,
+  "health": "UP",
+  "jarSha256": "202c41c481dbb04ee0e707668d91027be2046380c00e33c1bcb1aede9c33d65c",
+  "manifestSha256": "93e4bae4a26ee1107705ced4055323473bdb5fbf7aec6649b784e31ea35087ec",
+  "nginxUnchanged": true,
+  "noDatabaseMigration": true,
+  "previous": "/opt/qingfeng-music/releases/20261104-221025-account-ui",
+  "release": "/opt/qingfeng-music/releases/20261104-225531-session-management",
+  "sourceBranch": "main",
+  "sourceCommit": "2adbc576a50a1ddf4d88cd63409877bda5e11e5a",
+  "sourceRepository": "https://github.com/CheerfulMusic/cheerfulmusicAPP"
+}===== 各 release 的 app.sha256 =====
+-- /opt/qingfeng-music/releases/20261105-recharge-login-14f10936
+14f10936aa347a5543ad3615edcdc109631a4c425e861dbc86f7ba2a42189b6f  app.jar
+===== 当前 JAR 与最近 release 的 SHA =====
+1c0dc9d6da6c1a25cb71b21757157e590615f53ef41dabedcd066b57a69bd863  /opt/qingfeng-music/releases/20261104-221025-account-ui/app.jar
+202c41c481dbb04ee0e707668d91027be2046380c00e33c1bcb1aede9c33d65c  /opt/qingfeng-music/releases/20261104-225531-session-management/app.jar
+78e5c37cf23475e6b0c56d6feabf0c967bf3680833435993a658f6a53a3f6023  /opt/qingfeng-music/releases/20261105-01-integration/app.jar
+eaf99560d64fe0930ced29deef5b40559bbd31f25bcc73789d957acb4be9536b  /opt/qingfeng-music/releases/20261105-invite-layout/app.jar
+2e46362483323eb561f04dfb43b676479bf19553b80de553b61d5024af71ba35  /opt/qingfeng-music/releases/20261105-invite-release/app.jar
+2469deb545b976601318b7ef78cf2c7e4d329a3a4a929fd970f80cf5bd727f9f  /opt/qingfeng-music/releases/20261105-lyrics-save-brand/app.jar
+14f10936aa347a5543ad3615edcdc109631a4c425e861dbc86f7ba2a42189b6f  /opt/qingfeng-music/releases/20261105-recharge-login-14f10936/app.jar
+8b14fb2cc0df5bce77fc8e497e4c289e0e7b3c5dee4de634d5907afa658fdaba  /opt/qingfeng-music/releases/20261105T210752Z-login-phone/app.jar

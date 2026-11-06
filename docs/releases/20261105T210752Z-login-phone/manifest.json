@@ -1,0 +1,461 @@
+{
+  "release": "20261105T210752Z-login-phone",
+  "captured": "2026-11-06 (read-only from server)",
+  "jar_sha256": "8b14fb2cc0df5bce77fc8e497e4c289e0e7b3c5dee4de634d5907afa658fdaba",
+  "jar": "/opt/qingfeng-music/current/app.jar",
+  "note": "Server keeps only the compiled JAR; no source tree or .git exists. This is a build baseline, not source code.",
+  "database": {
+    "flyway_max_version": 20,
+    "music_work": 115,
+    "creator": 81
+  },
+  "static_file_count": 74,
+  "static_files": [
+    {
+      "path": "assets/AudioPreparation-CcK4HXIJ.js",
+      "bytes": 922,
+      "sha256": "c4ebe830a32506a745c6ed63b007daec2b721501b8f7bfe3faf2aae8610450ee"
+    },
+    {
+      "path": "assets/covers-BDRxlrAl.js",
+      "bytes": 608,
+      "sha256": "39db71928793f0d3086abe03f3179124874913a89defeb0b97b0326606bdf5cd"
+    },
+    {
+      "path": "assets/detail-Cmy9XwA8.js",
+      "bytes": 1532,
+      "sha256": "630cb0c252ac3f953ad7e89edf899fb35f8b4d9e3ac6515d73441cc8a83ab6ea"
+    },
+    {
+      "path": "assets/DraftStudioPage-BIytbAcd.css",
+      "bytes": 18251,
+      "sha256": "d86cb25e51f521df348ae7d96926f03765b9e56a9b9b64020a9711c62ea34015"
+    },
+    {
+      "path": "assets/DraftStudioPage-CCgH8SIG.js",
+      "bytes": 18421,
+      "sha256": "6290ca821fda806f7687412424579e7c3eeb8746c110b9f874709e6f04c1dff2"
+    },
+    {
+      "path": "assets/i18n-CCCeVEbi.js",
+      "bytes": 154737,
+      "sha256": "067f823e0a71362a11165f7bbca33028c918a6e210acb6cb4c839d676d8214c1"
+    },
+    {
+      "path": "assets/IdentityPage-CwYJxRh7.js",
+      "bytes": 21985,
+      "sha256": "6547d3a48f68b6d13cb42747f5e5ce5ed390a3c0768d6b2df2d719f0b67fa161"
+    },
+    {
+      "path": "assets/IdentityPage-Dip538Cg.css",
+      "bytes": 13962,
+      "sha256": "0bbf2356b4c7daab89ad372ce401ca86f89c4ed2279978e0a9463fa6fdc436c6"
+    },
+    {
+      "path": "assets/index-CLEhmdbj.js",
+      "bytes": 98595,
+      "sha256": "79eb9a1f08de9fb69c0b621ab482b9158887d48148486bcf93299e74f47e8a26"
+    },
+    {
+      "path": "assets/index-DcWTBVsZ.css",
+      "bytes": 133199,
+      "sha256": "739bff59646c3fce37690738498b0cf0a3d358d855a9611d16a31952769d924f"
+    },
+    {
+      "path": "assets/NotFoundPage-CWUiIW1V.js",
+      "bytes": 454,
+      "sha256": "be9b1164b0f53e7b6cb8571e8d3a0d21a29321a9e7f9b64c850bba80e4178fa7"
+    },
+    {
+      "path": "assets/payment-orders-DsFe1i1J.js",
+      "bytes": 510,
+      "sha256": "75526f19603f16dc47069b2f5c56b5a47b38d66d7789ec4c8e450c6e630d28aa"
+    },
+    {
+      "path": "assets/PremiumHomePage-Du9yhPTC.js",
+      "bytes": 10636,
+      "sha256": "dd5aeaf80b9f33e0bf658de1f325c26b59d5f8f07bbad06524aba305f2c64e68"
+    },
+    {
+      "path": "assets/PublicGiftPage-CHIQ944i.js",
+      "bytes": 3689,
+      "sha256": "0d217f2abedb944efbce1744d899b1e91861702b96b57b0099fe861fc0ba2610"
+    },
+    {
+      "path": "assets/RechargePage-am4Bxoph.css",
+      "bytes": 5905,
+      "sha256": "088ff05358e38163012eeaa1106799f3d38995cfd9ddf9d6dff9d9402288bbac"
+    },
+    {
+      "path": "assets/RechargePage-k3UcoeYC.js",
+      "bytes": 13542,
+      "sha256": "3d53b073761727716d1a74bc19aec2c252f189dcdcbfaf11cd658d10b868c4e6"
+    },
+    {
+      "path": "assets/vocals-D-TOXQaF.js",
+      "bytes": 5011,
+      "sha256": "5306e5ba67f495d6b16d35dd6dac58959d64c4967b941a618d9fe8ee88ba5e8c"
+    },
+    {
+      "path": "assets/WorkDetailPage-BAEVDbY1.css",
+      "bytes": 2851,
+      "sha256": "002de2014a984d921ead0dcdc91de34e388bb2514f96c2e0eb23981a33f49eba"
+    },
+    {
+      "path": "assets/WorkDetailPage-DpFwj7KN.js",
+      "bytes": 88327,
+      "sha256": "c576823e88dedab8b62bbf07e4fa657a0e281a4cf20a34aebe7b1181b2e424d0"
+    },
+    {
+      "path": "assets/WorkLibraryPage-BDGUaPR9.js",
+      "bytes": 5591,
+      "sha256": "1357b1a1b7e41c71c3a797f8378b3f4609f1684974f452cdc682ffaf70c27fe6"
+    },
+    {
+      "path": "brand/logo-mark.svg",
+      "bytes": 261,
+      "sha256": "cfae350d67e91336e922c3ce7487b6c62468d4f1085c9d2ba709c2f32d4e46e6"
+    },
+    {
+      "path": "brand/logo-symbol.svg",
+      "bytes": 220,
+      "sha256": "1b87098d6b2a2b577e289e684f8954f23ed59d9c714b012f12e18662fa14cd1e"
+    },
+    {
+      "path": "index.html",
+      "bytes": 743,
+      "sha256": "eba4c6b1f077262d7cdb119716fd12a0f6e9d68f54daead4ec3acaecb1a834f3"
+    },
+    {
+      "path": "media/brand-cover-en.svg",
+      "bytes": 1148,
+      "sha256": "1a9a018e2f324f644bdc38aa644146c4b9882e09f9377679c4083f1b7f4be798"
+    },
+    {
+      "path": "media/brand-cover-light-en.svg",
+      "bytes": 1148,
+      "sha256": "a33581deab4c4515e5e4b72c0a65cec4eedf91eebbec0575422cc44fd745c199"
+    },
+    {
+      "path": "media/brand-cover-light.svg",
+      "bytes": 1145,
+      "sha256": "43ac1343cf5e94180f53243c261b094a1b2820823c632c795a40c50555db7a26"
+    },
+    {
+      "path": "media/brand-cover.svg",
+      "bytes": 1145,
+      "sha256": "ba7d8aa529bf76f4888dfc68b843117cb3ba78f618b336bae4ba6ef0d0cbcdf0"
+    },
+    {
+      "path": "media/couple-editorial.png",
+      "bytes": 2100305,
+      "sha256": "c92f360e6471a11ac1dc0231475ccf447ab9d8ed9bf50e60773ff5fa2a8ce8cb"
+    },
+    {
+      "path": "media/explore-family-v1.webp",
+      "bytes": 250192,
+      "sha256": "85bd1657b6b3b120d4e390d2209034e1baa6347a43519844898f40752c4be874"
+    },
+    {
+      "path": "media/explore-love-v1.webp",
+      "bytes": 129802,
+      "sha256": "bfeb8fbf154fe982d5edfe143e37563d55eb55a69e0281019a523dc3b47e3c8b"
+    },
+    {
+      "path": "media/explore-travel-v1.webp",
+      "bytes": 140604,
+      "sha256": "0c4d6638746a249a787faf53d15d3bf9762cacd330eda3604842f8d4fc6b9285"
+    },
+    {
+      "path": "media/family-editorial.png",
+      "bytes": 2174834,
+      "sha256": "023962552dd093bc9e83bf3a468853beb9fbf6cf197a6e5451135355f948186e"
+    },
+    {
+      "path": "media/friends-editorial.png",
+      "bytes": 2116677,
+      "sha256": "edcc72b10831003b7ee89ca947ea3e72082487ec6852c2bb87e3c8d060e5db3c"
+    },
+    {
+      "path": "media/home.wav",
+      "bytes": 793844,
+      "sha256": "c261f5370e9fc0a60023954a67a34e5c962c95d9d222064aa04e4bdd1bf17a1f"
+    },
+    {
+      "path": "media/sample-family-cover-v2.webp",
+      "bytes": 128876,
+      "sha256": "f0f7f0f972785e685b08ab41e4ccfb5392d71e259729034591a192b45d645a63"
+    },
+    {
+      "path": "media/sample-family-v2.mp3",
+      "bytes": 3900244,
+      "sha256": "2b4c9fe0d338aa0ce2a52183bfa8fd0affcd49dc6cd03d8d1c80697414b35762"
+    },
+    {
+      "path": "media/sample-love-cover-v2.webp",
+      "bytes": 135680,
+      "sha256": "8bd4ee1e6c0aaca597a858b8a5fdab356b9c522a426b255857e76ae48c59460b"
+    },
+    {
+      "path": "media/sample-love-v2.mp3",
+      "bytes": 3971598,
+      "sha256": "6baf4941f45fa22a7591bc7bea5db8bd7219422b50652d7d59f54636d8241bd6"
+    },
+    {
+      "path": "media/sample-ocean-travel-v2.mp3",
+      "bytes": 8262848,
+      "sha256": "f25c962f027cd7cc9a3bb71421396771d8d03bcc28f101aa904864088b9f4276"
+    },
+    {
+      "path": "media/sample-travel-cover-v2.webp",
+      "bytes": 154752,
+      "sha256": "d0efeb3d7a671142b2f9411458a9bd6203dc5210bab470ae94825499a85bddaf"
+    },
+    {
+      "path": "media/sea.wav",
+      "bytes": 793844,
+      "sha256": "c14c9702b30793087ca259d73423cffa0804af9b1a03d8b8ccc554624ffc3098"
+    },
+    {
+      "path": "media/summer.wav",
+      "bytes": 793844,
+      "sha256": "2f21cd20d8f9c4da4137e6c6b3d480a7dc94081bd8066ab2a1ca44ba5c1341b9"
+    },
+    {
+      "path": "assets/AudioPreparation-COXV2x1K.js",
+      "bytes": 922,
+      "sha256": "5618cf4524b028be6013ef8441e0fcb9595f9a60adab68d647bf3459058af0cc"
+    },
+    {
+      "path": "assets/covers-Cu9x4WxW.js",
+      "bytes": 608,
+      "sha256": "83672bda7c0ef529eb4773e9a9baa79a346d3db4b03a3925fe2210e12e2429cc"
+    },
+    {
+      "path": "assets/detail-BTcDWHQF.js",
+      "bytes": 1532,
+      "sha256": "701ae357826cec3e37a1833f21b09fbdd24ad5390a29c60314d83d61273c31c5"
+    },
+    {
+      "path": "assets/DraftStudioPage-D19TTtE-.js",
+      "bytes": 18421,
+      "sha256": "26b3e3c0550a11a2fd2227aabe7c26cd58d2a14dcee4b26697b71238d1a9edd5"
+    },
+    {
+      "path": "assets/IdentityPage-D420buNc.js",
+      "bytes": 21985,
+      "sha256": "63c07a20684331873f34c5f0fc2861ea703ad8505f5876eb0af4f5d962a81864"
+    },
+    {
+      "path": "assets/index-DkO3qbHH.css",
+      "bytes": 133422,
+      "sha256": "75aec59ad6bc22ee3bcea1cd1e5c786073aedcf8594fd3cc8aa737aa16badeb8"
+    },
+    {
+      "path": "assets/index-DpwXbrfj.js",
+      "bytes": 98595,
+      "sha256": "63f9f01a33355e2ece48877d3f88ab1b9ddbd32842caae70db036dd3006c5c7e"
+    },
+    {
+      "path": "assets/PremiumHomePage-CWEoE8Pk.js",
+      "bytes": 10636,
+      "sha256": "7d7ecf7966f113a0f8a17aa8ba02c8b3e606539a0a3adc6c88f9dc9a70e9bce3"
+    },
+    {
+      "path": "assets/PublicGiftPage-UHSqFCpF.js",
+      "bytes": 3689,
+      "sha256": "142ea3c27ebed8e11535e3c0d18aa513f6d8babd7d15bf8ffeb213e8b3cf28ac"
+    },
+    {
+      "path": "assets/RechargePage-DZfZl70Y.js",
+      "bytes": 13542,
+      "sha256": "fc4293165e2e2c6ed64ee855db69f40e4900a46c35b67e9b70cdf3e2ff7755fc"
+    },
+    {
+      "path": "assets/vocals-FYnYOIno.js",
+      "bytes": 5011,
+      "sha256": "43709800b769738dae14e5886de83ecac579144559b1b14e4ca1639750ab808f"
+    },
+    {
+      "path": "assets/WorkDetailPage-ClwZERG-.js",
+      "bytes": 88327,
+      "sha256": "0670ba119790a134007d543e93e656cd1daa1955502fad56763d6fa594bd423f"
+    },
+    {
+      "path": "assets/WorkLibraryPage-Cws7e61h.js",
+      "bytes": 5591,
+      "sha256": "e240b5fc3f1dad575bdcbb3ba51cad94d83a8fe42d204ecf58f0fa78f2da2e70"
+    },
+    {
+      "path": "assets/AudioPreparation-Dd_mywBr.js",
+      "bytes": 922,
+      "sha256": "722a97ddcb56def8a512b73b84f5e9570f67115a1581b25eead1ebfa73254e70"
+    },
+    {
+      "path": "assets/covers-zsA8g7N6.js",
+      "bytes": 608,
+      "sha256": "ea12c29ed4d1ff76233c817cadd284721b25c5840726e86508ea9b2adea24210"
+    },
+    {
+      "path": "assets/detail-DCSXAWpY.js",
+      "bytes": 1435,
+      "sha256": "0b6a2ad3ce1bc6ffaac2d8bc4003f3ef13c03d4939835dcc0e309497f048856e"
+    },
+    {
+      "path": "assets/DraftStudioPage-BJxESc-s.css",
+      "bytes": 18251,
+      "sha256": "37db9ae2e83f612e41bea1c1af7ec37475e7e45aea217e2a0c4ee1d90a913d27"
+    },
+    {
+      "path": "assets/DraftStudioPage-Tk-p_-kq.js",
+      "bytes": 20277,
+      "sha256": "b39f779601f64417553a8e096d29042844ce60599c7d5d0768af85eb3f96e1aa"
+    },
+    {
+      "path": "assets/i18n-CQxRp8ir.js",
+      "bytes": 158273,
+      "sha256": "97aecb76d64e666524de8a99de1d5db22fef33486b50b4b6cbb4385434eb2056"
+    },
+    {
+      "path": "assets/IdentityPage-B_RgtY8d.js",
+      "bytes": 21992,
+      "sha256": "cd3eccaddc0983fdb8ff17ab5cf986680a04abf95134e1d8bf750c19c6cd9e71"
+    },
+    {
+      "path": "assets/index-CZ1qkqD7.css",
+      "bytes": 135046,
+      "sha256": "d5192222072d9190382c3fb6bb7bb419518963ccda9747f4a303dcbc0b0aae98"
+    },
+    {
+      "path": "assets/index-Dkkdum_Z.js",
+      "bytes": 98685,
+      "sha256": "d6e42d89d778902943e57ededd026d986d0776d3b1a246917fc829a188b2406d"
+    },
+    {
+      "path": "assets/NotFoundPage-BlYczq_f.js",
+      "bytes": 454,
+      "sha256": "53d9030abf997ffd7a70a0a3d13da0efadbe0c1cc5d92976156631327709a3bd"
+    },
+    {
+      "path": "assets/PremiumHomePage-BzGnqcJ_.js",
+      "bytes": 10611,
+      "sha256": "f581360aa436509fd611ceced0fd553f81ee2877a494409b02a5a6bf00b4b2e0"
+    },
+    {
+      "path": "assets/PublicGiftPage-DJ0GfBcw.js",
+      "bytes": 3689,
+      "sha256": "160f21ad02320f52667454eefaa0e146c2b7953e6434c281dd05d61019823cd1"
+    },
+    {
+      "path": "assets/RechargePage-BD5g68dL.js",
+      "bytes": 13542,
+      "sha256": "bd0536f058f25a74ef30bb33cf6f5fdba0e33c9f8a8ad395a32ea4f7691003a9"
+    },
+    {
+      "path": "assets/vocals-D_W8RuY-.js",
+      "bytes": 5011,
+      "sha256": "200068031778133ecc13a74e8fc11a00c6ed2d68d52940b8d4e893f4cb5c6d13"
+    },
+    {
+      "path": "assets/WorkDetailPage-BsAW3-GN.js",
+      "bytes": 87532,
+      "sha256": "5c5c1bc4e37190478001e2baf7b4aa8bbb952bd520e9bdcc3d34bf265acc6b82"
+    },
+    {
+      "path": "assets/WorkLibraryPage-kDoVzPse.js",
+      "bytes": 5591,
+      "sha256": "7bda86dae18126b5b49ebdbb38592217bd538afc8871274db3716109c38eb547"
+    },
+    {
+      "path": "brand/README.md",
+      "bytes": 1171,
+      "sha256": "37770c8b88ba84d8071ed8f988bff39af94d403d9335061b1c31ba06a766e055"
+    },
+    {
+      "path": "brand/wordmark-en.svg",
+      "bytes": 13751,
+      "sha256": "2d7bb95346805d8070420a90ef977850f81eb8605f50e2585b9b1eee6fc53999"
+    },
+    {
+      "path": "brand/wordmark-zh.svg",
+      "bytes": 7200,
+      "sha256": "411f646108acecc2c83a41b49a1d80db2efa8ab5f9a76b4734a95248ce3e5532"
+    }
+  ],
+  "top_level_class_count": 59,
+  "top_level_classes": [
+    "com/qingfeng/music/server/MusicApplication",
+    "com/qingfeng/music/server/config/BusinessConfiguration",
+    "com/qingfeng/music/server/config/CoverConfiguration",
+    "com/qingfeng/music/server/config/CreatorSecurityConfiguration",
+    "com/qingfeng/music/server/config/ExecutionConfiguration",
+    "com/qingfeng/music/server/config/GiftConfiguration",
+    "com/qingfeng/music/server/config/GoogleOAuthConfiguration",
+    "com/qingfeng/music/server/config/LogtoConfiguration",
+    "com/qingfeng/music/server/config/LyricsCompositionConfiguration",
+    "com/qingfeng/music/server/config/MusicSettingsConfiguration",
+    "com/qingfeng/music/server/config/PlaybackLyricsConfiguration",
+    "com/qingfeng/music/server/config/ProviderConfiguration",
+    "com/qingfeng/music/server/config/SectionEditingConfiguration",
+    "com/qingfeng/music/server/config/StorageConfiguration",
+    "com/qingfeng/music/server/config/UsageConfiguration",
+    "com/qingfeng/music/server/exception/GlobalExceptionHandler",
+    "com/qingfeng/music/server/invite/InviteGateConfiguration",
+    "com/qingfeng/music/server/invite/InviteGateController",
+    "com/qingfeng/music/server/invite/InviteGateFilter",
+    "com/qingfeng/music/server/invite/InviteGateService",
+    "com/qingfeng/music/server/invite/InviteGateSettings",
+    "com/qingfeng/music/server/payment/AirwallexSandboxGateway",
+    "com/qingfeng/music/server/payment/PayPalCheckoutGateway",
+    "com/qingfeng/music/server/payment/PayPalPaymentController",
+    "com/qingfeng/music/server/payment/PayPalPaymentService",
+    "com/qingfeng/music/server/payment/PaymentCatalog",
+    "com/qingfeng/music/server/payment/PaymentController",
+    "com/qingfeng/music/server/payment/PaymentGateway",
+    "com/qingfeng/music/server/payment/PaymentService",
+    "com/qingfeng/music/server/payment/risk/PaymentRiskJournal",
+    "com/qingfeng/music/server/query/WorkLibraryQuery",
+    "com/qingfeng/music/server/security/ApiRateLimitFilter",
+    "com/qingfeng/music/server/security/CreatorPrincipal",
+    "com/qingfeng/music/server/security/CreatorSessionFilter",
+    "com/qingfeng/music/server/security/GoogleOAuthFlow",
+    "com/qingfeng/music/server/security/LogtoCallbackSecurityConfiguration",
+    "com/qingfeng/music/server/security/LogtoIdentityService",
+    "com/qingfeng/music/server/security/LogtoOAuthFlow",
+    "com/qingfeng/music/server/security/WebSecurityConfiguration",
+    "com/qingfeng/music/server/web/AudioResponse",
+    "com/qingfeng/music/server/web/WebPageController",
+    "com/qingfeng/music/server/web/app/CoverController",
+    "com/qingfeng/music/server/web/app/CreditsController",
+    "com/qingfeng/music/server/web/app/GenerationController",
+    "com/qingfeng/music/server/web/app/IdentityController",
+    "com/qingfeng/music/server/web/app/InspirationController",
+    "com/qingfeng/music/server/web/app/LyricsController",
+    "com/qingfeng/music/server/web/app/MediaController",
+    "com/qingfeng/music/server/web/app/MusicSettingsController",
+    "com/qingfeng/music/server/web/app/PlaybackLyricsController",
+    "com/qingfeng/music/server/web/app/SectionEditingController",
+    "com/qingfeng/music/server/web/app/ShareController",
+    "com/qingfeng/music/server/web/app/UsageController",
+    "com/qingfeng/music/server/web/app/WorkController",
+    "com/qingfeng/music/server/web/publicapi/GiftController",
+    "com/qingfeng/music/server/web/publicapi/GoogleAuthController",
+    "com/qingfeng/music/server/web/publicapi/LogtoAuthController",
+    "com/qingfeng/music/server/web/publicapi/SessionController",
+    "com/qingfeng/music/server/web/publicapi/SystemInfoController"
+  ],
+  "config_templates": [
+    "application-local.yml",
+    "application-mysql.yml",
+    "application.yml",
+    "invite-gate.properties",
+    "usage-limits.properties"
+  ],
+  "source_commits_recorded_on_server": {
+    "20261104-225531-session-management": "2adbc576a50a1ddf4d88cd63409877bda5e11e5a",
+    "20261105-lyrics-save-brand": "00dd521632ad53eb6d1eb11e2f971873e59f4982 (not present in any current repository)",
+    "20261105-recharge-login-14f10936": "4e289875350e57fe3e9f7a966aebd33ac696a2ea",
+    "20261105-invite-release": "missing",
+    "20261105T210752Z-login-phone": "missing"
+  }
+}
