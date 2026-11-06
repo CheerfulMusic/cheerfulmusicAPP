@@ -1,0 +1,6 @@
+spring:
+  config:
+    import:
+      - optional:file:./Qingfeng_AI_Music/config/paypal-live.local.properties
+      - optional:file:../config/paypal-live.local.properties
+      - optional:file:./config/paypal-live.local.properties

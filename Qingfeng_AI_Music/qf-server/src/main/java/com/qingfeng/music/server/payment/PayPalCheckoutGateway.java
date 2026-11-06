@@ -29,13 +29,20 @@ public final class PayPalCheckoutGateway {
     private final String merchantId;
     private final String webhookId;
     private final Transport transport;
+    private final boolean localPopup;
 
     public PayPalCheckoutGateway(Environment environment, String clientId, String secret, String merchantId, String webhookId) {
-        this(environment, merchantId, webhookId, new HttpTransport(environment,clientId,secret));
+        this(environment,clientId,secret,merchantId,webhookId,false);
+    }
+    public PayPalCheckoutGateway(Environment environment, String clientId, String secret, String merchantId, String webhookId, boolean localPopup) {
+        this(environment, merchantId, webhookId, new HttpTransport(environment,clientId,secret), localPopup);
     }
     PayPalCheckoutGateway(Environment environment, String merchantId, String webhookId, Transport transport) {
-        if(environment==null || merchantId==null || merchantId.isBlank() || webhookId==null || webhookId.isBlank()) throw new IllegalArgumentException("Missing PayPal configuration");
-        this.environment=environment; this.merchantId=merchantId; this.webhookId=webhookId; this.transport=transport;
+        this(environment,merchantId,webhookId,transport,false);
+    }
+    PayPalCheckoutGateway(Environment environment, String merchantId, String webhookId, Transport transport, boolean localPopup) {
+        if(environment==null || merchantId==null || merchantId.isBlank() || webhookId==null || (!localPopup && webhookId.isBlank()) || (localPopup && environment!=Environment.LIVE)) throw new IllegalArgumentException("Missing PayPal configuration");
+        this.environment=environment; this.merchantId=merchantId; this.webhookId=webhookId; this.transport=transport; this.localPopup=localPopup;
     }
     public Created create(String reference,String title,BigDecimal amount,String currency,String returnUrl,String cancelUrl) {
         requireReference(reference);
@@ -43,7 +50,8 @@ public final class PayPalCheckoutGateway {
         requireReturnUrl(returnUrl); requireReturnUrl(cancelUrl);
         var purchase=Map.of("reference_id",reference,"custom_id",reference,"description",title,
                 "amount",Map.of("currency_code",currency,"value",amount.setScale(2).toPlainString()));
-        var body=Map.of("intent","CAPTURE","purchase_units",List.of(purchase),"payment_source",Map.of("paypal",Map.of("experience_context",Map.of("return_url",returnUrl,"cancel_url",cancelUrl,"user_action","PAY_NOW"))));
+        Map<String,Object> body=localPopup ? Map.of("intent","CAPTURE","purchase_units",List.of(purchase))
+            : Map.of("intent","CAPTURE","purchase_units",List.of(purchase),"payment_source",Map.of("paypal",Map.of("experience_context",Map.of("return_url",returnUrl,"cancel_url",cancelUrl,"user_action","PAY_NOW"))));
         JsonNode order=transport.send("POST","/v2/checkout/orders",Map.of("PayPal-Request-Id",reference,"Prefer","return=representation"),JSON.writeValueAsString(body));
         String id=order.path("id").asString(); requireOrderId(id);
         String approval=approvalUrl(order);
@@ -71,7 +79,7 @@ public final class PayPalCheckoutGateway {
     }
     /** Validate signature by PayPal's verification API; no remote certificate URLs are fetched locally. */
     public boolean verifyWebhook(WebhookHeaders h,byte[] rawBody) {
-        if(h==null || !valid(h.authAlgo()) || !valid(h.certUrl()) || !valid(h.transmissionId()) || !valid(h.transmissionSig()) || !valid(h.transmissionTime()) || rawBody==null || rawBody.length>262144) return false;
+        if(webhookId.isBlank() || h==null || !valid(h.authAlgo()) || !valid(h.certUrl()) || !valid(h.transmissionId()) || !valid(h.transmissionSig()) || !valid(h.transmissionTime()) || rawBody==null || rawBody.length>262144) return false;
         JsonNode event=JSON.readTree(rawBody);
         var payload=Map.of("auth_algo",h.authAlgo(),"cert_url",h.certUrl(),"transmission_id",h.transmissionId(),"transmission_sig",h.transmissionSig(),"transmission_time",h.transmissionTime(),"webhook_id",webhookId,"webhook_event",event);
         return "SUCCESS".equals(transport.send("POST","/v1/notifications/verify-webhook-signature",Map.of(),JSON.writeValueAsString(payload)).path("verification_status").asString());
@@ -90,7 +98,12 @@ public final class PayPalCheckoutGateway {
     private static boolean valid(String s){return s!=null && !s.isBlank() && s.length()<=4096;}
     private static void requireReference(String s){if(s==null || !s.matches("[A-Za-z0-9_-]{1,38}"))throw new IllegalArgumentException("Invalid request reference");}
     private static void requireOrderId(String s){if(s==null || !s.matches("[A-Za-z0-9]{1,32}"))throw new IllegalArgumentException("Invalid PayPal order ID");}
-    private static void requireReturnUrl(String s){URI u=URI.create(s);if(!"https".equalsIgnoreCase(u.getScheme()) || !"cheerfulmusic.com".equalsIgnoreCase(u.getHost()) || u.getUserInfo()!=null || (u.getPort()!=-1 && u.getPort()!=443))throw new IllegalArgumentException("Invalid return URL");}
+    private void requireReturnUrl(String s){
+        URI u=URI.create(s);
+        boolean production="https".equalsIgnoreCase(u.getScheme()) && "cheerfulmusic.com".equalsIgnoreCase(u.getHost()) && (u.getPort()==-1 || u.getPort()==443);
+        boolean local=localPopup && "http".equals(u.getScheme()) && "127.0.0.1".equals(u.getHost()) && u.getPort()==5173 && "/account".equals(u.getPath());
+        if(!(production || local) || u.getUserInfo()!=null || u.getFragment()!=null) throw new IllegalArgumentException("Invalid return URL");
+    }
 
     private static final class HttpTransport implements Transport {
         private final String base, basic; private final HttpClient client=HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();

@@ -4,6 +4,7 @@ import com.qingfeng.music.credits.CreditsLedger;
 import java.math.BigDecimal;
 import java.util.*;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.env.Environment;
 import org.springframework.context.annotation.Profile;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -21,12 +22,23 @@ public class PayPalPaymentService {
     @Value("${qingfeng.paypal.client-secret:}") private String clientSecret;
     @Value("${qingfeng.paypal.merchant-id:}") private String merchantId;
     @Value("${qingfeng.paypal.webhook-id:}") private String webhookId;
-    public PayPalPaymentService(JdbcTemplate db,TransactionTemplate tx,CreditsLedger ledger,PaymentCatalog catalog){this.db=db;this.tx=tx;this.ledger=ledger;this.catalog=catalog;}
-    // Live payments remain blocked until disputes, refunds and real sandbox acceptance are complete.
-    boolean ready(){return enabled && environment.equals("sandbox") && !clientId.isBlank() && !clientSecret.isBlank() && !merchantId.isBlank() && !webhookId.isBlank();}
+    @Value("${qingfeng.paypal.live-enabled:false}") private boolean liveEnabled;
+    @Value("${qingfeng.paypal.return-base-url:https://cheerfulmusic.com/account}") private String returnBase;
+    private final Environment configuration;
+    public PayPalPaymentService(JdbcTemplate db,TransactionTemplate tx,CreditsLedger ledger,PaymentCatalog catalog,Environment configuration){this.db=db;this.tx=tx;this.ledger=ledger;this.catalog=catalog;this.configuration=configuration;}
+    /** Local official PayPal Live checkout: popup-only, no public webhook, isolated on the 3309 database. */
+    boolean localLive(){return environment.equals("live") && liveEnabled
+        && Arrays.asList(configuration.getActiveProfiles()).contains("paypal-live")
+        && !Arrays.asList(configuration.getActiveProfiles()).contains("payment-demo")
+        && "paypal-local".equals(configuration.getProperty("qingfeng.deployment.environment"))
+        && "http://127.0.0.1:5173/account".equals(returnBase);}
+    // Live payments remain blocked for public traffic until disputes, refunds and sandbox acceptance are complete.
+    // The only permitted Live path is the explicitly labelled local popup checkout above.
+    boolean ready(){return enabled && !clientId.isBlank() && !clientSecret.isBlank() && !merchantId.isBlank()
+        && ((environment.equals("sandbox") && !webhookId.isBlank()) || localLive());}
     String provider(){return environment.equals("live")?"PAYPAL_LIVE":"PAYPAL_SANDBOX";}
-    PayPalCheckoutGateway gateway(){return new PayPalCheckoutGateway(environment.equals("live")?PayPalCheckoutGateway.Environment.LIVE:PayPalCheckoutGateway.Environment.SANDBOX,clientId,clientSecret,merchantId,webhookId);}
-    public Map<String,Object> catalog(){return Map.of("enabled",ready(),"packages",ready()?catalog.packages().stream().map(PaymentCatalog.Package::asMap).toList():List.of());}
+    PayPalCheckoutGateway gateway(){return new PayPalCheckoutGateway(environment.equals("live")?PayPalCheckoutGateway.Environment.LIVE:PayPalCheckoutGateway.Environment.SANDBOX,clientId,clientSecret,merchantId,webhookId,localLive());}
+    public Map<String,Object> catalog(){return Map.of("enabled",ready(),"environment",environment.equals("live")?"live":"sandbox","popupOnly",localLive(),"packages",ready()?catalog.packages().stream().map(PaymentCatalog.Package::asMap).toList():List.of());}
     /** The client ID is public; no server-side secret is returned to the browser. */
     public Map<String,Object> sdkConfig(){return Map.of("enabled",ready(),"clientId",ready()?clientId:"","environment",environment.equals("live")?"production":"sandbox");}
     public Map<String,Object> create(String owner,String packageId){
@@ -41,7 +53,7 @@ public class PayPalPaymentService {
             if(pending!=null && pending>0) throw new ResponseStatusException(HttpStatus.CONFLICT,"已有待核对的订单");
             db.update("INSERT INTO payment_order(id,creator_id,package_id,amount,currency,credits,status,created_at,provider) VALUES(?,?,?,?,?,?,?,CURRENT_TIMESTAMP,?)",id,owner,p.id(),p.amount(),p.currency(),p.credits(),"CREATING",type);
         });
-        var link=gateway().create(id,p.title(),p.amount(),p.currency(),"https://cheerfulmusic.com/account?paypal_order="+id,"https://cheerfulmusic.com/account?paypal_cancel="+id);
+        var link=gateway().create(id,p.title(),p.amount(),p.currency(),returnBase+"?paypal_order="+id,returnBase+"?paypal_cancel="+id);
         db.update("UPDATE payment_order SET provider_link_id=?,status=CASE WHEN status='CREATING' THEN 'PENDING' ELSE status END WHERE id=? AND provider=? AND (provider_link_id IS NULL OR provider_link_id=?)",link.orderId(),id,type,link.orderId());
         return Map.of("orderId",id,"checkoutUrl",link.approvalUrl(),"paypalOrderId",link.orderId());
     }
@@ -105,7 +117,7 @@ public class PayPalPaymentService {
         });
     }
     public void webhook(PayPalCheckoutGateway.WebhookHeaders headers,byte[] body){
-        if(!ready()) throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE);
+        if(!ready() || webhookId.isBlank()) throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE);
         var gateway=gateway();
         if(!gateway.verifyWebhook(headers,body)) throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
         var event=new tools.jackson.databind.ObjectMapper().readTree(body);
