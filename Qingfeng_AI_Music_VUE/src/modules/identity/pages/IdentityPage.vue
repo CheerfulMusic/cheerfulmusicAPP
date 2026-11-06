@@ -54,7 +54,7 @@ onMounted(async () => {
   try {
     if (platform.kind === 'web') await Promise.all([
       refreshAccountState().catch(() => undefined),
-      refreshLogtoState().catch(() => { logtoError.value = '暂时无法读取 Logto 登录状态，请刷新后重试。' }),
+      refreshLogtoState().catch(() => { logtoError.value = '暂时无法读取账号状态，请刷新后重试。' }),
     ])
     await ensureCreator()
     const recoveryEpoch = identityEpoch
@@ -70,9 +70,9 @@ onMounted(async () => {
     }
     if (result === 'success' && googleStatus.value.authenticated) player.reset()
     if (logtoResult === 'success' && logtoState.value.authenticated) { logtoNotice.value = '登录成功，你的音乐已关联到当前账号。'; player.reset() }
-    else if (logtoResult === 'success') logtoError.value = 'Logto 登录状态尚未确认，请刷新后重试。'
+    else if (logtoResult === 'success') logtoError.value = '登录状态尚未确认，请刷新后重试。'
     else if (logtoResult === 'conflict') logtoError.value = '当前作品属于另一个账号。请先保存找回码，再切换账号。'
-    else if (logtoResult === 'failed') logtoError.value = 'Logto 登录未完成，请重试。'
+    else if (logtoResult === 'failed') logtoError.value = '登录未完成，请重试。'
     else if (logtoResult === 'cancelled') logtoNotice.value = '已取消登录，当前作品仍在此设备。'
   } catch (e) {
     error.value = e instanceof Error ? e.message : '暂时无法读取身份状态'
@@ -137,26 +137,26 @@ async function recover() {
   <header class="account-intro">
     <p class="account-eyebrow"><span></span>{{ t('我的账号') }}</p>
     <h1>{{ t('账号与登录') }}</h1>
-    <p>{{ t('使用 Logto 登录，或使用找回码找回音乐。') }}</p>
+    <p>{{ t('登录音乐账号，或使用找回码找回音乐。') }}</p>
   </header>
   <p v-if="error" class="notice error" role="alert">{{ t(error) }}</p><p v-if="notice" class="notice success" role="status">{{ t(notice) }}</p>
   <p v-if="googleError" class="notice error" role="alert">{{ t(googleError) }}</p>
   <p v-if="googleNotice" class="notice" :class="googleNoticeKind" role="status">{{ t(googleNotice) }}</p>
   <p v-if="logtoError" class="notice error" role="alert">{{ t(logtoError) }}</p>
   <p v-if="logtoNotice" class="notice success" role="status">{{ t(logtoNotice) }}</p>
-  <section class="account-profile" :class="{ 'is-connected': logtoState.authenticated }" :aria-busy="accountBusy" :aria-label="t('使用 Logto 登录')">
+  <section class="account-profile" :class="{ 'is-connected': logtoState.authenticated }" :aria-busy="accountBusy" :aria-label="t('登录/注册')">
     <div class="profile-main profile-sign-in">
       <div class="profile-identity">
         <div class="google-avatar" aria-hidden="true"><NavIcon name="account" /></div>
         <div class="profile-copy">
-          <p class="profile-provider">Logto</p>
-          <h2>{{ logtoState.authenticated ? (logtoState.name || t('已连接账号')) : t('使用 Logto 登录') }}</h2>
-          <p class="profile-description">{{ logtoState.authenticated ? (logtoState.email || maskedPhoneLabel(logtoState.phoneMasked) || t('可以在其他设备找回你的音乐。')) : t('在 Logto 登录页选择已配置的方式，并保留当前设备的音乐作品。') }}</p>
+          <p class="profile-provider">{{ t('音乐账号') }}</p>
+          <h2>{{ logtoState.authenticated ? (logtoState.name || t('已连接账号')) : t('登录/注册') }}</h2>
+          <p class="profile-description">{{ logtoState.authenticated ? (logtoState.email || maskedPhoneLabel(logtoState.phoneMasked) || t('可以在其他设备找回你的音乐。')) : t('使用邮箱或手机号登录，保留并同步你的音乐作品。') }}</p>
         </div>
       </div>
       <div class="profile-actions"><span v-if="logtoState.authenticated" class="connection-badge">{{ t('已连接') }}</span><button type="button" class="google-sign-in" @click="showLoginDialog">{{ t('查看登录方式') }}</button></div>
     </div>
-    <div class="profile-footer"><NavIcon name="recovery" /><p>{{ t('登录由 Logto 提供。不同账号的音乐不会自动合并。') }}</p></div>
+    <div class="profile-footer"><NavIcon name="recovery" /><p>{{ t('不同账号的音乐不会自动合并。') }}</p></div>
   </section>
   <section v-if="googleStatus.enabled" class="account-profile" :class="{ 'is-connected': googleStatus.authenticated }" :aria-busy="accountBusy" :aria-label="t(googleStatus.authenticated ? '已连接 Google 账号' : '用 Google 找回你的音乐')">
     <template v-if="googleStatus.authenticated">
@@ -164,7 +164,7 @@ async function recover() {
         <div class="profile-identity">
           <div class="account-avatar" aria-hidden="true">{{ accountInitials }}<span class="avatar-provider"><GoogleMark /></span></div>
           <div class="profile-copy">
-            <p class="profile-provider">{{ t('旧版 Google 登录') }}</p>
+            <p class="profile-provider">{{ t('Google 账号') }}</p>
             <h2>{{ googleStatus.name || t('音乐创作者') }}</h2>
             <p v-if="googleStatus.email" class="profile-email">{{ googleStatus.email }}</p>
           </div>
@@ -187,7 +187,7 @@ async function recover() {
       <div class="profile-main profile-sign-in">
         <div class="profile-identity">
           <div class="google-avatar" aria-hidden="true"><GoogleMark /></div>
-          <div class="profile-copy"><p class="profile-provider">{{ t('旧版 Google 登录') }}</p><h2>{{ t('你的音乐，随账号一起收藏。') }}</h2><p class="profile-description">{{ t('已有 Google 账号可在此找回原有作品。') }}</p></div>
+          <div class="profile-copy"><p class="profile-provider">{{ t('Google 账号') }}</p><h2>{{ t('你的音乐，随账号一起收藏。') }}</h2><p class="profile-description">{{ t('已有 Google 账号可在此找回原有作品。') }}</p></div>
         </div>
         <button type="button" class="google-sign-in" :disabled="accountBusy || !googleStatus.enabled" @click="loginWithGoogle"><GoogleMark />{{ googleBusy ? t('正在前往 Google…') : t('使用 Google 账号登录') }}</button>
       </div>

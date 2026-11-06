@@ -18,6 +18,9 @@ server.forward-headers-strategy=framework
 # Enable only after each Logto delivery connector sends and verifies a real code.
 # qingfeng.auth.logto.email-enabled=false
 # qingfeng.auth.logto.phone-enabled=false
+# Enable only after an international SMS connector has been configured and verified.
+# Aliyun MAS supports mainland China (+86) only; leave false for that connector.
+# qingfeng.auth.logto.phone-international-enabled=false
 # Set this to the tested Apple social connector IdP name (usually apple), not its UUID.
 # qingfeng.auth.logto.apple-idp-name=
 spring.datasource.url=jdbc:mysql://127.0.0.1:3306/qingfeng_music?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai
