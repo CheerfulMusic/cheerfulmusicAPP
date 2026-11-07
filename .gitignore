@@ -47,3 +47,6 @@ ui-prototype/output/
 __pycache__/
 *.pyc
 *.pyo
+
+# 历史设计原型：文件保留在本机，不纳入版本库（历史提交中仍可追溯）
+/ui-prototype/
