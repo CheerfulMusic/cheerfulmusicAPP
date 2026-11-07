@@ -9,6 +9,8 @@ import tools.jackson.databind.*;
 /** 先上传站内已校验的JPEG，再提交一次图片编辑；付费POST不自动重试。 */
 public final class KieImageEditProvider implements ImageEditProvider {
  private final String key;private final boolean enabled;private final URI base,upload;private final HttpClient http;private final java.util.function.Consumer<String> approve;private final ObjectMapper json=new ObjectMapper();
+ private Runnable createGate=()->{},readGate=()->{};
+ public KieImageEditProvider withRequestLimits(Runnable creates,Runnable reads){createGate=Objects.requireNonNull(creates);readGate=Objects.requireNonNull(reads);return this;}
  public KieImageEditProvider(String key,boolean enabled,java.util.function.Consumer<String> approve){this(key,enabled,URI.create("https://api.kie.ai"),URI.create("https://kieai.redpandaai.co/api/file-base64-upload"),HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).followRedirects(HttpClient.Redirect.NEVER).build(),approve);}
  public KieImageEditProvider(String key,boolean enabled,URI base,URI upload,HttpClient http,java.util.function.Consumer<String> approve){this.key=key.trim();this.enabled=enabled;this.base=base;this.upload=upload;this.http=http;this.approve=approve;}
  public boolean configured(){return enabled&&!key.isBlank();}
@@ -31,7 +33,10 @@ public final class KieImageEditProvider implements ImageEditProvider {
   var result=data.path("resultJson");if(result.isTextual())result=json.readTree(result.asText());String url=result.path("resultUrls").path(0).asText();https(url);approve.accept(url);return new Result("SAVING",url);
  }
  private void https(String value){URI uri=URI.create(value);if(!"https".equalsIgnoreCase(uri.getScheme())||uri.getHost()==null||uri.getUserInfo()!=null||uri.getFragment()!=null||value.length()>4096||(uri.getPort()!=-1&&uri.getPort()!=443))throw new IllegalStateException("图片服务地址无效");}
- private JsonNode send(URI uri,String body,boolean submitting){try{
+ private JsonNode send(URI uri,String body,boolean submitting){
+  if(submitting&&uri.getPath().equals("/api/v1/jobs/createTask")){try{createGate.run();}catch(RuntimeException notDispatched){throw new Rejected();}}
+  else if(!submitting)readGate.run();
+  try{
   var request=HttpRequest.newBuilder(uri).header("Authorization","Bearer "+key).header("Accept","application/json").timeout(Duration.ofSeconds(45));if(body!=null)request.header("Content-Type","application/json").POST(HttpRequest.BodyPublishers.ofString(body));
   var response=http.send(request.build(),HttpResponse.BodyHandlers.ofString());int status=response.statusCode();if(submitting&&Set.of(400,401,402,403,404,422,429).contains(status))throw new Rejected();if(status!=200)throw new IllegalStateException("图片服务HTTP响应异常");var parsed=json.readTree(response.body());int code=parsed.path("code").asInt(-1);if(submitting&&Set.of(400,401,402,403,404,422,429).contains(code))throw new Rejected();if(code!=200)throw new IllegalStateException("图片服务响应异常");return parsed;
  }catch(InterruptedException e){Thread.currentThread().interrupt();throw new IllegalStateException("封面提交中断");}catch(java.io.IOException e){throw new IllegalStateException("封面连接异常，禁止自动重提");}}

@@ -19,7 +19,7 @@ import java.util.Set;
 public class CoverConfiguration {
  private final ProviderAudioUrls approved=new ProviderAudioUrls();
  @Bean CoverRepository coverRepository(JdbcTemplate jdbc,PlatformTransactionManager manager){return new JdbcCoverRepository(jdbc,new TransactionTemplate(manager));}
- @Bean ImageEditProvider imageEditProvider(Environment env){String key=env.getProperty("qingfeng.providers.kie.image-api-key",env.getProperty("qingfeng.providers.kie.api-key",env.getProperty("KIE_API_KEY","")));return new KieImageEditProvider(key,env.getProperty("qingfeng.cover.ai.enabled",Boolean.class,true),approved::approve);}
+ @Bean ImageEditProvider imageEditProvider(Environment env,com.qingfeng.music.infrastructure.provider.KieRequestLimiter limiter){String key=env.getProperty("qingfeng.providers.kie.image-api-key",env.getProperty("qingfeng.providers.kie.api-key",env.getProperty("KIE_API_KEY","")));return new KieImageEditProvider(key,env.getProperty("qingfeng.cover.ai.enabled",Boolean.class,true),approved::approve).withRequestLimits(limiter::beforeCreate,limiter::beforeRead);}
  @Bean ImageResultDownloader imageResultDownloader(){var downloader=new AllowlistedAudioDownloader(Set.of(),approved);return downloader::open;}
  @Bean CoverService coverService(WorkApi works,CoverRepository repo,CoverFileStore files,MediaMapper media,UsageBudget budget,Environment env,ImageEditProvider provider,ImageResultDownloader downloader){
   return new CoverService(works,repo,files,new MyBatisMediaRepository(media),provider,budget,downloader,env.getProperty("qingfeng.media.creator-capacity-bytes",Long.class,1073741824L));

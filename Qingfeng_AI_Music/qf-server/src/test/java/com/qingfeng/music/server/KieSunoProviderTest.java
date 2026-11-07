@@ -79,6 +79,17 @@ class KieSunoProviderTest {
         server.start(); provider=new KieSunoMusicProvider("test-only-key","V6",URI.create("http://127.0.0.1:"+server.getAddress().getPort()),HttpClient.newHttpClient());
     }
     @AfterEach void stop(){server.stop(0);}
+    @Test void localThrottleFailureIsDefinitelyNotSubmittedAndDoesNotCallTheNetwork(){
+        provider.withRequestLimits(()->{throw new IllegalStateException("离线模拟限流不可用");},()->{});
+        var error=assertThrows(MusicProvider.NotSubmitted.class,()->provider.submit(request,"key"));
+        assertEquals("PROVIDER_DISPATCH_UNAVAILABLE",error.code());assertEquals(0,calls.get());
+    }
+    @Test void submissionAndReadonlyQueryUseSeparateSharedGates(){
+        var creates=new AtomicInteger();var reads=new AtomicInteger();provider.withRequestLimits(creates::incrementAndGet,reads::incrementAndGet);
+        response="{\"code\":200,\"data\":{\"taskId\":\"task1\"}}";provider.submit(request,"key");
+        response="{\"code\":200,\"data\":{\"taskId\":\"task1\",\"state\":\"waiting\"}}";provider.query("task1");
+        assertEquals(1,creates.get());assertEquals(1,reads.get());assertEquals(2,calls.get());
+    }
     @Test void sendsConfirmedLyricsWithoutRewritingOrAutomaticRetries() {
         response="{\"code\":200,\"data\":{\"taskId\":\"task1\"}}";
         assertEquals("task1",provider.submit(request,"local-key").providerTaskId());

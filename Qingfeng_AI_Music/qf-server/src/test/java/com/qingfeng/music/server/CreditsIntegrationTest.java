@@ -21,7 +21,7 @@ class CreditsIntegrationTest {
  @Autowired com.qingfeng.music.server.web.app.ReferralController referrals;
  @Autowired org.springframework.jdbc.core.JdbcTemplate jdbc;
  @Test void knownUnsubmittedFailuresReleaseQuotaAndCreditsExactlyOnce(){
-  for(String code:java.util.List.of("LOCAL_PREPARATION_FAILED","PROVIDER_CONNECT_FAILED","PROVIDER_BALANCE_LOW")){
+  for(String code:java.util.List.of("LOCAL_PREPARATION_FAILED","PROVIDER_CONNECT_FAILED","PROVIDER_BALANCE_LOW","PROVIDER_DISPATCH_UNAVAILABLE")){
    String owner=identity.create().creatorId();credits.credit(owner,15,"not-sent-"+owner);
    var work=works.create(owner,new com.qingfeng.music.work.api.WorkApi.Draft("","","故事","","民谣","歌曲"));var revision=lyrics.save(owner,work.id(),0,"歌曲","歌词");lyrics.confirm(owner,work.id(),revision.id());
    String key=java.util.UUID.randomUUID().toString();var task=generation.submit(owner,work.id(),revision.id(),key);assertEquals(0,credits.balance(owner));

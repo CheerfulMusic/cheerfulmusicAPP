@@ -31,6 +31,7 @@ it('a coded server error is still ambiguous after POST while an explicit input r
  expect(uncertainSubmission({status:503,code:'MUSIC_PROVIDER_UNAVAILABLE'})).toBe(false)
  expect(generationProblem('AUDIO_ARCHIVE_FAILED')).toContain('无需重新生成')
  expect(generationProblem('QUERY_REVIEW_REQUIRED')).toContain('原任务')
+ expect(generationProblem('PROVIDER_DISPATCH_UNAVAILABLE')).toContain('尚未提交')
 })
 it('stops automatic reads after all tasks finish or checking is explicitly closed',()=>{
  expect(needsGenerationRefresh([])).toBe(false)

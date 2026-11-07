@@ -12,6 +12,8 @@ import tools.jackson.databind.*;
 public final class KieLyricsTimingProvider implements LyricsTimingProvider {
     private final String key,mode;private final URI base;private final HttpClient client;
     private final ObjectMapper json=new ObjectMapper();
+    private Runnable createGate=()->{},readGate=()->{};
+    public KieLyricsTimingProvider withRequestLimits(Runnable creates,Runnable reads){createGate=Objects.requireNonNull(creates);readGate=Objects.requireNonNull(reads);return this;}
     public KieLyricsTimingProvider(String key,String mode){this(key,mode,URI.create("https://api.kie.ai"),HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).followRedirects(HttpClient.Redirect.NEVER).build());}
     public KieLyricsTimingProvider(String key,String mode,URI base,HttpClient client){
         this.key=key.trim();this.mode=mode;this.base=base;this.client=client;
@@ -50,6 +52,7 @@ public final class KieLyricsTimingProvider implements LyricsTimingProvider {
         return "";
     }
     private JsonNode send(String path,String body){
+        if(body==null)readGate.run();else createGate.run();
         try{
             var builder=HttpRequest.newBuilder(base.resolve(path)).timeout(Duration.ofSeconds(55)).header("Authorization","Bearer "+key).header("Accept","application/json");
             if(body!=null)builder.header("Content-Type","application/json").POST(HttpRequest.BodyPublishers.ofString(body));

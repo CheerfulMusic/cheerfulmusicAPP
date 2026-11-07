@@ -17,4 +17,15 @@ class KieImageEditProviderTest{
  @Test void queriesCheckTaskAndModelThenApproveOnlyReturnedHttpsResult(){var r=provider.query("image1",provider.model());assertEquals("SAVING",r.status());assertEquals(List.of("https://cdn.example/result.png"),approved);query=query.replace("image1","wrong");assertThrows(IllegalStateException.class,()->provider.query("image1",provider.model()));assertEquals(1,approved.size());}
  @Test void invalidInputsCauseZeroNetworkCallsAndMissingPermissionsAreExplicit(){assertThrows(IllegalArgumentException.class,()->provider.submit(new byte[0],"edit",provider.model()));assertTrue(paths.isEmpty());status=403;assertThrows(ImageEditProvider.Rejected.class,()->provider.submit(new byte[]{(byte)255,(byte)216,(byte)255},"edit",provider.model()));assertEquals(List.of("/upload"),paths);}
  @Test void uncertainPaidSubmissionHasNoAutomaticRetry(){create="{\"code\":500}";assertThrows(IllegalStateException.class,()->provider.submit(new byte[]{(byte)255,(byte)216,(byte)255},"edit",provider.model()));assertEquals(1,paths.stream().filter(p->p.equals("/api/v1/jobs/createTask")).count());}
+ @Test void coverCreationSharesTheGenerationGateAfterUploadAndQueriesUseTheReadGate(){
+  var creates=new java.util.concurrent.atomic.AtomicInteger();var reads=new java.util.concurrent.atomic.AtomicInteger();
+  provider.withRequestLimits(()->{assertEquals(List.of("/upload"),paths);creates.incrementAndGet();},reads::incrementAndGet);
+  provider.submit(new byte[]{(byte)255,(byte)216,(byte)255},"edit",provider.model());provider.query("image1",provider.model());
+  assertEquals(1,creates.get());assertEquals(1,reads.get());assertEquals(3,paths.size());
+ }
+ @Test void blockedLocalGateNeverSendsACoverGenerationRequest(){
+  provider.withRequestLimits(()->{throw new IllegalStateException("本地限流失败");},()->{});
+  assertThrows(ImageEditProvider.Rejected.class,()->provider.submit(new byte[]{(byte)255,(byte)216,(byte)255},"edit",provider.model()));
+  assertEquals(List.of("/upload"),paths);
+ }
 }

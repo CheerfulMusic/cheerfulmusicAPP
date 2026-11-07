@@ -52,7 +52,7 @@ public final class MyBatisExecutionRepository implements ExecutionRepository {
             if(mapper.failed(task,token,code,now)!=1)return;
             jdbc.query("SELECT r.owner_id,r.work_id,r.request_key FROM generation_task t JOIN model_usage_reservation r ON r.kind='MUSIC' AND r.work_id=t.work_id AND r.request_key=t.request_key WHERE t.id=?",rs->{credits.refund(rs.getString(1),"music:"+rs.getString(2)+":"+rs.getString(3));},task);
             // 只对确定未受理的请求释放每日占额；结果未知和已完成音乐的归档失败不能释放。
-            if(code.equals("LOCAL_PREPARATION_FAILED")||code.equals("PROVIDER_REJECTED")||code.equals("PROVIDER_INPUT_REJECTED")||code.equals("PROVIDER_AUTH_FAILED")||code.equals("PROVIDER_BALANCE_LOW")||code.equals("PROVIDER_RATE_LIMITED")||code.equals("PROVIDER_ENDPOINT_UNAVAILABLE")||code.equals("PROVIDER_CONNECT_FAILED")||code.equals("PROVIDER_COOLDOWN"))
+            if(code.equals("LOCAL_PREPARATION_FAILED")||code.equals("PROVIDER_REJECTED")||code.equals("PROVIDER_INPUT_REJECTED")||code.equals("PROVIDER_AUTH_FAILED")||code.equals("PROVIDER_BALANCE_LOW")||code.equals("PROVIDER_RATE_LIMITED")||code.equals("PROVIDER_ENDPOINT_UNAVAILABLE")||code.equals("PROVIDER_CONNECT_FAILED")||code.equals("PROVIDER_COOLDOWN")||code.equals("PROVIDER_DISPATCH_UNAVAILABLE"))
                 jdbc.update("DELETE FROM model_usage_reservation WHERE kind='MUSIC' AND work_id=(SELECT work_id FROM generation_task WHERE id=?) AND request_key=(SELECT request_key FROM generation_task WHERE id=?)",task,task);
         });
     }

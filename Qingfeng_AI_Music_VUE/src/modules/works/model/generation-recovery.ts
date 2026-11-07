@@ -18,7 +18,7 @@ export function uncertainSubmission(error:{status?:number;code?:string}){
 }
 export function generationProblem(code:string|null|undefined){
   switch(code){
-    case 'LOCAL_PREPARATION_FAILED':case 'PROVIDER_CONNECT_FAILED':case 'PROVIDER_COOLDOWN':return '本次尚未提交音乐服务，内容已保留，可以稍后重试。'
+    case 'LOCAL_PREPARATION_FAILED':case 'PROVIDER_CONNECT_FAILED':case 'PROVIDER_COOLDOWN':case 'PROVIDER_DISPATCH_UNAVAILABLE':return '本次尚未提交音乐服务，内容已保留，可以稍后重试。'
     case 'PROVIDER_AUTH_FAILED':case 'PROVIDER_BALANCE_LOW':case 'PROVIDER_ENDPOINT_UNAVAILABLE':return '音乐生成服务暂不可用，内容已保留，已有歌曲仍可试听和分享。'
     case 'PROVIDER_RATE_LIMITED':return '音乐服务当前繁忙，请稍后再试，避免连续点击。'
     case 'PROVIDER_INPUT_REJECTED':return '音乐服务未接受这次要求，请调整音乐设置后再试。'

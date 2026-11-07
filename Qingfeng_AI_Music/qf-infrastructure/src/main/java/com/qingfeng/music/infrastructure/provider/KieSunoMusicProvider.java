@@ -28,6 +28,8 @@ public final class KieSunoMusicProvider implements MusicProvider {
     private double sectionAudioWeight=0.85;
     public KieSunoMusicProvider sectionAudioWeight(double value){if(!Double.isFinite(value)||value<0||value>1)throw new IllegalArgumentException("局部修改参考权重超出范围");sectionAudioWeight=value;return this;}
     private final ObjectMapper json = new ObjectMapper();
+    private Runnable createGate=()->{},readGate=()->{};
+    public KieSunoMusicProvider withRequestLimits(Runnable creates,Runnable reads){createGate=java.util.Objects.requireNonNull(creates);readGate=java.util.Objects.requireNonNull(reads);return this;}
     private java.util.function.Consumer<String> audioApproval = ignored -> { };
 
     public KieSunoMusicProvider approveAudioWith(java.util.function.Consumer<String> approval) {this.audioApproval=java.util.Objects.requireNonNull(approval);return this;}
@@ -159,6 +161,9 @@ public final class KieSunoMusicProvider implements MusicProvider {
         return "";
     }
     private JsonNode send(String path, String body, boolean submitting) {
+        if(submitting){
+            try{createGate.run();}catch(RuntimeException notDispatched){throw new NotSubmitted("PROVIDER_DISPATCH_UNAVAILABLE");}
+        }else readGate.run();
         try {
             var request=HttpRequest.newBuilder(base.resolve(path)).timeout(Duration.ofSeconds(45))
                 .header("Authorization","Bearer "+apiKey).header("Accept","application/json");

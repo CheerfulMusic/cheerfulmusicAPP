@@ -43,6 +43,10 @@ class KieLyricsTimingProviderTest {
     }
     KieLyricsTimingProvider create(String mode){return new KieLyricsTimingProvider("test-key",mode,URI.create("http://127.0.0.1:"+server.getAddress().getPort()),HttpClient.newHttpClient());}
     @AfterEach void stop(){server.stop(0);}
+    @Test void timingRequestsShareBothAccountBudgets(){
+        var creates=new AtomicInteger();var reads=new AtomicInteger();provider.withRequestLimits(creates::incrementAndGet,reads::incrementAndGet);
+        provider.fetch("task1","https://cdn.example/song.mp3");assertEquals(1,creates.get());assertEquals(1,reads.get());
+    }
     @Test void fetchesTimingForTheArchivedVersionAndDoesNotResubmitMusic(){
         var result=provider.fetch("task1","https://cdn.example/song.mp3?Expires=1");assertEquals(1,result.size());assertEquals(2.3,result.get(0).start());assertEquals(1,posts.get());assertEquals(1,gets.get());assertEquals("/api/v1/generate/get-timestamped-lyrics",endpoint);
         var json=new ObjectMapper().readTree(received);assertEquals("right-version",json.path("audioId").asText());assertEquals("task1",json.path("taskId").asText());
