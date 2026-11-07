@@ -11,7 +11,7 @@ public enum GenerationStatus {
             case QUEUED -> next == SUBMITTING || next == FAILED || next == CANCELLED;
             case SUBMITTING -> next == RUNNING || next == SAVING || next == FAILED || next == SUBMISSION_UNKNOWN;
             case SUBMISSION_UNKNOWN -> next == RUNNING || next == SAVING || next == FAILED;
-            case RUNNING -> next == SAVING || next == FAILED;
+            case RUNNING -> next == SAVING || next == FAILED || next == SUBMISSION_UNKNOWN;
             case SAVING -> next == SUCCEEDED || next == FAILED;
             case SUCCEEDED, FAILED, CANCELLED -> false;
         };

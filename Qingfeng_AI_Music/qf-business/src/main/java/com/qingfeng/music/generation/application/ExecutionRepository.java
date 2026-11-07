@@ -18,6 +18,7 @@ public interface ExecutionRepository {
     void accepted(String task, String externalId, Instant now, Instant next);
     void unknown(String task, String token, String code, Instant now);
     void running(String task, String token, int failures, String code, Instant now, Instant next);
+    default void review(String task,String token,String code,Instant now,Instant next){unknown(task,token,code,now);}
     void saving(String task, String token, String url, Instant now);
     void refreshAudioUrl(String task,String token,String url);
     void archiveFailed(String task, String token, int attempts, boolean terminal, Instant now, Instant next);

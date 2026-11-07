@@ -12,6 +12,8 @@ public class GenerationController {
  private final GenerationApi generation;
  public GenerationController(GenerationApi generation){this.generation=generation;}
  public record Request(@NotBlank String revisionId,@NotBlank @Pattern(regexp="[0-9a-fA-F-]{36}")String requestKey){}
+ public record PreviewRequest(@NotBlank String revisionId){}
+ @PostMapping("/preflight") public GenerationApi.Preflight preflight(@AuthenticationPrincipal CreatorPrincipal creator,@PathVariable String work,@Valid @RequestBody PreviewRequest request){return generation.preflight(creator.id(),work,request.revisionId());}
  @PostMapping public GenerationApi.Task submit(@AuthenticationPrincipal CreatorPrincipal creator,@PathVariable String work,@Valid @RequestBody Request request){return generation.submit(creator.id(),work,request.revisionId(),request.requestKey());}
  @GetMapping public List<GenerationApi.Task> list(@AuthenticationPrincipal CreatorPrincipal creator,@PathVariable String work){return generation.list(creator.id(),work);}
  @PostMapping("/{task}/cancel") public GenerationApi.Task cancel(@AuthenticationPrincipal CreatorPrincipal creator,@PathVariable String work,@PathVariable String task){return generation.cancel(creator.id(),work,task);}

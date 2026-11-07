@@ -19,6 +19,34 @@ class CreditsIntegrationTest {
  @Autowired com.qingfeng.music.work.api.WorkApi works; @Autowired com.qingfeng.music.lyrics.api.LyricsApi lyrics; @Autowired com.qingfeng.music.generation.api.GenerationApi generation;
  @Autowired CreditsLedger credits; @Autowired IdentityApi identity; @Autowired PlatformTransactionManager manager;
  @Autowired com.qingfeng.music.server.web.app.ReferralController referrals;
+ @Autowired org.springframework.jdbc.core.JdbcTemplate jdbc;
+ @Test void knownUnsubmittedFailuresReleaseQuotaAndCreditsExactlyOnce(){
+  for(String code:java.util.List.of("LOCAL_PREPARATION_FAILED","PROVIDER_CONNECT_FAILED","PROVIDER_BALANCE_LOW")){
+   String owner=identity.create().creatorId();credits.credit(owner,15,"not-sent-"+owner);
+   var work=works.create(owner,new com.qingfeng.music.work.api.WorkApi.Draft("","","故事","","民谣","歌曲"));var revision=lyrics.save(owner,work.id(),0,"歌曲","歌词");lyrics.confirm(owner,work.id(),revision.id());
+   String key=java.util.UUID.randomUUID().toString();var task=generation.submit(owner,work.id(),revision.id(),key);assertEquals(0,credits.balance(owner));
+   var now=java.time.Instant.now().plusSeconds(10);String token=java.util.UUID.randomUUID().toString();assertTrue(execution.lockProvider("credits-offline",token,now,now.plusSeconds(120)));
+   try{
+    assertEquals(task.id(),execution.claim("credits-offline",token,now,now.plusSeconds(120)).orElseThrow().task().id());
+    if(!code.equals("LOCAL_PREPARATION_FAILED"))assertTrue(execution.startSubmission(task.id(),token,now));
+    execution.failed(task.id(),token,code,now);execution.failed(task.id(),token,code,now);
+    assertEquals(15,credits.balance(owner));assertEquals(0,jdbc.queryForObject("SELECT COUNT(*) FROM model_usage_reservation WHERE work_id=? AND kind='MUSIC'",Integer.class,work.id()));
+    assertEquals(task.id(),generation.submit(owner,work.id(),revision.id(),key).id());assertEquals(15,credits.balance(owner));
+   }finally{execution.release(task.id(),token);execution.unlockProvider("credits-offline",token);}
+  }
+ }
+ @Test void archiveRetryKeepsAcceptedGenerationAccountingAndNeverChargesAgain(){
+  String owner=identity.create().creatorId();credits.credit(owner,15,"archive-"+owner);
+  var work=works.create(owner,new com.qingfeng.music.work.api.WorkApi.Draft("","","故事","","民谣","歌曲"));var revision=lyrics.save(owner,work.id(),0,"歌曲","歌词");lyrics.confirm(owner,work.id(),revision.id());
+  var task=generation.submit(owner,work.id(),revision.id(),java.util.UUID.randomUUID().toString());var now=java.time.Instant.now().plusSeconds(10);String token=java.util.UUID.randomUUID().toString();
+  assertTrue(execution.lockProvider("credits-offline",token,now,now.plusSeconds(120)));
+  try{
+   assertEquals(task.id(),execution.claim("credits-offline",token,now,now.plusSeconds(120)).orElseThrow().task().id());execution.startSubmission(task.id(),token,now);execution.accepted(task.id(),"accepted",now,now);execution.saving(task.id(),token,"https://audio.test/result.mp3",now);
+   execution.archiveFailed(task.id(),token,5,true,now,now);assertEquals(0,credits.balance(owner));assertEquals(1,jdbc.queryForObject("SELECT COUNT(*) FROM model_usage_reservation WHERE work_id=? AND kind='MUSIC'",Integer.class,work.id()));
+   generation.retryArchive(owner,work.id(),task.id());assertEquals(0,credits.balance(owner));
+  }finally{execution.release(task.id(),token);execution.unlockProvider("credits-offline",token);jdbc.update("UPDATE generation_task SET status='FAILED' WHERE id=?",task.id());}
+ }
+
  @Test void idempotencyRefundAndRollback(){String owner=identity.create().creatorId();credits.credit(owner,20,"order-1");credits.credit(owner,20,"order-1");assertThrows(DomainException.class,()->credits.credit(owner,30,"order-1"));credits.debit(owner,10,"task-1");credits.debit(owner,10,"task-1");assertEquals(10,credits.balance(owner));credits.refund(owner,"task-1");credits.refund(owner,"task-1");assertEquals(20,credits.balance(owner));assertThrows(RuntimeException.class,()->new TransactionTemplate(manager).executeWithoutResult(tx->{credits.debit(owner,10,"rollback");throw new IllegalStateException();}));assertEquals(20,credits.balance(owner));}
  @Test void concurrentDebitsCannotOverspend() throws Exception {String owner=identity.create().creatorId();credits.credit(owner,10,"order-2");var pool=Executors.newFixedThreadPool(2);var start=new CountDownLatch(1);try{var a=pool.submit(()->attempt(owner,"a",start));var b=pool.submit(()->attempt(owner,"b",start));start.countDown();assertNotEquals(a.get(10,TimeUnit.SECONDS),b.get(10,TimeUnit.SECONDS));assertEquals(0,credits.balance(owner));}finally{pool.shutdownNow();}}
  @Test void generationChargesOnceAndCancellationRefunds(){

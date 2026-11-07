@@ -19,6 +19,12 @@ public final class KieSunoMusicProvider implements MusicProvider {
     private final URI base;
     private final HttpClient client;
     private final Tuning tuning;
+    private com.qingfeng.music.settings.MusicPromptLimits limits=com.qingfeng.music.settings.MusicPromptLimits.suno();
+    public KieSunoMusicProvider withLimits(com.qingfeng.music.settings.MusicPromptLimits value){
+        if(value.title()>80||value.lyrics()>5000||value.style()>1000||value.negativeTags()>500)throw new IllegalArgumentException("预算不能超过当前KIE模型能力");
+        limits=value;return this;
+    }
+    public com.qingfeng.music.settings.MusicPromptLimits limits(){return limits;}
     private double sectionAudioWeight=0.85;
     public KieSunoMusicProvider sectionAudioWeight(double value){if(!Double.isFinite(value)||value<0||value>1)throw new IllegalArgumentException("局部修改参考权重超出范围");sectionAudioWeight=value;return this;}
     private final ObjectMapper json = new ObjectMapper();
@@ -71,11 +77,11 @@ public final class KieSunoMusicProvider implements MusicProvider {
         return new Submission(task);
     }
     public void validate(Request request) {
-        if (request.title()==null || request.title().isBlank() || request.title().length()>80
-            || request.confirmedLyrics()==null || request.confirmedLyrics().isBlank() || request.confirmedLyrics().length()>5000
-            || request.negativeTags().length()>500
-            || request.style()==null || request.style().isBlank() || request.style().length()>1000
-            || style(request).length()>1000)
+        if (request.title()==null || request.title().isBlank() || request.title().length()>limits.title()
+            || request.confirmedLyrics()==null || request.confirmedLyrics().isBlank() || request.confirmedLyrics().length()>limits.lyrics()
+            || request.negativeTags().length()>limits.negativeTags()
+            || request.style()==null || request.style().isBlank() || request.style().length()>limits.style()
+            || style(request).length()>limits.style())
             throw new DomainException("INVALID_MUSIC_INPUT","生成歌曲需要标题不超过80字、歌词不超过5000字、风格不超过1000字，请修改后重试");
     }
     public Submission submit(Request request, String idempotencyKey) {
@@ -94,6 +100,7 @@ public final class KieSunoMusicProvider implements MusicProvider {
         return new Submission(task);
     }
     private String style(Request request){return request.preparedStyle()?request.style():MusicStylePrompt.expand(request.style(),request.vocalGender());}
+    public Request prepare(Request request){return new Request(request.title(),request.confirmedLyrics(),style(request),request.vocalGender(),request.negativeTags(),true);}
     public Result query(String taskId) {
         var response=send("/api/v1/jobs/recordInfo?taskId="+URLEncoder.encode(taskId,StandardCharsets.UTF_8),null,false);
         var data=response.path("data");
@@ -108,6 +115,7 @@ public final class KieSunoMusicProvider implements MusicProvider {
         if(result.isTextual())result=json.readTree(result.asText());
         String audio=firstAudio(result);
         if(audio.isBlank())throw new IllegalStateException("KIE完成任务缺少音频，稍后重新查询");
+        var approvedUrls=new java.util.HashSet<String>();
         var candidates=new java.util.ArrayList<AudioInfo>();var seen=new java.util.HashSet<String>();
         for(var tracks:KieAudioResults.groups(result))for(var track:tracks){
             String url=track.path("audioUrl").asText(track.path("audio_url").asText(""));
@@ -115,7 +123,7 @@ public final class KieSunoMusicProvider implements MusicProvider {
             var source=info(result,url);
             // 不悄悄丢弃无法识别的候选，也不把流式预览链接当作完整文件。
             if(source==null)throw new IllegalStateException("候选音频缺少标识或时长，请稍后重新查询");
-            if(seen.add(source.audioId())){audioApproval.accept(url);candidates.add(source);}
+            if(seen.add(source.audioId())){if(approvedUrls.add(url))audioApproval.accept(url);candidates.add(source);}
         }
         if(candidates.isEmpty())audioApproval.accept(audio);
         if(candidates.size()>8)throw new IllegalStateException("候选音频数量异常");
@@ -157,15 +165,17 @@ public final class KieSunoMusicProvider implements MusicProvider {
             if(body!=null)request.header("Content-Type","application/json").POST(HttpRequest.BodyPublishers.ofString(body));
             var response=client.send(request.build(),HttpResponse.BodyHandlers.ofString());
             int status=response.statusCode();
-            if(submitting && java.util.Set.of(400,401,402,403,404,422,429).contains(status))throw new Rejected();
+            if(submitting && java.util.Set.of(400,401,402,403,404,422,429).contains(status))throw rejected(status);
             if(status!=200)throw new IllegalStateException("KIE HTTP请求未完成");
             var payload=json.readTree(response.body()); int code=payload.path("code").asInt(-1);
             if(code!=200) {
-                if(submitting && java.util.Set.of(400,401,402,403,404,422,429).contains(code))throw new Rejected();
+                if(submitting && java.util.Set.of(400,401,402,403,404,422,429).contains(code))throw rejected(code);
                 throw new IllegalStateException("KIE业务响应未完成");
             }
             return payload;
         } catch(InterruptedException e) { Thread.currentThread().interrupt(); throw new IllegalStateException("KIE请求中断，禁止重复提交"); }
+        catch(java.net.ConnectException | java.net.http.HttpConnectTimeoutException e) { if(submitting)throw new NotSubmitted("PROVIDER_CONNECT_FAILED");throw new IllegalStateException("音乐服务连接失败"); }
         catch(java.io.IOException e) { throw new IllegalStateException("KIE连接或响应异常，禁止重复提交"); }
     }
+    private Rejected rejected(int code){return new Rejected(switch(code){case 401,403->"PROVIDER_AUTH_FAILED";case 402->"PROVIDER_BALANCE_LOW";case 429->"PROVIDER_RATE_LIMITED";case 404->"PROVIDER_ENDPOINT_UNAVAILABLE";default->"PROVIDER_INPUT_REJECTED";});}
 }

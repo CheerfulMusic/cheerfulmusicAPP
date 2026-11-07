@@ -56,6 +56,7 @@ class SectionEditingIntegrationTest {
     @Test void sectionEditsInheritTheSourceDirectionRatherThanCurrentPreferences(){
         var f=fixture();
         var original=musicSettings.frozen(f.work,f.task).orElseThrow();
+
         var edited=editing.submit(f.owner,f.work,request(f,UUID.randomUUID().toString()));
         assertEquals(original,musicSettings.frozen(f.work,edited.id()).orElseThrow());
         musicSettings.save(f.owner,f.work,0,new com.qingfeng.music.settings.MusicSettings.Preferences(1,null,Map.of("genre",List.of("rock")),"MALE","有力量",""));

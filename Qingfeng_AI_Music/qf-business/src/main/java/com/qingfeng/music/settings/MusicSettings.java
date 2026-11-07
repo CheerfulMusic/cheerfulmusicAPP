@@ -10,7 +10,9 @@ public interface MusicSettings {
     record Group(String id,String zh,String en,int max,List<Option> options){}
     record Recipe(String id,String zh,String en,Map<String,List<String>> choices){}
     record Catalog(int version,List<Group> groups,List<Recipe> recipes){}
-    record Direction(Preferences preferences,String style,String negativeTags,String summaryZh,String summaryEn,int catalogVersion,CreativePlan creativePlan){
+    record Compilation(int styleCharacters,int styleLimit,int negativeCharacters,int negativeLimit,boolean simplified,String notice){}
+    record Direction(Preferences preferences,String style,String negativeTags,String summaryZh,String summaryEn,int catalogVersion,CreativePlan creativePlan,Compilation compilation){
+        public Direction(Preferences preferences,String style,String negativeTags,String zh,String en,int version,CreativePlan plan){this(preferences,style,negativeTags,zh,en,version,plan,null);}
         public Direction(Preferences preferences,String style,String negativeTags,String zh,String en,int version){this(preferences,style,negativeTags,zh,en,version,null);}
         public String effectiveVoice(String voice){return voice.equals("AUTO")&&creativePlan!=null?creativePlan.vocalGender():voice;}
     }
@@ -25,6 +27,7 @@ public interface MusicSettings {
     }
     Catalog catalog();
     Direction preview(Preferences preferences);
+    default Direction previewForWork(String owner,String work,Preferences preferences){return preview(preferences);}
     View get(String owner,String work);
     View save(String owner,String work,long expectedVersion,Preferences preferences);
     Direction resolve(String owner,Work work);

@@ -15,6 +15,18 @@ import tools.jackson.databind.ObjectMapper;
 import static org.junit.jupiter.api.Assertions.*;
 
 class InspirationRewriteTest {
+    @Test void musicBriefModeIsBoundedAndDoesNotAutomaticallyReplaceAnyUserText()throws Exception{
+        var client=org.mockito.Mockito.mock(HttpClient.class);var response=org.mockito.Mockito.mock(HttpResponse.class);var json=new ObjectMapper();
+        org.mockito.Mockito.when(client.send(org.mockito.ArgumentMatchers.any(HttpRequest.class),org.mockito.ArgumentMatchers.any(HttpResponse.BodyHandler.class))).thenReturn(response);
+        org.mockito.Mockito.when(response.statusCode()).thenReturn(200);
+        org.mockito.Mockito.when(response.body()).thenReturn(json.writeValueAsString(Map.of("choices",List.of(Map.of("finish_reason","stop","message",Map.of("content",json.writeValueAsString(Map.of("text","90 BPM，不要吉他"))))))));
+        var writer=new DeepSeekInspirationRewriter("offline","offline",URI.create("https://example.invalid"),client).musicBriefMode();
+        assertEquals("90 BPM，不要吉他",writer.rewrite("温暖，90 BPM，不要吉他","mixed"));
+        var captured=org.mockito.ArgumentCaptor.forClass(HttpRequest.class);org.mockito.Mockito.verify(client).send(captured.capture(),org.mockito.ArgumentMatchers.any(HttpResponse.BodyHandler.class));
+        assertEquals(java.time.Duration.ofSeconds(15),captured.getValue().timeout().orElseThrow());
+        org.mockito.Mockito.when(response.body()).thenReturn(json.writeValueAsString(Map.of("choices",List.of(Map.of("finish_reason","stop","message",Map.of("content",json.writeValueAsString(Map.of("text","x".repeat(301)))))))));
+        assertThrows(DomainException.class,()->writer.rewrite("原始要求","mixed"));
+    }
     @Test void sendsOriginalAsDataAndValidatesStructuredDescription() throws Exception {
         var json = new ObjectMapper(); var count = new AtomicInteger();
         var server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);

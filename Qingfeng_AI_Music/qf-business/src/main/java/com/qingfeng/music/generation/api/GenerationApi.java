@@ -3,6 +3,8 @@ import java.time.Instant;
 import java.util.List;
 import com.qingfeng.music.generation.domain.GenerationStatus;
 public interface GenerationApi {
+ record Preflight(long workVersion,String revisionId,int styleCharacters,int styleLimit,int negativeCharacters,int negativeLimit,String notice){}
+ default Preflight preflight(String owner,String work,String revision){throw new UnsupportedOperationException();}
  Task submit(String owner,String work,String revision,String requestKey);
  List<Task> list(String owner,String work);
  void retryArchive(String owner,String work,String task);

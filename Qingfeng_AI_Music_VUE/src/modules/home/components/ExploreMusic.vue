@@ -1,17 +1,25 @@
 <script setup lang="ts">
 import {computed,ref,nextTick} from 'vue'
 import {t,locale} from '../../../shared/i18n'
-import {usePreviewTracks} from '../model/tracks'
-import SongCard from './SongCard.vue'
-const tracks=usePreviewTracks(),filter=ref('all'),more=ref(false),gallery=ref<HTMLElement>()
-const visible=computed(()=>filter.value==='all'?tracks.value:tracks.value.filter(track=>track.id===filter.value))
-const styles=['抒情流行','梦幻电子','独立摇滚','温暖民谣','R&B节奏蓝调','说唱嘻哈','轻柔爵士','国风古韵']
-async function choose(id:string){filter.value=id;await nextTick();gallery.value?.scrollTo({left:0,behavior:'instant'})}
+import {previewFilters} from '../model/tracks'
+import {usePreviewPlaylists,filterPlaylists} from '../model/playlists'
+import PlaylistCard from './PlaylistCard.vue'
+import PlaylistDetails from './PlaylistDetails.vue'
+const playlists=usePreviewPlaylists(),filter=ref('all'),more=ref(false),gallery=ref<HTMLElement>(),selectedPlaylist=ref('')
+const moreToggle=ref<HTMLButtonElement>()
+const primaryFilters=previewFilters.slice(0,3),extraFilters=previewFilters.slice(3)
+const selectedExtra=computed(()=>extraFilters.find(option=>option.id===filter.value))
+const visible=computed(()=>filterPlaylists(playlists.value,filter.value))
+const details=computed(()=>playlists.value.find(playlist=>playlist.id===selectedPlaylist.value))
+const resultCount=computed(()=>visible.value.reduce((total,playlist)=>total+playlist.tracks.length,0))
+async function choose(id:string){filter.value=id;more.value=false;await nextTick();gallery.value?.scrollTo({left:0,behavior:'instant'});if(extraFilters.some(option=>option.id===id))moreToggle.value?.focus({preventScroll:true})}
 </script>
-<template><section id="inspiration" class="p-width explore-music">
-  <header class="explore-heading"><p class="explore-label">{{locale==='en'?'Explore Music':'试听作品 / Explore Music'}}</p><h2>{{t('听听这些歌，你也能创作。')}}</h2><p v-if="locale!=='en'" class="explore-heading-en" lang="en">Discover What You Can Create.</p><p class="explore-description">{{t('无需音乐基础，选择你喜欢的风格，下一首就由你创作。')}}</p><p v-if="locale!=='en'" class="explore-description-en" lang="en">Explore different music styles. Your next song is just a few clicks away.</p></header>
-  <div class="explore-toolbar"><nav class="genre-tabs" :aria-label="t('筛选试听作品')"><button type="button" :class="{selected:filter==='all'}" :aria-pressed="filter==='all'" @click="choose('all')">{{t('全部')}}</button><button v-for="track in tracks" :key="track.id" type="button" :class="{selected:filter===track.id}" :aria-pressed="filter===track.id" @click="choose(track.id)">{{track.category}}</button><button type="button" :aria-expanded="more" aria-controls="explore-style-links" @click="more=!more">{{t(more?'收起风格':'更多风格')}} <span aria-hidden="true">{{more?'−':'+'}}</span></button></nav><p class="swipe-hint">{{t('左右滑动，探索更多作品')}} <span aria-hidden="true">↔</span></p></div>
-  <div v-if="more" id="explore-style-links" class="explore-style-links"><p>{{t('选择一种风格，开始创作。')}}</p><nav :aria-label="t('选择创作风格')"><RouterLink v-for="style in styles" :key="style" :to="{path:'/create',query:{style}}">{{t(style)}} <span aria-hidden="true">↗</span></RouterLink></nav></div>
-  <div ref="gallery" class="explore-gallery" tabindex="0" :aria-label="t('试听作品列表')"><SongCard v-for="track in visible" :key="track.id" :track="track"/></div>
-  <footer class="explore-footer"><div><h3>{{t('下一首，听见你的创作。')}}</h3><p>{{t('从喜欢的风格开始，找到属于你的声音。')}}</p></div><RouterLink class="p-button" to="/create">{{t('立即生成我的歌')}} <span aria-hidden="true">↗</span></RouterLink></footer>
+<template><section id="inspiration" class="p-width explore-music playlist-explore">
+  <header class="explore-heading"><h2>{{t('听听这些歌 你也能创作')}}</h2><p v-if="locale!=='en'" class="explore-heading-en" lang="en">Discover What You Can Create.</p><p class="explore-description">{{t('从喜欢的风格开始 下一首由你创作')}}</p></header>
+  <div class="explore-toolbar"><nav class="genre-tabs" :aria-label="t('筛选试听作品')"><button type="button" :class="{selected:filter==='all'}" :aria-pressed="filter==='all'" @click="choose('all')">{{t('全部')}}</button><button v-for="option in primaryFilters" :key="option.id" type="button" :class="{selected:filter===option.id}" :aria-pressed="filter===option.id" @click="choose(option.id)">{{t(option.label)}}</button><button ref="moreToggle" type="button" :class="{selected:!!selectedExtra}" :aria-expanded="more" aria-controls="explore-style-filters" @click="more=!more">{{selectedExtra?t(selectedExtra.label):t(more?'收起风格':'更多风格')}} <span aria-hidden="true">{{more?'−':'+'}}</span></button></nav><p class="swipe-hint">{{t('左右滑动，探索更多作品')}} <span aria-hidden="true">↔</span></p></div>
+  <div v-if="more" id="explore-style-filters" class="playlist-style-filters"><nav class="genre-tabs" :aria-label="t('更多试听风格')"><button v-for="option in extraFilters" :key="option.id" type="button" :class="{selected:filter===option.id}" :aria-pressed="filter===option.id" @click="choose(option.id)">{{t(option.label)}}</button></nav></div>
+  <p class="sr-only" role="status" aria-live="polite">{{ t('找到 {count} 首歌曲',{count:resultCount}) }}</p>
+  <div ref="gallery" class="explore-gallery" :class="{'is-filtered':filter!=='all'}" tabindex="0" :aria-label="t('试听歌单列表')"><PlaylistCard v-for="playlist in visible" :key="playlist.id" :playlist="playlist" @more="selectedPlaylist=playlist.id"/></div>
+  <footer class="explore-footer"><h3>{{t('下一首 听见你的创作')}}</h3><RouterLink class="p-button" to="/create">{{t('开始创作')}}</RouterLink></footer>
+  <PlaylistDetails v-if="details" :playlist="details" @close="selectedPlaylist=''"/>
 </section></template>

@@ -25,7 +25,7 @@ public interface ExecutionMapper {
     int renewTask(@Param("id")String id,@Param("token")String token,@Param("now")Instant now,@Param("until")Instant until);
     @Update("UPDATE generation_task SET status='SUBMITTING',submit_attempts=submit_attempts+1,updated_at=#{now} WHERE id=#{id} AND lease_token=#{token} AND status='QUEUED'")
     int start(@Param("id")String id,@Param("token")String token,@Param("now")Instant now);
-    @Update("UPDATE generation_task SET status='RUNNING',provider_task_id=#{external},last_error_code=NULL,updated_at=#{now},next_attempt_at=#{next} WHERE id=#{id} AND status IN ('SUBMITTING','SUBMISSION_UNKNOWN') AND provider_task_id IS NULL")
+    @Update("UPDATE generation_task SET status='RUNNING',provider_task_id=#{external},last_error_code=NULL,updated_at=#{now},next_attempt_at=#{next} WHERE id=#{id} AND (status IN ('SUBMITTING','SUBMISSION_UNKNOWN') OR (status='FAILED' AND last_error_code='CHECKING_CLOSED')) AND provider_task_id IS NULL")
     void accepted(@Param("id")String id,@Param("external")String external,@Param("now")Instant now,@Param("next")Instant next);
     @Update("UPDATE generation_task SET status='SUBMISSION_UNKNOWN',last_error_code=#{code},updated_at=#{now} WHERE id=#{id} AND lease_token=#{token} AND status IN ('SUBMITTING','RUNNING')")
     int unknown(@Param("id")String id,@Param("token")String token,@Param("code")String code,@Param("now")Instant now);
@@ -33,6 +33,8 @@ public interface ExecutionMapper {
     void interrupted(@Param("id")String id,@Param("now")Instant now);
     @Update("UPDATE generation_task SET status='RUNNING',query_failures=#{failures},last_error_code=#{code},updated_at=#{now},next_attempt_at=#{next} WHERE id=#{id} AND lease_token=#{token} AND status IN ('RUNNING','SUBMISSION_UNKNOWN')")
     void running(@Param("id")String id,@Param("token")String token,@Param("failures")int failures,@Param("code")String code,@Param("now")Instant now,@Param("next")Instant next);
+    @Update("UPDATE generation_task SET status='SUBMISSION_UNKNOWN',last_error_code=#{code},updated_at=#{now},next_attempt_at=#{next} WHERE id=#{id} AND lease_token=#{token} AND status IN ('RUNNING','SUBMISSION_UNKNOWN') AND provider_task_id IS NOT NULL")
+    void review(@Param("id")String id,@Param("token")String token,@Param("code")String code,@Param("now")Instant now,@Param("next")Instant next);
     @Update("UPDATE generation_task SET status='SAVING',audio_url=#{url},last_error_code=NULL,updated_at=#{now},next_attempt_at=#{now} WHERE id=#{id} AND lease_token=#{token} AND status IN ('RUNNING','SUBMISSION_UNKNOWN')")
     void saving(@Param("id")String id,@Param("token")String token,@Param("url")String url,@Param("now")Instant now);
     @Update("UPDATE generation_task SET audio_url=#{url} WHERE id=#{id} AND lease_token=#{token} AND status='SAVING'")
@@ -41,7 +43,7 @@ public interface ExecutionMapper {
     void archiveFailed(@Param("id")String id,@Param("token")String token,@Param("attempts")int attempts,@Param("status")String status,@Param("now")Instant now,@Param("next")Instant next);
     @Update("UPDATE generation_task SET status='SUCCEEDED',asset_id=#{asset},last_error_code=NULL,updated_at=#{now} WHERE id=#{id} AND lease_token=#{token} AND status='SAVING'")
     void succeeded(@Param("id")String id,@Param("token")String token,@Param("asset")String asset,@Param("now")Instant now);
-    @Update("UPDATE generation_task SET status='FAILED',last_error_code=#{code},updated_at=#{now} WHERE id=#{id} AND lease_token=#{token} AND status IN ('SUBMITTING','RUNNING','SUBMISSION_UNKNOWN')")
+    @Update("UPDATE generation_task SET status='FAILED',last_error_code=#{code},updated_at=#{now} WHERE id=#{id} AND lease_token=#{token} AND status IN ('QUEUED','SUBMITTING','RUNNING','SUBMISSION_UNKNOWN')")
     int failed(@Param("id")String id,@Param("token")String token,@Param("code")String code,@Param("now")Instant now);
     @Update("UPDATE generation_task SET status='SAVING',archive_attempts=0,last_error_code=NULL,next_attempt_at=#{now},updated_at=#{now} WHERE id=#{id} AND work_id=#{work} AND status='FAILED' AND last_error_code='AUDIO_ARCHIVE_FAILED' AND provider_task_id IS NOT NULL AND audio_url IS NOT NULL")
     int retry(@Param("work")String work,@Param("id")String id,@Param("now")Instant now);

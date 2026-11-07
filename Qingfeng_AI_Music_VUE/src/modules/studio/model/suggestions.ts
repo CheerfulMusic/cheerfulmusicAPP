@@ -5,6 +5,6 @@ export const styleSuggestions = ['温暖民谣', '抒情流行', '轻柔爵士',
 
 /** 首页仅允许传递已知的创作建议；已有作品仍以服务器及其本机草稿为准。 */
 export function styleFromInspiration(value:unknown):string {
- const themes=['爱情主题','家庭与陪伴','自由随性 · 大海旅行']
+ const themes=['爱情主题','家庭与陪伴','自由随性 · 大海旅行','Disco舞曲']
  return typeof value==='string'&&[...styleSuggestions,...themes,'说唱嘻哈'].includes(value)?value:'温暖民谣'
 }

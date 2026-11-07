@@ -26,6 +26,7 @@ public final class MyBatisExecutionRepository implements ExecutionRepository {
     public void accepted(String task,String external,Instant now,Instant next) { mapper.accepted(task,external,now,next); }
     public void unknown(String task,String token,String code,Instant now) { if(mapper.unknown(task,token,code,now)==1)mapper.interrupted(task,now); }
     public void running(String task,String token,int failures,String code,Instant now,Instant next) { mapper.running(task,token,failures,code,now,next); }
+    public void review(String task,String token,String code,Instant now,Instant next){mapper.review(task,token,code,now,next);}
     public void saving(String task,String token,String url,Instant now) { mapper.saving(task,token,url,now); }
     public void refreshAudioUrl(String task,String token,String url){mapper.refreshUrl(task,token,url);}
     public void archiveFailed(String task,String token,int attempts,boolean terminal,Instant now,Instant next) { mapper.archiveFailed(task,token,attempts,terminal?"FAILED":"SAVING",now,next); }
@@ -35,6 +36,9 @@ public final class MyBatisExecutionRepository implements ExecutionRepository {
         transactions.executeWithoutResult(tx->{
             if(mapper.failed(task,token,code,now)!=1)return;
             jdbc.query("SELECT r.owner_id,r.work_id,r.request_key FROM generation_task t JOIN model_usage_reservation r ON r.kind='MUSIC' AND r.work_id=t.work_id AND r.request_key=t.request_key WHERE t.id=?",rs->{credits.refund(rs.getString(1),"music:"+rs.getString(2)+":"+rs.getString(3));},task);
+            // 只对确定未受理的请求释放每日占额；结果未知和已完成音乐的归档失败不能释放。
+            if(code.equals("LOCAL_PREPARATION_FAILED")||code.equals("PROVIDER_REJECTED")||code.equals("PROVIDER_INPUT_REJECTED")||code.equals("PROVIDER_AUTH_FAILED")||code.equals("PROVIDER_BALANCE_LOW")||code.equals("PROVIDER_RATE_LIMITED")||code.equals("PROVIDER_ENDPOINT_UNAVAILABLE")||code.equals("PROVIDER_CONNECT_FAILED")||code.equals("PROVIDER_COOLDOWN"))
+                jdbc.update("DELETE FROM model_usage_reservation WHERE kind='MUSIC' AND work_id=(SELECT work_id FROM generation_task WHERE id=?) AND request_key=(SELECT request_key FROM generation_task WHERE id=?)",task,task);
         });
     }
     public boolean retryArchive(String work,String task,Instant now) { return mapper.retry(work,task,now)==1; }

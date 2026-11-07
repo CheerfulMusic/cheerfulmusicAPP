@@ -18,6 +18,12 @@ public class ProviderConfiguration {
             environment.getProperty("qingfeng.providers.kie.style-weight",Double.class,0.85),
             environment.getProperty("qingfeng.providers.kie.weirdness-constraint",Double.class,0.25),
             environment.getProperty("qingfeng.providers.kie.variety",Integer.class,0));
-        return new KieSunoMusicProvider(key,environment.getProperty("qingfeng.providers.kie.model","V6"),tuning).sectionAudioWeight(environment.getProperty("qingfeng.providers.kie.section-audio-weight",Double.class,0.85)).approveAudioWith(audioUrls::approve);
+        var provider=new KieSunoMusicProvider(key,environment.getProperty("qingfeng.providers.kie.model","V6"),tuning).sectionAudioWeight(environment.getProperty("qingfeng.providers.kie.section-audio-weight",Double.class,0.85)).approveAudioWith(audioUrls::approve)
+            .withLimits(new com.qingfeng.music.settings.MusicPromptLimits(
+                environment.getProperty("qingfeng.providers.kie.max-title-characters",Integer.class,80),
+                environment.getProperty("qingfeng.providers.kie.max-lyrics-characters",Integer.class,5000),
+                environment.getProperty("qingfeng.providers.kie.max-style-characters",Integer.class,1000),
+                environment.getProperty("qingfeng.providers.kie.max-negative-characters",Integer.class,500)));
+        return new com.qingfeng.music.generation.application.ResilientMusicProvider(provider,java.time.Clock.systemUTC());
     }
 }

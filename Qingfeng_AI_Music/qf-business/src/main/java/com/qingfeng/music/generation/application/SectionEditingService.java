@@ -55,6 +55,7 @@ public final class SectionEditingService {
             }
             if(current.version()!=request.workVersion())throw new DomainException("WORK_VERSION_CONFLICT","故事已更新，请重新打开局部改词。");
             if(!enabled||!provider.isConfigured()||!provider.supportsSectionEditing())throw new DomainException("MUSIC_PROVIDER_UNAVAILABLE","局部改词服务暂不可用，请稍后再试。");
+            provider.checkAdmission();
             media.get(owner,work,request.sourceAssetId());
             var source=edits.source(work,request.sourceAssetId()).orElseThrow(()->new DomainException("SECTION_SOURCE_UNAVAILABLE","这首歌曲缺少可编辑的原曲信息。"));
             if(!provider.name().equals(source.provider())||source.providerTaskId()==null||source.audioId()==null||source.duration()==null||!Double.isFinite(source.duration()))throw new DomainException("SECTION_SOURCE_UNAVAILABLE","请先重新读取原曲信息，再提交修改。");
