@@ -9,19 +9,34 @@ public final class MyBatisExecutionRepository implements ExecutionRepository {
     public MyBatisExecutionRepository(ExecutionMapper mapper) { this.mapper=mapper; }
     private org.springframework.jdbc.core.JdbcTemplate jdbc;
     private org.springframework.transaction.support.TransactionTemplate transactions;
+    private org.springframework.transaction.support.TransactionTemplate claimTransactions;
     private com.qingfeng.music.credits.CreditsLedger credits;
-    public MyBatisExecutionRepository withCredits(org.springframework.jdbc.core.JdbcTemplate jdbc, org.springframework.transaction.support.TransactionTemplate transactions, com.qingfeng.music.credits.CreditsLedger credits){this.jdbc=jdbc;this.transactions=transactions;this.credits=credits;return this;}
+    public MyBatisExecutionRepository withCredits(org.springframework.jdbc.core.JdbcTemplate jdbc, org.springframework.transaction.support.TransactionTemplate transactions, com.qingfeng.music.credits.CreditsLedger credits){
+        this.jdbc=jdbc;this.transactions=transactions;this.credits=credits;
+        this.claimTransactions=new org.springframework.transaction.support.TransactionTemplate(transactions.getTransactionManager());
+        this.claimTransactions.setPropagationBehavior(org.springframework.transaction.TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+        this.claimTransactions.setIsolationLevel(org.springframework.transaction.TransactionDefinition.ISOLATION_READ_COMMITTED);
+        this.claimTransactions.setTimeout(10);
+        return this;
+    }
     public boolean lockProvider(String provider,String token,Instant now,Instant until) { mapper.ensureProvider(provider);return mapper.lock(provider,token,now,until)==1; }
     public void unlockProvider(String provider,String token) { mapper.unlock(provider,token); }
-    public Optional<Execution> claim(String provider,String token,Instant now,Instant until) {
-        for(String id:mapper.candidates(provider,now)) if(mapper.claim(id,token,now,until)==1) {
-            var row=mapper.find(id);
-            return Optional.of(new Execution(MyBatisTaskRepository.toTask(row),row.providerTaskId,row.audioUrl,row.submitAttempts,row.archiveAttempts,row.queryFailures,token));
-        }
-        return Optional.empty();
+    public Optional<Execution> claim(String provider,String token,Instant now,Instant until,Phase phase,int maxInFlight) {
+        if(maxInFlight<0)throw new IllegalArgumentException("音乐在途并发上限不能为负数");
+        if(claimTransactions==null)throw new IllegalStateException("任务领取必须配置独立短事务");
+        return claimTransactions.execute(tx->{
+            mapper.ensureProvider(provider);
+            if(mapper.claimGate(provider,token,now)==null)return Optional.empty();
+            boolean allowSubmission=mapper.inFlight(provider,now)<maxInFlight;
+            for(String id:mapper.candidates(provider,now,phase.name(),allowSubmission)) if(mapper.claim(id,token,now,until)==1) {
+                var row=mapper.find(id);
+                return Optional.of(new Execution(MyBatisTaskRepository.toTask(row),row.providerTaskId,row.audioUrl,row.submitAttempts,row.archiveAttempts,row.queryFailures,token));
+            }
+            return Optional.empty();
+        });
     }
     public void release(String task,String token) { mapper.release(task,token); }
-    public boolean renew(String provider,String task,String token,Instant now,Instant until){return mapper.renewProvider(provider,token,now,until)==1&&mapper.renewTask(task,token,now,until)==1;}
+    public boolean renew(String provider,String task,String token,Instant now,Instant until){return mapper.renewTask(task,token,now,until)==1;}
     public boolean startSubmission(String task,String token,Instant now) { return mapper.start(task,token,now)==1; }
     public void accepted(String task,String external,Instant now,Instant next) { mapper.accepted(task,external,now,next); }
     public void unknown(String task,String token,String code,Instant now) { if(mapper.unknown(task,token,code,now)==1)mapper.interrupted(task,now); }

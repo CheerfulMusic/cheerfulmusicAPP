@@ -7,11 +7,17 @@ import java.util.Optional;
 
 /** 原子条件更新与租约由仓储实现；网络调用不能处于数据库事务中。 */
 public interface ExecutionRepository {
+    enum Phase { ANY, SUBMIT, QUERY, ARCHIVE }
     record Execution(Task task, String providerTaskId, String audioUrl, int submitAttempts,
                      int archiveAttempts, int queryFailures, String leaseToken) {}
     boolean lockProvider(String provider, String token, Instant now, Instant until);
     void unlockProvider(String provider, String token);
-    Optional<Execution> claim(String provider, String token, Instant now, Instant until);
+    default Optional<Execution> claim(String provider, String token, Instant now, Instant until) {
+        return claim(provider, token, now, until, Phase.ANY, 3);
+    }
+    /** 在短事务内原子领取；排队任务的有效租约也占用在途名额，防止并发超发。 */
+    Optional<Execution> claim(String provider, String token, Instant now, Instant until,
+                              Phase phase, int maxInFlight);
     void release(String task, String token);
     boolean renew(String provider,String task,String token,Instant now,Instant until);
     boolean startSubmission(String task, String token, Instant now);

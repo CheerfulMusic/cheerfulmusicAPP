@@ -20,6 +20,9 @@ public final class GenerationWorker {
     private AudioCandidates candidates;
     private Duration queryReviewAfter=Duration.ofMinutes(30);
     private int maxQueryFailures=6;
+    private int maxInFlight=3;
+    /** 0 仅暂停新提交，已受理任务仍可查询和归档。 */
+    public GenerationWorker withConcurrencyLimit(int value){if(value<0)throw new IllegalArgumentException("音乐在途并发上限不能为负数");maxInFlight=value;return this;}
     public GenerationWorker withRecoveryPolicy(Duration reviewAfter,int failures){if(reviewAfter.isNegative()||reviewAfter.isZero()||failures<1)throw new IllegalArgumentException("恢复策略无效");queryReviewAfter=reviewAfter;maxQueryFailures=failures;return this;}
     public GenerationWorker withCandidates(AudioCandidates value){candidates=value;return this;}
     private com.qingfeng.music.settings.MusicSettings settings;
@@ -35,12 +38,14 @@ public final class GenerationWorker {
 
     private Instant now() { return clock.instant().truncatedTo(java.time.temporal.ChronoUnit.MICROS); }
     public boolean runOnce() {
+        return runOnce(ExecutionRepository.Phase.ANY);
+    }
+    public boolean runOnce(ExecutionRepository.Phase phase) {
         if (!provider.isConfigured()) return false;
         String token=UUID.randomUUID().toString(); Instant now=now();
-        if (!repository.lockProvider(provider.name(),token,now,now.plus(lease))) return false;
         String taskId=null;ScheduledExecutorService heartbeat=null;
         try {
-            var found=repository.claim(provider.name(),token,now,now.plus(lease));
+            var found=repository.claim(provider.name(),token,now,now.plus(lease),phase,maxInFlight);
             if (found.isEmpty()) return false;
             var execution=found.get(); taskId=execution.task().id();
             String claimedTask=taskId;
@@ -57,7 +62,6 @@ public final class GenerationWorker {
         } finally {
             if(heartbeat!=null)heartbeat.shutdownNow();
             if (taskId!=null) repository.release(taskId,token);
-            repository.unlockProvider(provider.name(),token);
         }
     }
 

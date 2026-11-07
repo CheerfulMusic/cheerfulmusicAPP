@@ -12,18 +12,33 @@ public interface ExecutionMapper {
     int lock(@Param("provider")String provider,@Param("token")String token,@Param("now")Instant now,@Param("until")Instant until);
     @Update("UPDATE generation_worker_lock SET lease_token=NULL,lease_until=NULL WHERE provider=#{provider} AND lease_token=#{token}")
     void unlock(@Param("provider")String provider,@Param("token")String token);
-    @Select("SELECT g.id FROM generation_task g WHERE g.provider=#{provider} AND (g.status IN ('QUEUED','SUBMITTING','RUNNING','SAVING') OR (g.status='SUBMISSION_UNKNOWN' AND g.provider_task_id IS NOT NULL)) AND g.next_attempt_at<=#{now} AND (g.lease_until IS NULL OR g.lease_until<=#{now}) AND (g.status<>'QUEUED' OR NOT EXISTS(SELECT 1 FROM generation_task busy WHERE busy.provider=#{provider} AND busy.status IN ('SUBMITTING','RUNNING','SAVING'))) ORDER BY g.next_attempt_at,g.id LIMIT 20")
-    List<String> candidates(@Param("provider")String provider,@Param("now")Instant now);
+    // 仅序列化领取事务；旧进程尚持有供应商租约时先等待，兼容滚动切换。
+    @Select("SELECT provider FROM generation_worker_lock WHERE provider=#{provider} AND (lease_token IS NULL OR lease_until<=#{now} OR lease_token=#{token}) FOR UPDATE")
+    String claimGate(@Param("provider")String provider,@Param("token")String token,@Param("now")Instant now);
+    @Select("SELECT COUNT(*) FROM generation_task WHERE provider=#{provider} AND (status IN ('SUBMITTING','RUNNING','SUBMISSION_UNKNOWN') OR (status='QUEUED' AND lease_until>#{now}))")
+    int inFlight(@Param("provider")String provider,@Param("now")Instant now);
+    @Select({"<script>",
+        "SELECT g.id FROM generation_task g WHERE g.provider=#{provider}",
+        "<choose>",
+        "<when test=\"phase == 'SUBMIT'\">AND g.status='QUEUED'</when>",
+        "<when test=\"phase == 'QUERY'\">AND (g.status IN ('SUBMITTING','RUNNING') OR (g.status='SUBMISSION_UNKNOWN' AND g.provider_task_id IS NOT NULL))</when>",
+        "<when test=\"phase == 'ARCHIVE'\">AND g.status='SAVING'</when>",
+        "<otherwise>AND (g.status IN ('QUEUED','SUBMITTING','RUNNING','SAVING') OR (g.status='SUBMISSION_UNKNOWN' AND g.provider_task_id IS NOT NULL))</otherwise>",
+        "</choose>",
+        "AND g.next_attempt_at &lt;= #{now} AND (g.lease_until IS NULL OR g.lease_until &lt;= #{now})",
+        "<if test='!allowSubmission'>AND g.status &lt;&gt; 'QUEUED'</if>",
+        "ORDER BY g.next_attempt_at,g.created_at,g.id LIMIT 20",
+        "</script>"})
+    List<String> candidates(@Param("provider")String provider,@Param("now")Instant now,
+                            @Param("phase")String phase,@Param("allowSubmission")boolean allowSubmission);
     @Update("UPDATE generation_task SET lease_token=#{token},lease_until=#{until} WHERE id=#{id} AND (status IN ('QUEUED','SUBMITTING','RUNNING','SAVING') OR (status='SUBMISSION_UNKNOWN' AND provider_task_id IS NOT NULL)) AND next_attempt_at<=#{now} AND (lease_until IS NULL OR lease_until<=#{now})")
     int claim(@Param("id")String id,@Param("token")String token,@Param("now")Instant now,@Param("until")Instant until);
     @Select("SELECT * FROM generation_task WHERE id=#{id}") TaskRow find(String id);
     @Update("UPDATE generation_task SET lease_token=NULL,lease_until=NULL WHERE id=#{id} AND lease_token=#{token}")
     void release(@Param("id")String id,@Param("token")String token);
-    @Update("UPDATE generation_worker_lock SET lease_until=#{until} WHERE provider=#{provider} AND lease_token=#{token} AND lease_until>#{now}")
-    int renewProvider(@Param("provider")String provider,@Param("token")String token,@Param("now")Instant now,@Param("until")Instant until);
     @Update("UPDATE generation_task SET lease_until=#{until} WHERE id=#{id} AND lease_token=#{token} AND lease_until>#{now}")
     int renewTask(@Param("id")String id,@Param("token")String token,@Param("now")Instant now,@Param("until")Instant until);
-    @Update("UPDATE generation_task SET status='SUBMITTING',submit_attempts=submit_attempts+1,updated_at=#{now} WHERE id=#{id} AND lease_token=#{token} AND status='QUEUED'")
+    @Update("UPDATE generation_task SET status='SUBMITTING',submit_attempts=submit_attempts+1,updated_at=#{now} WHERE id=#{id} AND lease_token=#{token} AND lease_until>#{now} AND status='QUEUED'")
     int start(@Param("id")String id,@Param("token")String token,@Param("now")Instant now);
     @Update("UPDATE generation_task SET status='RUNNING',provider_task_id=#{external},last_error_code=NULL,updated_at=#{now},next_attempt_at=#{next} WHERE id=#{id} AND (status IN ('SUBMITTING','SUBMISSION_UNKNOWN') OR (status='FAILED' AND last_error_code='CHECKING_CLOSED')) AND provider_task_id IS NULL")
     void accepted(@Param("id")String id,@Param("external")String external,@Param("now")Instant now,@Param("next")Instant next);
