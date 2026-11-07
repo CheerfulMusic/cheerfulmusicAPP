@@ -1,0 +1,33 @@
+# 正式环境 PayPal 收款配置模板（占位符，不含任何真实密钥）
+# 复制为服务器私有配置 /etc/qingfeng-music/application.properties 中的对应键，不要提交真实值。
+# 启用前必须完成商户与回调验收；退款、争议、拒付事件尚未实现自动处理。
+
+# --- 必须：商户后台提供 ---
+# Live App 的 Client ID / Secret（英国商户账户下的 Live 应用，不是 Sandbox 应用）
+qingfeng.paypal.client-id=<LIVE_CLIENT_ID>
+qingfeng.paypal.client-secret=<LIVE_CLIENT_SECRET>
+# 收款商户 ID（Live 环境）
+qingfeng.paypal.merchant-id=<LIVE_MERCHANT_ID>
+# Webhook ID：在开发者控制台为 https://cheerfulmusic.com/api/public/paypal/webhook
+# 创建 Webhook 订阅后生成。当前只可订阅 PAYMENT.CAPTURE.COMPLETED；
+# 订阅退款/争议事件会导致验签后返回 503 并被 PayPal 持续重试。
+qingfeng.paypal.webhook-id=<LIVE_WEBHOOK_ID>
+
+# --- 必须：正式环境开关（三道，缺一不可） ---
+qingfeng.paypal.enabled=true
+qingfeng.paypal.environment=live
+qingfeng.paypal.live-enabled=true
+# 公网 Live 的第二道独立开关，默认 false。防止本地 paypal-live 配置误传到线上。
+qingfeng.paypal.public-live-enabled=true
+
+# --- 必须：公网回调地址（写死校验，只允许这个值） ---
+qingfeng.paypal.return-base-url=https://cheerfulmusic.com/account
+
+# --- 禁止：下列本地验证标记绝不能出现在生产配置 ---
+# qingfeng.deployment.environment=paypal-local
+# spring.profiles.active 不得包含 paypal-live / payment-demo
+
+# --- 可选：套餐价格（USDonly，默认 4.99 / 12.99 / 24.99） ---
+# qingfeng.payments.prices.usd.starter=4.99
+# qingfeng.payments.prices.usd.standard=12.99
+# qingfeng.payments.prices.usd.plus=24.99

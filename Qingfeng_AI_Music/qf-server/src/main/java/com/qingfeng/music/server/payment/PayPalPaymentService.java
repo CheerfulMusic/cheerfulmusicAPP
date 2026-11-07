@@ -23,6 +23,7 @@ public class PayPalPaymentService {
     @Value("${qingfeng.paypal.merchant-id:}") private String merchantId;
     @Value("${qingfeng.paypal.webhook-id:}") private String webhookId;
     @Value("${qingfeng.paypal.live-enabled:false}") private boolean liveEnabled;
+    @Value("${qingfeng.paypal.public-live-enabled:false}") private boolean publicLiveEnabled;
     @Value("${qingfeng.paypal.return-base-url:https://cheerfulmusic.com/account}") private String returnBase;
     private final Environment configuration;
     public PayPalPaymentService(JdbcTemplate db,TransactionTemplate tx,CreditsLedger ledger,PaymentCatalog catalog,Environment configuration){this.db=db;this.tx=tx;this.ledger=ledger;this.catalog=catalog;this.configuration=configuration;}
@@ -32,10 +33,19 @@ public class PayPalPaymentService {
         && !Arrays.asList(configuration.getActiveProfiles()).contains("payment-demo")
         && "paypal-local".equals(configuration.getProperty("qingfeng.deployment.environment"))
         && "http://127.0.0.1:5173/account".equals(returnBase);}
-    // Live payments remain blocked for public traffic until disputes, refunds and sandbox acceptance are complete.
-    // The only permitted Live path is the explicitly labelled local popup checkout above.
+    /** Public Live checkout on the production site. Requires a second, independent opt-in so that
+     *  the local paypal-live configuration can never accidentally enable real charges on the server.
+     *  Webhook verification is mandatory here (unlike the popup-only local checkout). */
+    boolean publicLive(){return environment.equals("live") && liveEnabled && publicLiveEnabled
+        && !webhookId.isBlank()
+        && "https://cheerfulmusic.com/account".equals(returnBase)
+        && !Arrays.asList(configuration.getActiveProfiles()).contains("paypal-live")
+        && !Arrays.asList(configuration.getActiveProfiles()).contains("payment-demo")
+        && !"paypal-local".equals(configuration.getProperty("qingfeng.deployment.environment"));}
+    // Refund/dispute webhook events are not implemented yet; merchant acceptance must be completed
+    // before public-live-enabled is switched on. See docs/PayPal收款接入.md.
     boolean ready(){return enabled && !clientId.isBlank() && !clientSecret.isBlank() && !merchantId.isBlank()
-        && ((environment.equals("sandbox") && !webhookId.isBlank()) || localLive());}
+        && ((environment.equals("sandbox") && !webhookId.isBlank()) || localLive() || publicLive());}
     String provider(){return environment.equals("live")?"PAYPAL_LIVE":"PAYPAL_SANDBOX";}
     PayPalCheckoutGateway gateway(){return new PayPalCheckoutGateway(environment.equals("live")?PayPalCheckoutGateway.Environment.LIVE:PayPalCheckoutGateway.Environment.SANDBOX,clientId,clientSecret,merchantId,webhookId,localLive());}
     public Map<String,Object> catalog(){return Map.of("enabled",ready(),"environment",environment.equals("live")?"live":"sandbox","popupOnly",localLive(),"packages",ready()?catalog.packages().stream().map(PaymentCatalog.Package::asMap).toList():List.of());}

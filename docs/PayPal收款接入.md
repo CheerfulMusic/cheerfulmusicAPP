@@ -15,7 +15,9 @@
 - 用户账户页处理 PayPal 授权返回并请求服务端完成扣款；用户返回页面本身不作为支付成功凭据。
 - PayPal 退款及争议事件的审计基础见 [PayPal 退款争议处理](PayPal退款争议处理.md)，不能视为完整退款流程。
 
-**当前没有真实收款能力。**PayPal 后端固定不允许启用正式环境，默认关闭；尚未登录商户开发者平台，没有进行真实沙箱付款或验证账号的银行卡资格。创建订单结果不明时仍需人工核对；取消、过期、退款、拒付和异常对账尚未完成，禁止将现阶段用于生产销售。
+**当前没有开放真实收款。**代码已具备公网 Live 路径（`PayPalPaymentService.publicLive()`），但由独立开关 `qingfeng.paypal.public-live-enabled` 控制，默认 false；线上私有配置目前没有任何 `qingfeng.paypal.*` 键。公网 Live 还要求 webhook ID、公网回调地址，且禁止 `paypal-live` profile 与 `paypal-local` 部署标记，防止本地验证配置误传上线。配置模板见 `Qingfeng_AI_Music/config/paypal-production.properties.example`。
+
+**上线前仍禁止用于生产销售**：尚未完成商户与回调验收、真实沙箱付款及银行卡资格验证；创建订单结果不明时仍需人工核对；webhook 目前只实现 `PAYMENT.CAPTURE.COMPLETED`，退款、争议、拒付事件验签后返回 503，异常对账尚未完成。订阅这些事件前必须先补齐处理逻辑。
 
 该分支包含 V15–V20 完整迁移链。V17 原样引入现有身份迁移，只创建 `creator_authing_identity` 表，不启用身份登录功能。上线前须备份数据库并确认当前 Flyway 版本、各迁移校验值；已有迁移不得修改。正式环境启用前须完成商户与回调验收。
 
@@ -25,4 +27,4 @@
 2. 在服务端私有配置中设置沙箱凭证和商户 ID、webhook ID，配置对应的 HTTPS 回调并启用必要事件；先用独立测试数据库和沙箱买家完成端到端测试。
 3. 验证订单中断、重复通知、金额及币种不匹配、不同设备恢复、退款和争议；完成相关业务策略与实现后，才能评估正式环境上线。
 
-配置项为 `qingfeng.paypal.enabled`、`qingfeng.paypal.environment`、`qingfeng.paypal.client-id`、`qingfeng.paypal.client-secret`、`qingfeng.paypal.merchant-id` 和 `qingfeng.paypal.webhook-id`。回调为 `/api/public/paypal/webhook`；目前只处理并核对 `PAYMENT.CAPTURE.COMPLETED`，其他事件验签后返回失败以便重试，必须完成对应处理后再订阅。价格通过 `qingfeng.payments.prices.usd.{starter,standard,plus}` 调整。支付和积分扣费开关相互独立，购买要求绑定 Google 或 Logto 账号。
+配置项为 `qingfeng.paypal.enabled`、`qingfeng.paypal.environment`、`qingfeng.paypal.live-enabled`、`qingfeng.paypal.public-live-enabled`、`qingfeng.paypal.return-base-url`、`qingfeng.paypal.client-id`、`qingfeng.paypal.client-secret`、`qingfeng.paypal.merchant-id` 和 `qingfeng.paypal.webhook-id`。回调为 `/api/public/paypal/webhook`；目前只处理并核对 `PAYMENT.CAPTURE.COMPLETED`，其他事件验签后返回失败以便重试，必须完成对应处理后再订阅。价格通过 `qingfeng.payments.prices.usd.{starter,standard,plus}` 调整。支付和积分扣费开关相互独立，购买要求绑定 Google 或 Logto 账号。
