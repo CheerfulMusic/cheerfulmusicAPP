@@ -1,3 +1,4 @@
+import { installCreationLoginGate } from '../../shared/identity/creation-login-gate'
 import { createRouter, createWebHashHistory, createWebHistory } from 'vue-router'
 import { platform } from '../../platform'
 import { scrollBehavior } from './scroll'
@@ -17,3 +18,5 @@ export const router = createRouter({
     { path: '/:pathMatch(.*)*', name: 'not-found', component: () => import('../pages/NotFoundPage.vue') },
   ],
 })
+
+installCreationLoginGate(router)
