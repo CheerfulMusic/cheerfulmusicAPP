@@ -9,14 +9,14 @@ IDEA直接运行MusicApplication默认启用mysql模式，从后端config/local.
 本机JDK17、Maven3.6.3；Spring Boot4.1.2、MyBatis4.0.0、Flyway版本迁移。
 
 ```powershell
-cd E:\qingfeng_AI_music\Qingfeng_AI_Music
+cd Qingfeng_AI_Music
 .\scripts\build.ps1
 .\scripts\run-mysql.ps1
 ```
 
 先填写 `config/local.properties` 并准备独立 `qingfeng_music` 库，配置不能指向其他业务库。凭据不进入代码库或日志。详情见上级 `docs/本地配置与API接入.md`。
 
-`run-local.ps1`用于无数据库模式，首页可浏览。MySQL模式启动执行Flyway V1—V5，包含身份、作品、歌词、媒体、分享、任务、执行尝试与租约表；不会自动创建数据库。音频默认写入后端工作目录的`data/audio`，可配置绝对路径。上级`scripts/build-local.ps1`会将前端打进Jar，上级`scripts/start-local.ps1`提供后台启动与进程记录。
+MySQL 模式启动执行 Flyway V1—V23，包含身份、作品、歌词、媒体、分享、任务、积分、支付、OIDC 等表；不会自动创建数据库。日常本地运行统一连接线上生产主库（见上级 AGENTS.md），不再使用独立开发库或无数据库演示模式。音频默认写入后端工作目录的 `data/audio`，可配置绝对路径；生产私有 OSS 对象以 `oss:` 前缀登记。上级 `scripts/start-main.ps1` 是唯一启停入口，`start-local.ps1` 仅为转发壳。
 
 ## 业务入口
 
@@ -45,4 +45,4 @@ server→business、infrastructure；infrastructure→business；business→comm
 
 ## 验证状态
 
-34项后端测试通过，覆盖身份/归属/CSRF、不可变歌词、并发幂等、租约及恢复、未知提交、单个在途生成、只读刷新/归档重试、找回码并发消费、容量、路径和OSS私有ACL边界。自动化数据库为H2 MySQL兼容模式，供应商与OSS使用离线替身；本机MySQL V1—V5、真实重启、跨浏览器作品找回和备份恢复另行实测。详情见上级`docs/第三阶段验收.md`。
+后端全量测试通过（当前 285 项 / 60 suites），覆盖身份/归属/CSRF、不可变歌词、并发幂等、租约及恢复、未知提交、单个在途生成、只读刷新/归档重试、找回码并发消费、容量、路径和OSS私有ACL边界。自动化数据库为H2 MySQL兼容模式，供应商与OSS使用离线替身；本机MySQL V1—V23、真实重启、跨浏览器作品找回和备份恢复另行实测。详情见上级`docs/第三阶段验收.md`。

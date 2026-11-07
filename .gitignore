@@ -42,3 +42,8 @@ ui-prototype/output/
 
 # 助手的跨会话工作记忆，属于本机数据
 .workbuddy-ai/
+
+# Python 缓存（工作区含 3 个 .py 脚本，运行后会生成）
+__pycache__/
+*.pyc
+*.pyo
