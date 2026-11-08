@@ -33,7 +33,7 @@ async function refresh() {
     if(b.status==='fulfilled') { musicCost.value=b.value.musicCost; if(b.value.enabled) balance.value=b.value.balance }
     if(signedIn.value && available.value) {
       const [p,a]=await Promise.all([requestJson<{orders:{status:string}[]}>('app/paypal/orders'), requestJson<{orders:{status:string}[]}>('app/payments/orders')])
-      blocked.value=[...p.orders,...a.orders].some(o=>o.status!=='PAID')
+      blocked.value=[...p.orders,...a.orders].some(o=>['CREATING','PENDING','UNKNOWN'].includes(o.status))
     }
     if (available.value) {
       try {
@@ -43,7 +43,10 @@ async function refresh() {
             try { await requestJson(`app/paypal/orders/${encodeURIComponent(id)}/capture`,'POST',undefined,30000); await refresh() }
             catch { blocked.value=true; error.value=en.value?'Payment is being checked. Visit your account before trying again.':'付款正在核对，请前往账号页查看，避免重复支付。' }
           },
-          onCancel: () => { blocked.value=true; error.value=en.value?'The order needs checking. Visit your account before trying again.':'订单仍待核对，请先前往账号页查看。' },
+          onCancel: async id => {
+            try { await requestJson(`app/paypal/orders/${encodeURIComponent(id)}/close`,'POST',undefined,30000); await refresh() }
+            catch { blocked.value=true; error.value=en.value?'The order needs checking. Visit your account before trying again.':'订单仍待核对，请先前往账号页查看。' }
+          },
           onError: () => { blocked.value=true; error.value=en.value?'The payment status needs checking. Visit your account.':'支付状态需要核对，请前往账号页查看。' },
         })
       } catch { sdk.value=null }
