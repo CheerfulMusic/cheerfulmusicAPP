@@ -1,5 +1,6 @@
 /** Chinese source copy is the stable message key; business option values stay unchanged. */
 export const english: Record<string, string> = {
+  '继续创作一首歌': 'Create another song',
   '按当前音乐方向调整句长 节奏和表达 保留故事事实与重要原句':'Adapt the line lengths, rhythm and expression to the current music direction. Preserve the story facts and important original lines.',
   '音乐方向已更新 当前歌词保持不变':'Music direction updated. Your lyrics are unchanged.',
   '保留当前歌词':'Keep current lyrics',

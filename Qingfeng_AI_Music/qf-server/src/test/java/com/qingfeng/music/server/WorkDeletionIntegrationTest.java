@@ -22,7 +22,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import static org.junit.jupiter.api.Assertions.*;
 
-@SpringBootTest(properties={"spring.datasource.url=jdbc:h2:mem:work_deletion;MODE=MySQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1","qingfeng.generation.enabled=true"})
+@SpringBootTest(webEnvironment=SpringBootTest.WebEnvironment.RANDOM_PORT,properties={"spring.datasource.url=jdbc:h2:mem:work_deletion;MODE=MySQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1","qingfeng.generation.enabled=true"})
 @ActiveProfiles("test") @Import(WorkDeletionIntegrationTest.Offline.class)
 class WorkDeletionIntegrationTest {
     @TestConfiguration(proxyBeanMethods=false) static class Offline {
@@ -36,6 +36,7 @@ class WorkDeletionIntegrationTest {
     @Autowired GenerationApi tasks;@Autowired MediaService media;@Autowired SharingApi shares;
     @Autowired WorkLibraryQuery library;@Autowired JdbcTemplate jdbc;
     @Autowired ExecutionRepository executions;@Autowired MusicProvider provider;
+    @org.springframework.beans.factory.annotation.Value("${local.server.port}") int port;
     record Fixture(String owner,WorkApi.Work work,String revision){}
     Fixture fixture(){String owner=identity.create().creatorId();var work=works.create(owner,new WorkApi.Draft("朋友","旅行","故事","祝福","民谣","我的歌"));var revision=lyrics.save(owner,work.id(),0,"我的歌","歌词");lyrics.confirm(owner,work.id(),revision.id());return new Fixture(owner,work,revision.id());}
     byte[] wav(){return new GiftWorkflowIntegrationTest().wav();}
@@ -77,4 +78,46 @@ class WorkDeletionIntegrationTest {
         assertTrue(library.list(f.owner(),0).isEmpty());assertTrue(works.list(f.owner(),0).isEmpty());
         assertThrows(DomainException.class,()->tasks.submit(f.owner(),f.work().id(),f.revision(),UUID.randomUUID().toString()));
     }
+
+    /** Reproduces the production fk_attempt_task failure with a completed, generated audio asset. */
+    @Test void deletingGeneratedAudioThroughHttpPreservesDependentRowsAndInvalidatesAccess() throws Exception {
+        var client=java.net.http.HttpClient.newBuilder().cookieHandler(new java.net.CookieManager(null,java.net.CookiePolicy.ACCEPT_ALL)).build();
+        String csrf=field(send(client,"GET","/api/public/csrf",null).body(),"token");
+        String owner=field(send(client,"POST","/api/public/session",csrf).body(),"creatorId");
+        var work=works.create(owner,new WorkApi.Draft("朋友","旅行","晚风里的故事","祝福","民谣","生成的歌"));
+        var revision=lyrics.save(owner,work.id(),0,"生成的歌","把晚风唱进歌里");lyrics.confirm(owner,work.id(),revision.id());
+        var task=tasks.submit(owner,work.id(),revision.id(),UUID.randomUUID().toString());
+        Instant base=Instant.now();
+        for(var phase:java.util.List.of(ExecutionRepository.Phase.SUBMIT,ExecutionRepository.Phase.QUERY,ExecutionRepository.Phase.ARCHIVE)){
+            long delay=switch(phase){case SUBMIT->10;case QUERY->30;default->60;};
+            var worker=new GenerationWorker(executions,provider,url->new ByteArrayInputStream(wav()),media,Clock.fixed(base.plusSeconds(delay),ZoneOffset.UTC),Duration.ofMinutes(2),2);
+            assertTrue(worker.runOnce(phase),phase.name());
+        }
+        String asset=jdbc.queryForObject("SELECT asset_id FROM generation_task WHERE id=?",String.class,task.id());
+        int attempts=jdbc.queryForObject("SELECT COUNT(*) FROM generation_attempt WHERE task_id=?",Integer.class,task.id());
+        assertTrue(attempts>0);
+        // The old physical cleanup cannot remove the parent task while audit rows reference it.
+        assertThrows(org.springframework.dao.DataIntegrityViolationException.class,()->jdbc.update("DELETE FROM generation_task WHERE id=?",task.id()));
+        var share=shares.create(owner,work.id(),revision.id(),asset);
+        String path="/api/app/works/"+work.id();
+        assertEquals(403,send(client,"DELETE",path+"?acknowledgeCompleted=true",null).statusCode());
+        assertEquals(409,send(client,"DELETE",path,csrf).statusCode());
+        assertNull(jdbc.queryForObject("SELECT deleted_at FROM music_work WHERE id=?",java.sql.Timestamp.class,work.id()));
+        var deleted=send(client,"DELETE",path+"?acknowledgeCompleted=true",csrf);
+        assertEquals(200,deleted.statusCode(),deleted.body());assertTrue(deleted.body().contains("\"deleted\":true"));
+        assertEquals(200,send(client,"DELETE",path+"?acknowledgeCompleted=true",csrf).statusCode());
+        assertEquals(404,send(client,"GET",path,null).statusCode());
+        assertFalse(send(client,"GET","/api/app/works/library",null).body().contains(work.id()));
+        assertEquals(attempts,jdbc.queryForObject("SELECT COUNT(*) FROM generation_attempt WHERE task_id=?",Integer.class,task.id()));
+        assertEquals("SUCCEEDED",jdbc.queryForObject("SELECT status FROM generation_task WHERE id=?",String.class,task.id()));
+        assertEquals(1,jdbc.queryForObject("SELECT COUNT(*) FROM media_asset WHERE id=?",Integer.class,asset));
+        assertThrows(DomainException.class,()->shares.get(share.token()));
+        assertThrows(DomainException.class,()->shares.audio(share.token()));
+    }
+    private java.net.http.HttpResponse<String> send(java.net.http.HttpClient client,String method,String path,String csrf) throws Exception {
+        var request=java.net.http.HttpRequest.newBuilder(java.net.URI.create("http://127.0.0.1:"+port+path));
+        if(csrf!=null)request.header("X-XSRF-TOKEN",csrf);
+        return client.send(request.method(method,"POST".equals(method)?java.net.http.HttpRequest.BodyPublishers.ofString("{}"):java.net.http.HttpRequest.BodyPublishers.noBody()).build(),java.net.http.HttpResponse.BodyHandlers.ofString());
+    }
+    private String field(String json,String key){var match=java.util.regex.Pattern.compile("\""+key+"\"\\s*:\\s*\"([^\"]+)\"").matcher(json);assertTrue(match.find(),json);return match.group(1);}
 }
