@@ -36,6 +36,11 @@ qingfeng.providers.kie.variety=0
 qingfeng.providers.kie.section-audio-weight=0.85
 qingfeng.providers.deepseek.api-key=
 qingfeng.providers.deepseek.model=deepseek-flash
+# 写词提供方：openai 使用 GPT；deepseek 保留原模型。AI灵感改写独立配置。
+qingfeng.lyrics.provider=openai
+qingfeng.providers.openai.api-key=
+qingfeng.providers.openai.model=gpt-6.1-terra
+# 可用环境变量 OPENAI_API_KEY 提供密钥；禁止提交真实值。
 qingfeng.lyrics.enabled=false
 qingfeng.generation.provider=unconfigured
 

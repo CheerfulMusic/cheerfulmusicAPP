@@ -15,6 +15,7 @@ public final class DeepSeekLyricsWriter implements LyricsWriter {
     public DeepSeekLyricsWriter(String key,String model){this(key,model,URI.create("https://api.deepseek.com/chat/completions"),HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).followRedirects(HttpClient.Redirect.NEVER).build());}
     public DeepSeekLyricsWriter(String key,String model,URI endpoint,HttpClient client){this.key=key.trim();this.model=model;this.endpoint=endpoint;this.client=client;}
     public boolean isConfigured(){return !key.isBlank();}
+    @Override public String source(){return "DEEPSEEK";}
     public Draft write(WorkApi.Work work,String language){
         return write(work,language,"","");
     }

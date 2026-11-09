@@ -51,7 +51,7 @@ public final class LyricsCompositionService {
             if(works.get(owner,work).version()!=expectedVersion)throw new DomainException("WORK_VERSION_CONFLICT","作品已修改，请重新载入后保存歌词");
             if(draft.title()==null||draft.title().isBlank()||draft.title().length()>80||draft.lyrics()==null||draft.lyrics().isBlank()||draft.lyrics().length()>5000)throw new DomainException("LYRICS_RESPONSE_INVALID","歌词生成结果不完整，请稍后重新发起");
             structure.validate(draft.lyrics());
-            var revision=new LyricsApi.Revision(UUID.randomUUID().toString(),work,expectedVersion,draft.title().trim(),draft.lyrics(),"DEEPSEEK",false,Instant.now());
+            var revision=new LyricsApi.Revision(UUID.randomUUID().toString(),work,expectedVersion,draft.title().trim(),draft.lyrics(),writer.source(),false,Instant.now());
             requests.completeWithRevision(work,key,revision.id(),()->{
                 revisions.insert(revision);
                 if(plans!=null&&draft.plan()!=null)plans.save(work,revision.id(),com.qingfeng.music.settings.CreativePlan.sourceHash(snapshot),draft.plan());

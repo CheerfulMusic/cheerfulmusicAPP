@@ -19,6 +19,7 @@ class DeepSeekLyricsFlowTest {
   @Bean @Primary FakeWriter fakeWriter(){return new FakeWriter();}
  }
  static class FakeWriter implements LyricsWriter {
+  public String source(){return "DEEPSEEK";}
   WorkApi.Work lastWork;String lastLanguage;String instructions;String output;
   public Draft write(WorkApi.Work work,String language,String instructions,String previous){this.instructions=instructions;return output==null?write(work,language):new Draft("结构测试",output);}
   AtomicInteger calls=new AtomicInteger();public boolean isConfigured(){return true;}
