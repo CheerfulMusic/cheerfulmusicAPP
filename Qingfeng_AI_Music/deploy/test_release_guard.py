@@ -22,7 +22,7 @@ class GuardTest(unittest.TestCase):
         with zipfile.ZipFile(root / 'app.jar', 'w') as z:
             z.writestr(prefix + 'release-commit.txt', source)
             z.writestr(prefix + 'static/index.html', '<script src="/assets/index-abc.js"></script>')
-            z.writestr(prefix + 'static/assets/index-abc.js', 'IdentityPage-abc.js RechargePage-abc.js AnalyticsPage-abc.js "/media/sample.mp3"')
+            z.writestr(prefix + 'static/assets/index-abc.js', 'IdentityPage-abc.js RechargePage-abc.js AnalyticsPage-abc.js `/media/sample.mp3`')
             audio = b'ID3original-audio'
             z.writestr(prefix + 'static/preview-media-manifest.json', json.dumps({'version': 1, 'assets': [{'path': '/media/sample.mp3', 'bytes': len(audio), 'sha256': hashlib.sha256(audio).hexdigest()}]}))
             if not missing_audio:

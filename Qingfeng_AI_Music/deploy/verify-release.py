@@ -69,7 +69,7 @@ def verify(release, policy):
         referenced_audio = set()
         for name in names:
             if name.startswith('BOOT-INF/classes/static/assets/') and name.endswith('.js'):
-                referenced_audio.update(re.findall(r'''["'](/media/[^"'\\\s]+\.mp3)["']''', z.read(name).decode()))
+                referenced_audio.update(re.findall(r'''["'`](/media/[^"'`\\\s]+\.mp3)["'`]''', z.read(name).decode()))
         if not referenced_audio or referenced_audio != declared_audio:
             raise ValueError('Preview audio references do not match verified assets')
     return digest
