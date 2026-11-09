@@ -62,7 +62,7 @@ qingfeng.media.creator-capacity-bytes=1073741824
 # 积分与支付后端默认关闭。Airwallex 与 PayPal 均只支持沙箱联调，不支持生产收款。
 # 使用独立测试数据库和沙箱账号，在本机私有 local.properties 中按需填写，勿提交真实凭证。
 qingfeng.credits.enabled=false
-qingfeng.credits.music-cost=10
+qingfeng.credits.music-cost=15
 qingfeng.payments.enabled=false
 # qingfeng.payments.client-id=
 # qingfeng.payments.api-key=
