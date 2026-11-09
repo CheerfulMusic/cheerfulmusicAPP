@@ -124,3 +124,20 @@ html:has(.playlist-dialog[open]) { overflow:hidden; }
   .explore-track-row { gap:10px; }
   .explore-card .style-create { font-size:12px; }
 }
+
+/* 热歌推荐：播放 / 点赞 / 收藏 / 评论。计数用主题变量，深浅两套都成立。 */
+.explore-track-item { min-width:0; }
+.hot-song-meta { display:flex; align-items:center; flex-wrap:wrap; gap:1px 8px; margin:0 0 7px 64px; color:var(--muted); font-size:10.5px; line-height:1.7; }
+.hot-metric { display:inline-flex; align-items:center; gap:3px; padding:2px 0; border:0; background:none; color:inherit; font:inherit; font-size:10.5px; font-variant-numeric:tabular-nums; }
+.hot-metric svg { width:11px; height:11px; fill:none; stroke:currentColor; stroke-width:1.4; stroke-linejoin:round; }
+.hot-metric:first-child svg { fill:currentColor; stroke:none; }
+.hot-action { cursor:pointer; border-radius:9px; padding:2px 5px; margin-inline:-5px; }
+.hot-action:hover { color:var(--accent-text); }
+.hot-action[aria-pressed='true'] { color:var(--accent-text); }
+.hot-action[aria-pressed='true'] svg { fill:currentColor; }
+.hot-action:disabled { opacity:.5; cursor:progress; }
+.hot-action:focus-visible { outline:2px solid var(--accent-text); outline-offset:2px; }
+.hot-notice { margin:0 0 14px; padding:10px 14px; border-radius:10px; background:var(--accent-soft); color:var(--accent-text); font-size:12px; line-height:1.7; }
+.hot-notice.error { background:var(--warning-soft); color:var(--warning); }
+@media(max-width:1100px) and (min-width:701px) { .hot-song-meta { margin-left:53px; gap:1px 6px; } }
+@media(max-width:700px) { .hot-song-meta { margin-left:62px; gap:1px 9px; } .hot-metric { font-size:11px; } }

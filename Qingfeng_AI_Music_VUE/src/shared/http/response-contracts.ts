@@ -22,6 +22,7 @@ const cover=(v:unknown)=>obj(v)&&num(v.version)&&(v.currentCoverId===null||text(
 const choices=(v:unknown)=>obj(v)&&Object.values(v).every(values=>list(values,text))
 const preferences=(v:unknown)=>obj(v)&&v.version===1&&(v.recipeId===null||text(v.recipeId))&&choices(v.choices)&&['AUTO','MALE','FEMALE'].includes(String(v.vocalGender))&&str(v.freeText)&&str(v.negativeText)
 const direction=(v:unknown)=>obj(v)&&preferences(v.preferences)&&num(v.catalogVersion)&&str(v.style)&&str(v.negativeTags)&&str(v.summaryZh)&&str(v.summaryEn)
+const hotStat=(v:unknown)=>obj(v)&&text(v.trackId)&&['plays','likes','favorites','comments'].every(k=>num(v[k])&&Number(v[k])>=0)
 export const emptyResponseAllowed=(path:string,method:string)=>method==='DELETE'&&/^app\/works\/[^/]+\/shares$/.test(path)||method==='POST'&&/^app\/works\/[^/]+\/generations\/[^/]+\/retry-archive$/.test(path)||method==='GET'&&/^app\/works\/[^/]+\/generations\/[^/]+\/music-settings$/.test(path)
 /** 校验应用实际依赖的字段。HTTP 200只代表传输成功，不代表业务结果完整。 */
 export function validResponse(path:string,method:string,value:unknown):boolean{
@@ -43,6 +44,10 @@ export function validResponse(path:string,method:string,value:unknown):boolean{
  if(path==='public/auth/logto/status')return method==='GET'&&obj(value)&&typeof value.enabled==='boolean'&&typeof value.authenticated==='boolean'&&['emailEnabled','phoneEnabled','appleEnabled'].every(k=>!(k in value)||typeof value[k]==='boolean')&&['email','name','phoneMasked'].every(k=>!(k in value)||str(value[k]))
  if(path==='public/auth/logto/start')return method==='POST'&&obj(value)&&logtoAuthorizationUrl(value.authorizationUrl)
  if(path==='public/system/info')return obj(value)&&text(value.name)&&text(value.version)&&obj(value.capabilities)&&['lyricsGeneration','musicGeneration','giftSharing','workPersistence'].every(k=>typeof (value.capabilities as Row)[k]==='boolean')
+ if(path==='public/hot-songs')return method==='GET'&&obj(value)&&list(value.songs,hotStat)
+ if(/^public\/hot-songs\/[^/]+\/play$/.test(path))return method==='POST'&&hotStat(value)
+ if(path==='app/hot-songs/reactions')return method==='GET'&&obj(value)&&list(value.liked,text)&&list(value.favorited,text)
+ if(/^app\/hot-songs\/[^/]+\/(?:like|favorite)$/.test(path))return ['POST','DELETE'].includes(method)&&hotStat(value)&&typeof (value as Row).liked==='boolean'&&typeof (value as Row).favorited==='boolean'
  if(path==='app/identity/recovery')return obj(value)&&(method==='GET'?typeof value.configured==='boolean':text(value.code))
  if(path==='app/credits')return method==='GET'&&obj(value)&&typeof value.enabled==='boolean'&&num(value.balance)&&num(value.musicCost)
  if(path==='app/referrals')return method==='GET'&&obj(value)&&text(value.code)
