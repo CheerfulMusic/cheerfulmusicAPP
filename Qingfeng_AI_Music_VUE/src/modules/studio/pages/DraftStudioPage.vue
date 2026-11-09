@@ -14,7 +14,6 @@ import { useRoute, useRouter, onBeforeRouteLeave, onBeforeRouteUpdate } from 'vu
 import { getSystemInfo } from '../../../shared/http/system'
 import { ApiError, ensureCreator, currentCreatorId, lastKnownCreatorId, associatedGuestCreatorId } from '../../../shared/http/api-client'
 import { readRecovery, writeRecovery, recoveryKey,checkpointRecovery } from '../../../shared/drafts/recovery'
-import RecoveryCopies from '../../../shared/drafts/RecoveryCopies.vue'
 import { loadWork, saveWork, rewriteInspiration, type Work, type DraftInput } from '../api/works'
 import { normalizeVocalGender } from '../model/vocals'
 import { styleFromInspiration } from '../model/suggestions'
@@ -83,17 +82,6 @@ function remember() {
   const owner=currentCreatorId(),source=associatedGuestCreatorId()
   const belongs=owner&&(cacheKey.startsWith(recoveryKey(owner,'story',''))||source&&cacheKey.startsWith(recoveryKey(source,'story','')))
   if(existing.value&&belongs&&cacheKey!==recoveryKey(owner,'story',existing.value.id))writeRecovery(recoveryKey(owner,'story',existing.value.id),value)
-}
-function restoreCopy(value:Recovery){
- if(!initialized.value||resetting.value||saving.value||composing.value)return
- if(!checkpointRecovery(cacheKey,recoveryValue())){error.value='无法保留当前编辑，已停止恢复。请先复制内容，或清理浏览器存储后重试。';return}
- clearTimeout(timer)
- Object.assign(draft,asDraft(value.draft));language.value=value.language;structure.value=normalizeLyricsStructure(value.structure)
- mode.value=creationMode(value.mode,!!existing.value)
- if(value.preferences&&musicCatalog.value&&validMusicPreferences(value.preferences,musicCatalog.value))preferences.value=value.preferences
- conflict.value=!!existing.value&&value.version!==undefined&&value.version!==existing.value.version
- error.value=conflict.value?'另一页面已更新故事。本机内容已保留，请先核对再选择保存或载入。':''
- notice.value='已恢复本机副本，替换前的编辑也已另存。';remember();if(!conflict.value)schedule()
 }
 function schedule() {
   remember(); clearTimeout(timer)
@@ -314,7 +302,6 @@ onBeforeUnmount(()=>{remember();alive=false;initSequence++;clearTimeout(timer);w
       <span class="autosave-state" role="status">{{ saving?t('正在保存…'):dirty?localSaved?t('已保留在本机'):t('有尚未保存的修改'):existing?t('已保存'):t('填写后自动保存') }}</span>
     </div>
     <div class="creation-sound-divider" aria-hidden="true"><span></span>ııııı<span></span></div>
-    <RecoveryCopies v-if="initialized&&cacheKey" :storage-key="cacheKey" :validate="validRecovery" @restore="restoreCopy"/>
     <div class="creation-page-layout"><section class="draft-form story-focus">
       <p v-if="notice" class="notice success" role="status">{{ t(notice) }}</p>
       <div v-if="error" class="notice error" role="alert"><p>{{ t(error) }}</p><div class="actions">
