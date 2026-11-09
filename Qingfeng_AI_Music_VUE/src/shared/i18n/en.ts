@@ -1485,4 +1485,9 @@ export const english: Record<string, string> = {
   "更多试听风格": "More listening styles",
   "试听歌单列表": "Preview playlists",
   "找到 {count} 首歌曲": "Found {count} songs",
+  '这首作品': 'This song',
+  '确定删除《{name}》吗？删除后无法恢复，歌曲、歌词与封面都会一并移除。': 'Delete "{name}"? This cannot be undone. The song, lyrics and cover will be removed too.',
+  '删除失败，请刷新后重试': 'Could not delete it. Refresh the page and try again.',
+  '删除中…': 'Deleting…',
+  '删除': 'Delete',
 }
