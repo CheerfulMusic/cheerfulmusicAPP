@@ -3,7 +3,7 @@ from pathlib import Path
 import csv,http.cookiejar,json,os,re,subprocess,time,urllib.request
 ROOT=Path(__file__).resolve().parent.parent
 DEST=ROOT/'.secrets/production-main.gateway.json'
-SSH=['ssh','-i','D:/it_ai/青风/.runtime/qingfeng-deploy-key.pem','-o','BatchMode=yes','-o','StrictHostKeyChecking=yes','-o','ConnectTimeout=15','root@47.84.5.172','python3','-']
+SSH=['ssh','-i',os.environ.get('QF_SSH_KEY_PATH',str(ROOT/'.cache/deploy-ssh/id_ed25519')),'-o','BatchMode=yes','-o','StrictHostKeyChecking=yes','-o','UserKnownHostsFile='+str(ROOT/'.cache/deploy-ssh/known_hosts'),'-o','ConnectTimeout=15','root@47.84.5.172','python3','-']
 cookies=http.cookiejar.CookieJar()
 client=urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cookies))
 def data(path,body=None,csrf=None):

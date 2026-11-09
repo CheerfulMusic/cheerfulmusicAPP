@@ -12,7 +12,8 @@ $privatePath = Join-Path $workspaceRoot '.secrets\production-main.local.properti
 $manifestPath = Join-Path $workspaceRoot '.secrets\production-main.manifest.json'
 $gatewayPath = Join-Path $workspaceRoot '.secrets\production-main.gateway.json'
 $runtimeJar = Join-Path $runtimeRoot 'app.jar'
-$sshKey = 'D:\it_ai\青风\.runtime\qingfeng-deploy-key.pem'
+$sshKey = if ($env:QF_SSH_KEY_PATH) { $env:QF_SSH_KEY_PATH } else { Join-Path $workspaceRoot '.cache\deploy-ssh\id_ed25519' }
+$knownHosts = Join-Path $workspaceRoot '.cache\deploy-ssh\known_hosts'
 $runId = [Guid]::NewGuid().ToString('N')
 $processes = @()
 $lifecycleLock = $null
@@ -82,7 +83,7 @@ function Stop-ThisRun {
 }
 
 try {
-    foreach ($required in @($privatePath, $manifestPath, $runtimeJar, $sshKey)) {
+    foreach ($required in @($privatePath, $manifestPath, $runtimeJar, $sshKey, $knownHosts)) {
         if (-not (Test-Path -LiteralPath $required -PathType Leaf)) { throw '主库启动材料不完整，请先完成私有配置、清单和线上同版 JAR 的准备。' }
     }
     New-Item -ItemType Directory -Path $runtimeBase -Force | Out-Null
@@ -148,7 +149,7 @@ try {
     if(Test-Path -LiteralPath $gatewayPath){$gateway=Get-Content -LiteralPath $gatewayPath -Raw|ConvertFrom-Json;$gatewayReady=$gateway.upstream -eq 'https://cheerfulmusic.com' -and [long]$gateway.expiresAt -gt [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()+300}
     if(-not $gatewayReady){$python=(Get-Command python -CommandType Application -ErrorAction Stop|Select-Object -First 1).Source;& $python (Join-Path $workspaceRoot 'scripts/prepare-main-gateway.py');if($LASTEXITCODE -ne 0){throw '线上业务接口通行配置未准备完成。'}}
 
-    $tunnel = Start-Tracked $ssh @('-N', '-T', '-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=yes', '-o', 'ExitOnForwardFailure=yes', '-o', 'ConnectTimeout=10', '-o', 'ServerAliveInterval=30', '-o', 'ServerAliveCountMax=3', '-L', '127.0.0.1:13306:127.0.0.1:3306', '-i', $sshKey, 'root@47.84.5.172') $runtimeRoot 'ssh'
+    $tunnel = Start-Tracked $ssh @('-N', '-T', '-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=yes', '-o', "UserKnownHostsFile=$knownHosts", '-o', 'ExitOnForwardFailure=yes', '-o', 'ConnectTimeout=10', '-o', 'ServerAliveInterval=30', '-o', 'ServerAliveCountMax=3', '-L', '127.0.0.1:13306:127.0.0.1:3306', '-i', $sshKey, 'root@47.84.5.172') $runtimeRoot 'ssh'
     Wait-Ready $tunnel { Test-TunnelPort } 20 '主库 SSH 隧道启动失败，请查看 .cache/runtime/production-main/ssh.err.log。'
     $privateUri = ([Uri]$privatePath).AbsoluteUri
     $serverArguments = @('-Xms64m', '-Xmx512m', '-jar', $runtimeJar, '--spring.profiles.active=mysql', '--spring.profiles.include=', '--spring.config.location=classpath:/', "--spring.config.additional-location=$privateUri", '--server.address=127.0.0.1', '--server.port=8080', '--spring.flyway.enabled=false', '--spring.sql.init.mode=never', '--qingfeng.generation.scheduler-enabled=false', '--qingfeng.cover.ai.scheduler-enabled=false', '--qingfeng.payment-demo.enabled=false', '--qingfeng.payments.enabled=false', '--qingfeng.paypal.enabled=false', '--qingfeng.paypal.live-enabled=false', '--qingfeng.paypal.reconciliation.enabled=false', '--qingfeng.auth.sms-bridge.enabled=false')
