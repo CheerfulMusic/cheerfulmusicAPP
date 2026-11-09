@@ -24,10 +24,11 @@ import SharePanel from '../components/SharePanel.vue'
 import MusicGenerationDialog from '../components/MusicGenerationDialog.vue'
 import { songSettings } from '../model/song-settings'
 import { vocalGenderLabel } from '../../studio/model/vocals'
-import { ApiError,currentCreatorId } from '../../../shared/http/api-client'
+import { ApiError,currentCreatorId,requestJson } from '../../../shared/http/api-client'
 import GenerationRecovery from '../components/GenerationRecovery.vue'
 import {closeTaskChecking} from '../api/detail'
 import {needsGenerationRefresh,rememberGeneration,recoverGeneration,forgetGeneration,uncertainSubmission,generationProblem,type PendingGeneration} from '../model/generation-recovery'
+import {creditGap,isCreditShortfall,type Credits} from '../model/credit-shortfall'
 const route = useRoute(), work = ref<Work>(), revision = ref<Revision | null>(null), asset = ref<AudioAsset | null>(null), tasks = ref<GenerationTask[]>([]), error = ref(''), loading = ref(false), lyricDirty = ref(false), modelReady = ref(false), submitting = ref(false), requestKey = ref('')
 const lyricsPanel=ref<InstanceType<typeof LyricsPanel>>(), lyricsReady=ref(false), allowance=ref<Allowance>(), giftRevision=ref<Revision|null>(null)
 const lyricRecoverable=ref(false),listenAfterLoad=ref(false),giftStage=ref(false),shared=ref(false),settingsOpen=ref(false),settingsBusy=ref(false),cancelling=ref(false)
@@ -65,6 +66,21 @@ async function sendGift(){
 let sequence = 0
 const generationOpen = ref(false), trackedTaskId = ref(''), submissionIssue = ref(''), submissionUnknown = ref(false), progressIssue = ref(false)
 const pendingIntent=ref<PendingGeneration>(),intentOwner=ref(''),requestRecoverable=ref(true),generationNotice=ref(''),inputIssue=ref(false)
+// 积分不足是在底部生成按钮处才发现的，提示必须就近显示，不能只留在页面顶部。
+const creditIssue=ref(false),credits=ref<Credits>()
+let creditEpoch=0
+const creditDetail=computed(()=>{
+  const gap=creditGap(credits.value)
+  return gap?t('这首歌曲生成需要 {cost} 积分，当前可用 {balance} 积分。',{cost:gap.cost,balance:gap.balance}):t('当前积分不足，暂时无法开始谱曲。')
+})
+async function loadCredits(){
+  const epoch=++creditEpoch
+  try{const value=await requestJson<Credits>('app/credits');if(epoch===creditEpoch&&value.enabled)credits.value=value}catch{/* 余额读不到时保留通用提示，不猜测数字。 */}
+}
+function showCreditIssue(){
+  creditIssue.value=true;void loadCredits()
+  void nextTick(()=>document.getElementById('credit-issue')?.scrollIntoView({block:'center',behavior:window.matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth'}))
+}
 function clearIntent(workId:string){forgetGeneration(intentOwner.value||currentCreatorId(),workId);pendingIntent.value=undefined;requestKey.value='';requestRecoverable.value=true}
 function restoreIntent(workId:string,history:GenerationTask[]){
   intentOwner.value=currentCreatorId();pendingIntent.value=recoverGeneration(intentOwner.value,workId)
@@ -113,7 +129,7 @@ async function closeChecking(task:GenerationTask){
 }
 async function load() {
  const turn=++sequence;settingsOperation++;settingsBusy.value=false;premiumOpen.value=false;sectionOpen.value=false;giftStage.value=false;shared.value=false;settingsOpen.value=false;coverOpen.value=false;covers.value=undefined
- generationOpen.value=false;trackedTaskId.value='';submissionIssue.value='';submissionUnknown.value=false;progressIssue.value=false;submitting.value=false;loading.value=true;error.value='';revision.value=null;asset.value=null;tasks.value=[];giftRevision.value=null;work.value=undefined;lyricDirty.value=false;requestKey.value='';pendingIntent.value=undefined;generationNotice.value='';inputIssue.value=false
+ generationOpen.value=false;trackedTaskId.value='';submissionIssue.value='';submissionUnknown.value=false;progressIssue.value=false;submitting.value=false;loading.value=true;error.value='';revision.value=null;asset.value=null;tasks.value=[];giftRevision.value=null;work.value=undefined;lyricDirty.value=false;requestKey.value='';pendingIntent.value=undefined;generationNotice.value='';inputIssue.value=false;creditIssue.value=false;credits.value=undefined
  try{
   const id=String(route.params.id),[found,history,system]=await Promise.all([loadWork(id),listTasks(id),getSystemInfo()]);if(turn!==sequence)return
   work.value=found;tasks.value=history;trackedTaskId.value=history.find(inProgress)?.id||'';restoreIntent(id,history)
@@ -133,7 +149,7 @@ async function generate() {
   if(submissionUnknown.value){await refreshTasks();generationOpen.value=true;return}
   if (!work.value || !lyricsReady.value || !modelReady.value || submitting.value || !lyricsPanel.value) return
   const workId = work.value.id, turn = sequence
-  submitting.value = true; error.value = ''; submissionIssue.value = ''; submissionUnknown.value = false;inputIssue.value=false;generationNotice.value=''
+  submitting.value = true; error.value = ''; submissionIssue.value = ''; submissionUnknown.value = false;inputIssue.value=false;generationNotice.value='';creditIssue.value=false
   trackedTaskId.value = ''
   let posted=false
   try {
@@ -151,6 +167,8 @@ async function generate() {
     trackedTaskId.value = accepted.id;clearIntent(workId);generationOpen.value=true
   } catch (e) {
     if (turn !== sequence) return
+    // 积分不足是后端明确拒绝：本次没有创建任务，就地提示充值，且不保留待核对意图。
+    if(isCreditShortfall(e)){error.value='';submissionUnknown.value=false;submissionIssue.value='';inputIssue.value=false;generationOpen.value=false;clearIntent(workId);showCreditIssue();return}
     error.value = e instanceof Error ? e.message : '提交失败，未自动重试'
     submissionUnknown.value=posted&&uncertainSubmission(e instanceof ApiError?e:{})
     submissionIssue.value=submissionUnknown.value?error.value:''
@@ -167,7 +185,7 @@ async function resumeOriginalRequest(){
   // 重放本站相同幂等请求；不产生新的请求键，不调用新的歌词版本。
   const accepted=await submitTask(saved.workId,saved.revisionId,saved.requestKey);if(turn!==sequence)return
   tasks.value=[accepted,...tasks.value.filter(task=>task.id!==accepted.id)];trackedTaskId.value=accepted.id;submissionUnknown.value=false;submissionIssue.value='';clearIntent(saved.workId);generationOpen.value=true
- }catch(e){if(turn!==sequence)return;error.value=e instanceof Error?e.message:'暂时无法核对原请求';if(!uncertainSubmission(e instanceof ApiError?e:{})){submissionUnknown.value=false;submissionIssue.value='';clearIntent(saved.workId)}}
+ }catch(e){if(turn!==sequence)return;if(isCreditShortfall(e)){error.value='';submissionUnknown.value=false;submissionIssue.value='';clearIntent(saved.workId);showCreditIssue();return}error.value=e instanceof Error?e.message:'暂时无法核对原请求';if(!uncertainSubmission(e instanceof ApiError?e:{})){submissionUnknown.value=false;submissionIssue.value='';clearIntent(saved.workId)}}
  finally{if(turn===sequence){submitting.value=false;void updateAllowance()}}
 }
 
@@ -224,6 +242,17 @@ function adjustMusic(){giftStage.value=false;shared.value=false;settingsOpen.val
           <div v-if="asset" class="actions"><button class="button secondary" :disabled="submitting||(!pendingTask&&!submissionUnknown&&(!modelReady||!lyricsReady))" @click="generate">{{ submissionUnknown?t('核对生成进度'):pendingTask?t('查看生成进度'):t('用这版歌词重新生成歌曲') }}</button><span class="save-info">{{ t('重新生成歌曲会使用一次歌曲创作额度。') }}</span></div>
         </details>
         <SoundDirectionEntry v-if="!asset" :style-label="t(work.style)" :voice-label="t(vocalGenderLabel(work.vocalGender))" :disabled="submitting||!!pendingTask||submissionUnknown||settingsBusy" @choose="adjustMusic"/>
+        <section v-if="creditIssue" id="credit-issue" class="credit-issue" role="alert">
+          <div class="credit-issue-copy">
+            <strong>{{ t('积分不足，暂时不能开始谱曲') }}</strong>
+            <p>{{ creditDetail }}</p>
+            <p class="save-info">{{ t('歌词和音乐设置都已保留，充值后回来点击生成即可继续。') }}</p>
+          </div>
+          <div class="credit-issue-actions">
+            <RouterLink class="button creation-primary credit-issue-topup" to="/recharge">{{ t('去充值') }}</RouterLink>
+            <button type="button" class="text-button" @click="creditIssue=false">{{ t('稍后再说') }}</button>
+          </div>
+        </section>
         <div class="creation-action-bar work-primary-bar" :class="{'context-editor-open':coverOpen||settingsOpen}">
           <template v-if="asset"><button class="button creation-primary" @click="sendGift">{{ t('分享歌曲') }}</button><button class="button secondary premium-studio-entry" type="button" @click="premiumOpen=true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3v7m0 4v7M12 3v12m0 4v2M19 3v2m0 4v12M2 10h6v4H2zm7 5h6v4H9zm7-10h6v4h-6z"/></svg><span>{{ t('定制化音乐制作') }}</span></button></template>
           <template v-else><button class="button secondary sound-direction-mobile" :disabled="submitting||!!pendingTask||submissionUnknown||settingsBusy" @click="adjustMusic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 9v6M10 4v16M15 7v10M20 10v4"/></svg>{{ t('旋律与声音') }}</button><div><button class="button creation-primary" :disabled="submitting||(!pendingTask&&!submissionUnknown&&(!modelReady||!lyricsReady))" @click="generate">{{ submitting?t('正在准备歌曲…'):submissionUnknown?t('核对生成进度'):pendingTask?t('查看生成进度'):modelReady?t('确认歌词并生成歌曲'):t('歌曲生成暂未开放') }}</button><span class="save-info">{{ lyricDirty?t('请先点击保存，保存当前歌词后再生成歌曲。'):t('确认已保存的歌词后，再开始谱曲。') }}</span></div></template>
@@ -245,6 +274,17 @@ function adjustMusic(){giftStage.value=false;shared.value=false;settingsOpen.val
   <MusicGenerationDialog :open="generationOpen" :status="generationStatus" :title="trackedTask?.title||work?.title||''" :error="submissionIssue" :error-code="trackedTask?.errorCode" :sync-issue="progressIssue||trackedTask?.errorCode==='QUERY_RETRY'" :created-at="trackedTask?.createdAt" :submit-after="trackedTask?.nextAttemptAt" :cancelling="cancelling||submitting" :cover="artwork" @cancel="cancelGeneration" @archive="trackedTask&&retryArchive(trackedTask)" @close="generationOpen=false" @view="viewGeneratedMusic"/>
 </template>
 <style scoped>
+.credit-issue { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:14px 22px; margin:26px 0 0; padding:16px 20px; border:1px solid var(--warning-border); border-radius:16px; background:var(--warning-soft); scroll-margin:130px; }
+.credit-issue-copy { min-width:0; }
+.credit-issue-copy strong { display:block; color:var(--ink); font-size:14px; font-weight:650; line-height:1.6; }
+.credit-issue-copy p { margin:6px 0 0; color:var(--muted); font-size:12px; line-height:1.8; overflow-wrap:anywhere; }
+.credit-issue-actions { display:flex; align-items:center; gap:10px; flex:none; }
+.credit-issue .credit-issue-topup { display:inline-flex; align-items:center; justify-content:center; min-width:0; min-height:42px; padding:10px 22px; font-size:12px; font-weight:600; white-space:nowrap; text-decoration:none; }
+@media(max-width:600px) {
+ .credit-issue { margin-top:20px; padding:14px 16px; gap:12px; }
+ .credit-issue-actions { width:100%; }
+ .credit-issue .credit-issue-topup { flex:1; }
+}
 .work-primary-bar > .premium-studio-entry { display:inline-flex; align-items:center; justify-content:center; gap:8px; min-height:50px; padding:12px 22px; border:1px solid #c38a32; border-radius:26px; background:linear-gradient(120deg,#ffe9b5,#f3cd77); color:#704311; box-shadow:0 5px 16px #b9782226; font-size:15px; font-weight:650; line-height:1.4; }
 .premium-studio-entry svg { width:19px; height:19px; flex:none; fill:none; stroke:currentColor; stroke-width:1.6; stroke-linecap:round; stroke-linejoin:round; }
 .premium-studio-entry > span { min-width:0; }

@@ -7,12 +7,17 @@ import { logtoState } from '../identity/logto-state'
 import { maskedPhoneLabel } from '../identity/phone-label'
 import { showLoginDialog } from '../identity/login-dialog'
 import NavIcon from './NavIcon.vue'
+import { analyticsAccess } from '../../modules/analytics/api/analytics'
 
 const props = defineProps<{ navigationOpen?: boolean }>()
 const emit = defineEmits<{ opened: [] }>()
 const route = useRoute()
 const root = ref<HTMLElement>(), trigger = ref<HTMLButtonElement>(), panel = ref<HTMLElement>()
-const open = ref(false), error = ref('')
+const open = ref(false), error = ref(''), analyticsAllowed = ref(false)
+async function refreshAnalyticsAccess() {
+  try { analyticsAllowed.value = (await analyticsAccess()).allowed === true }
+  catch { analyticsAllowed.value = false }
+}
 const authenticated = computed(() => accountState.value.authenticated || logtoState.value.authenticated)
 const contact = computed(() => logtoState.value.authenticated
   ? logtoState.value.email || maskedPhoneLabel(logtoState.value.phoneMasked)
@@ -49,8 +54,8 @@ async function signOut() {
 }
 watch(() => route.fullPath, () => { void close() })
 watch(() => props.navigationOpen, value => { if (value) void close() })
-watch(authenticated, value => { if (!value) void close() })
-onMounted(() => document.addEventListener('pointerdown', outside))
+watch(authenticated, value => { if (!value) { analyticsAllowed.value = false; void close() } else void refreshAnalyticsAccess() })
+onMounted(() => { document.addEventListener('pointerdown', outside); if (authenticated.value) void refreshAnalyticsAccess() })
 onBeforeUnmount(() => document.removeEventListener('pointerdown', outside))
 </script>
 <template>
@@ -67,6 +72,7 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', outside))
         <nav :aria-label="t('账号菜单')">
           <RouterLink to="/account"><NavIcon name="account" />{{ t('账号与登录') }}</RouterLink>
           <RouterLink to="/works"><NavIcon name="music" />{{ t('我的音乐') }}</RouterLink>
+          <RouterLink v-if="analyticsAllowed" to="/analytics"><NavIcon name="account" />数据看板</RouterLink>
           <button type="button" class="account-sign-out" :disabled="accountLoggingOut" @click="signOut"><NavIcon name="logout" />{{ accountLoggingOut ? t('正在处理…') : t('退出登录') }}</button>
         </nav>
         <p v-if="error" class="account-menu-error" role="alert">{{ t(error) }}</p>

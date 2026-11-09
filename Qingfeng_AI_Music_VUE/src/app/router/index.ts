@@ -16,6 +16,7 @@ export const router = createRouter({
     { path: '/legal/terms', component: () => import('../../modules/legal/pages/LegalPage.vue') },
     { path: '/legal/privacy', component: () => import('../../modules/legal/pages/LegalPage.vue') },
     { path: '/recharge', name: 'recharge', component: () => import('../../modules/identity/pages/RechargePage.vue') },
+    { path: '/analytics', name: 'analytics', component: () => import('../../modules/analytics/pages/AnalyticsPage.vue') },
     ...(import.meta.env.DEV ? [{ path: '/payment-preview', name: 'payment-preview', component: () => import('../../modules/identity/pages/PaymentPreviewPage.vue') }] : []),
     { path: '/:pathMatch(.*)*', name: 'not-found', component: () => import('../pages/NotFoundPage.vue') },
   ],
