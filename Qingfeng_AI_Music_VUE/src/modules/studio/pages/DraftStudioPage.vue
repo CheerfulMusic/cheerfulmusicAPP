@@ -17,7 +17,7 @@ import { styleFromInspiration } from '../model/suggestions'
 import { inspirationPresets, inspirationSelection, type InspirationSelection } from '../model/inspiration-presets'
 import { continuationRequestKey, retireContinuationRequestKey } from '../model/lyrics-continuation'
 import { generateLyrics, getLyricsRequest, getUsage, type Allowance } from '../../works/api/detail'
-import { readAgentBrief } from '../../agent/model/brief'
+import { clearAgentBrief, readAgentBrief } from '../../agent/model/brief'
 
 const storyFlowVersion = 3
 interface Recovery { structure?:LyricsStructure; flowVersion?:number; draft:DraftInput; language:string; part:number; draftKey:string; workId?:string; version?:number; dirty:boolean; conflict?:boolean }
@@ -83,8 +83,9 @@ function schedule() {
 watch([draft,language,structure],schedule,{deep:true,flush:'sync'})
 async function initialize() {
   const turn=++initSequence,query={...route.query}
-  // Agent 创作整理好的灵感只交接一次：新建草稿时预填，刷新后由服务器草稿或本机副本接管。
-  const agentBrief=query.from==='agent'?readAgentBrief():undefined
+  // Agent 创作整理好的灵感只预填新建草稿；成功接手并写入本机副本后才清除，失败时保留供刷新重试。
+  const agentBrief=!query.work&&query.from==='agent'?readAgentBrief():undefined
+  let agentBriefApplied=false
   rewriting.value=false;rewriteError.value='';rewriteStatus.value='';rewriteBackup.value=undefined
   presetBackup.value=undefined
   resetting.value=true;ready.value=false;clearTimeout(timer)
@@ -107,7 +108,7 @@ async function initialize() {
     existing.value=found
     recoveredVersion=existing.value?.version;recoveredWorkId=existing.value?.id
     if (existing.value) {Object.assign(draft,asDraft(existing.value));baseline.value=JSON.stringify(asDraft(existing.value))}
-    else {Object.assign(draft,{recipient:'',occasion:String(query.occasion||''),story:agentBrief?.story||'',message:'',style:agentBrief?.style||styleFromInspiration(query.style),title:'',vocalGender:'AUTO'});baseline.value=JSON.stringify(snapshot());draftKey=crypto.randomUUID()}
+    else {Object.assign(draft,{recipient:'',occasion:String(query.occasion||''),story:agentBrief?.story||'',message:'',style:agentBrief?.style||styleFromInspiration(query.style),title:'',vocalGender:'AUTO'});baseline.value=JSON.stringify(snapshot());draftKey=crypto.randomUUID();agentBriefApplied=!!agentBrief}
     if (local) {
       language.value=local.language;structure.value=normalizeLyricsStructure(local.structure);draftKey=local.draftKey
       if (local.dirty) {
@@ -137,7 +138,9 @@ async function initialize() {
         try{await router.replace({path:'/create',query:{...route.query,part:undefined,question:undefined}})}finally{internalRoute=false}
       }
       if(turn!==initSequence||!alive)return
-      initialized.value=true;resetting.value=false;remember();if(!conflict.value)schedule()
+      initialized.value=true;resetting.value=false;remember()
+      if(agentBriefApplied)clearAgentBrief()
+      if(!conflict.value)schedule()
     }
   }
 }

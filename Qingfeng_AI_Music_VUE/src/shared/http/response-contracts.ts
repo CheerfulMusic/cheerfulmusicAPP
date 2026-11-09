@@ -32,6 +32,7 @@ export function validResponse(path:string,method:string,value:unknown):boolean{
  if(path==='public/invite/status')return method==='GET'&&obj(value)&&typeof value.enabled==='boolean'&&typeof value.admitted==='boolean'&&str(value.csrfToken)&&str(value.expiresAt)
  if(path==='public/invite/enter')return method==='POST'&&obj(value)&&value.admitted===true
  if(path==='app/inspiration/rewrite')return obj(value)&&text(value.text)&&(value.text as string).length<=4000
+ if(path==='app/agent/reference')return method==='POST'&&obj(value)&&text(value.style)&&str(value.mood)&&num(value.tempo)&&Number(value.tempo)>=0&&typeof value.tempoVerified==='boolean'&&list(value.inferredInstrumentation,text)&&list(value.negativeTags,text)&&text(value.summary)&&['AI','RULE'].includes(String(value.source))
  if(path==='app/welcome')return obj(value)&&typeof value.show==='boolean'&&Number.isInteger(value.amount)&&(value.show?value.amount===100:value.amount===0)
  if(path==='public/session'||path==='public/session/recover')return obj(value)&&text(value.creatorId)&&(value.associatedGuestCreatorId===undefined||text(value.associatedGuestCreatorId))
  if(path==='public/session/logout')return method==='POST'&&obj(value)&&value.loggedOut===true
@@ -46,6 +47,7 @@ export function validResponse(path:string,method:string,value:unknown):boolean{
  if(path==='public/system/info')return obj(value)&&text(value.name)&&text(value.version)&&obj(value.capabilities)&&['lyricsGeneration','musicGeneration','giftSharing','workPersistence'].every(k=>typeof (value.capabilities as Row)[k]==='boolean')
  if(path==='public/hot-songs')return method==='GET'&&obj(value)&&list(value.songs,hotStat)
  if(/^public\/hot-songs\/[^/]+\/play$/.test(path))return method==='POST'&&hotStat(value)
+ if(path==='app/analytics/page-users')return method==='GET'&&obj(value)&&typeof value.allowed==='boolean'&&(value.allowed!==true||(num(value.days)&&text(value.pagePath)&&list(value.users,u=>obj(u)&&text(u.creatorId)&&(u.account===null||str(u.account))&&num(u.avgDurationMs)&&num(u.samples)&&Number(u.samples)>=0)))
  if(path==='app/hot-songs/reactions')return method==='GET'&&obj(value)&&list(value.liked,text)&&list(value.favorited,text)
  if(/^app\/hot-songs\/[^/]+\/(?:like|favorite)$/.test(path))return ['POST','DELETE'].includes(method)&&hotStat(value)&&typeof (value as Row).liked==='boolean'&&typeof (value as Row).favorited==='boolean'
  if(path==='app/identity/recovery')return obj(value)&&(method==='GET'?typeof value.configured==='boolean':text(value.code))

@@ -1,7 +1,32 @@
 /** Agent 创作助手的本地意图解析：不依赖后端也能给出可直接使用的创作方案。 */
-import { styleSuggestions } from '../../studio/model/suggestions'
+import { styleFromInspiration, styleSuggestions } from '../../studio/model/suggestions'
+import { BPM_CONFIDENCE_THRESHOLD, type AudioFeatures } from './audio-features'
 
 export type AgentMode = 'write' | 'rewrite' | 'extend' | 'style' | 'more'
+
+/** AI 语义化结果：风格与情绪属推断，tempo 只在浏览器端 BPM 可信时才有值。 */
+export interface ReferenceInsight {
+  style: string
+  mood: string
+  tempo: number
+  tempoVerified: boolean
+  instrumentation: string[]
+  negativeTags: string[]
+  summary: string
+  source: 'AI' | 'RULE'
+}
+
+/** 本机选择的参考音乐；只把可读的音乐信息写进创作描述，音频文件本身不上传。 */
+export interface AgentReference {
+  name: string
+  duration: number
+  size: number
+  type: string
+  /** 浏览器端实测特征，用于描述节奏、频段与明亮度。 */
+  features?: AudioFeatures
+  /** DeepSeek 语义化结果；缺失时只写实测特征。 */
+  insight?: ReferenceInsight
+}
 
 export interface AgentBrief {
   /** 创作描述，直接填入创作页的灵感输入框。 */
@@ -9,6 +34,7 @@ export interface AgentBrief {
   style: string
   mood: string
   tags: string[]
+  reference?: AgentReference
 }
 
 export interface AgentReply {
@@ -74,18 +100,72 @@ export function matchTheme(input: string): Theme {
   return themes.find(theme => theme.keywords.some(keyword => input.includes(keyword))) || { ...fallback, topic: input.slice(0, 24) || fallback.topic }
 }
 
-export function analyzeRequest(input: string, mode: AgentMode = 'write', interests: string[] = []): AgentReply {
+export function bandWord(bands: AudioFeatures['bands']): string {
+  const entries: Array<[string, number]> = [['低频偏重', bands.low], ['中频突出', bands.mid], ['高频偏亮', bands.high]]
+  entries.sort((left, right) => right[1] - left[1])
+  const [label, top] = entries[0]!
+  const second = entries[1]![1]
+  if (top >= 0.45 && top - second >= 0.08) return label
+  return '三频较均衡'
+}
+
+export function toneWord(brightness: number): string {
+  if (brightness <= 0.1) return '听感偏暗'
+  if (brightness >= 0.3) return '听感偏亮'
+  return ''
+}
+
+/** 只写有把握的实测值；AI 推断单独标注，避免被当成算法检测结果。 */
+function referenceLine(reference: AgentReference): string {
+  // 与页面上的时长展示保持一致（秒向下取整），避免描述里出现 02:09 而卡片写 02:08。
+  const seconds = Number.isFinite(reference.duration) && reference.duration > 0 ? Math.floor(reference.duration) : 0
+  const duration = seconds ? `，时长 ${Math.floor(seconds / 60).toString().padStart(2, '0')}:${(seconds % 60).toString().padStart(2, '0')}` : ''
+  const measured: string[] = []
+  const features = reference.features
+  if (features) {
+    if (features.bpm > 0 && features.bpmConfidence >= BPM_CONFIDENCE_THRESHOLD) measured.push(`约 ${Math.round(features.bpm)} BPM`)
+    measured.push(bandWord(features.bands))
+    const tone = toneWord(features.brightness)
+    if (tone) measured.push(tone)
+  }
+  const head = `参考音乐《${reference.name.slice(0, 80)}》${duration}${measured.length ? `，${measured.join('、')}` : ''}。`
+  const insight = reference.insight
+  const inferred = [insight?.style, insight?.mood].filter((value): value is string => !!value && value.trim().length > 0)
+  const inference = inferred.length ? `AI 推断：${inferred.join('、')}。` : ''
+  const summary = insight?.summary?.trim() ? insight.summary.trim() : ''
+  return `${head}${inference}${summary}`
+}
+
+/**
+ * 把参考音乐写进创作描述；同一份描述只保留一条参考，避免多轮补充时重复。
+ * 参考块总是追加在末尾，因此从最后一个「参考音乐《」处截断即可整体替换；
+ * 末尾没有「》」时视为用户原话里的引用，不做截断。
+ */
+export function withReference(brief: AgentBrief, reference?: AgentReference): AgentBrief {
+  if (!reference?.name) return brief
+  const marker = '参考音乐《'
+  const index = brief.story.lastIndexOf(marker)
+  const closed = index >= 0 && brief.story.indexOf('》', index) > 0
+  const base = closed ? brief.story.slice(0, index).trimEnd() : brief.story
+  const story = `${base}${referenceLine(reference)}`
+  return { ...brief, story: story.slice(0, 4000), reference }
+}
+
+export function analyzeRequest(input: string, mode: AgentMode = 'write', interests: string[] = [], reference?: AgentReference): AgentReply {
   const clean = input.trim().slice(0, 400)
   const theme = matchTheme(clean)
-  const suggestions = mode === 'style' ? [theme.style, ...styleSuggestions.filter(style => style !== theme.style).slice(0, 2)] : []
+  // 用户没提任何文字要求时，才让 AI 推断的参考风格作为起点；有文字时用户风格优先。
+  const referenceStyle = clean ? '' : reference?.insight?.style || ''
+  const style = referenceStyle ? styleFromInspiration(referenceStyle) : theme.style
+  const suggestions = mode === 'style' ? [style, ...styleSuggestions.filter(item => item !== style).slice(0, 2)] : []
   const prefix = mode === 'rewrite' ? '改写这段歌词，保留原意但换一种表达：' : mode === 'extend' ? '把这首歌延长一段，延续原有情绪：' : ''
   const interestLine = interests.length ? `可以融入我喜欢的${interests.join('、')}元素。` : ''
-  const story = `${prefix}以「${clean || theme.topic}」为灵感，写一首${theme.style}风格的歌，突出${theme.mood}的情绪。${interestLine}`
+  const story = `${prefix}以「${clean || theme.topic}」为灵感，写一首${style}风格的歌，突出${theme.mood}的情绪。${interestLine}`
   return {
     topic: theme.topic,
-    style: theme.style,
+    style,
     mood: theme.mood,
     suggestions,
-    brief: { story, style: theme.style, mood: theme.mood, tags: [...interests] },
+    brief: withReference({ story, style, mood: theme.mood, tags: [...interests] }, reference),
   }
 }
