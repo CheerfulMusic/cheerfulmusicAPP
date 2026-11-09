@@ -20,5 +20,8 @@ public interface MediaApi {
     record Content(long size,String contentType,String filename,Source source) {}
     /** 仅含定位媒体对象所需的窄信息；Web 层不得由 filename 推导对象名。 */
     record MediaRef(String storageKey,long size,String contentType,String filename) {}
-    @FunctionalInterface interface Source{InputStream open()throws IOException;}
+    @FunctionalInterface interface Source{
+        InputStream open()throws IOException;
+        default InputStream open(long offset)throws IOException{var input=open();try{input.skipNBytes(offset);return input;}catch(IOException e){input.close();throw e;}}
+    }
 }
