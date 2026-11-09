@@ -15,10 +15,10 @@ const support = [
   { label: '反馈建议', to: '' },
 ]
 const legal = [
-  { label: '用户服务条款（含积分与退款规则）', to: '' },
-  { label: '隐私政策', to: '' },
-  { label: '音乐作品发布与社区规则', to: '' },
-  { label: '版权与授权说明', to: '' },
+  { label: '用户服务条款（含积分与退款规则）', href: '/legal/terms.html' },
+  { label: '隐私政策', href: '/legal/privacy.html' },
+  { label: '音乐作品发布与社区规则', href: '/legal/community.html' },
+  { label: '版权与授权说明', href: '' },
 ]
 </script>
 
@@ -86,7 +86,10 @@ const legal = [
 
           <nav class="footer-column" :aria-label="t('法律与政策')">
             <h2>{{ t('法律与政策') }}</h2>
-            <span v-for="item in legal" :key="item.label" class="footer-link footer-link-static">{{ t(item.label) }}</span>
+            <template v-for="item in legal" :key="item.label">
+              <a v-if="item.href" class="footer-link" :href="item.href">{{ t(item.label) }}</a>
+              <span v-else class="footer-link footer-link-static">{{ t(item.label) }}</span>
+            </template>
           </nav>
 
           <section class="footer-cta" :aria-label="t('立即创作你的第一首歌')">
@@ -98,7 +101,7 @@ const legal = [
         <div class="footer-bottom">
           <p class="footer-copyright" lang="en">© 2026 Cheerful Music Limited. All rights reserved.</p>
           <div class="footer-company" lang="en">
-            <p>Cheerful Music Limited <span>|</span> Company No. 145026629 <span>|</span> Registered in England and Wales</p>
+            <p>Cheerful Music Limited <span>|</span> Company No. 14502629 <span>|</span> Registered in England and Wales</p>
             <p>Registered Office: Room 130, Building 3, Chiswick Park, 566 Chiswick High Road, London, W4 5YA, United Kingdom</p>
           </div>
         </div>
