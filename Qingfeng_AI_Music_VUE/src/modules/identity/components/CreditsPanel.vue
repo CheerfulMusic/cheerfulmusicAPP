@@ -34,9 +34,9 @@ async function load() {
   loading.value = true; error.value = ''; orderNotice.value = ''; unresolvedOrders.value = []; recentOrders.value = []
   if (isPreview) {
     const packages = ['USD'].flatMap(currency => [
-      { id: `starter-${currency}`, title: '100 Credits', amount: 4.99, currency, credits: 100 },
-      { id: `standard-${currency}`, title: '300 Credits', amount: 12.99, currency, credits: 300 },
-      { id: `plus-${currency}`, title: '700 Credits', amount: 24.99, currency, credits: 700 },
+      { id: `starter-${currency}`, title: '100 Credits', amount: 9.9, currency, credits: 100 },
+      { id: `standard-${currency}`, title: '300 Credits', amount: 25.9, currency, credits: 300 },
+      { id: `plus-${currency}`, title: '700 Credits', amount: 49.9, currency, credits: 700 },
     ])
     credits.value = { enabled: true, balance: 0, musicCost: 15 }
     catalogs.value = { airwallex: { enabled: false, packages: [] }, paypal: { enabled: true, packages } }
