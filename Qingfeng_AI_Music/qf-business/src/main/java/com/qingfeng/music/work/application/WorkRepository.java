@@ -9,4 +9,7 @@ public interface WorkRepository {
     boolean update(String owner, Work work, long expectedVersion);
     Optional<Work> find(String owner, String id);
     List<Work> list(String owner, int offset, int limit);
+    record DeletionState(boolean deleted, boolean hasAudio) {}
+    Optional<DeletionState> lockDeletion(String owner,String id);
+    void delete(String owner,String id,java.time.Instant now);
 }

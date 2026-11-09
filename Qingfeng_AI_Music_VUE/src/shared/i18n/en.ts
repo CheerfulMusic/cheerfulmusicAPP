@@ -1,5 +1,16 @@
 /** Chinese source copy is the stable message key; business option values stay unchanged. */
 export const english: Record<string, string> = {
+  '删除作品':'Delete work',
+  '删除已完成的歌曲？':'Delete this completed song?',
+  '删除这份作品？':'Delete this work?',
+  '这首歌已经制作完成。删除后将无法从“我的音乐”找回，原分享链接也将失效。请先下载需要保留的歌曲。':'This song is complete. Deleting it removes it from My Music and disables its share links. Download a copy first if you want to keep it.',
+  '删除后将从“我的音乐”移除。已提交的制作任务可能继续完成，不会因删除而自动退款。':'This work will be removed from My Music. Production already submitted may still finish. Deleting does not automatically refund it.',
+  '作品刚刚生成完成，请阅读警告后再次确认删除。':'The song has just completed. Read the warning and confirm deletion again.',
+  '删除失败，请稍后重试。':'Could not delete. Please try again later.',
+  '作品已删除':'Work deleted',
+  '暂不删除':'Keep work',
+  '确认删除':'Confirm deletion',
+  '正在删除…':'Deleting…',
   '关闭': 'Close',
   '欢迎加入': 'Welcome to ',
   '恭喜您获得新人专属福利': 'A special gift to begin your music journey',

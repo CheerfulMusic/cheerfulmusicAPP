@@ -9,6 +9,7 @@ public interface WorkApi {
     Work update(String creatorId, String workId, long expectedVersion, Draft draft);
     Work get(String creatorId, String workId);
     List<Work> list(String creatorId, int page);
+    void delete(String creatorId, String workId, boolean acknowledgeCompleted);
     record Draft(String recipient, String occasion, String story, String message, String style, String title,String vocalGender) {
         public Draft {vocalGender=VocalGender.normalize(vocalGender);}
         public Draft(String recipient,String occasion,String story,String message,String style,String title){this(recipient,occasion,story,message,style,title,"AUTO");}

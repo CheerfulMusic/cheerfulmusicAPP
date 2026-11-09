@@ -3,6 +3,12 @@ import {requestJson,uploadForm,resetCreatorSession} from '../src/shared/http/api
 afterEach(()=>{vi.unstubAllGlobals();resetCreatorSession()})
 const reply=(value:unknown,status=200)=>new Response(JSON.stringify(value),{status})
 describe('R1 响应读取与业务结果校验',()=>{
+ it('删除作品必须收到明确确认，空响应不能伪装成删除成功',async()=>{
+  vi.stubGlobal('fetch',vi.fn(async()=>reply({deleted:true})))
+  await expect(requestJson('app/works/work?acknowledgeCompleted=true','DELETE')).resolves.toEqual({deleted:true})
+  vi.stubGlobal('fetch',vi.fn(async()=>reply({})))
+  await expect(requestJson('app/works/work?acknowledgeCompleted=true','DELETE')).rejects.toMatchObject({code:'INVALID_RESPONSE'})
+ })
  it('PayPal SDK 配置必须注明环境，启用时必须有公开 client ID',async()=>{
   vi.stubGlobal('fetch',vi.fn(async()=>reply({enabled:true,clientId:'',environment:'sandbox'})))
   await expect(requestJson('app/paypal/sdk-config')).rejects.toMatchObject({code:'INVALID_RESPONSE'})

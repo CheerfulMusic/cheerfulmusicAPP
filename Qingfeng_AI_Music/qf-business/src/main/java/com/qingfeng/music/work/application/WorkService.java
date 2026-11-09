@@ -30,6 +30,14 @@ public class WorkService implements WorkApi {
     }
     public Work get(String owner, String id) { return repository.find(owner, id).orElseThrow(() -> new DomainException("WORK_NOT_FOUND", "作品不存在或你无权访问")); }
     public List<Work> list(String owner, int page) { return repository.list(owner, Math.multiplyExact(page, 20), 20); }
+    @org.springframework.transaction.annotation.Transactional
+    public void delete(String owner,String id,boolean acknowledgeCompleted) {
+        if(!repository.lockActiveOwner(owner))throw new DomainException("CREATOR_SESSION_CHANGED","登录身份已改变，请刷新后重试");
+        var state=repository.lockDeletion(owner,id).orElseThrow(()->new DomainException("WORK_NOT_FOUND","作品不存在或你无权访问"));
+        if(state.deleted())return;
+        if(state.hasAudio()&&!acknowledgeCompleted)throw new DomainException("WORK_DELETE_CONFIRMATION_REQUIRED","作品已生成歌曲，请确认删除后再继续");
+        repository.delete(owner,id,Instant.now());
+    }
     private void validate(Draft d) {
         if (d == null || d.recipient() == null || d.recipient().length()>80 || d.occasion()==null || d.occasion().length()>32 || d.story()==null || d.story().length()>4000 || d.message()==null || d.message().length()>500 || d.style()==null || d.style().length()>80 || d.title()==null || d.title().length()>100)
             throw new DomainException("INVALID_DRAFT", "请检查草稿字段和长度");

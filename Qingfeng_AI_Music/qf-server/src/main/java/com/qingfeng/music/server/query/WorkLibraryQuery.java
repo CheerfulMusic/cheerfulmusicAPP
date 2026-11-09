@@ -28,7 +28,7 @@ public final class WorkLibraryQuery {
             LEFT JOIN work_cover c ON c.work_id=w.id
             LEFT JOIN media_asset m ON m.id=COALESCE((SELECT s.asset_id FROM work_audio_selection s WHERE s.work_id=w.id),(SELECT a.id FROM media_asset a WHERE a.work_id=w.id AND NOT EXISTS(SELECT 1 FROM section_edit e WHERE e.task_id=a.generation_task_id) ORDER BY a.created_at DESC,a.id DESC LIMIT 1))
             LEFT JOIN generation_task t ON t.id=m.generation_task_id
-            WHERE w.owner_id=? AND w.id IN (
+            WHERE w.owner_id=? AND w.deleted_at IS NULL AND w.id IN (
             """+placeholders+")";
         var args=new ArrayList<Object>();args.add(owner);owned.forEach(w->args.add(w.id()));
         var byId=new HashMap<String,State>();
@@ -36,7 +36,7 @@ public final class WorkLibraryQuery {
             String status=row.getInt("active_tasks")>0?"GENERATING":row.getInt("unknown_tasks")>0?"CHECKING":row.getString("audio_id")!=null?"COMPLETED":"FAILED".equals(row.getString("task_status"))?"GENERATION_FAILED":row.getInt("lyric_count")>0?"READY_TO_GENERATE":"LYRICS_DRAFT";
             byId.put(row.getString("id"),new State(status,row.getString("audio_id"),row.getString("audio_origin"),row.getString("song_title"),row.getString("cover_id")));
         },args.toArray());
-        return owned.stream().map(work->{var s=byId.get(work.id());return new Item(work,s.status,s.audioId,s.origin,s.title,s.coverId);}).toList();
+        return owned.stream().filter(work->byId.containsKey(work.id())).map(work->{var s=byId.get(work.id());return new Item(work,s.status,s.audioId,s.origin,s.title,s.coverId);}).toList();
     }
     private record State(String status,String audioId,String origin,String title,String coverId){}
 }

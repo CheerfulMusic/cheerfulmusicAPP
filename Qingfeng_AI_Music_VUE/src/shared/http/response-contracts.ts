@@ -61,7 +61,7 @@ export function validResponse(path:string,method:string,value:unknown):boolean{
  if(/\/music-settings$/.test(path))return obj(value)&&work(value.work)&&(value.direction===null||direction(value.direction))
  if(path==='app/works')return method==='GET'?list(value,work):work(value)
  if(path==='app/works/library')return list(value,v=>obj(v)&&work(v.work)&&text(v.status))
- if(/^app\/works\/[^/]+$/.test(path))return work(value)
+ if(/^app\/works\/[^/]+$/.test(path))return method==='DELETE'?obj(value)&&value.deleted===true:work(value)
  if(/\/section-context$/.test(path))return obj(value)&&typeof value.available==='boolean'&&Array.isArray(value.lines)&&(!value.available||str(value.lyrics)&&num(value.duration))
  if(/\/section-edits$/.test(path))return method==='GET'?list(value,v=>obj(v)&&text(v.taskId)&&text(v.status)&&str(v.replacementLyrics)):task(value)
  if(/\/lyrics\/requests\//.test(path))return obj(value)&&['NOT_FOUND','PENDING','FAILED','SUCCEEDED','UNKNOWN'].includes(String(value.status))&&(value.status!=='SUCCEEDED'||text(value.revisionId))

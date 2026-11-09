@@ -5,5 +5,5 @@ import java.time.Instant;
 public class WorkRow {
     public String id, ownerId, recipient, occasion, story, message, style, title,vocalGender;
     public long version;
-    public Instant createdAt, updatedAt;
+    public Instant createdAt, updatedAt,deletedAt;
 }
