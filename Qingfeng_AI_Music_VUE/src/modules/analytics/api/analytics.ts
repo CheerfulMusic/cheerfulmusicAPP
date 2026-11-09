@@ -4,7 +4,7 @@ export interface AnalyticsTotals {
   pv: number; uv: number; sessions: number; avgDurationMs: number; totalDurationMs: number
 }
 export interface AnalyticsDaily { d: string; pv: number; uv: number; avgDurationMs: number }
-export interface AnalyticsPageRow { pagePath: string; pv: number; avgDurationMs: number }
+export interface AnalyticsPageRow { pagePath: string; pv: number; avgDurationMs: number; samples: number }
 export interface AnalyticsUserRow {
   creatorId: string; account: string | null; pv: number; avgDurationMs: number; lastSeen: string
 }

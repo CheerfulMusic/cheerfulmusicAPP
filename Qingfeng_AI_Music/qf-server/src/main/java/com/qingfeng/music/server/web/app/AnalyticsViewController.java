@@ -124,13 +124,14 @@ public class AnalyticsViewController {
         try {
             body.put("totals", template.query(
                     "SELECT COUNT(*) pv, COUNT(DISTINCT visitor_id) uv, COUNT(DISTINCT session_id) sessions, "
-                            + "COALESCE(AVG(duration_ms),0) avg_duration_ms, COALESCE(SUM(duration_ms),0) total_duration_ms "
+                            + "COALESCE(AVG(CASE WHEN event='page_leave' THEN duration_ms END),0) avg_duration_ms, "
+                            + "COALESCE(SUM(CASE WHEN event='page_leave' THEN duration_ms END),0) total_duration_ms "
                             + "FROM site_event WHERE created_at >= ?",
                     (rs, n) -> map(rs.getLong("pv"), rs.getLong("uv"), rs.getLong("sessions"),
                             rs.getLong("avg_duration_ms"), rs.getLong("total_duration_ms")), since).stream().findFirst().orElseGet(LinkedHashMap::new));
             body.put("daily", template.query(
                     "SELECT CAST(created_at AS DATE) d, COUNT(*) pv, COUNT(DISTINCT visitor_id) uv, "
-                            + "COALESCE(AVG(duration_ms),0) avg_duration_ms FROM site_event "
+                            + "COALESCE(AVG(CASE WHEN event='page_leave' THEN duration_ms END),0) avg_duration_ms FROM site_event "
                             + "WHERE created_at >= ? GROUP BY CAST(created_at AS DATE) ORDER BY d",
                     (rs, n) -> {
                         var row = new LinkedHashMap<String, Object>();
@@ -140,20 +141,26 @@ public class AnalyticsViewController {
                         row.put("avgDurationMs", rs.getLong("avg_duration_ms"));
                         return row;
                     }, since));
+            // 停留时长只存在于 page_leave 事件上；pageview 行没有时长，
+            // 直接对 pageview 取平均会永远是 0，所以按页面分别聚合后再拼回来。
             body.put("pages", template.query(
-                    "SELECT page_path, COUNT(*) pv, COALESCE(AVG(duration_ms),0) avg_duration_ms "
-                            + "FROM site_event WHERE event='pageview' AND created_at >= ? "
-                            + "GROUP BY page_path ORDER BY pv DESC LIMIT 20",
+                    "SELECT p.page_path, p.pv, COALESCE(l.avg_ms,0) avg_duration_ms, COALESCE(l.samples,0) samples FROM ("
+                            + "SELECT page_path, COUNT(*) pv FROM site_event WHERE event='pageview' AND created_at >= ? "
+                            + "GROUP BY page_path ORDER BY pv DESC LIMIT 20) p LEFT JOIN ("
+                            + "SELECT page_path, AVG(duration_ms) avg_ms, COUNT(*) samples FROM site_event "
+                            + "WHERE event='page_leave' AND duration_ms IS NOT NULL AND created_at >= ? "
+                            + "GROUP BY page_path) l ON l.page_path = p.page_path ORDER BY p.pv DESC",
                     (rs, n) -> {
                         var row = new LinkedHashMap<String, Object>();
                         row.put("pagePath", rs.getString("page_path"));
                         row.put("pv", rs.getLong("pv"));
-                        row.put("avgDurationMs", rs.getLong("avg_duration_ms"));
+                        row.put("avgDurationMs", Math.round(rs.getDouble("avg_duration_ms")));
+                        row.put("samples", rs.getLong("samples"));
                         return row;
-                    }, since));
+                    }, since, since));
             body.put("users", template.query(
                     "SELECT s.creator_id, COALESCE(g.email, o.email, o.phone_masked) account, COUNT(*) pv, "
-                            + "COALESCE(AVG(s.duration_ms),0) avg_duration_ms, MAX(s.created_at) last_seen "
+                            + "COALESCE(AVG(CASE WHEN s.event='page_leave' THEN s.duration_ms END),0) avg_duration_ms, MAX(s.created_at) last_seen "
                             + "FROM site_event s LEFT JOIN creator_google_identity g ON g.creator_id=s.creator_id "
                             + "LEFT JOIN creator_oidc_identity o ON o.creator_id=s.creator_id "
                             + "WHERE s.creator_id IS NOT NULL AND s.created_at >= ? "

@@ -39,6 +39,8 @@ class AnalyticsSummarySqlTest {
             statement.execute("INSERT INTO site_event VALUES ('1','v1','s1','pageview','/','',NULL,CURRENT_TIMESTAMP,'creator-1',5000)");
             statement.execute("INSERT INTO site_event VALUES ('2','v1','s1','page_leave','/','',NULL,CURRENT_TIMESTAMP,'creator-1',5000)");
             statement.execute("INSERT INTO site_event VALUES ('3','v2','s2','pageview','/create','',NULL,CURRENT_TIMESTAMP,NULL,NULL)");
+            statement.execute("INSERT INTO site_event VALUES ('4','v2','s2','page_leave','/create','',NULL,CURRENT_TIMESTAMP,NULL,12000)");
+            statement.execute("INSERT INTO site_event VALUES ('5','v3','s3','page_leave','/create','',NULL,CURRENT_TIMESTAMP,NULL,20000)");
             statement.execute("INSERT INTO creator_google_identity VALUES ('creator-1','jiang@example.com')");
         }
 
@@ -56,10 +58,21 @@ class AnalyticsSummarySqlTest {
         assertNotNull(body);
         assertEquals(true, body.get("allowed"));
         assertFalse(body.containsKey("error"), "四条统计 SQL 必须全部在真实数据库上执行成功");
-        assertEquals(3L, ((Map<String, Object>) body.get("totals")).get("pv"));
-        assertEquals(2L, ((Map<String, Object>) body.get("totals")).get("uv"));
+        assertEquals(5L, ((Map<String, Object>) body.get("totals")).get("pv"));
+        assertEquals(3L, ((Map<String, Object>) body.get("totals")).get("uv"));
         assertFalse(((List<?>) body.get("daily")).isEmpty());
         assertFalse(((List<?>) body.get("pages")).isEmpty());
         assertEquals("jiang@example.com", ((Map<String, Object>) ((List<?>) body.get("users")).get(0)).get("account"));
+
+        // 停留时长按页面从 page_leave 聚合：pageview 行上的时长不能参与平均，也不能把页面算成 0。
+        var pages = (List<?>) body.get("pages");
+        var landing = (Map<String, Object>) pages.stream().filter(row -> "/".equals(((Map<String, Object>) row).get("pagePath"))).findFirst().orElseThrow();
+        var create = (Map<String, Object>) pages.stream().filter(row -> "/create".equals(((Map<String, Object>) row).get("pagePath"))).findFirst().orElseThrow();
+        assertEquals(5000L, landing.get("avgDurationMs"));
+        assertEquals(1L, landing.get("samples"));
+        assertEquals(16000L, create.get("avgDurationMs"));
+        assertEquals(2L, create.get("samples"));
+        assertEquals(12333L, ((Map<String, Object>) body.get("totals")).get("avgDurationMs"));
+        assertEquals(5000L, ((Map<String, Object>) ((List<?>) body.get("users")).get(0)).get("avgDurationMs"));
     }
 }

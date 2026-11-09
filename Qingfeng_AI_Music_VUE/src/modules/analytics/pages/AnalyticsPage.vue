@@ -112,13 +112,14 @@ function time(value: string | undefined | null): string {
 
       <section class="analytics-panel">
         <h2>页面分布与停留</h2>
+        <p class="analytics-hint">时长取每次离开该页时的可见停留，切到后台不计时；「—」表示还没有样本。</p>
         <div v-if="!pages.length" class="analytics-empty">暂无页面浏览数据。</div>
         <ul v-else class="analytics-bars">
           <li v-for="row in pages" :key="row.pagePath">
             <span class="bar-label" :title="row.pagePath">{{ row.pagePath || '/' }}</span>
             <span class="bar-track"><i :style="{ width: `${(row.pv / maxPagePv) * 100}%` }"></i></span>
             <span class="bar-value">{{ number(row.pv) }}</span>
-            <span class="bar-duration">{{ duration(row.avgDurationMs) }}</span>
+            <span class="bar-duration" :title="row.samples ? `基于 ${number(row.samples)} 次停留` : '还没有停留数据'">{{ row.samples ? duration(row.avgDurationMs) : '—' }}</span>
           </li>
         </ul>
       </section>
