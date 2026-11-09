@@ -1,10 +1,11 @@
 import { defineConfig, loadEnv } from 'vite'
 import vue from '@vitejs/plugin-vue'
+import {previewMediaPlugin} from './build/preview-media'
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
   return {
-    plugins: [vue()],
+    plugins: [vue(),previewMediaPlugin()],
     base: '/',
     server: {
       port: 5173,

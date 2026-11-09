@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { mergeOrderHistory, trustedCheckoutUrl, type Order } from '../src/modules/identity/model/order-history'
+import { isPendingOrder, mergeOrderHistory, trustedCheckoutUrl, type Order } from '../src/modules/identity/model/order-history'
+
+it('does not block new orders after a confirmed cancellation', () => {
+  expect(isPendingOrder('CANCELLED')).toBe(false)
+  expect(isPendingOrder('FAILED')).toBe(false)
+  expect(isPendingOrder('PENDING')).toBe(true)
+  expect(isPendingOrder('UNKNOWN')).toBe(true)
+})
 import { validResponse } from '../src/shared/http/response-contracts'
 
 describe('order history', () => {

@@ -3,6 +3,23 @@ import {requestJson,uploadForm,resetCreatorSession} from '../src/shared/http/api
 afterEach(()=>{vi.unstubAllGlobals();resetCreatorSession()})
 const reply=(value:unknown,status=200)=>new Response(JSON.stringify(value),{status})
 describe('R1 响应读取与业务结果校验',()=>{
+ it.each(['CANCELLED','FAILED','UNKNOWN'])('订单列表和详情接受合法状态 %s，并保留服务端原始含义',async status=>{
+  const order={orderId:'order',status,credits:300,createdAt:'2026-11-09T05:00:00Z'}
+  for(const provider of ['payments','paypal']){
+   vi.stubGlobal('fetch',vi.fn(async()=>reply({orders:[order]})))
+   await expect(requestJson(`app/${provider}/orders`)).resolves.toEqual({orders:[order]})
+   vi.stubGlobal('fetch',vi.fn(async()=>reply(order)))
+   await expect(requestJson(`app/${provider}/orders/order`)).resolves.toEqual(order)
+  }
+ })
+ it('取消响应必须提供完整订单状态，不能把空对象或任意状态当作成功',async()=>{
+  for(const value of [{},{orderId:'order',status:'CANCELLED'},{orderId:'order',status:'INVALID',credits:300}]){
+   vi.stubGlobal('fetch',vi.fn(async()=>reply(value)))
+   await expect(requestJson('app/paypal/orders/order/close','POST')).rejects.toMatchObject({code:'INVALID_RESPONSE'})
+  }
+  vi.stubGlobal('fetch',vi.fn(async()=>reply({orderId:'order',status:'CANCELLED',credits:300})))
+  await expect(requestJson('app/paypal/orders/order/close','POST')).resolves.toMatchObject({status:'CANCELLED'})
+ })
  it('PayPal SDK 配置必须注明环境，启用时必须有公开 client ID',async()=>{
   vi.stubGlobal('fetch',vi.fn(async()=>reply({enabled:true,clientId:'',environment:'sandbox'})))
   await expect(requestJson('app/paypal/sdk-config')).rejects.toMatchObject({code:'INVALID_RESPONSE'})
