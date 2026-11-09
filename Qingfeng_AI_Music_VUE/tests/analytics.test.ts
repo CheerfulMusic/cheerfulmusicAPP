@@ -87,8 +87,19 @@ describe('事件上报',()=>{
   track('pageview')
   expect(beacon).not.toHaveBeenCalled()
  })
- it('存储不可用时仍静默完成，不抛异常',()=>{
-  vi.stubGlobal('localStorage',{getItem:()=>{throw new Error('blocked')},setItem:()=>{throw new Error('blocked')},removeItem:()=>{throw new Error('blocked')}})
+ it('存储不可用时访客标识保持稳定、关闭开关仍生效',()=>{
+  const blocked={getItem:()=>{throw new Error('blocked')},setItem:()=>{throw new Error('blocked')},removeItem:()=>{throw new Error('blocked')}}
+  let seq=0
+  vi.stubGlobal('crypto',{randomUUID:()=>'id-'+(++seq)})
+  vi.stubGlobal('localStorage',blocked)
+  vi.stubGlobal('sessionStorage',blocked)
+  const first=visitorId()
+  expect(visitorId()).toBe(first)
+  expect(sessionId()).toBe(sessionId())
   expect(()=>track('pageview')).not.toThrow()
+  setAnalyticsEnabled(false)
+  expect(analyticsEnabled()).toBe(false)
+  setAnalyticsEnabled(true)
+  expect(analyticsEnabled()).toBe(true)
  })
 })

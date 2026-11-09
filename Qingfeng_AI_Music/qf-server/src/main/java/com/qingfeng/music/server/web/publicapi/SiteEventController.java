@@ -35,13 +35,14 @@ public class SiteEventController {
     private static final Pattern GIFT_TOKEN = Pattern.compile("/gift/[A-Za-z0-9_-]{20,}");
     private static final Pattern WORK_ID = Pattern.compile("/works/[A-Za-z0-9_-]{8,}");
     private static final int MAX_PAYLOAD = 2048;
+    static final String INSERT_SQL = "INSERT INTO site_event(id,visitor_id,session_id,event,page_path,referrer,payload,created_at) VALUES(?,?,?,?,?,?,?,?)";
 
     public record EventRequest(String event, String pagePath, String referrer,
                                String visitorId, String sessionId, Map<String, ?> payload) {}
 
     private final ObjectProvider<JdbcTemplate> jdbc;
     private final Environment environment;
-    private final ObjectMapper json = new ObjectMapper();
+    private static final ObjectMapper JSON = new ObjectMapper();
 
     public SiteEventController(ObjectProvider<JdbcTemplate> jdbc, Environment environment) {
         this.jdbc = jdbc;
@@ -57,13 +58,17 @@ public class SiteEventController {
         var template = jdbc.getIfAvailable();
         if (template == null) return ResponseEntity.noContent().build();
         try {
-            template.update("INSERT INTO site_event(id,visitor_id,session_id,event,page_path,referrer,payload,created_at) VALUES(?,?,?,?,?,?,?,?)",
-                    UUID.randomUUID().toString(), clean.visitorId(), clean.sessionId(), clean.event(),
-                    clean.pagePath(), clean.referrer(), payloadJson(clean.payload()), Timestamp.from(Instant.now()));
+            template.update(INSERT_SQL, row(clean, payloadJson(clean.payload())));
         } catch (RuntimeException ignored) {
             // 埋点失败不影响业务，也不向前端抛错。
         }
         return ResponseEntity.noContent().build();
+    }
+
+    /** 落库参数只来自脱敏后的请求；单独成方法便于测试断言，避免 mock varargs 的假阳性。 */
+    static Object[] row(EventRequest clean, String payloadJson) {
+        return new Object[]{UUID.randomUUID().toString(), clean.visitorId(), clean.sessionId(), clean.event(),
+                clean.pagePath(), clean.referrer(), payloadJson, Timestamp.from(Instant.now())};
     }
 
     /** 返回 null 表示拒绝；不信任前端，路径与来源在此二次脱敏。 */
@@ -106,7 +111,7 @@ public class SiteEventController {
         return value.matches("[A-Za-z0-9_-]{1,64}") ? value : "";
     }
 
-    private String payloadJson(Map<String, ?> payload) {
+    static String payloadJson(Map<String, ?> payload) {
         if (payload == null || payload.isEmpty()) return null;
         var clean = new LinkedHashMap<String, String>();
         for (var entry : payload.entrySet()) {
@@ -117,7 +122,7 @@ public class SiteEventController {
         }
         if (clean.isEmpty()) return null;
         try {
-            var text = json.writeValueAsString(clean);
+            var text = JSON.writeValueAsString(clean);
             return text.length() > MAX_PAYLOAD ? null : text;
         } catch (RuntimeException e) {
             return null;

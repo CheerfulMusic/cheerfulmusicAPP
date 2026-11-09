@@ -84,5 +84,33 @@ class SiteEventValidationTest {
         var controller = new SiteEventController(provider(template), environment(true));
         assertDoesNotThrow(() -> controller.collect(request("pageview")));
         assertEquals(204, controller.collect(request("pageview")).getStatusCode().value());
+        // 确认异常分支真的被执行，而不是 mock 没匹配上导致的假阳性通过。
+        verify(template, atLeastOnce()).update(eq(SiteEventController.INSERT_SQL), any(Object[].class));
+    }
+
+    @Test void validEventCallsInsertOnce() {
+        var template = mock(JdbcTemplate.class);
+        var controller = new SiteEventController(provider(template), environment(true));
+        assertEquals(204, controller.collect(request("pageview")).getStatusCode().value());
+        verify(template, times(1)).update(eq(SiteEventController.INSERT_SQL), any(Object[].class));
+    }
+
+    @Test void rowCarriesOnlySanitizedValues() {
+        var clean = SiteEventController.sanitize(new SiteEventController.EventRequest(
+                "pageview", "/gift/" + "a".repeat(43) + "?code=SECRET",
+                "https://ref.example/x?q=1", "visitor-1", "session-1", Map.of("route", "gift")));
+        var row = SiteEventController.row(clean, SiteEventController.payloadJson(clean.payload()));
+        assertEquals("visitor-1", row[1]);
+        assertEquals("session-1", row[2]);
+        assertEquals("pageview", row[3]);
+        assertEquals("/gift/:token", row[4]);
+        assertEquals("https://ref.example/x", row[5]);
+        assertEquals("{\"route\":\"gift\"}", row[6]);
+        assertNotNull(row[7]);
+    }
+
+    @Test void payloadDropsUnknownKeys() {
+        assertNull(SiteEventController.payloadJson(Map.of("story", "SECRET", "email", "a@b.c")));
+        assertEquals("{\"route\":\"gift\"}", SiteEventController.payloadJson(Map.of("route", "gift", "token", "SECRET")));
     }
 }

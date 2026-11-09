@@ -25,10 +25,11 @@ public final class ApiRateLimitFilter extends OncePerRequestFilter {
         String path=request.getRequestURI();
         if(!path.startsWith("/api/")||path.equals("/api/public/system/info")||path.equals("/api/public/csrf")){chain.doFilter(request,response);return;}
         boolean recovery=path.equals("/api/public/session/recover"),write=!Set.of("GET","HEAD","OPTIONS").contains(request.getMethod());
+        boolean analytics="POST".equals(request.getMethod())&&path.equals("/api/public/events");
         var auth=org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
         String actor=auth!=null&&auth.getPrincipal() instanceof CreatorPrincipal creator?creator.id():request.getRemoteAddr();
-        String key=(recovery?"recovery:":write?"write:":"read:")+(recovery?request.getRemoteAddr():actor);
-        if(!allow(key,recovery?5:write?60:180)){
+        String key=(analytics?"analytics:":recovery?"recovery:":write?"write:":"read:")+(recovery?request.getRemoteAddr():actor);
+        if(!allow(key,analytics?300:recovery?5:write?60:180)){
             response.setStatus(429);response.setHeader("Retry-After","60");response.setHeader("Cache-Control","no-store");response.setContentType("application/json;charset=UTF-8");response.getWriter().write("{\"code\":\"RATE_LIMITED\",\"message\":\"操作较频繁，请稍后再试\"}");return;
         }
         chain.doFilter(request,response);
