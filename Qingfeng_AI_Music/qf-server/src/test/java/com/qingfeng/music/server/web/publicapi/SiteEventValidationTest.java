@@ -25,7 +25,7 @@ class SiteEventValidationTest {
 
     private static Environment environment(boolean enabled) {
         var environment = mock(Environment.class);
-        when(environment.getProperty(eq("qingfeng.analytics.enabled"), eq(Boolean.class), eq(true))).thenReturn(enabled);
+        when(environment.getProperty(eq("qingfeng.analytics.enabled"), eq(Boolean.class), eq(false))).thenReturn(enabled);
         return environment;
     }
 
@@ -66,6 +66,13 @@ class SiteEventValidationTest {
     @Test void disabledConfigDoesNotWrite() {
         var template = mock(JdbcTemplate.class);
         var controller = new SiteEventController(provider(template), environment(false));
+        assertEquals(204, controller.collect(request("pageview")).getStatusCode().value());
+        verifyNoInteractions(template);
+    }
+
+    @Test void absentConfigDefaultsToDisabled() {
+        var template = mock(JdbcTemplate.class);
+        var controller = new SiteEventController(provider(template), new org.springframework.core.env.StandardEnvironment());
         assertEquals(204, controller.collect(request("pageview")).getStatusCode().value());
         verifyNoInteractions(template);
     }

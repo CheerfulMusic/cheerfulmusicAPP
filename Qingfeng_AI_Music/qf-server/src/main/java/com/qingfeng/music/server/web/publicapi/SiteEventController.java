@@ -52,7 +52,9 @@ public class SiteEventController {
     @PostMapping("/events")
     public ResponseEntity<Void> collect(@RequestBody(required = false) EventRequest request) {
         var clean = sanitize(request);
-        if (clean == null || !environment.getProperty("qingfeng.analytics.enabled", Boolean.class, true)) {
+        // 默认关闭：同意门禁与隐私政策落地前，绝不因「下一次上线」而自动开始采集。
+        // 需在服务端私有配置显式设置 qingfeng.analytics.enabled=true 才会落库。
+        if (clean == null || !environment.getProperty("qingfeng.analytics.enabled", Boolean.class, false)) {
             return ResponseEntity.noContent().build();
         }
         var template = jdbc.getIfAvailable();
