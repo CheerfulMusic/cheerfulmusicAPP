@@ -70,7 +70,10 @@ public class MediaService implements MediaApi, SharedMediaAccess, GeneratedAudio
     }
     public Content content(String work,String id){
         var stored=find(work,id);if(!files.exists(stored.storageKey()))throw new DomainException("MEDIA_NOT_FOUND","音频文件不存在，请联系维护人员恢复备份");
-        var asset=stored.asset();return new Content(asset.byteSize(),asset.contentType(),asset.id()+(asset.contentType().equals("audio/wav")?".wav":".mp3"),()->files.open(stored.storageKey()));
+        var asset=stored.asset();return new Content(asset.byteSize(),asset.contentType(),asset.id()+(asset.contentType().equals("audio/wav")?".wav":".mp3"),new MediaApi.Source(){
+            public InputStream open()throws IOException{return files.open(stored.storageKey());}
+            public InputStream open(long offset)throws IOException{return files.open(stored.storageKey(),offset);}
+        });
     }
     private MediaRepository.Stored find(String work,String id){return repository.find(work,id).orElseThrow(()->new DomainException("MEDIA_NOT_FOUND","音频不存在"));}
 }

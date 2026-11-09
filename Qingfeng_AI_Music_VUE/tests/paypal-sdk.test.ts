@@ -34,4 +34,11 @@ describe('PayPal checkout adapter', () => {
     expect(await preparePaypalCheckout({ enabled: true, clientId: 'public-id', environment: 'sandbox' }, { onApproved: vi.fn() })).toBeNull()
     expect(mocks.session).not.toHaveBeenCalled()
   })
+  it('passes the local order to cancellation handling', async () => {
+    const cancel = vi.fn().mockResolvedValue(undefined)
+    const checkout = await preparePaypalCheckout({ enabled: true, clientId: 'public-id', environment: 'sandbox' }, { onApproved: vi.fn(), onCancel: cancel })
+    await checkout!.start(async () => ({ orderId: 'local-order', paypalOrderId: 'PAYPAL123' }))
+    await mocks.session.mock.calls[0][0].onCancel()
+    expect(cancel).toHaveBeenCalledWith('local-order')
+  })
 })

@@ -95,3 +95,8 @@ qingfeng.cover.directory=./data/covers
 qingfeng.cover.ai.enabled=true
 qingfeng.cover.ai.scheduler-enabled=true
 # qingfeng.providers.kie.image-api-key=
+
+# 站内埋点：默认关闭。开启前须先落地隐私政策与 Cookie 同意策略。
+# qingfeng.analytics.enabled=false
+# 数据看板白名单：仅这些 Google 账号邮箱可见（多个用逗号分隔；留空 = 无人可见）。
+# qingfeng.analytics.viewer-emails=

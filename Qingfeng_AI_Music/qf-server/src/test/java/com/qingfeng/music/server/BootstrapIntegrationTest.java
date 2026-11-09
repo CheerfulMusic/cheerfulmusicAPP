@@ -34,6 +34,9 @@ class BootstrapIntegrationTest {
     @Test void rechargePageIsAccessibleOnDirectNavigation() throws Exception {
         assertEquals(200, get("/recharge").statusCode());
     }
+    @Test void analyticsPageIsAccessibleOnDirectNavigation() throws Exception {
+        assertEquals(200, get("/analytics").statusCode());
+    }
     @Test void privateBusinessRoutesAreClosedUntilAuthenticationIsImplemented() throws Exception {
         assertEquals(401, get("/api/app/works").statusCode());
     }

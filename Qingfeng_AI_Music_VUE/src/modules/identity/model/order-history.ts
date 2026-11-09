@@ -1,5 +1,6 @@
 export type Provider = 'airwallex' | 'paypal'
-export type OrderStatus = 'CREATING' | 'PENDING' | 'PAID' | 'UNKNOWN'
+export type OrderStatus = 'CREATING' | 'PENDING' | 'PAID' | 'CANCELLED' | 'FAILED' | 'UNKNOWN'
+export const isPendingOrder = (status: OrderStatus) => status === 'CREATING' || status === 'PENDING' || status === 'UNKNOWN'
 export type Order = { orderId: string; status: OrderStatus; credits?: number; createdAt?: string; provider: Provider }
 
 export function trustedCheckoutUrl(value: string, provider: Provider): string {

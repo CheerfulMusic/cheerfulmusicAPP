@@ -10,6 +10,7 @@ public final class RoutingMediaFileStore implements MediaFileStore {
     private MediaFileStore store(String key){if(key.startsWith("oss:")){if(oss==null)throw new DomainException("MEDIA_STORAGE_UNAVAILABLE","此音频需要已配置的OSS存储");return oss;}return local;}
     private String value(String key){return key.startsWith("oss:")?key.substring(4):key.startsWith("local:")?key.substring(6):key;}
     public InputStream open(String key)throws IOException{return store(key).open(value(key));}
+    public InputStream open(String key,long offset)throws IOException{return store(key).open(value(key),offset);}
     public boolean exists(String key){return store(key).exists(value(key));}
     public void discard(String key)throws IOException{store(key).discard(value(key));}
 }
