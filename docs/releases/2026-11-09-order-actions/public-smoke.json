@@ -1,0 +1,35 @@
+[
+  {
+    "path": "/",
+    "status": 200,
+    "matchesBuild": true
+  },
+  {
+    "path": "/assets/IdentityPage-rrzoCIlg.js",
+    "status": 200,
+    "matchesBuild": true
+  },
+  {
+    "path": "/assets/IdentityPage-DtL-w3nS.css",
+    "status": 200,
+    "matchesBuild": true
+  },
+  {
+    "path": "/assets/RechargePage-vVnZ4HdS.js",
+    "status": 200,
+    "matchesBuild": true
+  },
+  {
+    "path": "/assets/RechargePage-BHEQ2405.css",
+    "status": 200,
+    "matchesBuild": true
+  },
+  {
+    "path": "/account",
+    "status": 200
+  },
+  {
+    "path": "/recharge",
+    "status": 200
+  }
+]
