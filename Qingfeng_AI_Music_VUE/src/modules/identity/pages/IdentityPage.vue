@@ -143,6 +143,8 @@ async function recover() {
 </script>
 <template>
   <div class="account-page">
+    <a class="button secondary" href="#payment-orders">{{ t('查看我的订单 / 待处理付款') }}</a>
+
   <header class="account-intro">
     <p class="account-eyebrow"><span></span>{{ t('我的账号') }}</p>
     <h1>{{ t('账号与登录') }}</h1>

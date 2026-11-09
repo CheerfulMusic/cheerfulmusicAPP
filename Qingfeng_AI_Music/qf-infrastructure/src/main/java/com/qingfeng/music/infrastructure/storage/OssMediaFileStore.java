@@ -30,6 +30,13 @@ public final class OssMediaFileStore implements MediaFileStore {
             public void close()throws IOException{object.close();}
         };}catch(RuntimeException e){throw new IOException("云端音频暂不可用");}
     }
+    public InputStream open(String value,long offset)throws IOException{
+        try{var request=new GetObjectRequest(bucket,key(value));request.setRange(offset,-1);
+            var object=client.getObject(request);return new FilterInputStream(object.getObjectContent()){
+                public void close()throws IOException{object.close();}
+            };
+        }catch(RuntimeException e){throw new IOException("云端音频暂不可用",e);}
+    }
     public boolean exists(String value){try{return client.doesObjectExist(bucket,key(value));}catch(RuntimeException e){throw new DomainException("MEDIA_STORAGE_UNAVAILABLE","云端音频暂不可用");}}
     public void discard(String value)throws IOException{try{client.deleteObject(bucket,key(value));}catch(RuntimeException e){throw new IOException("云端音频清理失败");}}
     private String key(String value){if(value==null||!value.matches("[0-9a-f-]{36}\\.(wav|mp3)"))throw new IllegalArgumentException("非法存储标识");return prefix+value;}

@@ -4,7 +4,7 @@ export type PaypalSdkConfig = { enabled: boolean; clientId: string; environment:
 export type PaypalSdkOrder = { orderId: string; paypalOrderId: string }
 export type PaypalCheckoutHandlers = {
   onApproved: (localOrderId: string) => Promise<void>
-  onCancel?: () => void
+  onCancel?: (localOrderId: string) => Promise<void>
   onError?: () => void
 }
 export type PaypalCheckout = { start: (createOrder: () => Promise<PaypalSdkOrder>) => Promise<void> }
@@ -28,7 +28,10 @@ export async function preparePaypalCheckout(config: PaypalSdkConfig, handlers: P
       }
       await handlers.onApproved(order.orderId)
     },
-    onCancel: () => handlers.onCancel?.(),
+    onCancel: async () => {
+      try { const order = await pending; if (order) await handlers.onCancel?.(order.orderId) }
+      catch { handlers.onError?.() }
+    },
     onError: () => handlers.onError?.(),
   })
   return {

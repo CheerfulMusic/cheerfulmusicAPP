@@ -88,10 +88,23 @@ public class PayPalPaymentService {
         return Map.of("orderId",id,"status",r.get("status"),"credits",r.get("credits"));
     }
     public Map<String,Object> orders(String owner){return Map.of("orders",db.query("SELECT id,status,credits,created_at FROM payment_order WHERE creator_id=? AND provider=? ORDER BY created_at DESC,id DESC LIMIT 50",(rs,n)->Map.of("orderId",rs.getString(1),"status",rs.getString(2),"credits",rs.getLong(3),"createdAt",rs.getTimestamp(4).toInstant().toString()),owner,provider()));}
+    public Map<String,Object> close(String owner,String id){
+        var r=row(owner,id);
+        if("PAID".equals(r.get("status")) || "CANCELLED".equals(r.get("status"))) return order(owner,id);
+        String remote=(String)r.get("provider_link_id");
+        if(!ready() || remote==null) throw new ResponseStatusException(HttpStatus.CONFLICT,"订单待核对");
+        var snapshot=gateway().retrieve(remote); check(r,snapshot);
+        if("COMPLETED".equals(snapshot.orderStatus()) && "COMPLETED".equals(snapshot.captureStatus())) {settle(id,snapshot);return order(owner,id);}
+        if("APPROVED".equals(snapshot.orderStatus())) throw new ResponseStatusException(HttpStatus.CONFLICT,"付款已授权，订单待核对");
+        if(!List.of("CREATED","PAYER_ACTION_REQUIRED","VOIDED").contains(snapshot.orderStatus())) throw new ResponseStatusException(HttpStatus.CONFLICT,"订单状态待核对");
+        db.update("UPDATE payment_order SET status='CANCELLED' WHERE id=? AND creator_id=? AND provider=? AND status='PENDING'",id,owner,provider());
+        return Map.of("orderId",id,"status",row(owner,id).get("status"),"credits",r.get("credits"));
+    }
     public Map<String,Object> resume(String owner,String id){
         if(!ready()) throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,"PayPal 尚未开放");
         var r=row(owner,id);
         if("PAID".equals(r.get("status"))) return Map.of("orderId",id,"status","PAID");
+        if("CANCELLED".equals(r.get("status"))) throw new ResponseStatusException(HttpStatus.CONFLICT,"订单已取消");
         String remote=(String)r.get("provider_link_id");
         if(remote==null) throw new ResponseStatusException(HttpStatus.CONFLICT,"订单待核对");
         var view=gateway().retrieveCheckout(remote); var snapshot=view.snapshot(); check(r,snapshot);
@@ -112,6 +125,7 @@ public class PayPalPaymentService {
         String remote=(String)r.get("provider_link_id"); if(remote==null) throw new ResponseStatusException(HttpStatus.CONFLICT,"订单待核对");
         var gateway=gateway(); var before=gateway.retrieve(remote); check(r,before);
         if("COMPLETED".equals(before.orderStatus())) { settle(id,before); return order(owner,id); }
+        if("CANCELLED".equals(r.get("status"))) throw new ResponseStatusException(HttpStatus.CONFLICT,"订单已取消");
         if(!"APPROVED".equals(before.orderStatus())) throw new ResponseStatusException(HttpStatus.CONFLICT,"付款尚未授权");
         var captured=gateway.capture(remote,"c"+id); check(r,captured); settle(id,captured); return order(owner,id);
     }

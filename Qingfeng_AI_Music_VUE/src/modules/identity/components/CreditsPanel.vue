@@ -6,7 +6,7 @@ import { logtoState } from '../../../shared/identity/logto-state'
 import { t, locale } from '../../../shared/i18n'
 import { readPendingOrders, savePendingOrders } from '../model/payment-orders'
 import { canCapturePaypal, paypalReturn } from '../model/paypal-return'
-import { mergeOrderHistory, trustedCheckoutUrl, type Order, type Provider } from '../model/order-history'
+import { isPendingOrder, mergeOrderHistory, trustedCheckoutUrl, type Order, type Provider } from '../model/order-history'
 
 const props = withDefaults(defineProps<{ preview?: boolean }>(), { preview: false })
 // Preview is only reachable in a development build and must never call the payment API.
@@ -58,10 +58,11 @@ async function load() {
         try { history = await requestJson<{orders:Omit<Order, 'provider'>[]}>(base) }
         catch { historyUnavailable = true; continue }
         recent = mergeOrderHistory(recent, history.orders.map(order => ({ ...order, provider })))
-        const unresolved = history.orders.filter(order => order.status !== 'PAID')
+        const unresolved = history.orders.filter(order => isPendingOrder(order.status))
         const pending = [...new Set([...unresolved.map(order => order.orderId), ...readPendingOrders(localStorage, creatorId, provider)])]
         const returned = provider === 'paypal' ? paypalReturn(window.location.search) : null
         if (returned && !returned.approved && pending.includes(returned.orderId) && currentCreatorId() === creatorId) {
+          try { await requestJson(`${base}/${encodeURIComponent(returned.orderId)}/close`, 'POST', undefined, 30000) } catch { /* Keep the order pending until the server confirms its state. */ }
           savePendingOrders(localStorage, creatorId, readPendingOrders(localStorage, creatorId, 'paypal-approved').filter(id => id !== returned.orderId), 'paypal-approved')
           const clean = new URL(window.location.href); clean.searchParams.delete('paypal_cancel'); clean.searchParams.delete('token'); clean.searchParams.delete('PayerID'); window.history.replaceState(window.history.state, '', clean.pathname + clean.search + clean.hash)
         }
@@ -79,7 +80,7 @@ async function load() {
             if (currentCreatorId() !== creatorId || result.orderId !== id) throw new Error('Identity or order changed')
             const updated: Order = {orderId:id, status:result.status as Order['status'], credits:result.credits, ...(existing?.createdAt ? {createdAt:existing.createdAt} : {}), provider}
             recent = mergeOrderHistory(recent, [updated])
-            if (result.status === 'PAID') { paid.push(id); paidAny = true }
+            if (!isPendingOrder(updated.status)) { paid.push(id); if (result.status === 'PAID') paidAny = true }
             else stillPending.push(updated)
           } catch { const unknown: Order = {...existing || {orderId:id,status:'UNKNOWN' as const},provider}; stillPending.push(unknown); recent = mergeOrderHistory(recent, [unknown]) }
         }
@@ -139,6 +140,17 @@ async function resumePaypal(order: Order) {
   } catch { orderNotice.value = '暂时无法恢复支付，请稍后刷新并核对订单状态。' }
   finally { busy.value = false }
 }
+async function cancelPaypal(order: Order) {
+  if (isPreview || busy.value || order.provider !== 'paypal' || order.status !== 'PENDING') return
+  const creatorId = currentCreatorId()
+  busy.value = true
+  let failed = false
+  try { await requestJson(`app/paypal/orders/${encodeURIComponent(order.orderId)}/close`, 'POST', undefined, 30000) }
+  catch { failed = true }
+  finally { busy.value = false }
+  if (currentCreatorId() === creatorId) await load()
+  if (failed && currentCreatorId() === creatorId) orderNotice.value = '取消未成功，订单可能已授权或状态尚未确认；请刷新核对，勿重复付款。'
+}
 function price(item: Package) {
   try { return new Intl.NumberFormat(locale.value, { style: 'currency', currency: item.currency }).format(item.amount) }
   catch { return `${item.currency} ${item.amount}` }
@@ -148,7 +160,7 @@ function orderTime(value?: string) {
   return new Intl.DateTimeFormat(locale.value, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value))
 }
 function orderStatus(status: Order['status']) {
-  return status === 'PAID' ? '支付已确认' : status === 'PENDING' ? '订单等待支付确认' : status === 'CREATING' ? '订单创建状态待核对' : '订单状态暂无法确认'
+  return status === 'PAID' ? '支付已确认' : status === 'CANCELLED' ? '已取消支付' : status === 'FAILED' ? '支付失败' : status === 'PENDING' ? '订单等待支付确认' : status === 'CREATING' ? '订单创建状态待核对' : '订单状态暂无法确认'
 }
 async function buy(item: Package, provider: Provider) {
   if (isPreview) { orderNotice.value = '这是界面预览，不会产生订单或扣款。'; return }
@@ -171,7 +183,7 @@ onMounted(load)
 watch(signedIn, (current, previous) => { if (current !== previous) void load() })
 </script>
 <template>
-  <section class="credits-section" :aria-label="t('创作积分')">
+  <section id="payment-orders" class="credits-section" :aria-label="t('创作积分')">
     <div class="credits-head"><div><span class="eyebrow">{{ t('为下一首歌准备') }}</span><h2>{{ t('创作积分') }}</h2><p>{{ t('购买积分，用于创作歌曲。') }}</p></div><button type="button" class="refresh" :disabled="loading || busy" @click="load">{{ t('刷新') }}</button></div>
     <p v-if="loading" class="subtle" role="status">{{ t('正在读取积分…') }}</p>
     <p v-else-if="error" class="error" role="alert">{{ t(error) }}</p>
@@ -180,11 +192,17 @@ watch(signedIn, (current, previous) => { if (current !== previous) void load() }
       <p v-if="orderNotice" class="subtle" role="status">{{ t(orderNotice) }}</p>
       <p v-if="catalogError" class="subtle" role="status">{{ t('部分积分或支付信息暂时无法读取，请稍后刷新。') }}</p>
       <section v-if="signedIn" class="history" :aria-label="t('最近订单')">
-        <h3>{{ t('最近订单') }}</h3>
+        <h3>{{ t('我的订单') }}</h3><p class="history-help">{{ t('待付款订单可继续支付或申请取消；是否可取消由服务端核对付款状态。') }}</p>
         <p v-if="!recentOrders.length" class="subtle">{{ t(purchaseUncertain ? '订单暂时无法读取，请稍后刷新。' : '暂无订单。') }}</p>
         <ul v-else class="orders"><li v-for="order in recentOrders" :key="`${order.provider}:${order.orderId}`">
           <div><strong>{{ t(orderStatus(order.status)) }}</strong> · {{ order.provider === 'paypal' ? 'PayPal' : 'Airwallex' }}<template v-if="order.credits != null"> · {{ order.credits }} {{ t('积分') }}</template><template v-if="orderTime(order.createdAt)"> · {{ orderTime(order.createdAt) }}</template></div>
-          <div>{{ t('订单号') }}：<code>{{ order.orderId }}</code> <button v-if="order.status !== 'PAID' && order.provider === 'paypal' && paypalApproved.includes(order.orderId)" type="button" class="refresh" :disabled="busy" @click="retryPaypal(order)">{{ t('重新确认支付') }}</button><button v-else-if="order.status === 'PENDING' && order.provider === 'paypal'" type="button" class="refresh" :disabled="busy" @click="resumePaypal(order)">{{ t('继续支付') }}</button></div>
+          <div class="order-number">{{ t('订单号') }}：<code>{{ order.orderId }}</code></div>
+          <div v-if="isPendingOrder(order.status) && order.provider === 'paypal'" class="order-actions">
+            <button v-if="paypalApproved.includes(order.orderId)" type="button" class="order-action primary" :disabled="busy" @click="retryPaypal(order)">{{ t('重新确认支付') }}</button>
+            <button v-else-if="order.status === 'PENDING'" type="button" class="order-action primary" :disabled="busy" @click="resumePaypal(order)">{{ t('继续支付') }}</button>
+            <button v-if="order.status === 'PENDING'" type="button" class="order-action cancel-order" :disabled="busy" @click="cancelPaypal(order)">{{ t('取消订单') }}</button>
+            <p v-else class="subtle">{{ t('订单创建结果尚未确认，请刷新核对，暂不能直接取消。') }}</p>
+          </div>
         </li></ul>
       </section>
       <div v-if="!availableCurrencies.length && !catalogError" class="empty-state"><span class="empty-icon" aria-hidden="true">♪</span><div><strong>{{ t('积分购买暂未开放。') }}</strong><p>{{ t('开放后可在这里选购积分。') }}</p></div></div>
@@ -201,6 +219,8 @@ watch(signedIn, (current, previous) => { if (current !== previous) void load() }
   </section>
 </template>
 <style scoped>
+#payment-orders{scroll-margin-top:110px}.history{padding:22px;border:2px solid #ee8069;border-radius:16px;background:#fff8f4}.history h3{font-size:21px!important}.history-help{font-size:13px;color:var(--muted);line-height:1.7}.history .orders li{padding:18px;background:var(--surface)}.order-number{margin-top:8px}.order-actions{display:flex;gap:12px;flex-wrap:wrap;margin-top:14px}.order-action{min-height:44px;padding:10px 22px;border-radius:10px;border:1px solid #e27660;font-size:14px;font-weight:700;cursor:pointer}.order-action.primary{background:#ed614b;color:#fff}.order-action.cancel-order{background:var(--surface);color:#b94432}.order-action:disabled{opacity:.5;cursor:wait}
+
 .credits-section { margin-top:34px; padding:26px; border:1px solid var(--line); border-radius:20px; background:var(--surface); }
 .credits-head { display:flex; align-items:start; justify-content:space-between; gap:16px; }
 .credits-head h2 { margin:6px 0; font-size:20px; }.credits-head p,.subtle { color:var(--muted); font-size:13px; line-height:1.7; }.credits-head p { margin:0 0 18px; }.eyebrow { color:var(--accent-text); font-size:11px; font-weight:700; letter-spacing:.08em; }
