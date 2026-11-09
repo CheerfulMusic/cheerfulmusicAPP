@@ -230,7 +230,7 @@ async function continueWithGoogle() {
         <div v-if="method === 'email'" class="register-option"><template v-if="emailMode === 'sign-in' && passwordAvailable"><span>{{ t('还没有账号？') }}</span><button type="button" :disabled="locked" @click="changeMode('register')">{{ t('立即注册') }} <span aria-hidden="true">→</span></button></template><template v-else-if="passwordAvailable"><span>{{ t('已有账号？') }}</span><button type="button" :disabled="locked" @click="changeMode('sign-in')">{{ t('返回登录') }} <span aria-hidden="true">→</span></button></template></div>
         <button v-if="method === 'email' && passwordAvailable && emailMode === 'sign-in' && nativeStatus?.emailCodeEnabled" type="button" class="alternate-mode" :disabled="locked" @click="changeMode('code')">{{ t('使用验证码登录') }}</button>
         <button v-if="statusFailed" type="button" class="retry-status" :disabled="statusLoading || locked" @click="loadStatus()">{{ t('重新检查登录服务') }}</button>
-        <p class="legal-note">{{ t('服务协议与隐私政策将在正式开放前提供。') }}</p>
+        <p class="legal-note"><RouterLink to="/legal/terms" target="_blank" rel="noopener">用户服务条款（含积分与退款规则）</RouterLink> · <RouterLink to="/legal/privacy" target="_blank" rel="noopener">隐私政策</RouterLink></p>
       </div>
     </div>
   </dialog>

@@ -15,8 +15,8 @@ const support = [
   { label: '反馈建议', to: '' },
 ]
 const legal = [
-  { label: '用户服务条款（含积分与退款规则）', to: '' },
-  { label: '隐私政策', to: '' },
+  { label: '用户服务条款（含积分与退款规则）', to: '/legal/terms' },
+  { label: '隐私政策', to: '/legal/privacy' },
   { label: '音乐作品发布与社区规则', to: '' },
   { label: '版权与授权说明', to: '' },
 ]
@@ -86,7 +86,7 @@ const legal = [
 
           <nav class="footer-column" :aria-label="t('法律与政策')">
             <h2>{{ t('法律与政策') }}</h2>
-            <span v-for="item in legal" :key="item.label" class="footer-link footer-link-static">{{ t(item.label) }}</span>
+            <template v-for="item in legal" :key="item.label"><RouterLink v-if="item.to" class="footer-link" :to="item.to">{{ t(item.label) }}</RouterLink><span v-else class="footer-link footer-link-static">{{ t(item.label) }}</span></template>
           </nav>
 
           <section class="footer-cta" :aria-label="t('立即创作你的第一首歌')">
