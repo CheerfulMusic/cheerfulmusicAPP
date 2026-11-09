@@ -21,6 +21,7 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -61,14 +62,32 @@ public class AnalyticsViewController {
         return auth != null && auth.getPrincipal() instanceof CreatorPrincipal principal ? principal.id() : null;
     }
 
-    /** 包可见便于测试；空白名单绝不放行。 */
+    /**
+     * 账号来源：优先 Google 身份邮箱，缺失时回退到 Logto/OIDC 身份表的邮箱。
+     * 邮箱一律由服务端从已登录 creatorId 查得，前端传值不构成权限。
+     */
+    private Optional<String> account(String creatorId) {
+        var google = identity.googleIdentity(creatorId)
+                .map(IdentityApi.GoogleIdentity::email)
+                .filter(value -> value != null && !value.isBlank());
+        if (google.isPresent()) return google;
+        var template = jdbc.getIfAvailable();
+        if (template == null) return Optional.empty();
+        try {
+            return Optional.ofNullable(template.query(
+                    "SELECT email FROM creator_oidc_identity WHERE creator_id=?",
+                    rs -> rs.next() ? rs.getString(1) : null, creatorId));
+        } catch (RuntimeException e) {
+            return Optional.empty();
+        }
+    }
+
+    /** 包可见便于测试；空白名单、无身份、查库异常一律 fail-closed。 */
     boolean allowed(String creatorId) {
         var allowed = viewers();
         if (allowed.isEmpty() || creatorId == null || creatorId.isBlank()) return false;
         try {
-            return identity.googleIdentity(creatorId)
-                    .map(IdentityApi.GoogleIdentity::email)
-                    .filter(value -> value != null && !value.isBlank())
+            return account(creatorId)
                     .map(value -> value.trim().toLowerCase(Locale.ROOT))
                     .filter(allowed::contains)
                     .isPresent();
@@ -83,10 +102,7 @@ public class AnalyticsViewController {
         var ok = allowed(creator);
         var body = new LinkedHashMap<String, Object>();
         body.put("allowed", ok);
-        if (ok) {
-            body.put("viewer", identity.googleIdentity(creator)
-                    .map(IdentityApi.GoogleIdentity::email).orElse(""));
-        }
+        if (ok) body.put("viewer", account(creator).orElse(""));
         return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(body);
     }
 
