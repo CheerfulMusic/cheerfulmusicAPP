@@ -23,10 +23,13 @@ public final class DeepSeekLyricsWriter implements LyricsWriter {
         return write(work,language,instructions,previousLyrics,"");
     }
     public Draft write(WorkApi.Work work,String language,String instructions,String previousLyrics,String musicDirection){
+        return write(work,language,instructions,previousLyrics,new Direction(musicDirection,"",work.vocalGender()));
+    }
+    public Draft write(WorkApi.Work work,String language,String instructions,String previousLyrics,Direction direction){
         String system=LyricsWritingPrompt.system(language);
         var material=new LinkedHashMap<String,Object>();
         material.putAll(Map.of("recipient",work.recipient(),"occasion",work.occasion(),"story",work.story(),"message",work.message(),"style",work.style(),"preferredTitle",work.title(),"revisionInstructions",instructions,"previousLyrics",previousLyrics));
-        material.put("musicDirection",musicDirection);material.put("vocalGender",work.vocalGender());
+        material.put("musicDirection",direction.style());material.put("musicExclusions",direction.exclusions());material.put("vocalGender",direction.vocalGender());
         String context=json.writeValueAsString(material);
         String body=json.writeValueAsString(Map.of("model",model,"messages",List.of(Map.of("role","system","content",system),Map.of("role","user","content",context)),"response_format",Map.of("type","json_object"),"thinking",Map.of("type","disabled"),"max_tokens",2400,"stream",false));
         try{

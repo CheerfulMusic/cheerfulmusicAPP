@@ -7,8 +7,8 @@ export function validMusicPreferences(value:unknown,catalog:MusicCatalog):value 
  return Object.entries(p.choices).every(([id,values])=>{const group=catalog.groups.find(g=>g.id===id);return !!group&&Array.isArray(values)&&values.length<=group.max&&new Set(values).size===values.length&&values.every(v=>typeof v==='string'&&group.options.some(o=>o.id===v))})
 }
 export function legacyPreferences(work:Work):MusicPreferences{
- const style=work.style||'',genre=/R&B/.test(style)?'rnb':/爵士|波萨/.test(style)?'jazz':/摇滚/.test(style)?'rock':/国风|古韵/.test(style)?'chinese':/说唱/.test(style)?'rap':/电子|氛围/.test(style)?'electronic':/民谣|乡村/.test(style)?'folk':'pop'
- return {version:1,recipeId:null,choices:{genre:[genre],instruments:/钢琴/.test(style)?['piano']:genre==='folk'?['guitar']:[]},vocalGender:work.vocalGender||'AUTO',freeText:style,negativeText:''}
+ const style=work.style||'',genre=/R&B/.test(style)?'rnb':/爵士|波萨/.test(style)?'jazz':/摇滚/.test(style)?'rock':/中国风|国风|古韵/.test(style)?'chinese':/说唱/.test(style)?'rap':/电子|氛围/.test(style)?'electronic':/民谣|乡村/.test(style)?'folk':'pop'
+ return {version:1,recipeId:null,choices:{genre:style==='自动推荐'?[]:[genre],instruments:/钢琴/.test(style)?['piano']:genre==='folk'?['guitar']:[]},vocalGender:work.vocalGender||'AUTO',freeText:style==='自动推荐'?'':style,negativeText:''}
 }
 export function applyRecipe(current:MusicPreferences,recipe:MusicRecipe):MusicPreferences{
  return {...current,recipeId:recipe.id,choices:{...Object.fromEntries(Object.entries(recipe.choices).map(([key,values])=>[key,[...values]])),exclude:[...(current.choices.exclude||[])]}}

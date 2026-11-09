@@ -108,6 +108,15 @@ class OpenAiLyricsWriterTest {
             assertEquals("OPENAI",writer.source());
         }
     }
+    @Test void currentMusicExclusionsAndVoiceReachTheWritingRequest() throws Exception {
+        try(var fixture=new Fixture(200,JSON.writeValueAsString(completed(result())))){
+            fixture.writer().write(WORK,"zh-CN","","",new com.qingfeng.music.lyrics.application.LyricsWriter.Direction("rhythmic rap, fast tempo","no sad lyrics","FEMALE"));
+            var material=JSON.readTree(fixture.received.get().path("input").path(0).path("content").asText());
+            assertEquals("rhythmic rap, fast tempo",material.path("musicDirection").asText());
+            assertEquals("no sad lyrics",material.path("musicExclusions").asText());
+            assertEquals("FEMALE",material.path("vocalGender").asText());
+        }
+    }
 
     @ParameterizedTest @ValueSource(ints = {400, 401, 403, 404, 429, 500, 503})
     void providerErrorsAreSafeAndNeverRetried(int status) throws Exception {

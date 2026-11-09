@@ -18,6 +18,7 @@ public final class WorkLibraryQuery {
         String placeholders=String.join(",",Collections.nCopies(owned.size(),"?"));
         String sql="""
             SELECT w.id,
+              (SELECT q.status FROM quick_creation q WHERE q.work_id=w.id ORDER BY q.created_at DESC,q.id DESC LIMIT 1) AS quick_status,
               (SELECT t.status FROM generation_task t WHERE t.work_id=w.id ORDER BY t.created_at DESC,t.id DESC LIMIT 1) AS task_status,
               (SELECT COUNT(*) FROM generation_task t WHERE t.work_id=w.id AND t.status IN ('QUEUED','SUBMITTING','RUNNING','SAVING')) AS active_tasks,
               (SELECT COUNT(*) FROM generation_task t WHERE t.work_id=w.id AND t.status='SUBMISSION_UNKNOWN') AS unknown_tasks,
@@ -33,7 +34,8 @@ public final class WorkLibraryQuery {
         var args=new ArrayList<Object>();args.add(owner);owned.forEach(w->args.add(w.id()));
         var byId=new HashMap<String,State>();
         jdbc.query(sql, row->{
-            String status=row.getInt("active_tasks")>0?"GENERATING":row.getInt("unknown_tasks")>0?"CHECKING":row.getString("audio_id")!=null?"COMPLETED":"FAILED".equals(row.getString("task_status"))?"GENERATION_FAILED":row.getInt("lyric_count")>0?"READY_TO_GENERATE":"LYRICS_DRAFT";
+            String quick=row.getString("quick_status");
+            String status=row.getInt("active_tasks")>0||List.of("QUEUED","WRITING","LYRICS_READY","SUBMITTING_MUSIC").contains(quick==null?"":quick)?"GENERATING":row.getInt("unknown_tasks")>0?"CHECKING":row.getString("audio_id")!=null?"COMPLETED":"FAILED".equals(row.getString("task_status"))||"FAILED".equals(quick)?"GENERATION_FAILED":row.getInt("lyric_count")>0?"READY_TO_GENERATE":"LYRICS_DRAFT";
             byId.put(row.getString("id"),new State(status,row.getString("audio_id"),row.getString("audio_origin"),row.getString("song_title"),row.getString("cover_id")));
         },args.toArray());
         return owned.stream().filter(work->byId.containsKey(work.id())).map(work->{var s=byId.get(work.id());return new Item(work,s.status,s.audioId,s.origin,s.title,s.coverId);}).toList();

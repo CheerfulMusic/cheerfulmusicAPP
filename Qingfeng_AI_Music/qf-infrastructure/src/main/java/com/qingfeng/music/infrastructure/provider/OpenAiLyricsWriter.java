@@ -44,13 +44,17 @@ public final class OpenAiLyricsWriter implements LyricsWriter {
     }
     @Override public Draft write(WorkApi.Work work, String language, String instructions,
                                  String previousLyrics, String musicDirection) {
+        return write(work,language,instructions,previousLyrics,new Direction(musicDirection,"",work.vocalGender()));
+    }
+    @Override public Draft write(WorkApi.Work work,String language,String instructions,String previousLyrics,Direction direction) {
         if (!isConfigured()) throw unavailable("歌词生成暂不可用，请稍后再试或手动填写");
         var material = new LinkedHashMap<String, Object>();
         material.putAll(Map.of("recipient", work.recipient(), "occasion", work.occasion(),
             "story", work.story(), "message", work.message(), "style", work.style(),
             "preferredTitle", work.title(), "revisionInstructions", instructions, "previousLyrics", previousLyrics));
-        material.put("musicDirection", musicDirection);
-        material.put("vocalGender", work.vocalGender());
+        material.put("musicDirection", direction.style());
+        material.put("musicExclusions", direction.exclusions());
+        material.put("vocalGender", direction.vocalGender());
         String body = json.writeValueAsString(Map.of(
             "model", model, "instructions", LyricsWritingPrompt.system(language),
             "input", List.of(Map.of("role", "user", "content", json.writeValueAsString(material))),

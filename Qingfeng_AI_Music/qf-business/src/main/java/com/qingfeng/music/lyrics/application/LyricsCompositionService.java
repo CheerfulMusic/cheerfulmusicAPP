@@ -47,7 +47,8 @@ public final class LyricsCompositionService {
         if(!requests.claim(owner,work,key,hash))throw new DomainException("LYRICS_REQUEST_PENDING","这次歌词请求已处理或仍在确认中，请先刷新歌词版本，避免重复提交");
         try{
             var direction=settings==null?null:settings.resolve(owner,snapshot);
-            var draft=writer.write(snapshot,language,requirements+structure.instruction(),previous,direction==null?snapshot.style():direction.style());
+            var writingDirection=new LyricsWriter.Direction(direction==null?snapshot.style():direction.style(),direction==null?"":direction.negativeTags(),snapshot.vocalGender());
+            var draft=writer.write(snapshot,language,requirements+structure.instruction(),previous,writingDirection);
             if(works.get(owner,work).version()!=expectedVersion)throw new DomainException("WORK_VERSION_CONFLICT","作品已修改，请重新载入后保存歌词");
             if(draft.title()==null||draft.title().isBlank()||draft.title().length()>80||draft.lyrics()==null||draft.lyrics().isBlank()||draft.lyrics().length()>5000)throw new DomainException("LYRICS_RESPONSE_INVALID","歌词生成结果不完整，请稍后重新发起");
             structure.validate(draft.lyrics());

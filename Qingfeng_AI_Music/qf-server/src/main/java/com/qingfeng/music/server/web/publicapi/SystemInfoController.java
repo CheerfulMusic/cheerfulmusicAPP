@@ -19,9 +19,12 @@ public class SystemInfoController {
     @GetMapping("/info")
     public SystemInfo info() {
         boolean persisted=environment.acceptsProfiles(Profiles.of("mysql","test"));
-        return new SystemInfo("青风音乐", "0.1.0-SNAPSHOT", persisted?"LOCAL_WORKFLOW_READY":"SCAFFOLD", new Capabilities(persisted&&lyricsWriter.isConfigured()&&environment.getProperty("qingfeng.lyrics.enabled",Boolean.class,false), persisted&&musicProvider.isConfigured()&&environment.getProperty("qingfeng.generation.enabled",Boolean.class,false), persisted,persisted));
+        boolean writing=persisted&&lyricsWriter.isConfigured()&&environment.getProperty("qingfeng.lyrics.enabled",Boolean.class,false);
+        boolean music=persisted&&musicProvider.isConfigured()&&environment.getProperty("qingfeng.generation.enabled",Boolean.class,false);
+        boolean quick=writing&&music&&environment.getProperty("qingfeng.quick.enabled",Boolean.class,true)&&environment.getProperty("qingfeng.generation.scheduler-enabled",Boolean.class,true);
+        return new SystemInfo("青风音乐", "0.1.0-SNAPSHOT", persisted?"LOCAL_WORKFLOW_READY":"SCAFFOLD", new Capabilities(writing,music,persisted,persisted,quick));
     }
 
     public record SystemInfo(String name, String version, String stage, Capabilities capabilities) {}
-    public record Capabilities(boolean lyricsGeneration, boolean musicGeneration, boolean giftSharing,boolean workPersistence) {}
+    public record Capabilities(boolean lyricsGeneration, boolean musicGeneration, boolean giftSharing,boolean workPersistence,boolean quickCreation) {}
 }

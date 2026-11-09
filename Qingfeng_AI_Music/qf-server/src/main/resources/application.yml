@@ -27,6 +27,9 @@ server:
     enabled: true
     mime-types: text/html,text/css,application/javascript,application/json,image/svg+xml
 qingfeng:
+  quick:
+    enabled: true
+    workers: 4
   credits:
     enabled: true
     music-cost: 15

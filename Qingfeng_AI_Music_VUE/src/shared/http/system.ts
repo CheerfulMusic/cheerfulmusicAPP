@@ -3,6 +3,6 @@ export interface SystemInfo {
   name: string
   version: string
   stage: 'SCAFFOLD' | 'DRAFT_READY' | 'LOCAL_WORKFLOW_READY'
-  capabilities: { lyricsGeneration: boolean; musicGeneration: boolean; giftSharing: boolean; workPersistence: boolean }
+  capabilities: { lyricsGeneration: boolean; musicGeneration: boolean; giftSharing: boolean; workPersistence: boolean; quickCreation?:boolean }
 }
 export const getSystemInfo = () => getJson<SystemInfo>('public/system/info')

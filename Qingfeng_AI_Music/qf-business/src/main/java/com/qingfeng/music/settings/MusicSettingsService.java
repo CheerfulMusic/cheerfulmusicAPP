@@ -24,7 +24,6 @@ public class MusicSettingsService implements MusicSettings {
             if(values.stream().anyMatch(v->group.options().stream().noneMatch(o->o.id().equals(v))))throw invalid();
             choices.put(group.id(),List.copyOf(values));
         }
-        if(choices.get("genre").isEmpty())throw new DomainException("INVALID_MUSIC_SETTINGS","请选择一个主风格。");
         String voice=VocalGender.normalize(input.vocalGender()),free=text(input.freeText(),300),negative=text(input.negativeText(),200);
         if(choices.get("genre").contains("rap")&&choices.get("exclude").contains("no_rap"))throw conflict("说唱要求有冲突，请取消说唱或“不要说唱”。");
         String positive=free.replaceAll("(?:不要|不用|避免|no |without )[^，。；,;]*","");
@@ -34,6 +33,10 @@ public class MusicSettingsService implements MusicSettings {
         if(input.recipeId()!=null){var found=catalog.recipes().stream().filter(r->r.id().equals(input.recipeId())).findFirst().orElseThrow(this::invalid);boolean same=choices.entrySet().stream().filter(e->!e.getKey().equals("exclude")).allMatch(e->e.getValue().equals(found.choices().getOrDefault(e.getKey(),List.of())));if(same)recipe=found.id();}
         var prefs=new Preferences(1,recipe,Collections.unmodifiableMap(choices),voice,free,negative);
         var prompt=new ArrayList<String>();var zh=new ArrayList<String>();var en=new ArrayList<String>();var excluded=new ArrayList<String>();
+        if(choices.get("genre").isEmpty()){
+            prompt.add("Choose a coherent music style from the story and creative plan; explicit user directions take priority. If unspecified use accessible melodic pop");
+            zh.add("AI推荐曲风");en.add("Recommended music style");
+        }
         for(var group:catalog.groups())for(String id:choices.get(group.id())){
             var option=group.options().stream().filter(o->o.id().equals(id)).findFirst().orElseThrow();
             if(group.id().equals("exclude")){excluded.add(option.prompt());continue;}
@@ -78,7 +81,7 @@ public class MusicSettingsService implements MusicSettings {
     }
     public Direction resolve(String owner,WorkApi.Work work){works.get(owner,work.id());if(org.springframework.transaction.support.TransactionSynchronizationManager.isActualTransactionActive()&&repository.lockVersion(work.id())!=work.version())throw new DomainException("WORK_VERSION_CONFLICT","作品已修改，请重新确认音乐设置。");return repository.find(work.id()).filter(s->s.style().equals(work.style())&&s.vocalGender().equals(work.vocalGender())).map(s->preview(s.preferences())).orElseGet(()->InspirationMusicPresets.find(work.style()).map(preset->preview(preset.preferences(work.vocalGender()))).orElse(null));}
     @Transactional public View save(String owner,String work,long expectedVersion,Preferences input){
-        var current=works.get(owner,work);var direction=preview(input);String genre=input.choices().get("genre").get(0);String label=catalog.groups().stream().filter(g->g.id().equals("genre")).findFirst().orElseThrow().options().stream().filter(o->o.id().equals(genre)).findFirst().orElseThrow().zh();
+        var current=works.get(owner,work);var direction=preview(input);String genre=input.choices().getOrDefault("genre",List.of()).stream().findFirst().orElse(null);String label=genre==null?"自动推荐":catalog.groups().stream().filter(g->g.id().equals("genre")).findFirst().orElseThrow().options().stream().filter(o->o.id().equals(genre)).findFirst().orElseThrow().zh();
         var changed=works.update(owner,work,expectedVersion,new WorkApi.Draft(current.recipient(),current.occasion(),current.story(),current.message(),label,current.title(),direction.preferences().vocalGender()));
         repository.save(work,new Saved(label,changed.vocalGender(),direction.preferences()));return new View(changed,direction);
     }

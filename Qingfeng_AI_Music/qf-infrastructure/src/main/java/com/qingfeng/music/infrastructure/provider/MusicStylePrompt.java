@@ -6,6 +6,7 @@ import java.util.Map;
 final class MusicStylePrompt {
     private MusicStylePrompt() {}
     private static final Map<String,String> PRESETS=Map.ofEntries(
+        Map.entry("自动推荐", "Choose a coherent musical direction from the creative plan and the user's requirements. If unspecified, use accessible melodic pop with natural sung vocals"),
         Map.entry("温暖民谣", "Warm acoustic folk ballad, fingerpicked acoustic guitar, light piano, soft brushed percussion, relaxed 76-88 BPM, intimate natural singing, sparse organic arrangement"),
         Map.entry("抒情流行", "Emotional pop ballad, expressive melodic singing, piano-led verses, warm bass, restrained drums, soaring memorable chorus, gentle dynamic build, 72-88 BPM"),
         Map.entry("轻柔爵士", "Soft vocal jazz, warm piano voicings, upright bass, brushed jazz drums, gentle swing, intimate laid-back phrasing, small jazz ensemble, 76-94 BPM"),
