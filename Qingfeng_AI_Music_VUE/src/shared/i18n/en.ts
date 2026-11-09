@@ -1,5 +1,11 @@
 /** Chinese source copy is the stable message key; business option values stay unchanged. */
 export const english: Record<string, string> = {
+  '我的订单': 'My orders',
+  '待付款订单可继续支付或申请取消；是否可取消由服务端核对付款状态。': 'Continue payment or request cancellation. The server checks whether an order can be cancelled.',
+  '订单创建结果尚未确认，请刷新核对，暂不能直接取消。': 'Order creation is still being checked. Refresh its status before cancelling.',
+  '取消未成功，订单可能已授权或状态尚未确认；请刷新核对，勿重复付款。': 'Cancellation was not confirmed. The order may be approved or still being checked. Refresh before paying again.',
+  '查看我的订单 / 待处理付款': 'View my orders / pending payments',
+
   '关闭': 'Close',
   '欢迎加入': 'Welcome to ',
   '恭喜您获得新人专属福利': 'A special gift to begin your music journey',

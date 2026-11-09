@@ -149,7 +149,7 @@ async function cancelPaypal(order: Order) {
   catch { failed = true }
   finally { busy.value = false }
   if (currentCreatorId() === creatorId) await load()
-  if (failed && currentCreatorId() === creatorId) orderNotice.value = '暂时无法取消订单，请稍后刷新并核对付款状态。'
+  if (failed && currentCreatorId() === creatorId) orderNotice.value = '取消未成功，订单可能已授权或状态尚未确认；请刷新核对，勿重复付款。'
 }
 function price(item: Package) {
   try { return new Intl.NumberFormat(locale.value, { style: 'currency', currency: item.currency }).format(item.amount) }
@@ -183,7 +183,7 @@ onMounted(load)
 watch(signedIn, (current, previous) => { if (current !== previous) void load() })
 </script>
 <template>
-  <section class="credits-section" :aria-label="t('创作积分')">
+  <section id="payment-orders" class="credits-section" :aria-label="t('创作积分')">
     <div class="credits-head"><div><span class="eyebrow">{{ t('为下一首歌准备') }}</span><h2>{{ t('创作积分') }}</h2><p>{{ t('购买积分，用于创作歌曲。') }}</p></div><button type="button" class="refresh" :disabled="loading || busy" @click="load">{{ t('刷新') }}</button></div>
     <p v-if="loading" class="subtle" role="status">{{ t('正在读取积分…') }}</p>
     <p v-else-if="error" class="error" role="alert">{{ t(error) }}</p>
@@ -192,11 +192,17 @@ watch(signedIn, (current, previous) => { if (current !== previous) void load() }
       <p v-if="orderNotice" class="subtle" role="status">{{ t(orderNotice) }}</p>
       <p v-if="catalogError" class="subtle" role="status">{{ t('部分积分或支付信息暂时无法读取，请稍后刷新。') }}</p>
       <section v-if="signedIn" class="history" :aria-label="t('最近订单')">
-        <h3>{{ t('最近订单') }}</h3>
+        <h3>{{ t('我的订单') }}</h3><p class="history-help">{{ t('待付款订单可继续支付或申请取消；是否可取消由服务端核对付款状态。') }}</p>
         <p v-if="!recentOrders.length" class="subtle">{{ t(purchaseUncertain ? '订单暂时无法读取，请稍后刷新。' : '暂无订单。') }}</p>
         <ul v-else class="orders"><li v-for="order in recentOrders" :key="`${order.provider}:${order.orderId}`">
           <div><strong>{{ t(orderStatus(order.status)) }}</strong> · {{ order.provider === 'paypal' ? 'PayPal' : 'Airwallex' }}<template v-if="order.credits != null"> · {{ order.credits }} {{ t('积分') }}</template><template v-if="orderTime(order.createdAt)"> · {{ orderTime(order.createdAt) }}</template></div>
-          <div>{{ t('订单号') }}：<code>{{ order.orderId }}</code> <button v-if="isPendingOrder(order.status) && order.provider === 'paypal' && paypalApproved.includes(order.orderId)" type="button" class="refresh" :disabled="busy" @click="retryPaypal(order)">{{ t('重新确认支付') }}</button><template v-else-if="order.status === 'PENDING' && order.provider === 'paypal'"><button type="button" class="refresh" :disabled="busy" @click="resumePaypal(order)">{{ t('继续支付') }}</button><button type="button" class="refresh" :disabled="busy" @click="cancelPaypal(order)">{{ t('取消订单') }}</button></template></div>
+          <div class="order-number">{{ t('订单号') }}：<code>{{ order.orderId }}</code></div>
+          <div v-if="isPendingOrder(order.status) && order.provider === 'paypal'" class="order-actions">
+            <button v-if="paypalApproved.includes(order.orderId)" type="button" class="order-action primary" :disabled="busy" @click="retryPaypal(order)">{{ t('重新确认支付') }}</button>
+            <button v-else-if="order.status === 'PENDING'" type="button" class="order-action primary" :disabled="busy" @click="resumePaypal(order)">{{ t('继续支付') }}</button>
+            <button v-if="order.status === 'PENDING'" type="button" class="order-action cancel-order" :disabled="busy" @click="cancelPaypal(order)">{{ t('取消订单') }}</button>
+            <p v-else class="subtle">{{ t('订单创建结果尚未确认，请刷新核对，暂不能直接取消。') }}</p>
+          </div>
         </li></ul>
       </section>
       <div v-if="!availableCurrencies.length && !catalogError" class="empty-state"><span class="empty-icon" aria-hidden="true">♪</span><div><strong>{{ t('积分购买暂未开放。') }}</strong><p>{{ t('开放后可在这里选购积分。') }}</p></div></div>
@@ -213,6 +219,8 @@ watch(signedIn, (current, previous) => { if (current !== previous) void load() }
   </section>
 </template>
 <style scoped>
+#payment-orders{scroll-margin-top:110px}.history{padding:22px;border:2px solid #ee8069;border-radius:16px;background:#fff8f4}.history h3{font-size:21px!important}.history-help{font-size:13px;color:var(--muted);line-height:1.7}.history .orders li{padding:18px;background:var(--surface)}.order-number{margin-top:8px}.order-actions{display:flex;gap:12px;flex-wrap:wrap;margin-top:14px}.order-action{min-height:44px;padding:10px 22px;border-radius:10px;border:1px solid #e27660;font-size:14px;font-weight:700;cursor:pointer}.order-action.primary{background:#ed614b;color:#fff}.order-action.cancel-order{background:var(--surface);color:#b94432}.order-action:disabled{opacity:.5;cursor:wait}
+
 .credits-section { margin-top:34px; padding:26px; border:1px solid var(--line); border-radius:20px; background:var(--surface); }
 .credits-head { display:flex; align-items:start; justify-content:space-between; gap:16px; }
 .credits-head h2 { margin:6px 0; font-size:20px; }.credits-head p,.subtle { color:var(--muted); font-size:13px; line-height:1.7; }.credits-head p { margin:0 0 18px; }.eyebrow { color:var(--accent-text); font-size:11px; font-weight:700; letter-spacing:.08em; }
