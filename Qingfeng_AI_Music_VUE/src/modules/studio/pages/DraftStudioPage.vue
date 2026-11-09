@@ -17,7 +17,7 @@ import { readRecovery, writeRecovery, recoveryKey,checkpointRecovery } from '../
 import { loadWork, saveWork, rewriteInspiration, type Work, type DraftInput } from '../api/works'
 import { normalizeVocalGender } from '../model/vocals'
 import { styleFromInspiration } from '../model/suggestions'
-import { inspirationPresets, type InspirationSelection } from '../model/inspiration-presets'
+import { inspirationPresets } from '../model/inspiration-presets'
 import { continuationRequestKey, retireContinuationRequestKey } from '../model/lyrics-continuation'
 import { generateLyrics, getLyricsRequest, getUsage, type Allowance } from '../../works/api/detail'
 
@@ -33,15 +33,12 @@ const mode=ref<CreationMode>(creationMode(route.query.mode,!!route.query.work)),
 const musicCatalog=ref<MusicCatalog>(),preferences=ref<MusicPreferences>(),musicBaseline=ref(''),musicIssue=ref(''),musicPersisted=ref(false)
 const customTouched=ref(false)
 const musicChanged=computed(()=>!!preferences.value&&JSON.stringify(preferences.value)!==musicBaseline.value)
-const usingHiddenSettings=computed(()=>mode.value==='quick'&&!!preferences.value&&(customTouched.value||musicPersisted.value))
 async function changeMode(next:CreationMode){if(composing.value||rewriting.value)return;mode.value=next;remember();await router.replace({query:{...route.query,mode:next}})}
 const structure=ref<LyricsStructure>(normalizeLyricsStructure())
 const validationError=ref(''), selectedHint=ref(-1)
 const rewriting=ref(false), rewriteError=ref(''), rewriteStatus=ref('')
 const rewriteBackup=ref<{source:string;result:string}>()
 const inspirationPlaceholder=computed(()=>t('写下你的故事、情绪、场景或主题……'))
-const presetBackup=ref<{before:InspirationSelection;filled:InspirationSelection;previousHint:number}>()
-const canUndoPreset=computed(()=>!!presetBackup.value&&draft.story===presetBackup.value.filled.story&&draft.style===presetBackup.value.filled.style&&draft.vocalGender===presetBackup.value.filled.vocalGender)
 const continuationFailed=ref(false)
 const resetting=ref(false)
 const draft=reactive<DraftInput>({recipient:'',occasion:String(route.query.occasion||''),story:'',message:'',style:styleFromInspiration(route.query.style),title:'',vocalGender:'AUTO'})
@@ -49,17 +46,12 @@ watch(()=>draft.style,style=>{selectedHint.value=inspirationPresets.findIndex((p
 async function chooseInspiration(index:number) {
   if(!initialized.value||resetting.value||composing.value||rewriting.value)return
   const preset=inspirationPresets[index];if(!preset)return
-  const before={story:draft.story,style:draft.style,vocalGender:draft.vocalGender},previousHint=selectedHint.value
   checkpointRecovery(cacheKey,recoveryValue())
   const selected=chooseCreationStyle(draft,preset,index===5,t)
-  Object.assign(draft,selected);selectedHint.value=index;presetBackup.value={before,filled:{story:selected.story,style:selected.style,vocalGender:selected.vocalGender},previousHint}
+  Object.assign(draft,selected);selectedHint.value=index
   syncStylePreferences()
   rewriteBackup.value=undefined;rewriteError.value='';rewriteStatus.value='';validationError.value=''
   await nextTick();document.querySelector<HTMLTextAreaElement>('#inspiration-input')?.focus()
-}
-function undoInspiration() {
-  const backup=presetBackup.value;if(!backup||!canUndoPreset.value)return
-  Object.assign(draft,backup.before);syncStylePreferences();selectedHint.value=backup.previousHint;presetBackup.value=undefined
 }
 function syncStylePreferences(){
   if(!preferences.value)return
@@ -93,7 +85,6 @@ watch(preferences,()=>{if(initialized.value&&mode.value==='custom')customTouched
 async function initialize() {
   const turn=++initSequence,query={...route.query}
   rewriting.value=false;rewriteError.value='';rewriteStatus.value='';rewriteBackup.value=undefined
-  presetBackup.value=undefined
   resetting.value=true;ready.value=false;clearTimeout(timer)
   // 切换作品前先收尾正在保存的快照；旧响应不可把新建页面跳回旧作品。
   if(inflight)try{await inflight}catch{/* 旧作品的本机副本仍保留。 */}
@@ -335,8 +326,7 @@ onBeforeUnmount(()=>{remember();alive=false;initSequence++;clearTimeout(timer);w
           </div>
           <p v-if="validationError" id="story-validation" class="story-validation" role="alert">{{ t(validationError) }}</p>
           <div v-if="mode==='quick'" class="inspiration-examples" role="group" :aria-label="t('选择创作风格')"><span>♫ {{ t('选一种风格') }}</span><button v-for="(example,index) in inspirationPresets" :key="example.label" type="button" :disabled="rewriting" :aria-pressed="selectedHint===index" @click="chooseInspiration(index)">{{ t(example.label) }}</button></div>
-          <p v-if="mode==='quick'" id="inspiration-guidance" class="save-info">{{ t('选择一种风格 也可以直接写下你的想法') }} <button v-if="canUndoPreset" type="button" class="text-button" @click="undoInspiration">{{ t('撤销选择') }}</button></p>
-          <p v-if="usingHiddenSettings" class="save-info">{{ t('将沿用自定义中的音乐设置') }} <button type="button" class="text-button" @click="changeMode('custom')">{{ t('查看设置') }}</button></p>
+          <p v-if="mode==='quick'" id="inspiration-guidance" class="save-info">{{ t('选择一种风格 也可以直接写下你的想法') }}</p>
           <CreationMusicChoices v-if="mode==='custom'&&musicCatalog&&preferences" v-model="preferences" :catalog="musicCatalog" :disabled="composing||rewriting||resetting"><template #structure><LyricsTemplatePicker v-model="structure" :disabled="composing||rewriting||resetting||!initialized"/></template></CreationMusicChoices>
           <p v-if="mode==='custom'&&musicIssue" class="notice error" role="alert">{{ t(musicIssue) }}</p>
           <details v-if="draft.recipient||draft.occasion||draft.message" class="legacy-inspiration-context"><summary>{{ t('已保留的旧版作品信息') }}</summary><p v-if="draft.recipient">{{ t('收件人：') }}{{ draft.recipient }}</p><p v-if="draft.occasion">{{ draft.occasion }}</p><p v-if="draft.message" class="legacy-message">{{ draft.message }}</p></details>
