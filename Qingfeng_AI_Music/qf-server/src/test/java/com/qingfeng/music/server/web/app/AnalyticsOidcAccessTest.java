@@ -1,6 +1,7 @@
 package com.qingfeng.music.server.web.app;
 
 import com.qingfeng.music.identity.api.IdentityApi;
+import com.qingfeng.music.server.analytics.AnalyticsDetailService;
 import com.qingfeng.music.server.security.CreatorPrincipal;
 import org.h2.jdbcx.JdbcDataSource;
 import org.junit.jupiter.api.AfterEach;
@@ -40,7 +41,7 @@ class AnalyticsOidcAccessTest {
                 .thenReturn("jiangxueer.snow@gmail.com,yt0514255@gmail.com,snow@cheerfulmusic.co.uk");
         var jdbc = (ObjectProvider<JdbcTemplate>) mock(ObjectProvider.class);
         when(jdbc.getIfAvailable()).thenReturn(new JdbcTemplate(dataSource));
-        var controller = new AnalyticsViewController(identity, jdbc, environment);
+        var controller = new AnalyticsViewController(identity, jdbc, environment, new AnalyticsDetailService(new JdbcTemplate(dataSource)));
 
         assertTrue(controller.allowed("creator-oidc"));
         assertFalse(controller.allowed("creator-other"));
@@ -55,10 +56,10 @@ class AnalyticsOidcAccessTest {
         var strictEnvironment = mock(Environment.class);
         when(strictEnvironment.getProperty(eq("qingfeng.analytics.viewer-emails"), eq("")))
                 .thenReturn("yt0514255@gmail.com");
-        assertFalse(new AnalyticsViewController(identity, jdbc, strictEnvironment).allowed("creator-oidc"));
+        assertFalse(new AnalyticsViewController(identity, jdbc, strictEnvironment, new AnalyticsDetailService(new JdbcTemplate(dataSource))).allowed("creator-oidc"));
 
         var emptyEnvironment = mock(Environment.class);
         when(emptyEnvironment.getProperty(eq("qingfeng.analytics.viewer-emails"), eq(""))).thenReturn("");
-        assertFalse(new AnalyticsViewController(identity, jdbc, emptyEnvironment).allowed("creator-oidc"));
+        assertFalse(new AnalyticsViewController(identity, jdbc, emptyEnvironment, new AnalyticsDetailService(new JdbcTemplate(dataSource))).allowed("creator-oidc"));
     }
 }

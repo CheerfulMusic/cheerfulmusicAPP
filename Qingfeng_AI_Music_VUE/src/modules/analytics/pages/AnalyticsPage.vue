@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { analyticsAccess, analyticsSummary, type AnalyticsSummary } from '../api/analytics'
+import { analyticsAccess, analyticsPageUsers, analyticsSummary, type AnalyticsPageUserRow, type AnalyticsSummary } from '../api/analytics'
+import AnalyticsPageUsers from '../components/AnalyticsPageUsers.vue'
+import { accountDetail, accountName, accountTypeLabel, dwellLabel, filterUsers, formatDuration, isGuest, pageUsersKey, type UserFilter } from '../model/dwell'
 
 const loading = ref(true)
 const allowed = ref(false)
@@ -8,6 +10,10 @@ const viewer = ref('')
 const error = ref('')
 const days = ref(30)
 const summary = ref<AnalyticsSummary | null>(null)
+const expandedPage = ref('')
+const pageUsers = ref<Record<string, AnalyticsPageUserRow[]>>({})
+const pageUsersLoading = ref('')
+const pageUsersError = ref('')
 
 async function load() {
   loading.value = true
@@ -30,13 +36,37 @@ async function load() {
   }
 }
 onMounted(load)
-watch(days, load)
+// 时间范围变化后，已展开的下钻必须重新取数，不能拿旧窗口的明细冒充。
+watch(days, () => { expandedPage.value = ''; pageUsers.value = {}; pageUsersError.value = ''; void load() })
 
 const totals = computed(() => summary.value?.totals)
 const daily = computed(() => summary.value?.daily ?? [])
 const pages = computed(() => summary.value?.pages ?? [])
 const users = computed(() => summary.value?.users ?? [])
 const maxPagePv = computed(() => Math.max(1, ...pages.value.map(row => row.pv)))
+const guestCount = computed(() => users.value.filter(row => isGuest(row.accountType)).length)
+const signedInCount = computed(() => users.value.length - guestCount.value)
+const userFilter = ref<UserFilter>('all')
+const visibleUsers = computed(() => filterUsers(users.value, userFilter.value))
+
+async function togglePage(pagePath: string) {
+  const key = pageUsersKey(days.value, pagePath)
+  if (expandedPage.value === key) { expandedPage.value = ''; return }
+  expandedPage.value = key
+  pageUsersError.value = ''
+  if (pageUsers.value[key]) return
+  pageUsersLoading.value = key
+  try {
+    const data = await analyticsPageUsers(pagePath || '/', days.value)
+    if (data.allowed !== true) { allowed.value = false; summary.value = null; return }
+    pageUsers.value = { ...pageUsers.value, [key]: data.users ?? [] }
+    if (data.error) pageUsersError.value = '用户明细读取失败，请稍后重试。'
+  } catch {
+    pageUsersError.value = '用户明细读取失败，请稍后重试。'
+  } finally {
+    if (pageUsersLoading.value === key) pageUsersLoading.value = ''
+  }
+}
 
 const chart = computed(() => {
   const rows = daily.value
@@ -51,14 +81,6 @@ const chart = computed(() => {
   }
 })
 
-function duration(ms: number): string {
-  if (!Number.isFinite(ms) || ms <= 0) return '0 秒'
-  const seconds = Math.round(ms / 1000)
-  if (seconds < 60) return `${seconds} 秒`
-  const minutes = Math.floor(seconds / 60)
-  if (minutes < 60) return `${minutes} 分 ${seconds % 60} 秒`
-  return `${Math.floor(minutes / 60)} 小时 ${minutes % 60} 分`
-}
 function number(value: number | undefined): string { return Number(value ?? 0).toLocaleString('zh-CN') }
 function time(value: string | undefined | null): string {
   if (!value) return '—'
@@ -72,7 +94,7 @@ function time(value: string | undefined | null): string {
     <header class="analytics-head">
       <div>
         <h1>站内数据看板</h1>
-        <p>访问量、访问时长与登录用户明细 · 仅授权账号可见</p>
+        <p>访问量、停留时长与用户身份明细 · 仅授权账号可见</p>
       </div>
       <div v-if="allowed" class="analytics-range" role="group" aria-label="统计时间范围">
         <button v-for="option in [7, 30, 90]" :key="option" type="button" :class="{ active: days === option }" :aria-pressed="days === option" @click="days = option">{{ option }} 天</button>
@@ -91,8 +113,8 @@ function time(value: string | undefined | null): string {
       <section class="analytics-cards" aria-label="核心指标">
         <div class="analytics-card"><span>访问量 PV</span><strong>{{ number(totals?.pv) }}</strong><small>页面浏览 + 离开事件</small></div>
         <div class="analytics-card"><span>独立访客 UV</span><strong>{{ number(totals?.uv) }}</strong><small>按匿名访客标识去重</small></div>
-        <div class="analytics-card"><span>平均访问时长</span><strong>{{ duration(totals?.avgDurationMs ?? 0) }}</strong><small>单次页面停留</small></div>
-        <div class="analytics-card"><span>累计停留</span><strong>{{ duration(totals?.totalDurationMs ?? 0) }}</strong><small>会话数 {{ number(totals?.sessions) }}</small></div>
+        <div class="analytics-card"><span>平均访问时长</span><strong>{{ formatDuration(totals?.avgDurationMs ?? 0) }}</strong><small>单次页面停留</small></div>
+        <div class="analytics-card"><span>累计停留</span><strong>{{ formatDuration(totals?.totalDurationMs ?? 0) }}</strong><small>会话数 {{ number(totals?.sessions) }}</small></div>
       </section>
 
       <section class="analytics-panel">
@@ -115,27 +137,44 @@ function time(value: string | undefined | null): string {
         <p class="analytics-hint">时长取每次离开该页时的可见停留，切到后台不计时；「—」表示还没有样本。</p>
         <div v-if="!pages.length" class="analytics-empty">暂无页面浏览数据。</div>
         <ul v-else class="analytics-bars">
-          <li v-for="row in pages" :key="row.pagePath">
-            <span class="bar-label" :title="row.pagePath">{{ row.pagePath || '/' }}</span>
-            <span class="bar-track"><i :style="{ width: `${(row.pv / maxPagePv) * 100}%` }"></i></span>
-            <span class="bar-value">{{ number(row.pv) }}</span>
-            <span class="bar-duration" :title="row.samples ? `基于 ${number(row.samples)} 次停留` : '还没有停留数据'">{{ row.samples ? duration(row.avgDurationMs) : '—' }}</span>
+          <li v-for="(row, index) in pages" :key="row.pagePath">
+            <button type="button" class="bar-row" :class="{ open: expandedPage === pageUsersKey(days, row.pagePath) }" :aria-expanded="expandedPage === pageUsersKey(days, row.pagePath)" :aria-controls="`page-users-${index}`" @click="togglePage(row.pagePath)">
+              <span class="bar-label" :title="row.pagePath"><i class="bar-caret" aria-hidden="true"></i>{{ row.pagePath || '/' }}</span>
+              <span class="bar-track"><i :style="{ width: `${(row.pv / maxPagePv) * 100}%` }"></i></span>
+              <span class="bar-value">{{ number(row.pv) }}</span>
+              <span class="bar-duration" :title="row.samples ? `基于 ${number(row.samples)} 次停留` : '还没有停留数据'">{{ dwellLabel(row.avgDurationMs, row.samples) }}</span>
+            </button>
+            <AnalyticsPageUsers v-if="expandedPage === pageUsersKey(days, row.pagePath)" :id="`page-users-${index}`" :rows="pageUsers[pageUsersKey(days, row.pagePath)] ?? []" :loading="pageUsersLoading === pageUsersKey(days, row.pagePath)" :error="pageUsersError" />
           </li>
         </ul>
       </section>
 
       <section class="analytics-panel">
-        <h2>登录用户明细</h2>
-        <p class="analytics-hint">账号由服务端关联身份表取得，埋点表本身不存邮箱或手机号。</p>
-        <div v-if="!users.length" class="analytics-empty">所选时间范围内暂无登录用户数据。</div>
+        <h2>用户明细</h2>
+        <p class="analytics-hint">账号由服务端关联身份表取得；「游客」只创建了浏览器会话，未绑定 Google / 邮箱 / 手机身份，只能显示会话标识。手机号在登录时按脱敏保存，只能显示掩码。</p>
+        <div v-if="users.length" class="analytics-user-filter" role="group" aria-label="按身份筛选用户">
+          <p class="analytics-hint">{{ signedInCount }} 位登录用户 · {{ guestCount }} 位游客</p>
+          <div class="analytics-range">
+            <button v-for="option in [{ id: 'all', label: '全部' }, { id: 'signed', label: '仅登录' }, { id: 'guest', label: '仅游客' }]" :key="option.id" type="button" :class="{ active: userFilter === option.id }" :aria-pressed="userFilter === option.id" @click="userFilter = option.id as UserFilter">{{ option.label }}</button>
+          </div>
+        </div>
+        <div v-if="!users.length" class="analytics-empty">所选时间范围内暂无用户数据。</div>
+        <div v-else-if="!visibleUsers.length" class="analytics-empty">当前筛选下没有用户。</div>
         <div v-else class="analytics-table-wrap">
           <table class="analytics-table">
-            <thead><tr><th>登录账号</th><th>访问量</th><th>平均停留</th><th>最近访问时间</th></tr></thead>
+            <thead><tr><th>用户</th><th>身份</th><th>访问量</th><th>平均停留</th><th>有效停留次数</th><th>首次访问</th><th>最近访问</th></tr></thead>
             <tbody>
-              <tr v-for="row in users" :key="row.creatorId">
-                <td>{{ row.account || row.creatorId }}</td>
+              <tr v-for="row in visibleUsers" :key="row.creatorId">
+                <td class="user-cell">
+                  <span class="user-name">{{ accountName(row) }}</span>
+                  <span v-if="accountDetail(row)" class="user-detail">{{ accountDetail(row) }}</span>
+                  <code class="user-id" :title="row.creatorId">{{ row.creatorId }}</code>
+                </td>
+                <td>{{ accountTypeLabel(row.accountType) }}</td>
                 <td>{{ number(row.pv) }}</td>
-                <td>{{ duration(row.avgDurationMs) }}</td>
+                <td>{{ dwellLabel(row.avgDurationMs, row.samples) }}</td>
+                <td>{{ number(row.samples) }}</td>
+                <td>{{ time(row.firstSeen) }}</td>
                 <td>{{ time(row.lastSeen) }}</td>
               </tr>
             </tbody>
@@ -173,21 +212,33 @@ function time(value: string | undefined | null): string {
 .dot { width: 9px; height: 9px; border-radius: 50%; }
 .dot.pv { background: #d4483b; }
 .dot.uv { background: #3b7fb5; }
-.analytics-bars { display: grid; gap: 12px; margin: 16px 0 0; padding: 0; list-style: none; }
-.analytics-bars li { display: grid; grid-template-columns: minmax(110px, 1.1fr) minmax(90px, 2fr) 54px 96px; align-items: center; gap: 12px; font-size: 12px; }
+.analytics-bars { display: grid; gap: 4px; margin: 16px 0 0; padding: 0; list-style: none; }
+.analytics-bars li { display: block; font-size: 12px; }
+.bar-row { display: grid; grid-template-columns: minmax(110px, 1.1fr) minmax(90px, 2fr) 54px 96px; align-items: center; gap: 12px; width: 100%; padding: 7px 8px; border: 0; border-radius: 10px; background: none; color: inherit; font: inherit; font-size: 12px; text-align: left; cursor: pointer; }
+.bar-row:hover { background: #faf3f0; }
+.bar-row.open { background: #fbf1ee; }
+.bar-row:focus-visible { outline: 2px solid #d4483b; outline-offset: 2px; }
+.bar-caret { display: inline-block; width: 0; height: 0; margin-right: 7px; border-left: 5px solid #b8a9a2; border-top: 4px solid transparent; border-bottom: 4px solid transparent; vertical-align: middle; transition: transform .15s ease; }
+.bar-row.open .bar-caret { transform: rotate(90deg); }
 .bar-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink, #2c2522); }
 .bar-track { height: 9px; border-radius: 999px; background: #f3ece9; overflow: hidden; }
 .bar-track i { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, #f0a08f, #d4483b); }
 .bar-value { text-align: right; font-variant-numeric: tabular-nums; }
 .bar-duration { color: var(--muted, #6b615a); text-align: right; }
 .analytics-table-wrap { overflow-x: auto; margin-top: 14px; }
+.analytics-user-filter { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
+.analytics-user-filter .analytics-hint { margin: 0; }
 .analytics-table { width: 100%; border-collapse: collapse; font-size: 12px; }
 .analytics-table th { padding: 10px 12px; border-bottom: 1px solid var(--line, #e8dedb); color: var(--muted, #6b615a); font-weight: 500; text-align: left; white-space: nowrap; }
 .analytics-table td { padding: 11px 12px; border-bottom: 1px solid #f4eeec; font-variant-numeric: tabular-nums; }
 .analytics-table tbody tr:last-child td { border-bottom: 0; }
+.user-cell { max-width: 340px; }
+.user-name { display: block; color: var(--ink, #2c2522); overflow-wrap: anywhere; }
+.user-detail { display: block; color: var(--muted, #6b615a); font-size: 11px; overflow-wrap: anywhere; }
+.user-id { display: block; margin-top: 2px; color: #a3968f; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10px; overflow-wrap: anywhere; }
 @media (max-width: 620px) {
   .analytics { padding: 28px 16px 70px; }
-  .analytics-bars li { grid-template-columns: minmax(90px, 1fr) minmax(60px, 1.2fr) 44px; }
+  .bar-row { grid-template-columns: minmax(90px, 1fr) minmax(60px, 1.2fr) 44px; }
   .bar-duration { display: none; }
 }
 </style>
