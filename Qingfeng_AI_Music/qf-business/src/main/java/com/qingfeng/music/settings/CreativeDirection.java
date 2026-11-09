@@ -18,10 +18,16 @@ public final class CreativeDirection {
         return new CreativePlan(raw,"","",raw.isBlank()?"按所选风格编配":summary,raw.length()>300?"Original music directions retained":raw,"AUTO");
     }
     public static MusicSettings.Direction compile(Work work,MusicSettings.Direction base,CreativePlan plan){
+        return compile(work,base,plan,MusicPromptLimits.suno(),null);
+    }
+    public static MusicSettings.Direction compile(Work work,MusicSettings.Direction base,CreativePlan plan,MusicPromptLimits limits,String concise){
+        return compile(work,base,plan,limits,concise,true);
+    }
+    public static MusicSettings.Direction compile(Work work,MusicSettings.Direction base,CreativePlan plan,MusicPromptLimits limits,String concise,boolean currentOverrides){
         if(plan==null)plan=fallback(work);
         if(base!=null&&plan.requirements().isBlank()&&plan.suggestedArrangement().isBlank()&&plan.negativeTags().isBlank()&&"AUTO".equals(plan.vocalGender()))return base;
         String explicit=base==null?work.style():base.style();
-        String exclusions=String.join(", ",java.util.stream.Stream.of(base==null?"":base.negativeTags(),plan.negativeTags()).filter(s->!s.isBlank()).distinct().toList());
+        String exclusions=uniqueExclusions(base==null?"":base.negativeTags(),plan.negativeTags());
         // 已明确排除的乐器不能仍作为默认主乐器提交；不强删包含段落变化的用户自由描述。
         if(base!=null){
             var remove=new HashSet<String>();
@@ -31,16 +37,37 @@ public final class CreativeDirection {
                 String term=switch(instrument){case "guitar"->"acoustic guitar";case "piano"->"piano";case "drums"->"drums";default->instrument;};
                 if(avoid.contains(term)||avoid.contains(instrument))remove.add(term);
             }
-            for(String term:remove)explicit=explicit.replace("lead instrument: "+term,"").replace(term,"");
+            // 只处理系统默认，不能通过字符串替换改写用户的自由输入。
+            String marker="User directions take precedence: ";int split=explicit.indexOf(marker);
+            String defaults=split<0?explicit:explicit.substring(0,split),user=split<0?"":explicit.substring(split);
+            for(String term:remove)defaults=defaults.replace("lead instrument: "+term,"").replace(term,"");
+            explicit=defaults+user;
         }
-        var parts=new ArrayList<String>();
-        if(!plan.requirements().isBlank())parts.add("Original music directions: "+plan.requirements());
-        parts.add("Current music settings: "+explicit);
-        if(!plan.suggestedArrangement().isBlank())parts.add("Optional arrangement, only where compatible: "+plan.suggestedArrangement());
-        String style=String.join(". ",parts);
-        if(!plan.requirements().isBlank()&&base!=null)style+=". Current settings override earlier directions only where they conflict.";
-        if(style.length()>1000||exclusions.length()>500)throw new DomainException("INVALID_MUSIC_SETTINGS","合并后的音乐要求过长，请精简补充要求后生成；系统未截断你的要求。");
+        if(exclusions.length()>limits.negativeTags())throw new DomainException("INVALID_MUSIC_SETTINGS","需要避开的元素合并后过长，请精简排除项。原文已保留，尚未提交音乐生成。");
+        String style=required(explicit,plan.requirements(),base!=null&&currentOverrides);
+        boolean simplified=false;
+        if(style.length()>limits.style()&&concise!=null){style=required(concise,plan.requirements(),currentOverrides);simplified=true;}
+        if(style.length()>limits.style())throw new DomainException("INVALID_MUSIC_SETTINGS","保留你的明确要求后，音乐描述仍过长，请精简补充要求或减少音乐选项。原文和歌词已保留，尚未提交音乐生成。");
+        // 可选编曲整段省略，不截断用户句子，也不破坏否定词。
+        if(!plan.suggestedArrangement().isBlank()&&!style.contains(plan.suggestedArrangement())){
+            String extended=style+". Optional: "+plan.suggestedArrangement();
+            if(extended.length()<=limits.style())style=extended;else simplified=true;
+        }
         var prefs=base==null?new MusicSettings.Preferences(1,null,Map.of(),work.vocalGender(),"",""):base.preferences();
-        return new MusicSettings.Direction(prefs,style,exclusions,plan.summaryZh(),plan.summaryEn(),base==null?1:base.catalogVersion(),plan);
+        String zh=base==null?plan.summaryZh():base.summaryZh(),en=base==null?plan.summaryEn():base.summaryEn();
+        return new MusicSettings.Direction(prefs,style,exclusions,zh,en,base==null?1:base.catalogVersion(),plan,
+            new MusicSettings.Compilation(style.length(),limits.style(),exclusions.length(),limits.negativeTags(),simplified,
+                simplified?"已精简系统编曲建议，你的明确要求和歌词完整保留。":""));
+    }
+    private static String required(String current,String original,boolean hasCurrent){
+        if(original.isBlank()||current.contains(original))return current;
+        return "Requirements: "+original+". Current: "+current+(hasCurrent?". Current settings take priority in conflicts.":". Requirements take priority over defaults.");
+    }
+    private static String uniqueExclusions(String... sources){
+        var clauses=new LinkedHashMap<String,String>();
+        for(String source:sources)for(String clause:source.split("[,，;；\\n]")){
+            String text=clause.trim();if(!text.isBlank())clauses.putIfAbsent(text.toLowerCase(Locale.ROOT),text);
+        }
+        return String.join(", ",clauses.values());
     }
 }

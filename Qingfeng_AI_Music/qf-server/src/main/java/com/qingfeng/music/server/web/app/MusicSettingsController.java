@@ -11,6 +11,7 @@ public class MusicSettingsController {
  public record Save(long expectedVersion,MusicSettings.Preferences preferences){}
  @GetMapping("/music-settings/catalog") public MusicSettings.Catalog catalog(){return settings.catalog();}
  @PostMapping("/music-settings/preview") public MusicSettings.Direction preview(@RequestBody MusicSettings.Preferences preferences){return settings.preview(preferences);}
+ @PostMapping("/works/{work}/music-settings/preview") public MusicSettings.Direction previewForWork(@AuthenticationPrincipal CreatorPrincipal user,@PathVariable String work,@RequestBody MusicSettings.Preferences preferences){return settings.previewForWork(user.id(),work,preferences);}
  @GetMapping("/works/{work}/music-settings") public MusicSettings.View get(@AuthenticationPrincipal CreatorPrincipal user,@PathVariable String work){return settings.get(user.id(),work);}
  @GetMapping("/works/{work}/creative-direction") public MusicSettings.Direction direction(@AuthenticationPrincipal CreatorPrincipal user,@PathVariable String work){var view=settings.get(user.id(),work);return settings.forGeneration(user.id(),view.work());}
  @PutMapping("/works/{work}/music-settings") public MusicSettings.View save(@AuthenticationPrincipal CreatorPrincipal user,@PathVariable String work,@RequestBody Save input){return settings.save(user.id(),work,input.expectedVersion(),input.preferences());}

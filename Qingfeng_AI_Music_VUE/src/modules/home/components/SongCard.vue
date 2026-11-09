@@ -17,9 +17,10 @@ const duration = computed(() => {
 <template>
   <article class="explore-card">
     <header class="explore-category-heading">
-      <img class="explore-category-cover" :src="track.cover" :alt="t('{p0}，AI场景图', { p0: track.category })" width="84" height="84" loading="lazy">
+      <img class="explore-category-cover" :src="track.cover" :alt="t('{p0}风格封面', { p0: track.category })" width="84" height="84" loading="lazy">
       <div><h3>{{ track.category }}</h3><p>{{ track.description }}</p></div>
     </header>
+    <ul class="explore-track-tags" :aria-label="t('歌曲标签')"><li v-for="tag in track.tags" :key="tag">{{ tag }}</li></ul>
     <ul class="explore-track-list">
       <li>
         <button type="button" class="explore-track-row listen-action" :aria-label="t('{action}{title}', { action: playing ? t('暂停') : t('试听'), title: track.title })" :aria-pressed="playing" @click="player.toggle(track)">

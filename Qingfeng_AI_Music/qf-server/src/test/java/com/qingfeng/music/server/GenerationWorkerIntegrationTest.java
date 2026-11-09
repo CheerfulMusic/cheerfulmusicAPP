@@ -34,7 +34,8 @@ class GenerationWorkerIntegrationTest {
     }
     static class Provider implements MusicProvider {
         String name="offline-"+UUID.randomUUID(); AtomicInteger submissions=new AtomicInteger(),queries=new AtomicInteger();Request received;
-        boolean unknown,rejected,queryFailure; String audioUrl="https://audio.test/song.wav"; CountDownLatch entered,release;
+        boolean unknown,rejected,queryFailure,validationFailure,connectFailure; String audioUrl="https://audio.test/song.wav"; CountDownLatch entered,release;
+        public void validate(Request request){if(validationFailure)throw new com.qingfeng.music.common.exception.DomainException("INVALID_MUSIC_INPUT","offline validation");}
         public String name(){return name;} public boolean isConfigured(){return true;}
         public Submission submit(Request request,String key){received=request;submissions.incrementAndGet();if(entered!=null){entered.countDown();try{if(!release.await(5,TimeUnit.SECONDS))throw new IllegalStateException();}catch(InterruptedException e){Thread.currentThread().interrupt();throw new IllegalStateException();}}if(unknown)throw new IllegalStateException("模拟断线");if(rejected)throw new Rejected();return new Submission("external-"+key);}
         public Result query(String id){queries.incrementAndGet();if(queryFailure){queryFailure=false;throw new IllegalStateException("模拟查询断线");}return new Result(id,GenerationStatus.SAVING,audioUrl);}
@@ -44,6 +45,18 @@ class GenerationWorkerIntegrationTest {
     GenerationWorker worker(Fixture f,AudioDownloader downloader){return new GenerationWorker(repository,f.provider(),downloader,media,f.time(),Duration.ofMinutes(2),2);}
     byte[] wav(){var b=ByteBuffer.allocate(48).order(ByteOrder.LITTLE_ENDIAN);b.put("RIFF".getBytes()).putInt(40).put("WAVEfmt ".getBytes()).putInt(16).putShort((short)1).putShort((short)1).putInt(8000).putInt(16000).putShort((short)2).putShort((short)16).put("data".getBytes()).putInt(4).putInt(0);return b.array();}
     GenerationStatus status(Fixture f){return f.api().list(f.owner(),f.work()).get(0).status();}
+    @Test void localPreparationFailureIsNotAnUnknownSubmission(){
+        var f=fixture();f.provider().validationFailure=true;assertTrue(worker(f,url->new ByteArrayInputStream(wav())).runOnce());
+        assertEquals(GenerationStatus.FAILED,status(f));assertEquals("LOCAL_PREPARATION_FAILED",f.api().list(f.owner(),f.work()).get(0).errorCode());
+        assertEquals(0,f.provider().submissions.get());assertEquals(0,jdbc.queryForObject("SELECT submit_attempts FROM generation_task WHERE id=?",Integer.class,f.id()));
+    }
+    @Test void repeatedQueryFailureSwitchesToBackgroundReviewAndLaterRecoversTheOriginalTask(){
+        var f=fixture();var w=worker(f,url->new ByteArrayInputStream(wav())).withRecoveryPolicy(Duration.ofHours(2),2);w.runOnce();
+        for(int n=0;n<2;n++){f.time().advance(31);f.provider().queryFailure=true;assertTrue(w.runOnce());}
+        assertEquals(GenerationStatus.SUBMISSION_UNKNOWN,status(f));assertEquals("QUERY_REVIEW_REQUIRED",f.api().list(f.owner(),f.work()).get(0).errorCode());
+        assertEquals("external-"+f.id(),jdbc.queryForObject("SELECT provider_task_id FROM generation_task WHERE id=?",String.class,f.id()));
+        assertFalse(w.runOnce());f.time().advance(301);assertTrue(w.runOnce());assertEquals(GenerationStatus.SAVING,status(f));w.runOnce();assertEquals(GenerationStatus.SUCCEEDED,status(f));assertEquals(1,f.provider().submissions.get());
+    }
     @Test void workerCannotSubmitDuringTheFiveSecondUndoWindow(){var f=fixture();var task=f.api().list(f.owner(),f.work()).get(0);f.time().now=task.createdAt().plusSeconds(4);var w=worker(f,url->new ByteArrayInputStream(wav()));assertFalse(w.runOnce());assertEquals(0,f.provider().submissions.get());f.time().now=task.createdAt().plusSeconds(6);assertTrue(w.runOnce());assertEquals(1,f.provider().submissions.get());}
 
     @Test void workerSendsPersistedVoiceAfterWorkChanges(){

@@ -17,6 +17,24 @@ public class GenerationService implements GenerationApi {
  public GenerationService(WorkApi works,LyricsApi lyrics,MusicProvider provider,TaskRepository repository,ExecutionRepository execution,boolean enabled,com.qingfeng.music.usage.UsageBudget budget){this.works=works;this.lyrics=lyrics;this.provider=provider;this.repository=repository;this.execution=execution;this.enabled=enabled;this.budget=budget;}
  private com.qingfeng.music.settings.MusicSettings settings;
  public GenerationService withSettings(com.qingfeng.music.settings.MusicSettings value){settings=value;return this;}
+ /** 不占额、不落库、不调用供应商；正式提交仍在事务内重新校验并冻结快照。 */
+ public Preflight preflight(String owner,String work,String revisionId){
+  var w=works.get(owner,work);var revision=lyrics.get(owner,work,revisionId);
+  if(!revision.confirmed())throw new DomainException("LYRICS_NOT_CONFIRMED","请先确认歌词");
+  if(revision.workVersion()!=w.version())throw new DomainException("WORK_VERSION_CONFLICT","作品已修改，请保存并确认当前版本歌词");
+  available();
+  var direction=settings==null?null:settings.forGeneration(owner,w);
+  var request=request(w,revision,direction);provider.validate(request);
+  var limits=provider.limits();
+  return new Preflight(w.version(),revisionId,request.style().length(),limits.style(),request.negativeTags().length(),limits.negativeTags(),direction!=null&&direction.compilation()!=null?direction.compilation().notice():"");
+ }
+ private void available(){
+  if(!enabled||!provider.isConfigured())throw new DomainException("MUSIC_PROVIDER_UNAVAILABLE","音乐生成暂不可用，内容已保留，尚未提交生成。");
+  provider.checkAdmission();
+ }
+ private MusicProvider.Request request(WorkApi.Work work,LyricsApi.Revision revision,com.qingfeng.music.settings.MusicSettings.Direction direction){
+  return direction==null?new MusicProvider.Request(revision.title(),revision.lyrics(),work.style(),work.vocalGender()):new MusicProvider.Request(revision.title(),revision.lyrics(),direction.style(),direction.effectiveVoice(work.vocalGender()),direction.negativeTags(),true);
+ }
  // 并发重复插入后重新读取已提交任务，避免MySQL可重复读快照看不到竞争方的新记录。
  @Transactional(isolation = org.springframework.transaction.annotation.Isolation.READ_COMMITTED)
  public Task submit(String owner,String work,String revisionId,String key){
@@ -26,7 +44,7 @@ public class GenerationService implements GenerationApi {
   var revision=lyrics.get(owner,work,revisionId);
   if(!revision.confirmed())throw new DomainException("LYRICS_NOT_CONFIRMED","请先确认歌词");
   if(revision.workVersion()!=w.version())throw new DomainException("WORK_VERSION_CONFLICT","作品已修改，请保存并确认当前版本歌词");
-  if(!enabled||!provider.isConfigured())throw new DomainException("MUSIC_PROVIDER_UNAVAILABLE","音乐模型暂不可用，未提交生成或创建付费任务");
+  available();
   // 与局部编辑保持准入锁→作品锁顺序；后续校验失败会随整个事务回滚占额。
   budget.reserve(owner,work,key,com.qingfeng.music.usage.UsageBudget.Kind.MUSIC);
   var direction=settings==null?null:settings.forGeneration(owner,w);

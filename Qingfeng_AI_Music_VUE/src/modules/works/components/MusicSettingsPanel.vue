@@ -3,11 +3,25 @@ import {ref,computed,onMounted,onBeforeUnmount,watch,nextTick} from 'vue'
 import {t,locale} from '../../../shared/i18n'
 import {currentCreatorId} from '../../../shared/http/api-client'
 import type {Work} from '../../studio'
-import {loadMusicCatalog,loadMusicSettings,previewMusicSettings,type MusicPreferences,type MusicCatalog,type MusicDirection} from '../api/music-settings'
+import {loadMusicCatalog,loadMusicSettings,previewWorkMusicSettings,musicBriefAvailable,suggestMusicBrief,type MusicPreferences,type MusicCatalog,type MusicDirection} from '../api/music-settings'
 import {legacyPreferences,applyRecipe,toggleMusicOption,validMusicPreferences} from '../model/music-preferences'
 const props=defineProps<{work:Work;busy:boolean;initial?:boolean}>(),emit=defineEmits<{apply:[value:{expectedVersion:number;preferences:MusicPreferences}];close:[]}>()
 const dialog=ref<HTMLDialogElement>(),catalog=ref<MusicCatalog>(),prefs=ref<MusicPreferences>(legacyPreferences(props.work)),direction=ref<MusicDirection>(),loading=ref(true),previewing=ref(false),error=ref(''),hint=ref(''),advanced=ref(false),detail=ref(false),baseVersion=ref(props.work.version),oldDraft=ref<MusicPreferences>()
 let importedLegacy=false,alive=true,previewTurn=0,timer:ReturnType<typeof setTimeout>|undefined,initialized=false
+const aiAvailable=ref(false),simplifying=ref(false),suggestion=ref<{original:string;text:string}>()
+onMounted(()=>{void musicBriefAvailable().then(value=>{if(alive)aiAvailable.value=value}).catch(()=>{})})
+async function simplify(){
+ if(simplifying.value||props.busy||!prefs.value.freeText.trim())return
+ const original=prefs.value.freeText;simplifying.value=true;suggestion.value=undefined;hint.value=''
+ try{const value=await suggestMusicBrief(original);if(alive&&prefs.value.freeText===original)suggestion.value=value}
+ catch{if(alive)hint.value='AI整理暂不可用，原要求仍然保留，你可以继续调整或直接生成歌曲。'}
+ finally{if(alive)simplifying.value=false}
+}
+function useSuggestion(){
+ if(!suggestion.value||props.busy)return
+ if(prefs.value.freeText!==suggestion.value.original){hint.value='要求已发生变化，请重新整理后确认。';suggestion.value=undefined;return}
+ prefs.value.freeText=suggestion.value.text;suggestion.value=undefined;hint.value='已使用精简建议，请确认后保存音乐设置。'
+}
 const label=(value:{zh:string;en:string})=>locale.value==='en'?value.en:value.zh
 const storageKey=()=>`qingfeng.music-preferences:${currentCreatorId()}:${props.work.id}`
 const visibleGroups=computed(()=>catalog.value?.groups.filter(g=>!['exclude','arrangement','groove'].includes(g.id))||[])
@@ -16,7 +30,7 @@ const excludes=computed(()=>catalog.value?.groups.find(g=>g.id==='exclude'))
 const chips=computed(()=>catalog.value?.groups.flatMap(g=>(prefs.value.choices[g.id]||[]).map(id=>({group:g.id,option:g.options.find(o=>o.id===id)!}))).filter(c=>c.option)||[])
 const summary=computed(()=>locale.value==='en'?direction.value?.summaryEn:direction.value?.summaryZh)
 function remember(){if(!initialized)return;try{localStorage.setItem(storageKey(),JSON.stringify({workVersion:baseVersion.value,preferences:prefs.value}))}catch{/* 当前页面仍保留编辑。 */}}
-async function preview(){const turn=++previewTurn;previewing.value=true;direction.value=undefined;error.value='';try{const value=await previewMusicSettings(prefs.value);if(alive&&turn===previewTurn){direction.value=value;prefs.value.recipeId=value.preferences.recipeId}}catch(e){if(alive&&turn===previewTurn)error.value=e instanceof Error?e.message:'音乐设置暂时无法读取，请重试。'}finally{if(alive&&turn===previewTurn)previewing.value=false}}
+async function preview(){const turn=++previewTurn;previewing.value=true;direction.value=undefined;error.value='';try{const value=await previewWorkMusicSettings(props.work.id,prefs.value);if(alive&&turn===previewTurn){direction.value=value;prefs.value.recipeId=value.preferences.recipeId}}catch(e){if(alive&&turn===previewTurn)error.value=e instanceof Error?e.message:'音乐设置暂时无法读取，请重试。'}finally{if(alive&&turn===previewTurn)previewing.value=false}}
 function schedule(){if(!initialized)return;remember();clearTimeout(timer);previewTurn++;direction.value=undefined;previewing.value=true;timer=setTimeout(()=>{void preview()},350)}
 // 只监听用户偏好；预览返回的recipeId规范化不会导致重新请求。
 watch(()=>JSON.stringify({choices:prefs.value.choices,voice:prefs.value.vocalGender,free:prefs.value.freeText,negative:prefs.value.negativeText}),schedule)
@@ -42,8 +56,10 @@ onBeforeUnmount(()=>{remember();alive=false;previewTurn++;clearTimeout(timer);di
   <details class="music-advanced" :open="advanced" @toggle="advanced=($event.target as HTMLDetailsElement).open"><summary>{{ t('高级：律动与编曲') }}</summary><fieldset v-for="group in extras" :key="group.id" :disabled="busy"><legend>{{ label(group) }} <small>{{ t('最多 {count} 项',{count:group.max}) }}</small></legend><div class="music-tag-options"><button v-for="option in group.options" :key="option.id" type="button" :aria-pressed="(prefs.choices[group.id]||[]).includes(option.id)" @click="choose(group.id,option.id)">{{ label(option) }}</button></div></fieldset></details>
   <fieldset v-if="excludes" :disabled="busy" class="music-exclude"><legend>{{ t('不想要的元素') }}</legend><div class="music-tag-options"><button v-for="option in excludes.options" :key="option.id" type="button" :aria-pressed="(prefs.choices.exclude||[]).includes(option.id)" @click="choose('exclude',option.id)">{{ label(option) }}</button></div><label class="field">{{ t('其他需要避开的元素') }}<input v-model="prefs.negativeText" maxlength="200" :placeholder="t('例如：不要刺耳的高音')"></label></fieldset>
   <label class="field music-free-text">{{ t('还有什么想告诉我们？') }}<textarea v-model="prefs.freeText" :disabled="busy" maxlength="300" rows="3" :placeholder="t('例如：像平时聊天一样自然，人声突出，伴奏简单。')"></textarea><small>{{ t('补充要求会参与音乐生成，不会自动修改已经写好的歌词。') }}</small></label>
+  <div v-if="aiAvailable" class="music-brief-assist"><button class="text-button" :disabled="busy||simplifying||!prefs.freeText.trim()" @click="simplify">{{ simplifying?t('正在精简音乐要求…'):t('AI精简补充要求') }}</button><small>{{ t('先预览再采用，不会修改歌词或自动替换原要求。') }}</small></div>
+  <section v-if="suggestion" class="notice" :aria-label="t('精简建议')"><strong>{{ t('精简建议') }}</strong><p>{{ suggestion.text }}</p><small>{{ t('请确认曲风、乐器和限制均已保留。') }}</small><div class="actions"><button class="button secondary" :disabled="busy" @click="useSuggestion">{{ t('使用精简版') }}</button><button class="text-button" @click="suggestion=undefined">{{ t('保留原要求') }}</button></div></section>
  </div><aside class="music-settings-summary"><div class="music-summary-heading"><h3>{{ t('你选择的声音') }}</h3><small>{{ t('偏好组合，不是固定旋律') }}</small></div><div class="music-selected-chips"><button v-for="chip in chips" :key="chip.group+chip.option.id" :disabled="busy" :aria-label="t('移除 {label}',{label:label(chip.option)})" @click="choose(chip.group,chip.option.id)">{{ label(chip.option) }} <span aria-hidden="true">×</span></button><span v-if="!chips.length">{{ t('选一个配方，或展开精细调整。') }}</span></div><p v-if="previewing" class="music-summary-copy" role="status">{{ t('正在整理你的音乐偏好…') }}</p><p v-else-if="summary" class="music-summary-copy">{{ summary }}</p><p class="music-generation-boundary">{{ t('这些选择用于引导生成，实际旋律与唱腔仍由模型创作。') }}</p><p v-if="oldDraft" class="notice">{{ t('有一份较早的本机设置，你可以恢复后重新确认。') }}<button class="text-button" @click="recover">{{ t('恢复本机设置') }}</button></p></aside></div>
- <p v-if="hint" class="music-settings-hint" role="status">{{ t(hint) }}</p><p v-if="error" class="music-settings-error" role="alert">{{ t(error) }}</p>
+ <p v-if="hint" class="music-settings-hint" role="status">{{ t(hint) }}</p><p v-if="direction?.compilation?.notice" class="music-settings-hint" role="status">{{ t(direction.compilation.notice) }}</p><p v-if="error" class="music-settings-error" role="alert">{{ t(error) }}</p>
  <footer class="music-settings-footer"><p>{{ t('只保存偏好，不会开始生成歌曲。') }}</p><div><button class="button secondary" :disabled="busy" @click="close">{{ t('暂不修改') }}</button><button class="button" :disabled="busy||loading||previewing||!direction" @click="save">{{ busy?t('正在保存…'):t('确认音乐设置') }}</button></div></footer>
 </dialog>
 </template>

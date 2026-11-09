@@ -24,10 +24,11 @@ class GenerationSubmissionIntegrationTest {
   var ended=tasks.closeChecking(f.owner(),f.work(),task.id(),true);assertEquals("CHECKING_CLOSED",ended.errorCode());assertEquals(com.qingfeng.music.generation.domain.GenerationStatus.FAILED,ended.status());
   assertEquals(ended.id(),tasks.closeChecking(f.owner(),f.work(),task.id(),true).id());assertEquals(ended.status(),tasks.submit(f.owner(),f.work(),f.revision(),key).status());
   executions.accepted(task.id(),"late-platform-id",java.time.Instant.now(),java.time.Instant.now());
-  assertEquals(com.qingfeng.music.generation.domain.GenerationStatus.FAILED,tasks.list(f.owner(),f.work()).get(0).status());
-  assertNull(jdbc.queryForObject("SELECT provider_task_id FROM generation_task WHERE id=?",String.class,task.id()));
+  assertEquals(com.qingfeng.music.generation.domain.GenerationStatus.RUNNING,tasks.list(f.owner(),f.work()).get(0).status());
+  assertEquals("late-platform-id",jdbc.queryForObject("SELECT provider_task_id FROM generation_task WHERE id=?",String.class,task.id()));
   assertEquals(1,jdbc.queryForObject("SELECT COUNT(*) FROM model_usage_reservation WHERE work_id=? AND kind='MUSIC'",Integer.class,f.work()));
-  assertNotEquals(ended.id(),tasks.submit(f.owner(),f.work(),f.revision(),UUID.randomUUID().toString()).id());
+  assertEquals("PERSONAL_GENERATION_BUSY",assertThrows(com.qingfeng.music.common.exception.DomainException.class,()->tasks.submit(f.owner(),f.work(),f.revision(),UUID.randomUUID().toString())).code());
+  assertEquals(task.id(),tasks.submit(f.owner(),f.work(),f.revision(),key).id());
  }
  @Test void closingCheckingCannotRaceAnActiveLeaseOrDiscardAKnownPlatformTask(){
   var f=fixture();var task=tasks.submit(f.owner(),f.work(),f.revision(),UUID.randomUUID().toString());

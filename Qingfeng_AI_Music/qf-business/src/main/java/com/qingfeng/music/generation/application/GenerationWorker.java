@@ -8,6 +8,7 @@ import java.util.concurrent.*;
 
 /** 持久化每一步后再调用外部服务。中断的提交转待核对，只有查询和归档可自动重试。 */
 public final class GenerationWorker {
+    private static final java.util.logging.Logger LOG=java.util.logging.Logger.getLogger(GenerationWorker.class.getName());
     private final ExecutionRepository repository;
     private final MusicProvider provider;
     private final AudioDownloader downloader;
@@ -17,6 +18,9 @@ public final class GenerationWorker {
     private final int maxArchiveAttempts;
     private SectionEditRepository edits;
     private AudioCandidates candidates;
+    private Duration queryReviewAfter=Duration.ofMinutes(30);
+    private int maxQueryFailures=6;
+    public GenerationWorker withRecoveryPolicy(Duration reviewAfter,int failures){if(reviewAfter.isNegative()||reviewAfter.isZero()||failures<1)throw new IllegalArgumentException("恢复策略无效");queryReviewAfter=reviewAfter;maxQueryFailures=failures;return this;}
     public GenerationWorker withCandidates(AudioCandidates value){candidates=value;return this;}
     private com.qingfeng.music.settings.MusicSettings settings;
     public GenerationWorker withSettings(com.qingfeng.music.settings.MusicSettings value){settings=value;return this;}
@@ -59,24 +63,47 @@ public final class GenerationWorker {
 
     private void submit(ExecutionRepository.Execution execution) {
         var task=execution.task(); String token=execution.leaseToken();
-        if (!repository.startSubmission(task.id(),token,now())) return;
-        String attempt=repository.attempt(task.id(),"SUBMIT",now());
+        String attempt=repository.attempt(task.id(),"PREPARE",now());
+        boolean invoking=false;String externalId=null;
         try {
             var direction=settings==null?null:settings.frozen(task.workId(),task.id()).orElse(null);
             var request=direction==null?new MusicProvider.Request(task.title(),task.lyrics(),task.style(),task.vocalGender()):new MusicProvider.Request(task.title(),task.lyrics(),direction.style(),task.vocalGender(),direction.negativeTags(),true);
             var edit=edits==null?java.util.Optional.<SectionEditRepository.Edit>empty():edits.edit(task.id());
+            provider.validate(request);
+            repository.finishAttempt(attempt,"COMPLETED",null,now());
+            if (!repository.startSubmission(task.id(),token,now())) return;
+            attempt=repository.attempt(task.id(),"SUBMIT",now());
+            invoking=true;
             var accepted=edit.isPresent()?provider.replace(request,edit.get().replacement(),task.id()):provider.submit(request,task.id());
             if (accepted==null || accepted.providerTaskId()==null || accepted.providerTaskId().isBlank()
                 || accepted.providerTaskId().length()>255) throw new IllegalStateException("缺少供应商任务标识");
+            externalId=accepted.providerTaskId();
             // 已知成功的迟到响应也可恢复待核对任务；不能因此再次提交。
             repository.accepted(task.id(),accepted.providerTaskId(),now(),now().plusSeconds(10));
             repository.finishAttempt(attempt,"ACCEPTED",null,now());
         } catch (MusicProvider.Rejected rejected) {
-            repository.failed(task.id(),token,"PROVIDER_REJECTED",now());
-            repository.finishAttempt(attempt,"REJECTED","PROVIDER_REJECTED",now());
+            repository.failed(task.id(),token,rejected.code(),now());
+            repository.finishAttempt(attempt,"REJECTED",rejected.code(),now());
+            log(task.id(),"SUBMIT",rejected.code(),rejected);
+        } catch (MusicProvider.NotSubmitted notSent) {
+            repository.failed(task.id(),token,notSent.code(),now());
+            repository.finishAttempt(attempt,"NOT_SENT",notSent.code(),now());
+            log(task.id(),"SUBMIT",notSent.code(),notSent);
         } catch (RuntimeException unknown) {
-            repository.unknown(task.id(),token,"SUBMISSION_UNKNOWN",now());
-            repository.finishAttempt(attempt,"UNKNOWN","SUBMISSION_UNKNOWN",now());
+            if(!invoking){
+                repository.failed(task.id(),token,"LOCAL_PREPARATION_FAILED",now());
+                repository.finishAttempt(attempt,"NOT_SENT","LOCAL_PREPARATION_FAILED",now());
+                log(task.id(),"PREPARE","LOCAL_PREPARATION_FAILED",unknown);
+            }else if(externalId!=null){
+                // 只补写已取得的任务编号，绝不重新调用生成；日志不包含歌词、密钥或供应商响应。
+                LOG.warning("music_acceptance_persist_retry task="+task.id()+" external="+externalId);
+                repository.accepted(task.id(),externalId,now(),now().plusSeconds(10));
+                repository.finishAttempt(attempt,"ACCEPTED",null,now());
+            }else{
+                repository.unknown(task.id(),token,"SUBMISSION_UNKNOWN",now());
+                repository.finishAttempt(attempt,"UNKNOWN","SUBMISSION_UNKNOWN",now());
+                log(task.id(),"SUBMIT","SUBMISSION_UNKNOWN",unknown);
+            }
         }
     }
 
@@ -93,12 +120,16 @@ public final class GenerationWorker {
                 if(edits!=null&&result.audioInfo()!=null)edits.recordAudio(task.id(),result.audioInfo());
                 if(candidates!=null&&(edits==null||edits.edit(task.id()).isEmpty()))candidates.remember(task.id(),result.candidates());
                 repository.saving(task.id(),token,result.temporaryAudioUrl(),now());
-            } else repository.running(task.id(),token,0,null,now(),now().plusSeconds(10));
+            } else if(task.createdAt().plus(queryReviewAfter).isBefore(now()))repository.review(task.id(),token,"PROVIDER_DELAYED",now(),now().plusSeconds(300));
+            else repository.running(task.id(),token,0,null,now(),now().plusSeconds(10));
             repository.finishAttempt(attempt,"COMPLETED",null,now());
         } catch (RuntimeException error) {
             int failures=execution.queryFailures()+1;
-            repository.running(task.id(),token,failures,"QUERY_RETRY",now(),now().plusSeconds(Math.min(300,10L<<Math.min(5,failures))));
-            repository.finishAttempt(attempt,"RETRY","QUERY_RETRY",now());
+            boolean review=failures>=maxQueryFailures||task.createdAt().plus(queryReviewAfter).isBefore(now());
+            if(review)repository.review(task.id(),token,"QUERY_REVIEW_REQUIRED",now(),now().plusSeconds(300));
+            else repository.running(task.id(),token,failures,"QUERY_RETRY",now(),now().plusSeconds(Math.min(300,10L<<Math.min(5,failures))));
+            repository.finishAttempt(attempt,"RETRY",review?"QUERY_REVIEW_REQUIRED":"QUERY_RETRY",now());
+            log(task.id(),"QUERY",review?"QUERY_REVIEW_REQUIRED":"QUERY_RETRY",error);
         }
     }
 
@@ -127,6 +158,8 @@ public final class GenerationWorker {
             int attempts=execution.archiveAttempts()+1;
             repository.archiveFailed(task.id(),token,attempts,attempts>=maxArchiveAttempts,now(),now().plusSeconds(Math.min(300,15L<<Math.min(4,attempts))));
             repository.finishAttempt(attempt,"RETRY","AUDIO_ARCHIVE_FAILED",now());
+            log(task.id(),"ARCHIVE","AUDIO_ARCHIVE_FAILED",error);
         }
     }
+    private void log(String task,String phase,String code,Throwable error){LOG.warning("music_task task="+task+" phase="+phase+" code="+code+" exception="+error.getClass().getSimpleName());}
 }
