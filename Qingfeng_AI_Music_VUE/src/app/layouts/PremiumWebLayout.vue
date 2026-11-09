@@ -5,6 +5,7 @@ import { useRoute } from 'vue-router'
 import GlobalPlayer from '../../shared/player/GlobalPlayer.vue'
 import { usePlayer } from '../../shared/player/store'
 import BrandLogo from '../../shared/ui/BrandLogo.vue'
+import SiteFooter from './SiteFooter.vue'
 import NavIcon from '../../shared/ui/NavIcon.vue'
 import LanguageSwitcher from '../../shared/i18n/LanguageSwitcher.vue'
 import UserAccountMenu from '../../shared/ui/UserAccountMenu.vue'
@@ -86,7 +87,7 @@ onBeforeUnmount(() => {
     </template>
     <div class="music-shell-body">
       <main id="main-content" :class="{workspace:route.name!=='home'}" tabindex="-1"><slot/></main>
-      <footer class="brand-footer"><div class="footer-brand-message"><RouterLink to="/" :aria-label="t('Cheerful Music 青风音乐首页')"><BrandLogo compact/></RouterLink><p>{{ t('人人都是歌手') }}</p></div><nav :aria-label="t('页脚导航')"><RouterLink to="/works">{{ t('我的音乐') }}</RouterLink><RouterLink to="/account">{{ t('账号与登录') }}</RouterLink><RouterLink to="/#how">{{ t('如何创作') }}</RouterLink></nav></footer>
+      <SiteFooter/>
     </div>
     <GlobalPlayer/>
   </div>

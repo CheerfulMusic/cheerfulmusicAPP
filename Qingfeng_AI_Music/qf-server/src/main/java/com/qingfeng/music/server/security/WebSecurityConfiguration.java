@@ -27,7 +27,7 @@ public class WebSecurityConfiguration {
         var invite=inviteGate.getIfAvailable();
         if (invite!=null) http.addFilterBefore(invite, org.springframework.security.web.csrf.CsrfFilter.class);
         if (filter!=null) http.addFilterAfter(new ApiRateLimitFilter(),CreatorSessionFilter.class);
-        return http.csrf(csrf -> csrf.ignoringRequestMatchers("/api/public/payments/airwallex/webhook", "/api/public/paypal/webhook")
+        return http.csrf(csrf -> csrf.ignoringRequestMatchers("/api/public/payments/airwallex/webhook", "/api/public/paypal/webhook", "/api/public/events")
             .ignoringRequestMatchers(request->"POST".equals(request.getMethod())&&"/api/public/auth/sms/deliver".equals(request.getServletPath()))
             .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse()).csrfTokenRequestHandler(new CsrfTokenRequestAttributeHandler()))
             .authorizeHttpRequests(auth -> auth
@@ -36,6 +36,7 @@ public class WebSecurityConfiguration {
                 .requestMatchers(org.springframework.http.HttpMethod.POST,"/api/public/invite/enter").permitAll()
                 .requestMatchers(org.springframework.http.HttpMethod.GET,"/","/index.html","/assets/**","/brand/**","/media/**","/create","/works","/works/*","/gift/*","/account","/recharge").permitAll()
                 .requestMatchers("/api/public/system/info", "/api/public/csrf", "/api/public/session", "/api/public/session/recover", "/actuator/health").permitAll()
+                .requestMatchers(org.springframework.http.HttpMethod.POST,"/api/public/events").permitAll()
                 .requestMatchers(org.springframework.http.HttpMethod.GET,"/api/public/auth/google/status",GoogleOAuthFlow.CALLBACK).permitAll()
                 .requestMatchers(org.springframework.http.HttpMethod.POST,"/api/public/auth/google/start","/api/public/session/logout").permitAll()
                 .requestMatchers(org.springframework.http.HttpMethod.GET,"/api/public/auth/logto/status").permitAll()
