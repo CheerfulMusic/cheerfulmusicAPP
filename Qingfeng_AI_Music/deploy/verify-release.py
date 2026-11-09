@@ -47,6 +47,31 @@ def verify(release, policy):
                 raise ValueError('Missing server feature: ' + cls)
         if b'/orders/{id}/close' not in z.read('BOOT-INF/classes/com/qingfeng/music/server/payment/PayPalPaymentController.class'):
             raise ValueError('Missing server cancellation endpoint')
+        manifest_path = 'BOOT-INF/classes/static/preview-media-manifest.json'
+        if manifest_path not in names:
+            raise ValueError('Missing preview media manifest')
+        manifest = json.loads(z.read(manifest_path))
+        if manifest.get('version') != 1 or not manifest.get('assets'):
+            raise ValueError('Invalid preview media manifest')
+        declared_audio = set()
+        for asset in manifest['assets']:
+            path = asset['path']
+            if not path.startswith('/media/') or '..' in path.split('/'):
+                raise ValueError('Invalid preview asset path')
+            entry = 'BOOT-INF/classes/static' + path
+            if entry not in names:
+                raise ValueError('Missing preview asset: ' + path)
+            data = z.read(entry)
+            if not data or len(data) != asset['bytes'] or hashlib.sha256(data).hexdigest() != asset['sha256']:
+                raise ValueError('Preview asset checksum mismatch: ' + path)
+            if path.endswith('.mp3'):
+                declared_audio.add(path)
+        referenced_audio = set()
+        for name in names:
+            if name.startswith('BOOT-INF/classes/static/assets/') and name.endswith('.js'):
+                referenced_audio.update(re.findall(r'''["'](/media/[^"'\\\s]+\.mp3)["']''', z.read(name).decode()))
+        if not referenced_audio or referenced_audio != declared_audio:
+            raise ValueError('Preview audio references do not match verified assets')
     return digest
 
 
