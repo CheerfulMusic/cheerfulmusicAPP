@@ -17,6 +17,7 @@ import { styleFromInspiration } from '../model/suggestions'
 import { inspirationPresets, inspirationSelection, type InspirationSelection } from '../model/inspiration-presets'
 import { continuationRequestKey, retireContinuationRequestKey } from '../model/lyrics-continuation'
 import { generateLyrics, getLyricsRequest, getUsage, type Allowance } from '../../works/api/detail'
+import { readAgentBrief } from '../../agent/model/brief'
 
 const storyFlowVersion = 3
 interface Recovery { structure?:LyricsStructure; flowVersion?:number; draft:DraftInput; language:string; part:number; draftKey:string; workId?:string; version?:number; dirty:boolean; conflict?:boolean }
@@ -82,6 +83,8 @@ function schedule() {
 watch([draft,language,structure],schedule,{deep:true,flush:'sync'})
 async function initialize() {
   const turn=++initSequence,query={...route.query}
+  // Agent 创作整理好的灵感只交接一次：新建草稿时预填，刷新后由服务器草稿或本机副本接管。
+  const agentBrief=query.from==='agent'?readAgentBrief():undefined
   rewriting.value=false;rewriteError.value='';rewriteStatus.value='';rewriteBackup.value=undefined
   presetBackup.value=undefined
   resetting.value=true;ready.value=false;clearTimeout(timer)
@@ -90,7 +93,7 @@ async function initialize() {
   if(turn!==initSequence)return
   clearTimeout(timer); initialized.value=false; error.value=''; notice.value=''; conflict.value=false; ready.value=false;saving.value=false
   composing.value=false;language.value=locale.value;structure.value=normalizeLyricsStructure();selectedHint.value=-1;validationError.value='';existing.value=undefined;recoveredVersion=undefined;recoveredWorkId=undefined;cacheKey='';draftKey=crypto.randomUUID()
-  Object.assign(draft,{recipient:'',occasion:String(query.occasion||''),story:'',message:'',style:styleFromInspiration(query.style),title:'',vocalGender:'AUTO'});baseline.value=JSON.stringify(snapshot())
+  Object.assign(draft,{recipient:'',occasion:String(query.occasion||''),story:agentBrief?.story||'',message:'',style:agentBrief?.style||styleFromInspiration(query.style),title:'',vocalGender:'AUTO'});baseline.value=JSON.stringify(snapshot())
   try {
     await ensureCreator()
     const system=await getSystemInfo();if(turn!==initSequence)return;ready.value=system.capabilities.workPersistence; aiReady.value=system.capabilities.lyricsGeneration
@@ -104,7 +107,7 @@ async function initialize() {
     existing.value=found
     recoveredVersion=existing.value?.version;recoveredWorkId=existing.value?.id
     if (existing.value) {Object.assign(draft,asDraft(existing.value));baseline.value=JSON.stringify(asDraft(existing.value))}
-    else {Object.assign(draft,{recipient:'',occasion:String(query.occasion||''),story:'',message:'',style:styleFromInspiration(query.style),title:'',vocalGender:'AUTO'});baseline.value=JSON.stringify(snapshot());draftKey=crypto.randomUUID()}
+    else {Object.assign(draft,{recipient:'',occasion:String(query.occasion||''),story:agentBrief?.story||'',message:'',style:agentBrief?.style||styleFromInspiration(query.style),title:'',vocalGender:'AUTO'});baseline.value=JSON.stringify(snapshot());draftKey=crypto.randomUUID()}
     if (local) {
       language.value=local.language;structure.value=normalizeLyricsStructure(local.structure);draftKey=local.draftKey
       if (local.dirty) {
