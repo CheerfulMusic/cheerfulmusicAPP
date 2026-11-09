@@ -56,6 +56,14 @@ export function accountDetail(row: AccountRow): string {
   return ''
 }
 
+export type UserFilter = 'all' | 'signed' | 'guest'
+
+/** 看板按身份筛选；游客是真实访问，可以隐藏但不能被当成登录用户统计。 */
+export function filterUsers<T extends { accountType?: string | null }>(rows: readonly T[], filter: UserFilter): T[] {
+  if (filter === 'all') return [...rows]
+  return rows.filter(row => filter === 'guest' ? isGuest(row.accountType) : !isGuest(row.accountType))
+}
+
 /** 游客只存在于浏览器会话里，没有可还原的账号；这里只用于说明文案。 */
 export function guestHint(guests: number): string {
   return guests > 0 ? `${guests} 位游客只创建了浏览器会话，未绑定 Google / 邮箱 / 手机身份` : ''

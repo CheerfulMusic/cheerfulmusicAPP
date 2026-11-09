@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest'
-import { accountDetail, accountName, accountTypeLabel, dwellLabel, formatDuration, guestHint, isGuest, pageUsersKey } from '../src/modules/analytics/model/dwell'
+import { accountDetail, accountName, accountTypeLabel, dwellLabel, filterUsers, formatDuration, guestHint, isGuest, pageUsersKey } from '../src/modules/analytics/model/dwell'
 import { validResponse } from '../src/shared/http/response-contracts'
 
 it('formats dwell time for the dashboard and keeps zero honest', () => {
@@ -43,6 +43,18 @@ it('shows the most complete identity available and labels guests explicitly', ()
   expect(isGuest('GOOGLE')).toBe(false)
   expect(guestHint(6)).toContain('6 位游客')
   expect(guestHint(0)).toBe('')
+})
+
+it('filters users by identity without mutating the source list', () => {
+  const rows = [
+    { creatorId: 'g', accountType: 'GOOGLE' },
+    { creatorId: 'p', accountType: 'OIDC_PHONE' },
+    { creatorId: 'x', accountType: 'GUEST' },
+  ]
+  expect(filterUsers(rows, 'all').map(r => r.creatorId)).toEqual(['g', 'p', 'x'])
+  expect(filterUsers(rows, 'signed').map(r => r.creatorId)).toEqual(['g', 'p'])
+  expect(filterUsers(rows, 'guest').map(r => r.creatorId)).toEqual(['x'])
+  expect(rows).toHaveLength(3)
 })
 
 it('rejects drill-down responses without complete dwell rows', () => {
