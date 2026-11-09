@@ -21,8 +21,9 @@ import './app/styles/home-creation-guide.css'
 import './app/styles/home-light.css'
 import './app/styles/brand-theme.css'
 import { initializeLocale } from './shared/i18n'
-import { trackPageView } from './shared/analytics/track'
+import { installPageLeaveTracking, trackPageView } from './shared/analytics/track'
 
 initializeLocale()
+installPageLeaveTracking()
 router.afterEach(to => { trackPageView(String(to.name ?? 'unknown')) })
 createApp(App).use(createPinia()).use(router).mount('#app')

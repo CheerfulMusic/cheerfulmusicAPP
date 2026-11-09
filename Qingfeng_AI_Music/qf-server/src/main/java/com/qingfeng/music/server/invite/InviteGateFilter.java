@@ -15,7 +15,8 @@ public final class InviteGateFilter extends OncePerRequestFilter {
             "/api/public/invite/status", "/api/public/invite/enter");
     private static final Set<String> WEBHOOKS = Set.of(
             "/api/public/payments/airwallex/webhook", "/api/public/paypal/webhook", "/api/public/auth/sms/deliver");
-    private static final Set<String> ANALYTICS = Set.of("/api/public/events");
+    private static final Set<String> ANALYTICS = Set.of(
+            "/api/public/events", "/api/app/analytics/access", "/api/app/analytics/summary");
     private static final String GOOGLE_CALLBACK = "/api/public/auth/google/callback";
 
     private final InviteGateService gate;
@@ -30,7 +31,7 @@ public final class InviteGateFilter extends OncePerRequestFilter {
         boolean webhook = "POST".equals(request.getMethod()) && WEBHOOKS.contains(path);
         boolean publicGift = ("GET".equals(request.getMethod()) || "HEAD".equals(request.getMethod()))
                 && path.matches("/api/public/gifts/[A-Za-z0-9_-]{43}(?:/audio|/cover)?");
-        boolean analytics = "POST".equals(request.getMethod()) && ANALYTICS.contains(path);
+        boolean analytics = ANALYTICS.contains(path);
         if (!gate.settings().enabled() || !apiLike || publicGift || ENTRANCES.contains(path) || analytics || webhook
                 || gate.expiresAt(request) > 0) {
             chain.doFilter(request, response);

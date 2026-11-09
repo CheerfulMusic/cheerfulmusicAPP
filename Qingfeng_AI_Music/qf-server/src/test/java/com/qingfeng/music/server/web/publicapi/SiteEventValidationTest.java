@@ -1,11 +1,15 @@
 package com.qingfeng.music.server.web.publicapi;
 
+import com.qingfeng.music.identity.api.IdentityApi;
+import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.core.env.Environment;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.mock.web.MockHttpServletRequest;
 
 import java.util.Map;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
@@ -23,6 +27,19 @@ class SiteEventValidationTest {
         return provider;
     }
 
+    private static IdentityApi identity(String creatorId) {
+        var identity = mock(IdentityApi.class);
+        when(identity.resolve(any())).thenReturn(Optional.ofNullable(creatorId));
+        return identity;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static ObjectProvider<IdentityApi> identities(IdentityApi value) {
+        var provider = (ObjectProvider<IdentityApi>) mock(ObjectProvider.class);
+        when(provider.getIfAvailable()).thenReturn(value);
+        return provider;
+    }
+
     private static Environment environment(boolean enabled) {
         var environment = mock(Environment.class);
         when(environment.getProperty(eq("qingfeng.analytics.enabled"), eq(Boolean.class), eq(false))).thenReturn(enabled);
@@ -34,6 +51,7 @@ class SiteEventValidationTest {
         assertNull(SiteEventController.sanitize(null));
         assertNull(SiteEventController.sanitize(new SiteEventController.EventRequest(null, "/", "", "", "", null)));
         assertNotNull(SiteEventController.sanitize(request("pageview")));
+        assertNotNull(SiteEventController.sanitize(request("page_leave")));
     }
 
     @Test void pathIsStrippedOfTokensQueriesAndIds() {
@@ -63,57 +81,76 @@ class SiteEventValidationTest {
         assertEquals("ok_id-1", clean.sessionId());
     }
 
+    @Test void durationIsClampedAndRejectsGarbage() {
+        assertEquals(1500L, SiteEventController.durationMs(Map.of("durationMs", 1500)));
+        assertEquals(1500L, SiteEventController.durationMs(Map.of("durationMs", "1500")));
+        assertNull(SiteEventController.durationMs(Map.of("durationMs", -1)));
+        assertNull(SiteEventController.durationMs(Map.of("durationMs", 99_999_999L)));
+        assertNull(SiteEventController.durationMs(Map.of("durationMs", "not-a-number")));
+        assertNull(SiteEventController.durationMs(null));
+    }
+
+    @Test void creatorIdOnlyComesFromSessionCookie() {
+        var withCookie = new MockHttpServletRequest();
+        withCookie.setCookies(new Cookie("QF_SESSION", "tok"));
+        assertEquals("creator-9", SiteEventController.creatorId(identity("creator-9"), withCookie));
+        assertEquals("", SiteEventController.creatorId(identity("creator-9"), new MockHttpServletRequest()));
+        assertEquals("", SiteEventController.creatorId(null, withCookie));
+    }
+
     @Test void disabledConfigDoesNotWrite() {
         var template = mock(JdbcTemplate.class);
-        var controller = new SiteEventController(provider(template), environment(false));
-        assertEquals(204, controller.collect(request("pageview")).getStatusCode().value());
+        var controller = new SiteEventController(provider(template), identities(identity("")), environment(false));
+        assertEquals(204, controller.collect(request("pageview"), new MockHttpServletRequest()).getStatusCode().value());
         verifyNoInteractions(template);
     }
 
     @Test void absentConfigDefaultsToDisabled() {
         var template = mock(JdbcTemplate.class);
-        var controller = new SiteEventController(provider(template), new org.springframework.core.env.StandardEnvironment());
-        assertEquals(204, controller.collect(request("pageview")).getStatusCode().value());
+        var controller = new SiteEventController(provider(template), identities(identity("")), new org.springframework.core.env.StandardEnvironment());
+        assertEquals(204, controller.collect(request("pageview"), new MockHttpServletRequest()).getStatusCode().value());
         verifyNoInteractions(template);
     }
 
     @Test void missingDatasourceIsSilent() {
         @SuppressWarnings("unchecked") var absent = (ObjectProvider<JdbcTemplate>) mock(ObjectProvider.class);
         when(absent.getIfAvailable()).thenReturn(null);
-        var controller = new SiteEventController(absent, environment(true));
-        assertDoesNotThrow(() -> controller.collect(request("pageview")));
-        assertEquals(204, controller.collect(request("pageview")).getStatusCode().value());
+        var controller = new SiteEventController(absent, identities(identity("")), environment(true));
+        var servlet = new MockHttpServletRequest();
+        assertDoesNotThrow(() -> controller.collect(request("pageview"), servlet));
+        assertEquals(204, controller.collect(request("pageview"), servlet).getStatusCode().value());
     }
 
     @Test void databaseFailureNeverEscapes() {
         var template = mock(JdbcTemplate.class);
         when(template.update(anyString(), any(Object[].class))).thenThrow(new RuntimeException("db down"));
-        var controller = new SiteEventController(provider(template), environment(true));
-        assertDoesNotThrow(() -> controller.collect(request("pageview")));
-        assertEquals(204, controller.collect(request("pageview")).getStatusCode().value());
-        // 确认异常分支真的被执行，而不是 mock 没匹配上导致的假阳性通过。
+        var controller = new SiteEventController(provider(template), identities(identity("")), environment(true));
+        var servlet = new MockHttpServletRequest();
+        assertDoesNotThrow(() -> controller.collect(request("pageview"), servlet));
+        assertEquals(204, controller.collect(request("pageview"), servlet).getStatusCode().value());
         verify(template, atLeastOnce()).update(eq(SiteEventController.INSERT_SQL), any(Object[].class));
     }
 
     @Test void validEventCallsInsertOnce() {
         var template = mock(JdbcTemplate.class);
-        var controller = new SiteEventController(provider(template), environment(true));
-        assertEquals(204, controller.collect(request("pageview")).getStatusCode().value());
+        var controller = new SiteEventController(provider(template), identities(identity("")), environment(true));
+        assertEquals(204, controller.collect(request("pageview"), new MockHttpServletRequest()).getStatusCode().value());
         verify(template, times(1)).update(eq(SiteEventController.INSERT_SQL), any(Object[].class));
     }
 
     @Test void rowCarriesOnlySanitizedValues() {
         var clean = SiteEventController.sanitize(new SiteEventController.EventRequest(
-                "pageview", "/gift/" + "a".repeat(43) + "?code=SECRET",
-                "https://ref.example/x?q=1", "visitor-1", "session-1", Map.of("route", "gift")));
-        var row = SiteEventController.row(clean, SiteEventController.payloadJson(clean.payload()));
+                "page_leave", "/gift/" + "a".repeat(43) + "?code=SECRET",
+                "https://ref.example/x?q=1", "visitor-1", "session-1", Map.of("route", "gift", "durationMs", 1500)));
+        var row = SiteEventController.row(clean, SiteEventController.payloadJson(clean.payload()), "creator-9", 1500L);
         assertEquals("visitor-1", row[1]);
         assertEquals("session-1", row[2]);
-        assertEquals("pageview", row[3]);
+        assertEquals("page_leave", row[3]);
         assertEquals("/gift/:token", row[4]);
         assertEquals("https://ref.example/x", row[5]);
-        assertEquals("{\"route\":\"gift\"}", row[6]);
         assertNotNull(row[7]);
+        assertEquals("creator-9", row[8]);
+        assertEquals(1500L, row[9]);
     }
 
     @Test void payloadDropsUnknownKeys() {
