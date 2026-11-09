@@ -5,6 +5,7 @@ import { useRoute } from 'vue-router'
 import GlobalPlayer from '../../shared/player/GlobalPlayer.vue'
 import { usePlayer } from '../../shared/player/store'
 import BrandLogo from '../../shared/ui/BrandLogo.vue'
+import SiteFooter from './SiteFooter.vue'
 import NavIcon from '../../shared/ui/NavIcon.vue'
 import LanguageSwitcher from '../../shared/i18n/LanguageSwitcher.vue'
 import UserAccountMenu from '../../shared/ui/UserAccountMenu.vue'
@@ -86,7 +87,7 @@ onBeforeUnmount(() => {
     </template>
     <div class="music-shell-body">
       <main id="main-content" :class="{workspace:route.name!=='home'}" tabindex="-1"><slot/></main>
-      <footer class="brand-footer"><div class="footer-brand-message"><RouterLink to="/" :aria-label="t('Cheerful Music 青风音乐首页')"><BrandLogo compact/></RouterLink><p>{{ t('人人都是歌手') }}</p></div><nav :aria-label="t('页脚导航')"><RouterLink to="/works">{{ t('我的音乐') }}</RouterLink><RouterLink to="/account">{{ t('账号与登录') }}</RouterLink><RouterLink to="/#how">{{ t('如何创作') }}</RouterLink></nav><div class="footer-icp"><a href="https://beian.miit.gov.cn" target="_blank" rel="noopener noreferrer">粤ICP备2023023949号</a></div></footer>
+      <SiteFooter/>
     </div>
     <GlobalPlayer/>
   </div>
@@ -94,9 +95,6 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .consumer-recharge { color:#ee5741; font-size:13px; font-weight:700; text-decoration:none; white-space:nowrap; }
-.footer-icp { width:100%; padding-top:14px; font-size:12px; color:var(--muted); }
-.footer-icp a { color:var(--muted); text-decoration:none; }
-.footer-icp a:hover { text-decoration:underline; }
 .consumer-login { border:0; cursor:pointer; font-family:inherit; }
 .mobile-login-link { display:flex; align-items:center; gap:12px; width:100%; padding:13px 14px; border-radius:10px; color:#665259; font-size:14px; text-align:left; }
 .mobile-login-link:hover { background:var(--accent-soft); color:var(--accent-text); }
