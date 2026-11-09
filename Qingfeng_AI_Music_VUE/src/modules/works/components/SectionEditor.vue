@@ -115,7 +115,7 @@ defineExpose({compare})
     </article>
     <button v-if="player.segment&&previewing" class="text-button" @click="stopPreview">{{ t('停止片段试听') }}</button>
   </section>
-  <dialog ref="dialog" class="section-editor-dialog" :aria-label="t('局部改词')" @cancel.prevent="close">
+  <dialog v-if="open" ref="dialog" class="section-editor-dialog" :aria-label="t('局部改词')" @cancel.prevent="close">
     <header class="section-editor-header"><div><span>{{ title }}</span><h2>{{ t('让这一句，更贴近心意。') }}</h2></div><button class="section-editor-close" :aria-label="t('关闭局部改词')" @click="close">×</button></header>
     <div class="section-editor-body">
       <p v-if="loading" class="notice" role="status">{{ t('正在读取原曲信息…') }}</p><p v-if="error" class="notice error" role="alert">{{ t(error) }}</p>

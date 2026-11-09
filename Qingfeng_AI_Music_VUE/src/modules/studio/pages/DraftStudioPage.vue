@@ -111,7 +111,7 @@ async function initialize() {
       mode.value=creationMode(query.mode||local.mode,!!id)
       language.value=local.language;structure.value=normalizeLyricsStructure(local.structure);draftKey=local.draftKey
       if (local.dirty) {
-        Object.assign(draft,asDraft(local.draft));notice.value='已恢复本机尚未保存的内容。'
+        Object.assign(draft,asDraft(local.draft))
         conflict.value=!!local.conflict || (!!existing.value && local.version!==undefined && local.version!==existing.value.version)
         if (conflict.value) error.value='另一页面已更新故事。本机内容已保留，请先核对再选择保存或载入。'
       }
@@ -201,7 +201,7 @@ async function flush() {
   while(!existing.value||dirty.value){const saved=await persist();check();if(!saved||conflict.value)throw new Error('请先解决保存问题，再继续创作。')}
   return existing.value
 }
-async function retry(){const turn=initSequence;try{if(!ready.value){await initialize();return}await flush();if(turn===initSequence)notice.value='故事已保存。'}catch{/* 错误或旧页面的副本均保留。 */}}
+async function retry(){try{if(!ready.value){await initialize();return}await flush()}catch{/* 错误或旧页面的副本均保留。 */}}
 async function resolveConflict(useLocal:boolean){
   if(!existing.value)return
   const id=existing.value.id,turn=initSequence
@@ -290,11 +290,10 @@ onBeforeUnmount(()=>{remember();alive=false;initSequence++;clearTimeout(timer);w
     <div class="story-introduction">
       <h1>{{ t('从这一刻起，你也是歌手。') }}</h1>
       <p class="studio-introduction-copy">{{ t(mode==='quick'?'用几句话表达你的灵感 AI 会为你写成歌曲':'先选音乐方向 再写出适合演唱的歌词') }}</p>
-      <span class="autosave-state" role="status">{{ saving?t('正在保存…'):dirty?localSaved?t('已保留在本机'):t('有尚未保存的修改'):existing?t('已保存'):t('填写后自动保存') }}</span>
     </div>
     <div class="creation-sound-divider" aria-hidden="true"><span></span>ııııı<span></span></div>
     <div class="creation-page-layout"><section class="draft-form story-focus">
-      <p v-if="notice" class="notice success" role="status">{{ t(notice) }}</p>
+      <p v-if="notice" class="notice" role="status">{{ t(notice) }}</p>
       <div v-if="error" class="notice error" role="alert"><p>{{ t(error) }}</p><div class="actions">
         <template v-if="conflict"><button class="button secondary" type="button" @click="resolveConflict(true)">{{ t('用本机内容继续') }}</button><button class="button secondary" type="button" @click="resolveConflict(false)">{{ t('载入服务器版本') }}</button></template>
         <button v-else class="button secondary" type="button" :disabled="saving||composing" @click="continuationFailed?continueMaking():retry()">{{ t(continuationFailed?'重新编写歌词':'重试保存') }}</button>
