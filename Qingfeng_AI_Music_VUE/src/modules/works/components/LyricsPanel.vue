@@ -10,8 +10,8 @@ import { ApiError, currentCreatorId } from '../../../shared/http/api-client'
 import { readRecovery, writeRecovery, recoveryKey,checkpointRecovery } from '../../../shared/drafts/recovery'
 import RecoveryCopies from '../../../shared/drafts/RecoveryCopies.vue'
 import type { Work } from '../../studio'
-import { listRevisions, getRevision, getLyricsRequest, saveRevision, confirmRevision, generateLyrics, getUsage, rewriteLyricLine, type Revision, type Allowance } from '../api/detail'
-const props=defineProps<{work:Work}>(), emit=defineEmits<{selected:[revision:Revision|null];dirty:[value:boolean];ready:[value:boolean];recoverable:[value:boolean];base:[revision:Revision|null]}>()
+import { listRevisions, getRevision, getLyricsRequest, saveRevision, confirmRevision, generateLyrics, getUsage, rewriteLyricLine, type Revision, type Allowance, type LyricRewriteAction } from '../api/detail'
+const props=defineProps<{work:Work;externalSave?:boolean}>(), emit=defineEmits<{selected:[revision:Revision|null];dirty:[value:boolean];ready:[value:boolean];recoverable:[value:boolean];base:[revision:Revision|null]}>()
 const route=useRoute(),router=useRouter()
 const versions=ref<Revision[]>([]),active=ref<Revision|null>(null),title=ref(props.work.title||(props.work.recipient?t('写给{recipient}的歌',{recipient:props.work.recipient}):t('我的原创歌曲'))),text=ref(''),baseline=ref(''),loading=ref(true),saving=ref(false),composing=ref(false),preparing=ref(false),error=ref(''),notice=ref(''),aiReady=ref(false),localSaved=ref(false),allowance=ref<Allowance>()
 const language=ref<string>(['zh-CN','en','mixed'].includes(String(route.query.language))?String(route.query.language):locale.value),instructions=ref(''),requestKey=ref('')
@@ -37,26 +37,62 @@ const dirty=computed(()=>!loading.value&&JSON.stringify(draftValue())!==baseline
 const valid=computed(()=>!!title.value.trim()&&!!text.value.trim())
 const needsSave=computed(()=>dirty.value||!active.value||active.value.workVersion!==props.work.version)
 const canGenerate=computed(()=>valid.value&&!blocked.value&&!saving.value)
+const canSave=computed(()=>canGenerate.value&&needsSave.value)
+const savedTime=computed(()=>active.value&&!dirty.value?formatDate(active.value.createdAt):'')
 const editor=ref<HTMLTextAreaElement>()
 const selection=ref<{source:string;start:number;end:number;line:string;context:string}>()
 const linePreview=ref<{selection:NonNullable<typeof selection.value>;text:string}>()
 const lineBusy=ref(false),lineError=ref('')
+const mirror=ref<HTMLDivElement>(), marker=ref<HTMLSpanElement>(), toolbar=ref<HTMLDivElement>()
+const toolbarPosition=ref<{left:string;top:string}>()
+const lineActions: {id:LyricRewriteAction;label:string;icon:string}[] = [
+ {id:'REWRITE',label:'改写选句',icon:'m13 5 6 6M4 16l12-12 4 4L8 20H4v-4Z'},
+ {id:'RHYME',label:'更押韵',icon:'M7 17l5-5m3-3 3-3M4 17a2 2 0 1 0 4 0 2 2 0 1 0-4 0Zm7-5a2 2 0 1 0 4 0 2 2 0 1 0-4 0Zm6-7a2 2 0 1 0 4 0 2 2 0 1 0-4 0Z'},
+ {id:'COLLOQUIAL',label:'更口语化',icon:'M12 4a8 8 0 0 0-6 13l-1 3 4-1a8 8 0 1 0 3-15ZM8 12h.01m4 0h.01m4 0h.01'},
+ {id:'SHORTEN',label:'缩短一句',icon:'m4 20 6-6m-6 0h6v6M20 4l-6 6m6 0h-6V4'},
+]
+function placeToolbar(){
+ const el=editor.value, copy=mirror.value, selected=marker.value, bar=toolbar.value
+ if(!el||!copy||!selected||!bar||!window.matchMedia?.('(min-width: 761px)').matches){toolbarPosition.value=undefined;return}
+ const style=getComputedStyle(el)
+ copy.style.width=`${el.clientWidth+parseFloat(style.borderLeftWidth)+parseFloat(style.borderRightWidth)}px`
+ const area=copy.getBoundingClientRect()
+ const boxes=Array.from(selected.getClientRects())
+ const visible=boxes.filter(box=>box.bottom-area.top-el.scrollTop>0&&box.top-area.top-el.scrollTop<el.clientHeight)
+ const last=visible.at(-1)
+ if(!last||bar.offsetWidth+16>el.clientWidth){toolbarPosition.value=undefined;return}
+ const x=last.right-area.left-el.scrollLeft, y=last.top-area.top-el.scrollTop
+ const side=x+bar.offsetWidth+20<=el.clientWidth
+ const left=side?x+14:Math.min(Math.max(last.left-area.left-el.scrollLeft,8),el.clientWidth-bar.offsetWidth-8)
+ const below=y+last.height+7
+ const top=side?y+(last.height-bar.offsetHeight)/2:below+bar.offsetHeight<=el.clientHeight?below:y-bar.offsetHeight-7
+ toolbarPosition.value={left:`${left}px`,top:`${Math.max(4,top)}px`}
+}
+watch([selection,lineBusy],placeToolbar,{flush:'post'})
+let editorObserver:ResizeObserver|undefined
+onMounted(()=>{
+ if(typeof ResizeObserver==='undefined'||!editor.value)return
+ editorObserver=new ResizeObserver(placeToolbar)
+ editorObserver.observe(editor.value)
+})
+onBeforeUnmount(()=>editorObserver?.disconnect())
 function captureSelection(){
  const el=editor.value
  if(!el||lineBusy.value)return
  const {selectionStart:start,selectionEnd:end,value:source}=el
  const line=source.slice(start,end)
- selection.value=line.trim()&&line.length<=160&&!/[\r\n]/.test(line)&&!/^\s*\[.*\]\s*$/.test(line)
+ selection.value=line.trim()&&line.length<=160&&!/[\r\n\u2028\u2029]/.test(line)&&!/^\s*\[.*\]\s*$/.test(line)
    ?{source,start,end,line,context:source.slice(Math.max(0,start-180),start)+'\n'+source.slice(end,end+179)}
    :undefined
 }
-async function previewLine(action:'REWRITE'|'RHYME'){
+async function previewLine(action:LyricRewriteAction){
  const chosen=selection.value
  if(!chosen||chosen.source!==text.value||lineBusy.value||blocked.value||saving.value)return
  lineBusy.value=true;lineError.value='';linePreview.value=undefined
  try{
    const result=await rewriteLyricLine(props.work.id,{requestId:crypto.randomUUID(),action,line:chosen.line,context:chosen.context,language:active.value?.language||language.value})
-   if(!result.text?.trim()||result.text.length>160||/[\r\n]/.test(result.text))throw new Error('未得到可用的单句改写，原歌词已保留。')
+   if(!result.text?.trim()||result.text.length>160||/[\r\n\u2028\u2029]/.test(result.text)
+      ||action==='SHORTEN'&&result.text.trim().length>=chosen.line.trim().length)throw new Error('未得到可用的单句改写，原歌词已保留。')
    if(alive)linePreview.value={selection:chosen,text:result.text}
  }catch(e){
    if(alive)lineError.value=e instanceof ApiError&&e.status===405
@@ -196,28 +232,40 @@ async function compose(){
 onBeforeUnmount(()=>{remember();alive=false})
 async function preserveDraftForNavigation(){if(inflight)await inflight;if(dirty.value){remember();if(!localSaved.value)throw new Error('请先保存歌词')}}
 const regenerateSection=ref<HTMLDetailsElement>()
+const showRewrite=ref(false)
 async function reviewMusicDirection(){
   if(blocked.value||saving.value)return
   const direction=t('按当前音乐方向调整句长 节奏和表达 保留故事事实与重要原句')
   if(!instructions.value.includes(direction)&&instructions.value.length+direction.length+1<=1000)instructions.value+=(instructions.value?'\n':'')+direction
+  showRewrite.value=true
   await nextTick();if(regenerateSection.value){regenerateSection.value.open=true;regenerateSection.value.scrollIntoView({block:'center',behavior:'smooth'})}
 }
-defineExpose({prepareForGeneration,preserveDraftForNavigation,reviewMusicDirection,needsSave})
+defineExpose({prepareForGeneration,preserveDraftForNavigation,reviewMusicDirection,needsSave,canSave,save,saving})
 </script>
 <template><section class="detail-panel lyrics-panel">
-  <div class="detail-heading"><span class="autosave-state" role="status">{{ loading?t('正在读取歌词…'):saving?t('正在保存…'):dirty?t(localSaved?'已保留本机草稿':'有尚未保存的修改'):active?t('已保存'):t('尚未保存') }}</span></div>
   <p v-if="error" class="notice error" role="alert">{{ t(error) }} <button class="text-button" :disabled="loading||composing||requestChecking||saving" @click="retryError">{{ t(errorKind==='load'?'刷新页面':errorKind==='save'?'重试保存':requestWaiting?'刷新编写状态':'重新编写歌词') }}</button></p>
   <p v-if="notice" class="notice success" role="status">{{ t(notice) }}</p>
   <button v-if="requestWaiting&&!error" class="button secondary" :disabled="loading||composing||requestChecking" @click="refreshRequest">{{ t('刷新编写状态') }}</button>
   <p v-if="!loading&&!localSaved" class="save-info">{{ t('浏览器无法保存本机副本，请确认显示已保存后再离开。') }}</p>
-  <RecoveryCopies v-if="!loading&&cacheKey&&!blocked" :inert="saving||undefined" :storage-key="cacheKey" :validate="validRecovery" @restore="restoreCopy"/>
-  <label class="field">{{ t('歌曲名称') }}<input v-model="title" maxlength="100" :disabled="blocked||saving"></label>
+  <div class="lyric-title">
+    <label for="song-title">{{ t('歌曲名称') }}</label>
+    <span class="autosave-state" :class="{saved:active&&!dirty&&!saving}" role="status">{{ loading?t('正在读取歌词…'):saving?t('正在保存…'):dirty?t(localSaved?'已保留本机草稿':'有尚未保存的修改'):active?t('已保存'):t('尚未保存') }}</span>
+    <input id="song-title" v-model="title" maxlength="100" :disabled="blocked||saving">
+  </div>
   <div class="lyric-editor-box">
-    <div class="lyric-editor-label"><label for="song-lyrics">{{ t('歌词') }}</label><button type="button" class="text-button" :disabled="blocked||saving||!dirty" @click="revertDraft">{{ t('撤销未保存修改') }}</button></div>
-    <textarea id="song-lyrics" ref="editor" v-model="text" maxlength="12000" class="lyrics-edit" :disabled="blocked||saving" :placeholder="t('写下主歌、副歌，或者你想唱给TA听的话……')" @select="captureSelection" @keyup="captureSelection" @pointerup="captureSelection"></textarea>
-    <div v-if="selection||lineBusy" class="lyric-line-tools" role="group" :aria-label="t('选句润色')">
-      <span v-if="lineBusy" role="status">{{ t('正在润色…') }}</span>
-      <template v-else><button type="button" class="button secondary" :disabled="blocked||saving" @pointerdown.prevent @click="previewLine('REWRITE')">{{ t('改写选句') }}</button><button type="button" class="button secondary" :disabled="blocked||saving" @pointerdown.prevent @click="previewLine('RHYME')">{{ t('更押韵') }}</button></template>
+    <div class="lyric-editor-label">
+      <span id="lyric-editor-help">{{ t('歌词可直接修改，保存后再生成歌曲') }}</span>
+      <button type="button" class="lyric-quiet-action" :disabled="blocked||saving||!dirty" :title="t('撤销未保存修改')" @click="revertDraft"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5 4 9l4 4M4 9h10a5 5 0 0 1 0 10h-3"/></svg>{{ t('恢复原版') }}</button>
+    </div>
+    <div class="lyric-text-stage">
+      <textarea id="song-lyrics" ref="editor" v-model="text" maxlength="12000" class="lyrics-edit lyric-text" :aria-label="t('歌词')" aria-describedby="lyric-editor-help" :disabled="blocked||saving" :placeholder="t('写下主歌、副歌，或者你想唱给TA听的话……')" @select="captureSelection" @keyup="captureSelection" @pointerup="captureSelection" @scroll.passive="placeToolbar"></textarea>
+      <div v-if="selection" ref="mirror" class="lyric-text lyric-mirror" aria-hidden="true">{{ text.slice(0,selection.start) }}<span ref="marker">{{ selection.line }}</span>{{ text.slice(selection.end) }}</div>
+      <div v-if="selection||lineBusy" ref="toolbar" class="lyric-line-tools" :class="{'is-anchored':toolbarPosition}" :style="toolbarPosition" role="group" :aria-label="t('选句润色')">
+        <span v-if="lineBusy" class="line-busy" role="status">{{ t('正在润色…') }}</span>
+        <button v-for="action in lineBusy?[]:lineActions" :key="action.id" type="button" :disabled="blocked||saving" @pointerdown.prevent @click="previewLine(action.id)">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path :d="action.icon"/></svg>{{ t(action.id==='REWRITE'?'改写':action.label) }}
+        </button>
+      </div>
     </div>
   </div>
   <p v-if="lineError" class="notice error" role="alert">{{ t(lineError) }}</p>
@@ -226,32 +274,60 @@ defineExpose({prepareForGeneration,preserveDraftForNavigation,reviewMusicDirecti
     <p v-if="!canReplaceLine" class="save-info">{{ t('原歌词已变化或替换后超出长度，可以复制建议后手动修改。') }}</p>
     <div class="actions"><button class="button secondary" type="button" :disabled="!canReplaceLine||blocked||saving" @click="replaceLine">{{ t('替换选句') }}</button><button class="text-button" type="button" @click="linePreview=undefined">{{ t('关闭') }}</button></div>
   </div>
-  <div class="lyrics-save-bar"><p class="save-info">{{ t('选中一句歌词，可以用 AI 润色。') }}</p><button type="button" class="button lyrics-save-button" :disabled="blocked||saving||!valid||!needsSave" @click="save">{{ saving?t('正在保存…'):t('保存歌词') }}</button></div>
-  <details ref="regenerateSection" v-if="aiReady" class="creation-fold lyrics-regenerate" :open="!versions.length"><summary>{{ versions.length?t('想换个写法？调整并重新生成'):t('根据故事生成歌词') }}</summary><LyricsTemplatePicker v-model="structure" :disabled="blocked||saving"/><div class="regenerate-fields"><label class="field">{{ t('歌词语言') }}<select v-model="language" :disabled="blocked"><option value="zh-CN">{{ t('中文') }}</option><option value="en">English</option><option value="mixed">{{ t('中英混合') }}</option></select></label><label class="field">{{ t('修改要求（可选）') }}<textarea v-model="instructions" maxlength="1000" :disabled="blocked" :placeholder="t('例如：保留第二段，副歌加入妈妈的名字，少一点直白表达。')"></textarea></label></div><div class="lyric-writing-directions"><p class="save-info">{{ t('点选润色方向，也可以自己补充要求；点击重新生成后才会开始创作。') }}</p><div class="suggestion-tags" role="group" :aria-label="t('歌词润色方向')"><button v-for="direction in writingDirections" :key="direction.label" type="button" class="suggestion-tag" :class="{selected:directionSelected(direction.value)}" :aria-pressed="directionSelected(direction.value)" :disabled="blocked||(!directionSelected(direction.value)&&instructions.length+t(direction.value).length+1>1000)" @click="toggleDirection(direction.value)">{{ t(direction.label) }}</button></div></div><p v-if="versions.length" class="save-info">{{ t('重新生成以已保存的歌词为基础；如需保留手动修改，请先保存。') }}</p><button class="button secondary" :disabled="blocked||saving" @click="compose">{{ composing?t('正在编写歌词…'):versions.length?t('重新生成歌词'):t('根据故事生成歌词') }}</button><p class="save-info">{{ t('重新生成会使用一次歌词创作额度。') }} <span v-if="allowance">{{ allowance.dailyUnlimited?t('今日歌词编写不限次数'):t('今日还可编写 {remaining} 次歌词',{remaining:allowance.dailyRemaining}) }}</span></p></details>
-  <details v-if="versions.length" class="creation-fold lyrics-history">
-    <summary>{{ t('查看历史歌词版本') }}</summary>
-    <label class="field">{{ t('历史版本（最近100条）') }}<select v-model="historyId" :disabled="blocked||saving"><option value="">{{ t('选择版本预览') }}</option><option v-for="revision in versions" :key="revision.id" :value="revision.id">{{ revision.title }} · {{ formatDate(revision.createdAt) }}</option></select></label>
+  <div v-if="!externalSave" class="lyrics-save-bar"><button type="button" class="button lyrics-save-button" :disabled="!canSave" @click="save">{{ saving?t('正在保存…'):t('保存歌词') }}</button></div>
+  <details class="lyrics-history">
+    <summary class="lyric-version-strip">
+      <span class="lyric-version-meta"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h8l4 4v14H6ZM14 3v5h4M9 12h6m-6 4h6"/></svg><strong>{{ t('当前版本') }} · {{ t(dirty||!active?'草稿':'已保存') }}</strong><time v-if="savedTime" :datetime="active?.createdAt">{{ savedTime }}</time></span>
+      <span class="lyric-history-link">{{ t('查看历史版本') }} <span aria-hidden="true">›</span></span>
+    </summary>
+    <label v-if="versions.length" class="field">{{ t('历史版本（最近100条）') }}<select v-model="historyId" :disabled="blocked||saving"><option value="">{{ t('选择版本预览') }}</option><option v-for="revision in versions" :key="revision.id" :value="revision.id">{{ revision.title }} · {{ formatDate(revision.createdAt) }}</option></select></label>
     <template v-if="historyPreview"><pre class="lyric-history-preview">{{ historyPreview.lyrics }}</pre>
       <p v-if="dirty" class="save-info">{{ t('当前还有未保存的修改。') }}</p>
       <div class="actions"><button v-if="dirty" type="button" class="button secondary" :disabled="blocked||saving||!valid" @click="loadHistory(true)">{{ t('保存当前再载入') }}</button><button type="button" class="button secondary" :disabled="blocked||saving" @click="loadHistory()">{{ t(dirty?'放弃修改并载入':'载入此版本') }}</button><button type="button" class="text-button" :disabled="saving" @click="historyId=''">{{ t('取消') }}</button></div>
     </template>
+    <p v-if="!versions.length" class="save-info">{{ t('暂无已保存的歌词版本。') }}</p>
+    <button v-if="aiReady&&versions.length" type="button" class="lyric-quiet-action" :aria-expanded="showRewrite" @click="showRewrite=!showRewrite">{{ t('AI 重新写一版') }}</button>
+    <RecoveryCopies v-if="!loading&&cacheKey&&!blocked" :inert="saving||undefined" :storage-key="cacheKey" :validate="validRecovery" @restore="restoreCopy"/>
   </details>
-  <p class="save-info">{{ t('点击保存或重新生成歌词才会新增版本，已经生成的歌曲不会改变。') }}</p>
+  <details ref="regenerateSection" v-if="aiReady&&(showRewrite||!versions.length)" class="creation-fold lyrics-regenerate" open><summary>{{ versions.length?t('想换个写法？调整并重新生成'):t('根据故事生成歌词') }}</summary><LyricsTemplatePicker v-model="structure" :disabled="blocked||saving"/><div class="regenerate-fields"><label class="field">{{ t('歌词语言') }}<select v-model="language" :disabled="blocked"><option value="zh-CN">{{ t('中文') }}</option><option value="en">English</option><option value="mixed">{{ t('中英混合') }}</option></select></label><label class="field">{{ t('修改要求（可选）') }}<textarea v-model="instructions" maxlength="1000" :disabled="blocked" :placeholder="t('例如：保留第二段，副歌加入妈妈的名字，少一点直白表达。')"></textarea></label></div><div class="lyric-writing-directions"><p class="save-info">{{ t('点选润色方向，也可以自己补充要求；点击重新生成后才会开始创作。') }}</p><div class="suggestion-tags" role="group" :aria-label="t('歌词润色方向')"><button v-for="direction in writingDirections" :key="direction.label" type="button" class="suggestion-tag" :class="{selected:directionSelected(direction.value)}" :aria-pressed="directionSelected(direction.value)" :disabled="blocked||(!directionSelected(direction.value)&&instructions.length+t(direction.value).length+1>1000)" @click="toggleDirection(direction.value)">{{ t(direction.label) }}</button></div></div><p v-if="versions.length" class="save-info">{{ t('重新生成以已保存的歌词为基础；如需保留手动修改，请先保存。') }}</p><button class="button secondary" :disabled="blocked||saving" @click="compose">{{ composing?t('正在编写歌词…'):versions.length?t('重新生成歌词'):t('根据故事生成歌词') }}</button><p class="save-info">{{ t('重新生成会使用一次歌词创作额度。') }} <span v-if="allowance">{{ allowance.dailyUnlimited?t('今日歌词编写不限次数'):t('今日还可编写 {remaining} 次歌词',{remaining:allowance.dailyRemaining}) }}</span></p></details>
 </section></template>
 <style scoped>
-.detail-heading { justify-content: flex-end; margin-bottom: 0; }
-.lyric-editor-label { display:flex; align-items:center; justify-content:space-between; gap:12px; margin:12px 0 8px; font-weight:600; }
-.lyric-editor-label button { font-weight:400; }
-.lyric-editor-box { position:relative; min-width:0; }
-.lyric-editor-box textarea { box-sizing:border-box; width:100%; min-height:250px; padding:14px; border:1px solid var(--line,#ead9df); border-radius:14px; color:var(--ink); background:#fffdfd; font:inherit; line-height:1.8; resize:vertical; }
-.lyric-line-tools { display:flex; justify-content:flex-end; flex-wrap:wrap; align-items:center; gap:8px; padding:8px 0; }
-.lyric-line-tools .button { padding:6px 14px; min-height:36px; }
+.lyrics-panel { padding:20px clamp(16px,2.15vw,36px); background:#fffdfd; border-radius:20px; }
+.lyric-title { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:8px 12px; color:#242121; font-size:16px; font-weight:650; }
+.lyric-title .autosave-state { font-size:13px; font-weight:500; text-align:right; }
+.lyric-title .saved { color:#237954; }
+.lyric-title input { grid-column:1/-1; min-width:0; width:100%; padding:9px 13px; border:1px solid #e8e0e2; border-radius:11px; background:#fffdfd; color:inherit; font:inherit; font-weight:500; }
+.lyric-editor-label { display:flex; align-items:center; justify-content:space-between; gap:12px; margin:13px 0 10px; color:#72676a; font-size:14px; }
+.lyric-quiet-action { display:inline-flex; align-items:center; justify-content:center; gap:6px; min-height:32px; padding:0; border:0; background:none; color:#6f5852; font:inherit; cursor:pointer; }
+.lyric-quiet-action:disabled { opacity:.63; cursor:default; }
+.lyric-quiet-action svg,.lyric-version-strip svg,.lyric-line-tools svg { width:16px; height:16px; flex:none; fill:none; stroke:currentColor; stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round; }
+.lyric-text-stage { position:relative; min-width:0; }
+.lyric-text { box-sizing:border-box; width:100%; padding:16px clamp(14px,1.85vw,30px); border:1px solid #e8e0e2; border-radius:13px; color:#211d1d; background:#fffdfd; font:inherit; font-size:clamp(15px,1.2vw,19px); font-weight:400; line-height:1.42; letter-spacing:normal; white-space:pre-wrap; overflow-wrap:break-word; }
+.lyric-text-stage textarea.lyric-text { display:block; height:clamp(260px,37vh,352px); min-height:220px; resize:vertical; }
+.lyric-text-stage textarea::selection { background:#ffebd0; color:#211d1d; }
+.lyric-mirror { position:absolute; top:0; left:0; height:0; overflow:hidden; visibility:hidden; pointer-events:none; }
+.lyric-line-tools { display:flex; align-items:center; flex-wrap:wrap; width:max-content; max-width:100%; min-height:40px; margin-top:8px; padding:3px 6px; border:1px solid #ede5e6; border-radius:23px; background:#fffdfd; box-shadow:0 5px 18px #3c2b2d15; }
+.lyric-line-tools.is-anchored { position:absolute; z-index:1; margin:0; }
+.lyric-line-tools button { display:inline-flex; align-items:center; gap:6px; min-height:30px; padding:4px 10px; border:0; border-radius:0; background:none; color:#221c1c; font:inherit; font-size:13px; white-space:nowrap; cursor:pointer; }
+.lyric-line-tools button+button { border-left:1px solid #ece5e6; }
+.lyric-line-tools button:hover:not(:disabled) { color:#bb321e; }
+.lyric-line-tools button:disabled { opacity:.55; cursor:default; }
+.line-busy { padding:3px 10px; color:#6f5852; font-size:13px; }
+.lyrics-history { margin-top:12px; }
+.lyric-version-strip { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px 14px; min-height:42px; padding:7px 13px; border-radius:12px; background:#f7f2f0; color:#74635d; cursor:pointer; font-size:13px; list-style:none; }
+.lyric-version-strip::-webkit-details-marker { display:none; }
+.lyric-version-meta { display:flex; align-items:center; flex-wrap:wrap; gap:8px; }
+.lyric-version-meta strong { font-weight:600; }
+.lyric-version-meta time { margin-left:4px; color:#776a66; font-size:12px; }
+.lyric-history-link { white-space:nowrap; }
 .lyric-line-preview { border:1px solid #efcfc4; border-radius:14px; background:#fff6f1; padding:14px; margin:12px 0; }
 .lyric-line-preview p { overflow-wrap:anywhere; }
 .lyric-history-preview { max-height:220px; overflow:auto; white-space:pre-wrap; overflow-wrap:anywhere; font:inherit; padding:14px; border-radius:12px; background:#fff6f3; }
-@media(max-width:600px) { .lyric-line-tools { justify-content:flex-start; } .lyric-editor-box textarea { min-height:215px; } }
-@media(min-width:761px) {
-  .lyric-editor-box:has(.lyric-line-tools) { padding-bottom:45px; }
-  .lyric-line-tools { position:absolute; right:10px; bottom:2px; padding:4px; border:1px solid #ead9df; border-radius:999px; background:#fffafa; box-shadow:0 4px 15px #54313c14; }
+@media(max-width:760px) {
+ .lyric-line-tools { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); width:100%; border-radius:13px; }
+ .lyric-line-tools button { justify-content:center; min-height:40px; }
+ .lyric-line-tools button:nth-of-type(odd) { border-left:0; }
+ .lyric-editor-label { align-items:start; font-size:12px; }
+ .lyric-quiet-action { flex:none; min-height:24px; }
 }
 </style>

@@ -286,16 +286,24 @@ async function backToStory(){
 
 </script>
 <template>
-  <button v-if="draftReady" class="description-back-button lyric-studio-back" type="button" :disabled="submitting" @click="backToStory"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5m7-7-7 7 7 7"/></svg>{{ t('返回修改描述') }}</button>
-  <RouterLink v-else class="detail-back" to="/works">{{ t('← 我的音乐') }}</RouterLink>
+  <RouterLink v-if="!draftReady" class="detail-back" to="/works">{{ t('← 我的音乐') }}</RouterLink>
   <div v-show="mediaState==='ready'&&(quickBusy||!asset&&quickChecked&&!quickReadIssue)" class="work-entry-progress" :class="{'has-song':!!asset}"><QuickCreationProgress v-if="work" ref="quickProgress" :key="work.id" :work-id="work.id" :title="work.title" :auto-open="false" :result-ready="!!asset" @busy="quickBusy=$event" @checked="checkedQuick" @resolved="resolveQuick" @updated="quickUpdated" @view="viewGeneratedMusic"/></div>
   <SongResultSkeleton v-if="entryLoading"/>
   <p v-if="!asset&&mediaState==='ready'&&quickReadIssue&&!quickBusy" class="notice" role="status">{{ t('进度暂时无法读取 请稍后刷新 原任务不会重复提交') }} <button class="text-button" @click="quickProgress?.refresh()">{{ t('刷新进度') }}</button></p>
   <section v-if="work&&mediaState==='failed'&&!asset" class="notice" role="alert"><p>{{ t('音频暂时无法读取，你的作品仍然保留。') }}</p><button class="button secondary" @click="retryAudio">{{ t('重新读取歌曲') }}</button></section>
   <p v-if="taskReadIssue" class="notice" role="status">{{ t('创作记录暂时无法读取，已有歌曲仍可试听。') }} <button class="text-button" @click="refreshTasks">{{ t('刷新进度') }}</button></p><p v-if="error" class="notice error" role="alert">{{ t(error) }}</p>
   <template v-if="work">
-    <CreationSteps v-if="entryReady&&!asset" :current="currentStep"/>
-    <div v-if="entryReady&&!asset" class="work-detail-top" :class="{'lyrics-page-heading':draftReady}"><div><h1>{{ draftReady?t('修改歌词'):songTitle }}</h1><p class="detail-muted">{{ draftReady?t('歌词可以直接修改，满意后再生成歌曲。'):displayedStyle }}</p></div></div>
+    <header v-if="draftReady" class="lyric-studio-header">
+      <button class="description-back-button lyric-studio-back" type="button" :disabled="submitting" @click="backToStory"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5m7-7-7 7 7 7"/></svg>{{ t('返回修改描述') }}</button>
+      <CreationSteps :current="currentStep"/>
+      <div class="work-detail-top lyrics-page-heading">
+        <h1>{{ t('修改歌词') }}</h1><p>{{ t('歌词已生成，你可以继续润色后再生成歌曲') }}</p>
+      </div>
+    </header>
+    <template v-else-if="entryReady&&!asset">
+      <CreationSteps :current="currentStep"/>
+      <div class="work-detail-top"><div><h1>{{ songTitle }}</h1><p class="detail-muted">{{ displayedStyle }}</p></div></div>
+    </template>
     <div v-if="asset&&giftStage" class="story-back-actions"><button class="text-button" @click="giftStage=false;shared=false">{{ t('返回试听与调整') }}</button></div>
     <p v-if="generationNotice" class="notice" role="status">{{ t(generationNotice) }}</p>
     <p v-if="inputIssue" class="notice"><button class="text-button" @click="backToStory">{{ t('调整音乐要求') }}</button> · {{ t('尚未开始音乐生成，你的歌词和设置已保留。') }}</p>
@@ -311,7 +319,7 @@ async function backToStory(){
     <div v-if="draftReady&&musicDirectionChanged" class="notice" role="status"><p>{{ t('创作描述或音乐设置已更新，当前歌词已保留。') }}</p><div class="actions"><button type="button" class="button secondary" @click="dismissedDirection=true">{{ t('保留当前歌词') }}</button><button type="button" class="button secondary" @click="dismissedDirection=true;lyricsPanel?.reviewMusicDirection()">{{ t('按新方向调整歌词') }}</button></div></div>
     <div v-show="!!asset||draftReady" class="work-detail-layout" :class="{'lyric-studio-layout':draftReady}">
       <div>
-        <div class="lyrics-editor-fold"><LyricsPanel v-if="!generated&&(asset||draftOpened)" ref="lyricsPanel" :key="work.id+'-'+work.version+'-'+quickRevision" :inert="quickBusy||undefined" :work="work" @selected="revision=$event" @base="lyricBase=$event" @dirty="lyricDirty=$event" @ready="lyricsReady=$event" @recoverable="lyricRecoverable=$event"/>
+        <div class="lyrics-editor-fold"><LyricsPanel v-if="!generated&&(asset||draftOpened)" ref="lyricsPanel" :key="work.id+'-'+work.version+'-'+quickRevision" :inert="quickBusy||undefined" :work="work" :external-save="draftReady" @selected="revision=$event" @base="lyricBase=$event" @dirty="lyricDirty=$event" @ready="lyricsReady=$event" @recoverable="lyricRecoverable=$event"/>
         </div>
         <section v-if="creditIssue" id="credit-issue" class="credit-issue" role="alert">
           <div class="credit-issue-copy">
@@ -341,6 +349,7 @@ async function backToStory(){
       </aside>
     </div>
     <div v-if="draftReady" class="lyric-studio-actions">
+      <button class="button secondary lyric-studio-save" type="button" :disabled="submitting||!lyricsPanel?.canSave" @click="lyricsPanel?.save()"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4h12v16l-6-4-6 4V4Z"/></svg>{{ lyricsPanel?.saving?t('正在保存…'):t('保存歌词') }}</button>
       <button class="button creation-primary" type="button" :disabled="submitting||(!submissionUnknown&&(!modelReady||!lyricsReady))" @click="generate()">{{ submitting?t('正在准备歌曲…'):submissionUnknown?t('核对生成进度'):modelReady?t('生成歌曲'):t('歌曲生成暂未开放') }} <span aria-hidden="true">→</span></button>
       <dialog ref="saveGenerationDialog" class="save-generation-dialog" aria-labelledby="save-generation-heading">
         <h2 id="save-generation-heading">{{ t('保存当前歌词并生成歌曲？') }}</h2>
@@ -353,14 +362,23 @@ async function backToStory(){
   <MusicGenerationDialog :open="generationOpen" :status="generationStatus" :title="trackedTask?.title||work?.title||''" :error="submissionIssue" :error-code="trackedTask?.errorCode" :sync-issue="progressIssue||trackedTask?.errorCode==='QUERY_RETRY'" :created-at="trackedTask?.createdAt" :submit-after="trackedTask?.nextAttemptAt" :cancelling="cancelling||submitting" :cover="artwork" @cancel="cancelGeneration" @archive="trackedTask&&retryArchive(trackedTask)" @close="generationOpen=false" @view="viewGeneratedMusic"/>
 </template>
 <style scoped>
-.lyrics-page-heading { justify-content:center; text-align:center; margin-bottom:24px; }
-.lyric-studio-back { display:inline-flex; align-items:center; gap:8px; margin-bottom:12px; }
+.lyric-studio-header { position:relative; margin-bottom:30px; }
+:global(.consumer-shell .workspace:has(.lyric-studio-header)) { max-width:1540px; padding-top:24px; }
+.lyrics-page-heading { display:grid; justify-content:center; gap:4px; text-align:center; margin:0; }
+.work-detail-top.lyrics-page-heading h1 { margin:0; font-size:clamp(30px,2.5vw,42px); color:#211d1d; line-height:1.25; }
+.lyrics-page-heading p { margin:0; color:#62595b; font-size:clamp(14px,1.15vw,18px); }
+.lyric-studio-header :deep(.creation-steps) { margin-bottom:22px; }
+.lyric-studio-header :deep(.creation-steps li.done > span) { background:#d7cccf; }
+.lyric-studio-back { position:absolute; top:5px; left:0; display:inline-flex; align-items:center; gap:8px; }
 .lyric-studio-back svg { width:16px; height:16px; fill:none; stroke:currentColor; stroke-width:1.5; }
-.lyric-studio-layout { grid-template-columns:minmax(0,2.2fr) minmax(240px,1fr); gap:22px; }
+.lyric-studio-layout { grid-template-columns:minmax(0,2.22fr) minmax(255px,1fr); align-items:stretch; gap:clamp(18px,1.7vw,28px); }
 .lyric-studio-layout .lyrics-editor-fold { border:0; margin:0; }
 .lyric-studio-layout .lyrics-editor-fold :deep(.detail-panel) { margin:0; }
-.lyric-studio-actions { display:flex; justify-content:flex-end; margin-top:20px; }
-.lyric-studio-actions button { min-width:min(100%,210px); }
+.lyric-studio-actions { display:flex; justify-content:flex-end; gap:16px; margin-top:22px; }
+.lyric-studio-actions > .button { min-height:52px; border-radius:999px; font-size:16px; }
+.lyric-studio-actions > .creation-primary { min-width:clamp(165px,13vw,216px); }
+.lyric-studio-actions > .lyric-studio-save { min-width:clamp(140px,11.5vw,190px); gap:8px; }
+.lyric-studio-save svg { width:18px; height:18px; fill:none; stroke:currentColor; stroke-width:1.8; stroke-linejoin:round; }
 .save-generation-dialog { width:min(420px,calc(100% - 32px)); padding:22px; border:1px solid var(--line); border-radius:18px; color:var(--ink); background:#fffafa; box-shadow:0 22px 66px #39212638; }
 .save-generation-dialog::backdrop { background:#39272e66; }
 .save-generation-dialog h2 { margin:0 0 8px; font-size:20px; }
@@ -368,9 +386,12 @@ async function backToStory(){
 .save-generation-dialog .actions { justify-content:flex-end; gap:10px; margin:0; }
 .save-generation-dialog .actions button { min-width:0; width:auto; }
 @media(max-width:760px) {
+ .lyric-studio-header { margin-bottom:20px; }
+ .lyric-studio-back { position:static; }
+ .lyric-studio-header :deep(.creation-steps) { margin-bottom:12px; }
  .lyric-studio-layout { grid-template-columns:minmax(0,1fr); gap:14px; padding-bottom:0; }
- .lyric-studio-actions { position:sticky; bottom:0; z-index:2; margin-top:10px; padding:10px 0 calc(8px + env(safe-area-inset-bottom)); background:var(--page,#fcf6f6); }
- .lyric-studio-actions button { width:100%; }
+ .lyric-studio-actions { position:sticky; bottom:0; z-index:2; gap:8px; margin-top:10px; padding:10px 0 calc(8px + env(safe-area-inset-bottom)); background:var(--page,#fcf6f6); }
+ .lyric-studio-actions > .button { width:auto; min-width:0; min-height:46px; font-size:14px; flex:1 1 auto; }
  :global(.has-preview .lyric-studio-actions) { bottom:calc(86px + env(safe-area-inset-bottom)); }
  .lyric-studio-layout:has(:deep(textarea:focus)) + .lyric-studio-actions { position:static; }
 }

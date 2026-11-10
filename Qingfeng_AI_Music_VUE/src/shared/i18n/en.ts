@@ -1,5 +1,18 @@
 /** Chinese source copy is the stable message key; business option values stay unchanged. */
 export const english: Record<string, string> = {
+  '歌词已生成，你可以继续润色后再生成歌曲': 'Your lyrics are ready. Polish them before generating the song.',
+  '歌词可直接修改，保存后再生成歌曲': 'Edit your lyrics directly, then save and generate.',
+  '你的个性化选择': 'Your creative choices',
+  '以下内容继承自上一步的创作设置': 'These settings carry over from the previous step.',
+  '原始描述': 'Original brief',
+  '恢复原版': 'Restore original',
+  '当前版本': 'Current version',
+  '查看历史版本': 'View version history',
+  '暂无已保存的歌词版本。': 'There are no saved lyric versions yet.',
+  'AI 重新写一版': 'Rewrite with AI',
+  '改写': 'Rewrite',
+  '更口语化': 'More conversational',
+  '缩短一句': 'Shorten line',
   '本次创作设置': 'Creation settings',
   '查看本次创作设置': 'View creation settings',
   '沿用上一步的音乐设置': 'Music settings from the previous step',

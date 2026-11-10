@@ -20,7 +20,8 @@ export interface PlaybackLyrics {status:'NOT_REQUESTED'|'FETCHING'|'READY'|'EMPT
 export const getPlaybackLyrics = (work:string,asset:string)=>call<PlaybackLyrics>(`app/works/${work}/audio/${asset}/lyrics`)
 export async function syncPlaybackLyrics(work:string,asset:string,requestKey:string){await ensureCreator();return requestJson<PlaybackLyrics>(`app/works/${work}/audio/${asset}/lyrics/sync`,'POST',{requestKey},130000)}
 export const saveRevision = (work: string, workVersion: number, title: string, lyrics: string, baseRevisionId?: string) => call<Revision>(`app/works/${work}/lyrics`, 'POST', { workVersion, title, lyrics, baseRevisionId })
-export async function rewriteLyricLine(work:string, input:{requestId:string;action:'REWRITE'|'RHYME';line:string;context:string;language:string}) {
+export type LyricRewriteAction = 'REWRITE' | 'RHYME' | 'COLLOQUIAL' | 'SHORTEN'
+export async function rewriteLyricLine(work:string, input:{requestId:string;action:LyricRewriteAction;line:string;context:string;language:string}) {
   await ensureCreator()
   return requestJson<{text:string}>(`app/works/${work}/lyrics/rewrite-line`,'POST',input,35000)
 }

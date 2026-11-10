@@ -78,6 +78,20 @@ class DeepSeekLyricsFlowTest {
   assertEquals(1,calls.get());
   assertTrue(lyrics.list(owner,work.id()).isEmpty());
  }
+ @Test void supportsConversationalSuggestionsAndRejectsARewriteThatDoesNotShorten(){
+  String owner=identity.create().creatorId();
+  var work=works.create(owner,new WorkApi.Draft("","","海边旅行","","民谣",""));
+  var writer=new InspirationRewriter(){
+   public boolean isConfigured(){return true;}
+   public String rewrite(String text,String language){return text.startsWith("操作：COLLOQUIAL")?"我想你了":"我还是很想你";}
+  };
+  var service=new LyricLineRewriteService(works,new InspirationRewriteService(writer,true,2),4);
+  assertEquals("我想你了",service.preview(owner,work.id(),UUID.randomUUID(),LyricLineRewriteService.Action.COLLOQUIAL,"我甚是思念你","","zh-CN"));
+  assertEquals("我还是很想你",service.preview(owner,work.id(),UUID.randomUUID(),LyricLineRewriteService.Action.SHORTEN,"我现在还是非常想念你","","zh-CN"));
+  assertEquals("INVALID_REWRITE_RESPONSE",assertThrows(DomainException.class,
+      ()->service.preview(owner,work.id(),UUID.randomUUID(),LyricLineRewriteService.Action.SHORTEN,"我想你","","zh-CN")).code());
+  assertTrue(lyrics.list(owner,work.id()).isEmpty());
+ }
  @Test void refusesOtherOwnersAndStaleStoriesBeforeCallingProvider(){
   String owner=identity.create().creatorId(),other=identity.create().creatorId();var work=works.create(owner,new WorkApi.Draft("朋友","毕业","故事","祝福","爵士","回忆"));int before=writer.calls.get();
   assertThrows(DomainException.class,()->composer.compose(other,work.id(),0,UUID.randomUUID().toString(),"en"));

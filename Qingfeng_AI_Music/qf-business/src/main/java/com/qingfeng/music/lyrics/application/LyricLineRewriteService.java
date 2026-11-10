@@ -14,7 +14,7 @@ import java.util.UUID;
 
 /** A short-lived preview never creates a lyric revision. */
 public final class LyricLineRewriteService {
-    public enum Action { REWRITE, RHYME }
+    public enum Action { REWRITE, RHYME, COLLOQUIAL, SHORTEN }
     private record Key(String owner, UUID requestId) {}
     private record Entry(String fingerprint, Instant expiresAt, boolean pending, String result) {}
     private static final Duration WINDOW = Duration.ofMinutes(15);
@@ -62,6 +62,7 @@ public final class LyricLineRewriteService {
         try {
             var candidate = rewriter.rewrite(owner, input, language);
             if (!isLyricLine(candidate)) throw invalid();
+            if (action==Action.SHORTEN && candidate.length()>=line.strip().length()) throw invalid();
             result = candidate;
             return result;
         } finally {
