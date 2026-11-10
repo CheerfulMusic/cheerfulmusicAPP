@@ -24,6 +24,7 @@ export const english: Record<string, string> = {
   '原歌词已变化或替换后超出长度，可以复制建议后手动修改。': 'The lyrics changed or the replacement is too long. You can copy the suggestion and edit manually.',
   '未得到可用的单句改写，原歌词已保留。': 'No usable rewrite was returned. Your lyrics are unchanged.',
   '改写暂不可用，原歌词已保留。': 'Rewriting is unavailable. Your lyrics are unchanged.',
+  '当前后端版本不支持选句润色，请更新后端后重试。': 'This server version does not support line editing. Update the server and try again.',
   '短时间内改写次数较多，请稍后再试。': 'You’ve reached the rewrite limit. Try again shortly.',
   '改写内容已变化，请重新选择歌词。': 'The selection changed. Select the lyrics again.',
   '选中一句歌词，可以用 AI 润色。': 'Select a lyric line to polish it with AI.',

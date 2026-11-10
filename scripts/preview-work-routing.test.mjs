@@ -40,6 +40,7 @@ test('real Vite proxy sends metadata GET/POST/PUT/DELETE locally and preserves r
       ['GET','/api/app/music-settings/catalog'],['POST','/api/app/music-settings/preview'],
       ['PUT','/api/app/works/abc/music-settings'],['POST','/api/app/works/abc/music-settings/preview'],
       ['GET','/api/app/works/abc/creative-direction'],['POST','/api/app/works/abc/lyrics/generate'],
+      ['POST','/api/app/works/abc/lyrics/rewrite-line'],
       ['GET','/api/app/works/abc/lyrics/requests/key?check=1'],['POST','/api/app/works/abc/lyrics/revision/confirm'],
       ['POST','/api/app/works/abc/generations/preflight'],['POST','/api/app/works/abc/generations'],
     ]){

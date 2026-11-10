@@ -58,7 +58,11 @@ async function previewLine(action:'REWRITE'|'RHYME'){
    const result=await rewriteLyricLine(props.work.id,{requestId:crypto.randomUUID(),action,line:chosen.line,context:chosen.context,language:active.value?.language||language.value})
    if(!result.text?.trim()||result.text.length>160||/[\r\n]/.test(result.text))throw new Error('未得到可用的单句改写，原歌词已保留。')
    if(alive)linePreview.value={selection:chosen,text:result.text}
- }catch(e){if(alive)lineError.value=e instanceof Error?e.message:'改写暂不可用，原歌词已保留。'}
+ }catch(e){
+   if(alive)lineError.value=e instanceof ApiError&&e.status===405
+     ?'当前后端版本不支持选句润色，请更新后端后重试。'
+     :e instanceof Error?e.message:'改写暂不可用，原歌词已保留。'
+ }
  finally{lineBusy.value=false}
 }
 const canReplaceLine=computed(()=>{
