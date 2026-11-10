@@ -9,7 +9,7 @@ const emit = defineEmits<{ close: []; view: [];cancel:[];archive:[] }>()
 const problem=computed(()=>generationProblem(props.errorCode)||props.error)
 const archiveFailed=computed(()=>props.status==='FAILED'&&props.errorCode==='AUDIO_ARCHIVE_FAILED')
 const dialog = ref<HTMLDialogElement>()
-const clock=ref(Date.now()),tick=window.setInterval(()=>clock.value=Date.now(),500)
+const clock=ref(Date.now())
 const cancelled=computed(()=>props.status==='CANCELLED')
 const elapsed=computed(()=>Math.max(0,Math.floor((clock.value-new Date(props.createdAt||clock.value).getTime())/1000)))
 const remaining=computed(()=>Math.min(5,Math.max(0,Math.ceil((new Date(props.submitAfter||0).getTime()-clock.value)/1000))))
@@ -17,11 +17,11 @@ const complete = computed(() => props.status === 'SUCCEEDED')
 const failed = computed(() => props.status === 'FAILED')
 const unknown = computed(() => props.status === 'SUBMISSION_UNKNOWN')
 const settled = computed(() => complete.value || failed.value || unknown.value || cancelled.value)
-const stage = computed(() => complete.value ? 3 : props.status === 'SAVING' ? 2 : props.status === 'RUNNING'||props.quick&&['LYRICS_READY','SUBMITTING_MUSIC','MUSIC_QUEUED','SUBMITTING'].includes(props.status) ? 1 : 0)
+const stage = computed(() => complete.value ? 3 : props.status === 'SAVING' ? 2 : props.status === 'RUNNING'||props.quick&&['LYRICS_READY','SUBMITTING_MUSIC','MUSIC_QUEUED','SUBMITTING'].includes(props.status) ? 1 : ['PREPARING','SUBMITTING_QUICK'].includes(props.status) ? -1 : 0)
 const stages=computed(()=>props.quick?['编写歌词','谱曲与演唱','保存音频']:['提交创作','谱曲与演唱','保存音频'])
 const heading = computed(() => cancelled.value?'这次创作已撤销':complete.value ? '你的音乐准备好了' : archiveFailed.value?'音乐已完成，正在恢复保存':failed.value ? '这次创作暂未完成' : unknown.value ? '正在核对歌曲结果' : '你的故事，正在成为一首歌')
 const labels: Record<string, string> = {CANCELLED:'尚未提交音乐服务，本次歌曲额度已释放。', QUEUED:'即将开始，你仍可以撤销这次创作', SUBMITTING:'正在提交你的音乐创作', RUNNING:'正在为歌词谱曲与演唱', SAVING:'旋律已完成，正在保存音频', SUCCEEDED:'音乐已保存，可以试听和分享', FAILED:'歌词和设置已保留，请查看下方说明选择下一步。', SUBMISSION_UNKNOWN:'提交结果仍待确认，请稍后查看进度，避免重复提交。' }
-const quickLabels:Record<string,string>={PREPARING:'正在保存创作要求',QUEUED:'创作已排队',WRITING:'正在编写歌词',LYRICS_READY:'歌词已完成 正在准备音乐',SUBMITTING_MUSIC:'正在准备音乐',MUSIC_QUEUED:'音乐已排队',SUCCEEDED:'正在读取歌曲，请稍候…'}
+const quickLabels:Record<string,string>={PREPARING:'正在保存创作要求',SUBMITTING_QUICK:'正在提交你的音乐创作',QUEUED:'创作已排队',WRITING:'正在编写歌词',LYRICS_READY:'歌词已完成 正在准备音乐',SUBMITTING_MUSIC:'正在准备音乐',MUSIC_QUEUED:'音乐已排队',SUCCEEDED:'正在读取歌曲，请稍候…'}
 function syncOpen() {
   if (!dialog.value) return
   if (props.open && !dialog.value.open) dialog.value.showModal()
@@ -38,8 +38,14 @@ function backdrop(event: MouseEvent) {
   if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) emit('close')
 }
 watch(() => props.open, syncOpen, { flush: 'post' })
+watch(() => props.open && !!props.createdAt && !settled.value, (running, _, onCleanup) => {
+  if (!running) return
+  clock.value = Date.now()
+  const tick = window.setInterval(() => { clock.value = Date.now() }, 500)
+  onCleanup(() => window.clearInterval(tick))
+}, { immediate: true })
 onMounted(syncOpen)
-onBeforeUnmount(() => { window.clearInterval(tick);dialog.value?.close();syncScrollLock() })
+onBeforeUnmount(() => { dialog.value?.close();syncScrollLock() })
 </script>
 <template>
   <Teleport to="body">

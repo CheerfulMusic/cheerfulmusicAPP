@@ -10,8 +10,9 @@ export function useQuickSession(){
  const preparing=ref(false),checking=ref(false),modalRequested=ref(false),minimized=ref(false),unknown=ref(false),issue=ref(''),recoverable=ref(true)
  let epoch=0,candidateWork='',alive=true,posting=false
  const locked=computed(()=>preparing.value||checking.value||!!intent.value||!!flow.value||unknown.value)
- const initialOpen=computed(()=>modalRequested.value&&!flow.value)
- const initialStatus=computed(()=>unknown.value?'SUBMISSION_UNKNOWN':intent.value?'SUBMITTING':'PREPARING')
+ const dialogOpen=computed(()=>modalRequested.value&&!minimized.value)
+ const submissionPending=computed(()=>preparing.value&&!!intent.value&&!flow.value)
+ const initialStatus=computed(()=>unknown.value?'SUBMISSION_UNKNOWN':intent.value?'SUBMITTING_QUICK':'PREPARING')
  const canResume=computed(()=>unknown.value&&!!intent.value&&!preparing.value&&!checking.value)
  function reset(){epoch++;candidateWork='';posting=false;intent.value=undefined;flow.value=null;workId.value='';title.value='';preparing.value=false;checking.value=false;modalRequested.value=false;minimized.value=false;unknown.value=false;issue.value='';recoverable.value=true}
  function prepare(){preparing.value=true;modalRequested.value=true;minimized.value=false;unknown.value=false;issue.value=''}
@@ -92,5 +93,5 @@ export function useQuickSession(){
  }
  window.addEventListener('storage',storageChanged)
  onBeforeUnmount(()=>{alive=false;epoch++;window.removeEventListener('storage',storageChanged)})
- return {intent,flow,workId,title,preparing,checking,locked,initialOpen,initialStatus,minimized,unknown,issue,recoverable,canResume,reset,prepare,abortPreparation,close,show,visible,resolve,restore,submit,resume}
+ return {intent,flow,workId,title,preparing,checking,locked,dialogOpen,submissionPending,initialStatus,minimized,unknown,issue,recoverable,canResume,reset,prepare,abortPreparation,close,show,visible,resolve,restore,submit,resume}
 }

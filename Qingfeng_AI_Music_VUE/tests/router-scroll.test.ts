@@ -49,6 +49,16 @@ it('restores browser history positions before applying the editor query rule', (
   expect(scrollBehavior(route('/create?draft=a&mode=quick'), route('/create?draft=a&mode=custom'), saved)).toBe(saved)
 })
 
+it('only preserves draft-to-work scroll for the corresponding internal promotion', () => {
+  const draft = route('/create?draft=a&mode=quick')
+  const work = route('/create?work=new&mode=quick')
+  expect(scrollBehavior(work, draft, null)).toEqual({top:0})
+  vi.stubGlobal('window', {history:{state:{studioDraftPromotion:{draft:'a',work:'new'}}}})
+  expect(scrollBehavior(work, draft, null)).toBe(false)
+  expect(scrollBehavior(route('/create?work=other'), draft, null)).toEqual({top:0})
+  expect(scrollBehavior(work, route('/create?draft=b'), null)).toEqual({top:0})
+})
+
 it.each([false, true])('still scrolls to a newly requested anchor with reduced motion %s', (reduced) => {
   vi.stubGlobal('window', { matchMedia: () => ({ matches: reduced }) })
   expect(scrollBehavior(route('/works/a#lyrics'), route('/works/a'), null)).toEqual({

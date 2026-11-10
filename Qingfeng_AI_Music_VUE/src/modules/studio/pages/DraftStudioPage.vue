@@ -4,7 +4,6 @@ import {creationMode,chooseCreationStyle,type CreationMode} from '../model/creat
 import {legacyPreferences,validMusicPreferences} from '../../works/model/music-preferences'
 import {loadMusicCatalog,loadMusicSettings,saveMusicSettings,type MusicCatalog,type MusicPreferences} from '../../works/api/music-settings'
 import QuickCreationProgress from '../components/QuickCreationProgress.vue'
-import MusicGenerationDialog from '../../works/components/MusicGenerationDialog.vue'
 import {useQuickSession} from '../model/use-quick-session'
 import {followQuickInBackground} from '../model/background-quick'
 import {quickInProgress} from '../api/quick-creation'
@@ -34,9 +33,8 @@ const route=useRoute(), router=useRouter(), initialized=ref(false), ready=ref(fa
 const language=ref<string>(locale.value)
 const mode=ref<CreationMode>(creationMode(route.query.mode,!!route.query.work)),quickReady=ref(false)
 const quickSession=useQuickSession()
-const {flow:quickFlow,workId:quickWorkId,title:quickTitle,locked:quickLocked,initialOpen:quickInitialOpen,initialStatus:quickInitialStatus,minimized:quickMinimized,unknown:quickUnknown,issue:quickIssue,canResume:quickCanResume}=quickSession
-const quickPanel=ref<InstanceType<typeof QuickCreationProgress>>()
-function showQuickProgress(){if(quickFlow.value)quickPanel.value?.show();else quickSession.show()}
+const {flow:quickFlow,workId:quickWorkId,title:quickTitle,locked:quickLocked,dialogOpen:quickDialogOpen,initialStatus:quickInitialStatus,submissionPending:quickSubmissionPending,unknown:quickUnknown,issue:quickIssue,canResume:quickCanResume}=quickSession
+function setQuickDialogOpen(open:boolean){if(open)quickSession.show();else quickSession.close()}
 async function viewQuickResult(){
  if(!quickWorkId.value||quickFlow.value?.status!=='SUCCEEDED')return
  await router.push({path:`/works/${quickWorkId.value}`,query:{quick:quickFlow.value.id,mode:'quick',language:quickSession.intent.value?.language||language.value}})
@@ -298,7 +296,13 @@ async function continueMaking() {
       if(!quickReady.value)throw new Error('一键创作暂不可用 可以切换自定义创作')
       // 先固定作品地址，刷新能查询原任务；本站任务受理后仍留在输入页等待。
       const target=`work:${prepared.id}`;internalContext=target;internalRoute=true
-      try{await router.replace({path:'/create',query:{...route.query,work:prepared.id,draft:undefined,mode:'quick'}})}finally{internalRoute=false;if(internalContext===target)internalContext=undefined}
+      try{
+        await router.replace({
+          path:'/create',
+          query:{...route.query,work:prepared.id,draft:undefined,mode:'quick'},
+          state:{studioDraftPromotion:{draft:String(route.query.draft||''),work:prepared.id}},
+        })
+      }finally{internalRoute=false;if(internalContext===target)internalContext=undefined}
       if(!alive||turn!==initSequence)return
       await quickSession.submit(prepared.id,prepared.version,language.value,prepared.title)
       return
@@ -371,7 +375,7 @@ onBeforeUnmount(()=>{
 })
 </script>
 <template>
-  <div class="story-studio inspiration-studio single-inspiration-studio dual-creation-studio" :class="{'custom-creation-mode':mode==='custom'}">
+  <div class="story-studio inspiration-studio single-inspiration-studio dual-creation-studio" :class="{'custom-creation-mode':mode==='custom','studio-quick-locked':quickLocked}">
     <StudioAtmosphere/>
     <div class="creation-mode-switch" role="group" :aria-label="t('选择创作方式')"><button type="button" :aria-pressed="mode==='quick'" :disabled="composing||rewriting||quickLocked" @click="changeMode('quick')">{{ t('快速生成') }}</button><button type="button" :aria-pressed="mode==='custom'" :disabled="composing||rewriting||quickLocked" @click="changeMode('custom')">{{ t('自定义创作') }}</button></div>
     <div class="story-introduction">
@@ -380,10 +384,6 @@ onBeforeUnmount(()=>{
     </div>
     <div class="creation-sound-divider" aria-hidden="true"><span></span>ııııı<span></span></div>
     <div class="creation-page-layout"><section class="draft-form story-focus">
-      <QuickCreationProgress v-if="quickWorkId" ref="quickPanel" :key="quickWorkId" :work-id="quickWorkId" :title="quickTitle" :initial-flow="quickFlow" :auto-open="!quickMinimized" :result-ready="quickFlow?.status==='SUCCEEDED'" :awaiting-submission="quickUnknown" completion-mode="navigate" @resolved="quickSession.resolve" @visibility="quickSession.visible" @view="viewQuickResult"/>
-      <section v-if="quickLocked" class="notice quick-input-lock" role="status"><p>{{ t(quickFlow?.status==='SUCCEEDED'?'本次创作已完成 可试听歌曲或继续创作新歌':quickFlow&&['FAILED','CANCELLED'].includes(quickFlow.status)?'本次创作已结束 可继续原任务或切换自定义创作':'本次创作要求已固定 制作期间不能修改或重复提交') }}</p><button v-if="!quickFlow" class="button secondary" type="button" @click="showQuickProgress">{{ t('查看生成进度') }}</button><RouterLink v-if="quickFlow&&['SUCCEEDED','FAILED','CANCELLED'].includes(quickFlow.status)" class="button secondary" to="/create?mode=quick">{{ t('继续创作一首歌') }}</RouterLink></section>
-      <section v-if="quickUnknown" class="notice" role="alert"><p>{{ t(quickIssue) }}</p><button v-if="quickCanResume" class="button secondary" type="button" @click="quickSession.resume">{{ t('核对并恢复原请求') }}</button></section>
-      <p v-else-if="quickIssue&&!quickLocked" class="notice error" role="alert">{{ t(quickIssue) }}</p>
       <p v-if="notice" class="notice" role="status">{{ t(notice) }}</p>
       <div v-if="error" class="notice error" role="alert"><p>{{ t(error) }}</p><div class="actions">
         <template v-if="conflict&&!quickLocked"><button class="button secondary" type="button" @click="resolveConflict(true)">{{ t('用本机内容继续') }}</button><button class="button secondary" type="button" @click="resolveConflict(false)">{{ t('载入服务器版本') }}</button></template>
@@ -420,16 +420,28 @@ onBeforeUnmount(()=>{
           <CreationMusicChoices v-if="mode==='custom'&&musicCatalog&&preferences" v-model="preferences" :catalog="musicCatalog" :disabled="composing||rewriting||resetting"><template #structure><span class="creation-fixed-template">{{ t('歌词模板') }} · <strong>{{ structure.templateId }}</strong></span></template></CreationMusicChoices>
           <p v-if="mode==='custom'&&musicIssue" class="notice error" role="alert">{{ t(musicIssue) }}</p>
           <details v-if="draft.recipient||draft.occasion||draft.message" class="legacy-inspiration-context"><summary>{{ t('已保留的旧版作品信息') }}</summary><p v-if="draft.recipient">{{ t('收件人：') }}{{ draft.recipient }}</p><p v-if="draft.occasion">{{ draft.occasion }}</p><p v-if="draft.message" class="legacy-message">{{ draft.message }}</p></details>
-          <div v-if="!quickLocked" class="creation-action-bar story-action-bar"><button class="button creation-primary" type="submit" :disabled="!initialized||composing||rewriting||resetting||!ready||!aiReady||conflict||(mode==='quick'?!quickReady:!musicCatalog)">{{ composing?t(mode==='quick'?'正在开始创作…':'正在编写歌词…'):t(mode==='quick'?'一键生成音乐':'生成歌词') }}<span v-if="!composing" aria-hidden="true">→</span></button></div>
+          <div class="creation-action-bar story-action-bar"><button class="button creation-primary" type="submit" :disabled="!initialized||composing||rewriting||resetting||quickLocked||!ready||!aiReady||conflict||(mode==='quick'?!quickReady:!musicCatalog)">{{ composing?t(mode==='quick'?'正在开始创作…':'正在编写歌词…'):t(mode==='quick'?'一键生成音乐':'生成歌词') }}<span v-if="!composing" aria-hidden="true">→</span></button></div>
           <p class="inspiration-next-note">{{ t(mode==='quick'?'AI 自动完成歌词与谱曲 生成后即可试听':'下一步可编辑歌词 确认后再生成音乐') }}</p>
           <p v-if="mode==='quick'&&!quickReady&&initialized" class="save-info">{{ t('一键创作暂不可用 可以切换自定义创作') }}</p>
           <div v-if="route.query.returnRevision" class="story-secondary-actions"><button type="button" class="text-button return-to-lyrics" @click="returnToLyrics">{{ t('返回歌词编辑') }}</button></div>
           <p v-if="allowance" class="save-info inspiration-allowance">{{ allowance.dailyUnlimited?t('今日歌词编写不限次数'):t('今日还可编写 {remaining} 次歌词',{remaining:allowance.dailyRemaining}) }}</p>
         </fieldset>
       </form>
+      <section v-if="quickLocked" class="notice quick-input-lock" role="status"><p>{{ t(quickFlow?.status==='SUCCEEDED'?'本次创作已完成 可试听歌曲或继续创作新歌':quickFlow&&['FAILED','CANCELLED'].includes(quickFlow.status)?'本次创作已结束 可继续原任务或切换自定义创作':'本次创作要求已固定 制作期间不能修改或重复提交') }}</p><button v-if="!quickFlow" class="button secondary" type="button" @click="quickSession.show">{{ t('查看生成进度') }}</button><RouterLink v-if="quickFlow&&['SUCCEEDED','FAILED','CANCELLED'].includes(quickFlow.status)" class="button secondary" to="/create?mode=quick">{{ t('继续创作一首歌') }}</RouterLink></section>
+      <section v-if="quickUnknown" class="notice" role="alert"><p>{{ t(quickIssue) }}</p><button v-if="quickCanResume" class="button secondary" type="button" @click="quickSession.resume">{{ t('核对并恢复原请求') }}</button></section>
+      <p v-else-if="quickIssue&&!quickLocked" class="notice error" role="alert">{{ t(quickIssue) }}</p>
+      <QuickCreationProgress :work-id="quickWorkId" :title="quickTitle||draft.title"
+        :initial-flow="quickFlow" :dialog-open="quickDialogOpen" :submission-status="quickInitialStatus"
+        :submission-pending="quickSubmissionPending" :submission-issue="quickIssue"
+        :result-ready="quickFlow?.status==='SUCCEEDED'" :awaiting-submission="quickUnknown" completion-mode="navigate"
+        @resolved="quickSession.resolve" @visibility="setQuickDialogOpen" @view="viewQuickResult"/>
       <p v-if="initialized&&!aiReady" class="notice">{{ t('歌词生成暂不可用，请稍后再试或手动填写') }} <RouterLink v-if="existing" :to="`/works/${existing.id}`">{{ t('手动填写歌词') }}</RouterLink></p>
     </section><aside v-if="mode==='custom'" class="creation-inspiration-aside" aria-label="Cheerful Music"><div class="creation-record"><span>♫</span></div><h2>{{ t('让灵感 变成音乐') }}</h2><p>{{ t('无论是情感 故事 还是一个灵感 都能为你谱写动人的旋律') }}</p><div class="creation-waveform" aria-hidden="true">ııııııııııııııııııı</div><small>{{ t('可以在生成音乐前继续微调') }}</small></aside></div>
     <p class="studio-privacy-note">{{ t('灵感和草稿仅自己可见，分享由你主动创建。') }}</p>
-    <MusicGenerationDialog :open="quickInitialOpen" :status="quickInitialStatus" :title="quickTitle||draft.title" :error="quickIssue" quick @close="quickSession.close"/>
   </div>
 </template>
+
+<style scoped>
+/* Inserting status cards must not make the browser re-anchor the locked editor. */
+:global(html:has(.studio-quick-locked)) { overflow-anchor: none; }
+</style>

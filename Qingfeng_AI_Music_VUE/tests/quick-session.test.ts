@@ -13,13 +13,15 @@ const accepted={id:'flow-a',workId:'work-a',status:'WRITING',revisionId:null,tas
 beforeEach(()=>{vi.clearAllMocks();localStorage.clear();sessionStorage.clear();m.owner='owner-a';m.latest.mockResolvedValue(null);m.start.mockResolvedValue(accepted)})
 afterEach(()=>{app?.unmount();app=undefined;document.body.innerHTML=''})
 it('opens preparation immediately, fixes the intent before posting and rejects a duplicate click',async()=>{
- const s=mount();s.prepare();expect(s.initialOpen.value).toBe(true);expect(s.initialStatus.value).toBe('PREPARING');expect(s.locked.value).toBe(true)
+ const s=mount();s.prepare();expect(s.dialogOpen.value).toBe(true);expect(s.initialStatus.value).toBe('PREPARING');expect(s.locked.value).toBe(true)
  let finish!:(v:unknown)=>void;m.start.mockImplementationOnce(()=>new Promise(r=>finish=r))
  const pending=s.submit('work-a',2,'zh-CN','今天的歌')
+ expect(s.submissionPending.value).toBe(true);expect(s.initialStatus.value).toBe('SUBMITTING_QUICK')
  expect(recoverQuickIntent('owner-a','work-a')?.workVersion).toBe(2)
  await s.submit('work-a',2,'zh-CN','changed');expect(m.start).toHaveBeenCalledTimes(1)
  finish(accepted);await pending
  expect(s.workId.value).toBe('work-a');expect(s.flow.value?.id).toBe('flow-a');expect(s.locked.value).toBe(true)
+ expect(s.submissionPending.value).toBe(false);expect(s.dialogOpen.value).toBe(true)
 })
 it('retains an unknown submission through refresh and only queries on restore',async()=>{
  const s=mount();s.prepare();m.start.mockRejectedValueOnce(new ApiError('timeout',408));await s.submit('work-a',2,'en','Song')
@@ -40,7 +42,7 @@ it('finds an accepted task when resuming instead of submitting it again',async()
 it('unlocks input after an authoritative rejection and keeps no uncertain request',async()=>{
  const s=mount();s.prepare();m.start.mockRejectedValueOnce(new ApiError('credits',402,'INSUFFICIENT_CREDITS'))
  await expect(s.submit('work-a',2,'zh-CN','歌')).rejects.toThrow('credits')
- expect(s.locked.value).toBe(false);expect(s.initialOpen.value).toBe(false);expect(recoverQuickIntent('owner-a','work-a')).toBeUndefined()
+ expect(s.locked.value).toBe(false);expect(s.dialogOpen.value).toBe(false);expect(recoverQuickIntent('owner-a','work-a')).toBeUndefined()
 })
 it('does not apply a late response after the user leaves for a different draft',async()=>{
  const s=mount();s.prepare();let finish!:(v:unknown)=>void;m.start.mockImplementationOnce(()=>new Promise(r=>finish=r))
@@ -50,7 +52,7 @@ it('does not apply a late response after the user leaves for a different draft',
 })
 it('does not recover another account intent and preserves the minimized state',async()=>{
  const s=mount();s.prepare();s.close();await s.submit('work-a',2,'zh-CN','歌');s.reset();m.latest.mockResolvedValue(accepted);await s.restore('work-a','歌')
- expect(s.minimized.value).toBe(true);expect(s.initialOpen.value).toBe(false)
+ expect(s.minimized.value).toBe(true);expect(s.dialogOpen.value).toBe(false)
  expect(recoverQuickIntent('owner-b','work-a')).toBeUndefined()
 })
 it('ignores a stale empty lookup while the submission is still being accepted',async()=>{

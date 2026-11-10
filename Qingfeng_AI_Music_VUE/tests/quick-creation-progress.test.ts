@@ -96,3 +96,38 @@ it('ignores backdrop clicks for quick creation but supports an explicit close',a
  dialog.dispatchEvent(new MouseEvent('click',{bubbles:true,clientX:-10,clientY:-10}));await flush();expect(dialog.open).toBe(true)
  document.querySelector<HTMLButtonElement>('[aria-label="关闭生成进度弹窗"]')!.click();await flush();expect(dialog.open).toBe(false)
 })
+
+function mountStudioProgress(){
+ const props=reactive({workId:'',dialogOpen:true,submissionStatus:'PREPARING',submissionPending:false,awaitingSubmission:false,initialFlow:null as QuickCreation|null,resultReady:false,completionMode:'navigate' as const})
+ const view=vi.fn()
+ app=createApp({render:()=>h(QuickCreationProgress,{...props,onVisibility:(value:boolean)=>{props.dialogOpen=value},onView:view})})
+ app.mount(document.body.appendChild(document.createElement('div')))
+ return {props,view}
+}
+
+it('keeps the same open dialog through preparing, submitting, queued and writing',async()=>{
+ const {props}=mountStudioProgress();await flush()
+ const dialog=document.querySelector<HTMLDialogElement>('dialog')!
+ const status=()=>dialog.querySelector('.generation-live')?.textContent
+ expect(dialog.open).toBe(true);expect(status()).toContain('正在保存创作要求')
+ Object.assign(props,{workId:'work-a',submissionStatus:'SUBMITTING_QUICK',submissionPending:true})
+ await vi.advanceTimersByTimeAsync(4000);await flush()
+ expect(status()).toContain('正在提交你的音乐创作');expect(mocks.latest).not.toHaveBeenCalled()
+ Object.assign(props,{submissionPending:false,initialFlow:flow('QUEUED')});await flush()
+ expect(status()).toContain('创作已排队');expect(mocks.latest).not.toHaveBeenCalled()
+ await vi.advanceTimersByTimeAsync(4000);await flush()
+ expect(status()).toContain('正在编写歌词');expect(dialog.open).toBe(true)
+ expect(document.querySelectorAll('dialog')).toHaveLength(1);expect(document.querySelector('dialog')).toBe(dialog)
+})
+
+it('queries an uncertain submission without reopening a dialog dismissed during preparation',async()=>{
+ const {props,view}=mountStudioProgress();await flush()
+ click('收起，后台继续');await flush()
+ expect(props.dialogOpen).toBe(false)
+ Object.assign(props,{workId:'work-a',submissionPending:true,submissionStatus:'SUBMITTING_QUICK'});await flush()
+ expect(mocks.latest).not.toHaveBeenCalled()
+ Object.assign(props,{submissionPending:false,awaitingSubmission:true,submissionStatus:'SUBMISSION_UNKNOWN'});await flush()
+ expect(mocks.latest).toHaveBeenCalledOnce();expect(mocks.retry).not.toHaveBeenCalled()
+ expect(document.querySelector<HTMLDialogElement>('dialog')?.open).toBe(false);expect(view).not.toHaveBeenCalled()
+ click('查看生成进度');await flush();expect(document.querySelector<HTMLDialogElement>('dialog')?.open).toBe(true)
+})

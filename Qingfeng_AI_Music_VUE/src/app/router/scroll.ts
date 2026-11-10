@@ -13,6 +13,10 @@ export const scrollBehavior: RouterScrollBehavior = (to, from, savedPosition) =>
       ? to.query.work === from.query.work
       : to.query.draft === from.query.draft || !from.query.draft && typeof to.query.draft === 'string'
     if (sameDocument) return false
+
+    const promotion = typeof window === 'undefined' ? undefined : window.history?.state?.studioDraftPromotion
+    if (!from.query.work && typeof from.query.draft === 'string' && typeof to.query.work === 'string'
+      && promotion?.draft === from.query.draft && promotion.work === to.query.work) return false
   }
 
   return to.hash
