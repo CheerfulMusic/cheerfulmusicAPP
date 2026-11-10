@@ -38,6 +38,12 @@ import java.util.Set;
 @Profile({"mysql", "test"})
 public class AnalyticsViewController {
     private static final String VIEWER_KEY = "qingfeng.analytics.viewer-emails";
+    /**
+     * 匿名化哨兵值行（visitor_id/session_id = 'ANONYMIZED'）必须排除在 UV / sessions / 页面 PV 之外，
+     * 否则 COUNT(DISTINCT) 会把全部匿名化行误算成 1 个额外真实访客。正常数据无此哨兵值，行集合不变，口径零偏差。
+     * 各聚合统一引用此常量，避免散落硬编码导致后续遗漏（见隐私治理方案 §2.B.6 / §15.1）。
+     */
+    private static final String REAL_VISITOR_PREDICATE = "visitor_id <> 'ANONYMIZED' AND session_id <> 'ANONYMIZED'";
 
     private final IdentityApi identity;
     private final ObjectProvider<JdbcTemplate> jdbc;
@@ -132,14 +138,14 @@ public class AnalyticsViewController {
                             + "COUNT(DISTINCT visitor_id) uv, COUNT(DISTINCT session_id) sessions, "
                             + "COALESCE(AVG(CASE WHEN event='page_leave' THEN duration_ms END),0) avg_duration_ms, "
                             + "COALESCE(SUM(CASE WHEN event='page_leave' THEN duration_ms END),0) total_duration_ms "
-                            + "FROM site_event WHERE created_at >= ?",
+                            + "FROM site_event WHERE created_at >= ? AND " + REAL_VISITOR_PREDICATE,
                     (rs, n) -> map(rs.getLong("pv"), rs.getLong("pageviews"), rs.getLong("uv"), rs.getLong("sessions"),
                             rs.getLong("avg_duration_ms"), rs.getLong("total_duration_ms")), since).stream().findFirst().orElseGet(LinkedHashMap::new));
             body.put("daily", template.query(
                     "SELECT CAST(created_at AS DATE) d, COUNT(*) pv, COUNT(CASE WHEN event='pageview' THEN 1 END) pageviews, "
                             + "COUNT(DISTINCT visitor_id) uv, "
                             + "COALESCE(AVG(CASE WHEN event='page_leave' THEN duration_ms END),0) avg_duration_ms FROM site_event "
-                            + "WHERE created_at >= ? GROUP BY CAST(created_at AS DATE) ORDER BY d",
+                            + "WHERE created_at >= ? AND " + REAL_VISITOR_PREDICATE + " GROUP BY CAST(created_at AS DATE) ORDER BY d",
                     (rs, n) -> {
                         var row = new LinkedHashMap<String, Object>();
                         row.put("d", String.valueOf(rs.getDate("d")));
@@ -153,10 +159,10 @@ public class AnalyticsViewController {
             // 直接对 pageview 取平均会永远是 0，所以按页面分别聚合后再拼回来。
             body.put("pages", template.query(
                     "SELECT p.page_path, p.pv, COALESCE(l.avg_ms,0) avg_duration_ms, COALESCE(l.samples,0) samples FROM ("
-                            + "SELECT page_path, COUNT(*) pv FROM site_event WHERE event='pageview' AND created_at >= ? "
+                            + "SELECT page_path, COUNT(*) pv FROM site_event WHERE event='pageview' AND created_at >= ? AND " + REAL_VISITOR_PREDICATE + " "
                             + "GROUP BY page_path ORDER BY pv DESC LIMIT 20) p LEFT JOIN ("
                             + "SELECT page_path, AVG(duration_ms) avg_ms, COUNT(*) samples FROM site_event "
-                            + "WHERE event='page_leave' AND duration_ms IS NOT NULL AND duration_ms >= 0 AND created_at >= ? "
+                            + "WHERE event='page_leave' AND duration_ms IS NOT NULL AND duration_ms >= 0 AND created_at >= ? AND " + REAL_VISITOR_PREDICATE + " "
                             + "GROUP BY page_path) l ON l.page_path = p.page_path ORDER BY p.pv DESC",
                     (rs, n) -> {
                         var row = new LinkedHashMap<String, Object>();

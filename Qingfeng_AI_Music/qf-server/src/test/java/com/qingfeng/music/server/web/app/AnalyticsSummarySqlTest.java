@@ -153,4 +153,92 @@ class AnalyticsSummarySqlTest {
         assertEquals(1, users.size(), "空 creator_id 不能被聚合成一个用户");
         assertEquals("creator-1", ((Map<String, Object>) users.get(0)).get("creatorId"));
     }
+
+    /**
+     * 隐私治理方案 §2.B.6 / §15.1：匿名化哨兵值行（visitor_id/session_id='ANONYMIZED'）不得污染 UV/sessions/PV。
+     * 含 2 个真实访客 + 3 个匿名化行；UV 必须为 2（哨兵值多行只贡献 0），绝不能误算为 3。
+     */
+    @Test @SuppressWarnings("unchecked")
+    void anonymizedSentinelRowsExcludedFromUvAndPages() throws Exception {
+        var dataSource = new JdbcDataSource();
+        dataSource.setURL("jdbc:h2:mem:analytics_anon_exclude;MODE=MySQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1");
+        try (Connection c = dataSource.getConnection(); Statement s = c.createStatement()) {
+            s.execute("CREATE TABLE site_event (id VARCHAR(36) PRIMARY KEY, visitor_id VARCHAR(64), session_id VARCHAR(64), "
+                    + "event VARCHAR(50), page_path VARCHAR(512), referrer VARCHAR(512), payload TEXT, "
+                    + "created_at TIMESTAMP(6), creator_id VARCHAR(36), duration_ms BIGINT)");
+            s.execute("CREATE TABLE creator_google_identity (creator_id VARCHAR(36), email VARCHAR(320), display_name VARCHAR(200))");
+            s.execute("CREATE TABLE creator_oidc_identity (creator_id VARCHAR(36), email VARCHAR(320), phone_masked VARCHAR(40), display_name VARCHAR(200))");
+            s.execute("CREATE TABLE creator_authing_identity (creator_id VARCHAR(36), email VARCHAR(320), display_name VARCHAR(200))");
+            // 两个真实访客
+            s.execute("INSERT INTO site_event VALUES ('1','v1','s1','pageview','/','',NULL,CURRENT_TIMESTAMP,'creator-1',5000)");
+            s.execute("INSERT INTO site_event VALUES ('2','v1','s1','page_leave','/','',NULL,CURRENT_TIMESTAMP,'creator-1',5000)");
+            s.execute("INSERT INTO site_event VALUES ('3','v2','s2','pageview','/create','',NULL,CURRENT_TIMESTAMP,'creator-2',8000)");
+            s.execute("INSERT INTO site_event VALUES ('4','v2','s2','page_leave','/create','',NULL,CURRENT_TIMESTAMP,'creator-2',8000)");
+            // 三个匿名化哨兵值行（visitor_id/session_id = 'ANONYMIZED'）
+            s.execute("INSERT INTO site_event VALUES ('5','ANONYMIZED','ANONYMIZED','pageview','/','',NULL,CURRENT_TIMESTAMP,NULL,NULL)");
+            s.execute("INSERT INTO site_event VALUES ('6','ANONYMIZED','ANONYMIZED','page_leave','/','',NULL,CURRENT_TIMESTAMP,NULL,NULL)");
+            s.execute("INSERT INTO site_event VALUES ('7','ANONYMIZED','ANONYMIZED','pageview','/create','',NULL,CURRENT_TIMESTAMP,NULL,NULL)");
+            s.execute("INSERT INTO creator_google_identity VALUES ('creator-1','jiang@example.com','Jiang')");
+        }
+        var identity = mock(IdentityApi.class);
+        when(identity.googleIdentity(anyString())).thenReturn(Optional.of(
+                new IdentityApi.GoogleIdentity("hash", "jiang@example.com", "Jiang")));
+        var environment = mock(Environment.class);
+        when(environment.getProperty(eq("qingfeng.analytics.viewer-emails"), eq(""))).thenReturn("jiang@example.com");
+        var jdbcProvider = (ObjectProvider<JdbcTemplate>) mock(ObjectProvider.class);
+        when(jdbcProvider.getIfAvailable()).thenReturn(new JdbcTemplate(dataSource));
+        SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
+                new CreatorPrincipal("creator-1"), null, List.of(new SimpleGrantedAuthority("ROLE_CREATOR"))));
+
+        var body = new AnalyticsViewController(identity, jdbcProvider, environment,
+                new AnalyticsDetailService(new JdbcTemplate(dataSource))).summary(30).getBody();
+        assertNotNull(body);
+        assertFalse(body.containsKey("error"));
+        var totals = (Map<String, Object>) body.get("totals");
+        assertEquals(2L, totals.get("uv"), "匿名化哨兵值多行只贡献 0 个真实访客，UV 必须为真实访客数 2，绝不误算为 3");
+        assertEquals(2L, totals.get("sessions"), "sessions 同理必须排除哨兵值");
+        // pv = COUNT(*) 是全部事件行：真实 4 行（2 pageview + 2 page_leave），3 条匿名行须被排除（否则为 7）。
+        assertEquals(4L, totals.get("pv"), "COUNT(*) 必须排除匿名化行（真实 4 行）");
+        assertEquals(2L, totals.get("pageviews"), "仅 event='pageview' 的真实行为 2 条，匿名 pageview 须被排除");
+        var pages = (List<?>) body.get("pages");
+        var landing = (Map<String, Object>) pages.stream().filter(r -> "/".equals(((Map<String, Object>) r).get("pagePath"))).findFirst().orElseThrow();
+        var create = (Map<String, Object>) pages.stream().filter(r -> "/create".equals(((Map<String, Object>) r).get("pagePath"))).findFirst().orElseThrow();
+        assertEquals(1L, landing.get("pv"), "/ 页 PV 仅含真实访客 v1");
+        assertEquals(1L, create.get("pv"), "/create 页 PV 仅含真实访客 v2");
+    }
+
+    /** 仅含匿名化行时 UV 必须为 0，绝不能误算为 1——即哨兵值不能冒充一个真实访客。 */
+    @Test @SuppressWarnings("unchecked")
+    void sentinelOnlyRowsYieldZeroUv() throws Exception {
+        var dataSource = new JdbcDataSource();
+        dataSource.setURL("jdbc:h2:mem:analytics_sentinel_only;MODE=MySQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1");
+        try (Connection c = dataSource.getConnection(); Statement s = c.createStatement()) {
+            s.execute("CREATE TABLE site_event (id VARCHAR(36) PRIMARY KEY, visitor_id VARCHAR(64), session_id VARCHAR(64), "
+                    + "event VARCHAR(50), page_path VARCHAR(512), referrer VARCHAR(512), payload TEXT, "
+                    + "created_at TIMESTAMP(6), creator_id VARCHAR(36), duration_ms BIGINT)");
+            s.execute("CREATE TABLE creator_google_identity (creator_id VARCHAR(36), email VARCHAR(320), display_name VARCHAR(200))");
+            s.execute("CREATE TABLE creator_oidc_identity (creator_id VARCHAR(36), email VARCHAR(320), phone_masked VARCHAR(40), display_name VARCHAR(200))");
+            s.execute("CREATE TABLE creator_authing_identity (creator_id VARCHAR(36), email VARCHAR(320), display_name VARCHAR(200))");
+            s.execute("INSERT INTO site_event VALUES ('1','ANONYMIZED','ANONYMIZED','pageview','/','',NULL,CURRENT_TIMESTAMP,NULL,NULL)");
+            s.execute("INSERT INTO site_event VALUES ('2','ANONYMIZED','ANONYMIZED','pageview','/','',NULL,CURRENT_TIMESTAMP,NULL,NULL)");
+            s.execute("INSERT INTO creator_google_identity VALUES ('creator-1','jiang@example.com','Jiang')");
+        }
+        var identity = mock(IdentityApi.class);
+        when(identity.googleIdentity(anyString())).thenReturn(Optional.of(
+                new IdentityApi.GoogleIdentity("hash", "jiang@example.com", "Jiang")));
+        var environment = mock(Environment.class);
+        when(environment.getProperty(eq("qingfeng.analytics.viewer-emails"), eq(""))).thenReturn("jiang@example.com");
+        var jdbcProvider = (ObjectProvider<JdbcTemplate>) mock(ObjectProvider.class);
+        when(jdbcProvider.getIfAvailable()).thenReturn(new JdbcTemplate(dataSource));
+        SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
+                new CreatorPrincipal("creator-1"), null, List.of(new SimpleGrantedAuthority("ROLE_CREATOR"))));
+
+        var body = new AnalyticsViewController(identity, jdbcProvider, environment,
+                new AnalyticsDetailService(new JdbcTemplate(dataSource))).summary(30).getBody();
+        assertNotNull(body);
+        assertFalse(body.containsKey("error"));
+        var totals = (Map<String, Object>) body.get("totals");
+        assertEquals(0L, totals.get("uv"), "仅匿名化行时 UV 必须为 0，绝不能误算为 1");
+        assertEquals(0L, totals.get("pv"), "仅匿名化行时 PV 必须为 0");
+    }
 }
