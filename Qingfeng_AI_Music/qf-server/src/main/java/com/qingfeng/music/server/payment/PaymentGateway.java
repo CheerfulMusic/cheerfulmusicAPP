@@ -7,6 +7,8 @@ import java.math.BigDecimal;
  * external checkout links against its trusted HTTPS hosts before returning them to the client.
  */
 public interface PaymentGateway {
+    /** Definitive create rejection, never a transport failure or an unknown outcome. */
+    class CreationRejected extends RuntimeException {}
     record Link(String id, String url) {}
     record Snapshot(String id, String reference, String status, boolean reusable, String currency,
                     BigDecimal amount, String successfulPaymentId) {}

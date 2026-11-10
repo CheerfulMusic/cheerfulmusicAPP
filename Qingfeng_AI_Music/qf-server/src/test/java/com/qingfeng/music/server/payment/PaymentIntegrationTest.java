@@ -85,4 +85,40 @@ class PaymentIntegrationTest {
    payments.settle(id,"link1",AirwallexSandboxGateway.snapshot(mapper.readTree(json)));payments.settle(id,"link1",AirwallexSandboxGateway.snapshot(mapper.readTree(json)));
    assertEquals(10,ledger.balance(owner));
  }
+
+ @Autowired org.springframework.transaction.PlatformTransactionManager transactionManager;
+ @Autowired PaymentCatalog catalog;
+ private PaymentService service(PaymentGateway gateway) {
+   var result=new PaymentService(db,new org.springframework.transaction.support.TransactionTemplate(transactionManager),ledger,gateway,catalog);
+   org.springframework.test.util.ReflectionTestUtils.setField(result,"enabled",true);
+   return result;
+ }
+ private CreatorPrincipal signedInOwner() {
+   var session=identity.create();
+   identity.signInWithGoogle(session.token(),session.creatorId(),java.util.UUID.randomUUID().toString(),null,null);
+   return new CreatorPrincipal(session.creatorId());
+ }
+ @Test void definiteRejectionReleasesOrderButUnknownCreateMustBeRecoveredWithoutRecreating() {
+   var gateway=org.mockito.Mockito.mock(PaymentGateway.class);
+   org.mockito.Mockito.when(gateway.configured()).thenReturn(true);
+   var local=service(gateway);var owner=signedInOwner();
+   org.mockito.Mockito.when(gateway.create(org.mockito.ArgumentMatchers.anyString(),org.mockito.ArgumentMatchers.anyString(),org.mockito.ArgumentMatchers.any(),org.mockito.ArgumentMatchers.anyString()))
+     .thenThrow(new PaymentGateway.CreationRejected()).thenThrow(new IllegalStateException("timeout"));
+   assertThrows(org.springframework.web.server.ResponseStatusException.class,()->local.create(owner,new PaymentService.OrderRequest("starter-USD")));
+   assertEquals(1,db.queryForObject("SELECT COUNT(*) FROM payment_order WHERE creator_id=? AND status='FAILED'",Integer.class,owner.id()));
+   assertThrows(IllegalStateException.class,()->local.create(owner,new PaymentService.OrderRequest("starter-USD")));
+   String id=db.queryForObject("SELECT id FROM payment_order WHERE creator_id=? AND status='CREATING'",String.class,owner.id());
+   assertThrows(org.springframework.web.server.ResponseStatusException.class,()->local.create(owner,new PaymentService.OrderRequest("starter-USD")));
+   var remote=new PaymentGateway.Snapshot("original",id,"PAID",false,"USD",new java.math.BigDecimal("4.99"),"intent_original");
+   org.mockito.Mockito.when(gateway.retrieve("original")).thenReturn(remote);
+   assertThrows(org.springframework.web.server.ResponseStatusException.class,()->local.recover(signedInOwner(),id,"original"));
+   org.mockito.Mockito.when(gateway.retrieve("wrong")).thenReturn(new PaymentGateway.Snapshot("wrong",id,"PAID",false,"USD",new java.math.BigDecimal("0.01"),"intent_wrong"));
+   assertThrows(org.springframework.web.server.ResponseStatusException.class,()->local.recover(owner,id,"wrong"));
+   assertEquals("CREATING",db.queryForObject("SELECT status FROM payment_order WHERE id=?",String.class,id));
+   long before=ledger.balance(owner.id());
+   assertEquals("PAID",local.recover(owner,id,"original").get("status"));
+   local.recover(owner,id,"original");
+   assertEquals(before+100,ledger.balance(owner.id()));
+   org.mockito.Mockito.verify(gateway,org.mockito.Mockito.times(2)).create(org.mockito.ArgumentMatchers.anyString(),org.mockito.ArgumentMatchers.anyString(),org.mockito.ArgumentMatchers.any(),org.mockito.ArgumentMatchers.anyString());
+ }
 }

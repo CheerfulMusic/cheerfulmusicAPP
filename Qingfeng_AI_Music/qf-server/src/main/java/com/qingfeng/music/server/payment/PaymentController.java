@@ -19,6 +19,11 @@ public class PaymentController {
     public Map<String,Object> create(@AuthenticationPrincipal CreatorPrincipal creator, @RequestBody OrderRequest request) {
         return payments.create(creator, new PaymentService.OrderRequest(request.packageId()));
     }
+    public record RecoveryRequest(String providerLinkId) {}
+    @PostMapping("/api/app/payments/orders/{id}/recover")
+    public Map<String,Object> recover(@AuthenticationPrincipal CreatorPrincipal creator,@PathVariable String id,@RequestBody RecoveryRequest request) {
+        return payments.recover(creator,id,request.providerLinkId());
+    }
     @GetMapping("/api/app/payments/orders/{id}")
     public Map<String,Object> order(@AuthenticationPrincipal CreatorPrincipal creator, @PathVariable String id) { return payments.order(creator, id); }
     @GetMapping("/api/app/payments/orders")

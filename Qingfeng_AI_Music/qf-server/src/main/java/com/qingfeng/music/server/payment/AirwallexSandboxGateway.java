@@ -30,7 +30,12 @@ public final class AirwallexSandboxGateway implements PaymentGateway {
     @Value("${qingfeng.payments.webhook-secret:}") private String webhookSecret;
     public boolean configured() { return !clientId.isBlank() && !apiKey.isBlank() && !accountId.isBlank() && !webhookSecret.isBlank(); }
     public Link create(String reference, String title, BigDecimal amount, String currency) {
-        JsonNode link=call("POST", "/api/v1/pa/payment_links/create", Map.of("reusable",false,"title",title,"amount",amount,"currency",currency,"reference",reference));
+        JsonNode link;
+        try { link=call("POST", "/api/v1/pa/payment_links/create", Map.of("reusable",false,"title",title,"amount",amount,"currency",currency,"reference",reference)); }
+        catch (org.springframework.web.client.HttpClientErrorException failure) {
+            if(failure.getStatusCode().value()==400 || failure.getStatusCode().value()==422) throw new CreationRejected();
+            throw failure;
+        }
         String id=link.path("id").asString(), url=link.path("url").asString();
         return validateLink(id,url);
     }

@@ -16,7 +16,7 @@ function endpoint(path: string) {
 export async function requestJson<T>(path: string, method = 'GET', body?: unknown, timeoutMs = 10000): Promise<T> {
   const controller = new AbortController(), timer = setTimeout(() => controller.abort(), timeoutMs)
   try {
-    const response = await fetch(endpoint(path), { method, credentials: 'same-origin', signal: controller.signal,
+    const response = await fetch(endpoint(path), { method, credentials: platform.kind === 'web' ? 'same-origin' : 'include', signal: controller.signal,
       headers: { Accept: 'application/json', ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}), ...(method !== 'GET' && csrf ? { 'X-XSRF-TOKEN': csrf } : {}) }, body: body !== undefined ? JSON.stringify(body) : undefined })
     return await decodeResponse<T>(response,path,method)
   } catch (error) {
@@ -52,7 +52,7 @@ function invalidResponse(){return new ApiError('服务响应不完整，操作�
 export async function uploadForm<T>(path: string, body: FormData): Promise<T> {
   await ensureCreator()
   try{
-    const response = await fetch(endpoint(path), { method: 'POST', credentials: 'same-origin', body, headers: { 'X-XSRF-TOKEN': csrf }, signal: AbortSignal.timeout(120000) })
+    const response = await fetch(endpoint(path), { method: 'POST', credentials: platform.kind === 'web' ? 'same-origin' : 'include', body, headers: { 'X-XSRF-TOKEN': csrf }, signal: AbortSignal.timeout(120000) })
     return await decodeResponse<T>(response,path,'POST')
   }catch(error){
     if(error instanceof Error&&['AbortError','TimeoutError'].includes(error.name))throw new ApiError('请求超时，请检查网络后重试；不要连续重复提交。',408)

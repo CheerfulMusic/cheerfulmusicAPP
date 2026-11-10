@@ -39,7 +39,13 @@ public class PaymentService {
         String id=UUID.randomUUID().toString();
         reserve(creator.id(),id,selected.id(),selected.amount(),selected.currency(),selected.credits());
         // The order exists before contacting the provider so a racing webhook can find it.
-        PaymentGateway.Link link=gateway.create(id,selected.title(),selected.amount(),selected.currency());
+        PaymentGateway.Link link;
+        try { link=gateway.create(id,selected.title(),selected.amount(),selected.currency()); }
+        catch (PaymentGateway.CreationRejected rejected) {
+            db.update("UPDATE payment_order SET status='FAILED' WHERE id=? AND status='CREATING' AND provider_link_id IS NULL",id);
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,"支付平台拒绝创建订单，可稍后重试");
+        }
+        // Transport failures remain unresolved: a remote order may already exist.
         String linkId=link.id(), url=link.url();
         db.update("UPDATE payment_order SET provider_link_id=?,status=CASE WHEN status='CREATING' THEN 'PENDING' ELSE status END WHERE id=? AND (provider_link_id IS NULL OR provider_link_id=?)",linkId,id,linkId);
         return Map.of("orderId",id,"checkoutUrl",url);
@@ -66,6 +72,25 @@ public class PaymentService {
             if("PAID".equals(remote.status())) {settle(id,linkId,remote); row=db.queryForMap("SELECT id,status,credits FROM payment_order WHERE id=?",id);}
         }
         return Map.of("orderId",row.get("id"),"status",row.get("status"),"credits",row.get("credits"));
+    }
+    /** Attach the original support-confirmed link after an unknown create; never create a replacement. */
+    public Map<String,Object> recover(CreatorPrincipal creator,String id,String linkId) {
+        if(!ready()) throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE);
+        if(linkId==null || !linkId.matches("[A-Za-z0-9_-]{1,128}")) throw new ResponseStatusException(HttpStatus.BAD_REQUEST);
+        if(db.queryForList("SELECT id FROM payment_order WHERE id=? AND creator_id=? AND provider='AIRWALLEX'",id,creator.id()).isEmpty()) throw new ResponseStatusException(HttpStatus.NOT_FOUND);
+        var remote=gateway.retrieve(linkId);
+        return tx.execute(t->{
+            var row=db.queryForMap("SELECT * FROM payment_order WHERE id=? AND creator_id=? AND provider='AIRWALLEX' FOR UPDATE",id,creator.id());
+            if(!id.equals(remote.reference()) || !linkId.equals(remote.id()) || remote.reusable()
+                || !row.get("currency").equals(remote.currency()) || remote.amount()==null
+                || ((BigDecimal)row.get("amount")).compareTo(remote.amount())!=0
+                || (row.get("provider_link_id")!=null&&!linkId.equals(row.get("provider_link_id"))))
+                throw new ResponseStatusException(HttpStatus.CONFLICT,"支付信息不匹配");
+            if(!List.of("CREATING","PENDING","PAID").contains(row.get("status"))) throw new ResponseStatusException(HttpStatus.CONFLICT);
+            db.update("UPDATE payment_order SET provider_link_id=?,status=CASE WHEN status='CREATING' THEN 'PENDING' ELSE status END WHERE id=?",linkId,id);
+            if("PAID".equals(remote.status())) settle(id,linkId,remote);
+            return Map.of("orderId",id,"status",db.queryForObject("SELECT status FROM payment_order WHERE id=?",String.class,id),"credits",row.get("credits"));
+        });
     }
     public Map<String,Object> orders(CreatorPrincipal creator) {
         var orders=db.query("SELECT id,status,credits,created_at FROM payment_order WHERE creator_id=? AND provider='AIRWALLEX' ORDER BY created_at DESC,id DESC LIMIT 50",
