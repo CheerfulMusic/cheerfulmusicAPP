@@ -1,5 +1,8 @@
 <script setup lang="ts">
 import LyricsTemplatePicker from '../../works/components/LyricsTemplatePicker.vue'
+import CreditCostHint from '../../../shared/credits/CreditCostHint.vue'
+import { useCredits } from '../../../shared/credits/useCredits'
+import { guardCredits } from '../../../shared/credits/credit-gate'
 import { normalizeLyricsStructure, lyricsStructureKey, type LyricsStructure } from '../../works/model/lyrics-structure'
 import { composeStyleDetailed, splitStyle, styleTail as compileStyleTail } from '../../agent/model/style-compiler'
 import { agentLanguage, agentStructure } from '../../agent/model/param-compiler'
@@ -18,7 +21,7 @@ import { normalizeVocalGender } from '../model/vocals'
 import { styleFromInspiration } from '../model/suggestions'
 import { inspirationPresets, inspirationSelection, type InspirationSelection } from '../model/inspiration-presets'
 import { continuationRequestKey, retireContinuationRequestKey } from '../model/lyrics-continuation'
-import { generateLyrics, getLyricsRequest, getUsage, type Allowance } from '../../works/api/detail'
+import { generateLyrics, getLyricsRequest } from '../../works/api/detail'
 import { clearAgentBrief, readAgentBrief, shouldApplyAgentBrief } from '../../agent/model/brief'
 
 const storyFlowVersion = 3
@@ -27,7 +30,8 @@ function validRecovery(value:unknown):value is Recovery {
   const v = value as Recovery
   return !!v && !!v.draft && ['recipient','occasion','story','message','style','title'].every(k => typeof v.draft[k as keyof DraftInput] === 'string') && ['zh-CN','en','mixed'].includes(v.language) && /^[0-9a-f-]{36}$/i.test(v.draftKey)
 }
-const route=useRoute(), router=useRouter(), initialized=ref(false), ready=ref(false), aiReady=ref(false), existing=ref<Work>(), baseline=ref(''), saving=ref(false), composing=ref(false), error=ref(''), notice=ref(''), conflict=ref(false), localSaved=ref(false), allowance=ref<Allowance>()
+const route=useRoute(), router=useRouter(), initialized=ref(false), ready=ref(false), aiReady=ref(false), existing=ref<Work>(), baseline=ref(''), saving=ref(false), composing=ref(false), error=ref(''), notice=ref(''), conflict=ref(false), localSaved=ref(false), creditShort=ref(false)
+const { credits, refreshCredits } = useCredits()
 const language=ref<string>(locale.value)
 // 已编译进风格文本的参数说明，只读展示，便于提交前核对。
 const compiledParams=computed(()=>splitStyle(draft.style).tail)
@@ -36,6 +40,7 @@ const omittedParams=ref<string[]>([])
 const structure=ref<LyricsStructure>(normalizeLyricsStructure())
 const validationError=ref(''), selectedHint=ref(-1)
 const rewriting=ref(false), rewriteError=ref(''), rewriteStatus=ref('')
+const rewriteKey=ref('')
 const rewriteBackup=ref<{source:string;result:string}>()
 const inspirationPlaceholder=computed(()=>t('写下你的故事、情绪、场景或主题……'))
 const presetBackup=ref<{before:InspirationSelection;filled:InspirationSelection;previousHint:number}>()
@@ -133,7 +138,8 @@ async function initialize() {
       }
     }
     if(!id){const previousKey=cacheKey;cacheKey=recoveryKey(currentCreatorId(),'story',draftKey);const target=`draft:${draftKey}`;internalContext=target;internalRoute=true;try{await router.replace({path:'/create',query:{...query,draft:draftKey}})}finally{internalRoute=false;if(internalContext===target)internalContext=undefined};if(turn!==initSequence)return;if(previousKey!==cacheKey&&local)writeRecovery(cacheKey,local)}
-    void getUsage().then(v=>{if(turn===initSequence)allowance.value=v.lyrics}).catch(()=>{})
+    // 积分余额与歌词价格都从后端读取；读不到时提示整块不显示，不猜测数字。
+    void refreshCredits().catch(()=>{})
   } catch(e) {
     if(turn!==initSequence)return
     ready.value=false;error.value=e instanceof Error?e.message:'服务暂时不可用'
@@ -219,27 +225,53 @@ async function resolveConflict(useLocal:boolean){
 }
 watch(()=>[draft.story,draft.message],()=>{validationError.value='';continuationFailed.value=false})
 function rejectAnswer(message:string){validationError.value=message;document.querySelector<HTMLTextAreaElement>('#inspiration-input')?.focus()}
+/**
+ * 改写每次都会调用付费模型：每日免费额度内不扣积分，用完后每次扣一次积分。
+ * 余额不足时先刷新一次再判断，避免用过期数字拦下刚充值完的用户；后端仍会再次校验。
+ */
+async function blockedByRewrite(){
+  const gate=await guardCredits(()=>credits.value,refreshCredits,view=>view.rewriteFreeRemaining===0?view.rewriteCost:0)
+  if(!gate.blocked)return false
+  rewriteError.value=t('积分不足，当前余额 {balance} 积分，改写需要 {cost} 积分。',{balance:gate.balance as number,cost:gate.cost})
+  return true
+}
 async function rewriteIdea() {
   if(rewriting.value||composing.value||!initialized.value||resetting.value||conflict.value)return
   if(!draft.story.trim()){rejectAnswer('请先写下一点创作灵感，再使用AI改写。');return}
   const source=draft.story, requestedLanguage=language.value, turn=initSequence, owner=currentCreatorId()
   rewriting.value=true;rewriteError.value='';rewriteStatus.value=''
   try {
-    const result=await rewriteInspiration(source,requestedLanguage)
+    if(await blockedByRewrite())return
+    const key=rewriteKey.value||(rewriteKey.value=crypto.randomUUID())
+    const result=await rewriteInspiration(source,requestedLanguage,key)
+    rewriteKey.value=''
     if(!alive||turn!==initSequence||owner!==currentCreatorId())return
     if(draft.story!==source||language.value!==requestedLanguage||conflict.value){rewriteStatus.value='内容已修改，本次改写未覆盖当前输入，请重新改写。';return}
     if(!checkpointRecovery(cacheKey,recoveryValue())){rewriteError.value='无法备份原文，本次改写未覆盖内容。';return}
     rewriteBackup.value={source,result:result.text};draft.story=result.text
     rewriteStatus.value='已优化创作描述，你可以继续编辑或恢复原文。'
   } catch(e) {
+    // 后端已把这次请求记为失败：用同一个键重试只会得到「上次未完成」，此时换新键重新发起。
+    if(e instanceof ApiError&&e.code==='REWRITE_REQUEST_FAILED')rewriteKey.value=''
     if(alive&&turn===initSequence&&owner===currentCreatorId())rewriteError.value=e instanceof Error?e.message:'AI改写失败，请稍后重试；原文仍会保留。'
-  } finally {if(alive&&turn===initSequence)rewriting.value=false}
+  } finally {if(alive&&turn===initSequence)rewriting.value=false; void refreshCredits().catch(()=>{})}
 }
 function restoreRewrite() {
   const backup=rewriteBackup.value
   if(!backup||rewriting.value||draft.story!==backup.result)return
   if(!checkpointRecovery(cacheKey,recoveryValue())){rewriteError.value='无法备份原文，本次改写未覆盖内容。';return}
   draft.story=backup.source;rewriteBackup.value=undefined;rewriteError.value='';rewriteStatus.value='已恢复改写前的原文。'
+}
+/**
+ * 积分不足时先刷新一次余额再判断，避免用过期数字拦下刚充值完的用户；
+ * 刷新后仍然不足才拦截。后端在调用模型前还会再校验一次余额，前端拦截不是唯一防线。
+ */
+async function blockedByCredits(){
+  const gate=await guardCredits(()=>credits.value,refreshCredits)
+  if(!gate.blocked)return false
+  creditShort.value=true
+  error.value=t('积分不足，当前余额 {balance} 积分，生成需要 {cost} 积分。',{balance:gate.balance as number,cost:gate.cost})
+  return true
 }
 async function next() {
   if(rewriting.value)return
@@ -249,7 +281,8 @@ async function next() {
 async function continueMaking() {
   if(composing.value || rewriting.value || !ready.value)return
   if(!valid.value){rejectAnswer('请先写下一点创作灵感。');return}
-  composing.value=true;error.value='';notice.value=''
+  if(await blockedByCredits())return
+  composing.value=true;error.value='';notice.value='';creditShort.value=false
   continuationFailed.value=false
   const turn=initSequence
   let writing=false
@@ -265,7 +298,7 @@ async function continueMaking() {
     const revision=await generateLyrics(work.id,work.version,key,language.value,'',undefined,{...structure.value})
     if(alive&&turn===initSequence)await router.push({path:`/works/${work.id}`,query:{revision:revision.id,language:language.value,templateId:structure.value.templateId,chorusFirst:String(structure.value.chorusFirst)}})
   } catch(e){if(alive&&turn===initSequence){continuationFailed.value=writing;error.value=e instanceof Error?e.message:'歌词生成失败，请稍后再试'}}
-  finally{if(turn===initSequence)composing.value=false}
+  finally{if(turn===initSequence){composing.value=false;void refreshCredits().catch(()=>{})}}
 }
 async function returnToLyrics(){try{const work=await flush();if(work)await router.push({path:`/works/${work.id}`,query:{revision:String(route.query.returnRevision||'')}})}catch{/* 保存错误会显示在故事表单。 */}}
 const permitLeave=()=>!dirty.value||localSaved.value||window.confirm(t('当前内容尚未保存，确定离开吗？'))
@@ -288,7 +321,7 @@ onBeforeUnmount(()=>{remember();alive=false;initSequence++;clearTimeout(timer);w
     <RecoveryCopies v-if="initialized&&cacheKey" :storage-key="cacheKey" :validate="validRecovery" @restore="restoreCopy"/>
     <section class="draft-form story-focus">
       <p v-if="notice" class="notice success" role="status">{{ t(notice) }}</p>
-      <div v-if="error" class="notice error" role="alert"><p>{{ t(error) }}</p><div class="actions">
+      <div v-if="error" class="notice error" role="alert"><p>{{ t(error) }} <RouterLink v-if="creditShort" class="text-button" to="/recharge">{{ t('去充值') }}</RouterLink></p><div class="actions">
         <template v-if="conflict"><button class="button secondary" type="button" @click="resolveConflict(true)">{{ t('用本机内容继续') }}</button><button class="button secondary" type="button" @click="resolveConflict(false)">{{ t('载入服务器版本') }}</button></template>
         <button v-else class="button secondary" type="button" :disabled="saving||composing" @click="continuationFailed?continueMaking():retry()">{{ t(continuationFailed?'重新编写歌词':'重试保存') }}</button>
       </div></div>
@@ -301,6 +334,7 @@ onBeforeUnmount(()=>{remember();alive=false;initSequence++;clearTimeout(timer);w
                 <div class="inspiration-rewrite-action">
                   <button type="button" class="inspiration-label inspiration-rewrite" :disabled="rewriting||!ready||!aiReady||conflict" :aria-busy="rewriting" aria-describedby="inspiration-rewrite-purpose" @click="rewriteIdea"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5L12 3ZM21 2v5m-2.5-2.5h5"/></svg>{{ t(rewriting?'AI改写中…':'AI改写') }}</button>
                   <span id="inspiration-rewrite-purpose" class="inspiration-rewrite-purpose">{{ t('帮你把想法写得更具体') }}</span>
+                  <CreditCostHint v-if="credits&&credits.enabled&&(credits.rewriteCost>0||credits.rewriteFreeRemaining>0)" class="inspiration-rewrite-cost" :cost="credits.rewriteCost" :balance="credits.balance" :free-remaining="credits.rewriteFreeRemaining" :busy="rewriting" variant="rewrite"/>
                 </div>
                 <button v-if="rewriteBackup&&draft.story===rewriteBackup.result" class="inspiration-restore" type="button" :disabled="rewriting" @click="restoreRewrite">{{ t('恢复原文') }}</button>
               </div>
@@ -326,10 +360,9 @@ onBeforeUnmount(()=>{remember();alive=false;initSequence++;clearTimeout(timer);w
           <div class="inspiration-examples" role="group" :aria-label="t('选择创作风格')"><span>{{ t('选一种风格') }}</span><button v-for="(example,index) in inspirationPresets" :key="example.label" type="button" :disabled="rewriting" :aria-pressed="selectedHint===index" @click="chooseInspiration(index)">{{ t(example.label) }}</button></div>
           <p id="inspiration-guidance" class="save-info">{{ t('点击标签填入创作描述，你可以继续修改，补充想唱的主题。') }} <button v-if="canUndoPreset" type="button" class="text-button" @click="undoInspiration">{{ t('撤销填入') }}</button></p>
           <details v-if="draft.recipient||draft.occasion||draft.message" class="legacy-inspiration-context"><summary>{{ t('已保留的旧版作品信息') }}</summary><p v-if="draft.recipient">{{ t('收件人：') }}{{ draft.recipient }}</p><p v-if="draft.occasion">{{ draft.occasion }}</p><p v-if="draft.message" class="legacy-message">{{ draft.message }}</p></details>
-          <div class="creation-action-bar story-action-bar"><button class="button creation-primary" type="submit" :disabled="!initialized||composing||rewriting||resetting||!ready||!aiReady||conflict">{{ composing?t('正在编写歌词…'):t('生成歌词') }}<span v-if="!composing" aria-hidden="true">→</span></button></div>
+          <div class="creation-action-bar story-action-bar"><button class="button creation-primary" type="submit" :disabled="!initialized||composing||rewriting||resetting||!ready||!aiReady||conflict">{{ composing?t('正在编写歌词…'):t('生成歌词') }}<span v-if="!composing" aria-hidden="true">→</span></button><CreditCostHint v-if="credits&&credits.enabled&&credits.lyricsCost>0" :cost="credits.lyricsCost" :balance="credits.balance" :busy="composing"/></div>
           <p class="inspiration-next-note">{{ t('先生成歌词，修改满意后再生成音乐。') }}</p>
           <div v-if="route.query.returnRevision" class="story-secondary-actions"><button type="button" class="text-button return-to-lyrics" @click="returnToLyrics">{{ t('返回歌词编辑') }}</button></div>
-          <p v-if="allowance" class="save-info inspiration-allowance">{{ allowance.dailyUnlimited?t('今日歌词编写不限次数'):t('今日还可编写 {remaining} 次歌词',{remaining:allowance.dailyRemaining}) }}</p>
         </fieldset>
       </form>
       <p v-if="initialized&&!aiReady" class="notice">{{ t('歌词生成暂不可用，请稍后再试或手动填写') }} <RouterLink v-if="existing" :to="`/works/${existing.id}`">{{ t('手动填写歌词') }}</RouterLink></p>

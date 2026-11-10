@@ -35,7 +35,7 @@ class InspirationRewriteHttpTest {
     @Test void sessionAndCsrfAreRequiredAndRewriteDoesNotCreateWorkOrLyrics() throws Exception {
         calls.set(0); var json = new ObjectMapper();
         var http=HttpClient.newBuilder().cookieHandler(new CookieManager(null,CookiePolicy.ACCEPT_ALL)).build();
-        String input="{\"text\":\"我想感谢爸爸\",\"language\":\"zh-CN\"}";
+        String input="{\"text\":\"我想感谢爸爸\",\"language\":\"zh-CN\",\"requestKey\":\""+java.util.UUID.randomUUID()+"\"}";
         assertEquals(403,send(http,"POST","/api/app/inspiration/rewrite",input,null).statusCode());
         String csrf=json.readTree(send(http,"GET","/api/public/csrf",null,null).body()).path("token").asText();
         assertEquals(401,send(http,"POST","/api/app/inspiration/rewrite",input,csrf).statusCode());
@@ -44,6 +44,8 @@ class InspirationRewriteHttpTest {
         assertEquals(400,send(http,"POST","/api/app/inspiration/rewrite",input.replace("我想感谢爸爸"," "),csrf).statusCode());
         assertEquals(400,send(http,"POST","/api/app/inspiration/rewrite",input.replace("zh-CN","invalid"),csrf).statusCode());
         assertEquals(400,send(http,"POST","/api/app/inspiration/rewrite",input.replace("我想感谢爸爸","x".repeat(4001)),csrf).statusCode());
+        // 缺少幂等键必须被拒绝，否则可以绕过计费。
+        assertEquals(400,send(http,"POST","/api/app/inspiration/rewrite",input.replaceAll(",\\\"requestKey\\\":\\\"[^\\\"]+\\\"",""),csrf).statusCode());
         assertEquals(0,calls.get());
         var response=send(http,"POST","/api/app/inspiration/rewrite",input,csrf);
         assertEquals(200,response.statusCode(),response.body());

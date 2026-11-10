@@ -25,18 +25,29 @@ public final class ReferenceAnalysisService {
     private final ReferenceAnalyst analyst;
     private final boolean enabled;
     private final Semaphore slots;
+    private final com.qingfeng.music.credits.DailyQuota quota;
+    private final long dailyLimit;
     private final Set<String> active = ConcurrentHashMap.newKeySet();
 
     public ReferenceAnalysisService(ReferenceAnalyst analyst, boolean enabled, int concurrency) {
+        this(analyst, enabled, concurrency, com.qingfeng.music.credits.NoopDailyQuota.FREE, 0L);
+    }
+
+    public ReferenceAnalysisService(ReferenceAnalyst analyst, boolean enabled, int concurrency, com.qingfeng.music.credits.DailyQuota quota, long dailyLimit) {
         if (concurrency < 1) throw new IllegalArgumentException("Reference analysis concurrency must be positive");
         this.analyst = analyst;
         this.enabled = enabled;
+        this.quota = quota == null ? com.qingfeng.music.credits.NoopDailyQuota.FREE : quota;
+        this.dailyLimit = dailyLimit;
         this.slots = new Semaphore(concurrency);
     }
 
     public ReferenceAnalysis analyse(String owner, ReferenceAnalyst.Request request) {
         validate(owner, request);
         if (!enabled || !analyst.isConfigured()) throw unavailable();
+        // 上传参考音频后会自动触发，每次都是真实模型请求；用每日次数上限封顶成本敞口。
+        if (!quota.consume(owner, com.qingfeng.music.credits.DailyQuota.REFERENCE_ANALYSIS, dailyLimit))
+            throw new DomainException("REFERENCE_ANALYSIS_QUOTA_EXCEEDED", "今日AI参考分析次数已用完，已保留参考音乐的基础信息。");
         if (!active.add(owner)) throw busy();
         boolean acquired = false;
         try {

@@ -1,17 +1,23 @@
 {
   "version": 1,
-  "sourceCommit": "685ecc6dd53ee878737f294f58d754a012ed1366",
-  "jarSha256": "4e027727e4b95a2296868f6db00cde6e4325ab1d6ade45004a95907fc2ed3dc7",
+  "sourceCommit": "d79db4d380c02dcaab340b2f90f79c5187561ba2",
+  "jarSha256": "c249d651435c949a18e015572e7b19ee53eae63a9e63d09a0272bb5db7cf6797",
   "evidence": "Read-only current symlink, source manifest, embedded JAR source and JAR SHA256; no SQL or business data",
-  "migrationProvenance": "UNKNOWN",
+  "migrationProvenance": "CONFLICT",
   "unresolvedVersions": [
     27,
-    28
+    28,
+    29
   ],
   "productionReleaseAllowed": false,
-  "observedAt": "2026-11-10T20:00:13.702050+08:00",
+  "observedAt": "2026-11-10T22:32:39.823480+08:00",
   "previousAuditBaseline": {
     "sourceCommit": "3d9ffac1d83f54f8768603fe78220e88d55624ed",
     "jarSha256": "08cdee9fa2b63bed3535badf149b5c9f9c1755656d3c701297ab83fb14902bc9"
+  },
+  "previousObservedBaseline": {
+    "sourceCommit": "685ecc6dd53ee878737f294f58d754a012ed1366",
+    "jarSha256": "4e027727e4b95a2296868f6db00cde6e4325ab1d6ade45004a95907fc2ed3dc7",
+    "observedAt": "2026-11-10T20:00:13.702050+08:00"
   }
 }

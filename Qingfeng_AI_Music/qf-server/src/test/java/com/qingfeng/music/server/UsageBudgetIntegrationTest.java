@@ -141,6 +141,21 @@ class UsageBudgetIntegrationTest {
         assertThrows(IllegalArgumentException.class,()->new JdbcUsageBudget.Limits(-2,-1,1,3));
     }
     private JdbcUsageBudget configured(JdbcUsageBudget.Limits limits){return new JdbcUsageBudget(jdbc,new TransactionTemplate(manager),Map.of(Kind.MUSIC,limits),Clock.systemUTC(),ZoneId.of("Asia/Shanghai"));}
+    /**
+     * 封面 AI 与歌词时间轴按图/按次计费，必须同样有每日次数上限，否则成本敞口没有上界。
+     * 这里直接验证 COVER 与 TIMING 两个 Kind 的每日上限真的会拦截，而不是只看 MUSIC。
+     */
+    @Test void coverAndTimingKindsAlsoEnforceTheDailyLimit(){
+        var f=fixture();
+        for (Kind kind : List.of(Kind.COVER, Kind.TIMING)) {
+            var limited=new JdbcUsageBudget(jdbc,new TransactionTemplate(manager),Map.of(kind,new JdbcUsageBudget.Limits(2,-1,1,3)),Clock.systemUTC(),ZoneId.of("Asia/Shanghai"));
+            limited.reserve(f.owner,f.work,UUID.randomUUID().toString(),kind);
+            limited.reserve(f.owner,f.work,UUID.randomUUID().toString(),kind);
+            assertEquals("PERSONAL_DAILY_QUOTA_EXCEEDED",assertThrows(DomainException.class,()->limited.reserve(f.owner,f.work,UUID.randomUUID().toString(),kind)).code());
+            assertEquals(0,limited.allowance(f.owner,kind).dailyRemaining());
+        }
+        assertEquals(4,reservations());
+    }
     @Test void httpQuotaIsPrivateAndRejectedGenerationReturns429WithoutTask()throws Exception{
         var json=new tools.jackson.databind.ObjectMapper();var client=java.net.http.HttpClient.newBuilder().cookieHandler(new java.net.CookieManager(null,java.net.CookiePolicy.ACCEPT_ALL)).build();
         String base="http://127.0.0.1:"+port;

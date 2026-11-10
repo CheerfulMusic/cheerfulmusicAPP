@@ -29,6 +29,9 @@ qingfeng:
   credits:
     enabled: true
     music-cost: 15
+    lyrics-cost: 5
+    rewrite-cost: 1
+    rewrite-free-per-day: 5
   auth:
     google:
       enabled: ${GOOGLE_LOGIN_ENABLED:false}
@@ -40,6 +43,19 @@ qingfeng:
     rewrite:
       enabled: true
       concurrent-global: 4
+      concurrent-per-creator: 1
+  music-settings:
+    simplify:
+      enabled: true
+      concurrent-global: 2
+      # 每次精简都是一次真实模型请求：用每日次数上限封顶成本敞口。
+      daily-per-creator: 20
+  reference:
+    analysis:
+      enabled: true
+      concurrent-global: 2
+      # 上传参考音频后自动触发，同样用每日次数上限封顶成本敞口。
+      daily-per-creator: 20
   cover:
     ai:
       enabled: true

@@ -6,12 +6,16 @@ import { usePlayer } from '../../../shared/player/store'
 import { usePreviewTracks } from '../../home/model/tracks'
 import { isLiked, isPending, loadMyReactions, recordPlay, signedIn, toggleReaction } from '../../home/model/hot-songs'
 import { rewriteInspiration } from '../../studio/api/works'
+import { ApiError } from '../../../shared/http/api-client'
+import CreditCostHint from '../../../shared/credits/CreditCostHint.vue'
+import { useCredits } from '../../../shared/credits/useCredits'
+import { guardCredits } from '../../../shared/credits/credit-gate'
 import { writeAgentBrief } from '../model/brief'
 import { AudioAnalysisError, analyzeAudioFile, cancelAnalysis, forgetAnalysis } from '../model/audio-analysis'
 import { requestReferenceAnalysis } from '../api/reference'
 import { analyzeRequest, bandWord, hasParams, inspirationBoards, interestTags, modeOptions, quickPrompts, toneWord, withReference, type AgentBrief, type AgentMode, type AgentParams, type AgentReference, type ReferenceInsight } from '../model/assistant'
 
-interface Message { id: number; role: 'assistant' | 'user'; text: string; greeting?: boolean; brief?: AgentBrief; suggestions?: string[]; polishing?: boolean; polishError?: string }
+interface Message { id: number; role: 'assistant' | 'user'; text: string; greeting?: boolean; brief?: AgentBrief; suggestions?: string[]; polishing?: boolean; polishError?: string; polishCreditShort?: boolean }
 interface VoiceResult { results: ArrayLike<ArrayLike<{ transcript: string }>> }
 interface VoiceRecognition { lang: string; interimResults: boolean; onresult: ((event: VoiceResult) => void) | null; onerror: (() => void) | null; onend: (() => void) | null; start: () => void; stop?: () => void }
 interface UploadState { name: string; url: string; size: number; type: string; duration: number }
@@ -32,6 +36,8 @@ let messageId = 0, replyTimer: number | undefined, noticeTimer: number | undefin
 const messages = ref<Message[]>([{ id: messageId, role: 'assistant', text: '', greeting: true }])
 const chat = ref<HTMLElement>(), fileInput = ref<HTMLInputElement>()
 const input = ref(''), busy = ref(false), notice = ref(''), voiceHint = ref('')
+const { credits, refreshCredits } = useCredits()
+const polishKey = ref('')
 const mode = ref<AgentMode>('write'), interests = ref<string[]>(['时尚'])
 const panelOpen = ref(true), boardIndex = ref(0), previewIndex = ref(0)
 const brief = ref<AgentBrief | undefined>()
@@ -126,19 +132,41 @@ function send(extra?: string) {
   }, 420)
   void scrollChat()
 }
+/**
+ * 润色走的是同一个付费改写接口：免费额度用完后每次扣积分。
+ * 余额不足时先刷新一次再判断；后端在调用模型前还会再校验一次余额。
+ */
+async function blockedByRewrite() {
+  const gate = await guardCredits(() => credits.value, refreshCredits, view => view.rewriteFreeRemaining === 0 ? view.rewriteCost : 0)
+  if (!gate.blocked) return false
+  notify(t('积分不足，当前余额 {balance} 积分，改写需要 {cost} 积分。', { balance: gate.balance as number, cost: gate.cost }))
+  return true
+}
 async function polish(message: Message) {
   if (!message.brief || message.polishing) return
   const source = message.brief.story
   message.polishing = true; message.polishError = ''
   try {
-    const result = await rewriteInspiration(source, locale.value === 'en' ? 'en' : 'zh-CN')
+    // 润色走的是同一个付费改写接口：免费额度用完后每次扣积分，余额不足直接拦下。
+    if (await blockedByRewrite()) return
+    const key = polishKey.value || (polishKey.value = crypto.randomUUID())
+    const result = await rewriteInspiration(source, locale.value === 'en' ? 'en' : 'zh-CN', key)
+    polishKey.value = ''
     if (result.text && message.brief?.story === source) {
       const next = { ...message.brief, story: result.text }
       message.brief = next
       if (brief.value?.story === source) brief.value = next
     }
-  } catch { message.polishError = t('AI 整理暂不可用，已按原文继续。') }
-  finally { message.polishing = false }
+  } catch (error) {
+    // 后端已把这次请求记为失败：用同一个键重试只会得到「上次未完成」，此时换新键重新发起。
+    if (error instanceof ApiError && error.code === 'REWRITE_REQUEST_FAILED') polishKey.value = ''
+    // 积分不足要明确告知并给出充值入口，不能和「服务暂时不可用」混成一句话。
+    message.polishCreditShort = error instanceof ApiError && error.code === 'INSUFFICIENT_CREDITS'
+    message.polishError = message.polishCreditShort
+      ? t('积分不足，当前余额 {balance} 积分，改写需要 {cost} 积分。', { balance: credits.value?.balance ?? 0, cost: credits.value?.rewriteCost ?? 1 })
+      : (error instanceof ApiError && error.message) ? error.message : t('AI 整理暂不可用，已按原文继续。')
+  }
+  finally { message.polishing = false; void refreshCredits().catch(() => undefined) }
 }
 function polishLatest() {
   const latest = [...messages.value].reverse().find(message => message.brief)
@@ -311,7 +339,7 @@ async function copyLink() {
   catch { voiceHint.value = t('复制失败，可以直接下载试听。') }
 }
 function useAsInspiration() { send(`我想要一首${track.value.style}风格的歌`) }
-onMounted(() => { void loadMyReactions() })
+onMounted(() => { void loadMyReactions(); void refreshCredits().catch(() => undefined) })
 // 登录状态变化后重新读取点赞关系，避免刷新后喜欢状态丢失。
 watch(signedIn, value => { if (value) void loadMyReactions() })
 onBeforeUnmount(() => {
@@ -395,8 +423,8 @@ onBeforeUnmount(() => {
                 <span v-if="message.brief.params!.structure">{{ message.brief.params!.structure }}</span>
               </p>
               <div v-if="message.suggestions?.length" class="agent-brief-suggestions"><button v-for="style in message.suggestions" :key="style" type="button" :disabled="busy" @click="send(`我想要一首${style}风格的歌`)">{{ style }}</button></div>
-              <div class="agent-brief-actions"><button type="button" :disabled="message.polishing" @click="polish(message)">{{ message.polishing ? t('AI 整理中…') : t('AI 润色描述') }}</button><button type="button" class="primary" @click="beginCreation(message.brief)">{{ t('用它开始创作') }} →</button></div>
-              <p v-if="message.polishError" class="agent-brief-error" role="status">{{ message.polishError }}</p>
+              <div class="agent-brief-actions"><button type="button" :disabled="message.polishing" @click="polish(message)">{{ message.polishing ? t('AI 整理中…') : t('AI 润色描述') }}</button><button type="button" class="primary" @click="beginCreation(message.brief)">{{ t('用它开始创作') }} →</button><CreditCostHint v-if="credits&&credits.enabled&&(credits.rewriteCost>0||credits.rewriteFreeRemaining>0)" class="agent-brief-cost" :cost="credits.rewriteCost" :balance="credits.balance" :free-remaining="credits.rewriteFreeRemaining" :busy="message.polishing" variant="rewrite"/></div>
+              <p v-if="message.polishError" class="agent-brief-error" role="status">{{ message.polishError }} <RouterLink v-if="message.polishCreditShort" class="text-button" to="/recharge">{{ t('去充值') }}</RouterLink></p>
             </div>
           </div>
         </div>
