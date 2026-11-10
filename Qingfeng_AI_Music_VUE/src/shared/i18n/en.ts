@@ -1,5 +1,7 @@
 /** Chinese source copy is the stable message key; business option values stay unchanged. */
 export const english: Record<string, string> = {
+  '取消': 'Cancel',
+  '歌词模板': 'Lyric template',
   '正在保存创作要求': 'Saving your song idea',
   '本次创作已完成 可试听歌曲或继续创作新歌': 'Your song is ready. Listen to it or start a new song.',
   '本次创作已结束 可继续原任务或切换自定义创作': 'This attempt has ended. Resume the original task or switch to custom creation.',

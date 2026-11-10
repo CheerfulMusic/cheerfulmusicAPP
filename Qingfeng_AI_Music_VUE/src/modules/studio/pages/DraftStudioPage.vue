@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import LyricsTemplatePicker from '../../works/components/LyricsTemplatePicker.vue'
 import CreationMusicChoices from '../components/CreationMusicChoices.vue'
 import {creationMode,chooseCreationStyle,type CreationMode} from '../model/creation-mode'
 import {legacyPreferences,validMusicPreferences} from '../../works/model/music-preferences'
@@ -22,7 +21,7 @@ import { loadWork, saveWork, rewriteInspiration, type Work, type DraftInput } fr
 import { normalizeVocalGender } from '../model/vocals'
 import { styleFromInspiration } from '../model/suggestions'
 import { inspirationPresets } from '../model/inspiration-presets'
-import { continuationRequestKey, retireContinuationRequestKey } from '../model/lyrics-continuation'
+import { continuationRequestKey, existingContinuationRequestKey, retireContinuationRequestKey } from '../model/lyrics-continuation'
 import { generateLyrics, getLyricsRequest, getUsage, type Allowance } from '../../works/api/detail'
 
 const storyFlowVersion = 3
@@ -46,7 +45,8 @@ const musicCatalog=ref<MusicCatalog>(),preferences=ref<MusicPreferences>(),music
 const customTouched=ref(false)
 const musicChanged=computed(()=>!!preferences.value&&JSON.stringify(preferences.value)!==musicBaseline.value)
 async function changeMode(next:CreationMode){if(composing.value||rewriting.value||quickLocked.value)return;mode.value=next;remember();await router.replace({query:{...route.query,mode:next}})}
-const structure=ref<LyricsStructure>(normalizeLyricsStructure())
+const structure = {templateId:'AAB',chorusFirst:false} as const satisfies LyricsStructure
+let legacyStructure:LyricsStructure|undefined
 const validationError=ref(''), selectedHint=ref(-1)
 const rewriting=ref(false), rewriteError=ref(''), rewriteStatus=ref('')
 const rewriteBackup=ref<{source:string;result:string}>()
@@ -79,7 +79,7 @@ let recoveredVersion:number|undefined,recoveredWorkId:string|undefined
 let initSequence=0,internalContext:string|undefined
 const contextOf=(query:Record<string,unknown>)=>query.work?`work:${String(query.work)}`:query.draft?`draft:${String(query.draft)}`:'new'
 const asDraft=(work:DraftInput):DraftInput=>({recipient:work.recipient,occasion:work.occasion,story:work.story,message:work.message,style:work.style,title:work.title,vocalGender:normalizeVocalGender(work.vocalGender)})
-function recoveryValue():Recovery{return {mode:mode.value,preferences:preferences.value,flowVersion:storyFlowVersion,draft:{...draft},language:language.value,structure:{...structure.value},part:0,draftKey,workId:existing.value?.id||recoveredWorkId,version:existing.value?.version??recoveredVersion,dirty:dirty.value,conflict:conflict.value}}
+function recoveryValue():Recovery{return {mode:mode.value,preferences:preferences.value,flowVersion:storyFlowVersion,draft:{...draft},language:language.value,structure:legacyStructure,part:0,draftKey,workId:existing.value?.id||recoveredWorkId,version:existing.value?.version??recoveredVersion,dirty:dirty.value,conflict:conflict.value}}
 function remember() {
   if(!cacheKey||!initialized.value)return
   const value=recoveryValue();localSaved.value=writeRecovery(cacheKey,value)
@@ -91,7 +91,7 @@ function schedule() {
   remember(); clearTimeout(timer)
   if (dirty.value && valid.value && ready.value && !conflict.value && !composing.value&&!quickLocked.value) timer=setTimeout(()=>{void persist().catch(()=>{})},1200)
 }
-watch([draft,language,structure],schedule,{deep:true,flush:'sync'})
+watch([draft,language],schedule,{deep:true,flush:'sync'})
 watch([mode,preferences],remember,{deep:true,flush:'sync'})
 watch(preferences,()=>{if(initialized.value&&mode.value==='custom')customTouched.value=true},{deep:true,flush:'sync'})
 async function initialize() {
@@ -104,7 +104,7 @@ async function initialize() {
   if(turn!==initSequence)return
   clearTimeout(timer); initialized.value=false; error.value=''; notice.value=''; conflict.value=false; ready.value=false;saving.value=false
   mode.value=creationMode(query.mode,!!query.work);musicCatalog.value=undefined;preferences.value=undefined;musicBaseline.value='';musicPersisted.value=false;customTouched.value=false
-  composing.value=false;language.value=locale.value;structure.value=normalizeLyricsStructure();selectedHint.value=-1;validationError.value='';existing.value=undefined;recoveredVersion=undefined;recoveredWorkId=undefined;cacheKey='';draftKey=crypto.randomUUID()
+  composing.value=false;language.value=locale.value;legacyStructure=undefined;selectedHint.value=-1;validationError.value='';existing.value=undefined;recoveredVersion=undefined;recoveredWorkId=undefined;cacheKey='';draftKey=crypto.randomUUID()
   Object.assign(draft,{recipient:'',occasion:String(query.occasion||''),story:'',message:'',style:styleFromInspiration(query.style),title:'',vocalGender:'AUTO'});baseline.value=JSON.stringify(snapshot())
   try {
     await ensureCreator()
@@ -122,7 +122,7 @@ async function initialize() {
     else {Object.assign(draft,{recipient:'',occasion:String(query.occasion||''),story:'',message:'',style:styleFromInspiration(query.style),title:'',vocalGender:'AUTO'});baseline.value=JSON.stringify(snapshot());draftKey=crypto.randomUUID()}
     if (local) {
       mode.value=creationMode(query.mode||local.mode,!!id)
-      language.value=local.language;structure.value=normalizeLyricsStructure(local.structure);draftKey=local.draftKey
+      language.value=local.language;legacyStructure=normalizeLyricsStructure(local.structure);draftKey=local.draftKey
       if (local.dirty) {
         Object.assign(draft,asDraft(local.draft))
         conflict.value=!!local.conflict || (!!existing.value && local.version!==undefined && local.version!==existing.value.version)
@@ -149,7 +149,7 @@ async function initialize() {
     if(e instanceof ApiError && (e.status===0||e.status===408||e.status>=500)){
       const owner=currentCreatorId()||lastKnownCreatorId()
       if(owner){cacheKey=recoveryKey(owner,'story',String(query.work||query.draft||draftKey));const local=readRecovery(cacheKey,validRecovery)
-        if(local){Object.assign(draft,asDraft(local.draft));language.value=local.language;structure.value=normalizeLyricsStructure(local.structure);draftKey=local.draftKey;recoveredVersion=local.version;recoveredWorkId=local.workId;baseline.value='';notice.value='服务暂时连接不上，已恢复本机内容；连接后可重试保存。'}
+        if(local){Object.assign(draft,asDraft(local.draft));language.value=local.language;legacyStructure=normalizeLyricsStructure(local.structure);draftKey=local.draftKey;recoveredVersion=local.version;recoveredWorkId=local.workId;baseline.value='';notice.value='服务暂时连接不上，已恢复本机内容；连接后可重试保存。'}
       }
       ready.value=false
     }
@@ -286,13 +286,29 @@ async function continueMaking() {
       return
     }
     writing=true
-    let key=continuationRequestKey(prepared.id,prepared.version,language.value,lyricsStructureKey(structure.value))
+    // Recover an older in-flight request before using the fixed template for new lyrics.
+    const previousStructure=legacyStructure??normalizeLyricsStructure()
+    const previousKey=lyricsStructureKey(previousStructure)
+    const structureKey=lyricsStructureKey(structure)
+    if(previousKey!==structureKey){
+      const legacyKey=existingContinuationRequestKey(prepared.id,prepared.version,language.value,previousKey)
+      if(legacyKey){
+        const legacy=await getLyricsRequest(prepared.id,legacyKey)
+        if(!alive||turn!==initSequence)return
+        if(legacy.status==='SUCCEEDED'&&legacy.revisionId){
+          await router.push({path:`/works/${work.id}`,query:{revision:legacy.revisionId,language:language.value,templateId:previousStructure.templateId,chorusFirst:String(previousStructure.chorusFirst)}})
+          return
+        }
+        if(legacy.status==='PENDING'||legacy.status==='UNKNOWN')throw new Error('歌词仍在编写中，可以稍后刷新编写状态。')
+      }
+    }
+    let key=continuationRequestKey(prepared.id,prepared.version,language.value,structureKey)
     const previous=await getLyricsRequest(prepared.id,key)
-    if(previous.status==='SUCCEEDED'&&previous.revisionId){if(alive&&turn===initSequence)await router.push({path:`/works/${work.id}`,query:{revision:previous.revisionId,language:language.value,templateId:structure.value.templateId,chorusFirst:String(structure.value.chorusFirst)}});return}
+    if(previous.status==='SUCCEEDED'&&previous.revisionId){if(alive&&turn===initSequence)await router.push({path:`/works/${work.id}`,query:{revision:previous.revisionId,language:language.value,templateId:structure.templateId,chorusFirst:String(structure.chorusFirst)}});return}
     if(previous.status==='PENDING'||previous.status==='UNKNOWN')throw new Error('歌词仍在编写中，可以稍后刷新编写状态。')
-    if(previous.status==='FAILED'){retireContinuationRequestKey(prepared.id,prepared.version,language.value,lyricsStructureKey(structure.value));key=continuationRequestKey(prepared.id,prepared.version,language.value,lyricsStructureKey(structure.value))}
-    const revision=await generateLyrics(prepared.id,prepared.version,key,language.value,'',undefined,{...structure.value})
-    if(alive&&turn===initSequence)await router.push({path:`/works/${work.id}`,query:{revision:revision.id,language:language.value,templateId:structure.value.templateId,chorusFirst:String(structure.value.chorusFirst)}})
+    if(previous.status==='FAILED'){retireContinuationRequestKey(prepared.id,prepared.version,language.value,structureKey);key=continuationRequestKey(prepared.id,prepared.version,language.value,structureKey)}
+    const revision=await generateLyrics(prepared.id,prepared.version,key,language.value,'',undefined,{...structure})
+    if(alive&&turn===initSequence)await router.push({path:`/works/${work.id}`,query:{revision:revision.id,language:language.value,templateId:structure.templateId,chorusFirst:String(structure.chorusFirst)}})
   } catch(e){if(alive&&turn===initSequence){quickSession.abortPreparation();continuationFailed.value=writing;error.value=e instanceof Error?e.message:'歌词生成失败，请稍后再试'}}
   finally{if(turn===initSequence)composing.value=false}
 }
@@ -365,7 +381,7 @@ onBeforeUnmount(()=>{remember();alive=false;initSequence++;clearTimeout(timer);w
           <p v-if="validationError" id="story-validation" class="story-validation" role="alert">{{ t(validationError) }}</p>
           <div v-if="mode==='quick'" class="inspiration-examples" role="group" :aria-label="t('选择创作风格')"><span>♫ {{ t('选一种风格') }}</span><button v-for="(example,index) in inspirationPresets" :key="example.label" type="button" :disabled="rewriting" :aria-pressed="selectedHint===index" @click="chooseInspiration(index)">{{ t(example.label) }}</button></div>
           <p v-if="mode==='quick'" id="inspiration-guidance" class="save-info">{{ t('选择一种风格 也可以直接写下你的想法') }}</p>
-          <CreationMusicChoices v-if="mode==='custom'&&musicCatalog&&preferences" v-model="preferences" :catalog="musicCatalog" :disabled="composing||rewriting||resetting"><template #structure><LyricsTemplatePicker v-model="structure" :disabled="composing||rewriting||resetting||!initialized"/></template></CreationMusicChoices>
+          <CreationMusicChoices v-if="mode==='custom'&&musicCatalog&&preferences" v-model="preferences" :catalog="musicCatalog" :disabled="composing||rewriting||resetting"><template #structure><span class="creation-fixed-template">{{ t('歌词模板') }} · <strong>{{ structure.templateId }}</strong></span></template></CreationMusicChoices>
           <p v-if="mode==='custom'&&musicIssue" class="notice error" role="alert">{{ t(musicIssue) }}</p>
           <details v-if="draft.recipient||draft.occasion||draft.message" class="legacy-inspiration-context"><summary>{{ t('已保留的旧版作品信息') }}</summary><p v-if="draft.recipient">{{ t('收件人：') }}{{ draft.recipient }}</p><p v-if="draft.occasion">{{ draft.occasion }}</p><p v-if="draft.message" class="legacy-message">{{ draft.message }}</p></details>
           <div v-if="!quickLocked" class="creation-action-bar story-action-bar"><button class="button creation-primary" type="submit" :disabled="!initialized||composing||rewriting||resetting||!ready||!aiReady||conflict||(mode==='quick'?!quickReady:!musicCatalog)">{{ composing?t(mode==='quick'?'正在开始创作…':'正在编写歌词…'):t(mode==='quick'?'一键生成音乐':'生成歌词') }}<span v-if="!composing" aria-hidden="true">→</span></button></div>
