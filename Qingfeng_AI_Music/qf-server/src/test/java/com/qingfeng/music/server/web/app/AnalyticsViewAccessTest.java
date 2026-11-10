@@ -1,6 +1,7 @@
 package com.qingfeng.music.server.web.app;
 
 import com.qingfeng.music.identity.api.IdentityApi;
+import com.qingfeng.music.server.analytics.AnalyticsDetailService;
 import com.qingfeng.music.server.security.CreatorPrincipal;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -31,7 +32,7 @@ class AnalyticsViewAccessTest {
         when(environment.getProperty(eq("qingfeng.analytics.viewer-emails"), eq(""))).thenReturn(viewers);
         var jdbc = (ObjectProvider<JdbcTemplate>) mock(ObjectProvider.class);
         when(jdbc.getIfAvailable()).thenReturn(mock(JdbcTemplate.class));
-        return new AnalyticsViewController(identity, jdbc, environment);
+        return new AnalyticsViewController(identity, jdbc, environment, new AnalyticsDetailService(mock(JdbcTemplate.class)));
     }
 
     private static void login(String creatorId) {
@@ -69,7 +70,7 @@ class AnalyticsViewAccessTest {
         var environment = mock(Environment.class);
         when(environment.getProperty(eq("qingfeng.analytics.viewer-emails"), eq(""))).thenReturn("jiang@example.com");
         @SuppressWarnings("unchecked") var jdbc = (ObjectProvider<JdbcTemplate>) mock(ObjectProvider.class);
-        assertFalse(new AnalyticsViewController(identity, jdbc, environment).allowed("creator-1"));
+        assertFalse(new AnalyticsViewController(identity, jdbc, environment, new AnalyticsDetailService(mock(JdbcTemplate.class))).allowed("creator-1"));
     }
 
     @Test void deniedSummaryContainsNoStatistics() {

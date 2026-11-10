@@ -109,7 +109,7 @@ class PaymentIntegrationTest {
    assertThrows(IllegalStateException.class,()->local.create(owner,new PaymentService.OrderRequest("starter-USD")));
    String id=db.queryForObject("SELECT id FROM payment_order WHERE creator_id=? AND status='CREATING'",String.class,owner.id());
    assertThrows(org.springframework.web.server.ResponseStatusException.class,()->local.create(owner,new PaymentService.OrderRequest("starter-USD")));
-   var remote=new PaymentGateway.Snapshot("original",id,"PAID",false,"USD",new java.math.BigDecimal("4.99"),"intent_original");
+   var remote=new PaymentGateway.Snapshot("original",id,"PAID",false,"USD",catalog.find("starter-USD").orElseThrow().amount(),"intent_original");
    org.mockito.Mockito.when(gateway.retrieve("original")).thenReturn(remote);
    assertThrows(org.springframework.web.server.ResponseStatusException.class,()->local.recover(signedInOwner(),id,"original"));
    org.mockito.Mockito.when(gateway.retrieve("wrong")).thenReturn(new PaymentGateway.Snapshot("wrong",id,"PAID",false,"USD",new java.math.BigDecimal("0.01"),"intent_wrong"));

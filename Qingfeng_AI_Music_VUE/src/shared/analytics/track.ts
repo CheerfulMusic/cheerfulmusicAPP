@@ -28,7 +28,9 @@ const SESSION_MS = 30 * 60 * 1000
 const ALLOWED = new Set<string>(ANALYTICS_EVENTS)
 // 浏览器禁用存储时的进程内兜底，避免每次调用都生成新访客、也保证开关仍然生效。
 let memoryVid = '', memorySid = '', memoryOptOut = false
-let pageEnteredAt = 0, currentRoute = '', leaveReported = false, leaveInstalled = false
+// 当前页面的路径在进入时就固定下来：离开事件必须算在「离开的那一页」上，
+// 不能等到路由切换后再从 location 取，那时已经是新页面的地址了。
+let pageEnteredAt = 0, pageVisibleMs = 0, currentRoute = '', currentPath = '', leaveReported = false
 
 function local(key: string): string {
   try { return localStorage.getItem(key) || '' } catch { return '' }
@@ -105,12 +107,12 @@ export function setAnalyticsEnabled(value: boolean): void {
   try { localStorage.removeItem(OPT_OUT_KEY) } catch { /* 忽略。 */ }
 }
 
-export function track(event: AnalyticsEvent | string, payload?: AnalyticsPayload): void {
+export function track(event: AnalyticsEvent | string, payload?: AnalyticsPayload, pagePath?: string): void {
   try {
     if (!analyticsEnabled() || !ALLOWED.has(event)) return
     const body = JSON.stringify({
       event,
-      pagePath: sanitizePagePath(location.pathname),
+      pagePath: pagePath ?? sanitizePagePath(location.pathname),
       referrer: sanitizeReferrer(document.referrer || ''),
       visitorId: visitorId(),
       sessionId: sessionId(),
@@ -126,32 +128,49 @@ export function track(event: AnalyticsEvent | string, payload?: AnalyticsPayload
   } catch { /* 埋点失败绝不影响业务。 */ }
 }
 
-/** 上报上一页停留时长；同一段停留只上报一次，后台切换会重新计时。 */
+/** 当前这一段可见时长；页面隐藏时计时器会停，切回标签页再继续。 */
+function visibleMs(): number {
+  return pageEnteredAt ? Math.max(0, Date.now() - pageEnteredAt) : 0
+}
+
+/**
+ * 上报上一页停留时长。切标签页只暂停计时、累加已可见时间，
+ * 整页只发一条 page_leave，避免把一次访问拆成多个片段。
+ */
 export function reportPageLeave(): void {
-  if (!pageEnteredAt || leaveReported) return
+  if (!currentPath || leaveReported) return
+  const durationMs = Math.min(pageVisibleMs + visibleMs(), 86_400_000)
   leaveReported = true
-  const durationMs = Math.max(0, Math.min(Date.now() - pageEnteredAt, 86_400_000))
   pageEnteredAt = 0
-  track('page_leave', { route: currentRoute, durationMs })
+  pageVisibleMs = 0
+  if (durationMs <= 0) return
+  track('page_leave', { route: currentRoute, durationMs }, currentPath)
 }
 
 export function trackPageView(route: string): void {
   reportPageLeave()
   currentRoute = route
+  currentPath = sanitizePagePath(location.pathname)
   pageEnteredAt = Date.now()
+  pageVisibleMs = 0
   leaveReported = false
-  track('pageview', { route })
+  track('pageview', { route }, currentPath)
 }
 
 /** 页面隐藏 / 关闭时用 sendBeacon 补发停留时长；存储或事件 API 不可用时不抛错。 */
 export function installPageLeaveTracking(): void {
-  if (leaveInstalled) return
   try {
     if (typeof document === 'undefined' || typeof window === 'undefined') return
-    leaveInstalled = true
+    // 标记挂在 window 上：重复安装只注册一次监听，热更新和测试替换 window 时也能重新安装。
+    const marked = window as Window & { __qfPageLeave?: boolean }
+    if (marked.__qfPageLeave) return
+    marked.__qfPageLeave = true
     document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'hidden') reportPageLeave()
-      else if (currentRoute) { pageEnteredAt = Date.now(); leaveReported = false }
+      if (document.visibilityState === 'hidden') {
+        if (!leaveReported) { pageVisibleMs += visibleMs(); pageEnteredAt = 0 }
+      } else if (currentPath && !leaveReported && !pageEnteredAt) {
+        pageEnteredAt = Date.now()
+      }
     })
     window.addEventListener('pagehide', () => { reportPageLeave() })
   } catch { /* 无 DOM 环境（测试 / 预渲染）不安装。 */ }

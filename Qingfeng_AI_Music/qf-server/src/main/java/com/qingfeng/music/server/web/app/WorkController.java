@@ -27,6 +27,7 @@ public class WorkController {
     @GetMapping public List<WorkApi.Work> list(@AuthenticationPrincipal CreatorPrincipal creator,@RequestParam(defaultValue="0") @Min(0) @Max(10000) int page) { return works.list(creator.id(),page); }
     @GetMapping("/library") public List<com.qingfeng.music.server.query.WorkLibraryQuery.Item> library(@AuthenticationPrincipal CreatorPrincipal creator,@RequestParam(defaultValue="0") @Min(0) @Max(10000) int page) { return library.list(creator.id(),page); }
     @GetMapping("/{id}") public WorkApi.Work get(@AuthenticationPrincipal CreatorPrincipal creator,@PathVariable String id) { return works.get(creator.id(),id); }
+    @DeleteMapping("/{id}") public WorkApi.Work delete(@AuthenticationPrincipal CreatorPrincipal creator,@PathVariable String id) { return works.delete(creator.id(),id); }
     @PutMapping("/{id}") public WorkApi.Work update(@AuthenticationPrincipal CreatorPrincipal creator,@PathVariable String id,@RequestBody @Valid DraftRequest request) {
         if(request.expectedVersion()==null) throw new com.qingfeng.music.common.exception.DomainException("INVALID_DRAFT","更新草稿必须提供版本号");
         return works.update(creator.id(),id,request.expectedVersion(),request.draft());

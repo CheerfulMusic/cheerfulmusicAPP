@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { nextTick, onMounted, onUnmounted, ref } from 'vue'
-import { t } from '../../../shared/i18n'
+import { locale, t } from '../../../shared/i18n'
 import { fetchInviteStatus, submitInviteCode } from '../api/invite-gate'
 
 const required = ref(false)
@@ -87,7 +87,7 @@ onUnmounted(() => {
           {{ t(verifying ? '正在验证…' : '开启我的音乐之旅') }}
         </button>
       </form>
-      <p class="beta-access-note">{{ t('服务协议与隐私政策将在正式开放前提供。') }}</p>
+      <p class="beta-access-note">{{ locale === 'en' ? 'By continuing, you agree to our' : '继续即表示你同意' }} <a href="/legal/terms.html" target="_blank" rel="noopener noreferrer">{{ locale === 'en' ? 'Terms of Service' : '服务条款' }}</a> {{ locale === 'en' ? 'and' : '与' }} <a href="/legal/privacy.html" target="_blank" rel="noopener noreferrer">{{ locale === 'en' ? 'Privacy Policy' : '隐私政策' }}</a></p>
     </div>
   </div>
 </template>
@@ -139,4 +139,5 @@ onUnmounted(() => {
 }
 .beta-access-card button:disabled { opacity: .6; cursor: not-allowed; }
 .beta-access-note { margin-top: 28px !important; font-size: 11px !important; }
+.beta-access-note a { color: inherit; font-weight: 600; text-decoration: underline; text-underline-offset: 2px; }
 </style>

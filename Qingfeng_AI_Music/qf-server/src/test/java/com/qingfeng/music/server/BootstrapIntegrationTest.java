@@ -37,6 +37,15 @@ class BootstrapIntegrationTest {
     @Test void analyticsPageIsAccessibleOnDirectNavigation() throws Exception {
         assertEquals(200, get("/analytics").statusCode());
     }
+    @Test void mergedAgentAndLegalRoutesRemainAccessible() throws Exception {
+        assertEquals(200,get("/agent").statusCode());
+        for(String name:java.util.List.of("terms","privacy")) {
+            var response=get("/legal/"+name);
+            assertEquals(302,response.statusCode());
+            assertEquals(URI.create("http://127.0.0.1:"+port+"/legal/"+name+".html"),URI.create("http://127.0.0.1:"+port).resolve(response.headers().firstValue("Location").orElseThrow()));
+            assertEquals(200,get("/legal/"+name+".html").statusCode());
+        }
+    }
     @Test void privateBusinessRoutesAreClosedUntilAuthenticationIsImplemented() throws Exception {
         assertEquals(401, get("/api/app/works").statusCode());
     }

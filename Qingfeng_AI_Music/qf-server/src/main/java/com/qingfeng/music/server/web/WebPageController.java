@@ -4,6 +4,8 @@ import org.springframework.web.bind.annotation.GetMapping;
 /** 本地交付包由同一个进程提供Vue和API，深层页面刷新回到Vue入口。 */
 @Controller
 public class WebPageController {
-    @GetMapping({"/","/create","/works","/works/{id}","/gift/{token}","/account","/recharge","/legal/terms","/legal/privacy","/analytics"})
+    @GetMapping({"/","/create","/works","/works/{id}","/gift/{token}","/account","/recharge","/analytics","/agent"})
     public String index(){return "forward:/index.html";}
+    @GetMapping("/legal/terms") public String legacyTerms(){return "redirect:/legal/terms.html";}
+    @GetMapping("/legal/privacy") public String legacyPrivacy(){return "redirect:/legal/privacy.html";}
 }

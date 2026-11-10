@@ -17,7 +17,7 @@ const sdk = shallowRef<PaypalCheckout|null>(null)
 const chosen = computed(() => catalog.value.find(p => p.currency===currency && p.credits===selected.value))
 const tiers = computed(() => [100,300,700].map((credits, index) => {
   const real = catalog.value.find(p => p.currency===currency && p.credits===credits)
-  return {credits, amount:real?.amount ?? [4.99,12.99,24.99][index], real:!!real}
+  return {credits, amount:real?.amount ?? [9.9,25.9,49.9][index], real:!!real}
 }))
 const symbol = '$'
 const songCount = (credits:number) => Math.floor(credits / (musicCost.value > 0 ? musicCost.value : 15))

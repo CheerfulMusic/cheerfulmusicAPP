@@ -54,3 +54,8 @@ npm run build
 
 CapacitorHttp 已启用，Android/iOS 的 fetch（包括 FormData 上传）使用原生 HTTP 栈与 Cookie 存储。原生 API 请求携带 include 凭据，网页保留 same-origin。构建前配置可信 HTTPS 的 VITE_API_BASE_URL，随后执行 cap sync 更新原生配置并重新安装 App；仅更新网页资源不会更新原生插件配置。不需要为此放开后端任意来源的 CORS 或降低网页 Cookie 策略。设备验收应覆盖首次会话、登录、受保护接口、音频上传和退出后的会话失效。
 参考：https://capacitorjs.com/docs/apis/http
+
+
+### 测试依赖的安全覆盖
+
+`package.json` 对 js-beautify 的 glob/minimatch 及 editorconfig 的 minimatch 使用已修复版本覆盖，避免测试工具重新引入已审计的资源耗尽漏洞。`formatter-dependencies.test.ts` 验证通配文件输入与 EditorConfig 匹配仍兼容；上游依赖范围更新后可移除覆盖，并重新执行 npm ci、npm audit 与完整测试。

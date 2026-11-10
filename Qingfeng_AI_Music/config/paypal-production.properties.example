@@ -27,7 +27,7 @@ qingfeng.paypal.return-base-url=https://cheerfulmusic.com/account
 # qingfeng.deployment.environment=paypal-local
 # spring.profiles.active 不得包含 paypal-live / payment-demo
 
-# --- 可选：套餐价格（USDonly，默认 4.99 / 12.99 / 24.99） ---
-# qingfeng.payments.prices.usd.starter=4.99
-# qingfeng.payments.prices.usd.standard=12.99
-# qingfeng.payments.prices.usd.plus=24.99
+# --- 可选：套餐价格（USD only，默认 9.90 / 25.90 / 49.90） ---
+# qingfeng.payments.prices.usd.starter=9.90
+# qingfeng.payments.prices.usd.standard=25.90
+# qingfeng.payments.prices.usd.plus=49.90

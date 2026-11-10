@@ -15,10 +15,10 @@ const support = [
   { label: '反馈建议', to: '' },
 ]
 const legal = [
-  { label: '用户服务条款（含积分与退款规则）', to: '/legal/terms' },
-  { label: '隐私政策', to: '/legal/privacy' },
-  { label: '音乐作品发布与社区规则', to: '' },
-  { label: '版权与授权说明', to: '' },
+  { label: '用户服务条款（含积分与退款规则）', href: '/legal/terms.html' },
+  { label: '隐私政策', href: '/legal/privacy.html' },
+  { label: '音乐作品发布与社区规则', href: '/legal/community.html' },
+  { label: '版权与授权说明', href: '' },
 ]
 </script>
 
@@ -86,7 +86,10 @@ const legal = [
 
           <nav class="footer-column" :aria-label="t('法律与政策')">
             <h2>{{ t('法律与政策') }}</h2>
-            <template v-for="item in legal" :key="item.label"><RouterLink v-if="item.to" class="footer-link" :to="item.to">{{ t(item.label) }}</RouterLink><span v-else class="footer-link footer-link-static">{{ t(item.label) }}</span></template>
+            <template v-for="item in legal" :key="item.label">
+              <a v-if="item.href" class="footer-link" :href="item.href">{{ t(item.label) }}</a>
+              <span v-else class="footer-link footer-link-static">{{ t(item.label) }}</span>
+            </template>
           </nav>
 
           <section class="footer-cta" :aria-label="t('立即创作你的第一首歌')">
@@ -98,7 +101,7 @@ const legal = [
         <div class="footer-bottom">
           <p class="footer-copyright" lang="en">© 2026 Cheerful Music Limited. All rights reserved.</p>
           <div class="footer-company" lang="en">
-            <p>Cheerful Music Limited <span>|</span> Company No. 145026629 <span>|</span> Registered in England and Wales</p>
+            <p>Cheerful Music Limited <span>|</span> Company No. 14502629 <span>|</span> Registered in England and Wales</p>
             <p>Registered Office: Room 130, Building 3, Chiswick Park, 566 Chiswick High Road, London, W4 5YA, United Kingdom</p>
           </div>
         </div>
@@ -109,57 +112,57 @@ const legal = [
 
 <style scoped>
 .site-footer { position: relative; width: 100%; margin-top: 0; }
-.footer-wave { display: block; height: 88px; line-height: 0; }
+.footer-wave { display: block; height: 60px; line-height: 0; }
 .footer-wave svg { display: block; width: 100%; height: 100%; }
 .footer-body { background: #120f14; color: #fff; }
-.footer-inner { max-width: 1440px; margin: 0 auto; padding: 26px 54px 34px; }
-.footer-main { display: grid; grid-template-columns: 1.55fr 0.85fr 0.9fr 1.5fr 1.05fr; gap: 42px; align-items: start; }
+.footer-inner { max-width: 1440px; margin: 0 auto; padding: 18px 48px 24px; }
+.footer-main { display: grid; grid-template-columns: 1.55fr 0.85fr 0.9fr 1.5fr 1.05fr; gap: 30px; align-items: start; }
 
-.footer-brand-link { display: inline-flex; align-items: center; gap: 12px; color: #fff; }
-.footer-brand-link img { width: 42px; height: 42px; flex: none; }
-.footer-brand-link strong { font-size: 27px; font-weight: 700; letter-spacing: -.4px; line-height: 1; }
-.footer-tagline-en { margin: 22px 0 0; font-size: 17px; color: #fff; }
-.footer-tagline-zh { margin: 9px 0 0; font-size: 14px; color: #c8bfc5; }
-.footer-social { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 22px; }
-.footer-social-icon { display: inline-flex; align-items: center; justify-content: center; width: 42px; height: 42px; border-radius: 10px; background: #ffffff14; color: #fff; }
-.footer-social-icon svg { width: 21px; height: 21px; }
+.footer-brand-link { display: inline-flex; align-items: center; gap: 9px; color: #fff; }
+.footer-brand-link img { width: 32px; height: 32px; flex: none; }
+.footer-brand-link strong { font-size: 21px; font-weight: 700; letter-spacing: -.4px; line-height: 1; }
+.footer-tagline-en { margin: 14px 0 0; font-size: 15px; color: #fff; }
+.footer-tagline-zh { margin: 6px 0 0; font-size: 13px; color: #c8bfc5; }
+.footer-social { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 14px; }
+.footer-social-icon { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 8px; background: #ffffff14; color: #fff; }
+.footer-social-icon svg { width: 16px; height: 16px; }
 
-.footer-column { display: flex; flex-direction: column; align-items: flex-start; gap: 17px; }
-.footer-column h2 { margin: 4px 0 8px; font-size: 16px; font-weight: 700; color: #fff; }
-.footer-link { font-size: 15px; line-height: 1.4; color: #d9d2d7; }
+.footer-column { display: flex; flex-direction: column; align-items: flex-start; gap: 11px; }
+.footer-column h2 { margin: 3px 0 5px; font-size: 14px; font-weight: 700; color: #fff; }
+.footer-link { font-size: 13px; line-height: 1.4; color: #d9d2d7; }
 a.footer-link:hover { color: #fff; text-decoration: underline; text-underline-offset: 3px; }
 .footer-link-static { cursor: default; }
 
-.footer-cta { border-left: 1px solid #ffffff24; padding-left: 44px; }
-.footer-cta p { margin: 4px 0 22px; font-size: 16px; color: #fff; }
-.footer-cta-button { display: inline-flex; align-items: center; gap: 12px; min-height: 60px; padding: 0 34px; border-radius: 999px; background: linear-gradient(105deg, #ff6338, #f42a12); color: #fff; font-size: 18px; font-weight: 700; white-space: nowrap; }
+.footer-cta { border-left: 1px solid #ffffff24; padding-left: 30px; }
+.footer-cta p { margin: 3px 0 15px; font-size: 14px; color: #fff; }
+.footer-cta-button { display: inline-flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 26px; border-radius: 999px; background: linear-gradient(105deg, #ff6338, #f42a12); color: #fff; font-size: 15px; font-weight: 700; white-space: nowrap; }
 .footer-cta-button:hover { filter: brightness(1.07); }
-.footer-cta-button span { font-size: 21px; font-weight: 400; }
+.footer-cta-button span { font-size: 17px; font-weight: 400; }
 
-.footer-bottom { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 14px 44px; margin-top: 62px; padding-top: 26px; border-top: 1px solid #ffffff20; }
-.footer-bottom p { margin: 0; font-size: 13px; line-height: 1.8; color: #b9b1b7; }
+.footer-bottom { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 10px 32px; margin-top: 42px; padding-top: 18px; border-top: 1px solid #ffffff20; }
+.footer-bottom p { margin: 0; font-size: 12px; line-height: 1.65; color: #b9b1b7; }
 .footer-company { text-align: right; }
-.footer-company span { padding: 0 9px; color: #6f676d; }
+.footer-company span { padding: 0 7px; color: #6f676d; }
 
 @media (max-width: 1180px) {
-  .footer-inner { padding-inline: 36px; }
-  .footer-main { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 36px 30px; }
+  .footer-inner { padding-inline: 32px; }
+  .footer-main { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px 22px; }
   .footer-brand { grid-column: 1 / -1; }
-  .footer-cta { grid-column: 1 / -1; border-left: 0; border-top: 1px solid #ffffff24; padding: 26px 0 0; display: flex; align-items: center; justify-content: space-between; gap: 20px; }
+  .footer-cta { grid-column: 1 / -1; border-left: 0; border-top: 1px solid #ffffff24; padding: 18px 0 0; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
   .footer-cta p { margin: 0; }
 }
 @media (max-width: 700px) {
-  .footer-wave { height: 54px; }
-  .footer-inner { padding: 18px 22px 30px; }
-  .footer-main { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 30px 20px; }
-  .footer-brand-link strong { font-size: 23px; }
-  .footer-brand-link img { width: 36px; height: 36px; }
-  .footer-tagline-en { font-size: 15px; }
-  .footer-column h2 { font-size: 15px; }
-  .footer-link { font-size: 14px; }
+  .footer-wave { height: 38px; }
+  .footer-inner { padding: 12px 18px 20px; }
+  .footer-main { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px 16px; }
+  .footer-brand-link strong { font-size: 19px; }
+  .footer-brand-link img { width: 28px; height: 28px; }
+  .footer-tagline-en { font-size: 14px; }
+  .footer-column h2 { font-size: 13px; }
+  .footer-link { font-size: 12px; }
   .footer-cta { flex-direction: column; align-items: flex-start; }
-  .footer-cta-button { min-height: 52px; font-size: 16px; }
-  .footer-bottom { margin-top: 40px; }
+  .footer-cta-button { min-height: 40px; font-size: 14px; }
+  .footer-bottom { margin-top: 28px; }
   .footer-company { text-align: left; }
 }
 @media (max-width: 420px) {

@@ -32,7 +32,10 @@ public final class InviteGateFilter extends OncePerRequestFilter {
         boolean publicGift = ("GET".equals(request.getMethod()) || "HEAD".equals(request.getMethod()))
                 && path.matches("/api/public/gifts/[A-Za-z0-9_-]{43}(?:/audio|/cover)?");
         boolean analytics = ANALYTICS.contains(path);
-        if (!gate.settings().enabled() || !apiLike || publicGift || ENTRANCES.contains(path) || analytics || webhook
+        // 热歌推荐是首页公开展示，播放计次也不含个人信息；内测门禁不应让它变成 0。
+        boolean hotSong = ("GET".equals(request.getMethod()) && "/api/public/hot-songs".equals(path))
+                || ("POST".equals(request.getMethod()) && path.matches("/api/public/hot-songs/[A-Za-z0-9_-]{1,64}/play"));
+        if (!gate.settings().enabled() || !apiLike || publicGift || ENTRANCES.contains(path) || analytics || hotSong || webhook
                 || gate.expiresAt(request) > 0) {
             chain.doFilter(request, response);
             return;
