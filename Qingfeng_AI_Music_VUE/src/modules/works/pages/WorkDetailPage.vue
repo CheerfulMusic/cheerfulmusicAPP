@@ -20,6 +20,7 @@ import PremiumStudioDialog from '../components/PremiumStudioDialog.vue'
 import SectionEditor from '../components/SectionEditor.vue'
 import LyricsPanel from '../components/LyricsPanel.vue'
 import QuickCreationProgress from '../../studio/components/QuickCreationProgress.vue'
+import type {QuickCreation} from '../../studio/api/quick-creation'
 import AudioPanel from '../components/AudioPanel.vue'
 import SharePanel from '../components/SharePanel.vue'
 import MusicGenerationDialog from '../components/MusicGenerationDialog.vue'
@@ -40,7 +41,7 @@ const quickChecked = ref(false), quickReadIssue = ref(false)
 const quickProgress = ref<InstanceType<typeof QuickCreationProgress>>()
 const draftOpened = ref(false)
 const entryReady = computed(() => mediaState.value === 'ready' && tasksReady.value && quickChecked.value)
-const draftReady = computed(() => entryReady.value && !asset.value && !pendingTask.value && !quickBusy.value)
+const draftReady = computed(() => entryReady.value && !asset.value && !pendingTask.value && !quickBusy.value && !quickJourney.value)
 const entryLoading = computed(() => !asset.value && (loading.value || !!work.value && (
   mediaState.value === 'loading' || mediaState.value === 'ready' && !entryReady.value && !pendingTask.value && !quickBusy.value && !taskReadIssue.value && !quickReadIssue.value
 )))
@@ -49,6 +50,9 @@ function checkedQuick(ok:boolean) {
   quickReadIssue.value = !ok
 }
 function retryAudio(){mediaState.value='loading';mediaRefresh.value++}
+const quickResolved=ref(false),quickFlow=ref<QuickCreation|null>(null)
+const quickJourney=computed(()=>route.query.mode!=='custom'&&(route.query.mode==='quick'||!!route.query.quick||!!quickFlow.value))
+function resolveQuick(value:QuickCreation|null){quickFlow.value=value;quickResolved.value=true}
 const musicDirectionChanged=ref(false)
 function quickUpdated(value:{revisionId:string|null}){if(value.revisionId)quickRevision.value=value.revisionId;void refreshTasks()}
 const lyricRecoverable=ref(false),listenAfterLoad=ref(false),giftStage=ref(false),shared=ref(false),settingsOpen=ref(false),settingsBusy=ref(false),cancelling=ref(false)
@@ -67,7 +71,7 @@ const artwork=computed(()=>coverUrl(work.value?.id||'',covers.value?.currentCove
 function updateCover(value:CoverState){covers.value=value;if(player.current?.audio.includes(`/app/works/${work.value?.id}/audio/`))player.updateCover(player.current.id,artwork.value)}
 function openCover(){coverOpen.value=true;void nextTick(()=>document.getElementById('cover-editor')?.scrollIntoView({block:'start',behavior:'smooth'}))}
 watch(asset,value=>{if(value&&listenAfterLoad.value){listenAfterLoad.value=false;void viewGeneratedMusic()}})
-const currentStep=computed(()=>shared.value?4:giftStage.value?3:asset.value||pendingTask.value?2:1)
+const currentStep=computed(()=>shared.value?4:giftStage.value?3:asset.value||pendingTask.value||quickJourney.value?2:1)
 const songTitle=computed(()=>tasks.value.find(task=>task.assetId===asset.value?.id)?.title||work.value?.title||revision.value?.title||t('我的音乐'))
 const playingSettings=computed(()=>songSettings(asset.value,tasks.value))
 const displayedStyle=computed(()=>!asset.value?t(work.value?.style||''):asset.value.origin==='IMPORTED'?t('导入音频'):t(playingSettings.value?.style||'风格记录暂不可用'))
@@ -183,7 +187,7 @@ async function closeChecking(task:GenerationTask){
   finally{submitting.value=false}
 }
 async function load() {
- quickBusy.value=false;quickRevision.value='';mediaState.value='loading';tasksReady.value=false;taskReadIssue.value=false;quickChecked.value=false;quickReadIssue.value=false;modelReady.value=false;draftOpened.value=false;listenAfterLoad.value=false;musicDirectionChanged.value=false
+ quickBusy.value=false;quickRevision.value='';mediaState.value='loading';tasksReady.value=false;taskReadIssue.value=false;quickChecked.value=false;quickReadIssue.value=false;modelReady.value=false;draftOpened.value=false;listenAfterLoad.value=false;quickResolved.value=false;quickFlow.value=null;musicDirectionChanged.value=false
  const turn=++sequence;polling=false;settingsOperation++;settingsBusy.value=false;premiumOpen.value=false;giftStage.value=false;shared.value=false;settingsOpen.value=false;coverOpen.value=false;covers.value=undefined
  generationOpen.value=false;trackedTaskId.value='';submissionIssue.value='';submissionUnknown.value=false;progressIssue.value=false;submitting.value=false;loading.value=true;error.value='';revision.value=null;asset.value=null;tasks.value=[];giftRevision.value=null;work.value=undefined;lyricDirty.value=false;requestKey.value='';pendingIntent.value=undefined;generationNotice.value='';inputIssue.value=false;creditIssue.value=false;credits.value=undefined
  try{
@@ -296,7 +300,7 @@ function adjustMusic(){if(asset.value){void backToStory();return}giftStage.value
 </script>
 <template>
   <RouterLink class="detail-back" to="/works">{{ t('← 我的音乐') }}</RouterLink>
-  <div v-show="mediaState==='ready'&&(quickBusy||!asset&&quickChecked&&!quickReadIssue)" class="work-entry-progress" :class="{'has-song':!!asset}"><QuickCreationProgress v-if="work" ref="quickProgress" :key="work.id" :work-id="work.id" @busy="quickBusy=$event" @checked="checkedQuick" @updated="quickUpdated"/></div>
+  <div v-show="mediaState==='ready'&&(quickBusy||!asset&&quickChecked&&!quickReadIssue)" class="work-entry-progress" :class="{'has-song':!!asset}"><QuickCreationProgress v-if="work" ref="quickProgress" :key="work.id" :work-id="work.id" :title="work.title" :auto-open="false" :result-ready="!!asset" @busy="quickBusy=$event" @checked="checkedQuick" @resolved="resolveQuick" @updated="quickUpdated" @view="viewGeneratedMusic"/></div>
   <SongResultSkeleton v-if="entryLoading"/>
   <p v-if="!asset&&mediaState==='ready'&&quickReadIssue&&!quickBusy" class="notice" role="status">{{ t('进度暂时无法读取 请稍后刷新 原任务不会重复提交') }} <button class="text-button" @click="quickProgress?.refresh()">{{ t('刷新进度') }}</button></p>
   <section v-if="work&&mediaState==='failed'&&!asset" class="notice" role="alert"><p>{{ t('音频暂时无法读取，你的作品仍然保留。') }}</p><button class="button secondary" @click="retryAudio">{{ t('重新读取歌曲') }}</button></section>
@@ -308,7 +312,7 @@ function adjustMusic(){if(asset.value){void backToStory();return}giftStage.value
     <p v-if="generationNotice" class="notice" role="status">{{ t(generationNotice) }}</p>
     <p v-if="inputIssue" class="notice"><button class="text-button" @click="adjustMusic">{{ t('调整音乐要求') }}</button> · {{ t('尚未开始音乐生成，你的歌词和设置已保留。') }}</p>
     <section v-if="submissionUnknown&&!pendingTask" class="notice generation-recovery" role="status"><strong>{{ t('正在核对上次提交，暂不发起新的音乐创作。') }}</strong><p>{{ t('你的请求标识已保留。可以刷新核对，或使用原请求继续；不会创建新的生成请求。') }}</p><div class="actions"><button class="button secondary" :disabled="submitting" @click="refreshTasks">{{ t('刷新核对状态') }}</button><button class="button secondary" :disabled="submitting||!pendingIntent" @click="resumeOriginalRequest">{{ t('恢复原请求') }}</button></div></section>
-    <p v-if="pendingTask&&!generationOpen&&!quickBusy" class="notice" role="status">{{ t(generationProblem(pendingTask.errorCode)||'音乐正在后台制作，可以继续浏览，稍后回来查看。') }} <button class="text-button" @click="showProgress">{{ t('查看生成进度') }}</button></p>
+    <p v-if="pendingTask&&!generationOpen&&!quickBusy&&(!quickJourney||asset)" class="notice" role="status">{{ t(generationProblem(pendingTask.errorCode)||'音乐正在后台制作，可以继续浏览，稍后回来查看。') }} <button class="text-button" @click="showProgress">{{ t('查看生成进度') }}</button></p>
     <section v-if="latestFailure&&!pendingTask" class="notice" role="status"><p>{{ t(generationProblem(latestFailure.errorCode)||'音乐服务未完成这次创作，歌词和设置已保留。') }}</p><button v-if="latestFailure.errorCode==='AUDIO_ARCHIVE_FAILED'" class="button secondary" :disabled="submitting" @click="retryArchive(latestFailure)">{{ t('仅重试保存音频') }}</button></section>
     <GenerationRecovery v-if="pendingTask?.status==='SUBMISSION_UNKNOWN'" :task="pendingTask" :busy="submitting" @refresh="refreshTasks" @close="closeChecking(pendingTask)"/>
     <SongResult v-if="asset" :work="work" :asset="asset" :title="songTitle" :cover="artwork" :pending="!!pendingTask" :busy="submitting||settingsBusy||quickBusy||!tasksReady||taskReadIssue||!quickChecked||quickReadIssue||(!pendingTask&&!submissionUnknown&&(!modelReady||!generationLyricsReady))" :lyrics="giftRevision?.lyrics||''" @gift="sendGift" @regenerate="generate" @cover="openCover"/>
@@ -322,7 +326,7 @@ function adjustMusic(){if(asset.value){void backToStory();return}giftStage.value
       <div>
         <div class="lyrics-editor-fold"><LyricsPanel v-if="!generated&&(asset||draftOpened)" ref="lyricsPanel" :key="work.id+'-'+work.version+'-'+quickRevision" :inert="quickBusy||undefined" :work="work" @selected="revision=$event" @dirty="lyricDirty=$event" @ready="lyricsReady=$event" @recoverable="lyricRecoverable=$event"/>
         </div>
-        <SoundDirectionEntry v-if="draftReady" :style-label="t(work.style)" :voice-label="t(vocalGenderLabel(work.vocalGender))" :disabled="quickBusy||submitting||!!pendingTask||submissionUnknown||settingsBusy" @choose="adjustMusic"/>
+        <SoundDirectionEntry v-if="draftReady&&!quickJourney&&quickResolved" :style-label="t(work.style)" :voice-label="t(vocalGenderLabel(work.vocalGender))" :disabled="quickBusy||submitting||!!pendingTask||submissionUnknown||settingsBusy" @choose="adjustMusic"/>
         <section v-if="creditIssue" id="credit-issue" class="credit-issue" role="alert">
           <div class="credit-issue-copy">
             <strong>{{ t('积分不足，暂时不能开始谱曲') }}</strong>

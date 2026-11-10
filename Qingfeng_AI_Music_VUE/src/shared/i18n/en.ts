@@ -1,5 +1,14 @@
 /** Chinese source copy is the stable message key; business option values stay unchanged. */
 export const english: Record<string, string> = {
+  '正在保存创作要求': 'Saving your song idea',
+  '本次创作已完成 可试听歌曲或继续创作新歌': 'Your song is ready. Listen to it or start a new song.',
+  '本次创作已结束 可继续原任务或切换自定义创作': 'This attempt has ended. Resume the original task or switch to custom creation.',
+  '本次创作要求已固定 制作期间不能修改或重复提交': 'Your submitted idea is fixed. Editing and duplicate submissions are disabled while this song is being made.',
+  '提交结果仍待确认 请核对原任务 不要重复生成': 'Your submission is still being checked. Check the original task instead of creating another song.',
+  '核对并恢复原请求': 'Check and resume the original request',
+  '浏览器无法保留本次请求标识 请先核对生成进度 确定离开吗': 'This browser could not save the request ID. Check its progress before leaving. Leave anyway?',
+  '编写歌词': 'Writing lyrics',
+  '正在读取歌曲，请稍候…': 'Loading your song…',
   '音频暂时无法读取，你的作品仍然保留。': 'Audio could not be loaded. Your work is still saved.',
   '重新读取歌曲': 'Reload song',
   '创作记录暂时无法读取，已有歌曲仍可试听。': 'Creation history is temporarily unavailable. You can still listen to saved songs.',

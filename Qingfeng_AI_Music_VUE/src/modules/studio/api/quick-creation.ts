@@ -3,5 +3,6 @@ export interface QuickCreation {id:string;workId:string;status:string;revisionId
 async function call<T>(path:string,method='GET',body?:unknown){await ensureCreator();return requestJson<T>(path,method,body)}
 export const startQuickCreation=(work:string,workVersion:number,requestKey:string,language:string)=>call<QuickCreation>(`app/works/${work}/quick-creations`,'POST',{workVersion,requestKey,language})
 export const latestQuickCreation=(work:string)=>call<QuickCreation|null>(`app/works/${work}/quick-creations/latest`).then(v=>v??null)
+export const getQuickCreation=(work:string,id:string)=>call<QuickCreation>(`app/works/${encodeURIComponent(work)}/quick-creations/${encodeURIComponent(id)}`)
 export const retryQuickCreation=(work:string,id:string)=>call<QuickCreation>(`app/works/${work}/quick-creations/${id}/retry`,'POST',{})
 export const quickInProgress=(status:string)=>['QUEUED','WRITING','LYRICS_READY','SUBMITTING_MUSIC','MUSIC_QUEUED','SUBMITTING','RUNNING','SAVING','SUBMISSION_UNKNOWN'].includes(status)
