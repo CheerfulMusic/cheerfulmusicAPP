@@ -333,7 +333,7 @@ async function backToStory(){
           </div>
         </section>
         <div v-if="asset" class="creation-action-bar work-primary-bar" :class="{'context-editor-open':coverOpen}">
-          <template v-if="asset"><button class="button creation-primary" @click="sendGift">{{ t('分享歌曲') }}</button><button class="button secondary premium-studio-entry" type="button" @click="premiumOpen=true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3v7m0 4v7M12 3v12m0 4v2M19 3v2m0 4v12M2 10h6v4H2zm7 5h6v4H9zm7-10h6v4h-6z"/></svg><span>{{ t('定制化音乐制作') }}</span></button><button class="button secondary" @click="backToStory">{{ t('自定义创作') }}</button></template>
+          <template v-if="asset"><button class="button creation-primary" @click="sendGift">{{ t('分享歌曲') }}</button><button class="button secondary premium-studio-entry" type="button" @click="premiumOpen=true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3v7m0 4v7M12 3v12m0 4v2M19 3v2m0 4v12M2 10h6v4H2zm7 5h6v4H9zm7-10h6v4h-6z"/></svg><span>{{ t('定制化音乐制作') }}</span></button></template>
         </div>
         <p v-if="!modelReady&&!asset" class="notice">{{ t('音乐生成暂不可用，可以先编辑并保存歌词，稍后再试。') }}</p>
         <AudioPanel id="work-audio" tabindex="-1" :key="work.id+'-'+mediaRefresh" :work="work" :cover="artwork" @selected="asset=$event" @load-state="mediaState=$event" @compare="sectionEditor?.compare($event)"/>
