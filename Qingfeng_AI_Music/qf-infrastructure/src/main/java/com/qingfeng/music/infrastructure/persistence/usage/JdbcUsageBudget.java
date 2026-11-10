@@ -26,13 +26,22 @@ public final class JdbcUsageBudget implements UsageBudget {
         this.jdbc=jdbc;this.transactions=transactions;this.limits=Map.copyOf(limits);this.clock=clock;this.zone=zone;
     }
     private com.qingfeng.music.credits.CreditsLedger credits;
-    private boolean creditsEnabled;
-    private long musicCost;
-    public JdbcUsageBudget withCredits(com.qingfeng.music.credits.CreditsLedger credits, boolean enabled, long musicCost) {
-        if(musicCost<=0) throw new IllegalArgumentException("music cost must be positive");
-        this.credits=credits;this.creditsEnabled=enabled;this.musicCost=musicCost;return this;
+    private com.qingfeng.music.credits.CreditConsumptions consumptions;
+    private com.qingfeng.music.credits.CreditsPricing pricing;
+    public JdbcUsageBudget withCredits(com.qingfeng.music.credits.CreditsLedger credits, com.qingfeng.music.credits.CreditConsumptions consumptions, com.qingfeng.music.credits.CreditsPricing pricing) {
+        this.credits=credits;this.consumptions=consumptions;this.pricing=pricing;return this;
     }
-    private String reference(String work,String key){return "music:"+work+":"+key;}
+    private String reference(Kind kind,String work,String key){return com.qingfeng.music.credits.CreditReferences.of(kind.name(),work,key);}
+    /** 只有音乐和歌词是计费创作；价格来自统一定价服务，扣费与额度预留在同一事务内提交。 */
+    private void charge(String owner,String work,String key,Kind kind){
+        if(credits==null||pricing==null||!pricing.enabled())return;
+        var priced=kind==Kind.MUSIC?com.qingfeng.music.credits.CreditsPricing.Kind.MUSIC:kind==Kind.LYRICS?com.qingfeng.music.credits.CreditsPricing.Kind.LYRICS:null;
+        if(priced==null)return;
+        long cost=pricing.cost(priced);
+        credits.debit(owner,cost,reference(kind,work,key));
+        // 消费流水目前只覆盖歌词生成；歌曲生成沿用原有记账口径，不在本次改动范围内。
+        if(consumptions!=null&&kind==Kind.LYRICS)consumptions.reserved(owner,work,key,com.qingfeng.music.credits.CreditConsumptions.TYPE_LYRICS,cost);
+    }
     public void reserve(String owner, String work, String key, Kind kind) {
         transactions.executeWithoutResult(tx -> {
             // Serialize with guest migration before charging or creating an owner-scoped reservation.
@@ -42,7 +51,6 @@ public final class JdbcUsageBudget implements UsageBudget {
             var owners=jdbc.query("SELECT owner_id FROM music_work WHERE id=?",(rs,n)->rs.getString(1),work);
             if(owners.isEmpty()||!owner.equals(owners.get(0)))throw new DomainException("CREATOR_SESSION_CHANGED","作品归属已改变，请刷新后重试");
             jdbc.queryForObject("SELECT kind FROM model_usage_lock WHERE kind=? FOR UPDATE", String.class, kind.name());
-            if(kind==Kind.LYRICS)com.qingfeng.music.infrastructure.persistence.lyrics.JdbcCompositionRequests.expireStale(jdbc);
             if (count("SELECT COUNT(*) FROM model_usage_reservation WHERE kind=? AND work_id=? AND request_key=?", kind.name(),work,key)>0) return;
             var cap=limits.get(kind);var day=LocalDate.now(clock.withZone(zone));
             if (cap.dailyPerCreator()>=0 && count("SELECT COUNT(*) FROM model_usage_reservation WHERE kind=? AND usage_day=? AND owner_id=?",kind.name(),java.sql.Date.valueOf(day),owner)>=cap.dailyPerCreator())
@@ -53,7 +61,7 @@ public final class JdbcUsageBudget implements UsageBudget {
                 throw new DomainException("PERSONAL_GENERATION_BUSY","你已有创作正在处理或核对中，请完成后再试。");
             if (cap.concurrentGlobal()>=0 && active(kind,null)>=cap.concurrentGlobal())
                 throw new DomainException("GLOBAL_GENERATION_BUSY","当前创作人数较多，请稍后再试。");
-            if(kind==Kind.MUSIC && creditsEnabled) credits.debit(owner,musicCost,reference(work,key));
+            charge(owner,work,key,kind);
             jdbc.update("INSERT INTO model_usage_reservation(kind,work_id,request_key,owner_id,usage_day,created_at) VALUES(?,?,?,?,?,?)",kind.name(),work,key,owner,java.sql.Date.valueOf(day),Timestamp.from(clock.instant()));
         });
     }
@@ -67,7 +75,7 @@ public final class JdbcUsageBudget implements UsageBudget {
             jdbc.queryForObject("SELECT kind FROM model_usage_lock WHERE kind='MUSIC' FOR UPDATE",String.class);
             var owners=jdbc.query("SELECT owner_id FROM model_usage_reservation WHERE kind='MUSIC' AND work_id=? AND request_key=?",(rs,n)->rs.getString(1),work,key);
             if(!cancel.getAsBoolean())return false;
-            if(credits!=null && !owners.isEmpty()) credits.refund(owners.get(0),reference(work,key));
+            if(credits!=null && !owners.isEmpty()) credits.refund(owners.get(0),reference(Kind.MUSIC,work,key));
             jdbc.update("DELETE FROM model_usage_reservation WHERE kind='MUSIC' AND work_id=? AND request_key=?",work,key);
             return true;
         }));

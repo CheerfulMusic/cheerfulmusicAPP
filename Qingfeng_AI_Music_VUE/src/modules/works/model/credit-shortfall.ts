@@ -1,6 +1,6 @@
 import { ApiError } from '../../../shared/http/api-client'
 
-export type Credits = { enabled: boolean; balance: number; musicCost: number }
+export type Credits = { enabled: boolean; balance: number; musicCost: number; lyricsCost?: number }
 
 /** 积分不足是明确结果：不重试、不保留待核对意图，直接在生成按钮旁提示充值。 */
 export function isCreditShortfall(error: unknown): boolean {

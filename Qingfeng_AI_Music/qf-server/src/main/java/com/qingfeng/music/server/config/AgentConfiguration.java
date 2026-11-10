@@ -18,9 +18,12 @@ public class AgentConfiguration {
     }
 
     @Bean
-    ReferenceAnalysisService referenceAnalysisService(ReferenceAnalyst analyst, Environment env) {
+    ReferenceAnalysisService referenceAnalysisService(ReferenceAnalyst analyst, Environment env, org.springframework.beans.factory.ObjectProvider<com.qingfeng.music.credits.DailyQuota> quota) {
+        // 无数据库的 local 演示环境没有配额表，降级为不限；mysql/test 下正常限次。
         return new ReferenceAnalysisService(analyst,
             env.getProperty("qingfeng.reference.analysis.enabled", Boolean.class, true),
-            env.getProperty("qingfeng.reference.analysis.concurrent-global", Integer.class, 2));
+            env.getProperty("qingfeng.reference.analysis.concurrent-global", Integer.class, 2),
+            quota.getIfAvailable(() -> com.qingfeng.music.credits.DailyQuota.FREE),
+            env.getProperty("qingfeng.reference.analysis.daily-per-creator", Long.class, 20L));
     }
 }

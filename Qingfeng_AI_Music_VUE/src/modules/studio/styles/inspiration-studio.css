@@ -108,6 +108,7 @@
 .inspiration-rewrite-tools { display:flex; align-items:center; justify-content:space-between; gap:16px; }
 .inspiration-rewrite-action { display:flex; align-items:center; flex:1; flex-wrap:wrap; gap:4px 12px; min-width:0; }
 .inspiration-rewrite-purpose { color:#89716b; font-size:12px; line-height:1.7; }
+.inspiration-rewrite-cost { flex-basis:100%; margin-top:1px; }
 .inspiration-rewrite { padding:3px 8px 3px 0; border:0; background:transparent; color:#bb3928; min-height:32px; border-radius:8px; }
 .inspiration-rewrite:hover:not(:disabled) { background:#fff0e9; }
 .inspiration-rewrite:disabled { opacity:.6; }
@@ -143,7 +144,6 @@
 .single-inspiration-studio .story-action-bar { margin:18px auto 10px; }
 .single-inspiration-studio .creation-primary { gap:22px; }
 .inspiration-next-note { text-align:center; color:#8d737b; font-size:12px; margin:8px 0 0; }
-.inspiration-allowance { text-align:center; font-size:11px; }
 .legacy-inspiration-context { margin-top:20px; padding:12px 15px; border:1px solid #ecdfe0; border-radius:12px; font-size:12px; color:#846e75; }
 .legacy-inspiration-context summary { cursor:pointer; }
 .legacy-inspiration-context p { overflow-wrap:anywhere; }

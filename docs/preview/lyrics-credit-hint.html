@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>歌词生成 · 积分消耗提示 效果预览</title>
+<!-- 直接加载生产环境的真实样式表，所见即上线效果 -->
+<link rel="stylesheet" href="../../Qingfeng_AI_Music_VUE/src/app/styles/theme-base.css">
+<link rel="stylesheet" href="../../Qingfeng_AI_Music_VUE/src/app/styles/brand-theme.css">
+<link rel="stylesheet" href="../../Qingfeng_AI_Music_VUE/src/app/styles/workspace.css">
+<link rel="stylesheet" href="../../Qingfeng_AI_Music_VUE/src/app/styles/creation.css">
+<link rel="stylesheet" href="../../Qingfeng_AI_Music_VUE/src/app/styles/credits.css">
+<link rel="stylesheet" href="../../Qingfeng_AI_Music_VUE/src/modules/studio/styles/inspiration-studio.css">
+<style>
+  body { margin:0; padding:36px 28px 80px; background:var(--background); color:var(--ink); font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif; }
+  .doc-head { max-width:1180px; margin:0 auto 34px; }
+  .doc-head h1 { margin:0 0 10px; font-size:23px; letter-spacing:-.01em; }
+  .doc-head p { margin:0; max-width:760px; color:var(--muted); font-size:13px; line-height:1.85; }
+  .doc-head code { padding:1px 6px; border-radius:5px; background:var(--surface-raised); font-size:12px; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(340px,1fr)); gap:22px; max-width:1180px; margin:0 auto; }
+  .demo { border:1px solid var(--line); border-radius:18px; background:var(--surface); overflow:visible; }
+  .demo > figcaption { padding:13px 18px; border-bottom:1px solid var(--line); border-radius:18px 18px 0 0; background:var(--surface-raised); color:var(--muted); font-size:12px; font-weight:600; }
+  .demo > figcaption b { color:var(--ink); font-weight:650; }
+  .stage { padding:22px 20px 26px; }
+  .stage .demo-label { margin:0 0 14px; color:var(--muted); font-size:11px; letter-spacing:.04em; }
+  .phone { width:375px; max-width:100%; margin:0 auto; border:1px solid var(--line); border-radius:26px; overflow:hidden; box-shadow:0 18px 50px #71444f1a; background:var(--background); }
+  .phone iframe { display:block; width:375px; height:430px; border:0; }
+  .note { max-width:1180px; margin:34px auto 0; padding:18px 20px; border:1px solid var(--line); border-radius:14px; background:var(--surface); color:var(--muted); font-size:12px; line-height:1.9; }
+  .note b { color:var(--ink); }
+  .note ul { margin:8px 0 0; padding-left:20px; }
+  .note li { margin:3px 0; }
+</style>
+</head>
+<body>
+<div class="doc-head">
+  <h1>歌词生成 · 积分消耗提示</h1>
+  <p>本预览直接加载生产环境的 <code>credits.css</code> 与主题变量，DOM 结构与 <code>CreditCostHint.vue</code> 完全一致。
+  单次消耗积分由后端 <code>GET /api/app/credits</code> 下发（<code>lyricsCost</code>），前端不硬编码价格，改价不需要重新发布前端。</p>
+</div>
+
+<div class="grid" id="grid"></div>
+
+<div class="note">
+  <b>交互与规则</b>
+  <ul>
+    <li>提示为低视觉权重的小字（11px，<code>--muted</code>），配积分图标，不抢占创作区。</li>
+    <li>鼠标悬停或点击提示可展开积分规则浮层；点击页面其他处自动收起。</li>
+    <li>余额未知时只显示消耗数量，不编造余额数字；积分开关关闭时整块不显示。</li>
+    <li>余额不足时提示转为 <code>--warning</code> 警示色，并在规则浮层内提供「去充值」入口。</li>
+    <li>生成中按钮显示「正在编写歌词…」并禁用，提示标记 <code>aria-busy</code>，防止重复提交。</li>
+    <li>窄屏（≤600px）规则就地展开在按钮下方：随内容撑开，不溢出屏幕，也不遮挡主按钮。</li>
+    <li>所有歌词生成入口共用同一套积分价格与余额数据（后端 <code>app/credits</code>），积分不足时统一拦截；后端在调用模型前还会再校验一次余额。</li>
+  </ul>
+</div>
+
+<script>
+const CSS = [
+  '../../Qingfeng_AI_Music_VUE/src/app/styles/theme-base.css',
+  '../../Qingfeng_AI_Music_VUE/src/app/styles/brand-theme.css',
+  '../../Qingfeng_AI_Music_VUE/src/app/styles/workspace.css',
+  '../../Qingfeng_AI_Music_VUE/src/app/styles/creation.css',
+  '../../Qingfeng_AI_Music_VUE/src/app/styles/credits.css',
+  '../../Qingfeng_AI_Music_VUE/src/modules/studio/styles/inspiration-studio.css'
+].map(h => `<link rel="stylesheet" href="${h}">`).join('\n')
+
+const icon = '<svg class="credit-cost-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.6"/><circle cx="12" cy="12" r="4.1"/></svg>'
+
+function hint(cost, balance, open, insufficient, variant) {
+  const label = insufficient
+    ? `积分不足，当前余额 ${balance} 积分，生成需要 ${cost} 积分。`
+    : variant === 'regenerate'
+      ? `重新生成歌词同样消耗 ${cost} 积分`
+      : `本次生成消耗 ${cost} 积分`
+  const rule = `
+    <span class="credit-rule" role="tooltip">
+      <span class="credit-rule-title">积分规则</span>
+      <span class="credit-rule-line">歌词生成成功后保留积分扣费。</span>
+      <span class="credit-rule-line">生成失败、超时或取消将自动退还积分。</span>
+      <span class="credit-rule-line">当前余额 ${balance} 积分，单次生成消耗 ${cost} 积分。</span>
+      ${insufficient ? '<a class="credit-rule-link" href="#">去充值</a>' : ''}
+    </span>`
+  return `<span class="credit-cost${insufficient ? ' short' : ''}">
+    <button type="button" class="credit-cost-trigger" aria-expanded="${open}" aria-label="${label}">${icon}<span class="credit-cost-text">${label}</span></button>
+    ${open ? rule : ''}
+  </span>`
+}
+
+function studio(cost, balance, open, insufficient) {
+  return `<div class="workspace">
+    <div class="story-studio inspiration-studio single-inspiration-studio" style="padding-bottom:0">
+      <div class="story-introduction">
+        <h1 style="font-size:22px;margin:0 0 8px">从这一刻起，你也是歌手。</h1>
+        <p class="studio-introduction-copy" style="margin:0;font-size:13px">用几句话表达你的灵感，AI 会为你写成歌词。</p>
+      </div>
+      <form>
+        <fieldset class="draft-fields" style="border:0;padding:0;margin:0">
+          <div class="creation-action-bar story-action-bar">
+            <button class="button creation-primary" type="button">生成歌词<span aria-hidden="true">→</span></button>
+            ${hint(cost, balance, open, insufficient)}
+          </div>
+          <p class="inspiration-next-note">先生成歌词，修改满意后再生成音乐。</p>
+        </fieldset>
+      </form>
+    </div>
+  </div>`
+}
+
+function panel(cost, balance, open, insufficient) {
+  return `<div class="workspace"><section class="detail-panel lyrics-panel">
+    <div class="detail-heading"><h2>把想说的话，写进歌里。</h2></div>
+    <p class="detail-muted">歌词可以直接修改，改好后点击保存，再生成歌曲。</p>
+    <details class="creation-fold lyrics-regenerate" open><summary>想换个写法？调整并重新生成</summary>
+      <button class="button secondary" type="button">重新生成歌词</button>
+      <p class="credit-cost-row">${hint(cost, balance, open, insufficient, 'regenerate')}</p>
+    </details>
+  </section></div>`
+}
+
+function rewriteHint(cost, balance, remaining, open, insufficient) {
+  const label = remaining > 0
+    ? `本次改写不消耗积分，今日免费改写还剩 ${remaining} 次`
+    : insufficient
+      ? `积分不足，当前余额 ${balance} 积分，改写需要 ${cost} 积分。`
+      : `本次改写消耗 ${cost} 积分`
+  const rule = `
+    <span class="credit-rule" role="tooltip">
+      <span class="credit-rule-title">积分规则</span>
+      <span class="credit-rule-line">今日免费改写还剩 ${remaining} 次，用完后每次消耗 ${cost} 积分。</span>
+      <span class="credit-rule-line">改写失败会退还已扣积分；免费次数按调用计算，失败同样占用一次。</span>
+      ${insufficient ? '<a class="credit-rule-link" href="#">去充值</a>' : ''}
+    </span>`
+  return `<span class="credit-cost${insufficient ? ' short' : ''}">
+    <button type="button" class="credit-cost-trigger" aria-expanded="${open}" aria-label="${label}">${icon}<span class="credit-cost-text">${label}</span></button>
+    ${open ? rule : ''}
+  </span>`
+}
+
+function rewriteDemo(remaining, balance, open, insufficient) {
+  return `<div class="workspace"><div class="story-studio inspiration-studio single-inspiration-studio" style="padding-bottom:0">
+    <div class="story-introduction"><h1 style="font-size:20px;margin:0 0 8px">从这一刻起，你也是歌手。</h1></div>
+    <div class="inspiration-rewrite-action" style="margin-top:14px">
+      <button type="button" class="inspiration-label inspiration-rewrite">AI改写</button>
+      <span class="inspiration-rewrite-purpose">帮你把想法写得更具体</span>
+      <span class="inspiration-rewrite-cost">${rewriteHint(1, balance, remaining, open, insufficient)}</span>
+    </div>
+  </div></div>`
+}
+
+const demos = [
+  { title: '灵感创作页 · 积分充足', note: '生成歌词按钮旁显示「本次生成消耗 5 积分」', html: studio(5, 20, false, false) },
+  { title: '灵感创作页 · 积分不足', note: '余额 2 < 需要 5，提示转为警示色', html: studio(5, 2, false, true) },
+  { title: '积分规则浮层 · 悬停或点击展开', note: '说明成功才扣费、失败不扣费，并给出余额与单价', html: studio(5, 20, true, false) },
+  { title: '作品详情页 · 重新生成歌词', note: '重新生成同样先告知消耗，失败不扣费', html: panel(5, 20, false, false) },
+  { title: '作品详情页 · 积分不足 + 充值入口', note: '浮层内提供「去充值」', html: panel(5, 2, true, true) },
+  { title: 'AI 改写 · 免费额度内', note: '每日免费 5 次，本次不消耗积分', html: rewriteDemo(3, 0, false, false) },
+  { title: 'AI 改写 · 免费额度用尽', note: '超出后每次消耗 1 积分', html: rewriteDemo(0, 20, false, false) },
+  { title: 'AI 改写 · 额度用尽且积分不足', note: '拦截并给出充值入口', html: rewriteDemo(0, 0, true, true) }
+]
+
+const grid = document.getElementById('grid')
+demos.forEach(demo => {
+  const figure = document.createElement('figure')
+  figure.className = 'demo'
+  figure.style.margin = '0'
+  figure.innerHTML = `<figcaption><b>${demo.title}</b> · ${demo.note}</figcaption><div class="stage">${demo.html}</div>`
+  grid.appendChild(figure)
+})
+
+const phone = document.createElement('figure')
+phone.className = 'demo'
+phone.style.margin = '0'
+phone.innerHTML = `<figcaption><b>移动端 375px</b> · 提示换行到按钮下方，规则浮层改为贴底</figcaption>
+  <div class="stage"><div class="phone"><iframe title="移动端预览" srcdoc="<!DOCTYPE html><html lang='zh-CN'><head><meta charset='utf-8'>${CSS}<style>body{margin:0;padding:16px 14px 0;background:var(--background);font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei',sans-serif}</style></head><body>${studio(5, 2, true, true)}</body></html>"></iframe></div></div>`
+grid.appendChild(phone)
+</script>
+</body>
+</html>

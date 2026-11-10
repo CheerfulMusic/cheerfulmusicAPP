@@ -2,6 +2,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { currentCreatorId, ensureCreator, requestJson } from '../../../shared/http/api-client'
 import { accountState } from '../../../shared/identity/account-state'
+import { announceCreditsChanged } from '../../../shared/identity/credit-balance'
 import { logtoState } from '../../../shared/identity/logto-state'
 import { t, locale } from '../../../shared/i18n'
 import { readPendingOrders, savePendingOrders } from '../model/payment-orders'
@@ -116,7 +117,7 @@ async function retryPaypal(order: Order) {
   const creatorId = currentCreatorId()
   if (!creatorId || !readPendingOrders(localStorage, creatorId, 'paypal-approved').includes(order.orderId)) return
   busy.value = true
-  try { await requestJson(`app/paypal/orders/${encodeURIComponent(order.orderId)}/capture`, 'POST', undefined, 30000) } catch { /* Keep the order pending for later verification. */ }
+  try { await requestJson(`app/paypal/orders/${encodeURIComponent(order.orderId)}/capture`, 'POST', undefined, 30000); announceCreditsChanged() } catch { /* Keep the order pending for later verification. */ }
   finally { busy.value = false }
   if (currentCreatorId() === creatorId) await load()
 }
@@ -135,6 +136,7 @@ async function resumePaypal(order: Order) {
       paypalApproved.value = approved
       orderNotice.value = 'PayPal 已授权，请点击重新确认支付以完成付款。'
     } else if (result.status === 'PAID') {
+      announceCreditsChanged()
       await load()
     } else { throw new Error('Unknown status') }
   } catch { orderNotice.value = '暂时无法恢复支付，请稍后刷新并核对订单状态。' }

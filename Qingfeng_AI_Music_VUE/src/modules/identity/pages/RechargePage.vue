@@ -3,6 +3,7 @@ import { computed, onMounted, ref, shallowRef } from 'vue'
 import { locale } from '../../../shared/i18n'
 import { currentCreatorId, ensureCreator, requestJson } from '../../../shared/http/api-client'
 import { accountState, refreshAccountState } from '../../../shared/identity/account-state'
+import { announceCreditsChanged } from '../../../shared/identity/credit-balance'
 import { logtoState, refreshLogtoState } from '../../../shared/identity/logto-state'
 import { readPendingOrders, savePendingOrders } from '../model/payment-orders'
 import { preparePaypalCheckout, type PaypalCheckout, type PaypalSdkConfig } from '../api/paypal-sdk'
@@ -40,7 +41,7 @@ async function refresh() {
         const config=await requestJson<PaypalSdkConfig>('app/paypal/sdk-config')
         sdk.value=await preparePaypalCheckout(config, {
           onApproved: async id => {
-            try { await requestJson(`app/paypal/orders/${encodeURIComponent(id)}/capture`,'POST',undefined,30000); await refresh() }
+            try { await requestJson(`app/paypal/orders/${encodeURIComponent(id)}/capture`,'POST',undefined,30000); announceCreditsChanged(); await refresh() }
             catch { blocked.value=true; error.value=en.value?'Payment is being checked. Visit your account before trying again.':'付款正在核对，请前往账号页查看，避免重复支付。' }
           },
           onCancel: async id => {
