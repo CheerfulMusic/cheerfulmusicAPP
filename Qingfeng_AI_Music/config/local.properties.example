@@ -71,7 +71,7 @@ qingfeng.media.creator-capacity-bytes=1073741824
 # 积分与支付后端默认关闭。Airwallex 与 PayPal 均只支持沙箱联调，不支持生产收款。
 # 使用独立测试数据库和沙箱账号，在本机私有 local.properties 中按需填写，勿提交真实凭证。
 qingfeng.credits.enabled=false
-qingfeng.credits.music-cost=10
+qingfeng.credits.music-cost=15
 qingfeng.payments.enabled=false
 # qingfeng.payments.client-id=
 # qingfeng.payments.api-key=
@@ -85,9 +85,9 @@ qingfeng.paypal.environment=sandbox
 # qingfeng.paypal.merchant-id=
 # qingfeng.paypal.webhook-id=
 # 套餐价格由服务端配置，客户端只能选择对应套餐 ID，不可指定金额。
-# qingfeng.payments.prices.usd.starter=4.99
-# qingfeng.payments.prices.usd.standard=12.99
-# qingfeng.payments.prices.usd.plus=24.99
+# qingfeng.payments.prices.usd.starter=9.90
+# qingfeng.payments.prices.usd.standard=25.90
+# qingfeng.payments.prices.usd.plus=49.90
 
 # 播放歌词时间轴。compatible 为当前已验证的官方兼容接口；unified 为统一接口。
 # 默认只读取缓存；未同步的歌曲由用户点击同步。结果未知不自动重试、不重新生成歌曲。

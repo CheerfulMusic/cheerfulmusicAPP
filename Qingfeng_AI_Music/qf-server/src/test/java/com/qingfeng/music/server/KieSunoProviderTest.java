@@ -112,6 +112,26 @@ class KieSunoProviderTest {
         provider.submit(new MusicProvider.Request("歌名","歌词","民谣","MALE"),"male");assertEquals("m",new ObjectMapper().readTree(body).path("input").path("vocal_gender").asText());
         provider.submit(new MusicProvider.Request("歌名","歌词","民谣","FEMALE"),"female");assertEquals("f",new ObjectMapper().readTree(body).path("input").path("vocal_gender").asText());assertEquals(2,calls.get());
     }
+    @Test void carriesStructuredTailThroughPresetExpansionWithoutDuplication(){
+        response="{\"code\":200,\"data\":{\"taskId\":\"task1\"}}";
+        var prepared=provider.prepare(new MusicProvider.Request("歌名","歌词","温暖民谣 | 90 BPM, piano, Mandarin vocals","FEMALE"));
+        assertTrue(prepared.preparedStyle());
+        // 基础风格仍命中预设词典翻成英文，补充描述原样跟随，且只出现一次。
+        assertTrue(prepared.style().contains("Warm acoustic folk ballad"));
+        assertTrue(prepared.style().endsWith(" | 90 BPM, piano, Mandarin vocals"));
+        assertEquals(1,prepared.style().split("90 BPM",-1).length-1);
+        provider.submit(prepared,"tail");
+        var style=new ObjectMapper().readTree(body).path("input").path("style").asText();
+        assertEquals(prepared.style(),style);
+        assertEquals("f",new ObjectMapper().readTree(body).path("input").path("vocal_gender").asText());
+    }
+    @Test void keepsBaseWhenTheStructuredTailExceedsTheStyleBudget(){
+        String tail="x".repeat(900)+", "+"y".repeat(400);
+        var prepared=provider.prepare(new MusicProvider.Request("歌名","歌词","温暖民谣 | "+tail,"AUTO"));
+        assertTrue(prepared.style().length()<=provider.limits().style());
+        assertTrue(prepared.style().startsWith("Warm acoustic folk ballad"));
+        assertFalse(prepared.style().contains("y".repeat(400)));
+    }
     @Test void refusesInvalidVoiceBeforeAnyNetworkCall(){assertThrows(DomainException.class,()->provider.submit(new MusicProvider.Request("歌名","歌词","民谣","unknown"),"key"));assertEquals(0,calls.get());}
     @Test void expandsAllPresetsWithoutRewritingLyricsOrForcingVoiceGender(){
         response="{\"code\":200,\"data\":{\"taskId\":\"task1\"}}";

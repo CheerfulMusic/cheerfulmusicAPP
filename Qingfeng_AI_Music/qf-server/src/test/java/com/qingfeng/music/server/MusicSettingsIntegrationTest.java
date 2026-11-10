@@ -66,6 +66,62 @@ class MusicSettingsIntegrationTest {
   assertEquals("歌词完整保留",lyrics.get(f.owner(),f.work().id(),revision.id()).lyrics());
  }
  @Test void savesStructuredPreferencesAndPreservesLegacyStoryFields(){var f=fixture();assertNull(settings.get(f.owner(),f.work().id()).direction());var saved=settings.save(f.owner(),f.work().id(),0,recipe());assertEquals(1,saved.work().version());assertEquals("一盏灯",saved.work().story());assertEquals("FEMALE",saved.work().vocalGender());assertEquals(saved.direction().preferences(),settings.get(f.owner(),f.work().id()).direction().preferences());assertTrue(saved.direction().style().contains("lead instrument: acoustic guitar"));assertTrue(saved.direction().negativeTags().contains("刺耳的高音"));}
+ @Test void keepsTheAgentStructuredDescriptionThroughTheCatalogStyleAndIntoTheSubmittedRequest(){
+  String owner=identities.create().creatorId();
+  var work=works.create(owner,new WorkApi.Draft("","","海风与故乡","","温暖民谣 | 90 BPM, piano, Mandarin vocals","海风","FEMALE"));
+  // 没有音乐设置时，Agent 的补充描述必须进入生成用描述。
+  assertTrue(settings.forGeneration(owner,works.get(owner,work.id())).style().contains("90 BPM"));
+  // 目录风格替换基础风格后，补充描述依然保留：它已经是用户看得见、改得动的自由要求。
+  var saved=settings.save(owner,work.id(),0,new MusicSettings.Preferences(1,null,Map.of("genre",List.of("folk")),"FEMALE","90 BPM, piano, Mandarin vocals",""));
+  assertFalse(saved.work().style().contains("90 BPM"),saved.work().style());
+  var after=settings.forGeneration(owner,works.get(owner,work.id()));
+  assertTrue(after.style().contains("90 BPM"),after.style());
+  assertTrue(after.style().contains("piano"),after.style());
+  // 提交给供应商的请求里同样带着这段描述。
+  var revision=lyrics.save(owner,work.id(),saved.work().version(),"海风","[Verse]\n海风吹过故乡");lyrics.confirm(owner,work.id(),revision.id());
+  var task=generation.submit(owner,work.id(),revision.id(),UUID.randomUUID().toString());
+  var worker=new GenerationWorker(executions,provider,url->{throw new AssertionError();},(id,w,in)->{throw new AssertionError();},java.time.Clock.fixed(task.createdAt().plusSeconds(6),java.time.ZoneOffset.UTC),java.time.Duration.ofMinutes(2),2).withSettings(settings);
+  assertTrue(worker.runOnce(),"queued task should be claimed");
+  assertNotNull(provider.received);
+  assertTrue(provider.received.style().contains("90 BPM"),provider.received.style());
+  assertTrue(provider.received.style().contains("Mandarin vocals"),provider.received.style());
+ }
+ @Test void storesTheAgentStructuredDescriptionAndReadsItBackUnchanged(){
+  String owner=identities.create().creatorId();
+  var work=works.create(owner,new WorkApi.Draft("","","海风与故乡","","温暖民谣 | 90 BPM, piano, Cantonese vocals","海风","FEMALE"));
+  // 落库后原样读回：BPM、乐器、语言都没有在持久化途中丢失。
+  var stored=works.get(owner,work.id());
+  assertEquals("温暖民谣 | 90 BPM, piano, Cantonese vocals",stored.style());
+  assertEquals("FEMALE",stored.vocalGender());
+  // 生成用描述里同样带着这段参数。
+  assertTrue(settings.forGeneration(owner,stored).style().contains("90 BPM"));
+  assertTrue(settings.forGeneration(owner,stored).style().contains("Cantonese vocals"));
+ }
+ @Test void theUserEditedFreeTextWinsOverTheAgentDescription(){
+  String owner=identities.create().creatorId();
+  var work=works.create(owner,new WorkApi.Draft("","","海风与故乡","","温暖民谣 | 90 BPM, piano","海风","FEMALE"));
+  // 用户在音乐设置里改写补充要求：用户最新手动修改优先，Agent 的原始描述不再进入提交内容。
+  var saved=settings.save(owner,work.id(),0,new MusicSettings.Preferences(1,null,Map.of("genre",List.of("folk")),"FEMALE","120 BPM, guitar",""));
+  assertEquals(1,works.get(owner,work.id()).version());
+  var after=settings.forGeneration(owner,works.get(owner,work.id()));
+  assertTrue(after.style().contains("120 BPM"),after.style());
+  assertTrue(after.style().contains("guitar"),after.style());
+  assertFalse(after.style().contains("90 BPM"),after.style());
+  assertFalse(after.style().contains("piano"),after.style());
+ }
+ @Test void theTaskSnapshotFreezesTheCompiledDescription(){
+  String owner=identities.create().creatorId();
+  var work=works.create(owner,new WorkApi.Draft("","","海风与故乡","","温暖民谣 | 90 BPM, piano, Mandarin vocals","海风","FEMALE"));
+  var revision=lyrics.save(owner,work.id(),0,"海风","[Verse]\n海风吹过故乡");lyrics.confirm(owner,work.id(),revision.id());
+  var task=generation.submit(owner,work.id(),revision.id(),UUID.randomUUID().toString());
+  var frozen=settings.frozen(work.id(),task.id()).orElseThrow();
+  // 快照与编译结果逐字一致：参数不会在入队与提交之间丢失。
+  assertEquals(settings.forGeneration(owner,works.get(owner,work.id())).style(),frozen.style());
+  assertTrue(frozen.style().contains("90 BPM"),frozen.style());
+  assertTrue(frozen.style().contains("Mandarin vocals"),frozen.style());
+  // 任务表里的风格快照同样完整。
+  assertEquals("温暖民谣 | 90 BPM, piano, Mandarin vocals",jdbc.queryForObject("SELECT style FROM generation_task WHERE id=?",String.class,task.id()));
+ }
  @Test void rejectsUnknownOptionsConflictsAndExcessiveSelectionsBeforeSaving(){var f=fixture();for(var choices:List.of(Map.of("genre",List.of("fake")),Map.of("genre",List.of("rap"),"exclude",List.of("no_rap")),Map.of("genre",List.of("folk"),"emotion",List.of("warm","happy","sad"))))assertThrows(DomainException.class,()->settings.save(f.owner(),f.work().id(),0,new MusicSettings.Preferences(1,null,choices,"AUTO","","")));assertEquals(0,works.get(f.owner(),f.work().id()).version());assertThrows(DomainException.class,()->settings.preview(new MusicSettings.Preferences(1,null,Map.of("genre",List.of("folk")),"FEMALE","请用男声唱","")));}
  @Test void previewDoesNotChangeWorkVersionOrConsumeModelQuota(){var f=fixture();int before=jdbc.queryForObject("SELECT COUNT(*) FROM model_usage_reservation",Integer.class);for(int n=0;n<3;n++)settings.preview(recipe());assertEquals(before,jdbc.queryForObject("SELECT COUNT(*) FROM model_usage_reservation",Integer.class));assertEquals(0,works.get(f.owner(),f.work().id()).version());}
  @Test void generationFreezesSettingsAndWorkerUsesTheOriginalDirection(){var f=fixture();var saved=settings.save(f.owner(),f.work().id(),0,recipe());var r=lyrics.save(f.owner(),f.work().id(),saved.work().version(),"回家的灯","[Verse]\n你在门口留着灯");lyrics.confirm(f.owner(),f.work().id(),r.id());String key=UUID.randomUUID().toString();var task=generation.submit(f.owner(),f.work().id(),r.id(),key);assertEquals(task.id(),generation.submit(f.owner(),f.work().id(),r.id(),key).id());var frozen=settings.task(f.owner(),f.work().id(),task.id()).orElseThrow();settings.save(f.owner(),f.work().id(),1,new MusicSettings.Preferences(1,null,Map.of("genre",List.of("rock")),"MALE","有力量",""));var worker=new GenerationWorker(executions,provider,url->{throw new AssertionError();},(id,w,in)->{throw new AssertionError();},java.time.Clock.fixed(task.createdAt().plusSeconds(6),java.time.ZoneOffset.UTC),java.time.Duration.ofMinutes(2),2).withSettings(settings);assertTrue(worker.runOnce(),"queued snapshot task should be claimed");assertNotNull(provider.received);assertTrue(provider.received.preparedStyle(),"worker must submit the frozen structured direction");assertEquals(frozen.style(),provider.received.style());assertEquals(frozen.negativeTags(),provider.received.negativeTags());assertEquals("FEMALE",provider.received.vocalGender());assertEquals(frozen,settings.task(f.owner(),f.work().id(),task.id()).orElseThrow());}

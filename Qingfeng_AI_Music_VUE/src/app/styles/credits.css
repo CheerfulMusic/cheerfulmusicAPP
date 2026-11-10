@@ -1,0 +1,25 @@
+/* 创作区的积分消耗提示：低视觉权重的小字 + 积分图标，悬停或点击可查看积分规则。 */
+.credit-cost{position:relative;display:inline-flex;align-items:center;gap:6px;min-width:0;font-size:11px;line-height:1.7;color:var(--muted)}
+.credit-cost-trigger{display:inline-flex;align-items:center;gap:5px;max-width:100%;padding:3px 0;border:0;background:none;color:inherit;font:inherit;text-align:left;cursor:pointer;overflow-wrap:anywhere}
+.credit-cost-trigger:hover{color:var(--accent-text)}
+.credit-cost-trigger:focus-visible{outline:2px solid var(--accent-text);outline-offset:3px;border-radius:6px}
+.credit-cost-icon{width:13px;height:13px;flex:none;fill:none;stroke:currentColor;stroke-width:1.5;opacity:.85}
+.credit-cost.short{color:var(--warning)}
+.credit-cost.short .credit-cost-trigger{color:var(--warning)}
+.credit-cost.busy{opacity:.72}
+.credit-cost-row{display:flex;margin:8px 0 0}
+.credit-rule{position:absolute;left:0;top:calc(100% + 8px);z-index:210;display:flex;flex-direction:column;gap:3px;width:max-content;max-width:min(290px,calc(100vw - 32px));padding:11px 13px;border:1px solid var(--line);border-radius:12px;background:var(--surface);box-shadow:0 14px 38px #71444f1f;color:var(--ink);font-size:12px;line-height:1.7;text-align:left;transform:translateX(var(--credit-rule-shift,0px))}
+.credit-rule-title{font-weight:600;color:var(--ink)}
+.credit-rule-line{color:var(--muted)}
+.credit-rule-link{margin-top:5px;color:var(--accent-text);font-weight:600;text-decoration:none}
+.credit-rule-link:hover{text-decoration:underline}
+/* 按钮行内的提示：桌面在按钮右侧，窄屏换行到按钮下方，不与主按钮抢空间。 */
+.creation-action-bar .credit-cost{flex:none;margin-left:2px}
+@media(max-width:600px){
+  .creation-action-bar{flex-wrap:wrap;row-gap:2px}
+  .creation-action-bar .credit-cost{flex-basis:100%;justify-content:center;margin-left:0;text-align:center}
+  .credit-cost{flex-wrap:wrap;max-width:100%}
+  .credit-cost-row .credit-cost{flex:1;min-width:0}
+  /* 窄屏规则就地展开：随内容撑开，不溢出屏幕，也不会遮住主按钮或被固定按钮条裁掉。 */
+  .credit-rule{position:static;transform:none;width:100%;max-width:none;margin-top:3px;padding:9px 11px;box-shadow:none}
+}

@@ -1,6 +1,13 @@
 [CmdletBinding()]
-param()
+param([switch]$CheckOnly, [switch]$AllowProductionConnection)
 $ErrorActionPreference = 'Stop'
+$gateRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
+$gatePython = (Get-Command python -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source
+# Gate runs before lock/state creation, secret configuration loading, gateway, SSH or Start-Process.
+& $gatePython (Join-Path $PSScriptRoot 'release_gate.py') startup --workspace $gateRoot --manifest (Join-Path $gateRoot '.secrets/production-main.manifest.json') --jar (Join-Path $gateRoot '.cache/runtime/production-main/app.jar')
+if ($LASTEXITCODE -ne 0) { throw '启动门禁未通过：没有建立生产连接或启动进程。' }
+if ($CheckOnly) { return }
+if (-not $AllowProductionConnection) { throw '此入口会连接生产主库和线上API；实际启动须显式指定 -AllowProductionConnection。' }
 if ($PSVersionTable.PSVersion.Major -lt 7) { throw '请使用 PowerShell 7 运行此脚本。' }
 # Run from the installed <workspace>/scripts entry point.
 $workspaceRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))

@@ -16,3 +16,15 @@ export function lyricSections(value: LyricsStructure): string[] {
   return sections
 }
 export const lyricsStructureKey = (value: LyricsStructure) => value.templateId==='AUTO'?'':`${value.templateId}:${value.chorusFirst?'first':'normal'}`
+
+/**
+ * Agent 识别到的中文段落名 → 现成的歌词模板。
+ * 只映射能明确对应的组合，认不出来就保持 AUTO，绝不替用户编造段落。
+ */
+export function templateForSections(names: string[]): LyricsTemplateId {
+  const has = (name: string) => names.includes(name)
+  if (has('桥段')) return 'ABCD'
+  if (has('副歌')) return 'ABB'
+  if (has('主歌')) return 'AAB'
+  return 'AUTO'
+}

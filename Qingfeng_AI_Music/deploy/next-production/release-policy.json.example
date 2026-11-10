@@ -1,0 +1,4 @@
+{
+  "approved": {},
+  "note": "Intentionally empty. Each exact artifact needs separately reviewed sourceCommit, contractSha256, schemaEvidenceSha256. No legacyRollback bypass or generated self-approval."
+}

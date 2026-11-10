@@ -1,14 +1,13 @@
+[CmdletBinding()]
+param([string]$JavaHome = $env:JAVA_HOME)
 $ErrorActionPreference = 'Stop'
 $workspaceRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
-Push-Location (Join-Path $workspaceRoot 'Qingfeng_AI_Music_VUE')
-try {
-    if (-not (Test-Path node_modules)) { & npm ci; if ($LASTEXITCODE -ne 0) { throw '前端依赖安装失败。' } }
-    & npm run build
-    if ($LASTEXITCODE -ne 0) { throw '前端构建失败。' }
-    & npm test
-    if ($LASTEXITCODE -ne 0) { throw '前端测试失败。' }
-} finally { Pop-Location }
-# 只停止启停脚本记录的本项目进程，避免Windows锁住旧构建；不按端口终止其他程序。
-& (Join-Path $PSScriptRoot 'stop-local.ps1')
-& (Join-Path $workspaceRoot 'Qingfeng_AI_Music\scripts\build.ps1')
-Write-Host '本地交付包已生成，包含前端页面与后端。运行 scripts/start-local.ps1 即可体验。'
+$python = (Get-Command python -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source
+$git = (Get-Command git -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source
+$common = (& $git -C $workspaceRoot rev-parse --path-format=absolute --git-common-dir).Trim()
+if ($LASTEXITCODE -ne 0) { throw '无法确定仓库缓存范围，未构建。' }
+$cacheRoot = Join-Path (Split-Path $common -Parent) '.cache'
+# No stop/start, SSH, deployment or private configuration import in the build path.
+& $python (Join-Path $PSScriptRoot 'release_gate.py') build --workspace $workspaceRoot --baseline (Join-Path $workspaceRoot 'Qingfeng_AI_Music/deploy/production-baseline.json') --java-home $JavaHome --cache-root $cacheRoot
+if ($LASTEXITCODE -ne 0) { throw '可信构建被阻断；保留修改及失败证据，不停止任何运行进程。' }
+Write-Host '本地构建完成；正式发布仍须独立的数据库、业务、安全验收和审批。'

@@ -5,5 +5,6 @@ const config: CapacitorConfig = {
   appId: 'com.qingfeng.music',
   appName: '青风音乐',
   webDir: 'dist',
+  plugins: { CapacitorHttp: { enabled: true } },
 }
 export default config

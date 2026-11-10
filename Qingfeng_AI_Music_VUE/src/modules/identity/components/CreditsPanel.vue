@@ -2,6 +2,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { currentCreatorId, ensureCreator, requestJson } from '../../../shared/http/api-client'
 import { accountState } from '../../../shared/identity/account-state'
+import { announceCreditsChanged } from '../../../shared/identity/credit-balance'
 import { logtoState } from '../../../shared/identity/logto-state'
 import { t, locale } from '../../../shared/i18n'
 import { readPendingOrders, savePendingOrders } from '../model/payment-orders'
@@ -34,9 +35,9 @@ async function load() {
   loading.value = true; error.value = ''; orderNotice.value = ''; unresolvedOrders.value = []; recentOrders.value = []
   if (isPreview) {
     const packages = ['USD'].flatMap(currency => [
-      { id: `starter-${currency}`, title: '100 Credits', amount: 4.99, currency, credits: 100 },
-      { id: `standard-${currency}`, title: '300 Credits', amount: 12.99, currency, credits: 300 },
-      { id: `plus-${currency}`, title: '700 Credits', amount: 24.99, currency, credits: 700 },
+      { id: `starter-${currency}`, title: '100 Credits', amount: 9.9, currency, credits: 100 },
+      { id: `standard-${currency}`, title: '300 Credits', amount: 25.9, currency, credits: 300 },
+      { id: `plus-${currency}`, title: '700 Credits', amount: 49.9, currency, credits: 700 },
     ])
     credits.value = { enabled: true, balance: 0, musicCost: 15 }
     catalogs.value = { airwallex: { enabled: false, packages: [] }, paypal: { enabled: true, packages } }
@@ -116,7 +117,7 @@ async function retryPaypal(order: Order) {
   const creatorId = currentCreatorId()
   if (!creatorId || !readPendingOrders(localStorage, creatorId, 'paypal-approved').includes(order.orderId)) return
   busy.value = true
-  try { await requestJson(`app/paypal/orders/${encodeURIComponent(order.orderId)}/capture`, 'POST', undefined, 30000) } catch { /* Keep the order pending for later verification. */ }
+  try { await requestJson(`app/paypal/orders/${encodeURIComponent(order.orderId)}/capture`, 'POST', undefined, 30000); announceCreditsChanged() } catch { /* Keep the order pending for later verification. */ }
   finally { busy.value = false }
   if (currentCreatorId() === creatorId) await load()
 }
@@ -135,6 +136,7 @@ async function resumePaypal(order: Order) {
       paypalApproved.value = approved
       orderNotice.value = 'PayPal 已授权，请点击重新确认支付以完成付款。'
     } else if (result.status === 'PAID') {
+      announceCreditsChanged()
       await load()
     } else { throw new Error('Unknown status') }
   } catch { orderNotice.value = '暂时无法恢复支付，请稍后刷新并核对订单状态。' }

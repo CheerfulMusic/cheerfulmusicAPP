@@ -73,8 +73,20 @@ class InspirationRewriteTest {
         assertThrows(DomainException.class, () -> service.rewrite("owner", "x".repeat(4001), "en"));
         assertThrows(DomainException.class, () -> service.rewrite("owner", "原文", "invalid"));
         assertEquals(0, calls.get());
-        assertThrows(DomainException.class, () -> service.rewrite("owner", "原文", "en"));
-        assertEquals("有效结果", service.rewrite("owner", "原文", "en"));
+        assertThrows(DomainException.class, () -> service.rewrite("owner", "原文", "en", UUID.randomUUID().toString()));
+        assertEquals("有效结果", service.rewrite("owner", "原文", "en", UUID.randomUUID().toString()));
+    }
+
+    @Test void rejectsRewriteWithoutARequestKeySoBillingCannotBeBypassed() {
+        var calls = new AtomicInteger();
+        InspirationRewriter writer = new InspirationRewriter() {
+            public boolean isConfigured() { return true; }
+            public String rewrite(String t, String l) { calls.incrementAndGet(); return "有效结果"; }
+        };
+        var service = new InspirationRewriteService(writer, true, 1);
+        assertEquals("INVALID_REWRITE_REQUEST", assertThrows(DomainException.class, () -> service.rewrite("owner", "原文", "en")).code());
+        assertEquals("INVALID_REWRITE_REQUEST", assertThrows(DomainException.class, () -> service.rewrite("owner", "原文", "en", "not-a-uuid")).code());
+        assertEquals(0, calls.get());
     }
 
     @Test void blocksConcurrentRequestsFromSameCreatorAndGlobalOverload() throws Exception {
@@ -85,11 +97,11 @@ class InspirationRewriteTest {
         };
         var service = new InspirationRewriteService(writer, true, 1); var pool = Executors.newSingleThreadExecutor();
         try {
-            var first = pool.submit(() -> service.rewrite("a", "原文", "en")); assertTrue(entered.await(3, TimeUnit.SECONDS));
-            assertEquals("REWRITE_GENERATION_BUSY", assertThrows(DomainException.class, () -> service.rewrite("a", "原文", "en")).code());
-            assertEquals("REWRITE_GENERATION_BUSY", assertThrows(DomainException.class, () -> service.rewrite("b", "原文", "en")).code());
+            var first = pool.submit(() -> service.rewrite("a", "原文", "en", UUID.randomUUID().toString())); assertTrue(entered.await(3, TimeUnit.SECONDS));
+            assertEquals("REWRITE_GENERATION_BUSY", assertThrows(DomainException.class, () -> service.rewrite("a", "原文", "en", UUID.randomUUID().toString())).code());
+            assertEquals("REWRITE_GENERATION_BUSY", assertThrows(DomainException.class, () -> service.rewrite("b", "原文", "en", UUID.randomUUID().toString())).code());
             release.countDown(); assertNotNull(first.get(3, TimeUnit.SECONDS));
-            assertNotNull(service.rewrite("b", "原文", "en"));
+            assertNotNull(service.rewrite("b", "原文", "en", UUID.randomUUID().toString()));
         } finally { release.countDown(); pool.shutdownNow(); }
     }
 }

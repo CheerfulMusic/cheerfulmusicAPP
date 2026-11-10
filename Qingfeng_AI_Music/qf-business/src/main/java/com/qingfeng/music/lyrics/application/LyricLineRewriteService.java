@@ -60,7 +60,7 @@ public final class LyricLineRewriteService {
         }
         String result = null;
         try {
-            var candidate = rewriter.rewrite(owner, input, language);
+            var candidate = rewriter.rewrite(owner, input, language, requestId.toString());
             if (!isLyricLine(candidate)) throw invalid();
             if (action==Action.SHORTEN && candidate.length()>=line.strip().length()) throw invalid();
             result = candidate;

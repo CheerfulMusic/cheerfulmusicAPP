@@ -46,3 +46,14 @@ server→business、infrastructure；infrastructure→business；business→comm
 ## 验证状态
 
 后端全量测试通过（当前 285 项 / 60 suites），覆盖身份/归属/CSRF、不可变歌词、并发幂等、租约及恢复、未知提交、单个在途生成、只读刷新/归档重试、找回码并发消费、容量、路径和OSS私有ACL边界。自动化数据库为H2 MySQL兼容模式，供应商与OSS使用离线替身；本机MySQL V1—V23、真实重启、跨浏览器作品找回和备份恢复另行实测。详情见上级`docs/第三阶段验收.md`。
+
+
+### Airwallex Sandbox 创建失败的恢复
+
+明确的供应商请求校验拒绝（HTTP 400/422）会把本地订单标记为 FAILED，允许重新发起购买。超时、连接中断和其他未知结果保留 CREATING，禁止盲目新建或自动过期，避免远端已创建订单时重复付款。
+
+对于未知结果，从 Airwallex 商户后台按本地 orderId（reference）核对原支付链接。由订单所属账号携带正常会话和 CSRF 令牌调用 `POST /api/app/payments/orders/{id}/recover`，JSON 为 `{"providerLinkId":"原链接ID"}`。服务端重新向供应商读取链接，核对订单归属、reference、金额、币种和非复用属性后绑定原链接；已支付则幂等入账，未支付则恢复为 PENDING。继续使用商户后台核实的原链接付款，不创建替代订单。无法找到或无法确认的订单继续保留供人工核对，不能仅凭超时清除。
+
+### 反向代理信任边界
+
+部署模板假定 Nginx 是公网第一层可信入口：覆盖 X-Forwarded-For 为连接来源地址，并清除客户端 Forwarded，覆盖转发 Host、Port、Proto。若增加 CDN/负载均衡，须单独配置可信代理 real_ip 来源，不能直接恢复为透传客户端转发链。配置变更需后续明确上线后才生效。

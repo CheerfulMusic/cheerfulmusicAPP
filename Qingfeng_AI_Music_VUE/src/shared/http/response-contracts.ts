@@ -23,6 +23,23 @@ const cover=(v:unknown)=>obj(v)&&num(v.version)&&(v.currentCoverId===null||text(
 const choices=(v:unknown)=>obj(v)&&Object.values(v).every(values=>list(values,text))
 const preferences=(v:unknown)=>obj(v)&&v.version===1&&(v.recipeId===null||text(v.recipeId))&&choices(v.choices)&&['AUTO','MALE','FEMALE'].includes(String(v.vocalGender))&&str(v.freeText)&&str(v.negativeText)
 const direction=(v:unknown)=>obj(v)&&preferences(v.preferences)&&num(v.catalogVersion)&&str(v.style)&&str(v.negativeTags)&&str(v.summaryZh)&&str(v.summaryEn)
+const hotStat=(v:unknown)=>obj(v)&&text(v.trackId)&&['plays','likes','favorites','comments'].every(k=>num(v[k])&&Number(v[k])>=0)
+const analyticsCount=(v:unknown)=>num(v)&&Number(v)>=0
+const analyticsTotals=(v:unknown)=>obj(v)&&['pv','pageviews','uv','sessions','avgDurationMs','totalDurationMs'].every(k=>analyticsCount(v[k]))
+const analyticsDaily=(v:unknown)=>obj(v)&&text(v.d)&&['pv','pageviews','uv','avgDurationMs'].every(k=>analyticsCount(v[k]))
+const analyticsPageRow=(v:unknown)=>obj(v)&&text(v.pagePath)&&analyticsCount(v.pv)&&analyticsCount(v.avgDurationMs)&&analyticsCount(v.samples)
+const analyticsUserRow=(v:unknown)=>obj(v)&&str(v.creatorId)&&text(v.accountType)&&['name','email','phoneMasked'].every(k=>v[k]===null||str(v[k]))&&['pv','pageviews','avgDurationMs','samples'].every(k=>analyticsCount(v[k]))&&str(v.firstSeen)&&str(v.lastSeen)
+/**
+ * 统计看板：allowed 明确拒绝时不带数据；QUERY_FAILED 只带 error，绝不能被当成 0 展示。
+ * 字段缺失或类型不对一律判为非法响应，让前端进入“加载失败”而不是渲染 0。
+ */
+const analyticsSummaryBody=(v:unknown)=>{
+ if(!obj(v)||typeof v.allowed!=='boolean')return false
+ if(v.allowed!==true)return true
+ if(v.error!==undefined)return text(v.error)&&v.totals===undefined&&v.daily===undefined
+ return analyticsTotals(v.totals)&&list(v.daily,analyticsDaily)&&list(v.pages,analyticsPageRow)&&list(v.users,analyticsUserRow)
+}
+const analyticsAccessBody=(v:unknown)=>obj(v)&&typeof v.allowed==='boolean'&&(v.allowed!==true||text(v.viewer))
 const quickCreation=(v:unknown)=>obj(v)&&text(v.id)&&text(v.workId)&&['QUEUED','WRITING','LYRICS_READY','SUBMITTING_MUSIC','MUSIC_QUEUED','SUBMITTING','RUNNING','SAVING','SUBMISSION_UNKNOWN','SUCCEEDED','FAILED','CANCELLED'].includes(String(v.status))&&['revisionId','taskId','errorCode'].every(k=>v[k]===null||text(v[k]))&&typeof v.canRetry==='boolean'&&text(v.createdAt)
 export const emptyResponseAllowed=(path:string,method:string)=>method==='DELETE'&&/^app\/works\/[^/]+\/shares$/.test(path)||method==='POST'&&/^app\/works\/[^/]+\/generations\/[^/]+\/retry-archive$/.test(path)||method==='GET'&&(/^app\/works\/[^/]+\/generations\/[^/]+\/music-settings$/.test(path)||/^app\/works\/[^/]+\/quick-creations\/latest$/.test(path))
 /** 校验应用实际依赖的字段。HTTP 200只代表传输成功，不代表业务结果完整。 */
@@ -34,6 +51,7 @@ export function validResponse(path:string,method:string,value:unknown):boolean{
  if(path==='public/invite/status')return method==='GET'&&obj(value)&&typeof value.enabled==='boolean'&&typeof value.admitted==='boolean'&&str(value.csrfToken)&&str(value.expiresAt)
  if(path==='public/invite/enter')return method==='POST'&&obj(value)&&value.admitted===true
  if(path==='app/inspiration/rewrite')return obj(value)&&text(value.text)&&(value.text as string).length<=4000
+ if(path==='app/agent/reference')return method==='POST'&&obj(value)&&text(value.style)&&str(value.mood)&&num(value.tempo)&&Number(value.tempo)>=0&&typeof value.tempoVerified==='boolean'&&list(value.inferredInstrumentation,text)&&list(value.negativeTags,text)&&text(value.summary)&&['AI','RULE'].includes(String(value.source))
  if(path==='app/welcome')return obj(value)&&typeof value.show==='boolean'&&Number.isInteger(value.amount)&&(value.show?value.amount===100:value.amount===0)
  if(path==='public/session'||path==='public/session/recover')return obj(value)&&text(value.creatorId)&&(value.associatedGuestCreatorId===undefined||text(value.associatedGuestCreatorId))
  if(path==='public/session/logout')return method==='POST'&&obj(value)&&value.loggedOut===true
@@ -46,6 +64,14 @@ export function validResponse(path:string,method:string,value:unknown):boolean{
  if(path==='public/auth/logto/status')return method==='GET'&&obj(value)&&typeof value.enabled==='boolean'&&typeof value.authenticated==='boolean'&&['emailEnabled','phoneEnabled','appleEnabled'].every(k=>!(k in value)||typeof value[k]==='boolean')&&['email','name','phoneMasked'].every(k=>!(k in value)||str(value[k]))
  if(path==='public/auth/logto/start')return method==='POST'&&obj(value)&&logtoAuthorizationUrl(value.authorizationUrl)
  if(path==='public/system/info')return obj(value)&&text(value.name)&&text(value.version)&&obj(value.capabilities)&&['lyricsGeneration','musicGeneration','giftSharing','workPersistence'].every(k=>typeof (value.capabilities as Row)[k]==='boolean')
+ if(path==='public/hot-songs')return method==='GET'&&obj(value)&&list(value.songs,hotStat)
+ if(/^public\/hot-songs\/[^/]+\/play$/.test(path))return method==='POST'&&hotStat(value)
+ if(path==='app/analytics/page-users')return method==='GET'&&obj(value)&&typeof value.allowed==='boolean'&&(value.allowed!==true||(num(value.days)&&text(value.pagePath)&&list(value.users,u=>obj(u)&&text(u.creatorId)&&text(u.accountType)&&(u.name===null||str(u.name))&&(u.email===null||str(u.email))&&(u.phoneMasked===null||str(u.phoneMasked))&&num(u.avgDurationMs)&&num(u.samples)&&Number(u.samples)>=0)))
+ if(path==='app/analytics/access')return method==='GET'&&analyticsAccessBody(value)
+ if(path==='app/analytics/summary')return method==='GET'&&analyticsSummaryBody(value)
+ if(path==='app/analytics/user-pages')return method==='GET'&&obj(value)&&typeof value.allowed==='boolean'&&(value.allowed!==true||(num(value.days)&&text(value.creatorId)&&list(value.pages,u=>obj(u)&&text(u.pagePath)&&num(u.avgDurationMs)&&num(u.samples)&&Number(u.samples)>=0)))
+ if(path==='app/hot-songs/reactions')return method==='GET'&&obj(value)&&list(value.liked,text)&&list(value.favorited,text)
+ if(/^app\/hot-songs\/[^/]+\/(?:like|favorite)$/.test(path))return ['POST','DELETE'].includes(method)&&hotStat(value)&&typeof (value as Row).liked==='boolean'&&typeof (value as Row).favorited==='boolean'
  if(path==='app/identity/recovery')return obj(value)&&(method==='GET'?typeof value.configured==='boolean':text(value.code))
  if(path==='app/credits')return method==='GET'&&obj(value)&&typeof value.enabled==='boolean'&&num(value.balance)&&num(value.musicCost)
  if(path==='app/referrals')return method==='GET'&&obj(value)&&text(value.code)

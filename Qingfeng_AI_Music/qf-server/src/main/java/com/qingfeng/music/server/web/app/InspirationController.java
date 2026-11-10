@@ -13,10 +13,10 @@ import org.springframework.web.bind.annotation.*;
 public class InspirationController {
     private final InspirationRewriteService service;
     public InspirationController(InspirationRewriteService service) { this.service = service; }
-    public record RewriteRequest(@NotBlank @Size(max=4000) String text, @NotBlank @Pattern(regexp="zh-CN|en|mixed") String language) {}
+    public record RewriteRequest(@NotBlank @Size(max=4000) String text, @NotBlank @Pattern(regexp="zh-CN|en|mixed") String language, @NotBlank @Pattern(regexp="[0-9a-fA-F-]{36}") String requestKey) {}
     public record RewriteResponse(String text) {}
     @PostMapping("/rewrite")
     public RewriteResponse rewrite(@AuthenticationPrincipal CreatorPrincipal creator, @Valid @RequestBody RewriteRequest request) {
-        return new RewriteResponse(service.rewrite(creator.id(), request.text(), request.language()));
+        return new RewriteResponse(service.rewrite(creator.id(), request.text(), request.language(), request.requestKey()));
     }
 }

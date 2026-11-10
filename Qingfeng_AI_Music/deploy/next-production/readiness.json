@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "status": "BLOCKED",
+  "productionChangeApproved": false,
+  "resourcesCreated": false,
+  "sourceCommit": "UNKNOWN",
+  "artifactSha256": "UNKNOWN",
+  "contractSha256": "UNKNOWN",
+  "server": {
+    "identity": "UNKNOWN",
+    "region": "UNKNOWN",
+    "javaVersion": "17 required",
+    "pythonVersion": "3.12 required",
+    "dnsAndTls": "UNKNOWN",
+    "ports": "loopback 18080 proposed; no public exposure"
+  },
+  "database": {
+    "decision": "Current daily database remains unchanged; future replacement requires separate approval",
+    "identity": "UNKNOWN",
+    "mysqlVersion": "UNKNOWN",
+    "grants": "UNKNOWN",
+    "v27v28Originals": "UNKNOWN",
+    "restoreAndLedgerReconciliation": "NOT_RUN",
+    "automaticMigration": false
+  },
+  "storage": {
+    "testAndProductionOwnership": "UNKNOWN",
+    "privateSourceIdentity": "UNKNOWN",
+    "anonymousAccessDenied": "NOT_RUN",
+    "coldOriginAndRange": "NOT_RUN",
+    "existingShareCompatibility": "NOT_RUN",
+    "useExistingHKOrBeijingWithoutVerification": false
+  },
+  "paypal": {
+    "newPurchase": false,
+    "live": false,
+    "sandboxAcceptance": "BLOCKED",
+    "refundDisputeChargeback": "BLOCKED",
+    "priorUsd010UserReport": "not independently verified",
+    "sixOld404": "UNRESOLVED"
+  },
+  "businessAcceptance": "NOT_RUN",
+  "rollbackDrill": "NOT_RUN",
+  "trafficCutoverApproved": false
+}

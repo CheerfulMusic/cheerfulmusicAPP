@@ -108,6 +108,7 @@
 .inspiration-rewrite-tools { display:flex; align-items:center; justify-content:space-between; gap:16px; }
 .inspiration-rewrite-action { display:flex; align-items:center; flex:1; flex-wrap:wrap; gap:4px 12px; min-width:0; }
 .inspiration-rewrite-purpose { color:#89716b; font-size:12px; line-height:1.7; }
+.inspiration-rewrite-cost { flex-basis:100%; margin-top:1px; }
 .inspiration-rewrite { padding:3px 8px 3px 0; border:0; background:transparent; color:#bb3928; min-height:32px; border-radius:8px; }
 .inspiration-rewrite:hover:not(:disabled) { background:#fff0e9; }
 .inspiration-rewrite:disabled { opacity:.6; }
@@ -118,6 +119,11 @@
 .inspiration-input-box textarea::placeholder { color:#9a868d; opacity:1; }
 .inspiration-input-box textarea:focus-visible { outline:0!important; }
 .inspiration-input-footer { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px 20px; }
+.studio-agent-params { display:flex; align-items:baseline; flex-wrap:wrap; gap:8px; margin:10px 0 0; font-size:12px; color:#8c7a72; }
+.studio-agent-params-title { flex:none; padding:2px 8px; border-radius:10px; background:#fff1e8; color:#b7462d; font-size:11px; }
+.studio-agent-params-value { color:#6f5d55; word-break:break-word; }
+.studio-agent-omitted { display:flex; flex-wrap:wrap; align-items:baseline; gap:6px; margin:6px 0 0; font-size:12px; color:#a4603f; }
+.studio-agent-omitted small { color:#a0877d; font-size:11px; }
 .inspiration-counter { color:#958188; font-size:11px; }
 .inspiration-language { display:flex; align-items:center; gap:10px; margin-left:auto; padding:6px 7px 6px 12px; border:1px solid #e9b8aa; border-radius:15px; background:#fff0e9; color:#9d4130; font-size:12px; }
 .inspiration-language-title { display:inline-flex; align-items:center; gap:7px; font-weight:600; white-space:nowrap; }
@@ -138,7 +144,6 @@
 .single-inspiration-studio .story-action-bar { margin:18px auto 10px; }
 .single-inspiration-studio .creation-primary { gap:22px; }
 .inspiration-next-note { text-align:center; color:#8d737b; font-size:12px; margin:8px 0 0; }
-.inspiration-allowance { text-align:center; font-size:11px; }
 .legacy-inspiration-context { margin-top:20px; padding:12px 15px; border:1px solid #ecdfe0; border-radius:12px; font-size:12px; color:#846e75; }
 .legacy-inspiration-context summary { cursor:pointer; }
 .legacy-inspiration-context p { overflow-wrap:anywhere; }

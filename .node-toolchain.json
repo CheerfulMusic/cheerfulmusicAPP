@@ -1,0 +1,8 @@
+{
+  "version": "24.22.1",
+  "archiveName": "node-v24.22.1-win-x64.zip",
+  "archiveRoot": "node-v24.22.1-win-x64",
+  "archiveSha256": "d2046d28c2c3dcd211ac5145c0bf30e2047ef9dfb306693c8c6e2eccd8b95fa5",
+  "nodeExeSha256": "d702daa815eabbff763c7d3808e235cf031cf2ca70211b56847bc72f51e240e5",
+  "officialChecksums": "https://nodejs.org/dist/v24.22.1/SHASUMS256.txt"
+}

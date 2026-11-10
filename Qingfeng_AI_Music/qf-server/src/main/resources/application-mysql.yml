@@ -1,19 +1,7 @@
-# 兼容IDEA从工作区、后端根目录或qf-server目录启动；后面的配置优先。
+# Private settings must be provided explicitly by the guarded startup entry.
 spring:
-  config:
-    import:
-      - optional:file:./Qingfeng_AI_Music/config/local.properties
-      - optional:file:../config/local.properties
-      - optional:file:./config/local.properties
-      - optional:file:./Qingfeng_AI_Music/config/usage-limits.properties
-      - optional:file:../config/usage-limits.properties
-      - optional:file:./config/usage-limits.properties
-      - optional:file:/etc/qingfeng-music/usage-limits.properties
-      - optional:file:./Qingfeng_AI_Music/config/invite-gate.local.properties
-      - optional:file:../config/invite-gate.local.properties
-      - optional:file:./config/invite-gate.local.properties
   datasource:
-    url: ${MYSQL_URL:jdbc:mysql://127.0.0.1:3306/qingfeng_music?serverTimezone=Asia/Shanghai}
+    url: ${MYSQL_URL}
     username: ${MYSQL_USERNAME:}
     password: ${MYSQL_PASSWORD:}
     driver-class-name: com.mysql.cj.jdbc.Driver

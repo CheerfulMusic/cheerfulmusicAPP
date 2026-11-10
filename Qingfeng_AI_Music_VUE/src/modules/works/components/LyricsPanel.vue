@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import CreditCostHint from '../../../shared/credits/CreditCostHint.vue'
+import { useCredits } from '../../../shared/credits/useCredits'
+import { guardCredits } from '../../../shared/credits/credit-gate'
 import { normalizeLyricsStructure, type LyricsStructure } from '../model/lyrics-structure'
 import { t, formatDate, locale } from '../../../shared/i18n'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
@@ -11,7 +14,8 @@ import type { Work } from '../../studio'
 import { listRevisions, getRevision, getLyricsRequest, saveRevision, confirmRevision, generateLyrics, rewriteLyricLine, type Revision, type LyricRewriteAction } from '../api/detail'
 const props=defineProps<{work:Work;showInlineSave?:boolean}>(), emit=defineEmits<{selected:[revision:Revision|null];dirty:[value:boolean];ready:[value:boolean];recoverable:[value:boolean];base:[revision:Revision|null]}>()
 const route=useRoute(),router=useRouter()
-const versions=ref<Revision[]>([]),active=ref<Revision|null>(null),title=ref(props.work.title||(props.work.recipient?t('写给{recipient}的歌',{recipient:props.work.recipient}):t('我的原创歌曲'))),text=ref(''),baseline=ref(''),loading=ref(true),saving=ref(false),composing=ref(false),preparing=ref(false),error=ref(''),notice=ref(''),aiReady=ref(false),localSaved=ref(false)
+const versions=ref<Revision[]>([]),active=ref<Revision|null>(null),title=ref(props.work.title||(props.work.recipient?t('写给{recipient}的歌',{recipient:props.work.recipient}):t('我的原创歌曲'))),text=ref(''),baseline=ref(''),loading=ref(true),saving=ref(false),composing=ref(false),preparing=ref(false),error=ref(''),notice=ref(''),aiReady=ref(false),localSaved=ref(false),creditShort=ref(false)
+const { credits, refreshCredits } = useCredits()
 const language=ref<string>(['zh-CN','en','mixed'].includes(String(route.query.language))?String(route.query.language):locale.value),instructions=ref(''),requestKey=ref('')
 const structure=ref<LyricsStructure>(normalizeLyricsStructure({templateId:route.query.templateId,chorusFirst:route.query.chorusFirst==='true'}))
 const errorKind=ref<'load'|'save'|'compose'>('save'),requestWaiting=ref(false),requestChecking=ref(false)
@@ -136,6 +140,20 @@ function revertDraft(){
  if(!dirty.value||blocked.value||saving.value||!window.confirm(t('撤销当前尚未保存的歌词修改？')))return
  select(active.value);error.value='';notice.value=''
 }
+// 积分余额与歌词价格都从后端读取；读不到时提示整块不显示，不猜测数字。
+async function updateCredits(){try{await refreshCredits()}catch{/* 提交时以后端校验为准。 */}}
+/**
+ * 积分不足时先刷新一次余额再判断，避免用过期数字拦下刚充值完的用户；
+ * 刷新后仍然不足才拦截。后端在调用模型前还会再校验一次余额，前端拦截不是唯一防线。
+ */
+async function blockedByCredits(){
+  const gate=await guardCredits(()=>credits.value,refreshCredits)
+  if(!gate.blocked)return false
+  creditShort.value=true
+  errorKind.value='compose'
+  error.value=t('积分不足，当前余额 {balance} 积分，生成需要 {cost} 积分。',{balance:gate.balance as number,cost:gate.cost})
+  return true
+}
 async function recoverRequest(){
   const key=requestKey.value;if(!key)return
   requestChecking.value=true
@@ -153,7 +171,7 @@ async function recoverRequest(){
       if(JSON.stringify(draftValue())===baseline.value){select(found);await syncRoute(found.id)}
       requestKey.value='';error.value='';notice.value='上次编写的歌词已找回，可在历史版本中查看。'
     }else if(requestWaiting.value)notice.value='歌词仍在编写中，可以稍后刷新编写状态。'
-    remember()
+    remember();void updateCredits()
   }finally{requestChecking.value=false}
 }
 async function refreshRequest(){try{await recoverRequest()}catch(e){errorKind.value='compose';error.value=e instanceof Error?e.message:'暂时无法确认编写状态，请稍后刷新。'}}
@@ -170,6 +188,7 @@ onMounted(async()=>{
       if(local.dirty){select(versions.value.find(v=>v.id===local.baseId)||active.value);title.value=local.title;text.value=local.lyrics;notice.value=local.workVersion===props.work.version?'已恢复本机尚未保存的歌词。':'故事已更新，本机歌词已恢复，保存后将成为当前故事的新版本。'}
     }
     if(requestKey.value)await recoverRequest()
+    void updateCredits()
   }catch(e){errorKind.value='load';error.value=e instanceof Error?e.message:'歌词读取失败'}
   finally{loading.value=false;remember()}
 })
@@ -203,22 +222,23 @@ watch([language,instructions,structure],()=>{if(!composing.value&&!requestWaitin
 async function compose(){
   if(blocked.value||saving.value||lineBusy.value||!aiReady.value)return
   if(dirty.value&&!window.confirm(t('生成新歌词后将显示新版本，当前未保存的修改会被替换，是否继续？')))return
-  composing.value=true;error.value='';notice.value='';errorKind.value='compose'
+  composing.value=true;error.value='';notice.value='';errorKind.value='compose';creditShort.value=false
   try{
+    if(!requestKey.value&&(await blockedByCredits()||!alive))return
     if(inflight)await inflight
     requestKey.value ||= crypto.randomUUID();remember()
     const created=await generateLyrics(props.work.id,props.work.version,requestKey.value,language.value,instructions.value,active.value?.id,{...structure.value})
     if(!alive)return
     versions.value=[created,...versions.value.filter(v=>v.id!==created.id)];select(created);requestKey.value='';remember();await syncRoute(created.id);notice.value='新歌词已生成，旧版本已保留。你可以继续修改。'
-  }catch(e){if(!alive)return;errorKind.value='compose';error.value=e instanceof Error?e.message:'歌词生成失败，请稍后再试';try{await recoverRequest()}catch{/* 无法确认时保留原请求键，避免重复付费。 */}}
-  finally{composing.value=false;remember()}
+  }catch(e){if(!alive)return;errorKind.value='compose';creditShort.value=false;error.value=e instanceof Error?e.message:'歌词生成失败，请稍后再试';try{await recoverRequest()}catch{/* 无法确认时保留原请求键，避免重复付费。 */}}
+  finally{composing.value=false;remember();void updateCredits()}
 }
 onBeforeUnmount(()=>{remember();alive=false})
 async function preserveDraftForNavigation(){if(inflight)await inflight;if(dirty.value){remember();if(!localSaved.value)throw new Error('请先保存歌词')}}
 defineExpose({prepareForGeneration,preserveDraftForNavigation,needsSave,canSave,save,saving})
 </script>
 <template><section class="detail-panel lyrics-panel">
-  <p v-if="error" class="notice error" role="alert">{{ t(error) }} <button class="text-button" :disabled="loading||composing||requestChecking||saving" @click="retryError">{{ t(errorKind==='load'?'刷新页面':errorKind==='save'?'重试保存':requestWaiting?'刷新编写状态':'重新编写歌词') }}</button></p>
+  <p v-if="error" class="notice error" role="alert">{{ t(error) }} <RouterLink v-if="creditShort" class="text-button" to="/recharge">{{ t('去充值') }}</RouterLink> <button class="text-button" :disabled="loading||composing||requestChecking||saving" @click="retryError">{{ t(errorKind==='load'?'刷新页面':errorKind==='save'?'重试保存':requestWaiting?'刷新编写状态':'重新编写歌词') }}</button></p>
   <p v-if="notice" class="notice success" role="status">{{ t(notice) }}</p>
   <button v-if="requestWaiting&&!error" class="button secondary" :disabled="loading||composing||requestChecking" @click="refreshRequest">{{ t('刷新编写状态') }}</button>
   <p v-if="!loading&&!localSaved" class="save-info">{{ t('浏览器无法保存本机副本，请确认显示已保存后再离开。') }}</p>
@@ -236,6 +256,7 @@ defineExpose({prepareForGeneration,preserveDraftForNavigation,needsSave,canSave,
           {{ composing?t('正在编写歌词…'):versions.length?t('AI 重新生成全部歌词'):t('根据故事生成歌词') }}
         </button>
         <button type="button" class="lyric-quiet-action" :disabled="blocked||saving||!dirty" :title="t('撤销未保存修改')" @click="revertDraft"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5 4 9l4 4M4 9h10a5 5 0 0 1 0 10h-3"/></svg>{{ t('恢复原版') }}</button>
+        <CreditCostHint v-if="credits&&credits.enabled&&credits.lyricsCost>0" :cost="credits.lyricsCost" :balance="credits.balance" :busy="composing" variant="regenerate"/>
       </div>
     </div>
     <div class="lyric-text-stage">

@@ -102,7 +102,14 @@ public final class KieSunoMusicProvider implements MusicProvider {
         return new Submission(task);
     }
     private String style(Request request){return request.preparedStyle()?request.style():MusicStylePrompt.expand(request.style(),request.vocalGender());}
-    public Request prepare(Request request){return new Request(request.title(),request.confirmedLyrics(),style(request),request.vocalGender(),request.negativeTags(),true);}
+    public Request prepare(Request request){
+        // 基础风格仍走预设词典翻译；补充描述（BPM/配器/语言/段落）只追加在 style 末尾，不改协议。
+        var split=com.qingfeng.music.agent.model.StyleCompiler.split(request.style());
+        String base=request.preparedStyle()?split.base():MusicStylePrompt.expand(split.base(),request.vocalGender());
+        return new Request(request.title(),request.confirmedLyrics(),
+            com.qingfeng.music.agent.model.StyleCompiler.merge(base,split.tail(),limits.style()),
+            request.vocalGender(),request.negativeTags(),true);
+    }
     public Result query(String taskId) {
         var response=send("/api/v1/jobs/recordInfo?taskId="+URLEncoder.encode(taskId,StandardCharsets.UTF_8),null,false);
         var data=response.path("data");
