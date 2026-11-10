@@ -78,6 +78,13 @@ class GateTests(unittest.TestCase):
         import types
         workspace=self.root/"workspace";workspace.mkdir()
         java=self.root/"jdk";(java/"bin").mkdir(parents=True);(java/"bin/java.exe").write_bytes(b"fixture")
+        tools=self.root/"cache/toolchains";tools.mkdir(parents=True)
+        pin_zip=tools/"node-fixture.zip"
+        with zipfile.ZipFile(pin_zip,"w") as z:
+            z.writestr("node-fixture/node.exe",b"synthetic-node")
+            z.writestr("node-fixture/npm.cmd",b"synthetic-npm")
+        with zipfile.ZipFile(pin_zip) as z:z.extractall(tools)
+        (workspace/".node-toolchain.json").write_text(json.dumps({"version":"24.22.1","archiveName":"node-fixture.zip","archiveRoot":"node-fixture","archiveSha256":gate.sha(pin_zip.read_bytes()),"nodeExeSha256":gate.sha(b"synthetic-node")}))
         fixture_jar=self.jar()
         archive=io.BytesIO()
         with zipfile.ZipFile(archive,"w") as z:
@@ -98,6 +105,8 @@ class GateTests(unittest.TestCase):
             self.assertNotEqual(env["NPM_CONFIG_USERCONFIG"],env["NPM_CONFIG_GLOBALCONFIG"])
             if command[0].endswith("java.exe"):
                 kwargs["stdout"].write(b'java version "17"\n')
+            elif command[0].endswith("node.exe"):
+                kwargs["stdout"].write(b"v24.22.1\n")
             elif "ci" in command:
                 self.assertIn("--offline",command);self.assertIn("--ignore-scripts",command)
             elif "build" in command:
@@ -114,10 +123,22 @@ class GateTests(unittest.TestCase):
             return types.SimpleNamespace(returncode=0)
         with patch.object(gate,"check_source",return_value=source),patch.object(gate,"git",side_effect=fake_git),patch.object(gate.subprocess,"check_output",return_value=archive.getvalue()),patch.object(gate.subprocess,"run",side_effect=fake_process),patch.object(gate.shutil,"which",side_effect=lambda name:"fixture-"+name),patch.dict(os.environ,{"MYSQL_URL":"synthetic-forbidden","PAYPAL_CLIENT_SECRET":"synthetic-forbidden","JAVA_TOOL_OPTIONS":"synthetic-forbidden"}):
             result=gate.build(workspace,self.root/"unused",java,self.root/"cache")
-        self.assertEqual(5,len(calls))
+        self.assertEqual(6,len(calls))
         self.assertEqual("VERIFIED",result["localBuild"])
         self.assertEqual("BLOCKED",result["productionRelease"])
         self.assertFalse((Path(result["package"]).parent/"source/.secrets").exists())
+
+    def test_modified_pinned_node_runtime_is_rejected_before_execution(self):
+        cache=self.root/"cache";tools=cache/"toolchains";tools.mkdir(parents=True)
+        archive=tools/"node-fixture.zip"
+        with zipfile.ZipFile(archive,"w") as z:
+            z.writestr("node-fixture/node.exe",b"original")
+            z.writestr("node-fixture/npm.cmd",b"launcher")
+        with zipfile.ZipFile(archive) as z:z.extractall(tools)
+        pin={"archiveName":"node-fixture.zip","archiveRoot":"node-fixture","archiveSha256":gate.sha(archive.read_bytes()),"nodeExeSha256":gate.sha(b"original"),"version":"24.22.1"}
+        (tools/"node-fixture/node.exe").write_bytes(b"altered")
+        with self.assertRaisesRegex(gate.GateError,"toolchain differs"):
+            gate.check_node_toolchain(cache,pin)
 
     def test_implicit_external_configuration_is_rejected(self):
         with self.assertRaisesRegex(gate.GateError,"Implicit external"):

@@ -43,7 +43,8 @@ def run(name, command, expected, description):
 python=sys.executable
 run("stability-tests",[python,"-B","-X","utf8",str(__file__),"--offline-child","stability"],[0],"Offline Python regressions only")
 run("release-guard-tests",[python,"-B","-X","utf8",str(__file__),"--offline-child","guard"],[0],"Offline synthetic ZIP/approval tests only")
-source=run("source-gate",[python,"-B","-X","utf8","scripts/release_gate.py","source","--baseline","Qingfeng_AI_Music/deploy/production-baseline.json"],[2],"Expected rejection: current candidate has uncommitted changes")
+dirty = bool(subprocess.check_output(["git", "-C", str(ROOT), "status", "--porcelain=v1", "--untracked-files=all"]).strip())
+source=run("source-gate",[python,"-B","-X","utf8","scripts/release_gate.py","source","--baseline","Qingfeng_AI_Music/deploy/production-baseline.json"],[2 if dirty else 0],"Actual source provenance: dirty rejected, clean candidate must include observed deployed commit")
 run("monitor-no-run",[python,"-B","-X","utf8","scripts/media_health_check.py"],[2],"Expected rejection before DB/config/HTTP access")
 pwsh=shutil.which("pwsh")
 if pwsh:
@@ -59,7 +60,7 @@ if pwsh:
     if source.returncode==2:
         run("build-wrapper",[pwsh,"-NoProfile","-NonInteractive","-File","scripts/build-local.ps1","-JavaHome","D:/jdk17"],[1],"Expected block before dependency install/build or process stop")
     else:
-        results.append({"id":"build-wrapper","status":"BLOCKED","scope":"Do not run a full build as a negative test against clean source"})
+        results.append({"id":"build-wrapper","status":"NOT_RUN","scope":"Clean source; full real build is a separate workflow, not a negative test"})
 else:
     results.append({"id":"powershell-entry-tests","status":"BLOCKED","scope":"PowerShell not installed"})
 spec=importlib.util.spec_from_file_location("release_gate",ROOT/"scripts/release_gate.py")
@@ -89,7 +90,7 @@ files=set(gate.git(ROOT,"diff","--name-only").splitlines())|set(gate.git(ROOT,"l
 fingerprints={name:hashlib.sha256((ROOT/name).read_bytes()).hexdigest() for name in sorted(files) if (ROOT/name).is_file()}
 summary={"timestamp":datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=8))).isoformat(),
  "results":results,"sourceFingerprints":fingerprints,"productionConnections":0,"applicationStarted":False,
- "fullNpmMavenBuild":"BLOCKED_DIRTY_SOURCE","realMySQLSandboxOssCdnAcceptance":"BLOCKED",
+ "fullNpmMavenBuild":"SEPARATE_WORKFLOW","realMySQLSandboxOssCdnAcceptance":"BLOCKED",
  "productionReleaseAllowed":False}
 (evidence/"summary.json").write_text(json.dumps(summary,indent=2,ensure_ascii=False),encoding="utf-8")
 print(json.dumps({"evidence":str(evidence),"checks":len(results),"failed":sum(x["status"]=="FAIL" for x in results),

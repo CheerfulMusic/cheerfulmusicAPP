@@ -140,6 +140,31 @@ def inspect_artifact(jar):
             "frontendSha256": sha(json_bytes(static)), "migrations": sql}
 
 
+
+def check_node_toolchain(cache_root, pin):
+    root = Path(cache_root) / "toolchains"
+    archive = root / pin["archiveName"]
+    if not archive.is_file() or sha(archive.read_bytes()) != pin["archiveSha256"]:
+        raise GateError("Pinned official Node archive missing or altered")
+    home = root / pin["archiveRoot"]
+    if not home.is_dir():
+        raise GateError("Pinned project-local Node runtime missing")
+    with checked_zip(archive.read_bytes()) as z:
+        for name in z.namelist():
+            if name.endswith("/"):
+                continue
+            target = root / name
+            if not target.is_file() or sha(target.read_bytes()) != sha(z.read(name)):
+                raise GateError("Node/npm toolchain differs from pinned official archive")
+    node = home / "node.exe"
+    if not node.is_file() or sha(node.read_bytes()) != pin["nodeExeSha256"]:
+        raise GateError("Pinned Node executable checksum mismatch")
+    npm = home / "npm.cmd"
+    if not npm.is_file():
+        raise GateError("Pinned npm launcher missing")
+    return node, npm, pin["version"]
+
+
 def check_build_output(export, source, actual):
     """Bind packaged SQL/frontend bytes to the frozen source and this build's dist."""
     export = Path(export)
@@ -224,6 +249,7 @@ def build(workspace, baseline, java_home, cache_root):
     common = Path(git(workspace, "rev-parse", "--path-format=absolute", "--git-common-dir")).parent
     if not cache_root.is_relative_to(common):
         raise GateError("Dependency cache must remain within this repository")
+    node, npm, node_version = check_node_toolchain(cache_root, load_json(workspace / ".node-toolchain.json"))
     # Keep exports short on Windows; worktrees may already have deep paths.
     run = cache_root / "b" / uuid.uuid4().hex[:8]
     run.mkdir(parents=True, exist_ok=False)
@@ -240,7 +266,7 @@ def build(workspace, baseline, java_home, cache_root):
     npmrc = run / "empty.npmrc"; npmrc.write_text("", encoding="utf-8")
     global_npmrc = run / "empty-global.npmrc"; global_npmrc.write_text("", encoding="utf-8")
     env = {k: v for k, v in os.environ.items() if k.upper() in {"SYSTEMROOT", "WINDIR", "COMSPEC", "PATHEXT"}}
-    env.update({"PATH": os.environ.get("PATH", ""), "JAVA_HOME": str(Path(java_home).resolve()),
+    env.update({"PATH": str(node.parent) + os.pathsep + os.environ.get("PATH", ""), "JAVA_HOME": str(Path(java_home).resolve()),
                 "HOME": str(home), "USERPROFILE": str(home), "APPDATA": str(home), "LOCALAPPDATA": str(home),
                 "TEMP": str(run), "TMP": str(run), "NPM_CONFIG_USERCONFIG": str(npmrc),
                 "NPM_CONFIG_GLOBALCONFIG": str(global_npmrc), "NPM_CONFIG_ENGINE_STRICT": "true", "CI": "true"})
@@ -258,11 +284,14 @@ def build(workspace, baseline, java_home, cache_root):
     execute("javaVersion", [str(Path(java_home) / "bin/java.exe"), "-version"], export)
     if not re.search(r'version\s+"17(?:[."]|$)', (run / "javaVersion.log").read_text(encoding="utf-8", errors="replace")):
         raise GateError("Java toolchain must be version 17")
+    execute("nodeVersion", [str(node), "--version"], export)
+    if (run / "nodeVersion.log").read_text(encoding="utf-8").strip() != "v" + node_version:
+        raise GateError("Node runtime version differs from source pin")
     frontend = export / "Qingfeng_AI_Music_VUE"
-    npm = shutil.which("npm.cmd") or shutil.which("npm")
+    npm = str(npm)
     mvn = shutil.which("mvn.cmd") or shutil.which("mvn")
-    if not npm or not mvn:
-        raise GateError("Node/npm and Maven required")
+    if not mvn:
+        raise GateError("Maven required")
     execute("dependencies", [npm, "ci", "--offline", "--ignore-scripts", "--cache", str(cache_root / "npm")], frontend)
     execute("frontendTest", [npm, "test"], frontend)
     execute("frontendBuild", [npm, "run", "build"], frontend)
@@ -280,6 +309,7 @@ def build(workspace, baseline, java_home, cache_root):
     contract = {"version": 1, **actual,
                 "frontendSourceTree": source["frontendSourceTree"],
                 "localChecks": {k: logs[k] for k in ("frontendTest", "frontendBuild", "backendVerify")},
+                "toolchain": {"node": node_version, "nodeExeSha256": sha(node.read_bytes()), "java": "17"},
                 "productionReady": False, "mysqlAcceptance": "BLOCKED", "migrationProvenance": "UNKNOWN"}
     (package / "release-contract.json").write_bytes(json_bytes(contract))
     (package / "source-commit.txt").write_text(source["sourceCommit"] + "\n", encoding="utf-8")
