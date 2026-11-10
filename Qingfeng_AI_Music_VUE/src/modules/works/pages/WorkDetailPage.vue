@@ -23,6 +23,7 @@ import AudioPanel from '../components/AudioPanel.vue'
 import SharePanel from '../components/SharePanel.vue'
 import MusicGenerationDialog from '../components/MusicGenerationDialog.vue'
 import { songSettings } from '../model/song-settings'
+import {restoreRemakeSettings} from '../model/remake-settings'
 import { vocalGenderLabel } from '../../studio/model/vocals'
 import { ApiError,currentCreatorId,requestJson } from '../../../shared/http/api-client'
 import GenerationRecovery from '../components/GenerationRecovery.vue'
@@ -157,13 +158,19 @@ async function generate() {
   if (pendingTask.value) { showProgress(); return }
   if(submissionUnknown.value){await refreshTasks();generationOpen.value=true;return}
   if (!work.value || !generationLyricsReady.value || !modelReady.value || submitting.value || (!generated.value&&!lyricsPanel.value)) return
-  const workId = work.value.id, turn = sequence
+  const workId = work.value.id, turn = sequence, sourceAssetId=generated.value?asset.value!.id:undefined
+  const current=()=>turn===sequence&&(!sourceAssetId||asset.value?.id===sourceAssetId)
   submitting.value = true; error.value = ''; submissionIssue.value = ''; submissionUnknown.value = false;inputIssue.value=false;generationNotice.value='';creditIssue.value=false
   trackedTaskId.value = ''
   let posted=false
   try {
     let confirmed:Revision
     if(generated.value){
+      const source=tasks.value.find(task=>task.assetId===sourceAssetId)
+      if(!source)throw new Error('歌曲对应的原始任务暂时无法读取 请刷新后重试')
+      const restored=await restoreRemakeSettings(work.value!,source,current)
+      if(!restored||!current())return
+      work.value=restored;await nextTick()
       // 成曲后复用当前音频绑定的版本，不读取或提交本机编辑草稿。
       const snapshot=regenerationRevision.value||giftRevision.value
       if(!snapshot)throw new Error('歌曲对应的歌词暂时无法读取，请刷新后再试。')
@@ -171,19 +178,19 @@ async function generate() {
       // 只在用户点击重新制作时，为已变更的音乐设置复制原歌词；不改变已有音频。
       if(snapshot.workVersion!==work.value!.version){
         confirmed=await saveRevision(workId,work.value!.version,snapshot.title,snapshot.lyrics)
-        if(turn!==sequence)return
+        if(!current())return
         regenerationRevision.value=confirmed
       }
       if(!confirmed.confirmed){
         confirmed=await confirmRevision(workId,confirmed.id)
-        if(turn!==sequence)return
+        if(!current())return
         regenerationRevision.value=confirmed
       }
     }else confirmed=await lyricsPanel.value!.prepareForGeneration()
-    if(turn!==sequence)return
+    if(!current())return
     revision.value=confirmed
     const check=await preflightGeneration(workId,confirmed.id)
-    if(turn!==sequence)return
+    if(!current())return
     generationNotice.value=check.notice;giftStage.value=false;shared.value=false;requestKey.value ||= crypto.randomUUID()
     intentOwner.value=currentCreatorId();pendingIntent.value={workId,revisionId:confirmed.id,requestKey:requestKey.value,createdAt:Date.now()}
     requestRecoverable.value=rememberGeneration(intentOwner.value,pendingIntent.value);posted=true
@@ -222,7 +229,7 @@ async function cancelGeneration(){
  try{const cancelled=await cancelTask(work.value.id,trackedTask.value.id);tasks.value=tasks.value.map(t=>t.id===cancelled.id?cancelled:t);await updateAllowance()}catch(e){submissionIssue.value=e instanceof Error?e.message:'撤销失败，请刷新状态';await refreshTasks()}finally{cancelling.value=false}
 }
 async function backToStory(){
- try{await lyricsPanel.value?.preserveDraftForNavigation();await router.push({path:'/create',query:{work:work.value!.id,part:'1',returnRevision:revision.value?.id}})}catch(e){error.value=e instanceof Error?e.message:'请先保存歌词'}
+ try{await lyricsPanel.value?.preserveDraftForNavigation();await router.push({path:'/create',query:{work:work.value!.id,mode:'custom',part:'1',returnRevision:revision.value?.id}})}catch(e){error.value=e instanceof Error?e.message:'请先保存歌词'}
 }
 async function applyMusicSettings(value:{expectedVersion:number;preferences:MusicPreferences}){
  if(!work.value||settingsBusy.value)return
@@ -236,7 +243,7 @@ async function applyMusicSettings(value:{expectedVersion:number;preferences:Musi
   panel?.markSaved();work.value=saved.work;settingsOpen.value=false;musicDirectionChanged.value=true;void updateAllowance()
  }catch(e){if(current())error.value=e instanceof Error?e.message:'设置保存失败，请重试'}finally{if(turn===sequence&&operation===settingsOperation)settingsBusy.value=false}
 }
-function adjustMusic(){giftStage.value=false;shared.value=false;settingsOpen.value=true;void nextTick(()=>document.getElementById('music-settings')?.scrollIntoView({block:'center',behavior:'smooth'}))}
+function adjustMusic(){if(asset.value){void backToStory();return}giftStage.value=false;shared.value=false;settingsOpen.value=true;void nextTick(()=>document.getElementById('music-settings')?.scrollIntoView({block:'center',behavior:'smooth'}))}
 
 </script>
 <template>
@@ -246,7 +253,7 @@ function adjustMusic(){giftStage.value=false;shared.value=false;settingsOpen.val
   <template v-if="work">
     <CreationSteps :current="currentStep"/>
     <div class="work-detail-top"><div><h1>{{ asset?songTitle:work.title||(work.recipient?t('写给{recipient}的歌',{recipient:work.recipient}):t('我的原创歌曲')) }}</h1><p class="detail-muted"><template v-if="work.recipient">{{ t('送给 {recipient}',{recipient:work.recipient}) }} · </template> {{ displayedStyle }}<template v-if="playingSettings?.vocalGender"> · {{ t(vocalGenderLabel(playingSettings.vocalGender)) }}</template></p></div></div>
-    <div class="story-back-actions"><button class="description-back-button" type="button" @click="backToStory"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5m7-7-7 7 7 7"/></svg>{{ t('返回修改描述') }}</button><button v-if="giftStage" class="text-button" @click="giftStage=false;shared=false">{{ t('返回试听与调整') }}</button></div>
+    <div class="story-back-actions"><button class="description-back-button" type="button" @click="backToStory"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5m7-7-7 7 7 7"/></svg>{{ t(asset?'自定义创作':'返回修改描述') }}</button><button v-if="giftStage" class="text-button" @click="giftStage=false;shared=false">{{ t('返回试听与调整') }}</button></div>
     <p v-if="generationNotice" class="notice" role="status">{{ t(generationNotice) }}</p>
     <p v-if="inputIssue" class="notice"><button class="text-button" @click="adjustMusic">{{ t('调整音乐要求') }}</button> · {{ t('尚未开始音乐生成，你的歌词和设置已保留。') }}</p>
     <section v-if="submissionUnknown&&!pendingTask" class="notice generation-recovery" role="status"><strong>{{ t('正在核对上次提交，暂不发起新的音乐创作。') }}</strong><p>{{ t('你的请求标识已保留。可以刷新核对，或使用原请求继续；不会创建新的生成请求。') }}</p><div class="actions"><button class="button secondary" :disabled="submitting" @click="refreshTasks">{{ t('刷新核对状态') }}</button><button class="button secondary" :disabled="submitting||!pendingIntent" @click="resumeOriginalRequest">{{ t('恢复原请求') }}</button></div></section>
@@ -258,15 +265,11 @@ function adjustMusic(){giftStage.value=false;shared.value=false;settingsOpen.val
     <SectionEditor v-if="asset" ref="sectionEditor" :key="work.id" :work="work" :asset="asset" :title="songTitle" :cover="artwork" :tasks="tasks" :open="false" @refresh="refreshTasks" @adopted="sectionAdopted"/>
     <RouterLink v-if="asset" class="recovery-reminder" to="/account">{{ t('第一首歌值得留住。保存找回码，换设备也能找到它。') }}</RouterLink>
     <CoverEditor v-if="work&&(coverOpen)" :key="work.id" :work-id="work.id" :state="covers" @updated="updateCover" @close="coverOpen=false"/>
-    <MusicSettingsPanel ref="musicSettingsPanel" v-if="work&&settingsOpen" :work="work" :busy="settingsBusy" :initial="!asset" @apply="applyMusicSettings" @close="settingsOpen=false"/>
+    <MusicSettingsPanel ref="musicSettingsPanel" v-if="work&&settingsOpen&&!asset" :work="work" :busy="settingsBusy" :initial="!asset" @apply="applyMusicSettings" @close="settingsOpen=false"/>
     <div v-if="musicDirectionChanged&&!generated" class="notice" role="status"><p>{{ t('音乐方向已更新 当前歌词保持不变') }}</p><div class="actions"><button type="button" class="button secondary" @click="musicDirectionChanged=false">{{ t('保留当前歌词') }}</button><button type="button" class="button secondary" @click="musicDirectionChanged=false;lyricsPanel?.reviewMusicDirection()">{{ t('按新方向调整歌词') }}</button></div><p class="save-info">{{ t('调整歌词不会立即发起创作 确认修改要求后再点击重新生成') }}</p></div>
     <div class="work-detail-layout">
       <div>
         <div class="lyrics-editor-fold"><LyricsPanel v-if="!generated" ref="lyricsPanel" :key="work.id+'-'+work.version+'-'+quickRevision" :inert="quickBusy||undefined" :work="work" @selected="revision=$event" @dirty="lyricDirty=$event" @ready="lyricsReady=$event" @recoverable="lyricRecoverable=$event"/>
-          <section v-if="asset" class="regeneration-music-settings" :aria-label="t('下次生成的音乐设置')">
-            <div><strong>{{ t('下次生成的音乐设置') }}</strong><p class="save-info next-song-settings">{{ nextSettings }}</p><p class="save-info">{{ t('修改风格只影响下次生成，已有歌曲保持原样。') }}</p></div>
-            <button class="button secondary" type="button" :disabled="quickBusy||submitting||!!pendingTask||submissionUnknown||settingsBusy" @click="adjustMusic">{{ t('调整歌曲') }}</button>
-          </section>
         </div>
         <SoundDirectionEntry v-if="!asset" :style-label="t(work.style)" :voice-label="t(vocalGenderLabel(work.vocalGender))" :disabled="quickBusy||submitting||!!pendingTask||submissionUnknown||settingsBusy" @choose="adjustMusic"/>
         <section v-if="creditIssue" id="credit-issue" class="credit-issue" role="alert">
@@ -290,7 +293,7 @@ function adjustMusic(){giftStage.value=false;shared.value=false;settingsOpen.val
       </div>
       <aside class="work-overview">
         <h2>{{ work.recipient?t('关于这份心意'):t('创作灵感') }}</h2><p v-if="work.recipient">{{ t('收件人：') }}{{ work.recipient }}</p><p class="private-message">{{ work.message||work.story }}</p><small>{{ t('故事和草稿仅本人可见，分享由你主动创建。') }}</small>
-        <div class="model-status"><h3>{{ t('音乐生成') }}</h3><p class="next-song-settings">{{ nextSettings }}</p><p v-if="allowance">{{ allowance.dailyUnlimited?t('今日歌曲创作不限次数'):t('今日还可创作 {remaining} 次歌曲',{remaining:allowance.dailyRemaining}) }}</p><p>{{ t('保存和修改歌词不消耗歌曲创作次数。') }}</p><p v-if="pendingTask">{{ t(statusLabels[pendingTask.status]||pendingTask.status) }}</p>
+        <div class="model-status"><h3>{{ t('音乐生成') }}</h3><p v-if="!asset" class="next-song-settings">{{ nextSettings }}</p><p v-if="allowance">{{ allowance.dailyUnlimited?t('今日歌曲创作不限次数'):t('今日还可创作 {remaining} 次歌曲',{remaining:allowance.dailyRemaining}) }}</p><p v-if="!asset">{{ t('保存和修改歌词不消耗歌曲创作次数。') }}</p><p v-if="pendingTask">{{ t(statusLabels[pendingTask.status]||pendingTask.status) }}</p>
           <details v-if="tasks.length" class="creation-fold task-history"><summary>{{ t('查看创作记录') }}</summary><div v-for="task in tasks" :key="task.id" class="task-entry"><strong>{{ task.title }}</strong><span>{{ t(statusLabels[task.status]||task.status) }}</span><p v-if="task.status==='SUBMISSION_UNKNOWN'">{{ t('这次创作结果还在确认中，请稍后刷新，避免重复提交。') }}</p><p v-if="task.errorCode==='QUERY_RETRY'">{{ t('查询暂时失败，稍后自动继续查询。') }}</p><button v-if="task.status==='FAILED'&&task.errorCode==='AUDIO_ARCHIVE_FAILED'" class="button secondary" :disabled="submitting" @click="retryArchive(task)">{{ t('仅重试保存音频') }}</button><small>{{ formatDate(task.createdAt) }}</small></div></details>
           <button class="text-button" @click="refreshTasks">{{ t('刷新进度') }}</button>
         </div>

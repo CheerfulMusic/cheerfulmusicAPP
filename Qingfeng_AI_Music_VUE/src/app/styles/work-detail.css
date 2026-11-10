@@ -4,12 +4,6 @@
 .work-detail-top h1 { overflow-wrap: anywhere; margin: 0 0 8px; font-size: 31px; }
 .work-detail-top .backend-state { margin: 0 0 12px; }
 .detail-muted { color: var(--muted); font-size: 12px; line-height: 1.9; }
-.regeneration-music-settings { display:flex; align-items:center; justify-content:space-between; gap:20px; margin:20px 0 16px; padding:18px 20px; border:1px solid var(--line); border-radius:14px; background:var(--surface-raised); }
-.regeneration-music-settings>div { min-width:0; }
-.regeneration-music-settings strong { display:block; font-size:14px; font-weight:600; }
-.regeneration-music-settings .save-info { display:block; margin:6px 0 0; line-height:1.8; }
-.regeneration-music-settings>.button { flex-shrink:0; min-height:44px; }
-@media(max-width:600px) { .regeneration-music-settings { align-items:flex-start; flex-direction:column; gap:12px; padding:16px; } .regeneration-music-settings>.button { width:100%; } }
 .work-detail-layout { display: grid; grid-template-columns: minmax(0,1fr) 250px; gap: 24px; align-items: start; margin-top: 25px; }
 .detail-panel { padding: 26px 27px; border: 1px solid var(--line); background: var(--surface); border-radius: 14px; margin-bottom: 22px; min-width: 0; }
 .detail-heading { display: flex; align-items: center; justify-content: space-between; gap: 15px; }

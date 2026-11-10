@@ -1,5 +1,7 @@
 /** Chinese source copy is the stable message key; business option values stay unchanged. */
 export const english: Record<string, string> = {
+  '这首歌的原音乐设置记录不完整 请通过自定义创作重新选择':'The original music settings are incomplete. Choose your settings in custom creation.',
+  '歌曲对应的原始任务暂时无法读取 请刷新后重试':'The original creation record is unavailable. Refresh and try again.',
   '作品已不在当前列表中 已刷新作品列表':'This work is no longer in your current list. The list has been refreshed.',
   '暂时无法确认删除结果 请刷新作品列表后重试':'The deletion result could not be confirmed. Refresh your works before trying again.',
   '继续创作一首歌': 'Create another song',
