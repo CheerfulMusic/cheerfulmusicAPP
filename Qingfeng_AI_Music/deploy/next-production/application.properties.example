@@ -10,6 +10,7 @@ spring.sql.init.mode=never
 qingfeng.generation.scheduler-enabled=false
 qingfeng.cover.ai.scheduler-enabled=false
 qingfeng.paypal.enabled=false
+qingfeng.paypal.accepting-new-orders=false
 qingfeng.paypal.live-enabled=false
 qingfeng.paypal.public-live-enabled=false
 qingfeng.paypal.reconciliation.enabled=false

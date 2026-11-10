@@ -17,6 +17,7 @@ import org.springframework.web.server.ResponseStatusException;
 public class PayPalPaymentService {
     private final JdbcTemplate db; private final TransactionTemplate tx; private final CreditsLedger ledger; private final PaymentCatalog catalog;
     @Value("${qingfeng.paypal.enabled:false}") private boolean enabled;
+    @Value("${qingfeng.paypal.accepting-new-orders:true}") private boolean acceptingNewOrders = true;
     @Value("${qingfeng.paypal.environment:sandbox}") private String environment;
     @Value("${qingfeng.paypal.client-id:}") private String clientId;
     @Value("${qingfeng.paypal.client-secret:}") private String clientSecret;
@@ -48,11 +49,12 @@ public class PayPalPaymentService {
         && ((environment.equals("sandbox") && !webhookId.isBlank()) || localLive() || publicLive());}
     String provider(){return environment.equals("live")?"PAYPAL_LIVE":"PAYPAL_SANDBOX";}
     PayPalCheckoutGateway gateway(){return new PayPalCheckoutGateway(environment.equals("live")?PayPalCheckoutGateway.Environment.LIVE:PayPalCheckoutGateway.Environment.SANDBOX,clientId,clientSecret,merchantId,webhookId,localLive());}
-    public Map<String,Object> catalog(){return Map.of("enabled",ready(),"environment",environment.equals("live")?"live":"sandbox","popupOnly",localLive(),"packages",ready()?catalog.packages().stream().map(PaymentCatalog.Package::asMap).toList():List.of());}
+    public Map<String,Object> catalog(){return Map.of("enabled",ready() && acceptingNewOrders,"settlementEnabled",ready(),"environment",environment.equals("live")?"live":"sandbox","popupOnly",localLive(),"packages",ready()?catalog.packages().stream().map(PaymentCatalog.Package::asMap).toList():List.of());}
     /** The client ID is public; no server-side secret is returned to the browser. */
     public Map<String,Object> sdkConfig(){return Map.of("enabled",ready(),"clientId",ready()?clientId:"","environment",environment.equals("live")?"production":"sandbox");}
     public Map<String,Object> create(String owner,String packageId){
         if(!ready()) throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,"PayPal 尚未开放");
+        if(!acceptingNewOrders) throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,"新购买暂时暂停，已有订单仍可核对");
         var p=catalog.find(packageId).orElseThrow(()->new ResponseStatusException(HttpStatus.BAD_REQUEST,"套餐不存在"));
         String id=UUID.randomUUID().toString(), type=provider();
         tx.executeWithoutResult(s->{
