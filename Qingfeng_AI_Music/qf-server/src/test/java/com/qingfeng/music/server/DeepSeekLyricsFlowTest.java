@@ -32,6 +32,7 @@ class DeepSeekLyricsFlowTest {
   try{
    writer.output=String.join("\n",structure.sections().stream().map(s->"["+s+"]"+(s.equals("Interlude")?"":"\n今天仍然有风")).toList());
    var result=composer.compose(owner,work.id(),0,key,"mixed","保留真实细节",null,"ABC",true);
+   assertEquals("mixed",result.language());assertEquals("ABC",result.templateId());assertEquals(Boolean.TRUE,result.chorusFirst());
    assertTrue(writer.instructions.contains(structure.instruction()));assertTrue(writer.instructions.startsWith("保留真实细节"));
    assertEquals(result.id(),composer.compose(owner,work.id(),0,key,"mixed","保留真实细节",null,"ABC",true).id());
    var conflict=assertThrows(DomainException.class,()->composer.compose(owner,work.id(),0,key,"mixed","保留真实细节",null,"ABCD",true));
@@ -53,8 +54,29 @@ class DeepSeekLyricsFlowTest {
   String owner=identity.create().creatorId();var work=works.create(owner,new WorkApi.Draft("小雨","纪念","相识的故事","愿你快乐","民谣","故事"));
   var manual=lyrics.save(owner,work.id(),0,"原歌词","不要替换我的旧歌词");String key=UUID.randomUUID().toString();int before=writer.calls.get();
   var generated=composer.compose(owner,work.id(),0,key,"zh-CN");assertFalse(generated.confirmed());assertEquals("DEEPSEEK",generated.source());
+  var edited=lyrics.save(owner,work.id(),0,generated.title(),generated.lyrics()+"\n最后一句",generated.id());
+  assertEquals("zh-CN",edited.language());assertEquals("AUTO",edited.templateId());assertEquals(Boolean.FALSE,edited.chorusFirst());
+  assertNull(manual.language());assertNull(manual.templateId());
   assertEquals(generated.id(),composer.compose(owner,work.id(),0,key,"zh-CN").id());assertEquals(before+1,writer.calls.get());
   assertEquals("不要替换我的旧歌词",lyrics.get(owner,work.id(),manual.id()).lyrics());assertTrue(lyrics.confirm(owner,work.id(),generated.id()).confirmed());
+ }
+ @Test void linePreviewIsOwnerBoundIdempotentAndDoesNotWriteVersions(){
+  String owner=identity.create().creatorId(),other=identity.create().creatorId();
+  var work=works.create(owner,new WorkApi.Draft("","","海边旅行","","民谣",""));
+  var calls=new AtomicInteger();
+  var writer=new InspirationRewriter(){
+   public boolean isConfigured(){return true;}
+   public String rewrite(String text,String language){calls.incrementAndGet();return "晚风落进海里";}
+  };
+  var service=new LyricLineRewriteService(works,new InspirationRewriteService(writer,true,2),1);
+  var key=UUID.randomUUID();var action=LyricLineRewriteService.Action.RHYME;
+  assertThrows(DomainException.class,()->service.preview(other,work.id(),key,action,"晚风吹来","","zh-CN"));
+  assertEquals("晚风落进海里",service.preview(owner,work.id(),key,action,"晚风吹来","","zh-CN"));
+  assertEquals("晚风落进海里",service.preview(owner,work.id(),key,action,"晚风吹来","","zh-CN"));
+  assertEquals("REQUEST_KEY_CONFLICT",assertThrows(DomainException.class,()->service.preview(owner,work.id(),key,action,"另一句","","zh-CN")).code());
+  assertEquals("LYRIC_REWRITE_LIMIT",assertThrows(DomainException.class,()->service.preview(owner,work.id(),UUID.randomUUID(),action,"晚风吹来","","zh-CN")).code());
+  assertEquals(1,calls.get());
+  assertTrue(lyrics.list(owner,work.id()).isEmpty());
  }
  @Test void refusesOtherOwnersAndStaleStoriesBeforeCallingProvider(){
   String owner=identity.create().creatorId(),other=identity.create().creatorId();var work=works.create(owner,new WorkApi.Draft("朋友","毕业","故事","祝福","爵士","回忆"));int before=writer.calls.get();

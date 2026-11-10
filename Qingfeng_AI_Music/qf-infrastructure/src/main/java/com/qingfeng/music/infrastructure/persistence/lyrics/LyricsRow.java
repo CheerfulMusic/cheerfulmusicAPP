@@ -9,4 +9,7 @@ public class LyricsRow {
     public String source;
     public boolean confirmed;
     public Instant createdAt;
+    public String language;
+    public String templateId;
+    public Boolean chorusFirst;
 }

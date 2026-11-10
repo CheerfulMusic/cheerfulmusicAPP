@@ -232,6 +232,15 @@ async function retry(){
     if(!ready.value){
       remember()
       if(!localPending)await initialize()
+async function applyChosenMusic(work:Work,turn:number){
+  const chosen=preferences.value
+  if(!chosen||(!(mode.value==='custom'&&!musicPersisted.value)&&!musicChanged.value))return work
+  const saved=await saveMusicSettings(work.id,work.version,chosen)
+  if(!alive||turn!==initSequence)throw new Error('页面已切换，已停止后续操作。')
+  existing.value=saved.work;baseline.value=JSON.stringify(asDraft(saved.work));Object.assign(draft,asDraft(saved.work))
+  preferences.value=saved.direction?.preferences||chosen;musicBaseline.value=JSON.stringify(preferences.value);musicPersisted.value=true;remember(true)
+  return saved.work
+}
       return
     }
     await flush()
@@ -284,14 +293,8 @@ async function continueMaking() {
   try {
     const work=await flush()
     if(!work||!alive||turn!==initSequence)return
-    let prepared=work
-    if((mode.value==='custom'&&!musicPersisted.value||musicChanged.value)&&preferences.value){
-      const chosen=preferences.value
-      const saved=await saveMusicSettings(work.id,work.version,chosen)
-      if(!alive||turn!==initSequence)return
-      prepared=saved.work;existing.value=saved.work;baseline.value=JSON.stringify(asDraft(saved.work));Object.assign(draft,asDraft(saved.work))
-      preferences.value=saved.direction?.preferences||chosen;musicBaseline.value=JSON.stringify(preferences.value);musicPersisted.value=true;remember(true)
-    }
+    const prepared=await applyChosenMusic(work,turn)
+    if(!alive||turn!==initSequence)return
     if(mode.value==='quick'){
       if(!quickReady.value)throw new Error('一键创作暂不可用 可以切换自定义创作')
       // 先固定作品地址，刷新能查询原任务；本站任务受理后仍留在输入页等待。
@@ -334,7 +337,18 @@ async function continueMaking() {
   } catch(e){if(alive&&turn===initSequence){quickSession.abortPreparation();continuationFailed.value=writing;error.value=e instanceof Error?e.message:'歌词生成失败，请稍后再试'}}
   finally{if(turn===initSequence)composing.value=false}
 }
-async function returnToLyrics(){try{const work=await flush();if(work)await router.push({path:`/works/${work.id}`,query:{revision:String(route.query.returnRevision||'')}})}catch{/* 保存错误会显示在故事表单。 */}}
+async function returnToLyrics(){
+  if(composing.value||rewriting.value||quickLocked.value)return
+  const turn=initSequence,revision=String(route.query.returnRevision||'')
+  composing.value=true;error.value=''
+  try{
+    const work=await flush()
+    if(!work||!alive||turn!==initSequence)return
+    const prepared=await applyChosenMusic(work,turn)
+    if(alive&&turn===initSequence)await router.push({path:`/works/${prepared.id}`,query:{revision}})
+  }catch(e){if(alive&&turn===initSequence)error.value=e instanceof Error?e.message:'设置保存失败，请重试'}
+  finally{if(turn===initSequence)composing.value=false}
+}
 const quickUnrecoverable=()=>!!quickSession.intent.value&&!quickFlow.value&&!quickSession.recoverable.value
 function permitLeave(){
   remember()

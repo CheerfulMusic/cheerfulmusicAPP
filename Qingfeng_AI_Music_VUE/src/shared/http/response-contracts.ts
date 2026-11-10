@@ -73,6 +73,7 @@ export function validResponse(path:string,method:string,value:unknown):boolean{
  if(/\/section-context$/.test(path))return obj(value)&&typeof value.available==='boolean'&&Array.isArray(value.lines)&&(!value.available||str(value.lyrics)&&num(value.duration))
  if(/\/section-edits$/.test(path))return method==='GET'?list(value,v=>obj(v)&&text(v.taskId)&&text(v.status)&&str(v.replacementLyrics)):task(value)
  if(/\/lyrics\/requests\//.test(path))return obj(value)&&['NOT_FOUND','PENDING','FAILED','SUCCEEDED','UNKNOWN'].includes(String(value.status))&&(value.status!=='SUCCEEDED'||text(value.revisionId))
+ if(/\/lyrics\/rewrite-line$/.test(path))return method==='POST'&&obj(value)&&text(value.text)&&String(value.text).length<=160&&!/[\r\n\u2028\u2029]/.test(String(value.text))
  if(/\/audio\/[^/]+\/lyrics(?:\/sync)?$/.test(path))return obj(value)&&text(value.status)&&str(value.text)&&list(value.lines,v=>obj(v)&&str(v.text)&&num(v.start)&&num(v.end))&&typeof value.canSync==='boolean'
  if(/\/lyrics(?:\/[^/]+(?:\/confirm)?)?$/.test(path)||/\/lyrics\/generate$/.test(path))return method==='GET'&&path.endsWith('/lyrics')?list(value,revision):revision(value)
  if(/\/audio\/selection$/.test(path))return obj(value)&&num(value.version)&&(value.assetId===null?value.asset===null:asset(value.asset)&&obj(value.asset)&&value.asset.id===value.assetId)

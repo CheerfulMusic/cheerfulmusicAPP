@@ -1,6 +1,6 @@
-import type {LyricsStructure} from '../model/lyrics-structure'
+import type {LyricsStructure, LyricsTemplateId} from '../model/lyrics-structure'
 import { ensureCreator, requestJson, apiUrl } from '../../../shared/http/api-client'
-export interface Revision { id: string; workId: string; workVersion: number; title: string; lyrics: string; source: string; confirmed: boolean; createdAt: string }
+export interface Revision { id: string; workId: string; workVersion: number; title: string; lyrics: string; source: string; confirmed: boolean; createdAt: string; language?: string|null; templateId?: LyricsTemplateId|null; chorusFirst?: boolean|null }
 export interface LyricsRequestState {status:'NOT_FOUND'|'PENDING'|'FAILED'|'SUCCEEDED'|'UNKNOWN';revisionId:string|null;errorCode:string|null}
 export const getLyricsRequest = (work:string,key:string) => call<LyricsRequestState>(`app/works/${work}/lyrics/requests/${encodeURIComponent(key)}`)
 export interface AudioAsset { id: string; workId: string; origin: 'IMPORTED' | 'GENERATED'; contentType: string; byteSize: number; createdAt: string;sectionEdit?:boolean }
@@ -19,7 +19,11 @@ export interface LyricLine {text:string;start:number;end:number}
 export interface PlaybackLyrics {status:'NOT_REQUESTED'|'FETCHING'|'READY'|'EMPTY'|'FAILED'|'UNKNOWN';text:string;lines:LyricLine[];canSync:boolean}
 export const getPlaybackLyrics = (work:string,asset:string)=>call<PlaybackLyrics>(`app/works/${work}/audio/${asset}/lyrics`)
 export async function syncPlaybackLyrics(work:string,asset:string,requestKey:string){await ensureCreator();return requestJson<PlaybackLyrics>(`app/works/${work}/audio/${asset}/lyrics/sync`,'POST',{requestKey},130000)}
-export const saveRevision = (work: string, workVersion: number, title: string, lyrics: string) => call<Revision>(`app/works/${work}/lyrics`, 'POST', { workVersion, title, lyrics })
+export const saveRevision = (work: string, workVersion: number, title: string, lyrics: string, baseRevisionId?: string) => call<Revision>(`app/works/${work}/lyrics`, 'POST', { workVersion, title, lyrics, baseRevisionId })
+export async function rewriteLyricLine(work:string, input:{requestId:string;action:'REWRITE'|'RHYME';line:string;context:string;language:string}) {
+  await ensureCreator()
+  return requestJson<{text:string}>(`app/works/${work}/lyrics/rewrite-line`,'POST',input,35000)
+}
 export const confirmRevision = (work: string, revision: string) => call<Revision>(`app/works/${work}/lyrics/${revision}/confirm`, 'POST', {})
 export const listAudio = (work: string) => call<AudioAsset[]>(`app/works/${work}/audio`)
 export const listTasks = (work: string) => call<GenerationTask[]>(`app/works/${work}/generations`)

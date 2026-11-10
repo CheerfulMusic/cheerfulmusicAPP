@@ -12,6 +12,15 @@ import org.springframework.jdbc.core.JdbcTemplate;
 public class LyricsCompositionConfiguration {
     @Bean InspirationRewriter inspirationRewriter(Environment env){return new com.qingfeng.music.infrastructure.provider.DeepSeekInspirationRewriter(env.getProperty("qingfeng.providers.deepseek.api-key",env.getProperty("DEEPSEEK_API_KEY","")),env.getProperty("qingfeng.providers.deepseek.model","deepseek-flash"));}
     @Bean InspirationRewriteService inspirationRewriteService(InspirationRewriter writer,Environment env){return new InspirationRewriteService(writer,env.getProperty("qingfeng.inspiration.rewrite.enabled",Boolean.class,true),env.getProperty("qingfeng.inspiration.rewrite.concurrent-global",Integer.class,4));}
+    @Bean @Profile({"mysql","test"})
+    LyricLineRewriteService lyricLineRewriteService(WorkApi works,Environment env){
+        var writer=new com.qingfeng.music.infrastructure.provider.DeepSeekInspirationRewriter(
+            env.getProperty("qingfeng.providers.deepseek.api-key",env.getProperty("DEEPSEEK_API_KEY","")),
+            env.getProperty("qingfeng.providers.deepseek.model","deepseek-flash")).lyricLineMode();
+        var previews=new InspirationRewriteService(writer,env.getProperty("qingfeng.lyrics.line-rewrite.enabled",Boolean.class,true),
+            env.getProperty("qingfeng.lyrics.line-rewrite.concurrent-global",Integer.class,4));
+        return new LyricLineRewriteService(works,previews,env.getProperty("qingfeng.lyrics.line-rewrite.per-creator-per-15-minutes",Integer.class,12));
+    }
     @Bean LyricsWriter lyricsWriter(Environment env){
         // 既有部署未选提供方时维持原行为；切换必须显式配置，不在调用失败后偷偷换模型。
         return switch(env.getProperty("qingfeng.lyrics.provider","deepseek").trim().toLowerCase(java.util.Locale.ROOT)){

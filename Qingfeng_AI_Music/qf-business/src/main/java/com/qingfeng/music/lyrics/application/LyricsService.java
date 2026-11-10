@@ -10,10 +10,16 @@ public class LyricsService implements LyricsApi {
     private final WorkApi works; private final LyricsRepository repository;
     public LyricsService(WorkApi works,LyricsRepository repository){this.works=works;this.repository=repository;}
     public Revision save(String owner,String work,long version,String title,String lyrics){
+        return save(owner,work,version,title,lyrics,null);
+    }
+    @Override
+    public Revision save(String owner,String work,long version,String title,String lyrics,String baseRevisionId){
         var current=works.get(owner,work);
         if(current.version()!=version)throw new DomainException("WORK_VERSION_CONFLICT","作品已修改，请重新载入后保存歌词");
         if(title==null||title.isBlank()||title.length()>100||lyrics==null||lyrics.isBlank()||lyrics.length()>12000)throw new DomainException("INVALID_LYRICS","请填写标题和歌词，并检查长度");
-        var revision=new Revision(UUID.randomUUID().toString(),work,version,title.trim(),lyrics,"MANUAL",false,Instant.now());
+        var base=baseRevisionId==null?null:get(owner,work,baseRevisionId);
+        var revision=new Revision(UUID.randomUUID().toString(),work,version,title.trim(),lyrics,"MANUAL",false,Instant.now(),
+            base==null?null:base.language(),base==null?null:base.templateId(),base==null?null:base.chorusFirst());
         repository.insert(revision);return get(owner,work,revision.id());
     }
     @Transactional
