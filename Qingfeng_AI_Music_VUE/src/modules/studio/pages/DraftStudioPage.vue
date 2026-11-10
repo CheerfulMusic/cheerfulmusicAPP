@@ -30,7 +30,7 @@ function validRecovery(value:unknown):value is Recovery {
   const v = value as Recovery
   return !!v && !!v.draft && ['recipient','occasion','story','message','style','title'].every(k => typeof v.draft[k as keyof DraftInput] === 'string') && ['zh-CN','en','mixed'].includes(v.language) && /^[0-9a-f-]{36}$/i.test(v.draftKey)
 }
-const route=useRoute(), router=useRouter(), initialized=ref(false), ready=ref(false), aiReady=ref(false), existing=ref<Work>(), baseline=ref(''), saving=ref(false), composing=ref(false), error=ref(''), notice=ref(''), conflict=ref(false), localSaved=ref(false), allowance=ref<Allowance>()
+const route=useRoute(), router=useRouter(), initialized=ref(false), ready=ref(false), aiReady=ref(false), existing=ref<Work>(), baseline=ref(''), saving=ref(false), composing=ref(false), error=ref(''), notice=ref(''), conflict=ref(false), localSaved=ref(true), allowance=ref<Allowance>()
 const language=ref<string>(locale.value)
 const mode=ref<CreationMode>(creationMode(route.query.mode,!!route.query.work)),quickReady=ref(false)
 const quickSession=useQuickSession()
@@ -44,7 +44,7 @@ async function viewQuickResult(){
 const musicCatalog=ref<MusicCatalog>(),preferences=ref<MusicPreferences>(),musicBaseline=ref(''),musicIssue=ref(''),musicPersisted=ref(false)
 const customTouched=ref(false)
 const musicChanged=computed(()=>!!preferences.value&&JSON.stringify(preferences.value)!==musicBaseline.value)
-async function changeMode(next:CreationMode){if(composing.value||rewriting.value||quickLocked.value)return;mode.value=next;remember();await router.replace({query:{...route.query,mode:next}})}
+async function changeMode(next:CreationMode){if(composing.value||rewriting.value||quickLocked.value)return;mode.value=next;await router.replace({query:{...route.query,mode:next}})}
 const structure = {templateId:'AAB',chorusFirst:false} as const satisfies LyricsStructure
 let legacyStructure:LyricsStructure|undefined
 const validationError=ref(''), selectedHint=ref(-1)
@@ -76,25 +76,34 @@ const dirty=computed(()=>initialized.value && JSON.stringify(snapshot())!==basel
 const valid=computed(()=>!!(draft.story.trim()||draft.message.trim()) && !!draft.style.trim())
 let draftKey:string=crypto.randomUUID(), cacheKey='', alive=true, timer:ReturnType<typeof setTimeout>|undefined, inflight:Promise<Work|undefined>|undefined, internalRoute=false
 let recoveredVersion:number|undefined,recoveredWorkId:string|undefined
+let localPending=false
 let initSequence=0,internalContext:string|undefined
 const contextOf=(query:Record<string,unknown>)=>query.work?`work:${String(query.work)}`:query.draft?`draft:${String(query.draft)}`:'new'
 const asDraft=(work:DraftInput):DraftInput=>({recipient:work.recipient,occasion:work.occasion,story:work.story,message:work.message,style:work.style,title:work.title,vocalGender:normalizeVocalGender(work.vocalGender)})
 function recoveryValue():Recovery{return {mode:mode.value,preferences:preferences.value,flowVersion:storyFlowVersion,draft:{...draft},language:language.value,structure:legacyStructure,part:0,draftKey,workId:existing.value?.id||recoveredWorkId,version:existing.value?.version??recoveredVersion,dirty:dirty.value,conflict:conflict.value}}
-function remember() {
-  if(!cacheKey||!initialized.value)return
-  const value=recoveryValue();localSaved.value=writeRecovery(cacheKey,value)
+function remember(force=false) {
+  clearTimeout(timer)
+  if(!initialized.value||!force&&!localPending)return
+  localPending=true
+  if(!cacheKey){localSaved.value=false;return}
+  const value=recoveryValue()
+  localSaved.value=writeRecovery(cacheKey,value)
+  localPending=!localSaved.value
   const owner=currentCreatorId(),source=associatedGuestCreatorId()
   const belongs=owner&&(cacheKey.startsWith(recoveryKey(owner,'story',''))||source&&cacheKey.startsWith(recoveryKey(source,'story','')))
   if(existing.value&&belongs&&cacheKey!==recoveryKey(owner,'story',existing.value.id))writeRecovery(recoveryKey(owner,'story',existing.value.id),value)
 }
-function schedule() {
-  remember(); clearTimeout(timer)
-  if (dirty.value && valid.value && ready.value && !conflict.value && !composing.value&&!quickLocked.value) timer=setTimeout(()=>{void persist().catch(()=>{})},1200)
+function scheduleLocalSave() {
+  if(!initialized.value||resetting.value)return
+  // The sync watcher only marks changes, so even immediate navigation can flush them.
+  localPending=true
+  clearTimeout(timer)
+  timer=setTimeout(()=>remember(),500)
 }
-watch([draft,language],schedule,{deep:true,flush:'sync'})
-watch([mode,preferences],remember,{deep:true,flush:'sync'})
+watch([draft,language,mode,preferences],scheduleLocalSave,{deep:true,flush:'sync'})
 watch(preferences,()=>{if(initialized.value&&mode.value==='custom')customTouched.value=true},{deep:true,flush:'sync'})
 async function initialize() {
+  remember()
   const turn=++initSequence,query={...route.query}
   quickSession.reset()
   rewriting.value=false;rewriteError.value='';rewriteStatus.value='';rewriteBackup.value=undefined
@@ -102,7 +111,7 @@ async function initialize() {
   // 切换作品前先收尾正在保存的快照；旧响应不可把新建页面跳回旧作品。
   if(inflight)try{await inflight}catch{/* 旧作品的本机副本仍保留。 */}
   if(turn!==initSequence)return
-  clearTimeout(timer); initialized.value=false; error.value=''; notice.value=''; conflict.value=false; ready.value=false;saving.value=false
+  localPending=false;localSaved.value=true;initialized.value=false; error.value=''; notice.value=''; conflict.value=false; ready.value=false;saving.value=false
   mode.value=creationMode(query.mode,!!query.work);musicCatalog.value=undefined;preferences.value=undefined;musicBaseline.value='';musicPersisted.value=false;customTouched.value=false
   composing.value=false;language.value=locale.value;legacyStructure=undefined;selectedHint.value=-1;validationError.value='';existing.value=undefined;recoveredVersion=undefined;recoveredWorkId=undefined;cacheKey='';draftKey=crypto.randomUUID()
   Object.assign(draft,{recipient:'',occasion:String(query.occasion||''),story:'',message:'',style:styleFromInspiration(query.style),title:'',vocalGender:'AUTO'});baseline.value=JSON.stringify(snapshot())
@@ -162,7 +171,7 @@ async function initialize() {
         try{await router.replace({path:'/create',query:{...route.query,part:undefined,question:undefined}})}finally{internalRoute=false}
       }
       if(turn!==initSequence||!alive)return
-      initialized.value=true;resetting.value=false;remember();if(!conflict.value)schedule()
+      initialized.value=true;resetting.value=false
     }
   }
 }
@@ -172,7 +181,7 @@ async function identityChanged() {
   const owner=currentCreatorId();if(!owner)return
   const next=recoveryKey(owner,'story',String(route.query.work||route.query.draft||draftKey))
   if(cacheKey===next)return
-  clearTimeout(timer);remember()
+  remember()
   const source=associatedGuestCreatorId()
   if(source&&cacheKey.startsWith(recoveryKey(source,'story',''))) {
     if(!checkpointRecovery(next,recoveryValue())){ready.value=false;error.value='本机草稿备份失败，请保留当前编辑，恢复浏览器存储后重试。';return}
@@ -187,7 +196,6 @@ watch([()=>contextOf(route.query),()=>route.query.mode],([context,routeMode],[pr
   if(context!==previousContext||routeMode==='custom'&&mode.value!=='custom')void initialize()
 })
 function persist():Promise<Work|undefined> {
-  clearTimeout(timer)
   if(quickWorkId.value)return Promise.resolve(existing.value)
   if (inflight) return inflight
   if (!ready.value || !valid.value || conflict.value) return Promise.resolve(existing.value)
@@ -200,18 +208,19 @@ function persist():Promise<Work|undefined> {
       if(!alive||turn!==initSequence)return saved
       existing.value=saved;baseline.value=JSON.stringify(asDraft(saved));error.value=''
       // 新建向导保留同一个draft地址，浏览器后退不会误变成另一份新草稿。
-      remember()
+      remember(true)
       return saved
     } catch(e) {
       if(!alive||turn!==initSequence)throw e
       conflict.value=e instanceof ApiError && e.code==='WORK_VERSION_CONFLICT'
       error.value=conflict.value?'另一页面已更新故事。本机内容已保留，请先核对再选择保存或载入。':e instanceof Error?e.message:'保存失败，请重试'
-      remember();throw e
-    } finally {inflight=undefined;if(alive&&turn===initSequence){saving.value=false;if(dirty.value&&!error.value)schedule()}}
+      remember(true);throw e
+    } finally {inflight=undefined;if(alive&&turn===initSequence)saving.value=false}
   })()
   return inflight
 }
 async function flush() {
+  remember()
   const turn=initSequence
   const check=()=>{if(!alive||turn!==initSequence)throw new Error('页面已切换，已停止后续操作。')}
   if(!ready.value||!valid.value||conflict.value)throw new Error('请先解决保存问题，再继续创作。')
@@ -220,16 +229,25 @@ async function flush() {
   while(!existing.value||dirty.value){const saved=await persist();check();if(!saved||conflict.value)throw new Error('请先解决保存问题，再继续创作。')}
   return existing.value
 }
-async function retry(){try{if(!ready.value){await initialize();return}await flush()}catch{/* 错误或旧页面的副本均保留。 */}}
+async function retry(){
+  try {
+    if(!ready.value){
+      remember()
+      if(!localPending)await initialize()
+      return
+    }
+    await flush()
+  }catch{/* 错误或旧页面的副本均保留。 */}
+}
 async function resolveConflict(useLocal:boolean){
   if(!existing.value)return
   const id=existing.value.id,turn=initSequence
   if(!window.confirm(t(useLocal?'将用本机内容更新服务器故事，确定继续吗？':'载入服务器版本将替换本机修改，确定继续吗？')))return
-  try{const latest=await loadWork(id);if(!alive||turn!==initSequence)return;existing.value=latest;baseline.value=JSON.stringify(asDraft(latest));if(!useLocal)Object.assign(draft,asDraft(latest));conflict.value=false;error.value='';remember();await flush()}
+  try{const latest=await loadWork(id);if(!alive||turn!==initSequence)return;existing.value=latest;baseline.value=JSON.stringify(asDraft(latest));if(!useLocal)Object.assign(draft,asDraft(latest));conflict.value=false;error.value='';remember(true);if(useLocal)await flush()}
   catch(e){if(alive&&turn===initSequence)error.value=e instanceof Error?e.message:'保存失败，请重试'}
 }
 watch(()=>[draft.story,draft.message],()=>{validationError.value='';continuationFailed.value=false})
-function rejectAnswer(message:string){validationError.value=message;document.querySelector<HTMLTextAreaElement>('#inspiration-input')?.focus()}
+function rejectAnswer(message:string){validationError.value=message;document.querySelector<HTMLTextAreaElement>('#inspiration-input')?.focus({preventScroll:true})}
 async function rewriteIdea() {
   if(rewriting.value||composing.value||quickLocked.value||!initialized.value||resetting.value||conflict.value)return
   if(!draft.story.trim()){rejectAnswer('请先写下一点创作灵感，再使用AI改写。');return}
@@ -273,8 +291,8 @@ async function continueMaking() {
       const chosen=preferences.value
       const saved=await saveMusicSettings(work.id,work.version,chosen)
       if(!alive||turn!==initSequence)return
-      prepared=saved.work;existing.value=saved.work;baseline.value=JSON.stringify(asDraft(saved.work));Object.assign(draft,asDraft(saved.work));clearTimeout(timer)
-      preferences.value=saved.direction?.preferences||chosen;musicBaseline.value=JSON.stringify(preferences.value);musicPersisted.value=true;remember()
+      prepared=saved.work;existing.value=saved.work;baseline.value=JSON.stringify(asDraft(saved.work));Object.assign(draft,asDraft(saved.work))
+      preferences.value=saved.direction?.preferences||chosen;musicBaseline.value=JSON.stringify(preferences.value);musicPersisted.value=true;remember(true)
     }
     if(mode.value==='quick'){
       if(!quickReady.value)throw new Error('一键创作暂不可用 可以切换自定义创作')
@@ -314,7 +332,11 @@ async function continueMaking() {
 }
 async function returnToLyrics(){try{const work=await flush();if(work)await router.push({path:`/works/${work.id}`,query:{revision:String(route.query.returnRevision||'')}})}catch{/* 保存错误会显示在故事表单。 */}}
 const quickUnrecoverable=()=>!!quickSession.intent.value&&!quickFlow.value&&!quickSession.recoverable.value
-const permitLeave=()=>quickUnrecoverable()?window.confirm(t('浏览器无法保留本次请求标识 请先核对生成进度 确定离开吗')):!dirty.value||localSaved.value||window.confirm(t('当前内容尚未保存，确定离开吗？'))
+function permitLeave(){
+  remember()
+  if(quickUnrecoverable())return window.confirm(t('浏览器无法保留本次请求标识 请先核对生成进度 确定离开吗'))
+  return !localPending||window.confirm(t('当前内容尚未保存，确定离开吗？'))
+}
 function followAfterLeaving(){
   const flow=quickFlow.value, intent=quickSession.intent.value
   if(!quickWorkId.value||flow&&!quickInProgress(flow.status)||!flow&&!intent)return
@@ -326,13 +348,27 @@ onBeforeRouteLeave(to=>{
 })
 onBeforeRouteUpdate(to=>{
   if(internalRoute)return
-  if(composing.value||!permitLeave())return false
+  if(composing.value)return false
+  if(contextOf(to.query)!==contextOf(route.query)&&!permitLeave())return false
   if(to.query.work!==quickWorkId.value)followAfterLeaving()
 })
-const unload=(e:BeforeUnloadEvent)=>{remember();if(dirty.value&&!localSaved.value||quickUnrecoverable()){e.preventDefault();e.returnValue=''}}
-const online=()=>{if(ready.value&&!conflict.value&&!quickLocked.value)void retry()}
-onMounted(()=>{window.addEventListener('beforeunload',unload);window.addEventListener('online',online)})
-onBeforeUnmount(()=>{remember();alive=false;initSequence++;clearTimeout(timer);window.removeEventListener('beforeunload',unload);window.removeEventListener('online',online)})
+const unload=(event:BeforeUnloadEvent)=>{
+  remember()
+  if(localPending||quickUnrecoverable()){event.preventDefault();event.returnValue=''}
+}
+const saveOnPageHide=()=>remember()
+const saveWhenHidden=()=>{if(document.visibilityState==='hidden')remember()}
+onMounted(()=>{
+  window.addEventListener('beforeunload',unload)
+  window.addEventListener('pagehide',saveOnPageHide)
+  document.addEventListener('visibilitychange',saveWhenHidden)
+})
+onBeforeUnmount(()=>{
+  remember();alive=false;initSequence++
+  window.removeEventListener('beforeunload',unload)
+  window.removeEventListener('pagehide',saveOnPageHide)
+  document.removeEventListener('visibilitychange',saveWhenHidden)
+})
 </script>
 <template>
   <div class="story-studio inspiration-studio single-inspiration-studio dual-creation-studio" :class="{'custom-creation-mode':mode==='custom'}">
@@ -353,7 +389,7 @@ onBeforeUnmount(()=>{remember();alive=false;initSequence++;clearTimeout(timer);w
         <template v-if="conflict&&!quickLocked"><button class="button secondary" type="button" @click="resolveConflict(true)">{{ t('用本机内容继续') }}</button><button class="button secondary" type="button" @click="resolveConflict(false)">{{ t('载入服务器版本') }}</button></template>
         <button v-else-if="!quickLocked" class="button secondary" type="button" :disabled="saving||composing" @click="continuationFailed?continueMaking():retry()">{{ t(continuationFailed?'重新编写歌词':'重试保存') }}</button>
       </div></div>
-      <p v-if="initialized&&!localSaved" class="save-info">{{ t('浏览器无法保存本机副本，请确认显示已保存后再离开。') }}</p>
+      <p v-if="initialized&&!localSaved" class="save-info">{{ t('浏览器暂时无法保存草稿，请先复制你的创作描述再离开。') }}</p>
       <form @submit.prevent="next" :aria-label="t('写下创作灵感')">
         <fieldset class="draft-fields" :disabled="!initialized||composing||resetting||quickLocked">
           <div class="inspiration-input-box" :class="{'is-invalid':validationError}">

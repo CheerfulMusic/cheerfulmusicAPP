@@ -1,6 +1,7 @@
 /** Chinese source copy is the stable message key; business option values stay unchanged. */
 export const english: Record<string, string> = {
   '取消': 'Cancel',
+  '浏览器暂时无法保存草稿，请先复制你的创作描述再离开。': 'Your browser could not save this draft. Copy your description before leaving.',
   '歌词模板': 'Lyric template',
   '正在保存创作要求': 'Saving your song idea',
   '本次创作已完成 可试听歌曲或继续创作新歌': 'Your song is ready. Listen to it or start a new song.',
@@ -1204,7 +1205,7 @@ export const english: Record<string, string> = {
   "筛选作品": "Filter your songs",
   "全部作品": "All songs",
   "这个分类还没有作品": "No songs in this category yet",
-  "填写故事后会自动保存，随时都可以继续。": "Your story saves as you write. You can come back anytime.",
+  "点击生成后，作品会出现在这里。": "Songs will appear here once you start creating them.",
   "这次创作未完成，打开作品查看详情。故事和歌词都已保留。": "This song could not be completed. Open it for details. Your story and lyrics are safe.",
   "创作结果仍在核对，请打开作品查看，避免重复提交。": "We are checking this request. Open it for details before trying again.",
   "试听与分享": "Listen and share",

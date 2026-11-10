@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from 'vitest'
-import { readRecovery, recoveryKey, writeRecovery,createRecoveryStore,migrateRecoveryOwner } from '../src/shared/drafts/recovery'
+import { cleanExpiredRecovery, readRecovery, recoveryKey, writeRecovery,createRecoveryStore,migrateRecoveryOwner } from '../src/shared/drafts/recovery'
 afterEach(()=>{vi.unstubAllGlobals();vi.useRealTimers()})
 function storage(){const data=new Map<string,string>();vi.stubGlobal('localStorage',{get length(){return data.size},key:(n:number)=>[...data.keys()][n]||null,getItem:(k:string)=>data.get(k)||null,setItem:(k:string,v:string)=>data.set(k,v),removeItem:(k:string)=>data.delete(k)});return data}
 const valid=(value:unknown):value is {text:string}=>!!value&&typeof (value as {text:string}).text==='string'
@@ -42,6 +42,9 @@ it('R5 清理过期版本与另一标签新写入交错时，不会删除新内�
  const remove=localStorage.removeItem.bind(localStorage);let armed=true
  localStorage.removeItem=(name:string)=>{if(name===expired&&armed){armed=false;a.write(key,{text:'恰好同时写入的新内容',dirty:true})}remove(name)}
  b.write(key,{text:'另一标签的内容',dirty:false})
+ expect(armed).toBe(true)
+ cleanExpiredRecovery()
+ expect(data.has(expired)).toBe(false)
  expect(a.copies(key,valid).map(c=>c.value.text)).toContain('恰好同时写入的新内容')
 })
 

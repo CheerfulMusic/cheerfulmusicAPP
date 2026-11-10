@@ -8,6 +8,28 @@ function content(value:unknown):string{
  const ignored=new Set(['dirty','conflict','part','flowVersion','workId','draftKey','version','workVersion','baseId'])
  return JSON.stringify(Object.fromEntries(Object.entries(value).filter(([key])=>!ignored.has(key)).sort(([a],[b])=>a.localeCompare(b))))
 }
+
+export function cleanExpiredRecovery() {
+ const now=Date.now()
+ try {
+  for(let n=localStorage.length-1;n>=0;n--){
+   const name=localStorage.key(n)
+   if(!name?.startsWith(prefix))continue
+   try {
+    const old=JSON.parse(localStorage.getItem(name)||'{}') as Envelope<unknown>
+    if(old.immutable&&now-old.savedAt>maxAge)localStorage.removeItem(name)
+   } catch { /* An invalid entry does not stop cleanup of the other drafts. */ }
+  }
+ } catch { /* Storage can be unavailable in restricted browsing contexts. */ }
+}
+
+let nextCleanup=0
+function scheduleCleanup() {
+ if(typeof window==='undefined'||Date.now()<nextCleanup)return
+ nextCleanup=Date.now()+60_000
+ if(typeof window.requestIdleCallback==='function')window.requestIdleCallback(cleanExpiredRecovery)
+ else window.setTimeout(cleanExpiredRecovery,3000)
+}
 /** 每个文档实例只写自己的分支；localStorage没有CAS，不能靠读后覆盖保护别的标签。 */
 export function createRecoveryStore(writer:string=crypto.randomUUID()){
  const ownKeys=new Map<string,string>()
@@ -26,12 +48,13 @@ export function createRecoveryStore(writer:string=crypto.randomUUID()){
  }
  function write<T>(key:string,value:T):boolean{
   try{
-   // 每次先写新的不可变版本，再删除本实例的旧版本。清理过期分支不会撞上另一个标签的新写入。
-   for(let n=localStorage.length-1;n>=0;n--){const name=localStorage.key(n);if(!name?.startsWith(prefix))continue;try{const old=JSON.parse(localStorage.getItem(name)||'{}') as Envelope<unknown>;if(old.immutable&&Date.now()-old.savedAt>maxAge)localStorage.removeItem(name)}catch{}}
+   // Write a new immutable branch before removing this tab's previous copy.
    const previous=ownKeys.get(key),raw=previous?localStorage.getItem(previous):null,old=raw?JSON.parse(raw) as Envelope<T>:undefined
    const same=old&&content(old.value)===content(value),name=`${key}:tab:${writer}:${crypto.randomUUID()}`
    localStorage.setItem(name,JSON.stringify({savedAt:Date.now(),contentAt:same?(old.contentAt??old.savedAt):Date.now(),value,immutable:true} satisfies Envelope<T>))
-   ownKeys.set(key,name);if(previous)localStorage.removeItem(previous);return true
+   ownKeys.set(key,name);if(previous)localStorage.removeItem(previous)
+   scheduleCleanup()
+   return true
   }catch{return false}
  }
  function checkpoint<T>(key:string,value:T):boolean{try{localStorage.setItem(`${key}:tab:checkpoint-${crypto.randomUUID()}`,JSON.stringify({savedAt:Date.now(),contentAt:Date.now(),value,immutable:true} satisfies Envelope<T>));return true}catch{return false}}

@@ -25,9 +25,19 @@ it.each([
 })
 
 it.each([
+  ['/create?draft=a', '/create'],
+  ['/create?draft=a&mode=custom', '/create?draft=a&mode=quick'],
+  ['/create?work=a&mode=custom', '/create?work=a&part=1'],
+])('preserves the viewport on internal studio query changes: %s', (to, from) => {
+  expect(scrollBehavior(route(to), route(from), null)).toBe(false)
+})
+
+it.each([
   ['/works/b?revision=2', '/works/a?revision=1'],
   ['/works/a', '/'],
   ['/create?draft=b', '/create?draft=a'],
+  ['/create?work=b', '/create?work=a'],
+  ['/create?mode=quick', '/create?work=a&mode=quick'],
 ])('starts normal page navigation at the top: %s', (to, from) => {
   expect(scrollBehavior(route(to), route(from), null)).toEqual({ top: 0 })
 })
@@ -36,6 +46,7 @@ it('restores browser history positions before applying the editor query rule', (
   const saved = { left: 0, top: 640 }
   expect(scrollBehavior(route('/works/a?revision=1'), route('/works/a?revision=2'), saved)).toBe(saved)
   expect(scrollBehavior(route('/#songs'), route('/works/a'), saved)).toBe(saved)
+  expect(scrollBehavior(route('/create?draft=a&mode=quick'), route('/create?draft=a&mode=custom'), saved)).toBe(saved)
 })
 
 it.each([false, true])('still scrolls to a newly requested anchor with reduced motion %s', (reduced) => {
