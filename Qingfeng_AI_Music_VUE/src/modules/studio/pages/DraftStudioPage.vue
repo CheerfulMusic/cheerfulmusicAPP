@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import LyricsTemplatePicker from '../../works/components/LyricsTemplatePicker.vue'
 import { normalizeLyricsStructure, lyricsStructureKey, type LyricsStructure } from '../../works/model/lyrics-structure'
+import { composeStyleDetailed, splitStyle, styleTail as compileStyleTail } from '../../agent/model/style-compiler'
+import { agentLanguage, agentStructure } from '../../agent/model/param-compiler'
 import '../styles/inspiration-studio.css'
 import StudioAtmosphere from '../components/StudioAtmosphere.vue'
 import { t, locale } from '../../../shared/i18n'
@@ -17,7 +19,7 @@ import { styleFromInspiration } from '../model/suggestions'
 import { inspirationPresets, inspirationSelection, type InspirationSelection } from '../model/inspiration-presets'
 import { continuationRequestKey, retireContinuationRequestKey } from '../model/lyrics-continuation'
 import { generateLyrics, getLyricsRequest, getUsage, type Allowance } from '../../works/api/detail'
-import { clearAgentBrief, readAgentBrief } from '../../agent/model/brief'
+import { clearAgentBrief, readAgentBrief, shouldApplyAgentBrief } from '../../agent/model/brief'
 
 const storyFlowVersion = 3
 interface Recovery { structure?:LyricsStructure; flowVersion?:number; draft:DraftInput; language:string; part:number; draftKey:string; workId?:string; version?:number; dirty:boolean; conflict?:boolean }
@@ -27,6 +29,10 @@ function validRecovery(value:unknown):value is Recovery {
 }
 const route=useRoute(), router=useRouter(), initialized=ref(false), ready=ref(false), aiReady=ref(false), existing=ref<Work>(), baseline=ref(''), saving=ref(false), composing=ref(false), error=ref(''), notice=ref(''), conflict=ref(false), localSaved=ref(false), allowance=ref<Allowance>()
 const language=ref<string>(locale.value)
+// 已编译进风格文本的参数说明，只读展示，便于提交前核对。
+const compiledParams=computed(()=>splitStyle(draft.style).tail)
+// 因为作品描述长度放不下而没能提交的参数，明确告诉用户，不做静默丢弃。
+const omittedParams=ref<string[]>([])
 const structure=ref<LyricsStructure>(normalizeLyricsStructure())
 const validationError=ref(''), selectedHint=ref(-1)
 const rewriting=ref(false), rewriteError=ref(''), rewriteStatus=ref('')
@@ -84,7 +90,13 @@ watch([draft,language,structure],schedule,{deep:true,flush:'sync'})
 async function initialize() {
   const turn=++initSequence,query={...route.query}
   // Agent 创作整理好的灵感只预填新建草稿；成功接手并写入本机副本后才清除，失败时保留供刷新重试。
-  const agentBrief=!query.work&&query.from==='agent'?readAgentBrief():undefined
+  const agentBrief=shouldApplyAgentBrief(query)?readAgentBrief():undefined
+  // Agent 识别到的参数在这里一次性编译：补充描述进风格文本，语言与段落各有自己的去处。
+  const briefTail=compileStyleTail(agentBrief?.params)
+  const briefComposition=composeStyleDetailed(agentBrief?.style||styleFromInspiration(query.style),briefTail)
+  const briefStyle=briefComposition.style
+  const briefLanguage=agentLanguage(agentBrief?.params)
+  const briefStructure=agentStructure(agentBrief?.params)
   let agentBriefApplied=false
   rewriting.value=false;rewriteError.value='';rewriteStatus.value='';rewriteBackup.value=undefined
   presetBackup.value=undefined
@@ -94,7 +106,10 @@ async function initialize() {
   if(turn!==initSequence)return
   clearTimeout(timer); initialized.value=false; error.value=''; notice.value=''; conflict.value=false; ready.value=false;saving.value=false
   composing.value=false;language.value=locale.value;structure.value=normalizeLyricsStructure();selectedHint.value=-1;validationError.value='';existing.value=undefined;recoveredVersion=undefined;recoveredWorkId=undefined;cacheKey='';draftKey=crypto.randomUUID()
-  Object.assign(draft,{recipient:'',occasion:String(query.occasion||''),story:agentBrief?.story||'',message:'',style:agentBrief?.style||styleFromInspiration(query.style),title:'',vocalGender:'AUTO'});baseline.value=JSON.stringify(snapshot())
+  Object.assign(draft,{recipient:'',occasion:String(query.occasion||''),story:agentBrief?.story||'',message:'',style:briefStyle,title:'',vocalGender:agentBrief?.params?.vocal??'AUTO'});baseline.value=JSON.stringify(snapshot())
+  if(briefLanguage)language.value=briefLanguage
+  if(briefStructure)structure.value=briefStructure
+  omittedParams.value=briefComposition.dropped
   try {
     await ensureCreator()
     const system=await getSystemInfo();if(turn!==initSequence)return;ready.value=system.capabilities.workPersistence; aiReady.value=system.capabilities.lyricsGeneration
@@ -108,7 +123,7 @@ async function initialize() {
     existing.value=found
     recoveredVersion=existing.value?.version;recoveredWorkId=existing.value?.id
     if (existing.value) {Object.assign(draft,asDraft(existing.value));baseline.value=JSON.stringify(asDraft(existing.value))}
-    else {Object.assign(draft,{recipient:'',occasion:String(query.occasion||''),story:agentBrief?.story||'',message:'',style:agentBrief?.style||styleFromInspiration(query.style),title:'',vocalGender:'AUTO'});baseline.value=JSON.stringify(snapshot());draftKey=crypto.randomUUID();agentBriefApplied=!!agentBrief}
+    else {Object.assign(draft,{recipient:'',occasion:String(query.occasion||''),story:agentBrief?.story||'',message:'',style:briefStyle,title:'',vocalGender:agentBrief?.params?.vocal??'AUTO'});baseline.value=JSON.stringify(snapshot());draftKey=crypto.randomUUID();agentBriefApplied=!!agentBrief}
     if (local) {
       language.value=local.language;structure.value=normalizeLyricsStructure(local.structure);draftKey=local.draftKey
       if (local.dirty) {
@@ -292,6 +307,11 @@ onBeforeUnmount(()=>{remember();alive=false;initSequence++;clearTimeout(timer);w
               <LyricsTemplatePicker v-model="structure" :disabled="composing||rewriting||resetting||!initialized"/>
             </div>
             <textarea id="inspiration-input" v-model="draft.story" maxlength="4000" :aria-label="t('写下创作灵感')" :placeholder="inspirationPlaceholder" :aria-invalid="!!validationError||undefined" :aria-describedby="validationError?'inspiration-guidance story-validation':'inspiration-guidance'"></textarea>
+            <p v-if="compiledParams" class="studio-agent-params">
+              <span class="studio-agent-params-title">{{ t('已识别参数') }}</span>
+              <span class="studio-agent-params-value">{{ compiledParams }}</span>
+            </p>
+            <p v-if="omittedParams.length" class="studio-agent-omitted">{{ t('已省略') }}：{{ omittedParams.join('、') }}<small>{{ t('作品描述最多 80 字，放不下的参数没有提交。') }}</small></p>
             <div class="inspiration-input-footer">
               <span class="inspiration-counter">{{ draft.story.length }} / 4000</span>
               <label class="inspiration-language">

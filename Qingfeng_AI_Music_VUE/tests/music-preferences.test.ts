@@ -27,4 +27,21 @@ describe('音乐偏好组合',()=>{
   const work={style:'钢琴，像说话一样自然',vocalGender:'MALE'} as Parameters<typeof legacyPreferences>[0]
   const p=legacyPreferences(work);expect(p.vocalGender).toBe('MALE');expect(p.freeText).toBe(work.style);expect(p.choices.instruments).toEqual(['piano'])
  })
+ it('Agent 编译出的补充描述进入自由要求，主风格仍按基础风格判断',()=>{
+  const work={style:'温暖民谣 | 90 BPM, piano, Cantonese vocals',vocalGender:'FEMALE'} as Parameters<typeof legacyPreferences>[0]
+  const p=legacyPreferences(work)
+  // 补充描述里的英文词不参与主风格判断。
+  expect(p.choices.genre).toEqual(['folk'])
+  // 补充描述原样成为自由要求，用户可以随时改写它。
+  expect(p.freeText).toBe('90 BPM, piano, Cantonese vocals')
+  expect(p.vocalGender).toBe('FEMALE')
+  // 目录选项数量仍在上限内，保存不会被拒。
+  expect(validMusicPreferences(p,catalog)).toBe(true)
+ })
+ it('用户清空自由要求后，Agent 的补充描述不会自己回来',()=>{
+  const work={style:'温暖民谣 | 90 BPM, piano',vocalGender:'AUTO'} as Parameters<typeof legacyPreferences>[0]
+  const p=legacyPreferences(work);const cleared={...p,freeText:''}
+  expect(cleared.freeText).toBe('')
+  expect(validMusicPreferences(cleared,catalog)).toBe(true)
+ })
 })

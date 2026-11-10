@@ -1614,4 +1614,10 @@ export const english: Record<string, string> = {
   '听感偏亮': 'Bright tone',
   '已加入参考音乐，正在本机分析。': 'Reference track added — analysing on this device.',
   '已加入参考音乐，但没读到时长。': 'Reference track added, but its length could not be read.',
+  '已识别参数': 'Recognized parameters',
+  '已省略': 'Omitted',
+  '作品描述最多 80 字，放不下的参数没有提交。': 'The description holds at most 80 characters; anything that did not fit was not submitted.',
+  '中文演唱': 'Sung in Chinese',
+  '英文演唱': 'Sung in English',
+  '粤语演唱': 'Sung in Cantonese',
 }
