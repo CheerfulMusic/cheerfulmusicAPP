@@ -11,6 +11,7 @@ import LanguageSwitcher from '../../shared/i18n/LanguageSwitcher.vue'
 import UserAccountMenu from '../../shared/ui/UserAccountMenu.vue'
 import { accountState, ensureAccountState, refreshAccountState } from '../../shared/identity/account-state'
 import { logtoState, refreshLogtoState } from '../../shared/identity/logto-state'
+import { creditBalance, refreshCreditBalance } from '../../shared/identity/credit-balance'
 import { showLoginDialog } from '../../shared/identity/login-dialog'
 
 const route = useRoute(), player = usePlayer()
@@ -20,6 +21,7 @@ const menuButton = ref<HTMLButtonElement>(), menu = ref<HTMLElement>()
 const isGift = computed(() => route.name === 'gift')
 const isHome = computed(() => route.name === 'home')
 const isAgent = computed(() => route.name === 'agent')
+const authenticated = computed(() => accountState.value.authenticated || logtoState.value.authenticated)
 const navigation = [
   { to: '/', label: '首页', icon: 'home', agent: false },
   { to: '/create', label: '开始创作', icon: 'home', agent: false },
@@ -45,7 +47,15 @@ watch(menuOpen, async value => {
 })
 watch(() => route.fullPath, () => { menuOpen.value = false })
 watch(() => !!player.current, value => document.body.classList.toggle('has-preview', value), { immediate: true })
-function refreshAccount() { if (isGift.value) return; void refreshAccountState().catch(() => undefined); void refreshLogtoState().catch(() => undefined) }
+// 登录态一变化就重读余额；初始 immediate 只清空，等身份读取完成后再发请求。
+watch(authenticated, value => { void refreshCreditBalance(value) }, { immediate: true })
+function refreshAccount() {
+  if (isGift.value) return
+  void Promise.all([
+    refreshAccountState().catch(() => undefined),
+    refreshLogtoState().catch(() => undefined),
+  ]).then(() => refreshCreditBalance(authenticated.value))
+}
 function visibleAccount() { if (document.visibilityState === 'visible') refreshAccount() }
 onMounted(() => {
   screen.addEventListener('change', resize); document.addEventListener('keydown', onKey)
@@ -81,6 +91,10 @@ onBeforeUnmount(() => {
           <RouterLink v-if="!isGift" class="consumer-my-music" :class="{'is-active':route.path.startsWith('/works')}" to="/works"><NavIcon name="music"/><span>{{ t('我的音乐') }}</span></RouterLink>
           <RouterLink v-if="!isGift" class="consumer-recharge" to="/recharge">{{ locale === 'en' ? 'Credits' : '充值' }}</RouterLink>
           <UserAccountMenu v-if="!isGift" :navigation-open="menuOpen" @opened="menuOpen=false" />
+          <RouterLink v-if="!isGift && creditBalance !== null" class="consumer-credits" to="/recharge" :aria-label="`${t('可用积分')} ${creditBalance}`">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 14.2 8.8 20 11l-5.8 2.2L12 19l-2.2-5.8L4 11l5.8-2.2L12 3Z"/></svg>
+            <strong>{{ creditBalance }}</strong><span>{{ t('积分') }}</span>
+          </RouterLink>
           <button v-if="!isGift" ref="menuButton" class="mobile-menu-toggle" :aria-expanded="menuOpen" aria-controls="consumer-navigation" :aria-label="menuOpen?t('关闭导航'):t('打开导航')" @click="menuOpen=!menuOpen"><NavIcon name="menu"/></button>
         </div>
       </div>
@@ -91,6 +105,7 @@ onBeforeUnmount(() => {
         <div class="consumer-menu-heading"><strong>{{ t('想从哪里开始？') }}</strong><button class="consumer-menu-close" :aria-label="t('关闭导航')" @click="closeMenu"><NavIcon name="close"/></button></div>
         <nav :aria-label="t('手机导航')"><RouterLink v-for="item in navigation" :key="item.to" :to="item.to" :class="{'is-active':isActive(item.to), 'agent-menu-link':item.agent}"><NavIcon :name="item.icon"/>{{ t(item.label) }}<span v-if="item.agent" class="agent-nav-new">New</span></RouterLink><RouterLink to="/works"><NavIcon name="music"/>{{ t('我的音乐') }}</RouterLink><RouterLink v-if="accountState.authenticated || logtoState.authenticated" to="/account" :class="{'is-active':route.name==='identity'}"><NavIcon name="account"/>{{ t('账号与登录') }}</RouterLink><button v-else type="button" class="mobile-login-link" @click="menuOpen=false; showLoginDialog()"><NavIcon name="account"/>{{ t('登录/注册') }}</button></nav>
         <RouterLink class="consumer-menu-create" to="/create">{{ t('为重要的人，制作一首歌') }} <NavIcon name="arrow"/></RouterLink>
+        <p v-if="creditBalance !== null" class="consumer-menu-credits">{{ t('可用积分') }}：{{ creditBalance }}</p>
         <RouterLink class="consumer-recovery-link" to="/recharge">{{ locale === 'en' ? 'Recharge credits' : '充值创作积分' }}</RouterLink>
         <RouterLink class="consumer-recovery-link" to="/account">{{ t('找回之前的音乐') }}</RouterLink>
       </section>
@@ -105,6 +120,11 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .consumer-recharge { color:#ee5741; font-size:13px; font-weight:700; text-decoration:none; white-space:nowrap; }
+.consumer-credits { display:inline-flex; align-items:center; gap:5px; padding:5px 11px; border:1px solid #f4d9cd; border-radius:18px; background:#fff7f3; color:#c0472c; font-size:12px; font-weight:600; text-decoration:none; white-space:nowrap; }
+.consumer-credits svg { width:13px; height:13px; fill:currentColor; }
+.consumer-credits strong { font-size:13px; font-variant-numeric:tabular-nums; }
+.consumer-credits:hover { background:#ffede4; border-color:#f3ad92; }
+.consumer-menu-credits { margin:14px 0 0; text-align:center; font-size:13px; font-weight:700; color:#c0472c; }
 .consumer-login { border:0; cursor:pointer; font-family:inherit; }
 .mobile-login-link { display:flex; align-items:center; gap:12px; width:100%; padding:13px 14px; border-radius:10px; color:#665259; font-size:14px; text-align:left; }
 .mobile-login-link:hover { background:var(--accent-soft); color:var(--accent-text); }
@@ -113,6 +133,8 @@ onBeforeUnmount(() => {
   .consumer-header-actions { gap:8px; }
   /* The recharge entry remains available in the mobile menu. */
   .consumer-recharge { display:none; }
+  /* 窄屏顶栏空间有限，余额在展开的移动菜单里显示。 */
+  .consumer-credits { display:none; }
 }
 @media(max-width:380px) {
   .consumer-shell .consumer-header-actions { gap:4px; }

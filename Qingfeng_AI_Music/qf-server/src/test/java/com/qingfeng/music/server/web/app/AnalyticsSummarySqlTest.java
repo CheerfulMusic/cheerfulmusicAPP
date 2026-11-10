@@ -118,4 +118,39 @@ class AnalyticsSummarySqlTest {
         assertEquals(10000L, row.get("avgDurationMs"), "负时长不能拉低页面均值");
         assertEquals(1L, row.get("samples"), "负时长不能计入有效样本");
     }
+
+    /** 空字符串 creator_id 是埋点未解析出归属的脏行，不能出现在用户列表里拖垮前端响应契约。 */
+    @Test @SuppressWarnings("unchecked")
+    void emptyCreatorIdIsExcludedFromUsers() throws Exception {
+        var dataSource = new JdbcDataSource();
+        dataSource.setURL("jdbc:h2:mem:analytics_empty_creator;MODE=MySQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1");
+        try (Connection connection = dataSource.getConnection(); Statement statement = connection.createStatement()) {
+            statement.execute("CREATE TABLE site_event (id VARCHAR(36) PRIMARY KEY, visitor_id VARCHAR(64), session_id VARCHAR(64), "
+                    + "event VARCHAR(50), page_path VARCHAR(512), referrer VARCHAR(512), payload TEXT, "
+                    + "created_at TIMESTAMP(6), creator_id VARCHAR(36), duration_ms BIGINT)");
+            statement.execute("CREATE TABLE creator_google_identity (creator_id VARCHAR(36), email VARCHAR(320), display_name VARCHAR(200))");
+            statement.execute("CREATE TABLE creator_oidc_identity (creator_id VARCHAR(36), email VARCHAR(320), phone_masked VARCHAR(40), display_name VARCHAR(200))");
+            statement.execute("CREATE TABLE creator_authing_identity (creator_id VARCHAR(36), email VARCHAR(320), display_name VARCHAR(200))");
+            statement.execute("INSERT INTO site_event VALUES ('1','v1','s1','pageview','/','',NULL,CURRENT_TIMESTAMP,'creator-1',5000)");
+            statement.execute("INSERT INTO site_event VALUES ('2','v2','s2','pageview','/','',NULL,CURRENT_TIMESTAMP,'',5000)");
+            statement.execute("INSERT INTO creator_google_identity VALUES ('creator-1','jiang@example.com','Jiang')");
+        }
+        var identity = mock(IdentityApi.class);
+        when(identity.googleIdentity(anyString())).thenReturn(Optional.of(
+                new IdentityApi.GoogleIdentity("hash", "jiang@example.com", "Jiang")));
+        var environment = mock(Environment.class);
+        when(environment.getProperty(eq("qingfeng.analytics.viewer-emails"), eq(""))).thenReturn("jiang@example.com");
+        var jdbcProvider = (ObjectProvider<JdbcTemplate>) mock(ObjectProvider.class);
+        when(jdbcProvider.getIfAvailable()).thenReturn(new JdbcTemplate(dataSource));
+        SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
+                new CreatorPrincipal("creator-1"), null, List.of(new SimpleGrantedAuthority("ROLE_CREATOR"))));
+
+        var body = new AnalyticsViewController(identity, jdbcProvider, environment,
+                new AnalyticsDetailService(new JdbcTemplate(dataSource))).summary(30).getBody();
+        assertNotNull(body);
+        assertFalse(body.containsKey("error"));
+        var users = (List<?>) body.get("users");
+        assertEquals(1, users.size(), "空 creator_id 不能被聚合成一个用户");
+        assertEquals("creator-1", ((Map<String, Object>) users.get(0)).get("creatorId"));
+    }
 }

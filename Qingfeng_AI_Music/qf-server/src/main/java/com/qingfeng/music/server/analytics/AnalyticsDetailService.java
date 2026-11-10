@@ -54,7 +54,7 @@ public class AnalyticsDetailService {
                         + "LEFT JOIN creator_oidc_identity o ON o.creator_id=s.creator_id "
                         + "LEFT JOIN creator_authing_identity a ON a.creator_id=s.creator_id "
                         + "WHERE s.event='page_leave' AND s.page_path=? AND s.created_at>=? "
-                        + "AND s.creator_id IS NOT NULL AND s.duration_ms IS NOT NULL AND s.duration_ms>=0"
+                        + "AND s.creator_id IS NOT NULL AND s.creator_id<>'' AND s.duration_ms IS NOT NULL AND s.duration_ms>=0"
                         + ") t GROUP BY t.creator_id, t.account_type, t.name, t.email, t.phone_masked "
                         + "ORDER BY samples DESC, avg_ms DESC LIMIT " + LIMIT,
                 pagePath, Timestamp.from(since));

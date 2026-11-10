@@ -86,7 +86,8 @@ watch(days, () => {
 
 const totals = computed(() => summary.value?.totals)
 const pages = computed(() => summary.value?.pages ?? [])
-const users = computed(() => summary.value?.users ?? [])
+/** 空 creator_id 是埋点未解析出归属的脏行，不作为可下钻用户展示。 */
+const users = computed(() => (summary.value?.users ?? []).filter(row => !!row.creatorId?.trim()))
 const trend = computed(() => buildTrend(summary.value?.daily ?? [], days.value))
 const totalSamples = computed(() => pages.value.reduce((sum, row) => sum + (row.samples || 0), 0))
 const refreshLabel = computed(() => (updatedAt.value ? `更新于 ${timeOnly(updatedAt.value)}` : '尚未更新'))

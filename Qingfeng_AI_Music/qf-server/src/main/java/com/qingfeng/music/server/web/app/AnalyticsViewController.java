@@ -183,7 +183,7 @@ public class AnalyticsViewController {
                             + "FROM site_event s LEFT JOIN creator_google_identity g ON g.creator_id=s.creator_id "
                             + "LEFT JOIN creator_oidc_identity o ON o.creator_id=s.creator_id "
                             + "LEFT JOIN creator_authing_identity a ON a.creator_id=s.creator_id "
-                            + "WHERE s.creator_id IS NOT NULL AND s.created_at >= ?"
+                            + "WHERE s.creator_id IS NOT NULL AND s.creator_id <> '' AND s.created_at >= ?"
                             + ") t GROUP BY t.creator_id, t.account_type, t.name, t.email, t.phone_masked "
                             + "ORDER BY pv DESC LIMIT 50",
                     (rs, n) -> {
@@ -202,6 +202,8 @@ public class AnalyticsViewController {
                         return row;
                     }, since));
         } catch (RuntimeException e) {
+            // 查询异常时清掉已写入的半份指标：error 与数据互斥，前端才能正确显示「数据不可用」。
+            body.keySet().removeIf(key -> !Set.of("allowed", "days").contains(key));
             body.put("error", "QUERY_FAILED");
         }
         return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(body);
