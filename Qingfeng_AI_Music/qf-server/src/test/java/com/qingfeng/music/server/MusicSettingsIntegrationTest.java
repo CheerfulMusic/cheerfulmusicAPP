@@ -28,6 +28,20 @@ class MusicSettingsIntegrationTest {
  MusicSettings.Preferences recipe(){var r=settings.catalog().recipes().get(0);return new MusicSettings.Preferences(1,r.id(),r.choices(),"FEMALE","人声突出，不要太悲伤","刺耳的高音");}
  record Fixture(String owner,WorkApi.Work work){}
  Fixture fixture(){String owner=identities.create().creatorId();return new Fixture(owner,works.create(owner,new WorkApi.Draft("妈妈","生日","一盏灯","谢谢你","温暖民谣","回家的灯")));}
+ @Test void switchingToAiRecommendedStyleKeepsTheStoryAndCanPrepareMusic(){
+  var f=fixture();
+  var selected=settings.save(f.owner(),f.work().id(),0,new MusicSettings.Preferences(1,null,Map.of("genre",List.of("rock")),"MALE","",""));
+  var saved=settings.save(f.owner(),f.work().id(),selected.work().version(),new MusicSettings.Preferences(1,null,Map.of("genre",List.of()),"MALE","",""));
+  assertEquals("自动推荐",saved.work().style());
+  assertEquals(f.work().story(),saved.work().story());
+  var direction=settings.get(f.owner(),f.work().id()).direction();
+  assertTrue(direction.preferences().choices().get("genre").isEmpty());
+  assertTrue(direction.style().contains("Choose a coherent music style from the story"));
+  assertTrue(direction.style().contains("male lead vocals"));
+  var revision=lyrics.save(f.owner(),f.work().id(),saved.work().version(),"回家的灯","[Verse]\n你在门口留着灯");
+  lyrics.confirm(f.owner(),f.work().id(),revision.id());
+  assertEquals(revision.id(),generation.preflight(f.owner(),f.work().id(),revision.id()).revisionId());
+ }
  @Test void preflightAndSubmissionCompileTheReportedCaseWithoutChargingForPreview(){
   String owner=identities.create().creatorId();var work=works.create(owner,new WorkApi.Draft("","","海风与故乡","","中国风","海风","MALE"));
   var revision=lyrics.save(owner,work.id(),0,"海风","[Verse]\n海风吹过故乡");lyrics.confirm(owner,work.id(),revision.id());
