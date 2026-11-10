@@ -16,6 +16,43 @@ export interface ReferenceInsight {
   source: 'AI' | 'RULE'
 }
 
+/** 结构化创作参数：只记录用户明确说过的内容，用于创作页可编辑的音乐设置。 */
+export interface AgentParams {
+  /** 0 表示用户没提速度，不要猜。 */
+  bpm: number
+  vocal: 'AUTO' | 'MALE' | 'FEMALE'
+  instruments: string[]
+  language: '' | 'zh' | 'en' | 'yue'
+  structure: string
+}
+
+export const ALLOWED_INSTRUMENTS = ['钢琴', '吉他', '弦乐', '小提琴', '大提琴', '贝斯', '鼓', '打击乐', '合成器', '电子音色', '古筝', '二胡', '琵琶', '长笛', '萨克斯', '手风琴', '口琴']
+const STRUCTURES = ['前奏', '主歌', '副歌', '桥段', '间奏', '尾奏']
+
+/** 从自然语言里抽取可校验的参数；抽不到就留空，绝不替用户编造。 */
+export function extractParams(text: string): AgentParams {
+  const source = text.trim()
+  const bpmMatch = source.match(/(\d{2,3})\s*(?:bpm|BPM|拍)/) || source.match(/每分钟\s*(\d{2,3})\s*拍/)
+  const bpm = bpmMatch ? Number(bpmMatch[1]) : 0
+  const vocal: AgentParams['vocal'] = /女声|女歌手|女主唱|女音/.test(source) ? 'FEMALE'
+    : /男声|男歌手|男主唱|男音/.test(source) ? 'MALE' : 'AUTO'
+  const language: AgentParams['language'] = /粤语|广东话/.test(source) ? 'yue'
+    : /英文|英语|english/i.test(source) ? 'en'
+    : /中文|普通话|国语/.test(source) ? 'zh' : ''
+  return {
+    bpm: Number.isFinite(bpm) && bpm >= 40 && bpm <= 220 ? bpm : 0,
+    vocal,
+    instruments: ALLOWED_INSTRUMENTS.filter(name => source.includes(name)).slice(0, 5),
+    language,
+    structure: STRUCTURES.filter(name => source.includes(name)).join('-'),
+  }
+}
+
+/** 参数是否为空；为空时创作页保持原有默认值。 */
+export function hasParams(params: AgentParams | undefined): boolean {
+  return !!params && (params.bpm > 0 || params.vocal !== 'AUTO' || params.instruments.length > 0 || !!params.language || !!params.structure)
+}
+
 /** 本机选择的参考音乐；只把可读的音乐信息写进创作描述，音频文件本身不上传。 */
 export interface AgentReference {
   name: string
@@ -35,6 +72,8 @@ export interface AgentBrief {
   mood: string
   tags: string[]
   reference?: AgentReference
+  /** 用户明确提出的结构化参数（人声、速度、乐器、语言、段落）。 */
+  params?: AgentParams
 }
 
 export interface AgentReply {
@@ -166,6 +205,6 @@ export function analyzeRequest(input: string, mode: AgentMode = 'write', interes
     style,
     mood: theme.mood,
     suggestions,
-    brief: withReference({ story, style, mood: theme.mood, tags: [...interests] }, reference),
+    brief: withReference({ story, style, mood: theme.mood, tags: [...interests], params: extractParams(clean) }, reference),
   }
 }

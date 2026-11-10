@@ -136,6 +136,8 @@ nav.consumer-navigation a.agent-nav-link > svg { width: 17px; height: 17px; flex
 .agent-brief-head svg { width: 14px; height: 14px; fill: currentColor; }
 .agent-brief-story { margin: 8px 0; font-size: 12px !important; line-height: 1.8 !important; color: #6b554d !important; }
 .agent-brief-meta { display: flex; flex-wrap: wrap; gap: 12px; margin: 0; font-size: 11px; color: #a0877d; }
+.agent-brief-params { display: flex; flex-wrap: wrap; gap: 5px; margin: 8px 0 0; }
+.agent-brief-params span { padding: 2px 7px; border-radius: 9px; background: #fff1e8; color: #b7462d; font-size: 10px; }
 .agent-brief-suggestions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
 .agent-brief-suggestions button { padding: 4px 10px; border: 1px solid #f1c8b4; border-radius: 14px; background: #fff; color: #b7462d; font-size: 11px; }
 .agent-brief-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }

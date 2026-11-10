@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { analyzeRequest, inspirationBoards, modeOptions, quickPrompts, withReference } from '../src/modules/agent/model/assistant'
-import { clearAgentBrief, readAgentBrief, writeAgentBrief } from '../src/modules/agent/model/brief'
+import { analyzeRequest, extractParams, inspirationBoards, modeOptions, quickPrompts, withReference } from '../src/modules/agent/model/assistant'
+import { clearAgentBrief, readAgentBrief, shouldApplyAgentBrief, writeAgentBrief } from '../src/modules/agent/model/brief'
 
 afterEach(() => { vi.unstubAllGlobals() })
 
@@ -84,6 +84,55 @@ describe('Agent creation assistant', () => {
     expect(readAgentBrief()?.reference).toBeUndefined()
     storage.set('qingfeng.agent.brief', JSON.stringify({ story: '一段描述', style: '温暖民谣', mood: '', tags: [], reference: { name: 'ok.mp3', duration: -1, size: 0, type: 42 } }))
     expect(readAgentBrief()?.reference).toEqual({ name: 'ok.mp3', duration: 0, size: 0, type: '' })
+  })
+  it('extracts structured parameters only when the user actually said them', () => {
+    expect(extractParams('写一首 90 BPM 的慢歌，温柔女声，钢琴和弦乐，粤语演唱，主歌副歌')).toEqual({
+      bpm: 90, vocal: 'FEMALE', instruments: ['钢琴', '弦乐'], language: 'yue', structure: '主歌-副歌',
+    })
+    expect(extractParams('随便写点什么')).toEqual({ bpm: 0, vocal: 'AUTO', instruments: [], language: '', structure: '' })
+    // 越界的 BPM 与未知语言一律不采信。
+    expect(extractParams('500 bpm 英文演唱').bpm).toBe(0)
+    expect(extractParams('500 bpm 英文演唱').language).toBe('en')
+    expect(analyzeRequest('想要一首男声摇滚').brief.params?.vocal).toBe('MALE')
+  })
+  it('re-reads the same brief after a refresh so structured parameters survive', () => {
+    const storage = new Map<string, string>()
+    vi.stubGlobal('sessionStorage', {
+      getItem: (key: string) => storage.get(key) ?? null,
+      setItem: (key: string, value: string) => storage.set(key, value),
+      removeItem: (key: string) => storage.delete(key),
+    })
+    writeAgentBrief({
+      story: '写给妈妈的歌', style: '抒情流行', mood: '温暖怀念', tags: [],
+      params: { bpm: 88, vocal: 'FEMALE', instruments: ['钢琴'], language: 'zh', structure: '主歌-副歌' },
+    })
+    expect(readAgentBrief()?.params).toMatchObject({ bpm: 88, vocal: 'FEMALE', instruments: ['钢琴'], language: 'zh' })
+    // 刷新＝再读一次：brief 不再是一次性消费，参数也不会丢。
+    expect(readAgentBrief()?.params).toMatchObject({ bpm: 88, vocal: 'FEMALE' })
+  })
+  it('applies the agent brief only to a new draft from the agent page', () => {
+    expect(shouldApplyAgentBrief({ from: 'agent' })).toBe(true)
+    expect(shouldApplyAgentBrief({ from: 'agent', occasion: '生日' })).toBe(true)
+    // 打开已有作品时绝不能覆盖用户已保存的内容。
+    expect(shouldApplyAgentBrief({ from: 'agent', work: 'w1' })).toBe(false)
+    expect(shouldApplyAgentBrief({ work: 'w1' })).toBe(false)
+    expect(shouldApplyAgentBrief({})).toBe(false)
+    expect(shouldApplyAgentBrief({ from: 'home' })).toBe(false)
+  })
+  it('drops illegal structured parameters coming from session storage', () => {
+    const storage = new Map<string, string>()
+    vi.stubGlobal('sessionStorage', {
+      getItem: (key: string) => storage.get(key) ?? null,
+      setItem: (key: string, value: string) => storage.set(key, value),
+      removeItem: (key: string) => storage.delete(key),
+    })
+    storage.set('qingfeng.agent.brief', JSON.stringify({ story: '一段描述', style: '温暖民谣', mood: '', tags: [],
+      params: { bpm: 999, vocal: 'ROBOT', instruments: ['钢琴', '', 3], language: 'fr', structure: 5 } }))
+    // 只保留合法乐器，其余非法字段全部丢弃。
+    expect(readAgentBrief()?.params).toEqual({ bpm: 0, vocal: 'AUTO', instruments: ['钢琴'], language: '', structure: '' })
+    storage.set('qingfeng.agent.brief', JSON.stringify({ story: '一段描述', style: '温暖民谣', mood: '', tags: [],
+      params: { bpm: 88, vocal: 'FEMALE', instruments: ['钢琴'], language: 'zh', structure: '' } }))
+    expect(readAgentBrief()?.params).toEqual({ bpm: 88, vocal: 'FEMALE', instruments: ['钢琴'], language: 'zh', structure: '' })
   })
   it('never stores a story longer than the studio textarea allows', () => {
     const storage = new Map<string, string>()

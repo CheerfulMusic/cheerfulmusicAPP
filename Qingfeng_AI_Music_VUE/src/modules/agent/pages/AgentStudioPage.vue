@@ -9,7 +9,7 @@ import { rewriteInspiration } from '../../studio/api/works'
 import { writeAgentBrief } from '../model/brief'
 import { AudioAnalysisError, analyzeAudioFile, cancelAnalysis, forgetAnalysis } from '../model/audio-analysis'
 import { requestReferenceAnalysis } from '../api/reference'
-import { analyzeRequest, bandWord, inspirationBoards, interestTags, modeOptions, quickPrompts, toneWord, withReference, type AgentBrief, type AgentMode, type AgentReference, type ReferenceInsight } from '../model/assistant'
+import { analyzeRequest, bandWord, hasParams, inspirationBoards, interestTags, modeOptions, quickPrompts, toneWord, withReference, type AgentBrief, type AgentMode, type AgentParams, type AgentReference, type ReferenceInsight } from '../model/assistant'
 
 interface Message { id: number; role: 'assistant' | 'user'; text: string; greeting?: boolean; brief?: AgentBrief; suggestions?: string[]; polishing?: boolean; polishError?: string }
 interface VoiceResult { results: ArrayLike<ArrayLike<{ transcript: string }>> }
@@ -180,6 +180,12 @@ function reference(): AgentReference | undefined {
     ...(state.features ? { features: state.features } : {}),
     ...(state.insight ? { insight: state.insight } : {}),
   }
+}
+
+function languageLabel(language: AgentParams['language']): string {
+  if (language === 'en') return t('英文演唱')
+  if (language === 'yue') return t('粤语演唱')
+  return t('中文演唱')
 }
 
 function failureText(error: unknown): string {
@@ -377,6 +383,13 @@ onBeforeUnmount(() => {
               <strong class="agent-brief-head"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 2 1.8 5.2L19 9l-5.2 1.8L12 16l-1.8-5.2L5 9l5.2-1.8L12 2Z"/></svg>{{ t('已整理好创作灵感') }}</strong>
               <p class="agent-brief-story">{{ message.brief.story }}</p>
               <p class="agent-brief-meta"><span>{{ t('风格：') }}{{ message.brief.style }}</span><span>{{ t('情绪：') }}{{ message.brief.mood }}</span></p>
+              <p v-if="hasParams(message.brief.params)" class="agent-brief-params">
+                <span v-if="message.brief.params!.bpm">{{ message.brief.params!.bpm }} BPM</span>
+                <span v-if="message.brief.params!.vocal !== 'AUTO'">{{ message.brief.params!.vocal === 'FEMALE' ? t('女声') : t('男声') }}</span>
+                <span v-for="name in message.brief.params!.instruments" :key="name">{{ name }}</span>
+                <span v-if="message.brief.params!.language">{{ languageLabel(message.brief.params!.language) }}</span>
+                <span v-if="message.brief.params!.structure">{{ message.brief.params!.structure }}</span>
+              </p>
               <div v-if="message.suggestions?.length" class="agent-brief-suggestions"><button v-for="style in message.suggestions" :key="style" type="button" :disabled="busy" @click="send(`我想要一首${style}风格的歌`)">{{ style }}</button></div>
               <div class="agent-brief-actions"><button type="button" :disabled="message.polishing" @click="polish(message)">{{ message.polishing ? t('AI 整理中…') : t('AI 润色描述') }}</button><button type="button" class="primary" @click="beginCreation(message.brief)">{{ t('用它开始创作') }} →</button></div>
               <p v-if="message.polishError" class="agent-brief-error" role="status">{{ message.polishError }}</p>

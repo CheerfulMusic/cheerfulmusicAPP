@@ -82,7 +82,7 @@ async function drop(wrapper: VueWrapper, file: File | Record<string, unknown>) {
 
 function storedBrief() {
   const raw = sessionStorage.getItem('qingfeng.agent.brief')
-  return raw ? JSON.parse(raw) as { story: string; style: string; reference?: Record<string, unknown> } : undefined
+  return raw ? JSON.parse(raw) as { story: string; style: string; reference?: Record<string, unknown>; params?: Record<string, unknown> } : undefined
 }
 
 beforeAll(() => {
@@ -222,6 +222,22 @@ describe('Agent 创作页交互回归', () => {
     await wrapper.find('.agent-start-button').trigger('click')
     await flush()
     expect(storedBrief()?.story).toContain('约 120 BPM')
+  })
+
+  it('识别出的结构化参数会展示并交给创作页', async () => {
+    const { wrapper } = await mountPage()
+    await wrapper.find('.agent-composer-box input').setValue('写一首 90 BPM 的慢歌，温柔女声，钢琴和弦乐，粤语演唱')
+    await wrapper.find('form.agent-composer-box').trigger('submit')
+    await wait(480)
+    await flush()
+    const chips = wrapper.find('.agent-brief-params').text()
+    expect(chips).toContain('90 BPM')
+    expect(chips).toContain('女声')
+    expect(chips).toContain('钢琴')
+    expect(chips).toContain('粤语演唱')
+    await wrapper.find('.agent-start-button').trigger('click')
+    await flush()
+    expect(storedBrief()?.params).toMatchObject({ bpm: 90, vocal: 'FEMALE', language: 'yue' })
   })
 
   it('分析失败时给出提示但仍可创作', async () => {
