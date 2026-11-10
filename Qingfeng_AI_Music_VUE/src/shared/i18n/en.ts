@@ -1,5 +1,9 @@
 /** Chinese source copy is the stable message key; business option values stay unchanged. */
 export const english: Record<string, string> = {
+  '音频暂时无法读取，你的作品仍然保留。': 'Audio could not be loaded. Your work is still saved.',
+  '重新读取歌曲': 'Reload song',
+  '创作记录暂时无法读取，已有歌曲仍可试听。': 'Creation history is temporarily unavailable. You can still listen to saved songs.',
+  '部分歌曲信息暂时无法读取，已有歌曲仍可试听。': 'Some song details are temporarily unavailable. You can still listen to saved songs.',
   '这首歌的原音乐设置记录不完整 请通过自定义创作重新选择':'The original music settings are incomplete. Choose your settings in custom creation.',
   '歌曲对应的原始任务暂时无法读取 请刷新后重试':'The original creation record is unavailable. Refresh and try again.',
   '作品已不在当前列表中 已刷新作品列表':'This work is no longer in your current list. The list has been refreshed.',
