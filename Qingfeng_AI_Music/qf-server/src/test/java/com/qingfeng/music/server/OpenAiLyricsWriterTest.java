@@ -118,11 +118,16 @@ class OpenAiLyricsWriterTest {
         }
     }
 
-    @ParameterizedTest @ValueSource(ints = {400, 401, 403, 404, 429, 500, 503})
+    @ParameterizedTest @ValueSource(ints = {400, 401, 403, 404, 408, 429, 500, 503})
     void providerErrorsAreSafeAndNeverRetried(int status) throws Exception {
         try (var fixture = new Fixture(status, "private-provider-detail offline-key")) {
             var error = assertThrows(DomainException.class, () -> fixture.writer().write(WORK, "en"));
-            assertEquals("LYRICS_PROVIDER_UNAVAILABLE", error.code());
+            String expected = switch (status) {
+                case 401, 403, 404, 429 -> "LYRICS_PROVIDER_REJECTED";
+                case 408, 500, 503 -> "LYRICS_PROVIDER_NETWORK_ERROR";
+                default -> "LYRICS_PROVIDER_UNAVAILABLE";
+            };
+            assertEquals(expected, error.code());
             assertFalse(error.getMessage().contains("private"));assertFalse(error.getMessage().contains("offline-key"));
             assertEquals(1, fixture.calls.get());
         }

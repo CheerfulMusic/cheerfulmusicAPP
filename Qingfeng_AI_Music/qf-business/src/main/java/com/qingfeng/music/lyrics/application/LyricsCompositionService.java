@@ -53,7 +53,7 @@ public final class LyricsCompositionService {
             if(draft.title()==null||draft.title().isBlank()||draft.title().length()>80||draft.lyrics()==null||draft.lyrics().isBlank()||draft.lyrics().length()>5000)throw new DomainException("LYRICS_RESPONSE_INVALID","歌词生成结果不完整，请稍后重新发起");
             structure.validate(draft.lyrics());
             var revision=new LyricsApi.Revision(UUID.randomUUID().toString(),work,expectedVersion,draft.title().trim(),draft.lyrics(),
-                writer.source(),false,Instant.now(),language,structure.templateId(),structure.chorusFirst());
+                draft.source()==null?writer.source():draft.source(),false,Instant.now(),language,structure.templateId(),structure.chorusFirst());
             requests.completeWithRevision(work,key,revision.id(),()->{
                 revisions.insert(revision);
                 if(plans!=null&&draft.plan()!=null)plans.save(work,revision.id(),com.qingfeng.music.settings.CreativePlan.sourceHash(snapshot),draft.plan());

@@ -5,6 +5,8 @@ import com.qingfeng.music.lyrics.application.LyricsWriter;
 import com.qingfeng.music.settings.CreativePlan;
 import com.qingfeng.music.work.api.WorkApi;
 import java.io.IOException;
+import java.net.InetSocketAddress;
+import java.net.ProxySelector;
 import java.net.URI;
 import java.net.http.*;
 import java.time.Duration;
@@ -22,8 +24,36 @@ public final class OpenAiLyricsWriter implements LyricsWriter {
     private final ObjectMapper json = new ObjectMapper();
 
     public OpenAiLyricsWriter(String key, String model) {
-        this(key, model, URI.create("https://api.openai.com/v1/responses"), HttpClient.newBuilder()
-            .connectTimeout(Duration.ofSeconds(10)).followRedirects(HttpClient.Redirect.NEVER).build());
+        this(key, model, "");
+    }
+
+    public OpenAiLyricsWriter(String key, String model, String proxyUrl) {
+        this(key, model, URI.create("https://api.openai.com/v1/responses"), newClient(proxyUrl));
+    }
+
+    private static HttpClient newClient(String proxyUrl) {
+        var builder = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10))
+            .followRedirects(HttpClient.Redirect.NEVER);
+        if (!proxyUrl.isBlank()) {
+            var proxy = parseProxy(proxyUrl);
+            builder.proxy(ProxySelector.of(new InetSocketAddress(proxy.getHost(), proxy.getPort())));
+        }
+        return builder.build();
+    }
+
+    private static URI parseProxy(String proxyUrl) {
+        final URI proxy;
+        try { proxy = URI.create(proxyUrl.trim()); }
+        catch (IllegalArgumentException invalid) { throw invalidProxy(); }
+        if (!"http".equalsIgnoreCase(proxy.getScheme()) || proxy.getHost() == null ||
+            proxy.getPort() < 1 || proxy.getPort() > 65535 || proxy.getUserInfo() != null ||
+            !proxy.getPath().isEmpty() || proxy.getQuery() != null || proxy.getFragment() != null)
+            throw invalidProxy();
+        return proxy;
+    }
+
+    private static IllegalArgumentException invalidProxy() {
+        return new IllegalArgumentException("OpenAI lyrics proxy must be http://host:port");
     }
 
     // 可注入传输用于离线协议验证，应用配置不接受任意第三方端点。
@@ -62,13 +92,14 @@ public final class OpenAiLyricsWriter implements LyricsWriter {
             "reasoning", Map.of("effort", "low"), "max_output_tokens", 6000, "store", false, "stream", false));
         try {
             var response = LyricsHttpTransport.post(client, endpoint, key, body);
-            if (response.statusCode() != 200) {
+            int status = response.statusCode();
+            if (status != 200) {
                 // 不记录响应正文、请求素材、认证头或传输异常，防止密钥和用户故事进入日志。
-                LOG.log(System.Logger.Level.WARNING, "GPT lyrics HTTP failure: work={0}, status={1}", work.id(), response.statusCode());
-                if (response.statusCode() == 401 || response.statusCode() == 403)
-                    throw unavailable("歌词服务暂不可用，请联系管理员检查 GPT 接口授权。");
-                if (response.statusCode() == 429)
-                    throw unavailable("歌词服务当前额度不足或请求较多，请稍后再试；已有内容仍会保留。");
+                LOG.log(System.Logger.Level.WARNING, "GPT lyrics HTTP failure: work={0}, status={1}", work.id(), status);
+                if (status == 401 || status == 403 || status == 404 || status == 429)
+                    throw new DomainException("LYRICS_PROVIDER_REJECTED", "歌词服务暂时无法接受请求，请稍后再试；已有内容仍会保留。");
+                if (status == 408 || status >= 500)
+                    throw new DomainException("LYRICS_PROVIDER_NETWORK_ERROR", "歌词服务未确认结果，请先查看原请求进度。");
                 throw unavailable("歌词生成服务暂时不可用，请稍后再试；已有内容仍会保留。");
             }
             return parse(response.body());

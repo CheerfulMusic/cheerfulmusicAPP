@@ -20,6 +20,7 @@ final class LyricsHttpTransport {
 
     static HttpResponse<String> post(HttpClient client, URI endpoint, String key, String json)
             throws IOException, InterruptedException {
+        long deadline = System.nanoTime() + Duration.ofSeconds(90).toNanos();
         for (int attempt = 0; ; attempt++) {
             var bodyStarted = new AtomicBoolean();
             var delegate = HttpRequest.BodyPublishers.ofString(json);
@@ -30,7 +31,8 @@ final class LyricsHttpTransport {
                     delegate.subscribe(subscriber);
                 }
             };
-            var request = HttpRequest.newBuilder(endpoint).timeout(Duration.ofSeconds(90))
+            var request = HttpRequest.newBuilder(endpoint)
+                .timeout(Duration.ofNanos(Math.max(1, deadline - System.nanoTime())))
                 .header("Authorization", "Bearer " + key).header("Content-Type", "application/json")
                 .POST(body).build();
             try {

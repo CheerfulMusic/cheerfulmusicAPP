@@ -8,7 +8,8 @@ public interface LyricsWriter {
     Draft write(WorkApi.Work work,String language);
     default Draft write(WorkApi.Work work,String language,String instructions,String previousLyrics){return write(work,language);}
     default Draft write(WorkApi.Work work,String language,String instructions,String previousLyrics,String musicDirection){return write(work,language,instructions,previousLyrics);}
-    record Draft(String title,String lyrics,com.qingfeng.music.settings.CreativePlan plan) {
+    record Draft(String title,String lyrics,com.qingfeng.music.settings.CreativePlan plan,String source) {
+        public Draft(String title,String lyrics,com.qingfeng.music.settings.CreativePlan plan){this(title,lyrics,plan,null);}
         public Draft(String title,String lyrics){this(title,lyrics,null);}
     }
 }
