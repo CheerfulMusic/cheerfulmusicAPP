@@ -3,7 +3,6 @@ spring:
     import:
       - classpath:usage-limits.properties
       - classpath:invite-gate.properties
-      - optional:file:/etc/qingfeng-music/invite-gate.properties
   application:
     name: qingfeng-music
   profiles:

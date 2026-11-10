@@ -1,0 +1,27 @@
+# INACTIVE TEMPLATE: do not copy/enable without user approval and all prerequisites.
+[Unit]
+Description=Cheerful Music next environment (approval required)
+After=network-online.target
+Wants=network-online.target
+ConditionPathExists=/etc/qingfeng-music-next/release-policy.json
+
+[Service]
+Type=simple
+User=qfmusic-next
+Group=qfmusic-next
+WorkingDirectory=/opt/qingfeng-music-next/current
+EnvironmentFile=/etc/qingfeng-music-next/runtime.env
+ExecStartPre=/usr/bin/python3 /opt/qingfeng-music-next/verify-release.py --release /opt/qingfeng-music-next/current --policy /etc/qingfeng-music-next/release-policy.json
+ExecStart=/usr/bin/java -Xms256m -Xmx768m -jar /opt/qingfeng-music-next/current/app.jar --spring.profiles.active=mysql --spring.config.location=classpath:/ --spring.config.additional-location=file:/etc/qingfeng-music-next/usage-limits.properties,file:/etc/qingfeng-music-next/invite-gate.properties,file:/etc/qingfeng-music-next/application.properties --spring.flyway.enabled=false --spring.sql.init.mode=never --qingfeng.generation.scheduler-enabled=false --qingfeng.cover.ai.scheduler-enabled=false --qingfeng.paypal.enabled=false --qingfeng.paypal.live-enabled=false --qingfeng.paypal.reconciliation.enabled=false
+Restart=on-failure
+RestartSec=10
+SuccessExitStatus=143
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/qingfeng-music-next
+
+[Install]
+WantedBy=multi-user.target

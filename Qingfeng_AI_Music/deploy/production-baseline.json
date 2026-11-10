@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "sourceCommit": "3d9ffac1d83f54f8768603fe78220e88d55624ed",
+  "jarSha256": "08cdee9fa2b63bed3535badf149b5c9f9c1755656d3c701297ab83fb14902bc9",
+  "evidence": "Historical user-approved audit baseline; not a current server probe",
+  "migrationProvenance": "UNKNOWN",
+  "unresolvedVersions": [
+    27,
+    28
+  ],
+  "productionReleaseAllowed": false
+}

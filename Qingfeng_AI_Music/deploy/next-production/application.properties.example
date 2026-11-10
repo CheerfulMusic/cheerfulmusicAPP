@@ -1,0 +1,34 @@
+# INACTIVE TEMPLATE. No resources, keys or production data are provisioned.
+# Explicitly supplied NEXT_* values only. No default to the current production database.
+server.address=127.0.0.1
+server.port=18080
+spring.datasource.url=${NEXT_DB_JDBC_URL}
+spring.datasource.username=${NEXT_DB_USERNAME}
+spring.datasource.password=${NEXT_DB_PASSWORD}
+spring.flyway.enabled=false
+spring.sql.init.mode=never
+qingfeng.generation.scheduler-enabled=false
+qingfeng.cover.ai.scheduler-enabled=false
+qingfeng.paypal.enabled=false
+qingfeng.paypal.live-enabled=false
+qingfeng.paypal.public-live-enabled=false
+qingfeng.paypal.reconciliation.enabled=false
+qingfeng.payments.enabled=false
+qingfeng.payment-demo.enabled=false
+qingfeng.auth.sms-bridge.enabled=false
+qingfeng.auth.google.enabled=false
+qingfeng.auth.logto.enabled=false
+# A new deployment must not silently store user works locally as a substitute for OSS.
+qingfeng.media.storage=oss
+qingfeng.oss.endpoint=${NEXT_OSS_ENDPOINT}
+qingfeng.oss.region=${NEXT_OSS_REGION}
+qingfeng.oss.bucket=${NEXT_OSS_BUCKET}
+qingfeng.oss.access-key-id=${NEXT_OSS_ACCESS_KEY_ID}
+qingfeng.oss.access-key-secret=${NEXT_OSS_ACCESS_KEY_SECRET}
+qingfeng.oss.prefix=${NEXT_OSS_AUDIO_PREFIX}
+qingfeng.oss.cover-prefix=${NEXT_OSS_COVER_PREFIX}
+qingfeng.media.directory=/var/lib/qingfeng-music-next/audio
+qingfeng.media.staging-directory=/var/lib/qingfeng-music-next/staging
+qingfeng.cover.directory=/var/lib/qingfeng-music-next/covers
+qingfeng.cdn.enabled=false
+# Enable only after private cold/hot origin, signed access and permission tests pass.

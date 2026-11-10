@@ -2,10 +2,23 @@
 """Fail closed before service start; policy is root-owned and outside releases."""
 import argparse
 import hashlib
+import importlib.util
 import json
 from pathlib import Path
 import re
 import zipfile
+
+
+
+def gate_module():
+    # Installed beside this guard on the new server, or loaded from this source tree.
+    path = Path(__file__).with_name("release_gate.py")
+    if not path.is_file():
+        path = Path(__file__).resolve().parents[2] / "scripts" / "release_gate.py"
+    spec = importlib.util.spec_from_file_location("release_gate", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def verify(release, policy):
@@ -23,9 +36,14 @@ def verify(release, policy):
     source = (release / 'source-commit.txt').read_text().strip()
     if source != approval['sourceCommit'] or not re.fullmatch('[0-9a-f]{40}', source):
         raise ValueError('Source manifest does not match approved artifact')
-    # Temporary approval for automatic rollback during this deployment only.
+    # Every entry point uses the same artifact contract; no legacy bypass.
+    gate = gate_module()
+    gate.verify_contract(jar, release / 'release-contract.json',
+                         approval.get('contractSha256', ''), source)
+    if not re.fullmatch('[0-9a-f]{64}', approval.get('schemaEvidenceSha256', '')):
+        raise ValueError('Schema compatibility evidence missing; refusing to start')
     if approval.get('legacyRollback'):
-        return digest
+        raise ValueError('Legacy rollback bypass disabled; approve a verified compatible contract')
     with zipfile.ZipFile(jar) as z:
         if z.read('BOOT-INF/classes/release-commit.txt').decode().strip() != source:
             raise ValueError('Embedded build source does not match release manifest')
