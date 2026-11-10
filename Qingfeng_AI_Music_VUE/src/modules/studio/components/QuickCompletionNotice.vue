@@ -22,7 +22,7 @@ async function refresh() {
   try {
     const result = task.flowId ? await getQuickCreation(task.workId, task.flowId) : await latestQuickCreation(task.workId)
     if (!active || currentCreatorId() !== task.owner || backgroundQuick.get(task.workId) !== task || !result) return
-    if (result.status === 'FAILED' || result.status === 'CANCELLED') backgroundQuick.delete(task.workId)
+    if (result.status === 'FAILED' || result.status === 'CANCELLED' || result.errorCode === 'LYRICS_SUBMISSION_UNKNOWN') backgroundQuick.delete(task.workId)
     else backgroundQuick.set(task.workId, { ...task, flowId: result.id, status: result.status })
   } catch { /* The original job can still be checked in My Music. */ }
   finally { polling = false }

@@ -60,6 +60,18 @@ it('shows a failure and explicit recovery choices instead of starting another pa
  expect(document.querySelector('a')?.getAttribute('href')).toContain('mode=custom')
  expect(mocks.retry).not.toHaveBeenCalled()
 })
+it('keeps an uncertain lyric result out of the retry path and allows a fresh song',async()=>{
+ mocks.latest.mockResolvedValue(flow('SUBMISSION_UNKNOWN',{errorCode:'LYRICS_SUBMISSION_UNKNOWN'}))
+ mount(false,'navigate');await flush()
+ expect(document.querySelector('dialog h2')?.textContent).toBe('歌词结果待核对')
+ expect(document.body.textContent).not.toContain('重试歌词生成')
+ expect(document.querySelector('a')?.getAttribute('href')).toBe('/create?mode=quick')
+ await vi.advanceTimersByTimeAsync(8000);await flush()
+ expect(mocks.latest).toHaveBeenCalledTimes(1)
+ click('刷新进度');await flush()
+ expect(mocks.latest).toHaveBeenCalledTimes(2)
+ expect(mocks.retry).not.toHaveBeenCalled()
+})
 it('recovers an initial progress read failure by querying only, never resubmitting',async()=>{
  mocks.latest.mockRejectedValueOnce(new Error('network'))
  mount();await flush()

@@ -136,6 +136,36 @@ class OpenAiLyricsWriterTest {
         verifyNoInteractions(client);
     }
 
+    @Test void retriesOnceIfConnectionFailsBeforeTheRequestBodyIsUsed() throws Exception {
+        var client = mock(HttpClient.class);
+        @SuppressWarnings("unchecked") HttpResponse<String> response = mock(HttpResponse.class);
+        when(response.statusCode()).thenReturn(200);
+        when(response.body()).thenReturn(JSON.writeValueAsString(completed(result())));
+        when(client.<String>send(any(), any())).thenThrow(new ConnectException()).thenReturn(response);
+        var writer = new OpenAiLyricsWriter("offline-key", "custom-model", URI.create("https://example.invalid"), client);
+
+        assertEquals("门口的小碗", writer.write(WORK, "zh-CN").title());
+        verify(client, times(2)).send(any(), any());
+    }
+
+    @Test void doesNotRetryAConnectionFailureAfterTheRequestBodyIsUsed() throws Exception {
+        var client = mock(HttpClient.class);
+        doAnswer(call -> {
+            HttpRequest request = call.getArgument(0);
+            request.bodyPublisher().orElseThrow().subscribe(new java.util.concurrent.Flow.Subscriber<java.nio.ByteBuffer>() {
+                public void onSubscribe(java.util.concurrent.Flow.Subscription subscription) { subscription.cancel(); }
+                public void onNext(java.nio.ByteBuffer value) {}
+                public void onError(Throwable error) {}
+                public void onComplete() {}
+            });
+            throw new ConnectException();
+        }).when(client).send(any(), any());
+        var writer = new OpenAiLyricsWriter("offline-key", "custom-model", URI.create("https://example.invalid"), client);
+
+        assertEquals("LYRICS_PROVIDER_NETWORK_ERROR", assertThrows(DomainException.class, () -> writer.write(WORK, "zh-CN")).code());
+        verify(client, times(1)).send(any(), any());
+    }
+
     @Test void timeoutNetworkAndInterruptKeepDistinctSafeErrors() throws Exception {
         var client = mock(HttpClient.class);
         var writer = new OpenAiLyricsWriter("offline-key", "custom-model", URI.create("https://example.invalid"), client);

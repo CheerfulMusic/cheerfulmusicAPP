@@ -33,8 +33,7 @@ public final class DeepSeekLyricsWriter implements LyricsWriter {
         String context=json.writeValueAsString(material);
         String body=json.writeValueAsString(Map.of("model",model,"messages",List.of(Map.of("role","system","content",system),Map.of("role","user","content",context)),"response_format",Map.of("type","json_object"),"thinking",Map.of("type","disabled"),"max_tokens",2400,"stream",false));
         try{
-            var request=HttpRequest.newBuilder(endpoint).timeout(Duration.ofSeconds(90)).header("Authorization","Bearer "+key).header("Content-Type","application/json").POST(HttpRequest.BodyPublishers.ofString(body)).build();
-            var response=client.send(request,HttpResponse.BodyHandlers.ofString());
+            var response=LyricsHttpTransport.post(client,endpoint,key,body);
             if(response.statusCode()!=200)LOG.log(System.Logger.Level.WARNING,"Lyrics provider HTTP failure: work={0}, status={1}",work.id(),response.statusCode());
             if(response.statusCode()==401||response.statusCode()==403)throw new DomainException("LYRICS_PROVIDER_UNAVAILABLE","歌词服务认证失败，请检查后端DeepSeek密钥");
             if(response.statusCode()==402)throw new DomainException("LYRICS_PROVIDER_UNAVAILABLE","DeepSeek余额不足，请充值后重试");
@@ -45,9 +44,9 @@ public final class DeepSeekLyricsWriter implements LyricsWriter {
             var plan=result.path("plan");
             return new Draft(result.path("title").asText(""),result.path("lyrics").asText(""),
                 plan.isObject()?json.treeToValue(plan,com.qingfeng.music.settings.CreativePlan.class):null);
-        }catch(InterruptedException interrupted){Thread.currentThread().interrupt();throw new DomainException("LYRICS_REQUEST_INTERRUPTED","歌词编写已中断，可以重新编写；已有内容仍会保留。");}
-        catch(java.net.http.HttpTimeoutException timeout){throw new DomainException("LYRICS_PROVIDER_TIMEOUT","歌词编写超时，可以重新编写；已有内容仍会保留。");}
-        catch(java.io.IOException network){throw new DomainException("LYRICS_PROVIDER_NETWORK_ERROR","歌词服务连接中断，可以稍后重新编写。");}
+        }catch(InterruptedException interrupted){Thread.currentThread().interrupt();throw new DomainException("LYRICS_REQUEST_INTERRUPTED","歌词请求已中断，结果尚未确认，请先查看原请求进度。");}
+        catch(java.net.http.HttpTimeoutException timeout){throw new DomainException("LYRICS_PROVIDER_TIMEOUT","等待歌词结果超时，请先查看原请求进度。");}
+        catch(java.io.IOException network){throw new DomainException("LYRICS_PROVIDER_NETWORK_ERROR","歌词服务连接中断，结果尚未确认，请先查看原请求进度。");}
         catch(tools.jackson.core.JacksonException invalid){throw new DomainException("LYRICS_RESPONSE_INVALID","歌词生成结果不完整，请稍后重新发起");}
     }
 }

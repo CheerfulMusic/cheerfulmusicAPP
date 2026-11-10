@@ -41,6 +41,8 @@ public final class QuickCreationService {
         if(!enabled)throw new DomainException("QUICK_CREATION_UNAVAILABLE","一键创作暂不可用，可以切换自定义创作，先完善歌词。");
         // 已创建的音乐任务交给原任务恢复策略；不得在这里重新购买音乐。
         var task=music(entry);if(task.isPresent())return view(owner,entry);
+        if("LYRICS_SUBMISSION_UNKNOWN".equals(entry.errorCode()))
+            throw new DomainException("LYRICS_REQUEST_PENDING","歌词结果尚未确认，请先查看原任务进度。");
         if(current.version()!=entry.workVersion())throw new DomainException("WORK_VERSION_CONFLICT","内容已修改，请切换自定义创作继续制作。");
         if(!repository.retry(work,id,UUID.randomUUID().toString()))throw new DomainException("QUICK_CREATION_CONFLICT","创作仍在处理中，请先刷新进度。");
         return get(owner,work,id);
@@ -64,7 +66,8 @@ public final class QuickCreationService {
             if(works.get(entry.owner(),entry.workId()).version()!=entry.workVersion())throw new DomainException("WORK_VERSION_CONFLICT","内容已修改，请切换自定义创作继续制作。");
             if(revision==null){
                 var state=composer.requestState(entry.owner(),entry.workId(),entry.lyricsKey());
-                if(Set.of("PENDING","UNKNOWN").contains(state.status())){checkpoint(entry,token,"WRITING",null,null,null,5);return true;}
+                if(state.status().equals("PENDING")){checkpoint(entry,token,"WRITING",null,null,null,5);return true;}
+                if(state.status().equals("UNKNOWN")){checkpoint(entry,token,"SUBMISSION_UNKNOWN",null,null,"LYRICS_SUBMISSION_UNKNOWN",0);return true;}
                 if(state.status().equals("FAILED"))throw new DomainException(state.errorCode()==null?"LYRICS_REQUEST_FAILED":state.errorCode(),"歌词未完成，素材已保留。");
                 if(state.status().equals("SUCCEEDED"))revision=state.revisionId();
                 else{
@@ -82,7 +85,9 @@ public final class QuickCreationService {
         }catch(LeaseLost ignored){/* 其他执行者取得租约后，迟到线程不能继续推进。 */}
         catch(RuntimeException error){
             String code=error instanceof DomainException d?d.code():"QUICK_CREATION_INTERRUPTED";
-            if(code.equals("LYRICS_REQUEST_PENDING"))repository.checkpoint(entry.id(),token,"WRITING",revision,null,null,5);
+            if(revision==null&&LyricsCompositionService.outcomeUnknown(code))
+                repository.checkpoint(entry.id(),token,"SUBMISSION_UNKNOWN",null,null,"LYRICS_SUBMISSION_UNKNOWN",0);
+            else if(code.equals("LYRICS_REQUEST_PENDING"))repository.checkpoint(entry.id(),token,"WRITING",revision,null,null,5);
             else if(Set.of("GLOBAL_GENERATION_BUSY","PERSONAL_GENERATION_BUSY").contains(code))
                 repository.checkpoint(entry.id(),token,revision==null?"QUEUED":"LYRICS_READY",revision,null,null,5);
             else repository.checkpoint(entry.id(),token,"FAILED",revision,null,code,0);

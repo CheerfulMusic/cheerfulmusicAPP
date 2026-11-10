@@ -29,9 +29,9 @@ class QuickCreationIntegrationTest {
         @Bean @Primary FakeGeneration quickMusic(){return new FakeGeneration();}
     }
     static class FakeWriter implements LyricsWriter {
-        final AtomicInteger calls=new AtomicInteger();Direction direction;boolean fail;
+        final AtomicInteger calls=new AtomicInteger();Direction direction;String failureCode;
         public boolean isConfigured(){return true;}
-        public Draft write(WorkApi.Work work,String language){calls.incrementAndGet();if(fail)throw new DomainException("LYRICS_PROVIDER_TIMEOUT","offline failure");return new Draft("小碗","[Verse]\n橘子放在门边\n[Chorus]\n谢谢你等我回家");}
+        public Draft write(WorkApi.Work work,String language){calls.incrementAndGet();if(failureCode!=null)throw new DomainException(failureCode,"offline failure");return new Draft("小碗","[Verse]\n橘子放在门边\n[Chorus]\n谢谢你等我回家");}
         public Draft write(WorkApi.Work work,String language,String instructions,String previous,Direction direction){this.direction=direction;return write(work,language);}
     }
     static class FakeGeneration implements GenerationApi {
@@ -53,7 +53,7 @@ class QuickCreationIntegrationTest {
     @Autowired MusicSettings settings;@Autowired WorkLibraryQuery library;@Autowired JdbcTemplate jdbc;
     QuickCreationService service;String owner;WorkApi.Work work;
     @BeforeEach void setup(){
-        writer.fail=false;music.reject=false;music.loseAcknowledgement=false;music.busy=false;
+        writer.failureCode=null;music.reject=false;music.loseAcknowledgement=false;music.busy=false;
         owner=identity.create().creatorId();work=works.create(owner,new WorkApi.Draft("妈妈","生日","门口剥好的橘子","谢谢陪伴","温暖民谣",""));
         service=new QuickCreationService(repository,works,lyrics,composer,music,true);
     }
@@ -74,11 +74,34 @@ class QuickCreationIntegrationTest {
         assertEquals(1,lyrics.list(owner,work.id()).size());
     }
     @Test void writingFailureRetainsStoryAndOnlyExplicitRetryCreatesNewAttempt(){
-        writer.fail=true;var flow=start();int calls=writer.calls.get();service.runOnce();
+        writer.failureCode="LYRICS_PROVIDER_CONNECT_FAILED";var flow=start();int calls=writer.calls.get();service.runOnce();
         var stopped=service.get(owner,work.id(),flow.id());assertEquals("FAILED",stopped.status());assertTrue(stopped.canRetry());
-        assertEquals("LYRICS_PROVIDER_TIMEOUT",stopped.errorCode());assertEquals(work.story(),works.get(owner,work.id()).story());
+        assertEquals("LYRICS_PROVIDER_CONNECT_FAILED",stopped.errorCode());assertEquals(work.story(),works.get(owner,work.id()).story());
         assertFalse(service.runOnce());assertEquals(calls+1,writer.calls.get());
-        writer.fail=false;service.retry(owner,work.id(),flow.id());service.runOnce();assertNotNull(service.get(owner,work.id(),flow.id()).taskId());
+        writer.failureCode=null;service.retry(owner,work.id(),flow.id());service.runOnce();assertNotNull(service.get(owner,work.id(),flow.id()).taskId());
+    }
+    @Test void unknownLyricsSubmissionIsNotRepeatedAndAppearsInTheWorkLibrary(){
+        writer.failureCode="LYRICS_PROVIDER_NETWORK_ERROR";
+        var flow=start();
+        int calls=writer.calls.get(),songs=music.purchases.get();
+        assertTrue(service.runOnce());
+
+        var stopped=service.get(owner,work.id(),flow.id());
+        assertEquals("SUBMISSION_UNKNOWN",stopped.status());
+        assertEquals("LYRICS_SUBMISSION_UNKNOWN",stopped.errorCode());
+        assertNull(stopped.revisionId());
+        assertNull(stopped.taskId());
+        assertFalse(stopped.canRetry());
+        assertEquals("CHECKING",library.list(owner,0).get(0).status());
+
+        var entry=repository.find(work.id(),flow.id()).orElseThrow();
+        assertEquals("UNKNOWN",composer.requestState(owner,work.id(),entry.lyricsKey()).status());
+        assertEquals("LYRICS_REQUEST_PENDING",assertThrows(DomainException.class,()->service.retry(owner,work.id(),flow.id())).code());
+        assertEquals("QUICK_CREATION_PENDING",assertThrows(DomainException.class,this::start).code());
+        assertEquals(flow.id(),service.start(owner,work.id(),work.version(),entry.requestKey(),"zh-CN").id());
+        assertFalse(service.runOnce());
+        assertEquals(calls+1,writer.calls.get());
+        assertEquals(songs,music.purchases.get());
     }
     @Test void musicFailureKeepsSuccessfulLyricsAndRetryDoesNotWriteAnotherVersion(){
         music.reject=true;var flow=start();int calls=writer.calls.get();service.runOnce();

@@ -35,7 +35,7 @@ public final class WorkLibraryQuery {
         var byId=new HashMap<String,State>();
         jdbc.query(sql, row->{
             String quick=row.getString("quick_status");
-            String status=row.getInt("active_tasks")>0||List.of("QUEUED","WRITING","LYRICS_READY","SUBMITTING_MUSIC").contains(quick==null?"":quick)?"GENERATING":row.getInt("unknown_tasks")>0?"CHECKING":row.getString("audio_id")!=null?"COMPLETED":"FAILED".equals(row.getString("task_status"))||"FAILED".equals(quick)?"GENERATION_FAILED":row.getInt("lyric_count")>0?"READY_TO_GENERATE":"LYRICS_DRAFT";
+            String status=row.getInt("active_tasks")>0||List.of("QUEUED","WRITING","LYRICS_READY","SUBMITTING_MUSIC").contains(quick==null?"":quick)?"GENERATING":row.getInt("unknown_tasks")>0||"SUBMISSION_UNKNOWN".equals(quick)?"CHECKING":row.getString("audio_id")!=null?"COMPLETED":"FAILED".equals(row.getString("task_status"))||"FAILED".equals(quick)?"GENERATION_FAILED":row.getInt("lyric_count")>0?"READY_TO_GENERATE":"LYRICS_DRAFT";
             byId.put(row.getString("id"),new State(status,row.getString("audio_id"),row.getString("audio_origin"),row.getString("song_title"),row.getString("cover_id")));
         },args.toArray());
         return owned.stream().filter(work->byId.containsKey(work.id())).map(work->{var s=byId.get(work.id());return new Item(work,s.status,s.audioId,s.origin,s.title,s.coverId);}).toList();

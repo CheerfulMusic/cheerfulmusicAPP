@@ -59,10 +59,17 @@ public final class LyricsCompositionService {
             });return lyrics.get(owner,work,revision.id());
         }catch(RuntimeException error){
             String code=error instanceof DomainException domain?domain.code():"LYRICS_INTERNAL_ERROR";
-            requests.failed(work,key,code);
+            if(outcomeUnknown(code))requests.unknown(work,key,code);
+            else requests.failed(work,key,code);
             LOG.log(System.Logger.Level.WARNING,"Lyrics request failed: work={0}, request={1}, code={2}, type={3}",work,key,code,error.getClass().getSimpleName());
             throw error;
         }
+    }
+    public static boolean outcomeUnknown(String code){
+        return switch(code){
+            case "LYRICS_PROVIDER_TIMEOUT", "LYRICS_PROVIDER_NETWORK_ERROR", "LYRICS_REQUEST_INTERRUPTED" -> true;
+            default -> false;
+        };
     }
     private String fingerprint(String value){
         try{return java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256").digest(value.getBytes(java.nio.charset.StandardCharsets.UTF_8)));}

@@ -12,4 +12,5 @@ public interface CompositionRequests {
     default void completeWithRevision(String work,String key,String revision,Runnable save){save.run();complete(work,key,revision);}
     void failed(String work,String key);
     default void failed(String work,String key,String code){failed(work,key);}
+    void unknown(String work,String key,String code);
 }

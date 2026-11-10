@@ -61,10 +61,7 @@ public final class OpenAiLyricsWriter implements LyricsWriter {
             "text", Map.of("format", Map.of("type", "json_schema", "name", "song_lyrics", "strict", true, "schema", schema())),
             "reasoning", Map.of("effort", "low"), "max_output_tokens", 6000, "store", false, "stream", false));
         try {
-            var request = HttpRequest.newBuilder(endpoint).timeout(Duration.ofSeconds(90))
-                .header("Authorization", "Bearer " + key).header("Content-Type", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString(body)).build();
-            var response = client.send(request, HttpResponse.BodyHandlers.ofString());
+            var response = LyricsHttpTransport.post(client, endpoint, key, body);
             if (response.statusCode() != 200) {
                 // 不记录响应正文、请求素材、认证头或传输异常，防止密钥和用户故事进入日志。
                 LOG.log(System.Logger.Level.WARNING, "GPT lyrics HTTP failure: work={0}, status={1}", work.id(), response.statusCode());
@@ -77,11 +74,11 @@ public final class OpenAiLyricsWriter implements LyricsWriter {
             return parse(response.body());
         } catch (InterruptedException interrupted) {
             Thread.currentThread().interrupt();
-            throw new DomainException("LYRICS_REQUEST_INTERRUPTED", "歌词编写已中断，可以重新编写；已有内容仍会保留。");
+            throw new DomainException("LYRICS_REQUEST_INTERRUPTED", "歌词请求已中断，结果尚未确认，请先查看原请求进度。");
         } catch (HttpTimeoutException timeout) {
-            throw new DomainException("LYRICS_PROVIDER_TIMEOUT", "歌词编写超时，可以重新编写；已有内容仍会保留。");
+            throw new DomainException("LYRICS_PROVIDER_TIMEOUT", "等待歌词结果超时，请先查看原请求进度。");
         } catch (IOException network) {
-            throw new DomainException("LYRICS_PROVIDER_NETWORK_ERROR", "歌词服务连接中断，可以稍后重新编写。");
+            throw new DomainException("LYRICS_PROVIDER_NETWORK_ERROR", "歌词服务连接中断，结果尚未确认，请先查看原请求进度。");
         } catch (tools.jackson.core.JacksonException invalid) {
             throw incomplete();
         }

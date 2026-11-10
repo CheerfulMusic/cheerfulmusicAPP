@@ -25,7 +25,7 @@ public final class JdbcQuickCreationRepository implements QuickCreationRepositor
         if(!query("WHERE w.owner_id=? AND q.work_id<>? AND q.status IN ('QUEUED','WRITING','LYRICS_READY','SUBMITTING_MUSIC') LIMIT 1",entry.owner(),entry.workId()).isEmpty())
             throw new DomainException("PERSONAL_GENERATION_BUSY","你已有一键创作正在处理，请先查看原作品。");
         if(versions.get(0)!=entry.workVersion())throw new DomainException("WORK_VERSION_CONFLICT","作品已修改，请载入当前内容后继续。");
-        if(jdbc.queryForObject("SELECT COUNT(*) FROM quick_creation WHERE work_id=? AND status IN ('QUEUED','WRITING','LYRICS_READY','SUBMITTING_MUSIC')",Integer.class,entry.workId())>0||
+        if(jdbc.queryForObject("SELECT COUNT(*) FROM quick_creation WHERE work_id=? AND status IN ('QUEUED','WRITING','LYRICS_READY','SUBMITTING_MUSIC','SUBMISSION_UNKNOWN')",Integer.class,entry.workId())>0||
            jdbc.queryForObject("SELECT COUNT(*) FROM generation_task WHERE work_id=? AND status IN ('QUEUED','SUBMITTING','RUNNING','SAVING','SUBMISSION_UNKNOWN')",Integer.class,entry.workId())>0)
             throw new DomainException("QUICK_CREATION_PENDING","这份作品正在制作，请先查看原任务进度。");
         if(jdbc.queryForObject("SELECT COUNT(*) FROM generation_task t JOIN music_work w ON w.id=t.work_id WHERE w.owner_id=? AND w.deleted_at IS NULL AND t.status IN ('QUEUED','SUBMITTING','RUNNING','SAVING','SUBMISSION_UNKNOWN')",Integer.class,entry.owner())>0)
@@ -47,7 +47,7 @@ public final class JdbcQuickCreationRepository implements QuickCreationRepositor
     public void release(String id,String token){jdbc.update("UPDATE quick_creation SET lease_token=NULL,lease_until=NULL WHERE id=? AND lease_token=?",id,token);}
     public boolean retry(String work,String id,String lyricsKey){return transactions.execute(tx->{
         jdbc.queryForList("SELECT version FROM music_work WHERE id=? AND deleted_at IS NULL FOR UPDATE",Long.class,work);
-        if(jdbc.queryForObject("SELECT COUNT(*) FROM quick_creation WHERE work_id=? AND id<>? AND status IN ('QUEUED','WRITING','LYRICS_READY','SUBMITTING_MUSIC')",Integer.class,work,id)>0)return false;
+        if(jdbc.queryForObject("SELECT COUNT(*) FROM quick_creation WHERE work_id=? AND id<>? AND status IN ('QUEUED','WRITING','LYRICS_READY','SUBMITTING_MUSIC','SUBMISSION_UNKNOWN')",Integer.class,work,id)>0)return false;
         return jdbc.update("UPDATE quick_creation SET status=CASE WHEN revision_id IS NULL THEN 'QUEUED' ELSE 'LYRICS_READY' END,lyrics_key=CASE WHEN revision_id IS NULL THEN ? ELSE lyrics_key END,error_code=NULL,next_attempt_at=CURRENT_TIMESTAMP,lease_token=NULL,lease_until=NULL,updated_at=CURRENT_TIMESTAMP WHERE work_id=? AND id=? AND status='FAILED' AND (lease_until IS NULL OR lease_until<CURRENT_TIMESTAMP)",lyricsKey,work,id)==1;
     });}
     private List<Entry> query(String suffix,Object...args){return jdbc.query(SELECT+suffix,(r,n)->new Entry(r.getString("id"),r.getString("owner_id"),r.getString("work_id"),r.getLong("work_version"),r.getString("request_key"),r.getString("language"),r.getString("status"),r.getString("lyrics_key"),r.getString("music_key"),r.getString("revision_id"),r.getString("task_id"),r.getString("error_code"),r.getString("lease_token"),r.getTimestamp("created_at").toInstant()),args);}

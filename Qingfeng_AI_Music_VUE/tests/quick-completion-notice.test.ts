@@ -40,6 +40,17 @@ it('links to the completed original task from another page without navigating on
   expect(document.querySelector('[role="status"]')).toBeNull()
 })
 
+it('stops polling an unconfirmed lyric request so other songs can still notify', async () => {
+  mock.get.mockResolvedValueOnce({ id: 'flow-a', status: 'SUBMISSION_UNKNOWN', errorCode: 'LYRICS_SUBMISSION_UNKNOWN' })
+  followQuickInBackground({ owner: 'owner-a', workId: 'work-a', flowId: 'flow-a', status: 'WRITING' })
+  followQuickInBackground({ owner: 'owner-a', workId: 'work-b', flowId: 'flow-b', status: 'RUNNING' })
+
+  await vi.advanceTimersByTimeAsync(16000)
+  expect(mock.get.mock.calls).toEqual([['work-a', 'flow-a'], ['work-b', 'flow-b']])
+  expect(backgroundQuick.has('work-a')).toBe(false)
+  expect(document.querySelector('a')?.getAttribute('href')).toBe('/works/work-b')
+})
+
 it('clears the pending notification on identity change, even if a lookup is in flight', async () => {
   let finish!: (result: unknown) => void
   mock.get.mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))

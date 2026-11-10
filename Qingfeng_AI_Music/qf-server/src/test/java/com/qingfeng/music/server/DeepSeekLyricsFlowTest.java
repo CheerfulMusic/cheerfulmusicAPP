@@ -63,7 +63,7 @@ class DeepSeekLyricsFlowTest {
  }
  @Test void unknownRequestIsNotAutomaticallySubmittedAgain(){
   String owner=identity.create().creatorId();var work=works.create(owner,new WorkApi.Draft("朋友","生日","故事","祝福","民谣","回忆"));
-  var repo=new CompositionRequests(){public java.util.Optional<Entry> find(String w,String k){return java.util.Optional.of(new Entry("UNKNOWN",null));}public boolean claim(String w,String k){throw new AssertionError();}public void complete(String w,String k,String r){throw new AssertionError();}public void failed(String w,String k){throw new AssertionError();}};
+  var repo=new CompositionRequests(){public java.util.Optional<Entry> find(String w,String k){return java.util.Optional.of(new Entry("UNKNOWN",null));}public boolean claim(String w,String k){throw new AssertionError();}public void complete(String w,String k,String r){throw new AssertionError();}public void failed(String w,String k){throw new AssertionError();}public void unknown(String w,String k,String c){throw new AssertionError();}};
   var service=new LyricsCompositionService(works,lyrics,null,writer,repo,true);int before=writer.calls.get();assertThrows(DomainException.class,()->service.compose(owner,work.id(),0,UUID.randomUUID().toString(),"en"));assertEquals(before,writer.calls.get());
  }
 }

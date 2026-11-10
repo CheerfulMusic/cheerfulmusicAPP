@@ -20,12 +20,14 @@ let openedFlow='',presentedResult=''
 let alive=true,polling=false,workSequence=0
 const labels:Record<string,string>={QUEUED:'创作已排队',WRITING:'正在编写歌词',LYRICS_READY:'歌词已完成 正在准备音乐',SUBMITTING_MUSIC:'正在准备音乐',MUSIC_QUEUED:'音乐已排队',SUBMITTING:'正在提交音乐',RUNNING:'正在制作音乐',SAVING:'正在保存音频',SUBMISSION_UNKNOWN:'提交结果待核对',SUCCEEDED:'你的歌曲已完成',FAILED:'这次创作暂未完成',CANCELLED:'已撤销'}
 const active=computed(()=>!!flow.value&&quickInProgress(flow.value.status))
+const uncertainLyrics=computed(()=>flow.value?.errorCode==='LYRICS_SUBMISSION_UNKNOWN')
 const dialogStatus=computed(()=>flow.value?.status==='QUEUED'&&flow.value.taskId?'MUSIC_QUEUED':flow.value?.status||props.submissionStatus||'QUEUED')
 const failureCopy=computed(()=>{
  const code=flow.value?.errorCode
  if(code==='INSUFFICIENT_CREDITS')return '积分不足 已有歌词已保留 充值后可继续生成音乐'
  if(code==='WORK_VERSION_CONFLICT')return '内容已经修改 请使用自定义创作继续完善当前作品'
- if(code?.startsWith('LYRICS_'))return '歌词暂未完成 故事已保留 可以重新编写或使用自定义创作'
+ if(code==='LYRICS_PROVIDER_CONNECT_FAILED')return '暂时连不上歌词服务，创作描述已保留，可以稍后重试。'
+ if(code?.startsWith('LYRICS_'))return '歌词暂未生成，故事已保留。可以重试歌词生成，或切换到自定义创作。'
  if(code?.includes('QUOTA'))return '本次创作额度暂不可用 已有内容已保留'
  return '故事与已有歌词都已保留 可以继续制作'
 })
@@ -81,7 +83,7 @@ watch(()=>props.initialFlow,value=>{if(value?.workId===props.workId&&value!==flo
 watch(()=>props.awaitingSubmission,value=>{if(value)void refresh()})
 onMounted(()=>{if(props.initialFlow)receive(props.initialFlow);else void refresh();document.addEventListener('visibilitychange',visible)})
 function visible(){if(document.visibilityState==='visible')void refresh()}
-const timer=window.setInterval(()=>{if(document.visibilityState==='visible'&&(!loaded.value||active.value||!!issue.value||props.awaitingSubmission&&!flow.value))void refresh()},4000)
+const timer=window.setInterval(()=>{if(document.visibilityState==='visible'&&(!loaded.value||(active.value&&!uncertainLyrics.value)||!!issue.value||props.awaitingSubmission&&!flow.value))void refresh()},4000)
 defineExpose({show:()=>setOpen(true),refresh})
 onBeforeUnmount(()=>{alive=false;window.clearInterval(timer);document.removeEventListener('visibilitychange',visible)})
 </script>
@@ -89,8 +91,8 @@ onBeforeUnmount(()=>{alive=false;window.clearInterval(timer);document.removeEven
  <section v-if="workId&&!submissionPending&&(flow&&(!resultReady||active||completionMode==='navigate')||issue||!loaded)" class="quick-progress" aria-live="polite">
   <div class="quick-progress-icon" :class="{active}">♪</div>
   <div class="quick-progress-copy">
-   <strong>{{ t(flow?labels[flow.status]||'正在核对创作进度':'正在核对创作进度') }}</strong>
-   <p v-if="flow">{{ t(active?'可以离开页面 在我的音乐中继续查看进度':flow.status==='SUCCEEDED'?(resultReady?'歌曲已保存 可以试听与分享':'正在读取歌曲，请稍候…'):failureCopy) }}</p>
+   <strong>{{ t(uncertainLyrics?'歌词结果待核对':flow?labels[flow.status]||'正在核对创作进度':'正在核对创作进度') }}</strong>
+   <p v-if="flow">{{ t(uncertainLyrics?'歌词服务连接中断，创作描述已保留。可以刷新查看，请勿重复提交。':active?'可以离开页面 在我的音乐中继续查看进度':flow.status==='SUCCEEDED'?(resultReady?'歌曲已保存 可以试听与分享':'正在读取歌曲，请稍候…'):failureCopy) }}</p>
    <p v-if="issue" role="alert">{{ t(issue) }}</p>
    <div class="actions">
     <button v-if="flow&&active" class="button" @click="setOpen(true)">{{ t('查看生成进度') }}</button>
@@ -98,8 +100,9 @@ onBeforeUnmount(()=>{alive=false;window.clearInterval(timer);document.removeEven
     <RouterLink v-if="flow?.errorCode==='INSUFFICIENT_CREDITS'" class="button" to="/recharge">{{ t('去充值') }}</RouterLink>
     <RouterLink v-if="flow?.errorCode==='AUDIO_ARCHIVE_FAILED'&&completionMode==='navigate'" :to="`/works/${workId}?mode=quick`">{{ t('查看创作记录') }}</RouterLink>
     <RouterLink v-if="flow&&['FAILED','CANCELLED'].includes(flow.status)" :to="`/create?work=${workId}&mode=custom`">{{ t('自定义创作') }}</RouterLink>
+    <RouterLink v-if="uncertainLyrics&&completionMode==='navigate'" class="button" to="/create?mode=quick">{{ t('继续创作一首歌') }}</RouterLink>
     <button class="button secondary" @click="refresh">{{ t('刷新进度') }}</button>
-    <button v-if="flow?.canRetry" class="button" :disabled="retrying" @click="retry">{{ t(retrying?'正在继续…':flow.revisionId?'继续生成音乐':'重新编写并继续') }}</button>
+    <button v-if="flow?.canRetry" class="button" :disabled="retrying" @click="retry">{{ t(retrying?'正在继续…':flow.revisionId?'继续生成音乐':'重试歌词生成') }}</button>
    </div>
   </div>
  </section>

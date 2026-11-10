@@ -36,5 +36,8 @@ public final class JdbcCompositionRequests implements CompositionRequests {
         transactions.executeWithoutResult(tx->{complete(work,key,revision);save.run();});
     }
     public void failed(String work,String key){failed(work,key,"LYRICS_REQUEST_FAILED");}
+    public void unknown(String work,String key,String code){
+        jdbc.update("UPDATE lyrics_composition_request SET status='UNKNOWN',error_code=?,finished_at=CURRENT_TIMESTAMP WHERE work_id=? AND request_key=? AND status='PENDING'",code,work,key);
+    }
     public void failed(String work,String key,String code){jdbc.update("UPDATE lyrics_composition_request SET status='FAILED',error_code=?,finished_at=CURRENT_TIMESTAMP WHERE work_id=? AND request_key=? AND status='PENDING'",code,work,key);}
 }
