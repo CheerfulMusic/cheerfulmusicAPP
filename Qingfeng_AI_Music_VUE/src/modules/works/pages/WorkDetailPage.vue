@@ -316,10 +316,10 @@ async function backToStory(){
     <SectionEditor v-if="asset" ref="sectionEditor" :key="work.id" :work="work" :asset="asset" :title="songTitle" :cover="artwork" :tasks="tasks" :open="false" @refresh="refreshTasks" @adopted="sectionAdopted"/>
     <RouterLink v-if="asset" class="recovery-reminder" to="/account">{{ t('第一首歌值得留住。保存找回码，换设备也能找到它。') }}</RouterLink>
     <CoverEditor v-if="work&&(coverOpen)" :key="work.id" :work-id="work.id" :state="covers" @updated="updateCover" @close="coverOpen=false"/>
-    <div v-if="draftReady&&musicDirectionChanged" class="notice" role="status"><p>{{ t('创作描述或音乐设置已更新，当前歌词已保留。') }}</p><div class="actions"><button type="button" class="button secondary" @click="dismissedDirection=true">{{ t('保留当前歌词') }}</button><button type="button" class="button secondary" @click="dismissedDirection=true;lyricsPanel?.reviewMusicDirection()">{{ t('按新方向调整歌词') }}</button></div></div>
+    <div v-if="draftReady&&musicDirectionChanged" class="notice" role="status"><p>{{ t('创作设置已更新，可用「AI 重新生成全部歌词」应用新设置。') }}</p><div class="actions"><button type="button" class="button secondary" @click="dismissedDirection=true">{{ t('保留当前歌词') }}</button></div></div>
     <div v-show="!!asset||draftReady" class="work-detail-layout" :class="{'lyric-studio-layout':draftReady}">
       <div>
-        <div class="lyrics-editor-fold"><LyricsPanel v-if="!generated&&(asset||draftOpened)" ref="lyricsPanel" :key="work.id+'-'+work.version+'-'+quickRevision" :inert="quickBusy||undefined" :work="work" :external-save="draftReady" @selected="revision=$event" @base="lyricBase=$event" @dirty="lyricDirty=$event" @ready="lyricsReady=$event" @recoverable="lyricRecoverable=$event"/>
+        <div class="lyrics-editor-fold"><LyricsPanel v-if="!generated&&(asset||draftOpened)" ref="lyricsPanel" :key="work.id+'-'+work.version+'-'+quickRevision" :inert="quickBusy||undefined" :work="work" :show-inline-save="asset?.origin==='IMPORTED'" @selected="revision=$event" @base="lyricBase=$event" @dirty="lyricDirty=$event" @ready="lyricsReady=$event" @recoverable="lyricRecoverable=$event"/>
         </div>
         <section v-if="creditIssue" id="credit-issue" class="credit-issue" role="alert">
           <div class="credit-issue-copy">
@@ -374,7 +374,7 @@ async function backToStory(){
 .lyric-studio-layout { grid-template-columns:minmax(0,2.22fr) minmax(255px,1fr); align-items:stretch; gap:clamp(18px,1.7vw,28px); }
 .lyric-studio-layout .lyrics-editor-fold { border:0; margin:0; }
 .lyric-studio-layout .lyrics-editor-fold :deep(.detail-panel) { margin:0; }
-.lyric-studio-actions { display:flex; justify-content:flex-end; gap:16px; margin-top:22px; }
+.lyric-studio-actions { display:flex; justify-content:flex-end; gap:16px; margin-top:16px; }
 .lyric-studio-actions > .button { min-height:52px; border-radius:999px; font-size:16px; }
 .lyric-studio-actions > .creation-primary { min-width:clamp(165px,13vw,216px); }
 .lyric-studio-actions > .lyric-studio-save { min-width:clamp(140px,11.5vw,190px); gap:8px; }

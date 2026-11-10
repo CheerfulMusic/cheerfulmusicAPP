@@ -1,7 +1,5 @@
 <script setup lang="ts">
-import LyricsTemplatePicker from './LyricsTemplatePicker.vue'
 import { normalizeLyricsStructure, type LyricsStructure } from '../model/lyrics-structure'
-import {english} from '../../../shared/i18n/en'
 import { t, formatDate, locale } from '../../../shared/i18n'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -10,27 +8,13 @@ import { ApiError, currentCreatorId } from '../../../shared/http/api-client'
 import { readRecovery, writeRecovery, recoveryKey,checkpointRecovery } from '../../../shared/drafts/recovery'
 import RecoveryCopies from '../../../shared/drafts/RecoveryCopies.vue'
 import type { Work } from '../../studio'
-import { listRevisions, getRevision, getLyricsRequest, saveRevision, confirmRevision, generateLyrics, getUsage, rewriteLyricLine, type Revision, type Allowance, type LyricRewriteAction } from '../api/detail'
-const props=defineProps<{work:Work;externalSave?:boolean}>(), emit=defineEmits<{selected:[revision:Revision|null];dirty:[value:boolean];ready:[value:boolean];recoverable:[value:boolean];base:[revision:Revision|null]}>()
+import { listRevisions, getRevision, getLyricsRequest, saveRevision, confirmRevision, generateLyrics, rewriteLyricLine, type Revision, type LyricRewriteAction } from '../api/detail'
+const props=defineProps<{work:Work;showInlineSave?:boolean}>(), emit=defineEmits<{selected:[revision:Revision|null];dirty:[value:boolean];ready:[value:boolean];recoverable:[value:boolean];base:[revision:Revision|null]}>()
 const route=useRoute(),router=useRouter()
-const versions=ref<Revision[]>([]),active=ref<Revision|null>(null),title=ref(props.work.title||(props.work.recipient?t('写给{recipient}的歌',{recipient:props.work.recipient}):t('我的原创歌曲'))),text=ref(''),baseline=ref(''),loading=ref(true),saving=ref(false),composing=ref(false),preparing=ref(false),error=ref(''),notice=ref(''),aiReady=ref(false),localSaved=ref(false),allowance=ref<Allowance>()
+const versions=ref<Revision[]>([]),active=ref<Revision|null>(null),title=ref(props.work.title||(props.work.recipient?t('写给{recipient}的歌',{recipient:props.work.recipient}):t('我的原创歌曲'))),text=ref(''),baseline=ref(''),loading=ref(true),saving=ref(false),composing=ref(false),preparing=ref(false),error=ref(''),notice=ref(''),aiReady=ref(false),localSaved=ref(false)
 const language=ref<string>(['zh-CN','en','mixed'].includes(String(route.query.language))?String(route.query.language):locale.value),instructions=ref(''),requestKey=ref('')
 const structure=ref<LyricsStructure>(normalizeLyricsStructure({templateId:route.query.templateId,chorusFirst:route.query.chorusFirst==='true'}))
 const errorKind=ref<'load'|'save'|'compose'>('save'),requestWaiting=ref(false),requestChecking=ref(false)
-const writingDirections=[
- {label:'更含蓄一些',value:'用动作和细节承载情感，减少直白表白，但保留一处真诚直接的表达。'},
- {label:'更多画面感',value:'围绕故事里已有的物件、动作或原话增加画面，不补编经历。'},
- {label:'少些套话',value:'删减空泛祝福和重复的赞美，保留真实细节与自然口语。'},
- {label:'副歌更难忘',value:'让副歌围绕一个来自故事的核心意象，提炼短而有回味的记忆句。'},
- {label:'情绪有递进',value:'让第二段和桥段带来新的理解，不反复讲同一种心情。'},
-]
-const directionVariants=(value:string)=>[value,english[value]||value]
-const directionSelected=(value:string)=>instructions.value.split('\n').some(line=>directionVariants(value).includes(line))
-function toggleDirection(value:string){
- if(directionSelected(value)){instructions.value=instructions.value.split('\n').filter(line=>!directionVariants(value).includes(line)).join('\n');return}
- const next=instructions.value+(instructions.value&&!instructions.value.endsWith('\n')?'\n':'')+t(value)
- if(next.length<=1000)instructions.value=next
-}
 const blocked=computed(()=>loading.value||composing.value||preparing.value||requestWaiting.value||requestChecking.value)
 const draftValue=()=>({title:title.value.trim(),lyrics:text.value})
 const dirty=computed(()=>!loading.value&&JSON.stringify(draftValue())!==baseline.value)
@@ -134,7 +118,8 @@ watch(localSaved,value=>emit('recoverable',value),{immediate:true})
 function select(value:Revision|null){active.value=value;title.value=value?.title||props.work.title||(props.work.recipient?t('写给{recipient}的歌',{recipient:props.work.recipient}):t('我的原创歌曲'));text.value=value?.lyrics||'';baseline.value=JSON.stringify(draftValue());remember()}
 async function syncRoute(id:string){await nextTick();if(alive)await router.replace({query:{...route.query,revision:id,language:language.value,templateId:structure.value.templateId,chorusFirst:String(structure.value.chorusFirst)}})}
 const historyId=ref('')
-const historyPreview=computed(()=>versions.value.find(v=>v.id===historyId.value))
+const recentVersions=computed(()=>versions.value.slice(0,5))
+const historyPreview=computed(()=>recentVersions.value.find(v=>v.id===historyId.value))
 async function loadHistory(saveCurrent=false){
  const target=historyPreview.value
  if(!target||blocked.value||saving.value)return
@@ -151,7 +136,6 @@ function revertDraft(){
  if(!dirty.value||blocked.value||saving.value||!window.confirm(t('撤销当前尚未保存的歌词修改？')))return
  select(active.value);error.value='';notice.value=''
 }
-async function updateAllowance(){try{allowance.value=(await getUsage()).lyrics}catch{/* 额度以提交时的后端检查为准。 */}}
 async function recoverRequest(){
   const key=requestKey.value;if(!key)return
   requestChecking.value=true
@@ -169,7 +153,7 @@ async function recoverRequest(){
       if(JSON.stringify(draftValue())===baseline.value){select(found);await syncRoute(found.id)}
       requestKey.value='';error.value='';notice.value='上次编写的歌词已找回，可在历史版本中查看。'
     }else if(requestWaiting.value)notice.value='歌词仍在编写中，可以稍后刷新编写状态。'
-    remember();void updateAllowance()
+    remember()
   }finally{requestChecking.value=false}
 }
 async function refreshRequest(){try{await recoverRequest()}catch(e){errorKind.value='compose';error.value=e instanceof Error?e.message:'暂时无法确认编写状态，请稍后刷新。'}}
@@ -186,7 +170,6 @@ onMounted(async()=>{
       if(local.dirty){select(versions.value.find(v=>v.id===local.baseId)||active.value);title.value=local.title;text.value=local.lyrics;notice.value=local.workVersion===props.work.version?'已恢复本机尚未保存的歌词。':'故事已更新，本机歌词已恢复，保存后将成为当前故事的新版本。'}
     }
     if(requestKey.value)await recoverRequest()
-    void updateAllowance()
   }catch(e){errorKind.value='load';error.value=e instanceof Error?e.message:'歌词读取失败'}
   finally{loading.value=false;remember()}
 })
@@ -218,29 +201,21 @@ async function prepareForGeneration(saveChanges=false):Promise<Revision>{
 }
 watch([language,instructions,structure],()=>{if(!composing.value&&!requestWaiting.value&&!requestChecking.value)requestKey.value=''},{flush:'sync'})
 async function compose(){
-  if(blocked.value||saving.value||!aiReady.value)return
+  if(blocked.value||saving.value||lineBusy.value||!aiReady.value)return
   if(dirty.value&&!window.confirm(t('生成新歌词后将显示新版本，当前未保存的修改会被替换，是否继续？')))return
   composing.value=true;error.value='';notice.value='';errorKind.value='compose'
   try{
     if(inflight)await inflight
     requestKey.value ||= crypto.randomUUID();remember()
     const created=await generateLyrics(props.work.id,props.work.version,requestKey.value,language.value,instructions.value,active.value?.id,{...structure.value})
+    if(!alive)return
     versions.value=[created,...versions.value.filter(v=>v.id!==created.id)];select(created);requestKey.value='';remember();await syncRoute(created.id);notice.value='新歌词已生成，旧版本已保留。你可以继续修改。'
-  }catch(e){errorKind.value='compose';error.value=e instanceof Error?e.message:'歌词生成失败，请稍后再试';try{await recoverRequest()}catch{/* 无法确认时保留原请求键，避免重复付费。 */}}
-  finally{composing.value=false;remember();void updateAllowance()}
+  }catch(e){if(!alive)return;errorKind.value='compose';error.value=e instanceof Error?e.message:'歌词生成失败，请稍后再试';try{await recoverRequest()}catch{/* 无法确认时保留原请求键，避免重复付费。 */}}
+  finally{composing.value=false;remember()}
 }
 onBeforeUnmount(()=>{remember();alive=false})
 async function preserveDraftForNavigation(){if(inflight)await inflight;if(dirty.value){remember();if(!localSaved.value)throw new Error('请先保存歌词')}}
-const regenerateSection=ref<HTMLDetailsElement>()
-const showRewrite=ref(false)
-async function reviewMusicDirection(){
-  if(blocked.value||saving.value)return
-  const direction=t('按当前音乐方向调整句长 节奏和表达 保留故事事实与重要原句')
-  if(!instructions.value.includes(direction)&&instructions.value.length+direction.length+1<=1000)instructions.value+=(instructions.value?'\n':'')+direction
-  showRewrite.value=true
-  await nextTick();if(regenerateSection.value){regenerateSection.value.open=true;regenerateSection.value.scrollIntoView({block:'center',behavior:'smooth'})}
-}
-defineExpose({prepareForGeneration,preserveDraftForNavigation,reviewMusicDirection,needsSave,canSave,save,saving})
+defineExpose({prepareForGeneration,preserveDraftForNavigation,needsSave,canSave,save,saving})
 </script>
 <template><section class="detail-panel lyrics-panel">
   <p v-if="error" class="notice error" role="alert">{{ t(error) }} <button class="text-button" :disabled="loading||composing||requestChecking||saving" @click="retryError">{{ t(errorKind==='load'?'刷新页面':errorKind==='save'?'重试保存':requestWaiting?'刷新编写状态':'重新编写歌词') }}</button></p>
@@ -255,7 +230,13 @@ defineExpose({prepareForGeneration,preserveDraftForNavigation,reviewMusicDirecti
   <div class="lyric-editor-box">
     <div class="lyric-editor-label">
       <span id="lyric-editor-help">{{ t('歌词可直接修改，保存后再生成歌曲') }}</span>
-      <button type="button" class="lyric-quiet-action" :disabled="blocked||saving||!dirty" :title="t('撤销未保存修改')" @click="revertDraft"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5 4 9l4 4M4 9h10a5 5 0 0 1 0 10h-3"/></svg>{{ t('恢复原版') }}</button>
+      <div class="lyric-editor-actions">
+        <button v-if="aiReady" type="button" class="lyric-rewrite-all" :disabled="blocked||saving||lineBusy" @click="compose">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12l5-2 2-5 2 5 5 2-5 2-2 5-2-5-5-2Zm13-7h5m-2.5-2.5v5"/></svg>
+          {{ composing?t('正在编写歌词…'):versions.length?t('AI 重新生成全部歌词'):t('根据故事生成歌词') }}
+        </button>
+        <button type="button" class="lyric-quiet-action" :disabled="blocked||saving||!dirty" :title="t('撤销未保存修改')" @click="revertDraft"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5 4 9l4 4M4 9h10a5 5 0 0 1 0 10h-3"/></svg>{{ t('恢复原版') }}</button>
+      </div>
     </div>
     <div class="lyric-text-stage">
       <textarea id="song-lyrics" ref="editor" v-model="text" maxlength="12000" class="lyrics-edit lyric-text" :aria-label="t('歌词')" aria-describedby="lyric-editor-help" :disabled="blocked||saving" :placeholder="t('写下主歌、副歌，或者你想唱给TA听的话……')" @select="captureSelection" @keyup="captureSelection" @pointerup="captureSelection" @scroll.passive="placeToolbar"></textarea>
@@ -274,22 +255,20 @@ defineExpose({prepareForGeneration,preserveDraftForNavigation,reviewMusicDirecti
     <p v-if="!canReplaceLine" class="save-info">{{ t('原歌词已变化或替换后超出长度，可以复制建议后手动修改。') }}</p>
     <div class="actions"><button class="button secondary" type="button" :disabled="!canReplaceLine||blocked||saving" @click="replaceLine">{{ t('替换选句') }}</button><button class="text-button" type="button" @click="linePreview=undefined">{{ t('关闭') }}</button></div>
   </div>
-  <div v-if="!externalSave" class="lyrics-save-bar"><button type="button" class="button lyrics-save-button" :disabled="!canSave" @click="save">{{ saving?t('正在保存…'):t('保存歌词') }}</button></div>
+  <div v-if="showInlineSave" class="lyrics-save-bar"><button type="button" class="button lyrics-save-button" :disabled="!canSave" @click="save">{{ saving?t('正在保存…'):t('保存歌词') }}</button></div>
   <details class="lyrics-history">
     <summary class="lyric-version-strip">
       <span class="lyric-version-meta"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h8l4 4v14H6ZM14 3v5h4M9 12h6m-6 4h6"/></svg><strong>{{ t('当前版本') }} · {{ t(dirty||!active?'草稿':'已保存') }}</strong><time v-if="savedTime" :datetime="active?.createdAt">{{ savedTime }}</time></span>
       <span class="lyric-history-link">{{ t('查看历史版本') }} <span aria-hidden="true">›</span></span>
     </summary>
-    <label v-if="versions.length" class="field">{{ t('历史版本（最近100条）') }}<select v-model="historyId" :disabled="blocked||saving"><option value="">{{ t('选择版本预览') }}</option><option v-for="revision in versions" :key="revision.id" :value="revision.id">{{ revision.title }} · {{ formatDate(revision.createdAt) }}</option></select></label>
+    <label v-if="versions.length" class="field">{{ t('历史版本（最近5条）') }}<select v-model="historyId" :disabled="blocked||saving"><option value="">{{ t('选择版本预览') }}</option><option v-for="revision in recentVersions" :key="revision.id" :value="revision.id">{{ revision.title }} · {{ formatDate(revision.createdAt) }}</option></select></label>
     <template v-if="historyPreview"><pre class="lyric-history-preview">{{ historyPreview.lyrics }}</pre>
       <p v-if="dirty" class="save-info">{{ t('当前还有未保存的修改。') }}</p>
       <div class="actions"><button v-if="dirty" type="button" class="button secondary" :disabled="blocked||saving||!valid" @click="loadHistory(true)">{{ t('保存当前再载入') }}</button><button type="button" class="button secondary" :disabled="blocked||saving" @click="loadHistory()">{{ t(dirty?'放弃修改并载入':'载入此版本') }}</button><button type="button" class="text-button" :disabled="saving" @click="historyId=''">{{ t('取消') }}</button></div>
     </template>
     <p v-if="!versions.length" class="save-info">{{ t('暂无已保存的歌词版本。') }}</p>
-    <button v-if="aiReady&&versions.length" type="button" class="lyric-quiet-action" :aria-expanded="showRewrite" @click="showRewrite=!showRewrite">{{ t('AI 重新写一版') }}</button>
     <RecoveryCopies v-if="!loading&&cacheKey&&!blocked" :inert="saving||undefined" :storage-key="cacheKey" :validate="validRecovery" @restore="restoreCopy"/>
   </details>
-  <details ref="regenerateSection" v-if="aiReady&&(showRewrite||!versions.length)" class="creation-fold lyrics-regenerate" open><summary>{{ versions.length?t('想换个写法？调整并重新生成'):t('根据故事生成歌词') }}</summary><LyricsTemplatePicker v-model="structure" :disabled="blocked||saving"/><div class="regenerate-fields"><label class="field">{{ t('歌词语言') }}<select v-model="language" :disabled="blocked"><option value="zh-CN">{{ t('中文') }}</option><option value="en">English</option><option value="mixed">{{ t('中英混合') }}</option></select></label><label class="field">{{ t('修改要求（可选）') }}<textarea v-model="instructions" maxlength="1000" :disabled="blocked" :placeholder="t('例如：保留第二段，副歌加入妈妈的名字，少一点直白表达。')"></textarea></label></div><div class="lyric-writing-directions"><p class="save-info">{{ t('点选润色方向，也可以自己补充要求；点击重新生成后才会开始创作。') }}</p><div class="suggestion-tags" role="group" :aria-label="t('歌词润色方向')"><button v-for="direction in writingDirections" :key="direction.label" type="button" class="suggestion-tag" :class="{selected:directionSelected(direction.value)}" :aria-pressed="directionSelected(direction.value)" :disabled="blocked||(!directionSelected(direction.value)&&instructions.length+t(direction.value).length+1>1000)" @click="toggleDirection(direction.value)">{{ t(direction.label) }}</button></div></div><p v-if="versions.length" class="save-info">{{ t('重新生成以已保存的歌词为基础；如需保留手动修改，请先保存。') }}</p><button class="button secondary" :disabled="blocked||saving" @click="compose">{{ composing?t('正在编写歌词…'):versions.length?t('重新生成歌词'):t('根据故事生成歌词') }}</button><p class="save-info">{{ t('重新生成会使用一次歌词创作额度。') }} <span v-if="allowance">{{ allowance.dailyUnlimited?t('今日歌词编写不限次数'):t('今日还可编写 {remaining} 次歌词',{remaining:allowance.dailyRemaining}) }}</span></p></details>
 </section></template>
 <style scoped>
 .lyrics-panel { padding:20px clamp(16px,2.15vw,36px); background:#fffdfd; border-radius:20px; }
@@ -299,6 +278,10 @@ defineExpose({prepareForGeneration,preserveDraftForNavigation,reviewMusicDirecti
 .lyric-title input { grid-column:1/-1; min-width:0; width:100%; padding:9px 13px; border:1px solid #e8e0e2; border-radius:11px; background:#fffdfd; color:inherit; font:inherit; font-weight:500; }
 .lyric-editor-label { display:flex; align-items:center; justify-content:space-between; gap:12px; margin:13px 0 10px; color:#72676a; font-size:14px; }
 .lyric-quiet-action { display:inline-flex; align-items:center; justify-content:center; gap:6px; min-height:32px; padding:0; border:0; background:none; color:#6f5852; font:inherit; cursor:pointer; }
+.lyric-editor-actions { display:flex; align-items:center; justify-content:flex-end; flex-wrap:wrap; gap:6px 12px; }
+.lyric-rewrite-all { display:inline-flex; align-items:center; gap:6px; min-height:34px; padding:4px 10px; border:1px solid #edc7ba; border-radius:999px; background:#fff5f0; color:#a63b25; font:inherit; font-weight:650; cursor:pointer; }
+.lyric-rewrite-all:hover:not(:disabled) { background:#ffece2; }
+.lyric-rewrite-all svg { width:16px; height:16px; flex:none; fill:none; stroke:currentColor; stroke-width:1.6; stroke-linecap:round; stroke-linejoin:round; }
 .lyric-quiet-action:disabled { opacity:.63; cursor:default; }
 .lyric-quiet-action svg,.lyric-version-strip svg,.lyric-line-tools svg { width:16px; height:16px; flex:none; fill:none; stroke:currentColor; stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round; }
 .lyric-text-stage { position:relative; min-width:0; }
@@ -327,7 +310,8 @@ defineExpose({prepareForGeneration,preserveDraftForNavigation,reviewMusicDirecti
  .lyric-line-tools { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); width:100%; border-radius:13px; }
  .lyric-line-tools button { justify-content:center; min-height:40px; }
  .lyric-line-tools button:nth-of-type(odd) { border-left:0; }
- .lyric-editor-label { align-items:start; font-size:12px; }
+ .lyric-editor-label { align-items:start; flex-direction:column; gap:6px; font-size:12px; }
+ .lyric-editor-actions { width:100%; justify-content:space-between; }
  .lyric-quiet-action { flex:none; min-height:24px; }
 }
 </style>
