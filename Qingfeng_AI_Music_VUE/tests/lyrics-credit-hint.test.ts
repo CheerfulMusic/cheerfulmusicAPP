@@ -123,6 +123,15 @@ describe('歌词生成的积分消耗提示', () => {
     expect(wrapper.text()).toContain('今日免费改写还剩 2 次，用完后每次消耗 1 积分。')
     expect(wrapper.text()).toContain('改写失败会退还已扣积分；免费次数按调用计算，失败同样占用一次。')
   })
+
+  it('永久免费时不显示剩余次数，也不显示超大数字', async () => {
+    const wrapper = hint({ variant: 'rewrite', cost: 1, balance: 0, freeRemaining: -1 })
+    expect(wrapper.text()).toContain('本次改写不消耗积分')
+    expect(wrapper.text()).not.toContain('本次改写消耗')
+    expect(wrapper.text()).not.toContain('9223372036854775807')
+    await wrapper.find('.credit-cost-trigger').trigger('click')
+    expect(wrapper.text()).toContain('AI 改写当前不消耗积分。')
+  })
 })
 
 describe('积分文案的中英文一致性', () => {

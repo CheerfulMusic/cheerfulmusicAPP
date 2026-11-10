@@ -63,7 +63,7 @@ describe('歌词生成的积分准入', () => {
 })
 
 describe('AI 改写的积分准入', () => {
-  const rewriteCost = (view: CreditsView) => view.rewriteFreeRemaining > 0 ? 0 : view.rewriteCost
+  const rewriteCost = (view: CreditsView) => view.rewriteFreeRemaining === 0 ? view.rewriteCost : 0
 
   it('每日免费额度内不拦截，也不要求余额', async () => {
     const refresh = vi.fn()
@@ -71,6 +71,12 @@ describe('AI 改写的积分准入', () => {
     expect(gate.blocked).toBe(false)
     expect(gate.cost).toBe(0)
     expect(refresh).not.toHaveBeenCalled()
+  })
+
+  it('永久免费（剩余次数为 -1）同样不拦截', async () => {
+    const gate = await guardCredits(() => ({ ...view(0), rewriteCost: 1, rewriteFreeRemaining: -1 }), vi.fn(), rewriteCost)
+    expect(gate.blocked).toBe(false)
+    expect(gate.cost).toBe(0)
   })
 
   it('免费额度用尽后余额不足才拦截', async () => {

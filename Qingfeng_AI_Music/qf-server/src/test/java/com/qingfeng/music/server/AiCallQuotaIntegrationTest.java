@@ -74,7 +74,8 @@ class AiCallQuotaIntegrationTest {
         String owner=identity.create().creatorId();
         assertTrue(quota.consume(owner,DailyQuota.MUSIC_BRIEF,-1));
         assertTrue(quota.consume(owner,DailyQuota.MUSIC_BRIEF,-1));
-        assertEquals(Long.MAX_VALUE,quota.remaining(owner,DailyQuota.MUSIC_BRIEF,-1));
+        // -1 表示不限（与 rewriteFreeRemaining 的约定一致，界面据此不显示剩余次数）。
+        assertEquals(-1,quota.remaining(owner,DailyQuota.MUSIC_BRIEF,-1));
         assertFalse(quota.consume(owner,DailyQuota.REFERENCE_ANALYSIS,0));
         assertEquals(0,quota.remaining(owner,DailyQuota.REFERENCE_ANALYSIS,0));
     }

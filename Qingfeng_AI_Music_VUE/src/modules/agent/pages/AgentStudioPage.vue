@@ -137,7 +137,7 @@ function send(extra?: string) {
  * 余额不足时先刷新一次再判断；后端在调用模型前还会再校验一次余额。
  */
 async function blockedByRewrite() {
-  const gate = await guardCredits(() => credits.value, refreshCredits, view => view.rewriteFreeRemaining > 0 ? 0 : view.rewriteCost)
+  const gate = await guardCredits(() => credits.value, refreshCredits, view => view.rewriteFreeRemaining === 0 ? view.rewriteCost : 0)
   if (!gate.blocked) return false
   notify(t('积分不足，当前余额 {balance} 积分，改写需要 {cost} 积分。', { balance: gate.balance as number, cost: gate.cost }))
   return true

@@ -73,7 +73,8 @@ public final class JdbcRewriteCharges implements RewriteCharges {
 
     public long freeRemaining(String owner) {
         long perDay = pricing.freePerDay(CreditsPricing.Kind.REWRITE);
-        if (perDay < 0) return Long.MAX_VALUE;
+        // -1 表示永久免费，与 DailyQuota 的约定一致，界面据此不显示剩余次数。
+        if (perDay < 0) return -1L;
         return quota.remaining(owner, DailyQuota.REWRITE, perDay);
     }
 

@@ -10,7 +10,7 @@ export interface CreditGate { blocked: boolean; balance: number | null; cost: nu
  * 刷新后仍然不足才拦截。这只是提前拦截，后端在调用模型前还会再校验一次余额。
  *
  * costOf 决定本次入口实际要付多少：AI 改写在每日免费额度内价格为 0，
- * 用完免费额度后才按 rewriteCost 收费。
+ * 用完免费额度后才按 rewriteCost 收费。rewriteFreeRemaining 为 -1 表示永久免费。
  */
 export async function guardCredits(
   read: () => CreditsView | null,

@@ -230,7 +230,7 @@ function rejectAnswer(message:string){validationError.value=message;document.que
  * 余额不足时先刷新一次再判断，避免用过期数字拦下刚充值完的用户；后端仍会再次校验。
  */
 async function blockedByRewrite(){
-  const gate=await guardCredits(()=>credits.value,refreshCredits,view=>view.rewriteFreeRemaining>0?0:view.rewriteCost)
+  const gate=await guardCredits(()=>credits.value,refreshCredits,view=>view.rewriteFreeRemaining===0?view.rewriteCost:0)
   if(!gate.blocked)return false
   rewriteError.value=t('积分不足，当前余额 {balance} 积分，改写需要 {cost} 积分。',{balance:gate.balance as number,cost:gate.cost})
   return true

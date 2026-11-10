@@ -22,11 +22,16 @@ const rule = ref<HTMLElement | null>(null)
 const shift = ref(0)
 
 const insufficient = computed(() => props.balance !== null && props.balance !== undefined && props.balance < props.cost)
-/** 改写在每日免费额度内不扣积分，此时不显示余额不足。 */
-const freeRewrite = computed(() => props.variant === 'rewrite' && props.freeRemaining !== null && props.freeRemaining !== undefined && props.freeRemaining > 0)
+/** 改写在每日免费额度内不扣积分，此时不显示余额不足。rewriteFreeRemaining 为 -1 表示永久免费。 */
+const freeRewrite = computed(() => props.variant === 'rewrite' && props.freeRemaining !== null && props.freeRemaining !== undefined && props.freeRemaining !== 0)
 const label = computed(() => {
   if (props.variant === 'rewrite') {
-    if (freeRewrite.value) return t('本次改写不消耗积分，今日免费改写还剩 {remaining} 次', { remaining: props.freeRemaining as number })
+    if (freeRewrite.value) {
+      const remaining = props.freeRemaining as number
+      return remaining > 0
+        ? t('本次改写不消耗积分，今日免费改写还剩 {remaining} 次', { remaining })
+        : t('本次改写不消耗积分')
+    }
     if (insufficient.value) return t('积分不足，当前余额 {balance} 积分，改写需要 {cost} 积分。', { balance: props.balance as number, cost: props.cost })
     return t('本次改写消耗 {cost} 积分', { cost: props.cost })
   }
@@ -66,7 +71,7 @@ onBeforeUnmount(() => document.removeEventListener('click', onDocumentClick))
     <span v-if="visible" ref="rule" class="credit-rule" role="tooltip" :style="{ '--credit-rule-shift': shift + 'px' }">
       <template v-if="variant === 'rewrite'">
         <span class="credit-rule-title">{{ t('积分规则') }}</span>
-        <span class="credit-rule-line">{{ t('今日免费改写还剩 {remaining} 次，用完后每次消耗 {cost} 积分。', { remaining: freeRemaining ?? 0, cost }) }}</span>
+        <span class="credit-rule-line">{{ (freeRemaining ?? 0) > 0 ? t('今日免费改写还剩 {remaining} 次，用完后每次消耗 {cost} 积分。', { remaining: freeRemaining ?? 0, cost }) : t('AI 改写当前不消耗积分。') }}</span>
         <span class="credit-rule-line">{{ t('改写失败会退还已扣积分；免费次数按调用计算，失败同样占用一次。') }}</span>
         <RouterLink v-if="insufficient && !freeRewrite" class="credit-rule-link" to="/recharge">{{ t('去充值') }}</RouterLink>
       </template>

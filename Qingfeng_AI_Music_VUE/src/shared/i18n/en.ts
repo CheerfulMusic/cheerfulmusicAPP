@@ -1141,6 +1141,8 @@ export const english: Record<string, string> = {
   "本次生成消耗 {cost} 积分": "This generation costs {cost} credits",
   "重新生成歌词同样消耗 {cost} 积分": "Regenerating lyrics also costs {cost} credits",
   "本次改写不消耗积分，今日免费改写还剩 {remaining} 次": "This rewrite costs no credits — {remaining} free rewrites left today",
+  "本次改写不消耗积分": "This rewrite costs no credits",
+  "AI 改写当前不消耗积分。": "AI rewrites currently cost no credits.",
   "本次改写消耗 {cost} 积分": "This rewrite costs {cost} credits",
   "积分不足，当前余额 {balance} 积分，改写需要 {cost} 积分。": "Not enough credits: your balance is {balance} credits, and this rewrite needs {cost} credits.",
   "今日免费改写还剩 {remaining} 次，用完后每次消耗 {cost} 积分。": "{remaining} free rewrites left today; after that each rewrite costs {cost} credits.",

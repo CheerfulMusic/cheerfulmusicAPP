@@ -26,6 +26,6 @@ public interface DailyQuota {
      */
     boolean consume(String owner, String bucket, long limit);
 
-    /** 今日剩余额度；limit 为 -1 时返回 {@link Long#MAX_VALUE} 表示不限。 */
+    /** 今日剩余额度；limit 为 -1（不限）时返回 -1 表示不限。 */
     long remaining(String owner, String bucket, long limit);
 }

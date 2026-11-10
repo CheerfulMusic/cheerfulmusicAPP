@@ -33,7 +33,7 @@ public final class JdbcDailyQuota implements DailyQuota {
     }
 
     public long remaining(String owner, String bucket, long limit) {
-        if (limit < 0) return Long.MAX_VALUE;
+        if (limit < 0) return -1L;
         if (limit == 0) return 0L;
         var used = jdbc.query("SELECT used_count FROM daily_quota WHERE creator_id=? AND bucket=? AND usage_day=?", (rs, n) -> rs.getInt(1), owner, bucket, today());
         return Math.max(0L, limit - (used.isEmpty() ? 0 : used.get(0)));
