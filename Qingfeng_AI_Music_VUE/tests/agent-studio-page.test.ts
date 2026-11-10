@@ -327,4 +327,34 @@ describe('Agent 创作页交互回归', () => {
     expect(toggle).toHaveBeenCalledTimes(1)
     expect(spies.recordPlay).toHaveBeenCalledWith('travel')
   })
+
+  it('连点同一个快捷标签只给一次提示，五个标签各给一次且不触发发送', async () => {
+    const { wrapper } = await mountPage()
+    const modes = wrapper.findAll('.agent-modes button')
+    expect(modes).toHaveLength(5)
+    expect(modes.every(button => button.attributes('type') === 'button')).toBe(true)
+    const initial = wrapper.findAll('.agent-message').length
+    for (let i = 0; i < 5; i++) {
+      await modes[0]!.trigger('click')
+      await flush()
+      expect(wrapper.findAll('.agent-message')).toHaveLength(initial + 1)
+    }
+    expect(modes[0]!.attributes('aria-pressed')).toBe('true')
+    for (let i = 1; i < modes.length; i++) {
+      await modes[i]!.trigger('click')
+      await flush()
+    }
+    expect(wrapper.findAll('.agent-message')).toHaveLength(initial + modes.length)
+    // 回头再点第一个模式也不重复追加，且标签点击绝不会变成一次发送。
+    await modes[0]!.trigger('click')
+    await flush()
+    expect(wrapper.findAll('.agent-message')).toHaveLength(initial + modes.length)
+    expect(wrapper.findAll('.agent-message.user')).toHaveLength(0)
+  })
+
+  it('输入区是单行输入框，不含会被自动增高的 textarea', async () => {
+    const { wrapper } = await mountPage()
+    expect(wrapper.find('.agent-composer-box input[type="text"]').exists()).toBe(true)
+    expect(wrapper.find('.agent-composer-box textarea').exists()).toBe(false)
+  })
 })

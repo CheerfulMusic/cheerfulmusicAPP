@@ -92,8 +92,12 @@ function notify(message: string) {
 async function scrollChat() { await nextTick(); chat.value?.scrollTo({ top: chat.value.scrollHeight, behavior: 'smooth' }) }
 function nextBoard() { boardIndex.value++ }
 function toggleInterest(tag: string) { interests.value = interests.value.includes(tag) ? interests.value.filter(item => item !== tag) : [...interests.value, tag] }
+/** 同一模式的提示只出现一次：连点快捷标签不重复追加消息，也不重复触发聊天区定位。 */
+const hintedModes = new Set<AgentMode>()
 function chooseMode(option: typeof modeOptions[number]) {
   mode.value = option.id
+  if (hintedModes.has(option.id)) return
+  hintedModes.add(option.id)
   messages.value.push({ id: ++messageId, role: 'assistant', text: t(option.hint) })
   void scrollChat()
 }
