@@ -68,3 +68,68 @@ export function filterUsers<T extends { accountType?: string | null }>(rows: rea
 export function guestHint(guests: number): string {
   return guests > 0 ? `${guests} 位游客只创建了浏览器会话，未绑定 Google / 邮箱 / 手机身份` : ''
 }
+
+export interface TrendPoint { d: string; pv: number; uv: number; pageviews: number; avgDurationMs: number }
+
+function isoDay(date: Date): string {
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${date.getFullYear()}-${month}-${day}`
+}
+
+/**
+ * 补齐整段日期：接口只返回有事件的日期，缺的那天补 0。
+ * 0 是真实值（当天没有访问），不是编造数据；单点时图表也能画出可见坐标。
+ */
+export function buildTrend(rows: readonly { d: string; pv: number; uv: number; pageviews: number; avgDurationMs: number }[], days: number, now: Date = new Date()): TrendPoint[] {
+  const byDay = new Map<string, TrendPoint>()
+  for (const row of rows) {
+    byDay.set(row.d, {
+      d: row.d,
+      pv: Number(row.pv) || 0,
+      uv: Number(row.uv) || 0,
+      pageviews: Number(row.pageviews) || 0,
+      avgDurationMs: Number(row.avgDurationMs) || 0,
+    })
+  }
+  const span = Math.max(1, Math.floor(days))
+  const result: TrendPoint[] = []
+  for (let offset = span - 1; offset >= 0; offset--) {
+    const date = new Date(now.getFullYear(), now.getMonth(), now.getDate() - offset)
+    const d = isoDay(date)
+    result.push(byDay.get(d) ?? { d, pv: 0, uv: 0, pageviews: 0, avgDurationMs: 0 })
+  }
+  return result
+}
+
+/** 占比用于进度条，始终以最大页面的 PV 为参照，避免全为 0 时除零。 */
+export function shareOf(value: number, total: number): number {
+  if (!Number.isFinite(value) || !Number.isFinite(total) || total <= 0) return 0
+  return Math.max(0, Math.min(1, value / total))
+}
+
+const PAGE_NAMES: Record<string, string> = {
+  '/': '首页',
+  '/create': '创作页',
+  '/works': '我的音乐',
+  '/works/:id': '作品详情',
+  '/account': '账号页',
+  '/recharge': '充值页',
+  '/gift/:token': '分享页',
+  '/analytics': '数据看板',
+  '/agent': 'AI 工作台',
+}
+
+/** 页面中文名；未收录的路径直接回退到路径本身，不臆造名称。 */
+export function pageName(path: string): string {
+  return PAGE_NAMES[path] ?? (path || '/')
+}
+
+/** 头像首字母：优先昵称/邮箱首字符，游客用「游」。 */
+export function avatarText(row: AccountRow): string {
+  const name = row.name?.trim()
+  if (name) return [...name][0]!.toUpperCase()
+  if (row.email && row.email.trim()) return row.email.trim()[0]!.toUpperCase()
+  if (row.phoneMasked && row.phoneMasked.trim()) return '手'
+  return isGuest(row.accountType) ? '游' : '访'
+}

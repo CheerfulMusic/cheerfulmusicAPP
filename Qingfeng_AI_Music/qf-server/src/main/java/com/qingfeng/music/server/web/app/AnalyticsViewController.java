@@ -128,20 +128,23 @@ public class AnalyticsViewController {
         body.put("days", window);
         try {
             body.put("totals", template.query(
-                    "SELECT COUNT(*) pv, COUNT(DISTINCT visitor_id) uv, COUNT(DISTINCT session_id) sessions, "
+                    "SELECT COUNT(*) pv, COUNT(CASE WHEN event='pageview' THEN 1 END) pageviews, "
+                            + "COUNT(DISTINCT visitor_id) uv, COUNT(DISTINCT session_id) sessions, "
                             + "COALESCE(AVG(CASE WHEN event='page_leave' THEN duration_ms END),0) avg_duration_ms, "
                             + "COALESCE(SUM(CASE WHEN event='page_leave' THEN duration_ms END),0) total_duration_ms "
                             + "FROM site_event WHERE created_at >= ?",
-                    (rs, n) -> map(rs.getLong("pv"), rs.getLong("uv"), rs.getLong("sessions"),
+                    (rs, n) -> map(rs.getLong("pv"), rs.getLong("pageviews"), rs.getLong("uv"), rs.getLong("sessions"),
                             rs.getLong("avg_duration_ms"), rs.getLong("total_duration_ms")), since).stream().findFirst().orElseGet(LinkedHashMap::new));
             body.put("daily", template.query(
-                    "SELECT CAST(created_at AS DATE) d, COUNT(*) pv, COUNT(DISTINCT visitor_id) uv, "
+                    "SELECT CAST(created_at AS DATE) d, COUNT(*) pv, COUNT(CASE WHEN event='pageview' THEN 1 END) pageviews, "
+                            + "COUNT(DISTINCT visitor_id) uv, "
                             + "COALESCE(AVG(CASE WHEN event='page_leave' THEN duration_ms END),0) avg_duration_ms FROM site_event "
                             + "WHERE created_at >= ? GROUP BY CAST(created_at AS DATE) ORDER BY d",
                     (rs, n) -> {
                         var row = new LinkedHashMap<String, Object>();
                         row.put("d", String.valueOf(rs.getDate("d")));
                         row.put("pv", rs.getLong("pv"));
+                        row.put("pageviews", rs.getLong("pageviews"));
                         row.put("uv", rs.getLong("uv"));
                         row.put("avgDurationMs", rs.getLong("avg_duration_ms"));
                         return row;
@@ -153,7 +156,7 @@ public class AnalyticsViewController {
                             + "SELECT page_path, COUNT(*) pv FROM site_event WHERE event='pageview' AND created_at >= ? "
                             + "GROUP BY page_path ORDER BY pv DESC LIMIT 20) p LEFT JOIN ("
                             + "SELECT page_path, AVG(duration_ms) avg_ms, COUNT(*) samples FROM site_event "
-                            + "WHERE event='page_leave' AND duration_ms IS NOT NULL AND created_at >= ? "
+                            + "WHERE event='page_leave' AND duration_ms IS NOT NULL AND duration_ms >= 0 AND created_at >= ? "
                             + "GROUP BY page_path) l ON l.page_path = p.page_path ORDER BY p.pv DESC",
                     (rs, n) -> {
                         var row = new LinkedHashMap<String, Object>();
@@ -166,6 +169,7 @@ public class AnalyticsViewController {
             // 身份来自三张互斥的身份表；都没有绑定的就是游客会话（游客也带 creator_id，不能被当成登录用户）。
             body.put("users", template.query(
                     "SELECT t.creator_id, t.account_type, t.name, t.email, t.phone_masked, COUNT(*) pv, "
+                            + "COUNT(CASE WHEN t.event='pageview' THEN 1 END) pageviews, "
                             + "COALESCE(AVG(CASE WHEN t.event='page_leave' THEN t.duration_ms END),0) avg_duration_ms, "
                             + "SUM(CASE WHEN t.event='page_leave' AND t.duration_ms IS NOT NULL THEN 1 ELSE 0 END) samples, "
                             + "MIN(t.created_at) first_seen, MAX(t.created_at) last_seen FROM ("
@@ -190,6 +194,7 @@ public class AnalyticsViewController {
                         row.put("email", rs.getString("email"));
                         row.put("phoneMasked", rs.getString("phone_masked"));
                         row.put("pv", rs.getLong("pv"));
+                        row.put("pageviews", rs.getLong("pageviews"));
                         row.put("avgDurationMs", rs.getLong("avg_duration_ms"));
                         row.put("samples", rs.getLong("samples"));
                         row.put("firstSeen", rs.getTimestamp("first_seen") == null ? "" : rs.getTimestamp("first_seen").toInstant().toString());
@@ -231,8 +236,36 @@ public class AnalyticsViewController {
         return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(body);
     }
 
-    private static Map<String, Object> map(long pv, long uv, long sessions, long avg, long total) {        var row = new LinkedHashMap<String, Object>();
+    /** 用户下钻：某个用户在各页面的停留；权限与其它看板接口一致。 */
+    @GetMapping("/user-pages")
+    public ResponseEntity<Map<String, Object>> userPages(@RequestParam String creatorId,
+                                                         @RequestParam(defaultValue = "30") int days) {
+        var body = new LinkedHashMap<String, Object>();
+        body.put("allowed", false);
+        if (!allowed(currentCreatorId())) {
+            return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(body);
+        }
+        var clean = creatorId == null ? "" : creatorId.trim();
+        if (!clean.matches("[A-Za-z0-9-]{8,36}")) {
+            return ResponseEntity.badRequest().cacheControl(CacheControl.noStore()).build();
+        }
+        int window = Math.max(1, Math.min(days, 90));
+        body.put("allowed", true);
+        body.put("days", window);
+        body.put("creatorId", clean);
+        try {
+            body.put("pages", detail.userPages(clean, Instant.now().minus(window, ChronoUnit.DAYS)));
+        } catch (RuntimeException e) {
+            body.put("pages", List.of());
+            body.put("error", "QUERY_FAILED");
+        }
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(body);
+    }
+
+    private static Map<String, Object> map(long pv, long pageviews, long uv, long sessions, long avg, long total) {
+        var row = new LinkedHashMap<String, Object>();
         row.put("pv", pv);
+        row.put("pageviews", pageviews);
         row.put("uv", uv);
         row.put("sessions", sessions);
         row.put("avgDurationMs", avg);

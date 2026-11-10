@@ -139,6 +139,27 @@ class AnalyticsPageUsersSqlTest {
         assertEquals(400, blank.getStatusCode().value());
     }
 
+    @Test @SuppressWarnings("unchecked")
+    void userPagesGroupsDwellForOneCreator() {
+        var body = controller.userPages("creator-1", 30).getBody();
+        assertNotNull(body);
+        assertEquals(true, body.get("allowed"));
+        assertEquals("creator-1", body.get("creatorId"));
+        var rows = (List<AnalyticsDetailService.PageDwell>) body.get("pages");
+        assertEquals(2, rows.size(), "只取这个用户自己的页面");
+        assertEquals("/create", rows.get(0).pagePath(), "按有效停留次数排序");
+        assertEquals(3000L, rows.get(0).avgDurationMs());
+        assertEquals(2L, rows.get(0).samples());
+        assertEquals("/works", rows.get(1).pagePath());
+        assertEquals(1L, rows.get(1).samples());
+    }
+
+    @Test
+    void invalidCreatorIdIsRejected() {
+        assertEquals(400, controller.userPages("../etc/passwd", 30).getStatusCode().value());
+        assertEquals(400, controller.userPages("  ", 30).getStatusCode().value());
+    }
+
     @Test
     void nonWhitelistedViewerGetsNoRows() {
         login("creator-2");
@@ -146,5 +167,6 @@ class AnalyticsPageUsersSqlTest {
         assertNotNull(body);
         assertEquals(false, body.get("allowed"));
         assertFalse(body.containsKey("users"), "未授权时不能返回任何用户明细");
+        assertFalse(controller.userPages("creator-1", 30).getBody().containsKey("pages"), "未授权时同样拿不到用户页面明细");
     }
 }

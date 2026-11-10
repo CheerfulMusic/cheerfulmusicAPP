@@ -27,6 +27,9 @@ public class AnalyticsDetailService {
     public record UserDwell(String creatorId, String accountType, String name, String email,
                             String phoneMasked, long avgDurationMs, long samples) {}
 
+    /** 单个用户在各页面的停留；同样只认 page_leave 且有有效时长。 */
+    public record PageDwell(String pagePath, long avgDurationMs, long samples) {}
+
     /** 未识别的身份一律归为游客，绝不猜测成某个账号。 */
     static final String IDENTITY_SQL =
             "CASE WHEN g.creator_id IS NOT NULL THEN 'GOOGLE' "
@@ -59,6 +62,21 @@ public class AnalyticsDetailService {
         for (Map<String, Object> row : rows) {
             result.add(new UserDwell(text(row.get("creator_id")), text(row.get("account_type")),
                     text(row.get("name")), text(row.get("email")), text(row.get("phone_masked")),
+                    Math.round(number(row.get("avg_ms"))), number(row.get("samples"))));
+        }
+        return result;
+    }
+
+    public List<PageDwell> userPages(String creatorId, Instant since) {
+        var rows = db.queryForList(
+                "SELECT page_path, AVG(duration_ms) avg_ms, COUNT(*) samples FROM site_event "
+                        + "WHERE event='page_leave' AND creator_id=? AND created_at>=? "
+                        + "AND duration_ms IS NOT NULL AND duration_ms>=0 "
+                        + "GROUP BY page_path ORDER BY samples DESC, avg_ms DESC LIMIT " + LIMIT,
+                creatorId, Timestamp.from(since));
+        var result = new ArrayList<PageDwell>(rows.size());
+        for (Map<String, Object> row : rows) {
+            result.add(new PageDwell(text(row.get("page_path")),
                     Math.round(number(row.get("avg_ms"))), number(row.get("samples"))));
         }
         return result;
