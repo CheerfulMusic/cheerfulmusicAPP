@@ -17,6 +17,8 @@ public class MyBatisWorkRepository implements WorkRepository {
         mapper.deleteGenerationAudioSources(id);
         mapper.deleteGenerationMusicPreferences(id);
         mapper.deleteGenerationAudioCandidates(id);
+        // generation_attempt 挂在 generation_task 上，必须先删，否则删除作品会因外键约束失败。
+        mapper.deleteGenerationAttempts(id);
         mapper.deleteAudioSelection(id);
         mapper.deleteShares(id);
         mapper.deleteLyricsTimelines(id);
@@ -31,6 +33,8 @@ public class MyBatisWorkRepository implements WorkRepository {
         mapper.deleteModelUsageReservations(id);
         mapper.deleteLyricsCompositionRequests(id);
         mapper.deleteWorkMusicPreferences(id);
+        // 兜底清理尚未入库迁移引入的子表（quick_creation），存在才删。
+        if(mapper.countExistingTable("quick_creation")>0)mapper.deleteQuickCreations(id);
         mapper.deleteWork(owner,id);
     }
     private Work work(WorkRow r) { return new Work(r.id,r.recipient,r.occasion,r.story,r.message,r.style,r.title,r.version,r.createdAt,r.updatedAt,r.vocalGender); }

@@ -45,6 +45,9 @@ class WorkLibraryIntegrationTest {
         jdbc.update("INSERT INTO cover_asset(id,work_id,storage_key,byte_size,origin,created_at) VALUES(?,?,?,?,?,CURRENT_TIMESTAMP)",UUID.randomUUID().toString(),work.id(),"k",1,"UPLOADED");
         jdbc.update("INSERT INTO work_music_preferences(work_id,settings_json) VALUES(?,?)",work.id(),"{}");
         jdbc.update("INSERT INTO lyrics_composition_request(work_id,request_key,status,created_at) VALUES(?,?,?,CURRENT_TIMESTAMP)",work.id(),"rk","PENDING");
+        // 执行记录 generation_attempt 挂在 generation_task 上：删除作品时必须一起清掉，
+        // 否则会触发 fk_attempt_task 外键约束导致删除返回 500。
+        jdbc.update("INSERT INTO generation_attempt(id,task_id,phase,outcome,started_at) VALUES(?,?,'GENERATE','SUCCEEDED',CURRENT_TIMESTAMP)",UUID.randomUUID().toString(),task.id());
         works.delete(owner,work.id());
         assertTrue(library.list(owner,0).isEmpty());
         assertEquals(0,jdbc.queryForObject("SELECT COUNT(*) FROM music_work WHERE id=?",Integer.class,work.id()));
@@ -55,6 +58,7 @@ class WorkLibraryIntegrationTest {
         assertEquals(0,jdbc.queryForObject("SELECT COUNT(*) FROM cover_asset WHERE work_id=?",Integer.class,work.id()));
         assertEquals(0,jdbc.queryForObject("SELECT COUNT(*) FROM work_music_preferences WHERE work_id=?",Integer.class,work.id()));
         assertEquals(0,jdbc.queryForObject("SELECT COUNT(*) FROM lyrics_composition_request WHERE work_id=?",Integer.class,work.id()));
+        assertEquals(0,jdbc.queryForObject("SELECT COUNT(*) FROM generation_attempt WHERE task_id=?",Integer.class,task.id()));
         // 删除后再次删除应报找不到
         assertThrows(DomainException.class,()->works.delete(owner,work.id()));
     }

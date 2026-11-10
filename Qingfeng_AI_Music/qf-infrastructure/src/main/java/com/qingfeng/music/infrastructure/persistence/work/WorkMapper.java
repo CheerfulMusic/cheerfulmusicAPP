@@ -13,6 +13,9 @@ public interface WorkMapper {
     @Select("SELECT * FROM music_work WHERE owner_id=#{owner} ORDER BY updated_at DESC,id DESC LIMIT #{limit} OFFSET #{offset}") List<WorkRow> list(@Param("owner") String owner,@Param("offset") int offset,@Param("limit") int limit);
 
     // 删除作品时按外键依赖顺序清理关联数据：先删子表，再删父表，避免违反外键约束。
+    // generation_attempt 是 generation_task 的子表（V4 建表，fk_attempt_task），
+    // 必须排在 deleteGenerationTasks 之前，否则删除会因外键约束失败返回 500。
+    @Delete("DELETE FROM generation_attempt WHERE task_id IN (SELECT id FROM generation_task WHERE work_id=#{id})") void deleteGenerationAttempts(String id);
     @Delete("DELETE FROM section_edit WHERE task_id IN (SELECT id FROM generation_task WHERE work_id=#{id})") void deleteSectionEdits(String id);
     @Delete("DELETE FROM generation_audio_source WHERE task_id IN (SELECT id FROM generation_task WHERE work_id=#{id})") void deleteGenerationAudioSources(String id);
     @Delete("DELETE FROM generation_music_preferences WHERE task_id IN (SELECT id FROM generation_task WHERE work_id=#{id})") void deleteGenerationMusicPreferences(String id);
@@ -31,5 +34,9 @@ public interface WorkMapper {
     @Delete("DELETE FROM model_usage_reservation WHERE work_id=#{id}") void deleteModelUsageReservations(String id);
     @Delete("DELETE FROM lyrics_composition_request WHERE work_id=#{id}") void deleteLyricsCompositionRequests(String id);
     @Delete("DELETE FROM work_music_preferences WHERE work_id=#{id}") void deleteWorkMusicPreferences(String id);
+    // quick_creation 由尚未入库的 V28「quick creation」迁移引入，仓库迁移里还没有这张表。
+    // 这里先探测存在再清理：表存在就跟着作品一起清掉，不存在就跳过，避免删作品再次 500。
+    @Select("SELECT COUNT(*) FROM information_schema.tables WHERE table_name=#{name} AND table_schema=SCHEMA()") int countExistingTable(@Param("name") String name);
+    @Delete("DELETE FROM quick_creation WHERE work_id=#{id}") void deleteQuickCreations(String id);
     @Delete("DELETE FROM music_work WHERE owner_id=#{owner} AND id=#{id}") void deleteWork(@Param("owner") String owner,@Param("id") String id);
 }
