@@ -25,20 +25,9 @@ const legal = [
 <template>
   <footer class="site-footer">
     <div class="footer-wave" aria-hidden="true">
-      <svg viewBox="0 0 1440 120" preserveAspectRatio="none" focusable="false">
-        <defs>
-          <linearGradient id="qfFooterWaveGlow" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0" stop-color="var(--accent-border)"/>
-            <stop offset="0.45" stop-color="var(--accent-border)"/>
-            <stop offset="1" stop-color="var(--surface-raised)"/>
-          </linearGradient>
-          <linearGradient id="qfFooterWaveBody" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0" stop-color="var(--accent-soft)"/>
-            <stop offset="1" stop-color="var(--surface-raised)"/>
-          </linearGradient>
-        </defs>
-        <path d="M0 74 C 160 34, 300 76, 480 70 C 660 64, 760 20, 940 4 C 1120 -12, 1280 6, 1440 48 L1440 120 L0 120 Z" fill="url(#qfFooterWaveGlow)"/>
-        <path d="M0 88 C 160 48, 300 90, 480 84 C 660 78, 760 36, 940 22 C 1120 8, 1280 34, 1440 74 L1440 120 L0 120 Z" fill="url(#qfFooterWaveBody)"/>
+      <svg viewBox="0 0 1440 16" preserveAspectRatio="none" focusable="false">
+        <path d="M0 8 Q720 2 1440 8 V16 H0 Z" fill="var(--surface-raised)"/>
+        <path d="M0 8 Q720 2 1440 8" fill="none" stroke="var(--line)" vector-effect="non-scaling-stroke"/>
       </svg>
     </div>
 
@@ -109,7 +98,7 @@ const legal = [
 
 <style scoped>
 .site-footer { position: relative; width: 100%; margin-top: 0; }
-.footer-wave { display: block; height: 60px; line-height: 0; }
+.footer-wave { display: block; height: 16px; line-height: 0; }
 .footer-wave svg { display: block; width: 100%; height: 100%; }
 .footer-body { background: var(--surface-raised); color: var(--ink); }
 .footer-inner { max-width: 1440px; margin: 0 auto; padding: 20px 48px 24px; }
@@ -149,7 +138,6 @@ a.footer-link:hover { color: var(--accent-text); text-decoration: underline; tex
   .footer-cta p { margin: 0; }
 }
 @media (max-width: 700px) {
-  .footer-wave { height: 38px; }
   .footer-inner { padding: 16px 22px 22px; }
   .footer-main { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px 16px; }
   .footer-brand-link strong { font-size: 23px; }
