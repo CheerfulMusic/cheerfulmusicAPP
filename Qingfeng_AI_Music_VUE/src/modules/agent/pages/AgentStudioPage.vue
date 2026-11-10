@@ -15,7 +15,7 @@ import { AudioAnalysisError, analyzeAudioFile, cancelAnalysis, forgetAnalysis } 
 import { requestReferenceAnalysis } from '../api/reference'
 import { analyzeRequest, bandWord, hasParams, inspirationBoards, interestTags, modeOptions, quickPrompts, toneWord, withReference, type AgentBrief, type AgentMode, type AgentParams, type AgentReference, type ReferenceInsight } from '../model/assistant'
 
-interface Message { id: number; role: 'assistant' | 'user'; text: string; greeting?: boolean; brief?: AgentBrief; suggestions?: string[]; polishing?: boolean; polishError?: string }
+interface Message { id: number; role: 'assistant' | 'user'; text: string; greeting?: boolean; brief?: AgentBrief; suggestions?: string[]; polishing?: boolean; polishError?: string; polishCreditShort?: boolean }
 interface VoiceResult { results: ArrayLike<ArrayLike<{ transcript: string }>> }
 interface VoiceRecognition { lang: string; interimResults: boolean; onresult: ((event: VoiceResult) => void) | null; onerror: (() => void) | null; onend: (() => void) | null; start: () => void; stop?: () => void }
 interface UploadState { name: string; url: string; size: number; type: string; duration: number }
@@ -160,7 +160,11 @@ async function polish(message: Message) {
   } catch (error) {
     // 后端已把这次请求记为失败：用同一个键重试只会得到「上次未完成」，此时换新键重新发起。
     if (error instanceof ApiError && error.code === 'REWRITE_REQUEST_FAILED') polishKey.value = ''
-    message.polishError = t('AI 整理暂不可用，已按原文继续。')
+    // 积分不足要明确告知并给出充值入口，不能和「服务暂时不可用」混成一句话。
+    message.polishCreditShort = error instanceof ApiError && error.code === 'INSUFFICIENT_CREDITS'
+    message.polishError = message.polishCreditShort
+      ? t('积分不足，当前余额 {balance} 积分，改写需要 {cost} 积分。', { balance: credits.value?.balance ?? 0, cost: credits.value?.rewriteCost ?? 1 })
+      : (error instanceof ApiError && error.message) ? error.message : t('AI 整理暂不可用，已按原文继续。')
   }
   finally { message.polishing = false; void refreshCredits().catch(() => undefined) }
 }
@@ -420,7 +424,7 @@ onBeforeUnmount(() => {
               </p>
               <div v-if="message.suggestions?.length" class="agent-brief-suggestions"><button v-for="style in message.suggestions" :key="style" type="button" :disabled="busy" @click="send(`我想要一首${style}风格的歌`)">{{ style }}</button></div>
               <div class="agent-brief-actions"><button type="button" :disabled="message.polishing" @click="polish(message)">{{ message.polishing ? t('AI 整理中…') : t('AI 润色描述') }}</button><button type="button" class="primary" @click="beginCreation(message.brief)">{{ t('用它开始创作') }} →</button><CreditCostHint v-if="credits&&credits.enabled&&(credits.rewriteCost>0||credits.rewriteFreeRemaining>0)" class="agent-brief-cost" :cost="credits.rewriteCost" :balance="credits.balance" :free-remaining="credits.rewriteFreeRemaining" :busy="message.polishing" variant="rewrite"/></div>
-              <p v-if="message.polishError" class="agent-brief-error" role="status">{{ message.polishError }}</p>
+              <p v-if="message.polishError" class="agent-brief-error" role="status">{{ message.polishError }} <RouterLink v-if="message.polishCreditShort" class="text-button" to="/recharge">{{ t('去充值') }}</RouterLink></p>
             </div>
           </div>
         </div>
