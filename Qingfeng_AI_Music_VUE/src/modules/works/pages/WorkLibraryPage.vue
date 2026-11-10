@@ -24,7 +24,23 @@ async function confirmDelete(){
   if(player.current?.audio.includes(`/works/${item.work.id}/`))player.reset()
   player.setQueue(works.value.filter(w=>w.audioId).map(track));notice.value='作品已删除';deleteDialog.value?.close();deleteTarget.value=null
   await load(works.value.length===0&&page.value>0?page.value-1:page.value,true)
- }catch(e){if(!alive||epoch!==identityEpoch)return;if(e instanceof ApiError&&e.code==='WORK_DELETE_CONFIRMATION_REQUIRED'){completedWarning.value=true;deleteError.value='作品刚刚生成完成，请阅读警告后再次确认删除。'}else deleteError.value=e instanceof Error?e.message:'删除失败，请稍后重试。'}finally{if(epoch===identityEpoch)deleting.value=false}
+ }catch(e){
+  if(!alive||epoch!==identityEpoch)return
+  if(e instanceof ApiError&&e.code==='WORK_DELETE_CONFIRMATION_REQUIRED'){completedWarning.value=true;deleteError.value='作品刚刚生成完成，请阅读警告后再次确认删除。'}
+  else if(e instanceof ApiError&&e.status===404&&e.code==='WORK_NOT_FOUND'){
+   // 不把任意 404 当成删除成功；按当前身份重读列表后再处理过期卡片。
+   try{
+    const latest=await listWorks(page.value);if(!alive||epoch!==identityEpoch)return
+    sequence++;loading.value=false;works.value=latest.filter(row=>!removed.has(row.work.id))
+    if(latest.some(row=>row.work.id===item.work.id)){deleteError.value=e.message;return}
+    removed.add(item.work.id)
+    if(player.current?.audio.includes(`/works/${item.work.id}/`))player.reset()
+    player.setQueue(works.value.filter(row=>row.audioId).map(track));deleteDialog.value?.close();deleteTarget.value=null
+    notice.value='作品已不在当前列表中 已刷新作品列表'
+    if(!works.value.length&&page.value>0)await load(page.value-1,true)
+   }catch{deleteError.value='暂时无法确认删除结果 请刷新作品列表后重试'}
+  }else deleteError.value=e instanceof Error?e.message:'删除失败，请稍后重试。'
+ }finally{if(epoch===identityEpoch)deleting.value=false}
 }
 function track(r:LibraryItem){return {id:r.audioId!,title:r.songTitle||r.work.title||(r.work.recipient?t('写给{recipient}的歌',{recipient:r.work.recipient}):t('我的原创歌曲')),cover:coverUrl(r.work.id,r.coverId),audio:audioUrl(r.work.id,r.audioId!),provenance:r.audioOrigin!}}
 function play(item:LibraryItem){if(!item.audioId)return;player.setQueue(works.value.filter(w=>w.audioId).map(track));void player.toggle(track(item))}

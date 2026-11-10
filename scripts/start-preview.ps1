@@ -56,6 +56,8 @@ try{
     $newRootLine='const frontendRoot = '+(ConvertTo-Json -InputObject $frontendRoot -Compress)+';'
     $config=[regex]::Replace($config,$rootPattern,[System.Text.RegularExpressions.MatchEvaluator]{param($m) $newRootLine})
     [IO.File]::WriteAllText($newConfig,$config,[Text.UTF8Encoding]::new($false))
+    & $node (Join-Path $PSScriptRoot 'preview-work-routing.mjs') $newConfig $newConfig
+    if($LASTEXITCODE -ne 0){throw '作品接口预览路由准备失败，未停止原前端。'}
     Stop-Process -Id ([int]$oldWeb[0].id)
     $oldStopped=$true
     $deadline=[DateTime]::UtcNow.AddSeconds(5)
@@ -74,7 +76,7 @@ try{
     if(-not $ready){throw '新版页面未通过读取检查。'}
     Save-WebState $newWeb $true
     Write-Host '新版前端已启动：http://127.0.0.1:5173/create'
-    Write-Host '读取当前工作区源码；登录、主库隧道和原业务接口保留。新后端一键流程尚未上线，当前先看界面。'
+    Write-Host '读取当前工作区源码；作品列表与保存删除走本机后端，音频封面仍沿用线上接口。业务能力以本机后端实际返回为准。'
 }catch{
     if($newWeb){$newWeb.Refresh();if(-not $newWeb.HasExited){Stop-Process -Id $newWeb.Id}}
     if($oldStopped){

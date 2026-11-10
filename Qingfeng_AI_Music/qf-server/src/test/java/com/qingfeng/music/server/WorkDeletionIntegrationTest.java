@@ -60,6 +60,7 @@ class WorkDeletionIntegrationTest {
         assertEquals("WORK_DELETE_CONFIRMATION_REQUIRED",assertThrows(DomainException.class,()->works.delete(f.owner(),f.work().id(),false)).code());
         assertNotNull(shares.get(share.token()));
         works.delete(f.owner(),f.work().id(),true);
+        assertEquals(0,jdbc.queryForObject("SELECT COUNT(*) FROM share_link WHERE work_id=? AND active=TRUE",Integer.class,f.work().id()));
         assertThrows(DomainException.class,()->shares.get(share.token()));
         assertThrows(DomainException.class,()->shares.audio(share.token()));
         assertThrows(DomainException.class,()->shares.audioRef(share.token()));

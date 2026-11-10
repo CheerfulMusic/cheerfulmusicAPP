@@ -15,4 +15,6 @@ public interface WorkMapper {
     @Select("SELECT COUNT(*) FROM media_asset WHERE work_id=#{id}") int audioCount(String id);
     // 保留任务、生成尝试和账务关联；物理删除父任务会触发 fk_attempt_task，并丢失追溯依据。
     @Update("UPDATE music_work SET deleted_at=#{now},updated_at=#{now},version=version+1 WHERE owner_id=#{owner} AND id=#{id} AND deleted_at IS NULL") void delete(@Param("owner")String owner,@Param("id")String id,@Param("now")java.time.Instant now);
+    // 本机新代码与线上旧分享接口并存期间，也使旧接口无法继续使用原分享令牌。
+    @Update("UPDATE share_link SET active=FALSE WHERE work_id=#{id} AND EXISTS(SELECT 1 FROM music_work w WHERE w.id=#{id} AND w.owner_id=#{owner})") void revokeShares(@Param("owner")String owner,@Param("id")String id);
 }
