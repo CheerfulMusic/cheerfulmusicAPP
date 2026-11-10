@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import CreationMusicChoices from '../components/CreationMusicChoices.vue'
-import {creationMode,chooseCreationStyle,type CreationMode} from '../model/creation-mode'
+import {creationMode,chooseCreationStyle,inspirationLimit,type CreationMode} from '../model/creation-mode'
 import {legacyPreferences,validMusicPreferences} from '../../works/model/music-preferences'
 import {loadMusicCatalog,loadMusicSettings,saveMusicSettings,type MusicCatalog,type MusicPreferences} from '../../works/api/music-settings'
 import QuickCreationProgress from '../components/QuickCreationProgress.vue'
+import LyricsTemplatePicker from '../../works/components/LyricsTemplatePicker.vue'
 import {useQuickSession} from '../model/use-quick-session'
 import {followQuickInBackground} from '../model/background-quick'
 import {quickInProgress} from '../api/quick-creation'
@@ -11,7 +12,7 @@ import { normalizeLyricsStructure, lyricsStructureKey, type LyricsStructure } fr
 import '../styles/inspiration-studio.css'
 import StudioAtmosphere from '../components/StudioAtmosphere.vue'
 import { t, locale } from '../../../shared/i18n'
-import { onMounted, onBeforeUnmount, reactive, ref, computed, watch, nextTick } from 'vue'
+import { onMounted, onBeforeUnmount, reactive, ref, computed, watch } from 'vue'
 import { useRoute, useRouter, onBeforeRouteLeave, onBeforeRouteUpdate } from 'vue-router'
 import { getSystemInfo } from '../../../shared/http/system'
 import { ApiError, ensureCreator, currentCreatorId, lastKnownCreatorId, associatedGuestCreatorId } from '../../../shared/http/api-client'
@@ -43,7 +44,8 @@ const musicCatalog=ref<MusicCatalog>(),preferences=ref<MusicPreferences>(),music
 const customTouched=ref(false)
 const musicChanged=computed(()=>!!preferences.value&&JSON.stringify(preferences.value)!==musicBaseline.value)
 async function changeMode(next:CreationMode){if(composing.value||rewriting.value||quickLocked.value)return;mode.value=next;await router.replace({query:{...route.query,mode:next}})}
-const structure = {templateId:'AAB',chorusFirst:false} as const satisfies LyricsStructure
+const defaultStructure = {templateId:'AAB',chorusFirst:false} as const satisfies LyricsStructure
+const structure=ref<LyricsStructure>({...defaultStructure})
 let legacyStructure:LyricsStructure|undefined
 const validationError=ref(''), selectedHint=ref(-1)
 const rewriting=ref(false), rewriteError=ref(''), rewriteStatus=ref('')
@@ -53,15 +55,14 @@ const continuationFailed=ref(false)
 const resetting=ref(false)
 const draft=reactive<DraftInput>({recipient:'',occasion:String(route.query.occasion||''),story:'',message:'',style:styleFromInspiration(route.query.style),title:'',vocalGender:'AUTO'})
 watch(()=>draft.style,style=>{selectedHint.value=inspirationPresets.findIndex((preset,index)=>index<5&&preset.style===style)},{flush:'sync'})
-async function chooseInspiration(index:number) {
+function chooseInspiration(index:number) {
   if(!initialized.value||resetting.value||composing.value||rewriting.value||quickLocked.value)return
   const preset=inspirationPresets[index];if(!preset)return
-  checkpointRecovery(cacheKey,recoveryValue())
-  const selected=chooseCreationStyle(draft,preset,index===5,t)
+  const selected=chooseCreationStyle(draft,preset,t)
+  if(!selected){validationError.value='请先缩短创作描述，为风格提示留出空间。';return}
   Object.assign(draft,selected);selectedHint.value=index
   syncStylePreferences()
   rewriteBackup.value=undefined;rewriteError.value='';rewriteStatus.value='';validationError.value=''
-  await nextTick();document.querySelector<HTMLTextAreaElement>('#inspiration-input')?.focus()
 }
 function syncStylePreferences(){
   if(!preferences.value)return
@@ -78,7 +79,7 @@ let localPending=false
 let initSequence=0,internalContext:string|undefined
 const contextOf=(query:Record<string,unknown>)=>query.work?`work:${String(query.work)}`:query.draft?`draft:${String(query.draft)}`:'new'
 const asDraft=(work:DraftInput):DraftInput=>({recipient:work.recipient,occasion:work.occasion,story:work.story,message:work.message,style:work.style,title:work.title,vocalGender:normalizeVocalGender(work.vocalGender)})
-function recoveryValue():Recovery{return {mode:mode.value,preferences:preferences.value,flowVersion:storyFlowVersion,draft:{...draft},language:language.value,structure:legacyStructure,part:0,draftKey,workId:existing.value?.id||recoveredWorkId,version:existing.value?.version??recoveredVersion,dirty:dirty.value,conflict:conflict.value}}
+function recoveryValue():Recovery{return {mode:mode.value,preferences:preferences.value,flowVersion:storyFlowVersion,draft:{...draft},language:language.value,structure:{...structure.value},part:0,draftKey,workId:existing.value?.id||recoveredWorkId,version:existing.value?.version??recoveredVersion,dirty:dirty.value,conflict:conflict.value}}
 function remember(force=false) {
   clearTimeout(timer)
   if(!initialized.value||!force&&!localPending)return
@@ -98,8 +99,12 @@ function scheduleLocalSave() {
   clearTimeout(timer)
   timer=setTimeout(()=>remember(),500)
 }
-watch([draft,language,mode,preferences],scheduleLocalSave,{deep:true,flush:'sync'})
+watch([draft,language,mode,preferences,structure],scheduleLocalSave,{deep:true,flush:'sync'})
 watch(preferences,()=>{if(initialized.value&&mode.value==='custom')customTouched.value=true},{deep:true,flush:'sync'})
+function restoreTemplate(saved?:LyricsStructure){
+  legacyStructure=saved?normalizeLyricsStructure(saved):undefined
+  structure.value=legacyStructure??{...defaultStructure}
+}
 async function initialize() {
   remember()
   const turn=++initSequence,query={...route.query}
@@ -111,7 +116,7 @@ async function initialize() {
   if(turn!==initSequence)return
   localPending=false;localSaved.value=true;initialized.value=false; error.value=''; notice.value=''; conflict.value=false; ready.value=false;saving.value=false
   mode.value=creationMode(query.mode,!!query.work);musicCatalog.value=undefined;preferences.value=undefined;musicBaseline.value='';musicPersisted.value=false;customTouched.value=false
-  composing.value=false;language.value=locale.value;legacyStructure=undefined;selectedHint.value=-1;validationError.value='';existing.value=undefined;recoveredVersion=undefined;recoveredWorkId=undefined;cacheKey='';draftKey=crypto.randomUUID()
+  composing.value=false;language.value=locale.value;restoreTemplate();selectedHint.value=-1;validationError.value='';existing.value=undefined;recoveredVersion=undefined;recoveredWorkId=undefined;cacheKey='';draftKey=crypto.randomUUID()
   Object.assign(draft,{recipient:'',occasion:String(query.occasion||''),story:'',message:'',style:styleFromInspiration(query.style),title:'',vocalGender:'AUTO'});baseline.value=JSON.stringify(snapshot())
   try {
     await ensureCreator()
@@ -129,7 +134,7 @@ async function initialize() {
     else {Object.assign(draft,{recipient:'',occasion:String(query.occasion||''),story:'',message:'',style:styleFromInspiration(query.style),title:'',vocalGender:'AUTO'});baseline.value=JSON.stringify(snapshot());draftKey=crypto.randomUUID()}
     if (local) {
       mode.value=creationMode(query.mode||local.mode,!!id)
-      language.value=local.language;legacyStructure=normalizeLyricsStructure(local.structure);draftKey=local.draftKey
+      language.value=local.language;restoreTemplate(local.structure);draftKey=local.draftKey
       if (local.dirty) {
         Object.assign(draft,asDraft(local.draft))
         conflict.value=!!local.conflict || (!!existing.value && local.version!==undefined && local.version!==existing.value.version)
@@ -156,7 +161,7 @@ async function initialize() {
     if(e instanceof ApiError && (e.status===0||e.status===408||e.status>=500)){
       const owner=currentCreatorId()||lastKnownCreatorId()
       if(owner){cacheKey=recoveryKey(owner,'story',String(query.work||query.draft||draftKey));const local=readRecovery(cacheKey,validRecovery)
-        if(local){Object.assign(draft,asDraft(local.draft));language.value=local.language;legacyStructure=normalizeLyricsStructure(local.structure);draftKey=local.draftKey;recoveredVersion=local.version;recoveredWorkId=local.workId;baseline.value='';notice.value='服务暂时连接不上，已恢复本机内容；连接后可重试保存。'}
+        if(local){Object.assign(draft,asDraft(local.draft));language.value=local.language;restoreTemplate(local.structure);draftKey=local.draftKey;recoveredVersion=local.version;recoveredWorkId=local.workId;baseline.value='';notice.value='服务暂时连接不上，已恢复本机内容；连接后可重试保存。'}
       }
       ready.value=false
     }
@@ -227,11 +232,6 @@ async function flush() {
   while(!existing.value||dirty.value){const saved=await persist();check();if(!saved||conflict.value)throw new Error('请先解决保存问题，再继续创作。')}
   return existing.value
 }
-async function retry(){
-  try {
-    if(!ready.value){
-      remember()
-      if(!localPending)await initialize()
 async function applyChosenMusic(work:Work,turn:number){
   const chosen=preferences.value
   if(!chosen||(!(mode.value==='custom'&&!musicPersisted.value)&&!musicChanged.value))return work
@@ -241,6 +241,11 @@ async function applyChosenMusic(work:Work,turn:number){
   preferences.value=saved.direction?.preferences||chosen;musicBaseline.value=JSON.stringify(preferences.value);musicPersisted.value=true;remember(true)
   return saved.work
 }
+async function retry(){
+  try {
+    if(!ready.value){
+      remember()
+      if(!localPending)await initialize()
       return
     }
     await flush()
@@ -285,6 +290,7 @@ async function next() {
 async function continueMaking() {
   if(composing.value || rewriting.value || quickLocked.value || !ready.value)return
   if(!valid.value){rejectAnswer('请先写下一点创作灵感。');return}
+  const chosenStructure={...structure.value}
   composing.value=true;error.value='';notice.value=''
   if(mode.value==='quick')quickSession.prepare()
   continuationFailed.value=false
@@ -311,10 +317,10 @@ async function continueMaking() {
       return
     }
     writing=true
-    // Recover an older in-flight request before using the fixed template for new lyrics.
+    // Recover an older request before starting a new lyric generation.
     const previousStructure=legacyStructure??normalizeLyricsStructure()
     const previousKey=lyricsStructureKey(previousStructure)
-    const structureKey=lyricsStructureKey(structure)
+    const structureKey=lyricsStructureKey(chosenStructure)
     if(previousKey!==structureKey){
       const legacyKey=existingContinuationRequestKey(prepared.id,prepared.version,language.value,previousKey)
       if(legacyKey){
@@ -329,11 +335,11 @@ async function continueMaking() {
     }
     let key=continuationRequestKey(prepared.id,prepared.version,language.value,structureKey)
     const previous=await getLyricsRequest(prepared.id,key)
-    if(previous.status==='SUCCEEDED'&&previous.revisionId){if(alive&&turn===initSequence)await router.push({path:`/works/${work.id}`,query:{revision:previous.revisionId,language:language.value,templateId:structure.templateId,chorusFirst:String(structure.chorusFirst)}});return}
+    if(previous.status==='SUCCEEDED'&&previous.revisionId){if(alive&&turn===initSequence)await router.push({path:`/works/${work.id}`,query:{revision:previous.revisionId,language:language.value,templateId:chosenStructure.templateId,chorusFirst:String(chosenStructure.chorusFirst)}});return}
     if(previous.status==='PENDING'||previous.status==='UNKNOWN')throw new Error('歌词仍在编写中，可以稍后刷新编写状态。')
     if(previous.status==='FAILED'){retireContinuationRequestKey(prepared.id,prepared.version,language.value,structureKey);key=continuationRequestKey(prepared.id,prepared.version,language.value,structureKey)}
-    const revision=await generateLyrics(prepared.id,prepared.version,key,language.value,'',undefined,{...structure})
-    if(alive&&turn===initSequence)await router.push({path:`/works/${work.id}`,query:{revision:revision.id,language:language.value,templateId:structure.templateId,chorusFirst:String(structure.chorusFirst)}})
+    const revision=await generateLyrics(prepared.id,prepared.version,key,language.value,'',undefined,chosenStructure)
+    if(alive&&turn===initSequence)await router.push({path:`/works/${work.id}`,query:{revision:revision.id,language:language.value,templateId:chosenStructure.templateId,chorusFirst:String(chosenStructure.chorusFirst)}})
   } catch(e){if(alive&&turn===initSequence){quickSession.abortPreparation();continuationFailed.value=writing;error.value=e instanceof Error?e.message:'歌词生成失败，请稍后再试'}}
   finally{if(turn===initSequence)composing.value=false}
 }
@@ -417,9 +423,9 @@ onBeforeUnmount(()=>{
               </div>
               <strong v-if="mode==='custom'" class="creation-story-label">{{ t('写下你的故事') }}</strong>
             </div>
-            <textarea id="inspiration-input" v-model="draft.story" maxlength="4000" :aria-label="t('写下创作灵感')" :placeholder="inspirationPlaceholder" :aria-invalid="!!validationError||undefined" :aria-describedby="validationError?'inspiration-guidance story-validation':'inspiration-guidance'"></textarea>
+            <textarea id="inspiration-input" v-model="draft.story" :maxlength="inspirationLimit" :aria-label="t('写下创作灵感')" :placeholder="inspirationPlaceholder" :aria-invalid="!!validationError||undefined" :aria-describedby="validationError?'inspiration-guidance story-validation':'inspiration-guidance'"></textarea>
             <div class="inspiration-input-footer">
-              <span class="inspiration-counter">{{ draft.story.length }} / 4000</span>
+              <span class="inspiration-counter">{{ draft.story.length }} / {{ inspirationLimit }}</span>
               <label class="inspiration-language">
                 <span class="inspiration-language-title"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a17 17 0 0 1 0 18 17 17 0 0 1 0-18Z"/></svg>{{ t('歌词语言') }}</span>
                 <span class="inspiration-language-select"><select v-model="language" name="lyric-language" :aria-label="t('歌词语言')"><option value="zh-CN">{{ t('中文') }}</option><option value="en">English</option><option value="mixed">{{ t('中英混合') }}</option></select><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg></span>
@@ -429,9 +435,12 @@ onBeforeUnmount(()=>{
             <p v-else-if="rewriteStatus" class="inspiration-rewrite-message" role="status">{{ t(rewriteStatus) }}</p>
           </div>
           <p v-if="validationError" id="story-validation" class="story-validation" role="alert">{{ t(validationError) }}</p>
-          <div v-if="mode==='quick'" class="inspiration-examples" role="group" :aria-label="t('选择创作风格')"><span>♫ {{ t('选一种风格') }}</span><button v-for="(example,index) in inspirationPresets" :key="example.label" type="button" :disabled="rewriting" :aria-pressed="selectedHint===index" @click="chooseInspiration(index)">{{ t(example.label) }}</button></div>
-          <p v-if="mode==='quick'" id="inspiration-guidance" class="save-info">{{ t('选择一种风格 也可以直接写下你的想法') }}</p>
-          <CreationMusicChoices v-if="mode==='custom'&&musicCatalog&&preferences" v-model="preferences" :catalog="musicCatalog" :disabled="composing||rewriting||resetting"><template #structure><span class="creation-fixed-template">{{ t('歌词模板') }} · <strong>{{ structure.templateId }}</strong></span></template></CreationMusicChoices>
+          <div v-if="mode==='quick'" class="inspiration-examples" role="group" aria-labelledby="quick-style-label" aria-describedby="inspiration-guidance">
+            <span id="quick-style-label">{{ t('选一种风格') }}</span>
+            <button v-for="(example,index) in inspirationPresets" :key="example.label" type="button" :disabled="rewriting" :aria-pressed="selectedHint===index" @click="chooseInspiration(index)">{{ t(example.label) }}</button>
+          </div>
+          <p v-if="mode==='quick'" id="inspiration-guidance" class="save-info">{{ t('点击标签填入创作描述，你可以继续修改，补充想唱的主题。') }}</p>
+          <CreationMusicChoices v-if="mode==='custom'&&musicCatalog&&preferences" v-model="preferences" :catalog="musicCatalog" :disabled="composing||rewriting||resetting"><template #structure><LyricsTemplatePicker v-model="structure" :disabled="composing||rewriting||resetting||!initialized||quickLocked"/></template></CreationMusicChoices>
           <p v-if="mode==='custom'&&musicIssue" class="notice error" role="alert">{{ t(musicIssue) }}</p>
           <details v-if="draft.recipient||draft.occasion||draft.message" class="legacy-inspiration-context"><summary>{{ t('已保留的旧版作品信息') }}</summary><p v-if="draft.recipient">{{ t('收件人：') }}{{ draft.recipient }}</p><p v-if="draft.occasion">{{ draft.occasion }}</p><p v-if="draft.message" class="legacy-message">{{ draft.message }}</p></details>
           <div class="creation-action-bar story-action-bar"><button class="button creation-primary" type="submit" :disabled="!initialized||composing||rewriting||resetting||quickLocked||!ready||!aiReady||conflict||(mode==='quick'?!quickReady:!musicCatalog)">{{ composing?t(mode==='quick'?'正在开始创作…':'正在编写歌词…'):t(mode==='quick'?'一键生成音乐':'生成歌词') }}<span v-if="!composing" aria-hidden="true">→</span></button></div>

@@ -105,6 +105,9 @@ class InviteGateIntegrationTest {
         String gift = "/api/public/gifts/" + token;
         // This client never enters an invitation and never creates an account/session.
         var guest = HttpClient.newHttpClient();
+        assertEquals(200, send(guest, "GET", "/brand/share-default-cover.png", null, null).statusCode());
+        assertEquals(200, send(guest, "HEAD", "/brand/share-default-cover.png", null, null).statusCode());
+        assertEquals(200, send(guest, "GET", "/gift/" + token, null, null).statusCode());
         var snapshot = send(guest, "GET", gift, null, null);
         assertEquals(200, snapshot.statusCode(), snapshot.body());
         assertTrue(snapshot.body().contains("愿你一直快乐"));

@@ -1,6 +1,7 @@
 import {describe,it,expect} from 'vitest'
 import {chooseCreationStyle,creationMode} from '../src/modules/studio/model/creation-mode'
 import {inspirationPresets} from '../src/modules/studio/model/inspiration-presets'
+import {english} from '../src/shared/i18n/en'
 import {quickInProgress} from '../src/modules/studio/api/quick-creation'
 import {legacyPreferences} from '../src/modules/works/model/music-preferences'
 import {validResponse,emptyResponseAllowed} from '../src/shared/http/response-contracts'
@@ -10,15 +11,25 @@ describe('双入口与作者素材保护',()=>{
   expect(creationMode(undefined)).toBe('quick');expect(creationMode(undefined,true)).toBe('custom')
   expect(creationMode('quick',true)).toBe('quick');expect(creationMode('custom')).toBe('custom')
  })
- it('切换所有快捷风格均不覆盖作者故事',()=>{
-  for(const [index,preset] of inspirationPresets.entries()){
-   const selected=chooseCreationStyle(draft,preset,index===5,x=>x)
-   expect(selected.story).toBe(draft.story);expect(selected.recipient).toBe('妈妈');expect(selected.style).toBe(preset.style)
+ it('每个快捷风格都填入可编辑的描述并保留作者故事',()=>{
+  for(const preset of inspirationPresets){
+   expect(chooseCreationStyle({...draft,story:''},preset,x=>x)?.story).toBe(preset.description)
+   expect(chooseCreationStyle(draft,preset,x=>x)).toMatchObject({
+    story:`${preset.description}\n\n${draft.story}`,recipient:'妈妈',style:preset.style,vocalGender:preset.vocalGender,
+   })
   }
  })
- it('普通风格不自动填充故事 只有空白时选择没有灵感才填入示例',()=>{
-  expect(chooseCreationStyle({...draft,story:''},inspirationPresets[0]!,false,x=>x).story).toBe('')
-  expect(chooseCreationStyle({...draft,story:''},inspirationPresets[5]!,true,x=>x).story).toContain('寻找一个主题')
+ it('切换语言与标签时替换完整的旧提示，只保留一份提示和作者补充',()=>{
+  const pop=inspirationPresets[0]!,folk=inspirationPresets[3]!
+  const previous=chooseCreationStyle(draft,pop,x=>english[x]||x)!
+  const updated=chooseCreationStyle(previous,folk,x=>x)!
+  expect(updated.story).toBe(`${folk.description}\n\n${draft.story}`)
+  expect(chooseCreationStyle(updated,folk,x=>x)).toEqual(updated)
+ })
+ it('保留修改过的描述，空间不足时不截断原稿',()=>{
+  const preset=inspirationPresets[0]!,edited=`${inspirationPresets[1]!.description} 副歌唱给妈妈。`
+  expect(chooseCreationStyle({...draft,story:edited},preset,x=>x)?.story).toBe(`${preset.description}\n\n${edited}`)
+  expect(chooseCreationStyle({...draft,story:'歌'.repeat(4000)},preset,x=>x)).toBeNull()
  })
  it('写词和谱曲中都视为正在制作 结束后可恢复编辑',()=>{
   for(const state of ['QUEUED','WRITING','LYRICS_READY','SUBMITTING_MUSIC','RUNNING','SAVING','SUBMISSION_UNKNOWN'])expect(quickInProgress(state)).toBe(true)

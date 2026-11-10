@@ -46,11 +46,14 @@ class GiftWorkflowIntegrationTest {
   assertEquals(404,call(b,"GET","/api/app/works/"+w+"/audio/"+asset,null).statusCode());
   String token=share(a,w,r,asset),publicPath="/api/public/gifts/"+token;
   var gift=call(null,"GET",publicPath,null);assertEquals(200,gift.statusCode());assertTrue(text(gift).contains("原始祝福"));assertFalse(text(gift).contains("secret-only-story"));assertFalse(text(gift).contains("ownerId"));
+  var preview=call(null,"GET","/gift/"+token,null);assertEquals(200,preview.statusCode());assertTrue(text(preview).contains("property=\"og:title\" content=\"给你的歌\""));assertFalse(text(preview).contains("secret-only-story"));
+  assertEquals(200,call(null,"HEAD","/gift/"+token,null).statusCode());
   var ranged=HttpClient.newHttpClient().send(HttpRequest.newBuilder(URI.create("http://127.0.0.1:"+port+publicPath+"/audio")).header("Range","bytes=0-11").GET().build(),HttpResponse.BodyHandlers.ofByteArray());assertEquals(206,ranged.statusCode());assertEquals(12,ranged.body().length);
   assertNotEquals(302,call(null,"GET",publicPath+"/audio",null).statusCode(),"CDN 默认关闭时不得签发 302");
   assertEquals(404,call(b,"DELETE","/api/app/works/"+w+"/shares",null).statusCode());
   assertEquals(200,call(a,"DELETE","/api/app/works/"+w+"/shares",null).statusCode());
   assertEquals(404,call(null,"GET",publicPath,null).statusCode());assertEquals(404,call(null,"GET",publicPath+"/audio",null).statusCode());assertNotEquals(302,call(null,"GET",publicPath+"/audio",null).statusCode(),"撤销后不得签发 302");
+  assertEquals(404,call(null,"GET","/gift/"+token,null).statusCode());assertFalse(text(call(null,"GET","/gift/"+token,null)).contains("og:title"));
  }
  @Test void uploadedCoverRemainsPrivateUntilSharedAndGiftRevocationClosesItsRoute()throws Exception{
   var a=session();var other=session();String w=work(a),r=lyrics(a,w,"中文与 English");call(a,"POST","/api/app/works/"+w+"/lyrics/"+r+"/confirm","{}");String audio=field(text(upload(a,w,wav())),"id");

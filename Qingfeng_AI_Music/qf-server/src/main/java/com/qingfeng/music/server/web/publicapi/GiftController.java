@@ -19,8 +19,10 @@ public class GiftController {
   return AudioResponse.from(sharing.audio(token),download,range);
  }
  public ResponseEntity<Resource> audio(String token,boolean download){return audio(token,download,null);}
- @GetMapping("/cover") public ResponseEntity<Resource> cover(@PathVariable String token){
-  if(signer.enabled())try{var location=signer.cover(sharing.coverRef(token).storageKey());if(location.isPresent())return AudioResponse.redirect(location.get());}catch(RuntimeException ignored){/* fail-closed：回退原中转 */}
+ @GetMapping("/cover") public ResponseEntity<Resource> cover(@PathVariable String token,@RequestParam(defaultValue="false") boolean proxy){
+  // 海报由浏览器在同源画布中绘制，代理读取避免 CDN 跨域污染画布。
+  if(!proxy&&signer.enabled())try{var location=signer.cover(sharing.coverRef(token).storageKey());if(location.isPresent())return AudioResponse.redirect(location.get());}catch(RuntimeException ignored){/* fail-closed：回退原中转 */}
   return AudioResponse.from(sharing.cover(token),false);
  }
+ public ResponseEntity<Resource> cover(String token){return cover(token,false);}
 }

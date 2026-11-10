@@ -7,7 +7,7 @@ import com.qingfeng.music.lyrics.application.LyricsCompositionService;
 import com.qingfeng.music.work.api.WorkApi;
 import com.qingfeng.music.infrastructure.persistence.generation.JdbcQuickCreationRepository;
 import org.springframework.context.annotation.*;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -18,10 +18,12 @@ import java.util.concurrent.*;
 public class QuickCreationConfiguration {
     @Bean QuickCreationRepository quickCreationRepository(JdbcTemplate jdbc,PlatformTransactionManager manager){return new JdbcQuickCreationRepository(jdbc,new TransactionTemplate(manager));}
     @Bean QuickCreationService quickCreationService(QuickCreationRepository repository,WorkApi works,LyricsApi lyrics,LyricsCompositionService composer,GenerationApi generation,Environment env,com.qingfeng.music.lyrics.application.LyricsWriter writer,com.qingfeng.music.generation.application.port.MusicProvider provider){
-        return new QuickCreationService(repository,works,lyrics,composer,generation,writer.isConfigured()&&provider.isConfigured()&&env.getProperty("qingfeng.lyrics.enabled",Boolean.class,false)&&env.getProperty("qingfeng.quick.enabled",Boolean.class,true)&&env.getProperty("qingfeng.generation.enabled",Boolean.class,false)&&env.getProperty("qingfeng.generation.scheduler-enabled",Boolean.class,true));
+        return new QuickCreationService(repository,works,lyrics,composer,generation,writer.isConfigured()&&provider.isConfigured()&&env.getProperty("qingfeng.lyrics.enabled",Boolean.class,false)&&env.getProperty("qingfeng.quick.enabled",Boolean.class,true)&&env.getProperty("qingfeng.generation.enabled",Boolean.class,false)&&schedulerEnabled(env));
     }
+    /** 默认沿用音乐调度开关；显式设置时仅开启写词/提交编排，不领取音乐查询和归档队列。 */
+    public static boolean schedulerEnabled(Environment env){return env.getProperty("qingfeng.quick.scheduler-enabled",Boolean.class,env.getProperty("qingfeng.generation.scheduler-enabled",Boolean.class,true));}
     @Bean(destroyMethod="close")
-    @ConditionalOnProperty(name={"qingfeng.quick.enabled","qingfeng.generation.enabled","qingfeng.generation.scheduler-enabled"},havingValue="true")
+    @ConditionalOnExpression("${qingfeng.quick.enabled:true} && ${qingfeng.generation.enabled:false} && ${qingfeng.quick.scheduler-enabled:${qingfeng.generation.scheduler-enabled:true}}")
     QuickRunner quickRunner(QuickCreationService service,Environment env){return new QuickRunner(service,env.getProperty("qingfeng.quick.workers",Integer.class,4));}
     @Bean org.springframework.context.ApplicationListener<org.springframework.boot.context.event.ApplicationReadyEvent> quickRunnerStartup(org.springframework.beans.factory.ObjectProvider<QuickRunner> runner){return event->runner.ifAvailable(QuickRunner::start);}
     static final class QuickRunner implements AutoCloseable {

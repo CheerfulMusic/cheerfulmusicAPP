@@ -90,6 +90,17 @@ class CdnRedirectIntegrationTest {
         verify(media).open("creator-1","w1","a1");
     }
 
+    @Test void posterCoverRemainsSameOriginWithCdnEnabledAndRevocationStillApplies(){
+        SharingApi sharing=mock(SharingApi.class);
+        when(sharing.cover("token")).thenReturn(new MediaApi.Content(12,"image/jpeg","cover.jpg",()->new ByteArrayInputStream(new byte[12])));
+        GiftController controller=new GiftController(sharing,signer(true));
+        var response=controller.cover("token",true);
+        assertEquals(HttpStatus.OK,response.getStatusCode());assertNull(response.getHeaders().getLocation());
+        verify(sharing,never()).coverRef(anyString());
+        when(sharing.cover("token")).thenThrow(new DomainException("SHARE_NOT_FOUND","已撤销"));
+        assertThrows(DomainException.class,()->controller.cover("token",true));
+    }
+
     @Test void giftAudioAndCoverUseSeparateKeyParsing(){
         SharingApi sharing=mock(SharingApi.class);
         when(sharing.audioRef("token")).thenReturn(audioRef("oss:"+ID+".mp3"));

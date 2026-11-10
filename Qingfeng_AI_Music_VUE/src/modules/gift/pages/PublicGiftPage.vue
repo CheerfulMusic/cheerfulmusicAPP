@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import PlaybackIcon from '../../../shared/ui/PlaybackIcon.vue'
 import AudioPreparation from '../../../shared/player/AudioPreparation.vue'
-import { t, formatDate, defaultCover } from '../../../shared/i18n/index'
+import { t, formatDate } from '../../../shared/i18n/index'
 import { ref, watch,computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { requestJson, apiUrl } from '../../../shared/http/api-client'
@@ -10,7 +10,7 @@ interface Gift { hasCover?:boolean; title: string; recipient: string; message: s
 const route = useRoute(), gift = ref<Gift>(), loading = ref(false), error = ref(''), player = usePlayer()
 let sequence = 0
 watch(() => route.params.token, async () => { const turn = ++sequence; loading.value = true; error.value = ''; gift.value = undefined; try { if (!/^[A-Za-z0-9_-]{43}$/.test(String(route.params.token))) throw new Error('这份礼物不存在、已过期或已被撤销'); const result = await requestJson<Gift>(`public/gifts/${encodeURIComponent(String(route.params.token))}`); if (turn === sequence) gift.value = result } catch (e) { if (turn === sequence) { error.value = e instanceof Error ? e.message : '礼物暂时无法打开'; if (player.current?.id === `gift:${route.params.token}`) player.reset() } } finally { if (turn === sequence) loading.value = false } }, { immediate: true })
-const artwork=computed(()=>gift.value?.hasCover?apiUrl(`public/gifts/${encodeURIComponent(String(route.params.token))}/cover`):defaultCover())
+const artwork=computed(()=>gift.value?.hasCover?apiUrl(`public/gifts/${encodeURIComponent(String(route.params.token))}/cover`):'/brand/share-default-cover.png')
 const audio = () => apiUrl(`public/gifts/${encodeURIComponent(String(route.params.token))}/audio`)
 const track=computed(()=>gift.value?{id:`gift:${route.params.token}`,title:gift.value.title,cover:artwork.value,audio:audio(),provenance:gift.value.audioOrigin}:undefined)
 function play() { if (gift.value) player.toggle({ id: `gift:${route.params.token}`, title: gift.value.title, cover: artwork.value, audio: audio(), provenance: gift.value.audioOrigin }) }
