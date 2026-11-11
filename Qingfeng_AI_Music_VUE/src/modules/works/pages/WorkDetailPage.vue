@@ -339,7 +339,7 @@ async function backToStory(){
         <AudioPanel id="work-audio" tabindex="-1" :key="work.id+'-'+mediaRefresh" :work="work" :cover="artwork" @selected="asset=$event" @load-state="mediaState=$event" @compare="sectionEditor?.compare($event)"/>
         <SharePanel v-if="asset" :open="giftStage" :cover-id="covers?.currentCoverId" @close="giftStage=false" @created="shared=true" :work-id="work.id" :revision="giftRevision" :asset="asset"/>
       </div>
-      <CreationSettingsSummary v-if="draftReady" :work="work" :revision="lyricBase"/>
+      <CreationSettingsSummary v-if="draftReady" :work="work" :revision="lyricBase" :busy="submitting" @edit-music="backToStory"/>
       <aside v-else-if="asset" class="work-overview">
         <h2>{{ work.recipient?t('关于这份心意'):t('创作灵感') }}</h2><p v-if="work.recipient">{{ t('收件人：') }}{{ work.recipient }}</p><p class="private-message">{{ work.message||work.story }}</p><small>{{ t('故事和草稿仅本人可见，分享由你主动创建。') }}</small>
         <div class="model-status"><h3>{{ t('音乐生成') }}</h3><p v-if="allowance">{{ allowance.dailyUnlimited?t('今日歌曲创作不限次数'):t('今日还可创作 {remaining} 次歌曲',{remaining:allowance.dailyRemaining}) }}</p><p v-if="pendingTask">{{ t(statusLabels[pendingTask.status]||pendingTask.status) }}</p>

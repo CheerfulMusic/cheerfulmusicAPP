@@ -40,6 +40,7 @@ function validRecovery(value:unknown):value is Recovery {
 const route=useRoute(), router=useRouter(), initialized=ref(false), ready=ref(false), aiReady=ref(false), existing=ref<Work>(), baseline=ref(''), saving=ref(false), composing=ref(false), error=ref(''), notice=ref(''), conflict=ref(false), localSaved=ref(true), allowance=ref<Allowance>(), creditShort=ref(false)
 const language=ref<string>(locale.value)
 const mode=ref<CreationMode>(creationMode(route.query.mode,!!route.query.work)),quickReady=ref(false)
+const photoReady=ref(false), photoWork=ref(false)
 const quickSession=useQuickSession()
 const {flow:quickFlow,workId:quickWorkId,title:quickTitle,locked:quickLocked,dialogOpen:quickDialogOpen,initialStatus:quickInitialStatus,submissionPending:quickSubmissionPending,unknown:quickUnknown,issue:quickIssue,canResume:quickCanResume}=quickSession
 function setQuickDialogOpen(open:boolean){if(open)quickSession.show();else quickSession.close()}
@@ -101,7 +102,7 @@ function syncStylePreferences(){
 }
 const snapshot=():DraftInput=>({...draft,recipient:draft.recipient.trim()})
 const dirty=computed(()=>initialized.value && JSON.stringify(snapshot())!==baseline.value)
-const valid=computed(()=>!!(draft.story.trim()||draft.message.trim()) && !!draft.style.trim())
+const valid=computed(()=>(photoWork.value||!!(draft.story.trim()||draft.message.trim())) && !!draft.style.trim())
 let draftKey:string=crypto.randomUUID(), cacheKey='', alive=true, timer:ReturnType<typeof setTimeout>|undefined, inflight:Promise<Work|undefined>|undefined, internalRoute=false
 let recoveredVersion:number|undefined,recoveredWorkId:string|undefined
 let localPending=false
@@ -155,7 +156,7 @@ async function initialize() {
   if(turn!==initSequence)return
   localPending=false;localSaved.value=true;initialized.value=false; error.value=''; notice.value=''; conflict.value=false; ready.value=false;saving.value=false
   mode.value=creationMode(query.mode,!!query.work);musicCatalog.value=undefined;preferences.value=undefined;musicBaseline.value='';musicPersisted.value=false;customTouched.value=false
-  composing.value=false;language.value=locale.value;restoreTemplate();validationError.value='';existing.value=undefined;recoveredVersion=undefined;recoveredWorkId=undefined;cacheKey='';draftKey=crypto.randomUUID()
+  composing.value=false;photoWork.value=false;language.value=locale.value;restoreTemplate();validationError.value='';existing.value=undefined;recoveredVersion=undefined;recoveredWorkId=undefined;cacheKey='';draftKey=crypto.randomUUID()
   Object.assign(draft,{recipient:'',occasion:String(query.occasion||''),story:agentBrief?.story||'',message:'',style:briefStyle,title:'',vocalGender:agentBrief?.params?.vocal??'AUTO'});baseline.value=JSON.stringify(snapshot())
   if(briefLanguage)language.value=briefLanguage
   if(briefStructure)structure.value=briefStructure
@@ -163,6 +164,7 @@ async function initialize() {
   try {
     await ensureCreator()
     const system=await getSystemInfo();if(turn!==initSequence)return;ready.value=system.capabilities.workPersistence; aiReady.value=system.capabilities.lyricsGeneration;quickReady.value=system.capabilities.quickCreation===true
+    photoReady.value=system.capabilities.photoLyrics===true
     if (!ready.value) throw new Error('暂时无法保存故事，请稍后再试。')
     const id=String(query.work||'')
     cacheKey=recoveryKey(currentCreatorId(),'story',id||String(query.draft||draftKey))
@@ -188,6 +190,7 @@ async function initialize() {
       const [catalog,music]=await Promise.all([loadMusicCatalog(),existing.value?loadMusicSettings(existing.value.id):Promise.resolve(null)])
       if(turn!==initSequence)return
       musicCatalog.value=catalog
+      photoWork.value=!!music?.photoInspiration
       if(!query.style&&!existing.value&&!local&&!agentBrief)draft.style='自动推荐'
       const initial=music?.direction?.preferences||{...legacyPreferences({...draft,id:'',version:0,createdAt:'',updatedAt:''}),...(agentBrief?{}:{freeText:''}),...(draft.style==='自动推荐'?{choices:{genre:[],instruments:[]}}:{})}
       musicPersisted.value=!!music?.direction;musicBaseline.value=JSON.stringify(initial);preferences.value=initial
@@ -355,7 +358,7 @@ async function blockedByCredits(){
 }
 async function next() {
   if(rewriting.value)return
-  if(!draft.story.trim()&&!draft.message.trim()){rejectAnswer('请先写下一点创作灵感。');return}
+  if(!photoWork.value&&!draft.story.trim()&&!draft.message.trim()){rejectAnswer('请先写下一点创作灵感。');return}
   await continueMaking()
 }
 async function continueMaking() {
@@ -470,7 +473,11 @@ onBeforeUnmount(()=>{
   <div class="story-studio inspiration-studio single-inspiration-studio dual-creation-studio"
     :class="{'custom-creation-mode':mode==='custom','studio-quick-locked':quickLocked,'studio-inspiration-open':inspirationOpen}">
     <StudioAtmosphere/>
-    <div class="creation-mode-switch" role="group" :aria-label="t('选择创作方式')"><button type="button" :aria-pressed="mode==='quick'" :disabled="composing||rewriting||quickLocked" @click="changeMode('quick')">{{ t('快速生成') }}</button><button type="button" :aria-pressed="mode==='custom'" :disabled="composing||rewriting||quickLocked" @click="changeMode('custom')">{{ t('自定义创作') }}</button></div>
+    <div class="creation-mode-switch" :class="{'has-photo-mode':photoReady}" role="group" :aria-label="t('选择创作方式')">
+      <button type="button" :aria-pressed="mode==='quick'" :disabled="composing||rewriting||quickLocked" @click="changeMode('quick')">{{ t('快速生成') }}</button>
+      <button type="button" :aria-pressed="mode==='custom'" :disabled="composing||rewriting||quickLocked" @click="changeMode('custom')">{{ t('自定义创作') }}</button>
+      <button v-if="photoReady" type="button" :disabled="composing||rewriting||quickLocked" @click="router.push('/create/photo')">{{ t('用照片写一首歌') }}</button>
+    </div>
     <div class="story-introduction">
       <h1>{{ t('从这一刻起，你也是歌手。') }}</h1>
       <p class="studio-introduction-copy">{{ t(mode==='quick'?'用几句话表达你的灵感 AI 会为你写成歌曲':'先选音乐方向 再写出适合演唱的歌词') }}</p>

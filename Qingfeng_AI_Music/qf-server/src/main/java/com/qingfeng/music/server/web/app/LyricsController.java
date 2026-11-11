@@ -10,6 +10,7 @@ import java.util.UUID;
 import org.springframework.context.annotation.Profile;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 @RestController @Profile({"mysql","test"})
 @RequestMapping("/api/app/works/{work}/lyrics")
@@ -27,6 +28,12 @@ public class LyricsController {
  }
  public record ComposeRequest(@NotNull @PositiveOrZero Long workVersion,@NotBlank @Pattern(regexp="[0-9a-fA-F-]{36}")String requestKey,@NotBlank @Pattern(regexp="zh-CN|en|mixed")String language,@Size(max=1000)String instructions,@Pattern(regexp="[0-9a-fA-F-]{36}")String baseRevisionId,@Pattern(regexp="AUTO|AAB|ABB|ABC|ABCD")String templateId,boolean chorusFirst){}
  @PostMapping("/generate") public LyricsApi.Revision compose(@AuthenticationPrincipal CreatorPrincipal creator,@PathVariable String work,@Valid @RequestBody ComposeRequest request){return composer.compose(creator.id(),work,request.workVersion(),request.requestKey(),request.language(),request.instructions(),request.baseRevisionId(),request.templateId(),request.chorusFirst());}
+ @PostMapping(value="/generate-photo", consumes="multipart/form-data")
+ public LyricsApi.Revision composePhoto(@AuthenticationPrincipal CreatorPrincipal creator, @PathVariable String work,
+     @RequestParam @PositiveOrZero long workVersion, @RequestParam UUID requestKey,
+     @RequestParam @Pattern(regexp="zh-CN|en|mixed") String language, @RequestParam MultipartFile photo) {
+     return composer.composePhoto(creator.id(),work,workVersion,requestKey.toString(),language,PhotoLyricsImage.jpeg(photo));
+ }
  @GetMapping("/requests/{key}") public LyricsCompositionService.RequestState requestState(@AuthenticationPrincipal CreatorPrincipal creator,@PathVariable String work,@PathVariable String key){return composer.requestState(creator.id(),work,key);}
  public record Request(@NotNull @PositiveOrZero Long workVersion,@NotBlank @Size(max=100) String title,@NotBlank @Size(max=12000) String lyrics,@Pattern(regexp="[0-9a-fA-F-]{36}") String baseRevisionId){}
  @GetMapping public List<LyricsApi.Revision> list(@AuthenticationPrincipal CreatorPrincipal creator,@PathVariable String work){return lyrics.list(creator.id(),work);}

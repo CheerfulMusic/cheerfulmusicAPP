@@ -88,6 +88,7 @@ export function validResponse(path:string,method:string,value:unknown):boolean{
  if(path==='app/music-settings/preview'||/\/music-settings\/preview$/.test(path)||/\/generations\/[^/]+\/music-settings$/.test(path))return direction(value)
  if(/\/generations\/preflight$/.test(path))return method==='POST'&&obj(value)&&num(value.workVersion)&&text(value.revisionId)&&['styleCharacters','styleLimit','negativeCharacters','negativeLimit'].every(k=>num(value[k]))&&Number(value.styleCharacters)<=Number(value.styleLimit)&&Number(value.negativeCharacters)<=Number(value.negativeLimit)&&str(value.notice)
  if(/\/music-settings$/.test(path))return obj(value)&&work(value.work)&&(value.direction===null||direction(value.direction))
+   &&(value.photoInspiration==null||obj(value.photoInspiration)&&text(value.photoInspiration.summary)&&text(value.photoInspiration.arrangement))
  if(path==='app/works')return method==='GET'?list(value,work):work(value)
  if(path==='app/works/library')return list(value,v=>obj(v)&&work(v.work)&&text(v.status))
  if(/^app\/works\/[^/]+$/.test(path)){

@@ -243,6 +243,8 @@
 .dual-creation-studio{max-width:1160px;margin:auto;position:relative;padding-top:12px}
 .creation-mode-switch{display:flex;width:min(360px,100%);margin:0 auto 22px;border:1px solid #efdee3;border-radius:999px;padding:4px;background:#fffafc;box-shadow:0 3px 12px #b9607310}
 .creation-mode-switch button{flex:1;border:0;border-radius:999px;background:transparent;color:#302730;font:inherit;font-weight:600;min-height:42px;cursor:pointer}
+.creation-mode-switch.has-photo-mode{width:min(520px,100%)}
+.creation-mode-switch.has-photo-mode button{padding:4px 5px;line-height:1.25;overflow-wrap:anywhere}
 .creation-mode-switch button[aria-pressed=true]{background:linear-gradient(110deg,#ff674d,#f52238);color:white;box-shadow:0 4px 14px #f9382226}
 .creation-mode-switch button:focus-visible,.creation-chips button:focus-visible,.creation-more-toggle:focus-visible{outline:2px solid #a82e31;outline-offset:3px}
 .dual-creation-studio .story-introduction{margin-bottom:8px}.dual-creation-studio .story-introduction h1{font-size:clamp(28px,3.3vw,46px);line-height:1.3;margin:0 0 12px}.dual-creation-studio .studio-introduction-copy{font-size:17px}

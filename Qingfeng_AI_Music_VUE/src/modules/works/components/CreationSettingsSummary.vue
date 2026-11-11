@@ -3,11 +3,13 @@ import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue'
 import { t, locale } from '../../../shared/i18n'
 import type { Work } from '../../studio'
 import { vocalGenderLabel } from '../../studio/model/vocals'
-import { loadMusicCatalog, loadMusicSettings, type MusicCatalog, type MusicDirection } from '../api/music-settings'
+import { loadMusicCatalog, loadMusicSettings, type MusicCatalog, type MusicDirection, type PhotoInspiration } from '../api/music-settings'
 import type { Revision } from '../api/detail'
 
-const props=defineProps<{work:Work;revision:Revision|null}>()
+const props=defineProps<{work:Work;revision:Revision|null;busy?:boolean}>()
+const emit=defineEmits<{editMusic:[]}>()
 const direction=ref<MusicDirection|null>(null),catalog=ref<MusicCatalog>()
+const photo=ref<PhotoInspiration|null>(null)
 const state=ref<'loading'|'ready'|'failed'>('loading')
 const compact=ref(false), expanded=ref(false)
 const description=computed(()=>[props.work.story,props.work.message].filter(Boolean).join('\n\n'))
@@ -26,11 +28,12 @@ onBeforeUnmount(()=>media?.removeEventListener('change',updateViewport))
 watch(()=>[props.work.id,props.work.version],async (_,__,onCleanup)=>{
  let current=true
  onCleanup(()=>{current=false})
- state.value='loading';direction.value=null
+ state.value='loading';direction.value=null;photo.value=null
  try{
    const [settings,labels]=await Promise.all([loadMusicSettings(props.work.id),loadMusicCatalog().catch(()=>undefined)])
    if(!current)return
-   direction.value=settings?.direction??null;catalog.value=labels;state.value='ready'
+   direction.value=settings?.direction??null;photo.value=settings?.photoInspiration??null;catalog.value=labels;state.value='ready'
+   if(photo.value)expanded.value=true
  }catch{if(current)state.value='failed'}
 },{immediate:true})
 function choices(group:string){
@@ -59,6 +62,13 @@ const rows=computed(()=>{
     <summary @click.prevent="expanded=!expanded">{{ t('查看本次创作设置') }}</summary>
     <h2>{{ t('你的个性化选择') }}</h2>
     <p>{{ t('以下内容继承自上一步的创作设置') }}</p>
+    <section v-if="photo" class="setting-description photo-brief">
+      <strong>{{ t('照片画面') }}</strong>
+      <p>{{ photo.summary }}</p>
+      <strong>{{ t('音乐方向') }}</strong>
+      <p>{{ direction?.preferences.freeText || (locale==='en'?direction?.summaryEn:direction?.summaryZh) || photo.arrangement }}</p>
+      <button type="button" class="text-button" :disabled="busy" @click="emit('editMusic')">{{ t('调整音乐要求') }}</button>
+    </section>
     <details v-if="description" class="setting-description">
       <summary>
         <strong><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14v16H5ZM8 8h1m3 0h4m-8 4h1m3 0h4m-8 4h1m3 0h4"/></svg>{{ t('原始描述') }}<span aria-hidden="true">⌄</span></strong>
@@ -86,6 +96,8 @@ const rows=computed(()=>{
 .setting-description[open] summary strong span { rotate:180deg; }
 .setting-description p,.description-preview { white-space:pre-wrap; overflow-wrap:anywhere; margin:7px 0 0; color:#695f61; font-size:14px; line-height:1.55; }
 .description-preview { display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; }
+.photo-brief { margin-bottom:10px; }
+.photo-brief strong:not(:first-child) { display:block; margin-top:12px; }
 .setting-description[open] .description-preview { display:none; }
 .setting-description p { max-height:160px; overflow:auto; }
 svg { width:18px; height:18px; flex:none; fill:none; stroke:currentColor; stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round; }
