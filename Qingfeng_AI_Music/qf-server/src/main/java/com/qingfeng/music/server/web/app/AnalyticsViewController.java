@@ -74,34 +74,55 @@ public class AnalyticsViewController {
     }
 
     /**
-     * 账号来源：优先 Google 身份邮箱，缺失时回退到 Logto/OIDC 身份表的邮箱。
-     * 邮箱一律由服务端从已登录 creatorId 查得，前端传值不构成权限。
+     * 账号来源：Google 与 OIDC/Logto 两种已验证身份。
+     * 两张身份表都只在「提供方已验证」后才会落库，因此库里存在的邮箱即已验证邮箱；
+     * 空白邮箱等价于「该来源无已验证邮箱」，不参与白名单匹配。
+     * 白名单匹配采用「任一已验证邮箱命中即授权」的并集口径，避免用户同时绑了
+     * Google 与 OIDC、但白名单只写了其中一个邮箱时被误拒。
      */
-    private Optional<String> account(String creatorId) {
-        var google = identity.googleIdentity(creatorId)
+    private Optional<String> googleEmail(String creatorId) {
+        // 外部身份服务异常直接向上抛，allowed() 统一 fail-closed 拒绝。
+        return identity.googleIdentity(creatorId)
                 .map(IdentityApi.GoogleIdentity::email)
                 .filter(value -> value != null && !value.isBlank());
-        if (google.isPresent()) return google;
+    }
+
+    /** 已验证的 OIDC/Logto 邮箱（空白视为无）。查询异常不阻断整体，仅视为无此来源。 */
+    private Optional<String> oidcEmail(String creatorId) {
         var template = jdbc.getIfAvailable();
         if (template == null) return Optional.empty();
         try {
             return Optional.ofNullable(template.query(
                     "SELECT email FROM creator_oidc_identity WHERE creator_id=?",
-                    rs -> rs.next() ? rs.getString(1) : null, creatorId));
+                    rs -> rs.next() ? rs.getString(1) : null, creatorId))
+                    .filter(value -> value != null && !value.isBlank());
         } catch (RuntimeException e) {
             return Optional.empty();
         }
     }
 
-    /** 包可见便于测试；空白名单、无身份、查库异常一律 fail-closed。 */
+    /** 审批人展示用账号标识：优先 Google 已验证邮箱，回退 OIDC。 */
+    private Optional<String> account(String creatorId) {
+        try {
+            var google = googleEmail(creatorId);
+            if (google.isPresent()) return google;
+            return oidcEmail(creatorId);
+        } catch (RuntimeException e) {
+            return Optional.empty();
+        }
+    }
+
+    /** 包可见便于测试；任一身份源异常、邮箱为空、白名单为空一律 fail-closed。 */
     boolean allowed(String creatorId) {
         var allowed = viewers();
         if (allowed.isEmpty() || creatorId == null || creatorId.isBlank()) return false;
         try {
-            return account(creatorId)
+            var candidates = new HashSet<String>();
+            googleEmail(creatorId).ifPresent(candidates::add);
+            oidcEmail(creatorId).ifPresent(candidates::add);
+            return candidates.stream()
                     .map(value -> value.trim().toLowerCase(Locale.ROOT))
-                    .filter(allowed::contains)
-                    .isPresent();
+                    .anyMatch(allowed::contains);
         } catch (RuntimeException e) {
             return false;
         }

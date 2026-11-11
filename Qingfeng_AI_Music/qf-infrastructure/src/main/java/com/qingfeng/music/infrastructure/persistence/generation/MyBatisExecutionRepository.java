@@ -49,13 +49,19 @@ public final class MyBatisExecutionRepository implements ExecutionRepository {
     public void failed(String task,String token,String code,Instant now) {
         if(transactions==null){mapper.failed(task,token,code,now);return;}
         transactions.executeWithoutResult(tx->{
+            // 非锁定读出任务归属（owner/work/request_key），在更新 generation_task 之前先取 creator 行锁，
+            // 统一锁序为 creator → generation_task → credit_lock，消除与 cancelMusic 的 creator↔task 反转。
+            var owners=jdbc.query("SELECT r.owner_id,r.work_id,r.request_key FROM generation_task t JOIN model_usage_reservation r ON r.kind='MUSIC' AND r.work_id=t.work_id AND r.request_key=t.request_key WHERE t.id=?",(rs,n)->new String[]{rs.getString(1),rs.getString(2),rs.getString(3)},task);
+            if(!owners.isEmpty()) lockCreator(owners.get(0)[0]);
             if(mapper.failed(task,token,code,now)!=1)return;
-            jdbc.query("SELECT r.owner_id,r.work_id,r.request_key FROM generation_task t JOIN model_usage_reservation r ON r.kind='MUSIC' AND r.work_id=t.work_id AND r.request_key=t.request_key WHERE t.id=?",rs->{credits.refund(rs.getString(1),"music:"+rs.getString(2)+":"+rs.getString(3));},task);
+            for(var row:owners) credits.refund(row[0],"music:"+row[1]+":"+row[2]);
             // 只对确定未受理的请求释放每日占额；结果未知和已完成音乐的归档失败不能释放。
             if(code.equals("LOCAL_PREPARATION_FAILED")||code.equals("PROVIDER_REJECTED")||code.equals("PROVIDER_INPUT_REJECTED")||code.equals("PROVIDER_AUTH_FAILED")||code.equals("PROVIDER_BALANCE_LOW")||code.equals("PROVIDER_RATE_LIMITED")||code.equals("PROVIDER_ENDPOINT_UNAVAILABLE")||code.equals("PROVIDER_CONNECT_FAILED")||code.equals("PROVIDER_COOLDOWN")||code.equals("PROVIDER_DISPATCH_UNAVAILABLE"))
                 jdbc.update("DELETE FROM model_usage_reservation WHERE kind='MUSIC' AND work_id=(SELECT work_id FROM generation_task WHERE id=?) AND request_key=(SELECT request_key FROM generation_task WHERE id=?)",task,task);
         });
     }
+    /** 以 creator 行的排他锁作为任务失败事务的第一把锁，与 cancelMusic / 账本保持一致。 */
+    private void lockCreator(String owner){ if(owner!=null && !owner.isBlank()) jdbc.queryForList("SELECT id FROM creator WHERE id=? FOR UPDATE",owner); }
     public boolean retryArchive(String work,String task,Instant now) { return mapper.retry(work,task,now)==1; }
     public boolean closeChecking(String work,String task,Instant now){return mapper.closeChecking(work,task,now,now.minusSeconds(180))==1;}
     public String attempt(String task,String phase,Instant now) { String id=UUID.randomUUID().toString();mapper.attempt(id,task,phase,now);return id; }

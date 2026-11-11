@@ -1,4 +1,4 @@
-/* Agent 创作：导航入口 + 创作助手三栏工作区。 */
+/* Agent 创作：导航入口 + 对话式创作工作区（左对话 / 右作品卡）。 */
 nav.consumer-navigation a.agent-nav-link {
   position: relative;
   display: inline-flex;
@@ -55,7 +55,7 @@ nav.consumer-navigation a.agent-nav-link > svg { width: 17px; height: 17px; flex
   position: relative;
   isolation: isolate;
   display: grid;
-  grid-template-columns: 258px minmax(0, 1fr) 232px;
+  grid-template-columns: minmax(0, 1fr) 320px;
   gap: 20px;
   width: min(1360px, calc(100% - 72px));
   /* 固定视口内工作区：网格行高恒定，消息只在中栏内部滚动，底部输入区不再被撑下去。 */
@@ -70,167 +70,130 @@ nav.consumer-navigation a.agent-nav-link > svg { width: 17px; height: 17px; flex
 .agent-scenery span:nth-child(2) { right: -18%; width: 74%; height: 250px; background: linear-gradient(180deg, #ffcbaa, #ff9d78); opacity: .62; }
 .agent-scenery span:nth-child(3) { left: 28%; width: 60%; height: 190px; background: linear-gradient(180deg, #ffe3cc, #ffc49d); opacity: .55; }
 
-.agent-assistant-panel, .agent-preview, .agent-bubble, .agent-quick-card, .agent-composer-box {
+.agent-preview, .agent-bubble, .agent-composer-box {
   background: #fffdfce8;
   border: 1px solid #f4ded3;
   box-shadow: 0 14px 40px #d9795c14;
   backdrop-filter: blur(9px);
 }
-.agent-assistant-panel, .agent-preview { align-self: start; border-radius: 20px; padding: 17px; }
-.agent-assistant-panel { max-height: calc(100svh - 128px); overflow-y: auto; scrollbar-width: thin; scrollbar-color: #f0cdbd transparent; }
-.agent-assistant-panel.is-collapsed { max-height: none; }
-.agent-panel-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.agent-panel-head h2 { display: flex; align-items: center; gap: 7px; margin: 0; font-family: inherit; font-size: 15px; font-weight: 700; color: #3d332f; }
-.agent-panel-head h2 svg { width: 17px; height: 17px; fill: #ff5a35; }
-.agent-panel-toggle { display: grid; place-items: center; width: 26px; height: 26px; border: 0; border-radius: 50%; background: #fff3ec; color: #9b8278; }
-.agent-panel-toggle svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; transition: transform .2s ease; }
-.agent-assistant-panel.is-collapsed .agent-panel-toggle svg { transform: rotate(180deg); }
-.agent-panel-body { display: grid; gap: 17px; margin-top: 16px; }
-.agent-section-head { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
-.agent-section-head strong { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: #453733; }
-.agent-section-head strong svg { width: 15px; height: 15px; fill: none; stroke: #ff6a45; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
-.agent-section-head > button { display: inline-flex; align-items: center; gap: 3px; padding: 0; border: 0; background: transparent; color: #a18a80; font-size: 11px; }
-.agent-section-head > button svg { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
-.agent-section-manage { font-size: 11px; color: #a18a80; }
-.agent-section-hint { margin: 6px 0 9px; font-size: 10px; line-height: 1.6; color: #a18a80; }
-.agent-inspiration-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
-.agent-inspiration-card { position: relative; display: grid; gap: 3px; padding: 0; border: 0; background: transparent; text-align: left; }
-.agent-inspiration-card img { display: block; width: 100%; aspect-ratio: 1 / 1; object-fit: cover; border-radius: 9px; }
-.agent-inspiration-card strong { font-size: 10px; font-weight: 700; color: #54433d; }
-.agent-inspiration-card small { font-size: 9px; line-height: 1.4; color: #aa9087; }
-.agent-card-play { position: absolute; top: 50%; left: 50%; display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: #fffdfae0; transform: translate(-50%, -50%); opacity: .92; }
-.agent-card-play svg { width: 13px; height: 13px; fill: #e5563a; }
-.agent-inspiration-card:hover img { outline: 2px solid #ff9c7d; outline-offset: 1px; }
+
+/* 左栏：对话区自适应高度，聊天区吃掉剩余空间，输入区固定在底部。 */
+.agent-conversation { display: flex; flex-direction: column; min-width: 0; min-height: 0; height: 100%; }
+/* flex:1 + min-height:0 让高度只由父容器决定，消息数量不会改变输入框的纵向位置。 */
+.agent-chat { display: flex; flex: 1 1 0; flex-direction: column; gap: 18px; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 4px 6px 12px 4px; scrollbar-width: thin; scrollbar-color: #f0cdbd transparent; }
+
+/* 开场白：设计稿顶部的居中引导区，随消息一起滚动。 */
+.agent-hero { display: grid; justify-items: center; gap: 7px; padding: 22px 12px 26px; text-align: center; }
+.agent-hero-icon { display: grid; place-items: center; width: 58px; height: 58px; border-radius: 50%; background: linear-gradient(150deg, #ffe6d8, #ffd3bd); box-shadow: 0 10px 26px #e5855a26; }
+.agent-hero-icon svg { width: 28px; height: 28px; fill: #ff6a3d; }
+.agent-hero h1 { margin: 6px 0 0; font-family: inherit; font-size: 26px; font-weight: 800; letter-spacing: .4px; color: #3a2e2a; }
+.agent-hero p { margin: 0; font-size: 13px; color: #9b8278; }
+
+.agent-message { display: flex; align-items: flex-start; gap: 11px; }
+.agent-message.user { justify-content: flex-end; }
+/* 助手头像：品牌橙底音符方；用户头像：右侧人像圆。 */
+.agent-bot-avatar { display: grid; flex: 0 0 38px; place-items: center; width: 38px; height: 38px; border-radius: 12px; box-shadow: 0 6px 16px #ff6a4533; }
+.agent-bot-avatar svg { width: 38px; height: 38px; }
+.agent-user-avatar { display: grid; flex: 0 0 38px; place-items: center; width: 38px; height: 38px; border-radius: 50%; background: #ffece2; box-shadow: 0 6px 16px #e0a18933; }
+.agent-user-avatar svg { width: 38px; height: 38px; }
+/* 助手消息：白底气泡与淡粉方案卡上下排列，卡片可以比气泡更宽。 */
+.agent-message-body { display: flex; flex-direction: column; align-items: flex-start; gap: 9px; max-width: min(560px, 100%); }
+.agent-message.user .agent-message-body { align-items: flex-end; }
+.agent-bubble { max-width: 100%; padding: 13px 17px; border-radius: 18px 18px 18px 6px; }
+.agent-bubble p { margin: 0; font-size: 13px; line-height: 1.9; color: #4a3b39; }
+.agent-message.user .agent-bubble { border-color: transparent; border-radius: 18px 18px 6px 18px; background: linear-gradient(110deg, #ffb08c, #ff9a6b); }
+.agent-message.user .agent-bubble p { color: #fff; }
+.agent-bubble-tail { margin-top: 9px !important; color: #7d6a63 !important; }
+
+/* 创作方案卡片：设计稿里的淡粉底信息块。 */
+.agent-plan { width: 100%; margin-top: 0; padding: 12px 14px; border-radius: 13px; background: linear-gradient(140deg, #fff3ea, #ffeade); }
+.agent-plan-head { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; color: #d8552f; }
+.agent-plan-head svg { width: 14px; height: 14px; fill: currentColor; }
+.agent-plan-params { margin: 9px 0 0 !important; color: #8a6a5c; font-size: 12px; line-height: 1.8 !important; }
+/* 尾句同时是进入创作页的入口：外观保持成设计稿里的一句普通文字。 */
+.agent-plan-tail { display: block; margin-top: 10px; padding: 0; border: 0; background: transparent; color: #7d6a63; font: inherit; font-size: 13px; line-height: 1.9; text-align: left; cursor: pointer; }
+.agent-plan-tail:hover { color: #d8552f; text-decoration: underline; }
+.agent-plan-error { margin-top: 8px !important; font-size: 11px !important; color: #b7462d !important; }
+.agent-plan-status { margin-top: 8px !important; font-size: 11px !important; color: #a18a80 !important; }
+
+/* 生成中：设计稿里的一枚灰底小胶囊 + 转圈。 */
+.agent-typing { display: inline-flex; align-items: center; gap: 8px; width: fit-content; margin: 0 0 0 49px; padding: 7px 13px; border-radius: 15px; background: #f4ece7; font-size: 12px; color: #a18a80; }
+.agent-typing-spinner { width: 13px; height: 13px; border: 2px solid #f2d6c7; border-top-color: #ff6a3d; border-radius: 50%; animation: agent-spin .8s linear infinite; }
+@keyframes agent-spin { to { transform: rotate(360deg); } }
+
+/* 输入框、工具菜单与底部提示作为整体底部区域：不压缩、不随消息增长被推动。 */
+.agent-composer { position: relative; flex: 0 0 auto; margin-top: 12px; }
+/* 设计稿的输入框是上下两行：上面是输入文字，下面是三个圆形工具按钮，发送键在右侧居中。 */
+.agent-composer-box { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "input send" "row send"; align-items: center; column-gap: 12px; padding: 12px 16px 12px 20px; border-radius: 26px; }
+.agent-composer-box:focus-within { border-color: #f3a98d; box-shadow: 0 0 0 3px #ff70431c, 0 14px 40px #d9795c1c; }
+.agent-composer-box input { grid-area: input; width: 100%; min-width: 0; height: 26px; border: 0; outline: 0; background: transparent; color: #403430; font-size: 13px; }
+.agent-composer-box input::placeholder { color: #b09a91; }
+.agent-composer-row { grid-area: row; }
+.agent-composer-tools { position: relative; display: flex; gap: 10px; }
+.agent-composer-plus, .agent-composer-clip, .agent-composer-mic { display: grid; flex: 0 0 32px; place-items: center; width: 32px; height: 32px; border: 0; border-radius: 50%; background: #f3f0ee; color: #8e8884; }
+.agent-composer-plus svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+.agent-composer-clip svg, .agent-composer-mic svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.agent-composer-plus:hover, .agent-composer-clip:hover, .agent-composer-mic:hover { background: #eae5e1; color: #d84b2e; }
+/* 创作偏好面板浮在输入框上方，不遮挡输入行。 */
+.agent-composer-menu { position: absolute; bottom: calc(100% - 6px); left: 16px; z-index: 20; display: grid; gap: 8px; width: 258px; padding: 13px 14px; border: 1px solid #f0dcd2; border-radius: 14px; background: #fffdfb; box-shadow: 0 16px 36px #6d463526; text-align: left; }
+.agent-composer-menu > strong { font-size: 12px; color: #6f5a52; }
+.agent-menu-modes { display: flex; flex-wrap: wrap; gap: 6px; }
+.agent-menu-modes button { padding: 4px 10px; border: 1px solid #f0d9cd; border-radius: 14px; background: #fffdfa; color: #806a62; font-size: 11px; }
+.agent-menu-modes button.active { border-color: #f3ad92; background: #ffede4; color: #cc472c; font-weight: 700; }
 .agent-tag-list { display: flex; flex-wrap: wrap; gap: 6px; }
-.agent-tag-list button { padding: 5px 11px; border: 1px solid #f0ded5; border-radius: 15px; background: #fff9f6; color: #8a736b; font-size: 11px; }
-.agent-tag-list button[aria-pressed="true"] { border-color: #ffab8e; background: linear-gradient(110deg, #ff9a68, #ff6a42); color: #fff; font-weight: 700; box-shadow: 0 4px 12px #ff704329; }
-.agent-upload-box { display: grid; justify-items: center; gap: 4px; width: 100%; padding: 13px 8px; border: 1px dashed #eec7b5; border-radius: 11px; background: #fffaf7; color: #8a736b; font-size: 11px; }
-.agent-upload-box svg { width: 17px; height: 17px; fill: none; stroke: #e58a68; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
-.agent-upload-box small { font-size: 9px; color: #b39b91; }
-.agent-upload-box:hover { background: #fff2eb; border-color: #ffab8e; }
-.agent-upload-box.is-dragging { border-color: #ff5a35; border-style: solid; background: #ffefe6; color: #d84b2e; }
+.agent-tag-list button { padding: 4px 10px; border: 1px solid #f0ded5; border-radius: 14px; background: #fff9f6; color: #8a736b; font-size: 11px; }
+.agent-tag-list button[aria-pressed="true"] { border-color: #ffab8e; background: linear-gradient(110deg, #ff9a68, #ff6a42); color: #fff; font-weight: 700; }
+.agent-menu-polish { padding: 6px 12px; border: 1px solid #eec5b2; border-radius: 15px; background: #fff; color: #966f62; font-size: 11px; }
+.agent-composer-send { grid-area: send; display: grid; flex: 0 0 38px; place-items: center; align-self: center; width: 38px; height: 38px; border: 0; border-radius: 50%; background: linear-gradient(120deg, #ff9257, #ff4d2d); color: #fff; box-shadow: 0 5px 14px #ff5a353d; }
+.agent-composer-send svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.agent-composer-send:hover { background: #ee4423; }
+.agent-composer-send:disabled { background: #f5cdbc; box-shadow: none; cursor: not-allowed; }
+.agent-composer-send.is-busy { background: #f0a98d; box-shadow: none; cursor: progress; }
+.agent-voice-hint { margin: 7px 0 0; text-align: center; font-size: 11px; color: #b7462d; }
+/* 底部提示：设计稿里居中的一行说明文案。 */
+.agent-hint { margin: 14px 0 0; text-align: center; font-size: 12px; color: #b09a91; }
+.agent-hint span { color: #ff8a5e; }
+.agent-upload-file { display: flex; align-items: center; gap: 6px; margin-top: 8px; padding: 6px 8px; border-radius: 8px; background: #fff2eb; font-size: 10px; color: #7b6259; }
+.agent-upload-file span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.agent-upload-file button { border: 0; background: transparent; color: #d95435; font-size: 10px; }
+.agent-upload-file small { flex: 0 0 auto; font-size: 10px; color: #b39b91; font-variant-numeric: tabular-nums; }
 .agent-upload-error { margin: 6px 0 0; font-size: 10px; line-height: 1.6; color: #c9402a; }
 .agent-analysis { display: flex; flex-wrap: wrap; gap: 5px; margin: 7px 0 0; font-size: 10px; color: #8a736b; }
 .agent-analysis > span { padding: 2px 7px; border-radius: 9px; background: #fff1e8; color: #b7462d; font-variant-numeric: tabular-nums; }
 .agent-analysis.is-failed { display: block; padding: 0; background: none; color: #c9402a; line-height: 1.6; }
 .agent-analysis-inference { margin: 5px 0 0; font-size: 10px; line-height: 1.6; color: #8a73a8; }
-.agent-upload-file { display: flex; align-items: center; gap: 6px; margin-top: 8px; padding: 6px 8px; border-radius: 8px; background: #fff2eb; font-size: 10px; color: #7b6259; }
-.agent-upload-file span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.agent-upload-file button { border: 0; background: transparent; color: #d95435; font-size: 10px; }
-.agent-upload-file small { flex: 0 0 auto; font-size: 10px; color: #b39b91; font-variant-numeric: tabular-nums; }
-.agent-start-button { display: flex; align-items: center; justify-content: center; gap: 7px; width: 100%; min-height: 40px; border: 0; border-radius: 22px; background: linear-gradient(110deg, #ff9a5e, #ff5834); color: #fff; font-size: 12px; font-weight: 700; box-shadow: 0 8px 20px #ff704329; }
-.agent-start-button svg { width: 15px; height: 15px; fill: currentColor; }
-.agent-start-button:hover { background: linear-gradient(110deg, #ff8a48, #ef4423); }
+.agent-section-hint { margin: 6px 0 9px; font-size: 10px; line-height: 1.6; color: #a18a80; }
 
-/* 中栏拉伸到网格行高，内部用 flex column：聊天区吃掉剩余空间，输入区固定在底部。 */
-.agent-conversation { display: flex; flex-direction: column; min-width: 0; min-height: 0; height: 100%; }
-.agent-dots { display: flex; flex: 0 0 auto; justify-content: center; gap: 7px; padding-block: 2px 8px; }
-.agent-dots i { width: 6px; height: 6px; border-radius: 50%; background: #f0c5b2; }
-.agent-dots i.active { width: 7px; height: 7px; background: #ff5a35; }
-/* flex:1 + min-height:0 让高度只由父容器决定，消息数量不会改变输入框的纵向位置。 */
-.agent-chat { display: flex; flex: 1 1 0; flex-direction: column; gap: 15px; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 8px 12px 12px 4px; scrollbar-width: thin; scrollbar-color: #f0cdbd transparent; }
-.agent-message { display: flex; align-items: flex-start; gap: 11px; }
-.agent-message.user { justify-content: flex-end; }
-.agent-bot-avatar { display: grid; flex: 0 0 42px; place-items: center; width: 42px; height: 42px; border-radius: 50%; background: #eaf3ff; box-shadow: 0 5px 14px #4a90e226; }
-.agent-bot-avatar svg { width: 34px; height: 34px; }
-.agent-bubble { max-width: min(560px, 100%); padding: 13px 17px; border-radius: 18px 18px 18px 6px; }
-.agent-message.assistant .agent-bubble { min-width: min(340px, 100%); }
-.agent-bubble p { margin: 0; font-size: 13px; line-height: 1.9; color: #4a3b39; }
-.agent-message.user .agent-bubble { border-color: transparent; border-radius: 18px 18px 6px 18px; background: linear-gradient(110deg, #ff855c, #ff5432); }
-.agent-message.user .agent-bubble p { color: #fff; }
-.agent-typing { margin: 0 0 0 54px; font-size: 11px; color: #a18a80; }
-.agent-brief-card { margin-top: 12px; padding: 12px 14px; border: 1px solid #f6d9c9; border-radius: 13px; background: #fff8f3; }
-.agent-brief-head { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #b7462d; }
-.agent-brief-head svg { width: 14px; height: 14px; fill: currentColor; }
-.agent-brief-story { margin: 8px 0; font-size: 12px !important; line-height: 1.8 !important; color: #6b554d !important; }
-.agent-brief-meta { display: flex; flex-wrap: wrap; gap: 12px; margin: 0; font-size: 11px; color: #a0877d; }
-.agent-brief-params { display: flex; flex-wrap: wrap; gap: 5px; margin: 8px 0 0; }
-.agent-brief-params span { padding: 2px 7px; border-radius: 9px; background: #fff1e8; color: #b7462d; font-size: 10px; }
-.agent-brief-suggestions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
-.agent-brief-suggestions button { padding: 4px 10px; border: 1px solid #f1c8b4; border-radius: 14px; background: #fff; color: #b7462d; font-size: 11px; }
-.agent-brief-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; align-items: center; }
-.agent-brief-cost { flex-basis: 100%; margin-top: 2px; }
-.agent-brief-actions button { padding: 6px 12px; border: 1px solid #eec5b2; border-radius: 16px; background: #fff; color: #966f62; font-size: 11px; }
-.agent-brief-actions button.primary { border-color: transparent; background: linear-gradient(110deg, #ff9160, #ff5432); color: #fff; font-weight: 700; }
-.agent-brief-error { margin: 8px 0 0; font-size: 11px !important; color: #b7462d !important; }
-.agent-quick-card { max-width: 640px; margin-left: 53px; padding: 15px 20px; border-radius: 18px; }
-.agent-quick-card > strong { display: flex; align-items: center; gap: 6px; font-size: 13px; color: #453733; }
-.agent-quick-card > strong svg { width: 15px; height: 15px; fill: #ff5a35; }
-.agent-quick-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px 20px; margin-top: 12px; }
-.agent-quick-grid button { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 3px 0; border: 0; background: transparent; color: #5f4c45; font-size: 12px; text-align: left; }
-.agent-quick-grid button:hover { color: #d84b2e; }
-.agent-quick-grid button span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.agent-quick-grid svg { flex: 0 0 16px; width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
-/* Agent 正在整理上一条需求时，可点区域统一给出禁用态，避免点了没反应。 */
-.agent-inspiration-card:disabled, .agent-quick-grid button:disabled, .agent-brief-suggestions button:disabled { opacity: .45; cursor: not-allowed; }
-.agent-brief-actions button:disabled { opacity: .55; cursor: progress; }
-
-/* 输入框、快捷标签与标语作为整体底部区域：不压缩、不随消息增长被推动。 */
-.agent-composer { flex: 0 0 auto; margin-top: 12px; }
-.agent-composer-box { display: flex; align-items: center; gap: 9px; padding: 8px 9px 8px 17px; border-radius: 30px; }
-.agent-composer-box:focus-within { border-color: #f3a98d; box-shadow: 0 0 0 3px #ff70431c, 0 14px 40px #d9795c1c; }
-.agent-composer-spark { flex: 0 0 19px; width: 19px; height: 19px; fill: #ff5a35; }
-.agent-composer-box input { flex: 1; min-width: 0; height: 36px; border: 0; outline: 0; background: transparent; color: #403430; font-size: 13px; }
-.agent-composer-box input::placeholder { color: #b09a91; }
-.agent-composer-mic, .agent-composer-polish, .agent-composer-send { display: grid; flex: 0 0 34px; place-items: center; width: 34px; height: 34px; border: 0; border-radius: 50%; }
-.agent-composer-mic { background: transparent; color: #9b8278; }
-.agent-composer-mic svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
-.agent-composer-polish { background: #f2ecff; }
-.agent-composer-polish svg { width: 17px; height: 17px; fill: #8265d8; }
-.agent-composer-send { flex-basis: 38px; width: 38px; height: 38px; background: linear-gradient(120deg, #ff9257, #ff4d2d); color: #fff; box-shadow: 0 5px 14px #ff5a353d; }
-.agent-composer-send svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-.agent-composer-send:hover { background: #ee4423; }
-.agent-composer-send:disabled { background: #f5cdbc; box-shadow: none; cursor: not-allowed; }
-.agent-composer-send.is-busy { background: #f0a98d; box-shadow: none; cursor: progress; }
-.agent-voice-hint { margin: 7px 0 0; text-align: center; font-size: 11px; color: #b7462d; }
-.agent-modes { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 13px; }
-.agent-modes button { display: inline-flex; align-items: center; gap: 5px; padding: 5px 11px; border: 1px solid #f0d9cd; border-radius: 16px; background: #fffdfab8; color: #806a62; font-size: 11px; }
-.agent-modes button svg { width: 12px; height: 12px; fill: currentColor; }
-.agent-modes button.active { border-color: #f3ad92; background: #ffede4; color: #cc472c; font-weight: 700; }
-.agent-slogan { position: relative; width: fit-content; margin: 20px auto 0; padding-bottom: 8px; font-family: "KaiTi", "STKaiti", "Segoe Script", cursive; font-size: 18px; color: #c9623f; }
-.agent-slogan span { color: #e0755a; }
-.agent-slogan::after { content: ''; position: absolute; left: 2%; right: 2%; bottom: 0; height: 8px; border-bottom: 1.5px solid #e7966f; border-radius: 0 0 50% 50%; transform: rotate(-1deg); }
-
-.agent-preview-head { display: flex; align-items: center; justify-content: space-between; }
-.agent-preview-head strong { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: #453733; }
-.agent-preview-head strong svg { width: 15px; height: 15px; fill: #ff5a35; }
-.agent-preview-head > div { display: flex; gap: 3px; }
-.agent-preview-head button { width: 22px; height: 22px; border: 0; border-radius: 50%; background: #fff3ec; color: #9b8278; font-size: 15px; line-height: 1; }
-.agent-preview-cover { position: relative; margin-top: 13px; border-radius: 14px; overflow: hidden; }
-.agent-preview-cover img { display: block; width: 100%; aspect-ratio: 1.28; object-fit: cover; }
-.agent-preview-count { position: absolute; top: 9px; right: 9px; padding: 3px 8px; border-radius: 10px; background: #2b2321a8; color: #fff; font-size: 10px; }
-.agent-preview-play { position: absolute; bottom: 11px; left: 11px; display: grid; place-items: center; width: 34px; height: 34px; border: 0; border-radius: 50%; background: #fffdfadd; box-shadow: 0 4px 12px #3a231d33; }
-.agent-preview-play svg { width: 15px; height: 15px; fill: none; stroke: #e0452b; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-.agent-preview-meta strong { display: block; margin-top: 12px; font-size: 14px; color: #3d302c; }
-.agent-preview-meta span { display: block; margin-top: 4px; font-size: 10px; color: #a0877d; }
-.agent-preview-progress { margin-top: 12px; }
-.agent-preview-range { display: block; width: 100%; height: 4px; margin: 0; border: 0; border-radius: 4px; appearance: none; cursor: pointer; }
+/* 右栏作品卡：设计稿的封面 + 标题 + 播放行 + 三按钮 + 歌词。 */
+.agent-preview { align-self: start; border-radius: 20px; padding: 16px; }
+.agent-preview-cover { border-radius: 14px; overflow: hidden; }
+.agent-preview-cover img { display: block; width: 100%; aspect-ratio: 1 / 1; object-fit: cover; }
+.agent-preview-title { margin: 14px 0 0; font-family: inherit; font-size: 17px; font-weight: 700; color: #3d302c; }
+.agent-preview-sub { margin: 5px 0 0; font-size: 11px; color: #a0877d; }
+.agent-preview-playrow { display: flex; align-items: center; gap: 10px; margin-top: 14px; }
+.agent-preview-play { display: grid; flex: 0 0 34px; place-items: center; width: 34px; height: 34px; border: 0; border-radius: 50%; background: linear-gradient(120deg, #ff9257, #ff4d2d); color: #fff; box-shadow: 0 5px 14px #ff5a353d; }
+.agent-preview-play svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.agent-preview-range { flex: 1; min-width: 0; height: 4px; margin: 0; border: 0; border-radius: 4px; appearance: none; cursor: pointer; }
 .agent-preview-range:disabled { cursor: default; }
 .agent-preview-range::-webkit-slider-thumb { width: 10px; height: 10px; border: 0; border-radius: 50%; appearance: none; background: #ff432d; box-shadow: 0 0 0 2px #fffdfc; }
 .agent-preview-range::-moz-range-thumb { width: 10px; height: 10px; border: 0; border-radius: 50%; background: #ff432d; box-shadow: 0 0 0 2px #fffdfc; }
-.agent-preview-progress > div:last-child { display: flex; justify-content: space-between; margin-top: 5px; font-size: 10px; color: #a0877d; font-variant-numeric: tabular-nums; }
-.agent-preview-lyrics { min-height: 96px; margin-top: 14px; text-align: center; }
-.agent-preview-lyrics p { margin: 0 0 7px; font-size: 11px; line-height: 1.7; color: #ac958c; }
-.agent-preview-lyrics p.active { color: #e04b2e; font-weight: 700; }
-.agent-preview-lyrics small { font-size: 9px; color: #c2aba2; }
-.agent-preview-actions { display: flex; align-items: center; justify-content: space-between; gap: 4px; margin-top: 10px; padding-top: 11px; border-top: 1px solid #f4e6de; }
-.agent-preview-actions > :is(button, a) { display: inline-flex; align-items: center; gap: 4px; padding: 0; border: 0; background: transparent; color: #806a62; font-size: 11px; text-decoration: none; }
+.agent-preview-time { flex: 0 0 auto; font-size: 10px; color: #a0877d; font-variant-numeric: tabular-nums; }
+.agent-preview-actions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin-top: 16px; }
+.agent-preview-actions > :is(button, a) { display: inline-flex; align-items: center; justify-content: center; gap: 5px; padding: 8px 4px; border: 1px solid #f2e2da; border-radius: 12px; background: #fffaf7; color: #806a62; font-size: 11px; text-decoration: none; }
 .agent-preview-actions svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .agent-preview-actions button.liked { color: #e04b2e; }
 .agent-preview-actions button.liked svg { fill: #e04b2e; }
-.agent-preview-more { position: relative; }
-.agent-preview-more summary { display: flex; align-items: center; gap: 2px; color: #806a62; font-size: 11px; list-style: none; cursor: pointer; }
-.agent-preview-more summary::-webkit-details-marker { display: none; }
-.agent-preview-more > div { position: absolute; right: 0; bottom: 24px; z-index: 5; display: grid; gap: 3px; min-width: 132px; padding: 6px; border: 1px solid #f0dcd2; border-radius: 10px; background: #fff; box-shadow: 0 10px 26px #6d46351f; }
-.agent-preview-more > div button { padding: 6px 8px; border: 0; border-radius: 6px; background: transparent; color: #6c5650; font-size: 11px; text-align: left; white-space: nowrap; }
-.agent-preview-more > div button:hover { background: #fff2eb; }
+.agent-preview-lyrics-head { display: flex; align-items: center; justify-content: space-between; margin-top: 18px; padding-top: 14px; border-top: 1px solid #f4e6de; }
+.agent-preview-lyrics-head strong { font-size: 13px; color: #453733; }
+.agent-preview-lyrics-head button { display: inline-flex; align-items: center; gap: 3px; padding: 0; border: 0; background: transparent; color: #a18a80; font-size: 11px; }
+.agent-preview-lyrics-head button span { transition: transform .2s ease; }
+.agent-preview-lyrics-head button[aria-expanded="true"] span { transform: rotate(180deg); }
+.agent-preview-lyrics { margin-top: 10px; }
+.agent-preview-lyrics p { margin: 0 0 6px; font-size: 11px; line-height: 1.8; color: #ac958c; }
 
-/* 窄屏改为自然文档流（助手面板移到首行），聊天区改用固定高度，仍然只在内部滚动。 */
+/* 窄屏改为自然文档流：作品卡落到对话区下方，聊天区仍只在内部滚动。 */
 @media (max-width: 1180px) {
-  .agent-studio { grid-template-columns: minmax(0, 1fr) 220px; height: auto; min-height: 0; }
-  .agent-assistant-panel { grid-column: 1 / -1; max-height: none; }
-  .agent-assistant-panel .agent-panel-body { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
-  .agent-start-button { grid-column: 1 / -1; }
+  .agent-studio { grid-template-columns: minmax(0, 1fr) 300px; height: auto; min-height: 0; }
   .agent-conversation { height: auto; }
   .agent-chat { flex: 0 0 auto; height: min(52vh, 460px); min-height: 220px; }
 }
@@ -238,15 +201,16 @@ nav.consumer-navigation a.agent-nav-link > svg { width: 17px; height: 17px; flex
   .agent-studio { grid-template-columns: minmax(0, 1fr); width: calc(100% - 40px); }
   .agent-preview { grid-column: 1; }
   .agent-preview-cover img { aspect-ratio: 2 / 1; }
-  .agent-quick-grid { grid-template-columns: minmax(0, 1fr); }
   .agent-shell .music-shell-body { padding-bottom: 0; }
 }
 @media (max-width: 600px) {
   .agent-studio { width: calc(100% - 28px); padding-block: 16px 24px; gap: 15px; }
-  .agent-assistant-panel .agent-panel-body { grid-template-columns: minmax(0, 1fr); }
   .agent-bubble { padding: 11px 13px; }
-  .agent-quick-card { margin-left: 0; padding: 13px 15px; }
-  .agent-bot-avatar { flex-basis: 34px; width: 34px; height: 34px; }
-  .agent-bot-avatar svg { width: 28px; height: 28px; }
-  .agent-slogan { font-size: 16px; }
+  .agent-hero h1 { font-size: 21px; }
+  .agent-bot-avatar, .agent-user-avatar { flex-basis: 32px; width: 32px; height: 32px; }
+  .agent-bot-avatar svg, .agent-user-avatar svg { width: 32px; height: 32px; }
+  .agent-composer-menu { width: min(258px, calc(100vw - 70px)); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .agent-typing-spinner { animation: none; }
 }

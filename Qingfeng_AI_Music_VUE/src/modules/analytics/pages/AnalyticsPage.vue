@@ -222,7 +222,7 @@ const detailRowsForUser = computed(() => userPages.value[pageUsersKey(days.value
 
       <section class="block" aria-labelledby="sec-pages">
         <div class="section-title"><span>03</span><h2 id="sec-pages">页面表现</h2></div>
-        <p class="block-hint">按访问量排序；平均停留只统计有效样本，没有样本显示「—」。点击任一页面可展开该页的用户停留明细。</p>
+        <p class="block-hint">按访问量排序，展示访问量最高的前 20 个页面（占比按这 20 页合计，可能低于全站 100%）；平均停留只统计有效样本，没有样本显示「—」。点击任一页面可展开该页的用户停留明细。</p>
         <div v-if="unavailable" class="analytics-unavailable" role="alert">
           <strong>页面数据不可用</strong>
           <span>查询失败时不会显示成空榜单。</span>

@@ -36,13 +36,16 @@ public final class JdbcRewriteCharges implements RewriteCharges {
     }
 
     public Reservation reserve(String owner, String requestKey) {
+        // 孤儿记录清理放在主事务之外：每条 stale 记录各自用独立事务退款，
+        // 避免在一个 creator 锁内跨 owner 退款造成锁序反转（creatorA→creatorB vs creatorB→creatorA）。
+        reapStale();
         return transactions.execute(tx -> {
+            lockCreator(owner); // 统一锁序：creator → credit_lock（admit/debit 内部再取 credit_lock）
             var prior = jdbc.query("SELECT status,amount,charged,result_text FROM rewrite_consumption WHERE creator_id=? AND request_key=?", (rs, n) -> new Prior(rs.getString(1), rs.getLong(2), rs.getInt(3), rs.getString(4)), owner, requestKey);
             if (!prior.isEmpty()) {
                 var row = prior.get(0);
                 return new Reservation(false, row.charged() == 0, row.amount(), row.status(), row.result());
             }
-            reapStale();
             admit(owner);
             long freePerDay = pricing.freePerDay(CreditsPricing.Kind.REWRITE);
             // freePerDay：-1 永久免费；0 无免费额度（全部按积分收费）；正数表示前 N 次免费。
@@ -62,6 +65,7 @@ public final class JdbcRewriteCharges implements RewriteCharges {
 
     public void fail(String owner, String requestKey) {
         transactions.executeWithoutResult(tx -> {
+            lockCreator(owner); // 统一锁序：creator → rewrite 行 → credit_lock
             var rows = jdbc.query("SELECT amount,charged,refunded FROM rewrite_consumption WHERE creator_id=? AND request_key=? FOR UPDATE", (rs, n) -> new Charge(rs.getLong(1), rs.getInt(2), rs.getInt(3)), owner, requestKey);
             if (rows.isEmpty()) return;
             var row = rows.get(0);
@@ -94,12 +98,23 @@ public final class JdbcRewriteCharges implements RewriteCharges {
     private void reapStale() {
         var stale = jdbc.query("SELECT creator_id,request_key FROM rewrite_consumption WHERE status='RESERVED' AND created_at<TIMESTAMPADD(SECOND,-?,CURRENT_TIMESTAMP)", (rs, n) -> new String[]{rs.getString(1), rs.getString(2)}, STALE_SECONDS);
         for (var row : stale) {
-            credits.refund(row[0], CreditReferences.of("rewrite", row[0], row[1]));
-            jdbc.update("UPDATE rewrite_consumption SET status='FAILED',refunded=1,updated_at=CURRENT_TIMESTAMP WHERE creator_id=? AND request_key=? AND status='RESERVED'", row[0], row[1]);
+            try {
+                // 每条 stale 记录单独一个事务，统一锁序 creator → rewrite 行 → credit_lock；
+                // 先按 RESERVED 条件更新状态（并发下仅一个事务能命中），命中后才退款，二者同事务，失败一起回滚。
+                transactions.executeWithoutResult(tx -> {
+                    lockCreator(row[0]);
+                    int updated = jdbc.update("UPDATE rewrite_consumption SET status='FAILED',refunded=1,updated_at=CURRENT_TIMESTAMP WHERE creator_id=? AND request_key=? AND status='RESERVED'", row[0], row[1]);
+                    if (updated == 1) credits.refund(row[0], CreditReferences.of("rewrite", row[0], row[1]));
+                });
+            } catch (RuntimeException single) {
+                // 异常捕获位于单条事务边界之外：只回滚该条并继续处理其余，绝不影响调用方的新请求。
+            }
         }
     }
 
     private DomainException busy() { return new DomainException("REWRITE_GENERATION_BUSY", "AI改写正在处理中，请稍后再试。"); }
+    /** 以 creator 行的排他锁作为积分事务的第一把锁，建立与账本/额度一致的全局锁序。 */
+    private void lockCreator(String owner) { if (owner != null && !owner.isBlank()) jdbc.queryForList("SELECT id FROM creator WHERE id=? FOR UPDATE", owner); }
     private record Prior(String status, long amount, int charged, String result) {}
     private record Charge(long amount, int charged, int refunded) {}
 }

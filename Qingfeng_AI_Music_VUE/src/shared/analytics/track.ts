@@ -27,7 +27,8 @@ const YEAR_MS = 365 * 24 * 60 * 60 * 1000
 const SESSION_MS = 30 * 60 * 1000
 const ALLOWED = new Set<string>(ANALYTICS_EVENTS)
 // 浏览器禁用存储时的进程内兜底，避免每次调用都生成新访客、也保证开关仍然生效。
-let memoryVid = '', memorySid = '', memoryOptOut = false
+let memoryVid = '', memorySid = ''
+let memoryDecision: boolean | null = null
 // 当前页面的路径在进入时就固定下来：离开事件必须算在「离开的那一页」上，
 // 不能等到路由切换后再从 location 取，那时已经是新页面的地址了。
 let pageEnteredAt = 0, pageVisibleMs = 0, currentRoute = '', currentPath = '', leaveReported = false
@@ -90,21 +91,33 @@ export function sanitizeReferrer(referrer: string): string {
   } catch { return '' }
 }
 
+// 同意状态用现有 OPT_OUT_KEY 持久化，避免重复弹窗：
+//   ''  未决定 → 默认不采集（绝不默认视为已同意）
+//   '0' 已同意 → 允许采集
+//   '1' 已拒绝 → 不采集
+// memoryDecision 仅在存储不可用时作为内存兜底，初始为 null（即未决定 = 不采集）。
 export function analyticsEnabled(): boolean {
-  if (memoryOptOut || local(OPT_OUT_KEY) === '1') return false
+  // 浏览器级 DNT 永远最高优先级：用户已全局拒绝跟踪，任何业务同意都不覆盖。
   try {
     const nav = navigator as Navigator & { doNotTrack?: string }
     if (nav.doNotTrack === '1') return false
     if ((globalThis as unknown as { doNotTrack?: string }).doNotTrack === '1') return false
-  } catch { /* 无 navigator 的环境按可用处理。 */ }
-  return true
+  } catch { return false }
+  const stored = local(OPT_OUT_KEY)
+  if (stored === '1') return false
+  if (stored === '0') return true
+  if (memoryDecision !== null) return memoryDecision
+  return false
 }
 
-/** 接入 Cookie 同意组件后，未获同意时调用 false；再次同意调用 true。 */
+/**
+ * 接入 Cookie 同意组件：true=接受分析、false=拒绝/撤回。
+ * 未明确同意前（未决定）不要调用，或调用即视为已做出选择；绝不在用户无操作时默认开启。
+ */
 export function setAnalyticsEnabled(value: boolean): void {
-  memoryOptOut = !value
+  memoryDecision = value
   if (!value) { setLocal(OPT_OUT_KEY, '1'); return }
-  try { localStorage.removeItem(OPT_OUT_KEY) } catch { /* 忽略。 */ }
+  try { setLocal(OPT_OUT_KEY, '0') } catch { /* 忽略；退回内存兜底。 */ }
 }
 
 export function track(event: AnalyticsEvent | string, payload?: AnalyticsPayload, pagePath?: string): void {

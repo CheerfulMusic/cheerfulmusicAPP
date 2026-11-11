@@ -72,8 +72,10 @@ public final class JdbcUsageBudget implements UsageBudget {
     }
     public boolean cancelMusic(String work,String key,java.util.function.BooleanSupplier cancel){
         return Boolean.TRUE.equals(transactions.execute(tx->{
-            jdbc.queryForObject("SELECT kind FROM model_usage_lock WHERE kind='MUSIC' FOR UPDATE",String.class);
+            // 统一锁序：先读归属（非锁定），再按 creator → usage_lock → credit_lock 加锁，与 reserve 保持一致。
             var owners=jdbc.query("SELECT owner_id FROM model_usage_reservation WHERE kind='MUSIC' AND work_id=? AND request_key=?",(rs,n)->rs.getString(1),work,key);
+            if(!owners.isEmpty() && owners.get(0)!=null) jdbc.queryForList("SELECT id FROM creator WHERE id=? FOR UPDATE",owners.get(0));
+            jdbc.queryForObject("SELECT kind FROM model_usage_lock WHERE kind='MUSIC' FOR UPDATE",String.class);
             if(!cancel.getAsBoolean())return false;
             if(credits!=null && !owners.isEmpty()) credits.refund(owners.get(0),reference(Kind.MUSIC,work,key));
             jdbc.update("DELETE FROM model_usage_reservation WHERE kind='MUSIC' AND work_id=? AND request_key=?",work,key);
