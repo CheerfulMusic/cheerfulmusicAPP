@@ -39,7 +39,7 @@ function validRecovery(value:unknown):value is Recovery {
 }
 const route=useRoute(), router=useRouter(), initialized=ref(false), ready=ref(false), aiReady=ref(false), existing=ref<Work>(), baseline=ref(''), saving=ref(false), composing=ref(false), error=ref(''), notice=ref(''), conflict=ref(false), localSaved=ref(true), allowance=ref<Allowance>(), creditShort=ref(false)
 const language=ref<string>(locale.value)
-const mode=ref<CreationMode>(creationMode(route.query.mode,!!route.query.work)),quickReady=ref(false)
+const mode=ref<CreationMode>(creationMode(route.query.mode)),quickReady=ref(false)
 const photoReady=ref(false), photoWork=ref(false)
 const quickSession=useQuickSession()
 const {flow:quickFlow,workId:quickWorkId,title:quickTitle,locked:quickLocked,dialogOpen:quickDialogOpen,initialStatus:quickInitialStatus,submissionPending:quickSubmissionPending,unknown:quickUnknown,issue:quickIssue,canResume:quickCanResume}=quickSession
@@ -155,7 +155,7 @@ async function initialize() {
   if(inflight)try{await inflight}catch{/* 旧作品的本机副本仍保留。 */}
   if(turn!==initSequence)return
   localPending=false;localSaved.value=true;initialized.value=false; error.value=''; notice.value=''; conflict.value=false; ready.value=false;saving.value=false
-  mode.value=creationMode(query.mode,!!query.work);musicCatalog.value=undefined;preferences.value=undefined;musicBaseline.value='';musicPersisted.value=false;customTouched.value=false
+  mode.value=creationMode(query.mode);musicCatalog.value=undefined;preferences.value=undefined;musicBaseline.value='';musicPersisted.value=false;customTouched.value=false
   composing.value=false;photoWork.value=false;language.value=locale.value;restoreTemplate();validationError.value='';existing.value=undefined;recoveredVersion=undefined;recoveredWorkId=undefined;cacheKey='';draftKey=crypto.randomUUID()
   Object.assign(draft,{recipient:'',occasion:String(query.occasion||''),story:agentBrief?.story||'',message:'',style:briefStyle,title:'',vocalGender:agentBrief?.params?.vocal??'AUTO'});baseline.value=JSON.stringify(snapshot())
   if(briefLanguage)language.value=briefLanguage
@@ -177,7 +177,7 @@ async function initialize() {
     if (existing.value) {Object.assign(draft,asDraft(existing.value));baseline.value=JSON.stringify(asDraft(existing.value))}
     else {Object.assign(draft,{recipient:'',occasion:String(query.occasion||''),story:agentBrief?.story||'',message:'',style:briefStyle,title:'',vocalGender:agentBrief?.params?.vocal??'AUTO'});baseline.value=JSON.stringify(snapshot());draftKey=crypto.randomUUID();agentBriefApplied=!!agentBrief}
     if (local) {
-      mode.value=creationMode(query.mode||local.mode,!!id)
+      mode.value=creationMode(query.mode||local.mode)
       language.value=local.language;restoreTemplate(local.structure);draftKey=local.draftKey
       if (local.dirty) {
         Object.assign(draft,asDraft(local.draft))
@@ -477,14 +477,14 @@ onBeforeUnmount(()=>{
   <div class="story-studio inspiration-studio single-inspiration-studio dual-creation-studio"
     :class="{'custom-creation-mode':mode==='custom','studio-quick-locked':quickLocked,'studio-inspiration-open':inspirationOpen}">
     <StudioAtmosphere/>
+    <div class="story-introduction">
+      <h1>{{ t('从这一刻起，你也是歌手。') }}</h1>
+      <p class="studio-introduction-copy">{{ t('用几句话表达你的灵感 AI 会为你写成歌曲') }}</p>
+    </div>
     <div class="creation-mode-switch" :class="{'has-photo-mode':photoReady}" role="group" :aria-label="t('选择创作方式')">
       <button type="button" :aria-pressed="mode==='quick'" :disabled="composing||rewriting||quickLocked" @click="changeMode('quick')">{{ t('快速生成') }}</button>
       <button type="button" :aria-pressed="mode==='custom'" :disabled="composing||rewriting||quickLocked" @click="changeMode('custom')">{{ t('自定义创作') }}</button>
       <button v-if="photoReady" type="button" :disabled="composing||rewriting||quickLocked" @click="router.push('/create/photo')">{{ t('用照片写一首歌') }}</button>
-    </div>
-    <div class="story-introduction">
-      <h1>{{ t('从这一刻起，你也是歌手。') }}</h1>
-      <p class="studio-introduction-copy">{{ t(mode==='quick'?'用几句话表达你的灵感 AI 会为你写成歌曲':'先选音乐方向 再写出适合演唱的歌词') }}</p>
     </div>
     <div class="creation-sound-divider" aria-hidden="true"><span></span>ııııı<span></span></div>
     <div class="creation-page-layout"><section class="draft-form story-focus">

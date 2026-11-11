@@ -2,7 +2,7 @@ import type {DraftInput} from '../api/works'
 import {english} from '../../../shared/i18n/en'
 import {inspirationPresets,inspirationSelection,legacyInspirationDescription,type InspirationPreset} from './inspiration-presets'
 export type CreationMode='quick'|'custom'
-export const creationMode=(value:unknown,existing=false):CreationMode=>value==='custom'||value!=='quick'&&existing?'custom':'quick'
+export const creationMode=(value:unknown):CreationMode=>value==='quick'?'quick':'custom'
 export const inspirationLimit = 4000
 export function appendInspiration(story:string, description:string):string|null {
   const combined = story.trim() ? `${story}\n\n${description}` : description

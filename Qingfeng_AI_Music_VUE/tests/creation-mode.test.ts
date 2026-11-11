@@ -7,9 +7,10 @@ import {legacyPreferences} from '../src/modules/works/model/music-preferences'
 import {validResponse,emptyResponseAllowed} from '../src/shared/http/response-contracts'
 const draft={recipient:'妈妈',occasion:'生日',story:'门口剥好的橘子是我的真实故事',message:'',style:'温暖民谣',title:'',vocalGender:'AUTO' as const}
 describe('双入口与作者素材保护',()=>{
- it('新建默认快速 已有作品保留自定义入口 明确选择优先',()=>{
-  expect(creationMode(undefined)).toBe('quick');expect(creationMode(undefined,true)).toBe('custom')
-  expect(creationMode('quick',true)).toBe('quick');expect(creationMode('custom')).toBe('custom')
+ it('默认自定义创作，保留显式选择的快速生成',()=>{
+  expect(creationMode(undefined)).toBe('custom')
+  expect(creationMode('quick')).toBe('quick')
+  expect(creationMode('custom')).toBe('custom')
  })
  it('每个快捷风格都填入可编辑的描述并保留作者故事',()=>{
   for(const preset of inspirationPresets){
