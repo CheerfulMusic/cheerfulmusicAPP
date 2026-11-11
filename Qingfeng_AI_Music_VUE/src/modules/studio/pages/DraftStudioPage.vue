@@ -20,7 +20,7 @@ import StudioAtmosphere from '../components/StudioAtmosphere.vue'
 import { t, locale } from '../../../shared/i18n'
 import { nextTick, onMounted, onBeforeUnmount, reactive, ref, computed, watch } from 'vue'
 import { useRoute, useRouter, onBeforeRouteLeave, onBeforeRouteUpdate } from 'vue-router'
-import { getSystemInfo } from '../../../shared/http/system'
+import { getSystemInfo, getPhotoLyricsAvailable, usesLocalPhotoCapability } from '../../../shared/http/system'
 import { ApiError, ensureCreator, currentCreatorId, lastKnownCreatorId, associatedGuestCreatorId } from '../../../shared/http/api-client'
 import { readRecovery, writeRecovery, recoveryKey,checkpointRecovery } from '../../../shared/drafts/recovery'
 import { loadWork, saveWork, rewriteInspiration, type Work, type DraftInput } from '../api/works'
@@ -164,7 +164,7 @@ async function initialize() {
   try {
     await ensureCreator()
     const system=await getSystemInfo();if(turn!==initSequence)return;ready.value=system.capabilities.workPersistence; aiReady.value=system.capabilities.lyricsGeneration;quickReady.value=system.capabilities.quickCreation===true
-    photoReady.value=system.capabilities.photoLyrics===true
+    if(!usesLocalPhotoCapability)photoReady.value=system.capabilities.photoLyrics===true
     if (!ready.value) throw new Error('暂时无法保存故事，请稍后再试。')
     const id=String(query.work||'')
     cacheKey=recoveryKey(currentCreatorId(),'story',id||String(query.draft||draftKey))
@@ -241,6 +241,10 @@ async function identityChanged() {
 }
 onMounted(()=>window.addEventListener('qingfeng:identity-changed',identityChanged))
 onBeforeUnmount(()=>window.removeEventListener('qingfeng:identity-changed',identityChanged))
+onMounted(()=>{
+  if(!usesLocalPhotoCapability)return
+  void getPhotoLyricsAvailable().then(available=>{if(alive)photoReady.value=available}).catch(()=>{})
+})
 onMounted(initialize)
 watch([()=>contextOf(route.query),()=>route.query.mode],([context,routeMode],[previousContext])=>{
   if(context===internalContext)return

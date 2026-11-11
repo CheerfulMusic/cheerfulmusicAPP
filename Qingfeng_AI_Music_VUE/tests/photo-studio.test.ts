@@ -11,7 +11,7 @@ vi.mock('../src/shared/http/api-client', () => ({
   ensureCreator: async () => {},
 }))
 vi.mock('../src/shared/http/system', () => ({
-  getSystemInfo: async () => ({ capabilities: { photoLyrics: true } }),
+  getPhotoLyricsAvailable: async () => true,
 }))
 vi.mock('../src/shared/credits/useCredits', () => ({
   useCredits: () => ({ credits: { value: null }, refreshCredits: async () => {} }),

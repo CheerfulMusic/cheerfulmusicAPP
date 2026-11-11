@@ -63,7 +63,7 @@ export function validResponse(path:string,method:string,value:unknown):boolean{
  if(path==='public/auth/native/password/reset')return method==='POST'&&obj(value)&&value.reset===true
  if(path==='public/auth/logto/status')return method==='GET'&&obj(value)&&typeof value.enabled==='boolean'&&typeof value.authenticated==='boolean'&&['emailEnabled','phoneEnabled','appleEnabled'].every(k=>!(k in value)||typeof value[k]==='boolean')&&['email','name','phoneMasked'].every(k=>!(k in value)||str(value[k]))
  if(path==='public/auth/logto/start')return method==='POST'&&obj(value)&&logtoAuthorizationUrl(value.authorizationUrl)
- if(path==='public/system/info')return obj(value)&&text(value.name)&&text(value.version)&&obj(value.capabilities)&&['lyricsGeneration','musicGeneration','giftSharing','workPersistence'].every(k=>typeof (value.capabilities as Row)[k]==='boolean')
+ if(path==='public/system/info'||path==='public/system/photo-preview')return obj(value)&&text(value.name)&&text(value.version)&&obj(value.capabilities)&&['lyricsGeneration','musicGeneration','giftSharing','workPersistence'].every(k=>typeof (value.capabilities as Row)[k]==='boolean')
  if(path==='public/hot-songs')return method==='GET'&&obj(value)&&list(value.songs,hotStat)
  if(/^public\/hot-songs\/[^/]+\/play$/.test(path))return method==='POST'&&hotStat(value)
  if(path==='app/analytics/page-users')return method==='GET'&&obj(value)&&typeof value.allowed==='boolean'&&(value.allowed!==true||(num(value.days)&&text(value.pagePath)&&list(value.users,u=>obj(u)&&text(u.creatorId)&&text(u.accountType)&&(u.name===null||str(u.name))&&(u.email===null||str(u.email))&&(u.phoneMasked===null||str(u.phoneMasked))&&num(u.avgDurationMs)&&num(u.samples)&&Number(u.samples)>=0)))

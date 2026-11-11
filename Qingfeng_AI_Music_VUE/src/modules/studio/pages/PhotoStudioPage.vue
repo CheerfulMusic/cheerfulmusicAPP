@@ -2,7 +2,7 @@
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { currentCreatorId, ensureCreator } from '../../../shared/http/api-client'
-import { getSystemInfo } from '../../../shared/http/system'
+import { getPhotoLyricsAvailable } from '../../../shared/http/system'
 import { locale, t } from '../../../shared/i18n'
 import { useCredits } from '../../../shared/credits/useCredits'
 import { guardCredits } from '../../../shared/credits/credit-gate'
@@ -164,8 +164,7 @@ function reset() {
 
 onMounted(async () => {
   try {
-    const system = await getSystemInfo()
-    if (!system.capabilities.photoLyrics) throw new Error('照片写歌暂不可用，请稍后再试。')
+    if (!(await getPhotoLyricsAvailable())) throw new Error('照片写歌暂不可用，请稍后再试。')
     await ensureCreator()
     if (!alive) return
     owner = currentCreatorId()
