@@ -28,7 +28,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class AgentMigrationParityTest {
 
     private static final String FLYWAY = "db/migration/V32__agent_conversation.sql";
-    private static final String DBA = "db/migration/V32_agent_conversation.dba.sql";
+    private static final String DBA = "db/dba/V32_agent_conversation.dba.sql";
 
     @Autowired JdbcTemplate db;
 
@@ -88,20 +88,27 @@ class AgentMigrationParityTest {
      * 不应存在会被 Flyway 误识别的「双下划线变体」。Flyway 版本化命名是 V&lt;version&gt;__&lt;description&gt;.sql，
      * 任何同时满足「含双下划线且以 .sql 结尾」的文件都会被当作版本迁移解析；若描述段含点（如 .dba / .copy 变体，
      * 例 V32__agent_conversation.dba.sql），就会与正式迁移同版本冲突导致 Flyway 启动失败。
-     * 正式迁移描述段不含点，DBA 副本用单下划线（V32_agent_conversation.dba.sql）故意避开 Flyway 命名。
+     * 同时禁止「非规范命名」留在 db/migration：发布门禁 release_gate 的迁移名校验与契约生成器的
+     * 版本号解析都要求严格的 V&lt;version&gt;__&lt;description&gt;.sql，DBA 手工副本一律放 db/dba/。
      */
     @Test
     void noDoubleUnderscoreVariantMisrecognizedByFlyway() throws Exception {
         Pattern VERSIONED = Pattern.compile("^V(\\d+)__(.+)\\.sql$");
         List<String> offenders = new ArrayList<>();
+        List<String> nonCanonical = new ArrayList<>();
         for (String name : listMigrationFiles()) {
             Matcher m = VERSIONED.matcher(name);
             if (m.matches() && m.group(2).contains(".")) {
                 offenders.add(name);
             }
+            if (!m.matches()) {
+                nonCanonical.add(name);
+            }
         }
         assertTrue(offenders.isEmpty(),
                 "db/migration 下不应存在被 Flyway 误识别的双下划线变体（描述含点）：" + offenders);
+        assertTrue(nonCanonical.isEmpty(),
+                "db/migration 下只允许 V<version>__<description>.sql；DBA 手工副本请放 db/dba/：" + nonCanonical);
     }
 
     private static List<String> listMigrationFiles() throws Exception {

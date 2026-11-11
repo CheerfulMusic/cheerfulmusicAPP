@@ -1,7 +1,10 @@
 -- V32 · 对话式 Agent 创作会话（DBA 手工执行版，W1）
 -- 与 V32__agent_conversation.sql 语义一致，仅多出 IF NOT EXISTS 幂等保护。
--- 文件名为单下划线 V32_agent_conversation.dba.sql：不符合 Flyway 的 V<version>__<desc>.sql 命名，
--- 因此 Flyway 会跳过本文件，不会与同版本 Flyway 迁移冲突；请勿改成双下划线。
+-- ⚠️ 本文件刻意放在 db/dba/ 而不是 db/migration/：db/migration 下只允许规范的
+--    V<version>__<description>.sql。非规范文件会被 Flyway 的版本扫描、以及发布工具链
+--    （release_gate 的迁移名校验、契约生成器的版本号解析）判为非法迁移，导致发布时
+--    无法产出 release-contract.json / schema-evidence.json。
+--    请勿移回 db/migration/，也请勿改成双下划线。
 -- ⚠️ 编号待上线前复核：本环境未直连生产 flyway_schema_history；V31 已被 V31__rewrite_charges.sql 占用，
 --    故顺延为 V32。上线前须只读核对生产最大版本；若 V32 亦被占用则继续顺延。
 -- 当前为单会话设计：agent_conversation.creator_id 唯一。多会话需去掉该 UNIQUE 并增加会话选择逻辑。
