@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { useAnalyticsConsent } from '../../shared/analytics/useAnalyticsConsent'
+import { useAnalyticsConsent } from '../../../shared/analytics/useAnalyticsConsent'
 
-const { isUndecided, isAccepted, isRejected, accept, reject, withdraw, manage } = useAnalyticsConsent()
+const { isUndecided, isAccepted, accept, reject, withdraw, manage } = useAnalyticsConsent()
 </script>
 
 <template>
