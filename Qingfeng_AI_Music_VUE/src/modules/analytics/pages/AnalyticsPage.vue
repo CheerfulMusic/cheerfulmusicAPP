@@ -9,6 +9,7 @@ import AnalyticsKpiCard from '../components/AnalyticsKpiCard.vue'
 import AnalyticsTrendChart from '../components/AnalyticsTrendChart.vue'
 import AnalyticsPagePerformance from '../components/AnalyticsPagePerformance.vue'
 import AnalyticsUserList from '../components/AnalyticsUserList.vue'
+import AnalyticsRechargeTable from '../components/AnalyticsRechargeTable.vue'
 import { buildTrend, formatDuration, pageUsersKey } from '../model/dwell'
 
 const loading = ref(true)
@@ -90,6 +91,9 @@ const pages = computed(() => summary.value?.pages ?? [])
 const users = computed(() => (summary.value?.users ?? []).filter(row => !!row.creatorId?.trim()))
 const trend = computed(() => buildTrend(summary.value?.daily ?? [], days.value))
 const totalSamples = computed(() => pages.value.reduce((sum, row) => sum + (row.samples || 0), 0))
+const recharge = computed(() => summary.value?.recharge)
+const recharges = computed(() => summary.value?.recharges ?? [])
+const countries = computed(() => summary.value?.countries ?? [])
 const refreshLabel = computed(() => (updatedAt.value ? `更新于 ${timeOnly(updatedAt.value)}` : '尚未更新'))
 
 async function togglePage(pagePath: string) {
@@ -206,6 +210,9 @@ const detailRowsForUser = computed(() => userPages.value[pageUsersKey(days.value
           <AnalyticsKpiCard label="独立访客 UV" :value="number(totals?.uv)" hint="独立访问人数 · 按访客标识去重" icon="users" tint="green" :spark="trend.map(point => point.uv)" />
           <AnalyticsKpiCard label="平均访问时长" :value="durationValue(totals?.avgDurationMs)" :hint="totalSamples ? `基于 ${number(totalSamples)} 次有效停留` : '还没有有效停留样本'" icon="clock" tint="violet" />
           <AnalyticsKpiCard label="累计停留时长" :value="durationValue(totals?.totalDurationMs)" :hint="`会话数 ${number(totals?.sessions)} · 有效停留 ${number(totalSamples)} 次`" icon="hourglass" tint="amber" />
+          <AnalyticsKpiCard label="创作次数" :value="number(totals?.creations)" hint="周期内新增作品" tint="coral" />
+          <AnalyticsKpiCard label="充值总额" :value="number(recharge?.amount)" :hint="`已支付 ${number(recharge?.orders)} 笔 · 未做汇率换算`" tint="green" />
+          <AnalyticsKpiCard label="已支付订单" :value="number(recharge?.orders)" :hint="`累计 ${number(recharge?.credits)} 积分`" tint="amber" />
         </div>
       </section>
 
@@ -254,6 +261,35 @@ const detailRowsForUser = computed(() => userPages.value[pageUsersKey(days.value
           :detail-loading="userPagesLoading === pageUsersKey(days, openUser)"
           :detail-error="userPagesError"
           @toggle="toggleUser" />
+      </section>
+
+      <section class="block" aria-labelledby="sec-recharge">
+        <div class="section-title"><span>05</span><h2 id="sec-recharge">充值明细</h2></div>
+        <p class="block-hint">周期内全部充值订单（含待支付 / 失败），按时间倒序；「已支付」为实际成交。金额可能含多币种，合计值未做汇率换算（不同币种金额相加仅供参考）。</p>
+        <div v-if="unavailable" class="analytics-unavailable" role="alert">
+          <strong>充值数据不可用</strong>
+          <span>查询失败时不会显示成没有充值。</span>
+          <button type="button" class="analytics-retry" @click="load(false)">重试</button>
+        </div>
+        <AnalyticsRechargeTable v-else :rows="recharges" />
+      </section>
+
+      <section class="block" aria-labelledby="sec-geo">
+        <div class="section-title"><span>06</span><h2 id="sec-geo">国家分布</h2></div>
+        <p class="block-hint">基于埋点请求派生的国家（离线 GeoIP 解析，仅记录国家、不存储原始 IP）。只统计周期内已解析出国家的真实访客；IPv6 与私有 / 保留地址不计入。</p>
+        <div v-if="unavailable" class="analytics-unavailable" role="alert">
+          <strong>国家数据不可用</strong>
+          <span>查询失败时不会显示成没有访客。</span>
+          <button type="button" class="analytics-retry" @click="load(false)">重试</button>
+        </div>
+        <ul v-else class="analytics-countries">
+          <li v-for="c in countries" :key="c.country" class="country-row">
+            <span class="country-name">{{ c.country }}</span>
+            <span class="country-visitors">{{ number(c.visitors) }} 访客</span>
+            <span class="country-hits">{{ number(c.hits) }} 次访问</span>
+          </li>
+          <li v-if="!countries.length" class="country-empty">周期内暂无可解析国家的访客数据。</li>
+        </ul>
       </section>
     </template>
   </div>
@@ -310,4 +346,10 @@ const detailRowsForUser = computed(() => userPages.value[pageUsersKey(days.value
   .analytics-kpis { grid-template-columns: 1fr; gap: 14px; }
   .analytics-controls { width: 100%; justify-content: space-between; }
 }
+.analytics-countries { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.country-row { display: flex; align-items: center; gap: 14px; padding: 11px 14px; border: 1px solid var(--a-line); border-radius: 12px; background: #fff; }
+.country-name { font-weight: 600; font-size: 13px; min-width: 60px; }
+.country-visitors { color: var(--a-muted); font-size: 12px; }
+.country-hits { color: #a2948e; font-size: 12px; margin-left: auto; }
+.country-empty { color: #9a8b84; font-size: 12px; padding: 8px 2px; }
 </style>
