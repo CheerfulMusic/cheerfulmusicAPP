@@ -72,12 +72,16 @@ export interface AgentBrief {
   mood: string
   tags: string[]
   reference?: AgentReference
-  /** 用户明确提出的结构化参数（人声、速度、乐器、语言、段落）。 */
+  /** 结构化参数：用户明确提出的内容原样保留；人声在用户未提出时按方案推荐补齐。 */
   params?: AgentParams
 }
 
 export interface AgentReply {
   topic: string
+  /** 助手消息里的完整短句，例如「关于离别的温柔抒情歌曲」。 */
+  phrase: string
+  /** 用户原话，用于推导作品名。 */
+  input: string
   style: string
   mood: string
   brief: AgentBrief
@@ -119,24 +123,62 @@ export const inspirationBoards: InspirationCard[][] = [
 
 export const interestTags = ['时尚', '旅行', '电影', '美食', '音乐', '游戏', '动漫', '生活']
 
-interface Theme { keywords: string[]; topic: string; mood: string; style: string }
+interface Theme {
+  /** 命中关键词；支持正则，避免「抒情歌」被「情歌」误命中。 */
+  keywords: Array<string | RegExp>
+  /** 主题短名，用于内部展示。 */
+  topic: string
+  /** 助手消息里的完整短句，例如「关于离别的温柔抒情歌曲」。 */
+  phrase: string
+  mood: string
+  style: string
+  /** 方案推荐的人声；用户明确提出时以用户为准。 */
+  vocal: 'MALE' | 'FEMALE'
+}
 const themes: Theme[] = [
-  { keywords: ['粤语', '港风', '粤语歌'], topic: '粤语情歌', mood: '复古深情', style: '复古港风' },
-  { keywords: ['旅行', '远方', '海风', '公路', '出发', '旅途', '沿途'], topic: '旅行与远方', mood: '自由随性', style: '温暖民谣' },
-  { keywords: ['电影', '配乐', '画面', '大片', '叙事'], topic: '电影感叙事', mood: '有画面感', style: '电影配乐' },
-  { keywords: ['治愈', '放松', '安静', '疗愈', '慢一点', '平静'], topic: '治愈与放松', mood: '温柔平静', style: '治愈轻音乐' },
-  { keywords: ['情歌', '爱情', '恋人', '告白', '喜欢', '暗恋', '相思'], topic: '爱与陪伴', mood: '甜蜜真挚', style: '甜蜜情歌' },
-  { keywords: ['生日', '祝福', '庆生', '快乐歌'], topic: '生日祝福', mood: '轻快明亮', style: '轻快流行' },
-  { keywords: ['夏日', '海岛', '夏天', '阳光', '海边'], topic: '夏日海岛', mood: '清爽明快', style: '梦幻电子' },
-  { keywords: ['摇滚', '热血', '态度', '自由'], topic: '自由态度', mood: '热烈有力', style: '独立摇滚' },
-  { keywords: ['国风', '古风', '东方', '古韵', '山水'], topic: '东方意境', mood: '悠远留白', style: '国风古韵' },
-  { keywords: ['家人', '妈妈', '爸爸', '陪伴', '回忆'], topic: '家人的陪伴', mood: '温暖怀念', style: '抒情流行' },
+  { keywords: ['末班车', '离别', '告别', '分别', '离歌', '散伙', '再见', '不舍', '思念', '想念'], topic: '离别', phrase: '关于离别的温柔抒情歌曲', mood: '不舍与怀念', style: '抒情流行', vocal: 'FEMALE' },
+  { keywords: ['粤语', '港风', '粤语歌'], topic: '粤语情歌', phrase: '关于一段粤语的深情旋律', mood: '复古深情', style: '复古港风', vocal: 'FEMALE' },
+  { keywords: ['旅行', '远方', '海风', '公路', '出发', '旅途', '沿途'], topic: '旅行与远方', phrase: '关于旅行与远方的自由在路上', mood: '自由随性', style: '温暖民谣', vocal: 'MALE' },
+  { keywords: ['电影', '配乐', '画面', '大片', '叙事'], topic: '电影感叙事', phrase: '关于一段像电影一样的故事', mood: '有画面感', style: '电影配乐', vocal: 'MALE' },
+  { keywords: ['治愈', '放松', '安静', '疗愈', '慢一点', '平静'], topic: '治愈与放松', phrase: '关于一段可以慢慢呼吸的时光', mood: '温柔平静', style: '治愈轻音乐', vocal: 'FEMALE' },
+  { keywords: ['抒情', '慢歌', '伤感', '怀旧'], topic: '心里的话', phrase: '关于一段想慢慢说的心里话', mood: '温柔怅然', style: '抒情流行', vocal: 'FEMALE' },
+  { keywords: [/(?<!抒)情歌/, '爱情', '恋人', '告白', '暗恋', '相思'], topic: '爱与陪伴', phrase: '关于爱与陪伴的心动', mood: '甜蜜真挚', style: '甜蜜情歌', vocal: 'FEMALE' },
+  { keywords: ['生日', '祝福', '庆生', '快乐歌'], topic: '生日祝福', phrase: '关于今天最想祝福的那个人', mood: '轻快明亮', style: '轻快流行', vocal: 'FEMALE' },
+  { keywords: ['夏日', '海岛', '夏天', '阳光', '海边'], topic: '夏日海岛', phrase: '关于夏日海边的风', mood: '清爽明快', style: '梦幻电子', vocal: 'FEMALE' },
+  { keywords: ['摇滚', '热血', '态度', '自由'], topic: '自由态度', phrase: '关于不肯妥协的那股劲头', mood: '热烈有力', style: '独立摇滚', vocal: 'MALE' },
+  { keywords: ['国风', '古风', '东方', '古韵', '山水'], topic: '东方意境', phrase: '关于东方意境里的一片留白', mood: '悠远留白', style: '国风古韵', vocal: 'FEMALE' },
+  { keywords: ['家人', '妈妈', '爸爸', '陪伴', '回忆'], topic: '家人的陪伴', phrase: '关于家人始终在身后的陪伴', mood: '温暖怀念', style: '抒情流行', vocal: 'FEMALE' },
 ]
-const fallback: Theme = { keywords: [], topic: '日常里的小情绪', mood: '真诚温暖', style: '温暖民谣' }
+const fallback: Theme = { keywords: [], topic: '日常里的小情绪', phrase: '关于日常里的小情绪', mood: '真诚温暖', style: '温暖民谣', vocal: 'FEMALE' }
 
-/** 关键词命中优先按列表顺序；未命中时把用户原话作为主题。 */
+/** 剥掉「我想写一首」「帮我创作」这类说法，只留真正的主题描述。 */
+function topicText(input: string): string {
+  let text = input.trim()
+  text = text.replace(/^(请|麻烦)(你)?(帮我)?/, '')
+  text = text.replace(/^我?(想|要|希望|打算)?(再)?(写|创作|做|来)(一)?(首|个)?/, '')
+  text = text.replace(/[，,。！!？?、\s]+$/, '').trim()
+  return text || input.trim()
+}
+
+function keywordHit(keyword: string | RegExp, input: string): boolean {
+  return typeof keyword === 'string' ? input.includes(keyword) : keyword.test(input)
+}
+
+/** 关键词命中优先按列表顺序；未命中时把用户原话整理成主题。 */
 export function matchTheme(input: string): Theme {
-  return themes.find(theme => theme.keywords.some(keyword => input.includes(keyword))) || { ...fallback, topic: input.slice(0, 24) || fallback.topic }
+  const matched = themes.find(theme => theme.keywords.some(keyword => keywordHit(keyword, input)))
+  if (matched) return matched
+  const text = topicText(input)
+  return { ...fallback, topic: text.slice(0, 24) || fallback.topic, phrase: text.startsWith('关于') ? text : `关于${text}` }
+}
+
+/** 作品名候选：从用户原话里取出具体意象，去掉曲风词与并列的主题词。 */
+export function extractWorkTitle(input: string, topic: string, fallbackTitle: string): string {
+  let body = topicText(input).replace(/^关于/, '').replace(/的$/, '').trim()
+  body = body.replace(/((的)?(抒情|流行|摇滚|民谣|电子|古风|国风|轻音乐|情歌|歌曲|音乐|歌))+$/, '').trim()
+  const parts = body.split(/和|与|、|跟/).map(part => part.trim()).filter(Boolean)
+  const picked = parts.find(part => part !== topic && !topic.includes(part) && !part.includes(topic)) || parts[0] || body
+  return (picked || fallbackTitle).slice(0, 12)
 }
 
 export function bandWord(bands: AudioFeatures['bands']): string {
@@ -200,11 +242,16 @@ export function analyzeRequest(input: string, mode: AgentMode = 'write', interes
   const prefix = mode === 'rewrite' ? '改写这段歌词，保留原意但换一种表达：' : mode === 'extend' ? '把这首歌延长一段，延续原有情绪：' : ''
   const interestLine = interests.length ? `可以融入我喜欢的${interests.join('、')}元素。` : ''
   const story = `${prefix}以「${clean || theme.topic}」为灵感，写一首${style}风格的歌，突出${theme.mood}的情绪。${interestLine}`
+  const params = extractParams(clean)
+  // 用户没有指定人声时按主题推荐一个：方案卡与创作页给出同一个答案，不会前后不一致。
+  const resolved = params.vocal === 'AUTO' ? { ...params, vocal: theme.vocal } : params
   return {
     topic: theme.topic,
+    phrase: theme.phrase,
+    input: clean,
     style,
     mood: theme.mood,
     suggestions,
-    brief: withReference({ story, style, mood: theme.mood, tags: [...interests], params: extractParams(clean) }, reference),
+    brief: withReference({ story, style, mood: theme.mood, tags: [...interests], params: resolved }, reference),
   }
 }

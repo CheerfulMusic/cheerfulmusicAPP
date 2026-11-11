@@ -81,14 +81,20 @@ async function attach(wrapper: VueWrapper, file: File | Record<string, unknown>)
   await flush()
 }
 
-/** 发送一条需求并等待创作方案卡片出现；返回该卡片的「用它开始创作」主按钮。 */
-async function sendAndGetCreateButton(wrapper: VueWrapper, text: string): Promise<DOMWrapper<Element>> {
+/** 发送一条需求并等待创作方案卡片出现；返回卡片里进入创作页的入口（尾句按钮）。 */
+async function sendAndGetCreateEntry(wrapper: VueWrapper, text: string): Promise<DOMWrapper<Element>> {
   await wrapper.find('.agent-composer-box input').setValue(text)
   await wrapper.find('form.agent-composer-box').trigger('submit')
   await wait(480)
   await flush()
-  const cards = wrapper.findAll('.agent-brief-card')
-  return cards[cards.length - 1]!.find('.agent-brief-actions button.primary')
+  const cards = wrapper.findAll('.agent-plan')
+  return cards[cards.length - 1]!.find('.agent-plan-tail')
+}
+
+/** 打开输入框左侧的「创作偏好」菜单，模式与兴趣标签都收在这里。 */
+async function openTools(wrapper: VueWrapper) {
+  await wrapper.find('.agent-composer-plus').trigger('click')
+  await flush()
 }
 
 function storedBrief() {
@@ -118,33 +124,125 @@ beforeEach(() => {
   setLocale('zh-CN')
 })
 
-describe('Agent 创作页交互回归（两栏：对话 + 作品卡片）', () => {
+describe('Agent 创作页交互回归（设计稿：开场白 + 对话 + 作品卡）', () => {
   it('进入页面读取点赞关系，右栏作品卡片复用既有本地化预览数据源', async () => {
     const { wrapper } = await mountPage()
     expect(spies.loadMyReactions).toHaveBeenCalledTimes(1)
-    expect(wrapper.find('.agent-preview-meta strong').text()).toBe('你的作品')
-    expect(wrapper.find('.agent-preview-count').text()).toBe('1/3')
+    expect(wrapper.find('.agent-preview-title').text()).toBe('把平凡唱给你')
+    expect(wrapper.find('.agent-preview-sub').text()).toBe('原创歌曲 · 爱情主题')
     expect(wrapper.find('.agent-preview-actions button').attributes('aria-pressed')).toBe('false')
   })
 
-  it('切换语言后问候语与灵感快捷 chips 实时走词条', async () => {
+  it('开场白、底部提示与右栏标题都走词条，切语言实时生效', async () => {
     const { wrapper } = await mountPage()
-    expect(wrapper.findAll('.agent-message.assistant p')[0]!.text()).toContain('你好！我是你的音乐创作助手')
-    expect(wrapper.find('.agent-quick-grid button span').text()).toBe('写一首关于旅行的歌')
+    expect(wrapper.find('.agent-hero h1').text()).toBe('今天，想创作一首什么歌？')
+    expect(wrapper.find('.agent-hero p').text()).toBe('告诉我你的灵感，剩下的交给我。')
+    expect(wrapper.find('.agent-hint').text()).toContain('AI 可以理解灵感、写歌词、编曲并生成歌曲')
     setLocale('en')
     await nextTick()
-    expect(wrapper.findAll('.agent-message.assistant p')[0]!.text()).toBe('Hi! I am your music creation assistant~')
-    expect(wrapper.find('.agent-quick-grid button span').text()).toBe('Write a song about travelling')
-    expect(wrapper.find('.agent-preview-meta strong').text()).toBe('Your Work')
+    expect(wrapper.find('.agent-hero h1').text()).toBe('What kind of song do you want to create today?')
+    expect(wrapper.find('.agent-hero p').text()).toBe('Tell me your inspiration and I will handle the rest.')
+    expect(wrapper.find('.agent-hint').text()).toContain('AI understands your inspiration')
+    expect(wrapper.find('.agent-preview-title').text()).toBe('Love in the Everyday')
   })
 
-  it('快捷提示不覆盖已经打好的需求，两者合并成一条发送', async () => {
+  it('设计稿没有的模块不再出现：快速灵感卡、模式行、旧标语、作品卡头部', async () => {
     const { wrapper } = await mountPage()
-    const input = wrapper.find('.agent-composer-box input')
-    await input.setValue('我想写一首给妈妈的歌')
-    await wrapper.findAll('.agent-quick-grid button')[0]!.trigger('click')
-    expect(wrapper.find('.agent-message.user .agent-bubble p').text()).toBe('我想写一首给妈妈的歌；写一首关于旅行的歌')
-    expect((input.element as HTMLInputElement).value).toBe('')
+    expect(wrapper.find('.agent-quick-card').exists()).toBe(false)
+    expect(wrapper.find('.agent-modes').exists()).toBe(false)
+    expect(wrapper.find('.agent-slogan').exists()).toBe(false)
+    expect(wrapper.find('.agent-preview-head').exists()).toBe(false)
+    expect(wrapper.find('.agent-preview-count').exists()).toBe(false)
+    expect(wrapper.find('.agent-conversation-head').exists()).toBe(false)
+  })
+
+  it('用户消息在右、助手消息在左，双方各自带头像', async () => {
+    const { wrapper } = await mountPage()
+    await wrapper.find('.agent-composer-box input').setValue('我想写一首关于末班车和离别的抒情歌')
+    await wrapper.find('form.agent-composer-box').trigger('submit')
+    await wait(480)
+    await flush()
+    const user = wrapper.find('.agent-message.user')
+    expect(user.exists()).toBe(true)
+    expect(user.find('.agent-user-avatar').exists()).toBe(true)
+    expect(user.find('.agent-bot-avatar').exists()).toBe(false)
+    const assistant = wrapper.find('.agent-message.assistant')
+    expect(assistant.find('.agent-bot-avatar').exists()).toBe(true)
+    expect(assistant.find('.agent-user-avatar').exists()).toBe(false)
+    expect(assistant.find('.agent-bubble p').text()).toBe('我理解了，这是一首关于离别的温柔抒情歌曲。')
+  })
+
+  it('创作方案卡片按设计稿给出一行参数与下一步文案', async () => {
+    const { wrapper } = await mountPage()
+    await wrapper.find('.agent-composer-box input').setValue('写一首 90 BPM 的慢歌，温柔女声，钢琴和弦乐，粤语演唱')
+    await wrapper.find('form.agent-composer-box').trigger('submit')
+    await wait(480)
+    await flush()
+    const plan = wrapper.find('.agent-plan')
+    expect(plan.exists()).toBe(true)
+    expect(plan.find('.agent-plan-head').text()).toContain('创作方案')
+    const params = plan.find('.agent-plan-params').text()
+    expect(params).toContain('曲风：')
+    expect(params).toContain('人声：')
+    expect(params).toContain('情绪：')
+    expect(params).toContain('节奏：')
+    expect(params).toContain('女声')
+    // 设计稿的方案卡只有四枚定性参数：BPM 精确值不再占展示位，由 params 传给创作页。
+    expect(params).toContain('中速')
+    expect(plan.find('.agent-plan-tail').text()).toContain('接下来，我为你创作歌词，并生成歌曲')
+  })
+
+  it('设计稿没有的按钮不再出现：方案卡不再有独立操作行', async () => {
+    const { wrapper } = await mountPage()
+    await wrapper.find('.agent-composer-box input').setValue('我想写一首关于末班车和离别的抒情歌')
+    await wrapper.find('form.agent-composer-box').trigger('submit')
+    await wait(480)
+    await flush()
+    expect(wrapper.find('.agent-plan-actions').exists()).toBe(false)
+    expect(wrapper.find('.agent-plan-tags').exists()).toBe(false)
+    expect(wrapper.find('.agent-bubble-tail').exists()).toBe(false)
+    // 进入创作页的入口保留在方案卡尾句上，外观仍是设计稿里的一句普通文字。
+    expect(wrapper.find('.agent-plan-tail').exists()).toBe(true)
+  })
+
+  it('右栏作品卡按设计稿给出标题、副标题、播放行与三按钮，歌词可展开', async () => {
+    const { wrapper } = await mountPage()
+    expect(wrapper.find('.agent-preview-cover img').exists()).toBe(true)
+    expect(wrapper.find('.agent-preview-playrow .agent-preview-play').exists()).toBe(true)
+    expect(wrapper.find('.agent-preview-time').text()).toContain('/')
+    const actions = wrapper.findAll('.agent-preview-actions > *')
+    expect(actions).toHaveLength(3)
+    expect(actions[0]!.text()).toContain('点赞')
+    expect(actions[1]!.text()).toContain('下载')
+    expect(actions[2]!.text()).toContain('分享')
+    const toggle = wrapper.find('.agent-preview-lyrics-head button')
+    expect(toggle.text()).toContain('展开')
+    expect(toggle.attributes('aria-expanded')).toBe('false')
+    await toggle.trigger('click')
+    await flush()
+    expect(wrapper.find('.agent-preview-lyrics-head button').attributes('aria-expanded')).toBe('true')
+    expect(wrapper.find('.agent-preview-lyrics-head button').text()).toContain('收起')
+  })
+
+  it('右栏作品名与副标题来自这条需求，不再出现半截标题', async () => {
+    const { wrapper } = await mountPage()
+    await wrapper.find('.agent-composer-box input').setValue('我想写一首关于末班车和离别的抒情歌')
+    await wrapper.find('form.agent-composer-box').trigger('submit')
+    await wait(480)
+    await flush()
+    expect(wrapper.find('.agent-preview-title').text()).toBe('末班车')
+    expect(wrapper.find('.agent-preview-sub').text()).toBe('原创歌曲 · 温柔女声')
+    const lyrics = wrapper.findAll('.agent-preview-lyrics p').map(node => node.text())
+    expect(lyrics).toEqual(['黄昏落在站台尽头', '最后一班车缓缓驶走', '那句未说出口的再见…'])
+  })
+
+  it('创作偏好收在输入框左侧的加号菜单里，不占页面主体', async () => {
+    const { wrapper } = await mountPage()
+    expect(wrapper.find('.agent-composer-menu').exists()).toBe(false)
+    await openTools(wrapper)
+    expect(wrapper.find('.agent-composer-menu').exists()).toBe(true)
+    expect(wrapper.findAll('.agent-menu-modes button')).toHaveLength(5)
+    expect(wrapper.findAll('.agent-tag-list button').length).toBeGreaterThan(0)
   })
 
   it('busy 期间再次发送给出可见提示，不清空输入也不新增消息', async () => {
@@ -169,13 +267,13 @@ describe('Agent 创作页交互回归（两栏：对话 + 作品卡片）', () =
     await wrapper.find('form.agent-composer-box').trigger('submit')
     await wait(480)
     await flush()
-    expect(wrapper.find('.agent-brief-card').exists()).toBe(true)
+    expect(wrapper.find('.agent-plan').exists()).toBe(true)
     expect(storedBrief()).toBeUndefined()
     await input.setValue('用粤语唱一首情歌')
     await wrapper.find('form.agent-composer-box').trigger('submit')
     await wait(480)
     await flush()
-    const create = await sendAndGetCreateButton(wrapper, '用粤语唱一首情歌')
+    const create = await sendAndGetCreateEntry(wrapper, '用粤语唱一首情歌')
     await create.trigger('click')
     await flush()
     const brief = storedBrief()
@@ -194,7 +292,7 @@ describe('Agent 创作页交互回归（两栏：对话 + 作品卡片）', () =
     expect(wrapper.find('.agent-upload-file small').text()).toBe('02:08')
     expect(createObjectURL).toHaveBeenCalled()
     expect(wrapper.find('.agent-voice-hint').text()).toContain('已加入参考音乐')
-    const create = await sendAndGetCreateButton(wrapper, '写一首关于旅行的歌')
+    const create = await sendAndGetCreateEntry(wrapper, '写一首关于旅行的歌')
     await create.trigger('click')
     await flush()
     const brief = storedBrief()
@@ -233,7 +331,7 @@ describe('Agent 创作页交互回归（两栏：对话 + 作品卡片）', () =
     const chip = wrapper.find('.agent-analysis').text()
     expect(chip).toContain('120 BPM')
     expect(chip).toContain('低频偏重')
-    const create = await sendAndGetCreateButton(wrapper, '写一首关于旅行的歌')
+    const create = await sendAndGetCreateEntry(wrapper, '写一首关于旅行的歌')
     await create.trigger('click')
     await flush()
     expect(storedBrief()?.story).toContain('约 120 BPM')
@@ -245,12 +343,10 @@ describe('Agent 创作页交互回归（两栏：对话 + 作品卡片）', () =
     await wrapper.find('form.agent-composer-box').trigger('submit')
     await wait(480)
     await flush()
-    const chips = wrapper.find('.agent-brief-params').text()
-    expect(chips).toContain('90 BPM')
-    expect(chips).toContain('女声')
-    expect(chips).toContain('钢琴')
-    expect(chips).toContain('粤语演唱')
-    const create = await sendAndGetCreateButton(wrapper, '写一首 90 BPM 的慢歌，温柔女声，钢琴和弦乐，粤语演唱')
+    const params = wrapper.find('.agent-plan-params').text()
+    expect(params).toContain('女声')
+    expect(params).toContain('中速')
+    const create = await sendAndGetCreateEntry(wrapper, '写一首 90 BPM 的慢歌，温柔女声，钢琴和弦乐，粤语演唱')
     await create.trigger('click')
     await flush()
     expect(storedBrief()?.params).toMatchObject({ bpm: 90, vocal: 'FEMALE', language: 'yue' })
@@ -263,7 +359,7 @@ describe('Agent 创作页交互回归（两栏：对话 + 作品卡片）', () =
     await flush()
     await flush()
     expect(wrapper.find('.agent-analysis.is-failed').text()).toContain('无法解码')
-    const create = await sendAndGetCreateButton(wrapper, '写一首关于旅行的歌')
+    const create = await sendAndGetCreateEntry(wrapper, '写一首关于旅行的歌')
     await create.trigger('click')
     await flush()
     const brief = storedBrief()
@@ -306,7 +402,7 @@ describe('Agent 创作页交互回归（两栏：对话 + 作品卡片）', () =
     await attach(wrapper, new File(['fake'], 'slow.mp3', { type: 'audio/mpeg' }))
     await flush()
     // 先以真实计时器把需求发出去，等创作方案卡片出现（不需要 fake timer）。
-    const create = await sendAndGetCreateButton(wrapper, '写一首关于旅行的歌')
+    const create = await sendAndGetCreateEntry(wrapper, '写一首关于旅行的歌')
     vi.useFakeTimers()
     await create.trigger('click')
     await flush()
@@ -344,12 +440,13 @@ describe('Agent 创作页交互回归（两栏：对话 + 作品卡片）', () =
     const { wrapper, toggle } = await mountPage()
     await wrapper.find('.agent-preview-play').trigger('click')
     expect(toggle).toHaveBeenCalledTimes(1)
-    expect(spies.recordPlay).toHaveBeenCalledWith('travel')
+    expect(spies.recordPlay).toHaveBeenCalledWith('love')
   })
 
   it('连点同一个模式标签只给一次提示，五个标签各给一次且不触发发送', async () => {
     const { wrapper } = await mountPage()
-    const modes = wrapper.findAll('.agent-modes button')
+    await openTools(wrapper)
+    const modes = wrapper.findAll('.agent-menu-modes button')
     expect(modes).toHaveLength(5)
     expect(modes.every(button => button.attributes('type') === 'button')).toBe(true)
     const initial = wrapper.findAll('.agent-message').length
@@ -371,9 +468,19 @@ describe('Agent 创作页交互回归（两栏：对话 + 作品卡片）', () =
     expect(wrapper.findAll('.agent-message.user')).toHaveLength(0)
   })
 
-  it('输入区是单行输入框，不含会被自动增高的 textarea', async () => {
+  it('输入区按设计稿是上下两行：上面输入文字，下面三个圆形工具按钮', async () => {
     const { wrapper } = await mountPage()
-    expect(wrapper.find('.agent-composer-box input[type="text"]').exists()).toBe(true)
+    const input = wrapper.find('.agent-composer-box input[type="text"]')
+    expect(input.exists()).toBe(true)
     expect(wrapper.find('.agent-composer-box textarea').exists()).toBe(false)
+    expect(input.attributes('placeholder')).toBe('告诉我你的创作需求...')
+    const tools = wrapper.find('.agent-composer-tools')
+    expect(tools.find('.agent-composer-plus').exists()).toBe(true)
+    expect(tools.find('.agent-composer-clip').exists()).toBe(true)
+    expect(tools.find('.agent-composer-mic').exists()).toBe(true)
+    // 三个工具按钮都排在输入行下方，发送键单独占右侧一列。
+    const order = wrapper.find('.agent-composer-box input[type="text"]').element.compareDocumentPosition(tools.element)
+    expect(order & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(wrapper.find('.agent-composer-send').exists()).toBe(true)
   })
 })
