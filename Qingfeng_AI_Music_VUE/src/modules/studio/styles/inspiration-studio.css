@@ -270,3 +270,20 @@
 .consumer-shell .workspace .dual-creation-studio .creation-page-layout>.story-focus{width:100%;max-width:none;margin:0;box-sizing:border-box;background:#ffffffc9;border:1px solid #f5e5eb;border-radius:30px 30px 70px 30px}
 .consumer-shell .workspace .custom-creation-mode .creation-page-layout>.story-focus{border-radius:24px}
 @media(max-width:600px),(max-height:720px){.consumer-shell .workspace .custom-creation-mode .story-action-bar{position:static;transform:none;left:auto;bottom:auto;width:auto;max-width:none;background:transparent;border:0;padding:0;box-shadow:none;backdrop-filter:none;margin:16px 0 8px}.custom-creation-mode{padding-bottom:0}.consumer-shell .workspace .dual-creation-studio .creation-page-layout>.story-focus{border-radius:24px}}
+
+@media (max-width:700px), (max-height:720px) {
+  .consumer-shell .workspace .studio-inspiration-open .story-action-bar {
+    position:static;
+    transform:none;
+    width:auto;
+    border:0;
+    padding:0;
+    background:transparent;
+    box-shadow:none;
+    backdrop-filter:none;
+    margin:16px 0 8px;
+  }
+  .studio-inspiration-open.single-inspiration-studio {
+    padding-bottom:var(--player-clearance,0px);
+  }
+}

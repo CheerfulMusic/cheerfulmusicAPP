@@ -8,8 +8,11 @@ export const inspirationPresets: readonly InspirationPreset[] = [
   { label: '蓝调R&B', description: '我想写一首节奏轻松的R&B歌曲，使用七和弦、九和弦、转调及转位和弦，色彩丰富，男声演唱，展现极高的人声技巧与情感爆发力。', style: '蓝调R&B', vocalGender: 'MALE' },
   { label: '华语民谣', description: '我想写一首以木吉他为主的民谣歌曲，旋律简单流畅，配器线条清晰简约，辅以口琴、手风琴、箱鼓或基础打击乐即可。', style: '华语民谣', vocalGender: 'AUTO' },
   { label: '中国风', description: '我想写一首五声音阶的中国风歌曲，以婉约诗词、古典意象和细腻叙事为核心，结合清新流行旋律与淡雅编曲，营造出含蓄、忧伤、浪漫的文人气质。', style: '中国风', vocalGender: 'MALE' },
-  { label: '我还没有灵感', description: '我还没有明确的灵感，想创作一首自然、有画面感的歌曲，请帮我寻找一个主题。', style: '轻快流行', vocalGender: 'AUTO' },
 ]
+
+// Older drafts may still begin with this preset paragraph.
+export const legacyInspirationDescription = '我还没有明确的灵感，想创作一首自然、有画面感的歌曲，请帮我寻找一个主题。'
+
 export type InspirationSelection = Pick<InspirationPreset, 'style' | 'vocalGender'> & { story: string }
 export function inspirationSelection(preset: InspirationPreset, translate: (text: string) => string): InspirationSelection {
   return { story: translate(preset.description), style: preset.style, vocalGender: preset.vocalGender }

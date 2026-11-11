@@ -1,6 +1,6 @@
 import {describe,it,expect} from 'vitest'
-import {chooseCreationStyle,creationMode} from '../src/modules/studio/model/creation-mode'
-import {inspirationPresets} from '../src/modules/studio/model/inspiration-presets'
+import {appendInspiration,chooseCreationStyle,creationMode} from '../src/modules/studio/model/creation-mode'
+import {inspirationPresets,legacyInspirationDescription} from '../src/modules/studio/model/inspiration-presets'
 import {english} from '../src/shared/i18n/en'
 import {quickInProgress} from '../src/modules/studio/api/quick-creation'
 import {legacyPreferences} from '../src/modules/works/model/music-preferences'
@@ -30,6 +30,19 @@ describe('双入口与作者素材保护',()=>{
   const preset=inspirationPresets[0]!,edited=`${inspirationPresets[1]!.description} 副歌唱给妈妈。`
   expect(chooseCreationStyle({...draft,story:edited},preset,x=>x)?.story).toBe(`${preset.description}\n\n${edited}`)
   expect(chooseCreationStyle({...draft,story:'歌'.repeat(4000)},preset,x=>x)).toBeNull()
+ })
+ it('旧草稿切换曲风时仍会替换已下线的默认段落',()=>{
+  const preset=inspirationPresets[0]!
+  for(const previous of [legacyInspirationDescription,english[legacyInspirationDescription]]){
+   const updated=chooseCreationStyle({...draft,story:`${previous}\n\n${draft.story}`},preset,x=>x)
+   expect(updated?.story).toBe(`${preset.description}\n\n${draft.story}`)
+  }
+ })
+ it('空白时填入灵感，有原文时完整追加，超出长度时保留原文',()=>{
+  const idea='雨后的末班公交'
+  expect(appendInspiration('',idea)).toBe(idea)
+  expect(appendInspiration(' 原文\n',idea)).toBe(` 原文\n\n\n${idea}`)
+  expect(appendInspiration('歌'.repeat(4000),idea)).toBeNull()
  })
  it('写词和谱曲中都视为正在制作 结束后可恢复编辑',()=>{
   for(const state of ['QUEUED','WRITING','LYRICS_READY','SUBMITTING_MUSIC','RUNNING','SAVING','SUBMISSION_UNKNOWN'])expect(quickInProgress(state)).toBe(true)
