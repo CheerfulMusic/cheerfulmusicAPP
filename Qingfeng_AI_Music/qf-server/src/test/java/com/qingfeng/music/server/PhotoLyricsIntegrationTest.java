@@ -13,9 +13,12 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.ByteBuffer;
+import java.util.Arrays;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.zip.CRC32;
 import javax.imageio.ImageIO;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -68,8 +71,9 @@ class PhotoLyricsIntegrationTest {
             "recipient","","occasion","","story","","message","","style","自动推荐","title","照片创作")),"id");
         String root="/api/app/works/"+work;
         String key=UUID.randomUUID().toString();
-        byte[] png=photo(Color.ORANGE);
+        byte[] png=withTextChunk(photo(Color.ORANGE),10*1024*1024);
         assertEquals(400,upload(session,root,key,new byte[]{1,2,3}).statusCode());
+        assertEquals(400,upload(session,root,key,Arrays.copyOf(png,png.length+1)).statusCode());
         assertEquals(404,upload(session(),root,key,png).statusCode());
         assertEquals(0,photoCalls.get());
 
@@ -102,6 +106,20 @@ class PhotoLyricsIntegrationTest {
         var bytes=new ByteArrayOutputStream();
         ImageIO.write(image,"png",bytes);
         return bytes.toByteArray();
+    }
+
+    private byte[] withTextChunk(byte[] png,int size) {
+        // A valid ancillary chunk grows the upload without changing the decoded pixels.
+        int endChunk=png.length-12;
+        byte[] text=new byte[size-png.length-12];
+        Arrays.fill(text,(byte)'a');
+        text[1]=0;
+        var padded=ByteBuffer.allocate(size);
+        padded.put(png,0,endChunk).putInt(text.length).putInt(0x74455874).put(text);
+        var checksum=new CRC32();
+        checksum.update(padded.array(),endChunk+4,4+text.length);
+        padded.putInt((int)checksum.getValue()).put(png,endChunk,12);
+        return padded.array();
     }
 
     private record Session(HttpClient client,String csrf){}

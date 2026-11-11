@@ -70,8 +70,8 @@ function choosePhoto(event: Event) {
   input.value = ''
   if (!selected) return
   error.value = ''
-  if (!['image/jpeg','image/png'].includes(selected.type) || !selected.size || selected.size > 5 * 1024 * 1024) {
-    error.value = '请选择 5 MB 以内的 JPG 或 PNG 照片。'
+  if (!['image/jpeg','image/png'].includes(selected.type) || !selected.size || selected.size > 10 * 1024 * 1024) {
+    error.value = '请选择 10 MB 以内的 JPG 或 PNG 照片。'
     return
   }
   clearPhoto()
@@ -194,7 +194,7 @@ onBeforeUnmount(() => {
           <input type="file" accept="image/jpeg,image/png" :disabled="!ready||busy||checking||needsCheck" @change="choosePhoto">
           <span>{{ t(preview?'更换照片':'选择照片') }}</span>
         </label>
-        <small>{{ t('一张 JPG 或 PNG，最大 5 MB') }}</small>
+        <small>{{ t('一张 JPG 或 PNG，最大 10 MB') }}</small>
       </div>
       <div class="photo-fields">
         <label class="field">

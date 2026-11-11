@@ -12,7 +12,7 @@ import javax.imageio.stream.MemoryCacheImageOutputStream;
 import org.springframework.web.multipart.MultipartFile;
 
 final class PhotoLyricsImage {
-    private static final int MAX_BYTES = 5 * 1024 * 1024;
+    private static final int MAX_BYTES = 10 * 1024 * 1024;
     private static final int MAX_EDGE = 1600;
 
     private PhotoLyricsImage() {}
@@ -72,6 +72,6 @@ final class PhotoLyricsImage {
     }
 
     private static DomainException invalid() {
-        return new DomainException("INVALID_LYRICS_REQUEST", "请上传有效的 JPG 或 PNG 图片，最大 5 MB、1600 万像素。");
+        return new DomainException("INVALID_LYRICS_REQUEST", "请上传有效的 JPG 或 PNG 图片，最大 10 MB、1600 万像素。");
     }
 }

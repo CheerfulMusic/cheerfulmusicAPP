@@ -54,9 +54,16 @@ it('uploads a single photo with the optional story and opens the unconfirmed lyr
       id: 'lyric-revision', workId: '', workVersion: 0, title: '海边', lyrics: '风吹过海面',
       source: 'OPENAI', confirmed: false, createdAt: '',
     })
-    const file = new File(['photo'], 'beach.png', { type: 'image/png' })
+    const maxBytes = 10 * 1024 * 1024
     const input = page.get('input[type=file]')
-    Object.defineProperty(input.element, 'files', { value: [file] })
+    const oversized = new File([new Uint8Array(maxBytes + 1)], 'large.png', { type: 'image/png' })
+    Object.defineProperty(input.element, 'files', { configurable: true, value: [oversized] })
+    await input.trigger('change')
+    expect(page.get('[role=alert]').text()).toContain('10 MB')
+    expect(page.find('img').exists()).toBe(false)
+
+    const file = new File([new Uint8Array(maxBytes)], 'beach.png', { type: 'image/png' })
+    Object.defineProperty(input.element, 'files', { configurable: true, value: [file] })
     await input.trigger('change')
     expect(page.get('img').attributes('src')).toBe('blob:photo-test')
     await page.get('textarea').setValue('这是妈妈第一次看到海。')
