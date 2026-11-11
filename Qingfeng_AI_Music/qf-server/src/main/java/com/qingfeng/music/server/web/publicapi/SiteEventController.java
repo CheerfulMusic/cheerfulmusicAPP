@@ -1,7 +1,9 @@
 package com.qingfeng.music.server.web.publicapi;
 
 import com.qingfeng.music.identity.api.IdentityApi;
+import com.qingfeng.music.infrastructure.geo.GeoIpResolver;
 import com.qingfeng.music.server.security.CreatorSessionFilter;
+import com.qingfeng.music.server.web.util.ClientIp;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.core.env.Environment;
@@ -42,7 +44,7 @@ public class SiteEventController {
     private static final Pattern WORK_ID = Pattern.compile("/works/[A-Za-z0-9_-]{8,}");
     private static final int MAX_PAYLOAD = 2048;
     private static final long MAX_DURATION_MS = 86_400_000L;
-    static final String INSERT_SQL = "INSERT INTO site_event(id,visitor_id,session_id,event,page_path,referrer,payload,created_at,creator_id,duration_ms) VALUES(?,?,?,?,?,?,?,?,?,?)";
+    static final String INSERT_SQL = "INSERT INTO site_event(id,visitor_id,session_id,event,page_path,referrer,payload,created_at,creator_id,duration_ms,country) VALUES(?,?,?,?,?,?,?,?,?,?,?)";
 
     public record EventRequest(String event, String pagePath, String referrer,
                                String visitorId, String sessionId, Map<String, ?> payload) {}
@@ -50,13 +52,15 @@ public class SiteEventController {
     private final ObjectProvider<JdbcTemplate> jdbc;
     private final ObjectProvider<IdentityApi> identities;
     private final Environment environment;
+    private final ObjectProvider<GeoIpResolver> geoIp;
     private static final ObjectMapper JSON = new ObjectMapper();
 
     public SiteEventController(ObjectProvider<JdbcTemplate> jdbc, ObjectProvider<IdentityApi> identities,
-                               Environment environment) {
+                               Environment environment, ObjectProvider<GeoIpResolver> geoIp) {
         this.jdbc = jdbc;
         this.identities = identities;
         this.environment = environment;
+        this.geoIp = geoIp;
     }
 
     @PostMapping("/events")
@@ -69,9 +73,13 @@ public class SiteEventController {
         }
         var template = jdbc.getIfAvailable();
         if (template == null) return ResponseEntity.noContent().build();
+        // 服务端解析真实客户端 IP → 派生国家，只落 country，不存原始 IP（隐私最小化）。
+        String country = null;
+        var resolver = geoIp.getIfAvailable();
+        if (resolver != null) country = resolver.resolveCountry(ClientIp.resolve(servletRequest));
         try {
             template.update(INSERT_SQL, row(clean, payloadJson(clean.payload()),
-                    creatorId(servletRequest), durationMs(clean.payload())));
+                    creatorId(servletRequest), durationMs(clean.payload()), country));
         } catch (RuntimeException ignored) {
             // 埋点失败不影响业务，也不向前端抛错。
         }
@@ -79,9 +87,9 @@ public class SiteEventController {
     }
 
     /** 落库参数只来自脱敏后的请求与服务端会话；单独成方法便于测试断言，避免 mock varargs 的假阳性。 */
-    static Object[] row(EventRequest clean, String payloadJson, String creatorId, Long durationMs) {
+    static Object[] row(EventRequest clean, String payloadJson, String creatorId, Long durationMs, String country) {
         return new Object[]{UUID.randomUUID().toString(), clean.visitorId(), clean.sessionId(), clean.event(),
-                clean.pagePath(), clean.referrer(), payloadJson, Timestamp.from(Instant.now()), creatorId, durationMs};
+                clean.pagePath(), clean.referrer(), payloadJson, Timestamp.from(Instant.now()), creatorId, durationMs, country};
     }
 
     /** 登录用户归属只认服务端会话令牌，前端传任何身份字段都无效。 */

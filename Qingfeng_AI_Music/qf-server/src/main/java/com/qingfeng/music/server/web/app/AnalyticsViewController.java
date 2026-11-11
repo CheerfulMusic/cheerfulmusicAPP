@@ -196,6 +196,7 @@ public class AnalyticsViewController {
             // 身份来自三张互斥的身份表；都没有绑定的就是游客会话（游客也带 creator_id，不能被当成登录用户）。
             body.put("users", template.query(
                     "SELECT t.creator_id, t.account_type, t.name, t.email, t.phone_masked, COUNT(*) pv, "
+                            + "COALESCE(w.works,0) works, "
                             + "COUNT(CASE WHEN t.event='pageview' THEN 1 END) pageviews, "
                             + "COALESCE(AVG(CASE WHEN t.event='page_leave' THEN t.duration_ms END),0) avg_duration_ms, "
                             + "SUM(CASE WHEN t.event='page_leave' AND t.duration_ms IS NOT NULL THEN 1 ELSE 0 END) samples, "
@@ -211,7 +212,8 @@ public class AnalyticsViewController {
                             + "LEFT JOIN creator_oidc_identity o ON o.creator_id=s.creator_id "
                             + "LEFT JOIN creator_authing_identity a ON a.creator_id=s.creator_id "
                             + "WHERE s.creator_id IS NOT NULL AND s.creator_id <> '' AND s.created_at >= ?"
-                            + ") t GROUP BY t.creator_id, t.account_type, t.name, t.email, t.phone_masked "
+                            + ") t LEFT JOIN (SELECT owner_id, COUNT(*) works FROM music_work GROUP BY owner_id) w ON w.owner_id = t.creator_id "
+                            + "GROUP BY t.creator_id, t.account_type, t.name, t.email, t.phone_masked "
                             + "ORDER BY pv DESC LIMIT 50",
                     (rs, n) -> {
                         var row = new LinkedHashMap<String, Object>();
@@ -220,12 +222,66 @@ public class AnalyticsViewController {
                         row.put("name", rs.getString("name"));
                         row.put("email", rs.getString("email"));
                         row.put("phoneMasked", rs.getString("phone_masked"));
+                        row.put("works", rs.getLong("works"));
                         row.put("pv", rs.getLong("pv"));
                         row.put("pageviews", rs.getLong("pageviews"));
                         row.put("avgDurationMs", rs.getLong("avg_duration_ms"));
                         row.put("samples", rs.getLong("samples"));
                         row.put("firstSeen", rs.getTimestamp("first_seen") == null ? "" : rs.getTimestamp("first_seen").toInstant().toString());
                         row.put("lastSeen", rs.getTimestamp("last_seen") == null ? "" : rs.getTimestamp("last_seen").toInstant().toString());
+                        return row;
+                    }, since));
+            // 创作次数：music_work 按创建时间统计周期内新增作品。
+            body.put("creations", template.query(
+                    "SELECT COUNT(*) c FROM music_work WHERE created_at >= ?",
+                    (rs, n) -> rs.getLong("c"), since).stream().findFirst().orElse(0L));
+            // 充值汇总：只统计已支付（PAID）订单；金额按 DECIMAL 取出后转 double 入 JSON。
+            body.put("recharge", template.query(
+                    "SELECT COUNT(*) orders, COALESCE(SUM(amount),0) amount, COALESCE(SUM(credits),0) credits "
+                            + "FROM payment_order WHERE status='PAID' AND created_at >= ?",
+                    (rs, n) -> {
+                        var row = new LinkedHashMap<String, Object>();
+                        row.put("orders", rs.getLong("orders"));
+                        row.put("amount", rs.getDouble("amount"));
+                        row.put("credits", rs.getLong("credits"));
+                        return row;
+                    }, since).stream().findFirst().orElseGet(LinkedHashMap::new));
+            // 充值明细：周期内全部订单（含未支付/失败），关联身份表给出账号信息，按时间倒序。
+            body.put("recharges", template.query(
+                    "SELECT p.creator_id, p.package_id, p.amount, p.currency, p.credits, p.status, p.created_at, "
+                            + "COALESCE(g.email, o.email) email, COALESCE(g.display_name, o.display_name, a.display_name) name, o.phone_masked, "
+                            + "CASE WHEN g.creator_id IS NOT NULL THEN 'GOOGLE' WHEN o.email IS NOT NULL AND o.email <> '' THEN 'OIDC_EMAIL' "
+                            + "WHEN o.creator_id IS NOT NULL THEN 'OIDC_PHONE' WHEN a.creator_id IS NOT NULL THEN 'AUTHING' ELSE 'GUEST' END account_type "
+                            + "FROM payment_order p LEFT JOIN creator_google_identity g ON g.creator_id=p.creator_id "
+                            + "LEFT JOIN creator_oidc_identity o ON o.creator_id=p.creator_id "
+                            + "LEFT JOIN creator_authing_identity a ON a.creator_id=p.creator_id "
+                            + "WHERE p.created_at >= ? ORDER BY p.created_at DESC LIMIT 50",
+                    (rs, n) -> {
+                        var row = new LinkedHashMap<String, Object>();
+                        row.put("creatorId", rs.getString("creator_id"));
+                        row.put("accountType", rs.getString("account_type"));
+                        row.put("name", rs.getString("name"));
+                        row.put("email", rs.getString("email"));
+                        row.put("phoneMasked", rs.getString("phone_masked"));
+                        row.put("packageId", rs.getString("package_id"));
+                        row.put("amount", rs.getDouble("amount"));
+                        row.put("currency", rs.getString("currency"));
+                        row.put("credits", rs.getLong("credits"));
+                        row.put("status", rs.getString("status"));
+                        row.put("createdAt", rs.getTimestamp("created_at") == null ? "" : rs.getTimestamp("created_at").toInstant().toString());
+                        return row;
+                    }, since));
+            // 国家分布：按埋点落库的派生国家聚合；排除匿名化哨兵值与未解析出国家的行。
+            // country 仅存国家名（服务端离线 GeoIP 派生，不存原始 IP）。
+            body.put("countries", template.query(
+                    "SELECT country, COUNT(DISTINCT visitor_id) visitors, COUNT(*) hits "
+                            + "FROM site_event WHERE created_at >= ? AND country IS NOT NULL AND " + REAL_VISITOR_PREDICATE
+                            + " GROUP BY country ORDER BY visitors DESC LIMIT 50",
+                    (rs, n) -> {
+                        var row = new LinkedHashMap<String, Object>();
+                        row.put("country", rs.getString("country"));
+                        row.put("visitors", rs.getLong("visitors"));
+                        row.put("hits", rs.getLong("hits"));
                         return row;
                     }, since));
         } catch (RuntimeException e) {

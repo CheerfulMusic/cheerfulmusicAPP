@@ -18,6 +18,7 @@ const guests = computed(() => props.rows.filter(row => isGuest(row.accountType))
 const signed = computed(() => props.rows.length - guests.value)
 
 function visits(row: AnalyticsUserRow): string { return Number.isFinite(row.pageviews) ? row.pageviews.toLocaleString('zh-CN') : '—' }
+function works(row: AnalyticsUserRow): string { return Number.isFinite(row.works) ? row.works!.toLocaleString('zh-CN') : '—' }
 function time(value: string): string {
   if (!value) return '—'
   const date = new Date(value)
@@ -46,6 +47,7 @@ function time(value: string): string {
             <code class="user-id" :title="row.creatorId">{{ row.creatorId }}</code>
           </span>
           <span class="type-badge" :class="{ guest: isGuest(row.accountType) }">{{ accountTypeLabel(row.accountType) }}</span>
+          <span class="metric"><strong>{{ works(row) }}</strong><small>创作</small></span>
           <span class="metric"><strong>{{ visits(row) }}</strong><small>访问</small></span>
           <span class="metric"><strong>{{ dwellLabel(row.avgDurationMs, row.samples) }}</strong><small>{{ row.samples ? `${row.samples} 次停留` : '无有效样本' }}</small></span>
           <span class="last-seen">{{ time(row.lastSeen) }}</span>
@@ -80,7 +82,7 @@ function time(value: string): string {
 .users-list > li:last-child { border-bottom: 0; }
 .users-row {
   display: grid; align-items: center; gap: 14px; width: 100%; padding: 12px;
-  grid-template-columns: 38px minmax(150px, 1.9fr) 82px 84px 104px 108px 18px;
+  grid-template-columns: 38px minmax(150px, 1.9fr) 82px 70px 84px 104px 108px 18px;
   border: 0; border-radius: 12px; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer;
 }
 .users-row:hover { background: #fff7f4; }
@@ -111,7 +113,7 @@ function time(value: string): string {
 .user-page-metric { text-align: right; color: #5f534e; font-variant-numeric: tabular-nums; }
 .user-page-samples { text-align: right; color: #a2948e; font-variant-numeric: tabular-nums; }
 @media (max-width: 900px) {
-  .users-row { grid-template-columns: 34px minmax(120px, 1.8fr) 72px 66px 84px 16px; gap: 10px; }
+  .users-row { grid-template-columns: 34px minmax(120px, 1.8fr) 72px 58px 66px 84px 16px; gap: 10px; }
   .last-seen { display: none; }
 }
 @media (max-width: 620px) {
