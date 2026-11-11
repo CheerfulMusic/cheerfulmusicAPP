@@ -1,5 +1,5 @@
 import {afterEach,beforeEach,describe,it,expect,vi} from 'vitest'
-import {installPageLeaveTracking,reportPageLeave,trackPageView} from '../src/shared/analytics/track'
+import {installPageLeaveTracking,reportPageLeave,setAnalyticsEnabled,trackPageView} from '../src/shared/analytics/track'
 
 function memoryStorage(){
  const map=new Map<string,string>()
@@ -19,6 +19,7 @@ beforeEach(()=>{
  beacon=vi.fn(()=>true)
  vi.stubGlobal('navigator',{sendBeacon:beacon,doNotTrack:'0'})
  vi.stubGlobal('fetch',vi.fn(async()=>({ok:true})))
+ setAnalyticsEnabled(true)
  trackPageView('start')
  beacon.mockClear()
 })

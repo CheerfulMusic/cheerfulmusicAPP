@@ -58,6 +58,7 @@ describe('事件上报',()=>{
   expect(fetchMock).not.toHaveBeenCalled()
  })
  it('pageview 走 sendBeacon，携带脱敏字段与匿名标识',async()=>{
+  setAnalyticsEnabled(true)
   vi.stubGlobal('location',{pathname:'/gift/'+'b'.repeat(43)})
   vi.stubGlobal('document',{referrer:'https://t.example/share?q=1'})
   trackPageView('gift')
@@ -71,6 +72,7 @@ describe('事件上报',()=>{
   expect(sent.payload).toEqual({route:'gift'})
  })
  it('sendBeacon 不可用时回退到 keepalive fetch',()=>{
+  setAnalyticsEnabled(true)
   beacon.mockReturnValue(false)
   track('purchase',{plan:'standard'})
   expect(fetchMock).toHaveBeenCalledTimes(1)

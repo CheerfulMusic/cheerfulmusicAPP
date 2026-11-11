@@ -8,8 +8,9 @@ import WelcomeModal from '../modules/identity/components/WelcomeModal.vue'
 import LoginModal from '../modules/identity/components/LoginModal.vue'
 import BetaAccessGate from '../modules/beta-access/BetaAccessGate.vue'
 import QuickCompletionNotice from '../modules/studio/components/QuickCompletionNotice.vue'
+import AnalyticsConsentBanner from '../modules/analytics/components/AnalyticsConsentBanner.vue'
 const layout = computed(() => platform.kind === 'web' ? WebLayout : AppLayout)
 const route = useRoute()
 const standalonePreview = computed(() => import.meta.env.DEV && route.name === 'payment-preview')
 </script>
-<template><RouterView v-if="standalonePreview" /><BetaAccessGate v-else :public-access="route.name === 'gift'"><component :is="layout"><RouterView /></component><LoginModal /><WelcomeModal /><QuickCompletionNotice /></BetaAccessGate></template>
+<template><RouterView v-if="standalonePreview" /><BetaAccessGate v-else :public-access="route.name === 'gift'"><component :is="layout"><RouterView /></component><LoginModal /><WelcomeModal /><QuickCompletionNotice /></BetaAccessGate><AnalyticsConsentBanner /></template>
