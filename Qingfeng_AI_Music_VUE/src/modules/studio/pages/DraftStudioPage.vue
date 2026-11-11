@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import CreationMusicChoices from '../components/CreationMusicChoices.vue'
 import InspirationPanel from '../components/InspirationPanel.vue'
-import {appendInspiration,creationMode,chooseCreationStyle,inspirationLimit,type CreationMode} from '../model/creation-mode'
+import {chooseInspiration,creationMode,chooseCreationStyle,inspirationLimit,type CreationMode} from '../model/creation-mode'
 import {legacyPreferences,validMusicPreferences} from '../../works/model/music-preferences'
 import {loadMusicCatalog,loadMusicSettings,saveMusicSettings,type MusicCatalog,type MusicPreferences} from '../../works/api/music-settings'
 import QuickCreationProgress from '../components/QuickCreationProgress.vue'
@@ -80,7 +80,7 @@ function chooseStyle(preset:InspirationPreset) {
 
 async function useInspiration(description:string) {
   if(inspirationEditsDisabled.value)return
-  const story=appendInspiration(draft.story,description)
+  const story=chooseInspiration(draft.story,description)
   if(story===null){
     validationError.value='请先缩短创作描述，为灵感留出空间。'
     return
