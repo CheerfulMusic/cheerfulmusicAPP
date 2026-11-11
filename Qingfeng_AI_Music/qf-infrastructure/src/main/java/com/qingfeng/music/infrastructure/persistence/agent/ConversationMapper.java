@@ -45,6 +45,13 @@ public interface ConversationMapper {
     @Delete("DELETE FROM agent_message WHERE conversation_id=#{conversation}")
     int deleteMessages(@Param("conversation") String conversation);
 
+    @Select("SELECT * FROM agent_message WHERE kind=#{kind} AND state=#{state} ORDER BY created_at")
+    List<MessageRow> findPendingPlaceholders(@Param("kind") String kind,
+                                             @Param("state") String state);
+
+    @Update("UPDATE agent_message SET state=#{state} WHERE id=#{id}")
+    int updateMessageState(@Param("id") String id, @Param("state") String state);
+
     @Update("UPDATE agent_conversation SET current_work_id=NULL,updated_at=#{now} WHERE id=#{conversation}")
     int clearWork(@Param("conversation") String conversation, @Param("now") Instant now);
 

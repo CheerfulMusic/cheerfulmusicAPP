@@ -7,9 +7,17 @@ import org.springframework.core.io.ClassPathResource;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 
+import java.net.URL;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Enumeration;
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -73,5 +81,47 @@ class AgentMigrationParityTest {
                         + "WHERE LOWER(table_name)='agent_message' AND LOWER(column_name)='state'",
                 Integer.class);
         assertEquals(1, columns);
+    }
+
+    /**
+     * 防回归（裁决点 2）：db/migration 下除正式的 V&lt;version&gt;__&lt;description&gt;.sql 外，
+     * 不应存在会被 Flyway 误识别的「双下划线变体」。Flyway 版本化命名是 V&lt;version&gt;__&lt;description&gt;.sql，
+     * 任何同时满足「含双下划线且以 .sql 结尾」的文件都会被当作版本迁移解析；若描述段含点（如 .dba / .copy 变体，
+     * 例 V32__agent_conversation.dba.sql），就会与正式迁移同版本冲突导致 Flyway 启动失败。
+     * 正式迁移描述段不含点，DBA 副本用单下划线（V32_agent_conversation.dba.sql）故意避开 Flyway 命名。
+     */
+    @Test
+    void noDoubleUnderscoreVariantMisrecognizedByFlyway() throws Exception {
+        Pattern VERSIONED = Pattern.compile("^V(\\d+)__(.+)\\.sql$");
+        List<String> offenders = new ArrayList<>();
+        for (String name : listMigrationFiles()) {
+            Matcher m = VERSIONED.matcher(name);
+            if (m.matches() && m.group(2).contains(".")) {
+                offenders.add(name);
+            }
+        }
+        assertTrue(offenders.isEmpty(),
+                "db/migration 下不应存在被 Flyway 误识别的双下划线变体（描述含点）：" + offenders);
+    }
+
+    private static List<String> listMigrationFiles() throws Exception {
+        List<String> names = new ArrayList<>();
+        Enumeration<URL> roots = AgentMigrationParityTest.class.getClassLoader().getResources("db/migration");
+        while (roots.hasMoreElements()) {
+            URL url = roots.nextElement();
+            if ("file".equals(url.getProtocol())) {
+                Path dir = Paths.get(url.toURI());
+                try (var stream = Files.list(dir)) {
+                    stream.map(p -> p.getFileName().toString())
+                            .filter(n -> n.endsWith(".sql"))
+                            .forEach(names::add);
+                }
+            }
+        }
+        if (names.isEmpty()) {
+            // 兜底：classpath 未以文件形式暴露（如 jar 包），至少假定正式迁移存在
+            names.add("V32__agent_conversation.sql");
+        }
+        return names;
     }
 }

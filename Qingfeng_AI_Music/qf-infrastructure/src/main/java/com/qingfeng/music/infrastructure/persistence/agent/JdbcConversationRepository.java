@@ -78,4 +78,17 @@ public final class JdbcConversationRepository implements ConversationRepository 
         mapper.clearWork(conversationId, now);
         mapper.clearState(conversationId, now);
     }
+
+    @Override
+    public List<AgentMessage> findPendingPlaceholders() {
+        return mapper.findPendingPlaceholders(AgentMessage.KIND_PLACEHOLDER, AgentMessage.STATE_PENDING)
+                .stream().map(row -> new AgentMessage(
+                row.id, row.conversationId, row.seq, row.role, row.kind, row.state,
+                row.contentJson, row.taskId, row.createdAt)).toList();
+    }
+
+    @Override
+    public void updateMessageState(String messageId, String state) {
+        mapper.updateMessageState(messageId, state);
+    }
 }

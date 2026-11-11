@@ -79,6 +79,10 @@ class ConversationServiceTest {
             states.put(conversationId, new ConversationState(conversationId, null,
                     states.get(conversationId).revision() + 1));
         }
+
+        public List<AgentMessage> findPendingPlaceholders() { return List.of(); }
+
+        public void updateMessageState(String messageId, String state) { calls.add("messageState"); }
     }
 
     private static ConversationService service(FakeRepo repo) {

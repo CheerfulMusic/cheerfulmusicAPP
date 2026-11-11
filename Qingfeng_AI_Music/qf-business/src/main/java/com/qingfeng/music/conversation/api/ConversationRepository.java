@@ -27,4 +27,10 @@ public interface ConversationRepository {
 
     /** 清空消息、current_work_id 指针与快照，但保留 conversation 行以稳定会话 ID。 */
     void clear(String conversationId, Instant now);
+
+    /** W2 排队：取出所有 PLACEHOLDER 且 state=PENDING 的消息，供 PendingIntentDispatcher 消费。 */
+    List<AgentMessage> findPendingPlaceholders();
+
+    /** W2 排队：把已触发（即将重新分发）的占位标记为 RUNNING，避免重复触发。 */
+    void updateMessageState(String messageId, String state);
 }
