@@ -13,7 +13,7 @@ import { guardCredits } from '../../../shared/credits/credit-gate'
 import { writeAgentBrief } from '../model/brief'
 import { AudioAnalysisError, analyzeAudioFile, cancelAnalysis, forgetAnalysis } from '../model/audio-analysis'
 import { requestReferenceAnalysis } from '../api/reference'
-import { analyzeRequest, bandWord, hasParams, inspirationBoards, interestTags, modeOptions, quickPrompts, toneWord, withReference, type AgentBrief, type AgentMode, type AgentParams, type AgentReference, type ReferenceInsight } from '../model/assistant'
+import { analyzeRequest, bandWord, hasParams, interestTags, modeOptions, quickPrompts, toneWord, withReference, type AgentBrief, type AgentMode, type AgentParams, type AgentReference, type ReferenceInsight } from '../model/assistant'
 
 interface Message { id: number; role: 'assistant' | 'user'; text: string; greeting?: boolean; brief?: AgentBrief; suggestions?: string[]; polishing?: boolean; polishError?: string; polishCreditShort?: boolean }
 interface VoiceResult { results: ArrayLike<ArrayLike<{ transcript: string }>> }
@@ -39,13 +39,12 @@ const input = ref(''), busy = ref(false), notice = ref(''), voiceHint = ref('')
 const { credits, refreshCredits } = useCredits()
 const polishKey = ref('')
 const mode = ref<AgentMode>('write'), interests = ref<string[]>(['时尚'])
-const panelOpen = ref(true), boardIndex = ref(0), previewIndex = ref(0)
 const brief = ref<AgentBrief | undefined>()
-const uploaded = ref<UploadState | undefined>(), dragActive = ref(false), uploadError = ref('')
+const uploaded = ref<UploadState | undefined>(), uploadError = ref('')
+const showInterests = ref(false)
 // 分析只在本机进行；每次换文件或清除都会让 token 失效，旧结果不可能覆盖新文件。
 const analysis = ref<ReferenceAnalysisState>({ status: 'idle', insightStatus: 'idle' })
 let analysisToken = 0, analysisPromise: Promise<void> | undefined
-const board = computed(() => inspirationBoards[boardIndex.value % inspirationBoards.length]!)
 const placeholder = computed(() => {
   const option = modeOptions.find(item => item.id === mode.value)!
   return locale.value === 'en' ? option.placeholderEn : option.placeholder
@@ -59,9 +58,10 @@ const promptPaths: Record<string, string> = {
   palm: 'M12 21V10m0 0C9 6 5 7 4 9c3-1 5 0 8 1Zm0 0c3-4 7-3 8-1-3-1-5 0-8 1Zm0 0c-1-4 1-6 3-6-1 2-2 4-3 6Z',
   gift: 'M3 10h18v10H3V10ZM2 6h20v4H2V6Zm10 0v14M12 6C9 6 7 5 7 3.5S9 2 10 3s2 3 2 3Zm0 0c3 0 5-1 5-2.5S15 2 14 3s-2 3-2 3Z',
 }
-// 沿用既有试听数据源（含本地化标题/标签），只挑三首保持右栏原有编排与计数。
+// 沿用既有试听数据源（含本地化标题/标签），右栏作品卡片用它驱动播放器，使生成前也能真实试听。
 const previewTracks = usePreviewTracks()
 const previewOrder = [2, 0, 7]
+const previewIndex = ref(0)
 const previewCount = previewOrder.length
 const lyricBoards = [
   ['下一站，去有海风的地方', '把地图折进口袋', '让风替我轻轻哼唱'],
@@ -89,6 +89,21 @@ const analysisTone = computed(() => {
 })
 const fmt = (value: number) => `${Math.floor((value || 0) / 60).toString().padStart(2, '0')}:${Math.floor((value || 0) % 60).toString().padStart(2, '0')}`
 
+/** 当前作品：对话中出现过的最后一个创作方案；没有时右栏展示占位，播放器仍可试听示例。 */
+const currentBrief = computed<AgentBrief | undefined>(() => brief.value ?? [...messages.value].reverse().find(message => message.brief)?.brief)
+const workTitle = computed(() => {
+  const b = currentBrief.value
+  if (!b) return t('你的作品')
+  const line = (b.story || '').split(/[，。\n]/)[0]?.trim()
+  return line ? line.slice(0, 12) : `${b.style} · ${b.mood}`
+})
+const workCover = computed(() => defaultCover())
+const workLyrics = computed(() => {
+  const b = currentBrief.value
+  if (b) return (b.story || '').split(/[，。\n]/).map(line => line.trim()).filter(Boolean).slice(0, 4)
+  return lyricLines.value
+})
+
 /** 一次性提示：busy 期间的重复操作、上传校验等都在这里给出可见反馈，不再静默丢弃。 */
 function notify(message: string) {
   notice.value = message
@@ -96,9 +111,8 @@ function notify(message: string) {
   noticeTimer = window.setTimeout(() => { notice.value = '' }, 4200)
 }
 async function scrollChat() { await nextTick(); chat.value?.scrollTo({ top: chat.value.scrollHeight, behavior: 'smooth' }) }
-function nextBoard() { boardIndex.value++ }
 function toggleInterest(tag: string) { interests.value = interests.value.includes(tag) ? interests.value.filter(item => item !== tag) : [...interests.value, tag] }
-/** 同一模式的提示只出现一次：连点快捷标签不重复追加消息，也不重复触发聊天区定位。 */
+/** 同一模式的提示只出现一次：连点模式标签不重复追加消息，也不重复触发聊天区定位。 */
 const hintedModes = new Set<AgentMode>()
 function chooseMode(option: typeof modeOptions[number]) {
   mode.value = option.id
@@ -123,6 +137,7 @@ function send(extra?: string) {
   messages.value.push({ id: ++messageId, role: 'user', text })
   busy.value = true
   const reply = analyzeRequest(text, mode.value, interests.value, reference())
+  // 右栏作品卡片在生成期间显示「正在创作歌词…」，与对话里的加载态一致。
   const line = `${t('收到！主题是')}${reply.topic}${t('，我为你选了')}${reply.style}${t('，情绪关键词是')}${reply.mood}${t('。可以直接开始创作，也可以继续补充细节 ♫')}`
   replyTimer = window.setTimeout(() => {
     messages.value.push({ id: ++messageId, role: 'assistant', text: line, brief: reply.brief, suggestions: reply.suggestions })
@@ -132,6 +147,7 @@ function send(extra?: string) {
   }, 420)
   void scrollChat()
 }
+function step(direction: number) { previewIndex.value = (previewIndex.value + direction + previewCount) % previewCount }
 /**
  * 润色走的是同一个付费改写接口：免费额度用完后每次扣积分。
  * 余额不足时先刷新一次再判断；后端在调用模型前还会再校验一次余额。
@@ -303,15 +319,6 @@ function onFile(event: Event) {
   target.value = ''
   void acceptFile(file)
 }
-function onDrop(event: DragEvent) {
-  dragActive.value = false
-  void acceptFile(event.dataTransfer?.files?.[0])
-}
-function onDragOver(event: DragEvent) {
-  event.preventDefault()
-  if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy'
-  dragActive.value = true
-}
 function clearUpload() {
   uploadError.value = ''
   analysisToken += 1
@@ -326,7 +333,6 @@ function playUpload() {
   if (!uploaded.value) return
   void player.toggle({ id: uploadTrackId, title: uploaded.value.name, cover: defaultCover(), audio: uploaded.value.url, provenance: 'IMPORTED' })
 }
-function step(direction: number) { previewIndex.value = (previewIndex.value + direction + previewCount) % previewCount }
 function togglePreview() {
   const starting = !isCurrentPlaying.value
   void player.toggle(track.value)
@@ -355,53 +361,11 @@ onBeforeUnmount(() => {
   <div class="agent-studio">
     <div class="agent-scenery" aria-hidden="true"><span/><span/><span/></div>
 
-    <aside class="agent-assistant-panel" :class="{ 'is-collapsed': !panelOpen }" :aria-label="t('创作助手')">
-      <div class="agent-panel-head">
-        <h2><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 2 1.8 5.2L19 9l-5.2 1.8L12 16l-1.8-5.2L5 9l5.2-1.8L12 2ZM19 15l.9 2.6L22.5 18.5l-2.6.9L19 22l-.9-2.6-2.6-.9 2.6-.9L19 15Z"/></svg>{{ t('创作助手') }}</h2>
-        <button class="agent-panel-toggle" :aria-expanded="panelOpen" :aria-label="panelOpen ? t('收起创作助手') : t('展开创作助手')" @click="panelOpen = !panelOpen"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 14 6-6 6 6"/></svg></button>
-      </div>
-      <div v-if="panelOpen" class="agent-panel-body">
-        <section class="agent-inspiration">
-          <div class="agent-section-head"><strong><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18h6m-5 3h4M12 3a6 6 0 0 0-3.5 10.9c.6.5.9 1.1 1 1.8h5c.1-.7.4-1.3 1-1.8A6 6 0 0 0 12 3Z"/></svg>{{ t('灵感一下') }}</strong><button type="button" @click="nextBoard">{{ t('换一批') }}<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 6.3M20 5v6h-6"/></svg></button></div>
-          <p class="agent-section-hint">{{ t('不知道写什么？试试这些灵感~') }}</p>
-          <div class="agent-inspiration-grid">
-            <button v-for="card in board" :key="card.title" type="button" class="agent-inspiration-card" :disabled="busy" @click="send(card.prompt)">
-              <img :src="card.cover" :alt="t(card.title)" loading="lazy"/>
-              <span class="agent-card-play" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m9 6 9 6-9 6V6Z"/></svg></span>
-              <strong>{{ t(card.title) }}</strong><small>{{ t(card.caption) }}</small>
-            </button>
-          </div>
-        </section>
-        <section class="agent-interests">
-          <div class="agent-section-head"><strong><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20s-7-4.4-7-9a4 4 0 0 1 7-2.6A4 4 0 0 1 19 11c0 4.6-7 9-7 9Z"/></svg>{{ t('我的兴趣标签') }}</strong><span class="agent-section-manage">{{ t('管理') }} ›</span></div>
-          <p class="agent-section-hint">{{ t('选择你喜欢的，获得更懂你的推荐') }}</p>
-          <div class="agent-tag-list"><button v-for="tag in interestTags" :key="tag" type="button" :aria-pressed="interests.includes(tag)" @click="toggleInterest(tag)">{{ t(tag) }}</button></div>
-        </section>
-        <section class="agent-upload">
-          <div class="agent-section-head"><strong><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18V5l11-2v13M9 9l11-2M6 21a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm11-2a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"/></svg>{{ t('上传参考音乐') }}</strong></div>
-          <p class="agent-section-hint">{{ t('只在本机提取节奏、频段与明亮度，音频不会上传') }}</p>
-          <button type="button" class="agent-upload-box" :class="{ 'is-dragging': dragActive }" @click="fileInput?.click()" @dragenter.prevent="dragActive = true" @dragover="onDragOver" @dragleave="dragActive = false" @drop.prevent="onDrop"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4m-4 4 4-4 4 4M4 17v2a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-2"/></svg>{{ t('拖拽上传 或 点击选择') }}<small>{{ t('支持 MP3、WAV、M4A 格式') }}</small></button>
-          <input ref="fileInput" type="file" accept="audio/*,.mp3,.wav,.m4a,.aac,.ogg,.flac" hidden :aria-label="t('上传参考音乐')" @change="onFile"/>
-          <p v-if="uploadError" class="agent-upload-error" role="alert">{{ uploadError }}</p>
-          <div v-if="uploaded" class="agent-upload-file"><span :title="uploaded.name">{{ uploaded.name }}</span><small v-if="uploaded.duration">{{ fmt(uploaded.duration) }}</small><button type="button" @click="playUpload">{{ t('试听') }}</button><button type="button" :aria-label="t('移除')" @click="clearUpload">×</button></div>
-          <p v-if="analysis.status === 'analyzing'" class="agent-analysis" role="status">{{ t('分析中…') }}</p>
-          <template v-else-if="analysis.status === 'ready'">
-            <div class="agent-analysis" role="status">
-              <span v-if="analysisBpm">{{ analysisBpm }}</span>
-              <span v-else>{{ t('无法判断节奏') }}</span>
-              <span v-if="analysisBand">{{ analysisBand }}</span>
-              <span v-if="analysisTone">{{ analysisTone }}</span>
-            </div>
-            <p v-if="analysis.insight" class="agent-analysis-inference">{{ t('AI 推断') }}：{{ analysis.insight.style }}<template v-if="analysis.insight.mood"> · {{ analysis.insight.mood }}</template></p>
-            <p v-else-if="analysis.insightStatus === 'ready'" class="agent-section-hint">{{ t('AI 参考分析暂不可用，已按音乐特征继续。') }}</p>
-          </template>
-          <p v-else-if="analysis.status === 'failed'" class="agent-analysis is-failed" role="status">{{ analysis.failure }}</p>
-        </section>
-        <button type="button" class="agent-start-button" @click="beginCreation()"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 2 1.8 5.2L19 9l-5.2 1.8L12 16l-1.8-5.2L5 9l5.2-1.8L12 2Z"/></svg>{{ t('开启我的创作之旅') }}<span aria-hidden="true">→</span></button>
-      </div>
-    </aside>
-
     <section class="agent-conversation" :aria-label="t('Agent 创作对话')">
+      <header class="agent-conversation-head">
+        <span class="agent-conversation-pill"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 2 1.8 5.2L19 9l-5.2 1.8L12 16l-1.8-5.2L5 9l5.2-1.8L12 2ZM19 15l.9 2.6L22.5 18.5l-2.6.9L19 22l-.9-2.6-2.6-.9 2.6-.9L19 15Z"/></svg>{{ t('Agent 创作') }}<i class="agent-nav-new">New</i></span>
+        <p class="agent-conversation-sub">{{ t('用一句话，把心情变成一首歌') }}</p>
+      </header>
       <div class="agent-dots" aria-hidden="true"><i v-for="n in 5" :key="n" :class="{ active: n === 1 }"/></div>
       <div ref="chat" class="agent-chat" role="log" :aria-label="t('创作对话记录')">
         <div v-for="message in messages" :key="message.id" class="agent-message" :class="message.role">
@@ -435,30 +399,55 @@ onBeforeUnmount(() => {
               <svg viewBox="0 0 24 24" :style="{ color: prompt.color }" aria-hidden="true"><path :d="promptPaths[prompt.icon]"/></svg><span>{{ locale === 'en' ? prompt.en : prompt.text }}</span>
             </button>
           </div>
+          <button type="button" class="agent-interests-toggle" :aria-expanded="showInterests" @click="showInterests = !showInterests">{{ t('选择兴趣标签') }} {{ showInterests ? '▴' : '▾' }}</button>
+          <div v-if="showInterests" class="agent-tag-list agent-tag-list--inline">
+            <button v-for="tag in interestTags" :key="tag" type="button" :aria-pressed="interests.includes(tag)" @click="toggleInterest(tag)">{{ t(tag) }}</button>
+          </div>
         </div>
-        <p v-if="busy" class="agent-typing" role="status">{{ t('正在想…') }}</p>
+        <p v-if="busy" class="agent-typing" role="status">{{ t('正在创作歌词…') }}</p>
       </div>
 
       <div class="agent-composer">
         <form class="agent-composer-box" @submit.prevent="send()">
           <svg class="agent-composer-spark" viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 1.9 5.6L19.5 10.5 13.9 12.4 12 18l-1.9-5.6L4.5 10.5l5.6-1.9L12 3ZM19 16l.7 2.3L22 19l-2.3.7L19 22l-.7-2.3L16 19l2.3-.7L19 16Z"/></svg>
           <input v-model="input" type="text" maxlength="500" :placeholder="placeholder" :aria-label="t('告诉我的创作需求')"/>
+          <button type="button" class="agent-composer-clip" :aria-label="t('上传参考音乐')" @click="fileInput?.click()"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 11.5 12.5 20a5 5 0 0 1-7-7l8.5-8.5a3.3 3.3 0 0 1 4.7 4.7L10 17.6a1.7 1.7 0 0 1-2.4-2.4l7.8-7.8"/></svg></button>
           <button type="button" class="agent-composer-mic" :aria-label="t('语音输入')" @click="startVoice"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button>
           <button type="button" class="agent-composer-polish" :aria-label="t('AI 润色描述')" @click="polishLatest"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 1.9 5.6L19.5 10.5 13.9 12.4 12 18l-1.9-5.6L4.5 10.5l5.6-1.9L12 3Z"/></svg></button>
           <button type="submit" class="agent-composer-send" :class="{ 'is-busy': busy }" :disabled="!input.trim()" :aria-busy="busy" :aria-label="busy ? t('正在整理上一条需求…') : t('发送')" :title="busy ? t('正在整理上一条需求…') : t('发送')"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h15m-6-6 6 6-6 6"/></svg></button>
         </form>
+        <input ref="fileInput" type="file" accept="audio/*,.mp3,.wav,.m4a,.aac,.ogg,.flac" hidden :aria-label="t('上传参考音乐')" @change="onFile"/>
+        <p v-if="uploaded" class="agent-upload-file"><span :title="uploaded.name">{{ uploaded.name }}</span><small v-if="uploaded.duration">{{ fmt(uploaded.duration) }}</small><button type="button" @click="playUpload">{{ t('试听') }}</button><button type="button" :aria-label="t('移除')" @click="clearUpload">×</button></p>
+        <p v-if="uploadError" class="agent-upload-error" role="alert">{{ uploadError }}</p>
+        <p v-if="analysis.status === 'analyzing'" class="agent-analysis" role="status">{{ t('分析中…') }}</p>
+        <template v-else-if="analysis.status === 'ready'">
+          <div class="agent-analysis" role="status">
+            <span v-if="analysisBpm">{{ analysisBpm }}</span>
+            <span v-else>{{ t('无法判断节奏') }}</span>
+            <span v-if="analysisBand">{{ analysisBand }}</span>
+            <span v-if="analysisTone">{{ analysisTone }}</span>
+          </div>
+          <p v-if="analysis.insight" class="agent-analysis-inference">{{ t('AI 推断') }}：{{ analysis.insight.style }}<template v-if="analysis.insight.mood"> · {{ analysis.insight.mood }}</template></p>
+          <p v-else-if="analysis.insightStatus === 'ready'" class="agent-section-hint">{{ t('AI 参考分析暂不可用，已按音乐特征继续。') }}</p>
+        </template>
+        <p v-else-if="analysis.status === 'failed'" class="agent-analysis is-failed" role="status">{{ analysis.failure }}</p>
         <p v-if="notice || voiceHint" class="agent-voice-hint" role="status" aria-live="polite">{{ notice || voiceHint }}</p>
         <div class="agent-modes"><button v-for="option in modeOptions" :key="option.id" type="button" :class="{ active: mode === option.id }" :aria-pressed="mode === option.id" @click="chooseMode(option)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 1.9 5.6L19.5 10.5 13.9 12.4 12 18l-1.9-5.6L4.5 10.5l5.6-1.9L12 3Z"/></svg>{{ t(option.label) }}</button></div>
         <p class="agent-slogan">{{ t('让音乐，点亮你的每一种情绪') }} <span aria-hidden="true">♡</span></p>
       </div>
     </section>
 
-    <aside class="agent-preview" :aria-label="t('歌曲预览')">
-      <div class="agent-preview-head"><strong><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 2 1.8 5.2L19 9l-5.2 1.8L12 16l-1.8-5.2L5 9l5.2-1.8L12 2Z"/></svg>{{ t('歌曲预览') }}</strong><div><button type="button" :aria-label="t('上一首')" @click="step(-1)">‹</button><button type="button" :aria-label="t('下一首')" @click="step(1)">›</button></div></div>
-      <div class="agent-preview-cover"><img :src="track.cover" :alt="t('歌曲封面')"/><span class="agent-preview-count">{{ previewIndex + 1 }}/{{ previewCount }}</span><button type="button" class="agent-preview-play" :aria-label="isCurrentPlaying ? t('暂停') : t('播放')" @click="togglePreview"><svg viewBox="0 0 24 24" aria-hidden="true"><path v-if="isCurrentPlaying" d="M9 6v12M15 6v12"/><path v-else d="m9 6 9 6-9 6V6Z"/></svg></button></div>
-      <div class="agent-preview-meta"><strong>{{ track.title }}</strong><span>{{ track.tags.join(' · ') }}</span></div>
+    <aside class="agent-preview" :aria-label="t('作品卡片')">
+      <div class="agent-preview-head"><strong><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 2 1.8 5.2L19 9l-5.2 1.8L12 16l-1.8-5.2L5 9l5.2-1.8L12 2Z"/></svg>{{ t('你的作品') }}</strong><i class="agent-nav-new">New</i><div><button type="button" :aria-label="t('上一首')" @click="step(-1)">‹</button><button type="button" :aria-label="t('下一首')" @click="step(1)">›</button></div></div>
+      <div class="agent-preview-cover">
+        <img :src="workCover" :alt="t('歌曲封面')"/>
+        <span class="agent-preview-count">{{ previewIndex + 1 }}/{{ previewCount }}</span>
+        <button type="button" class="agent-preview-play" :aria-label="isCurrentPlaying ? t('暂停') : t('播放')" @click="togglePreview"><svg viewBox="0 0 24 24" aria-hidden="true"><path v-if="isCurrentPlaying" d="M9 6v12M15 6v12"/><path v-else d="m9 6 9 6-9 6V6Z"/></svg></button>
+        <div v-if="busy" class="agent-work-loading"><span>{{ t('正在创作歌词…') }}</span></div>
+      </div>
+      <div class="agent-preview-meta"><strong>{{ workTitle }}</strong><span>{{ track.tags.join(' · ') }}</span></div>
       <div class="agent-preview-progress"><input class="agent-preview-range" type="range" min="0" :max="previewDuration" step="0.1" :value="previewTime" :disabled="!isPreviewLoaded" :style="{ background: `linear-gradient(90deg,#ff9257,#ff432d) 0/${previewProgress}% 100% no-repeat,#f2ded4` }" :aria-label="t('播放进度')" @input="seekPreview"/><div><span>{{ fmt(previewTime) }}</span><span>{{ fmt(previewDuration) }}</span></div></div>
-      <div class="agent-preview-lyrics"><p v-for="(line, index) in lyricLines" :key="line" :class="{ active: index === activeLyric }">{{ line }}</p><small>{{ t('示例歌词') }}</small></div>
+      <div class="agent-preview-lyrics"><p v-for="(line, index) in workLyrics" :key="line" :class="{ active: index === activeLyric }">{{ line }}</p><small>{{ t('示例歌词') }}</small></div>
       <div class="agent-preview-actions">
         <button type="button" :class="{ liked: isLiked(track.id) }" :aria-pressed="isLiked(track.id)" :disabled="isPending(track.id, 'like')" @click="toggleReaction(track.id, 'like')"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20s-7-4.4-7-9a4 4 0 0 1 7-2.6A4 4 0 0 1 19 11c0 4.6-7 9-7 9Z"/></svg>{{ t('喜欢') }}</button>
         <a :href="track.audio" :download="`${track.title}.mp3`"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11m-4-4 4 4 4-4M5 19h14"/></svg>{{ t('下载') }}</a>

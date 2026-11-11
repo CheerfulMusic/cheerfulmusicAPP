@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
-import { mount, type VueWrapper } from '@vue/test-utils'
+import { mount, type DOMWrapper, type VueWrapper } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { nextTick } from 'vue'
 
@@ -73,11 +73,22 @@ async function mountPage() {
   return { wrapper, player, toggle }
 }
 
-async function drop(wrapper: VueWrapper, file: File | Record<string, unknown>) {
-  const event = new Event('drop', { bubbles: true, cancelable: true })
-  Object.defineProperty(event, 'dataTransfer', { value: { files: [file] }, configurable: true })
-  wrapper.find('.agent-upload-box').element.dispatchEvent(event)
+/** 参考音乐现在由输入栏曲别针触发隐藏的 file input；这里直接对其派发 change，等价于点击上传。 */
+async function attach(wrapper: VueWrapper, file: File | Record<string, unknown>) {
+  const input = wrapper.find('input[type="file"]')
+  Object.defineProperty(input.element, 'files', { value: [file], configurable: true })
+  await input.trigger('change')
   await flush()
+}
+
+/** 发送一条需求并等待创作方案卡片出现；返回该卡片的「用它开始创作」主按钮。 */
+async function sendAndGetCreateButton(wrapper: VueWrapper, text: string): Promise<DOMWrapper<Element>> {
+  await wrapper.find('.agent-composer-box input').setValue(text)
+  await wrapper.find('form.agent-composer-box').trigger('submit')
+  await wait(480)
+  await flush()
+  const cards = wrapper.findAll('.agent-brief-card')
+  return cards[cards.length - 1]!.find('.agent-brief-actions button.primary')
 }
 
 function storedBrief() {
@@ -107,25 +118,24 @@ beforeEach(() => {
   setLocale('zh-CN')
 })
 
-describe('Agent 创作页交互回归', () => {
-  it('进入页面读取点赞关系，右栏复用既有本地化预览数据源', async () => {
+describe('Agent 创作页交互回归（两栏：对话 + 作品卡片）', () => {
+  it('进入页面读取点赞关系，右栏作品卡片复用既有本地化预览数据源', async () => {
     const { wrapper } = await mountPage()
     expect(spies.loadMyReactions).toHaveBeenCalledTimes(1)
-    expect(wrapper.find('.agent-preview-meta strong').text()).toBe('去有海风的地方')
+    expect(wrapper.find('.agent-preview-meta strong').text()).toBe('你的作品')
     expect(wrapper.find('.agent-preview-count').text()).toBe('1/3')
     expect(wrapper.find('.agent-preview-actions button').attributes('aria-pressed')).toBe('false')
   })
 
-  it('切换语言后问候语与灵感卡片实时走词条', async () => {
+  it('切换语言后问候语与灵感快捷 chips 实时走词条', async () => {
     const { wrapper } = await mountPage()
     expect(wrapper.findAll('.agent-message.assistant p')[0]!.text()).toContain('你好！我是你的音乐创作助手')
-    expect(wrapper.find('.agent-inspiration-card strong').text()).toBe('治愈系生活')
+    expect(wrapper.find('.agent-quick-grid button span').text()).toBe('写一首关于旅行的歌')
     setLocale('en')
     await nextTick()
     expect(wrapper.findAll('.agent-message.assistant p')[0]!.text()).toBe('Hi! I am your music creation assistant~')
-    expect(wrapper.find('.agent-inspiration-card strong').text()).toBe('Healing everyday')
-    expect(wrapper.find('.agent-inspiration-card small').text()).toBe('Gentle tempo, quiet days')
-    expect(wrapper.find('.agent-preview-meta strong').text()).toBe('Where the Sea Breeze Leads')
+    expect(wrapper.find('.agent-quick-grid button span').text()).toBe('Write a song about travelling')
+    expect(wrapper.find('.agent-preview-meta strong').text()).toBe('Your Work')
   })
 
   it('快捷提示不覆盖已经打好的需求，两者合并成一条发送', async () => {
@@ -144,8 +154,7 @@ describe('Agent 创作页交互回归', () => {
     await input.setValue('第一句需求')
     await form.trigger('submit')
     expect(wrapper.find('.agent-composer-send').attributes('aria-busy')).toBe('true')
-    expect(wrapper.find('.agent-typing').text()).toContain('正在想')
-    expect(wrapper.find('.agent-inspiration-card').attributes('disabled')).toBeDefined()
+    expect(wrapper.find('.agent-typing').text()).toContain('正在创作歌词')
     await input.setValue('第二句需求')
     await form.trigger('submit')
     expect(wrapper.find('.agent-voice-hint').text()).toContain('上一条还在整理')
@@ -153,7 +162,7 @@ describe('Agent 创作页交互回归', () => {
     expect(wrapper.findAll('.agent-message.user')).toHaveLength(1)
   })
 
-  it('开始创作时以输入框里的最新需求为准，不被旧 brief 覆盖', async () => {
+  it('每个创作方案卡片只提交自己的需求，最新一条不被旧 brief 覆盖', async () => {
     const { wrapper } = await mountPage()
     const input = wrapper.find('.agent-composer-box input')
     await input.setValue('写一首关于旅行的歌')
@@ -163,7 +172,11 @@ describe('Agent 创作页交互回归', () => {
     expect(wrapper.find('.agent-brief-card').exists()).toBe(true)
     expect(storedBrief()).toBeUndefined()
     await input.setValue('用粤语唱一首情歌')
-    await wrapper.find('.agent-start-button').trigger('click')
+    await wrapper.find('form.agent-composer-box').trigger('submit')
+    await wait(480)
+    await flush()
+    const create = await sendAndGetCreateButton(wrapper, '用粤语唱一首情歌')
+    await create.trigger('click')
     await flush()
     const brief = storedBrief()
     expect(brief?.story).toContain('用粤语唱一首情歌')
@@ -172,16 +185,17 @@ describe('Agent 创作页交互回归', () => {
     expect(spies.push).toHaveBeenCalledWith({ path: '/create', query: { from: 'agent' } })
   })
 
-  it('参考音乐支持拖拽上传、文案为 M4A，并真正写进后续创作描述', async () => {
+  it('参考音乐支持上传、文案为 M4A，并真正写进后续创作描述', async () => {
     const { wrapper } = await mountPage()
-    expect(wrapper.find('.agent-upload-box small').text()).toBe('支持 MP3、WAV、M4A 格式')
-    await drop(wrapper, new File(['fake'], 'ref.m4a', { type: 'audio/mp4' }))
+    expect(wrapper.find('.agent-composer-clip').exists()).toBe(true)
+    await attach(wrapper, new File(['fake'], 'ref.m4a', { type: 'audio/mp4' }))
     await flush()
     expect(wrapper.find('.agent-upload-file span').text()).toBe('ref.m4a')
     expect(wrapper.find('.agent-upload-file small').text()).toBe('02:08')
     expect(createObjectURL).toHaveBeenCalled()
     expect(wrapper.find('.agent-voice-hint').text()).toContain('已加入参考音乐')
-    await wrapper.find('.agent-start-button').trigger('click')
+    const create = await sendAndGetCreateButton(wrapper, '写一首关于旅行的歌')
+    await create.trigger('click')
     await flush()
     const brief = storedBrief()
     expect(brief?.story).toContain('参考音乐《ref.m4a》')
@@ -193,16 +207,16 @@ describe('Agent 创作页交互回归', () => {
 
   it('不支持的格式与超大文件给出明确报错且不接管', async () => {
     const { wrapper } = await mountPage()
-    await drop(wrapper, new File(['x'], 'note.txt', { type: 'text/plain' }))
+    await attach(wrapper, new File(['x'], 'note.txt', { type: 'text/plain' }))
     expect(wrapper.find('.agent-upload-error').text()).toContain('只支持 MP3、WAV、M4A 等音频文件')
-    await drop(wrapper, { name: 'big.mp3', type: 'audio/mpeg', size: 30 * 1024 * 1024 })
+    await attach(wrapper, { name: 'big.mp3', type: 'audio/mpeg', size: 30 * 1024 * 1024 })
     expect(wrapper.find('.agent-upload-error').text()).toContain('20MB')
     expect(wrapper.find('.agent-upload-file').exists()).toBe(false)
   })
 
   it('移除参考音乐时先停播再释放 Object URL', async () => {
     const { wrapper, player } = await mountPage()
-    await drop(wrapper, new File(['fake'], 'ref.mp3', { type: 'audio/mpeg' }))
+    await attach(wrapper, new File(['fake'], 'ref.mp3', { type: 'audio/mpeg' }))
     player.current = { id: 'agent-upload', title: 'ref.mp3', cover: '/media/cover.svg', audio: 'blob:agent-reference' }
     const close = vi.spyOn(player, 'close')
     await wrapper.find('.agent-upload-file button[aria-label="移除"]').trigger('click')
@@ -213,13 +227,14 @@ describe('Agent 创作页交互回归', () => {
 
   it('上传后展示可信特征，分析结果进入 brief', async () => {
     const { wrapper } = await mountPage()
-    await drop(wrapper, new File(['fake'], 'ref.mp3', { type: 'audio/mpeg' }))
+    await attach(wrapper, new File(['fake'], 'ref.mp3', { type: 'audio/mpeg' }))
     await flush()
     await flush()
     const chip = wrapper.find('.agent-analysis').text()
     expect(chip).toContain('120 BPM')
     expect(chip).toContain('低频偏重')
-    await wrapper.find('.agent-start-button').trigger('click')
+    const create = await sendAndGetCreateButton(wrapper, '写一首关于旅行的歌')
+    await create.trigger('click')
     await flush()
     expect(storedBrief()?.story).toContain('约 120 BPM')
   })
@@ -235,7 +250,8 @@ describe('Agent 创作页交互回归', () => {
     expect(chips).toContain('女声')
     expect(chips).toContain('钢琴')
     expect(chips).toContain('粤语演唱')
-    await wrapper.find('.agent-start-button').trigger('click')
+    const create = await sendAndGetCreateButton(wrapper, '写一首 90 BPM 的慢歌，温柔女声，钢琴和弦乐，粤语演唱')
+    await create.trigger('click')
     await flush()
     expect(storedBrief()?.params).toMatchObject({ bpm: 90, vocal: 'FEMALE', language: 'yue' })
   })
@@ -243,11 +259,12 @@ describe('Agent 创作页交互回归', () => {
   it('分析失败时给出提示但仍可创作', async () => {
     analysisSpies.analyzeAudioFile.mockRejectedValue(new AudioAnalysisError('DECODE_FAILED', 'x'))
     const { wrapper } = await mountPage()
-    await drop(wrapper, new File(['fake'], 'ref.mp3', { type: 'audio/mpeg' }))
+    await attach(wrapper, new File(['fake'], 'ref.mp3', { type: 'audio/mpeg' }))
     await flush()
     await flush()
     expect(wrapper.find('.agent-analysis.is-failed').text()).toContain('无法解码')
-    await wrapper.find('.agent-start-button').trigger('click')
+    const create = await sendAndGetCreateButton(wrapper, '写一首关于旅行的歌')
+    await create.trigger('click')
     await flush()
     const brief = storedBrief()
     expect(brief?.story).toContain('参考音乐《ref.mp3》')
@@ -261,8 +278,8 @@ describe('Agent 创作页交互回归', () => {
       .mockImplementationOnce(() => new Promise(resolve => { resolveFirst = resolve }))
       .mockResolvedValueOnce({ features: { ...FEATURES, bpm: 90.4 }, key: 'hash-2' })
     const { wrapper } = await mountPage()
-    await drop(wrapper, new File(['a'], 'first.mp3', { type: 'audio/mpeg' }))
-    await drop(wrapper, new File(['bb'], 'second.mp3', { type: 'audio/mpeg' }))
+    await attach(wrapper, new File(['a'], 'first.mp3', { type: 'audio/mpeg' }))
+    await attach(wrapper, new File(['bb'], 'second.mp3', { type: 'audio/mpeg' }))
     await flush()
     resolveFirst?.({ features: FEATURES, key: 'hash-1' })
     await flush()
@@ -286,10 +303,12 @@ describe('Agent 创作页交互回归', () => {
   it('分析未完成时开始创作，最多等 1.5 秒后带元信息继续', async () => {
     analysisSpies.analyzeAudioFile.mockImplementation(() => new Promise(() => undefined))
     const { wrapper } = await mountPage()
-    await drop(wrapper, new File(['fake'], 'slow.mp3', { type: 'audio/mpeg' }))
+    await attach(wrapper, new File(['fake'], 'slow.mp3', { type: 'audio/mpeg' }))
     await flush()
+    // 先以真实计时器把需求发出去，等创作方案卡片出现（不需要 fake timer）。
+    const create = await sendAndGetCreateButton(wrapper, '写一首关于旅行的歌')
     vi.useFakeTimers()
-    await wrapper.find('.agent-start-button').trigger('click')
+    await create.trigger('click')
     await flush()
     // 分析还没回来：此刻不应该写 brief，说明确实在等而不是直接跳过。
     expect(storedBrief()).toBeUndefined()
@@ -304,7 +323,7 @@ describe('Agent 创作页交互回归', () => {
 
   it('清除参考音乐会取消分析并清掉缓存引用', async () => {
     const { wrapper } = await mountPage()
-    await drop(wrapper, new File(['fake'], 'ref.mp3', { type: 'audio/mpeg' }))
+    await attach(wrapper, new File(['fake'], 'ref.mp3', { type: 'audio/mpeg' }))
     await flush()
     await flush()
     await wrapper.find('.agent-upload-file button[aria-label="移除"]').trigger('click')
@@ -328,7 +347,7 @@ describe('Agent 创作页交互回归', () => {
     expect(spies.recordPlay).toHaveBeenCalledWith('travel')
   })
 
-  it('连点同一个快捷标签只给一次提示，五个标签各给一次且不触发发送', async () => {
+  it('连点同一个模式标签只给一次提示，五个标签各给一次且不触发发送', async () => {
     const { wrapper } = await mountPage()
     const modes = wrapper.findAll('.agent-modes button')
     expect(modes).toHaveLength(5)

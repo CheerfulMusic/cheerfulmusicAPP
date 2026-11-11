@@ -55,7 +55,7 @@ nav.consumer-navigation a.agent-nav-link > svg { width: 17px; height: 17px; flex
   position: relative;
   isolation: isolate;
   display: grid;
-  grid-template-columns: 258px minmax(0, 1fr) 232px;
+  grid-template-columns: minmax(0, 1fr) 372px;
   gap: 20px;
   width: min(1360px, calc(100% - 72px));
   /* 固定视口内工作区：网格行高恒定，消息只在中栏内部滚动，底部输入区不再被撑下去。 */
@@ -70,15 +70,13 @@ nav.consumer-navigation a.agent-nav-link > svg { width: 17px; height: 17px; flex
 .agent-scenery span:nth-child(2) { right: -18%; width: 74%; height: 250px; background: linear-gradient(180deg, #ffcbaa, #ff9d78); opacity: .62; }
 .agent-scenery span:nth-child(3) { left: 28%; width: 60%; height: 190px; background: linear-gradient(180deg, #ffe3cc, #ffc49d); opacity: .55; }
 
-.agent-assistant-panel, .agent-preview, .agent-bubble, .agent-quick-card, .agent-composer-box {
+.agent-preview, .agent-conversation-head, .agent-bubble, .agent-quick-card, .agent-composer-box {
   background: #fffdfce8;
   border: 1px solid #f4ded3;
   box-shadow: 0 14px 40px #d9795c14;
   backdrop-filter: blur(9px);
 }
-.agent-assistant-panel, .agent-preview { align-self: start; border-radius: 20px; padding: 17px; }
-.agent-assistant-panel { max-height: calc(100svh - 128px); overflow-y: auto; scrollbar-width: thin; scrollbar-color: #f0cdbd transparent; }
-.agent-assistant-panel.is-collapsed { max-height: none; }
+.agent-preview { align-self: start; border-radius: 20px; padding: 17px; }
 .agent-panel-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .agent-panel-head h2 { display: flex; align-items: center; gap: 7px; margin: 0; font-family: inherit; font-size: 15px; font-weight: 700; color: #3d332f; }
 .agent-panel-head h2 svg { width: 17px; height: 17px; fill: #ff5a35; }
@@ -124,6 +122,22 @@ nav.consumer-navigation a.agent-nav-link > svg { width: 17px; height: 17px; flex
 
 /* 中栏拉伸到网格行高，内部用 flex column：聊天区吃掉剩余空间，输入区固定在底部。 */
 .agent-conversation { display: flex; flex-direction: column; min-width: 0; min-height: 0; height: 100%; }
+/* 对话区头部：复刻截图顶部「Agent 创作」紫色胶囊 + 橙色 New 角标，统一视觉语言。 */
+.agent-conversation-head { display: flex; flex-direction: column; gap: 6px; margin-bottom: 2px; }
+.agent-conversation-pill { position: relative; display: inline-flex; align-items: center; gap: 7px; padding: 7px 15px 7px 12px; border: 1px solid #ded9fb; border-radius: 21px; background: linear-gradient(105deg, #edf0ff, #f5e9ff 55%, #e9efff); color: #4b45a8; font-size: 14px; font-weight: 700; box-shadow: 0 5px 16px #6a5acd1c; width: fit-content; }
+.agent-conversation-pill svg { width: 17px; height: 17px; fill: #7d63d8; }
+.agent-conversation-pill .agent-nav-new { position: static; transform: none; margin-left: 4px; }
+.agent-conversation-sub { margin: 0; font-size: 12px; color: #9b8278; }
+/* 兴趣折叠：默认收起，展开后才显示标签，保持对话区初始清爽，同时不丢功能。 */
+.agent-interests-toggle { display: inline-flex; align-items: center; gap: 4px; margin-top: 12px; padding: 4px 10px; border: 1px dashed #eec7b5; border-radius: 14px; background: #fffaf7; color: #b07d6c; font-size: 11px; }
+.agent-tag-list--inline { margin-top: 9px; }
+/* 曲别针：把参考音乐上传收进输入栏，替代原左栏独立上传区。 */
+.agent-composer-clip { display: grid; flex: 0 0 34px; place-items: center; width: 34px; height: 34px; border: 0; border-radius: 50%; background: transparent; color: #9b8278; }
+.agent-composer-clip svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.agent-composer-clip:hover { color: #d84b2e; }
+/* 生成中遮罩：busy 时在封面叠「正在创作歌词…」，与对话加载态呼应。 */
+.agent-work-loading { position: absolute; inset: 0; display: grid; place-items: center; border-radius: 14px; background: #2b232199; }
+.agent-work-loading span { padding: 6px 14px; border-radius: 14px; background: #fffdfae6; color: #cc472c; font-size: 12px; font-weight: 700; box-shadow: 0 6px 18px #3a231d33; }
 .agent-dots { display: flex; flex: 0 0 auto; justify-content: center; gap: 7px; padding-block: 2px 8px; }
 .agent-dots i { width: 6px; height: 6px; border-radius: 50%; background: #f0c5b2; }
 .agent-dots i.active { width: 7px; height: 7px; background: #ff5a35; }
@@ -227,10 +241,7 @@ nav.consumer-navigation a.agent-nav-link > svg { width: 17px; height: 17px; flex
 
 /* 窄屏改为自然文档流（助手面板移到首行），聊天区改用固定高度，仍然只在内部滚动。 */
 @media (max-width: 1180px) {
-  .agent-studio { grid-template-columns: minmax(0, 1fr) 220px; height: auto; min-height: 0; }
-  .agent-assistant-panel { grid-column: 1 / -1; max-height: none; }
-  .agent-assistant-panel .agent-panel-body { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
-  .agent-start-button { grid-column: 1 / -1; }
+  .agent-studio { grid-template-columns: minmax(0, 1fr) 320px; height: auto; min-height: 0; }
   .agent-conversation { height: auto; }
   .agent-chat { flex: 0 0 auto; height: min(52vh, 460px); min-height: 220px; }
 }
