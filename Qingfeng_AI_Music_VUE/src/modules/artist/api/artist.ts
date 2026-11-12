@@ -1,4 +1,5 @@
 import { apiUrl, ensureCreator, requestJson, uploadForm } from '../../../shared/http/api-client'
+import { platform } from '../../../platform'
 import { audioUrl } from '../../works/api/detail'
 import { coverUrl } from '../../works/api/covers'
 
@@ -47,6 +48,11 @@ interface ReleaseSelection {
 const mine = 'app/artist-profile'
 const publicArtist = (id: string) => `public/artists/${encodeURIComponent(id)}`
 const release = (work: string) => `${mine}/releases/${encodeURIComponent(work)}`
+
+export function artistHomeUrl(id: string) {
+  const origin = platform.kind === 'web' ? window.location.origin : new URL(apiUrl('public/system/info')).origin
+  return new URL(`/artist/${encodeURIComponent(id)}`, origin).href
+}
 
 export async function getArtistProfile() {
   await ensureCreator()

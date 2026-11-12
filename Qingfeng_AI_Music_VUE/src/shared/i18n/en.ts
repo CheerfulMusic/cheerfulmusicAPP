@@ -2030,4 +2030,11 @@ export const english: Record<string, string> = {
   "账号与安全": "Account & security",
   "未提供": "Not provided",
   "我的权益": "My benefits",
+  "关于": "About",
+  "个人介绍": "About the artist",
+  "最新发布": "Latest release",
+  "播放最新作品": "Play latest release",
+  "暂停最新作品": "Pause latest release",
+  "分享主页": "Share artist page",
+  "请手动复制主页链接": "Copy the page link manually",
 }

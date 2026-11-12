@@ -3,8 +3,9 @@ import { computed, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { ApiError } from '../../../shared/http/api-client'
 import { t } from '../../../shared/i18n'
-import { getPublicArtist, publicAvatarUrl, publicTrack, type PublicArtist } from '../api/artist'
+import { artistHomeUrl, getPublicArtist, publicAvatarUrl, publicTrack, type PublicArtist } from '../api/artist'
 import ArtistHome from '../components/ArtistHome.vue'
+import ArtistShareButton from '../components/ArtistShareButton.vue'
 
 const route = useRoute()
 const id = computed(() => String(route.params.id || ''))
@@ -37,7 +38,11 @@ watch(id, load, { immediate: true })
 </script>
 
 <template>
-  <ArtistHome v-if="artist" :name="artist.stageName" :tagline="artist.tagline" :avatar="avatar" :tracks="tracks" />
+  <ArtistHome v-if="artist" :name="artist.stageName" :tagline="artist.tagline" :avatar="avatar" :tracks="tracks">
+    <template #actions>
+      <ArtistShareButton :key="id" :url="artistHomeUrl(id)" :name="artist.stageName" />
+    </template>
+  </ArtistHome>
   <p v-else-if="loading" class="notice" role="status">{{ t('正在加载歌手主页…') }}</p>
   <section v-else class="module-card">
     <h1>{{ t(missing ? '该主页暂不可访问' : error) }}</h1>

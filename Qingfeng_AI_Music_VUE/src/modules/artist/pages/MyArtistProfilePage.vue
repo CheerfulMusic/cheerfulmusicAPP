@@ -1,12 +1,9 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
-import { platform } from '../../../platform'
-import { apiUrl } from '../../../shared/http/api-client'
 import { t } from '../../../shared/i18n'
 import NavIcon from '../../../shared/ui/NavIcon.vue'
 import {
-  getArtistProfile, ownerAvatarUrl, ownerTrack, removeSongFromArtist, saveArtistProfile,
+  artistHomeUrl, getArtistProfile, ownerAvatarUrl, ownerTrack, removeSongFromArtist, saveArtistProfile,
   setArtistVisibility, type ArtistProfile, type ArtistRelease,
 } from '../api/artist'
 import ArtistAvatar from '../components/ArtistAvatar.vue'
@@ -14,7 +11,6 @@ import ArtistHome from '../components/ArtistHome.vue'
 import ProfileAccount from '../components/ProfileAccount.vue'
 import ProfileWorks from '../components/ProfileWorks.vue'
 
-const router = useRouter()
 const profile = ref<ArtistProfile>()
 const stageName = ref('')
 const tagline = ref('')
@@ -42,11 +38,7 @@ const dirty = computed(() => editing.value && Boolean(avatar.value || removeAvat
   || stageName.value.trim() !== profile.value?.stageName || tagline.value.trim() !== profile.value?.tagline))
 const tracks = computed(() => profile.value?.songs.map(ownerTrack) || [])
 const homeRoute = computed(() => ({ name: 'artist-home', params: { id: profile.value?.publicId || '' } }))
-const link = computed(() => {
-  if (!profile.value?.publicId) return ''
-  if (platform.kind !== 'web') return new URL(`/artist/${encodeURIComponent(profile.value.publicId)}`, apiUrl('public/system/info')).href
-  return new URL(router.resolve(homeRoute.value).href, window.location.origin).href
-})
+const link = computed(() => profile.value?.publicId ? artistHomeUrl(profile.value.publicId) : '')
 
 function clearAvatarDraft() {
   if (localAvatar.value) URL.revokeObjectURL(localAvatar.value)
@@ -168,7 +160,7 @@ onBeforeUnmount(clearAvatarDraft)
 </script>
 
 <template>
-  <div class="my-artist">
+  <div class="my-artist" :class="{ 'showing-home-preview': preview }">
     <p v-if="notice" class="notice" role="status">{{ t(notice) }}</p>
     <p v-if="error" class="notice error" role="alert">{{ t(error) }}</p>
     <p v-if="loading" class="notice" role="status">{{ t('正在读取资料…') }}</p>
@@ -284,6 +276,7 @@ onBeforeUnmount(clearAvatarDraft)
   margin-inline: auto;
   padding-bottom: 6px;
 }
+.my-artist.showing-home-preview { max-width: 1348px; }
 .profile-heading { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 16px; margin-bottom: 16px; }
 .profile-heading h1 { margin: 0; font-size: clamp(28px, 4vw, 34px); font-weight: 800; line-height: 1.18; }
 .profile-heading p { margin: 0; color: var(--muted); font-size: 13px; }
@@ -358,7 +351,8 @@ onBeforeUnmount(clearAvatarDraft)
 .profile-save:hover:not(:disabled) { background: #dd3b23; color: #fff; }
 .profile-avatar-reset { padding: 4px; border: 0; background: none; color: var(--muted); font-size: 12px; cursor: pointer; }
 .profile-avatar-reset:hover { color: var(--accent-text); text-decoration: underline; }
-.artist-preview-bar, .artist-preview-publish { max-width: 920px; margin: 0 auto 14px; }
+.artist-preview-bar { margin: 0 0 14px; }
+.artist-preview-publish { margin-top: 22px; }
 .artist-preview-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 .artist-preview-bar span, .artist-preview-publish p { color: var(--muted); }
 @media (max-width: 890px) { .profile-wave { display: none; } }
