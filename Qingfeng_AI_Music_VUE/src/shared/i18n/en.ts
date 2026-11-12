@@ -2023,4 +2023,11 @@ export const english: Record<string, string> = {
   "请先在我的资料中保存艺名。": "Save your artist name under My profile first.",
   "请先填写艺名。": "Enter your artist name first.",
   "该主页或作品暂不可访问。": "This page or song is currently unavailable.",
+  "管理个人信息、作品与账号设置": "Manage your profile, music, and account settings",
+  "编辑资料": "Edit profile",
+  "基本信息": "Basic information",
+  "保存修改": "Save changes",
+  "账号与安全": "Account & security",
+  "未提供": "Not provided",
+  "我的权益": "My benefits",
 }

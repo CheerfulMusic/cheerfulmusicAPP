@@ -4,12 +4,15 @@ import { useRouter } from 'vue-router'
 import { platform } from '../../../platform'
 import { apiUrl } from '../../../shared/http/api-client'
 import { t } from '../../../shared/i18n'
+import NavIcon from '../../../shared/ui/NavIcon.vue'
 import {
   getArtistProfile, ownerAvatarUrl, ownerTrack, removeSongFromArtist, saveArtistProfile,
   setArtistVisibility, type ArtistProfile, type ArtistRelease,
 } from '../api/artist'
 import ArtistAvatar from '../components/ArtistAvatar.vue'
 import ArtistHome from '../components/ArtistHome.vue'
+import ProfileAccount from '../components/ProfileAccount.vue'
+import ProfileWorks from '../components/ProfileWorks.vue'
 
 const router = useRouter()
 const profile = ref<ArtistProfile>()
@@ -27,6 +30,10 @@ const previewHeading = ref<HTMLElement>()
 const editHeading = ref<HTMLElement>()
 const linkInput = ref<HTMLInputElement>()
 const showLink = ref(false)
+const workCount = ref<number | null>(null)
+const nameInput = ref<HTMLInputElement>()
+const avatarInput = ref<HTMLInputElement>()
+const waveform = [7, 15, 34, 18, 9, 17, 29, 12, 22, 53, 16, 24, 10, 33, 17, 8]
 const avatarSrc = computed(() => localAvatar.value || (removeAvatar.value ? undefined
   : profile.value?.avatarKey ? ownerAvatarUrl(profile.value.avatarKey) : undefined))
 const dirty = computed(() => Boolean(avatar.value || removeAvatar.value
@@ -69,6 +76,10 @@ function chooseAvatar(event: Event) {
 function useDefaultAvatar() {
   clearAvatarDraft()
   removeAvatar.value = Boolean(profile.value?.avatarKey)
+}
+function cancelEdits() {
+  if (profile.value) apply(profile.value)
+  error.value = ''
 }
 function report(cause: unknown, fallback: string) {
   error.value = cause instanceof Error ? cause.message : fallback
@@ -157,108 +168,168 @@ onBeforeUnmount(clearAvatarDraft)
     <template v-else>
       <header class="profile-heading">
         <h1 ref="editHeading" tabindex="-1">{{ t('我的资料') }}</h1>
-        <RouterLink to="/account" class="text-button">{{ t('账号与登录') }}</RouterLink>
+        <p>{{ t('管理个人信息、作品与账号设置') }}</p>
       </header>
-      <div class="artist-editor-grid">
-        <form class="artist-editor" @submit.prevent="save">
+      <section class="profile-card profile-summary" aria-labelledby="profile-summary-name">
+        <div class="profile-avatar-wrap">
+          <ArtistAvatar v-if="avatarSrc" :name="stageName" :src="avatarSrc" />
+          <span v-else class="profile-avatar-default" aria-hidden="true"><img src="/brand/logo-symbol.svg" alt=""></span>
+          <input ref="avatarInput" class="profile-avatar-input" type="file" accept="image/jpeg,image/png" tabindex="-1" :aria-label="t('更换头像')" :disabled="busy" @change="chooseAvatar">
+          <button class="profile-avatar-camera" type="button" :aria-label="t('更换头像')" :title="t('更换头像')" :disabled="busy" @click="avatarInput?.click()">
+            <span aria-hidden="true"></span>
+          </button>
+        </div>
+        <div class="profile-summary-copy">
+          <h2 id="profile-summary-name">{{ profile.stageName || t('你的艺名') }}</h2>
+          <p v-if="profile.tagline">{{ profile.tagline }}</p>
+          <dl class="profile-stats">
+            <div v-if="workCount !== null"><dt>{{ t('作品') }}</dt><dd>{{ workCount }}</dd></div>
+            <div><dt>{{ t('主页作品') }}</dt><dd>{{ profile.songs.length }}</dd></div>
+          </dl>
+        </div>
+        <div class="profile-summary-actions">
+          <div class="profile-wave" aria-hidden="true"><span v-for="(height, index) in waveform" :key="index" :style="{ height: height + 'px' }"></span></div>
+          <button type="button" class="profile-pill profile-edit-button" :disabled="busy" @click="nameInput?.focus()">{{ t('编辑资料') }}</button>
+        </div>
+      </section>
+      <div class="profile-columns">
+        <form class="profile-card profile-form" aria-labelledby="profile-basic-title" @submit.prevent="save">
+          <h2 id="profile-basic-title" class="profile-card-title"><NavIcon name="account" />{{ t('基本信息') }}</h2>
           <fieldset :disabled="busy">
-            <div class="artist-avatar-field">
-              <ArtistAvatar :name="stageName" :src="avatarSrc" />
-              <div>
-                <label class="artist-upload">
-                  {{ t('更换头像') }}
-                  <input type="file" accept="image/jpeg,image/png" :aria-label="t('更换头像')" @change="chooseAvatar">
-                </label>
-                <button v-if="avatarSrc" type="button" class="text-button" @click="useDefaultAvatar">{{ t('使用默认头像') }}</button>
-                <small>{{ t('JPG 或 PNG，最多 5 MB') }}</small>
+            <label class="profile-form-row">
+              <span>{{ t('艺名') }}</span>
+              <input ref="nameInput" v-model="stageName" maxlength="30" :required="profile.published" :placeholder="t('填写你想在主页显示的名字')">
+            </label>
+            <label class="profile-form-row profile-tagline">
+              <span>{{ t('个性签名') }}</span>
+              <span class="profile-signature-input">
+                <textarea v-model="tagline" rows="2" maxlength="120" :placeholder="t('写一句话介绍自己（选填）')" />
+                <small aria-hidden="true">{{ tagline.length }} / 120</small>
+              </span>
+            </label>
+            <div class="profile-form-row">
+              <span>{{ t('歌手主页') }}</span>
+              <div class="profile-inline-actions">
+                <span class="profile-visibility" :class="{ published: profile.published }">{{ t(profile.published ? '已公开' : '未公开') }}</span>
+                <button type="button" class="profile-pill" @click="showPreview(true)">{{ t('预览歌手主页') }}</button>
+                <template v-if="profile.published">
+                  <RouterLink class="profile-pill" :to="homeRoute">{{ t('查看主页') }}</RouterLink>
+                  <button type="button" class="profile-pill" @click="copyLink">{{ t('复制主页链接') }}</button>
+                  <button type="button" class="profile-pill" @click="changeVisibility(false)">{{ t('隐藏主页') }}</button>
+                </template>
               </div>
             </div>
-            <label class="field">
-              {{ t('艺名') }}
-              <input v-model="stageName" maxlength="30" :required="profile.published" :placeholder="t('填写你想在主页显示的名字')">
+            <label v-if="showLink" class="profile-form-row">
+              <span>{{ t('主页链接') }}</span>
+              <input ref="linkInput" readonly :value="link" @focus="linkInput?.select()">
             </label>
-            <label class="field">
-              {{ t('个性签名') }}
-              <textarea v-model="tagline" rows="3" maxlength="120" :placeholder="t('写一句话介绍自己（选填）')" />
-            </label>
-            <button type="submit" class="button" :disabled="!dirty">
-              {{ t(busy ? '正在保存…' : profile.published ? '保存并更新主页' : '保存资料') }}
-            </button>
+            <div class="profile-form-row profile-form-footer">
+              <div class="profile-inline-actions">
+                <button type="submit" class="profile-pill profile-save" :disabled="!dirty">
+                  {{ t(busy ? '正在保存…' : '保存修改') }}
+                </button>
+                <button type="button" class="profile-pill" :disabled="!dirty" @click="cancelEdits">{{ t('取消') }}</button>
+                <button v-if="avatarSrc" type="button" class="profile-avatar-reset" @click="useDefaultAvatar">{{ t('使用默认头像') }}</button>
+              </div>
+            </div>
           </fieldset>
         </form>
-        <section class="artist-publication" aria-labelledby="profile-publication-title">
-          <div class="artist-publication-header">
-            <h2 id="profile-publication-title">{{ t('歌手主页') }}</h2>
-            <span :class="{ published: profile.published }">{{ t(profile.published ? '已公开' : '未公开') }}</span>
-          </div>
-          <p>{{ t(profile.published ? '访客可通过链接查看资料和试听你选中的歌曲。' : '发布主页后，访客可以通过链接访问。') }}</p>
-          <div class="artist-publication-actions">
-            <button type="button" class="button secondary" :disabled="busy" @click="showPreview(true)">{{ t('预览歌手主页') }}</button>
-            <template v-if="profile.published">
-              <button type="button" class="text-button" :disabled="busy" @click="copyLink">{{ t('复制主页链接') }}</button>
-              <RouterLink class="text-button" :to="homeRoute">{{ t('查看主页') }}</RouterLink>
-              <button type="button" class="text-button" :disabled="busy" @click="changeVisibility(false)">{{ t('隐藏主页') }}</button>
-            </template>
-          </div>
-          <label v-if="showLink" class="field">
-            {{ t('主页链接') }}
-            <input ref="linkInput" readonly :value="link" @focus="linkInput?.select()">
-          </label>
-        </section>
+        <ProfileAccount />
       </div>
-      <section class="artist-manage" aria-labelledby="artist-manage-title">
-        <div class="artist-manage-header">
-          <h2 id="artist-manage-title">{{ t('主页作品') }}</h2>
-          <RouterLink class="text-button" to="/works">{{ t('去我的音乐选歌') }}</RouterLink>
-        </div>
-        <p v-if="!profile.songs.length">{{ t('打开一首已完成的歌曲，选择「发布歌曲」即可加入主页。') }}</p>
-        <ul v-else>
-          <li v-for="(song, index) in profile.songs" :key="song.id">
-            <img :src="tracks[index]?.cover" alt="" loading="lazy">
-            <strong>{{ song.title }}</strong>
-            <div class="artist-song-actions">
-              <RouterLink class="text-button" :to="{ name: 'work-detail', params: { id: song.workId } }">{{ t('去作品页更换版本') }}</RouterLink>
-              <button type="button" class="text-button" :disabled="busy" @click="remove(song)">{{ t('移出主页') }}</button>
-            </div>
-          </li>
-        </ul>
-      </section>
+      <ProfileWorks :songs="profile.songs" :busy="busy" @remove="remove" @library-count="workCount = $event" />
     </template>
   </div>
 </template>
 
 <style scoped>
-.my-artist { max-width: 1040px; margin-inline: auto; padding-bottom: 24px; }
-.profile-heading, .artist-manage-header, .artist-publication-header, .artist-preview-bar {
-  display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+.my-artist {
+  --profile-card: #fffafb;
+  --profile-line: #eddee2;
+  --profile-shadow: 0 2px 7px #70354908;
+  max-width: 1080px;
+  margin-inline: auto;
+  padding-bottom: 6px;
 }
-.profile-heading { margin: 0 0 26px; }
-.profile-heading h1 { font-size: clamp(32px, 5vw, 50px); margin: 0; }
-.artist-editor-grid { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); align-items: start; gap: clamp(20px, 5vw, 52px); }
-.artist-editor fieldset { padding: 0; border: 0; margin: 0; min-width: 0; }
-.artist-editor .field { margin-block: 20px; }
-.artist-avatar-field { display: flex; align-items: center; gap: 16px; }
-.artist-avatar-field small { display: block; color: var(--muted); margin-top: 8px; }
-.artist-upload { display: inline-block; position: relative; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; font-weight: 600; }
-.artist-upload:focus-within { outline: 2px solid var(--accent); outline-offset: 4px; }
-.artist-upload input { position: absolute; inset: 0; width: 100%; opacity: 0; cursor: pointer; }
-.artist-avatar-field button { margin-inline-start: 12px; }
-.artist-publication { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: clamp(18px, 4vw, 26px); }
-.artist-publication h2, .artist-manage h2 { margin: 0; font-size: 21px; }
-.artist-publication-header span { border-radius: 30px; background: var(--accent-soft); padding: 4px 10px; color: var(--muted); font-size: .82rem; }
-.artist-publication-header .published { background: #e2efe8; color: #285d43; }
-.artist-publication p, .artist-manage p, .artist-preview-publish p { color: var(--muted); margin: 12px 0 18px; }
-.artist-publication-actions, .artist-song-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 14px; }
-.artist-publication .field { margin-block: 16px 0; }
-.artist-manage { margin-top: 42px; }
-.artist-manage ul { padding: 0; margin-block: 14px 0; list-style: none; border-top: 1px solid var(--line); }
-.artist-manage li { display: grid; grid-template-columns: 46px minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 11px 0; border-bottom: 1px solid var(--line); overflow-wrap: anywhere; }
-.artist-manage img { width: 46px; height: 46px; border-radius: 6px; object-fit: cover; }
+.profile-heading { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 16px; margin-bottom: 16px; }
+.profile-heading h1 { margin: 0; font-size: clamp(28px, 4vw, 34px); font-weight: 800; line-height: 1.18; }
+.profile-heading p { margin: 0; color: var(--muted); font-size: 13px; }
+.profile-card { min-width: 0; border: 1px solid var(--profile-line); border-radius: 16px; background: var(--profile-card); box-shadow: var(--profile-shadow); }
+.profile-summary { display: flex; align-items: center; gap: clamp(18px, 3vw, 34px); padding: 17px 19px 17px clamp(18px, 4vw, 42px); }
+.profile-avatar-wrap { --artist-avatar-size: clamp(70px, 9vw, 98px); flex: none; position: relative; display: grid; }
+.profile-avatar-default {
+  display: grid;
+  width: var(--artist-avatar-size);
+  aspect-ratio: 1;
+  place-items: center;
+  border-radius: 50%;
+  background: radial-gradient(circle at 22% 18%, #ffe1c3, transparent 58%), linear-gradient(135deg, #ffb795, #eb91bb);
+}
+.profile-avatar-default img { width: 48%; height: auto; }
+.profile-avatar-input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.profile-avatar-camera {
+  position: absolute; display: grid; place-items: center; right: 0; bottom: 0; width: 26px; height: 26px;
+  padding: 0; border: 2px solid var(--profile-card); border-radius: 50%; background: #332c30; color: #fff; cursor: pointer;
+}
+.profile-avatar-camera span { position: relative; width: 11px; height: 8px; border: 1px solid; border-radius: 2px; }
+.profile-avatar-camera span::before, .profile-avatar-camera span::after { position: absolute; content: ''; }
+.profile-avatar-camera span::before { width: 3px; height: 3px; border: 1px solid; border-radius: 50%; inset: 1.5px auto auto 3px; }
+.profile-avatar-camera span::after { width: 4px; height: 2px; border-radius: 1px; top: -2px; left: 2px; background: currentColor; }
+.profile-summary-copy { flex: 1; min-width: 0; }
+.profile-summary h2 { margin: 0; font-size: clamp(17px, 3vw, 21px); line-height: 1.35; overflow-wrap: anywhere; }
+.profile-summary-copy > p { margin: 4px 0 0; color: var(--muted); font-size: 13px; white-space: pre-line; overflow-wrap: anywhere; }
+.profile-stats { display: flex; align-items: center; flex-wrap: wrap; gap: 7px 0; margin: 13px 0 0; }
+.profile-stats div { display: inline-flex; flex-direction: row-reverse; align-items: baseline; gap: 5px; }
+.profile-stats div + div { margin-left: 14px; padding-left: 14px; border-left: 1px solid var(--profile-line); }
+.profile-stats dt { color: var(--muted); font-size: 12px; }
+.profile-stats dd { margin: 0; font-size: 16px; font-weight: 750; line-height: 1.15; font-variant-numeric: tabular-nums; }
+.profile-summary-actions { display: flex; align-items: center; gap: clamp(12px, 2vw, 26px); }
+.profile-wave { display: flex; align-items: center; gap: 5px; color: #ff9079; }
+.profile-wave span { width: 5px; max-height: 42px; border-radius: 8px; background: linear-gradient(currentColor, #ffc9bd); opacity: .28; }
+.profile-wave span:nth-child(even) { opacity: .18; }
+.profile-columns { display: grid; grid-template-columns: minmax(0, 1.85fr) minmax(0, 1fr); gap: 13px 16px; margin: 13px 0; }
+.profile-form { padding: 14px clamp(14px, 2.15vw, 32px) 15px; }
+.profile-card-title { display: flex; align-items: center; gap: 7px; margin: 0 0 13px; font-size: 15px; line-height: 1.4; }
+.profile-card-title svg { flex: none; width: 17px; height: 17px; color: var(--accent-text); }
+.profile-form fieldset { padding: 0; margin: 0; min-width: 0; border: 0; }
+.profile-form-row { display: grid; grid-template-columns: 80px minmax(0, 1fr); align-items: center; gap: 8px 12px; margin: 0 0 13px; font-size: 13px; }
+.profile-form-row > span:first-child { font-weight: 560; }
+.profile-form-row input, .profile-form-row textarea {
+  width: 100%; min-width: 0; padding: 7px 11px; border: 1px solid #e9dbdf; border-radius: 9px;
+  background: #fffafb; color: var(--ink); font: inherit; line-height: 1.45;
+}
+.profile-form-row input { min-height: 34px; }
+.profile-tagline { align-items: start; }
+.profile-tagline > span:first-child { padding-top: 8px; }
+.profile-signature-input { position: relative; display: flex; min-width: 0; }
+.profile-form-row textarea { min-height: 62px; padding-bottom: 18px; resize: vertical; }
+.profile-signature-input small { position: absolute; right: 9px; bottom: 4px; color: var(--muted); font-size: 10px; pointer-events: none; }
+.profile-inline-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 5px 7px; }
+.profile-visibility { display: inline-flex; padding: 3px 9px; border-radius: 24px; background: #f8edf0; color: #765e68; font-size: 11px; }
+.profile-visibility.published { background: #e6f3ec; color: #2b6448; }
+.profile-pill {
+  display: inline-flex; align-items: center; justify-content: center; padding: 5px 11px; min-height: 29px;
+  border: 1px solid var(--profile-line); border-radius: 24px; background: #fff8f6; color: var(--ink);
+  font: inherit; font-size: 12px; line-height: 1.35; text-decoration: none; cursor: pointer;
+}
+.profile-pill:hover:not(:disabled) { background: #ffeae4; color: var(--accent-text); }
+.profile-pill:disabled { opacity: .55; cursor: default; }
+.profile-edit-button { min-height: 34px; padding-inline: 14px; border-color: transparent; background: #ffe7df; white-space: nowrap; font-weight: 650; }
+.profile-form-footer { margin-bottom: 0; }
+.profile-form-footer > div { grid-column: 2; }
+.profile-save { padding-inline: 15px; border-color: #ed4a2d; background: linear-gradient(180deg, #ff643f, #ef4528); color: #fff; font-weight: 700; }
+.profile-save:hover:not(:disabled) { background: #dd3b23; color: #fff; }
+.profile-avatar-reset { padding: 4px; border: 0; background: none; color: var(--muted); font-size: 12px; cursor: pointer; }
+.profile-avatar-reset:hover { color: var(--accent-text); text-decoration: underline; }
 .artist-preview-bar, .artist-preview-publish { max-width: 920px; margin: 0 auto 14px; }
-.artist-preview-bar span { color: var(--muted); }
+.artist-preview-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.artist-preview-bar span, .artist-preview-publish p { color: var(--muted); }
+@media (max-width: 890px) { .profile-wave { display: none; } }
 @media (max-width: 680px) {
-  .artist-editor-grid { grid-template-columns: minmax(0, 1fr); gap: 24px; }
-  .artist-manage li { grid-template-columns: 46px minmax(0, 1fr); }
-  .artist-song-actions { grid-column: 2; }
+  .profile-columns { grid-template-columns: minmax(0, 1fr); }
+  .profile-summary { gap: 13px; flex-wrap: wrap; }
+  .profile-summary-actions { margin-left: auto; }
+  .profile-form-row { grid-template-columns: 67px minmax(0, 1fr); gap: 6px 8px; }
+  .profile-pill, .profile-avatar-camera { min-height: 34px; }
+  .profile-avatar-camera { width: 34px; }
 }
 </style>
