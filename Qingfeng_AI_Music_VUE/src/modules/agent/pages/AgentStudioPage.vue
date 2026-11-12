@@ -18,6 +18,7 @@ import AgentProgressCard from '../components/AgentProgressCard.vue'
 import { agentProgress } from '../model/progress'
 import UserAvatarDialog from '../components/UserAvatarDialog.vue'
 import { useUserAvatar } from '../composables/useUserAvatar'
+import { downloadSong, downloadStatus } from '../../works/api/download'
 import { useAvatarGeneration } from '../composables/useAvatarGeneration'
 const AgentNativeDialog = defineAsyncComponent(() => import('../components/AgentNativeDialog.vue'))
 
@@ -93,17 +94,19 @@ const statusText = computed(() => {
 })
 async function scrollChat() { await nextTick(); chat.value?.scrollTo?.({ top: chat.value.scrollHeight, behavior: 'smooth' }) }
 function togglePlay() { if (playable.value) void player.toggle(playable.value) }
-function download() {
-  if (!audioUrl.value || !songCard.value) return
+const downloadUnlocked=ref(false)
+const downloadPath=computed(()=>songCard.value?.songId&&songCard.value.assetId?`app/works/${encodeURIComponent(songCard.value.songId)}/audio/${encodeURIComponent(songCard.value.assetId)}/download`:'')
+watch([downloadPath,accountState,logtoState],([path],_,onCleanup)=>{let stale=false;onCleanup(()=>{stale=true});downloadUnlocked.value=false;if(path)void downloadStatus(path).then(s=>{if(!stale)downloadUnlocked.value=s.unlocked}).catch(()=>undefined)},{immediate:true})
+async function download() {
+  if (!audioUrl.value || !songCard.value || !downloadPath.value) return
   const url = new URL(audioUrl.value); url.searchParams.set('download', 'true')
-  const link = document.createElement('a'); link.href = url.href; link.download = `${songCard.value.title || 'song'}.mp3`
-  document.body.appendChild(link); link.click(); link.remove()
+  if(await downloadSong(downloadPath.value,url.href,`${songCard.value.title || 'song'}.mp3`)){downloadUnlocked.value=true;void refreshCredits()}
 }
 async function handleResult(result?: ConversationSnapshot) {
   if (!result) return
   if (result.action === 'generate_avatar') avatarGeneration.start()
   if (result.action === 'play' && !isPlaying.value) togglePlay()
-  if (result.action === 'download') download()
+  if (result.action === 'download') await download()
   if (result.action === 'login') showLoginDialog()
   if (result.action === 'recharge' || result.action === 'account' || result.action === 'privacy' || result.action === 'photo') nativePanel.value = { kind: result.action }
   void refreshCredits().catch(() => undefined)
@@ -316,7 +319,7 @@ onBeforeUnmount(() => { avatarDisposed = true; window.removeEventListener('qingf
         <div v-else-if="previewTab === 'story'" class="agent-tab-content agent-story-empty" role="tabpanel"><p v-if="storyLoading">{{ tr('正在加载作品故事…', 'Loading story…') }}</p><p v-else-if="storyError">{{ tr('作品故事加载失败', 'Unable to load story') }} <button type="button" @click="fetchStory">{{ tr('重试', 'Retry') }}</button></p><p v-else>{{ story || tr('暂无作品故事', 'No story yet') }}</p></div>
         <div v-else class="agent-tab-content agent-song-actions" role="tabpanel"><button v-if="!taskRunning" type="button" class="agent-start-button" :disabled="blocked || !songCard.lyrics" @click="send('用当前歌词生成音乐')">{{ audioUrl ? tr('重新生成音乐', 'Generate another version') : tr('生成音乐', 'Generate music') }}</button><button v-else type="button" :disabled="blocked" @click="send('停止生成')">{{ tr('停止生成', 'Cancel generation') }}</button><button type="button" :disabled="blocked" @click="input = tr('把副歌改得更温柔，保留其他部分', 'Make the chorus gentler and keep the rest')">{{ tr('修改歌词', 'Revise lyrics') }}</button></div>
         <div v-if="publicLink" class="agent-share-link"><a :href="publicLink" target="_blank" rel="noopener noreferrer">{{ tr('打开分享页面', 'Open share page') }}</a><button type="button" @click="copyShare">{{ tr('复制链接', 'Copy link') }}</button></div>
-        <div class="agent-preview-actions agent-bottom-actions"><button type="button" :disabled="blocked || !playable" @click="send('下载当前作品')">↓ {{ tr('下载', 'Download') }}</button><button type="button" :disabled="blocked || !playable" @click="send('分享当前作品')">♧ {{ tr('分享', 'Share') }}</button><button type="button" :disabled="blocked" @click="input = tr('参考当前作品，帮我创作一首同风格的新歌', 'Create a new song inspired by the style of the current song')">✦ {{ tr('改编同款', 'Create a version') }}</button></div>
+        <div class="agent-preview-actions agent-bottom-actions"><button type="button" :disabled="blocked || !playable" @click="send('下载当前作品')">↓ {{ downloadUnlocked ? tr('免费下载', 'Free download') : tr('下载（首次10积分）', 'Download (10 credits first time)') }}</button><button type="button" :disabled="blocked || !playable" @click="send('分享当前作品')">♧ {{ tr('分享', 'Share') }}</button><button type="button" :disabled="blocked" @click="input = tr('参考当前作品，帮我创作一首同风格的新歌', 'Create a new song inspired by the style of the current song')">✦ {{ tr('改编同款', 'Create a version') }}</button></div>
       </template>
       <div v-else class="agent-empty-song"><span aria-hidden="true">♫</span><strong>{{ tr('从一句灵感开始', 'Start with an idea') }}</strong><p>{{ tr('写好歌词后，作品会出现在这里。音乐完成后，就能试听、下载和分享。', 'Your song will appear here when its lyrics are ready. Once the music is generated, you can listen, download and share.') }}</p></div>
     </aside>

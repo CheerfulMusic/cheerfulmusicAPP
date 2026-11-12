@@ -17,13 +17,20 @@ import org.springframework.web.multipart.MultipartFile;
 public class MediaController {
  private final MediaApi media;
  private final MediaCdnSigner signer;
- public MediaController(MediaApi media,MediaCdnSigner signer){this.media=media;this.signer=signer;}
+ private final com.qingfeng.music.server.download.DownloadEntitlements downloads;
+ @org.springframework.beans.factory.annotation.Autowired
+ public MediaController(MediaApi media,MediaCdnSigner signer,com.qingfeng.music.server.download.DownloadEntitlements downloads){this.media=media;this.signer=signer;this.downloads=downloads;}
+ public MediaController(MediaApi media,MediaCdnSigner signer){this(media,signer,null);}
+ public record DownloadStatus(boolean unlocked,long price){}
+ @GetMapping("/{asset}/download") public DownloadStatus downloadStatus(@AuthenticationPrincipal CreatorPrincipal creator,@PathVariable String work,@PathVariable String asset){String owner=downloads.verifiedOwner(creator);media.get(owner,work,asset);return new DownloadStatus(downloads.unlocked(owner,work),com.qingfeng.music.server.download.DownloadEntitlements.PRICE);}
+ @PostMapping("/{asset}/download") public DownloadStatus unlockDownload(@AuthenticationPrincipal CreatorPrincipal creator,@PathVariable String work,@PathVariable String asset){String owner=downloads.verifiedOwner(creator);downloads.unlock(owner,work,media.open(owner,work,asset));return new DownloadStatus(true,com.qingfeng.music.server.download.DownloadEntitlements.PRICE);}
  @GetMapping public List<MediaApi.Asset> list(@AuthenticationPrincipal CreatorPrincipal creator,@PathVariable String work){return media.list(creator.id(),work);}
  @GetMapping("/selection") public MediaApi.Selection selection(@AuthenticationPrincipal CreatorPrincipal creator,@PathVariable String work){return media.selection(creator.id(),work);}
  public record SelectionRequest(@jakarta.validation.constraints.NotBlank String assetId,@jakarta.validation.constraints.PositiveOrZero long version){}
  @PutMapping("/selection") public MediaApi.Selection select(@AuthenticationPrincipal CreatorPrincipal creator,@PathVariable String work,@jakarta.validation.Valid @RequestBody SelectionRequest request){return media.select(creator.id(),work,request.assetId(),request.version());}
  @PostMapping(consumes="multipart/form-data") public MediaApi.Asset upload(@AuthenticationPrincipal CreatorPrincipal creator,@PathVariable String work,@RequestParam("file") MultipartFile file)throws IOException{try(var input=file.getInputStream()){return media.importAudio(creator.id(),work,input);}}
  @GetMapping("/{asset}") public ResponseEntity<Resource> audio(@AuthenticationPrincipal CreatorPrincipal creator,@PathVariable String work,@PathVariable String asset,@RequestParam(defaultValue="false") boolean download,@RequestHeader(value="Range",required=false) String range){
+  if(download){String owner=downloads.verifiedOwner(creator);if(!downloads.unlocked(owner,work))throw new com.qingfeng.music.common.exception.DomainException("DOWNLOAD_LOCKED","请先解锁下载。");}
   // CDN 关闭时完全走改动前的路径，不额外触发 locate() 的授权与文件存在性检查。
   if(!download&&signer.enabled())try{var location=signer.audio(media.locate(creator.id(),work,asset).storageKey());if(location.isPresent())return AudioResponse.redirect(location.get());}catch(RuntimeException ignored){/* fail-closed：回退原中转，由 open() 重新执行完整授权 */}
   return AudioResponse.from(media.open(creator.id(),work,asset),download,range);

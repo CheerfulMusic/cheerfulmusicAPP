@@ -123,6 +123,7 @@ export function validResponse(path:string,method:string,value:unknown):boolean{
  if(/\/covers\/selection$/.test(path))return cover(value)
  if(/\/covers$/.test(path))return method==='GET'?cover(value):coverAsset(value)
  if(/\/shares$/.test(path))return obj(value)&&text(value.id)&&text(value.token)&&text(value.expiresAt)
+ if(/\/download$/.test(path))return obj(value)&&typeof value.unlocked==='boolean'&&num(value.price)
  if(/^public\/gifts\//.test(path))return obj(value)&&str(value.title)&&str(value.lyrics)
  return Array.isArray(value)||obj(value)&&Object.keys(value).length>0
 }
