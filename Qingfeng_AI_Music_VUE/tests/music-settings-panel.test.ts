@@ -54,6 +54,11 @@ it('opens directly at detailed choices and selects the settings from the audio b
   expect(panel.find('.music-recipes').exists()).toBe(false)
   expect(panel.find('.music-refine-toggle').exists()).toBe(false)
   const controls = panel.get('.music-settings-controls')
+  const lyricsEditor = controls.get('details.remake-lyrics')
+  expect(controls.element.children[1]).toBe(lyricsEditor.element)
+  expect(lyricsEditor.get('summary').text()).toBe('修改完整歌词')
+  const lyrics = lyricsEditor.get<HTMLTextAreaElement>('textarea')
+  expect(lyrics.element.value).toBe(revision.lyrics)
   expect(controls.findAll('button[aria-pressed="true"]').map(button => button.text())).toEqual([
     '女声', '民谣主', '木吉他主', '钢琴', '舒缓', '平稳', '不要说唱',
   ])
@@ -62,13 +67,14 @@ it('opens directly at detailed choices and selects the settings from the audio b
   expect(panel.get<HTMLInputElement>('.music-exclude input').element.value).toBe(preferences.negativeText)
 
   await controls.findAll('button').find(button => button.text() === '钢琴')!.trigger('click')
+  await lyrics.setValue('灯依然在等你')
   const submit = panel.get<HTMLButtonElement>('.music-settings-footer .button:not(.secondary)')
   await vi.waitFor(() => expect(submit.element.disabled).toBe(false))
   await submit.trigger('click')
   expect(panel.emitted('apply')).toEqual([[{
     expectedVersion: work.version,
     preferences: { ...preferences, recipeId: null, choices: { ...preferences.choices, instruments: ['guitar'] } },
-    lyrics: revision.lyrics,
+    lyrics: '灯依然在等你',
   }]])
 })
 
