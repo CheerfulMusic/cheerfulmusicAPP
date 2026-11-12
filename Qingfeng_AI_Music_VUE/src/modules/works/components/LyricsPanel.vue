@@ -12,7 +12,7 @@ import { readRecovery, writeRecovery, recoveryKey,checkpointRecovery } from '../
 import RecoveryCopies from '../../../shared/drafts/RecoveryCopies.vue'
 import type { Work } from '../../studio'
 import { listRevisions, getRevision, getLyricsRequest, saveRevision, confirmRevision, generateLyrics, type Revision, type LyricRewriteAction } from '../api/detail'
-import { lyricRewriteError, selectLyricText, suggestLyricLine, type LyricLineSelection } from '../model/lyric-line-edit'
+import { lyricRewriteError, lyricsMaxLength, selectLyricLine, suggestLyricLine, type LyricLineSelection } from '../model/lyric-line-edit'
 const props=defineProps<{work:Work;showInlineSave?:boolean}>(), emit=defineEmits<{selected:[revision:Revision|null];dirty:[value:boolean];ready:[value:boolean];recoverable:[value:boolean];base:[revision:Revision|null]}>()
 const route=useRoute(),router=useRouter()
 const versions=ref<Revision[]>([]),active=ref<Revision|null>(null),title=ref(props.work.title||(props.work.recipient?t('写给{recipient}的歌',{recipient:props.work.recipient}):t('我的原创歌曲'))),text=ref(''),baseline=ref(''),loading=ref(true),saving=ref(false),composing=ref(false),preparing=ref(false),error=ref(''),notice=ref(''),aiReady=ref(false),localSaved=ref(false),creditShort=ref(false)
@@ -30,36 +30,42 @@ const canSave=computed(()=>canGenerate.value&&needsSave.value)
 const savedTime=computed(()=>active.value&&!dirty.value?formatDate(active.value.createdAt):'')
 const editor=ref<HTMLTextAreaElement>()
 const selection=ref<LyricLineSelection>()
-const linePreview=ref<{selection:NonNullable<typeof selection.value>;text:string}>()
+const linePreview=ref<{selection:LyricLineSelection;text:string}>()
 const lineBusy=ref(false),lineError=ref('')
-const canPolishLine=computed(()=>selection.value?.source===text.value&&!lineBusy.value&&!blocked.value&&!saving.value)
+const editorText=computed(()=>text.value.replace(/\r\n?/g,'\n'))
+const selectedLine=computed(()=>selection.value?.source===editorText.value?selection.value:undefined)
+const canPolishLine=computed(()=>!!selectedLine.value&&!lineBusy.value&&!blocked.value&&!saving.value)
 const lineActions: {id:LyricRewriteAction;label:string;icon:string}[] = [
  {id:'REWRITE',label:'改写选句',icon:'m13 5 6 6M4 16l12-12 4 4L8 20H4v-4Z'},
  {id:'RHYME',label:'更押韵',icon:'M7 17l5-5m3-3 3-3M4 17a2 2 0 1 0 4 0 2 2 0 1 0-4 0Zm7-5a2 2 0 1 0 4 0 2 2 0 1 0-4 0Zm6-7a2 2 0 1 0 4 0 2 2 0 1 0-4 0Z'},
  {id:'COLLOQUIAL',label:'更口语化',icon:'M12 4a8 8 0 0 0-6 13l-1 3 4-1a8 8 0 1 0 3-15ZM8 12h.01m4 0h.01m4 0h.01'},
  {id:'SHORTEN',label:'缩短一句',icon:'m4 20 6-6m-6 0h6v6M20 4l-6 6m6 0h-6V4'},
 ]
-function captureSelection(){
+function captureSelection(event?:Event){
  const el=editor.value
- if(!el||lineBusy.value)return
+ if(!el||(event&&'isComposing' in event&&event.isComposing))return
  const {selectionStart:start,selectionEnd:end,value:source}=el
- selection.value=selectLyricText(source,start,end)
+ const next=selectLyricLine(source,start,end),previous=selection.value
+ if(next?.source===previous?.source&&next?.start===previous?.start&&next?.end===previous?.end)return
+ selection.value=next
+ linePreview.value=undefined;lineError.value=''
 }
 async function previewLine(action:LyricRewriteAction){
- const chosen=selection.value
+ const chosen=selectedLine.value
  if(!chosen||!canPolishLine.value)return
  lineBusy.value=true;lineError.value='';linePreview.value=undefined
+ const current=()=>alive&&selectedLine.value===chosen
  try{
    const text=await suggestLyricLine(props.work.id,chosen,action,active.value?.language||language.value)
-   if(alive)linePreview.value={selection:chosen,text}
+   if(current())linePreview.value={selection:chosen,text}
  }catch(e){
-   if(alive)lineError.value=lyricRewriteError(e)
+   if(current())lineError.value=lyricRewriteError(e)
  }
  finally{lineBusy.value=false}
 }
 const canReplaceLine=computed(()=>{
  const preview=linePreview.value
- return !!preview&&preview.selection.source===text.value&&text.value.length-preview.selection.line.length+preview.text.length<=12000
+ return !!preview&&preview.selection===selectedLine.value&&editorText.value.length-preview.selection.line.length+preview.text.length<=lyricsMaxLength
 })
 function replaceLine(){
  const preview=linePreview.value
@@ -67,7 +73,11 @@ function replaceLine(){
  const {start,end,source}=preview.selection
  text.value=source.slice(0,start)+preview.text+source.slice(end)
  linePreview.value=undefined
- void nextTick(()=>{editor.value?.focus({preventScroll:true});editor.value?.setSelectionRange(start+preview.text.length,start+preview.text.length)})
+ void nextTick(()=>{
+  const caret=start+preview.text.length
+  editor.value?.focus({preventScroll:true});editor.value?.setSelectionRange(caret,caret)
+  captureSelection()
+ })
 }
 let alive=true,inflight:Promise<Revision>|undefined,cacheKey=''
 interface Recovery {structure?:LyricsStructure;title:string;lyrics:string;workVersion:number;baseId:string|null;language:string;instructions:string;requestKey:string;dirty:boolean}
@@ -85,7 +95,10 @@ function restoreCopy(value:Recovery){
 // 输入只保留本机恢复副本；仅用户明确保存时写入版本历史。
 watch([title,text,language,structure,instructions,requestKey],remember,{flush:'sync'})
 watch([dirty,active,composing,canGenerate],()=>{emit('dirty',dirty.value);emit('selected',dirty.value||composing.value?null:active.value);emit('ready',canGenerate.value);emit('base',active.value)},{immediate:true})
-watch(text,()=>{selection.value=undefined})
+watch(editorText,source=>{
+ if(selection.value?.source===source)return
+ selection.value=undefined;linePreview.value=undefined;lineError.value=''
+})
 watch(localSaved,value=>emit('recoverable',value),{immediate:true})
 function select(value:Revision|null){active.value=value;title.value=value?.title||props.work.title||(props.work.recipient?t('写给{recipient}的歌',{recipient:props.work.recipient}):t('我的原创歌曲'));text.value=value?.lyrics||'';baseline.value=JSON.stringify(draftValue());remember()}
 async function syncRoute(id:string){await nextTick();if(alive)await router.replace({query:{...route.query,revision:id,language:language.value,templateId:structure.value.templateId,chorusFirst:String(structure.value.chorusFirst)}})}
@@ -227,13 +240,14 @@ defineExpose({prepareForGeneration,preserveDraftForNavigation,needsSave,canSave,
         <CreditCostHint v-if="credits&&credits.enabled&&credits.lyricsCost>0" :cost="credits.lyricsCost" :balance="credits.balance" :busy="composing" variant="regenerate"/>
       </div>
     </div>
-    <textarea id="song-lyrics" ref="editor" v-model="text" maxlength="12000" class="lyrics-edit lyric-text" :aria-label="t('歌词')" aria-describedby="lyric-editor-help" :disabled="blocked||saving" :placeholder="t('写下主歌、副歌，或者你想唱给TA听的话……')" @select="captureSelection" @keyup="captureSelection" @pointerup="captureSelection"></textarea>
+    <textarea id="song-lyrics" ref="editor" v-model="text" :maxlength="lyricsMaxLength" class="lyrics-edit lyric-text" :aria-label="t('歌词')" aria-describedby="lyric-editor-help" :disabled="blocked||saving" :placeholder="t('写下主歌、副歌，或者你想唱给TA听的话……')" @input="captureSelection" @select="captureSelection" @keyup="captureSelection" @click="captureSelection"></textarea>
     <div class="lyric-line-tools" role="group" :aria-label="t('选句润色')">
       <button v-for="action in lineActions" :key="action.id" type="button" :disabled="!canPolishLine" @pointerdown.prevent @click="previewLine(action.id)">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path :d="action.icon"/></svg>{{ t(action.label) }}
       </button>
       <span v-if="lineBusy" class="line-busy" role="status">{{ t('正在润色…') }}</span>
     </div>
+    <p v-if="selectedLine" class="lyric-selected-line"><strong>{{ t('已选歌词') }}</strong>{{ selectedLine.line }}</p>
   </div>
   <p v-if="lineError" class="notice error" role="alert">{{ t(lineError) }}</p>
   <div v-if="linePreview" class="lyric-line-preview" role="region" :aria-label="t('改写建议')">
@@ -278,6 +292,8 @@ textarea.lyric-text::selection { background:#ffebd0; color:#211d1d; }
 .lyric-line-tools button:hover:not(:disabled) { color:var(--accent-text); border-color:var(--accent-border); }
 .lyric-line-tools button:disabled { opacity:.5; cursor:not-allowed; }
 .line-busy { color:var(--muted); font-size:13px; }
+.lyric-selected-line { margin:10px 0 0; color:var(--muted); font-size:13px; overflow-wrap:anywhere; }
+.lyric-selected-line strong { margin-inline-end:8px; color:var(--ink); }
 .lyrics-history { margin-top:12px; }
 .lyric-version-strip { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px 14px; min-height:42px; padding:7px 13px; border-radius:12px; background:#f7f2f0; color:#74635d; cursor:pointer; font-size:13px; list-style:none; }
 .lyric-version-strip::-webkit-details-marker { display:none; }

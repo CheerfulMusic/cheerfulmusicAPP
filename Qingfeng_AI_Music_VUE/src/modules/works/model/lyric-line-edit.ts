@@ -16,7 +16,7 @@ function isLyricLine(line: string) {
   return !!line.trim() && line.length <= 160 && !lineBreak.test(line) && !/^\s*\[.*\]\s*$/.test(line)
 }
 
-export function selectLyricText(source: string, start: number, end: number): LyricLineSelection | undefined {
+function selectLyricText(source: string, start: number, end: number): LyricLineSelection | undefined {
   const line = source.slice(start, end)
   if (!isLyricLine(line)) return
   return { source, start, end, line, context: source.slice(Math.max(0, start - 180), start) + '\n' + source.slice(end, end + 179) }

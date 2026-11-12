@@ -124,7 +124,7 @@ it.each([['更押韵', 'RHYME'], ['更口语化', 'COLLOQUIAL']])('previews %s a
   expect(panel.find('.remake-lyrics-preview').exists()).toBe(false)
 })
 
-it('keeps the creation tools below the textarea and enables all four for selected text', async () => {
+it('keeps the creation tools below the textarea and targets the line at the caret', async () => {
   api.rewrite.mockResolvedValue({ text: '我还在等你' })
   const panel = mount(LyricsPanel, { props: { work } })
   await flushPromises()
@@ -136,14 +136,35 @@ it('keeps the creation tools below the textarea and enables all four for selecte
   expect(buttons.every(button => button.element.disabled)).toBe(true)
 
   const start = revision.lyrics.indexOf('灯在等你')
-  editor.element.setSelectionRange(start, start + '灯在等你'.length)
-  await editor.trigger('select')
+  editor.element.setSelectionRange(start, start)
+  await editor.trigger('click')
+  expect(panel.get('.lyric-selected-line').text()).toBe('已选歌词灯在等你')
   expect(buttons.every(button => !button.element.disabled)).toBe(true)
+  const nextLine = revision.lyrics.indexOf('夜风')
+  editor.element.setSelectionRange(nextLine, nextLine)
+  await editor.trigger('keyup', { key: 'ArrowDown' })
+  expect(panel.get('.lyric-selected-line').text()).toBe('已选歌词夜风吹过山城')
   await buttons[2]!.trigger('click')
   await flushPromises()
-  expect(api.rewrite).toHaveBeenCalledExactlyOnceWith(work.id, expect.objectContaining({ action: 'COLLOQUIAL', line: '灯在等你' }))
+  expect(api.rewrite).toHaveBeenCalledExactlyOnceWith(work.id, expect.objectContaining({ action: 'COLLOQUIAL', line: '夜风吹过山城' }))
   expect(panel.get('.lyric-line-preview').text()).toContain('我还在等你')
   expect(editor.element.value).toBe(revision.lyrics)
+  await panel.get('.lyric-line-preview .button').trigger('click')
+  await flushPromises()
+  expect(editor.element.value).toBe('[Verse]\n灯在等你\n我还在等你')
+})
+
+it('tracks lyrics as they are typed and clears the selected line on a blank line', async () => {
+  const panel = mount(LyricsPanel, { props: { work } })
+  await flushPromises()
+  const editor = panel.get<HTMLTextAreaElement>('textarea')
+  const buttons = panel.get('.lyric-line-tools').findAll<HTMLButtonElement>('button')
+  await editor.setValue('新写的一句')
+  expect(panel.get('.lyric-selected-line').text()).toBe('已选歌词新写的一句')
+  expect(buttons.every(button => !button.element.disabled)).toBe(true)
+  await editor.setValue('新写的一句\n')
+  expect(panel.find('.lyric-selected-line').exists()).toBe(false)
+  expect(buttons.every(button => button.element.disabled)).toBe(true)
 })
 
 it('ignores a late suggestion when the lyric draft changes during rewriting', async () => {
