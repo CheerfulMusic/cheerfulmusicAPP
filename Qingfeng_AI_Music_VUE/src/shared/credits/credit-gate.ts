@@ -2,6 +2,24 @@ import type { CreditsView } from '../identity/credit-balance'
 
 export interface CreditGate { blocked: boolean; balance: number | null; cost: number }
 
+/** 快速创作包含歌词和音乐两个独立计费步骤。价格不完整时不可猜测总价。 */
+export function quickCreationCost(view: CreditsView | null): number | null {
+  if (!view || !Number.isSafeInteger(view.lyricsCost) || view.lyricsCost <= 0 ||
+      !Number.isSafeInteger(view.musicCost) || view.musicCost <= 0) return null
+  const total = view.lyricsCost + view.musicCost
+  return Number.isSafeInteger(total) ? total : null
+}
+
+export async function checkQuickCreationCredits(refresh: () => Promise<CreditsView | null>) {
+  const view = await refresh()
+  if (!view) return { status: 'unavailable' as const }
+  if (!view.enabled) return { status: 'ok' as const }
+  const cost = quickCreationCost(view)
+  if (cost === null || view.balance === null || !Number.isFinite(view.balance)) return { status: 'unavailable' as const }
+  if (view.balance < cost) return { status: 'insufficient' as const, cost, balance: view.balance }
+  return { status: 'ok' as const }
+}
+
 /**
  * 统一的积分准入判断：所有创作入口都调用这里，保证价格与余额来源一致，
  * 不会出现某个入口用旧价格、另一个入口用新价格的情况。
