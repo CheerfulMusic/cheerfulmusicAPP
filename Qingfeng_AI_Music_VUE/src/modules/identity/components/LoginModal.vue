@@ -190,7 +190,7 @@ async function continueWithGoogle() {
       <div class="login-content">
         <h2 id="login-title">{{ t(title) }}</h2>
         <p id="login-description" class="login-description">{{ t('登录账号，开启你的音乐之旅') }}</p>
-        <p id="login-bonus" class="login-bonus"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 11h16v10H4zM2 7h20v4H2zM12 7v14M12 7H8.5A2.5 2.5 0 1 1 11 4.5L12 7Zm0 0h3.5A2.5 2.5 0 1 0 13 4.5L12 7Z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg><span>{{ t('新用户首次注册赠送100积分，每个账号限领一次。') }}</span></p>
+        <p id="login-bonus" class="login-bonus"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 11h16v10H4zM2 7h20v4H2zM12 7v14M12 7H8.5A2.5 2.5 0 1 1 11 4.5L12 7Zm0 0h3.5A2.5 2.5 0 1 0 13 4.5L12 7Z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg><span>{{ t('新用户首次注册赠送50积分，每个账号限领一次。') }}</span></p>
 
         <div class="social-options" :aria-label="t('社交账号登录')">
           <button class="social-button" type="button" :disabled="statusLoading || !googleReady || locked" :aria-busy="openingGoogle" @click="continueWithGoogle"><GoogleMark/><span>{{ t(openingGoogle ? '正在前往 Google…' : '使用 Google 继续') }}</span><small v-if="statusLoading">{{ t('检查中…') }}</small><small v-else-if="!googleReady">{{ t('暂不可用') }}</small></button>

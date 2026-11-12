@@ -38,8 +38,8 @@ qingfeng:
     workers: 4
   credits:
     enabled: true
-    music-cost: 15
-    lyrics-cost: 5
+    music-cost: 5
+    lyrics-cost: 1
     rewrite-cost: 1
     rewrite-free-per-day: 5
   auth:

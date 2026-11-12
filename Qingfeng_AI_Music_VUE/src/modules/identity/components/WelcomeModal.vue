@@ -9,7 +9,7 @@ import { t } from '../../../shared/i18n'
 import musicGiftUrl from '../../../assets/welcome/music-gift.png'
 const route=useRoute(),router=useRouter(),dialog=ref<HTMLDialogElement>(),start=ref<HTMLButtonElement>()
 const authenticated=computed(()=>accountState.value.authenticated||logtoState.value.authenticated)
-const amount=ref(100),claimed=new Set<string>()
+const amount=ref(0),claimed=new Set<string>()
 let checking=false,alive=true
 async function check(){
  if(checking||!authenticated.value||loginDialogOpen.value||route.name==='gift')return
@@ -18,7 +18,7 @@ async function check(){
   await ensureCreator();const owner=currentCreatorId();if(claimed.has(owner))return
   const result=await requestJson<{show:boolean;amount:number}>('app/welcome','POST',{})
   claimed.add(owner)
-  if(!alive||owner!==currentCreatorId()||!authenticated.value||!result.show||result.amount!==100)return
+  if(!alive||owner!==currentCreatorId()||!authenticated.value||!result.show||!Number.isSafeInteger(result.amount)||result.amount<=0)return
   amount.value=result.amount;await nextTick();dialog.value?.showModal();start.value?.focus()
  }catch{/* Keep login usable; a later confirmed identity refresh can retry an unavailable welcome request. */}
  finally{checking=false}
