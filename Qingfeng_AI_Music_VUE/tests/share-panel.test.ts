@@ -28,13 +28,20 @@ beforeEach(() => {
   mocks.get.mockResolvedValue({ title: '我的歌', lyrics: '[Verse]\n窗台那盆薄荷\nKeep the light on', hasCover: true })
   mocks.poster.mockResolvedValue(new Blob(['image'], { type: 'image/png' }))
 })
-afterEach(() => { app?.unmount(); app = undefined; document.body.innerHTML = ''; vi.restoreAllMocks() })
+afterEach(() => { app?.unmount(); app = undefined; document.body.innerHTML = ''; vi.unstubAllGlobals(); vi.restoreAllMocks() })
 describe('share panel state and poster lifecycle', () => {
-  it('reads the published snapshot and offers card, poster and a backup public URL', async () => {
+  it('offers direct access to copy the public URL alongside the card and poster', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    vi.stubGlobal('navigator', { clipboard: { writeText } })
     mount(); await flush()
     expect(document.querySelector('.share-card-copy h3')?.textContent).toBe('我的歌')
     expect(button('分享歌曲卡片')).toBeTruthy(); expect(button('制作音乐海报')).toBeTruthy()
-    expect(document.querySelector<HTMLInputElement>('.share-link-backup input')?.value).toContain('/gift/' + token)
+    const copy = button('复制分享链接')
+    const url = document.querySelector<HTMLInputElement>('.share-link-panel input')?.value
+    expect(url).toContain('/gift/' + token)
+    expect(copy.closest('details')).toBeNull()
+    copy.click(); await flush()
+    expect(writeText).toHaveBeenCalledExactlyOnceWith(url)
     expect(document.querySelector('.share-card-art img')?.getAttribute('src')).toContain('/cover?proxy=true')
   })
   it('retries reading without creating a second token when the public snapshot request fails', async () => {
@@ -50,7 +57,7 @@ describe('share panel state and poster lifecycle', () => {
     mocks.get.mockResolvedValue({ title: '第二首歌', lyrics: '新歌词' }); await flush()
     resolve({ token: 'B'.repeat(43), expiresAt: new Date(Date.now() + 86400000).toISOString() }); await flush()
     expect(document.querySelector('.share-card-copy h3')?.textContent).toBe('第二首歌')
-    expect(document.querySelector<HTMLInputElement>('.share-link-backup input')?.value).not.toContain('B'.repeat(43))
+    expect(document.querySelector<HTMLInputElement>('.share-link-panel input')?.value).not.toContain('B'.repeat(43))
   })
   it('invalidates an old poster after editing the selected lyric and never publishes stale render results', async () => {
     let finish!: (blob: Blob) => void
@@ -70,7 +77,7 @@ describe('share panel state and poster lifecycle', () => {
     mount(); await flush(); button('制作音乐海报').click(); await flush()
     button('撤销本作品全部分享').click(); await flush()
     expect(mocks.revoke).toHaveBeenCalledWith('work-a')
-    expect(document.querySelector('.share-song-card')).toBeNull(); expect(document.querySelector('.share-link-backup')).toBeNull()
+    expect(document.querySelector('.share-song-card')).toBeNull(); expect(document.querySelector('.share-link-panel')).toBeNull()
     expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:poster')
   })
 })
