@@ -78,6 +78,7 @@ onBeforeUnmount(() => { alive = false })
     <button type="button" class="button secondary" :disabled="!canSuggest" @click="preview('REWRITE')">{{ t('改写选句') }}</button>
     <button type="button" class="button secondary" :disabled="!canSuggest" @click="preview('RHYME')">{{ t('更押韵') }}</button>
     <button type="button" class="button secondary" :disabled="!canSuggest" @click="preview('COLLOQUIAL')">{{ t('更口语化') }}</button>
+    <button type="button" class="button secondary" :disabled="!canSuggest" @click="preview('SHORTEN')">{{ t('缩短一句') }}</button>
     <span v-if="busy" role="status">{{ t('正在润色…') }}</span>
   </div>
   <p v-if="selection && !suggestion" class="remake-lyrics-selected"><strong>{{ t('已选歌词') }}</strong>{{ selection.line }}</p>

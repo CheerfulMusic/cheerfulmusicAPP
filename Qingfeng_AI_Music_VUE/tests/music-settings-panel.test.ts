@@ -103,24 +103,36 @@ it('uses the audio task’s recorded genre and voice when the legacy snapshot ha
   expect(panel.text()).toContain('原版设置记录不完整')
 })
 
-it.each([['更押韵', 'RHYME'], ['更口语化', 'COLLOQUIAL']])('previews %s and replaces only the selected line after confirmation', async (label, action) => {
+it.each([
+  ['改写选句', 'REWRITE', '灯火还在等你'],
+  ['更押韵', 'RHYME', '灯火等你回城'],
+  ['更口语化', 'COLLOQUIAL', '灯还等着你呢'],
+  ['缩短一句', 'SHORTEN', '灯等你'],
+])('previews %s and replaces only the selected line after confirmation', async (label, action, replacement) => {
   api.snapshot.mockResolvedValue({ preferences })
-  api.rewrite.mockResolvedValue({ text: '灯火等你回城' })
+  api.rewrite.mockResolvedValue({ text: replacement })
   const panel = mountAdjustment()
   await flushPromises()
   const editor = panel.get<HTMLTextAreaElement>('.music-settings-lyrics textarea')
+  const toolbar = panel.get('.music-settings-lyrics > .remake-lyrics-actions')
+  const buttons = toolbar.findAll<HTMLButtonElement>('button')
+  expect(editor.element.nextElementSibling).toBe(toolbar.element)
+  expect(buttons.map(button => button.text())).toEqual(['改写选句', '更押韵', '更口语化', '缩短一句'])
+  expect(buttons.every(button => button.element.disabled)).toBe(true)
   const caret = revision.lyrics.indexOf('灯在等你') + 1
   editor.element.setSelectionRange(caret, caret)
   await editor.trigger('click')
-  await panel.findAll('button').find(button => button.text() === label)!.trigger('click')
+  expect(panel.get('.remake-lyrics-selected').text()).toBe('已选歌词灯在等你')
+  expect(buttons.every(button => !button.element.disabled)).toBe(true)
+  await buttons.find(button => button.text() === label)!.trigger('click')
   await flushPromises()
   expect(api.rewrite).toHaveBeenCalledExactlyOnceWith(work.id, expect.objectContaining({
     action, line: '灯在等你', language: 'zh-CN', context: expect.stringContaining('夜风吹过山城'),
   }))
-  expect(panel.get('.remake-lyrics-preview').text()).toContain('灯火等你回城')
+  expect(panel.get('.remake-lyrics-preview').text()).toContain(replacement)
   expect(editor.element.value).toBe(revision.lyrics)
   await panel.findAll('button').find(button => button.text() === '采用这句')!.trigger('click')
-  expect(editor.element.value).toBe('[Verse]\n灯火等你回城\n夜风吹过山城')
+  expect(editor.element.value).toBe(`[Verse]\n${replacement}\n夜风吹过山城`)
   expect(panel.find('.remake-lyrics-preview').exists()).toBe(false)
 })
 
