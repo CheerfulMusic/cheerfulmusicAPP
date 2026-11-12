@@ -27,16 +27,26 @@ public enum AgentTool {
     }
 
     public record GenerateSongArgs(String text, String style, String language, Integer bpm,
-                                   String vocal, List<String> instruments) {}
+                                   String vocal, List<String> instruments, String mode, String revisionId) {
+        public GenerateSongArgs(String text, String style, String language, Integer bpm, String vocal, List<String> instruments) {
+            this(text, style, language, bpm, vocal, instruments, null, null);
+        }
+    }
 
-    public record GenerateLyricsArgs(String text, String language, String mode) {}
+    public record GenerateLyricsArgs(String text, String language, String mode, String revisionId) {
+        public GenerateLyricsArgs(String text, String language, String mode) { this(text, language, mode, null); }
+    }
 
     public record ModifySectionArgs(String section, String replacementLyrics, Double startS, Double endS) {}
 
     public record ExtendSongArgs(String direction, Integer seconds) {}
 
     public record SetStyleArgs(String style, String mood, Integer bpm, String language,
-                               List<String> instruments) {}
+                               List<String> instruments, String vocal) {
+        public SetStyleArgs(String style,String mood,Integer bpm,String language,List<String> instruments) {
+            this(style,mood,bpm,language,instruments,null);
+        }
+    }
 
     public record GetCurrentSongArgs() {}
 }

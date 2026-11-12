@@ -2,117 +2,77 @@ package com.qingfeng.music.agent.application;
 
 import com.qingfeng.music.agent.api.SongCard;
 import com.qingfeng.music.agent.model.AgentJson;
+import com.qingfeng.music.generation.api.GenerationApi;
+import com.qingfeng.music.generation.domain.GenerationStatus;
 import com.qingfeng.music.lyrics.api.LyricsApi;
 import com.qingfeng.music.media.api.MediaApi;
 import com.qingfeng.music.work.api.WorkApi;
+import java.util.*;
 
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-
-/**
- * 把当前的「指针 + 轻量快照」实时聚合成消息流内歌曲卡片。
- * lyrics / audioUrl / coverUrl / title 一律来自 work / lyric_revision / media_asset 实时读取，
- * 不在此处落地副本；style / mood / bpm / language / instruments 来自会话快照（current_song_json）。
- */
+/** 歌词、音频与任务必须属于同一版本，不能把新歌词与旧音频拼成作品卡。 */
 public final class SongCardProjector {
-
     private final WorkApi works;
     private final LyricsApi lyrics;
     private final MediaApi media;
+    private GenerationApi generation;
 
     public SongCardProjector(WorkApi works, LyricsApi lyrics, MediaApi media) {
-        this.works = works;
-        this.lyrics = lyrics;
-        this.media = media;
+        this.works = works; this.lyrics = lyrics; this.media = media;
     }
+    public SongCardProjector withGeneration(GenerationApi generation) { this.generation = generation; return this; }
 
     public SongCard project(String creatorId, String workId, String snapshotJson) {
-        if (workId == null || workId.isBlank()) {
-            return SongCard.empty(0L);
+        if (workId == null || workId.isBlank()) return SongCard.empty(0L);
+        var work = works.get(creatorId, workId);
+        var snapshot = snapshotJson == null ? Map.<String,Object>of() : AgentJson.read(snapshotJson);
+        String revisionId = text(snapshot.get("revisionId"));
+        String taskId = text(snapshot.get("taskId"));
+        List<GenerationApi.Task> tasks = generation == null ? List.of() : generation.list(creatorId, workId);
+        GenerationApi.Task task = taskId == null ? null : tasks.stream().filter(t -> t.id().equals(taskId)).findFirst().orElse(null);
+        var selection = media.selection(creatorId, workId);
+        if (task == null && revisionId == null && selection != null && selection.assetId() != null) {
+            task = tasks.stream().filter(t -> selection.assetId().equals(t.assetId())).findFirst().orElse(null);
         }
-        try {
-            var work = works.get(creatorId, workId);
-            var snapshot = snapshotJson == null ? Map.<String, Object>of() : AgentJson.read(snapshotJson);
-            String style = firstNonNull(snapshot.get("style"), work.style());
-            String mood = asString(snapshot.get("mood"));
-            String language = asString(snapshot.get("language"));
-            Integer bpm = asInteger(snapshot.get("bpm"));
-            List<String> instruments = asList(snapshot.get("instruments"));
-
-            String title = work.title() == null ? "" : work.title();
-            String lyricText = "";
-            try {
-                lyricText = lyrics.list(creatorId, workId).stream()
-                        .filter(com.qingfeng.music.lyrics.api.LyricsApi.Revision::confirmed)
-                        .reduce((first, second) -> second)
-                        .map(com.qingfeng.music.lyrics.api.LyricsApi.Revision::lyrics)
-                        .orElse("");
-            } catch (RuntimeException ignored) {
-                lyricText = "";
-            }
-
-            String audioUrl = "";
-            String coverUrl = null;
-            String status = "DRAFT";
-            try {
-                MediaApi.Selection selection = media.selection(creatorId, workId);
-                if (selection != null && selection.assetId() != null && !selection.assetId().isBlank()) {
-                    audioUrl = "/api/app/works/" + workId + "/audio/" + selection.assetId();
-                    status = "READY";
-                    if (selection.asset() != null) coverUrl = selection.asset().contentType();
-                }
-            } catch (RuntimeException ignored) {
-                audioUrl = "";
-            }
-
-            return new SongCard(workId, title, style == null ? "" : style, lyricText, audioUrl,
-                    status, coverUrl, 0L);
-        } catch (RuntimeException e) {
-            return SongCard.empty(0L);
+        if (revisionId == null && task != null) revisionId = task.revisionId();
+        var revision = revisionId == null ? latest(lyrics.list(creatorId, workId)) : lyrics.get(creatorId, workId, revisionId);
+        String audioUrl = "", assetId = null;
+        String status = revision == null ? "DRAFT" : "LYRICS_READY";
+        if (task != null && revision != null && revision.id().equals(task.revisionId())) {
+            status = task.status().name();
+            if (task.status() == GenerationStatus.SUCCEEDED && task.assetId() != null) assetId = task.assetId();
+        } else if (revision != null && selection != null && selection.assetId() != null
+                && media.matchesGenerationRevision(creatorId, workId, selection.assetId(), revision.id())) {
+            assetId = selection.assetId(); status = "READY";
         }
+        if (assetId != null) {
+            media.get(creatorId, workId, assetId);
+            audioUrl = "/api/app/works/" + workId + "/audio/" + assetId;
+        }
+        return new SongCard(workId, revision == null ? work.title() : revision.title(),
+                text(snapshot.get("style")) == null ? work.style() : text(snapshot.get("style")),
+                revision == null ? "" : revision.lyrics(), audioUrl, status, null, work.version(),
+                revision == null ? null : revision.id(), assetId, task == null ? null : task.id());
     }
 
-    /** 合并 set_style 参数到现有快照，返回新快照 JSON（不触碰 lyrics / audioUrl 等实时字段）。 */
-    public static String mergeSnapshot(String existingJson, String style, String mood,
-                                       Integer bpm, String language, List<String> instruments) {
-        Map<String, Object> map = new LinkedHashMap<>();
-        if (existingJson != null) {
-            Map<String, Object> parsed = AgentJson.read(existingJson);
-            map.putAll(parsed);
-        }
-        if (style != null) map.put("style", style);
+    public static LyricsApi.Revision latest(List<LyricsApi.Revision> revisions) {
+        return revisions.stream().filter(LyricsApi.Revision::confirmed)
+                .max(Comparator.comparing(LyricsApi.Revision::createdAt, Comparator.nullsFirst(Comparator.naturalOrder())))
+                .orElse(null);
+    }
+    public static String mergeSnapshot(String existingJson, String style, String mood, Integer bpm,
+                                       String language, List<String> instruments) {
+        Map<String,Object> map = existingJson == null ? new LinkedHashMap<>() : new LinkedHashMap<>(AgentJson.read(existingJson));
+        if (style != null && !style.isBlank()) map.put("style", style);
         if (mood != null) map.put("mood", mood);
         if (bpm != null) map.put("bpm", Integer.toString(bpm));
-        if (language != null) map.put("language", language);
+        if (language != null && !language.isBlank()) map.put("language", language);
         if (instruments != null) map.put("instruments", String.join("\u0001", instruments));
         return AgentJson.write(map);
     }
-
-    private static String firstNonNull(Object primary, String fallback) {
-        if (primary != null && !primary.toString().isBlank()) return primary.toString();
-        return fallback;
+    public static String withPointers(String snapshot, String revisionId, String taskId) {
+        var map = snapshot == null ? new LinkedHashMap<String,Object>() : new LinkedHashMap<>(AgentJson.read(snapshot));
+        map.put("revisionId", revisionId); map.put("taskId", taskId);
+        return AgentJson.write(map);
     }
-
-    @SuppressWarnings("unchecked")
-    private static List<String> asList(Object value) {
-        if (value == null) return List.of();
-        if (value instanceof List) return (List<String>) value;
-        String text = value.toString();
-        if (text.isBlank()) return List.of();
-        return List.of(text.split(java.util.regex.Pattern.quote("\u0001")));
-    }
-
-    private static String asString(Object value) {
-        return value == null ? null : value.toString();
-    }
-
-    private static Integer asInteger(Object value) {
-        if (value == null) return null;
-        try {
-            return Integer.valueOf(value.toString().trim());
-        } catch (NumberFormatException e) {
-            return null;
-        }
-    }
+    private static String text(Object value) { return value == null || value.toString().isBlank() ? null : value.toString(); }
 }

@@ -69,12 +69,7 @@ public class AgentToolDispatcher {
             return ToolResult.ok(messageId, result.card());
         } catch (DomainException error) {
             if ("PERSONAL_GENERATION_BUSY".equals(error.code())) {
-                String prevTaskId = findInFlightTask(creatorId, conversation.currentWorkId());
-                String intent = serializeIntent(tool, args, requestKey, prevTaskId,
-                        conversation.currentWorkId(), conversationId, creatorId);
-                conversations.appendMessage(creatorId, conversationId, "assistant",
-                        AgentMessage.KIND_PLACEHOLDER, AgentMessage.STATE_PENDING, intent, prevTaskId);
-                return ToolResult.busy(messageId, "已有创作正在生成中，已自动排队，完成后会继续。");
+                return ToolResult.busy(messageId, "已有歌曲正在生成，请等当前任务完成后再发送生成请求。尚未自动排队或重复扣费。");
             }
             // 其余业务异常（含 CONFLICT / INVALID_* / UNAVAILABLE）向上抛，由全局处理器映射 HTTP 状态码：
             // CONFLICT→409（并发/陈旧写入）、INVALID_*→400、UNAVAILABLE→503。
@@ -129,6 +124,9 @@ public class AgentToolDispatcher {
         m.put("status", card.status());
         m.put("coverUrl", card.coverUrl());
         m.put("revision", Long.toString(card.revision()));
+        m.put("revisionId", card.revisionId());
+        m.put("assetId", card.assetId());
+        m.put("taskId", card.taskId());
         return AgentJson.write(m);
     }
 

@@ -66,6 +66,14 @@ public final class IntentRouter {
         if (clean.isEmpty() || clean.length() > TEXT_LIMIT) {
             return IntentResult.clarify("请用一句话告诉我你想做什么，例如「写一首关于旅行的歌」。");
         }
+        // Negations and conversation requests must be resolved before keyword rules.
+        if (AgentChatPolicy.chatOnly(clean) || (AgentChatPolicy.deniesAction(clean) && !AgentChatPolicy.lyricsOnly(clean))
+                || Pattern.compile("我喜欢|我想聊|什么是|解释一下|不要下载|不下载|don.t download",Pattern.CASE_INSENSITIVE).matcher(clean).find()) {
+            return IntentResult.clarify("可以先聊聊创作想法，本次不会执行创作工具。");
+        }
+        if (AgentChatPolicy.lyricsOnly(clean) || Pattern.compile("(?:写|生成|创作).{0,4}歌词|(?:write|generate).{0,8}lyrics",Pattern.CASE_INSENSITIVE).matcher(clean).find()) {
+            return IntentResult.rule(AgentTool.GENERATE_LYRICS.id(),extractArgs(clean),"好的，先为你创作歌词。");
+        }
         for (Rule rule : RULES) {
             if (rule.pattern().matcher(clean).find()) {
                 return IntentResult.rule(rule.tool().id(), extractArgs(clean), rule.reply());

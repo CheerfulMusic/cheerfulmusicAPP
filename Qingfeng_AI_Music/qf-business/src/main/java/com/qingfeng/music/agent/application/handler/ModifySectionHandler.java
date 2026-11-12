@@ -52,18 +52,20 @@ public class ModifySectionHandler implements AgentToolHandler {
         if (selection == null || selection.assetId() == null || selection.assetId().isBlank()) {
             throw new DomainException("NO_AUDIO", "该作品还没有可编辑的原曲音频。");
         }
-        Revision revision = latestConfirmed(creatorId, workId);
+        Revision revision = AgentCreationSupport.selected(lyrics, creatorId, workId, null, AgentCreationSupport.snapshot(ctx));
         if (revision == null) {
             throw new DomainException("NO_LYRICS", "请先确认歌词，再局部修改。");
         }
+        if (!media.matchesGenerationRevision(creatorId, workId, selection.assetId(), revision.id()))
+            throw new DomainException("INVALID_SECTION_SOURCE", "当前歌词与选定音频不匹配，请选择对应版本后再修改音频片段。");
         String section = a.section();
         int textStart = revision.lyrics().indexOf(section);
         if (textStart < 0) {
             throw new DomainException("SECTION_NOT_FOUND", "未在歌词中找到该段落，请提供更准确的文本。");
         }
         int textEnd = textStart + section.length();
-        double start = a.startS() == null ? 0.0 : a.startS();
-        double end = a.endS() == null ? 30.0 : a.endS();
+        double start = a.startS();
+        double end = a.endS();
 
         var request = new SectionEditingService.Request(selection.assetId(), work.version(),
                 ctx.requestKey(), start, end, textStart, textEnd, a.replacementLyrics());
@@ -71,11 +73,10 @@ public class ModifySectionHandler implements AgentToolHandler {
 
         SongCard base = projector.project(creatorId, workId, ctx.state() == null
                 ? null : ctx.state().currentSongJson());
-        SongCard card = new SongCard(workId, base.title(), base.style(), base.lyrics(), "",
-                task.status().name(), base.coverUrl(), base.revision());
+        SongCard card = new SongCard(workId, task.title(), base.style(), task.lyrics(), "",
+                task.status().name(), base.coverUrl(), base.revision(), task.revisionId(), null, task.id());
         long expectedRevision = ctx.state() == null ? 0L : ctx.state().revision();
-        return new AgentToolResult(card, workId, ctx.state() == null
-                ? null : ctx.state().currentSongJson(), expectedRevision, task.id(), false);
+        return new AgentToolResult(card, workId, SongCardProjector.withPointers(AgentCreationSupport.snapshot(ctx), task.revisionId(), task.id()), expectedRevision, task.id(), false);
     }
 
     private Revision latestConfirmed(String creatorId, String workId) {

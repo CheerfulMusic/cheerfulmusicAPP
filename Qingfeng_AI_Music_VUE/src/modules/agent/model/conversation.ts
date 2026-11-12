@@ -14,6 +14,28 @@ export interface SongCard {
   status: string
   coverUrl: string | null
   revision: number
+  revisionId?: string | null
+  assetId?: string | null
+  taskId?: string | null
+}
+
+export interface ConversationSnapshot {
+  messages: Message[]
+  songCard: SongCard | null
+  taskId: string | null
+  action: string | null
+  shareUrl: string | null
+  liked: boolean
+}
+
+/** Never display tool payload JSON as a reply. */
+export function messageText(message: Message): string {
+  try {
+    const body = JSON.parse(message.contentJson || '{}') as Record<string, unknown>
+    if (typeof body.text === 'string') return body.text
+    if (typeof body.progress === 'string') return body.progress
+  } catch { /* A malformed older message must not break the rest of the conversation. */ }
+  return message.state === 'FAILED' ? '这一步没有完成，请重新说明你的需求。' : ''
 }
 
 export interface Message {

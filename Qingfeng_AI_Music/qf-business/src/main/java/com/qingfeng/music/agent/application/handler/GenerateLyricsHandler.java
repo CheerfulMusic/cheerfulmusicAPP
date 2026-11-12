@@ -1,57 +1,38 @@
 package com.qingfeng.music.agent.application.handler;
 
 import com.qingfeng.music.agent.api.AgentTool;
-import com.qingfeng.music.agent.api.SongCard;
-import com.qingfeng.music.agent.application.AgentToolHandler;
-import com.qingfeng.music.agent.application.SongCardProjector;
+import com.qingfeng.music.agent.application.*;
+import com.qingfeng.music.common.exception.DomainException;
 import com.qingfeng.music.lyrics.api.LyricsApi;
 import com.qingfeng.music.lyrics.application.LyricsCompositionService;
 import com.qingfeng.music.media.api.MediaApi;
+import com.qingfeng.music.settings.MusicSettings;
 import com.qingfeng.music.work.api.WorkApi;
 
-/**
- * generate_lyrics：确保有作品后创作歌词并确认为当前版本，返回已写入歌词的卡片。
- * 歌词创作在请求线程同步完成（端口自身决定是否需要模型），本处理器不轮询。
- */
+/** 显式 new 创建新作品；rewrite 使用选中的真实歌词版本作为模型输入。 */
 public class GenerateLyricsHandler implements AgentToolHandler {
-
-    private final WorkApi works;
-    private final LyricsApi lyrics;
-    private final LyricsCompositionService composer;
-    private final SongCardProjector projector;
-
-    public GenerateLyricsHandler(WorkApi works, LyricsApi lyrics, LyricsCompositionService composer,
-                                 MediaApi media) {
-        this.works = works;
-        this.lyrics = lyrics;
-        this.composer = composer;
-        this.projector = new SongCardProjector(works, lyrics, media);
+    private final WorkApi works; private final LyricsApi lyrics; private final LyricsCompositionService composer;
+    private final SongCardProjector projector; private final MusicSettings settings;
+    public GenerateLyricsHandler(WorkApi works,LyricsApi lyrics,LyricsCompositionService composer,MediaApi media) { this(works,lyrics,composer,media,null); }
+    public GenerateLyricsHandler(WorkApi works,LyricsApi lyrics,LyricsCompositionService composer,MediaApi media,MusicSettings settings) {
+        this.works=works;this.lyrics=lyrics;this.composer=composer;this.settings=settings;projector=new SongCardProjector(works,lyrics,media);
     }
-
-    @Override
-    public AgentTool tool() {
-        return AgentTool.GENERATE_LYRICS;
-    }
-
-    @Override
-    public AgentToolResult execute(ToolContext ctx, Object args) {
-        var a = (com.qingfeng.music.agent.api.AgentTool.GenerateLyricsArgs) args;
-        String creatorId = ctx.creatorId();
-        String workId = ctx.current().currentWorkId();
-        var work = workId == null || workId.isBlank()
-                ? works.create(creatorId, new WorkApi.Draft("", "",
-                a.text() == null || a.text().isBlank() ? "智能创作" : a.text(), "",
-                "", "智能创作", "AUTO"))
-                : works.get(creatorId, workId);
-
-        var revision = composer.compose(creatorId, work.id(), work.version(),
-                ctx.requestKey(), GenerateSongHandler.mapLanguage(a.language()), a.text(), null);
-        revision = lyrics.confirm(creatorId, work.id(), revision.id());
-
-        SongCard card = projector.project(creatorId, work.id(), ctx.state() == null
-                ? null : ctx.state().currentSongJson());
-        long expectedRevision = ctx.state() == null ? 0L : ctx.state().revision();
-        return new AgentToolResult(card, work.id(), ctx.state() == null
-                ? null : ctx.state().currentSongJson(), expectedRevision, null, false);
+    public AgentTool tool(){return AgentTool.GENERATE_LYRICS;}
+    public AgentToolResult execute(ToolContext ctx,Object args) {
+        var a=(AgentTool.GenerateLyricsArgs)args;
+        boolean newWork="new".equals(a.mode()) || ctx.current().currentWorkId()==null || ctx.current().currentWorkId().isBlank();
+        if(newWork && "rewrite".equals(a.mode())) throw new DomainException("NO_LYRICS","请先创作歌词，再指定修改要求。");
+        String owner=ctx.creatorId(),snapshot=newWork && ctx.current().currentWorkId()!=null?null:AgentCreationSupport.snapshot(ctx);
+        var work=newWork ? works.create(owner,new WorkApi.Draft("","",a.text()==null||a.text().isBlank()?"今天的心情":a.text(),"","","智能创作","AUTO"),ctx.requestKey()) : works.get(owner,ctx.current().currentWorkId());
+        var previous=newWork?null:AgentCreationSupport.selected(lyrics,owner,work.id(),a.revisionId(),snapshot);
+        if("rewrite".equals(a.mode()) && previous==null) throw new DomainException("NO_LYRICS","请先创作歌词，再指定修改要求。");
+        String language=AgentCreationSupport.language(a.language(),snapshot,previous);
+        snapshot=SongCardProjector.mergeSnapshot(snapshot,null,null,null,language,null);
+        var applied=AgentCreationSupport.apply(settings,works,owner,work,snapshot,null);work=applied.work();snapshot=applied.snapshot();
+        var revision=composer.compose(owner,work.id(),work.version(),ctx.requestKey(),GenerateSongHandler.mapLanguage(language),
+                AgentCreationSupport.instructions(newWork?"":a.text(),language),previous==null?null:previous.id());
+        revision=lyrics.confirm(owner,work.id(),revision.id());
+        snapshot=SongCardProjector.withPointers(snapshot,revision.id(),null);
+        return new AgentToolResult(projector.project(owner,work.id(),snapshot),work.id(),snapshot,ctx.state()==null?0:ctx.state().revision(),null,false);
     }
 }

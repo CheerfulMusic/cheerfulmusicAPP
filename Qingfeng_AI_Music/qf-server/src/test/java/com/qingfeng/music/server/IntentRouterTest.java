@@ -130,4 +130,14 @@ class IntentRouterTest {
         }
         assertNull(AgentTool.fromId("drop_database"));
     }
+
+    @Test
+    void negationChatAndLyricsOnlyAreResolvedBeforeSongKeywords() {
+        var router=router(false,null);
+        for(String text:List.of("先不要生成一首歌","我喜欢民谣但今天只想聊天","什么是摇滚","不要下载")) {
+            assertNull(router.route(text,"zh-CN").tool(),text);
+        }
+        assertEquals("generate_lyrics",router.route("只写一首歌词，不要生成音乐","zh-CN").tool());
+        assertEquals("generate_lyrics",router.route("帮我生成歌词","zh-CN").tool());
+    }
 }

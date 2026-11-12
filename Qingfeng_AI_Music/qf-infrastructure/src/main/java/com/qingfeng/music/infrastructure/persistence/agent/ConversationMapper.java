@@ -23,7 +23,7 @@ public interface ConversationMapper {
             + "VALUES(#{id},#{conversationId},#{seq},#{role},#{kind},#{state},#{contentJson},#{taskId},#{createdAt})")
     int insertMessage(MessageRow row);
 
-    @Select("SELECT * FROM agent_message WHERE conversation_id=#{conversation} ORDER BY seq")
+    @Select("SELECT * FROM agent_message WHERE conversation_id=#{conversation} AND kind<>'REQUEST' ORDER BY seq")
     List<MessageRow> listMessages(@Param("conversation") String conversation);
 
     @Update("UPDATE agent_conversation SET current_work_id=#{work},updated_at=#{now} WHERE id=#{conversation}")
@@ -42,7 +42,16 @@ public interface ConversationMapper {
     int updateState(@Param("conversation") String conversation, @Param("json") String json,
                     @Param("expected") long expected, @Param("now") Instant now);
 
-    @Delete("DELETE FROM agent_message WHERE conversation_id=#{conversation}")
+    @Select("SELECT id FROM agent_conversation WHERE id=#{conversation} FOR UPDATE")
+    String lockForReset(@Param("conversation") String conversation);
+
+    @Select("SELECT COUNT(*) FROM agent_message WHERE conversation_id=#{conversation} AND role='user' AND state='RUNNING' AND created_at>=#{threshold}")
+    int recentRunning(@Param("conversation") String conversation,@Param("threshold") Instant threshold);
+
+    @Update("UPDATE agent_message SET kind='REQUEST',role='system',state=CASE WHEN state='RUNNING' THEN 'FAILED' ELSE state END WHERE conversation_id=#{conversation} AND role='user' AND content_json LIKE '%\"requestKey\"%'")
+    int archiveRequests(@Param("conversation") String conversation);
+
+    @Delete("DELETE FROM agent_message WHERE conversation_id=#{conversation} AND kind<>'REQUEST'")
     int deleteMessages(@Param("conversation") String conversation);
 
     @Select("SELECT * FROM agent_message WHERE kind=#{kind} AND state=#{state} ORDER BY created_at")
