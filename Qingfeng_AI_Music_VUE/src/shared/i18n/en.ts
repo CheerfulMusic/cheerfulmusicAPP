@@ -1385,6 +1385,8 @@ export const english: Record<string, string> = {
   "今日免费改写还剩 {remaining} 次，用完后每次消耗 {cost} 积分。": "{remaining} free rewrites left today; after that each rewrite costs {cost} credits.",
   "改写失败会退还已扣积分；免费次数按调用计算，失败同样占用一次。": "A failed rewrite refunds any credits charged. Free rewrites are counted per call, so a failed one still uses a free slot.",
   "积分不足，当前余额 {balance} 积分，生成需要 {cost} 积分。": "Not enough credits: your balance is {balance} credits, and this generation needs {cost} credits.",
+  '无法获取积分价格，请稍后重试。': 'Unable to retrieve credit prices. Please try again later.',
+  '一键创作预计消耗 {cost} 积分（歌词 {lyrics}，音乐 {music}）': 'Quick creation costs an estimated {cost} credits (lyrics {lyrics}, music {music}).',
   "积分规则": "Credit rules",
   "歌词生成成功后保留积分扣费。": "Credits are deducted once the lyrics are generated successfully.",
   "生成失败、超时或取消将自动退还积分。": "If the generation fails, times out or is cancelled, the credits are refunded automatically.",
