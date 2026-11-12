@@ -14,7 +14,7 @@
 
 ## 数据库与发布边界
 
-生产仍运行 `dc429abba9066e8bc5925dbcef1687f4d946fab2`。上线前只读核对显示，V1—V39 的文件名、Flyway CRC 和成功状态均与本次源码一致。
+上线前生产运行 `dc429abba9066e8bc5925dbcef1687f4d946fab2`。只读核对显示，V1—V39 的文件名、Flyway CRC 和成功状态均与本次源码一致。
 
 共享数据库另有同事开发中的 `V40__artist_profiles_and_releases.sql`，已执行 CRC 为 `1424328127`。用户明确要求保留新增表。本次制品不包含该未完成业务，不重编号、repair 或删除该历史行，不执行 DDL。部署前后应固定核对完整生产迁移记录未变化，始终保持 `spring.flyway.enabled=false`、`spring.sql.init.mode=never`。
 
@@ -27,3 +27,15 @@
 回归包含真实 loopback HTTP 慢响应、SSE 实际调度线程、H2 事务与并发、工具参数到业务适配器、重复付费和确认流程，以及前端欢迎/条款契约。前后端全量检查、发布制品逐文件校验和实际命令日志随本次发布材料保存。
 
 自动验证不向生产库写夹具，不调用真实付费生成或模拟支付。缺少独立 MySQL/Redis/RabbitMQ/Qdrant 的条件测试须单列为未运行，不能将离线测试描述为生产负载或真实资金验收。
+
+## 发布结果
+
+- 已部署源码：`b01c47f19b577925a493f2c2b6d1b54c197ce57d`；发布分支 `codex/agent-audited-release-20261112` 已推送远端。
+- 审计修复已通过 `de36e702866e86490e3f8ec29f43c914f5f06a9c` 合入并推送 main。main 保留同事的下载计费 `b8a924f` 及后到的网页歌词模型切换 `3d1a08f`；这两项均不在本次服务器制品中。支付重构 `c780f7a` 继续留在原分支。
+- 前端 `npm test`：86 个文件、667 项通过；`npm run build` 通过。后端 `mvn clean verify -Drelease.commit=b01c47f19b577925a493f2c2b6d1b54c197ce57d`：共 1006 项，其中 937 项通过、69 项跳过，无失败或错误。
+- main 自动合并点另执行欢迎积分、下载及 Agent 响应契约测试，17 项通过。发布准备及失败恢复脚本离线测试 26 项通过。
+- JAR SHA-256：`6489af396e515669c49d78cdf75aabacf47d7c604191273b05522ae11c5f343b`。嵌入源码提交正确，全部前端文件与构建输出逐文件一致，制品只含原有 V1—V39。
+- 服务器 current：`/opt/qingfeng-music/releases/20261112T153000Z-agent-audit-b01c47f`；备份：`/opt/qingfeng-music/backups/20261112T153000Z-agent-audit-b01c47f`。备份归档、冻结文件清单及数据库解压后的校验和均验证通过。
+- 最终验收：服务健康 UP、公网页面及关键页面资源字节匹配、匿名 Agent/头像请求被拒绝、Nginx 与监控定时任务恢复、正式启动策略只允许当前 JAR，旧 JAR 被保护脚本拒绝。
+- V1—V40 历史 SHA-256 仍为 `ba2263a2eb81b4085bc84c9c835b08b14a1edcdd82541598ec61910291b46e35`，数据库结构断言未变，未执行 DDL、Flyway repair、数据库恢复或真实付费业务探测。
+- 本机 8080/5173 运行实例未切换，代码合入 main 不代表本地运行版本已更新。
