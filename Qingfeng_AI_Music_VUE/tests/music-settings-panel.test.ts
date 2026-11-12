@@ -2,13 +2,14 @@
 import { readFileSync } from 'node:fs'
 import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+import { ApiError } from '../src/shared/http/api-client'
 import type { Work } from '../src/modules/studio'
 import type { GenerationTask, Revision } from '../src/modules/works/api/detail'
 import type { MusicCatalog, MusicPreferences } from '../src/modules/works/api/music-settings'
 import LyricsPanel from '../src/modules/works/components/LyricsPanel.vue'
 import MusicSettingsPanel from '../src/modules/works/components/MusicSettingsPanel.vue'
 
-const api = vi.hoisted(() => ({ snapshot: vi.fn(), load: vi.fn(), preview: vi.fn(), rewrite: vi.fn() }))
+const api = vi.hoisted(() => ({ snapshot: vi.fn(), load: vi.fn(), preview: vi.fn(), rewrite: vi.fn(), rewriteSelection: vi.fn() }))
 const catalog = JSON.parse(readFileSync('../Qingfeng_AI_Music/qf-infrastructure/src/main/resources/music/catalog-v1.json', 'utf8')) as MusicCatalog
 vi.mock('../src/modules/works/api/music-settings', () => ({
   loadMusicCatalog: async () => catalog,
@@ -18,11 +19,13 @@ vi.mock('../src/modules/works/api/music-settings', () => ({
   musicBriefAvailable: async () => false,
   suggestMusicBrief: vi.fn(),
 }))
-vi.mock('../src/shared/credits/useCredits', () => ({
-  useCredits: () => ({ credits: undefined, refreshCredits: async () => {} }),
-}))
+vi.mock('../src/shared/credits/useCredits', async () => {
+  const { ref } = await import('vue')
+  return { useCredits: () => ({ credits: ref(null), refreshCredits: async () => {} }) }
+})
 vi.mock('../src/modules/works/api/detail', () => ({
   rewriteLyricLine: api.rewrite,
+  rewriteLyricSelection: api.rewriteSelection,
   listRevisions: async () => [revision],
 }))
 vi.mock('../src/shared/http/system', () => ({ getSystemInfo: async () => ({ capabilities: { lyricsGeneration: true } }) }))
@@ -177,6 +180,57 @@ it('tracks lyrics as they are typed and clears the selected line on a blank line
   await editor.setValue('新写的一句\n')
   expect(panel.find('.lyric-selected-line').exists()).toBe(false)
   expect(buttons.every(button => button.element.disabled)).toBe(true)
+})
+
+it('keeps individually selected lines and entire sections, applying a preview only on confirmation', async () => {
+  const source = '[Verse]\n晚风吹过山城\n楼下亮了灯\n\n[Chorus]\n灯还在等你\n等你走进这座城'
+  const rewritten = source.replace('等你走进这座城', '等你循着灯光回来')
+  api.rewriteSelection.mockResolvedValue({ lyrics: rewritten })
+  const panel = mount(LyricsPanel, { props: { work } })
+  await flushPromises()
+  const editor = panel.get<HTMLTextAreaElement>('textarea')
+  await editor.setValue(source)
+  await panel.get('.lyric-rewrite-all').trigger('click')
+  const dialog = panel.get('dialog.lyric-selection-dialog')
+  const generate = () => dialog.findAll<HTMLButtonElement>('button').find(button => button.text() === '生成预览')!
+  expect(generate().element.disabled).toBe(true)
+  await dialog.findAll('.selection-heading input')[0]!.setValue(true)
+  await dialog.findAll('.selection-row input')[2]!.setValue(true)
+  expect(dialog.text()).toContain('保留 3 句 · 重写 1 句')
+  await generate().trigger('click')
+  await flushPromises()
+  expect(api.rewriteSelection).toHaveBeenCalledExactlyOnceWith(work.id, expect.objectContaining({
+    lyrics: source, keptLines: [1, 2, 5], workVersion: work.version,
+  }))
+  expect(dialog.findAll('.selection-result > span').map(line => line.text())).toEqual(['晚风吹过山城', '楼下亮了灯', '灯还在等你', '等你循着灯光回来'])
+  expect(dialog.get('details').text()).toContain('等你走进这座城')
+  expect(editor.element.value).toBe(source)
+  await dialog.findAll('button').find(button => button.text() === '返回选择')!.trigger('click')
+  expect(dialog.text()).toContain('保留 3 句 · 重写 1 句')
+  await generate().trigger('click')
+  expect(api.rewriteSelection).toHaveBeenCalledTimes(1)
+  await dialog.findAll('button').find(button => button.text() === '采用新版')!.trigger('click')
+  expect(editor.element.value).toBe(rewritten)
+  expect(panel.find('dialog.lyric-selection-dialog').exists()).toBe(false)
+})
+
+it('retries a lost preview response with the original request ID', async () => {
+  api.rewriteSelection.mockRejectedValueOnce(new ApiError('等待预览超时', 408))
+    .mockResolvedValueOnce({ lyrics: revision.lyrics.replace('夜风吹过山城', '风里还有灯火') })
+  const panel = mount(LyricsPanel, { props: { work: { ...work, id: 'retry-work' } } })
+  await flushPromises()
+  await panel.get('.lyric-rewrite-all').trigger('click')
+  const dialog = panel.get('dialog.lyric-selection-dialog')
+  await dialog.get('.selection-row input').setValue(true)
+  const generate = () => dialog.findAll('button').find(button => button.text() === '生成预览')!
+  await generate().trigger('click')
+  await flushPromises()
+  expect(dialog.get('[role="alert"]').text()).toBe('等待预览超时')
+  await generate().trigger('click')
+  await flushPromises()
+  expect(api.rewriteSelection).toHaveBeenCalledTimes(2)
+  expect(api.rewriteSelection.mock.calls[1]).toEqual(api.rewriteSelection.mock.calls[0])
+  expect(dialog.text()).toContain('新版歌词预览')
 })
 
 it('ignores a late suggestion when the lyric draft changes during rewriting', async () => {

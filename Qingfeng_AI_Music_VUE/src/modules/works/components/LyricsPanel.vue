@@ -10,6 +10,7 @@ import { getSystemInfo } from '../../../shared/http/system'
 import { ApiError, currentCreatorId } from '../../../shared/http/api-client'
 import { readRecovery, writeRecovery, recoveryKey,checkpointRecovery } from '../../../shared/drafts/recovery'
 import RecoveryCopies from '../../../shared/drafts/RecoveryCopies.vue'
+import LyricSelectionRewriteDialog from './LyricSelectionRewriteDialog.vue'
 import type { Work } from '../../studio'
 import { listRevisions, getRevision, getLyricsRequest, saveRevision, confirmRevision, generateLyrics, type Revision, type LyricRewriteAction } from '../api/detail'
 import { lyricRewriteError, lyricsMaxLength, selectLyricLine, suggestLyricLine, type LyricLineSelection } from '../model/lyric-line-edit'
@@ -33,6 +34,7 @@ const selection=ref<LyricLineSelection>()
 const linePreview=ref<{selection:LyricLineSelection;text:string}>()
 const lineBusy=ref(false),lineError=ref('')
 const editorText=computed(()=>text.value.replace(/\r\n?/g,'\n'))
+const rewriteDraft=ref<{source:string;workVersion:number;language:string}>()
 const selectedLine=computed(()=>selection.value?.source===editorText.value?selection.value:undefined)
 const canPolishLine=computed(()=>!!selectedLine.value&&!lineBusy.value&&!blocked.value&&!saving.value)
 const lineActions: {id:LyricRewriteAction;label:string;icon:string}[] = [
@@ -200,6 +202,26 @@ async function prepareForGeneration(saveChanges=false):Promise<Revision>{
   finally{preparing.value=false}
 }
 watch([language,instructions,structure],()=>{if(!composing.value&&!requestWaiting.value&&!requestChecking.value)requestKey.value=''},{flush:'sync'})
+function startAiLyrics(){
+  if(blocked.value||saving.value||lineBusy.value||!aiReady.value)return
+  if(!editorText.value.trim()){void compose();return}
+  rewriteDraft.value={source:editorText.value,workVersion:props.work.version,language:active.value?.language||language.value}
+}
+function applyRewrittenLyrics(lyrics:string){
+  const original=rewriteDraft.value
+  rewriteDraft.value=undefined
+  if(!original||original.source!==editorText.value||original.workVersion!==props.work.version){
+    notice.value='当前歌词或作品已变化，请重新选择要保留的句子。'
+    return
+  }
+  text.value=lyrics
+  notice.value='新版歌词已填入编辑框，满意后请保存。'
+}
+async function rewriteAll(){
+  rewriteDraft.value=undefined
+  await nextTick()
+  if(alive)void compose()
+}
 async function compose(){
   if(blocked.value||saving.value||lineBusy.value||!aiReady.value)return
   if(dirty.value&&!window.confirm(t('生成新歌词后将显示新版本，当前未保存的修改会被替换，是否继续？')))return
@@ -232,12 +254,12 @@ defineExpose({prepareForGeneration,preserveDraftForNavigation,needsSave,canSave,
     <div class="lyric-editor-label">
       <span id="lyric-editor-help">{{ t('歌词可直接修改，保存后再生成歌曲') }}</span>
       <div class="lyric-editor-actions">
-        <button v-if="aiReady" type="button" class="lyric-rewrite-all" :disabled="blocked||saving||lineBusy" @click="compose">
+        <button v-if="aiReady" type="button" class="lyric-rewrite-all" :disabled="blocked||saving||lineBusy" @click="startAiLyrics">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12l5-2 2-5 2 5 5 2-5 2-2 5-2-5-5-2Zm13-7h5m-2.5-2.5v5"/></svg>
-          {{ composing?t('正在编写歌词…'):versions.length?t('AI 重新生成全部歌词'):t('根据故事生成歌词') }}
+          {{ composing?t('正在编写歌词…'):editorText.trim()?t('AI 重写歌词'):t('根据故事生成歌词') }}
         </button>
         <button type="button" class="lyric-quiet-action" :disabled="blocked||saving||!dirty" :title="t('撤销未保存修改')" @click="revertDraft"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5 4 9l4 4M4 9h10a5 5 0 0 1 0 10h-3"/></svg>{{ t('恢复原版') }}</button>
-        <CreditCostHint v-if="credits&&credits.enabled&&credits.lyricsCost>0" :cost="credits.lyricsCost" :balance="credits.balance" :busy="composing" variant="regenerate"/>
+        <CreditCostHint v-if="!editorText.trim()&&credits&&credits.enabled&&credits.lyricsCost>0" :cost="credits.lyricsCost" :balance="credits.balance" :busy="composing" variant="regenerate"/>
       </div>
     </div>
     <textarea id="song-lyrics" ref="editor" v-model="text" :maxlength="lyricsMaxLength" class="lyrics-edit lyric-text" :aria-label="t('歌词')" aria-describedby="lyric-editor-help" :disabled="blocked||saving" :placeholder="t('写下主歌、副歌，或者你想唱给TA听的话……')" @input="captureSelection" @select="captureSelection" @keyup="captureSelection" @click="captureSelection"></textarea>
@@ -249,6 +271,8 @@ defineExpose({prepareForGeneration,preserveDraftForNavigation,needsSave,canSave,
     </div>
     <p v-if="selectedLine" class="lyric-selected-line"><strong>{{ t('已选歌词') }}</strong>{{ selectedLine.line }}</p>
   </div>
+  <LyricSelectionRewriteDialog v-if="rewriteDraft" :work-id="work.id" v-bind="rewriteDraft"
+    @close="rewriteDraft=undefined" @apply="applyRewrittenLyrics" @rewrite-all="rewriteAll" />
   <p v-if="lineError" class="notice error" role="alert">{{ t(lineError) }}</p>
   <div v-if="linePreview" class="lyric-line-preview" role="region" :aria-label="t('改写建议')">
     <strong>{{ t('改写建议') }}</strong><p>{{ linePreview.text }}</p>
