@@ -124,7 +124,7 @@ async function revoke() {
     await revokeShares(workId)
     if (turn !== generation) return
     reset(); if (player.current?.id === oldTrack) player.reset()
-    notice.value = '此作品的全部分享已撤销，停止新的礼物与音频访问。'
+    notice.value = '此作品的全部分享已撤销，已购买者仍可下载已购音频。'
   } catch (cause) { if (turn === generation) error.value = cause instanceof Error ? cause.message : '撤销失败' }
   finally { if (turn === generation) busy.value = false }
 }
@@ -180,7 +180,7 @@ onBeforeUnmount(() => { generation++; clearPoster(); dialog.value?.close() })
       <button v-if="!busy && revision?.confirmed && asset && (!song || error)" class="button" type="button" @click="create">{{ t(error ? '重试创建分享链接' : '创建歌曲分享链接') }}</button>
       <p v-if="notice" class="notice success" role="status">{{ t(notice) }}</p>
       <p class="song-share-note">{{ t('朋友无需登录即可收听，原始故事和编辑权限不会公开。') }}</p>
-      <details class="song-share-manage"><summary>{{ t('管理分享') }}</summary><p>{{ t('撤销后链接及海报二维码将失效，已保存的图片和音频无法收回。') }}</p><button class="text-button" type="button" :disabled="busy" @click="revoke">{{ t('撤销本作品全部分享') }}</button></details>
+      <details class="song-share-manage"><summary>{{ t('管理分享') }}</summary><p>{{ t('撤销后未购买者无法继续访问；已付费解锁者仍可下载已购买音频。') }}</p><button class="text-button" type="button" :disabled="busy" @click="revoke">{{ t('撤销本作品全部分享') }}</button></details>
     </section>
   </dialog>
 </template>

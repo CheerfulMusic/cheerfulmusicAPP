@@ -30,7 +30,7 @@ import org.springframework.jdbc.support.JdbcTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 import static org.junit.jupiter.api.Assertions.*;
 
-/** Real main V1-V40/InnoDB contract, synthetic local facts only. No application, provider or network client. */
+/** Real canonical core V1-V40 plus integration V41/InnoDB contract, synthetic local facts only. */
 class IntegratedCreditAccountMySqlTest {
     private static final String ACCOUNT="acct_refund_offline",ENV="sandbox",PROVIDER="STRIPE";
     private static JdbcTemplate db;
@@ -75,8 +75,10 @@ class IntegratedCreditAccountMySqlTest {
                 assertTrue(Set.of(database,"information_schema","performance_schema").contains(rows.getString(1)));}
         }
         assertEquals(0,number("SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE()"),"Never clear or reuse an earlier cohort");
-        Flyway.configure().dataSource(source).locations("classpath:db/migration").cleanDisabled(true).target("39").load().migrate();
-        assertEquals(39,number("SELECT COUNT(*) FROM flyway_schema_history WHERE success=1 AND version IS NOT NULL"));
+        Flyway.configure().dataSource(source).locations("classpath:db/migration").cleanDisabled(true).target("40").load().migrate();
+        assertEquals(40,number("SELECT COUNT(*) FROM flyway_schema_history WHERE success=1 AND version IS NOT NULL"));
+        assertEquals("V40__shared_download_entitlement.sql",db.queryForObject("SELECT script FROM flyway_schema_history WHERE version='40'",String.class));assertEquals(-500011050,number("SELECT checksum FROM flyway_schema_history WHERE version='40'"));
+        assertEquals(1,number("SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='shared_download_entitlement'"));
         tx=new TransactionTemplate(new JdbcTransactionManager(source));
         // Synthetic pre-integration history, not a production import or reconstructed FIFO allocation.
         String owner=unique(),order=unique(),capture="pi_"+unique();legacy=new Paid(owner,order,capture,ACCOUNT);legacyRefund="re_"+unique();
@@ -84,8 +86,10 @@ class IntegratedCreditAccountMySqlTest {
         db.update("INSERT INTO payment_order(id,creator_id,package_id,amount,currency,credits,status,created_at,provider,provider_capture_id) VALUES(?,?, 'starter-USD',9.90,'USD',100,'PAID',CURRENT_TIMESTAMP,'STRIPE_SANDBOX',?)",order,owner,capture);
         db.update("INSERT INTO credit_ledger VALUES('CREDIT',?,?,100,CURRENT_TIMESTAMP)","payment:"+order,owner);
         db.update("INSERT INTO credit_ledger VALUES('PAYMENT_ADJUST',?,?,-20,CURRENT_TIMESTAMP)","legacy-adjust:"+unique(),owner);
-        Flyway.configure().dataSource(source).locations("classpath:db/migration").cleanDisabled(true).target("40").load().migrate();
-        assertEquals(40,number("SELECT COUNT(*) FROM flyway_schema_history WHERE success=1 AND version IS NOT NULL"));
+        Flyway.configure().dataSource(source).locations("classpath:db/migration").cleanDisabled(true).target("41").load().migrate();
+        assertEquals(41,number("SELECT COUNT(*) FROM flyway_schema_history WHERE success=1 AND version IS NOT NULL"));
+        assertEquals("V41__credit_entitlement_integration.sql",db.queryForObject("SELECT script FROM flyway_schema_history WHERE version='41'",String.class));assertEquals(-340729157,number("SELECT checksum FROM flyway_schema_history WHERE version='41'"));
+        assertEquals(1,number("SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='shared_download_entitlement'"));
         assertEquals(3,number("SELECT protocol FROM p0_credit_writer_policy WHERE id=1"));
         db.update("INSERT INTO p0_credit_batch(reference,owner_id,source_type,source_id,original,consumed,adjusted,held,status,created_at) VALUES(?,?,'PAYMENT',?,100,0,20,0,'ACTIVE',CURRENT_TIMESTAMP)","payment:"+order,owner,order);
         db.update("INSERT INTO p0_credit_payment_binding VALUES(?,?,?,?,?,?)",order,PROVIDER,ACCOUNT,ENV,owner,capture);
@@ -121,13 +125,13 @@ class IntegratedCreditAccountMySqlTest {
         }finally{pool.shutdownNow();assertTrue(pool.awaitTermination(10,TimeUnit.SECONDS));}
     }
 
-    @Test void mappedLegacySuccessSurvivesV40AndRestoresWithoutRewritingOriginal(){
+    @Test void mappedLegacySuccessSurvivesV41AndRestoresWithoutRewritingOriginal(){
         returned(legacy,legacyRefund,198,"txn_"+unique());assertEquals(100,ledger.balance(legacy.owner()));assertEquals(0,adjusted(legacy));
         assertEquals(198,number("SELECT amount_minor FROM p0_credit_refund WHERE external_id=?",legacyRefund));
         assertThrows(DataAccessException.class,()->db.update("UPDATE p0_credit_refund SET amount_minor=1 WHERE external_id=?",legacyRefund));
         assertThrows(DataAccessException.class,()->db.update("DELETE FROM p0_credit_refund WHERE external_id=?",legacyRefund));
     }
-    @Test void v40ProtocolThreeRejectsOldWritersAndStaleSession(){
+    @Test void v41ProtocolThreeRejectsOldWritersAndStaleSession(){
         assertEquals(3,number("SELECT protocol FROM p0_credit_writer_policy WHERE id=1"));
         assertNotEquals("P0_CREDIT_WRITER_V1",db.queryForObject("SELECT epoch FROM p0_credit_writer_policy WHERE id=1",String.class));
         long before=ledger.balance(legacy.owner());
@@ -135,7 +139,7 @@ class IntegratedCreditAccountMySqlTest {
             var policy=db.queryForMap("SELECT epoch,protocol FROM p0_credit_writer_policy WHERE id=1 FOR UPDATE");
             // Exact V33 protocol acceptance condition, executed against the upgraded real policy.
             if(((Number)policy.get("protocol")).intValue()!=1)throw new IllegalStateException("Unsupported credit writer protocol");
-            fail("A V33 writer must never pass the V40 writer gate");
+            fail("A V33 writer must never pass the V41 writer gate");
         }));
         assertThrows(DataAccessException.class,()->tx.executeWithoutResult(status->{
             db.execute("SET @qf_credit_writer_epoch='P0_CREDIT_WRITER_V1'");

@@ -11,6 +11,12 @@ import com.qingfeng.music.server.avatar.AvatarGenerationService;
 import com.qingfeng.music.server.avatar.AvatarImageProvider;
 import com.qingfeng.music.server.avatar.AvatarService;
 import com.qingfeng.music.server.config.CreditSchemaReadiness;
+import com.qingfeng.music.server.download.DownloadEntitlements;
+import com.qingfeng.music.server.download.SharedDownloadGrants;
+import com.qingfeng.music.media.api.MediaApi;
+import com.qingfeng.music.media.api.SharedMediaAccess;
+import com.qingfeng.music.work.api.WorkApi;
+import java.io.ByteArrayInputStream;
 import com.qingfeng.music.usage.UsageBudget;
 import java.math.BigDecimal;
 import java.net.URI;
@@ -35,7 +41,7 @@ import tools.jackson.databind.ObjectMapper;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
-/** Real full Boot/V1..V40/MySQL/HTTP/SDK-signature integration with synthetic supplier facts.
+/** Real full Boot/canonical V1..V40 plus V41/MySQL/HTTP/SDK-signature integration with synthetic supplier facts.
  * Not Sandbox/Live, real historical migration or real AI/media execution. */
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class IntegratedPaymentApplicationMySqlTest {
@@ -74,13 +80,15 @@ class IntegratedPaymentApplicationMySqlTest {
             try(var facts=statement.executeQuery("SELECT SCHEMA_NAME FROM information_schema.SCHEMATA")){while(facts.next())assertTrue(Set.of(database,"information_schema","performance_schema").contains(facts.getString(1)));}
         }
         assertEquals(0,number("SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE()"),"Never clear or reuse a previous acceptance cohort");
-        Flyway.configure().dataSource(source).locations("classpath:db/migration").cleanDisabled(true).target("39").load().migrate();
+        Flyway.configure().dataSource(source).locations("classpath:db/migration").cleanDisabled(true).target("40").load().migrate();
+        assertEquals(40,number("SELECT COUNT(*) FROM flyway_schema_history WHERE success=1 AND version IS NOT NULL"));assertEquals("V40__shared_download_entitlement.sql",db.queryForObject("SELECT script FROM flyway_schema_history WHERE version='40'",String.class));assertEquals(-500011050,number("SELECT checksum FROM flyway_schema_history WHERE version='40'"));
+        assertEquals(1,number("SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='shared_download_entitlement'"));
         legacyOwner=UUID.randomUUID().toString();OWNERS.add(legacyOwner);
         db.update("INSERT INTO creator(id,created_at) VALUES(?,CURRENT_TIMESTAMP)",legacyOwner);
         db.update("INSERT INTO credit_ledger VALUES('CREDIT','synthetic-legacy-gift',?,100,CURRENT_TIMESTAMP)",legacyOwner);
         db.update("INSERT INTO credit_ledger VALUES('DEBIT','synthetic-legacy-debit',?,-25,CURRENT_TIMESTAMP)",legacyOwner);
         db.update("INSERT INTO credit_account(owner_id,balance,updated_at) VALUES(?,75,CURRENT_TIMESTAMP)",legacyOwner);
-        Flyway.configure().dataSource(source).locations("classpath:db/migration").cleanDisabled(true).target("40").load().migrate();
+        Flyway.configure().dataSource(source).locations("classpath:db/migration").cleanDisabled(true).target("41").load().migrate();
         try(var resource=Objects.requireNonNull(IntegratedPaymentApplicationMySqlTest.class.getResourceAsStream("/credit-migration-reference.json"))){
             var manifest=JSON.readTree(resource);for(var m:manifest.path("core"))assertHistory(m);assertHistory(manifest.path("integration"));
         }
@@ -96,7 +104,7 @@ class IntegratedPaymentApplicationMySqlTest {
         Map<String,Object> values=new LinkedHashMap<>();
         values.put("spring.datasource.url",url);values.put("spring.datasource.username",user);values.put("spring.datasource.password",password);values.put("spring.datasource.driver-class-name","com.mysql.cj.jdbc.Driver");
         values.put("spring.datasource.hikari.maximum-pool-size",16);values.put("spring.datasource.hikari.connection-init-sql","SET SESSION innodb_lock_wait_timeout=5");
-        values.put("spring.flyway.target","40");values.put("spring.flyway.clean-disabled",true);values.put("spring.sql.init.mode","never");values.put("server.address","127.0.0.1");values.put("server.port",0);
+        values.put("spring.flyway.target","41");values.put("spring.flyway.clean-disabled",true);values.put("spring.sql.init.mode","never");values.put("server.address","127.0.0.1");values.put("server.port",0);
         values.put("qingfeng.credits.writer-fence.enabled",true);values.put("qingfeng.credits.writer-fence.expected-database",database);values.put("qingfeng.credits.writer-fence.expected-port",23316);values.put("qingfeng.credits.enabled",true);
         values.put("qingfeng.stripe.enabled",true);values.put("qingfeng.stripe.accepting-new-orders",true);values.put("qingfeng.stripe.environment","sandbox");values.put("qingfeng.stripe.account-id",ACCOUNT);values.put("qingfeng.stripe.api-key","sk_test_integrated_offline_fixture");values.put("qingfeng.stripe.webhook-secret",SECRET);
         values.put("qingfeng.paypal.enabled",true);values.put("qingfeng.paypal.environment","sandbox");values.put("qingfeng.paypal.client-id","offline-fixture");values.put("qingfeng.paypal.client-secret","offline-fixture");values.put("qingfeng.paypal.merchant-id",PAYPAL_MERCHANT);values.put("qingfeng.paypal.webhook-id","offline-fixture");
@@ -110,7 +118,7 @@ class IntegratedPaymentApplicationMySqlTest {
         application=new SpringApplicationBuilder(MusicApplication.class,OfflineGateways.class).environment(environment).profiles("mysql").web(WebApplicationType.SERVLET).logStartupInfo(false)
             .initializers(context->context.getBeanFactory().registerSingleton("acceptanceOnlyTestConfigurationFilter",new AcceptanceOnlyTestFilter())).run();
         db=application.getBean(JdbcTemplate.class);ledger=application.getBean(CreditsLedger.class);stripe=application.getBean(StripePaymentService.class);paypal=application.getBean(PayPalPaymentService.class);inbox=application.getBean(PaymentInbox.class);identity=application.getBean(IdentityApi.class);usage=application.getBean(JdbcUsageBudget.class);manager=application.getBean(PlatformTransactionManager.class);port=application.getEnvironment().getRequiredProperty("local.server.port",Integer.class);
-        assertInstanceOf(JdbcFencedCreditsLedger.class,ledger);assertEquals("40",application.getEnvironment().getProperty("spring.flyway.target"));assertTrue(CreditSchemaReadiness.ready(db));
+        assertInstanceOf(JdbcFencedCreditsLedger.class,ledger);assertEquals("41",application.getEnvironment().getProperty("spring.flyway.target"));assertTrue(CreditSchemaReadiness.ready(db));
     }
     @AfterAll static void close(){if(application!=null)application.close();}
     @AfterEach void allFinancialProjectionsRemainEqual(){for(String owner:OWNERS){long book=number("SELECT COALESCE(SUM(amount),0) FROM credit_ledger WHERE owner_id=?",owner);assertEquals(book,number("SELECT COALESCE(SUM(balance),0) FROM credit_account WHERE owner_id=?",owner));assertEquals(book,number("SELECT COALESCE(SUM(CAST(original AS DECIMAL(65,0))-consumed-adjusted),0) FROM p0_credit_batch WHERE owner_id=?",owner));assertEquals(book,ledger.balance(owner));}}
@@ -176,8 +184,9 @@ class IntegratedPaymentApplicationMySqlTest {
         BALANCES.put(debit,movement(debit,refund,"refund",-198,"available"));BALANCES.put(credit,movement(credit,refund,"refund_failure",198,status));
     }
 
-    @Test @Order(1) void actualCore40AndTheFullApplicationUseOnlyTheProvenIsolatedDatabase() throws Exception {
-        assertEquals(database,db.queryForObject("SELECT DATABASE()",String.class));assertEquals(40,number("SELECT COUNT(*) FROM flyway_schema_history WHERE success=1 AND version IS NOT NULL"));assertEquals(3,number("SELECT protocol FROM p0_credit_writer_policy WHERE id=1"));assertEquals(75,ledger.balance(legacyOwner));assertEquals(25,number("SELECT amount FROM p0_legacy_debit_mapping WHERE reference='synthetic-legacy-debit'"));
+    @Test @Order(1) void actualCore40AndIntegration41FullApplicationUseOnlyTheProvenIsolatedDatabase() throws Exception {
+        assertEquals(database,db.queryForObject("SELECT DATABASE()",String.class));assertEquals(41,number("SELECT COUNT(*) FROM flyway_schema_history WHERE success=1 AND version IS NOT NULL"));assertEquals(3,number("SELECT protocol FROM p0_credit_writer_policy WHERE id=1"));assertEquals(75,ledger.balance(legacyOwner));assertEquals(25,number("SELECT amount FROM p0_legacy_debit_mapping WHERE reference='synthetic-legacy-debit'"));
+        assertEquals("V40__shared_download_entitlement.sql",db.queryForObject("SELECT script FROM flyway_schema_history WHERE version='40'",String.class));assertEquals(-500011050,number("SELECT checksum FROM flyway_schema_history WHERE version='40'"));assertEquals(-340729157,number("SELECT checksum FROM flyway_schema_history WHERE version='41'"));assertEquals(0,number("SELECT COUNT(*) FROM shared_download_entitlement"));
         assertInstanceOf(JdbcFencedCreditsLedger.class,ledger);assertNotNull(application.getBean(PaymentInbox.class));assertNotNull(application.getBean(JdbcUsageBudget.class));assertTrue(application.getBeansOfType(PaymentInboxRunner.class).isEmpty());assertTrue(CreditSchemaReadiness.ready(db));
         var prices=application.getBean(CreditsPricing.class);assertEquals(5,prices.cost(CreditsPricing.Kind.MUSIC));assertEquals(1,prices.cost(CreditsPricing.Kind.LYRICS));assertEquals(1,prices.cost(CreditsPricing.Kind.REWRITE));assertEquals(5,prices.freePerDay(CreditsPricing.Kind.REWRITE));
         var health=request("/actuator/health","GET",null,null,null);assertEquals(200,health.statusCode());assertEquals("UP",JSON.readTree(health.body()).path("status").asString());
@@ -227,7 +236,7 @@ class IntegratedPaymentApplicationMySqlTest {
     }
     @Test @Order(10) void fullContextRestartRetainsPendingCompensationAndAppliesAvailablePrincipalOnlyOnce() throws Exception {
         var p=paid();String refund=refund(p,198),debit="txn_"+unique(),credit="txn_"+unique(),event="evt_"+unique();returnedRefund(p,refund,"ch_"+unique(),debit,credit,"pending");accepted("refund.failed",refund,event);drain();assertEquals(80,ledger.balance(p.owner().creatorId()));assertEquals(0,number("SELECT attempts FROM payment_webhook_inbox WHERE event_id=?",event));assertEquals("PROVIDER_PENDING",db.queryForObject("SELECT last_error FROM payment_webhook_inbox WHERE event_id=?",String.class,event));assertEquals(1,number("SELECT COUNT(*) FROM payment_inbox_attempt WHERE event_id=? AND result='WAITING'",event));
-        var before=application;application.close();start();assertNotSame(before,application);assertEquals(80,ledger.balance(p.owner().creatorId()));assertEquals("PAID",db.queryForObject("SELECT status FROM payment_order WHERE id=?",String.class,p.order()));assertEquals(40,number("SELECT COUNT(*) FROM flyway_schema_history WHERE success=1 AND version IS NOT NULL"));
+        var before=application;application.close();start();assertNotSame(before,application);assertEquals(80,ledger.balance(p.owner().creatorId()));assertEquals("PAID",db.queryForObject("SELECT status FROM payment_order WHERE id=?",String.class,p.order()));assertEquals(41,number("SELECT COUNT(*) FROM flyway_schema_history WHERE success=1 AND version IS NOT NULL"));
         BALANCES.put(credit,movement(credit,refund,"refund_failure",198,"available"));due(event);drain();assertEquals(100,ledger.balance(p.owner().creatorId()));accepted("refund.failed",refund,"evt_"+unique());drain();assertEquals(100,ledger.balance(p.owner().creatorId()));assertEquals(1,number("SELECT COUNT(*) FROM p0_credit_refund_return WHERE order_id=?",p.order()));assertEquals(1,number("SELECT COUNT(*) FROM credit_ledger WHERE owner_id=? AND entry_type='REFUND_RETURN'",p.owner().creatorId()));
     }
     static AvatarGenerationService avatar(AvatarImageProvider provider){return new AvatarGenerationService(db,new TransactionTemplate(manager),application.getBean(AvatarService.class),provider,ledger,application.getBean(CreditsPricing.class),10);}
@@ -262,5 +271,62 @@ class IntegratedPaymentApplicationMySqlTest {
         String body=JSON.writeValueAsString(Map.of("id",event,"event_type","PAYMENT.CAPTURE.REVERSED","resource",Map.of("id",capture,"supplementary_data",Map.of("related_ids",Map.of("order_id",remote)))));assertEquals(200,request("/api/public/paypal/webhook","POST",body,null,null).statusCode());drain();
         assertEquals(120,ledger.balance(owner.creatorId()));assertEquals(20,number("SELECT held FROM p0_credit_batch WHERE reference=?","payment:"+a));assertEquals("REVIEW",db.queryForObject("SELECT status FROM p0_credit_batch WHERE reference=?",String.class,"payment:"+a));assertEquals(0,held(b));assertEquals(0,number("SELECT adjusted FROM p0_credit_batch WHERE reference=?","payment:"+a));assertEquals(0,number("SELECT payment_risk_frozen FROM creator WHERE id=?",owner.creatorId()));
         assertEquals("PENDING",db.queryForObject("SELECT status FROM payment_webhook_inbox WHERE event_id=?",String.class,event));assertEquals(0,number("SELECT attempts FROM payment_webhook_inbox WHERE event_id=?",event));assertEquals("WAITING",db.queryForObject("SELECT result FROM payment_inbox_attempt WHERE event_id=?",String.class,event));ledger.debit(owner.creatorId(),100,"paypal-other-batch:"+unique());assertEquals(20,ledger.balance(owner.creatorId()));assertThrows(DomainException.class,()->ledger.debit(owner.creatorId(),1,"paypal-held:"+unique()));
+    }
+
+    private record SharedFixture(IdentityApi.Session author,String work,String asset,String token){}
+    private static SharedFixture sharedFixture(){var author=owner();return sharedFixture(author,work(author.creatorId()));}
+    private static SharedFixture sharedFixture(IdentityApi.Session author,String work){
+        String asset=UUID.randomUUID().toString();db.update("INSERT INTO media_asset(id,work_id,storage_key,origin,content_type,byte_size,sha256,created_at) VALUES(?,?,?,'IMPORTED','audio/mpeg',1,?,CURRENT_TIMESTAMP)",asset,work,"local:synthetic-download:"+asset,"0".repeat(64));
+        byte[] bytes=new byte[32];new java.security.SecureRandom().nextBytes(bytes);String token=Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
+        db.update("INSERT INTO share_link(id,work_id,token_hash,asset_id,title,recipient,message,lyrics,audio_origin,active,created_at,expires_at) VALUES(?,?,?,?,'synthetic download','','','','IMPORTED',TRUE,CURRENT_TIMESTAMP,TIMESTAMPADD(DAY,1,CURRENT_TIMESTAMP))",UUID.randomUUID().toString(),work,shareHash(token),asset);
+        return new SharedFixture(author,work,asset,token);
+    }
+    private static String shareHash(String token){try{return HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256").digest(token.getBytes(java.nio.charset.StandardCharsets.UTF_8)));}catch(java.security.NoSuchAlgorithmException e){throw new IllegalStateException(e);}}
+    private static SharedDownloadGrants sharedDownloads(SharedFixture... fixtures){
+        var offlineMedia=mock(SharedMediaAccess.class);for(var fixture:fixtures)when(offlineMedia.content(fixture.work(),fixture.asset())).thenReturn(new MediaApi.Content(1,"audio/mpeg","synthetic.mp3",()->new ByteArrayInputStream(new byte[]{1})));
+        assertInstanceOf(JdbcFencedCreditsLedger.class,ledger);assertEquals(10,DownloadEntitlements.PRICE);
+        return new SharedDownloadGrants(db,new TransactionTemplate(manager),offlineMedia,application.getBean(DownloadEntitlements.class));
+    }
+    private static long downloadDebits(String owner){return number("SELECT COUNT(*) FROM credit_ledger WHERE owner_id=? AND entry_type='DEBIT' AND reference_id LIKE 'download-v1:%'",owner);}
+    private static void awaitDownload(CountDownLatch latch){try{if(!latch.await(15,TimeUnit.SECONDS))throw new IllegalStateException("download test coordination timeout");}catch(InterruptedException e){Thread.currentThread().interrupt();throw new IllegalStateException(e);}}
+
+    @Test @Order(14) void activeSharedDownloadsChargeTenOnceForAllSharedVersionsOfOneWorkUnderConcurrentRetries() throws Exception {
+        var first=sharedFixture();var second=sharedFixture(first.author(),first.work());var shared=sharedDownloads(first,second);var buyer=owner();ledger.credit(buyer.creatorId(),20,"gift:download-once:"+unique());
+        var pool=Executors.newFixedThreadPool(8);var start=new CountDownLatch(1);try{var calls=new ArrayList<Future<?>>();for(int i=0;i<16;i++)calls.add(pool.submit(()->{awaitDownload(start);shared.unlock(buyer.creatorId(),first.token());}));start.countDown();for(var call:calls)call.get(30,TimeUnit.SECONDS);}finally{start.countDown();pool.shutdownNow();assertTrue(pool.awaitTermination(15,TimeUnit.SECONDS));}
+        assertEquals(10,ledger.balance(buyer.creatorId()));assertEquals(1,downloadDebits(buyer.creatorId()));assertEquals(1,shared.list(buyer.creatorId()).size());assertEquals(0,shared.price(buyer.creatorId(),second.token()));
+        shared.unlock(buyer.creatorId(),second.token());shared.unlock(buyer.creatorId(),second.token());assertEquals(10,ledger.balance(buyer.creatorId()));assertEquals(1,downloadDebits(buyer.creatorId()));assertEquals(2,shared.list(buyer.creatorId()).size());assertTrue(shared.assetUnlocked(buyer.creatorId(),first.token()));assertTrue(shared.assetUnlocked(buyer.creatorId(),second.token()));
+        assertEquals(10,number("SELECT SUM(a.amount) FROM p0_credit_allocation a JOIN credit_ledger l ON l.entry_type='DEBIT' AND l.reference_id=a.debit_reference WHERE a.owner_id=? AND l.reference_id LIKE 'download-v1:%' AND a.restored=0",buyer.creatorId()));
+    }
+
+    @Test @Order(15) void activeDownloadsSkipTheFrozenPaymentBatchAndRejectANegativeAccountWithoutGrantingRights() throws Exception {
+        var fixture=sharedFixture();var shared=sharedDownloads(fixture);var buyer=owner();var a=paid(buyer);var b=paid(buyer);dispute(a,"dp_"+unique(),"under_review",List.of());shared.unlock(buyer.creatorId(),fixture.token());
+        assertEquals(190,ledger.balance(buyer.creatorId()));assertEquals(100,held(a));assertEquals(0,number("SELECT consumed FROM p0_credit_batch WHERE reference=?","payment:"+a.order()));assertEquals(10,number("SELECT consumed FROM p0_credit_batch WHERE reference=?","payment:"+b.order()));assertEquals(1,shared.list(buyer.creatorId()).size());
+        var indebted=paid();ledger.debit(indebted.owner().creatorId(),80,"download-debt-consumed:"+unique());refund(indebted,990);assertEquals(-80,ledger.balance(indebted.owner().creatorId()));
+        assertEquals("INSUFFICIENT_CREDITS",assertThrows(DomainException.class,()->shared.unlock(indebted.owner().creatorId(),fixture.token())).code());assertEquals(-80,ledger.balance(indebted.owner().creatorId()));assertEquals(0,downloadDebits(indebted.owner().creatorId()));assertTrue(shared.list(indebted.owner().creatorId()).isEmpty());
+    }
+
+    @Test @Order(16) void activeSharedAuthorizationAndDebitRollBackTogetherAndInvalidAssetBindingNeverCharges() throws Exception {
+        var fixture=sharedFixture();var shared=sharedDownloads(fixture);var buyer=owner();ledger.credit(buyer.creatorId(),20,"gift:download-rollback:"+unique());
+        assertThrows(IllegalStateException.class,()->new TransactionTemplate(manager).executeWithoutResult(s->{shared.unlock(buyer.creatorId(),fixture.token());throw new IllegalStateException("synthetic after-grant rollback");}));
+        assertEquals(20,ledger.balance(buyer.creatorId()));assertEquals(0,downloadDebits(buyer.creatorId()));assertTrue(shared.list(buyer.creatorId()).isEmpty());
+        shared.unlock(buyer.creatorId(),fixture.token());shared.unlock(buyer.creatorId(),fixture.token());assertEquals(10,ledger.balance(buyer.creatorId()));assertEquals(1,downloadDebits(buyer.creatorId()));assertEquals(1,shared.list(buyer.creatorId()).size());
+        var invalid=sharedFixture();var foreign=sharedFixture();db.update("UPDATE share_link SET asset_id=? WHERE token_hash=?",foreign.asset(),shareHash(invalid.token()));var another=owner();ledger.credit(another.creatorId(),20,"gift:invalid-download:"+unique());
+        assertEquals("SHARE_NOT_FOUND",assertThrows(DomainException.class,()->sharedDownloads(invalid).unlock(another.creatorId(),invalid.token())).code());assertEquals(20,ledger.balance(another.creatorId()));assertEquals(0,downloadDebits(another.creatorId()));assertEquals(0,number("SELECT COUNT(*) FROM shared_download_entitlement WHERE owner_id=?",another.creatorId()));
+    }
+
+    @Test @Order(17) void realWorkDeletionAndActiveSharedPurchaseFollowWorkThenShareInBothWinningOrders() throws Exception {
+        var works=application.getBean(WorkApi.class);var bought=sharedFixture();var shared=sharedDownloads(bought);var buyer=owner();ledger.credit(buyer.creatorId(),20,"gift:download-wins:"+unique());
+        var purchased=new CountDownLatch(1);var releasePurchase=new CountDownLatch(1);var deleteStarted=new CountDownLatch(1);var pool=Executors.newFixedThreadPool(2);
+        try{
+            var purchase=pool.submit(()->new TransactionTemplate(manager).executeWithoutResult(s->{shared.unlock(buyer.creatorId(),bought.token());purchased.countDown();awaitDownload(releasePurchase);}));assertTrue(purchased.await(15,TimeUnit.SECONDS));
+            var deletion=pool.submit(()->{deleteStarted.countDown();works.delete(bought.author().creatorId(),bought.work(),true);});assertTrue(deleteStarted.await(10,TimeUnit.SECONDS));assertThrows(TimeoutException.class,()->deletion.get(200,TimeUnit.MILLISECONDS));releasePurchase.countDown();purchase.get(30,TimeUnit.SECONDS);deletion.get(30,TimeUnit.SECONDS);
+            assertEquals(10,ledger.balance(buyer.creatorId()));assertEquals(1,downloadDebits(buyer.creatorId()));assertEquals(1,shared.list(buyer.creatorId()).size());assertEquals(1,shared.contentForToken(buyer.creatorId(),bought.token()).size());assertEquals(1,number("SELECT COUNT(*) FROM music_work WHERE id=? AND deleted_at IS NOT NULL",bought.work()));
+        }finally{releasePurchase.countDown();pool.shutdownNow();assertTrue(pool.awaitTermination(15,TimeUnit.SECONDS));}
+        var removed=sharedFixture();var removedShared=sharedDownloads(removed);var later=owner();ledger.credit(later.creatorId(),20,"gift:deletion-wins:"+unique());var workLocked=new CountDownLatch(1);var continueDeletion=new CountDownLatch(1);var purchaseStarted=new CountDownLatch(1);var secondPool=Executors.newFixedThreadPool(2);
+        try{
+            var deletion=secondPool.submit(()->new TransactionTemplate(manager).executeWithoutResult(s->{db.queryForList("SELECT id FROM creator WHERE id=? FOR UPDATE",removed.author().creatorId());db.queryForList("SELECT id FROM music_work WHERE id=? FOR UPDATE",removed.work());workLocked.countDown();awaitDownload(continueDeletion);works.delete(removed.author().creatorId(),removed.work(),true);}));assertTrue(workLocked.await(15,TimeUnit.SECONDS));
+            var purchase=secondPool.submit(()->{purchaseStarted.countDown();return assertThrows(DomainException.class,()->removedShared.unlock(later.creatorId(),removed.token())).code();});assertTrue(purchaseStarted.await(10,TimeUnit.SECONDS));assertThrows(TimeoutException.class,()->purchase.get(200,TimeUnit.MILLISECONDS));continueDeletion.countDown();deletion.get(30,TimeUnit.SECONDS);assertEquals("SHARE_NOT_FOUND",purchase.get(30,TimeUnit.SECONDS));
+            assertEquals(20,ledger.balance(later.creatorId()));assertEquals(0,downloadDebits(later.creatorId()));assertTrue(removedShared.list(later.creatorId()).isEmpty());assertEquals(1,number("SELECT COUNT(*) FROM music_work WHERE id=? AND deleted_at IS NOT NULL",removed.work()));
+        }finally{continueDeletion.countDown();secondPool.shutdownNow();assertTrue(secondPool.awaitTermination(15,TimeUnit.SECONDS));}
     }
 }

@@ -1,5 +1,5 @@
 {
-  "core_commit": "7a7778afba67bb1b554068b4ca7a5fa6e173b1a6",
+  "core_commit": "b8a924f624f7b1643c483cf2cc963ab56f1d03ff",
   "core": [
     {
       "version": "1",
@@ -234,13 +234,19 @@
       "script": "V39__avatar_generation_task.sql",
       "sha256_lf": "9cb8edb9e62742186da6d1b843cdfeb7b6813e572a0027441279313371350559",
       "checksum": -674578620
+    },
+    {
+      "version": "40",
+      "script": "V40__shared_download_entitlement.sql",
+      "sha256_lf": "cfa29d81a1e69515436e357111ec31fd81f8f7709add6b7b5241b7b2462fffec",
+      "checksum": -500011050
     }
   ],
   "integration": {
-    "version": "40",
-    "script": "V40__credit_entitlement_integration.sql",
-    "sha256_lf": "eb2868df1676875014762fe4b2e61615a69941e2fde7ce3f60002f526bb563f4",
-    "checksum": -1311214355
+    "version": "41",
+    "script": "V41__credit_entitlement_integration.sql",
+    "sha256_lf": "5b71ce9b5cb86e11c7e2ab8582dcc35cf9f024272632aabb84a4341546a97086",
+    "checksum": -340729157
   },
   "p0_tables": [
     "p0_credit_writer_policy",
@@ -300,5 +306,13 @@
     "payment_inbox_review",
     "payment_inbox_attempt",
     "p0_credit_native_identity"
-  ]
+  ],
+  "legacy_payment_v40": {
+    "version": "40",
+    "script": "V40__credit_entitlement_integration.sql",
+    "sha256_lf": "eb2868df1676875014762fe4b2e61615a69941e2fde7ce3f60002f526bb563f4",
+    "checksum": -1311214355,
+    "source_commit": "c780f7a90ac3952fda8dea9ab38a7a42b901e7ed",
+    "test_only": true
+  }
 }

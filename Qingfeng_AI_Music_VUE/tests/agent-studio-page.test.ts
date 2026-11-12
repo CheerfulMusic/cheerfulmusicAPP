@@ -13,6 +13,8 @@ vi.mock('../src/modules/agent/composables/useAvatarGeneration', async () => {
   return { useAvatarGeneration: () => ({ message: ref(''), available: ref(null), start: vi.fn(), stop: vi.fn() }) }
 })
 const api = vi.hoisted(() => ({ current: vi.fn(), state: vi.fn(), history: vi.fn(), send: vi.fn(), reset: vi.fn(), analyse: vi.fn(), cancel: vi.fn(), forget: vi.fn(), loadWork: vi.fn() }))
+const downloadApi = vi.hoisted(() => ({ status: vi.fn(async () => ({unlocked: true, price: 10})), download: vi.fn(async () => true) }))
+vi.mock('../src/modules/works/api/download', () => ({downloadStatus: downloadApi.status, downloadSong: downloadApi.download}))
 vi.mock('../src/modules/agent/api/chat', () => ({ getCurrentConversation: api.current, getConversationState: api.state, getConversationHistory: api.history, sendMessage: api.send, resetConversation: api.reset }))
 vi.mock('../src/shared/credits/useCredits', () => ({ useCredits: () => ({ credits: null, refreshCredits: vi.fn(async () => undefined) }) }))
 vi.mock('../src/modules/agent/model/audio-analysis', () => ({ analyzeAudioFile: api.analyse, cancelAnalysis: api.cancel, forgetAnalysis: api.forget, MAX_REFERENCE_BYTES: 20 * 1024 * 1024 }))
@@ -235,12 +237,9 @@ describe('真实 Agent 对话与作品', () => {
     api.send.mockResolvedValue(state({ songCard: song, action: 'play' }))
     await wrapper.find('textarea').setValue('播放当前作品'); await wrapper.find('form').trigger('submit'); await flushPromises()
     expect(toggle).not.toHaveBeenCalled()
-    const clicked: string[] = []
-    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) { clicked.push(this.href) })
     api.send.mockResolvedValue(state({ songCard: song, action: 'download' }))
     await wrapper.findAll('.agent-preview-actions button')[0]!.trigger('click'); await flushPromises()
-    expect(clicked[0]).toContain('/work-real/audio/asset-real?download=true')
-    click.mockRestore()
+    expect(downloadApi.download).toHaveBeenCalledWith('app/works/work-real/audio/asset-real/download', expect.stringContaining('/work-real/audio/asset-real?download=true'), expect.any(String))
   })
 })
 

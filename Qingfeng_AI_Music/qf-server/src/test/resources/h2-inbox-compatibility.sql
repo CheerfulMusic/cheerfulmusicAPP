@@ -1,5 +1,5 @@
--- TEST ONLY. Run after the unchanged canonical core migrations through V39 on H2.
--- This compatibility fixture does not execute or certify MySQL V40, its triggers,
+-- TEST ONLY. Run after the unchanged canonical core migrations through V40 on H2.
+-- This compatibility fixture does not execute or certify MySQL V41, its triggers,
 -- protocol, permissions, financial model, or activation. Existing rows are retained.
 ALTER TABLE payment_webhook_inbox ADD COLUMN merchant_scope VARCHAR(128) NOT NULL DEFAULT 'LEGACY_UNKNOWN';
 ALTER TABLE payment_webhook_inbox ADD COLUMN env_scope VARCHAR(16) NOT NULL DEFAULT 'LEGACY_UNKNOWN';

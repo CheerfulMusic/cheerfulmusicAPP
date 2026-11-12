@@ -1,9 +1,15 @@
 package com.qingfeng.music.server.payment;
 
 import java.math.BigDecimal;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
+import java.security.MessageDigest;
 import java.util.*;
 import org.flywaydb.core.Flyway;
+import org.flywaydb.core.api.exception.FlywayValidateException;
 import org.junit.jupiter.api.*;
+import org.junit.jupiter.api.io.TempDir;
 import org.springframework.dao.DataAccessException;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -15,7 +21,8 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 import static org.junit.jupiter.api.Assertions.*;
 
-/** Actual canonical V1..V39 -> V40 on a new isolated schema. No application or provider client. */
+/** Historical CI selector retained: actual canonical V1..V40 -> V41 on fresh isolated schemas.
+ * No application/provider client. The original isolated payment40 history is separately rejected. */
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class CreditEntitlementV40MySqlMigrationTest {
     private static JdbcTemplate db;
@@ -67,21 +74,28 @@ class CreditEntitlementV40MySqlMigrationTest {
         try (var resource = Objects.requireNonNull(CreditEntitlementV40MySqlMigrationTest.class.getResourceAsStream("/credit-migration-reference.json"))) {
             reference = new ObjectMapper().readTree(resource);
         }
-        assertEquals("7a7778afba67bb1b554068b4ca7a5fa6e173b1a6", reference.path("core_commit").asString());
-        Flyway.configure().dataSource(source).locations("classpath:db/migration").cleanDisabled(true).target("39").load().migrate();
-        assertEquals(39, number("SELECT COUNT(*) FROM flyway_schema_history WHERE success=1 AND version IS NOT NULL"));
+        assertEquals("b8a924f624f7b1643c483cf2cc963ab56f1d03ff", reference.path("core_commit").asString());
+        Flyway.configure().dataSource(source).locations("classpath:db/migration").cleanDisabled(true).target("40").load().migrate();
+        assertEquals(40, number("SELECT COUNT(*) FROM flyway_schema_history WHERE success=1 AND version IS NOT NULL"));
         for (var migration : reference.path("core")) assertHistory(migration);
         owner = UUID.randomUUID().toString(); order = UUID.randomUUID().toString();
         db.update("INSERT INTO creator(id,created_at) VALUES(?,CURRENT_TIMESTAMP)", owner);
         db.update("INSERT INTO credit_ledger(entry_type,reference_id,owner_id,amount,created_at) VALUES('CREDIT','migration-original-credit',?,100,CURRENT_TIMESTAMP)", owner);
         db.update("INSERT INTO credit_account(owner_id,balance,updated_at) VALUES(?,100,CURRENT_TIMESTAMP)", owner);
+        String work = UUID.randomUUID().toString(), asset = UUID.randomUUID().toString(), grant = UUID.randomUUID().toString();
+        db.update("INSERT INTO music_work(id,owner_id,recipient,occasion,story,message,style,title,version,created_at,updated_at) VALUES(?,?,'','OTHER','','','','migration download',0,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)", work, owner);
+        db.update("INSERT INTO media_asset(id,work_id,storage_key,origin,content_type,byte_size,sha256,created_at) VALUES(?,?,'local:migration','IMPORTED','audio/mpeg',1,?,CURRENT_TIMESTAMP)", asset, work, "0".repeat(64));
+        db.update("INSERT INTO shared_download_entitlement(id,owner_id,work_id,asset_id,title) VALUES(?,?,?,?,'original synthetic download')", grant, owner, work, asset);
         db.update("INSERT INTO payment_order(id,creator_id,package_id,amount,currency,credits,status,created_at,provider,provider_capture_id) VALUES(?,?,'starter-USD',?,'USD',100,'PAID',CURRENT_TIMESTAMP,'STRIPE_SANDBOX',?)", order, owner, new BigDecimal("9.90"), CAPTURE);
         db.update("INSERT INTO payment_webhook_inbox(provider,event_id,event_type,payload,payload_hash,status,attempts,next_attempt_at,created_at,updated_at) VALUES('STRIPE','evt_migration_legacy','refund.updated','{}',?,'PENDING',2,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)", "0".repeat(64));
         var original = db.queryForMap("SELECT entry_type,reference_id,owner_id,amount,created_at FROM credit_ledger WHERE reference_id='migration-original-credit'");
         var originalInbox = db.queryForMap("SELECT provider,event_id,event_type,payload,payload_hash,status,attempts,next_attempt_at,created_at,updated_at FROM payment_webhook_inbox WHERE event_id='evt_migration_legacy'");
-        Flyway.configure().dataSource(source).locations("classpath:db/migration").cleanDisabled(true).target("40").load().migrate();
+        var originalDownload = db.queryForMap("SELECT * FROM shared_download_entitlement WHERE id=?", grant);
+        Flyway.configure().dataSource(source).locations("classpath:db/migration").cleanDisabled(true).target("41").load().migrate();
         assertEquals(original, db.queryForMap("SELECT entry_type,reference_id,owner_id,amount,created_at FROM credit_ledger WHERE reference_id='migration-original-credit'"));
         assertEquals(originalInbox, db.queryForMap("SELECT provider,event_id,event_type,payload,payload_hash,status,attempts,next_attempt_at,created_at,updated_at FROM payment_webhook_inbox WHERE event_id='evt_migration_legacy'"));
+        assertEquals(originalDownload, db.queryForMap("SELECT * FROM shared_download_entitlement WHERE id=?", grant), "V41 must retain every original core40 download grant field");
+        assertEquals(1, number("SELECT COUNT(*) FROM shared_download_entitlement"));
         assertEquals(100, number("SELECT balance FROM credit_account WHERE owner_id=?", owner));
         assertEquals(0, number("SELECT COUNT(*) FROM p0_credit_batch"));
         assertEquals(0, number("SELECT COUNT(*) FROM p0_credit_native_identity"));
@@ -96,14 +110,17 @@ class CreditEntitlementV40MySqlMigrationTest {
             "A migration must have an explicit successful Boolean/numeric JDBC result");
     }
 
-    @Test @Order(1) void canonical39ChecksumsRemainAndActual40IsNotAnOldPaymentRename() {
-        assertEquals(40, number("SELECT COUNT(*) FROM flyway_schema_history WHERE success=1 AND version IS NOT NULL"));
+    @Test @Order(1) void canonical40ChecksumsRemainAndActual41PreservesDownloadAndFinancialFacts() {
+        assertEquals(41, number("SELECT COUNT(*) FROM flyway_schema_history WHERE success=1 AND version IS NOT NULL"));
         for (var migration : reference.path("core")) assertHistory(migration);
         assertHistory(reference.path("integration"));
         assertEquals(0, number("SELECT COUNT(*) FROM flyway_schema_history WHERE script IN ('V33__credit_entitlement_recovery.sql','V34__payment_return_evidence.sql')"));
         assertEquals(1, number("SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='site_event' AND COLUMN_NAME='country' AND COLUMN_TYPE='varchar(64)' AND IS_NULLABLE='YES'"));
         assertEquals(1, number("SELECT COUNT(*) FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='site_event' AND INDEX_NAME='idx_site_event_country' AND COLUMN_NAME='country'"));
         assertEquals(1, number("SELECT COUNT(*) FROM credit_ledger"));
+        assertEquals(-500011050, number("SELECT checksum FROM flyway_schema_history WHERE version='40'"));
+        assertEquals("V40__shared_download_entitlement.sql", db.queryForObject("SELECT script FROM flyway_schema_history WHERE version='40'", String.class));
+        assertEquals(1, number("SELECT COUNT(*) FROM shared_download_entitlement WHERE title='original synthetic download'"));
     }
 
     @Test @Order(2) void expectedTablesAndAppendOnlyTriggersExistButNoCutoverIsActivated() {
@@ -233,5 +250,70 @@ class CreditEntitlementV40MySqlMigrationTest {
         });
         assertEquals("PREPARING", db.queryForObject("SELECT status FROM p0_credit_cutover_state WHERE id=1", String.class));
         assertFalse(CreditSchemaReadiness.ready(db));
+    }
+
+    @Test @Order(12) void canonicalValidateAndMigrateRejectActualOriginalPayment40WithoutChangingHistory(@TempDir Path legacyChain) throws Exception {
+        String prefix = "P0_INTEGRATION_LEGACY40_MYSQL_";
+        String database = required(prefix + "DATABASE"), url = required(prefix + "URL");
+        if (!database.matches("p0_integration_legacy40_20261112r[0-9]+")
+                || !url.matches("jdbc:mysql://127\\.0\\.0\\.1:23316/" + database + "(?:\\?.*)?")
+                || url.toLowerCase(Locale.ROOT).contains("password="))
+            throw new IllegalStateException("Only the separate fresh isolated legacy40 rejection cohort is permitted");
+        var source = new DriverManagerDataSource(url, required(prefix + "USER"), required(prefix + "PASSWORD"));
+        var legacy = new JdbcTemplate(source);
+        try (var connection = source.getConnection(); var statement = connection.createStatement()) {
+            try (var identity = statement.executeQuery("SELECT VERSION(),@@server_uuid,@@datadir,@@port,@@bind_address,DATABASE(),CURRENT_ROLE()")) {
+                assertTrue(identity.next()); assertEquals("8.0.46", identity.getString(1));
+                assertEquals("05c27d3c-dda3-11f1-aba0-84a938421519", identity.getString(2));
+                assertEquals(required(prefix + "UUID"), identity.getString(2));
+                assertEquals("r:/data/", identity.getString(3).replace('\\', '/').toLowerCase(Locale.ROOT));
+                assertEquals(23316, identity.getInt(4)); assertEquals("127.0.0.1", identity.getString(5));
+                assertEquals(database, identity.getString(6)); assertEquals("NONE", identity.getString(7));
+            }
+            int grants = 0;
+            try (var rows = statement.executeQuery("SHOW GRANTS")) { while (rows.next()) {
+                String grant = rows.getString(1);
+                assertTrue(grant.startsWith("GRANT USAGE ON *.*") || grant.contains("ON `" + database + "`.*"));
+                assertFalse(grant.contains("WITH GRANT OPTION")); grants++;
+            }}
+            assertEquals(2, grants);
+            try (var rows = statement.executeQuery("SHOW DATABASES")) { while (rows.next())
+                assertTrue(Set.of(database, "information_schema", "performance_schema").contains(rows.getString(1)));
+            }
+        }
+        assertEquals(0, legacy.queryForObject("SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE()", Integer.class), "Never clear or reuse the rejection cohort");
+        for (var migration : reference.path("core")) {
+            if (Integer.parseInt(migration.path("version").asString()) > 39) continue;
+            String script = migration.path("script").asString();
+            try (var resource = Objects.requireNonNull(getClass().getResourceAsStream("/db/migration/" + script))) {
+                Files.write(legacyChain.resolve(script), resource.readAllBytes(), StandardOpenOption.CREATE_NEW);
+            }
+        }
+        var original = reference.path("legacy_payment_v40");
+        String script = original.path("script").asString();
+        try (var resource = Objects.requireNonNull(getClass().getResourceAsStream("/legacy-payment-migrations/" + script))) {
+            byte[] bytes = resource.readAllBytes();
+            assertEquals(original.path("sha256_lf").asString(), HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes)));
+            Files.write(legacyChain.resolve(script), bytes, StandardOpenOption.CREATE_NEW);
+        }
+        Flyway.configure().dataSource(source).locations("filesystem:" + legacyChain.toAbsolutePath()).cleanDisabled(true).target("40").load().migrate();
+        assertEquals(40, legacy.queryForObject("SELECT COUNT(*) FROM flyway_schema_history WHERE success=1 AND version IS NOT NULL", Integer.class));
+        assertEquals("V40__credit_entitlement_integration.sql", legacy.queryForObject("SELECT script FROM flyway_schema_history WHERE version='40'", String.class));
+        assertEquals(-1311214355, legacy.queryForObject("SELECT checksum FROM flyway_schema_history WHERE version='40'", Integer.class));
+        var history = legacy.queryForList("SELECT * FROM flyway_schema_history ORDER BY installed_rank");
+        var tables = legacy.queryForList("SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() ORDER BY TABLE_NAME");
+        var canonical = Flyway.configure().dataSource(source).locations("classpath:db/migration").cleanDisabled(true).target("41").load();
+        var validation = canonical.validateWithResult();
+        assertFalse(validation.validationSuccessful);
+        assertTrue(validation.invalidMigrations.stream().anyMatch(item -> "40".equals(item.version)), "The actual original payment40 history must be identified as incompatible");
+        assertThrows(FlywayValidateException.class, canonical::validate);
+        assertThrows(FlywayValidateException.class, canonical::migrate);
+        assertTrue(CreditSchemaReadiness.installed(legacy));
+        assertFalse(CreditSchemaReadiness.ready(legacy));
+        assertThrows(IllegalStateException.class, () -> CreditSchemaReadiness.requireActive(legacy));
+        assertEquals(history, legacy.queryForList("SELECT * FROM flyway_schema_history ORDER BY installed_rank"));
+        assertEquals(tables, legacy.queryForList("SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() ORDER BY TABLE_NAME"));
+        assertEquals(0, legacy.queryForObject("SELECT COUNT(*) FROM flyway_schema_history WHERE version='41'", Integer.class));
+        assertEquals(0, legacy.queryForObject("SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='shared_download_entitlement'", Integer.class));
     }
 }

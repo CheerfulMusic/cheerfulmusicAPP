@@ -47,7 +47,9 @@ class CdnRedirectIntegrationTest {
     @Test void downloadAndLocalKeysFallBackToOriginalStreaming(){
         MediaApi media=mock(MediaApi.class);
         when(media.open("creator-1","w1","a1")).thenReturn(content());
-        MediaController controller=new MediaController(media,signer(true));
+        var downloads=mock(com.qingfeng.music.server.download.DownloadEntitlements.class);
+        when(downloads.verifiedOwner(OWNER)).thenReturn("creator-1");when(downloads.unlocked("creator-1","w1")).thenReturn(true);
+        MediaController controller=new MediaController(media,signer(true),downloads);
         ResponseEntity<Resource> download=controller.audio(OWNER,"w1","a1",true);
         assertEquals(HttpStatus.OK,download.getStatusCode());
         assertTrue(download.getHeaders().getContentDisposition().isAttachment());
@@ -118,8 +120,11 @@ class CdnRedirectIntegrationTest {
     @Test void giftDownloadAndRevocationNeverIssue302(){
         SharingApi sharing=mock(SharingApi.class);
         when(sharing.audio("token")).thenReturn(content());
-        GiftController controller=new GiftController(sharing,signer(true));
-        assertEquals(HttpStatus.OK,controller.audio("token",true).getStatusCode());
+        var downloads=mock(com.qingfeng.music.server.download.DownloadEntitlements.class);
+        var grants=mock(com.qingfeng.music.server.download.SharedDownloadGrants.class);
+        when(downloads.verifiedOwner(OWNER)).thenReturn("creator-1");when(grants.contentForToken("creator-1","token")).thenReturn(content());
+        GiftController controller=new GiftController(sharing,signer(true),downloads,grants);
+        assertEquals(HttpStatus.OK,controller.audio("token",true,null,OWNER).getStatusCode());
         verify(sharing,never()).audioRef(anyString());
 
         DomainException revoked=new DomainException("SHARE_NOT_FOUND","礼物已撤销");
