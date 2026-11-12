@@ -10,7 +10,7 @@ import tools.jackson.databind.ObjectMapper;
 @Configuration(proxyBeanMethods=false) @Profile({"mysql","test"})
 public class MusicSettingsConfiguration {
  @Bean MusicBriefService musicBriefService(org.springframework.core.env.Environment env,org.springframework.beans.factory.ObjectProvider<com.qingfeng.music.credits.DailyQuota> quota){
-  var writer=new com.qingfeng.music.infrastructure.provider.DeepSeekInspirationRewriter(env.getProperty("qingfeng.providers.deepseek.api-key",env.getProperty("DEEPSEEK_API_KEY","")),env.getProperty("qingfeng.providers.deepseek.model","deepseek-flash")).musicBriefMode();
+  var writer=RewriteProviderSettings.writer(env).musicBriefMode();
   // 无数据库的 local 演示环境没有配额表，降级为不限；mysql/test 下正常限次。
   return new MusicBriefService(writer,env.getProperty("qingfeng.music-settings.simplify.enabled",Boolean.class,true),env.getProperty("qingfeng.music-settings.simplify.concurrent-global",Integer.class,2),quota.getIfAvailable(() -> com.qingfeng.music.credits.DailyQuota.FREE),env.getProperty("qingfeng.music-settings.simplify.daily-per-creator",Long.class,20L));
  }
