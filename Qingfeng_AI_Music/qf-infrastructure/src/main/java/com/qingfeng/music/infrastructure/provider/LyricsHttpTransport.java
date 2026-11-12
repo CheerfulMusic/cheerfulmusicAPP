@@ -20,8 +20,9 @@ final class LyricsHttpTransport {
 
     static HttpResponse<String> post(HttpClient client, URI endpoint, String key, String json)
             throws IOException, InterruptedException {
-        long deadline = System.nanoTime() + Duration.ofSeconds(90).toNanos();
+        long deadline = System.nanoTime() + com.qingfeng.music.common.concurrent.AgentRequestScope.timeout(Duration.ofSeconds(90)).toNanos();
         for (int attempt = 0; ; attempt++) {
+            com.qingfeng.music.common.concurrent.AgentRequestScope.check();
             var bodyStarted = new AtomicBoolean();
             var delegate = HttpRequest.BodyPublishers.ofString(json);
             var body = new HttpRequest.BodyPublisher() {

@@ -26,6 +26,15 @@ public interface ConversationMapper {
     @Select("SELECT * FROM agent_message WHERE conversation_id=#{conversation} AND kind<>'REQUEST' ORDER BY seq")
     List<MessageRow> listMessages(@Param("conversation") String conversation);
 
+    @Select("SELECT * FROM (SELECT * FROM agent_message WHERE conversation_id=#{conversation} AND kind<>'REQUEST' AND seq<#{before} ORDER BY seq DESC LIMIT #{limit}) recent ORDER BY seq")
+    List<MessageRow> messagesBefore(@Param("conversation")String conversation,@Param("before")long before,@Param("limit")int limit);
+    @Select("SELECT * FROM agent_message WHERE conversation_id=#{conversation} AND kind<>'REQUEST' AND seq>#{after} ORDER BY seq LIMIT #{limit}")
+    List<MessageRow> messagesAfter(@Param("conversation")String conversation,@Param("after")long after,@Param("limit")int limit);
+    @Select("SELECT history_epoch FROM agent_conversation WHERE id=#{conversation}")
+    long historyEpoch(@Param("conversation")String conversation);
+    @Select("SELECT * FROM (SELECT * FROM agent_message WHERE conversation_id=#{conversation} AND role='assistant' AND kind='TEXT' AND (content_json LIKE '%\"shareUrl\"%' OR content_json LIKE '%\"revoke_share\"%') ORDER BY seq DESC LIMIT #{limit}) actions ORDER BY seq")
+    List<MessageRow> recentActionMessages(@Param("conversation")String conversation,@Param("limit")int limit);
+
     @Update("UPDATE agent_conversation SET current_work_id=#{work},updated_at=#{now} WHERE id=#{conversation}")
     int updateCurrentWork(@Param("conversation") String conversation, @Param("work") String work,
                           @Param("now") Instant now);
@@ -61,7 +70,7 @@ public interface ConversationMapper {
     @Update("UPDATE agent_message SET state=#{state} WHERE id=#{id}")
     int updateMessageState(@Param("id") String id, @Param("state") String state);
 
-    @Update("UPDATE agent_conversation SET current_work_id=NULL,updated_at=#{now} WHERE id=#{conversation}")
+    @Update("UPDATE agent_conversation SET current_work_id=NULL,history_epoch=history_epoch+1,updated_at=#{now} WHERE id=#{conversation}")
     int clearWork(@Param("conversation") String conversation, @Param("now") Instant now);
 
     @Update("UPDATE agent_conversation_state SET current_song_json=NULL,revision=revision+1,updated_at=#{now} "

@@ -165,7 +165,7 @@ class RewriteCreditsIntegrationTest {
         String stale=key();
         jdbc.update("INSERT INTO rewrite_consumption(id,creator_id,request_key,amount,charged,status,refunded,created_at,updated_at) VALUES(?,?,?,1,1,'RESERVED',0,TIMESTAMPADD(SECOND,-600,CURRENT_TIMESTAMP),CURRENT_TIMESTAMP)",
             java.util.UUID.randomUUID().toString(),owner,stale);
-        jdbc.update("INSERT INTO credit_ledger(entry_type,reference_id,owner_id,amount,created_at) VALUES('DEBIT',?,?,-1,CURRENT_TIMESTAMP)","rewrite:"+owner+":"+stale,owner);
+        credits.debit(owner,1,"rewrite:"+owner+":"+stale);
         assertEquals(99,credits.balance(owner));
         // 触发一次新的改写：回收旧记录并退款。
         rewrite(owner,key());

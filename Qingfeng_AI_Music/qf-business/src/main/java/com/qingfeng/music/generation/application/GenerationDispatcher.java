@@ -3,9 +3,12 @@ package com.qingfeng.music.generation.application;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.EnumMap;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 import java.util.logging.Logger;
 
@@ -19,6 +22,8 @@ public final class GenerationDispatcher implements AutoCloseable {
     private final long scanMillis;
     private final int submissions, queries, archives;
     private final List<ScheduledThreadPoolExecutor> pools = new ArrayList<>();
+    private final EnumMap<ExecutionRepository.Phase,ScheduledThreadPoolExecutor> phasePools=new EnumMap<>(ExecutionRepository.Phase.class);
+    private final EnumMap<ExecutionRepository.Phase,AtomicBoolean> wakeups=new EnumMap<>(ExecutionRepository.Phase.class);
     private boolean started, closed;
 
     public GenerationDispatcher(Consumer<ExecutionRepository.Phase> scan, Duration interval,
@@ -59,15 +64,22 @@ public final class GenerationDispatcher implements AutoCloseable {
         pool.setExecuteExistingDelayedTasksAfterShutdownPolicy(false);
         pool.setContinueExistingPeriodicTasksAfterShutdownPolicy(false);
         pools.add(pool);
+        phasePools.put(phase,pool);wakeups.put(phase,new AtomicBoolean());
         for (int i = 0; i < workers; i++) {
-            pool.scheduleWithFixedDelay(() -> {
-                try {
-                    scan.accept(phase);
-                } catch (RuntimeException error) {
-                    // 一次数据库/供应商异常不能终止整个阶段的后续扫描。
-                    LOG.warning("music_scan_failed phase=" + phase + " exception=" + error.getClass().getSimpleName());
-                }
-            }, 0, scanMillis, TimeUnit.MILLISECONDS);
+            pool.scheduleWithFixedDelay(() -> scanOnce(phase), 0, scanMillis, TimeUnit.MILLISECONDS);
+        }
+    }
+
+    /** Broker notifications share the existing phase pool, with at most one extra queued/running scan. */
+    public synchronized boolean wakeup(ExecutionRepository.Phase phase) {
+        if(!started||closed||!phasePools.containsKey(phase))return false;
+        var pending=wakeups.get(phase);if(!pending.compareAndSet(false,true))return false;
+        try{phasePools.get(phase).execute(()->{try{scanOnce(phase);}finally{pending.set(false);}});return true;}
+        catch(RejectedExecutionException stopping){pending.set(false);return false;}
+    }
+    private void scanOnce(ExecutionRepository.Phase phase){
+        try{scan.accept(phase);}catch(RuntimeException error){
+            LOG.warning("music_scan_failed phase="+phase+" exception="+error.getClass().getSimpleName());
         }
     }
 

@@ -5,6 +5,9 @@ export interface PlayableTrack { id: string; title: string; titleKey?: string; c
 export const usePlayer = defineStore('player', () => {
   const current=ref<PlayableTrack|null>(null),playing=ref(false),starting=ref(false),buffering=ref(false),time=ref(0),duration=ref(0),error=ref(''),queue=ref<PlayableTrack[]>([])
   const hasQueue=computed(()=>queue.value.length>1&&queue.value.some(track=>track.id===current.value?.id))
+  const tracks=computed(()=>Object.freeze(queue.value.map(track=>Object.freeze({...track}))))
+  const repeatOne=ref(false)
+  function toggleRepeat(){repeatOne.value=!repeatOne.value}
   const seekVersion=ref(0),segment=ref<{track:string;start:number;end:number;loop:boolean}|null>(null)
   let audio:HTMLAudioElement|undefined,operation=0,waitingTimer:ReturnType<typeof setTimeout>|undefined,autoAdvance=true
   type SegmentState={track:string;start:number;end:number;loop:boolean}
@@ -141,6 +144,20 @@ export const usePlayer = defineStore('player', () => {
         if(part.loop){element.currentTime=part.start;time.value=part.start;seekVersion.value++;const turn=operation;void element.play().catch(()=>{if(turn===operation){segment.value=null;error.value='暂时无法播放，请点击重试，并检查礼物链接是否有效。'}})}else segment.value=null
         return
       }
+      if(repeatOne.value){
+        const turn=operation
+        try{
+          element.currentTime=0;time.value=0;seekVersion.value++;starting.value=true;waitForAudio()
+          void element.play().catch((cause:unknown)=>{
+            if(turn!==operation||!active())return
+            starting.value=false;element.pause();playing.value=false;stopWaiting()
+            error.value=cause instanceof Error&&cause.name==='NotAllowedError'?'浏览器暂停了播放，请点击播放继续。':'暂时无法播放，请点击重试，并检查礼物链接是否有效。'
+          })
+        }catch{
+          if(turn===operation&&active()){starting.value=false;element.pause();playing.value=false;stopWaiting();error.value='暂时无法播放，请点击重试，并检查礼物链接是否有效。'}
+        }
+        return
+      }
       const index=queue.value.findIndex(track=>track.id===current.value?.id)
       if(autoAdvance&&hasQueue.value&&index<queue.value.length-1)void next()
     })
@@ -192,8 +209,8 @@ export const usePlayer = defineStore('player', () => {
     seek(start);segment.value={track:track.id,start,end:until,loop}
   }
   function stopSegment(pause=false){segment.value=null;if(pause){cancelReauth();operation++;starting.value=false;audio?.pause();stopWaiting()}}
-  function close(){cancelReauth();operation++;segment.value=null;audio?.pause();if(audio)audio.preload='metadata';current.value=null;queue.value=[];time.value=0;duration.value=0;error.value='';starting.value=false;stopWaiting();playing.value=false}
+  function close(){cancelReauth();operation++;segment.value=null;repeatOne.value=false;audio?.pause();if(audio)audio.preload='metadata';current.value=null;queue.value=[];time.value=0;duration.value=0;error.value='';starting.value=false;stopWaiting();playing.value=false}
   /** 身份切换和分享失效彻底释放，与普通收起播放器分开。 */
   function reset(){close();audio=undefined;pool.clear()}
-  return {current,playing,starting,buffering,time,duration,error,hasQueue,seekVersion,toggle,seek,close,reset,setQueue,next,updateCover,segment,playSegment,stopSegment}
+  return {current,playing,starting,buffering,time,duration,error,hasQueue,tracks,repeatOne,toggleRepeat,seekVersion,toggle,seek,close,reset,setQueue,next,updateCover,segment,playSegment,stopSegment}
 })

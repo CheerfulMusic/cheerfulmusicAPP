@@ -31,7 +31,8 @@ import static org.junit.jupiter.api.Assertions.*;
 @SpringBootTest(webEnvironment=SpringBootTest.WebEnvironment.RANDOM_PORT, properties={
         "spring.datasource.url=jdbc:h2:mem:agent_chat_flow;MODE=MySQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1",
         "qingfeng.agent.chat.enabled=true", "qingfeng.lyrics.enabled=true", "qingfeng.generation.enabled=true",
-        "qingfeng.generation.scheduler-enabled=false", "qingfeng.cover.ai.scheduler-enabled=false"})
+        "qingfeng.generation.scheduler-enabled=false", "qingfeng.cover.ai.scheduler-enabled=false",
+        "qingfeng.agent.admission.user-rpm=60", "qingfeng.agent.admission.user-daily-tokens=10000000"})
 @ActiveProfiles("test")
 @Import(AgentChatFlowIntegrationTest.Offline.class)
 class AgentChatFlowIntegrationTest {

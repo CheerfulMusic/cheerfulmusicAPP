@@ -83,19 +83,20 @@ nav.consumer-navigation a.agent-nav-link > svg { width: 17px; height: 17px; flex
 .agent-chat { display: flex; flex: 1 1 0; flex-direction: column; gap: 18px; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 4px 6px 12px 4px; scrollbar-width: thin; scrollbar-color: #f0cdbd transparent; }
 
 /* 开场白：设计稿顶部的居中引导区，随消息一起滚动。 */
-.agent-hero { display: grid; justify-items: center; gap: 7px; padding: 22px 12px 26px; text-align: center; }
-.agent-hero-icon { display: grid; place-items: center; width: 58px; height: 58px; border-radius: 50%; background: linear-gradient(150deg, #ffe6d8, #ffd3bd); box-shadow: 0 10px 26px #e5855a26; }
-.agent-hero-icon svg { width: 28px; height: 28px; fill: #ff6a3d; }
-.agent-hero h1 { margin: 6px 0 0; font-family: inherit; font-size: 26px; font-weight: 800; letter-spacing: .4px; color: #3a2e2a; }
-.agent-hero p { margin: 0; font-size: 13px; color: #9b8278; }
+.agent-hero { display: grid; justify-items: center; gap: 8px; padding: 22px 12px 20px; text-align: center; }
+.agent-hero h1 { margin: 0; font-family: inherit; font-size: 28px; line-height: 1.3; font-weight: 800; color: #302925; }
+.agent-hero p { margin: 0; font-size: 16px; line-height: 1.5; color: #99877e; }
+.agent-hero .agent-hero-tagline { font-size: 24px; line-height: 1.4; font-weight: 800; color: #ff543f; }
 
 .agent-message { display: flex; align-items: flex-start; gap: 11px; }
 .agent-message.user { justify-content: flex-end; }
-/* 助手头像：品牌橙底音符方；用户头像：右侧人像圆。 */
-.agent-bot-avatar { display: grid; flex: 0 0 38px; place-items: center; width: 38px; height: 38px; border-radius: 12px; box-shadow: 0 6px 16px #ff6a4533; }
-.agent-bot-avatar svg { width: 38px; height: 38px; }
-.agent-user-avatar { display: grid; flex: 0 0 38px; place-items: center; width: 38px; height: 38px; border-radius: 50%; background: #ffece2; box-shadow: 0 6px 16px #e0a18933; }
+/* 助手头像：品牌图标；用户头像：右侧人像圆。 */
+.agent-bot-avatar { display: grid; flex: 0 0 38px; place-items: center; width: 38px; height: 38px; }
+.agent-bot-avatar img { width: 38px; height: 38px; object-fit: contain; }
+.agent-user-avatar { display: grid; flex: 0 0 38px; place-items: center; width: 38px; height: 38px; padding: 0; overflow: hidden; border: 0; border-radius: 50%; background: #ffece2; box-shadow: 0 6px 16px #e0a18933; cursor: pointer; }
 .agent-user-avatar svg { width: 38px; height: 38px; }
+.agent-user-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.agent-user-avatar:focus-visible { outline: 3px solid #ffa279; outline-offset: 2px; }
 /* 助手消息：白底气泡与淡粉方案卡上下排列，卡片可以比气泡更宽。 */
 .agent-message-body { display: flex; flex-direction: column; align-items: flex-start; gap: 9px; max-width: min(560px, 100%); }
 .agent-message.user .agent-message-body { align-items: flex-end; }
@@ -207,10 +208,13 @@ nav.consumer-navigation a.agent-nav-link > svg { width: 17px; height: 17px; flex
   .agent-studio { width: calc(100% - 28px); padding-block: 16px 24px; gap: 15px; }
   .agent-bubble { padding: 11px 13px; }
   .agent-hero h1 { font-size: 21px; }
+  .agent-hero .agent-hero-tagline { font-size: 20px; }
+  .agent-hero p { font-size: 14px; }
   .agent-bot-avatar, .agent-user-avatar { flex-basis: 32px; width: 32px; height: 32px; }
-  .agent-bot-avatar svg, .agent-user-avatar svg { width: 32px; height: 32px; }
+  .agent-bot-avatar img, .agent-user-avatar svg { width: 32px; height: 32px; }
   .agent-composer-menu { width: min(258px, calc(100vw - 70px)); }
 }
 @media (prefers-reduced-motion: reduce) {
   .agent-typing-spinner { animation: none; }
 }
+.agent-history-more{align-self:center;margin:12px auto;padding:8px 16px;border:1px solid #e8ccba;border-radius:18px;background:#fffaf7;color:#8b5d47;cursor:pointer}.agent-history-more:disabled{opacity:.5;cursor:wait}

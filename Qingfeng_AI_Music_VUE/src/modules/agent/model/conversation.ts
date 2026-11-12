@@ -29,6 +29,12 @@ export function isAgentContinuation(value: unknown): value is AgentContinuation 
 }
 
 export interface ConversationSnapshot {
+  messagesMode?: 'replace' | 'append'
+  hasOlderMessages?: boolean
+  hasNewerMessages?: boolean
+  oldestSeq?: number
+  latestSeq?: number
+  historyEpoch?: number
   continuation?: AgentContinuation | null
   messages: Message[]
   songCard: SongCard | null
@@ -36,6 +42,14 @@ export interface ConversationSnapshot {
   action: string | null
   shareUrl: string | null
   liked: boolean
+}
+
+export interface ConversationHistory {
+  messages: Message[]
+  hasOlderMessages: boolean
+  oldestSeq: number
+  latestSeq: number
+  historyEpoch: number
 }
 
 /** Never display tool payload JSON as a reply. */

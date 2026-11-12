@@ -1,11 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const spies = vi.hoisted(() => ({ ensureCreator: vi.fn(), requestJson: vi.fn() }))
-vi.mock('../src/shared/http/api-client', () => ({ ensureCreator: spies.ensureCreator, requestJson: spies.requestJson }))
+const spies = vi.hoisted(() => ({ ensureCreator: vi.fn(), requestJson: vi.fn(), owner: 'owner-a' }))
+vi.mock('../src/shared/http/api-client', () => ({ ensureCreator: spies.ensureCreator, requestJson: spies.requestJson, currentCreatorId: () => spies.owner }))
 import { creditBalance, creditPricing, loadCredits, refreshCreditBalance } from '../src/shared/identity/credit-balance'
 import { useCredits } from '../src/shared/credits/useCredits'
 
 beforeEach(() => {
+  spies.owner = 'owner-a'
   spies.ensureCreator.mockReset().mockResolvedValue(undefined)
   spies.requestJson.mockReset().mockResolvedValue({ enabled: true, balance: 100, musicCost: 15 })
   return refreshCreditBalance(false)
@@ -50,6 +51,16 @@ describe('顶栏积分余额', () => {
 })
 
 describe('创作区的积分价格', () => {
+  it('账号切换后不应用旧账号的迟到余额', async () => {
+    let resolve!: (value: unknown) => void
+    spies.requestJson.mockImplementationOnce(() => new Promise(r => { resolve = r }))
+    const pending = loadCredits()
+    await vi.waitFor(() => expect(spies.requestJson).toHaveBeenCalled())
+    spies.owner = 'owner-b'
+    resolve({ enabled: true, balance: 999, musicCost: 15 })
+    expect(await pending).toBeNull()
+    expect(creditBalance.value).toBeNull()
+  })
   it('歌词价格来自后端接口，前端不硬编码', async () => {
     spies.requestJson.mockResolvedValue({ enabled: true, balance: 30, musicCost: 15, lyricsCost: 7 })
     const view = await loadCredits()

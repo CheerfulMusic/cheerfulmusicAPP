@@ -31,7 +31,17 @@ public final class AgentChatPolicy {
         return requested(text,"(?:写|创作|生成|编|改|修改|改写|重写|优化|润色|续写).{0,12}(?:歌词|词|段|一句)|(?:写|创作)(?:一|这)?首歌|(?:主歌|副歌).{0,10}(?:改|短|长|温柔|力量)|(?:write|rewrite|change|edit|generate).{0,15}(?:lyrics|chorus|verse)|write.{0,10}song");
     }
     public static boolean settingsRequested(String text) {
+        if(clearAllMusicOptionsRequested(text,"instruments")||clearAllMusicOptionsRequested(text,"genre"))return true;
         return requested(text,"(?:改|换|设|调|加|减少|增加|去掉|用).{0,12}(?:风格|声|bpm|拍|钢琴|吉他|乐器|语|配器|民谣|摇滚|爵士|流行|电子)|\\d{2,3}\\s*(?:bpm|拍)|change.{0,12}(?:style|voice|tempo|instrument)");
+    }
+    /** Only an explicit, complete instruction can clear an entire settings category. */
+    public static boolean clearAllMusicOptionsRequested(String text,String group) {
+        if(text==null||text.length()>160)return false;
+        String labels=switch(group){case "instruments"->"(?:乐器|配器)(?:选项)?";case "genre"->"(?:风格|曲风)(?:选项)?";default->null;};
+        if(labels==null)return false;
+        String english=group.equals("instruments")?"instruments(?: options)?":"(?:genres|music styles|genre options)";
+        String whole=text.strip().replaceFirst("[。.!！]+$","").strip();
+        return whole.matches("(?i)(?:(?:请|帮我|请帮我)?(?:清空|移除|去掉)(?:全部|所有)"+labels+"|(?:please )?(?:clear|remove) all "+english+")");
     }
     public static boolean confirmed(String text) {
         return text != null && text.trim().matches("(?i)(确认生成|确认开始|确认执行|确认删除|确认处理|继续执行|确认|开始生成|生成吧|yes|confirm|go ahead)[。！! ]*");
@@ -60,7 +70,7 @@ public final class AgentChatPolicy {
     private static final String MUSIC="(?:生成|制作|开始做|做成).{0,10}(?:音乐|歌曲|歌|音频)|(?:生成|开始生成)(?:吧|音乐|歌曲|这首|一首|$)|(?:写|来|做|唱)(?:一|个|这)?首歌|generate.{0,12}(?:music|song|audio)|make.{0,12}(?:music|song)";
     private static final Set<String> READ_ACTIONS=Set.of("list_works","list_versions","list_audio","list_covers","discover_music","list_tasks",
             "get_credits","list_credit_entries","get_usage","get_account","get_referral","list_orders","get_order","payment_catalog","get_current_song",
-            "get_music_settings","music_settings_catalog","preview_music_settings","get_playback_lyrics","list_section_edits","section_context");
+            "get_music_settings","music_settings_catalog","preview_music_settings","get_playback_lyrics","list_section_edits","section_context","search_memory");
     private static String surface(String text) {
         if(text==null)return "";
         // Quoted commands are data. A quoted song title can still follow an explicit verb.
@@ -94,7 +104,7 @@ public final class AgentChatPolicy {
         return explicitSocial(text);
     }
     public static boolean requiresConfirmation(String action) {
-        return Set.of("delete_work","erase_analytics","close_checking").contains(action);
+        return Set.of("delete_work","erase_analytics","close_checking","generate_avatar").contains(action);
     }
     public static boolean actionRequested(String action,String text) {
         if(action==null)return false;
@@ -114,6 +124,7 @@ public final class AgentChatPolicy {
         if(action==null)return false;
         if(READ_ACTIONS.contains(action))return true;
         return switch(action) {
+            case "index_work_memory" -> requested(text,"(?:将|把|给|为).{0,50}(?:这首|当前|指定|作品|歌曲).{0,20}(?:加入语义检索|建立语义索引|加入记忆)|(?:记住|索引).{0,15}(?:这首|当前|作品|歌曲)|(?:index|remember).{0,30}(?:this|current|work|song)");
             case "create_work" -> requested(text,"(?:新建|创建|建立|开).{0,12}(?:草稿|作品|空白歌曲|空白项目)|(?:create|new).{0,12}(?:draft|work|blank song)")
                     ||applicationAllowed("save_lyrics",text)||applicationAllowed("upload_audio",text);
             case "select_work","select_version","select_audio","select_cover" -> requested(text,"选择|选中|选|打开|切换|切回|用|第[一二三四五六七八九十0-9]+|上一版|下一版|上一首|下一首|播放|下载|分享|改名|重命名|删除|修改|继续|查看|撤销|点赞|\\bselect\\b|\\bopen\\b|\\bplay\\b|\\bprevious\\b");
@@ -121,6 +132,7 @@ public final class AgentChatPolicy {
             case "update_work" -> requested(text,"(?:修改|更新|设置|保存|更改|改|换).{0,15}(?:收礼人|收件人|场景|故事|寄语|标题|歌名|送给)|(?:收礼人|收件人|场景|故事|寄语|标题|歌名).{0,10}(?:改|换|设)|(?:update|set|save).{0,15}(?:recipient|occasion|story|message|title)");
             case "delete_work" -> requested(text,"删除|删掉|移除作品|delete|remove.{0,12}(?:song|work)");
             case "edit_cover" -> requested(text,"(?:生成|画|绘制|制作|修改|换|重做|设计).{0,15}(?:封面|cover)|(?:封面|cover).{0,12}(?:改|换)|(?:generate|edit|create).{0,12}cover");
+            case "generate_avatar" -> requested(text,"(?:生成|画|绘制|制作|设计|创建).{0,60}(?:头像|avatar|profile picture)|(?:头像|avatar|profile picture).{0,30}(?:生成|画|绘制|制作|设计)|(?:generate|draw|create|make).{0,60}(?:avatar|profile picture)");
             case "upload_cover" -> requested(text,"(?:上传|导入|选择文件).{0,12}(?:封面|图片)|upload.{0,12}(?:cover|image)");
             case "upload_audio" -> requested(text,"(?:上传|导入|选择文件).{0,12}(?:音频|音乐|歌曲|伴奏)|upload.{0,12}(?:audio|music)");
             case "favorite_music" -> requested(text,"收藏|加入收藏|favorite|bookmark")&&!has(surface(text),"取消收藏|移出收藏|删除收藏|unfavorite|unbookmark");

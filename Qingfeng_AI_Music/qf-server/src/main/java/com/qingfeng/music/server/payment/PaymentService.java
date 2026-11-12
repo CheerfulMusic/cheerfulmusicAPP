@@ -57,7 +57,7 @@ public class PaymentService {
             if(creators.isEmpty()) throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
             Integer identities=db.queryForObject("SELECT (SELECT COUNT(*) FROM creator_google_identity WHERE creator_id=?) + (SELECT COUNT(*) FROM creator_oidc_identity WHERE creator_id=?)",Integer.class,owner,owner);
             if(identities==null || identities==0) throw new ResponseStatusException(HttpStatus.FORBIDDEN,"请先登录账号");
-            Integer pending=db.queryForObject("SELECT COUNT(*) FROM payment_order WHERE creator_id=? AND status IN ('CREATING','PENDING')",Integer.class,owner);
+            Integer pending=db.queryForObject("SELECT COUNT(*) FROM payment_order WHERE creator_id=? AND status IN ('CREATING','CREATION_UNKNOWN','PENDING')",Integer.class,owner);
             if(pending!=null && pending>0) throw new ResponseStatusException(HttpStatus.CONFLICT,"已有待核对的订单，请先查看订单状态");
             db.update("INSERT INTO payment_order(id,creator_id,package_id,amount,currency,credits,status,created_at) VALUES(?,?,?,?,?,?,?,CURRENT_TIMESTAMP)",id,owner,selectedPackage,selectedAmount,selectedCurrency,selectedCredits,"CREATING");
         });
@@ -80,6 +80,7 @@ public class PaymentService {
         if(db.queryForList("SELECT id FROM payment_order WHERE id=? AND creator_id=? AND provider='AIRWALLEX'",id,creator.id()).isEmpty()) throw new ResponseStatusException(HttpStatus.NOT_FOUND);
         var remote=gateway.retrieve(linkId);
         return tx.execute(t->{
+            db.queryForList("SELECT id FROM creator WHERE id=? FOR UPDATE",creator.id());
             var row=db.queryForMap("SELECT * FROM payment_order WHERE id=? AND creator_id=? AND provider='AIRWALLEX' FOR UPDATE",id,creator.id());
             if(!id.equals(remote.reference()) || !linkId.equals(remote.id()) || remote.reusable()
                 || !row.get("currency").equals(remote.currency()) || remote.amount()==null
@@ -104,6 +105,8 @@ public class PaymentService {
     }
     void settle(String id,String linkId,PaymentGateway.Snapshot remote) {
         tx.executeWithoutResult(s -> {
+            String owner=db.queryForObject("SELECT creator_id FROM payment_order WHERE id=? AND provider='AIRWALLEX'",String.class,id);
+            db.queryForList("SELECT id FROM creator WHERE id=? FOR UPDATE",owner);
             var rows=db.queryForList("SELECT * FROM payment_order WHERE id=? AND provider='AIRWALLEX' FOR UPDATE",id);
             if(rows.isEmpty()) throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,"订单尚未就绪");
             var row=rows.get(0);

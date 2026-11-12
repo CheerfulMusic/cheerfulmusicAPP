@@ -2,7 +2,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const spies = vi.hoisted(() => ({ ensureCreator: vi.fn(), requestJson: vi.fn() }))
-vi.mock('../src/shared/http/api-client', () => ({ ensureCreator: spies.ensureCreator, requestJson: spies.requestJson }))
+vi.mock('../src/shared/http/api-client', () => ({ ensureCreator: spies.ensureCreator, requestJson: spies.requestJson, currentCreatorId: () => 'owner-a' }))
 import { announceCreditsChanged, creditBalance, refreshCreditBalance } from '../src/shared/identity/credit-balance'
 import { useCredits } from '../src/shared/credits/useCredits'
 

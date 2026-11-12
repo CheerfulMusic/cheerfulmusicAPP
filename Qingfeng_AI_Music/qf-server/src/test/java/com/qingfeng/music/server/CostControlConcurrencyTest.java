@@ -66,7 +66,7 @@ import static org.junit.jupiter.api.Assertions.*;
 @Import(CostControlConcurrencyTest.Offline.class)
 class CostControlConcurrencyTest {
 
-    static final long LYRICS_COST = 5L;
+    static final long LYRICS_COST = 1L;
     static final long REWRITE_COST = 1L;
 
     @Autowired IdentityApi identity;
@@ -87,6 +87,7 @@ class CostControlConcurrencyTest {
         jdbc.update("DELETE FROM daily_quota");
         jdbc.update("DELETE FROM rewrite_consumption");
         jdbc.update("DELETE FROM credit_consumption");
+        jdbc.update("DELETE FROM credit_account");
         jdbc.update("DELETE FROM credit_ledger");
         jdbc.update("DELETE FROM lyrics_composition_request");
         lyricsWriter.calls.set(0);

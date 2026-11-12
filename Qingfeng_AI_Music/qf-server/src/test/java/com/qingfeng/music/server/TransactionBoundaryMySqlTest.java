@@ -74,7 +74,8 @@ class TransactionBoundaryMySqlTest {
             jdbc.update("DELETE FROM model_usage_reservation");
             jdbc.update("DELETE FROM rewrite_consumption");
             jdbc.update("DELETE FROM credit_consumption");
-            jdbc.update("DELETE FROM credit_ledger");
+        jdbc.update("DELETE FROM credit_account");
+        jdbc.update("DELETE FROM credit_ledger");
             jdbc.update("DELETE FROM music_work");
         } finally {
             jdbc.execute("SET FOREIGN_KEY_CHECKS=1");
@@ -183,6 +184,7 @@ class TransactionBoundaryMySqlTest {
     void reapStaleSingleFailureDoesNotBlockOthers() {
         String ownerA = identity.create().creatorId();
         String ownerB = identity.create().creatorId();
+        credits.credit(ownerA, 100, "fund-" + ownerA);
         String goodKey = UUID.randomUUID().toString();
         String badKey = UUID.randomUUID().toString();
         // 正常记录：DEBIT 属于 ownerA，可正常退款。
@@ -230,7 +232,7 @@ class TransactionBoundaryMySqlTest {
     }
 
     private void seedDebit(String owner, String reference, long amount) {
-        jdbc.update("INSERT INTO credit_ledger(entry_type,reference_id,owner_id,amount,created_at) VALUES('DEBIT',?,?,?,CURRENT_TIMESTAMP(6))", reference, owner, -amount);
+        credits.debit(owner,amount,reference);
     }
 
     private void seedStaleRewrite(String owner, String key, int secondsAgo) {

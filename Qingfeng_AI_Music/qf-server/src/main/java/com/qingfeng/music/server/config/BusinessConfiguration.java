@@ -19,5 +19,5 @@ import org.mybatis.spring.annotation.MapperScan;
 public class BusinessConfiguration {
     @Bean FirstLoginCredits firstLoginCredits(CreditsLedger credits, com.qingfeng.music.credits.ReferralRewards referrals) { return new FirstLoginCredits(credits, referrals); }
     @Bean IdentityApi identityApi(IdentityMapper mapper, FirstLoginCredits firstLoginCredits) { return new IdentityService(new MyBatisIdentityRepository(mapper), firstLoginCredits); }
-    @Bean WorkApi workApi(WorkMapper mapper) { return new WorkService(new MyBatisWorkRepository(mapper)); }
+    @Bean WorkApi workApi(WorkMapper mapper,com.qingfeng.music.agent.retrieval.SemanticIndexQueue index) { return new WorkService(new MyBatisWorkRepository(mapper),index); }
 }

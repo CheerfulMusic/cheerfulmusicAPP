@@ -1,6 +1,7 @@
 package com.qingfeng.music.server.web.app;
 
 import com.qingfeng.music.server.agent.AgentChatService;
+import com.qingfeng.music.server.agent.AgentChatExecutor;
 import com.qingfeng.music.server.security.CreatorPrincipal;
 import com.qingfeng.music.common.exception.DomainException;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -17,16 +18,18 @@ import java.util.Map;
 public class AgentChatController {
     public record Request(String text,String requestKey,String locale) {}
     private final AgentChatService chat;
-    public AgentChatController(AgentChatService chat){this.chat=chat;}
+    private final AgentChatExecutor executor;
+    public AgentChatController(AgentChatService chat,AgentChatExecutor executor){this.chat=chat;this.executor=executor;}
     @PostMapping("/messages")
-    public AgentChatService.Snapshot send(@AuthenticationPrincipal CreatorPrincipal creator,@PathVariable String id,@RequestBody Request request){
-        return chat.send(creator.id(),id,request.text(),request.requestKey(),request.locale());
+    public org.springframework.web.context.request.async.DeferredResult<AgentChatService.Snapshot> send(@AuthenticationPrincipal CreatorPrincipal creator,@PathVariable String id,@RequestBody Request request){
+        return executor.submit(creator.id(),id,request.text(),request.requestKey(),request.locale());
     }
     @GetMapping("/state")
-    public AgentChatService.Snapshot state(@AuthenticationPrincipal CreatorPrincipal creator,@PathVariable String id){return chat.state(creator.id(),id);}
+    public AgentChatService.Snapshot state(@AuthenticationPrincipal CreatorPrincipal creator,@PathVariable String id,@RequestParam(required=false)Long afterSeq,@RequestParam(required=false)Long historyEpoch){return chat.state(creator.id(),id,afterSeq,historyEpoch);}
     @ExceptionHandler(DomainException.class)
     public ResponseEntity<Map<String,String>> failure(DomainException error){
-        int status=error.code().contains("NOT_FOUND")?404:error.code().contains("CONFLICT")||error.code().contains("IN_PROGRESS")?409:400;
-        return ResponseEntity.status(status).body(Map.of("code",error.code(),"message",error.getMessage()));
+        int status=error.code().contains("NOT_FOUND")?404:error.code().contains("CONFLICT")||error.code().contains("IN_PROGRESS")?409:error.code().equals("AGENT_BUSY")||error.code().contains("RATE_LIMITED")||error.code().contains("BUDGET_EXCEEDED")?429:error.code().contains("ADMISSION_")||error.code().contains("DEADLINE")?503:400;
+        var response=ResponseEntity.status(status);if(status==429||status==503)response.header("Retry-After","60");
+        return response.body(Map.of("code",error.code(),"message",error.getMessage()));
     }
 }

@@ -17,8 +17,14 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 class QuickSchedulerConfigurationTest {
+    @Test void apiOnlyOptInAdvertisesAcceptanceWithoutStartingQuickWorker(){
+        context("qingfeng.generation.scheduler-enabled=false","qingfeng.quick.scheduler-enabled=false","qingfeng.quick.accept-enabled=true").run(c->{
+            assertNull(c.getStartupFailure());assertFalse(c.containsBean("quickRunner"));assertTrue(new SystemInfoController(music,c.getEnvironment(),writer,customWriter).info().capabilities().quickCreation());
+        });
+    }
     private final MusicProvider music = mock(MusicProvider.class);
     private final LyricsWriter writer = mock(LyricsWriter.class);
+    private final LyricsWriter customWriter = mock(LyricsWriter.class);
     private ApplicationContextRunner context(String... properties) {
         when(music.isConfigured()).thenReturn(true); when(writer.isConfigured()).thenReturn(true);
         return new ApplicationContextRunner().withUserConfiguration(QuickCreationConfiguration.class)
@@ -36,27 +42,30 @@ class QuickSchedulerConfigurationTest {
     @Test void dailyMainModeDoesNotStartQuickWorkersByDefault() {
         context("qingfeng.generation.scheduler-enabled=false").run(c -> {
             assertNull(c.getStartupFailure()); assertFalse(c.containsBean("quickRunner"));
-            assertFalse(new SystemInfoController(music,c.getEnvironment(),writer).info().capabilities().quickCreation());
+            assertFalse(new SystemInfoController(music,c.getEnvironment(),writer,customWriter).info().capabilities().quickCreation());
         });
     }
     @Test void localQuickWorkerCanRunWithoutTakingOverMusicQueues() {
         context("qingfeng.generation.scheduler-enabled=false", "qingfeng.quick.scheduler-enabled=true").run(c -> {
             assertNull(c.getStartupFailure()); assertTrue(c.containsBean("quickRunner"));
             assertFalse(c.getEnvironment().getProperty("qingfeng.generation.scheduler-enabled",Boolean.class,true));
-            assertTrue(new SystemInfoController(music,c.getEnvironment(),writer).info().capabilities().quickCreation());
+            var capabilities = new SystemInfoController(music,c.getEnvironment(),writer,customWriter).info().capabilities();
+            assertTrue(capabilities.quickCreation());
+            assertTrue(capabilities.lyricsGeneration());
+            assertFalse(capabilities.customLyricsGeneration());
             assertNotNull(c.getBean(QuickCreationService.class));
         });
     }
     @Test void explicitQuickOffAlsoWorksWithMusicWorkerOn() {
         context("qingfeng.generation.scheduler-enabled=true", "qingfeng.quick.scheduler-enabled=false").run(c -> {
             assertNull(c.getStartupFailure()); assertFalse(c.containsBean("quickRunner"));
-            assertFalse(new SystemInfoController(music,c.getEnvironment(),writer).info().capabilities().quickCreation());
+            assertFalse(new SystemInfoController(music,c.getEnvironment(),writer,customWriter).info().capabilities().quickCreation());
         });
     }
     @Test void productionDefaultsStillStartQuickRunnerAlongsideMusic() {
         context("qingfeng.generation.scheduler-enabled=true").run(c -> {
             assertNull(c.getStartupFailure()); assertTrue(c.containsBean("quickRunner"));
-            assertTrue(new SystemInfoController(music,c.getEnvironment(),writer).info().capabilities().quickCreation());
+            assertTrue(new SystemInfoController(music,c.getEnvironment(),writer,customWriter).info().capabilities().quickCreation());
         });
     }
 }

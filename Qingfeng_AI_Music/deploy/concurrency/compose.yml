@@ -1,0 +1,34 @@
+# Infrastructure template only. Starting containers does not migrate or deploy the application.
+# Bind only loopback. Configure passwords in an ignored .env, never in git.
+services:
+  redis:
+    image: redis:8.2-alpine
+    restart: unless-stopped
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?Set REDIS_PASSWORD in private .env}
+    command: ["sh", "-c", "exec redis-server --appendonly yes --appendfsync everysec --maxmemory 256mb --maxmemory-policy noeviction --requirepass \"$$REDIS_PASSWORD\""]
+    ports: ["127.0.0.1:6379:6379"]
+    volumes: ["redis-data:/data"]
+    mem_limit: 512m
+  rabbitmq:
+    image: rabbitmq:4.3.6-management
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:?Set dedicated RabbitMQ user}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?Set RABBITMQ_PASSWORD in private .env}
+      RABBITMQ_DEFAULT_VHOST: qingfeng
+    ports: ["127.0.0.1:5672:5672", "127.0.0.1:15672:15672"]
+    volumes: ["rabbit-data:/var/lib/rabbitmq"]
+    mem_limit: 1g
+  qdrant:
+    image: qdrant/qdrant:v1.15.5
+    restart: unless-stopped
+    environment:
+      QDRANT__SERVICE__API_KEY: ${QDRANT_API_KEY:?Set QDRANT_API_KEY in private .env}
+    ports: ["127.0.0.1:6333:6333"]
+    volumes: ["qdrant-data:/qdrant/storage"]
+    mem_limit: 1g
+volumes:
+  redis-data:
+  rabbit-data:
+  qdrant-data:

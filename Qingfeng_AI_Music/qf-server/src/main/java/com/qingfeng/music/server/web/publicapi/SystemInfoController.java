@@ -2,6 +2,7 @@ package com.qingfeng.music.server.web.publicapi;
 
 import com.qingfeng.music.generation.application.port.MusicProvider;
 import com.qingfeng.music.lyrics.application.LyricsWriter;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -14,18 +15,28 @@ public class SystemInfoController {
     private final MusicProvider musicProvider;
     private final Environment environment;
     private final LyricsWriter lyricsWriter;
-    public SystemInfoController(MusicProvider musicProvider, Environment environment,LyricsWriter lyricsWriter) { this.musicProvider = musicProvider; this.environment=environment;this.lyricsWriter=lyricsWriter; }
+    private final LyricsWriter customLyricsWriter;
+    public SystemInfoController(MusicProvider musicProvider, Environment environment, LyricsWriter lyricsWriter,
+                                @Qualifier("customLyricsWriter") LyricsWriter customLyricsWriter) {
+        this.musicProvider = musicProvider;
+        this.environment = environment;
+        this.lyricsWriter = lyricsWriter;
+        this.customLyricsWriter = customLyricsWriter;
+    }
 
     @GetMapping("/info")
     public SystemInfo info() {
         boolean persisted=environment.acceptsProfiles(Profiles.of("mysql","test"));
-        boolean writing=persisted&&lyricsWriter.isConfigured()&&environment.getProperty("qingfeng.lyrics.enabled",Boolean.class,false);
+        boolean lyricsEnabled=persisted&&environment.getProperty("qingfeng.lyrics.enabled",Boolean.class,false);
+        boolean writing=lyricsEnabled&&lyricsWriter.isConfigured();
+        boolean customWriting=lyricsEnabled&&customLyricsWriter.isConfigured();
         boolean music=persisted&&musicProvider.isConfigured()&&environment.getProperty("qingfeng.generation.enabled",Boolean.class,false);
-        boolean quick=writing&&music&&environment.getProperty("qingfeng.quick.enabled",Boolean.class,true)&&com.qingfeng.music.server.config.QuickCreationConfiguration.schedulerEnabled(environment);
+        boolean quick=writing&&music&&environment.getProperty("qingfeng.quick.enabled",Boolean.class,true)&&com.qingfeng.music.server.config.QuickCreationConfiguration.acceptEnabled(environment);
         boolean photo=persisted&&com.qingfeng.music.server.config.LyricsCompositionConfiguration.photoLyricsConfigured(environment);
-        return new SystemInfo("青风音乐", "0.1.0-SNAPSHOT", persisted?"LOCAL_WORKFLOW_READY":"SCAFFOLD", new Capabilities(writing,music,persisted,persisted,quick,photo));
+        return new SystemInfo("青风音乐", "0.1.0-SNAPSHOT", persisted?"LOCAL_WORKFLOW_READY":"SCAFFOLD", new Capabilities(writing,music,persisted,persisted,quick,photo,customWriting));
     }
 
     public record SystemInfo(String name, String version, String stage, Capabilities capabilities) {}
-    public record Capabilities(boolean lyricsGeneration, boolean musicGeneration, boolean giftSharing,boolean workPersistence,boolean quickCreation,boolean photoLyrics) {}
+    public record Capabilities(boolean lyricsGeneration, boolean musicGeneration, boolean giftSharing,boolean workPersistence,
+                               boolean quickCreation,boolean photoLyrics,boolean customLyricsGeneration) {}
 }

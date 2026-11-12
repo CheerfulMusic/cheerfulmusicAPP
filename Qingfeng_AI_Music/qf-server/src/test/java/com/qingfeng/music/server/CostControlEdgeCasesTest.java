@@ -47,7 +47,7 @@ import static org.junit.jupiter.api.Assertions.*;
  * 成本封顶边界验收：幂等并发、不同请求隔离、失败重放、超时/取消退款、每日额度跨日重置。
  *
  * 全程 H2 内存库，不触碰生产主库。仅放开与「每日成本上限」正交的并发/全局准入上限，
- * 保留生产积分单价（lyrics=5、music=15、rewrite=1）与每日上限（cover=20）。
+ * 保留生产积分单价（lyrics=1、music=5、rewrite=1）与每日上限（cover=20）。
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = {
     "spring.datasource.url=jdbc:h2:mem:cost_control_edges;MODE=MySQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1",
@@ -67,8 +67,8 @@ import static org.junit.jupiter.api.Assertions.*;
 @Import(CostControlEdgeCasesTest.Offline.class)
 class CostControlEdgeCasesTest {
 
-    static final long LYRICS_COST = 5L;
-    static final long MUSIC_COST = 15L;
+    static final long LYRICS_COST = 1L;
+    static final long MUSIC_COST = 5L;
 
     @Autowired IdentityApi identity;
     @Autowired WorkApi works;
@@ -85,6 +85,7 @@ class CostControlEdgeCasesTest {
         jdbc.update("DELETE FROM daily_quota");
         jdbc.update("DELETE FROM rewrite_consumption");
         jdbc.update("DELETE FROM credit_consumption");
+        jdbc.update("DELETE FROM credit_account");
         jdbc.update("DELETE FROM credit_ledger");
         jdbc.update("DELETE FROM lyrics_composition_request");
         lyricsWriter.calls.set(0);
@@ -114,7 +115,7 @@ class CostControlEdgeCasesTest {
         assertTrue(ok >= 1, "至少一次请求成功");
         assertEquals(1, lyricsWriter.calls.get(), "模型只被调用一次");
         assertEquals(1, consumptions(owner).size(), "只产生一条扣费流水");
-        assertEquals(fund - LYRICS_COST, credits.balance(owner), "同一幂等 Key 只扣 5 积分");
+        assertEquals(fund - LYRICS_COST, credits.balance(owner), "同一幂等 Key 只扣 1 积分");
     }
 
     /** 不同请求 Key 不会错误共用幂等结果：各自产生独立版本、各自精确扣费。 */
@@ -190,7 +191,7 @@ class CostControlEdgeCasesTest {
         String work = works.create(owner, draft()).id();
         String key = UUID.randomUUID().toString();
         usageBudget.reserve(owner, work, key, Kind.MUSIC);
-        assertEquals(fund - MUSIC_COST, credits.balance(owner), "MUSIC 预扣 15 积分");
+        assertEquals(fund - MUSIC_COST, credits.balance(owner), "MUSIC 预扣 5 积分");
         assertTrue(usageBudget.cancelMusic(work, key, () -> true), "取消成功");
         assertEquals(fund, credits.balance(owner), "取消后全额退款");
         assertEquals(0, reservations(Kind.MUSIC, owner), "额度预留已释放");

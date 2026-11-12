@@ -52,7 +52,7 @@ public class LyricsController {
  }
  @PostMapping("/generate")
  public LyricsApi.Revision compose(@AuthenticationPrincipal CreatorPrincipal creator,@PathVariable String work,@Valid @RequestBody ComposeRequest request){
-     return composer.compose(creator.id(),work,request.workVersion(),request.requestKey(),request.language(),
+     return composer.composeCustom(creator.id(),work,request.workVersion(),request.requestKey(),request.language(),
          request.instructions(),request.baseRevisionId(),request.templateId(),request.chorusFirst(),request.customSections());
  }
  @PostMapping(value="/generate-photo", consumes="multipart/form-data")

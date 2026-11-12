@@ -6,7 +6,7 @@ import { guardCredits } from '../../../shared/credits/credit-gate'
 import { useCredits } from '../../../shared/credits/useCredits'
 import { rewriteLyricSelection } from '../api/detail'
 
-const props = defineProps<{workId: string; workVersion: number; source: string; language: string}>()
+const props = defineProps<{workId: string; workVersion: number; source: string; language: string; canRewriteAll?: boolean}>()
 const emit = defineEmits<{close: []; apply: [lyrics: string]; rewriteAll: []}>()
 const dialog = ref<HTMLDialogElement>()
 const previewHeading = ref<HTMLElement>()
@@ -192,7 +192,7 @@ onBeforeUnmount(() => {
             <button type="button" class="button" @click="emit('apply', preview!)">{{ t('采用新版') }}</button>
           </template>
           <template v-else>
-            <button type="button" class="button secondary" :disabled="busy" @click="emit('rewriteAll')">
+            <button v-if="props.canRewriteAll !== false" type="button" class="button secondary" :disabled="busy" @click="emit('rewriteAll')">
               {{ credits && credits.lyricsCost > 0 ? t('全部重写（{count} 积分）', { count: credits.lyricsCost }) : t('全部重写') }}
             </button>
             <button type="button" class="button" :disabled="!canGenerate" @click="generate">{{ busy ? t('正在重写歌词…') : t('生成预览') }}</button>

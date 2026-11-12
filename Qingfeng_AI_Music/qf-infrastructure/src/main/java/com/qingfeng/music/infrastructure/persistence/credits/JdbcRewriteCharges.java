@@ -87,7 +87,7 @@ public final class JdbcRewriteCharges implements RewriteCharges {
      * 统计落在数据库上，因此多副本部署时上限不会随实例数放大。
      */
     private void admit(String owner) {
-        jdbc.queryForObject("SELECT id FROM credit_lock WHERE id=1 FOR UPDATE", Integer.class);
+        jdbc.queryForObject("SELECT id FROM rewrite_admission_lock WHERE id=1 FOR UPDATE", Integer.class);
         Integer inflight = jdbc.queryForObject("SELECT COUNT(*) FROM rewrite_consumption WHERE status='RESERVED'", Integer.class);
         if (inflight != null && inflight >= globalConcurrency) throw busy();
         Integer mine = jdbc.queryForObject("SELECT COUNT(*) FROM rewrite_consumption WHERE status='RESERVED' AND creator_id=?", Integer.class, owner);

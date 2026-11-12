@@ -104,4 +104,40 @@ class InspirationRewriteTest {
             assertNotNull(service.rewrite("b", "原文", "en", UUID.randomUUID().toString()));
         } finally { release.countDown(); pool.shutdownNow(); }
     }
+
+    @Test void qwenRequestOmitsDeepSeekOnlyThinkingParameter() throws Exception {
+        var json = new ObjectMapper(); var captured = new AtomicReference<String>();
+        var server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/", e -> {
+            captured.set(new String(e.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
+            byte[] response = json.writeValueAsBytes(Map.of("choices", List.of(Map.of("finish_reason", "stop", "message", Map.of("content", "{\"text\":\"夏天、海风与汽水\"}")))));
+            e.sendResponseHeaders(200, response.length); e.getResponseBody().write(response); e.close();
+        }); server.start();
+        try {
+            var writer = new DeepSeekInspirationRewriter("offline-key", DeepSeekInspirationRewriter.QWEN_MODEL,
+                URI.create("http://127.0.0.1:" + server.getAddress().getPort() + "/chat/completions"), HttpClient.newHttpClient());
+            assertEquals("夏天、海风与汽水", writer.rewrite("想写一首关于夏天的歌", "zh-CN"));
+            var body = json.readTree(captured.get());
+            assertEquals("qwen3.8-flash", body.path("model").asText());
+            assertFalse(body.has("thinking"), "Qwen 不应收到 DeepSeek 专有的 thinking 参数");
+            assertEquals("json_object", body.path("response_format").path("type").asText());
+        } finally { server.stop(0); }
+    }
+
+    @Test void deepSeekRequestStillSendsThinkingDisabled() throws Exception {
+        var json = new ObjectMapper(); var captured = new AtomicReference<String>();
+        var server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/", e -> {
+            captured.set(new String(e.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
+            byte[] response = json.writeValueAsBytes(Map.of("choices", List.of(Map.of("finish_reason", "stop", "message", Map.of("content", "{\"text\":\"有效结果\"}")))));
+            e.sendResponseHeaders(200, response.length); e.getResponseBody().write(response); e.close();
+        }); server.start();
+        try {
+            var writer = new DeepSeekInspirationRewriter("offline-key", "deepseek-flash",
+                URI.create("http://127.0.0.1:" + server.getAddress().getPort() + "/chat/completions"), HttpClient.newHttpClient());
+            assertEquals("有效结果", writer.rewrite("原文", "zh-CN"));
+            var body = json.readTree(captured.get());
+            assertEquals("disabled", body.path("thinking").path("type").asText());
+        } finally { server.stop(0); }
+    }
 }

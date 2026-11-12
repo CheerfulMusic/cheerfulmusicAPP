@@ -25,7 +25,9 @@ class AgentChatServiceTest {
     final SongCard song=new SongCard("work","妈妈","温暖民谣","原来的副歌","/audio/current","SUCCEEDED",null,1,"lyrics","asset",null);
     AgentChatService service;
     @BeforeEach void setup(){
-        when(conversations.listMessages("owner","conversation")).thenAnswer(call->List.copyOf(messages));
+        when(conversations.listRecentMessages(eq("owner"),eq("conversation"),anyInt())).thenAnswer(call->List.copyOf(messages));
+        when(conversations.listRecentActionMessages(eq("owner"),eq("conversation"),anyInt())).thenAnswer(call->List.copyOf(messages));
+        when(conversations.historyPage(eq("owner"),eq("conversation"),isNull(),anyInt())).thenAnswer(call->new ConversationService.MessagePage(List.copyOf(messages),false,messages.isEmpty()?0:1,messages.size(),0));
         when(conversations.appendMessage(anyString(),anyString(),anyString(),anyString(),anyString(),anyString(),nullable(String.class))).thenAnswer(call->{
             var message=new AgentMessage(UUID.randomUUID().toString(),"conversation",messages.size()+1,call.getArgument(2),call.getArgument(3),call.getArgument(4),call.getArgument(5),call.getArgument(6),Instant.now());
             messages.add(message);return message;
@@ -40,6 +42,46 @@ class AgentChatServiceTest {
         service=new AgentChatService(conversations,tools,model,store,social);
     }
     String key(){return UUID.randomUUID().toString();}
+    @Test void executionProgressIsDurableExcludedFromPromptAndReplayDoesNotExecuteTwice(){
+        service.withProgress(true);
+        when(model.respond(any())).thenReturn(new AgentChatModel.Plan("generate_lyrics",Map.of("text","写歌词"),"开始写词"));
+        String request=key();service.send("owner","conversation","写一首歌词",request,"zh-CN");
+        long count=messages.stream().filter(m->m.contentJson().contains("\"kind\":\"progress\"")).count();
+        assertEquals(3,count);
+        int before=messages.size();service.send("owner","conversation","写一首歌词",request,"zh-CN");assertEquals(before,messages.size());
+        when(model.respond(any())).thenReturn(new AgentChatModel.Plan("chat",Map.of(),"你好"));
+        service.send("owner","conversation","你好",key(),"zh-CN");
+        var contexts=ArgumentCaptor.forClass(AgentChatModel.Context.class);verify(model,times(2)).respond(contexts.capture());
+        assertEquals("owner",contexts.getValue().execution().owner());
+        assertTrue(contexts.getValue().history().stream().noneMatch(t->t.text().contains("正在理解")||t.text().contains("正在处理")||t.text().contains("本步骤已返回")));
+        verify(tools,times(1)).dispatch(eq(AgentTool.GENERATE_LYRICS),any(),eq("owner"),eq(request));
+    }
+    @Test void progressDoesNotBypassConfirmationOrClaimFailedToolSucceeded(){
+        service.withProgress(true);when(model.respond(any())).thenReturn(plan("generate_song"));
+        service.send("owner","conversation","帮妈妈准备一份生日惊喜",key(),"zh-CN");
+        verify(tools,never()).dispatch(eq(AgentTool.GENERATE_SONG),any(),anyString(),anyString());
+        when(tools.dispatch(eq(AgentTool.GENERATE_SONG),any(),anyString(),anyString())).thenThrow(new com.qingfeng.music.common.exception.DomainException("GENERATION_FAILED","生成暂不可用"));
+        service.send("owner","conversation","确认生成",key(),"zh-CN");
+        assertTrue(messages.stream().anyMatch(m->m.contentJson().contains("tool_started")));
+        assertFalse(messages.stream().anyMatch(m->m.contentJson().contains("tool_finished")));
+        assertTrue(messages.get(messages.size()-1).contentJson().contains("GENERATION_FAILED"));
+    }
+    @Test void epochResetReplacesHistoryAndResetsCursorInsteadOfKeepingPreviousSequence(){
+        when(conversations.historyPage(eq("owner"),eq("conversation"),isNull(),anyInt())).thenReturn(new ConversationService.MessagePage(List.of(),false,0,0,5));
+        when(conversations.historyEpoch("owner","conversation")).thenReturn(5L);
+        var snapshot=service.state("owner","conversation",100L,4L);
+        assertEquals("replace",snapshot.messagesMode());assertEquals(0,snapshot.latestSeq());assertEquals(5,snapshot.historyEpoch());assertFalse(snapshot.hasNewerMessages());
+    }
+    @Test void incrementalPageReportsMoreMessagesEvenWhenMusicIsFinished(){
+        for(int i=1;i<=150;i++)messages.add(new AgentMessage("m"+i,"conversation",i,"assistant","TEXT","DONE","{\"text\":\"历史\"}",null,Instant.now()));
+        when(conversations.listMessagesAfter("owner","conversation",0L,100)).thenReturn(List.copyOf(messages.subList(0,100)));
+        var snapshot=service.state("owner","conversation",0L,0L);
+        assertEquals("append",snapshot.messagesMode());assertEquals(100,snapshot.latestSeq());assertTrue(snapshot.hasNewerMessages());assertEquals(100,snapshot.messages().size());
+    }
+    @Test void repeatedResetsDuringSnapshotNeverReturnMixedEpochState(){
+        when(conversations.historyEpoch("owner","conversation")).thenReturn(0L,1L,2L);
+        assertEquals("AGENT_CONVERSATION_CONFLICT",assertThrows(com.qingfeng.music.common.exception.DomainException.class,()->service.state("owner","conversation",0L,0L)).code());
+    }
     AgentChatModel.Plan plan(String action){return new AgentChatModel.Plan(action,Map.of("text","妈妈的生日"),"我可以帮你继续创作。");}
     @Test void conversationalReplyUsesHistoryAndCurrentLyricsWithoutGenerating(){
         messages.add(new AgentMessage("1","conversation",1,"user","TEXT","DONE","{\"text\":\"给妈妈写首歌\"}",null,Instant.now()));

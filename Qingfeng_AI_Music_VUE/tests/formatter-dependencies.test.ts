@@ -16,4 +16,4 @@ it('patched formatter dependencies preserve glob input and EditorConfig matching
   expect(output).toContain('beautified sample.html')
   expect(readFileSync(join(dir,'sample.html'),'utf8').replace(/\r\n/g,'\n')).toContain('\n   <div>text</div>')
  }finally{rmSync(dir,{recursive:true,force:true})}
-})
+},15000) // The child process itself has a 10s deadline; allow setup and cleanup around it.

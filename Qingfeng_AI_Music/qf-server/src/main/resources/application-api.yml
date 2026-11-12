@@ -1,0 +1,23 @@
+# Opt-in split role: use with mysql and explicitly configured private broker settings.
+qingfeng:
+  quick:
+    accept-enabled: true
+    scheduler-enabled: false
+  generation:
+    scheduler-enabled: false
+  cover:
+    ai:
+      scheduler-enabled: false
+  payment:
+    inbox:
+      scheduler-enabled: false
+  agent:
+    legacy-pending:
+      enabled: false
+    retrieval:
+      scheduler-enabled: false
+  events:
+    dispatcher-enabled: true
+    rabbit:
+      enabled: true
+      consumer-enabled: false

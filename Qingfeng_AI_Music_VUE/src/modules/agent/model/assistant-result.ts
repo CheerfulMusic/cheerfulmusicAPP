@@ -12,7 +12,7 @@ export function assistantResult(message: Message): AssistantResult | null {
   if (message.role !== 'assistant' || message.state !== 'DONE') return null
   try {
     const body: unknown = JSON.parse(message.contentJson || '{}')
-    if (!object(body)) return null
+    if (!object(body) || body.kind === 'progress') return null
     const commands = (Array.isArray(body.commands) ? body.commands : []).filter((c): c is AgentCommand =>
       object(c) && typeof c.kind === 'string' && kinds.includes(c.kind as AgentCommandKind)
       && typeof c.label === 'string' && c.label.trim().length > 0 && c.label.length <= 200

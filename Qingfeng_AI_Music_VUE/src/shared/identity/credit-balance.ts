@@ -1,5 +1,5 @@
 import { readonly, ref } from 'vue'
-import { ensureCreator, requestJson } from '../http/api-client'
+import { currentCreatorId, ensureCreator, requestJson } from '../http/api-client'
 
 export interface CreditBalanceResponse { enabled: boolean; balance: number; musicCost: number; lyricsCost: number; rewriteCost: number; rewriteFreeRemaining: number }
 /** 创作区使用的积分视图：余额与价格都来自后端，前端不硬编码价格。balance 为 null 表示还没读到真实余额。 */
@@ -66,15 +66,18 @@ export async function refreshCreditBalance(authenticated: boolean): Promise<numb
  */
 export async function loadCredits(): Promise<CreditsView | null> {
   const turn = ++loadTurn
+  let owner = currentCreatorId()
   try {
     await ensureCreator()
+    if (owner && owner !== currentCreatorId()) return null
+    owner = currentCreatorId()
     const data = await requestJson<CreditBalanceResponse>('app/credits')
     const view = normalize(data)
-    if (turn !== loadTurn) return null
+    if (turn !== loadTurn || owner !== currentCreatorId()) return null
     apply(view)
     return view
   } catch {
-    if (turn === loadTurn) apply(null)
+    if (turn === loadTurn && owner === currentCreatorId()) apply(null)
     return null
   }
 }

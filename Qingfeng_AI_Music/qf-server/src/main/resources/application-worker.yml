@@ -1,0 +1,23 @@
+# Worker HTTP stays on loopback for health checks; never put this port behind public ingress.
+server:
+  address: 127.0.0.1
+  port: ${WORKER_PORT:8081}
+qingfeng:
+  quick:
+    scheduler-enabled: true
+  generation:
+    scheduler-enabled: true
+  cover:
+    ai:
+      scheduler-enabled: true
+  payment:
+    inbox:
+      scheduler-enabled: true
+  agent:
+    retrieval:
+      scheduler-enabled: true
+  events:
+    dispatcher-enabled: true
+    rabbit:
+      enabled: true
+      consumer-enabled: true

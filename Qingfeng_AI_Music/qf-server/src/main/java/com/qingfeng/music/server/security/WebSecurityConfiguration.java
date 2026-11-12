@@ -20,18 +20,18 @@ public class WebSecurityConfiguration {
         return username -> { throw new UsernameNotFoundException("身份服务尚未接入"); };
     }
 
-    @Bean @org.springframework.core.annotation.Order(2) SecurityFilterChain apiSecurity(HttpSecurity http, ObjectProvider<CreatorSessionFilter> sessionFilter, ObjectProvider<GoogleOAuthFlow> googleFlow, ObjectProvider<InviteGateFilter> inviteGate) throws Exception {
+    @Bean @org.springframework.core.annotation.Order(2) SecurityFilterChain apiSecurity(HttpSecurity http, ObjectProvider<CreatorSessionFilter> sessionFilter, ObjectProvider<GoogleOAuthFlow> googleFlow, ObjectProvider<InviteGateFilter> inviteGate,org.springframework.core.env.Environment env,ObjectProvider<org.springframework.data.redis.core.StringRedisTemplate> redis) throws Exception {
         var google=googleFlow.getIfAvailable();if(google!=null)google.configure(http);
         var filter=sessionFilter.getIfAvailable();
         if (filter!=null) http.addFilterBefore(filter, AnonymousAuthenticationFilter.class);
         var invite=inviteGate.getIfAvailable();
         if (invite!=null) http.addFilterBefore(invite, org.springframework.security.web.csrf.CsrfFilter.class);
-        if (filter!=null) http.addFilterAfter(new ApiRateLimitFilter(),CreatorSessionFilter.class);
+        if (filter!=null) http.addFilterAfter(new ApiRateLimitFilter(java.time.Clock.systemUTC(),env.getProperty("qingfeng.redis.enabled",Boolean.class,false)&&env.getProperty("qingfeng.redis.api-rate-limit-enabled",Boolean.class,true)?new RedisApiRateGate(redis.getObject()):null),CreatorSessionFilter.class);
         return http.csrf(csrf -> csrf.ignoringRequestMatchers("/api/public/payments/airwallex/webhook", "/api/public/paypal/webhook", "/api/public/events", "/api/public/hot-songs/*/play")
             .ignoringRequestMatchers(request->"POST".equals(request.getMethod())&&"/api/public/auth/sms/deliver".equals(request.getServletPath()))
             .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse()).csrfTokenRequestHandler(new CsrfTokenRequestAttributeHandler()))
             .authorizeHttpRequests(auth -> auth
-                .dispatcherTypeMatchers(jakarta.servlet.DispatcherType.ERROR).permitAll()
+                .dispatcherTypeMatchers(jakarta.servlet.DispatcherType.ERROR,jakarta.servlet.DispatcherType.ASYNC).permitAll()
                 .requestMatchers(org.springframework.http.HttpMethod.GET,"/api/public/invite/status").permitAll()
                 .requestMatchers(org.springframework.http.HttpMethod.POST,"/api/public/invite/enter").permitAll()
                 .requestMatchers(org.springframework.http.HttpMethod.GET,"/","/index.html","/assets/**","/brand/**","/media/**","/create","/create/photo","/works","/works/*","/gift/*","/account","/profile","/artist/*","/recharge","/analytics","/agent","/legal/**").permitAll()

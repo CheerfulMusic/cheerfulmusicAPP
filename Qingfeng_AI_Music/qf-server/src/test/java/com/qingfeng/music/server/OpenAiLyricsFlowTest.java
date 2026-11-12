@@ -11,6 +11,7 @@ import com.qingfeng.music.common.exception.DomainException;
 import com.qingfeng.music.server.security.CreatorPrincipal;
 import com.qingfeng.music.server.web.app.LyricsController;
 import com.qingfeng.music.server.web.app.LyricsController.ComposeRequest;
+import com.qingfeng.music.server.web.publicapi.SystemInfoController;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -23,6 +24,7 @@ import org.springframework.context.annotation.*;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.bean.override.convention.TestBean;
 import static org.junit.jupiter.api.Assertions.*;
 
 /** H2 隔离流程验证；不加载 mysql profile、不发送真实模型请求。 */
@@ -80,6 +82,51 @@ class OpenAiLyricsFlowTest {
     @Autowired OfflineGpt writer;
     @Autowired OfflineDeepSeek backup;
     @Autowired LyricsController controller;
+    @Autowired SystemInfoController system;
+    private static final OfflineGpt CUSTOM_GPT = new OfflineGpt();
+    private static final OfflineDeepSeek CUSTOM_DEEPSEEK = new OfflineDeepSeek();
+    @TestBean(name="customLyricsWriter", methodName="offlineCustomWriter", enforceOverride=true)
+    LyricsWriter customWriter;
+
+    static LyricsWriter offlineCustomWriter(){return new FallbackLyricsWriter(CUSTOM_GPT,CUSTOM_DEEPSEEK);}
+
+    @Test void successfulCustomCreationAndRegenerationUseOpenAi(){
+        String owner=identity.create().creatorId();
+        var work=works.create(owner,new WorkApi.Draft("","", "送别之后的回忆","","民谣",""));
+        var principal=new CreatorPrincipal(owner);
+        int sharedCalls=writer.calls.get(), customCalls=CUSTOM_GPT.calls.get(), backupCalls=CUSTOM_DEEPSEEK.calls.get();
+        var first=new ComposeRequest(0L,UUID.randomUUID().toString(),"zh-CN","",null,null,false);
+        assertTrue(system.info().capabilities().customLyricsGeneration());
+        var generated=controller.compose(principal,work.id(),first);
+        assertEquals(generated.id(),controller.compose(principal,work.id(),first).id());
+        var next=new ComposeRequest(0L,UUID.randomUUID().toString(),"zh-CN","更温暖",generated.id(),null,false);
+        var regenerated=controller.compose(principal,work.id(),next);
+        assertEquals("OPENAI",generated.source());
+        assertEquals("OPENAI",regenerated.source());
+        assertNotEquals(generated.id(),regenerated.id());
+        assertEquals(customCalls+2,CUSTOM_GPT.calls.get());
+        assertEquals(sharedCalls,writer.calls.get());
+        assertEquals(backupCalls,CUSTOM_DEEPSEEK.calls.get());
+    }
+
+    @Test void customCreationFallsBackOnceForAnExplicitProviderRejection(){
+        String owner=identity.create().creatorId();
+        var work=works.create(owner,new WorkApi.Draft("","","夜里回家","","民谣",""));
+        var principal=new CreatorPrincipal(owner);
+        var request=new ComposeRequest(0L,UUID.randomUUID().toString(),"zh-CN","保持朴素",null,null,false);
+        int customCalls=CUSTOM_GPT.calls.get(), backupCalls=CUSTOM_DEEPSEEK.calls.get();
+        CUSTOM_GPT.failureCode="LYRICS_PROVIDER_REJECTED";
+        try {
+            var generated=controller.compose(principal,work.id(),request);
+            assertEquals("DEEPSEEK",generated.source());
+            assertEquals(generated.id(),controller.compose(principal,work.id(),request).id());
+            assertEquals(customCalls+1,CUSTOM_GPT.calls.get());
+            assertEquals(backupCalls+1,CUSTOM_DEEPSEEK.calls.get());
+            assertTrue(CUSTOM_DEEPSEEK.instructions.contains("保持朴素"));
+        } finally {
+            CUSTOM_GPT.failureCode=null;
+        }
+    }
 
     @Test void customSectionOrderSurvivesGenerationEditsConfirmationAndRegeneration(){
         String owner=identity.create().creatorId();
@@ -88,21 +135,21 @@ class OpenAiLyricsFlowTest {
         var sections=List.of("Chorus","Verse 2","Chorus","Interlude");
         String key=UUID.randomUUID().toString();
         var first=new ComposeRequest(0L,key,"zh-CN","",null,"CUSTOM",false,sections);
-        int before=writer.calls.get();
-        writer.output="[Chorus]\n灯还亮着\n[Verse 2]\n窗台留着小碗\n[Chorus]\n灯还亮着\n[Interlude]";
+        int before=CUSTOM_GPT.calls.get();
+        CUSTOM_GPT.output="[Chorus]\n灯还亮着\n[Verse 2]\n窗台留着小碗\n[Chorus]\n灯还亮着\n[Interlude]";
         try {
             var generated=controller.compose(principal,work.id(),first);
             assertEquals("OPENAI",generated.source());
             assertEquals("CUSTOM",generated.templateId());
             assertEquals(sections,generated.customSections());
-            assertTrue(writer.instructions.contains("[Chorus] → [Verse 2] → [Chorus] → [Interlude]"));
+            assertTrue(CUSTOM_GPT.instructions.contains("[Chorus] → [Verse 2] → [Chorus] → [Interlude]"));
             assertEquals(generated.id(),controller.compose(principal,work.id(),first).id());
 
             var reordered=new ComposeRequest(0L,key,"zh-CN","",null,"CUSTOM",false,
                 List.of("Verse 2","Chorus","Chorus","Interlude"));
             assertEquals("REQUEST_KEY_CONFLICT",assertThrows(DomainException.class,
                 ()->controller.compose(principal,work.id(),reordered)).code());
-            assertEquals(before+1,writer.calls.get());
+            assertEquals(before+1,CUSTOM_GPT.calls.get());
 
             var edited=lyrics.save(owner,work.id(),0,generated.title(),"窗台上还亮着灯",generated.id());
             var confirmed=lyrics.confirm(owner,work.id(),edited.id());
@@ -111,11 +158,11 @@ class OpenAiLyricsFlowTest {
             var next=new ComposeRequest(0L,UUID.randomUUID().toString(),"zh-CN","更温暖",confirmed.id(),"CUSTOM",false,sections);
             var regenerated=controller.compose(principal,work.id(),next);
             assertEquals(sections,regenerated.customSections());
-            assertEquals(confirmed.lyrics(),writer.previousLyrics);
-            assertTrue(writer.instructions.contains("[Chorus] → [Verse 2] → [Chorus] → [Interlude]"));
-            assertEquals(before+2,writer.calls.get());
+            assertEquals(confirmed.lyrics(),CUSTOM_GPT.previousLyrics);
+            assertTrue(CUSTOM_GPT.instructions.contains("[Chorus] → [Verse 2] → [Chorus] → [Interlude]"));
+            assertEquals(before+2,CUSTOM_GPT.calls.get());
         } finally {
-            writer.output=null;
+            CUSTOM_GPT.output=null;
         }
     }
 
@@ -128,19 +175,35 @@ class OpenAiLyricsFlowTest {
             var factory=factoryBean.getObject();
             factory.getConfiguration().addMapper(LyricsMapper.class);
             var repository=new MyBatisLyricsRepository(new SqlSessionTemplate(factory).getMapper(LyricsMapper.class));
-            var service=new LyricsCompositionService(works,lyrics,repository,writer,requests,true);
+            var service=new LyricsCompositionService(works,lyrics,repository,CUSTOM_GPT,requests,true);
 
             String owner=identity.create().creatorId();
             var work=works.create(owner,new WorkApi.Draft("","","晚归时留下的灯","","民谣",""));
             String key=UUID.randomUUID().toString();
-            int before=writer.calls.get();
+            int before=CUSTOM_GPT.calls.get();
             assertEquals("LYRICS_CUSTOM_STRUCTURE_UNAVAILABLE",assertThrows(DomainException.class,
-                ()->service.compose(owner,work.id(),0,key,"zh-CN","",null,"CUSTOM",false,List.of("Verse"))).code());
+                ()->service.composeCustom(owner,work.id(),0,key,"zh-CN","",null,"CUSTOM",false,List.of("Verse"))).code());
             assertEquals("NOT_FOUND",service.requestState(owner,work.id(),key).status());
-            assertEquals(before,writer.calls.get());
+            assertEquals(before,CUSTOM_GPT.calls.get());
         }
     }
 
+    @Test void uncertainCustomRequestRetainsItsOriginalStatus(){
+        String owner=identity.create().creatorId();
+        var work=works.create(owner,new WorkApi.Draft("","","等最后一班车","","民谣",""));
+        var request=new ComposeRequest(0L,UUID.randomUUID().toString(),"zh-CN","",null,null,false);
+        int backupCalls=CUSTOM_DEEPSEEK.calls.get();
+        CUSTOM_GPT.failureCode="LYRICS_PROVIDER_TIMEOUT";
+        try {
+            assertEquals("LYRICS_PROVIDER_TIMEOUT",assertThrows(DomainException.class,
+                ()->controller.compose(new CreatorPrincipal(owner),work.id(),request)).code());
+            assertEquals("UNKNOWN",composer.requestState(owner,work.id(),request.requestKey()).status());
+            assertEquals(backupCalls,CUSTOM_DEEPSEEK.calls.get());
+            assertTrue(lyrics.list(owner,work.id()).isEmpty());
+        } finally {
+            CUSTOM_GPT.failureCode=null;
+        }
+    }
 
     @Test void gptVersionAndPlanPersistWithCorrectSourceWithoutOverwritingOrDuplicateCalls(){
         String owner=identity.create().creatorId();
