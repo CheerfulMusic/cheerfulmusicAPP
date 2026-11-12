@@ -5,7 +5,8 @@ import org.springframework.core.env.Environment;
 
 /**
  * AI 改写（灵感改写 / 歌词行改写 / 音乐要求精简）专用模型配置。
- * 默认阿里云百炼千问 Flash「qwen3.8-flash」，走 OpenAI 兼容 chat/completions。
+ * 默认千问AI平台（qianwenaiapi.com）的千问 Flash「qwen3.8-flash」，走 OpenAI 兼容
+ * chat/completions；base-url 必须与签发该 key 的平台配套，不能混用阿里云百炼官方域名。
  *
  * <p>密钥绝不写入仓库：优先服务器私有配置 {@code qingfeng.providers.qwen.api-key}，
  * 其次环境变量 {@code aliyunqingfengKEY}，最后通用 {@code DASHSCOPE_API_KEY}。

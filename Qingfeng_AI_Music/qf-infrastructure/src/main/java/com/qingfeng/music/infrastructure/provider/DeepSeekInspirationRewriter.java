@@ -15,15 +15,16 @@ import tools.jackson.databind.ObjectMapper;
  * OpenAI 兼容的文本改写器：灵感改写 / 歌词行改写 / 音乐要求精简共用。
  *
  * <p>类名沿用历史命名（DeepSeek...），实际 provider 由传入的 endpoint + model 决定。
- * AI 改写默认已切换为阿里云百炼 qwen3.8-flash（见 qf-server 的 RewriteProviderSettings），
- * 歌词生成主链路 DeepSeekLyricsWriter 仍使用原有 deepseek 配置，两者互不影响。
+ * AI 改写默认已切换为千问AI平台（qianwenaiapi.com）的 qwen3.8-flash
+ * （见 qf-server 的 RewriteProviderSettings）；歌词生成主链路 DeepSeekLyricsWriter
+ * 仍使用原有 deepseek 配置，两者互不影响。
  *
  * <p>仅 DeepSeek 模型附带其专有的 {@code thinking} 参数；Qwen 等其它 OpenAI 兼容
  * provider 不发送该字段，避免 unknown parameter 导致 400。
  */
 public final class DeepSeekInspirationRewriter implements InspirationRewriter {
     public static final String QWEN_MODEL = "qwen3.8-flash";
-    public static final String QWEN_ENDPOINT = "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions";
+    public static final String QWEN_ENDPOINT = "https://maas.qianwenaiapi.com/compatible-mode/v1/chat/completions";
     private static final String DEEPSEEK_ENDPOINT = "https://api.deepseek.com/chat/completions";
 
     private final String key, model;

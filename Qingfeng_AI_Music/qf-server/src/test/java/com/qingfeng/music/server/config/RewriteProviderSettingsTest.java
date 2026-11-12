@@ -13,14 +13,14 @@ class RewriteProviderSettingsTest {
     void defaultsToQwenFlashAndDashscopeCompatibleEndpoint() {
         var s = RewriteProviderSettings.settings(new MockEnvironment());
         assertEquals("qwen3.8-flash", s.model());
-        assertEquals("https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions", s.endpoint());
+        assertEquals("https://maas.qianwenaiapi.com/compatible-mode/v1/chat/completions", s.endpoint());
     }
 
     @Test
     void baseUrlWithoutChatCompletionsIsNormalized() {
         var env = new MockEnvironment().withProperty(
-            "qingfeng.providers.qwen.base-url", "https://dashscope.aliyuncs.com/compatible-mode/v1/");
-        assertEquals("https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
+            "qingfeng.providers.qwen.base-url", "https://maas.qianwenaiapi.com/compatible-mode/v1/");
+        assertEquals("https://maas.qianwenaiapi.com/compatible-mode/v1/chat/completions",
             RewriteProviderSettings.settings(env).endpoint());
     }
 
