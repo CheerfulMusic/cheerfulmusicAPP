@@ -10,8 +10,10 @@ import { getSystemInfo } from '../../../shared/http/system'
 import { ApiError, currentCreatorId } from '../../../shared/http/api-client'
 import { readRecovery, writeRecovery, recoveryKey,checkpointRecovery } from '../../../shared/drafts/recovery'
 import RecoveryCopies from '../../../shared/drafts/RecoveryCopies.vue'
+import LyricSelectionRewriteDialog from './LyricSelectionRewriteDialog.vue'
 import type { Work } from '../../studio'
-import { listRevisions, getRevision, getLyricsRequest, saveRevision, confirmRevision, generateLyrics, rewriteLyricLine, type Revision, type LyricRewriteAction } from '../api/detail'
+import { listRevisions, getRevision, getLyricsRequest, saveRevision, confirmRevision, generateLyrics, type Revision, type LyricRewriteAction } from '../api/detail'
+import { lyricRewriteError, lyricsMaxLength, selectLyricLine, suggestLyricLine, type LyricLineSelection } from '../model/lyric-line-edit'
 const props=defineProps<{work:Work;showInlineSave?:boolean}>(), emit=defineEmits<{selected:[revision:Revision|null];dirty:[value:boolean];ready:[value:boolean];recoverable:[value:boolean];base:[revision:Revision|null]}>()
 const route=useRoute(),router=useRouter()
 const versions=ref<Revision[]>([]),active=ref<Revision|null>(null),title=ref(props.work.title||(props.work.recipient?t('写给{recipient}的歌',{recipient:props.work.recipient}):t('我的原创歌曲'))),text=ref(''),baseline=ref(''),loading=ref(true),saving=ref(false),composing=ref(false),preparing=ref(false),error=ref(''),notice=ref(''),aiReady=ref(false),localSaved=ref(false),creditShort=ref(false)
@@ -28,70 +30,44 @@ const canGenerate=computed(()=>valid.value&&!blocked.value&&!saving.value)
 const canSave=computed(()=>canGenerate.value&&needsSave.value)
 const savedTime=computed(()=>active.value&&!dirty.value?formatDate(active.value.createdAt):'')
 const editor=ref<HTMLTextAreaElement>()
-const selection=ref<{source:string;start:number;end:number;line:string;context:string}>()
-const linePreview=ref<{selection:NonNullable<typeof selection.value>;text:string}>()
+const selection=ref<LyricLineSelection>()
+const linePreview=ref<{selection:LyricLineSelection;text:string}>()
 const lineBusy=ref(false),lineError=ref('')
-const mirror=ref<HTMLDivElement>(), marker=ref<HTMLSpanElement>(), toolbar=ref<HTMLDivElement>()
-const toolbarPosition=ref<{left:string;top:string}>()
+const editorText=computed(()=>text.value.replace(/\r\n?/g,'\n'))
+const rewriteDraft=ref<{source:string;workVersion:number;language:string}>()
+const selectedLine=computed(()=>selection.value?.source===editorText.value?selection.value:undefined)
+const canPolishLine=computed(()=>!!selectedLine.value&&!lineBusy.value&&!blocked.value&&!saving.value)
 const lineActions: {id:LyricRewriteAction;label:string;icon:string}[] = [
  {id:'REWRITE',label:'改写选句',icon:'m13 5 6 6M4 16l12-12 4 4L8 20H4v-4Z'},
  {id:'RHYME',label:'更押韵',icon:'M7 17l5-5m3-3 3-3M4 17a2 2 0 1 0 4 0 2 2 0 1 0-4 0Zm7-5a2 2 0 1 0 4 0 2 2 0 1 0-4 0Zm6-7a2 2 0 1 0 4 0 2 2 0 1 0-4 0Z'},
  {id:'COLLOQUIAL',label:'更口语化',icon:'M12 4a8 8 0 0 0-6 13l-1 3 4-1a8 8 0 1 0 3-15ZM8 12h.01m4 0h.01m4 0h.01'},
  {id:'SHORTEN',label:'缩短一句',icon:'m4 20 6-6m-6 0h6v6M20 4l-6 6m6 0h-6V4'},
 ]
-function placeToolbar(){
- const el=editor.value, copy=mirror.value, selected=marker.value, bar=toolbar.value
- if(!el||!copy||!selected||!bar||!window.matchMedia?.('(min-width: 761px)').matches){toolbarPosition.value=undefined;return}
- const style=getComputedStyle(el)
- copy.style.width=`${el.clientWidth+parseFloat(style.borderLeftWidth)+parseFloat(style.borderRightWidth)}px`
- const area=copy.getBoundingClientRect()
- const boxes=Array.from(selected.getClientRects())
- const visible=boxes.filter(box=>box.bottom-area.top-el.scrollTop>0&&box.top-area.top-el.scrollTop<el.clientHeight)
- const last=visible.at(-1)
- if(!last||bar.offsetWidth+16>el.clientWidth){toolbarPosition.value=undefined;return}
- const x=last.right-area.left-el.scrollLeft, y=last.top-area.top-el.scrollTop
- const side=x+bar.offsetWidth+20<=el.clientWidth
- const left=side?x+14:Math.min(Math.max(last.left-area.left-el.scrollLeft,8),el.clientWidth-bar.offsetWidth-8)
- const below=y+last.height+7
- const top=side?y+(last.height-bar.offsetHeight)/2:below+bar.offsetHeight<=el.clientHeight?below:y-bar.offsetHeight-7
- toolbarPosition.value={left:`${left}px`,top:`${Math.max(4,top)}px`}
-}
-watch([selection,lineBusy],placeToolbar,{flush:'post'})
-let editorObserver:ResizeObserver|undefined
-onMounted(()=>{
- if(typeof ResizeObserver==='undefined'||!editor.value)return
- editorObserver=new ResizeObserver(placeToolbar)
- editorObserver.observe(editor.value)
-})
-onBeforeUnmount(()=>editorObserver?.disconnect())
-function captureSelection(){
+function captureSelection(event?:Event){
  const el=editor.value
- if(!el||lineBusy.value)return
+ if(!el||(event&&'isComposing' in event&&event.isComposing))return
  const {selectionStart:start,selectionEnd:end,value:source}=el
- const line=source.slice(start,end)
- selection.value=line.trim()&&line.length<=160&&!/[\r\n\u2028\u2029]/.test(line)&&!/^\s*\[.*\]\s*$/.test(line)
-   ?{source,start,end,line,context:source.slice(Math.max(0,start-180),start)+'\n'+source.slice(end,end+179)}
-   :undefined
+ const next=selectLyricLine(source,start,end),previous=selection.value
+ if(next?.source===previous?.source&&next?.start===previous?.start&&next?.end===previous?.end)return
+ selection.value=next
+ linePreview.value=undefined;lineError.value=''
 }
 async function previewLine(action:LyricRewriteAction){
- const chosen=selection.value
- if(!chosen||chosen.source!==text.value||lineBusy.value||blocked.value||saving.value)return
+ const chosen=selectedLine.value
+ if(!chosen||!canPolishLine.value)return
  lineBusy.value=true;lineError.value='';linePreview.value=undefined
+ const current=()=>alive&&selectedLine.value===chosen
  try{
-   const result=await rewriteLyricLine(props.work.id,{requestId:crypto.randomUUID(),action,line:chosen.line,context:chosen.context,language:active.value?.language||language.value})
-   if(!result.text?.trim()||result.text.length>160||/[\r\n\u2028\u2029]/.test(result.text)
-      ||action==='SHORTEN'&&result.text.trim().length>=chosen.line.trim().length)throw new Error('未得到可用的单句改写，原歌词已保留。')
-   if(alive)linePreview.value={selection:chosen,text:result.text}
+   const text=await suggestLyricLine(props.work.id,chosen,action,active.value?.language||language.value)
+   if(current())linePreview.value={selection:chosen,text}
  }catch(e){
-   if(alive)lineError.value=e instanceof ApiError&&e.status===405
-     ?'当前后端版本不支持选句润色，请更新后端后重试。'
-     :e instanceof Error?e.message:'改写暂不可用，原歌词已保留。'
+   if(current())lineError.value=lyricRewriteError(e)
  }
  finally{lineBusy.value=false}
 }
 const canReplaceLine=computed(()=>{
  const preview=linePreview.value
- return !!preview&&preview.selection.source===text.value&&text.value.length-preview.selection.line.length+preview.text.length<=12000
+ return !!preview&&preview.selection===selectedLine.value&&editorText.value.length-preview.selection.line.length+preview.text.length<=lyricsMaxLength
 })
 function replaceLine(){
  const preview=linePreview.value
@@ -99,7 +75,11 @@ function replaceLine(){
  const {start,end,source}=preview.selection
  text.value=source.slice(0,start)+preview.text+source.slice(end)
  linePreview.value=undefined
- void nextTick(()=>{editor.value?.focus({preventScroll:true});editor.value?.setSelectionRange(start+preview.text.length,start+preview.text.length)})
+ void nextTick(()=>{
+  const caret=start+preview.text.length
+  editor.value?.focus({preventScroll:true});editor.value?.setSelectionRange(caret,caret)
+  captureSelection()
+ })
 }
 let alive=true,inflight:Promise<Revision>|undefined,cacheKey=''
 interface Recovery {structure?:LyricsStructure;title:string;lyrics:string;workVersion:number;baseId:string|null;language:string;instructions:string;requestKey:string;dirty:boolean}
@@ -117,7 +97,10 @@ function restoreCopy(value:Recovery){
 // 输入只保留本机恢复副本；仅用户明确保存时写入版本历史。
 watch([title,text,language,structure,instructions,requestKey],remember,{flush:'sync'})
 watch([dirty,active,composing,canGenerate],()=>{emit('dirty',dirty.value);emit('selected',dirty.value||composing.value?null:active.value);emit('ready',canGenerate.value);emit('base',active.value)},{immediate:true})
-watch(text,()=>{selection.value=undefined})
+watch(editorText,source=>{
+ if(selection.value?.source===source)return
+ selection.value=undefined;linePreview.value=undefined;lineError.value=''
+})
 watch(localSaved,value=>emit('recoverable',value),{immediate:true})
 function select(value:Revision|null){active.value=value;title.value=value?.title||props.work.title||(props.work.recipient?t('写给{recipient}的歌',{recipient:props.work.recipient}):t('我的原创歌曲'));text.value=value?.lyrics||'';baseline.value=JSON.stringify(draftValue());remember()}
 async function syncRoute(id:string){await nextTick();if(alive)await router.replace({query:{...route.query,revision:id,language:language.value,templateId:structure.value.templateId,chorusFirst:String(structure.value.chorusFirst)}})}
@@ -219,6 +202,26 @@ async function prepareForGeneration(saveChanges=false):Promise<Revision>{
   finally{preparing.value=false}
 }
 watch([language,instructions,structure],()=>{if(!composing.value&&!requestWaiting.value&&!requestChecking.value)requestKey.value=''},{flush:'sync'})
+function startAiLyrics(){
+  if(blocked.value||saving.value||lineBusy.value||!aiReady.value)return
+  if(!editorText.value.trim()){void compose();return}
+  rewriteDraft.value={source:editorText.value,workVersion:props.work.version,language:active.value?.language||language.value}
+}
+function applyRewrittenLyrics(lyrics:string){
+  const original=rewriteDraft.value
+  rewriteDraft.value=undefined
+  if(!original||original.source!==editorText.value||original.workVersion!==props.work.version){
+    notice.value='当前歌词或作品已变化，请重新选择要保留的句子。'
+    return
+  }
+  text.value=lyrics
+  notice.value='新版歌词已填入编辑框，满意后请保存。'
+}
+async function rewriteAll(){
+  rewriteDraft.value=undefined
+  await nextTick()
+  if(alive)void compose()
+}
 async function compose(){
   if(blocked.value||saving.value||lineBusy.value||!aiReady.value)return
   if(dirty.value&&!window.confirm(t('生成新歌词后将显示新版本，当前未保存的修改会被替换，是否继续？')))return
@@ -251,25 +254,25 @@ defineExpose({prepareForGeneration,preserveDraftForNavigation,needsSave,canSave,
     <div class="lyric-editor-label">
       <span id="lyric-editor-help">{{ t('歌词可直接修改，保存后再生成歌曲') }}</span>
       <div class="lyric-editor-actions">
-        <button v-if="aiReady" type="button" class="lyric-rewrite-all" :disabled="blocked||saving||lineBusy" @click="compose">
+        <button v-if="aiReady" type="button" class="lyric-rewrite-all" :disabled="blocked||saving||lineBusy" @click="startAiLyrics">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12l5-2 2-5 2 5 5 2-5 2-2 5-2-5-5-2Zm13-7h5m-2.5-2.5v5"/></svg>
-          {{ composing?t('正在编写歌词…'):versions.length?t('AI 重新生成全部歌词'):t('根据故事生成歌词') }}
+          {{ composing?t('正在编写歌词…'):editorText.trim()?t('AI 重写歌词'):t('根据故事生成歌词') }}
         </button>
         <button type="button" class="lyric-quiet-action" :disabled="blocked||saving||!dirty" :title="t('撤销未保存修改')" @click="revertDraft"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5 4 9l4 4M4 9h10a5 5 0 0 1 0 10h-3"/></svg>{{ t('恢复原版') }}</button>
-        <CreditCostHint v-if="credits&&credits.enabled&&credits.lyricsCost>0" :cost="credits.lyricsCost" :balance="credits.balance" :busy="composing" variant="regenerate"/>
+        <CreditCostHint v-if="!editorText.trim()&&credits&&credits.enabled&&credits.lyricsCost>0" :cost="credits.lyricsCost" :balance="credits.balance" :busy="composing" variant="regenerate"/>
       </div>
     </div>
-    <div class="lyric-text-stage">
-      <textarea id="song-lyrics" ref="editor" v-model="text" maxlength="12000" class="lyrics-edit lyric-text" :aria-label="t('歌词')" aria-describedby="lyric-editor-help" :disabled="blocked||saving" :placeholder="t('写下主歌、副歌，或者你想唱给TA听的话……')" @select="captureSelection" @keyup="captureSelection" @pointerup="captureSelection" @scroll.passive="placeToolbar"></textarea>
-      <div v-if="selection" ref="mirror" class="lyric-text lyric-mirror" aria-hidden="true">{{ text.slice(0,selection.start) }}<span ref="marker">{{ selection.line }}</span>{{ text.slice(selection.end) }}</div>
-      <div v-if="selection||lineBusy" ref="toolbar" class="lyric-line-tools" :class="{'is-anchored':toolbarPosition}" :style="toolbarPosition" role="group" :aria-label="t('选句润色')">
-        <span v-if="lineBusy" class="line-busy" role="status">{{ t('正在润色…') }}</span>
-        <button v-for="action in lineBusy?[]:lineActions" :key="action.id" type="button" :disabled="blocked||saving" @pointerdown.prevent @click="previewLine(action.id)">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path :d="action.icon"/></svg>{{ t(action.id==='REWRITE'?'改写':action.label) }}
-        </button>
-      </div>
+    <textarea id="song-lyrics" ref="editor" v-model="text" :maxlength="lyricsMaxLength" class="lyrics-edit lyric-text" :aria-label="t('歌词')" aria-describedby="lyric-editor-help" :disabled="blocked||saving" :placeholder="t('写下主歌、副歌，或者你想唱给TA听的话……')" @input="captureSelection" @select="captureSelection" @keyup="captureSelection" @click="captureSelection"></textarea>
+    <div class="lyric-line-tools" role="group" :aria-label="t('选句润色')">
+      <button v-for="action in lineActions" :key="action.id" type="button" :disabled="!canPolishLine" @pointerdown.prevent @click="previewLine(action.id)">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path :d="action.icon"/></svg>{{ t(action.label) }}
+      </button>
+      <span v-if="lineBusy" class="line-busy" role="status">{{ t('正在润色…') }}</span>
     </div>
+    <p v-if="selectedLine" class="lyric-selected-line"><strong>{{ t('已选歌词') }}</strong>{{ selectedLine.line }}</p>
   </div>
+  <LyricSelectionRewriteDialog v-if="rewriteDraft" :work-id="work.id" v-bind="rewriteDraft"
+    @close="rewriteDraft=undefined" @apply="applyRewrittenLyrics" @rewrite-all="rewriteAll" />
   <p v-if="lineError" class="notice error" role="alert">{{ t(lineError) }}</p>
   <div v-if="linePreview" class="lyric-line-preview" role="region" :aria-label="t('改写建议')">
     <strong>{{ t('改写建议') }}</strong><p>{{ linePreview.text }}</p>
@@ -305,18 +308,16 @@ defineExpose({prepareForGeneration,preserveDraftForNavigation,needsSave,canSave,
 .lyric-rewrite-all svg { width:16px; height:16px; flex:none; fill:none; stroke:currentColor; stroke-width:1.6; stroke-linecap:round; stroke-linejoin:round; }
 .lyric-quiet-action:disabled { opacity:.63; cursor:default; }
 .lyric-quiet-action svg,.lyric-version-strip svg,.lyric-line-tools svg { width:16px; height:16px; flex:none; fill:none; stroke:currentColor; stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round; }
-.lyric-text-stage { position:relative; min-width:0; }
 .lyric-text { box-sizing:border-box; width:100%; padding:16px clamp(14px,1.85vw,30px); border:1px solid #e8e0e2; border-radius:13px; color:#211d1d; background:#fffdfd; font:inherit; font-size:clamp(15px,1.2vw,19px); font-weight:400; line-height:1.42; letter-spacing:normal; white-space:pre-wrap; overflow-wrap:break-word; }
-.lyric-text-stage textarea.lyric-text { display:block; height:clamp(260px,37vh,352px); min-height:220px; resize:vertical; }
-.lyric-text-stage textarea::selection { background:#ffebd0; color:#211d1d; }
-.lyric-mirror { position:absolute; top:0; left:0; height:0; overflow:hidden; visibility:hidden; pointer-events:none; }
-.lyric-line-tools { display:flex; align-items:center; flex-wrap:wrap; width:max-content; max-width:100%; min-height:40px; margin-top:8px; padding:3px 6px; border:1px solid #ede5e6; border-radius:23px; background:#fffdfd; box-shadow:0 5px 18px #3c2b2d15; }
-.lyric-line-tools.is-anchored { position:absolute; z-index:1; margin:0; }
-.lyric-line-tools button { display:inline-flex; align-items:center; gap:6px; min-height:30px; padding:4px 10px; border:0; border-radius:0; background:none; color:#221c1c; font:inherit; font-size:13px; white-space:nowrap; cursor:pointer; }
-.lyric-line-tools button+button { border-left:1px solid #ece5e6; }
-.lyric-line-tools button:hover:not(:disabled) { color:#bb321e; }
-.lyric-line-tools button:disabled { opacity:.55; cursor:default; }
-.line-busy { padding:3px 10px; color:#6f5852; font-size:13px; }
+textarea.lyric-text { display:block; height:clamp(260px,37vh,352px); min-height:220px; resize:vertical; }
+textarea.lyric-text::selection { background:#ffebd0; color:#211d1d; }
+.lyric-line-tools { display:flex; align-items:center; flex-wrap:wrap; gap:8px; margin-top:10px; }
+.lyric-line-tools button { display:inline-flex; align-items:center; gap:6px; min-height:42px; padding:8px 14px; border:1px solid var(--line); border-radius:24px; background:var(--surface); color:var(--ink); font:inherit; font-size:13px; font-weight:600; white-space:nowrap; cursor:pointer; }
+.lyric-line-tools button:hover:not(:disabled) { color:var(--accent-text); border-color:var(--accent-border); }
+.lyric-line-tools button:disabled { opacity:.5; cursor:not-allowed; }
+.line-busy { color:var(--muted); font-size:13px; }
+.lyric-selected-line { margin:10px 0 0; color:var(--muted); font-size:13px; overflow-wrap:anywhere; }
+.lyric-selected-line strong { margin-inline-end:8px; color:var(--ink); }
 .lyrics-history { margin-top:12px; }
 .lyric-version-strip { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px 14px; min-height:42px; padding:7px 13px; border-radius:12px; background:#f7f2f0; color:#74635d; cursor:pointer; font-size:13px; list-style:none; }
 .lyric-version-strip::-webkit-details-marker { display:none; }
@@ -328,9 +329,7 @@ defineExpose({prepareForGeneration,preserveDraftForNavigation,needsSave,canSave,
 .lyric-line-preview p { overflow-wrap:anywhere; }
 .lyric-history-preview { max-height:220px; overflow:auto; white-space:pre-wrap; overflow-wrap:anywhere; font:inherit; padding:14px; border-radius:12px; background:#fff6f3; }
 @media(max-width:760px) {
- .lyric-line-tools { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); width:100%; border-radius:13px; }
- .lyric-line-tools button { justify-content:center; min-height:40px; }
- .lyric-line-tools button:nth-of-type(odd) { border-left:0; }
+ .lyric-line-tools button { min-height:44px; }
  .lyric-editor-label { align-items:start; flex-direction:column; gap:6px; font-size:12px; }
  .lyric-editor-actions { width:100%; justify-content:space-between; }
  .lyric-quiet-action { flex:none; min-height:24px; }

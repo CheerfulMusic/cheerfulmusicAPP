@@ -10,6 +10,12 @@ const source={id:'original-task',style:'温暖民谣',vocalGender:'FEMALE'} as G
 const prefs:MusicPreferences={version:1,recipeId:null,choices:{genre:['folk'],instruments:['guitar'],emotion:['warm'],tempo:['slow']},vocalGender:'FEMALE',freeText:'保留木吉他与温柔的声音',negativeText:'不要电子鼓'}
 const original={preferences:prefs,style:'acoustic folk',negativeTags:'electronic drums',summaryZh:'温暖民谣',summaryEn:'Warm folk',catalogVersion:1} satisfies MusicDirection
 beforeEach(()=>{vi.clearAllMocks();api.snapshot.mockResolvedValue(original);api.load.mockResolvedValue({work,direction:original});api.save.mockResolvedValue({work:{...work,version:3},direction:original})})
+it('saves the confirmed adjustment rather than restoring the old generation snapshot',async()=>{
+ const chosen={...prefs,vocalGender:'MALE' as const}
+ await expect(restoreRemakeSettings(work,source,()=>true,chosen)).resolves.toMatchObject({version:3})
+ expect(api.snapshot).not.toHaveBeenCalled()
+ expect(api.save).toHaveBeenCalledExactlyOnceWith('work',2,chosen)
+})
 it('reuses the selected audio task snapshot and does not write when its settings are unchanged',async()=>{
  await expect(restoreRemakeSettings(work,source,()=>true)).resolves.toBe(work);expect(api.snapshot).toHaveBeenCalledWith('work','original-task');expect(api.save).not.toHaveBeenCalled()
 })

@@ -22,6 +22,15 @@ public class LyricsCompositionConfiguration {
             env.getProperty("qingfeng.lyrics.line-rewrite.concurrent-global",Integer.class,4));
         return new LyricLineRewriteService(works,previews,env.getProperty("qingfeng.lyrics.line-rewrite.per-creator-per-15-minutes",Integer.class,12));
     }
+    @Bean @Profile({"mysql","test"})
+    LyricSelectionRewriteService lyricSelectionRewriteService(WorkApi works, Environment env, com.qingfeng.music.credits.RewriteCharges charges) {
+        var writer = new com.qingfeng.music.infrastructure.provider.DeepSeekInspirationRewriter(
+            env.getProperty("qingfeng.providers.deepseek.api-key", env.getProperty("DEEPSEEK_API_KEY", "")),
+            env.getProperty("qingfeng.providers.deepseek.model", "deepseek-flash")).lyricSelectionMode();
+        var rewriter = new InspirationRewriteService(writer, env.getProperty("qingfeng.lyrics.enabled", Boolean.class, false),
+            env.getProperty("qingfeng.inspiration.rewrite.concurrent-global", Integer.class, 4), charges);
+        return new LyricSelectionRewriteService(works, rewriter);
+    }
     @Bean LyricsWriter lyricsWriter(Environment env){
         return switch(env.getProperty("qingfeng.lyrics.provider","deepseek").trim().toLowerCase(java.util.Locale.ROOT)){
             case "openai" -> {
