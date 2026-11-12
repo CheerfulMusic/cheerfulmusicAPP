@@ -14,6 +14,8 @@ import { googleLoginFeedback } from '../model/google-login'
 import NavIcon from '../../../shared/ui/NavIcon.vue'
 import GoogleMark from '../components/GoogleMark.vue'
 import CreditsPanel from '../components/CreditsPanel.vue'
+const props = defineProps<{ embedded?: boolean }>()
+const emit = defineEmits<{ close: []; works: [] }>()
 const router = useRouter(), player = usePlayer(), busy = ref(true), configured = ref(false), secret = ref(''), restoreCode = ref(''), error = ref(''), notice = ref('')
 const route = useRoute()
 const googleStatus = accountState
@@ -47,7 +49,7 @@ watch(logtoState, (current, previous) => {
 function finishRecoveryRefresh() {
   if (!recoveryRefreshPending || busy.value) return
   busy.value = true
-  window.location.replace('/account')
+  window.location.replace(props.embedded ? '/agent' : '/account')
 }
 onMounted(async () => {
   const result = route.query.google
@@ -106,7 +108,7 @@ async function manageGoogleSession(action: 'switch' | 'logout') {
     await logoutAccount()
     configured.value = false; secret.value = ''; restoreCode.value = ''
     if (action === 'switch') window.location.assign(await beginGoogleLogin())
-    else window.location.replace('/account?session=signed-out')
+    else window.location.replace(props.embedded ? '/agent' : '/account?session=signed-out')
   } catch {
     googleError.value = action === 'switch' ? '暂时无法切换账号，请稍后重试。' : '暂时无法退出登录，请稍后重试。'
     googleBusy.value = false
@@ -137,7 +139,7 @@ async function recover() {
   if (accountBusy.value) return
   if (!restoreCode.value.trim() || !window.confirm(t('将打开找回码对应的音乐收藏。当前作品不会合并，请先保存自己的找回码，是否继续？'))) return
   busy.value = true; restoringIdentity = true; error.value = ''
-  try { await ensureCreator(); await requestJson('public/session/recover', 'POST', {code:restoreCode.value.trim()}); resetCreatorSession(); player.reset(); secret.value = ''; restoreCode.value = ''; await Promise.all([refreshAccountState().catch(() => {}), refreshLogtoState().catch(() => {})]); await router.replace('/works') }
+  try { await ensureCreator(); await requestJson('public/session/recover', 'POST', {code:restoreCode.value.trim()}); resetCreatorSession(); player.reset(); secret.value = ''; restoreCode.value = ''; await Promise.all([refreshAccountState().catch(() => {}), refreshLogtoState().catch(() => {})]); if (props.embedded) { emit('close'); window.location.replace('/agent') } else await router.replace('/works') }
   catch (e) { error.value = e instanceof Error ? e.message : '恢复失败，请检查找回码' } finally { restoringIdentity = false; busy.value = false; finishRecoveryRefresh() }
 }
 </script>
@@ -182,7 +184,7 @@ async function recover() {
         </div>
         <div class="profile-actions">
           <span class="connection-badge"><svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m4 8 2.5 2.5L12 5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>{{ t('已连接') }}</span>
-          <RouterLink class="profile-library-link" to="/works">{{ t('进入我的音乐') }}<NavIcon name="arrow" /></RouterLink>
+          <button v-if="props.embedded" type="button" class="profile-library-link" @click="emit('works')">{{ t('进入我的音乐') }}<NavIcon name="arrow" /></button><RouterLink v-else class="profile-library-link" to="/works">{{ t('进入我的音乐') }}<NavIcon name="arrow" /></RouterLink>
         </div>
       </div>
       <div class="profile-footer"><NavIcon name="recovery" /><p>{{ t('换个设备，也能继续你的音乐故事。') }}</p><span>Google</span></div>
@@ -231,7 +233,7 @@ async function recover() {
       </section>
     </div>
   </section>
-  <RouterLink class="account-back" to="/works"><NavIcon name="music" />{{ t('← 返回我的音乐') }}</RouterLink>
+  <button v-if="props.embedded" type="button" class="account-back" @click="emit('close')">{{ t('返回对话') }}</button><RouterLink v-else class="account-back" to="/works"><NavIcon name="music" />{{ t('← 返回我的音乐') }}</RouterLink>
   </div>
 </template>
 <style scoped>

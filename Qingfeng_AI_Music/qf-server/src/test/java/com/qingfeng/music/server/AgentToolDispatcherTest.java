@@ -187,16 +187,15 @@ class AgentToolDispatcherTest {
     }
 
     @Test
-    void busyIsCaughtAndWritesPlaceholderInsteadOf500() {
+    void busyDoesNotQueueAnUnattendedPaidRequest() {
         var f = fixture(new FakeRepo(), new BusyHandler());
         ToolResult result = f.dispatcher().dispatch(AgentTool.GENERATE_SONG,
                 new AgentTool.GenerateSongArgs("歌", "温暖民谣", "zh", 120, null, null),
                 "creator-a", "rk-1");
         assertEquals(ToolResult.BUSY, result.status());
         List<AgentMessage> placeholders = f.repo().findPendingPlaceholders();
-        assertEquals(1, placeholders.size());
-        assertEquals(AgentMessage.KIND_PLACEHOLDER, placeholders.get(0).kind());
-        assertEquals(AgentMessage.STATE_PENDING, placeholders.get(0).state());
+        assertTrue(placeholders.isEmpty(), "Busy must not schedule a future paid operation");
+        assertTrue(result.progress().contains("尚未自动排队"));
     }
 
     @Test

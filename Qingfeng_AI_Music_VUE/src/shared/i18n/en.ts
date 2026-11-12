@@ -1035,6 +1035,7 @@ export const english: Record<string, string> = {
   '粘贴你的作品找回码': 'Paste your recovery code',
   '找回码只能使用一次，恢复后请生成并保存新的找回码。多个身份的作品不会自动合并。': 'Each code works once. After recovery, generate and save a new code. Separate collections are not automatically merged.',
   '← 返回我的音乐': '← Back to my music',
+  '返回对话': 'Back to conversation',
   '让一段故事，有自己的旋律。': 'Give your story a melody.',
   '继续编辑你的音乐礼物': 'Continue your music gift',
   '从一个名字，和一件小事开始。': 'Start with a name and a little memory.',

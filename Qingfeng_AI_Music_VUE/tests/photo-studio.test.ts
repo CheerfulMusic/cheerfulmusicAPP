@@ -28,7 +28,7 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-async function setup() {
+async function setup(embedded = false) {
   vi.stubGlobal('URL', Object.assign(class extends URL {}, {
     createObjectURL: () => 'blob:photo-test',
     revokeObjectURL: () => {},
@@ -39,10 +39,27 @@ async function setup() {
     { path: '/works/:id', component: { template: '<div />' } },
   ] })
   await router.push('/create/photo')
-  const page = mount(PhotoStudioPage, { global: { plugins: [router] } })
+  const page = mount(PhotoStudioPage, { props: { embedded }, global: { plugins: [router] } })
   await flushPromises()
   return { page, router }
 }
+
+it('returns an embedded photo result to the conversation without navigating or submitting music', async () => {
+  const { page, router } = await setup(true)
+  try {
+    vi.mocked(saveWork).mockImplementation(async (draft, _, key) => ({ ...draft, id: key!, version: 0, createdAt: '', updatedAt: '' }))
+    vi.mocked(generatePhotoLyrics).mockResolvedValue({ id: 'photo-lyric', workId: '', workVersion: 0, title: '海边', lyrics: '风吹过海面', source: 'OPENAI', confirmed: false, createdAt: '' })
+    const file = new File(['picture'], 'beach.png', { type: 'image/png' }), input = page.get('input[type=file]')
+    Object.defineProperty(input.element, 'files', { configurable: true, value: [file] })
+    await input.trigger('change'); await page.get('form').trigger('submit'); await flushPromises()
+    expect(router.currentRoute.value.path).toBe('/create/photo')
+    const result = page.emitted('created')?.[0]?.[0] as { workId: string; revisionId: string; language: string }
+    expect(result).toEqual({ workId: expect.stringMatching(/^[\da-f-]{36}$/), revisionId: 'photo-lyric', language: 'zh-CN' })
+    expect(sessionStorage.getItem('qingfeng.photo-draft:photo-test-owner')).toBeNull()
+    expect(page.find('.detail-back').text()).toContain('返回对话')
+    expect(generatePhotoLyrics).toHaveBeenCalledExactlyOnceWith(result.workId, 0, expect.any(String), 'zh-CN', file)
+  } finally { page.unmount() }
+})
 
 it('uploads a single photo with the optional story and opens the unconfirmed lyric draft', async () => {
   const { page, router } = await setup()

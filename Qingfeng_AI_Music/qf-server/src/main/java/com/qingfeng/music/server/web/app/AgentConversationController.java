@@ -65,7 +65,7 @@ public class AgentConversationController {
 
     @ExceptionHandler(DomainException.class)
     public ResponseEntity<Map<String, String>> onDomain(DomainException error) {
-        int status = ConversationService.CONFLICT.equals(error.code()) ? 409 : 404;
+        int status = ConversationService.CONFLICT.equals(error.code()) || error.code().contains("IN_PROGRESS") ? 409 : 404;
         return ResponseEntity.status(status).body(Map.of("code", error.code(), "message", error.getMessage()));
     }
 

@@ -10,6 +10,10 @@ public interface WorkApi {
     Work get(String creatorId, String workId);
     List<Work> list(String creatorId, int page);
     void delete(String creatorId, String workId, boolean acknowledgeCompleted);
+    default void delete(String creatorId,String workId,boolean acknowledgeCompleted,long expectedVersion) {
+        if(get(creatorId,workId).version()!=expectedVersion)throw new com.qingfeng.music.common.exception.DomainException("WORK_VERSION_CONFLICT","作品在确认后发生变化，请重新确认删除。");
+        delete(creatorId,workId,acknowledgeCompleted);
+    }
     record Draft(String recipient, String occasion, String story, String message, String style, String title,String vocalGender) {
         public Draft {vocalGender=VocalGender.normalize(vocalGender);}
         public Draft(String recipient,String occasion,String story,String message,String style,String title){this(recipient,occasion,story,message,style,title,"AUTO");}

@@ -32,9 +32,18 @@ public class WorkService implements WorkApi {
     public List<Work> list(String owner, int page) { return repository.list(owner, Math.multiplyExact(page, 20), 20); }
     @org.springframework.transaction.annotation.Transactional
     public void delete(String owner,String id,boolean acknowledgeCompleted) {
+        deleteChecked(owner,id,acknowledgeCompleted,null);
+    }
+    @org.springframework.transaction.annotation.Transactional
+    public void delete(String owner,String id,boolean acknowledgeCompleted,long expectedVersion) {
+        deleteChecked(owner,id,acknowledgeCompleted,expectedVersion);
+    }
+    private void deleteChecked(String owner,String id,boolean acknowledgeCompleted,Long expectedVersion) {
         if(!repository.lockActiveOwner(owner))throw new DomainException("CREATOR_SESSION_CHANGED","登录身份已改变，请刷新后重试");
         var state=repository.lockDeletion(owner,id).orElseThrow(()->new DomainException("WORK_NOT_FOUND","作品不存在或你无权访问"));
         if(state.deleted())return;
+        // lockDeletion holds the work row: a concurrent rename cannot bypass a reviewed confirmation.
+        if(expectedVersion!=null&&get(owner,id).version()!=expectedVersion)throw new DomainException("WORK_VERSION_CONFLICT","作品在确认后发生变化，请重新确认删除。");
         if(state.hasAudio()&&!acknowledgeCompleted)throw new DomainException("WORK_DELETE_CONFIRMATION_REQUIRED","作品已生成歌曲，请确认删除后再继续");
         repository.delete(owner,id,Instant.now());
     }

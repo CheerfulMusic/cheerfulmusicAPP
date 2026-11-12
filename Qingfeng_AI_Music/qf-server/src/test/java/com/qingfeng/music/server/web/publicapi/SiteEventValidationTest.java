@@ -1,7 +1,9 @@
 package com.qingfeng.music.server.web.publicapi;
 
 import com.qingfeng.music.identity.api.IdentityApi;
+import com.qingfeng.music.infrastructure.geo.GeoIpResolver;
 import jakarta.servlet.http.Cookie;
+import org.mockito.ArgumentCaptor;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.core.env.Environment;
@@ -31,6 +33,13 @@ class SiteEventValidationTest {
         var identity = mock(IdentityApi.class);
         when(identity.resolve(any())).thenReturn(Optional.ofNullable(creatorId));
         return identity;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static ObjectProvider<GeoIpResolver> noGeoIp() {
+        var provider = (ObjectProvider<GeoIpResolver>) mock(ObjectProvider.class);
+        when(provider.getIfAvailable()).thenReturn(null);
+        return provider;
     }
 
     @SuppressWarnings("unchecked")
@@ -100,14 +109,14 @@ class SiteEventValidationTest {
 
     @Test void disabledConfigDoesNotWrite() {
         var template = mock(JdbcTemplate.class);
-        var controller = new SiteEventController(provider(template), identities(identity("")), environment(false));
+        var controller = new SiteEventController(provider(template), identities(identity("")), environment(false), noGeoIp());
         assertEquals(204, controller.collect(request("pageview"), new MockHttpServletRequest()).getStatusCode().value());
         verifyNoInteractions(template);
     }
 
     @Test void absentConfigDefaultsToDisabled() {
         var template = mock(JdbcTemplate.class);
-        var controller = new SiteEventController(provider(template), identities(identity("")), new org.springframework.core.env.StandardEnvironment());
+        var controller = new SiteEventController(provider(template), identities(identity("")), new org.springframework.core.env.StandardEnvironment(), noGeoIp());
         assertEquals(204, controller.collect(request("pageview"), new MockHttpServletRequest()).getStatusCode().value());
         verifyNoInteractions(template);
     }
@@ -115,7 +124,7 @@ class SiteEventValidationTest {
     @Test void missingDatasourceIsSilent() {
         @SuppressWarnings("unchecked") var absent = (ObjectProvider<JdbcTemplate>) mock(ObjectProvider.class);
         when(absent.getIfAvailable()).thenReturn(null);
-        var controller = new SiteEventController(absent, identities(identity("")), environment(true));
+        var controller = new SiteEventController(absent, identities(identity("")), environment(true), noGeoIp());
         var servlet = new MockHttpServletRequest();
         assertDoesNotThrow(() -> controller.collect(request("pageview"), servlet));
         assertEquals(204, controller.collect(request("pageview"), servlet).getStatusCode().value());
@@ -124,7 +133,7 @@ class SiteEventValidationTest {
     @Test void databaseFailureNeverEscapes() {
         var template = mock(JdbcTemplate.class);
         when(template.update(anyString(), any(Object[].class))).thenThrow(new RuntimeException("db down"));
-        var controller = new SiteEventController(provider(template), identities(identity("")), environment(true));
+        var controller = new SiteEventController(provider(template), identities(identity("")), environment(true), noGeoIp());
         var servlet = new MockHttpServletRequest();
         assertDoesNotThrow(() -> controller.collect(request("pageview"), servlet));
         assertEquals(204, controller.collect(request("pageview"), servlet).getStatusCode().value());
@@ -133,7 +142,7 @@ class SiteEventValidationTest {
 
     @Test void validEventCallsInsertOnce() {
         var template = mock(JdbcTemplate.class);
-        var controller = new SiteEventController(provider(template), identities(identity("")), environment(true));
+        var controller = new SiteEventController(provider(template), identities(identity("")), environment(true), noGeoIp());
         assertEquals(204, controller.collect(request("pageview"), new MockHttpServletRequest()).getStatusCode().value());
         verify(template, times(1)).update(eq(SiteEventController.INSERT_SQL), any(Object[].class));
     }
@@ -142,7 +151,7 @@ class SiteEventValidationTest {
         var clean = SiteEventController.sanitize(new SiteEventController.EventRequest(
                 "page_leave", "/gift/" + "a".repeat(43) + "?code=SECRET",
                 "https://ref.example/x?q=1", "visitor-1", "session-1", Map.of("route", "gift", "durationMs", 1500)));
-        var row = SiteEventController.row(clean, SiteEventController.payloadJson(clean.payload()), "creator-9", 1500L);
+        var row = SiteEventController.row(clean, SiteEventController.payloadJson(clean.payload()), "creator-9", 1500L, null);
         assertEquals("visitor-1", row[1]);
         assertEquals("session-1", row[2]);
         assertEquals("page_leave", row[3]);
@@ -151,10 +160,32 @@ class SiteEventValidationTest {
         assertNotNull(row[7]);
         assertEquals("creator-9", row[8]);
         assertEquals(1500L, row[9]);
+        assertNull(row[10], "国家列默认不存原始 IP，由服务端派生；单测无 resolver 时为 null");
     }
 
     @Test void payloadDropsUnknownKeys() {
         assertNull(SiteEventController.payloadJson(Map.of("story", "SECRET", "email", "a@b.c")));
         assertEquals("{\"route\":\"gift\"}", SiteEventController.payloadJson(Map.of("route", "gift", "token", "SECRET")));
+    }
+
+    @SuppressWarnings("unchecked")
+    private static ObjectProvider<GeoIpResolver> geoProvider(GeoIpResolver resolver) {
+        var provider = (ObjectProvider<GeoIpResolver>) mock(ObjectProvider.class);
+        when(provider.getIfAvailable()).thenReturn(resolver);
+        return provider;
+    }
+
+    /** 服务端从请求头解析真实 IP 并派生国家，写入 country 列（第 11 列）；不向前端/库暴露原始 IP。 */
+    @Test void countryIsResolvedFromRequestIpAndStored() {
+        var template = mock(JdbcTemplate.class);
+        var resolver = mock(GeoIpResolver.class);
+        when(resolver.resolveCountry("203.0.113.9")).thenReturn("中国");
+        var controller = new SiteEventController(provider(template), identities(identity("")), environment(true), geoProvider(resolver));
+        var servlet = new MockHttpServletRequest();
+        servlet.addHeader("X-Forwarded-For", "203.0.113.9");
+        controller.collect(request("pageview"), servlet);
+        var captor = ArgumentCaptor.forClass(Object[].class);
+        verify(template).update(eq(SiteEventController.INSERT_SQL), captor.capture());
+        assertEquals("中国", captor.getValue()[10], "country 列应写入派生国家");
     }
 }

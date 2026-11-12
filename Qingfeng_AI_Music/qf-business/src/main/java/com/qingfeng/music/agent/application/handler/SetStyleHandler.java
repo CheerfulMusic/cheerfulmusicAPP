@@ -1,41 +1,27 @@
 package com.qingfeng.music.agent.application.handler;
 
 import com.qingfeng.music.agent.api.AgentTool;
-import com.qingfeng.music.agent.api.SongCard;
-import com.qingfeng.music.agent.application.AgentToolHandler;
-import com.qingfeng.music.agent.application.SongCardProjector;
+import com.qingfeng.music.agent.application.*;
+import com.qingfeng.music.agent.model.AgentJson;
 import com.qingfeng.music.lyrics.api.LyricsApi;
 import com.qingfeng.music.media.api.MediaApi;
+import com.qingfeng.music.settings.MusicSettings;
 import com.qingfeng.music.work.api.WorkApi;
 
-import java.util.List;
-
-/**
- * set_style：把风格参数合并进会话「轻量快照」，不触碰作品标题 / 歌词 / 音频。
- * 用 current_song_json 的 revision 做乐观锁；并发或陈旧的写入会冲突（→ HTTP 409），由上层整体回滚。
- */
+/** 有作品时写入真实音乐设置；没有作品时保留待创作要求，不伪造音频结果。 */
 public class SetStyleHandler implements AgentToolHandler {
-
-    private final SongCardProjector projector;
-
-    public SetStyleHandler(WorkApi works, LyricsApi lyrics, MediaApi media) {
-        this.projector = new SongCardProjector(works, lyrics, media);
+    private final SongCardProjector projector;private final WorkApi works;private final MusicSettings settings;
+    public SetStyleHandler(WorkApi works,LyricsApi lyrics,MediaApi media){this(works,lyrics,media,null);}
+    public SetStyleHandler(WorkApi works,LyricsApi lyrics,MediaApi media,MusicSettings settings){
+        this.works=works;this.settings=settings;projector=new SongCardProjector(works,lyrics,media);
     }
-
-    @Override
-    public AgentTool tool() {
-        return AgentTool.SET_STYLE;
-    }
-
-    @Override
-    public AgentToolResult execute(ToolContext ctx, Object args) {
-        var a = (com.qingfeng.music.agent.api.AgentTool.SetStyleArgs) args;
-        String existing = ctx.state() == null ? null : ctx.state().currentSongJson();
-        String merged = SongCardProjector.mergeSnapshot(existing, a.style(), a.mood(), a.bpm(),
-                a.language(), a.instruments());
-        String workId = ctx.current().currentWorkId();
-        SongCard card = projector.project(ctx.creatorId(), workId, merged);
-        long expectedRevision = ctx.state() == null ? 0L : ctx.state().revision();
-        return new AgentToolResult(card, workId, merged, expectedRevision, null, false);
+    public AgentTool tool(){return AgentTool.SET_STYLE;}
+    public AgentToolResult execute(ToolContext ctx,Object args){
+        var a=(AgentTool.SetStyleArgs)args;
+        String snapshot=SongCardProjector.mergeSnapshot(AgentCreationSupport.snapshot(ctx),a.style(),a.mood(),a.bpm(),a.language(),a.instruments());
+        if(a.vocal()!=null){var map=AgentJson.read(snapshot);map.put("vocal",a.vocal().toUpperCase(java.util.Locale.ROOT));snapshot=AgentJson.write(map);}
+        String workId=ctx.current().currentWorkId();
+        if(workId!=null&&!workId.isBlank()) snapshot=AgentCreationSupport.apply(settings,works,ctx.creatorId(),works.get(ctx.creatorId(),workId),snapshot,a.vocal()).snapshot();
+        return new AgentToolResult(projector.project(ctx.creatorId(),workId,snapshot),workId,snapshot,ctx.state()==null?0:ctx.state().revision(),null,false);
     }
 }

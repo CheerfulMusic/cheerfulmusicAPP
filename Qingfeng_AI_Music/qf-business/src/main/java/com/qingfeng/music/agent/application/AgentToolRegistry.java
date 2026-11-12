@@ -61,11 +61,18 @@ public final class AgentToolRegistry {
         requireStyle(a.style());
         requireLanguage(a.language());
         requireBpm(a.bpm());
+        requireMode(a.mode(), Set.of("new", "regenerate"));
+        requireInstruments(a.instruments());
+        if (a.vocal() != null && !Set.of("AUTO", "MALE", "FEMALE", "auto", "male", "female").contains(a.vocal()))
+            throw new DomainException("INVALID_VOCAL", "人声仅支持 auto / male / female。");
     }
 
     private void validateGenerateLyrics(AgentTool.GenerateLyricsArgs a) {
         requireText("text", a.text());
         requireLanguage(a.language());
+        requireMode(a.mode(), Set.of("new", "rewrite", "regenerate"));
+        if ("rewrite".equals(a.mode()) && a.text() != null && a.text().length() > 900)
+            throw new DomainException("INVALID_TOOL_ARGUMENT", "改词要求请控制在900字以内。");
     }
 
     private void validateModifySection(AgentTool.ModifySectionArgs a) {
@@ -73,6 +80,9 @@ public final class AgentToolRegistry {
             throw new DomainException("INVALID_SECTION", "请指定要修改的段落。");
         }
         requireText("replacementLyrics", a.replacementLyrics());
+        if (a.startS() == null || a.endS() == null || !Double.isFinite(a.startS()) || !Double.isFinite(a.endS())
+                || a.startS() < 0 || a.endS() <= a.startS())
+            throw new DomainException("INVALID_SECTION", "请明确要替换的音频起止秒数，不能自动猜测片段。");
         if (a.replacementLyrics() == null || a.replacementLyrics().isBlank()) {
             throw new DomainException("INVALID_SECTION", "替换歌词不能为空。");
         }
@@ -91,5 +101,19 @@ public final class AgentToolRegistry {
         requireStyle(a.style());
         requireLanguage(a.language());
         requireBpm(a.bpm());
+        requireText("mood", a.mood());
+        if (a.vocal() != null && !Set.of("AUTO", "MALE", "FEMALE", "auto", "male", "female").contains(a.vocal()))
+            throw new DomainException("INVALID_VOCAL", "人声仅支持 auto / male / female。");
+        requireInstruments(a.instruments());
+    }
+
+    private void requireMode(String mode, Set<String> allowed) {
+        if (mode != null && !mode.isBlank() && !allowed.contains(mode))
+            throw new DomainException("INVALID_TOOL_ARGUMENT", "不支持的创作模式。");
+    }
+
+    private void requireInstruments(java.util.List<String> instruments) {
+        if (instruments != null && (instruments.size() > 8 || instruments.stream().anyMatch(s -> s == null || s.isBlank() || s.length() > 30)))
+            throw new DomainException("INVALID_TOOL_ARGUMENT", "最多指定8种乐器，每种名称不超过30字。");
     }
 }

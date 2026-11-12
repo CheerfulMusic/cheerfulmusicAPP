@@ -1,3 +1,4 @@
+import { isAgentContinuation } from '../../modules/agent/model/conversation'
 type Row=Record<string,unknown>
 const obj=(v:unknown):v is Row=>!!v&&typeof v==='object'&&!Array.isArray(v)
 const str=(v:unknown)=>typeof v==='string'
@@ -24,11 +25,16 @@ const choices=(v:unknown)=>obj(v)&&Object.values(v).every(values=>list(values,te
 const preferences=(v:unknown)=>obj(v)&&v.version===1&&(v.recipeId===null||text(v.recipeId))&&choices(v.choices)&&['AUTO','MALE','FEMALE'].includes(String(v.vocalGender))&&str(v.freeText)&&str(v.negativeText)
 const direction=(v:unknown)=>obj(v)&&preferences(v.preferences)&&num(v.catalogVersion)&&str(v.style)&&str(v.negativeTags)&&str(v.summaryZh)&&str(v.summaryEn)
 const hotStat=(v:unknown)=>obj(v)&&text(v.trackId)&&['plays','likes','favorites','comments'].every(k=>num(v[k])&&Number(v[k])>=0)
+const nullableText=(v:unknown)=>v===null||str(v)
+const agentMessage=(v:unknown)=>obj(v)&&text(v.id)&&text(v.conversationId)&&Number.isInteger(v.seq)&&Number(v.seq)>0&&['user','assistant'].includes(String(v.role))&&['TEXT','TOOL_CARD','PLACEHOLDER'].includes(String(v.kind))&&['PENDING','RUNNING','DONE','FAILED'].includes(String(v.state))&&nullableText(v.contentJson)&&nullableText(v.taskId)&&str(v.createdAt)
+const agentCard=(v:unknown)=>obj(v)&&nullableText(v.songId)&&['title','style','lyrics','audioUrl','status'].every(k=>str(v[k]))&&nullableText(v.coverUrl)&&num(v.revision)&&['revisionId','assetId','taskId'].every(k=>v[k]===undefined||nullableText(v[k]))
+const agentSnapshot=(v:unknown)=>obj(v)&&(v.continuation===undefined||v.continuation===null||isAgentContinuation(v.continuation))&&list(v.messages,agentMessage)&&(v.songCard===null||agentCard(v.songCard))&&nullableText(v.taskId)&&nullableText(v.action)&&(v.shareUrl===null||typeof v.shareUrl==='string'&&/^\/gift\/[A-Za-z0-9_-]+$/.test(v.shareUrl))&&typeof v.liked==='boolean'
 const analyticsCount=(v:unknown)=>num(v)&&Number(v)>=0
 const analyticsTotals=(v:unknown)=>obj(v)&&['pv','pageviews','uv','sessions','avgDurationMs','totalDurationMs'].every(k=>analyticsCount(v[k]))
 const analyticsDaily=(v:unknown)=>obj(v)&&text(v.d)&&['pv','pageviews','uv','avgDurationMs'].every(k=>analyticsCount(v[k]))
 const analyticsPageRow=(v:unknown)=>obj(v)&&text(v.pagePath)&&analyticsCount(v.pv)&&analyticsCount(v.avgDurationMs)&&analyticsCount(v.samples)
 const analyticsUserRow=(v:unknown)=>obj(v)&&str(v.creatorId)&&text(v.accountType)&&['name','email','phoneMasked'].every(k=>v[k]===null||str(v[k]))&&['pv','pageviews','avgDurationMs','samples'].every(k=>analyticsCount(v[k]))&&str(v.firstSeen)&&str(v.lastSeen)
+const analyticsCountryRow=(v:unknown)=>obj(v)&&text(v.country)&&analyticsCount(v.visitors)&&analyticsCount(v.hits)
 /**
  * 统计看板：allowed 明确拒绝时不带数据；QUERY_FAILED 只带 error，绝不能被当成 0 展示。
  * 字段缺失或类型不对一律判为非法响应，让前端进入“加载失败”而不是渲染 0。
@@ -37,7 +43,7 @@ const analyticsSummaryBody=(v:unknown)=>{
  if(!obj(v)||typeof v.allowed!=='boolean')return false
  if(v.allowed!==true)return true
  if(v.error!==undefined)return text(v.error)&&v.totals===undefined&&v.daily===undefined
- return analyticsTotals(v.totals)&&list(v.daily,analyticsDaily)&&list(v.pages,analyticsPageRow)&&list(v.users,analyticsUserRow)
+ return analyticsTotals(v.totals)&&list(v.daily,analyticsDaily)&&list(v.pages,analyticsPageRow)&&list(v.users,analyticsUserRow)&&(v.countries===undefined||list(v.countries,analyticsCountryRow))
 }
 const analyticsAccessBody=(v:unknown)=>obj(v)&&typeof v.allowed==='boolean'&&(v.allowed!==true||text(v.viewer))
 const quickCreation=(v:unknown)=>obj(v)&&text(v.id)&&text(v.workId)&&['QUEUED','WRITING','LYRICS_READY','SUBMITTING_MUSIC','MUSIC_QUEUED','SUBMITTING','RUNNING','SAVING','SUBMISSION_UNKNOWN','SUCCEEDED','FAILED','CANCELLED'].includes(String(v.status))&&['revisionId','taskId','errorCode'].every(k=>v[k]===null||text(v[k]))&&typeof v.canRetry==='boolean'&&text(v.createdAt)
@@ -52,6 +58,10 @@ export function validResponse(path:string,method:string,value:unknown):boolean{
  if(path==='public/invite/enter')return method==='POST'&&obj(value)&&value.admitted===true
  if(path==='app/inspiration/rewrite')return obj(value)&&text(value.text)&&(value.text as string).length<=4000
  if(path==='app/agent/reference')return method==='POST'&&obj(value)&&text(value.style)&&str(value.mood)&&num(value.tempo)&&Number(value.tempo)>=0&&typeof value.tempoVerified==='boolean'&&list(value.inferredInstrumentation,text)&&list(value.negativeTags,text)&&text(value.summary)&&['AI','RULE'].includes(String(value.source))
+ if(path==='app/agent/conversations/current')return method==='GET'&&obj(value)&&text(value.id)&&nullableText(value.currentWorkId)
+ if(/^app\/agent\/conversations\/[^/]+\/state$/.test(path))return method==='GET'&&agentSnapshot(value)
+ if(/^app\/agent\/conversations\/[^/]+\/messages$/.test(path))return method==='GET'?list(value,agentMessage):method==='POST'&&agentSnapshot(value)
+ if(/^app\/agent\/conversations\/[^/]+(?:\/reset)?$/.test(path))return ['POST','DELETE'].includes(method)&&obj(value)&&value.cleared===true
  if(path==='app/welcome')return obj(value)&&typeof value.show==='boolean'&&Number.isInteger(value.amount)&&(value.show?value.amount===100:value.amount===0)
  if(path==='public/session'||path==='public/session/recover')return obj(value)&&text(value.creatorId)&&(value.associatedGuestCreatorId===undefined||text(value.associatedGuestCreatorId))
  if(path==='public/session/logout')return method==='POST'&&obj(value)&&value.loggedOut===true
@@ -71,7 +81,7 @@ export function validResponse(path:string,method:string,value:unknown):boolean{
  if(path==='app/analytics/summary')return method==='GET'&&analyticsSummaryBody(value)
  if(path==='app/analytics/user-pages')return method==='GET'&&obj(value)&&typeof value.allowed==='boolean'&&(value.allowed!==true||(num(value.days)&&text(value.creatorId)&&list(value.pages,u=>obj(u)&&text(u.pagePath)&&num(u.avgDurationMs)&&num(u.samples)&&Number(u.samples)>=0)))
  if(path==='app/hot-songs/reactions')return method==='GET'&&obj(value)&&list(value.liked,text)&&list(value.favorited,text)
- if(/^app\/hot-songs\/[^/]+\/(?:like|favorite)$/.test(path))return ['POST','DELETE'].includes(method)&&hotStat(value)&&typeof (value as Row).liked==='boolean'&&typeof (value as Row).favorited==='boolean'
+ if(/^app\/hot-songs\/[^/]+\/(?:like|favorite)$/.test(path))return ['POST','DELETE'].includes(method)&&obj(value)&&hotStat(value.stat)&&typeof value.liked==='boolean'&&typeof value.favorited==='boolean'
  if(path==='app/identity/recovery')return obj(value)&&(method==='GET'?typeof value.configured==='boolean':text(value.code))
  if(path==='app/credits')return method==='GET'&&obj(value)&&typeof value.enabled==='boolean'&&num(value.balance)&&num(value.musicCost)
  if(path==='app/referrals')return method==='GET'&&obj(value)&&text(value.code)

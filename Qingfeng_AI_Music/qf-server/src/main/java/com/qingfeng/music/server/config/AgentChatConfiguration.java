@@ -74,26 +74,26 @@ public class AgentChatConfiguration {
     }
 
     @Bean
-    GetCurrentSongHandler getCurrentSongHandler(WorkApi works, LyricsApi lyrics, MediaApi media) {
-        return new GetCurrentSongHandler(works, lyrics, media);
+    GetCurrentSongHandler getCurrentSongHandler(WorkApi works, LyricsApi lyrics, MediaApi media, GenerationApi generation, com.qingfeng.music.cover.api.CoverApi covers) {
+        return new GetCurrentSongHandler(works, lyrics, media, generation).withCovers(covers);
     }
 
     @Bean
-    SetStyleHandler setStyleHandler(WorkApi works, LyricsApi lyrics, MediaApi media) {
-        return new SetStyleHandler(works, lyrics, media);
+    SetStyleHandler setStyleHandler(WorkApi works, LyricsApi lyrics, MediaApi media, com.qingfeng.music.settings.MusicSettings settings) {
+        return new SetStyleHandler(works, lyrics, media, settings);
     }
 
     @Bean
     GenerateSongHandler generateSongHandler(WorkApi works, LyricsApi lyrics,
                                             LyricsCompositionService composer, GenerationApi generation,
-                                            MediaApi media) {
-        return new GenerateSongHandler(works, lyrics, composer, generation, media);
+                                            MediaApi media, com.qingfeng.music.settings.MusicSettings settings) {
+        return new GenerateSongHandler(works, lyrics, composer, generation, media, settings);
     }
 
     @Bean
     GenerateLyricsHandler generateLyricsHandler(WorkApi works, LyricsApi lyrics,
-                                                LyricsCompositionService composer, MediaApi media) {
-        return new GenerateLyricsHandler(works, lyrics, composer, media);
+                                                LyricsCompositionService composer, MediaApi media, com.qingfeng.music.settings.MusicSettings settings) {
+        return new GenerateLyricsHandler(works, lyrics, composer, media, settings);
     }
 
     @Bean
@@ -134,7 +134,7 @@ public class AgentChatConfiguration {
     /** 每 3 秒扫描排队意图；仅 agent.chat 启用时注册。复用 GenerationWorker 同款轮询节奏，不引入消息队列。 */
     @Bean
     @org.springframework.boot.autoconfigure.condition.ConditionalOnProperty(
-            name = "qingfeng.agent.chat.enabled", havingValue = "true")
+            name = "qingfeng.agent.legacy-pending.enabled", havingValue = "true")
     PendingIntentScheduler pendingIntentScheduler(PendingIntentDispatcher dispatcher) {
         return new PendingIntentScheduler(dispatcher);
     }

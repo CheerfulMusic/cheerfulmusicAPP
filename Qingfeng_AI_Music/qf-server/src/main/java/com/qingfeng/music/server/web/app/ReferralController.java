@@ -32,11 +32,11 @@ class JdbcReferralRewards implements ReferralRewards {
     private final JdbcTemplate db;
     private final CreditsLedger credits;
     JdbcReferralRewards(JdbcTemplate db, CreditsLedger credits) { this.db = db; this.credits = credits; }
-    String code(String creator) {
+    @Override public String code(String creator) {
         if (!verified(creator)) throw new DomainException("REFERRAL_LOGIN_REQUIRED", "请先登录账号，再分享邀请链接");
         return creator;
     }
-    @Transactional void accept(String invitee, String code) {
+    @Override @Transactional public void accept(String invitee, String code) {
         if (code == null || !code.matches("[0-9a-fA-F-]{36}")) throw invalid();
         String inviter;
         try { inviter = UUID.fromString(code).toString(); } catch (IllegalArgumentException e) { throw invalid(); }

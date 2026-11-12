@@ -36,6 +36,8 @@ public final class AgentToolArgs {
                 put(m, "language", a.language());
                 put(m, "bpm", a.bpm());
                 put(m, "vocal", a.vocal());
+                put(m, "mode", a.mode());
+                put(m, "revisionId", a.revisionId());
                 put(m, "instruments", join(a.instruments()));
             }
             case GENERATE_LYRICS -> {
@@ -43,6 +45,7 @@ public final class AgentToolArgs {
                 put(m, "text", a.text());
                 put(m, "language", a.language());
                 put(m, "mode", a.mode());
+                put(m, "revisionId", a.revisionId());
             }
             case MODIFY_SECTION -> {
                 var a = (AgentTool.ModifySectionArgs) args;
@@ -60,6 +63,7 @@ public final class AgentToolArgs {
                 var a = (AgentTool.SetStyleArgs) args;
                 put(m, "style", a.style());
                 put(m, "mood", a.mood());
+                put(m, "vocal", a.vocal());
                 put(m, "bpm", a.bpm());
                 put(m, "language", a.language());
                 put(m, "instruments", join(a.instruments()));
@@ -73,9 +77,9 @@ public final class AgentToolArgs {
         return switch (tool) {
             case GENERATE_SONG -> new AgentTool.GenerateSongArgs(
                     str(m, "text"), str(m, "style"), str(m, "language"),
-                    integer(m, "bpm"), str(m, "vocal"), split(str(m, "instruments")));
+                    integer(m, "bpm"), str(m, "vocal"), instruments(m), str(m, "mode"), str(m, "revisionId"));
             case GENERATE_LYRICS -> new AgentTool.GenerateLyricsArgs(
-                    str(m, "text"), str(m, "language"), str(m, "mode"));
+                    str(m, "text"), str(m, "language"), str(m, "mode"), str(m, "revisionId"));
             case MODIFY_SECTION -> new AgentTool.ModifySectionArgs(
                     str(m, "section"), str(m, "replacementLyrics"),
                     decimal(m, "startS"), decimal(m, "endS"));
@@ -83,7 +87,7 @@ public final class AgentToolArgs {
                     str(m, "direction"), integer(m, "seconds"));
             case SET_STYLE -> new AgentTool.SetStyleArgs(
                     str(m, "style"), str(m, "mood"), integer(m, "bpm"),
-                    str(m, "language"), split(str(m, "instruments")));
+                    str(m, "language"), instruments(m), str(m, "vocal"));
             case GET_CURRENT_SONG -> new AgentTool.GetCurrentSongArgs();
         };
     }
@@ -108,8 +112,15 @@ public final class AgentToolArgs {
     }
 
     private static String join(List<String> values) {
-        if (values == null || values.isEmpty()) return null;
+        if (values == null) return null;
         return String.join(SEP, values);
+    }
+
+    private static List<String> instruments(Map<String, Object> map) {
+        Object value = map.get("instruments");
+        if (value == null) return null;
+        if (value instanceof List<?> list) return list.stream().map(Object::toString).toList();
+        return split(value.toString());
     }
 
     private static List<String> split(String value) {

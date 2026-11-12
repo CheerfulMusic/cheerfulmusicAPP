@@ -74,6 +74,11 @@ public final class JdbcConversationRepository implements ConversationRepository 
 
     @Override
     public void clear(String conversationId, Instant now) {
+        mapper.lockForReset(conversationId);
+        if(mapper.recentRunning(conversationId,now.minusSeconds(600))>0) {
+            throw new com.qingfeng.music.common.exception.DomainException("AGENT_TURN_IN_PROGRESS","当前消息仍在处理，请先等待或刷新结果。持续 10 分钟未恢复时可重新开始；已有作品和生成任务会保留。");
+        }
+        mapper.archiveRequests(conversationId);
         mapper.deleteMessages(conversationId);
         mapper.clearWork(conversationId, now);
         mapper.clearState(conversationId, now);

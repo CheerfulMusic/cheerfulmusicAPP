@@ -4,7 +4,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * 无第三方依赖的极简 JSON：仅支持「对象 + 字符串值」。
+ * 无第三方依赖的小型 JSON：支持对象、字符串列表及标量。
  * W2 的对话意图 / 歌曲卡片序列化专用——数值与列表一律按字符串存储，避免引入 JSON 库。
  * 不追求通用性，只为可控的小结构服务。
  */
@@ -22,6 +22,11 @@ public final class AgentJson {
             Object value = entry.getValue();
             if (value == null) sb.append("null");
             else if (value instanceof Map) sb.append(write((Map<String, Object>) value));
+            else if (value instanceof java.util.List<?> list) {
+                sb.append('['); boolean itemFirst=true;
+                for (Object item:list) { if(!itemFirst)sb.append(',');itemFirst=false;sb.append(item==null?"null":jsonString(item.toString())); }
+                sb.append(']');
+            }
             else sb.append(jsonString(value.toString()));
         }
         return sb.append('}').toString();
@@ -38,6 +43,17 @@ public final class AgentJson {
         if (index[0] >= source.length()) return null;
         char c = source.charAt(index[0]);
         if (c == '{') return readObject(source, index);
+        if (c == '[') {
+            var result=new java.util.ArrayList<Object>(); index[0]++;
+            while(index[0]<source.length()) {
+                index[0]=skipWhitespace(source,index[0]);
+                if(index[0]>=source.length())throw new IllegalArgumentException("Unterminated JSON array");
+                if(source.charAt(index[0])==']'){index[0]++;break;}
+                result.add(readValue(source,index)); index[0]=skipWhitespace(source,index[0]);
+                if(index[0]<source.length() && source.charAt(index[0])==',')index[0]++;
+            }
+            return result;
+        }
         if (c == '"') return readString(source, index);
         if (source.startsWith("null", index[0])) {
             index[0] += 4;
@@ -45,7 +61,7 @@ public final class AgentJson {
         }
         int start = index[0];
         while (index[0] < source.length() && source.charAt(index[0]) != ','
-                && source.charAt(index[0]) != '}') {
+                && source.charAt(index[0]) != '}' && source.charAt(index[0]) != ']') {
             index[0]++;
         }
         return source.substring(start, index[0]).trim();
@@ -87,6 +103,10 @@ public final class AgentJson {
                         case 'n' -> sb.append('\n');
                         case 'r' -> sb.append('\r');
                         case 't' -> sb.append('\t');
+                        case 'u' -> {
+                            if(index[0]+4>=source.length())throw new IllegalArgumentException("Invalid JSON escape");
+                            sb.append((char)Integer.parseInt(source.substring(index[0]+1,index[0]+5),16));index[0]+=4;
+                        }
                         default -> sb.append(escaped);
                     }
                     index[0]++;
@@ -117,7 +137,7 @@ public final class AgentJson {
                 case '\n' -> sb.append("\\n");
                 case '\r' -> sb.append("\\r");
                 case '\t' -> sb.append("\\t");
-                default -> sb.append(c);
+                default -> { if(c<32)sb.append(String.format("\\u%04x",(int)c));else sb.append(c); }
             }
         }
         return sb.append('"').toString();
