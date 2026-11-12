@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>站点分析合规确认清单 · 法务签字页</title>
+<style>
+  :root{--ink:#1f2933;--muted:#5b6b7b;--line:#d8dee5;--accent:#1f4e79;--warn:#8a4b00;--soft:#f5f7f9;--warnbg:#fff8ec}
+  *{box-sizing:border-box}
+  body{margin:0;padding:26px 34px 40px;background:#fff;color:var(--ink);
+       font:13.5px/1.6 -apple-system,"Segoe UI","Microsoft YaHei",sans-serif}
+  header{border-bottom:3px solid var(--accent);padding-bottom:12px;margin-bottom:16px}
+  h1{font-size:21px;margin:0 0 5px;color:var(--accent);letter-spacing:.3px}
+  .meta{color:var(--muted);font-size:12px}
+  h2{font-size:15px;margin:20px 0 8px;color:var(--accent);border-left:4px solid var(--accent);padding-left:8px}
+  .lead{background:var(--soft);border:1px solid var(--line);border-radius:5px;padding:10px 13px;margin:0 0 14px}
+  .facts{margin:0;padding-left:20px;color:#374151}
+  .facts li{margin:3px 0}
+  .warn{background:var(--warnbg);border:1px solid #f0d6a8;border-radius:5px;padding:9px 12px;color:var(--warn);margin:12px 0}
+  .q{border:1px solid var(--line);border-radius:6px;padding:10px 13px;margin:0 0 9px;break-inside:avoid}
+  .q h3{font-size:13.5px;margin:0 0 6px;display:flex;align-items:baseline;gap:9px}
+  .badge{display:inline-block;min-width:30px;background:var(--accent);color:#fff;border-radius:3px;
+         padding:1px 6px;font-size:11.5px;text-align:center}
+  .opts{margin:6px 0 6px 39px;padding:0;list-style:none}
+  .opts li{margin:2px 0}
+  .opts label{cursor:pointer}
+  .opts input{vertical-align:-1px;margin-right:6px}
+  .blank{display:inline-block;border-bottom:1px solid #94a3b8;min-width:90px}
+  .row{margin:4px 0 0 39px;font-size:12.5px}
+  .row b{color:var(--accent);font-weight:600}
+  .row.impact{color:#4b5563}
+  table{width:100%;border-collapse:collapse;font-size:12.5px;margin-top:6px}
+  th,td{border:1px solid var(--line);padding:5px 8px;text-align:left;vertical-align:top}
+  th{background:var(--soft);color:var(--accent);font-weight:600}
+  code{background:var(--soft);padding:1px 4px;border-radius:3px;font-size:12px}
+  .sign{margin-top:16px}
+  .sign td{height:34px}
+  .sign .lbl{background:var(--soft);width:130px;font-weight:600}
+  .foot{margin-top:16px;border-top:1px solid var(--line);padding-top:9px;color:var(--muted);font-size:11.5px}
+  .noprint{margin-bottom:12px;color:var(--muted);font-size:12px}
+  @media print{
+    body{padding:0;font-size:12px}
+    .noprint{display:none}
+    .q{padding:7px 10px;margin-bottom:6px}
+    h2{margin:12px 0 6px}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>站点分析合规确认清单（法务签字页）</h1>
+  <div class="meta">
+    日期：2026-11-10 &nbsp;|&nbsp; 主体：CHEERFUL MUSIC LIMITED（隐私政策所载 Data Controller）
+    &nbsp;|&nbsp; 范围：第一方站点分析 <code>site_event</code>（非广告、不与第三方共享）
+    &nbsp;|&nbsp; 依据文档：《数据看板隐私治理实施方案》§3/§11、《数据看板生产上线核验报告》§5、<code>public/legal/privacy.html</code>
+  </div>
+</header>
+
+<p class="lead">
+  <b>用途：</b>下列 10 项是技术侧无权自行决定的合规决策点。技术侧已实现保留清理、历史擦除与隐私政策分析小节，
+  但<b>全部默认关闭、参数留空</b>。本清单的结论将直接决定配置项取值、政策措辞，以及是否允许启用相关能力。
+  请逐项勾选并签字；<b>技术侧不自行认定合规</b>。
+</p>
+
+<h2>一、当前事实（请法务先确认这四条属实）</h2>
+<ol class="facts">
+  <li>隐私政策 <code>privacy.html</code> 已存在。§7.1 原文写明：分析数据保留期
+      “<i>has not yet been determined and will be set by our legal review</i>”，并声明
+      “<i>We do not state a retention period in this Policy that has not been confirmed</i>”。</li>
+  <li>§10 Data Retention 仅表述“只保留合理必要时长”，并写明“上线前才会制定并公布分类保留表”，<b>未给出具体天数</b>。</li>
+  <li>政策载明 <code>Effective Date: 13 November 2026</code>，截至 2026-11-10 <b>尚未生效</b>；
+      《生产上线核验报告》§5 是“材料整理，供人工确认”的提问清单，<b>不是法务回函</b>；全仓无法务签字或审核通过记录。</li>
+  <li>相关代码能力已实现，但开关全关：<code>retention.enabled=false</code>、
+      <code>retention-days=0</code>、<code>erasure.enabled=false</code>、
+      <code>erasure.method=""</code>、调度未注册。</li>
+</ol>
+
+<div class="warn">⚠ 未签字前：不得开启任何清理／擦除开关，不得对外发布含确定保留期的政策正文，不得宣告 PRODUCTION READY。</div>
+
+<h2>二、请逐项勾选（L1–L9）</h2>
+
+<div class="q">
+  <h3><span class="badge">L1</span>分析数据的具体保留天数</h3>
+  <ul class="opts">
+    <li><label><input type="checkbox"> 90 天</label></li>
+    <li><label><input type="checkbox"> 180 天</label></li>
+    <li><label><input type="checkbox"> 13 个月</label></li>
+    <li><label><input type="checkbox"> 24 个月</label></li>
+    <li><label><input type="checkbox"> 其他：<span class="blank"></span></label></li>
+  </ul>
+  <div class="row"><b>技术侧建议（非法律结论）：</b>13 个月（可覆盖同比统计）；《生产上线核验报告》§5.5 原举例为“13 / 24 个月”。最终以法务结论为准。</div>
+  <div class="row impact"><b>为何需签字：</b>期限直接决定合法留存边界；填错会导致超期留存或过早删除。适用法（UK GDPR / EU GDPR / PIPL / 美国州法）及“最短必要期限”由法务判定，技术侧不下结论。</div>
+  <div class="row impact"><b>落地：</b><code>qingfeng.analytics.retention.retention-days</code>（当前 0，缺失或 ≤0 时清理任务拒绝执行）；<code>privacy.html</code> §7.1 Retention 句。</div>
+</div>
+
+<div class="q">
+  <h3><span class="badge">L2</span>分析采集的法律基础：同意 vs 正当利益</h3>
+  <ul class="opts">
+    <li><label><input type="checkbox"> 明示同意（consent）——与现有实现一致</label></li>
+    <li><label><input type="checkbox"> 正当利益（legitimate interests，需另做 LIA 评估）</label></li>
+    <li><label><input type="checkbox"> 其他／组合：<span class="blank"></span></label></li>
+  </ul>
+  <div class="row"><b>技术侧建议（非法律结论）：</b>当前横幅与代码是“明示同意、默认不采集、DNT 优先、可撤回”。若改选正当利益，横幅文案与撤回机制需重做。</div>
+  <div class="row impact"><b>为何需签字：</b>决定激活前是否必须取得有效同意、撤回的法律效力，以及横幅措辞是否需法务背书。</div>
+  <div class="row impact"><b>落地：</b>同意横幅文案、<code>privacy.html</code> §7.1 与法律基础章节。</div>
+</div>
+
+<div class="q">
+  <h3><span class="badge">L3</span>撤回同意后，历史数据的处理方式</h3>
+  <ul class="opts">
+    <li><label><input type="checkbox"> 物理删除 DELETE（已实现）</label></li>
+    <li><label><input type="checkbox"> 匿名化 ANONYMIZE（已实现，须同时答 L8）</label></li>
+    <li><label><input type="checkbox"> 聚合后保留 AGGREGATE（<b>当前未实现</b>，需另建汇总表并排期）</label></li>
+    <li><label><input type="checkbox"> 组合／其他：<span class="blank"></span></label></li>
+  </ul>
+  <div class="row"><b>技术侧建议（非法律结论）：</b>在 DELETE 与 ANONYMIZE 中择一；若选 AGGREGATE，请一并确认排期——代码现明确返回 <code>UNSUPPORTED</code>，绝不静默降级为删除。</div>
+  <div class="row impact"><b>为何需签字：</b>三种方式的法律后果不同；技术侧不得替法务选，也不得声称任一种“必然”满足法律要求。</div>
+  <div class="row impact"><b>落地：</b><code>qingfeng.analytics.erasure.method</code>。</div>
+</div>
+
+<div class="q">
+  <h3><span class="badge">L4</span>擦除范围：跨 <code>visitor_id</code> 与登录前匿名行</h3>
+  <ul class="opts">
+    <li><label><input type="checkbox"> 仅覆盖登录用户的 <code>creator_id</code> 行（当前实现）</label></li>
+    <li><label><input type="checkbox"> 必须覆盖登录前匿名 <code>visitor_id</code> 行（需新增身份关联机制与排期）</label></li>
+    <li><label><input type="checkbox"> 只需停止未来采集，历史可不处理</label></li>
+  </ul>
+  <div class="row"><b>已核实事实：</b>同一自然人可能有多个 <code>visitor_id</code>（多设备／清缓存）；登录前的匿名行无法可靠关联到账号，当前端点不强行关联。</div>
+  <div class="row impact"><b>为何需签字：</b>“被遗忘权／删除权”是否要求覆盖全部历史，属法律判断；若要求覆盖，现有端点范围不足。</div>
+  <div class="row impact"><b>落地：</b>擦除端点范围、是否新增身份关联方案。</div>
+</div>
+
+<div class="q">
+  <h3><span class="badge">L5</span>历史数据的删除请求渠道</h3>
+  <ul class="opts">
+    <li><label><input type="checkbox"> 登录用户自助端点（已建，默认关）</label></li>
+    <li><label><input type="checkbox"> 仅通过隐私联系邮箱人工处理</label></li>
+    <li><label><input type="checkbox"> 两者并存</label></li>
+  </ul>
+  <div class="row"><b>技术侧建议（非法律结论）：</b>端点仅接受服务端会话身份，不接受任何客户端身份参数；启用前需确认身份验证方式与响应时限。</div>
+  <div class="row impact"><b>为何需签字：</b>渠道决定权利行使是否可达、是否需对外公示，以及是否开放自助入口。</div>
+  <div class="row impact"><b>落地：</b><code>qingfeng.analytics.erasure.enabled</code>、<code>privacy.html</code> §7.1、前台入口。</div>
+</div>
+
+<div class="q">
+  <h3><span class="badge">L6</span>隐私政策语种</h3>
+  <ul class="opts">
+    <li><label><input type="checkbox"> 仅英文（现状）</label></li>
+    <li><label><input type="checkbox"> 中英双语</label></li>
+    <li><label><input type="checkbox"> 其他：<span class="blank"></span></label></li>
+  </ul>
+  <div class="row"><b>已核实事实：</b>现正文为英文，标题为“Privacy Policy隐私政策”；生效日 2026-11-13。</div>
+  <div class="row impact"><b>为何需签字：</b>发布语种属合规与用户告知要求，技术侧不擅自增补译文。</div>
+  <div class="row impact"><b>落地：</b><code>privacy.html</code> 全文。</div>
+</div>
+
+<div class="q">
+  <h3><span class="badge">L7</span>政策正文准确性复核（发布门槛）</h3>
+  <ul class="opts">
+    <li><label><input type="checkbox"> 确认 §7.1 字段清单与实际采集一致，同意按结论补齐后发布</label></li>
+    <li><label><input type="checkbox"> 需修改，意见：<span class="blank"></span></label></li>
+    <li><label><input type="checkbox"> 暂缓发布</label></li>
+  </ul>
+  <div class="row"><b>已核实事实：</b>§7.1 字段已与 <code>track.ts</code> / <code>SiteEventController</code> 逐项对齐；但保留期、删除方式、撤回路径仍为占位描述。</div>
+  <div class="row impact"><b>为何需签字：</b>政策对外具有法律效力；措辞须经法务审核后方可发布，技术侧只保证“链接可达 + 字段描述与代码一致”。</div>
+  <div class="row impact"><b>落地：</b><code>privacy.html</code> §7.1、Effective Date。</div>
+</div>
+
+<div class="q">
+  <h3><span class="badge">L8</span>哨兵值匿名化是否被认可为充分去标识</h3>
+  <ul class="opts">
+    <li><label><input type="checkbox"> 认可，可启用 ANONYMIZE</label></li>
+    <li><label><input type="checkbox"> 不认可，必须物理删除（只能用 DELETE）</label></li>
+    <li><label><input type="checkbox"> 需补充说明／附加条件：<span class="blank"></span></label></li>
+  </ul>
+  <div class="row"><b>已核实事实：</b><code>visitor_id</code> / <code>session_id</code> 为 NOT NULL，匿名化只能置为常量 <code>'ANONYMIZED'</code>；<code>creator_id</code> / <code>payload</code> 置 NULL，聚合友好字段保留。</div>
+  <div class="row impact"><b>为何需签字：</b>该结论直接决定 L3 可选哪种方式；技术侧不宣称哨兵值在法律上构成充分匿名化。</div>
+  <div class="row impact"><b>落地：</b><code>erasure.method</code> 是否允许 <code>ANONYMIZE</code>。</div>
+</div>
+
+<div class="q">
+  <h3><span class="badge">L9</span>匿名用户人工申请流程是否满足删除权行使要求</h3>
+  <ul class="opts">
+    <li><label><input type="checkbox"> 满足，维持人工流程</label></li>
+    <li><label><input type="checkbox"> 不满足，需补充验证机制（请说明）：<span class="blank"></span></label></li>
+    <li><label><input type="checkbox"> 需法务另行评估</label></li>
+  </ul>
+  <div class="row"><b>已核实事实：</b>匿名 <code>visitor_id</code> 仅存浏览器 localStorage，服务端无法据此验证申请人身份；当前只能走人工流程。</div>
+  <div class="row impact"><b>为何需签字：</b>人工流程是否足以支撑权利行使、是否需额外验证或公示，属法律判断。</div>
+  <div class="row impact"><b>落地：</b><code>privacy.html</code> §7.1 相关表述、是否新增机制。</div>
+</div>
+
+<div class="q">
+  <h3><span class="badge">L10</span>采集客户端 IP 并派生「国家」维度（V33 新增）</h3>
+  <ul class="opts">
+    <li><label><input type="checkbox"> 认可：仅存储派生的国家名（如「中国」），原始 IP 不入库、不落盘（当前实现）</label></li>
+    <li><label><input type="checkbox"> 不认可：禁止采集任何 IP 派生信息，需回退 V33</label></li>
+    <li><label><input type="checkbox"> 需补充条件／其他：<span class="blank"></span></label></li>
+  </ul>
+  <div class="row"><b>已核实事实：</b>V33 迁移为 <code>site_event</code> 新增 <code>country VARCHAR(64)</code> 列及索引；
+    服务端从 <code>X-Forwarded-For</code> / <code>X-Real-IP</code> 解析真实客户端 IP，仅在 <code>GeoIpResolver</code> Bean 可用时，
+    经内嵌离线库 <code>ip2region.xdb</code>（JAR 内置，10.5 MB）离线解析出国家名后写入，<b>原始 IP 字符串从不写入数据库或日志</b>；
+    解析失败／私有地址／IPv6 一律置 <code>NULL</code>。该能力经 <code>ObjectProvider&lt;GeoIpResolver&gt;</code> 注入，Bean 缺失时自动降级为不采集。
+    <code>privacy.html</code> §7.1 已新增「Site Usage Analytics」小节披露此行为。</div>
+  <div class="row impact"><b>为何需签字：</b>即便只保留派生国家名、不保留原始 IP，是否构成对 IP 的处理、是否需要单独同意／告知、是否落入地域统计的最小必要边界，属法律判断；技术侧不擅自判定。</div>
+  <div class="row impact"><b>落地：</b>若否，需回退 V33 迁移与 <code>SiteEventController</code> 国家采集分支；若是，确认 <code>privacy.html</code> §7.1 披露措辞是否需补强。</div>
+</div>
+
+<h2>三、附录 A：结论 → 配置映射（技术侧照此填写，不写死在代码里）</h2>
+<table>
+  <tr><th style="width:70px">结论项</th><th>配置项 / 文件</th><th style="width:150px">当前值</th><th>签字后动作</th></tr>
+  <tr><td>L1</td><td><code>qingfeng.analytics.retention.retention-days</code></td><td>0（拒绝执行）</td><td>填入法务确定天数</td></tr>
+  <tr><td>L1</td><td><code>qingfeng.analytics.retention.enabled</code></td><td>false</td><td>备份与副本演练后由运维开启</td></tr>
+  <tr><td>L1</td><td><code>retention.scheduler-enabled</code></td><td>未设置（不注册）</td><td>确认单节点调度后开启</td></tr>
+  <tr><td>L3 / L8</td><td><code>qingfeng.analytics.erasure.method</code></td><td>空字符串</td><td>填 DELETE / ANONYMIZE / AGGREGATE</td></tr>
+  <tr><td>L5</td><td><code>qingfeng.analytics.erasure.enabled</code></td><td>false</td><td>确认渠道与身份验证后开启</td></tr>
+  <tr><td>L2 / L6 / L7</td><td><code>privacy.html</code> §7.1、同意横幅</td><td>英文、保留期占位</td><td>按法务措辞修订、复核后发布</td></tr>
+  <tr><td>L4 / L9</td><td>擦除端点范围、人工流程</td><td>仅登录用户</td><td>按结论决定是否扩展</td></tr>
+  <tr><td>L10</td><td><code>site_event.country</code>（V33 迁移）、<code>GeoIpResolver</code> Bean</td><td>列已建、Bean 可缺省降级</td><td>按结论确认保留或回退 V33</td></tr>
+</table>
+
+<h2>四、附录 B：技术侧收到签字结论后的动作</h2>
+<ol class="facts">
+  <li>把结论填入上表配置项（经环境变量注入，不硬编码在代码或仓库配置中）。</li>
+  <li>修订 <code>privacy.html</code> §7.1（保留期、删除方式、请求渠道、语种），交法务复核（L7）后发布。</li>
+  <li>生产启用前必须完成：V25 生产迁移只读核验、生产接口实时核验、数据库备份与副本演练、影响行数复核；由运维显式开启开关。</li>
+  <li>上述未完成前：维持 <b>CONDITIONAL PASS</b>，禁止宣告 <b>PRODUCTION READY</b>。本地代码提交 ≠ 运行版本生效 ≠ 上线授权。</li>
+</ol>
+
+<h2>五、法务签字</h2>
+<table class="sign">
+  <tr><td class="lbl">审核结论</td><td colspan="3">
+    <label><input type="checkbox"> 同意按上述勾选启用</label> &nbsp;&nbsp;
+    <label><input type="checkbox"> 需修改后复核</label> &nbsp;&nbsp;
+    <label><input type="checkbox"> 暂缓</label>
+  </td></tr>
+  <tr><td class="lbl">法务审核人</td><td></td><td class="lbl" style="width:70px">日期</td><td style="width:150px"></td></tr>
+  <tr><td class="lbl">补充说明</td><td colspan="3" style="height:52px"></td></tr>
+</table>
+
+<div class="foot">
+  本清单由技术侧整理，仅陈述已核实的技术事实与待决策选项，<b>不构成法律意见，亦不自行声明合规</b>。
+  所列 L1–L9 编号为本清单内部编号，非外部法条编号。依据文件：《数据看板隐私治理实施方案》§3/§11/§13、
+  《数据看板生产上线核验报告》§5、《数据看板上线前最终验收报告》、《数据看板隐私治理实施方案》§17，
+  以及 <code>Qingfeng_AI_Music_VUE/public/legal/privacy.html</code>。
+</div>
+
+</body>
+</html>

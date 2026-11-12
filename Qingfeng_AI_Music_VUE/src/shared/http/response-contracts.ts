@@ -34,6 +34,7 @@ const analyticsTotals=(v:unknown)=>obj(v)&&['pv','pageviews','uv','sessions','av
 const analyticsDaily=(v:unknown)=>obj(v)&&text(v.d)&&['pv','pageviews','uv','avgDurationMs'].every(k=>analyticsCount(v[k]))
 const analyticsPageRow=(v:unknown)=>obj(v)&&text(v.pagePath)&&analyticsCount(v.pv)&&analyticsCount(v.avgDurationMs)&&analyticsCount(v.samples)
 const analyticsUserRow=(v:unknown)=>obj(v)&&str(v.creatorId)&&text(v.accountType)&&['name','email','phoneMasked'].every(k=>v[k]===null||str(v[k]))&&['pv','pageviews','avgDurationMs','samples'].every(k=>analyticsCount(v[k]))&&str(v.firstSeen)&&str(v.lastSeen)
+const analyticsCountryRow=(v:unknown)=>obj(v)&&text(v.country)&&analyticsCount(v.visitors)&&analyticsCount(v.hits)
 /**
  * 统计看板：allowed 明确拒绝时不带数据；QUERY_FAILED 只带 error，绝不能被当成 0 展示。
  * 字段缺失或类型不对一律判为非法响应，让前端进入“加载失败”而不是渲染 0。
@@ -42,7 +43,7 @@ const analyticsSummaryBody=(v:unknown)=>{
  if(!obj(v)||typeof v.allowed!=='boolean')return false
  if(v.allowed!==true)return true
  if(v.error!==undefined)return text(v.error)&&v.totals===undefined&&v.daily===undefined
- return analyticsTotals(v.totals)&&list(v.daily,analyticsDaily)&&list(v.pages,analyticsPageRow)&&list(v.users,analyticsUserRow)
+ return analyticsTotals(v.totals)&&list(v.daily,analyticsDaily)&&list(v.pages,analyticsPageRow)&&list(v.users,analyticsUserRow)&&(v.countries===undefined||list(v.countries,analyticsCountryRow))
 }
 const analyticsAccessBody=(v:unknown)=>obj(v)&&typeof v.allowed==='boolean'&&(v.allowed!==true||text(v.viewer))
 const quickCreation=(v:unknown)=>obj(v)&&text(v.id)&&text(v.workId)&&['QUEUED','WRITING','LYRICS_READY','SUBMITTING_MUSIC','MUSIC_QUEUED','SUBMITTING','RUNNING','SAVING','SUBMISSION_UNKNOWN','SUCCEEDED','FAILED','CANCELLED'].includes(String(v.status))&&['revisionId','taskId','errorCode'].every(k=>v[k]===null||text(v[k]))&&typeof v.canRetry==='boolean'&&text(v.createdAt)
