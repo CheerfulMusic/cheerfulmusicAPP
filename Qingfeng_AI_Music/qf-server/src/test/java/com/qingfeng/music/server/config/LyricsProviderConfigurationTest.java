@@ -28,6 +28,18 @@ class LyricsProviderConfigurationTest {
         assertTrue(config.lyricsWriter(new MockEnvironment().withProperty("qingfeng.lyrics.provider", "deepseek")
             .withProperty("DEEPSEEK_API_KEY", "offline-key")).isConfigured());
     }
+    @Test void customCreationUsesOpenAiWithDeepSeekBackupIndependentOfSharedConfiguration() {
+        var env = new MockEnvironment().withProperty("qingfeng.lyrics.provider", "deepseek")
+            .withProperty("qingfeng.lyrics.deepseek-fallback-enabled", "false");
+        var custom = assertInstanceOf(FallbackLyricsWriter.class, config.customLyricsWriter(env));
+        assertEquals("OPENAI", custom.source());
+        assertFalse(custom.isConfigured());
+        env.withProperty("DEEPSEEK_API_KEY", "offline-deepseek-key");
+        assertTrue(config.customLyricsWriter(env).isConfigured());
+        assertTrue(config.customLyricsWriter(new MockEnvironment()
+            .withProperty("OPENAI_API_KEY", "offline-openai-key")).isConfigured());
+        assertInstanceOf(DeepSeekLyricsWriter.class, config.lyricsWriter(env));
+    }
     @Test void enablingFallbackCanUseDeepSeekWhenTheOpenAiKeyIsMissing() {
         var env = new MockEnvironment().withProperty("qingfeng.lyrics.provider", "openai")
             .withProperty("qingfeng.lyrics.deepseek-fallback-enabled", "true")

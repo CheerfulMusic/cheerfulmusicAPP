@@ -5,6 +5,7 @@ import com.qingfeng.music.work.api.WorkApi;
 import com.qingfeng.music.infrastructure.provider.DeepSeekLyricsWriter;
 import com.qingfeng.music.infrastructure.provider.OpenAiLyricsWriter;
 import com.qingfeng.music.infrastructure.persistence.lyrics.*;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.*;
 import org.springframework.core.env.Environment;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -38,6 +39,10 @@ public class LyricsCompositionConfiguration {
             default -> throw new IllegalArgumentException("Unsupported qingfeng.lyrics.provider; use openai or deepseek");
         };
     }
+    @Bean(defaultCandidate=false)
+    LyricsWriter customLyricsWriter(Environment env){
+        return new FallbackLyricsWriter(openAiWriter(env),deepSeekLyricsWriter(env));
+    }
     private static String openAiKey(Environment env){
         return env.getProperty("qingfeng.providers.openai.api-key",env.getProperty("OPENAI_API_KEY",""));
     }
@@ -60,8 +65,11 @@ public class LyricsCompositionConfiguration {
             env.getProperty("qingfeng.providers.deepseek.model","deepseek-flash"));
     }
     @Bean @Profile({"mysql","test"}) CompositionRequests compositionRequests(JdbcTemplate jdbc,com.qingfeng.music.usage.UsageBudget budget,org.springframework.transaction.PlatformTransactionManager manager,com.qingfeng.music.credits.CreditsLedger credits,com.qingfeng.music.credits.CreditConsumptions consumptions){return new JdbcCompositionRequests(jdbc,budget,new org.springframework.transaction.support.TransactionTemplate(manager),credits,consumptions);}
-    @Bean @Profile({"mysql","test"}) LyricsCompositionService lyricsCompositionService(WorkApi works,LyricsApi lyrics,LyricsMapper mapper,LyricsWriter writer,CompositionRequests requests,Environment env,com.qingfeng.music.settings.MusicSettings settings,com.qingfeng.music.settings.CreativePlan.Repository plans,org.springframework.beans.factory.ObjectProvider<PhotoLyricsWriter> photos){
-        return new LyricsCompositionService(works,lyrics,new MyBatisLyricsRepository(mapper),writer,requests,env.getProperty("qingfeng.lyrics.enabled",Boolean.class,false))
+    @Bean @Profile({"mysql","test"}) LyricsCompositionService lyricsCompositionService(WorkApi works,LyricsApi lyrics,LyricsMapper mapper,LyricsWriter writer,
+            @Qualifier("customLyricsWriter") LyricsWriter customWriter,CompositionRequests requests,Environment env,
+            com.qingfeng.music.settings.MusicSettings settings,com.qingfeng.music.settings.CreativePlan.Repository plans,
+            org.springframework.beans.factory.ObjectProvider<PhotoLyricsWriter> photos){
+        return new LyricsCompositionService(works,lyrics,new MyBatisLyricsRepository(mapper),writer,customWriter,requests,env.getProperty("qingfeng.lyrics.enabled",Boolean.class,false))
             .withCreativePlans(settings,plans).withPhotoWriter(photos.getIfAvailable());
     }
 }

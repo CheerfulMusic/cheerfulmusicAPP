@@ -9,13 +9,19 @@ import java.util.UUID;
 public final class LyricsCompositionService {
     private static final System.Logger LOG=System.getLogger(LyricsCompositionService.class.getName());
     private final WorkApi works;private final LyricsApi lyrics;private final LyricsRepository revisions;
-    private final LyricsWriter writer;private final CompositionRequests requests;private final boolean enabled;
+    private final LyricsWriter writer;private final LyricsWriter customWriter;private final CompositionRequests requests;private final boolean enabled;
     private com.qingfeng.music.settings.MusicSettings settings;
     private com.qingfeng.music.settings.CreativePlan.Repository plans;
     private PhotoLyricsWriter photoWriter;
     public LyricsCompositionService withPhotoWriter(PhotoLyricsWriter value){photoWriter=value;return this;}
     public LyricsCompositionService withCreativePlans(com.qingfeng.music.settings.MusicSettings settings,com.qingfeng.music.settings.CreativePlan.Repository plans){this.settings=settings;this.plans=plans;return this;}
-    public LyricsCompositionService(WorkApi works,LyricsApi lyrics,LyricsRepository revisions,LyricsWriter writer,CompositionRequests requests,boolean enabled){this.works=works;this.lyrics=lyrics;this.revisions=revisions;this.writer=writer;this.requests=requests;this.enabled=enabled;}
+    public LyricsCompositionService(WorkApi works,LyricsApi lyrics,LyricsRepository revisions,LyricsWriter writer,CompositionRequests requests,boolean enabled){
+        this(works,lyrics,revisions,writer,writer,requests,enabled);
+    }
+    public LyricsCompositionService(WorkApi works,LyricsApi lyrics,LyricsRepository revisions,LyricsWriter writer,
+                                   LyricsWriter customWriter,CompositionRequests requests,boolean enabled){
+        this.works=works;this.lyrics=lyrics;this.revisions=revisions;this.writer=writer;this.customWriter=customWriter;this.requests=requests;this.enabled=enabled;
+    }
     public LyricsApi.Revision compose(String owner,String work,long expectedVersion,String key,String language){
         return compose(owner,work,expectedVersion,key,language,"",null);
     }
@@ -29,12 +35,17 @@ public final class LyricsCompositionService {
         return compose(owner,work,expectedVersion,key,language,instructions,baseRevisionId,null,false);
     }
     public LyricsApi.Revision compose(String owner,String work,long expectedVersion,String key,String language,String instructions,String baseRevisionId,String templateId,boolean chorusFirst){
-        return compose(owner,work,expectedVersion,key,language,instructions,baseRevisionId,templateId,chorusFirst,null);
+        return compose(owner,work,expectedVersion,key,language,instructions,baseRevisionId,templateId,chorusFirst,writer,null);
+    }
+    public LyricsApi.Revision composeCustom(String owner,String work,long expectedVersion,String key,String language,
+                                             String instructions,String baseRevisionId,String templateId,boolean chorusFirst){
+        return compose(owner,work,expectedVersion,key,language,instructions,baseRevisionId,templateId,chorusFirst,customWriter,null);
     }
     public LyricsApi.Revision composePhoto(String owner,String work,long expectedVersion,String key,String language,byte[] jpeg){
-        return compose(owner,work,expectedVersion,key,language,"",null,null,false,java.util.Objects.requireNonNull(jpeg));
+        return compose(owner,work,expectedVersion,key,language,"",null,null,false,writer,java.util.Objects.requireNonNull(jpeg));
     }
-    private LyricsApi.Revision compose(String owner,String work,long expectedVersion,String key,String language,String instructions,String baseRevisionId,String templateId,boolean chorusFirst,byte[] photo){
+    private LyricsApi.Revision compose(String owner,String work,long expectedVersion,String key,String language,String instructions,
+                                       String baseRevisionId,String templateId,boolean chorusFirst,LyricsWriter selectedWriter,byte[] photo){
         var structure=new LyricsStructure(templateId,chorusFirst);
         var snapshot=works.get(owner,work);
         if(key==null||!key.matches("[0-9a-fA-F-]{36}")||language==null||!java.util.Set.of("zh-CN","en","mixed").contains(language))throw new DomainException("INVALID_LYRICS_REQUEST","歌词生成参数无效，请刷新后重试");
@@ -51,7 +62,7 @@ public final class LyricsCompositionService {
         }
         if(snapshot.version()!=expectedVersion)throw new DomainException("WORK_VERSION_CONFLICT","作品已修改，请重新载入后保存歌词");
         if(photo!=null&&photoWriter==null)throw new DomainException("LYRICS_PROVIDER_UNAVAILABLE","照片写歌暂不可用，请稍后再试。");
-        if(photo==null&&(!enabled||!writer.isConfigured()))throw new DomainException("LYRICS_PROVIDER_UNAVAILABLE","歌词生成暂不可用，请稍后再试或手动填写");
+        if(photo==null&&(!enabled||!selectedWriter.isConfigured()))throw new DomainException("LYRICS_PROVIDER_UNAVAILABLE","歌词生成暂不可用，请稍后再试或手动填写");
         var photoPlan=photo==null&&plans!=null?plans.find(work,com.qingfeng.music.settings.CreativePlan.sourceHash(snapshot))
             .filter(plan->!plan.photoSummary().isBlank()).orElse(null):null;
         if(photo==null&&photoPlan==null&&snapshot.story().isBlank()&&snapshot.message().isBlank())throw new DomainException("INVALID_LYRICS_REQUEST","请先在故事中填写一段回忆或祝福，再生成歌词");
@@ -61,13 +72,13 @@ public final class LyricsCompositionService {
             var direction=settings==null?null:settings.resolve(owner,snapshot);
             var writingDirection=new LyricsWriter.Direction(direction==null?snapshot.style():direction.style(),direction==null?"":direction.negativeTags(),snapshot.vocalGender());
             String context=photoPlan==null?"":"\n【照片画面素材，仅用于创作】\n"+photoPlan.photoSummary();
-            var draft=photo==null?writer.write(snapshot,language,requirements+context+structure.instruction(),previous,writingDirection)
+            var draft=photo==null?selectedWriter.write(snapshot,language,requirements+context+structure.instruction(),previous,writingDirection)
                 :photoWriter.write(snapshot,language,photo,writingDirection);
             if(works.get(owner,work).version()!=expectedVersion)throw new DomainException("WORK_VERSION_CONFLICT","作品已修改，请重新载入后保存歌词");
             if(draft.title()==null||draft.title().isBlank()||draft.title().length()>80||draft.lyrics()==null||draft.lyrics().isBlank()||draft.lyrics().length()>5000)throw new DomainException("LYRICS_RESPONSE_INVALID","歌词生成结果不完整，请稍后重新发起");
             structure.validate(draft.lyrics());
             var revision=new LyricsApi.Revision(UUID.randomUUID().toString(),work,expectedVersion,draft.title().trim(),draft.lyrics(),
-                draft.source()==null?writer.source():draft.source(),false,Instant.now(),language,structure.templateId(),structure.chorusFirst());
+                draft.source()==null?selectedWriter.source():draft.source(),false,Instant.now(),language,structure.templateId(),structure.chorusFirst());
             requests.completeWithRevision(work,key,revision.id(),()->{
                 revisions.insert(revision);
                 var plan=photoPlan==null?draft.plan():photoPlan;

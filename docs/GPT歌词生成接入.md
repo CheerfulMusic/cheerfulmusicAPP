@@ -2,7 +2,7 @@
 
 ## 本次范围
 
-生成歌词、按修改要求重新生成歌词，按 `qingfeng.lyrics.provider` 选择提供方。选 `openai` 时使用官方 `https://api.openai.com/v1/responses`，默认型号 `gpt-6.1-terra`，`reasoning.effort=low`，单次输出上限 6000 tokens，请求超时 90 秒。型号可以通过服务端配置调整，需要使用支持 Responses、严格结构化输出和 low reasoning 的模型。
+自定义创作的生成歌词和重新生成歌词使用 OpenAI。快捷创作和 Agent 的共享写词服务由 `qingfeng.lyrics.provider` 配置，默认使用 DeepSeek。OpenAI 写词使用官方 `https://api.openai.com/v1/responses`，默认型号 `gpt-6.1-terra`，`reasoning.effort=low`，单次输出上限 6000 tokens，请求超时 90 秒。型号可以通过服务端配置调整，需要使用支持 Responses、严格结构化输出和 low reasoning 的模型。
 
 复用现有写词提示词、语言选择、段落模板、保留原句要求、音乐设置与 CreativePlan；不改变歌词版本保存流程。新增 GPT 版本来源记为 `OPENAI`，DeepSeek 仍记为 `DEEPSEEK`，历史数据不改写。灵感输入框的“AI 改写”、音乐生成、封面生成仍保持各自原有提供方。
 
@@ -12,16 +12,15 @@
 
 ```properties
 qingfeng.lyrics.enabled=true
-qingfeng.lyrics.provider=openai
 qingfeng.providers.openai.model=gpt-6.1-terra
 # qingfeng.providers.openai.api-key=（仅在私有配置填写）
 ```
 
 2026-11-09 已从用户指定的桌面记事本读取密钥，写入 Git 忽略的 `Qingfeng_AI_Music/config/local.properties`，并设置以上提供方与型号。修改前的配置备份在本机忽略目录 `.backups/gpt-lyrics/`，没有改动数据库连接、后台调度或支付配置。
 
-未显式配置提供方的既有部署仍走 DeepSeek，避免未配置 GPT 密钥时意外切换。手动回退只需将提供方改为 `deepseek` 并保留原 DeepSeek 密钥，再按授权流程重启。调用失败不会自动切换模型，也不会自动重发付费请求。
+自定义创作优先使用 OpenAI。配置了 DeepSeek 后，OpenAI 未配置，或请求未能建立连接、收到明确拒绝且仍在兜底时间窗口内时，会使用 DeepSeek。超时等结果未知的请求保留原请求状态，避免再次提交。成功的版本记录实际提供方。共享写词服务可独立配置提供方和回退策略。
 
-照片写歌入口默认关闭。在隔离的本地验证环境中，配置支持图片输入的 OpenAI 模型与私有密钥，并设置 `qingfeng.lyrics.photo.enabled=true`。普通写词仍可使用原提供方。照片入口接受单张 JPG/PNG（最大 10 MB），后台将缩放后的图和选填故事一起送入一次 Responses 请求。应用保存画面摘要、歌词和音乐方向，原图不进入作品存储。离线端到端验证可用 `PhotoLyricsIntegrationTest`，它使用 H2 和替代供应商。
+照片写歌入口默认关闭。在隔离的本地验证环境中，配置支持图片输入的 OpenAI 模型与私有密钥，并设置 `qingfeng.lyrics.photo.enabled=true`。照片入口接受单张 JPG/PNG（最大 10 MB），后台将缩放后的图和选填故事一起送入一次 Responses 请求。应用保存画面摘要、歌词和音乐方向，原图不进入作品存储。离线端到端验证可用 `PhotoLyricsIntegrationTest`，它使用 H2 和替代供应商。
 
 日常主库启动仍必须遵循 `scripts/start-main.ps1` 约定，使用 `.secrets/production-main.local.properties`、版本清单及线上同版 JAR。当前这些主库启动材料在此工作区缺失，本次没有创建替代数据库、启动旧入口或替换运行版本。准备主库启动材料时，应将上述 GPT 配置安全地并入该私有配置；不得直接以旧 `local.properties` 作为完整主库配置。
 

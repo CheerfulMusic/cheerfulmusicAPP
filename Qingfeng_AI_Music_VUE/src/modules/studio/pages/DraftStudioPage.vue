@@ -39,7 +39,7 @@ function validRecovery(value:unknown):value is Recovery {
 }
 const route=useRoute(), router=useRouter(), initialized=ref(false), ready=ref(false), aiReady=ref(false), existing=ref<Work>(), baseline=ref(''), saving=ref(false), composing=ref(false), error=ref(''), notice=ref(''), conflict=ref(false), localSaved=ref(true), allowance=ref<Allowance>(), creditShort=ref(false)
 const language=ref<string>(locale.value)
-const mode=ref<CreationMode>(creationMode(route.query.mode)),quickReady=ref(false)
+const mode=ref<CreationMode>(creationMode(route.query.mode)),quickReady=ref(false),customLyricsReady=ref(false)
 const photoReady=ref(false), photoWork=ref(false)
 const quickSession=useQuickSession()
 const {flow:quickFlow,workId:quickWorkId,title:quickTitle,locked:quickLocked,dialogOpen:quickDialogOpen,initialStatus:quickInitialStatus,submissionPending:quickSubmissionPending,unknown:quickUnknown,issue:quickIssue,canResume:quickCanResume}=quickSession
@@ -161,6 +161,7 @@ async function initialize() {
   try {
     await ensureCreator()
     const system=await getSystemInfo();if(turn!==initSequence)return;ready.value=system.capabilities.workPersistence; aiReady.value=system.capabilities.lyricsGeneration;quickReady.value=system.capabilities.quickCreation===true
+    customLyricsReady.value=system.capabilities.customLyricsGeneration??system.capabilities.lyricsGeneration
     if(!usesLocalPhotoCapability)photoReady.value=system.capabilities.photoLyrics===true
     if (!ready.value) throw new Error('暂时无法保存故事，请稍后再试。')
     const id=String(query.work||'')
@@ -542,7 +543,7 @@ onBeforeUnmount(()=>{
           <CreationMusicChoices v-if="mode==='custom'&&musicCatalog&&preferences" v-model="preferences" :catalog="musicCatalog" :disabled="composing||rewriting||resetting"><template #structure><LyricsTemplatePicker v-model="structure" :disabled="composing||rewriting||resetting||!initialized||quickLocked"/></template></CreationMusicChoices>
           <p v-if="mode==='custom'&&musicIssue" class="notice error" role="alert">{{ t(musicIssue) }}</p>
           <details v-if="draft.recipient||draft.occasion||draft.message" class="legacy-inspiration-context"><summary>{{ t('已保留的旧版作品信息') }}</summary><p v-if="draft.recipient">{{ t('收件人：') }}{{ draft.recipient }}</p><p v-if="draft.occasion">{{ draft.occasion }}</p><p v-if="draft.message" class="legacy-message">{{ draft.message }}</p></details>
-          <div class="creation-action-bar story-action-bar"><button class="button creation-primary" type="submit" :disabled="!initialized||composing||rewriting||resetting||quickLocked||!ready||!aiReady||conflict||(mode==='quick'?!quickReady:!musicCatalog)">{{ composing?t(mode==='quick'?'正在开始创作…':'正在编写歌词…'):t(mode==='quick'?'一键生成音乐':'生成歌词') }}<span v-if="!composing" aria-hidden="true">→</span></button><span v-if="mode==='quick'&&credits&&quickCost!==null" class="save-info">{{ t('一键创作预计消耗 {cost} 积分（歌词 {lyrics}，音乐 {music}）',{cost:quickCost,lyrics:credits.lyricsCost,music:credits.musicCost}) }}</span><CreditCostHint v-else-if="mode!=='quick'&&credits&&credits.enabled&&credits.lyricsCost>0" :cost="credits.lyricsCost" :balance="credits.balance" :busy="composing"/></div>
+          <div class="creation-action-bar story-action-bar"><button class="button creation-primary" type="submit" :disabled="!initialized||composing||rewriting||resetting||quickLocked||!ready||conflict||(mode==='quick'?!quickReady:!customLyricsReady||!musicCatalog)">{{ composing?t(mode==='quick'?'正在开始创作…':'正在编写歌词…'):t(mode==='quick'?'一键生成音乐':'生成歌词') }}<span v-if="!composing" aria-hidden="true">→</span></button><span v-if="mode==='quick'&&credits&&quickCost!==null" class="save-info">{{ t('一键创作预计消耗 {cost} 积分（歌词 {lyrics}，音乐 {music}）',{cost:quickCost,lyrics:credits.lyricsCost,music:credits.musicCost}) }}</span><CreditCostHint v-else-if="mode!=='quick'&&credits&&credits.enabled&&credits.lyricsCost>0" :cost="credits.lyricsCost" :balance="credits.balance" :busy="composing"/></div>
           <p class="inspiration-next-note">{{ t(mode==='quick'?'AI 自动完成歌词与谱曲 生成后即可试听':'下一步可编辑歌词 确认后再生成音乐') }}</p>
           <p v-if="mode==='quick'&&!quickReady&&initialized" class="save-info">{{ t('一键创作暂不可用 可以切换自定义创作') }}</p>
           <div v-if="route.query.returnRevision" class="story-secondary-actions"><button type="button" class="text-button return-to-lyrics" @click="returnToLyrics">{{ t('返回歌词编辑') }}</button></div>
@@ -556,7 +557,7 @@ onBeforeUnmount(()=>{
         :submission-pending="quickSubmissionPending" :submission-issue="quickIssue"
         :result-ready="quickFlow?.status==='SUCCEEDED'" :awaiting-submission="quickUnknown" completion-mode="navigate"
         @resolved="quickSession.resolve" @visibility="setQuickDialogOpen" @view="viewQuickResult"/>
-      <p v-if="initialized&&!aiReady" class="notice">{{ t('歌词生成暂不可用，请稍后再试或手动填写') }} <RouterLink v-if="existing" :to="`/works/${existing.id}`">{{ t('手动填写歌词') }}</RouterLink></p>
+      <p v-if="initialized&&mode==='custom'&&!customLyricsReady" class="notice">{{ t('歌词生成暂不可用，请稍后再试或手动填写') }} <RouterLink v-if="existing" :to="`/works/${existing.id}`">{{ t('手动填写歌词') }}</RouterLink></p>
     </section><aside v-if="mode==='custom'" class="creation-inspiration-aside" aria-label="Cheerful Music"><div class="creation-record"><span>♫</span></div><h2>{{ t('让灵感 变成音乐') }}</h2><p>{{ t('无论是情感 故事 还是一个灵感 都能为你谱写动人的旋律') }}</p><div class="creation-waveform" aria-hidden="true">ııııııııııııııııııı</div><small>{{ t('可以在生成音乐前继续微调') }}</small></aside></div>
     <p class="studio-privacy-note">{{ t('灵感和草稿仅自己可见，分享由你主动创建。') }}</p>
   </div>

@@ -17,6 +17,7 @@ import { lyricRewriteError, lyricsMaxLength, selectLyricLine, suggestLyricLine, 
 const props=defineProps<{work:Work;showInlineSave?:boolean}>(), emit=defineEmits<{selected:[revision:Revision|null];dirty:[value:boolean];ready:[value:boolean];recoverable:[value:boolean];base:[revision:Revision|null]}>()
 const route=useRoute(),router=useRouter()
 const versions=ref<Revision[]>([]),active=ref<Revision|null>(null),title=ref(props.work.title||(props.work.recipient?t('写给{recipient}的歌',{recipient:props.work.recipient}):t('我的原创歌曲'))),text=ref(''),baseline=ref(''),loading=ref(true),saving=ref(false),composing=ref(false),preparing=ref(false),error=ref(''),notice=ref(''),aiReady=ref(false),localSaved=ref(false),creditShort=ref(false)
+const customLyricsReady=ref(false)
 const { credits, refreshCredits } = useCredits()
 const language=ref<string>(['zh-CN','en','mixed'].includes(String(route.query.language))?String(route.query.language):locale.value),instructions=ref(''),requestKey=ref('')
 const structure=ref<LyricsStructure>(normalizeLyricsStructure({templateId:route.query.templateId,chorusFirst:route.query.chorusFirst==='true'}))
@@ -162,6 +163,7 @@ async function retryError(){if(errorKind.value==='load'){window.location.reload(
 onMounted(async()=>{
   try{
     const [history,system]=await Promise.all([listRevisions(props.work.id),getSystemInfo()]);versions.value=history;aiReady.value=system.capabilities.lyricsGeneration
+    customLyricsReady.value=system.capabilities.customLyricsGeneration??system.capabilities.lyricsGeneration
     select(history.find(v=>v.id===route.query.revision)||history[0]||null)
     cacheKey=recoveryKey(currentCreatorId(),'lyrics',props.work.id)
     const local=readRecovery(cacheKey,validRecovery)
@@ -203,8 +205,8 @@ async function prepareForGeneration(saveChanges=false):Promise<Revision>{
 }
 watch([language,instructions,structure],()=>{if(!composing.value&&!requestWaiting.value&&!requestChecking.value)requestKey.value=''},{flush:'sync'})
 function startAiLyrics(){
-  if(blocked.value||saving.value||lineBusy.value||!aiReady.value)return
-  if(!editorText.value.trim()){void compose();return}
+  if(blocked.value||saving.value||lineBusy.value)return
+  if(!editorText.value.trim()||!aiReady.value){void compose();return}
   rewriteDraft.value={source:editorText.value,workVersion:props.work.version,language:active.value?.language||language.value}
 }
 function applyRewrittenLyrics(lyrics:string){
@@ -223,7 +225,7 @@ async function rewriteAll(){
   if(alive)void compose()
 }
 async function compose(){
-  if(blocked.value||saving.value||lineBusy.value||!aiReady.value)return
+  if(blocked.value||saving.value||lineBusy.value||!customLyricsReady.value)return
   if(dirty.value&&!window.confirm(t('生成新歌词后将显示新版本，当前未保存的修改会被替换，是否继续？')))return
   composing.value=true;error.value='';notice.value='';errorKind.value='compose';creditShort.value=false
   try{
@@ -254,7 +256,7 @@ defineExpose({prepareForGeneration,preserveDraftForNavigation,needsSave,canSave,
     <div class="lyric-editor-label">
       <span id="lyric-editor-help">{{ t('歌词可直接修改，保存后再生成歌曲') }}</span>
       <div class="lyric-editor-actions">
-        <button v-if="aiReady" type="button" class="lyric-rewrite-all" :disabled="blocked||saving||lineBusy" @click="startAiLyrics">
+        <button v-if="customLyricsReady||(aiReady&&editorText.trim())" type="button" class="lyric-rewrite-all" :disabled="blocked||saving||lineBusy" @click="startAiLyrics">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12l5-2 2-5 2 5 5 2-5 2-2 5-2-5-5-2Zm13-7h5m-2.5-2.5v5"/></svg>
           {{ composing?t('正在编写歌词…'):editorText.trim()?t('AI 重写歌词'):t('根据故事生成歌词') }}
         </button>
@@ -271,7 +273,7 @@ defineExpose({prepareForGeneration,preserveDraftForNavigation,needsSave,canSave,
     </div>
     <p v-if="selectedLine" class="lyric-selected-line"><strong>{{ t('已选歌词') }}</strong>{{ selectedLine.line }}</p>
   </div>
-  <LyricSelectionRewriteDialog v-if="rewriteDraft" :work-id="work.id" v-bind="rewriteDraft"
+  <LyricSelectionRewriteDialog v-if="rewriteDraft" :work-id="work.id" :can-rewrite-all="customLyricsReady" v-bind="rewriteDraft"
     @close="rewriteDraft=undefined" @apply="applyRewrittenLyrics" @rewrite-all="rewriteAll" />
   <p v-if="lineError" class="notice error" role="alert">{{ t(lineError) }}</p>
   <div v-if="linePreview" class="lyric-line-preview" role="region" :aria-label="t('改写建议')">
