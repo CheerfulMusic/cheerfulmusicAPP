@@ -130,6 +130,16 @@ class AgentCreationHandlersTest {
         verifyNoInteractions(generation,composer);
     }
 
+    @Test void firstAgentSettingChangePreservesPhotoArrangementBeforePreferencesAreSaved(){
+        String arrangement="Warm folk, acoustic guitar, slow tempo";
+        var photoPrefs=new MusicSettings.Preferences(1,null,Map.of(),"AUTO",arrangement,"不要说唱");
+        when(settings.get("owner","W")).thenReturn(new MusicSettings.View(current.get(),direction(photoPrefs),new MusicSettings.PhotoInspiration("两个人坐在海边。",arrangement)));
+        new SetStyleHandler(works,lyrics,media,settings).execute(context("W",null),new AgentTool.SetStyleArgs(null,null,null,null,null,"female"));
+        var saved=org.mockito.ArgumentCaptor.forClass(MusicSettings.Preferences.class);verify(settings).save(eq("owner"),eq("W"),eq(1L),saved.capture());
+        assertTrue(saved.getValue().freeText().contains(arrangement));assertEquals("不要说唱",saved.getValue().negativeText());assertEquals("FEMALE",saved.getValue().vocalGender());
+        verifyNoInteractions(generation,composer);
+    }
+
     @Test void realSettingsCatalogAcceptsTheAdaptedPreferences(){
         var groups=List.of("genre","emotion","tempo","instruments","exclude").stream()
                 .map(id->new MusicSettings.Group(id,id,id,8,List.of())).toList();

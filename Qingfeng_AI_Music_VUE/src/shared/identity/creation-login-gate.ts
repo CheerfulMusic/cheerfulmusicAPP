@@ -6,13 +6,14 @@ import { loginDialogOpen, showLoginDialog } from './login-dialog'
 
 const destinationKey = 'qingfeng:creation-login-destination'
 const signedIn = () => accountState.value.authenticated || logtoState.value.authenticated
+const creationRoute = (name: unknown) => name === 'studio' || name === 'photo-studio'
 
 /** Gate every entry to the studio, including direct URLs and style links. */
 export function installCreationLoginGate(router: Router) {
   let destination = ''
   try {
     const saved = sessionStorage.getItem(destinationKey)
-    if (saved && new URL(saved, 'https://local.invalid').pathname === '/create' && saved.startsWith('/create')) destination = saved
+    if (saved && /^\/create(?:\/photo)?(?:[?#]|$)/.test(saved)) destination = saved
   } catch { /* In-memory continuation still works without browser storage. */ }
   function remember(value: string) {
     destination = value
@@ -22,7 +23,7 @@ export function installCreationLoginGate(router: Router) {
     } catch { /* Storage availability must not block login. */ }
   }
   const removeGuard = router.beforeEach(async to => {
-    if (to.name !== 'studio') return true
+    if (!creationRoute(to.name)) return true
     // Refresh both identity providers: a guest creator cookie alone is not a login.
     const results = await Promise.allSettled([refreshAccountState(), refreshLogtoState()])
     if (results.some(result => result.status === 'fulfilled' && result.value.authenticated)) {
@@ -40,7 +41,7 @@ export function installCreationLoginGate(router: Router) {
       void router.push(target)
     } else if (!signedIn() && !loginDialogOpen.value) {
       remember('')
-      if (router.currentRoute.value.name === 'studio') void router.replace({ name: 'home' })
+      if (creationRoute(router.currentRoute.value.name)) void router.replace({ name: 'home' })
     }
   }, { flush: 'post' })
   // OAuth can return to the homepage after a full page navigation.

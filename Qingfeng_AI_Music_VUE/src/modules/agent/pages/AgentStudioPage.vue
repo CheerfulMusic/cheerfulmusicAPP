@@ -20,7 +20,7 @@ const { messages, songCard, shareUrl, liked, taskRunning, loading, sending, erro
 const player = usePlayer(), { credits, refreshCredits } = useCredits()
 const input = ref(''), chat = ref<HTMLElement>(), fileInput = ref<HTMLInputElement>(), notice = ref('')
 const confirmingReset = ref(false)
-const nativePanel = ref<{ kind: 'recharge' | 'account' | 'privacy' | 'upload_cover' | 'upload_audio'; workId?: string } | null>(null)
+const nativePanel = ref<{ kind: 'recharge' | 'account' | 'privacy' | 'photo' | 'upload_cover' | 'upload_audio'; workId?: string } | null>(null)
 const lastAssistantId = computed(() => [...messages.value].reverse().find(message => message.role === 'assistant')?.id)
 const chatMessages = computed(() => messages.value.map(message => ({ ...message, result: assistantResult(message) })))
 const blocked = computed(() => loading.value || sending.value || !!pending.value)
@@ -34,6 +34,7 @@ const prompts = computed(() => [
   tr('查看我的积分和用量', 'Show my credits and usage'),
   tr('查看我的订单', 'Show my orders'),
   tr('查看推荐音乐', 'Show recommended music'),
+  tr('我想用照片写歌', 'Write a song from a photo'),
 ])
 function safeLink(value?: string | null): string {
   if (!value) return ''
@@ -73,7 +74,7 @@ async function handleResult(result?: ConversationSnapshot) {
   if (result.action === 'play' && !isPlaying.value) togglePlay()
   if (result.action === 'download') download()
   if (result.action === 'login') showLoginDialog()
-  if (result.action === 'recharge' || result.action === 'account' || result.action === 'privacy') nativePanel.value = { kind: result.action }
+  if (result.action === 'recharge' || result.action === 'account' || result.action === 'privacy' || result.action === 'photo') nativePanel.value = { kind: result.action }
   void refreshCredits().catch(() => undefined)
   await scrollChat()
 }
@@ -90,7 +91,7 @@ function runCommand(command: AgentCommand) {
   if (blocked.value) return
   if (command.kind === 'send') { void send(command.text); return }
   if (command.kind === 'login') { showLoginDialog(); return }
-  if (command.kind === 'recharge' || command.kind === 'account' || command.kind === 'privacy') { nativePanel.value = { kind: command.kind }; return }
+  if (command.kind === 'recharge' || command.kind === 'account' || command.kind === 'privacy' || command.kind === 'photo') { nativePanel.value = { kind: command.kind }; return }
   const target = uploadTarget(command)
   if (target) { nativePanel.value = target; return }
   if (command.kind === 'upload' && !command.text) fileInput.value?.click()
@@ -186,15 +187,18 @@ onBeforeUnmount(() => { recognition?.stop?.(); clearReference() })
         <button type="button" @click="confirmingReset = false">{{ tr('保留对话', 'Keep chat') }}</button>
       </div>
       <div ref="chat" class="agent-chat" role="log" aria-live="polite">
+        <div v-if="!messages.length" class="agent-hero"><span class="agent-hero-icon" aria-hidden="true"><svg viewBox="0 0 48 48"><path d="M25 9l12 2.6v16.2a6 6 0 1 1-3.4-5.4V18.3l-8 1.7v11.4a6 6 0 1 1-3.4-5.4V12z"/></svg></span><h1>{{ tr('今天，想创作一首什么歌？', 'What would you like to create today?') }}</h1><p>{{ tr('告诉我你的灵感，剩下的交给我。', 'Tell me your inspiration. Let’s make it a song.') }}</p></div>
         <p v-if="loading" class="agent-typing" role="status">{{ tr('正在恢复对话…', 'Loading conversation…') }}</p>
         <div v-if="!messages.length && !loading && !error" class="agent-message assistant">
           <div class="agent-bubble"><p>{{ tr('你好！告诉我你想做什么：聊灵感、写歌、找作品、选版本、换封面、分享，或查积分和订单。需要选择时，我会把选项放在对话里。', 'Hi! Ask for ideas, write a song, find your music, compare versions, change artwork, share, or check credits and orders. I will show any choices right here.') }}</p></div>
         </div>
         <div v-for="message in chatMessages" :key="message.id" class="agent-message" :class="message.role">
+          <div v-if="message.role === 'assistant'" class="agent-bot-avatar" aria-hidden="true"><svg viewBox="0 0 48 48"><rect width="48" height="48" rx="14" fill="#ff4c3b"/><path d="M25 9l12 2.6v16.2a6 6 0 1 1-3.4-5.4V18.3l-8 1.7v11.4a6 6 0 1 1-3.4-5.4V12z" fill="#fff"/></svg></div>
           <div class="agent-message-content"><div v-if="messageText(message)" class="agent-bubble" :class="{ 'agent-message-failed': message.state === 'FAILED' }"><p>{{ messageText(message) }}</p></div><AgentResultCard v-if="message.result" :result="message.result" :disabled="blocked" :current="message.id === lastAssistantId" @command="runCommand"/></div>
+          <div v-if="message.role === 'user'" class="agent-user-avatar" aria-hidden="true"><svg viewBox="0 0 48 48"><circle cx="24" cy="17" r="8.4" fill="#f0b49c"/><path d="M7 44c1.9-9.6 8.6-14.4 17-14.4S39.1 34.4 41 44z" fill="#f0b49c"/></svg></div>
         </div>
         <div v-if="pending" class="agent-message user agent-pending"><div class="agent-bubble"><p>{{ pending.text }}</p><small>{{ sending ? tr('发送中…', 'Sending…') : tr('结果待确认', 'Awaiting confirmation') }}</small></div></div>
-        <p v-if="sending" class="agent-typing" role="status">{{ tr('正在处理你的请求…', 'Working on your request…') }}</p>
+        <p v-if="sending" class="agent-typing" role="status"><span class="agent-typing-spinner" aria-hidden="true"/>{{ tr('正在处理你的请求…', 'Working on your request…') }}</p>
         <div v-if="!messages.length && !loading" class="agent-quick-card"><strong>{{ tr('试着说', 'Try saying') }}</strong><div class="agent-quick-grid"><button v-for="prompt in prompts" :key="prompt" type="button" :disabled="blocked" @click="send(prompt)"><span>{{ prompt }}</span></button></div></div>
       </div>
       <div class="agent-composer">
@@ -205,9 +209,12 @@ onBeforeUnmount(() => { recognition?.stop?.(); clearReference() })
         <p v-if="refreshError" class="agent-upload-error" role="status">{{ refreshError }}</p>
         <form class="agent-composer-box" @submit.prevent="send()">
           <textarea v-model="input" rows="2" maxlength="4000" :placeholder="tr('告诉我你想做什么，比如「找出上次的歌，换个封面」…', 'Tell me what to do, e.g. “find my last song and change its artwork”…')" :aria-label="tr('创作消息', 'Message')" @keydown.enter.exact="onEnter"/>
-          <button type="button" class="agent-composer-clip" :aria-label="tr('参考音乐', 'Reference audio')" @click="fileInput?.click()">＋</button>
-          <button type="button" class="agent-composer-mic" :aria-label="tr('语音输入', 'Voice input')" @click="startVoice">♩</button>
-          <button type="submit" class="agent-composer-send" :disabled="!input.trim() || blocked" :aria-busy="sending" :aria-label="tr('发送', 'Send')">↑</button>
+          <div class="agent-composer-row"><div class="agent-composer-tools">
+            <button type="button" class="agent-composer-plus" :disabled="blocked" :aria-label="tr('所有功能', 'All tools')" @click="send('查看所有功能')"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
+            <button type="button" class="agent-composer-clip" :aria-label="tr('参考音乐', 'Reference audio')" @click="fileInput?.click()"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 11.5 12.5 20a5 5 0 0 1-7-7l8.5-8.5a3.3 3.3 0 0 1 4.7 4.7L10 17.6a1.7 1.7 0 0 1-2.4-2.4l7.8-7.8"/></svg></button>
+            <button type="button" class="agent-composer-mic" :aria-label="tr('语音输入', 'Voice input')" @click="startVoice"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button>
+          </div></div>
+          <button type="submit" class="agent-composer-send" :class="{ 'is-busy': sending }" :disabled="!input.trim() || blocked" :aria-busy="sending" :aria-label="tr('发送', 'Send')"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5m-6 6 6-6 6 6"/></svg></button>
         </form>
         <input ref="fileInput" type="file" accept="audio/*,.mp3,.wav,.m4a,.aac,.ogg,.flac" hidden @change="attach"/>
         <p v-if="reference" class="agent-upload-file"><span>{{ reference.name }}</span><button type="button" @click="playReference">{{ tr('试听', 'Listen') }}</button><button v-if="reference.summary && !analyzing" type="button" @click="useReference">{{ tr('将特征加入输入', 'Use audio features') }}</button><button type="button" :aria-label="tr('移除参考', 'Remove reference')" @click="clearReference">×</button></p>
@@ -220,10 +227,10 @@ onBeforeUnmount(() => { recognition?.stop?.(); clearReference() })
     <aside class="agent-preview" :aria-label="tr('当前作品', 'Current song')">
       <div class="agent-preview-head"><strong>{{ tr('当前作品', 'Current song') }}</strong></div>
       <template v-if="songCard?.songId">
-        <div class="agent-preview-cover"><img :src="safeLink(songCard.coverUrl) || defaultCover()" :alt="tr('歌曲封面', 'Song artwork')"/><button v-if="playable" type="button" class="agent-preview-play" :aria-label="isPlaying ? tr('暂停', 'Pause') : tr('播放', 'Play')" @click="togglePlay">{{ isPlaying ? 'Ⅱ' : '▷' }}</button></div>
+        <div class="agent-preview-cover"><img :src="safeLink(songCard.coverUrl) || defaultCover()" :alt="tr('歌曲封面', 'Song artwork')"/></div>
         <div class="agent-preview-meta"><strong>{{ songCard.title || tr('未命名作品', 'Untitled song') }}</strong><span>{{ songCard.style }}</span></div>
         <p class="agent-song-status" role="status">{{ statusText }}</p>
-        <div v-if="playable" class="agent-preview-progress"><input type="range" min="0" :max="duration || 1" :value="playTime" :disabled="!currentPlaying || !duration" :aria-label="tr('播放进度', 'Playback position')" @input="player.seek(Number(($event.target as HTMLInputElement).value))"/><div><span>{{ formatTime(playTime) }}</span><span>{{ formatTime(duration) }}</span></div></div>
+        <div v-if="playable" class="agent-preview-progress agent-preview-playrow"><button type="button" class="agent-preview-play" :aria-label="isPlaying ? tr('暂停', 'Pause') : tr('播放', 'Play')" @click="togglePlay"><svg viewBox="0 0 24 24" aria-hidden="true"><path v-if="isPlaying" d="M9 6v12M15 6v12"/><path v-else d="m9 6 9 6-9 6V6Z"/></svg></button><input class="agent-preview-range" type="range" min="0" :max="duration || 1" :value="playTime" :disabled="!currentPlaying || !duration" :aria-label="tr('播放进度', 'Playback position')" @input="player.seek(Number(($event.target as HTMLInputElement).value))"/><span class="agent-preview-time">{{ formatTime(playTime) }} / {{ formatTime(duration) }}</span></div>
         <p v-if="currentPlaying && player.error" class="agent-upload-error" role="alert">{{ player.error }}</p>
         <div class="agent-preview-actions"><button type="button" :disabled="blocked" :aria-pressed="liked" @click="send(liked ? '取消点赞当前作品' : '给当前作品点赞')">{{ liked ? tr('已喜欢', 'Liked') : tr('喜欢', 'Like') }}</button><button type="button" :disabled="blocked || !playable" @click="send('下载当前作品')">{{ tr('下载', 'Download') }}</button><button type="button" :disabled="blocked || !playable" @click="send('分享当前作品')">{{ tr('分享', 'Share') }}</button></div>
         <div v-if="publicLink" class="agent-share-link"><a :href="publicLink" target="_blank" rel="noopener noreferrer">{{ tr('打开分享页面', 'Open share page') }}</a><button type="button" @click="copyShare">{{ tr('复制链接', 'Copy link') }}</button></div>
@@ -237,8 +244,10 @@ onBeforeUnmount(() => { recognition?.stop?.(); clearReference() })
 </template>
 
 <style scoped>
-.agent-message-content{max-width:min(90%,720px);min-width:0}.agent-message-content .agent-bubble{max-width:100%}.agent-capabilities{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}.agent-capabilities button{background:#fff8f3;border:1px solid #f0d9cb;color:#956d55;border-radius:18px;padding:6px 12px;font-size:12px;cursor:pointer}.agent-capabilities button:focus-visible{outline:3px solid #ffa279;outline-offset:2px}
-.agent-composer-box textarea { flex: 1; min-width: 0; resize: vertical; max-height: 180px; border: 0; outline: 0; background: transparent; padding: 8px; color: #4a3b39; font: inherit; line-height: 1.6; }
+.agent-conversation-head{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;padding:0 4px 12px;color:#806a62}.agent-conversation-pill{font-size:12px;font-weight:700}.agent-conversation-sub{flex:1;margin:0;font-size:11px;color:#9b8278}.agent-preview-head{font-size:12px;color:#9b8278;margin-bottom:12px}.agent-preview-meta{display:grid;gap:5px;margin-top:14px}.agent-preview-meta strong{font-size:17px;color:#3d302c}.agent-preview-meta span{font-size:11px;color:#a0877d}.agent-quick-card{padding:14px;color:#9b8278;font-size:12px}.agent-quick-grid{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}.agent-quick-grid button{border:1px solid #efd9cc;border-radius:12px;padding:8px 12px;background:#fffaf7;color:#956d55;text-align:left}.agent-start-button{border:0;border-radius:14px;padding:12px;background:linear-gradient(120deg,#ff9257,#ff4d2d);color:#fff;font-weight:600}
+
+.agent-message-content{max-width:min(calc(100% - 49px),720px);min-width:0}.agent-message-content .agent-bubble{max-width:100%}.agent-capabilities{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}.agent-capabilities button{background:#fff8f3;border:1px solid #f0d9cb;color:#956d55;border-radius:18px;padding:6px 12px;font-size:12px;cursor:pointer}.agent-capabilities button:focus-visible{outline:3px solid #ffa279;outline-offset:2px}
+.agent-composer-box textarea { grid-area: input; width: 100%; flex: 1; min-width: 0; resize: vertical; max-height: 180px; border: 0; outline: 0; background: transparent; padding: 8px; color: #4a3b39; font: inherit; line-height: 1.6; }
 .agent-bubble p, .agent-real-lyrics p { white-space: pre-wrap; overflow-wrap: anywhere; }
 .agent-pending small { color: #fff; font-size: 11px; opacity: .8; }
 .agent-message-failed { border-color: #d77363; }

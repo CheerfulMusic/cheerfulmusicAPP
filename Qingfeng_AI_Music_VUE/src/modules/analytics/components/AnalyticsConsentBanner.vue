@@ -51,10 +51,10 @@ const { isUndecided, isAccepted, accept, reject, withdraw, manage } = useAnalyti
   position: fixed; right: 16px; bottom: 16px; z-index: 50;
   display: flex; gap: 8px; align-items: center;
   padding: 8px 12px; border-radius: 999px; background: #ffffff; color: #5b6472;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, .12); font-size: 12px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, .12); font-size: 13px;
 }
 .consent-link {
   background: none; border: 0; color: #2f6df6; cursor: pointer;
-  text-decoration: underline; padding: 0; font-size: 12px;
+  text-decoration: underline; padding: 0; font-size: 13px;
 }
 </style>

@@ -52,6 +52,7 @@ public class AgentAccountActions implements AgentApplicationActions {
             cap("close_order","按现有规则关闭本人未付款PayPal订单","{orderId:真实订单ID}","write"),
             cap("payment_catalog","查看当前开放的充值套餐及价格","{}","read"),
             cap("recharge","在对话中打开现有充值收银台；用户选择套餐并授权实际支付","{}","native"),
+            cap("photo_song","在对话内打开真实照片写歌面板，用户选择图片、查看价格后提交；打开窗口不会生成或扣费","{}","native"),
             cap("login","打开登录窗口，由用户本人完成验证","{}","native"),
             cap("logout","打开账号窗口执行退出登录","{}","native"),
             cap("account_settings","在对话中打开账号设置，可查看或生成恢复码、恢复账号；秘密仅在原生窗口显示","{}","native"),
@@ -82,6 +83,7 @@ public class AgentAccountActions implements AgentApplicationActions {
                 case "close_order" -> order(owner,args,true);
                 case "payment_catalog" -> catalog();
                 case "recharge" -> nativeResult("请在对话内的充值窗口选择套餐并完成支付授权。支付结果将由服务端核对。","打开充值窗口","recharge",action);
+                case "photo_song" -> result("请在照片写歌窗口选择图片，查看生成费用并提交。打开窗口不会开始生成；完成后可以返回对话继续创作。","photo",List.of(),List.of(new Command("打开照片写歌","","photo")),action);
                 case "login" -> nativeResult("请在登录窗口完成账号验证。","登录账号","login",action);
                 case "logout" -> nativeResult("可以在账号窗口退出当前账号。","打开账号窗口","account",action);
                 case "account_settings" -> nativeResult("账号设置将在独立窗口显示。请勿把密码、验证码或恢复码发送到聊天里。","打开账号设置","account",action);

@@ -8,11 +8,15 @@ import java.util.*;
 
 /** 用户明确要求与系统补全分开保存。音乐计划不是歌词，也不能改变已确认的歌词。 */
 public record CreativePlan(String requirements, String suggestedArrangement, String negativeTags,
-                           String summaryZh, String summaryEn, String vocalGender) {
+                           String summaryZh, String summaryEn, String vocalGender, String photoSummary) {
+    public CreativePlan(String requirements,String arrangement,String negativeTags,String zh,String en,String voice) {
+        this(requirements,arrangement,negativeTags,zh,en,voice,"");
+    }
     public CreativePlan {
         requirements=bounded(requirements,600);suggestedArrangement=bounded(suggestedArrangement,240);
         negativeTags=bounded(negativeTags,250);summaryZh=bounded(summaryZh,200);summaryEn=bounded(summaryEn,300);
         vocalGender=com.qingfeng.music.work.api.VocalGender.normalize(vocalGender);
+        photoSummary=bounded(photoSummary,400);
     }
     private static String bounded(String value,int max){
         String text=value==null?"":value.trim();

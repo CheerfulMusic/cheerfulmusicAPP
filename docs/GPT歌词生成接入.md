@@ -21,6 +21,8 @@ qingfeng.providers.openai.model=gpt-6.1-terra
 
 未显式配置提供方的既有部署仍走 DeepSeek，避免未配置 GPT 密钥时意外切换。手动回退只需将提供方改为 `deepseek` 并保留原 DeepSeek 密钥，再按授权流程重启。调用失败不会自动切换模型，也不会自动重发付费请求。
 
+照片写歌入口默认关闭。在隔离的本地验证环境中，配置支持图片输入的 OpenAI 模型与私有密钥，并设置 `qingfeng.lyrics.photo.enabled=true`。普通写词仍可使用原提供方。照片入口接受单张 JPG/PNG（最大 10 MB），后台将缩放后的图和选填故事一起送入一次 Responses 请求。应用保存画面摘要、歌词和音乐方向，原图不进入作品存储。离线端到端验证可用 `PhotoLyricsIntegrationTest`，它使用 H2 和替代供应商。
+
 日常主库启动仍必须遵循 `scripts/start-main.ps1` 约定，使用 `.secrets/production-main.local.properties`、版本清单及线上同版 JAR。当前这些主库启动材料在此工作区缺失，本次没有创建替代数据库、启动旧入口或替换运行版本。准备主库启动材料时，应将上述 GPT 配置安全地并入该私有配置；不得直接以旧 `local.properties` 作为完整主库配置。
 
 ## 错误与数据保护

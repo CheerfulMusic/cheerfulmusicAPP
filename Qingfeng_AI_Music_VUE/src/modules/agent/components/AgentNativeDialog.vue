@@ -8,14 +8,15 @@ import { loadCovers, type CoverState } from '../../works/api/covers'
 import type { AudioAsset } from '../../works/api/detail'
 const RechargePage = defineAsyncComponent(() => import('../../identity/pages/RechargePage.vue').then(module => module.default))
 const IdentityPage = defineAsyncComponent(() => import('../../identity/pages/IdentityPage.vue').then(module => module.default))
+const PhotoStudioPage = defineAsyncComponent(() => import('../../studio/pages/PhotoStudioPage.vue').then(module => module.default))
 const CoverEditor = defineAsyncComponent(() => import('../../works/components/CoverEditor.vue').then(module => module.default))
-const props = defineProps<{ kind: 'recharge' | 'account' | 'privacy' | 'upload_cover' | 'upload_audio'; workId?: string }>()
+const props = defineProps<{ kind: 'recharge' | 'account' | 'privacy' | 'photo' | 'upload_cover' | 'upload_audio'; workId?: string }>()
 const emit = defineEmits<{ close: []; refresh: []; send: [text: string] }>()
 const dialog = ref<HTMLDialogElement>(), error = ref(''), busy = ref(false), notice = ref(''), uncertain = ref(false), covers = ref<CoverState>()
 const tr = (zh: string, en: string) => locale.value === 'en' ? en : zh
 const { isAccepted, isUndecided, accept, reject, withdraw } = useAnalyticsConsent()
-const titles = { privacy: '隐私设置', recharge: '充值积分', account: '账号与付款', upload_cover: '作品封面', upload_audio: '导入作品音频' }
-const enTitles = { privacy: 'Privacy settings', recharge: 'Recharge credits', account: 'Account and payments', upload_cover: 'Song artwork', upload_audio: 'Import song audio' }
+const titles = { photo: '照片写歌', privacy: '隐私设置', recharge: '充值积分', account: '账号与付款', upload_cover: '作品封面', upload_audio: '导入作品音频' }
+const enTitles = { photo: 'Photo to song', privacy: 'Privacy settings', recharge: 'Recharge credits', account: 'Account and payments', upload_cover: 'Song artwork', upload_audio: 'Import song audio' }
 let alive = true
 const owner = currentCreatorId()
 const current = () => alive && owner === currentCreatorId()
@@ -55,6 +56,7 @@ onBeforeUnmount(() => { alive = false; dialog.value?.close() })
     <header><h2 id="agent-native-title">{{ tr(titles[kind], enTitles[kind]) }}</h2><button type="button" :disabled="busy" :aria-label="tr('关闭并返回对话', 'Close and return to chat')" @click="close">×</button></header>
     <RechargePage v-if="kind === 'recharge'" embedded @login="login" @orders="send('查看我的订单')"/>
     <IdentityPage v-else-if="kind === 'account'" embedded @close="close" @works="send('查看我的作品')"/>
+    <PhotoStudioPage v-else-if="kind === 'photo'" embedded @created="send(`选择作品 ${$event.workId}`)" @close="close" @recharge="send('我要充值')"/>
     <section v-else-if="kind === 'privacy'" class="agent-import-audio">
       <p>{{ tr('匿名分析仅收集页面路径和停留时长，不包含歌词、邮箱或手机号。拒绝不会影响创作功能。', 'Anonymous analytics collects page paths and visit duration, without lyrics, email addresses or phone numbers. Declining does not affect creation features.') }}</p>
       <p role="status">{{ isAccepted ? tr('当前已同意分析', 'Analytics accepted') : isUndecided ? tr('尚未选择', 'No choice made yet') : tr('当前已拒绝分析', 'Analytics declined') }}</p>

@@ -1,11 +1,11 @@
 import type { Message } from './conversation'
 
-export type AgentCommandKind = 'send' | 'login' | 'recharge' | 'account' | 'privacy' | 'upload' | 'upload_cover' | 'upload_audio'
+export type AgentCommandKind = 'send' | 'login' | 'recharge' | 'account' | 'privacy' | 'photo' | 'upload' | 'upload_cover' | 'upload_audio'
 export interface AgentCommand { label: string; text: string; kind: AgentCommandKind }
 export interface AgentResultItem { id: string; title: string; subtitle: string; data: Record<string, unknown> }
 export interface AssistantResult { kind: string; items: AgentResultItem[]; commands: AgentCommand[] }
 const object = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v)
-const kinds: AgentCommandKind[] = ['send', 'login', 'recharge', 'account', 'privacy', 'upload', 'upload_cover', 'upload_audio']
+const kinds: AgentCommandKind[] = ['send', 'login', 'recharge', 'account', 'privacy', 'photo', 'upload', 'upload_cover', 'upload_audio']
 
 /** Render only typed server results. User text and unknown commands never become executable UI. */
 export function assistantResult(message: Message): AssistantResult | null {

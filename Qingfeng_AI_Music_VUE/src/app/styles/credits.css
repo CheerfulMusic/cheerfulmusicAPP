@@ -18,8 +18,8 @@
 @media(max-width:600px){
   .creation-action-bar{flex-wrap:wrap;row-gap:2px}
   .creation-action-bar .credit-cost{flex-basis:100%;justify-content:center;margin-left:0;text-align:center}
-  .credit-cost{flex-wrap:wrap;max-width:100%}
+  .credit-cost{flex-wrap:wrap;max-width:100%;font-size:13px}
   .credit-cost-row .credit-cost{flex:1;min-width:0}
   /* 窄屏规则就地展开：随内容撑开，不溢出屏幕，也不会遮住主按钮或被固定按钮条裁掉。 */
-  .credit-rule{position:static;transform:none;width:100%;max-width:none;margin-top:3px;padding:9px 11px;box-shadow:none}
+  .credit-rule{position:static;transform:none;width:100%;max-width:none;margin-top:3px;padding:9px 11px;box-shadow:none;font-size:14px}
 }

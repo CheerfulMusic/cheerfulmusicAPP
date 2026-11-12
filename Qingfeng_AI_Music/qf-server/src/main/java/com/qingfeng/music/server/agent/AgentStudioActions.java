@@ -49,10 +49,13 @@ public final class AgentStudioActions implements AgentApplicationActions {
             case "get_music_settings" -> {
                 var task=value(args,"taskId",null);
                 var direction=task==null?settings.get(owner,work).direction():settings.task(owner,work,task).orElseThrow(()->invalid("该任务没有可用的设置快照。"));
+                if(direction==null)direction=settings.preview(new MusicSettings.Preferences(1,null,Map.of(),works.get(owner,work).vocalGender(),"",""));
                 yield settingsResult(action,direction,task==null?"当前音乐设置":"任务实际使用的音乐设置");
             }
             case "preview_music_settings","update_music_settings" -> {
-                var prior=settings.get(owner,work); var preferences=preferences(args,prior.direction().preferences());
+                var prior=settings.get(owner,work);
+                var existing=prior.direction()==null?new MusicSettings.Preferences(1,null,Map.of(),prior.work().vocalGender(),"",""):prior.direction().preferences();
+                var preferences=preferences(args,existing);
                 if("preview_music_settings".equals(action)) yield settingsResult(action,settings.previewForWork(owner,work,preferences),"设置预览（未保存）");
                 var saved=settings.save(owner,work,prior.work().version(),preferences);
                 // The settings API is authoritative. Clear old Agent overrides so they cannot overwrite this save on the next generation.

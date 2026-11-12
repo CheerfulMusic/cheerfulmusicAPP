@@ -53,7 +53,13 @@ public class MusicSettingsService implements MusicSettings {
         String summaryEn=String.join(", ",en)+"."+(free.isEmpty()?"":" Additional direction: "+free)+(exclusions.isEmpty()?"":" Avoid: "+exclusions);
         return new Direction(prefs,style.trim(),exclusions,summaryZh,summaryEn,catalog.version());
     }
-    public View get(String owner,String work){var w=works.get(owner,work);return new View(w,resolve(owner,w));}
+    public View get(String owner,String work){
+        var w=works.get(owner,work);
+        var direction=resolve(owner,w);
+        var plan=findPlan(w);
+        if(plan==null||plan.photoSummary().isBlank())return new View(w,direction);
+        return new View(w,direction==null?photoDefault(w,plan):direction,new PhotoInspiration(plan.photoSummary(),plan.suggestedArrangement()));
+    }
     public Direction forGeneration(String owner,WorkApi.Work work){
         var base=resolve(owner,work);
         boolean explicit=repository.find(work.id()).filter(s->s.style().equals(work.style())&&s.vocalGender().equals(work.vocalGender())).isPresent();
@@ -61,10 +67,17 @@ public class MusicSettingsService implements MusicSettings {
     }
     public Direction previewForWork(String owner,String work,Preferences preferences){return compile(works.get(owner,work),preview(preferences),true);}
     private Direction compile(WorkApi.Work work,Direction base,boolean currentOverrides){
-        var plan=plans==null?null:plans.find(work.id(),CreativePlan.sourceHash(work)).orElse(null);
+        var plan=findPlan(work);
+        if(base==null&&plan!=null&&!plan.photoSummary().isBlank())base=photoDefault(work,plan);
         // 老作品只有风格名称时也要冻结完整描述，不能把中文标签误当成已编译的供应商提示。
         if(base==null)base=new Direction(new Preferences(1,null,Map.of(),work.vocalGender(),"",""),legacyStyle.apply(work.style(),work.vocalGender()),"",work.style(),work.style(),catalog.version());
         return CreativeDirection.compile(work,base,plan,limits,concise(base),currentOverrides);
+    }
+    private CreativePlan findPlan(WorkApi.Work work){
+        return plans==null?null:plans.find(work.id(),CreativePlan.sourceHash(work)).orElse(null);
+    }
+    private Direction photoDefault(WorkApi.Work work,CreativePlan plan){
+        return preview(new Preferences(1,null,Map.of(),work.vocalGender(),plan.suggestedArrangement(),""));
     }
     /** 预算不足时仅把系统选项的长描述换成分类标签，自由要求原样保留。 */
     private String concise(Direction base){

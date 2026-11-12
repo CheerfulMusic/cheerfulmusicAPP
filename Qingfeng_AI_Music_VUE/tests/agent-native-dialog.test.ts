@@ -7,16 +7,24 @@ vi.mock('../src/modules/works/api/covers', () => ({ loadCovers: api.covers }))
 vi.mock('../src/modules/identity/pages/RechargePage.vue', () => ({ default: { props: { embedded: Boolean }, emits: ['orders', 'login'], template: '<div class="recharge-stub"><span>{{ embedded }}</span><button @click="$emit(\'orders\')">订单</button></div>' } }))
 vi.mock('../src/modules/identity/pages/IdentityPage.vue', () => ({ default: { props: { embedded: Boolean }, template: '<div class="identity-stub">{{ embedded }}</div>' } }))
 vi.mock('../src/modules/works/components/CoverEditor.vue', () => ({ default: { props: ['workId', 'state'], template: '<div class="cover-stub">{{ workId }}</div>' } }))
+vi.mock('../src/modules/studio/pages/PhotoStudioPage.vue', () => ({ default: { props: { embedded: Boolean }, emits: ['created'], template: '<div class="photo-stub"><span>{{ embedded }}</span><button @click="$emit(\'created\', { workId: \'photo-work\', revisionId: \'photo-lyrics\' })">完成照片歌词</button></div>' } }))
 import AgentNativeDialog from '../src/modules/agent/components/AgentNativeDialog.vue'
 import { setLocale } from '../src/shared/i18n'
 const wrappers: Array<{ unmount(): void }> = []
-async function dialog(kind: 'upload_audio' | 'upload_cover' | 'recharge' | 'account' | 'privacy') {
+async function dialog(kind: 'upload_audio' | 'upload_cover' | 'recharge' | 'account' | 'privacy' | 'photo') {
   const wrapper = mount(AgentNativeDialog, { props: { kind, workId: 'work-1' } }); wrappers.push(wrapper)
   await flushPromises(); return wrapper
 }
 beforeEach(() => { vi.clearAllMocks(); api.owner = 'owner-1'; setLocale('zh-CN') })
 afterEach(() => { wrappers.splice(0).forEach(w => w.unmount()) })
 describe('native actions inside the conversation', () => {
+  it('returns the real photo-created work to the conversation for selection', async () => {
+    const wrapper = await dialog('photo')
+    await vi.waitFor(() => expect(wrapper.find('.photo-stub').exists()).toBe(true))
+    expect(wrapper.find('.photo-stub').text()).toContain('true')
+    await wrapper.find('.photo-stub button').trigger('click')
+    expect(wrapper.emitted('send')).toEqual([['选择作品 photo-work']])
+  })
   it('reuses recharge in embedded mode and returns order checks to the conversation', async () => {
     const wrapper = await dialog('recharge')
     await vi.waitFor(() => expect(wrapper.find('.recharge-stub').exists()).toBe(true))

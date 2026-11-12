@@ -3,10 +3,10 @@ import { inspirationPresets, inspirationSelection } from '../src/modules/studio/
 import { english } from '../src/shared/i18n/en'
 
 describe('Inspiration style tags', () => {
-  it('shows the six requested choices in order and pairs the five music styles with explicit voices', () => {
-    expect(inspirationPresets.map(preset => preset.label)).toEqual(['流行抒情', '流行摇滚', '蓝调R&B', '华语民谣', '中国风', '我还没有灵感'])
-    expect(inspirationPresets.map(preset => preset.vocalGender)).toEqual(['FEMALE', 'MALE', 'MALE', 'AUTO', 'MALE', 'AUTO'])
-    expect(inspirationPresets.slice(0, 5).map(preset => preset.style)).toEqual(inspirationPresets.slice(0, 5).map(preset => preset.label))
+  it('shows only the five music styles and keeps their vocal settings', () => {
+    expect(inspirationPresets.map(preset => preset.label)).toEqual(['流行抒情', '流行摇滚', '蓝调R&B', '华语民谣', '中国风'])
+    expect(inspirationPresets.map(preset => preset.vocalGender)).toEqual(['FEMALE', 'MALE', 'MALE', 'AUTO', 'MALE'])
+    expect(inspirationPresets.map(preset => preset.style)).toEqual(inspirationPresets.map(preset => preset.label))
   })
   it('fills real editable text and a persisted style instead of only changing the placeholder', () => {
     const preset = inspirationPresets[0]!
@@ -23,11 +23,5 @@ describe('Inspiration style tags', () => {
       expect(selection.story).toBe(english[preset.description])
       expect(selection.style).toBe(preset.style)
     }
-  })
-  it('the no-idea option gives an open brief and releases a previously aggressive or gendered direction', () => {
-    const selection = inspirationSelection(inspirationPresets[5]!, text => text)
-    expect(selection.story).toContain('寻找一个主题')
-    expect(selection.vocalGender).toBe('AUTO')
-    expect(selection.style).toBe('轻快流行')
   })
 })

@@ -1,5 +1,5 @@
 import type {LyricsStructure, LyricsTemplateId} from '../model/lyrics-structure'
-import { ensureCreator, requestJson, apiUrl } from '../../../shared/http/api-client'
+import { ensureCreator, requestJson, apiUrl, uploadForm } from '../../../shared/http/api-client'
 export interface Revision { id: string; workId: string; workVersion: number; title: string; lyrics: string; source: string; confirmed: boolean; createdAt: string; language?: string|null; templateId?: LyricsTemplateId|null; chorusFirst?: boolean|null }
 export interface LyricsRequestState {status:'NOT_FOUND'|'PENDING'|'FAILED'|'SUCCEEDED'|'UNKNOWN';revisionId:string|null;errorCode:string|null}
 export const getLyricsRequest = (work:string,key:string) => call<LyricsRequestState>(`app/works/${work}/lyrics/requests/${encodeURIComponent(key)}`)
@@ -11,6 +11,14 @@ export const listRevisions = (work: string) => call<Revision[]>(`app/works/${wor
 export async function generateLyrics(work: string, workVersion: number, requestKey: string, language: string, instructions = '', baseRevisionId?: string, structure?: LyricsStructure) {
   await ensureCreator()
   return requestJson<Revision>(`app/works/${work}/lyrics/generate`, 'POST', {workVersion, requestKey, language, instructions, baseRevisionId, ...structure}, 120000)
+}
+export function generatePhotoLyrics(work: string, version: number, key: string, language: string, photo: File) {
+  const form = new FormData()
+  form.set('photo', photo)
+  form.set('workVersion', String(version))
+  form.set('requestKey', key)
+  form.set('language', language)
+  return uploadForm<Revision>(`app/works/${encodeURIComponent(work)}/lyrics/generate-photo`, form)
 }
 export const getRevision = (work: string, revision: string) => call<Revision>(`app/works/${work}/lyrics/${revision}`)
 export interface Allowance {dailyLimit:number;dailyRemaining:number;concurrentLimit:number;active:number;resetsAt:string;dailyUnlimited?:boolean;concurrentUnlimited?:boolean}

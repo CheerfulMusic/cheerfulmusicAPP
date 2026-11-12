@@ -1,15 +1,17 @@
 import {describe,it,expect} from 'vitest'
-import {chooseCreationStyle,creationMode} from '../src/modules/studio/model/creation-mode'
-import {inspirationPresets} from '../src/modules/studio/model/inspiration-presets'
+import {chooseInspiration,chooseCreationStyle,creationMode} from '../src/modules/studio/model/creation-mode'
+import {inspirationGroups} from '../src/modules/studio/model/inspiration-ideas'
+import {inspirationPresets,legacyInspirationDescription} from '../src/modules/studio/model/inspiration-presets'
 import {english} from '../src/shared/i18n/en'
 import {quickInProgress} from '../src/modules/studio/api/quick-creation'
 import {legacyPreferences} from '../src/modules/works/model/music-preferences'
 import {validResponse,emptyResponseAllowed} from '../src/shared/http/response-contracts'
 const draft={recipient:'妈妈',occasion:'生日',story:'门口剥好的橘子是我的真实故事',message:'',style:'温暖民谣',title:'',vocalGender:'AUTO' as const}
 describe('双入口与作者素材保护',()=>{
- it('新建默认快速 已有作品保留自定义入口 明确选择优先',()=>{
-  expect(creationMode(undefined)).toBe('quick');expect(creationMode(undefined,true)).toBe('custom')
-  expect(creationMode('quick',true)).toBe('quick');expect(creationMode('custom')).toBe('custom')
+ it('默认自定义创作，保留显式选择的快速生成',()=>{
+  expect(creationMode(undefined)).toBe('custom')
+  expect(creationMode('quick')).toBe('quick')
+  expect(creationMode('custom')).toBe('custom')
  })
  it('每个快捷风格都填入可编辑的描述并保留作者故事',()=>{
   for(const preset of inspirationPresets){
@@ -30,6 +32,29 @@ describe('双入口与作者素材保护',()=>{
   const preset=inspirationPresets[0]!,edited=`${inspirationPresets[1]!.description} 副歌唱给妈妈。`
   expect(chooseCreationStyle({...draft,story:edited},preset,x=>x)?.story).toBe(`${preset.description}\n\n${edited}`)
   expect(chooseCreationStyle({...draft,story:'歌'.repeat(4000)},preset,x=>x)).toBeNull()
+ })
+ it('旧草稿切换曲风时仍会替换已下线的默认段落',()=>{
+  const preset=inspirationPresets[0]!
+  for(const previous of [legacyInspirationDescription,english[legacyInspirationDescription]]){
+   const updated=chooseCreationStyle({...draft,story:`${previous}\n\n${draft.story}`},preset,x=>x)
+   expect(updated?.story).toBe(`${preset.description}\n\n${draft.story}`)
+  }
+ })
+ it('首次选择保留原文，切换时只替换最近一条完整的灵感',()=>{
+  const first=inspirationGroups[0][0][2], second=inspirationGroups[1][0][2], third=inspirationGroups[2][0][3]
+  expect(chooseInspiration('',first)).toBe(first)
+  const original=` 原文\n\n\n${first}`
+  expect(chooseInspiration(' 原文\n',first)).toBe(original)
+  expect(chooseInspiration(original,first)).toBe(original)
+  expect(chooseInspiration(`${original}\n\n补充`,second)).toBe(` 原文\n\n\n${second}\n\n补充`)
+  expect(chooseInspiration(`${original}\n\n${second}`,third)).toBe(`${original}\n\n${third}`)
+ })
+ it('手动修改的灵感作为原文保留，长度按替换结果检查',()=>{
+  const first=inspirationGroups[0][0][3], second=inspirationGroups[0][1][2]
+  expect(chooseInspiration(`${first} 我补充了一句。`,second)).toBe(`${first} 我补充了一句。\n\n${second}`)
+  expect(chooseInspiration('歌'.repeat(4000),second)).toBeNull()
+  const story='歌'.repeat(3998-first.length)
+  expect(chooseInspiration(`${story}\n\n${first}`,second)).toBe(`${story}\n\n${second}`)
  })
  it('写词和谱曲中都视为正在制作 结束后可恢复编辑',()=>{
   for(const state of ['QUEUED','WRITING','LYRICS_READY','SUBMITTING_MUSIC','RUNNING','SAVING','SUBMISSION_UNKNOWN'])expect(quickInProgress(state)).toBe(true)

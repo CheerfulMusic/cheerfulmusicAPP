@@ -6,7 +6,8 @@ export interface MusicGroup {id:string;zh:string;en:string;max:number;options:Mu
 export interface MusicRecipe {id:string;zh:string;en:string;choices:Record<string,string[]>}
 export interface MusicCatalog {version:number;groups:MusicGroup[];recipes:MusicRecipe[]}
 export interface MusicDirection {preferences:MusicPreferences;style:string;negativeTags:string;summaryZh:string;summaryEn:string;catalogVersion:number;compilation?:{styleCharacters:number;styleLimit:number;negativeCharacters:number;negativeLimit:number;simplified:boolean;notice:string}|null}
-export interface MusicSettingsView {work:Work;direction:MusicDirection|null}
+export interface PhotoInspiration {summary:string;arrangement:string}
+export interface MusicSettingsView {work:Work;direction:MusicDirection|null;photoInspiration?:PhotoInspiration|null}
 async function call<T>(path:string,method='GET',body?:unknown){await ensureCreator();return requestJson<T>(path,method,body)}
 export const loadMusicCatalog=()=>call<MusicCatalog>('app/music-settings/catalog')
 export const loadMusicSettings=(work:string)=>call<MusicSettingsView>(`app/works/${work}/music-settings`)

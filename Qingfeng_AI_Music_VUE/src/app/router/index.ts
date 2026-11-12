@@ -9,6 +9,7 @@ export const router = createRouter({
   routes: [
     { path: '/', name: 'home', component: () => import('../../modules/home/pages/PremiumHomePage.vue') },
     { path: '/create', name: 'studio', component: () => import('../../modules/studio/pages/DraftStudioPage.vue') },
+    { path: '/create/photo', name: 'photo-studio', component: () => import('../../modules/studio/pages/PhotoStudioPage.vue') },
     { path: '/agent', name: 'agent', component: () => import('../../modules/agent/pages/AgentStudioPage.vue') },
     { path: '/works', name: 'works', component: () => import('../../modules/works/pages/WorkLibraryPage.vue') },
     { path: '/works/:id', name: 'work-detail', component: () => import('../../modules/works/pages/WorkDetailPage.vue') },

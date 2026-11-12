@@ -74,6 +74,35 @@ class OpenAiLyricsWriterTest {
         assertInvalid(JSON.writeValueAsString(response));
     }
 
+    @Test void photoLyricsUseOneMultimodalRequestAndRequireBothCreativeOutputs() throws Exception {
+        var output=result();
+        output.put("photoSummary","夕阳下，两个人坐在海边。");
+        try(var fixture=new Fixture(200,JSON.writeValueAsString(completed(output)))){
+            byte[] jpeg={-1,-40,-1,-39};
+            var direction=new com.qingfeng.music.lyrics.application.LyricsWriter.Direction("","","AUTO");
+            var draft=fixture.writer().writePhoto(WORK,"zh-CN",jpeg,direction);
+            var request=fixture.received.get();
+            var parts=request.path("input").path(0).path("content");
+            assertEquals("input_text",parts.path(0).path("type").asText());
+            var material=JSON.readTree(parts.path(0).path("text").asText());
+            assertEquals(WORK.story(),material.path("story").asText());
+            assertEquals("",material.path("preferredTitle").asText());
+            assertEquals("input_image",parts.path(1).path("type").asText());
+            assertEquals("data:image/jpeg;base64,"+Base64.getEncoder().encodeToString(jpeg),parts.path(1).path("image_url").asText());
+            assertTrue(request.path("text").path("format").path("schema").path("properties").has("photoSummary"));
+            assertEquals(output.get("photoSummary"),draft.plan().photoSummary());
+            assertEquals("Acoustic guitar",draft.plan().suggestedArrangement());
+            assertEquals("OPENAI",draft.source());
+            assertEquals(1,fixture.calls.get());
+        }
+        try(var fixture=new Fixture(200,JSON.writeValueAsString(completed(result())))){
+            var direction=new com.qingfeng.music.lyrics.application.LyricsWriter.Direction("","","AUTO");
+            assertEquals("LYRICS_RESPONSE_INVALID",assertThrows(DomainException.class,
+                ()->fixture.writer().writePhoto(WORK,"zh-CN",new byte[]{1},direction)).code());
+            assertEquals(1,fixture.calls.get());
+        }
+    }
+
     @Test void rejectsRefusalsEvenOnCompletedResponse() throws Exception {
         assertInvalid(JSON.writeValueAsString(Map.of("status", "completed", "output", List.of(
             Map.of("type", "message", "role", "assistant", "status", "completed", "content",

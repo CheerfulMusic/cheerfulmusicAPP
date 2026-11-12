@@ -137,6 +137,7 @@ public final class AgentChatPolicy {
             case "sync_playback_lyrics" -> requested(text,"(?:同步|对齐|生成|更新|修复).{0,15}(?:滚动歌词|播放歌词|时间轴|时间戳|歌词时间)|(?:sync|align).{0,15}(?:lyrics|timestamps)");
             case "accept_referral" -> requested(text,"(?:绑定|使用|填入|接受).{0,12}(?:邀请码|邀请|推荐码)|(?:accept|use).{0,12}(?:referral|invite)");
             case "recharge" -> requested(text,"充值|购买.{0,12}(?:积分|点数|套餐)|recharge|top.?up|buy.{0,12}(?:credit|plan)");
+            case "photo_song" -> requested(text,"(?:打开|开始|使用|用|根据|拿|给).{0,12}(?:照片|图片|相片).{0,12}(?:写歌|创作|歌词|歌曲|音乐|写首歌|写一首歌)|(?:把|将).{0,12}(?:照片|图片|相片).{0,12}(?:变成|做成|写成|生成).{0,8}(?:歌|音乐)|^(?:照片|图片|相片)写歌$|(?:open|use|create|make).{0,20}(?:photo|image).{0,12}(?:song|lyrics)|(?:write|make|create).{0,12}(?:song|lyrics).{0,15}(?:photo|image)");
             case "close_order" -> requested(text,"(?:关闭|取消|撤销).{0,12}(?:订单|支付)|(?:close|cancel).{0,12}(?:order|payment)");
             case "login" -> requested(text,"登录|登入|log.?in|sign.?in");
             case "logout" -> requested(text,"退出登录|登出|注销登录|log.?out|sign.?out");

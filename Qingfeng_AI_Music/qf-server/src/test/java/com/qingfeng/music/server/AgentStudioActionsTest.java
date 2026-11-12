@@ -44,6 +44,14 @@ class AgentStudioActionsTest {
         verify(conversations).applyToolResult(eq("owner"),eq("C"),isNull(),eq("{}"),eq("W"),snapshot.capture(),isNull(),eq(4L));
         var state=AgentJson.read(snapshot.getValue());assertFalse(state.containsKey("style"));assertEquals("A",state.get("assetId"));assertEquals("R",state.get("revisionId"));assertEquals("yue",state.get("language"));assertEquals("更温暖",state.get("baseFreeText"));
     }
+    @Test void aNewDraftWithoutSavedSettingsCanReadAndUpdateItsMusicSettings(){
+        when(settings.get("owner","W")).thenReturn(new MusicSettings.View(work,null));
+        when(settings.preview(any())).thenAnswer(i->direction(i.getArgument(0)));
+        assertEquals("get_music_settings",run("get_music_settings",Map.of()).action());
+        run("update_music_settings",Map.of("freeText","温暖民谣"));
+        var saved=org.mockito.ArgumentCaptor.forClass(MusicSettings.Preferences.class);verify(settings).save(eq("owner"),eq("W"),eq(2L),saved.capture());
+        assertEquals("FEMALE",saved.getValue().vocalGender());assertEquals("温暖民谣",saved.getValue().freeText());
+    }
     @Test void malformedChoicesNeverReachTheSettingsService(){
         assertThrows(DomainException.class,()->run("update_music_settings",Map.of("choices",Map.of("genre","folk"))));
         verify(settings,never()).save(any(),any(),anyLong(),any());

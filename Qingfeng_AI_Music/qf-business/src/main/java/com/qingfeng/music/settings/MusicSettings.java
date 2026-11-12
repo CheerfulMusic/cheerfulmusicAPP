@@ -16,7 +16,10 @@ public interface MusicSettings {
         public Direction(Preferences preferences,String style,String negativeTags,String zh,String en,int version){this(preferences,style,negativeTags,zh,en,version,null);}
         public String effectiveVoice(String voice){return voice.equals("AUTO")&&creativePlan!=null?creativePlan.vocalGender():voice;}
     }
-    record View(Work work,Direction direction){}
+    record PhotoInspiration(String summary,String arrangement){}
+    record View(Work work,Direction direction,PhotoInspiration photoInspiration){
+        public View(Work work,Direction direction){this(work,direction,null);}
+    }
     record Saved(String style,String vocalGender,Preferences preferences){}
     interface Repository {
         long lockVersion(String work);

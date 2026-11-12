@@ -36,6 +36,12 @@ final class AgentCreationSupport {
         if (settings == null) throw new DomainException("MUSIC_SETTINGS_UNAVAILABLE", "音乐设置暂不可用，尚未提交生成。");
         Map<String,Object> state = snapshot == null ? new LinkedHashMap<>() : new LinkedHashMap<>(AgentJson.read(snapshot));
         MusicSettings.Direction existing = settings.resolve(owner, work);
+        if (existing == null) {
+            // Photo creation exposes its initial arrangement through View before explicit settings exist.
+            // Preserve that default when an Agent turn changes only voice or starts music generation.
+            var view = settings.get(owner, work.id());
+            if (view != null && view.photoInspiration() != null) existing = view.direction();
+        }
         MusicSettings.Preferences prior = existing == null ? null : existing.preferences();
         if (prior == null && !state.containsKey("style") && work.style() != null && !work.style().isBlank()) state.put("style", work.style());
         Map<String,List<String>> choices = new LinkedHashMap<>(prior == null ? Map.of() : prior.choices());

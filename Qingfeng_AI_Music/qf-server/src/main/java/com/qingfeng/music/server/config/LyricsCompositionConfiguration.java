@@ -25,10 +25,7 @@ public class LyricsCompositionConfiguration {
     @Bean LyricsWriter lyricsWriter(Environment env){
         return switch(env.getProperty("qingfeng.lyrics.provider","deepseek").trim().toLowerCase(java.util.Locale.ROOT)){
             case "openai" -> {
-                var primary = new OpenAiLyricsWriter(
-                    env.getProperty("qingfeng.providers.openai.api-key",env.getProperty("OPENAI_API_KEY","")),
-                    env.getProperty("qingfeng.providers.openai.model",OpenAiLyricsWriter.DEFAULT_MODEL),
-                    env.getProperty("qingfeng.providers.openai.proxy-url",""));
+                var primary = openAiWriter(env);
                 yield env.getProperty("qingfeng.lyrics.deepseek-fallback-enabled",Boolean.class,false)
                     ? new FallbackLyricsWriter(primary,deepSeekLyricsWriter(env)) : primary;
             }
@@ -36,10 +33,30 @@ public class LyricsCompositionConfiguration {
             default -> throw new IllegalArgumentException("Unsupported qingfeng.lyrics.provider; use openai or deepseek");
         };
     }
+    private static String openAiKey(Environment env){
+        return env.getProperty("qingfeng.providers.openai.api-key",env.getProperty("OPENAI_API_KEY",""));
+    }
+    private static OpenAiLyricsWriter openAiWriter(Environment env){
+        return new OpenAiLyricsWriter(openAiKey(env),
+            env.getProperty("qingfeng.providers.openai.model",OpenAiLyricsWriter.DEFAULT_MODEL),
+            env.getProperty("qingfeng.providers.openai.proxy-url",""));
+    }
+    public static boolean photoLyricsConfigured(Environment env){
+        return env.getProperty("qingfeng.lyrics.photo.enabled",Boolean.class,false)&&!openAiKey(env).isBlank();
+    }
+    @Bean @Profile({"mysql","test"})
+    @org.springframework.boot.autoconfigure.condition.ConditionalOnProperty(name="qingfeng.lyrics.photo.enabled",havingValue="true")
+    PhotoLyricsWriter photoLyricsWriter(Environment env){
+        var writer=openAiWriter(env);
+        return writer.isConfigured()?writer::writePhoto:null;
+    }
     private DeepSeekLyricsWriter deepSeekLyricsWriter(Environment env){
         return new DeepSeekLyricsWriter(env.getProperty("qingfeng.providers.deepseek.api-key",env.getProperty("DEEPSEEK_API_KEY","")),
             env.getProperty("qingfeng.providers.deepseek.model","deepseek-flash"));
     }
     @Bean @Profile({"mysql","test"}) CompositionRequests compositionRequests(JdbcTemplate jdbc,com.qingfeng.music.usage.UsageBudget budget,org.springframework.transaction.PlatformTransactionManager manager,com.qingfeng.music.credits.CreditsLedger credits,com.qingfeng.music.credits.CreditConsumptions consumptions){return new JdbcCompositionRequests(jdbc,budget,new org.springframework.transaction.support.TransactionTemplate(manager),credits,consumptions);}
-    @Bean @Profile({"mysql","test"}) LyricsCompositionService lyricsCompositionService(WorkApi works,LyricsApi lyrics,LyricsMapper mapper,LyricsWriter writer,CompositionRequests requests,Environment env,com.qingfeng.music.settings.MusicSettings settings,com.qingfeng.music.settings.CreativePlan.Repository plans){return new LyricsCompositionService(works,lyrics,new MyBatisLyricsRepository(mapper),writer,requests,env.getProperty("qingfeng.lyrics.enabled",Boolean.class,false)).withCreativePlans(settings,plans);}
+    @Bean @Profile({"mysql","test"}) LyricsCompositionService lyricsCompositionService(WorkApi works,LyricsApi lyrics,LyricsMapper mapper,LyricsWriter writer,CompositionRequests requests,Environment env,com.qingfeng.music.settings.MusicSettings settings,com.qingfeng.music.settings.CreativePlan.Repository plans,org.springframework.beans.factory.ObjectProvider<PhotoLyricsWriter> photos){
+        return new LyricsCompositionService(works,lyrics,new MyBatisLyricsRepository(mapper),writer,requests,env.getProperty("qingfeng.lyrics.enabled",Boolean.class,false))
+            .withCreativePlans(settings,plans).withPhotoWriter(photos.getIfAvailable());
+    }
 }

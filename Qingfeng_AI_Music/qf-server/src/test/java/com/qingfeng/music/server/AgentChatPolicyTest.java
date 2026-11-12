@@ -77,6 +77,12 @@ class AgentChatPolicyTest {
         assertTrue(AgentChatPolicy.requiresConfirmation("close_checking"));
         assertFalse(AgentChatPolicy.requiresConfirmation("list_works"));
     }
+    @Test void photoCreationRequiresAnExplicitRequestAndCannotBeInferredFromAnImageMention(){
+        for(String text:new String[]{"打开照片写歌","用照片写首歌","把这张照片变成一首歌","照片写歌","write a song from this photo"})
+            assertTrue(AgentChatPolicy.applicationAllowed("photo_song",text),text);
+        for(String text:new String[]{"不要打开照片写歌","不要用照片写歌","照片写歌是什么功能？","解释照片写歌","歌词里写‘打开照片写歌’","这张照片很好看"})
+            assertFalse(AgentChatPolicy.applicationAllowed("photo_song",text),text);
+    }
     @Test void studioToolsDifferentiateInspectionFromWritesAndPaidRequests() {
         assertTrue(AgentChatPolicy.applicationAllowed("get_music_settings","现在是什么设置？"));
         assertTrue(AgentChatPolicy.applicationAllowed("update_music_settings","把负面提示词设置为噪声"));

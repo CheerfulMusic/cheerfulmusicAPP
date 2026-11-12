@@ -53,6 +53,14 @@ class AgentAccountActionsTest {
         assertEquals("account",run("account_settings",Map.of()).commands().get(0).kind());
         verifyNoInteractions(payments,paypal,identity,credits);
     }
+    @Test void photoSongOpensTheRealPanelWithoutStartingGenerationOrCharging(){
+        var result=run("photo_song",Map.of("imageUrl","https://untrusted.invalid/photo.jpg"));
+        assertEquals("photo_song",result.action());assertEquals("photo",result.kind());assertEquals(1,result.commands().size());
+        assertEquals("photo",result.commands().get(0).kind());assertEquals("",result.commands().get(0).text());
+        assertEquals("native",actions.capabilities().stream().filter(c->c.id().equals("photo_song")).findFirst().orElseThrow().effect());
+        assertTrue(result.reply().contains("不会开始生成"));assertFalse(result.toString().contains("untrusted.invalid"));
+        verifyNoInteractions(payments,paypal,identity,credits,pricing,rewrites,usage,referrals,erasure);
+    }
     @Test void orderQueriesUseAuthenticatedOwnerAndNeverCaptureOrCreatePayments(){
         when(paypal.order("owner","order-one")).thenReturn(Map.of("orderId","order-one","status","PENDING","credits",100));
         var result=run("get_order",Map.of("orderId","order-one","provider","paypal","creatorId","someone-else"));

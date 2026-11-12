@@ -49,7 +49,8 @@ public final class CreativeDirection {
         if(style.length()>limits.style()&&concise!=null){style=required(concise,plan.requirements(),currentOverrides);simplified=true;}
         if(style.length()>limits.style())throw new DomainException("INVALID_MUSIC_SETTINGS","保留你的明确要求后，音乐描述仍过长，请精简补充要求或减少音乐选项。原文和歌词已保留，尚未提交音乐生成。");
         // 可选编曲整段省略，不截断用户句子，也不破坏否定词。
-        if(!plan.suggestedArrangement().isBlank()&&!style.contains(plan.suggestedArrangement())){
+        if(!plan.suggestedArrangement().isBlank()&&!style.contains(plan.suggestedArrangement())
+            &&(plan.photoSummary().isBlank()||!currentOverrides)){
             String extended=style+". Optional: "+plan.suggestedArrangement();
             if(extended.length()<=limits.style())style=extended;else simplified=true;
         }
