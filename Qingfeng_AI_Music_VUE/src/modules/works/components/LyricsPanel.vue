@@ -11,7 +11,8 @@ import { ApiError, currentCreatorId } from '../../../shared/http/api-client'
 import { readRecovery, writeRecovery, recoveryKey,checkpointRecovery } from '../../../shared/drafts/recovery'
 import RecoveryCopies from '../../../shared/drafts/RecoveryCopies.vue'
 import type { Work } from '../../studio'
-import { listRevisions, getRevision, getLyricsRequest, saveRevision, confirmRevision, generateLyrics, rewriteLyricLine, type Revision, type LyricRewriteAction } from '../api/detail'
+import { listRevisions, getRevision, getLyricsRequest, saveRevision, confirmRevision, generateLyrics, type Revision, type LyricRewriteAction } from '../api/detail'
+import { lyricRewriteError, selectLyricText, suggestLyricLine, type LyricLineSelection } from '../model/lyric-line-edit'
 const props=defineProps<{work:Work;showInlineSave?:boolean}>(), emit=defineEmits<{selected:[revision:Revision|null];dirty:[value:boolean];ready:[value:boolean];recoverable:[value:boolean];base:[revision:Revision|null]}>()
 const route=useRoute(),router=useRouter()
 const versions=ref<Revision[]>([]),active=ref<Revision|null>(null),title=ref(props.work.title||(props.work.recipient?t('写给{recipient}的歌',{recipient:props.work.recipient}):t('我的原创歌曲'))),text=ref(''),baseline=ref(''),loading=ref(true),saving=ref(false),composing=ref(false),preparing=ref(false),error=ref(''),notice=ref(''),aiReady=ref(false),localSaved=ref(false),creditShort=ref(false)
@@ -28,7 +29,7 @@ const canGenerate=computed(()=>valid.value&&!blocked.value&&!saving.value)
 const canSave=computed(()=>canGenerate.value&&needsSave.value)
 const savedTime=computed(()=>active.value&&!dirty.value?formatDate(active.value.createdAt):'')
 const editor=ref<HTMLTextAreaElement>()
-const selection=ref<{source:string;start:number;end:number;line:string;context:string}>()
+const selection=ref<LyricLineSelection>()
 const linePreview=ref<{selection:NonNullable<typeof selection.value>;text:string}>()
 const lineBusy=ref(false),lineError=ref('')
 const mirror=ref<HTMLDivElement>(), marker=ref<HTMLSpanElement>(), toolbar=ref<HTMLDivElement>()
@@ -68,24 +69,17 @@ function captureSelection(){
  const el=editor.value
  if(!el||lineBusy.value)return
  const {selectionStart:start,selectionEnd:end,value:source}=el
- const line=source.slice(start,end)
- selection.value=line.trim()&&line.length<=160&&!/[\r\n\u2028\u2029]/.test(line)&&!/^\s*\[.*\]\s*$/.test(line)
-   ?{source,start,end,line,context:source.slice(Math.max(0,start-180),start)+'\n'+source.slice(end,end+179)}
-   :undefined
+ selection.value=selectLyricText(source,start,end)
 }
 async function previewLine(action:LyricRewriteAction){
  const chosen=selection.value
  if(!chosen||chosen.source!==text.value||lineBusy.value||blocked.value||saving.value)return
  lineBusy.value=true;lineError.value='';linePreview.value=undefined
  try{
-   const result=await rewriteLyricLine(props.work.id,{requestId:crypto.randomUUID(),action,line:chosen.line,context:chosen.context,language:active.value?.language||language.value})
-   if(!result.text?.trim()||result.text.length>160||/[\r\n\u2028\u2029]/.test(result.text)
-      ||action==='SHORTEN'&&result.text.trim().length>=chosen.line.trim().length)throw new Error('未得到可用的单句改写，原歌词已保留。')
-   if(alive)linePreview.value={selection:chosen,text:result.text}
+   const text=await suggestLyricLine(props.work.id,chosen,action,active.value?.language||language.value)
+   if(alive)linePreview.value={selection:chosen,text}
  }catch(e){
-   if(alive)lineError.value=e instanceof ApiError&&e.status===405
-     ?'当前后端版本不支持选句润色，请更新后端后重试。'
-     :e instanceof Error?e.message:'改写暂不可用，原歌词已保留。'
+   if(alive)lineError.value=lyricRewriteError(e)
  }
  finally{lineBusy.value=false}
 }
