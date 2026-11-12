@@ -72,7 +72,7 @@ class CreditAccountConcurrencyTest {
             assertTrue(inviterLocked.await(5,TimeUnit.SECONDS));
             var welcome=pool.submit(()->new TransactionTemplate(manager).executeWithoutResult(t->grant.grant(invitee)));
             debit.get(5,TimeUnit.SECONDS);welcome.get(5,TimeUnit.SECONDS);
-            assertEquals(110,credits.balance(inviter));assertEquals(100,credits.balance(invitee));
+            assertEquals(110,credits.balance(inviter));assertEquals(50,credits.balance(invitee));
         }finally{welcomeCredited.countDown();pool.shutdownNow();}
     }
     private static void await(CountDownLatch latch){try{if(!latch.await(5,TimeUnit.SECONDS))throw new IllegalStateException("test coordination timed out");}catch(InterruptedException e){Thread.currentThread().interrupt();throw new IllegalStateException(e);}}

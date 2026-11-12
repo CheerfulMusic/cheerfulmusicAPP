@@ -25,6 +25,8 @@ let historyUnavailable: string
 let failCreate: boolean
 let switchOwnerOnCreate: boolean
 let paypalEnabled: boolean
+let musicCost: number
+let creditsUnavailable: boolean
 let creator: string
 const reply = (value: unknown, status = 200) => new Response(JSON.stringify(value), { status })
 const drain = async () => { for (let i = 0; i < 8; i++) { await new Promise(resolve => setTimeout(resolve, 0)); await nextTick() } }
@@ -32,12 +34,16 @@ const drain = async () => { for (let i = 0; i < 8; i++) { await new Promise(reso
 beforeEach(() => {
   resetCreatorSession(); localStorage.clear(); sessionStorage.clear()
   calls = []; stripeStatus = 'PAID'; stripeCurrent = 'PAID'; historyUnavailable = ''; failCreate = false; switchOwnerOnCreate = false; paypalEnabled = false; creator = 'owner'
+  musicCost = 15; creditsUnavailable = false
   vi.stubGlobal('fetch', vi.fn(async (input: string, init: RequestInit = {}) => {
     const path = input.replace('/api/', ''), method = init.method || 'GET'; calls.push(`${method} ${path}`)
     const order = { orderId: id, status: stripeStatus, credits: 300, createdAt: '2026-11-09T05:00:00Z' }
     if (path === 'public/csrf') return reply({ token: 'csrf' })
     if (path === 'public/session') return reply({ creatorId: creator })
-    if (path === 'app/credits') return reply({ enabled: true, balance: stripeCurrent === 'PAID' ? 300 : 0, musicCost: 15 })
+    if (path === 'app/credits') {
+      if (creditsUnavailable) throw new TypeError('isolated price service unavailable')
+      return reply({ enabled: true, balance: stripeCurrent === 'PAID' ? 300 : 0, musicCost })
+    }
     if (path === 'app/stripe/catalog') return reply({ enabled: true, packages: [pack] })
     if (path === 'app/paypal/catalog') return reply({ enabled: paypalEnabled, packages: paypalEnabled ? [pack] : [] })
     if (path === 'app/payments/catalog') return reply({ enabled: false, packages: [] })
@@ -66,6 +72,36 @@ async function mount(component: typeof RechargePage | typeof CreditsPanel) {
 }
 
 describe('Stripe recharge and account with the real HTTP decoder', () => {
+  it('shows the server song price of five and derives all generation estimates without changing USD package snapshots', async () => {
+    musicCost = 5
+    const root = await mount(RechargePage)
+    expect(root.textContent).toContain('每次生成歌曲消耗 5 积分')
+    expect([...root.querySelectorAll('.plan-info')].map(element => element.textContent?.trim())).toEqual([
+      '约可生成 20 次歌曲', '约可生成 60 次歌曲', '约可生成 140 次歌曲',
+    ])
+    expect(root.textContent).toContain('$25.90')
+    expect(root.querySelector('button.pay-button')?.textContent).toContain('银行卡')
+    expect(calls).not.toContain('POST app/stripe/orders')
+  })
+
+  it.each([0, -5])('hides song price and estimates when the server price is invalid: %s', async price => {
+    musicCost = price
+    const root = await mount(RechargePage)
+    expect(root.querySelector('.balance small')).toBeNull()
+    expect(root.querySelectorAll('.plan-info')).toHaveLength(0)
+    expect(root.textContent).toContain('$25.90')
+    expect(calls).not.toContain('POST app/stripe/orders')
+  })
+
+  it('does not invent an old fallback generation price when the credits API cannot be read', async () => {
+    creditsUnavailable = true
+    const root = await mount(RechargePage)
+    expect(root.querySelector('.balance small')).toBeNull()
+    expect(root.querySelectorAll('.plan-info')).toHaveLength(0)
+    expect(root.textContent).not.toContain('15 积分')
+    expect(calls).not.toContain('POST app/stripe/orders')
+  })
+
   it('shows the actual USD snapshot and enables Stripe without creating an order on mount', async () => {
     const root = await mount(RechargePage)
     expect(root.textContent).toContain('USD')

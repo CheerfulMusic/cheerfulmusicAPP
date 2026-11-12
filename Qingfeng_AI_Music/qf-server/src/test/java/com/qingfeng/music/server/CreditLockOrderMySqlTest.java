@@ -68,7 +68,7 @@ import static org.junit.jupiter.api.Assertions.*;
 @Import(CreditLockOrderMySqlTest.Offline.class)
 class CreditLockOrderMySqlTest {
 
-    static final long LYRICS_COST = 5L;
+    static final long LYRICS_COST = 1L;
 
     @Autowired IdentityApi identity;
     @Autowired WorkApi works;

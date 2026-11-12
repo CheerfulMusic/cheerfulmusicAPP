@@ -2,7 +2,7 @@ package com.qingfeng.music.credits;
 
 /** One welcome grant per creator, shared by all verified login providers. */
 public final class FirstLoginCredits {
-    public static final long AMOUNT = 100;
+    public static final long AMOUNT = 50;
     private final CreditsLedger credits;
     private final ReferralRewards referrals;
 

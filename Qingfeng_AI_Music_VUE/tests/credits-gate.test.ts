@@ -1,10 +1,27 @@
 import { describe, expect, it, vi } from 'vitest'
-import { guardCredits } from '../src/shared/credits/credit-gate'
+import { checkQuickCreationCredits, guardCredits, quickCreationCost } from '../src/shared/credits/credit-gate'
 import type { CreditsView } from '../src/shared/identity/credit-balance'
 
 function view(balance: number | null, lyricsCost = 5): CreditsView {
   return { enabled: true, balance, musicCost: 15, lyricsCost, rewriteCost: 1, rewriteFreeRemaining: 0 }
 }
+
+describe('一键创作的积分准入', () => {
+  const priced = (balance: number | null): CreditsView => ({ ...view(balance, 1), musicCost: 5 })
+  it('合计歌词和音乐的实时价格，余额不足时拦截', async () => {
+    expect(quickCreationCost(priced(5))).toBe(6)
+    expect(await checkQuickCreationCredits(async () => priced(5))).toEqual({ status: 'insufficient', cost: 6, balance: 5 })
+    expect(await checkQuickCreationCredits(async () => priced(6))).toEqual({ status: 'ok' })
+  })
+  it('价格或余额未知时拒绝启动，不猜测价格', async () => {
+    expect(await checkQuickCreationCredits(async () => null)).toEqual({ status: 'unavailable' })
+    expect(await checkQuickCreationCredits(async () => ({ ...priced(20), musicCost: 0 }))).toEqual({ status: 'unavailable' })
+    expect(await checkQuickCreationCredits(async () => priced(null))).toEqual({ status: 'unavailable' })
+  })
+  it('积分功能关闭时无需余额', async () => {
+    expect(await checkQuickCreationCredits(async () => ({ ...priced(null), enabled: false }))).toEqual({ status: 'ok' })
+  })
+})
 
 describe('歌词生成的积分准入', () => {
   it('余额充足时放行，且不额外请求余额', async () => {

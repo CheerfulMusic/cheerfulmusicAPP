@@ -14,6 +14,8 @@ import { showLoginDialog } from '../../../shared/identity/login-dialog'
 import { loadWork } from '../../studio/api/works'
 import { assistantResult, uploadTarget, type AgentCommand } from '../model/assistant-result'
 import AgentResultCard from '../components/AgentResultCard.vue'
+import AgentProgressCard from '../components/AgentProgressCard.vue'
+import { agentProgress } from '../model/progress'
 import UserAvatarDialog from '../components/UserAvatarDialog.vue'
 import { useUserAvatar } from '../composables/useUserAvatar'
 import { useAvatarGeneration } from '../composables/useAvatarGeneration'
@@ -45,8 +47,12 @@ async function fetchStory() {
   finally { if (version === storyVersion) storyLoading.value = false }
 }
 const nativePanel = ref<{ kind: 'recharge' | 'account' | 'privacy' | 'photo' | 'upload_cover' | 'upload_audio'; workId?: string } | null>(null)
-const lastAssistantId = computed(() => [...messages.value].reverse().find(message => message.role === 'assistant')?.id)
-const chatMessages = computed(() => messages.value.map(message => ({ ...message, result: assistantResult(message) })))
+const lastAssistantId = computed(() => [...messages.value].reverse().find(message => message.role === 'assistant' && !agentProgress(message))?.id)
+const chatMessages = computed(() => messages.value.map(message => ({ ...message, progress: agentProgress(message), result: agentProgress(message) ? null : assistantResult(message) })))
+const pendingAlreadySaved = computed(() => !!pending.value && messages.value.some(message => {
+  if (message.role !== 'user') return false
+  try { return JSON.parse(message.contentJson || '{}').requestKey === pending.value?.requestKey } catch { return false }
+}))
 const blocked = computed(() => loading.value || sending.value || !!pending.value)
 const english = computed(() => locale.value === 'en')
 const tr = (zh: string, en: string) => english.value ? en : zh
@@ -247,10 +253,10 @@ onBeforeUnmount(() => { avatarDisposed = true; window.removeEventListener('qingf
         </div>
         <div v-for="message in chatMessages" :key="message.id" class="agent-message" :class="message.role">
           <div v-if="message.role === 'assistant'" class="agent-bot-avatar" aria-hidden="true"><img :src="'/brand/logo-symbol.svg'" alt=""/></div>
-          <div class="agent-message-content"><div v-if="messageText(message)" class="agent-bubble" :class="{ 'agent-message-failed': message.state === 'FAILED' }"><p>{{ messageText(message) }}</p></div><AgentResultCard v-if="message.result" :result="message.result" :disabled="blocked" :current="message.id === lastAssistantId" @command="runCommand"/></div>
+          <div class="agent-message-content"><AgentProgressCard v-if="message.progress" :progress="message.progress"/><div v-else-if="messageText(message)" class="agent-bubble" :class="{ 'agent-message-failed': message.state === 'FAILED' }"><p>{{ messageText(message) }}</p></div><AgentResultCard v-if="message.result" :result="message.result" :disabled="blocked" :current="message.id === lastAssistantId" @command="runCommand"/></div>
           <button v-if="message.role === 'user'" type="button" class="agent-user-avatar" :aria-label="tr('设置头像', 'Change avatar')" @click="avatarDialog = true"><img v-if="avatar.avatarUrl.value" :src="avatar.avatarUrl.value" alt="" @error="avatar.avatarUrl.value = ''"/><svg v-else viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="17" r="8.4" fill="#f0b49c"/><path d="M7 44c1.9-9.6 8.6-14.4 17-14.4S39.1 34.4 41 44z" fill="#f0b49c"/></svg></button>
         </div>
-        <div v-if="pending" class="agent-message user agent-pending"><div class="agent-bubble"><p>{{ pending.text }}</p><small>{{ sending ? tr('发送中…', 'Sending…') : tr('结果待确认', 'Awaiting confirmation') }}</small></div></div>
+        <div v-if="pending && !pendingAlreadySaved" class="agent-message user agent-pending"><div class="agent-bubble"><p>{{ pending.text }}</p><small>{{ sending ? tr('发送中…', 'Sending…') : tr('结果待确认', 'Awaiting confirmation') }}</small></div></div>
         <p v-if="sending" class="agent-typing" role="status"><span class="agent-typing-spinner" aria-hidden="true"/>{{ tr('正在处理你的请求…', 'Working on your request…') }}</p>
         <div v-if="!messages.length && !loading" class="agent-quick-card"><strong>{{ tr('试着说', 'Try saying') }}</strong><div class="agent-quick-grid"><button v-for="prompt in prompts" :key="prompt" type="button" :disabled="blocked" @click="send(prompt)"><span>{{ prompt }}</span></button></div></div>
       </div>

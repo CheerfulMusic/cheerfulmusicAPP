@@ -66,7 +66,7 @@ import static org.junit.jupiter.api.Assertions.*;
 @Import(CostControlConcurrencyTest.Offline.class)
 class CostControlConcurrencyTest {
 
-    static final long LYRICS_COST = 5L;
+    static final long LYRICS_COST = 1L;
     static final long REWRITE_COST = 1L;
 
     @Autowired IdentityApi identity;

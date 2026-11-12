@@ -324,9 +324,9 @@ class IntegratedCreditAccountMySqlTest {
         var actual=(ReferralRewards)constructor.newInstance(db,ledger);var inviteeCredited=new CountDownLatch(1);var inviterHeld=new CountDownLatch(1);var releaseInviter=new CountDownLatch(1);
         var login=new FirstLoginCredits(ledger,owner->{inviteeCredited.countDown();actual.rewardForFirstLogin(owner);});var pool=Executors.newFixedThreadPool(2);
         try{
-            var first=pool.submit(()->tx.executeWithoutResult(s->{db.queryForList("SELECT id FROM creator WHERE id=? FOR UPDATE",inviter);inviterHeld.countDown();await(inviteeCredited);ledger.credit(inviter,100,"first-login:"+inviter);releaseInviter.countDown();}));
+            var first=pool.submit(()->tx.executeWithoutResult(s->{db.queryForList("SELECT id FROM creator WHERE id=? FOR UPDATE",inviter);inviterHeld.countDown();await(inviteeCredited);ledger.credit(inviter,FirstLoginCredits.AMOUNT,"first-login:"+inviter);releaseInviter.countDown();}));
             assertTrue(inviterHeld.await(10,TimeUnit.SECONDS));var second=pool.submit(()->tx.executeWithoutResult(s->login.grant(invitee)));
-            first.get(10,TimeUnit.SECONDS);second.get(10,TimeUnit.SECONDS);assertEquals(120,ledger.balance(inviter));assertEquals(100,ledger.balance(invitee));assertEquals(0,releaseInviter.getCount());
+            first.get(10,TimeUnit.SECONDS);second.get(10,TimeUnit.SECONDS);assertEquals(50,FirstLoginCredits.AMOUNT);assertEquals(70,ledger.balance(inviter));assertEquals(50,ledger.balance(invitee));assertEquals(0,releaseInviter.getCount());
         }finally{pool.shutdownNow();assertTrue(pool.awaitTermination(10,TimeUnit.SECONDS));}
     }
 

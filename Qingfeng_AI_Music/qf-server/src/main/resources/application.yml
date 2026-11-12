@@ -42,8 +42,8 @@ qingfeng:
       enabled: ${CREDIT_WRITER_FENCE_ENABLED:false}
       expected-database: ${CREDIT_WRITER_EXPECTED_DATABASE:}
       expected-port: ${CREDIT_WRITER_EXPECTED_PORT:0}
-    music-cost: 15
-    lyrics-cost: 5
+    music-cost: 5
+    lyrics-cost: 1
     rewrite-cost: 1
     rewrite-free-per-day: 5
   stripe:

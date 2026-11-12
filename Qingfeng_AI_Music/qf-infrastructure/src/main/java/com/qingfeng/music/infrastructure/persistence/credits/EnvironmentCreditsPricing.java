@@ -25,5 +25,5 @@ public final class EnvironmentCreditsPricing implements CreditsPricing {
         if (value < -1) throw new IllegalStateException("每日免费次数不能小于 -1：" + kind);
         return value;
     }
-    private long defaultCost(Kind kind) { return kind == Kind.LYRICS ? 5L : kind == Kind.REWRITE ? 1L : 15L; }
+    private long defaultCost(Kind kind) { return kind == Kind.LYRICS ? 1L : kind == Kind.REWRITE ? 1L : 5L; }
 }

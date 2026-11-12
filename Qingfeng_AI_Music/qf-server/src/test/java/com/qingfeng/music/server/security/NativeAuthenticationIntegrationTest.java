@@ -127,29 +127,29 @@ class NativeAuthenticationIntegrationTest {
         assertEquals(guest.creator,JSON.readTree(response.body()).path("associatedGuestCreatorId").asText());
     }
 
-    @Test void passwordLoginCompletesOidcRotatesSessionAndGrants100Once()throws Exception{
+    @Test void passwordLoginCompletesOidcRotatesSessionAndGrants50Once()throws Exception{
         var browser=browser();String email=email(),old=cookie(browser);USERS.add(email);
         var response=post(browser,"/password/sign-in",Map.of("email",email,"password","correct-password"));
         assertEquals(200,response.statusCode(),response.body());assertEquals("{\"authenticated\":true}",response.body());
         assertTrue(response.headers().firstValue("cache-control").orElse("").contains("no-store"));
         assertTrue(response.headers().allValues("set-cookie").stream().anyMatch(c->c.startsWith("QF_SESSION=")&&c.contains("HttpOnly")&&c.contains("SameSite=Lax")));
-        assertTrue(identity.resolve(old).isEmpty());assertEquals(browser.creator,identity.resolve(cookie(browser)).orElseThrow());assertEquals(100,credits.balance(browser.creator));
+        assertTrue(identity.resolve(old).isEmpty());assertEquals(browser.creator,identity.resolve(cookie(browser)).orElseThrow());assertEquals(50,credits.balance(browser.creator));
         var second=browser();assertEquals(200,post(second,"/password/sign-in",Map.of("email",email,"password","correct-password")).statusCode());
-        assertEquals(browser.creator,identity.resolve(cookie(second)).orElseThrow());assertEquals(100,credits.balance(browser.creator));
+        assertEquals(browser.creator,identity.resolve(cookie(second)).orElseThrow());assertEquals(50,credits.balance(browser.creator));
     }
     @Test void emailRegistrationRequiresVerifiedCodeAndSetsPasswordBeforeIdentification()throws Exception{
         var browser=browser();String email=email();assertEquals(200,code(browser,"email",email,"register").statusCode());
         var wrong=post(browser,"/register",Map.of("email",email,"password","correct-password","code","000000"));
         assertEquals(400,wrong.statusCode());assertEquals(0,credits.balance(browser.creator));
         var response=post(browser,"/register",Map.of("email",email,"password","correct-password","code","123456"));
-        assertEquals(200,response.statusCode(),response.body());assertTrue(USERS.contains(email));assertEquals(100,credits.balance(browser.creator));
+        assertEquals(200,response.statusCode(),response.body());assertTrue(USERS.contains(email));assertEquals(50,credits.balance(browser.creator));
     }
     @Test void phoneOtpAndEmailOtpRegisterWithoutPasswordAndStayOnSameOrigin()throws Exception{
         for(String channel:List.of("phone","email")){
             var browser=browser();String value="phone".equals(channel)?"+447700"+String.format("%06d",new Random().nextInt(1000000)):email();
             var sent=code(browser,channel,value,"sign-in");assertEquals(200,sent.statusCode(),sent.body());assertFalse(sent.body().contains("verificationId"));
             var response=post(browser,"/"+channel+"/sign-in",Map.of(channel,value,"code","123456"));
-            assertEquals(200,response.statusCode(),response.body());assertTrue(response.headers().firstValue("location").isEmpty());assertEquals(100,credits.balance(browser.creator));
+            assertEquals(200,response.statusCode(),response.body());assertTrue(response.headers().firstValue("location").isEmpty());assertEquals(50,credits.balance(browser.creator));
         }
     }
     @Test void resetRequiresBoundVerifiedCodeAndDoesNotLogInOrGrantCredits()throws Exception{

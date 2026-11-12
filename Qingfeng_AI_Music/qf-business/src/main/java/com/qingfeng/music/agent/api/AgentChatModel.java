@@ -6,16 +6,25 @@ import java.util.Map;
 /** The model proposes a bounded plan; the application independently authorizes every step. */
 public interface AgentChatModel {
     record Turn(String role, String text) {}
+    /** Server-authenticated execution identity; never accept these values from model output. */
+    record Execution(String owner, String conversation, String requestKey) {}
     record Context(String text, String locale, List<Turn> history, SongCard song, String settings,
-                   List<AgentApplicationActions.Capability> capabilities, String results) {
+                   List<AgentApplicationActions.Capability> capabilities, String results, Execution execution) {
         public Context {
             history = history == null ? List.of() : List.copyOf(history);
             capabilities = capabilities == null ? List.of() : List.copyOf(capabilities);
+        }
+        public Context(String text,String locale,List<Turn> history,SongCard song,String settings,
+                       List<AgentApplicationActions.Capability> capabilities,String results) {
+            this(text,locale,history,song,settings,capabilities,results,null);
         }
         public Context(String text,String locale,List<Turn> history,SongCard song,String settings) {
             this(text,locale,history,song,settings,List.of(),null);
         }
         public Context(String text,String locale,List<Turn> history,SongCard song){this(text,locale,history,song,null);}
+        public Context withExecution(Execution value) {
+            return new Context(text,locale,history,song,settings,capabilities,results,value);
+        }
     }
     record Step(String action, Map<String, Object> args) {
         public Step { args = immutableArgs(args); }

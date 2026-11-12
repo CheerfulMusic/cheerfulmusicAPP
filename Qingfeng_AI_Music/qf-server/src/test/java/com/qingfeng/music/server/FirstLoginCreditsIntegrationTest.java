@@ -41,7 +41,7 @@ class FirstLoginCreditsIntegrationTest {
         assertEquals(0, grants(guest.creatorId()));
     }
 
-    @Test void firstGoogleLoginGrants100EvenWhenCreditChargingIsDisabled() {
+    @Test void firstGoogleLoginGrants50EvenWhenCreditChargingIsDisabled() {
         var guest = identity.create();
         String subject = UUID.randomUUID().toString();
         var signed = google(guest, subject);
@@ -54,7 +54,7 @@ class FirstLoginCreditsIntegrationTest {
         assertEquals(0, credits.balance(otherDevice.creatorId()));
     }
 
-    @Test void firstLogtoLoginGrants100AndRepeatOrNewDeviceCannotGrantAgain() {
+    @Test void firstLogtoLoginGrants50AndRepeatOrNewDeviceCannotGrantAgain() {
         var guest = identity.create();
         String subject = UUID.randomUUID().toString();
         var signed = logto(guest, subject);
@@ -168,7 +168,7 @@ class FirstLoginCreditsIntegrationTest {
     }
 
     private void assertGrant(String owner) {
-        assertEquals(100, credits.balance(owner));
+        assertEquals(50, credits.balance(owner));
         assertEquals(1, grants(owner));
     }
 
