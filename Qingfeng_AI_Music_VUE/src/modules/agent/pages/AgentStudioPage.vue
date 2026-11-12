@@ -24,7 +24,7 @@ const { messages, songCard, shareUrl, liked, taskRunning, loading, sending, erro
 const player = usePlayer(), { credits, refreshCredits } = useCredits()
 const input = ref(''), chat = ref<HTMLElement>(), fileInput = ref<HTMLInputElement>(), notice = ref('')
 const avatar = useUserAvatar()
-const avatarGeneration = useAvatarGeneration(avatar.refresh)
+const avatarGeneration = useAvatarGeneration(avatar.refresh, refreshCredits)
 const avatarDialog = ref(false)
 async function uploadAvatar(file: File) { if (await avatar.upload(file)) avatarDialog.value = false }
 function generateAvatar(description: string) {

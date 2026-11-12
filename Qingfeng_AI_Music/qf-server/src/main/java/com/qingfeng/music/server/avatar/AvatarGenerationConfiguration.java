@@ -16,8 +16,8 @@ public class AvatarGenerationConfiguration {
         boolean enabled=env.getProperty("qingfeng.avatar.ai.enabled",Boolean.class,false) && env.getProperty("qingfeng.avatar.ai.scheduler-enabled",Boolean.class,false);
         return new KieAvatarImageProvider(key,enabled,limiter::beforeCreate,limiter::beforeRead);
     }
-    @Bean AvatarGenerationService avatarGenerationService(JdbcTemplate db,PlatformTransactionManager manager,AvatarService avatars,AvatarImageProvider provider,Environment env) {
-        return new AvatarGenerationService(db,new TransactionTemplate(manager),avatars,provider,env.getProperty("qingfeng.avatar.ai.sponsor-enabled",Boolean.class,false),env.getProperty("qingfeng.avatar.ai.daily-limit",Integer.class,3));
+    @Bean AvatarGenerationService avatarGenerationService(JdbcTemplate db,PlatformTransactionManager manager,AvatarService avatars,AvatarImageProvider provider,com.qingfeng.music.credits.CreditsLedger credits,com.qingfeng.music.credits.CreditsPricing pricing,Environment env) {
+        return new AvatarGenerationService(db,new TransactionTemplate(manager),avatars,provider,credits,pricing,env.getProperty("qingfeng.avatar.ai.daily-limit",Integer.class,3));
     }
     @Bean AgentAvatarActions agentAvatarActions(AvatarGenerationService service) { return new AgentAvatarActions(service); }
     @Bean AvatarGenerationRunner avatarGenerationRunner(AvatarGenerationService service,Environment env) { return new AvatarGenerationRunner(service,env.getProperty("qingfeng.avatar.ai.scheduler-enabled",Boolean.class,false)); }
