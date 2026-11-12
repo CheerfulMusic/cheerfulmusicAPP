@@ -223,7 +223,7 @@ onBeforeUnmount(() => { storyVersion++; recognition?.stop?.(); clearReference() 
           <div class="agent-bubble"><p>{{ tr('你好！告诉我你想做什么：聊灵感、写歌、找作品、选版本、换封面、分享，或查积分和订单。需要选择时，我会把选项放在对话里。', 'Hi! Ask for ideas, write a song, find your music, compare versions, change artwork, share, or check credits and orders. I will show any choices right here.') }}</p></div>
         </div>
         <div v-for="message in chatMessages" :key="message.id" class="agent-message" :class="message.role">
-          <div v-if="message.role === 'assistant'" class="agent-bot-avatar" aria-hidden="true"><svg viewBox="0 0 48 48"><rect width="48" height="48" rx="14" fill="#ff4c3b"/><path d="M25 9l12 2.6v16.2a6 6 0 1 1-3.4-5.4V18.3l-8 1.7v11.4a6 6 0 1 1-3.4-5.4V12z" fill="#fff"/></svg></div>
+          <div v-if="message.role === 'assistant'" class="agent-bot-avatar" aria-hidden="true"><img :src="'/brand/logo-symbol.svg'" alt=""/></div>
           <div class="agent-message-content"><div v-if="messageText(message)" class="agent-bubble" :class="{ 'agent-message-failed': message.state === 'FAILED' }"><p>{{ messageText(message) }}</p></div><AgentResultCard v-if="message.result" :result="message.result" :disabled="blocked" :current="message.id === lastAssistantId" @command="runCommand"/></div>
           <div v-if="message.role === 'user'" class="agent-user-avatar" aria-hidden="true"><svg viewBox="0 0 48 48"><circle cx="24" cy="17" r="8.4" fill="#f0b49c"/><path d="M7 44c1.9-9.6 8.6-14.4 17-14.4S39.1 34.4 41 44z" fill="#f0b49c"/></svg></div>
         </div>

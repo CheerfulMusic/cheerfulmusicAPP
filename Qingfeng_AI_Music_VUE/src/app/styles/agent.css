@@ -90,9 +90,9 @@ nav.consumer-navigation a.agent-nav-link > svg { width: 17px; height: 17px; flex
 
 .agent-message { display: flex; align-items: flex-start; gap: 11px; }
 .agent-message.user { justify-content: flex-end; }
-/* 助手头像：品牌橙底音符方；用户头像：右侧人像圆。 */
-.agent-bot-avatar { display: grid; flex: 0 0 38px; place-items: center; width: 38px; height: 38px; border-radius: 12px; box-shadow: 0 6px 16px #ff6a4533; }
-.agent-bot-avatar svg { width: 38px; height: 38px; }
+/* 助手头像：品牌图标；用户头像：右侧人像圆。 */
+.agent-bot-avatar { display: grid; flex: 0 0 38px; place-items: center; width: 38px; height: 38px; }
+.agent-bot-avatar img { width: 38px; height: 38px; object-fit: contain; }
 .agent-user-avatar { display: grid; flex: 0 0 38px; place-items: center; width: 38px; height: 38px; border-radius: 50%; background: #ffece2; box-shadow: 0 6px 16px #e0a18933; }
 .agent-user-avatar svg { width: 38px; height: 38px; }
 /* 助手消息：白底气泡与淡粉方案卡上下排列，卡片可以比气泡更宽。 */
@@ -209,7 +209,7 @@ nav.consumer-navigation a.agent-nav-link > svg { width: 17px; height: 17px; flex
   .agent-hero .agent-hero-tagline { font-size: 20px; }
   .agent-hero p { font-size: 14px; }
   .agent-bot-avatar, .agent-user-avatar { flex-basis: 32px; width: 32px; height: 32px; }
-  .agent-bot-avatar svg, .agent-user-avatar svg { width: 32px; height: 32px; }
+  .agent-bot-avatar img, .agent-user-avatar svg { width: 32px; height: 32px; }
   .agent-composer-menu { width: min(258px, calc(100vw - 70px)); }
 }
 @media (prefers-reduced-motion: reduce) {
