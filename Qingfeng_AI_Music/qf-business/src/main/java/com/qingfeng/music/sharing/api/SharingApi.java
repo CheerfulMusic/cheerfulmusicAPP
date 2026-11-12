@@ -4,6 +4,7 @@ import com.qingfeng.music.media.api.MediaApi.Content;
 import java.time.Instant;
 public interface SharingApi {
     Created create(String owner,String work,String revision,String asset);
+    default Created createWithWorkTitle(String owner,String work,String revision,String asset,String title) { return create(owner,work,revision,asset); }
     void revokeAll(String owner,String work);
     Gift get(String token);
     Content audio(String token);

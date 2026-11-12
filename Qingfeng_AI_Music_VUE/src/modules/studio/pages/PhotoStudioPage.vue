@@ -18,6 +18,8 @@ interface PhotoDraft {
   submitted: boolean
 }
 
+const props = defineProps<{ embedded?: boolean }>()
+const emit = defineEmits<{ created: [result: { workId: string; revisionId: string; language: string }]; close: []; recharge: [] }>()
 const router = useRouter()
 const photo = ref<File>()
 const preview = ref('')
@@ -81,6 +83,11 @@ function choosePhoto(event: Event) {
 
 async function openLyrics(revisionId: string, workId: string, lyricLanguage: string) {
   if (!alive || currentCreatorId() !== owner) return
+  if (props.embedded) {
+    draft = undefined; remember()
+    emit('created', { workId, revisionId, language: lyricLanguage })
+    return
+  }
   const failure = await router.push({ path: `/works/${workId}`, query: { revision: revisionId, language: lyricLanguage } })
   if (!failure) {
     draft = undefined
@@ -184,7 +191,7 @@ onBeforeUnmount(() => {
 
 <template>
   <section class="photo-studio" aria-labelledby="photo-studio-title">
-    <RouterLink class="detail-back" to="/create">{{ t('← 返回开始创作') }}</RouterLink>
+    <button v-if="props.embedded" type="button" class="detail-back" @click="emit('close')">{{ t('返回对话') }}</button><RouterLink v-else class="detail-back" to="/create">{{ t('← 返回开始创作') }}</RouterLink>
     <h1 id="photo-studio-title">{{ t('用照片写一首歌') }}</h1>
     <p>{{ t('选一张想写进歌里的照片，也可以告诉我们它背后的故事。') }}</p>
     <form class="photo-form" :aria-busy="busy||checking" @submit.prevent="submit">
@@ -210,7 +217,7 @@ onBeforeUnmount(() => {
         </label>
         <small>{{ t('照片会发送给 AI 用于本次创作。分享作品时不会公开原图。') }}</small>
         <p v-if="error" class="notice error" role="alert">{{ t(error) }}
-          <RouterLink v-if="creditShort" to="/recharge">{{ t('去充值') }}</RouterLink>
+          <button v-if="creditShort && props.embedded" type="button" @click="emit('recharge')">{{ t('去充值') }}</button><RouterLink v-else-if="creditShort" to="/recharge">{{ t('去充值') }}</RouterLink>
         </p>
         <div class="photo-actions">
           <button v-if="needsCheck" class="button primary" type="button" :disabled="checking||busy" @click="checkOriginal">
@@ -219,7 +226,7 @@ onBeforeUnmount(() => {
           <button v-else class="button primary" type="submit" :disabled="!ready||!photo||busy">
             {{ t(busy?'正在准备照片并编写歌词…':'生成歌词') }}
           </button>
-          <CreditCostHint v-if="credits&&credits.lyricsCost>0&&!needsCheck" :cost="credits.lyricsCost" :balance="credits.balance" :busy="busy"/>
+          <small v-if="props.embedded && credits && credits.lyricsCost > 0 && !needsCheck">{{ t('本次生成消耗 {cost} 积分', { cost: credits.lyricsCost }) }}</small><CreditCostHint v-else-if="credits&&credits.lyricsCost>0&&!needsCheck" :cost="credits.lyricsCost" :balance="credits.balance" :busy="busy"/>
         </div>
         <button v-if="locked&&!busy&&!needsCheck" type="button" class="text-button" @click="reset">{{ t('修改创作素材') }}</button>
         <button v-if="outcomeUnknown&&!checking" type="button" class="text-button" @click="reset">{{ t('开始新的照片创作') }}</button>

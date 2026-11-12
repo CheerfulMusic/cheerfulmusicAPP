@@ -117,9 +117,9 @@ export async function toggleReaction(trackId: string, kind: HotKind): Promise<vo
   busy.value = { ...busy.value, [trackId]: [...(busy.value[trackId] || []), kind] }
   try {
     await ensureCreator()
-    const result = await requestJson<HotStat & { liked: boolean; favorited: boolean }>(
+    const result = await requestJson<{ stat: HotStat; liked: boolean; favorited: boolean }>(
       `app/hot-songs/${encodeURIComponent(trackId)}/${kind}`, active ? 'DELETE' : 'POST')
-    stats.value = { ...stats.value, [trackId]: { trackId, plays: result.plays, likes: result.likes, favorites: result.favorites, comments: result.comments } }
+    stats.value = { ...stats.value, [trackId]: result.stat }
     mine.value = {
       liked: result.liked ? [...new Set([...mine.value.liked, trackId])] : mine.value.liked.filter(id => id !== trackId),
       favorited: result.favorited ? [...new Set([...mine.value.favorited, trackId])] : mine.value.favorited.filter(id => id !== trackId),
