@@ -10,23 +10,19 @@ import org.springframework.core.env.Environment;
 import org.springframework.jdbc.core.JdbcTemplate;
 @Configuration(proxyBeanMethods=false)
 public class LyricsCompositionConfiguration {
-    @Bean InspirationRewriter inspirationRewriter(Environment env){return new com.qingfeng.music.infrastructure.provider.DeepSeekInspirationRewriter(env.getProperty("qingfeng.providers.deepseek.api-key",env.getProperty("DEEPSEEK_API_KEY","")),env.getProperty("qingfeng.providers.deepseek.model","deepseek-flash"));}
+    @Bean InspirationRewriter inspirationRewriter(Environment env){return RewriteProviderSettings.writer(env);}
     // 无数据库的 local 演示环境没有积分账本，改写降级为不计费；mysql/test 下正常计费。
     @Bean InspirationRewriteService inspirationRewriteService(InspirationRewriter writer,Environment env,org.springframework.beans.factory.ObjectProvider<com.qingfeng.music.credits.RewriteCharges> charges){return new InspirationRewriteService(writer,env.getProperty("qingfeng.inspiration.rewrite.enabled",Boolean.class,true),env.getProperty("qingfeng.inspiration.rewrite.concurrent-global",Integer.class,4),charges.getIfAvailable(() -> com.qingfeng.music.credits.RewriteCharges.FREE));}
     @Bean @Profile({"mysql","test"})
     LyricLineRewriteService lyricLineRewriteService(WorkApi works,Environment env){
-        var writer=new com.qingfeng.music.infrastructure.provider.DeepSeekInspirationRewriter(
-            env.getProperty("qingfeng.providers.deepseek.api-key",env.getProperty("DEEPSEEK_API_KEY","")),
-            env.getProperty("qingfeng.providers.deepseek.model","deepseek-flash")).lyricLineMode();
+        var writer=RewriteProviderSettings.writer(env).lyricLineMode();
         var previews=new InspirationRewriteService(writer,env.getProperty("qingfeng.lyrics.line-rewrite.enabled",Boolean.class,true),
             env.getProperty("qingfeng.lyrics.line-rewrite.concurrent-global",Integer.class,4));
         return new LyricLineRewriteService(works,previews,env.getProperty("qingfeng.lyrics.line-rewrite.per-creator-per-15-minutes",Integer.class,12));
     }
     @Bean @Profile({"mysql","test"})
     LyricSelectionRewriteService lyricSelectionRewriteService(WorkApi works, Environment env, com.qingfeng.music.credits.RewriteCharges charges) {
-        var writer = new com.qingfeng.music.infrastructure.provider.DeepSeekInspirationRewriter(
-            env.getProperty("qingfeng.providers.deepseek.api-key", env.getProperty("DEEPSEEK_API_KEY", "")),
-            env.getProperty("qingfeng.providers.deepseek.model", "deepseek-flash")).lyricSelectionMode();
+        var writer = RewriteProviderSettings.writer(env).lyricSelectionMode();
         var rewriter = new InspirationRewriteService(writer, env.getProperty("qingfeng.lyrics.enabled", Boolean.class, false),
             env.getProperty("qingfeng.inspiration.rewrite.concurrent-global", Integer.class, 4), charges);
         return new LyricSelectionRewriteService(works, rewriter);

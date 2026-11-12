@@ -71,6 +71,15 @@ qingfeng:
       enabled: true
       scheduler-enabled: true
   providers:
+    # AI 改写（灵感改写 / 歌词行改写 / 音乐要求精简）默认走千问AI平台千问 Flash 快速版。
+    # base-url 必须与签发 key 的平台配套，不能混用阿里云百炼官方域名 dashscope.aliyuncs.com。
+    # 密钥严禁写入仓库：由服务器私有配置 qingfeng.providers.qwen.api-key，
+    # 或环境变量 aliyunqingfengKEY / DASHSCOPE_API_KEY 注入。
+    # 歌词生成主链路仍用 qingfeng.providers.deepseek.*，此处不影响。
+    qwen:
+      model: qwen3.8-flash
+      # 只配到 /v1 即可，代码会自动补齐 /chat/completions。
+      base-url: https://maas.qianwenaiapi.com/compatible-mode/v1
     kie:
       # 初始调优值，实际听感需要付费对照试听验证。
       style-weight: 0.85

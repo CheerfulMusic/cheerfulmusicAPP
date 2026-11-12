@@ -28,9 +28,11 @@ import java.util.Set;
 
 /**
  * 站内数据看板（内部工具）。
- * 鉴权完全在服务端：只有已登录、且 Google 账号邮箱命中私有白名单
- * qingfeng.analytics.viewer-emails 的账号才能拿到任何统计值。
- * 白名单为空 / 未登录 / 非 Google 账号 / 邮箱不匹配一律 fail-closed。
+ * 鉴权完全在服务端：只有已登录、且满足以下任一条件才能拿到任何统计值：
+ * ① Google / OIDC 已验证邮箱命中私有白名单 qingfeng.analytics.viewer-emails；
+ * ② creator_id 命中私有白名单 qingfeng.analytics.viewer-creator-ids
+ *    （用于纯手机号登录、没有任何已验证邮箱的账号）。
+ * 两种白名单都为空 / 未登录 / 邮箱不匹配一律 fail-closed。
  * 前端是否渲染入口不构成权限，绕过前端直接调接口同样拿不到数据。
  */
 @RestController
@@ -38,6 +40,7 @@ import java.util.Set;
 @Profile({"mysql", "test"})
 public class AnalyticsViewController {
     private static final String VIEWER_KEY = "qingfeng.analytics.viewer-emails";
+    private static final String VIEWER_IDS_KEY = "qingfeng.analytics.viewer-creator-ids";
     /**
      * 匿名化哨兵值行（visitor_id/session_id = 'ANONYMIZED'）必须排除在 UV / sessions / 页面 PV 之外，
      * 否则 COUNT(DISTINCT) 会把全部匿名化行误算成 1 个额外真实访客。正常数据无此哨兵值，行集合不变，口径零偏差。
@@ -61,6 +64,18 @@ public class AnalyticsViewController {
     private Set<String> viewers() {
         var result = new HashSet<String>();
         var raw = environment.getProperty(VIEWER_KEY, "");
+        for (var item : raw.split(",")) {
+            var value = item.trim().toLowerCase(Locale.ROOT);
+            if (!value.isEmpty()) result.add(value);
+        }
+        return result;
+    }
+
+    /** 纯手机号登录（无已验证邮箱）账号的显式授权白名单；未配置时为空，保持 fail-closed。 */
+    private Set<String> viewerCreatorIds() {
+        var result = new HashSet<String>();
+        var raw = environment.getProperty(VIEWER_IDS_KEY, "");
+        if (raw == null) return result; // 未配置 / mock 环境，不放松任何权限
         for (var item : raw.split(",")) {
             var value = item.trim().toLowerCase(Locale.ROOT);
             if (!value.isEmpty()) result.add(value);
@@ -101,12 +116,28 @@ public class AnalyticsViewController {
         }
     }
 
-    /** 审批人展示用账号标识：优先 Google 已验证邮箱，回退 OIDC。 */
+    /** 审批人展示用账号标识：优先 Google 已验证邮箱，回退 OIDC，最后用掩码手机号（绝不返回完整号码）。 */
     private Optional<String> account(String creatorId) {
         try {
             var google = googleEmail(creatorId);
             if (google.isPresent()) return google;
-            return oidcEmail(creatorId);
+            var oidc = oidcEmail(creatorId);
+            if (oidc.isPresent()) return oidc;
+            return oidcPhone(creatorId);
+        } catch (RuntimeException e) {
+            return Optional.empty();
+        }
+    }
+
+    /** 无邮箱时从 OIDC 身份表取已掩码手机号作为展示标识；查询失败不影响权限判定。 */
+    private Optional<String> oidcPhone(String creatorId) {
+        var template = jdbc.getIfAvailable();
+        if (template == null) return Optional.empty();
+        try {
+            return Optional.ofNullable(template.query(
+                    "SELECT phone_masked FROM creator_oidc_identity WHERE creator_id=?",
+                    rs -> rs.next() ? rs.getString(1) : null, creatorId))
+                    .filter(value -> value != null && !value.isBlank());
         } catch (RuntimeException e) {
             return Optional.empty();
         }
@@ -115,7 +146,10 @@ public class AnalyticsViewController {
     /** 包可见便于测试；任一身份源异常、邮箱为空、白名单为空一律 fail-closed。 */
     boolean allowed(String creatorId) {
         var allowed = viewers();
-        if (allowed.isEmpty() || creatorId == null || creatorId.isBlank()) return false;
+        var allowedIds = viewerCreatorIds();
+        if ((allowed.isEmpty() && allowedIds.isEmpty()) || creatorId == null || creatorId.isBlank()) return false;
+        // 显式 creator_id 授权优先：纯手机号账号没有已验证邮箱，无需依赖身份服务即可放行。
+        if (allowedIds.contains(creatorId.trim().toLowerCase(Locale.ROOT))) return true;
         try {
             var candidates = new HashSet<String>();
             googleEmail(creatorId).ifPresent(candidates::add);
