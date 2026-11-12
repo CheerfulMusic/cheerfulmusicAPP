@@ -15,6 +15,8 @@ export const router = createRouter({
     { path: '/works/:id', name: 'work-detail', component: () => import('../../modules/works/pages/WorkDetailPage.vue') },
     { path: '/gift/:token', name: 'gift', component: () => import('../../modules/gift/pages/PublicGiftPage.vue') },
     { path: '/account', name: 'identity', component: () => import('../../modules/identity/pages/IdentityPage.vue') },
+    { path: '/profile', name: 'artist-profile', component: () => import('../../modules/artist/pages/MyArtistProfilePage.vue') },
+    { path: '/artist/:id', name: 'artist-home', component: () => import('../../modules/artist/pages/PublicArtistPage.vue') },
     { path: '/legal/terms', component: { render: () => null }, beforeEnter: () => { window.location.replace('/legal/terms.html'); return false } },
     { path: '/legal/privacy', component: { render: () => null }, beforeEnter: () => { window.location.replace('/legal/privacy.html'); return false } },
     { path: '/recharge', name: 'recharge', component: () => import('../../modules/identity/pages/RechargePage.vue') },

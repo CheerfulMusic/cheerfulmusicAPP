@@ -152,6 +152,7 @@ async function recover() {
     <h1>{{ t('账号与登录') }}</h1>
     <p>{{ t('登录音乐账号，或使用找回码找回音乐。') }}</p>
   </header>
+  <RouterLink v-if="!props.embedded && (logtoState.authenticated || googleStatus.authenticated)" class="button secondary" to="/profile">{{ t('我的资料') }}</RouterLink>
   <p v-if="error" class="notice error" role="alert">{{ t(error) }}</p><p v-if="notice" class="notice success" role="status">{{ t(notice) }}</p>
   <p v-if="googleError" class="notice error" role="alert">{{ t(googleError) }}</p>
   <p v-if="googleNotice" class="notice" :class="googleNoticeKind" role="status">{{ t(googleNotice) }}</p>

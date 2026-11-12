@@ -34,7 +34,7 @@ public class WebSecurityConfiguration {
                 .dispatcherTypeMatchers(jakarta.servlet.DispatcherType.ERROR).permitAll()
                 .requestMatchers(org.springframework.http.HttpMethod.GET,"/api/public/invite/status").permitAll()
                 .requestMatchers(org.springframework.http.HttpMethod.POST,"/api/public/invite/enter").permitAll()
-                .requestMatchers(org.springframework.http.HttpMethod.GET,"/","/index.html","/assets/**","/brand/**","/media/**","/create","/create/photo","/works","/works/*","/gift/*","/account","/recharge","/analytics","/agent","/legal/**").permitAll()
+                .requestMatchers(org.springframework.http.HttpMethod.GET,"/","/index.html","/assets/**","/brand/**","/media/**","/create","/create/photo","/works","/works/*","/gift/*","/account","/profile","/artist/*","/recharge","/analytics","/agent","/legal/**").permitAll()
                 .requestMatchers(org.springframework.http.HttpMethod.HEAD,"/gift/*","/brand/share-default-cover.png").permitAll()
                 .requestMatchers("/api/public/system/info", "/api/public/csrf", "/api/public/session", "/api/public/session/recover", "/actuator/health").permitAll()
                 .requestMatchers(org.springframework.http.HttpMethod.POST,"/api/public/events").permitAll()
@@ -51,6 +51,8 @@ public class WebSecurityConfiguration {
                 .requestMatchers(org.springframework.http.HttpMethod.POST,"/api/public/auth/sms/deliver").permitAll()
                 .requestMatchers(org.springframework.http.HttpMethod.GET,"/api/public/gifts/*","/api/public/gifts/*/audio","/api/public/gifts/*/cover").permitAll()
                 .requestMatchers(org.springframework.http.HttpMethod.HEAD,"/api/public/gifts/*","/api/public/gifts/*/audio","/api/public/gifts/*/cover").permitAll()
+                .requestMatchers(org.springframework.http.HttpMethod.GET,"/api/public/artists/*","/api/public/artists/*/avatar/*","/api/public/artists/*/songs/*/*/audio","/api/public/artists/*/songs/*/*/cover").permitAll()
+                .requestMatchers(org.springframework.http.HttpMethod.HEAD,"/api/public/artists/*","/api/public/artists/*/avatar/*","/api/public/artists/*/songs/*/*/audio","/api/public/artists/*/songs/*/*/cover").permitAll()
                 .requestMatchers("/api/app/**").hasRole("CREATOR")
                 .anyRequest().denyAll())
             .exceptionHandling(errors -> errors.authenticationEntryPoint((request,response,error)->{

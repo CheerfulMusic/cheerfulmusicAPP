@@ -8,6 +8,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 /** 内测期间只拦截 /api 与 /media；页面、静态资源、门禁端点、支付回调与已放行会话不受影响。 */
 public final class InviteGateFilter extends OncePerRequestFilter {
@@ -18,6 +19,9 @@ public final class InviteGateFilter extends OncePerRequestFilter {
     private static final Set<String> ANALYTICS = Set.of(
             "/api/public/events", "/api/app/analytics/access", "/api/app/analytics/summary");
     private static final String GOOGLE_CALLBACK = "/api/public/auth/google/callback";
+    private static final String PUBLIC_ID = "[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}";
+    private static final Pattern ARTIST_READ = Pattern.compile("/api/public/artists/" + PUBLIC_ID
+            + "(?:/avatar/" + PUBLIC_ID + "|/songs/" + PUBLIC_ID + "/[1-9][0-9]{0,18}/(?:audio|cover))?");
 
     private final InviteGateService gate;
 
@@ -29,13 +33,14 @@ public final class InviteGateFilter extends OncePerRequestFilter {
         String path = request.getServletPath();
         boolean apiLike = path.startsWith("/api/") || path.startsWith("/media/");
         boolean webhook = "POST".equals(request.getMethod()) && WEBHOOKS.contains(path);
-        boolean publicGift = ("GET".equals(request.getMethod()) || "HEAD".equals(request.getMethod()))
-                && path.matches("/api/public/gifts/[A-Za-z0-9_-]{43}(?:/audio|/cover)?");
+        boolean read = "GET".equals(request.getMethod()) || "HEAD".equals(request.getMethod());
+        boolean publicGift = read && path.matches("/api/public/gifts/[A-Za-z0-9_-]{43}(?:/audio|/cover)?");
+        boolean publicArtist = read && ARTIST_READ.matcher(path).matches();
         boolean analytics = ANALYTICS.contains(path);
         // 热歌推荐是首页公开展示，播放计次也不含个人信息；内测门禁不应让它变成 0。
         boolean hotSong = ("GET".equals(request.getMethod()) && "/api/public/hot-songs".equals(path))
                 || ("POST".equals(request.getMethod()) && path.matches("/api/public/hot-songs/[A-Za-z0-9_-]{1,64}/play"));
-        if (!gate.settings().enabled() || !apiLike || publicGift || ENTRANCES.contains(path) || analytics || hotSong || webhook
+        if (!gate.settings().enabled() || !apiLike || publicGift || publicArtist || ENTRANCES.contains(path) || analytics || hotSong || webhook
                 || gate.expiresAt(request) > 0) {
             chain.doFilter(request, response);
             return;
