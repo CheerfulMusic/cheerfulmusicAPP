@@ -1,5 +1,6 @@
 package com.qingfeng.music.server.invite;
 
+import com.qingfeng.music.server.security.CreatorSessionFilter;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -34,7 +35,8 @@ public final class InviteGateFilter extends OncePerRequestFilter {
         boolean apiLike = path.startsWith("/api/") || path.startsWith("/media/");
         boolean webhook = "POST".equals(request.getMethod()) && WEBHOOKS.contains(path);
         boolean read = "GET".equals(request.getMethod()) || "HEAD".equals(request.getMethod());
-        boolean publicGift = read && path.matches("/api/public/gifts/[A-Za-z0-9_-]{43}(?:/audio|/cover)?");
+        boolean publicGift = read && path.matches("/api/public/gifts/[A-Za-z0-9_-]{43}(?:/audio|/cover)?")
+                && !CreatorSessionFilter.isGiftDownload(request);
         boolean publicArtist = read && ARTIST_READ.matcher(path).matches();
         boolean analytics = ANALYTICS.contains(path);
         // 热歌推荐是首页公开展示，播放计次也不含个人信息；内测门禁不应让它变成 0。

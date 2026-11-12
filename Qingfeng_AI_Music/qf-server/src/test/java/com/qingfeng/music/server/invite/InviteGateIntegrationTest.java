@@ -14,8 +14,11 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.regex.Pattern;
 import javax.imageio.ImageIO;
+import com.qingfeng.music.credits.CreditsLedger;
 import com.qingfeng.music.identity.api.IdentityApi;
+import com.qingfeng.music.lyrics.api.LyricsApi;
 import com.qingfeng.music.media.api.MediaApi;
+import com.qingfeng.music.sharing.api.SharingApi;
 import com.qingfeng.music.work.api.WorkApi;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.junit.jupiter.api.Test;
@@ -103,8 +106,11 @@ class InviteGateIntegrationTest {
 
     @org.springframework.beans.factory.annotation.Autowired org.springframework.jdbc.core.JdbcTemplate jdbc;
     @Autowired IdentityApi identity;
+    @Autowired LyricsApi lyrics;
     @Autowired WorkApi works;
     @Autowired MediaApi media;
+    @Autowired SharingApi sharing;
+    @Autowired CreditsLedger credits;
 
     @Test void sharedSongIsReadableWithoutInvitationOrSessionButOwnerRoutesStayPrivate() throws Exception {
         var owner = browser(); assertEquals(200, enter(owner).statusCode());
@@ -148,6 +154,62 @@ class InviteGateIntegrationTest {
         jdbc.update("UPDATE share_link SET expires_at=? WHERE work_id=?", java.sql.Timestamp.from(java.time.Instant.now().minusSeconds(60)), work);
         assertEquals(404, send(guest, "GET", "/api/public/gifts/" + nextToken, null, null).statusCode());
         assertEquals(404, send(guest, "GET", "/api/public/gifts/" + nextToken + "/audio", null, null).statusCode());
+    }
+
+    @Test void giftDownloadRequiresAdmissionVerifiedIdentityAndCsrf() throws Exception {
+        String owner = identity.create().creatorId();
+        var work = works.create(owner, new WorkApi.Draft("Friend", "生日", "Story", "Message", "民谣", "Gift"));
+        var revision = lyrics.save(owner, work.id(), work.version(), "Gift", "A line to sing");
+        lyrics.confirm(owner, work.id(), revision.id());
+        byte[] sample = wav(17);
+        var asset = media.importAudio(owner, work.id(), new ByteArrayInputStream(sample));
+        String gift = "/api/public/gifts/" + sharing.create(owner, work.id(), revision.id(), asset.id()).token();
+        String unlock = gift + "/download";
+        String attachment = gift + "/audio?download=true";
+
+        var visitor = HttpClient.newHttpClient();
+        var publicAudio = readBytes(visitor, gift + "/audio?download=false");
+        assertEquals(200, publicAudio.statusCode());
+        assertArrayEquals(sample, publicAudio.body());
+        assertTrue(send(visitor, "GET", unlock, null, null).body().contains("INVITE_REQUIRED"));
+        assertTrue(send(visitor, "GET", gift + "/audio?download=on", null, null).body().contains("INVITE_REQUIRED"));
+
+        var recipient = browser();
+        assertEquals(200, enter(recipient).statusCode());
+        String csrf = field(send(recipient.http(), "GET", "/api/public/csrf", null, null).body(), "token");
+        var session = send(recipient.http(), "POST", "/api/public/session", "{}", csrf);
+        assertEquals(200, session.statusCode(), session.body());
+        String creator = field(session.body(), "creatorId");
+        var guest = send(recipient.http(), "GET", unlock, null, null);
+        assertEquals(409, guest.statusCode(), guest.body());
+        assertTrue(guest.body().contains("DOWNLOAD_LOGIN_REQUIRED"));
+        linkFixtureAccount(creator);
+        credits.credit(creator, 20, "gift-download-test:" + creator);
+        long before = credits.balance(creator);
+        var locked = send(recipient.http(), "GET", unlock, null, null);
+        assertEquals(200, locked.statusCode(), locked.body());
+        assertTrue(locked.body().contains("\"unlocked\":false"));
+        assertTrue(locked.body().contains("\"price\":10"));
+        assertEquals(404, readBytes(recipient.http(), attachment).statusCode());
+        assertEquals(403, send(recipient.http(), "POST", unlock, "{}", null).statusCode());
+        assertEquals(before, credits.balance(creator));
+
+        for (int attempt = 0; attempt < 2; attempt++) {
+            var unlocked = send(recipient.http(), "POST", unlock, "{}", csrf);
+            assertEquals(200, unlocked.statusCode(), unlocked.body());
+            assertTrue(unlocked.body().contains("\"unlocked\":true"));
+            assertEquals(before - 10, credits.balance(creator));
+        }
+        var downloaded = readBytes(recipient.http(), attachment);
+        assertEquals(200, downloaded.statusCode());
+        assertTrue(downloaded.headers().firstValue("Content-Disposition").orElseThrow().startsWith("attachment"));
+        assertArrayEquals(sample, downloaded.body());
+
+        var other = artistSession("Other download recipient");
+        assertEquals(404, readBytes(other.http(), attachment).statusCode());
+        sharing.revokeAll(owner, work.id());
+        assertEquals(404, readBytes(visitor, gift + "/audio").statusCode());
+        assertArrayEquals(sample, readBytes(recipient.http(), attachment).body());
     }
 
     @Test void artistPublicationPinsTheAudioAndClosesGuestAccessWhenRemovedOrHidden() throws Exception {

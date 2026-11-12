@@ -49,6 +49,7 @@ public class WebSecurityConfiguration {
                 .requestMatchers(org.springframework.http.HttpMethod.POST,"/api/public/payments/airwallex/webhook").permitAll()
                 .requestMatchers(org.springframework.http.HttpMethod.POST,"/api/public/paypal/webhook").permitAll()
                 .requestMatchers(org.springframework.http.HttpMethod.POST,"/api/public/auth/sms/deliver").permitAll()
+                .requestMatchers(CreatorSessionFilter::isGiftDownload).hasRole("CREATOR")
                 .requestMatchers(org.springframework.http.HttpMethod.GET,"/api/public/gifts/*","/api/public/gifts/*/audio","/api/public/gifts/*/cover").permitAll()
                 .requestMatchers(org.springframework.http.HttpMethod.HEAD,"/api/public/gifts/*","/api/public/gifts/*/audio","/api/public/gifts/*/cover").permitAll()
                 .requestMatchers(org.springframework.http.HttpMethod.GET,"/api/public/artists/*","/api/public/artists/*/avatar/*","/api/public/artists/*/cover/*","/api/public/artists/*/songs/*/*/audio","/api/public/artists/*/songs/*/*/cover").permitAll()
