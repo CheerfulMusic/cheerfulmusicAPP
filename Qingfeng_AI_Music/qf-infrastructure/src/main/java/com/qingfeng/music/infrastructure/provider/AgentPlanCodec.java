@@ -31,14 +31,15 @@ public final class AgentPlanCodec {
                     if(!step.isObject())throw invalid();
                     String action=step.path("action").asText("");
                     requireAction(action,allowed,false);
-                    steps.add(new AgentChatModel.Step(action,arguments(step.get("args"))));
+                    steps.add(new AgentChatModel.Step(action,reviewedArguments(action,arguments(step.get("args")),context)));
                 }
                 return fromSteps(reply,steps);
             }
             String action=plan.path("action").asText("chat");
             requireAction(action,allowed,true);
-            return new AgentChatModel.Plan(action,arguments(plan.get("args")),reply);
-        } catch(IllegalArgumentException error) {throw error;}
+            return new AgentChatModel.Plan(action,reviewedArguments(action,arguments(plan.get("args")),context),reply);
+        } catch(AgentToolSchemaCatalog.ClarificationRequired clarification) {return clearClarification();}
+        catch(IllegalArgumentException error) {throw error;}
         catch(Exception error) {throw invalid();}
     }
 
@@ -62,7 +63,7 @@ public final class AgentPlanCodec {
                         requireAction(action,allowed,false);
                         Map<String,Object> args=arguments(object(function.path("arguments").asText()));
                         // Unlike a provider-supplied schema, these definitions are reviewed application code.
-                        args=AgentToolSchemaCatalog.normalizeNativeArguments(action,args);
+                        args=AgentToolSchemaCatalog.normalizeNativeArguments(action,args,context.text());
                         steps.add(new AgentChatModel.Step(action,args));
                     }
                     // Function requests may have no textual content. Never invent a successful result.
@@ -80,7 +81,8 @@ public final class AgentPlanCodec {
             }
             if(text.startsWith("{")||text.startsWith("["))return parse(text,context);
             return new AgentChatModel.Plan("chat",Map.of(),reply(text));
-        } catch(IllegalArgumentException error) {throw error;}
+        } catch(AgentToolSchemaCatalog.ClarificationRequired clarification) {return clearClarification();}
+        catch(IllegalArgumentException error) {throw error;}
         catch(Exception error) {throw invalid();}
     }
 
@@ -104,9 +106,16 @@ public final class AgentPlanCodec {
     private static void requireAction(String action,Set<String> allowed,boolean chatAllowed) {
         if(!allowed.contains(action)||(!chatAllowed&&"chat".equals(action)))throw invalid();
     }
+    private static Map<String,Object> reviewedArguments(String action,Map<String,Object> args,AgentChatModel.Context context) {
+        // The JSON fallback is a transport compatibility path, never a way around a reviewed schema.
+        return AgentToolSchemaCatalog.supports(action) ? AgentToolSchemaCatalog.normalizeNativeArguments(action,args,context.text()) : args;
+    }
     private static String reply(String value) {
         if(value==null||value.isBlank())throw invalid();
         return value.length()>8000?value.substring(0,8000):value;
+    }
+    private static AgentChatModel.Plan clearClarification() {
+        return new AgentChatModel.Plan("chat",Map.of(),"请先单独说明要清空的具体设置或资料，再继续其他操作。这次尚未执行计划，也没有开始生成。");
     }
     private static AgentChatModel.Plan fromSteps(String reply,List<AgentChatModel.Step> steps) {
         var first=steps.get(0);return new AgentChatModel.Plan(first.action(),first.args(),reply,steps);

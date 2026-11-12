@@ -1,6 +1,7 @@
 package com.qingfeng.music.infrastructure.provider;
 
 import com.qingfeng.music.agent.api.AgentChatModel;
+import com.qingfeng.music.agent.application.AgentChatPolicy;
 import java.util.*;
 
 /**
@@ -32,11 +33,43 @@ public final class AgentToolSchemaCatalog {
         validate(schema,arguments,0);
     }
 
-    /** JSON Schema integer includes 90.0; downstream typed business arguments require Java Integer. */
-    @SuppressWarnings("unchecked")
+    /** Omitted optional values preserve existing fields; schema integers normalize for domain parsers. */
     public static Map<String,Object> normalizeNativeArguments(String action,Map<String,Object> arguments) {
+        return normalizeNativeArguments(action,arguments,null);
+    }
+    @SuppressWarnings("unchecked")
+    public static Map<String,Object> normalizeNativeArguments(String action,Map<String,Object> arguments,String originalRequest) {
         validateNativeArguments(action,arguments);
-        return (Map<String,Object>)normalize(SCHEMAS.get(action),arguments);
+        if(needsClearClarification(action,arguments,originalRequest))throw new ClarificationRequired();
+        var result=(Map<String,Object>)normalize(SCHEMAS.get(action),arguments);
+        if(result.get("instruments") instanceof List<?> values&&values.isEmpty()&&!AgentChatPolicy.clearAllMusicOptionsRequested(originalRequest,"instruments"))result.remove("instruments");
+        if(result.get("choices") instanceof Map<?,?> choices) {
+            choices.entrySet().removeIf(entry->entry.getValue() instanceof List<?> values&&values.isEmpty()&&!AgentChatPolicy.clearAllMusicOptionsRequested(originalRequest,String.valueOf(entry.getKey())));
+            if(choices.isEmpty())result.remove("choices");
+        }
+        return result;
+    }
+    static final class ClarificationRequired extends IllegalArgumentException {
+        private ClarificationRequired(){super("Clearing intent needs clarification");}
+    }
+    private static boolean needsClearClarification(String action,Map<String,Object> args,String text) {
+        if(text==null||!Set.of("set_style","generate_song","update_work","update_music_settings","preview_music_settings").contains(action))return false;
+        if(AgentChatPolicy.clearAllMusicOptionsRequested(text,"instruments")||AgentChatPolicy.clearAllMusicOptionsRequested(text,"genre"))return false;
+        if(!java.util.regex.Pattern.compile("清空|清除|去掉|移除|重置|留空|设为空|(?i)\\b(?:clear|remove|reset|empty)\\b").matcher(text).find())return false;
+        if(hasEmptyCollection(args))return true;
+        // Null/blank in an unrelated optional field is still just an omitted value. Only an
+        // explicit reference to editable data makes silent omission unsafe for a later step.
+        return hasEmptyScalar(args)&&java.util.regex.Pattern.compile("乐器|配器|风格|曲风|选项|情绪|参数|提示词|描述|寄语|故事|收礼人|场景|名称|标题|(?i)instrument|genre|emotion|mood|setting|prompt|recipe|title|story|recipient|message").matcher(text).find();
+    }
+    private static boolean hasEmptyCollection(Object value) {
+        if(value instanceof List<?> values)return values.isEmpty()||values.stream().anyMatch(AgentToolSchemaCatalog::hasEmptyCollection);
+        if(value instanceof Map<?,?> values)return values.values().stream().anyMatch(child->child instanceof Map<?,?> map&&map.isEmpty()||hasEmptyCollection(child));
+        return false;
+    }
+    private static boolean hasEmptyScalar(Object value) {
+        if(value==null||value instanceof String text&&text.isBlank())return true;
+        if(value instanceof Map<?,?> values)return values.values().stream().anyMatch(AgentToolSchemaCatalog::hasEmptyScalar);
+        return false;
     }
 
     private static Map<String,Map<String,Object>> schemas() {
@@ -109,8 +142,12 @@ public final class AgentToolSchemaCatalog {
             case "integer" -> Integer.valueOf(((Number)value).intValue());
             case "object" -> {
                 var properties=(Map<String,Object>)schema.getOrDefault("properties",Map.of());
+                var required=(List<String>)schema.getOrDefault("required",List.of());
                 var result=new LinkedHashMap<String,Object>();
                 ((Map<String,Object>)value).forEach((key,item)->{
+                    // LLMs commonly fill unused fields with null/blank. They are not an instruction
+                    // to erase stored work details, settings or an imported audio's lyric binding.
+                    if(!required.contains(key)&&(item==null||item instanceof String text&&text.isBlank()))return;
                     Object child=properties.getOrDefault(key,schema.get("additionalProperties"));
                     result.put(key,normalize((Map<String,Object>)child,item));
                 });
@@ -124,7 +161,8 @@ public final class AgentToolSchemaCatalog {
     @SuppressWarnings("unchecked")
     private static void validate(Map<String,Object> schema,Object value,int depth) {
         if(depth>8)throw invalid();
-        // Optional nulls remain compatible with existing argument defaults; required fields below reject them.
+        // Optional nulls are accepted for transport compatibility, then removed by normalize().
+        // Required fields below reject null before any tool executes.
         if(value==null)return;
         String type=(String)schema.get("type");
         switch(type) {

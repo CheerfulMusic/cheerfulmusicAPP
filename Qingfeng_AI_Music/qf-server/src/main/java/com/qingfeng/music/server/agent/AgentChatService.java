@@ -26,7 +26,7 @@ public final class AgentChatService {
     }
     private record Outcome(String action,String shareUrl,String songId,String revisionId,String assetId) {}
     private record Pending(List<Step> steps,String authorizedText,String songId,String revisionId,
-                           String taskId,String continuationKey,Instant createdAt) {
+                           String taskId,String continuationKey,Instant createdAt,boolean workResolved,boolean versionResolved) {
         boolean automatic(){return continuationKey!=null;}
     }
     private static final String CONTINUE="继续已安排的操作";
@@ -93,6 +93,9 @@ public final class AgentChatService {
             List<Step> steps=normalizedSteps(plan.orderedSteps(),authorizedText);validatePlan(steps);
             final String originalIntent=authorizedText;
             String writtenLyricsWork=null;
+            // Confirmations/continuations already carry a server-frozen object binding.
+            boolean resolvedWork=(confirmation||continuation)&&pending.workResolved(),resolvedVersion=(confirmation||continuation)&&pending.versionResolved();
+            SongCard resolvedTarget=resolvedWork||resolvedVersion?current:null;
             for(int i=0;i<steps.size();i++) {
                 AgentRequestScope.check();
                 turns.assertActive(owner,conversation,key);
@@ -107,7 +110,7 @@ public final class AgentChatService {
                     if(AgentChatPolicy.paidMusicAction(proposed)&&!AgentChatPolicy.chatOnly(authorizedText)&&!AgentChatPolicy.deniesAction(authorizedText)){
                         args.putIfAbsent("text",authorizedText);
                         ask(owner,conversation,replaceFirst(steps.subList(i,steps.size()),proposed,args),authorizedText,current,
-                            "创作方向已准备好。生成音频会使用创作额度；确认后开始。",null,null);
+                             "创作方向已准备好。生成音频会使用创作额度；确认后开始。",null,null,resolvedWork,resolvedVersion);
                     } else append(owner,conversation,Map.of("text","我还没有执行这项操作。请明确告诉我需要处理的作品和动作；也可以继续讨论想法。"));
                     break;
                 }
@@ -122,7 +125,12 @@ public final class AgentChatService {
                     String target=String.valueOf(args.getOrDefault("title",current==null?"当前账号":current.title()));
                     if(args.get("workId")!=null)target+="（作品 "+args.get("workId")+"，版本 "+args.getOrDefault("expectedVersion","当前")+"）";
                     ask(owner,conversation,replaceFirst(steps.subList(i,steps.size()),proposed,args),authorizedText,current,
-                        "请确认："+capability.description()+"。目标："+target+"。",null,null);break;
+                         "请确认："+capability.description()+"。目标："+target+"。",null,null,resolvedWork,resolvedVersion);break;
+                }
+                if(SOCIAL.contains(proposed)&&needsResolvedSocialTarget(proposed,authorizedText)
+                        &&(!sameTarget(resolvedTarget,current)||versionReference(authorizedText)&&!resolvedVersion
+                            ||requiresWorkResolution(authorizedText)&&!resolvedWork)) {
+                    append(owner,conversation,Map.of("text","还没有确认你指定的那首作品或版本，本次没有执行这项操作。请先从作品或版本列表选择目标，再继续。"));break;
                 }
                 String stepKey=steps.size()==1?key:derivedKey(key+":"+i+":"+proposed);
                 progress(owner,conversation,key,"tool_started",proposed,i+1,"正在处理："+capability.description());
@@ -162,6 +170,17 @@ public final class AgentChatService {
                     action=proposed;append(owner,conversation,Map.of("text",completedReply(tool)));
                 } else throw new DomainException("AGENT_ACTION_UNAVAILABLE","当前环境未启用这项操作。");
                 SongCard updated=current(owner);
+                if(Set.of("select_version","select_audio").contains(proposed)) {
+                    resolvedWork=resolvedWork&&resolvedTarget!=null&&updated!=null&&Objects.equals(resolvedTarget.songId(),updated.songId());
+                    resolvedTarget=updated;resolvedVersion=true;
+                } else if("select_work".equals(proposed)) {
+                    resolvedTarget=updated;resolvedWork=updated!=null;resolvedVersion=false;
+                } else if(Set.of("create_work","generate_lyrics","generate_song","save_lyrics").contains(proposed)&&resolvedTarget!=null) {
+                    boolean sameWork=updated!=null&&Objects.equals(resolvedTarget.songId(),updated.songId());
+                    resolvedWork=resolvedWork&&sameWork;
+                    resolvedVersion=resolvedVersion&&sameWork&&Objects.equals(resolvedTarget.revisionId(),updated.revisionId());
+                    resolvedTarget=resolvedWork||resolvedVersion?updated:null;
+                }
                 if(("generate_lyrics".equals(proposed)||"save_lyrics".equals(proposed))&&updated!=null)writtenLyricsWork=updated.songId();
                 if(i+1<steps.size()&&"edit_cover".equals(proposed)) {
                     append(owner,conversation,Map.of("text","封面任务已提交，后续步骤需要等新封面完成后再执行。可以查询封面列表查看进度。"));break;
@@ -171,7 +190,7 @@ public final class AgentChatService {
                     if(remaining.stream().anyMatch(s->!AgentChatPolicy.actionRequested(s.action(),originalIntent)&&!"read".equals(capability(s.action()).effect()))){
                         append(owner,conversation,Map.of("text","生成任务已提交。后续动作还需要你明确说明，暂未安排。"));break;
                     }
-                    ask(owner,conversation,remaining,authorizedText,updated,"任务正在处理，完成后会继续你已安排的后续操作。",updated.taskId(),derivedKey(key+":continue"));break;
+                    ask(owner,conversation,remaining,authorizedText,updated,"任务正在处理，完成后会继续你已安排的后续操作。",updated.taskId(),derivedKey(key+":continue"),resolvedWork,resolvedVersion);break;
                 }
                 // A query can resolve the IDs needed by the original instruction ('上一版').
                 // Replan once using only persisted tool results; original authorization never grows.
@@ -208,10 +227,11 @@ public final class AgentChatService {
     }
     private void validatePlan(List<Step> steps) {
         if(steps.isEmpty()||steps.size()>6)throw new DomainException("INVALID_AGENT_PLAN","一次最多处理六个步骤，请把任务分成几次完成。");
-        int audio=0,lyrics=0,clientMedia=0;var writes=new HashSet<Step>();
+        int audio=0,lyrics=0,clientMedia=0;var writes=new HashSet<Step>();var paidTypes=new HashSet<String>();
         for(var step:steps){
             if("chat".equals(step.action()))continue;
             var capability=capability(step.action());
+            if("paid".equals(capability.effect())&&!paidTypes.add(step.action()))throw new DomainException("INVALID_AGENT_PLAN","一次请求每种付费操作最多执行一次。请先查看这次结果，再继续下一次创作。");
             if(clientMedia>0&&!"read".equals(capability.effect()))throw new DomainException("INVALID_AGENT_PLAN","一次只能播放或下载一首作品；之后只能查询信息。请先完成作品切换和修改，再单独播放或下载。");
             if(CLIENT_MEDIA.contains(step.action()))clientMedia++;
             if(!"read".equals(capability.effect())&&!writes.add(step))throw new DomainException("INVALID_AGENT_PLAN","计划包含重复操作，本次没有继续执行。请明确每一步需要处理的作品。");
@@ -219,10 +239,11 @@ public final class AgentChatService {
         }
         if(audio>1||lyrics>1)throw new DomainException("INVALID_AGENT_PLAN","一次请求最多生成一组音乐和一版歌词。请先完成当前版本，再继续创作。");
     }
-    private void ask(String owner,String conversation,List<Step> steps,String authorizedText,SongCard current,String text,String taskId,String continuationKey) {
+    private void ask(String owner,String conversation,List<Step> steps,String authorizedText,SongCard current,String text,String taskId,String continuationKey,boolean workResolved,boolean versionResolved) {
         var body=new LinkedHashMap<String,Object>();body.put("text",text);body.put("kind",continuationKey==null?"confirmation":"waiting");
         body.put("pendingSteps",steps);body.put("authorizedText",authorizedText);body.put("pendingSongId",current==null?null:current.songId());
         body.put("pendingRevisionId",current==null?null:current.revisionId());body.put("pendingTaskId",taskId);body.put("continuationKey",continuationKey);
+        body.put("pendingWorkResolved",workResolved);body.put("pendingVersionResolved",versionResolved);
         body.put("commands",continuationKey==null?List.of(new Command("确认执行","确认执行","send"),new Command("取消","取消操作","send")):List.of(new Command("停止后续操作","停止后续操作","send")));append(owner,conversation,body);
     }
     private Pending pending(List<AgentMessage> history) {
@@ -233,7 +254,7 @@ public final class AgentChatService {
             if(!"assistant".equals(m.role())||!AgentMessage.KIND_TEXT.equals(m.kind()))continue;
             var b=json.readTree(m.contentJson());if("progress".equals(b.path("kind").asText()))continue;if(!b.path("pendingSteps").isArray())return null;
             List<Step> steps=new ArrayList<>();for(var s:b.path("pendingSteps"))steps.add(new Step(s.path("action").asText(),json.convertValue(s.path("args"),Map.class)));
-            return new Pending(steps,b.path("authorizedText").asText(""),b.path("pendingSongId").asText(null),b.path("pendingRevisionId").asText(null),b.path("pendingTaskId").asText(null),b.path("continuationKey").asText(null),m.createdAt());
+            return new Pending(steps,b.path("authorizedText").asText(""),b.path("pendingSongId").asText(null),b.path("pendingRevisionId").asText(null),b.path("pendingTaskId").asText(null),b.path("continuationKey").asText(null),m.createdAt(),b.path("pendingWorkResolved").asBoolean(false),b.path("pendingVersionResolved").asBoolean(false));
         }return null;
     }
     private boolean pendingValid(Pending p,SongCard current,boolean automatic) {
@@ -301,6 +322,36 @@ public final class AgentChatService {
     private static boolean sameMedia(Outcome expected,SongCard card) {
         return card!=null&&expected.songId()!=null&&expected.assetId()!=null
             &&Objects.equals(expected.songId(),card.songId())&&Objects.equals(expected.revisionId(),card.revisionId())&&Objects.equals(expected.assetId(),card.assetId());
+    }
+    private static boolean sameTarget(SongCard expected,SongCard current) {
+        return expected!=null&&current!=null&&Objects.equals(expected.songId(),current.songId())
+            &&Objects.equals(expected.revisionId(),current.revisionId())&&Objects.equals(expected.assetId(),current.assetId())
+            &&Objects.equals(expected.taskId(),current.taskId());
+    }
+    private static boolean needsResolvedSocialTarget(String action,String text) {
+        if(text==null)return false;
+        // A model omitting select_work must not redirect a named/numbered request to current work.
+        if(java.util.regex.Pattern.compile("第[一二三四五六七八九十百0-9]+|(?:上|下)(?:一)?(?:首|版)|[《》“”‘’「」\\\"']|workId|revisionId|assetId",java.util.regex.Pattern.CASE_INSENSITIVE).matcher(text).find())return true;
+        for(String clause:text.split("[，。；,;\\n]|(?:然后|接着|并且|并|再)")) {
+            if(!AgentChatPolicy.explicitAction(action,clause))continue;
+            String targetClause=clause.strip().replaceFirst("^(?:生成完成后|生成好后|完成之后|完成后)","").strip();
+            if(action.equals(AgentChatPolicy.currentSocial(targetClause)))continue;
+            if(targetClause.matches("(?i)(?:please )?(?:share|play|download|like|unlike|cancel)(?: (?:it|this(?: song| work)?|the current (?:song|work|task)))?[.!]*"))continue;
+            return true;
+        }
+        return false;
+    }
+    private static boolean versionReference(String text) {
+        return text!=null&&java.util.regex.Pattern.compile("(?:上|下)(?:一)?版|第[一二三四五六七八九十百0-9]+版|某版|版本|音频|revisionId|assetId|previous version",java.util.regex.Pattern.CASE_INSENSITIVE).matcher(text).find();
+    }
+    private static boolean requiresWorkResolution(String text) {
+        if(!versionReference(text))return true;
+        // Only these unambiguous current-work version requests can skip selecting the work.
+        // Everything more complex needs both bindings, rather than guessing what a name means.
+        String version="(?:当前(?:作品|歌曲)的?)?(?:上一版|下一版|第[一二三四五六七八九十0-9]+版)";
+        String action="(?:分享|播放|试听|下载|点赞|取消点赞|撤销分享)";
+        String simple="(?:(?:请|帮我|请帮我)?(?:"+action+version+"|(?:切回|切换到|选择)"+version+"(?:并|然后|再)?"+action+"(?:它|这版)?))";
+        return !text.strip().replaceFirst("[。.!！]+$","").matches("(?i)(?:"+simple+"|(?:please )?(?:share|play|download) (?:the )?previous version)");
     }
     private AgentApplicationActions executor(String action){return applications.stream().filter(a->a.supports(action)).findFirst().orElse(null);}
     private Capability capability(String action){return capabilities().stream().filter(c->c.id().equals(action)).findFirst().orElseThrow(()->new DomainException("UNKNOWN_AGENT_ACTION","这项功能尚未接入，当前没有执行任何后续操作。"));}
