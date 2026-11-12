@@ -87,14 +87,14 @@ describe('真实 Agent 对话与作品', () => {
     expect(api.send).not.toHaveBeenCalled()
   })
   it('作品列表选择按钮走同一消息接口，超时后重试保留原请求键', async () => {
-    const result = { ...message('找到你的作品'), contentJson: JSON.stringify({ text: '找到你的作品', kind: 'works', items: [{ id: 'w2', title: '旅行日记', subtitle: '已完成', data: { workId: 'w2' } }], commands: [{ kind: 'send', label: '选择旅行日记', text: '选择作品 w2' }] }) }
+    const result = { ...message('找到你的作品'), contentJson: JSON.stringify({ text: '找到你的作品', kind: 'works', items: [{ id: 'w2', title: '旅行日记', subtitle: '已完成', data: { workId: 'w2' } }], commands: [{ kind: 'send', label: '打开「旅行日记」', text: '打开作品 w2' }] }) }
     const { wrapper } = await page(state({ messages: [result] }))
     expect(wrapper.find('.agent-result-items').text()).toContain('旅行日记')
     api.send.mockRejectedValueOnce(new Error('网络中断'))
-    await wrapper.find('.agent-result-commands button').trigger('click'); await flushPromises()
+    await wrapper.find('.agent-work-open').trigger('click'); await flushPromises()
     const first = api.send.mock.calls[0]!
-    expect(first[1]).toBe('选择作品 w2')
-    expect(wrapper.find('.agent-result-commands button').attributes('disabled')).toBeDefined()
+    expect(first[1]).toBe('打开作品 w2')
+    expect(wrapper.find('.agent-work-open').attributes('disabled')).toBeDefined()
     api.send.mockResolvedValue(state({ songCard: { ...song, songId: 'w2', title: '旅行日记' } }))
     await wrapper.find('.agent-upload-error button').trigger('click'); await flushPromises()
     expect(api.send.mock.calls[1]![2]).toBe(first[2])

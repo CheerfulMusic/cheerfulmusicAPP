@@ -5,7 +5,7 @@ import { assistantResult, resultMediaUrl, resultInviteUrl, uploadTarget, type Ag
 import AgentResultCard from '../src/modules/agent/components/AgentResultCard.vue'
 import type { Message } from '../src/modules/agent/model/conversation'
 const message = (body: unknown, role: Message['role'] = 'assistant'): Message => ({ id: 'm1', conversationId: 'c1', seq: 1, role, kind: 'TEXT', state: 'DONE', contentJson: JSON.stringify(body), taskId: null, createdAt: '' })
-const body = { kind: 'works', text: '找到这些作品', items: [{ id: 'w1', title: '给妈妈的歌', subtitle: '昨天 · 已生成', data: { workId: 'w1' } }], commands: [{ kind: 'send', label: '选择给妈妈的歌', text: '选择作品 w1' }] }
+const body = { kind: 'works', text: '找到这些作品', items: [{ id: 'w1', title: '给妈妈的歌', subtitle: 'COMPLETED · 作品版本 0', data: { workId: 'w1' } }], commands: [{ kind: 'send', label: '打开「给妈妈的歌」', text: '打开作品 w1' }] }
 describe('conversation result cards', () => {
   it('shows a copyable invitation only for the exact first-party invitation route', () => {
     const origin = window.location.origin
@@ -21,10 +21,54 @@ describe('conversation result cards', () => {
     const result = assistantResult(message(body))!
     const wrapper = mount(AgentResultCard, { props: { result, disabled: false, current: true } })
     expect(wrapper.text()).toContain('给妈妈的歌')
-    expect(wrapper.text()).toContain('昨天 · 已生成')
+    expect(wrapper.text()).not.toContain('COMPLETED · 作品版本 0')
     expect(wrapper.text()).not.toContain('workId')
-    await wrapper.find('button').trigger('click')
+    expect(wrapper.find('.agent-result-commands').exists()).toBe(false)
+    await wrapper.find('.agent-work-open').trigger('click')
     expect(wrapper.emitted('command')).toEqual([[body.commands[0]]])
+    wrapper.unmount()
+  })
+  it('matches each work by id even for duplicate titles and out-of-order commands, preserving other commands', async () => {
+    const commands = [
+      { kind: 'send', label: '打开第二首', text: '打开作品 w2' },
+      { kind: 'send', label: '打开第一首', text: '打开作品 w1' },
+      { kind: 'send', label: '下一页', text: '列出我的作品，第 2 页' },
+    ]
+    const result = assistantResult(message({ kind: 'works', items: [
+      { id: 'w1', title: '同名作品', subtitle: 'COMPLETED · 作品版本 0', data: { workId: 'w1' } },
+      { id: 'w2', title: '同名作品', subtitle: 'LYRICS_DRAFT · 作品版本 1', data: { workId: 'w2' } },
+      { id: 'w3', title: '无命令作品', subtitle: 'READY_TO_GENERATE', data: { workId: 'w3' } },
+    ], commands }))!
+    const wrapper = mount(AgentResultCard, { props: { result, disabled: false, current: true } })
+    const rows = wrapper.findAll('.agent-result-items li')
+    expect(rows[0]!.find('.agent-work-open').attributes('aria-label')).toContain('同名作品')
+    expect(rows[2]!.find('.agent-work-open').exists()).toBe(false)
+    expect(wrapper.text()).not.toMatch(/COMPLETED|LYRICS_DRAFT|READY_TO_GENERATE|作品版本/)
+    await rows[0]!.find('.agent-work-open').trigger('click')
+    await rows[1]!.find('.agent-work-open').trigger('click')
+    expect(wrapper.emitted('command')).toEqual([[commands[1]], [commands[0]]])
+    expect(wrapper.findAll('.agent-result-commands button').map(b => b.text())).toEqual(['下一页'])
+    await wrapper.setProps({ disabled: true })
+    expect(rows[0]!.find('.agent-work-open').attributes('disabled')).toBeDefined()
+    await rows[0]!.find('.agent-work-open').trigger('click')
+    expect(wrapper.emitted('command')).toHaveLength(2)
+    wrapper.unmount()
+  })
+  it('retains subtitles and actions on non-work result cards', async () => {
+    const command = { kind: 'send', label: '选择版本', text: '选择第 1 版' }
+    const result = assistantResult(message({ kind: 'versions', items: [{ id: 'r1', title: '歌词版本', subtitle: '已确认', data: {} }], commands: [command] }))!
+    const wrapper = mount(AgentResultCard, { props: { result, disabled: false, current: true } })
+    expect(wrapper.text()).toContain('已确认')
+    expect(wrapper.find('.agent-work-open').exists()).toBe(false)
+    await wrapper.find('.agent-result-commands button').trigger('click')
+    expect(wrapper.emitted('command')).toEqual([[command]])
+    wrapper.unmount()
+  })
+  it('keeps the description in a newly created work result', () => {
+    const result = assistantResult(message({ kind: 'works', items: [{ id: 'new-work', title: '新作品', subtitle: '空白作品草稿', data: { workId: 'new-work' } }], commands: [] }))!
+    const wrapper = mount(AgentResultCard, { props: { result, disabled: false, current: true } })
+    expect(wrapper.text()).toContain('空白作品草稿')
+    expect(wrapper.find('.agent-work-open').exists()).toBe(false)
     wrapper.unmount()
   })
   it('ignores user-authored result JSON, broken data and navigation commands', () => {
