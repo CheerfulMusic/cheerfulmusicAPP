@@ -3,6 +3,7 @@ import com.qingfeng.music.work.api.WorkApi;
 import com.qingfeng.music.lyrics.api.LyricsApi;
 import com.qingfeng.music.common.exception.DomainException;
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 /** 外部请求不占用数据库事务；失败请求保留幂等键和额度，只有用户明确新建请求才再次调用模型。 */
@@ -31,16 +32,23 @@ public final class LyricsCompositionService {
     public LyricsApi.Revision compose(String owner,String work,long expectedVersion,String key,String language,String instructions,String baseRevisionId,String templateId,boolean chorusFirst){
         return compose(owner,work,expectedVersion,key,language,instructions,baseRevisionId,templateId,chorusFirst,null);
     }
-    public LyricsApi.Revision composePhoto(String owner,String work,long expectedVersion,String key,String language,byte[] jpeg){
-        return compose(owner,work,expectedVersion,key,language,"",null,null,false,java.util.Objects.requireNonNull(jpeg));
+    public LyricsApi.Revision compose(String owner,String work,long expectedVersion,String key,String language,
+                                      String instructions,String baseRevisionId,String templateId,boolean chorusFirst,List<String> customSections){
+        var structure=new LyricsStructure(templateId,chorusFirst,customSections);
+        return compose(owner,work,expectedVersion,key,language,instructions,baseRevisionId,structure,null);
     }
-    private LyricsApi.Revision compose(String owner,String work,long expectedVersion,String key,String language,String instructions,String baseRevisionId,String templateId,boolean chorusFirst,byte[] photo){
-        var structure=new LyricsStructure(templateId,chorusFirst);
+    public LyricsApi.Revision composePhoto(String owner,String work,long expectedVersion,String key,String language,byte[] jpeg){
+        return compose(owner,work,expectedVersion,key,language,"",null,new LyricsStructure(null,false),java.util.Objects.requireNonNull(jpeg));
+    }
+    private LyricsApi.Revision compose(String owner,String work,long expectedVersion,String key,String language,String instructions,
+                                       String baseRevisionId,LyricsStructure structure,byte[] photo){
         var snapshot=works.get(owner,work);
         if(key==null||!key.matches("[0-9a-fA-F-]{36}")||language==null||!java.util.Set.of("zh-CN","en","mixed").contains(language))throw new DomainException("INVALID_LYRICS_REQUEST","歌词生成参数无效，请刷新后重试");
         String requirements=instructions==null?"":instructions.trim();
         if(requirements.length()>1000)throw new DomainException("INVALID_LYRICS_REQUEST","修改要求不能超过1000字");
-        String material=expectedVersion+"\n"+language+"\n"+requirements+"\n"+(baseRevisionId==null?"":baseRevisionId)+structure.instruction();
+        String structureInstruction=structure.instruction();
+        String material=expectedVersion+"\n"+language+"\n"+requirements+"\n"+(baseRevisionId==null?"":baseRevisionId)+structureInstruction;
+        if(structure.customSections()!=null)material+="\n"+structure.templateId();
         String hash=fingerprint(photo==null?material:material+"\nphoto:"+digest(photo));
         var prior=requests.find(work,key);
         if(prior.isPresent()){
@@ -56,18 +64,19 @@ public final class LyricsCompositionService {
             .filter(plan->!plan.photoSummary().isBlank()).orElse(null):null;
         if(photo==null&&photoPlan==null&&snapshot.story().isBlank()&&snapshot.message().isBlank())throw new DomainException("INVALID_LYRICS_REQUEST","请先在故事中填写一段回忆或祝福，再生成歌词");
         String previous=baseRevisionId==null?"":lyrics.get(owner,work,baseRevisionId).lyrics();
+        if(structure.customSections()!=null)revisions.requireCustomSectionsStorage();
         if(!requests.claim(owner,work,key,hash))throw new DomainException("LYRICS_REQUEST_PENDING","这次歌词请求已处理或仍在确认中，请先刷新歌词版本，避免重复提交");
         try{
             var direction=settings==null?null:settings.resolve(owner,snapshot);
             var writingDirection=new LyricsWriter.Direction(direction==null?snapshot.style():direction.style(),direction==null?"":direction.negativeTags(),snapshot.vocalGender());
             String context=photoPlan==null?"":"\n【照片画面素材，仅用于创作】\n"+photoPlan.photoSummary();
-            var draft=photo==null?writer.write(snapshot,language,requirements+context+structure.instruction(),previous,writingDirection)
+            var draft=photo==null?writer.write(snapshot,language,requirements+context+structureInstruction,previous,writingDirection)
                 :photoWriter.write(snapshot,language,photo,writingDirection);
             if(works.get(owner,work).version()!=expectedVersion)throw new DomainException("WORK_VERSION_CONFLICT","作品已修改，请重新载入后保存歌词");
             if(draft.title()==null||draft.title().isBlank()||draft.title().length()>80||draft.lyrics()==null||draft.lyrics().isBlank()||draft.lyrics().length()>5000)throw new DomainException("LYRICS_RESPONSE_INVALID","歌词生成结果不完整，请稍后重新发起");
             structure.validate(draft.lyrics());
             var revision=new LyricsApi.Revision(UUID.randomUUID().toString(),work,expectedVersion,draft.title().trim(),draft.lyrics(),
-                draft.source()==null?writer.source():draft.source(),false,Instant.now(),language,structure.templateId(),structure.chorusFirst());
+                draft.source()==null?writer.source():draft.source(),false,Instant.now(),language,structure.templateId(),structure.chorusFirst(),structure.customSections());
             requests.completeWithRevision(work,key,revision.id(),()->{
                 revisions.insert(revision);
                 var plan=photoPlan==null?draft.plan():photoPlan;

@@ -1,5 +1,5 @@
 import {expect,it,vi,afterEach} from 'vitest'
-import {lyricTemplates,lyricSections,normalizeLyricsStructure,lyricsStructureKey} from '../src/modules/works/model/lyrics-structure'
+import {lyricTemplates,lyricSections,normalizeLyricsStructure,lyricsStructureKey,lyricsStructureFromQuery,lyricsStructureQuery,type LyricsStructure} from '../src/modules/works/model/lyrics-structure'
 import {continuationRequestKey} from '../src/modules/studio/model/lyrics-continuation'
 import {resetCreatorSession} from '../src/shared/http/api-client'
 import {generateLyrics} from '../src/modules/works/api/detail'
@@ -24,6 +24,22 @@ it('separates paid request keys when the template or chorus-first selection chan
   expect(continuationRequestKey(work,0,'mixed',lyricsStructureKey(b))).not.toBe(first)
   expect(continuationRequestKey(work,0,'mixed','ABCD:normal')).not.toBe(first)
 })
+it('restores ordered custom sections with repeats and gives a reordered draft a new request key',()=>{
+  const custom:LyricsStructure={templateId:'CUSTOM',chorusFirst:false,customSections:['Chorus','Verse','Chorus','Interlude']}
+  const normalized=normalizeLyricsStructure(custom)
+  expect(normalized).toEqual(custom)
+  expect(lyricSections(normalized)).toEqual(custom.customSections)
+  expect(lyricSections(normalized)).not.toBe(custom.customSections)
+  expect(lyricsStructureFromQuery(lyricsStructureQuery(custom))).toEqual(custom)
+  expect(lyricsStructureFromQuery({templateId:'CUSTOM',customSections:'Verse'})).toEqual({...custom,customSections:['Verse']})
+  const work=crypto.randomUUID()
+  const initialKey=continuationRequestKey(work,0,'mixed',lyricsStructureKey(custom))
+  const reordered:LyricsStructure={...custom,customSections:['Verse','Chorus','Chorus','Interlude']}
+  expect(continuationRequestKey(work,0,'mixed',lyricsStructureKey(reordered))).not.toBe(initialKey)
+  for(const customSections of [[],['Interlude','Interlude'],['Verse','Unknown'],Array(25).fill('Verse')]){
+    expect(normalizeLyricsStructure({...custom,customSections})).toEqual({templateId:'AUTO',chorusFirst:false})
+  }
+})
 it('sends structural choices as distinct API fields together with language and revision requirements',async()=>{
   const fetch=vi.fn(async (url:unknown)=>Response.json(String(url).endsWith('/csrf')?{token:'csrf'}:String(url).endsWith('/session')?{creatorId:'owner'}:{id:'revision',workId:'work',workVersion:0,title:'song',lyrics:'lyrics',confirmed:false}))
   vi.stubGlobal('fetch',fetch)
@@ -31,4 +47,8 @@ it('sends structural choices as distinct API fields together with language and r
   const call=fetch.mock.calls.find(([url])=>String(url).endsWith('/generate'))!
   const init=(call as unknown as [string,RequestInit])[1]
   expect(JSON.parse(String(init.body))).toMatchObject({language:'mixed',instructions:'保留原话',baseRevisionId:'base',templateId:'ABCD',chorusFirst:true})
+  const custom:LyricsStructure={templateId:'CUSTOM',chorusFirst:false,customSections:['Verse','Chorus','Bridge','Chorus']}
+  await generateLyrics('work',0,crypto.randomUUID(),'mixed','','base',custom)
+  const customInit=(fetch.mock.calls.at(-1) as unknown as [string,RequestInit])[1]
+  expect(JSON.parse(String(customInit.body))).toMatchObject(custom)
 })

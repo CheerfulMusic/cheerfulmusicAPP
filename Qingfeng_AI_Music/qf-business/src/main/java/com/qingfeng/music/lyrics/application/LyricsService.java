@@ -19,7 +19,8 @@ public class LyricsService implements LyricsApi {
         if(title==null||title.isBlank()||title.length()>100||lyrics==null||lyrics.isBlank()||lyrics.length()>12000)throw new DomainException("INVALID_LYRICS","请填写标题和歌词，并检查长度");
         var base=baseRevisionId==null?null:get(owner,work,baseRevisionId);
         var revision=new Revision(UUID.randomUUID().toString(),work,version,title.trim(),lyrics,"MANUAL",false,Instant.now(),
-            base==null?null:base.language(),base==null?null:base.templateId(),base==null?null:base.chorusFirst());
+            base==null?null:base.language(),base==null?null:base.templateId(),base==null?null:base.chorusFirst(),
+            base==null?null:base.customSections());
         repository.insert(revision);return get(owner,work,revision.id());
     }
     @Transactional

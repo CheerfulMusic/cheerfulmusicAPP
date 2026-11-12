@@ -12,7 +12,7 @@ import {quickInProgress} from '../api/quick-creation'
 import CreditCostHint from '../../../shared/credits/CreditCostHint.vue'
 import { useCredits } from '../../../shared/credits/useCredits'
 import { guardCredits } from '../../../shared/credits/credit-gate'
-import { normalizeLyricsStructure, lyricsStructureKey, type LyricsStructure } from '../../works/model/lyrics-structure'
+import { normalizeLyricsStructure, lyricsStructureKey, lyricsStructureQuery, type LyricsStructure } from '../../works/model/lyrics-structure'
 import { composeStyleDetailed, splitStyle, styleTail as compileStyleTail } from '../../agent/model/style-compiler'
 import { agentLanguage, agentStructure } from '../../agent/model/param-compiler'
 import '../styles/inspiration-studio.css'
@@ -28,11 +28,11 @@ import { normalizeVocalGender } from '../model/vocals'
 import { styleFromInspiration } from '../model/suggestions'
 import { inspirationPresets, type InspirationPreset } from '../model/inspiration-presets'
 import { continuationRequestKey, existingContinuationRequestKey, retireContinuationRequestKey } from '../model/lyrics-continuation'
-import { generateLyrics, getLyricsRequest, getUsage, type Allowance } from '../../works/api/detail'
+import { generateLyrics, getLyricsRequest, getRevision, getUsage, type Allowance } from '../../works/api/detail'
 import { clearAgentBrief, readAgentBrief, shouldApplyAgentBrief } from '../../agent/model/brief'
 
 const storyFlowVersion = 3
-interface Recovery { mode?:CreationMode;preferences?:MusicPreferences;structure?:LyricsStructure; flowVersion?:number; draft:DraftInput; language:string; part:number; draftKey:string; workId?:string; version?:number; dirty:boolean; conflict?:boolean }
+interface Recovery { mode?:CreationMode;preferences?:MusicPreferences;structure?:LyricsStructure;lastSubmittedStructure?:LyricsStructure; flowVersion?:number; draft:DraftInput; language:string; part:number; draftKey:string; workId?:string; version?:number; dirty:boolean; conflict?:boolean }
 function validRecovery(value:unknown):value is Recovery {
   const v = value as Recovery
   return !!v && !!v.draft && ['recipient','occasion','story','message','style','title'].every(k => typeof v.draft[k as keyof DraftInput] === 'string') && ['zh-CN','en','mixed'].includes(v.language) && /^[0-9a-f-]{36}$/i.test(v.draftKey)
@@ -55,6 +55,7 @@ async function changeMode(next:CreationMode){if(composing.value||rewriting.value
 const defaultStructure = {templateId:'AAB',chorusFirst:false} as const satisfies LyricsStructure
 const structure=ref<LyricsStructure>({...defaultStructure})
 let legacyStructure:LyricsStructure|undefined
+let lastSubmittedStructure:LyricsStructure|undefined
 const { credits, refreshCredits } = useCredits()
 const compiledParams=computed(()=>splitStyle(draft.style).tail)
 const omittedParams=ref<string[]>([])
@@ -106,7 +107,7 @@ let localPending=false
 let initSequence=0,internalContext:string|undefined
 const contextOf=(query:Record<string,unknown>)=>query.work?`work:${String(query.work)}`:query.draft?`draft:${String(query.draft)}`:'new'
 const asDraft=(work:DraftInput):DraftInput=>({recipient:work.recipient,occasion:work.occasion,story:work.story,message:work.message,style:work.style,title:work.title,vocalGender:normalizeVocalGender(work.vocalGender)})
-function recoveryValue():Recovery{return {mode:mode.value,preferences:preferences.value,flowVersion:storyFlowVersion,draft:{...draft},language:language.value,structure:{...structure.value},part:0,draftKey,workId:existing.value?.id||recoveredWorkId,version:existing.value?.version??recoveredVersion,dirty:dirty.value,conflict:conflict.value}}
+function recoveryValue():Recovery{return {mode:mode.value,preferences:preferences.value,flowVersion:storyFlowVersion,draft:{...draft},language:language.value,structure:{...structure.value},lastSubmittedStructure,part:0,draftKey,workId:existing.value?.id||recoveredWorkId,version:existing.value?.version??recoveredVersion,dirty:dirty.value,conflict:conflict.value}}
 function remember(force=false) {
   clearTimeout(timer)
   if(!initialized.value||!force&&!localPending)return
@@ -128,8 +129,9 @@ function scheduleLocalSave() {
 }
 watch([draft,language,mode,preferences,structure],scheduleLocalSave,{deep:true,flush:'sync'})
 watch(preferences,()=>{if(initialized.value&&mode.value==='custom')customTouched.value=true},{deep:true,flush:'sync'})
-function restoreTemplate(saved?:LyricsStructure){
+function restoreTemplate(saved?:LyricsStructure,lastSubmitted?:LyricsStructure){
   legacyStructure=saved?normalizeLyricsStructure(saved):undefined
+  lastSubmittedStructure=lastSubmitted?normalizeLyricsStructure(lastSubmitted):undefined
   structure.value=legacyStructure??{...defaultStructure}
 }
 async function initialize() {
@@ -174,7 +176,7 @@ async function initialize() {
     else {Object.assign(draft,{recipient:'',occasion:String(query.occasion||''),story:agentBrief?.story||'',message:'',style:briefStyle,title:'',vocalGender:agentBrief?.params?.vocal??'AUTO'});baseline.value=JSON.stringify(snapshot());draftKey=crypto.randomUUID();agentBriefApplied=!!agentBrief}
     if (local) {
       mode.value=creationMode(query.mode||local.mode)
-      language.value=local.language;restoreTemplate(local.structure);draftKey=local.draftKey
+      language.value=local.language;restoreTemplate(local.structure,local.lastSubmittedStructure);draftKey=local.draftKey
       if (local.dirty) {
         Object.assign(draft,asDraft(local.draft))
         conflict.value=!!local.conflict || (!!existing.value && local.version!==undefined && local.version!==existing.value.version)
@@ -183,8 +185,11 @@ async function initialize() {
     }
     if(!id){const previousKey=cacheKey;cacheKey=recoveryKey(currentCreatorId(),'story',draftKey);const target=`draft:${draftKey}`;internalContext=target;internalRoute=true;try{await router.replace({path:'/create',query:{...query,draft:draftKey}})}finally{internalRoute=false;if(internalContext===target)internalContext=undefined};if(turn!==initSequence)return;if(previousKey!==cacheKey&&local)writeRecovery(cacheKey,local)}
     try{
-      const [catalog,music]=await Promise.all([loadMusicCatalog(),existing.value?loadMusicSettings(existing.value.id):Promise.resolve(null)])
+      const revisionId=typeof query.returnRevision==='string'?query.returnRevision:undefined
+      const origin=found&&revisionId&&!local?.structure?getRevision(found.id,revisionId).catch(()=>null):null
+      const [catalog,music,sourceRevision]=await Promise.all([loadMusicCatalog(),found?loadMusicSettings(found.id):null,origin])
       if(turn!==initSequence)return
+      if(sourceRevision?.templateId)restoreTemplate(normalizeLyricsStructure(sourceRevision))
       musicCatalog.value=catalog
       photoWork.value=!!music?.photoInspiration
       if(!query.style&&!existing.value&&!local&&!agentBrief)draft.style='自动推荐'
@@ -204,7 +209,7 @@ async function initialize() {
     if(e instanceof ApiError && (e.status===0||e.status===408||e.status>=500)){
       const owner=currentCreatorId()||lastKnownCreatorId()
       if(owner){cacheKey=recoveryKey(owner,'story',String(query.work||query.draft||draftKey));const local=readRecovery(cacheKey,validRecovery)
-        if(local){Object.assign(draft,asDraft(local.draft));language.value=local.language;restoreTemplate(local.structure);draftKey=local.draftKey;recoveredVersion=local.version;recoveredWorkId=local.workId;baseline.value='';notice.value='服务暂时连接不上，已恢复本机内容；连接后可重试保存。'}
+        if(local){Object.assign(draft,asDraft(local.draft));language.value=local.language;restoreTemplate(local.structure,local.lastSubmittedStructure);draftKey=local.draftKey;recoveredVersion=local.version;recoveredWorkId=local.workId;baseline.value='';notice.value='服务暂时连接不上，已恢复本机内容；连接后可重试保存。'}
       }
       ready.value=false
     }
@@ -364,7 +369,7 @@ async function next() {
 async function continueMaking() {
   if(composing.value || rewriting.value || quickLocked.value || !ready.value)return
   if(!valid.value){rejectAnswer('请先写下一点创作灵感。');return}
-  const chosenStructure={...structure.value}
+  const chosenStructure=normalizeLyricsStructure(structure.value)
   composing.value=true;error.value='';notice.value='';creditShort.value=false
   if(mode.value==='quick')quickSession.prepare()
   continuationFailed.value=false
@@ -391,8 +396,8 @@ async function continueMaking() {
       return
     }
     writing=true
-    // Recover an older request before starting a new lyric generation.
-    const previousStructure=legacyStructure??normalizeLyricsStructure()
+    // Avoid a second paid generation while an earlier draft request is still running.
+    const previousStructure=lastSubmittedStructure??legacyStructure??normalizeLyricsStructure()
     const previousKey=lyricsStructureKey(previousStructure)
     const structureKey=lyricsStructureKey(chosenStructure)
     if(previousKey!==structureKey){
@@ -400,8 +405,9 @@ async function continueMaking() {
       if(legacyKey){
         const legacy=await getLyricsRequest(prepared.id,legacyKey)
         if(!alive||turn!==initSequence)return
-        if(legacy.status==='SUCCEEDED'&&legacy.revisionId){
-          await router.push({path:`/works/${work.id}`,query:{revision:legacy.revisionId,language:language.value,templateId:previousStructure.templateId,chorusFirst:String(previousStructure.chorusFirst)}})
+        // Older drafts without a stored selection can still reopen their original lyrics.
+        if(!lastSubmittedStructure&&!legacyStructure&&structureKey===lyricsStructureKey(defaultStructure)&&legacy.status==='SUCCEEDED'&&legacy.revisionId){
+          await router.push({path:`/works/${work.id}`,query:{revision:legacy.revisionId,language:language.value,...lyricsStructureQuery(previousStructure)}})
           return
         }
         if(legacy.status==='PENDING'||legacy.status==='UNKNOWN')throw new Error('歌词仍在编写中，可以稍后刷新编写状态。')
@@ -409,12 +415,14 @@ async function continueMaking() {
     }
     let key=continuationRequestKey(prepared.id,prepared.version,language.value,structureKey)
     const previous=await getLyricsRequest(prepared.id,key)
-    if(previous.status==='SUCCEEDED'&&previous.revisionId){if(alive&&turn===initSequence)await router.push({path:`/works/${work.id}`,query:{revision:previous.revisionId,language:language.value,templateId:chosenStructure.templateId,chorusFirst:String(chosenStructure.chorusFirst)}});return}
+    if(previous.status==='SUCCEEDED'&&previous.revisionId){if(alive&&turn===initSequence)await router.push({path:`/works/${work.id}`,query:{revision:previous.revisionId,language:language.value,...lyricsStructureQuery(chosenStructure)}});return}
     if(previous.status==='PENDING'||previous.status==='UNKNOWN')throw new Error('歌词仍在编写中，可以稍后刷新编写状态。')
     if(previous.status==='FAILED'){retireContinuationRequestKey(prepared.id,prepared.version,language.value,structureKey);key=continuationRequestKey(prepared.id,prepared.version,language.value,structureKey)}
     if(!alive||turn!==initSequence||await blockedByCredits()||!alive||turn!==initSequence)return
+    lastSubmittedStructure=chosenStructure
+    remember(true)
     const revision=await generateLyrics(prepared.id,prepared.version,key,language.value,'',undefined,chosenStructure)
-    if(alive&&turn===initSequence)await router.push({path:`/works/${work.id}`,query:{revision:revision.id,language:language.value,templateId:chosenStructure.templateId,chorusFirst:String(chosenStructure.chorusFirst)}})
+    if(alive&&turn===initSequence)await router.push({path:`/works/${work.id}`,query:{revision:revision.id,language:language.value,...lyricsStructureQuery(chosenStructure)}})
   } catch(e){if(alive&&turn===initSequence){quickSession.abortPreparation();continuationFailed.value=writing;error.value=e instanceof Error?e.message:'歌词生成失败，请稍后再试'}}
   finally{if(turn===initSequence){composing.value=false;void refreshCredits().catch(()=>{})}}
 }
@@ -426,7 +434,7 @@ async function returnToLyrics(){
     const work=await flush()
     if(!work||!alive||turn!==initSequence)return
     const prepared=await applyChosenMusic(work,turn)
-    if(alive&&turn===initSequence)await router.push({path:`/works/${prepared.id}`,query:{revision}})
+    if(alive&&turn===initSequence)await router.push({path:`/works/${prepared.id}`,query:{revision,...lyricsStructureQuery(structure.value)}})
   }catch(e){if(alive&&turn===initSequence)error.value=e instanceof Error?e.message:'设置保存失败，请重试'}
   finally{if(turn===initSequence)composing.value=false}
 }

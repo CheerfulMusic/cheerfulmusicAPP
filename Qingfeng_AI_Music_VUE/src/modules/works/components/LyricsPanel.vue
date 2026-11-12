@@ -2,7 +2,7 @@
 import CreditCostHint from '../../../shared/credits/CreditCostHint.vue'
 import { useCredits } from '../../../shared/credits/useCredits'
 import { guardCredits } from '../../../shared/credits/credit-gate'
-import { normalizeLyricsStructure, type LyricsStructure } from '../model/lyrics-structure'
+import { lyricsStructureFromQuery, lyricsStructureQuery, normalizeLyricsStructure, type LyricsStructure } from '../model/lyrics-structure'
 import { t, formatDate, locale } from '../../../shared/i18n'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -19,7 +19,9 @@ const route=useRoute(),router=useRouter()
 const versions=ref<Revision[]>([]),active=ref<Revision|null>(null),title=ref(props.work.title||(props.work.recipient?t('写给{recipient}的歌',{recipient:props.work.recipient}):t('我的原创歌曲'))),text=ref(''),baseline=ref(''),loading=ref(true),saving=ref(false),composing=ref(false),preparing=ref(false),error=ref(''),notice=ref(''),aiReady=ref(false),localSaved=ref(false),creditShort=ref(false)
 const { credits, refreshCredits } = useCredits()
 const language=ref<string>(['zh-CN','en','mixed'].includes(String(route.query.language))?String(route.query.language):locale.value),instructions=ref(''),requestKey=ref('')
-const structure=ref<LyricsStructure>(normalizeLyricsStructure({templateId:route.query.templateId,chorusFirst:route.query.chorusFirst==='true'}))
+const routeStructure=lyricsStructureFromQuery(route.query)
+const hasRouteStructure=route.query.templateId===routeStructure.templateId
+const structure=ref<LyricsStructure>(routeStructure)
 const errorKind=ref<'load'|'save'|'compose'>('save'),requestWaiting=ref(false),requestChecking=ref(false)
 const blocked=computed(()=>loading.value||composing.value||preparing.value||requestWaiting.value||requestChecking.value)
 const draftValue=()=>({title:title.value.trim(),lyrics:text.value})
@@ -103,7 +105,7 @@ watch(editorText,source=>{
 })
 watch(localSaved,value=>emit('recoverable',value),{immediate:true})
 function select(value:Revision|null){active.value=value;title.value=value?.title||props.work.title||(props.work.recipient?t('写给{recipient}的歌',{recipient:props.work.recipient}):t('我的原创歌曲'));text.value=value?.lyrics||'';baseline.value=JSON.stringify(draftValue());remember()}
-async function syncRoute(id:string){await nextTick();if(alive)await router.replace({query:{...route.query,revision:id,language:language.value,templateId:structure.value.templateId,chorusFirst:String(structure.value.chorusFirst)}})}
+async function syncRoute(id:string){await nextTick();if(alive)await router.replace({query:{...route.query,revision:id,language:language.value,...lyricsStructureQuery(structure.value)}})}
 const historyId=ref('')
 const recentVersions=computed(()=>versions.value.slice(0,5))
 const historyPreview=computed(()=>recentVersions.value.find(v=>v.id===historyId.value))
@@ -151,7 +153,11 @@ async function recoverRequest(){
       if(!alive||key!==requestKey.value)return
       versions.value=[found,...versions.value.filter(v=>v.id!==found.id)]
       // 结果恢复不覆盖用户尚未保存的编辑。
-      if(JSON.stringify(draftValue())===baseline.value){select(found);await syncRoute(found.id)}
+      if(JSON.stringify(draftValue())===baseline.value){
+        select(found)
+        if(found.templateId)structure.value=normalizeLyricsStructure(found)
+        await syncRoute(found.id)
+      }
       requestKey.value='';error.value='';notice.value='上次编写的歌词已找回，可在历史版本中查看。'
     }else if(requestWaiting.value)notice.value='歌词仍在编写中，可以稍后刷新编写状态。'
     remember();void updateCredits()
@@ -166,8 +172,12 @@ onMounted(async()=>{
     cacheKey=recoveryKey(currentCreatorId(),'lyrics',props.work.id)
     const local=readRecovery(cacheKey,validRecovery)
     if(active.value?.language)language.value=active.value.language
-    if(active.value?.templateId)structure.value=normalizeLyricsStructure(active.value)
-    if(local){language.value=local.language;structure.value=normalizeLyricsStructure(local.structure??structure.value);instructions.value=local.instructions;requestKey.value=local.workVersion===props.work.version?local.requestKey:''
+    if(!hasRouteStructure&&active.value?.templateId)structure.value=normalizeLyricsStructure(active.value)
+    if(local){
+      language.value=local.language;instructions.value=local.instructions
+      const sameRevision=local.baseId===(active.value?.id??null)
+      if(!hasRouteStructure&&(local.dirty||sameRevision||!active.value?.templateId))structure.value=normalizeLyricsStructure(local.structure??structure.value)
+      requestKey.value=local.workVersion===props.work.version&&(local.dirty||sameRevision||!route.query.revision)?local.requestKey:''
       if(local.dirty){select(versions.value.find(v=>v.id===local.baseId)||active.value);title.value=local.title;text.value=local.lyrics;notice.value=local.workVersion===props.work.version?'已恢复本机尚未保存的歌词。':'故事已更新，本机歌词已恢复，保存后将成为当前故事的新版本。'}
     }
     if(requestKey.value)await recoverRequest()

@@ -5,19 +5,39 @@ import java.util.*;
 import java.util.regex.Pattern;
 
 /** User-selected section order is a contract, not a reusable melody or lyric text. */
-public record LyricsStructure(String templateId, boolean chorusFirst) {
+public record LyricsStructure(String templateId, boolean chorusFirst, List<String> customSections) {
+    public static final int MAX_CUSTOM_SECTIONS = 24;
+    private static final Set<String> CUSTOM_SECTION_NAMES = Set.of(
+        "Verse", "Verse 1", "Verse 2", "Pre-Chorus", "Chorus", "Chorus 2", "Bridge", "Interlude");
     private static final Map<String,List<String>> TEMPLATES = Map.of(
         "AAB", List.of("Verse 1","Verse 2","Chorus","Interlude","Verse 2","Chorus","Chorus 2"),
         "ABB", List.of("Verse","Chorus","Chorus 2","Interlude","Verse","Chorus","Chorus 2"),
         "ABC", List.of("Verse","Pre-Chorus","Chorus","Interlude","Pre-Chorus","Chorus","Chorus 2"),
         "ABCD", List.of("Verse","Pre-Chorus","Chorus","Interlude","Pre-Chorus","Chorus","Bridge","Chorus"));
 
+    public LyricsStructure(String templateId, boolean chorusFirst) {
+        this(templateId, chorusFirst, null);
+    }
+
     public LyricsStructure {
         templateId = templateId == null ? "AUTO" : templateId;
-        if (!templateId.equals("AUTO") && !TEMPLATES.containsKey(templateId) || templateId.equals("AUTO") && chorusFirst)
-            throw new DomainException("INVALID_LYRICS_REQUEST", "请选择有效的歌词模板；副歌先行需要先选择一种模板");
+        if (templateId.equals("CUSTOM")) {
+            if (chorusFirst || customSections == null || customSections.size() > MAX_CUSTOM_SECTIONS
+                || customSections.stream().anyMatch(section -> section == null || !CUSTOM_SECTION_NAMES.contains(section))
+                || customSections.stream().allMatch("Interlude"::equals)) {
+                throw new DomainException("INVALID_LYRICS_REQUEST", "请设置有效的自定义段落顺序，最多24段，且至少有一段填写歌词");
+            }
+            customSections = List.copyOf(customSections);
+        } else {
+            if (!templateId.equals("AUTO") && !TEMPLATES.containsKey(templateId) || templateId.equals("AUTO") && chorusFirst)
+                throw new DomainException("INVALID_LYRICS_REQUEST", "请选择有效的歌词模板；副歌先行需要先选择一种模板");
+            if (customSections != null && !customSections.isEmpty())
+                throw new DomainException("INVALID_LYRICS_REQUEST", "请先选择自定义歌词模板");
+            customSections = null;
+        }
     }
     public List<String> sections() {
+        if (customSections != null) return customSections;
         var result = new ArrayList<>(TEMPLATES.getOrDefault(templateId,List.of()));
         if (chorusFirst) { result.remove("Chorus"); result.add(0,"Chorus"); }
         return List.copyOf(result);
@@ -37,12 +57,14 @@ public record LyricsStructure(String templateId, boolean chorusFirst) {
         var found = new ArrayList<String>();
         int end = 0; String last = null;
         while (headers.find()) {
-            String body = lyrics.substring(end,headers.start()).trim();
-            if (last == null ? !body.isEmpty() : last.equalsIgnoreCase("Interlude") ? !body.isEmpty() : body.isEmpty()) invalid();
+            if (!validBody(last,lyrics.substring(end,headers.start()))) invalid();
             last = headers.group(1).trim(); found.add(last.toLowerCase(Locale.ROOT)); end = headers.end();
         }
-        if (last == null || last.equalsIgnoreCase("Interlude") || lyrics.substring(end).isBlank()
+        if (last == null || !validBody(last,lyrics.substring(end))
             || !found.equals(sections().stream().map(s -> s.toLowerCase(Locale.ROOT)).toList())) invalid();
+    }
+    private static boolean validBody(String section, String body) {
+        return section == null || section.equalsIgnoreCase("Interlude") ? body.isBlank() : !body.isBlank();
     }
     private static void invalid() { throw new DomainException("LYRICS_STRUCTURE_MISMATCH", "本次歌词未符合所选模板，未保存新版本，也未自动重试；原歌词保留，可调整要求后重新生成"); }
 }

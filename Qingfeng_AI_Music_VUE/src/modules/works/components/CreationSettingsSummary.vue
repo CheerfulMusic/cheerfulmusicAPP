@@ -5,6 +5,7 @@ import type { Work } from '../../studio'
 import { vocalGenderLabel } from '../../studio/model/vocals'
 import { loadMusicCatalog, loadMusicSettings, type MusicCatalog, type MusicDirection, type PhotoInspiration } from '../api/music-settings'
 import type { Revision } from '../api/detail'
+import { normalizeLyricsStructure } from '../model/lyrics-structure'
 
 const props=defineProps<{work:Work;revision:Revision|null;busy?:boolean}>()
 const emit=defineEmits<{editMusic:[]}>()
@@ -44,7 +45,9 @@ function choices(group:string){
 const rows=computed(()=>{
  const prefs=direction.value?.preferences
  const labels:Record<string,string>={'zh-CN':'中文',en:'English',mixed:'中英混合'}
- const template=props.revision?.templateId, timbre=choices('timbre')
+ const structure=normalizeLyricsStructure(props.revision??undefined), timbre=choices('timbre')
+ const template=structure.templateId==='CUSTOM'?t('自定义（{count} 段）',{count:structure.customSections.length})
+   :structure.templateId==='AUTO'?t('让 AI 安排'):structure.templateId
  const voice=t(vocalGenderLabel(prefs?.vocalGender||props.work.vocalGender))
  return [
   {label:'曲风',value:choices('genre')||t(props.work.style),icon:icons.genre},
@@ -52,7 +55,7 @@ const rows=computed(()=>{
   {label:'节奏',value:choices('tempo'),icon:icons.tempo},
   {label:'演唱声音',value:timbre?`${voice} (${timbre})`:voice,icon:icons.voice},
   {label:'歌词语言',value:t(labels[props.revision?.language||'']||''),icon:icons.language},
-  {label:'歌词模板',value:template?(template==='AUTO'?t('自由结构'):template)+(props.revision?.chorusFirst?' · '+t('副歌先行'):''):'',icon:icons.template},
+  {label:'歌词模板',value:props.revision?.templateId?template+(structure.chorusFirst?' · '+t('副歌先行'):''):'',icon:icons.template},
  ]
 })
 </script>

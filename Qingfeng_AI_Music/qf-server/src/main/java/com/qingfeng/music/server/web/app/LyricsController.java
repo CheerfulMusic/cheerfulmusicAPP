@@ -1,6 +1,7 @@
 package com.qingfeng.music.server.web.app;
 import com.qingfeng.music.lyrics.api.LyricsApi;
 import com.qingfeng.music.lyrics.application.LyricsCompositionService;
+import com.qingfeng.music.lyrics.application.LyricsStructure;
 import com.qingfeng.music.lyrics.application.LyricLineRewriteService;
 import com.qingfeng.music.lyrics.application.LyricSelectionRewriteService;
 import com.qingfeng.music.server.security.CreatorPrincipal;
@@ -38,8 +39,22 @@ public class LyricsController {
      return new SelectionRewriteResponse(selectionRewrite.preview(creator.id(),work,request.workVersion(),request.requestId(),
          request.lyrics(),request.keptLines(),request.language()));
  }
- public record ComposeRequest(@NotNull @PositiveOrZero Long workVersion,@NotBlank @Pattern(regexp="[0-9a-fA-F-]{36}")String requestKey,@NotBlank @Pattern(regexp="zh-CN|en|mixed")String language,@Size(max=1000)String instructions,@Pattern(regexp="[0-9a-fA-F-]{36}")String baseRevisionId,@Pattern(regexp="AUTO|AAB|ABB|ABC|ABCD")String templateId,boolean chorusFirst){}
- @PostMapping("/generate") public LyricsApi.Revision compose(@AuthenticationPrincipal CreatorPrincipal creator,@PathVariable String work,@Valid @RequestBody ComposeRequest request){return composer.compose(creator.id(),work,request.workVersion(),request.requestKey(),request.language(),request.instructions(),request.baseRevisionId(),request.templateId(),request.chorusFirst());}
+ public record ComposeRequest(@NotNull @PositiveOrZero Long workVersion,
+     @NotBlank @Pattern(regexp="[0-9a-fA-F-]{36}") String requestKey,
+     @NotBlank @Pattern(regexp="zh-CN|en|mixed") String language,
+     @Size(max=1000) String instructions, @Pattern(regexp="[0-9a-fA-F-]{36}") String baseRevisionId,
+     @Pattern(regexp="AUTO|AAB|ABB|ABC|ABCD|CUSTOM") String templateId, boolean chorusFirst,
+     @Size(max=LyricsStructure.MAX_CUSTOM_SECTIONS) List<String> customSections){
+     public ComposeRequest(Long workVersion,String requestKey,String language,String instructions,String baseRevisionId,
+                           String templateId,boolean chorusFirst){
+         this(workVersion,requestKey,language,instructions,baseRevisionId,templateId,chorusFirst,null);
+     }
+ }
+ @PostMapping("/generate")
+ public LyricsApi.Revision compose(@AuthenticationPrincipal CreatorPrincipal creator,@PathVariable String work,@Valid @RequestBody ComposeRequest request){
+     return composer.compose(creator.id(),work,request.workVersion(),request.requestKey(),request.language(),
+         request.instructions(),request.baseRevisionId(),request.templateId(),request.chorusFirst(),request.customSections());
+ }
  @PostMapping(value="/generate-photo", consumes="multipart/form-data")
  public LyricsApi.Revision composePhoto(@AuthenticationPrincipal CreatorPrincipal creator, @PathVariable String work,
      @RequestParam @PositiveOrZero long workVersion, @RequestParam UUID requestKey,
