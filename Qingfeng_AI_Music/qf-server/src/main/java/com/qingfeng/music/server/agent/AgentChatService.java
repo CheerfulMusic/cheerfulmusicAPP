@@ -40,6 +40,9 @@ public final class AgentChatService {
     private final AgentSocialActions social;
     private final List<AgentApplicationActions> applications;
     private final ObjectMapper json=new ObjectMapper();
+    private boolean progressEnabled;
+    /** Observable execution uses the same durable turn; it never starts another model/tool loop. */
+    public AgentChatService withProgress(boolean enabled){this.progressEnabled=enabled;return this;}
     public AgentChatService(ConversationService c,AgentToolDispatcher t,AgentChatModel m,AgentTurnStore ts,AgentSocialActions s){this(c,t,m,ts,s,List.of());}
     public AgentChatService(ConversationService c,AgentToolDispatcher t,AgentChatModel m,AgentTurnStore ts,AgentSocialActions s,List<AgentApplicationActions> apps){
         conversations=c;tools=t;model=m;turns=ts;social=s;applications=List.copyOf(apps);
@@ -81,8 +84,9 @@ public final class AgentChatService {
                 else if(text.matches("(?:查看|列出|显示)?(?:全部|所有|可用)(?:功能|能力)|能力清单"))plan=new AgentChatModel.Plan("list_capabilities",Map.of(),"");
                 else {
                     var state=conversations.state(owner,conversation);
+                    progress(owner,conversation,key,"planning",null,0,"正在理解你的要求。");
                     plan=model.respond(new AgentChatModel.Context(text,locale==null?"zh-CN":locale,history(history),current,
-                        state==null?null:state.currentSongJson(),capabilities(),results(history)));
+                        state==null?null:state.currentSongJson(),capabilities(),results(history)).withExecution(new AgentChatModel.Execution(owner,conversation,key)));
                     modelCalls++;
                 }
             }
@@ -121,8 +125,10 @@ public final class AgentChatService {
                         "请确认："+capability.description()+"。目标："+target+"。",null,null);break;
                 }
                 String stepKey=steps.size()==1?key:derivedKey(key+":"+i+":"+proposed);
+                progress(owner,conversation,key,"tool_started",proposed,i+1,"正在处理："+capability.description());
                 if("list_capabilities".equals(proposed)){
                     var items=capabilities().stream().map(c->new Item(c.id(),c.description(),c.effect().equals("native")?"在对话内打开专用操作窗口":"可通过对话执行",Map.of())).toList();
+                    progress(owner,conversation,key,"tool_finished",proposed,i+1,"已取得功能列表。");
                     appendResult(owner,conversation,new Result("以下是已接入的功能。社区公开发布、平台发行和无缝音频延长尚未提供。","capabilities",items,List.of(),proposed));action=proposed;
                 } else if(SOCIAL.contains(proposed)&&social!=null) {
                     AgentRequestScope.check();
@@ -130,12 +136,15 @@ public final class AgentChatService {
                     turns.assertActive(owner,conversation,key);action=result.action();shareUrl=result.shareUrl();if(shareUrl!=null)sharedCard=current;
                     if(action!=null&&CLIENT_MEDIA.contains(action)){clientAction=action;clientCard=current;}
                     var body=new LinkedHashMap<String,Object>();body.put("text",result.reply());body.put("action",action);body.put("shareUrl",shareUrl);
+                    progress(owner,conversation,key,"tool_finished",proposed,i+1,"本步骤已返回结果，请查看具体说明。");
                     body.put("songId",current==null?null:current.songId());body.put("revisionId",current==null?null:current.revisionId());body.put("assetId",current==null?null:current.assetId());append(owner,conversation,body);
                     if(action==null)break;
                 } else if(executor!=null) {
                     AgentRequestScope.check();
                     var result=executor.execute(owner,conversation,proposed,args,authorizedText,stepKey,current);
-                    turns.assertActive(owner,conversation,key);appendResult(owner,conversation,result);action=result.action();
+                    turns.assertActive(owner,conversation,key);
+                    progress(owner,conversation,key,"tool_finished",proposed,i+1,"本步骤已返回结果，请查看具体说明。");
+                    appendResult(owner,conversation,result);action=result.action();
                     if(action==null||"native".equals(capability.effect()))break;
                 } else if(AgentTool.fromId(proposed)!=null) {
                     var tool=AgentTool.fromId(proposed);
@@ -149,6 +158,7 @@ public final class AgentChatService {
                     turns.assertActive(owner,conversation,key);
                     if(ToolResult.BUSY.equals(result.status())){append(owner,conversation,Map.of("text",result.progress()==null?"已有任务正在生成，请完成后再试。":result.progress()));break;}
                     if(!ToolResult.OK.equals(result.status())){append(owner,conversation,Map.of("text","这一步没有完成，后续操作已停止。请检查当前作品后重试。"));break;}
+                    progress(owner,conversation,key,"tool_finished",proposed,i+1,"本步骤已返回结果，请查看作品和任务状态。");
                     action=proposed;append(owner,conversation,Map.of("text",completedReply(tool)));
                 } else throw new DomainException("AGENT_ACTION_UNAVAILABLE","当前环境未启用这项操作。");
                 SongCard updated=current(owner);
@@ -169,7 +179,7 @@ public final class AgentChatService {
                     AgentRequestScope.check();
                     var observed=conversations.listRecentMessages(owner,conversation,80);var state=conversations.state(owner,conversation);
                     var next=model.respond(new AgentChatModel.Context(originalIntent,locale==null?"zh-CN":locale,history(observed),updated,
-                        state==null?null:state.currentSongJson(),capabilities(),results(observed)));
+                        state==null?null:state.currentSongJson(),capabilities(),results(observed)).withExecution(new AgentChatModel.Execution(owner,conversation,key)));
                     modelCalls++;
                     var follow=normalizedSteps(next.orderedSteps(),originalIntent);
                     // A planner that repeats the same query has made no progress. Do not execute it twice.
@@ -221,7 +231,7 @@ public final class AgentChatService {
             // A newer user message supersedes an older pending plan, including while its model call is running.
             if("user".equals(m.role())&&AgentMessage.KIND_TEXT.equals(m.kind()))return null;
             if(!"assistant".equals(m.role())||!AgentMessage.KIND_TEXT.equals(m.kind()))continue;
-            var b=json.readTree(m.contentJson());if(!b.path("pendingSteps").isArray())return null;
+            var b=json.readTree(m.contentJson());if("progress".equals(b.path("kind").asText()))continue;if(!b.path("pendingSteps").isArray())return null;
             List<Step> steps=new ArrayList<>();for(var s:b.path("pendingSteps"))steps.add(new Step(s.path("action").asText(),json.convertValue(s.path("args"),Map.class)));
             return new Pending(steps,b.path("authorizedText").asText(""),b.path("pendingSongId").asText(null),b.path("pendingRevisionId").asText(null),b.path("pendingTaskId").asText(null),b.path("continuationKey").asText(null),m.createdAt());
         }return null;
@@ -236,6 +246,13 @@ public final class AgentChatService {
     private static String safeReply(String reply){return reply==null||reply.isBlank()?"可以继续告诉我你的想法，或说「查看所有功能」。":reply;}
     private void appendResult(String owner,String conversation,Result r){var b=new LinkedHashMap<String,Object>();b.put("text",r.reply());b.put("kind",r.kind());b.put("items",r.items());b.put("commands",r.commands());b.put("action",r.action());append(owner,conversation,b);}
     private void append(String owner,String conversation,Map<String,Object> content){conversations.appendMessage(owner,conversation,"assistant",AgentMessage.KIND_TEXT,AgentMessage.STATE_DONE,json.writeValueAsString(content),null);}
+    private void progress(String owner,String conversation,String requestKey,String stage,String action,int step,String text){
+        if(!progressEnabled)return;
+        turns.assertActive(owner,conversation,requestKey);
+        var body=new LinkedHashMap<String,Object>();body.put("kind","progress");body.put("stage",stage);body.put("text",text);body.put("requestKey",requestKey);body.put("step",step);
+        if(action!=null)body.put("action",action);
+        append(owner,conversation,body);
+    }
     private SongCard current(String owner){var c=tools.dispatch(AgentTool.GET_CURRENT_SONG,new AgentTool.GetCurrentSongArgs(),owner,UUID.randomUUID().toString()).songCard();return c==null||c.songId()==null||c.songId().isBlank()?null:c;}
     private Snapshot snapshot(String owner,String conversation,String action) {
         return snapshot(owner,conversation,action,null);
@@ -301,7 +318,7 @@ public final class AgentChatService {
     }
     private List<AgentChatModel.Turn> history(List<AgentMessage> messages) {
         List<AgentChatModel.Turn> h=new ArrayList<>();
-        for(var m:messages){if(!AgentMessage.KIND_TEXT.equals(m.kind()))continue;String t=json.readTree(m.contentJson()).path("text").asText("");if(!t.isBlank())h.add(new AgentChatModel.Turn(m.role(),t));}
+        for(var m:messages){if(!AgentMessage.KIND_TEXT.equals(m.kind()))continue;var body=json.readTree(m.contentJson());if("progress".equals(body.path("kind").asText()))continue;String t=body.path("text").asText("");if(!t.isBlank())h.add(new AgentChatModel.Turn(m.role(),t));}
         return h.subList(Math.max(0,h.size()-20),h.size());
     }
     private String results(List<AgentMessage> messages) {

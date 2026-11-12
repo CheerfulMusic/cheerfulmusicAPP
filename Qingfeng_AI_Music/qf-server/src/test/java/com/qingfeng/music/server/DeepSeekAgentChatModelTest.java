@@ -16,6 +16,90 @@ import java.util.concurrent.atomic.AtomicReference;
 import static org.junit.jupiter.api.Assertions.*;
 
 class DeepSeekAgentChatModelTest {
+    @Test void completeApplicationCatalogAndCurrentLyricsFitTheReservedPromptBudget() throws Exception {
+        List<AgentApplicationActions> applications=List.of(
+                new com.qingfeng.music.server.agent.AgentLibraryActions(null,null,null,null,null,null,null,null),
+                new com.qingfeng.music.server.agent.AgentStudioActions(null,null,null,null,null,null,null),
+                new com.qingfeng.music.server.agent.AgentAccountActions(null,null,null,null,null,null,null,null,null,null),
+                new com.qingfeng.music.server.agent.retrieval.SemanticRetrievalActions(null,null,null));
+        var service=new com.qingfeng.music.server.agent.AgentChatService(null,null,null,null,null,applications);
+        var capabilities=service.capabilities();assertEquals(67,capabilities.size());
+        for(int lyricCharacters:List.of(4000,8000)) {
+            var song=new SongCard("work","给妈妈","温暖民谣","歌词".repeat(lyricCharacters/2),"","DRAFT",null,1,"revision-1",null,null);
+            withResponse("可以，我们先聊这首歌。",(model,request)->{
+                try(var scope=new com.qingfeng.music.common.concurrent.AgentRequestScope(java.time.Duration.ofSeconds(10),65536).enter()){
+                    assertEquals("chat",model.respond(new AgentChatModel.Context("先聊这首歌","zh-CN",List.of(),song,null,capabilities,null)).action());
+                    assertEquals(capabilities.size(),new ObjectMapper().readTree(request.get()).path("tools").size());
+                    assertTrue(request.get().getBytes(StandardCharsets.UTF_8).length<=65536);
+                }
+            });
+        }
+    }
+
+    @Test void oversizedHttpBodyIsCancelledBeforeUnboundedResponseBuffering() throws Exception {
+        var server=HttpServer.create(new InetSocketAddress("127.0.0.1",0),0);
+        var finishResponse=new java.util.concurrent.CountDownLatch(1);
+        server.createContext("/chat",exchange->{
+            exchange.getRequestBody().readAllBytes();exchange.sendResponseHeaders(200,0);
+            try {
+                byte[] chunk=" ".repeat(16384).getBytes(StandardCharsets.UTF_8);
+                for(int i=0;i<20;i++){exchange.getResponseBody().write(chunk);exchange.getResponseBody().flush();}
+                // No EOF until the caller returns: an unbounded ofString() handler would keep waiting.
+                try {finishResponse.await(10,java.util.concurrent.TimeUnit.SECONDS);}
+                catch(InterruptedException interrupted){Thread.currentThread().interrupt();}
+            } catch(java.io.IOException expectedCancellation) {
+                // The subscriber cancels the exchange after its bounded byte allowance.
+            } finally {exchange.close();}
+        });server.start();
+        try {
+            var model=new DeepSeekAgentChatModel("test-only-key","test-model",true,URI.create("http://127.0.0.1:"+server.getAddress().getPort()+"/chat"),HttpClient.newHttpClient());
+            var error=assertTimeoutPreemptively(java.time.Duration.ofSeconds(5),()->assertThrows(DomainException.class,()->model.respond(new AgentChatModel.Context("你好","zh-CN",List.of(),null))));
+            assertEquals("AGENT_CHAT_UNAVAILABLE",error.code());
+        } finally {finishResponse.countDown();server.stop(0);}
+    }
+
+    @Test void nativeFunctionCallsUseServerSchemasAndReturnOneOrderedPlanFromOneHttpCall() throws Exception {
+        var received=new AtomicReference<String>();var calls=new java.util.concurrent.atomic.AtomicInteger();var json=new ObjectMapper();
+        var server=HttpServer.create(new InetSocketAddress("127.0.0.1",0),0);
+        server.createContext("/chat",exchange->{
+            calls.incrementAndGet();received.set(new String(exchange.getRequestBody().readAllBytes(),StandardCharsets.UTF_8));
+            var first=Map.of("id","call-1","type","function","function",Map.of("name","select_work","arguments","{\"workId\":\"work-2\"}"));
+            var second=Map.of("id","call-2","type","function","function",Map.of("name","rename_work","arguments","{\"title\":\"晴天\"}"));
+            byte[] body=json.writeValueAsBytes(Map.of("choices",List.of(Map.of("finish_reason","tool_calls","message",Map.of("tool_calls",List.of(first,second))))));
+            exchange.sendResponseHeaders(200,body.length);exchange.getResponseBody().write(body);exchange.close();
+        });server.start();
+        try {
+            var model=new DeepSeekAgentChatModel("test-only-key","test-model",true,URI.create("http://127.0.0.1:"+server.getAddress().getPort()+"/chat"),HttpClient.newHttpClient());
+            var capabilities=List.of(new AgentApplicationActions.Capability("select_work","选择作品","workId,index","write"),new AgentApplicationActions.Capability("rename_work","修改名称","title","write"));
+            var plan=model.respond(new AgentChatModel.Context("打开第二首并改名晴天","zh-CN",List.of(),null,null,capabilities,null));
+            assertEquals(1,calls.get());assertEquals(List.of("select_work","rename_work"),plan.orderedSteps().stream().map(AgentChatModel.Step::action).toList());
+            var request=json.readTree(received.get());assertEquals("auto",request.path("tool_choice").asText());assertEquals(2,request.path("tools").size());
+            assertEquals("function",request.path("tools").get(0).path("type").asText());
+            assertTrue(request.path("tools").toString().contains("additionalProperties"));assertFalse(request.path("tools").toString().contains("delete_work"));
+            assertEquals(2600,request.path("max_tokens").asInt());
+        } finally {server.stop(0);}
+    }
+
+    @Test void incompleteProviderResponseCannotBecomeExecutableEvenWhenItsJsonIsValid() throws Exception {
+        var json=new ObjectMapper();var server=HttpServer.create(new InetSocketAddress("127.0.0.1",0),0);
+        server.createContext("/chat",exchange->{
+            exchange.getRequestBody().readAllBytes();
+            byte[] body=json.writeValueAsBytes(Map.of("choices",List.of(Map.of("finish_reason","length","message",Map.of("content","{\"action\":\"generate_song\",\"reply\":\"开始\",\"args\":{}}")))));
+            exchange.sendResponseHeaders(200,body.length);exchange.getResponseBody().write(body);exchange.close();
+        });server.start();
+        try {
+            var model=new DeepSeekAgentChatModel("test-only-key","test-model",true,URI.create("http://127.0.0.1:"+server.getAddress().getPort()+"/chat"),HttpClient.newHttpClient());
+            assertEquals("AGENT_CHAT_UNAVAILABLE",assertThrows(DomainException.class,()->model.respond(new AgentChatModel.Context("生成歌曲","zh-CN",List.of(),null))).code());
+        } finally {server.stop(0);}
+    }
+
+    @Test void plainChatWithoutToolCallsIsAcceptedByTheSameHttpAdapter() throws Exception {
+        withResponse("你好！想聊音乐还是一起构思歌词？",(model,request)->{
+            var plan=model.respond(new AgentChatModel.Context("你好","zh-CN",List.of(),null));
+            assertEquals("chat",plan.action());assertEquals("你好！想聊音乐还是一起构思歌词？",plan.reply());
+        });
+    }
+
     @Test void longHistoryDropsOldTurnsWhileKeepingCurrentInstructionInsideReservedBudget()throws Exception{
         var history=new ArrayList<AgentChatModel.Turn>();for(int i=0;i<20;i++)history.add(new AgentChatModel.Turn("user","旧话题".repeat(4000)));
         withResponse("{\"action\":\"chat\",\"reply\":\"可以继续聊\",\"args\":{}}",(model,request)->{
@@ -72,7 +156,7 @@ class DeepSeekAgentChatModelTest {
             assertEquals("work-2",plan.orderedSteps().get(0).args().get("workId"));
             assertEquals("rename_work",plan.orderedSteps().get(1).action());
             var content=new ObjectMapper().readTree(request.get()).path("messages").toString();
-            assertTrue(content.contains("work-2"));assertTrue(content.contains("重命名作品"));
+            assertTrue(content.contains("work-2"));assertTrue(new ObjectMapper().readTree(request.get()).path("tools").toString().contains("重命名作品"));
             assertTrue(content.contains("不能编造"));assertTrue(content.contains("尚未接通"));
         });
     }

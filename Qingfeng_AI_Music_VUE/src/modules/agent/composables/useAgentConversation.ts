@@ -1,5 +1,6 @@
 import { computed, onScopeDispose, ref } from 'vue'
 import { getConversationState, getConversationHistory, getCurrentConversation, resetConversation, sendMessage } from '../api/chat'
+import { observeConversation } from '../api/events'
 import { ApiError } from '../../../shared/http/api-client'
 import { isAgentContinuation, type AgentContinuation, type ConversationSnapshot, type Message, type SongCard } from '../model/conversation'
 
@@ -17,7 +18,9 @@ export function useAgentConversation(onContinuation?: (snapshot: ConversationSna
   const continuation = ref<AgentContinuation | null>(null)
   const autoStarted = new Set<string>()
   const taskRunning = computed(() => !!taskId.value && ['QUEUED', 'SUBMITTING', 'RUNNING', 'SAVING', 'SUBMISSION_UNKNOWN'].includes(songCard.value?.status || ''))
-  let disposed = false, timer: ReturnType<typeof setTimeout> | undefined, refreshVersion = 0
+  let disposed = false, timer: ReturnType<typeof setTimeout> | undefined, refreshVersion = 0, pollRequest = 0
+  let observation: AbortController | undefined, observationTimer: ReturnType<typeof setTimeout> | undefined
+  const progressTransport = ref<'stream' | 'poll' | null>(null)
 
   function remember() {
     try {
@@ -34,10 +37,16 @@ export function useAgentConversation(onContinuation?: (snapshot: ConversationSna
   }
   function merge(rows: Message[]) {
     const byId = new Map(messages.value.map(message => [message.id, message]))
-    for (const message of rows) byId.set(message.id, message)
+    for (const message of rows) {
+      const existing = byId.get(message.id)
+      // A delayed observer must not turn an acknowledged message back into RUNNING.
+      if (existing && ['DONE', 'FAILED'].includes(existing.state) && ['PENDING', 'RUNNING'].includes(message.state)) continue
+      byId.set(message.id, message)
+    }
     messages.value = [...byId.values()].sort((a, b) => a.seq - b.seq)
   }
-  function apply(snapshot: ConversationSnapshot) {
+  function apply(snapshot: ConversationSnapshot, observeOnly = false) {
+    if (snapshot.historyEpoch !== undefined && historyEpoch !== undefined && snapshot.historyEpoch < historyEpoch) return
     const changed = snapshot.historyEpoch !== undefined && historyEpoch !== undefined && snapshot.historyEpoch !== historyEpoch
     if (changed) { messages.value = []; historyRequest++; loadingOlder.value = false; continuation.value = null; autoStarted.clear() }
     if (snapshot.historyEpoch === undefined || historyEpoch === undefined || changed) messages.value = [...snapshot.messages].sort((a, b) => a.seq - b.seq)
@@ -46,19 +55,55 @@ export function useAgentConversation(onContinuation?: (snapshot: ConversationSna
       historyEpoch = snapshot.historyEpoch
       if (pending.value?.historyEpoch !== undefined && pending.value.historyEpoch !== historyEpoch) { pending.value = null; remember() }
     }
-    latestSeq = snapshot.latestSeq ?? messages.value.at(-1)?.seq ?? 0
+    latestSeq = changed ? snapshot.latestSeq ?? 0 : Math.max(latestSeq, snapshot.latestSeq ?? messages.value.at(-1)?.seq ?? 0)
     hasNewerMessages = snapshot.hasNewerMessages === true
     if (snapshot.messagesMode !== 'append' || changed) hasOlderMessages.value = snapshot.hasOlderMessages ?? false
     songCard.value = snapshot.songCard
     taskId.value = snapshot.taskId
     shareUrl.value = snapshot.shareUrl
     liked.value = snapshot.liked
-    continuation.value = isAgentContinuation(snapshot.continuation) ? snapshot.continuation : null
+    // Only normal recovery or the POST response may arrange the next authorized turn.
+    if (!observeOnly) continuation.value = isAgentContinuation(snapshot.continuation) ? snapshot.continuation : null
   }
-  function schedulePoll() {
+  function stopObservation() {
+    observation?.abort(); observation = undefined
+    clearTimeout(observationTimer); progressTransport.value = null
+  }
+  function startObservation(version: number) {
+    stopObservation()
+    const id = conversationId.value, controller = new AbortController()
+    observation = controller; progressTransport.value = 'stream'
+    const active = () => !disposed && !controller.signal.aborted && version === refreshVersion && id === conversationId.value && sending.value
+    const receive = (snapshot: ConversationSnapshot) => {
+      if (!active()) return
+      const epoch = historyEpoch
+      apply(snapshot, true); refreshError.value = ''
+      if (epoch !== undefined && historyEpoch !== epoch) {
+        // Another tab reset the conversation. Neither this POST nor its observer may revive it.
+        refreshVersion++; sending.value = false; stopObservation(); schedulePoll()
+      }
+    }
+    const fallback = async () => {
+      if (!active()) return
+      progressTransport.value = 'poll'
+      let succeeded = false
+      try {
+        const snapshot = await getConversationState(id, latestSeq, historyEpoch)
+        receive(snapshot); succeeded = true
+      } catch (cause) {
+        if (active()) refreshError.value = cause instanceof Error ? cause.message : '暂时无法刷新进度，正在重试。'
+      } finally {
+        if (active()) observationTimer = setTimeout(() => { void fallback() }, succeeded && hasNewerMessages ? 0 : 3000)
+      }
+    }
+    // A closed or unsupported stream only changes the read transport. It never resubmits a turn.
+    void observeConversation(id, latestSeq, historyEpoch, receive, controller.signal)
+      .catch(() => undefined).then(() => { if (active()) void fallback() })
+  }
+  function schedulePoll(readFailed = false) {
     clearTimeout(timer)
     if (!disposed && !sending.value && !loading.value && !pending.value && hasNewerMessages) {
-      timer = setTimeout(() => { void poll() }, 0)
+      timer = setTimeout(() => { void poll() }, readFailed ? 3000 : 0)
       return
     }
     if (!disposed && !sending.value && !loading.value && !pending.value && continuation.value && !autoStarted.has(continuation.value.requestKey)) {
@@ -72,17 +117,19 @@ export function useAgentConversation(onContinuation?: (snapshot: ConversationSna
       }, 0)
       return
     }
-    if (!disposed && taskRunning.value && !sending.value) timer = setTimeout(() => { void poll() }, 3000)
+    if (!disposed && (taskRunning.value || (pending.value && !pending.value.rejected)) && !sending.value) timer = setTimeout(() => { void poll() }, 3000)
   }
   async function poll() {
-    const version = ++refreshVersion
+    const version = refreshVersion, request = ++pollRequest
+    let failed = false
     try {
       const snapshot = await getConversationState(conversationId.value, latestSeq, historyEpoch)
-      if (disposed || version !== refreshVersion) return
-      apply(snapshot); refreshError.value = ''
+      if (disposed || version !== refreshVersion || request !== pollRequest) return
+      apply(snapshot, !!pending.value); refreshError.value = ''
     } catch (cause) {
-      if (!disposed && version === refreshVersion) refreshError.value = cause instanceof Error ? cause.message : '暂时无法刷新进度，正在重试。'
-    } finally { if (!disposed && version === refreshVersion) schedulePoll() }
+      failed = true
+      if (!disposed && version === refreshVersion && request === pollRequest) refreshError.value = cause instanceof Error ? cause.message : '暂时无法刷新进度，正在重试。'
+    } finally { if (!disposed && version === refreshVersion && request === pollRequest) schedulePoll(failed) }
   }
   async function loadOlder() {
     if (!conversationId.value || !hasOlderMessages.value || loadingOlder.value || !messages.value.length) return
@@ -118,9 +165,12 @@ export function useAgentConversation(onContinuation?: (snapshot: ConversationSna
     if (!pending.value || sending.value || !conversationId.value) return
     sending.value = true; error.value = ''; const version = ++refreshVersion; clearTimeout(timer)
     const turn = pending.value
+    continuation.value = null
+    startObservation(version)
     try {
       const snapshot = await sendMessage(conversationId.value, turn.text, turn.requestKey, turn.locale)
       if (disposed || version !== refreshVersion) return
+      stopObservation()
       apply(snapshot); pending.value = null; remember(); refreshError.value = ''
       return snapshot
     } catch (cause) {
@@ -129,7 +179,7 @@ export function useAgentConversation(onContinuation?: (snapshot: ConversationSna
         // A rejected HTTP 400 has not begun a turn; transport errors must keep the original key.
         if (cause instanceof ApiError && cause.status === 400 && pending.value) { pending.value.rejected = true; remember() }
       }
-    } finally { if (!disposed && version === refreshVersion) { sending.value = false; schedulePoll() } }
+    } finally { if (!disposed && version === refreshVersion) { stopObservation(); sending.value = false; schedulePoll() } }
   }
   function editRejected(): string | undefined {
     if (sending.value || !pending.value?.rejected) return
@@ -139,7 +189,7 @@ export function useAgentConversation(onContinuation?: (snapshot: ConversationSna
   }
   async function reset(): Promise<boolean> {
     if (!conversationId.value || sending.value || loading.value) return false
-    loading.value = true; const version = ++refreshVersion; clearTimeout(timer)
+    loading.value = true; const version = ++refreshVersion; clearTimeout(timer); stopObservation()
     try {
       await resetConversation(conversationId.value)
       if (disposed || version !== refreshVersion) return false
@@ -154,7 +204,7 @@ export function useAgentConversation(onContinuation?: (snapshot: ConversationSna
   }
   /** A reply started under a different identity must never repopulate the new account's screen. */
   async function changeIdentity() {
-    refreshVersion++; clearTimeout(timer); continuation.value = null; autoStarted.clear()
+    refreshVersion++; clearTimeout(timer); stopObservation(); continuation.value = null; autoStarted.clear()
     historyRequest++; historyEpoch = undefined; latestSeq = 0; hasNewerMessages = false; hasOlderMessages.value = false; loadingOlder.value = false; historyError.value = ''
     conversationId.value = ''; messages.value = []; songCard.value = null; taskId.value = null
     shareUrl.value = null; liked.value = false; pending.value = null; error.value = ''; refreshError.value = ''
@@ -168,6 +218,6 @@ export function useAgentConversation(onContinuation?: (snapshot: ConversationSna
     remember()
     return deliver()
   }
-  onScopeDispose(() => { disposed = true; refreshVersion++; clearTimeout(timer) })
-  return { conversationId, messages, songCard, taskId, shareUrl, liked, taskRunning, loading, sending, error, refreshError, pending, hasOlderMessages, loadingOlder, historyError, loadOlder, refresh, send, retry: deliver, editRejected, reset, changeIdentity }
+  onScopeDispose(() => { disposed = true; refreshVersion++; clearTimeout(timer); stopObservation() })
+  return { conversationId, messages, songCard, taskId, shareUrl, liked, taskRunning, loading, sending, error, refreshError, pending, progressTransport, hasOlderMessages, loadingOlder, historyError, loadOlder, refresh, send, retry: deliver, editRejected, reset, changeIdentity }
 }

@@ -3,6 +3,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { effectScope } from 'vue'
+vi.mock('../src/modules/agent/api/events', () => ({ observeConversation: (_id: string, _seq: number, _epoch: number | undefined, _receive: unknown, signal: AbortSignal) => new Promise<void>(resolve => signal.addEventListener('abort', () => resolve(), { once: true })) }))
+vi.mock('../src/modules/agent/composables/useUserAvatar', async () => {
+  const { ref } = await import('vue')
+  return { useUserAvatar: () => ({ avatarUrl: ref(''), busy: ref(false), error: ref(''), refresh: vi.fn(async () => undefined), clear: vi.fn(), upload: vi.fn() }) }
+})
+vi.mock('../src/modules/agent/composables/useAvatarGeneration', async () => {
+  const { ref } = await import('vue')
+  return { useAvatarGeneration: () => ({ message: ref(''), available: ref(null), start: vi.fn(), stop: vi.fn() }) }
+})
 const api = vi.hoisted(() => ({ current: vi.fn(), state: vi.fn(), history: vi.fn(), send: vi.fn(), reset: vi.fn(), analyse: vi.fn(), cancel: vi.fn(), forget: vi.fn(), loadWork: vi.fn() }))
 vi.mock('../src/modules/agent/api/chat', () => ({ getCurrentConversation: api.current, getConversationState: api.state, getConversationHistory: api.history, sendMessage: api.send, resetConversation: api.reset }))
 vi.mock('../src/shared/credits/useCredits', () => ({ useCredits: () => ({ credits: null, refreshCredits: vi.fn(async () => undefined) }) }))
