@@ -63,7 +63,7 @@ class AgentLibraryActionsTest {
         var saved=AgentJson.read(snapshot.getValue());assertFalse(saved.containsKey("style"));assertNull(saved.get("revisionId"));
     }
     @Test void secondWorkUsesThePersistedVisibleList(){
-        when(conversations.listMessages("owner","C")).thenReturn(List.of(message("{\"kind\":\"works\",\"items\":[{\"data\":{\"workId\":\"W\"}},{\"data\":{\"workId\":\"W2\"}}]}")));
+        when(conversations.listRecentMessages("owner","C",80)).thenReturn(List.of(message("{\"kind\":\"works\",\"items\":[{\"data\":{\"workId\":\"W\"}},{\"data\":{\"workId\":\"W2\"}}]}")));
         run("select_work",Map.of("index",2));
         verify(conversations).applyToolResult(eq("owner"),eq("C"),isNull(),eq("{}"),eq("W2"),anyString(),isNull(),eq(5L));
     }

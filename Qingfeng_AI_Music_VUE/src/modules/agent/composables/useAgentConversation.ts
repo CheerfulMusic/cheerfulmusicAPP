@@ -1,9 +1,9 @@
 import { computed, onScopeDispose, ref } from 'vue'
-import { getConversationState, getCurrentConversation, resetConversation, sendMessage } from '../api/chat'
+import { getConversationState, getConversationHistory, getCurrentConversation, resetConversation, sendMessage } from '../api/chat'
 import { ApiError } from '../../../shared/http/api-client'
 import { isAgentContinuation, type AgentContinuation, type ConversationSnapshot, type Message, type SongCard } from '../model/conversation'
 
-interface PendingTurn { text: string; requestKey: string; locale: string; rejected?: boolean }
+interface PendingTurn { text: string; requestKey: string; locale: string; rejected?: boolean; historyEpoch?: number }
 const recoveryKey = (id: string) => `qingfeng.agent.pending.${id}`
 
 /** Only unacknowledged requests are kept locally, so retry reuses the original idempotency key. */
@@ -12,6 +12,8 @@ export function useAgentConversation(onContinuation?: (snapshot: ConversationSna
   const taskId = ref<string | null>(null), shareUrl = ref<string | null>(null), liked = ref(false)
   const loading = ref(false), sending = ref(false), error = ref(''), refreshError = ref('')
   const pending = ref<PendingTurn | null>(null)
+  const hasOlderMessages = ref(false), loadingOlder = ref(false), historyError = ref('')
+  let historyEpoch: number | undefined, latestSeq = 0, historyRequest = 0, hasNewerMessages = false
   const continuation = ref<AgentContinuation | null>(null)
   const autoStarted = new Set<string>()
   const taskRunning = computed(() => !!taskId.value && ['QUEUED', 'SUBMITTING', 'RUNNING', 'SAVING', 'SUBMISSION_UNKNOWN'].includes(songCard.value?.status || ''))
@@ -30,8 +32,23 @@ export function useAgentConversation(onContinuation?: (snapshot: ConversationSna
       if (value && typeof value.text === 'string' && typeof value.requestKey === 'string' && typeof value.locale === 'string') pending.value = value
     } catch { /* Ignore a corrupt local hint; authoritative history still loads. */ }
   }
+  function merge(rows: Message[]) {
+    const byId = new Map(messages.value.map(message => [message.id, message]))
+    for (const message of rows) byId.set(message.id, message)
+    messages.value = [...byId.values()].sort((a, b) => a.seq - b.seq)
+  }
   function apply(snapshot: ConversationSnapshot) {
-    messages.value = [...snapshot.messages].sort((a, b) => a.seq - b.seq)
+    const changed = snapshot.historyEpoch !== undefined && historyEpoch !== undefined && snapshot.historyEpoch !== historyEpoch
+    if (changed) { messages.value = []; historyRequest++; loadingOlder.value = false; continuation.value = null; autoStarted.clear() }
+    if (snapshot.historyEpoch === undefined || historyEpoch === undefined || changed) messages.value = [...snapshot.messages].sort((a, b) => a.seq - b.seq)
+    else merge(snapshot.messages)
+    if (snapshot.historyEpoch !== undefined) {
+      historyEpoch = snapshot.historyEpoch
+      if (pending.value?.historyEpoch !== undefined && pending.value.historyEpoch !== historyEpoch) { pending.value = null; remember() }
+    }
+    latestSeq = snapshot.latestSeq ?? messages.value.at(-1)?.seq ?? 0
+    hasNewerMessages = snapshot.hasNewerMessages === true
+    if (snapshot.messagesMode !== 'append' || changed) hasOlderMessages.value = snapshot.hasOlderMessages ?? false
     songCard.value = snapshot.songCard
     taskId.value = snapshot.taskId
     shareUrl.value = snapshot.shareUrl
@@ -40,13 +57,17 @@ export function useAgentConversation(onContinuation?: (snapshot: ConversationSna
   }
   function schedulePoll() {
     clearTimeout(timer)
+    if (!disposed && !sending.value && !loading.value && !pending.value && hasNewerMessages) {
+      timer = setTimeout(() => { void poll() }, 0)
+      return
+    }
     if (!disposed && !sending.value && !loading.value && !pending.value && continuation.value && !autoStarted.has(continuation.value.requestKey)) {
       timer = setTimeout(() => {
         if (disposed || sending.value || loading.value || pending.value || !continuation.value) return
         const next = continuation.value
         if (autoStarted.has(next.requestKey)) return
         autoStarted.add(next.requestKey)
-        pending.value = { text: next.text, requestKey: next.requestKey, locale: 'zh-CN' }; remember()
+        pending.value = { text: next.text, requestKey: next.requestKey, locale: 'zh-CN', historyEpoch }; remember()
         void deliver().then(result => { if (result) onContinuation?.(result) })
       }, 0)
       return
@@ -56,12 +77,24 @@ export function useAgentConversation(onContinuation?: (snapshot: ConversationSna
   async function poll() {
     const version = ++refreshVersion
     try {
-      const snapshot = await getConversationState(conversationId.value)
+      const snapshot = await getConversationState(conversationId.value, latestSeq, historyEpoch)
       if (disposed || version !== refreshVersion) return
       apply(snapshot); refreshError.value = ''
     } catch (cause) {
       if (!disposed && version === refreshVersion) refreshError.value = cause instanceof Error ? cause.message : '暂时无法刷新进度，正在重试。'
     } finally { if (!disposed && version === refreshVersion) schedulePoll() }
+  }
+  async function loadOlder() {
+    if (!conversationId.value || !hasOlderMessages.value || loadingOlder.value || !messages.value.length) return
+    const id = conversationId.value, epoch = historyEpoch, request = ++historyRequest
+    loadingOlder.value = true; historyError.value = ''
+    try {
+      const page = await getConversationHistory(id, messages.value[0]!.seq)
+      if (disposed || request !== historyRequest || id !== conversationId.value || epoch !== historyEpoch) return
+      if (page.historyEpoch !== historyEpoch) { await refresh(); return }
+      merge(page.messages); hasOlderMessages.value = page.hasOlderMessages
+    } catch (cause) { if (!disposed && request === historyRequest) historyError.value = cause instanceof Error ? cause.message : '历史消息加载失败，请重试。' }
+    finally { if (!disposed && request === historyRequest) loadingOlder.value = false }
   }
   async function refresh() {
     if (loading.value || sending.value) return
@@ -111,6 +144,7 @@ export function useAgentConversation(onContinuation?: (snapshot: ConversationSna
       await resetConversation(conversationId.value)
       if (disposed || version !== refreshVersion) return false
       pending.value = null; remember(); continuation.value = null; autoStarted.clear(); messages.value = []; songCard.value = null
+      historyRequest++; historyEpoch = undefined; latestSeq = 0; hasNewerMessages = false; hasOlderMessages.value = false; loadingOlder.value = false; historyError.value = ''
       taskId.value = null; shareUrl.value = null; liked.value = false; error.value = ''; refreshError.value = ''
       return true
     } catch (cause) {
@@ -121,6 +155,7 @@ export function useAgentConversation(onContinuation?: (snapshot: ConversationSna
   /** A reply started under a different identity must never repopulate the new account's screen. */
   async function changeIdentity() {
     refreshVersion++; clearTimeout(timer); continuation.value = null; autoStarted.clear()
+    historyRequest++; historyEpoch = undefined; latestSeq = 0; hasNewerMessages = false; hasOlderMessages.value = false; loadingOlder.value = false; historyError.value = ''
     conversationId.value = ''; messages.value = []; songCard.value = null; taskId.value = null
     shareUrl.value = null; liked.value = false; pending.value = null; error.value = ''; refreshError.value = ''
     loading.value = false; sending.value = false
@@ -129,10 +164,10 @@ export function useAgentConversation(onContinuation?: (snapshot: ConversationSna
   async function send(text: string, locale: string): Promise<ConversationSnapshot | undefined> {
     if (!text.trim() || sending.value || loading.value || pending.value) return
     if (!conversationId.value) { await refresh(); if (!conversationId.value || error.value || pending.value) return }
-    pending.value = { text: text.trim(), locale, requestKey: crypto.randomUUID() }
+    pending.value = { text: text.trim(), locale, requestKey: crypto.randomUUID(), historyEpoch }
     remember()
     return deliver()
   }
   onScopeDispose(() => { disposed = true; refreshVersion++; clearTimeout(timer) })
-  return { conversationId, messages, songCard, taskId, shareUrl, liked, taskRunning, loading, sending, error, refreshError, pending, refresh, send, retry: deliver, editRejected, reset, changeIdentity }
+  return { conversationId, messages, songCard, taskId, shareUrl, liked, taskRunning, loading, sending, error, refreshError, pending, hasOlderMessages, loadingOlder, historyError, loadOlder, refresh, send, retry: deliver, editRejected, reset, changeIdentity }
 }

@@ -7,6 +7,11 @@ mybatis:
   configuration:
     map-underscore-to-camel-case: true
 qingfeng:
+  events:
+    dispatcher-enabled: false
+  payment:
+    inbox:
+      scheduler-enabled: false
   credits:
     enabled: false
   cover:

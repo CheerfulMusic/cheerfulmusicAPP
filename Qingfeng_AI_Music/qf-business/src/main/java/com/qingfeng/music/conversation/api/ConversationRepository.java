@@ -12,6 +12,21 @@ public interface ConversationRepository {
 
     List<AgentMessage> listMessages(String conversationId);
 
+    /** Compatibility defaults for in-memory adapters; JDBC implements bounded SQL queries. */
+    default List<AgentMessage> messagesBefore(String id,long before,int limit) {
+        var rows=listMessages(id).stream().filter(m->m.seq()<before).toList();
+        return rows.subList(Math.max(0,rows.size()-limit),rows.size());
+    }
+    default List<AgentMessage> messagesAfter(String id,long after,int limit) {
+        return listMessages(id).stream().filter(m->m.seq()>after).limit(limit).toList();
+    }
+    default long historyEpoch(String id) { return 0; }
+    default List<AgentMessage> recentActionMessages(String id,int limit) {
+        var rows=listMessages(id).stream().filter(m->"assistant".equals(m.role())&&m.contentJson()!=null
+                &&(m.contentJson().contains("\"shareUrl\"")||m.contentJson().contains("\"revoke_share\""))).toList();
+        return rows.subList(Math.max(0,rows.size()-limit),rows.size());
+    }
+
     long nextSeq(String conversationId);
 
     void insertMessage(AgentMessage message);

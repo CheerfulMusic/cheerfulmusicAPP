@@ -215,3 +215,4 @@ nav.consumer-navigation a.agent-nav-link > svg { width: 17px; height: 17px; flex
 @media (prefers-reduced-motion: reduce) {
   .agent-typing-spinner { animation: none; }
 }
+.agent-history-more{align-self:center;margin:12px auto;padding:8px 16px;border:1px solid #e8ccba;border-radius:18px;background:#fffaf7;color:#8b5d47;cursor:pointer}.agent-history-more:disabled{opacity:.5;cursor:wait}

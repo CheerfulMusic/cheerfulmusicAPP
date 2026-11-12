@@ -27,6 +27,7 @@ class PayPalNewPurchaseGateTest {
     private CreditsLedger ledger;
     private PayPalCheckoutGateway gateway;
     private PayPalPaymentService service;
+    private PaymentInbox inbox;
     private Map<String,Object> row;
     private final String owner="synthetic-owner", id="synthetic-local-order", remote="REMOTE1";
     private final PayPalCheckoutGateway.WebhookHeaders headers=
@@ -39,6 +40,7 @@ class PayPalNewPurchaseGateTest {
         service=new PayPalPaymentService(db,tx,ledger,new PaymentCatalog(env),env){
             @Override PayPalCheckoutGateway gateway(){return gateway;}
         };
+        inbox=mock(PaymentInbox.class);service.infrastructure(inbox,mock(PaymentRiskService.class));
         ReflectionTestUtils.setField(service,"enabled",true);
         ReflectionTestUtils.setField(service,"environment","sandbox");
         ReflectionTestUtils.setField(service,"clientId","synthetic-client");
@@ -54,6 +56,7 @@ class PayPalNewPurchaseGateTest {
             "COMPLETED".equals(captureStatus)?"CAP1":"",captureStatus,new BigDecimal("9.90"),"USD");
     }
     private void persistence(){
+        when(db.queryForObject(contains("SELECT creator_id"),eq(String.class),any(),any())).thenReturn(owner);
         when(db.queryForList(anyString(),any(Object[].class))).thenAnswer(inv->List.of(row));
         doAnswer(inv->{
             Consumer<TransactionStatus> callback=inv.getArgument(0);
@@ -66,7 +69,7 @@ class PayPalNewPurchaseGateTest {
         });
     }
     private byte[] event(){
-        return ("{\"event_type\":\"PAYMENT.CAPTURE.COMPLETED\",\"resource\":{\"id\":\"CAP1\","
+        return ("{\"id\":\"WH-fixture\",\"event_type\":\"PAYMENT.CAPTURE.COMPLETED\",\"resource\":{\"id\":\"CAP1\","
             +"\"supplementary_data\":{\"related_ids\":{\"order_id\":\""+remote+"\"}}}}").getBytes(StandardCharsets.UTF_8);
     }
     @Test void closedGateHasNoDatabaseLedgerOrGatewaySideEffects(){
@@ -92,20 +95,20 @@ class PayPalNewPurchaseGateTest {
         verify(ledger).credit(owner,100L,"payment:"+id);
         verify(gateway,never()).capture(anyString(),anyString());
     }
-    @Test void completionWebhookStillVerifiesAndSettles(){
+    @Test void completionWebhookStillVerifiesAndPersistsWhenPurchasesArePaused(){
         persistence();when(gateway.verifyWebhook(eq(headers),any(byte[].class))).thenReturn(true);
         when(gateway.retrieve(remote)).thenReturn(snapshot("COMPLETED","COMPLETED"));
         service.webhook(headers,event());
         verify(gateway).verifyWebhook(eq(headers),any(byte[].class));
-        verify(ledger).credit(owner,100L,"payment:"+id);
-        assertEquals("PAID",row.get("status"));
+        verify(inbox).acceptVerified(eq("PAYPAL_SANDBOX"),eq("WH-fixture"),eq("PAYMENT.CAPTURE.COMPLETED"),anyString());
+        verifyNoInteractions(ledger);verify(gateway,never()).retrieve(anyString());
     }
-    @Test void repeatedWebhookKeepsTheSameBusinessIdempotencyReference(){
+    @Test void repeatedWebhookKeepsTheSameDurableEventIdentity(){
         persistence();when(gateway.verifyWebhook(eq(headers),any(byte[].class))).thenReturn(true);
         when(gateway.retrieve(remote)).thenReturn(snapshot("COMPLETED","COMPLETED"));
         service.webhook(headers,event());service.webhook(headers,event());
-        verify(ledger,times(2)).credit(owner,100L,"payment:"+id);
-        // This proves reference stability, NOT MySQL exactly-once crediting.
+        verify(inbox,times(2)).acceptVerified(eq("PAYPAL_SANDBOX"),eq("WH-fixture"),eq("PAYMENT.CAPTURE.COMPLETED"),anyString());
+        verifyNoInteractions(ledger);
     }
     @Test void invalidWebhookIsNotAcceptedWhenNewPurchasesArePaused(){
         when(gateway.verifyWebhook(eq(headers),any(byte[].class))).thenReturn(false);

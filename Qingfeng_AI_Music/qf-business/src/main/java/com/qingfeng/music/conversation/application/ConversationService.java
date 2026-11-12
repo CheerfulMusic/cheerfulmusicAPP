@@ -64,6 +64,29 @@ public class ConversationService {
         return repository.listMessages(requireOwned(creatorId, conversationId).id());
     }
 
+    public record MessagePage(List<AgentMessage> messages,boolean hasOlderMessages,long oldestSeq,long latestSeq,long historyEpoch) {}
+    private int pageLimit(int limit) { return Math.max(1,Math.min(200,limit)); }
+    public List<AgentMessage> listRecentMessages(String owner,String id,int limit) { return listMessagesBefore(owner,id,Long.MAX_VALUE,limit); }
+    public List<AgentMessage> listMessagesBefore(String owner,String id,long beforeSeq,int limit) {
+        return repository.messagesBefore(requireOwned(owner,id).id(),beforeSeq,pageLimit(limit));
+    }
+    public List<AgentMessage> listMessagesAfter(String owner,String id,long afterSeq,int limit) {
+        return repository.messagesAfter(requireOwned(owner,id).id(),Math.max(0,afterSeq),pageLimit(limit));
+    }
+    public long historyEpoch(String owner,String id) { return repository.historyEpoch(requireOwned(owner,id).id()); }
+    public List<AgentMessage> listRecentActionMessages(String owner,String id,int limit) {
+        return repository.recentActionMessages(requireOwned(owner,id).id(),pageLimit(limit));
+    }
+    @Transactional(readOnly=true,isolation=org.springframework.transaction.annotation.Isolation.REPEATABLE_READ)
+    public MessagePage historyPage(String owner,String id,Long beforeSeq,int limit) {
+        requireOwned(owner,id);
+        int size=pageLimit(limit);
+        var rows=repository.messagesBefore(id,beforeSeq==null?Long.MAX_VALUE:beforeSeq,size+1);
+        boolean more=rows.size()>size;
+        if(more)rows=rows.subList(1,rows.size());
+        return new MessagePage(List.copyOf(rows),more,rows.isEmpty()?0:rows.get(0).seq(),rows.isEmpty()?0:rows.get(rows.size()-1).seq(),repository.historyEpoch(id));
+    }
+
     public ConversationState state(String creatorId, String conversationId) {
         return repository.findState(requireOwned(creatorId, conversationId).id());
     }

@@ -37,7 +37,7 @@ public final class AgentLibraryActions implements AgentApplicationActions {
     public AgentLibraryActions withLibrary(com.qingfeng.music.server.query.WorkLibraryQuery library) { this.library=library; return this; }
     public List<Capability> capabilities() { return List.of(
         cap("create_work","新建空白作品草稿并选中，不生成歌词或音乐、不收费。用户自带歌词或音频且没有作品时可先执行此动作","title?:100字内标题,recipient?:80字内收礼人,occasion?:32字内场景,story?:4000字内故事,message?:500字内寄语","write"),
-        cap("list_works","列出、按标题搜索我的作品（每页20首）","query?:标题关键词,page?:0起页码","read"),
+        cap("list_works","列出我的作品，按标题、故事、歌词关键词查询（每页20首，非语义搜索）","query?:关键词,page?:0起页码","read"),
         cap("select_work","打开另一首我的作品；同名时先列出候选，绝不猜测","workId?:作品ID,index?:上次作品列表的1起序号,query?:标题","write"),
         cap("rename_work","修改作品名称，保留其他创作设定","workId?:作品ID,title:新名称","write"),
         cap("update_work","修改创作故事、收礼人、场景、寄语或作品标题，只更新明确提供的字段","workId?:作品ID,recipient?:80字内收礼人,occasion?:32字内场景,story?:4000字内故事,message?:500字内寄语,title?:100字内标题","write"),
@@ -194,8 +194,8 @@ public final class AgentLibraryActions implements AgentApplicationActions {
         List<LibraryWork> found=search(owner,query,page);
         var items=found.stream().map(w->new Item(w.work().id(),w.title(),w.status()+" · 作品版本 "+w.work().version(),Map.<String,Object>of("workId",w.work().id(),"version",w.work().version(),"createdAt",w.work().createdAt().toString(),"status",w.status()))).toList();
         var commands=new ArrayList<Command>(); found.stream().limit(10).forEach(w->commands.add(send("打开「"+w.title()+"」","打开作品 "+w.work().id())));
-        if(query.isBlank()&&found.size()==20) commands.add(send("下一页","列出我的作品，第 "+(page+2)+" 页（page="+(page+1)+"）"));
-        return new Result(clarification!=null?clarification:found.isEmpty()?"没有找到符合条件的作品。":"这是你的作品。可以告诉我打开第几首，或按名称搜索。"+(query.isBlank()?"":"（按名称搜索最近2000首作品）"),"works",items,commands,clarification==null?"list_works":null);
+        if(found.size()==20) commands.add(send("下一页","列出我的作品，第 "+(page+2)+" 页（page="+(page+1)+"）"+(query.isBlank()?"":"，关键词："+query)));
+        return new Result(clarification!=null?clarification:found.isEmpty()?"没有找到符合条件的作品。":"这是你的作品。可以告诉我打开第几首，或按关键词查询。"+(query.isBlank()?"":"（匹配标题、故事和歌词文字，非语义搜索）"),"works",items,commands,clarification==null?"list_works":null);
     }
     private record LibraryWork(WorkApi.Work work,String title,String status) {}
     private List<LibraryWork> libraryPage(String owner,int page) {
@@ -204,10 +204,8 @@ public final class AgentLibraryActions implements AgentApplicationActions {
     }
     private List<LibraryWork> search(String owner,String query,int page) {
         if(query.isBlank()) return libraryPage(owner,page);
-        var found=new ArrayList<LibraryWork>();
-        // Bound search to 2000 owned works; never search another user's data or silently pick one of duplicates.
-        for(int p=0;p<100;p++) { var batch=libraryPage(owner,p); for(var w:batch) if(w.title().toLowerCase(Locale.ROOT).contains(query)) found.add(w); if(batch.size()<20) break; }
-        int from=Math.min(found.size(),page*20); return found.subList(from,Math.min(found.size(),from+20));
+        if(library==null)return libraryPage(owner,page).stream().filter(w->w.title().toLowerCase(Locale.ROOT).contains(query)).toList();
+        return library.search(owner,query,page).stream().map(item->{var w=item.work();String display=w.title();if(display==null||display.isBlank()||"智能创作".equals(display))display=item.songTitle();return new LibraryWork(w,display==null||display.isBlank()?title(w):display,item.status());}).toList();
     }
     private WorkApi.Work work(String owner,String conversation,Map<String,Object> args,SongCard current) {
         String id=value(args,"workId",null);
@@ -262,7 +260,7 @@ public final class AgentLibraryActions implements AgentApplicationActions {
     private String fromResult(String owner,String conversation,String kind,String key,String work,Map<String,Object> args,boolean required) {
         if(!args.containsKey("index")) return null;
         long ordinal=number(args,"index",0); if(ordinal<1||ordinal>50) throw invalid("列表序号应从1开始。");
-        var history=conversations.listMessages(owner,conversation);
+        var history=conversations.listRecentMessages(owner,conversation,80);
         for(int n=history.size()-1;n>=0;n--) {
             if(!"assistant".equals(history.get(n).role())) continue;
             var body=json.readTree(history.get(n).contentJson());

@@ -14,7 +14,28 @@ public final class WorkLibraryQuery {
     private final JdbcTemplate jdbc;
     public WorkLibraryQuery(WorkApi works,JdbcTemplate jdbc){this.works=works;this.jdbc=jdbc;}
     public List<Item> list(String owner,int page){
-        var owned=works.list(owner,page);if(owned.isEmpty())return List.of();
+        return project(owner,works.list(owner,page));
+    }
+    /** Literal keyword query, scoped before pagination. User '%' and '_' never become wildcards. */
+    public List<Item> search(String owner,String query,int page) {
+        if(query==null||query.isBlank())return list(owner,page);
+        if(page<0||page>10000||query.length()>200)throw new com.qingfeng.music.common.exception.DomainException("INVALID_SEARCH","关键词最多200字，页码必须有效。");
+        String pattern="%"+query.trim().replace("!","!!").replace("%","!%").replace("_","!_").toLowerCase(Locale.ROOT)+"%";
+        var ids=jdbc.queryForList("""
+            SELECT w.id FROM music_work w WHERE w.owner_id=? AND w.deleted_at IS NULL
+            AND (LOWER(w.title) LIKE ? ESCAPE '!' OR LOWER(w.story) LIKE ? ESCAPE '!'
+              OR LOWER(w.message) LIKE ? ESCAPE '!' OR EXISTS
+              (SELECT 1 FROM lyric_revision l WHERE l.work_id=w.id AND
+               (LOWER(l.title) LIKE ? ESCAPE '!' OR LOWER(l.lyrics) LIKE ? ESCAPE '!')))
+            ORDER BY w.updated_at DESC,w.id DESC LIMIT 20 OFFSET ?
+            """,String.class,owner,pattern,pattern,pattern,pattern,pattern,Math.multiplyExact(page,20));
+        // Revalidate ownership after search, before exposing a projection.
+        var owned=new ArrayList<WorkApi.Work>();
+        for(String id:ids)try{owned.add(works.get(owner,id));}catch(com.qingfeng.music.common.exception.DomainException ignored){}
+        return project(owner,owned);
+    }
+    private List<Item> project(String owner,List<WorkApi.Work> owned){
+        if(owned.isEmpty())return List.of();
         String placeholders=String.join(",",Collections.nCopies(owned.size(),"?"));
         String sql="""
             SELECT w.id,

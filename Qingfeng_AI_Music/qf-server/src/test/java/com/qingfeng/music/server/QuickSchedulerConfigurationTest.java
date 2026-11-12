@@ -17,6 +17,11 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 class QuickSchedulerConfigurationTest {
+    @Test void apiOnlyOptInAdvertisesAcceptanceWithoutStartingQuickWorker(){
+        context("qingfeng.generation.scheduler-enabled=false","qingfeng.quick.scheduler-enabled=false","qingfeng.quick.accept-enabled=true").run(c->{
+            assertNull(c.getStartupFailure());assertFalse(c.containsBean("quickRunner"));assertTrue(new SystemInfoController(music,c.getEnvironment(),writer).info().capabilities().quickCreation());
+        });
+    }
     private final MusicProvider music = mock(MusicProvider.class);
     private final LyricsWriter writer = mock(LyricsWriter.class);
     private ApplicationContextRunner context(String... properties) {

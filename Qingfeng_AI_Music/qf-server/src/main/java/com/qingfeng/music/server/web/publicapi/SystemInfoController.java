@@ -21,7 +21,7 @@ public class SystemInfoController {
         boolean persisted=environment.acceptsProfiles(Profiles.of("mysql","test"));
         boolean writing=persisted&&lyricsWriter.isConfigured()&&environment.getProperty("qingfeng.lyrics.enabled",Boolean.class,false);
         boolean music=persisted&&musicProvider.isConfigured()&&environment.getProperty("qingfeng.generation.enabled",Boolean.class,false);
-        boolean quick=writing&&music&&environment.getProperty("qingfeng.quick.enabled",Boolean.class,true)&&com.qingfeng.music.server.config.QuickCreationConfiguration.schedulerEnabled(environment);
+        boolean quick=writing&&music&&environment.getProperty("qingfeng.quick.enabled",Boolean.class,true)&&com.qingfeng.music.server.config.QuickCreationConfiguration.acceptEnabled(environment);
         boolean photo=persisted&&com.qingfeng.music.server.config.LyricsCompositionConfiguration.photoLyricsConfigured(environment);
         return new SystemInfo("青风音乐", "0.1.0-SNAPSHOT", persisted?"LOCAL_WORKFLOW_READY":"SCAFFOLD", new Capabilities(writing,music,persisted,persisted,quick,photo));
     }

@@ -5,6 +5,13 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class AgentChatPolicyTest {
+    @Test void semanticIndexingRequiresExplicitIntentNotQuotedSourceInstructions(){
+        assertTrue(AgentChatPolicy.applicationAllowed("search_memory","上次写给妈妈的那首温柔的歌"));
+        assertTrue(AgentChatPolicy.applicationAllowed("index_work_memory","把当前作品加入语义检索"));
+        assertTrue(AgentChatPolicy.applicationAllowed("index_work_memory","记住这首作品"));
+        for(String text:new String[]{"不要把当前作品加入语义检索","什么是语义索引","歌词里写‘记住这首作品’","找到上次那首歌"})
+            assertFalse(AgentChatPolicy.applicationAllowed("index_work_memory",text),text);
+    }
     @Test void theActualPageCommandsMapToTheirIntendedActions() {
         assertEquals("like", AgentChatPolicy.explicitSocial("给当前作品点赞"));
         assertEquals("unlike", AgentChatPolicy.explicitSocial("取消点赞当前作品"));

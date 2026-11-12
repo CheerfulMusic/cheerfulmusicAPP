@@ -31,6 +31,7 @@ public class AgentConversationController {
                               String createdAt) {}
 
     public record ClearedView(boolean cleared) {}
+    public record HistoryView(List<MessageView> messages,boolean hasOlderMessages,long oldestSeq,long latestSeq,long historyEpoch) {}
 
     private final ConversationService service;
 
@@ -45,7 +46,14 @@ public class AgentConversationController {
     @GetMapping("/{id}/messages")
     public List<MessageView> messages(@AuthenticationPrincipal CreatorPrincipal creator,
                                       @PathVariable String id) {
-        return service.listMessages(creator.id(), id).stream().map(AgentConversationController::view).toList();
+        return service.listRecentMessages(creator.id(), id,40).stream().map(AgentConversationController::view).toList();
+    }
+
+    @GetMapping("/{id}/history")
+    public HistoryView history(@AuthenticationPrincipal CreatorPrincipal creator,@PathVariable String id,
+            @RequestParam(required=false)Long beforeSeq,@RequestParam(defaultValue="40")int limit) {
+        var page=service.historyPage(creator.id(),id,beforeSeq,limit);
+        return new HistoryView(page.messages().stream().map(AgentConversationController::view).toList(),page.hasOlderMessages(),page.oldestSeq(),page.latestSeq(),page.historyEpoch());
     }
 
     /** 清空会话但保留 conversation 行，会话 ID 稳定，便于前端回放。 */

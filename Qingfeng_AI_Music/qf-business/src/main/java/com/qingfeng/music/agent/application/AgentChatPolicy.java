@@ -60,7 +60,7 @@ public final class AgentChatPolicy {
     private static final String MUSIC="(?:生成|制作|开始做|做成).{0,10}(?:音乐|歌曲|歌|音频)|(?:生成|开始生成)(?:吧|音乐|歌曲|这首|一首|$)|(?:写|来|做|唱)(?:一|个|这)?首歌|generate.{0,12}(?:music|song|audio)|make.{0,12}(?:music|song)";
     private static final Set<String> READ_ACTIONS=Set.of("list_works","list_versions","list_audio","list_covers","discover_music","list_tasks",
             "get_credits","list_credit_entries","get_usage","get_account","get_referral","list_orders","get_order","payment_catalog","get_current_song",
-            "get_music_settings","music_settings_catalog","preview_music_settings","get_playback_lyrics","list_section_edits","section_context");
+            "get_music_settings","music_settings_catalog","preview_music_settings","get_playback_lyrics","list_section_edits","section_context","search_memory");
     private static String surface(String text) {
         if(text==null)return "";
         // Quoted commands are data. A quoted song title can still follow an explicit verb.
@@ -114,6 +114,7 @@ public final class AgentChatPolicy {
         if(action==null)return false;
         if(READ_ACTIONS.contains(action))return true;
         return switch(action) {
+            case "index_work_memory" -> requested(text,"(?:将|把|给|为).{0,50}(?:这首|当前|指定|作品|歌曲).{0,20}(?:加入语义检索|建立语义索引|加入记忆)|(?:记住|索引).{0,15}(?:这首|当前|作品|歌曲)|(?:index|remember).{0,30}(?:this|current|work|song)");
             case "create_work" -> requested(text,"(?:新建|创建|建立|开).{0,12}(?:草稿|作品|空白歌曲|空白项目)|(?:create|new).{0,12}(?:draft|work|blank song)")
                     ||applicationAllowed("save_lyrics",text)||applicationAllowed("upload_audio",text);
             case "select_work","select_version","select_audio","select_cover" -> requested(text,"选择|选中|选|打开|切换|切回|用|第[一二三四五六七八九十0-9]+|上一版|下一版|上一首|下一首|播放|下载|分享|改名|重命名|删除|修改|继续|查看|撤销|点赞|\\bselect\\b|\\bopen\\b|\\bplay\\b|\\bprevious\\b");

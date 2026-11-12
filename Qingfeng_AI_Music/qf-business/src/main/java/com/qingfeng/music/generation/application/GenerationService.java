@@ -17,6 +17,8 @@ public class GenerationService implements GenerationApi {
  public GenerationService(WorkApi works,LyricsApi lyrics,MusicProvider provider,TaskRepository repository,ExecutionRepository execution,boolean enabled,com.qingfeng.music.usage.UsageBudget budget){this.works=works;this.lyrics=lyrics;this.provider=provider;this.repository=repository;this.execution=execution;this.enabled=enabled;this.budget=budget;}
  private com.qingfeng.music.settings.MusicSettings settings;
  public GenerationService withSettings(com.qingfeng.music.settings.MusicSettings value){settings=value;return this;}
+ private com.qingfeng.music.events.DurableEvents events=(topic,key,payload)->{};
+ public GenerationService withEvents(com.qingfeng.music.events.DurableEvents value){events=Objects.requireNonNull(value);return this;}
  /** 不占额、不落库、不调用供应商；正式提交仍在事务内重新校验并冻结快照。 */
  public Preflight preflight(String owner,String work,String revisionId){
   var w=works.get(owner,work);var revision=lyrics.get(owner,work,revisionId);
@@ -52,7 +54,11 @@ public class GenerationService implements GenerationApi {
   provider.validate(direction==null?new MusicProvider.Request(revision.title(),revision.lyrics(),w.style(),voice):new MusicProvider.Request(revision.title(),revision.lyrics(),direction.style(),voice,direction.negativeTags(),true));
   Instant now=Instant.now();
   String id=UUID.randomUUID().toString();var task=checked(repository.insertOrRead(new Task(id,work,revisionId,w.version(),key,revision.title(),revision.lyrics(),w.style(),provider.name(),GenerationStatus.QUEUED,now,null,null,now,now.plusSeconds(5),voice)),revisionId);
-  if(settings!=null&&task.id().equals(id))settings.snapshot(id,direction);return task;
+  if(task.id().equals(id)){
+   if(settings!=null)settings.snapshot(id,direction);
+   events.publish("music.ready",id,id);
+  }
+  return task;
  }
  public List<Task> list(String owner,String work){works.get(owner,work);return repository.list(work);}
  public Task closeChecking(String owner,String work,String id,boolean acknowledge){

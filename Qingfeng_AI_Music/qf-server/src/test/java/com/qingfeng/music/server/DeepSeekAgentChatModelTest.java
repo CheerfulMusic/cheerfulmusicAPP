@@ -16,6 +16,26 @@ import java.util.concurrent.atomic.AtomicReference;
 import static org.junit.jupiter.api.Assertions.*;
 
 class DeepSeekAgentChatModelTest {
+    @Test void longHistoryDropsOldTurnsWhileKeepingCurrentInstructionInsideReservedBudget()throws Exception{
+        var history=new ArrayList<AgentChatModel.Turn>();for(int i=0;i<20;i++)history.add(new AgentChatModel.Turn("user","旧话题".repeat(4000)));
+        withResponse("{\"action\":\"chat\",\"reply\":\"可以继续聊\",\"args\":{}}",(model,request)->{
+            try(var scope=new com.qingfeng.music.common.concurrent.AgentRequestScope(java.time.Duration.ofSeconds(10),65536).enter()){
+                assertEquals("chat",model.respond(new AgentChatModel.Context("请聊现在的主题","zh-CN",history,null)).action());
+                assertTrue(request.get().getBytes(StandardCharsets.UTF_8).length<=65536);assertTrue(request.get().contains("请聊现在的主题"));
+            }
+        });
+    }
+    @Test void oversizedPromptAndExpiredDeadlineNeverCallProvider() {
+        var model=new DeepSeekAgentChatModel("test-key","test",true,URI.create("http://127.0.0.1:1/never"),HttpClient.newHttpClient());
+        var scope=new com.qingfeng.music.common.concurrent.AgentRequestScope(java.time.Duration.ofSeconds(10),1024);
+        try(var ignored=scope.enter()){
+            assertEquals("AGENT_CONTEXT_TOO_LARGE",assertThrows(DomainException.class,()->model.respond(new AgentChatModel.Context("你好","zh-CN",List.of(),null))).code());
+        }
+        scope=new com.qingfeng.music.common.concurrent.AgentRequestScope(java.time.Duration.ofSeconds(10),65536);scope.cancel();
+        try(var ignored=scope.enter()){
+            assertEquals("AGENT_DEADLINE_EXCEEDED",assertThrows(DomainException.class,()->model.respond(new AgentChatModel.Context("你好","zh-CN",List.of(),null))).code());
+        }
+    }
     @Test void sendsConversationAndCurrentWorkToRealHttpAdapterAndPreservesStructuredArgs() throws Exception {
         var received=new AtomicReference<String>();var json=new ObjectMapper();
         var server=HttpServer.create(new InetSocketAddress("127.0.0.1",0),0);

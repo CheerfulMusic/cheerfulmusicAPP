@@ -46,6 +46,8 @@ public class GenerateSongHandler implements AgentToolHandler {
             revision=lyrics.save(owner,work.id(),work.version(),revision.title(),revision.lyrics(),revision.id());
         }
         revision=lyrics.confirm(owner,work.id(),revision.id());
+        // A long lyric call may have exhausted the Agent turn's shared lease/deadline.
+        com.qingfeng.music.common.concurrent.AgentRequestScope.check();
         var task=generation.submit(owner,work.id(),revision.id(),ctx.requestKey());
         return result(ctx,work.id(),snapshot,task);
     }

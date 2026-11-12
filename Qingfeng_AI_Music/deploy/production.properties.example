@@ -40,6 +40,30 @@ qingfeng.cover.directory=/var/lib/qingfeng-music/covers
 # qingfeng.cdn.key-backup=
 # qingfeng.cdn.ttl-seconds=600
 # qingfeng.cdn.uid=0
+# Reliability components: opt-in after V34-V37 migrations and private infrastructure validation.
+qingfeng.redis.enabled=false
+qingfeng.agent.admission.mode=db
+# spring.data.redis.host=127.0.0.1
+# spring.data.redis.port=6379
+# spring.data.redis.password=SET_IN_PRIVATE_CONFIG
+spring.data.redis.timeout=2s
+spring.data.redis.connect-timeout=2s
+qingfeng.events.rabbit.enabled=false
+qingfeng.events.dispatcher-enabled=true
+qingfeng.events.batch-size=32
+# spring.rabbitmq.host=127.0.0.1
+# spring.rabbitmq.port=5672
+# spring.rabbitmq.virtual-host=qingfeng
+# spring.rabbitmq.username=SET_IN_PRIVATE_CONFIG
+# spring.rabbitmq.password=SET_IN_PRIVATE_CONFIG
+spring.rabbitmq.connection-timeout=3s
+qingfeng.events.rabbit.consumers=2
+qingfeng.payment.inbox.scheduler-enabled=true
+# Separate financial authorization; empty denies all review operations. Not an Agent capability.
+qingfeng.payment.risk.admin-owner-ids=
+qingfeng.agent.retrieval.enabled=false
+qingfeng.agent.retrieval.scheduler-enabled=false
+# Complete embedding/Qdrant settings are documented in docs/agent-retrieval.md.
 # 与存储侧保持一致；音频对象名不含 prefix，封面对象名已含 cover-prefix。
 # qingfeng.oss.prefix=qingfeng/audio/
 # qingfeng.oss.cover-prefix=qingfeng/covers/

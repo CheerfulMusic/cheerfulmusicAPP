@@ -18,10 +18,12 @@ import java.util.concurrent.*;
 public class QuickCreationConfiguration {
     @Bean QuickCreationRepository quickCreationRepository(JdbcTemplate jdbc,PlatformTransactionManager manager){return new JdbcQuickCreationRepository(jdbc,new TransactionTemplate(manager));}
     @Bean QuickCreationService quickCreationService(QuickCreationRepository repository,WorkApi works,LyricsApi lyrics,LyricsCompositionService composer,GenerationApi generation,Environment env,com.qingfeng.music.lyrics.application.LyricsWriter writer,com.qingfeng.music.generation.application.port.MusicProvider provider){
-        return new QuickCreationService(repository,works,lyrics,composer,generation,writer.isConfigured()&&provider.isConfigured()&&env.getProperty("qingfeng.lyrics.enabled",Boolean.class,false)&&env.getProperty("qingfeng.quick.enabled",Boolean.class,true)&&env.getProperty("qingfeng.generation.enabled",Boolean.class,false)&&schedulerEnabled(env));
+        return new QuickCreationService(repository,works,lyrics,composer,generation,writer.isConfigured()&&provider.isConfigured()&&env.getProperty("qingfeng.lyrics.enabled",Boolean.class,false)&&env.getProperty("qingfeng.quick.enabled",Boolean.class,true)&&env.getProperty("qingfeng.generation.enabled",Boolean.class,false)&&acceptEnabled(env));
     }
     /** 默认沿用音乐调度开关；显式设置时仅开启写词/提交编排，不领取音乐查询和归档队列。 */
     public static boolean schedulerEnabled(Environment env){return env.getProperty("qingfeng.quick.scheduler-enabled",Boolean.class,env.getProperty("qingfeng.generation.scheduler-enabled",Boolean.class,true));}
+    /** API-only acceptance is explicit; disabling local schedulers still disables paid Quick admission by default. */
+    public static boolean acceptEnabled(Environment env){return env.getProperty("qingfeng.quick.accept-enabled",Boolean.class,schedulerEnabled(env));}
     @Bean(destroyMethod="close")
     @ConditionalOnExpression("${qingfeng.quick.enabled:true} && ${qingfeng.generation.enabled:false} && ${qingfeng.quick.scheduler-enabled:${qingfeng.generation.scheduler-enabled:true}}")
     QuickRunner quickRunner(QuickCreationService service,Environment env){return new QuickRunner(service,env.getProperty("qingfeng.quick.workers",Integer.class,4));}

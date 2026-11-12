@@ -14,7 +14,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 /** PayPal payment flow. Remote calls are outside transactions; successful capture and credit commit together. */
 @Service @Profile({"mysql","test"})
-public class PayPalPaymentService {
+public class PayPalPaymentService implements VerifiedPaymentProcessor {
     private final JdbcTemplate db; private final TransactionTemplate tx; private final CreditsLedger ledger; private final PaymentCatalog catalog;
     @Value("${qingfeng.paypal.enabled:false}") private boolean enabled;
     @Value("${qingfeng.paypal.accepting-new-orders:true}") private boolean acceptingNewOrders = true;
@@ -27,6 +27,12 @@ public class PayPalPaymentService {
     @Value("${qingfeng.paypal.public-live-enabled:false}") private boolean publicLiveEnabled;
     @Value("${qingfeng.paypal.return-base-url:https://cheerfulmusic.com/account}") private String returnBase;
     private final Environment configuration;
+    private volatile PayPalCheckoutGateway sharedGateway;
+    private PaymentInbox inbox;
+    private PaymentRiskService risks;
+    @Value("${qingfeng.payment.inbox.enabled:true}") private boolean inboxEnabled=true;
+    @org.springframework.beans.factory.annotation.Autowired
+    void infrastructure(PaymentInbox inbox,PaymentRiskService risks){this.inbox=inbox;this.risks=risks;}
     public PayPalPaymentService(JdbcTemplate db,TransactionTemplate tx,CreditsLedger ledger,PaymentCatalog catalog,Environment configuration){this.db=db;this.tx=tx;this.ledger=ledger;this.catalog=catalog;this.configuration=configuration;}
     /** Local official PayPal Live checkout: popup-only, no public webhook, isolated on the 3309 database. */
     boolean localLive(){return environment.equals("live") && liveEnabled
@@ -43,12 +49,15 @@ public class PayPalPaymentService {
         && !Arrays.asList(configuration.getActiveProfiles()).contains("paypal-live")
         && !Arrays.asList(configuration.getActiveProfiles()).contains("payment-demo")
         && !"paypal-local".equals(configuration.getProperty("qingfeng.deployment.environment"));}
-    // Refund/dispute webhook events are not implemented yet; merchant acceptance must be completed
-    // before public-live-enabled is switched on. See docs/PayPal收款接入.md.
+    // Verified refunds/disputes enter a durable inbox and freeze spending pending an audited review.
+    // Public Live checkout still requires explicit merchant acceptance and its independent opt-in.
     boolean ready(){return enabled && !clientId.isBlank() && !clientSecret.isBlank() && !merchantId.isBlank()
         && ((environment.equals("sandbox") && !webhookId.isBlank()) || localLive() || publicLive());}
-    String provider(){return environment.equals("live")?"PAYPAL_LIVE":"PAYPAL_SANDBOX";}
-    PayPalCheckoutGateway gateway(){return new PayPalCheckoutGateway(environment.equals("live")?PayPalCheckoutGateway.Environment.LIVE:PayPalCheckoutGateway.Environment.SANDBOX,clientId,clientSecret,merchantId,webhookId,localLive());}
+    @Override public String provider(){return environment.equals("live")?"PAYPAL_LIVE":"PAYPAL_SANDBOX";}
+    PayPalCheckoutGateway gateway(){
+        var current=sharedGateway;if(current!=null)return current;
+        synchronized(this){if(sharedGateway==null)sharedGateway=new PayPalCheckoutGateway(environment.equals("live")?PayPalCheckoutGateway.Environment.LIVE:PayPalCheckoutGateway.Environment.SANDBOX,clientId,clientSecret,merchantId,webhookId,localLive());return sharedGateway;}
+    }
     public Map<String,Object> catalog(){return Map.of("enabled",ready() && acceptingNewOrders,"settlementEnabled",ready(),"environment",environment.equals("live")?"live":"sandbox","popupOnly",localLive(),"packages",ready()?catalog.packages().stream().map(PaymentCatalog.Package::asMap).toList():List.of());}
     /** The client ID is public; no server-side secret is returned to the browser. */
     public Map<String,Object> sdkConfig(){return Map.of("enabled",ready(),"clientId",ready()?clientId:"","environment",environment.equals("live")?"production":"sandbox");}
@@ -61,17 +70,46 @@ public class PayPalPaymentService {
             if(db.queryForList("SELECT id FROM creator WHERE id=? FOR UPDATE",owner).isEmpty()) throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
             Integer identity=db.queryForObject("SELECT (SELECT COUNT(*) FROM creator_google_identity WHERE creator_id=?) + (SELECT COUNT(*) FROM creator_oidc_identity WHERE creator_id=?)",Integer.class,owner,owner);
             if(identity==null||identity==0) throw new ResponseStatusException(HttpStatus.FORBIDDEN,"请先登录账号");
-            Integer pending=db.queryForObject("SELECT COUNT(*) FROM payment_order WHERE creator_id=? AND status IN ('CREATING','PENDING')",Integer.class,owner);
+            Integer pending=db.queryForObject("SELECT COUNT(*) FROM payment_order WHERE creator_id=? AND status IN ('CREATING','CREATION_UNKNOWN','PENDING')",Integer.class,owner);
             if(pending!=null && pending>0) throw new ResponseStatusException(HttpStatus.CONFLICT,"已有待核对的订单");
             db.update("INSERT INTO payment_order(id,creator_id,package_id,amount,currency,credits,status,created_at,provider) VALUES(?,?,?,?,?,?,?,CURRENT_TIMESTAMP,?)",id,owner,p.id(),p.amount(),p.currency(),p.credits(),"CREATING",type);
         });
-        var link=gateway().create(id,p.title(),p.amount(),p.currency(),returnBase+"?paypal_order="+id,returnBase+"?paypal_cancel="+id);
+        PayPalCheckoutGateway.Created link;
+        try{link=gateway().create(id,p.title(),p.amount(),p.currency(),returnBase+"?paypal_order="+id,returnBase+"?paypal_cancel="+id);}
+        catch(PayPalCheckoutGateway.ProviderBusy busy){
+            db.update("UPDATE payment_order SET status='FAILED',failure_code='CREATE_NOT_STARTED' WHERE id=? AND status='CREATING' AND provider_link_id IS NULL",id);
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,"支付通道繁忙，本次尚未创建支付单，请稍后重试");
+        }
+        catch(PayPalCheckoutGateway.CreationRejected rejected){
+            db.update("UPDATE payment_order SET status='FAILED',failure_code='CREATE_REJECTED' WHERE id=? AND status='CREATING' AND provider_link_id IS NULL",id);
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,"支付平台明确拒绝创建订单，可稍后重试");
+        }catch(RuntimeException unknown){
+            db.update("UPDATE payment_order SET status='CREATION_UNKNOWN',failure_code='CREATE_RESULT_UNKNOWN' WHERE id=? AND status='CREATING' AND provider_link_id IS NULL",id);
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,"订单创建结果待核查，请保留原订单并联系支持核对，请勿重复付款");
+        }
         db.update("UPDATE payment_order SET provider_link_id=?,status=CASE WHEN status='CREATING' THEN 'PENDING' ELSE status END WHERE id=? AND provider=? AND (provider_link_id IS NULL OR provider_link_id=?)",link.orderId(),id,type,link.orderId());
         return Map.of("orderId",id,"checkoutUrl",link.approvalUrl(),"paypalOrderId",link.orderId());
     }
     Map<String,Object> row(String owner,String id){
         var rows=db.queryForList("SELECT * FROM payment_order WHERE id=? AND creator_id=? AND provider=?",id,owner,provider());
         if(rows.isEmpty()) throw new ResponseStatusException(HttpStatus.NOT_FOUND); return rows.get(0);
+    }
+    /** Attach an existing provider order after an uncertain create; this never creates or captures an order. */
+    public Map<String,Object> recover(String owner,String id,String remote){
+        if(!ready())throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE);
+        var original=row(owner,id);
+        var snapshot=gateway().retrieve(remote);
+        tx.executeWithoutResult(t->{
+            db.queryForList("SELECT id FROM creator WHERE id=? FOR UPDATE",owner);
+            var locked=db.queryForMap("SELECT * FROM payment_order WHERE id=? AND creator_id=? AND provider=? FOR UPDATE",id,owner,provider());
+            String prior=(String)locked.get("provider_link_id");
+            if(prior!=null&&!prior.equals(remote))throw new ResponseStatusException(HttpStatus.CONFLICT,"原支付单不匹配");
+            if(!Set.of("CREATING","CREATION_UNKNOWN","PENDING","PAID").contains(locked.get("status")))throw new ResponseStatusException(HttpStatus.CONFLICT,"订单不能恢复");
+            var expected=new HashMap<>(locked);expected.put("provider_link_id",remote);check(expected,snapshot);
+            db.update("UPDATE payment_order SET provider_link_id=?,status=CASE WHEN status IN ('CREATING','CREATION_UNKNOWN') THEN 'PENDING' ELSE status END,failure_code=NULL WHERE id=?",remote,id);
+            if("COMPLETED".equals(snapshot.orderStatus())&&"COMPLETED".equals(snapshot.captureStatus()))settle(id,snapshot);
+        });
+        return order(owner,id);
     }
     public Map<String,Object> order(String owner,String id){
         var r=row(owner,id);
@@ -133,6 +171,8 @@ public class PayPalPaymentService {
     }
     void settle(String id,PayPalCheckoutGateway.Snapshot s){
         tx.executeWithoutResult(t->{
+            String owner=db.queryForObject("SELECT creator_id FROM payment_order WHERE id=? AND provider=?",String.class,id,provider());
+            db.queryForList("SELECT id FROM creator WHERE id=? FOR UPDATE",owner);
             var rows=db.queryForList("SELECT * FROM payment_order WHERE id=? AND provider=? FOR UPDATE",id,provider());
             if(rows.isEmpty()) throw new ResponseStatusException(HttpStatus.NOT_FOUND);
             var row=rows.get(0);check(row,s);
@@ -143,20 +183,126 @@ public class PayPalPaymentService {
         });
     }
     public void webhook(PayPalCheckoutGateway.WebhookHeaders headers,byte[] body){
-        if(!ready() || webhookId.isBlank()) throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE);
+        if(!ready() || webhookId.isBlank()||!inboxEnabled||inbox==null) throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE);
         var gateway=gateway();
         if(!gateway.verifyWebhook(headers,body)) throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
         var event=new tools.jackson.databind.ObjectMapper().readTree(body);
-        if(!"PAYMENT.CAPTURE.COMPLETED".equals(event.path("event_type").asString()))
-            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,"事件处理尚未实现");
+        String eventId=event.path("id").asString(),type=event.path("event_type").asString();
         var resource=event.path("resource");
-        String remote=resource.path("supplementary_data").path("related_ids").path("order_id").asString();
-        String capture=resource.path("id").asString();
-        if(remote.isBlank()||capture.isBlank()) throw new ResponseStatusException(HttpStatus.BAD_REQUEST);
-        var rows=db.queryForList("SELECT id FROM payment_order WHERE provider=? AND provider_link_id=?",provider(),remote);
-        if(rows.size()!=1) throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,"订单待核对");
-        var snapshot=gateway.retrieve(remote);
-        if(!capture.equals(snapshot.captureId())) throw new ResponseStatusException(HttpStatus.CONFLICT);
-        settle((String)rows.get(0).get("id"),snapshot);
+        // Store only identifiers needed for authoritative rereads, not payer details or callback credentials.
+        var normalized=new TreeMap<String,String>();
+        String resourceId=resource.path("id").asString();
+        if(resourceId.isBlank())resourceId=resource.path("dispute_id").asString();
+        normalized.put("resourceId",resourceId);
+        normalized.put("orderId",resource.path("supplementary_data").path("related_ids").path("order_id").asString());
+        inbox.acceptVerified(provider(),eventId,type,new tools.jackson.databind.ObjectMapper().writeValueAsString(normalized));
+    }
+    public boolean processNextEvent(){
+        if(!ready()||!inboxEnabled||inbox==null)return false;
+        var found=inbox.claim(provider());if(found.isEmpty())return false;
+        var event=found.get();
+        try{
+            var payload=new tools.jackson.databind.ObjectMapper().readTree(event.payload());
+            String resource=payload.path("resourceId").asString();
+            if("PAYMENT.CAPTURE.COMPLETED".equals(event.type())){
+                String remote=payload.path("orderId").asString();
+                if(remote.isBlank())remote=gateway().retrieveCapture(resource).path("supplementary_data").path("related_ids").path("order_id").asString();
+                var snapshot=gateway().retrieve(remote);
+                if(!resource.equals(snapshot.captureId()))throw new IllegalStateException("Capture correlation mismatch");
+                String order=snapshot.reference();
+                var local=db.queryForMap("SELECT * FROM payment_order WHERE id=? AND provider=?",order,provider());
+                var expected=new HashMap<>(local);expected.put("provider_link_id",snapshot.orderId());check(expected,snapshot);
+                if(local.get("provider_link_id")!=null&&!snapshot.orderId().equals(local.get("provider_link_id")))throw new IllegalStateException("Provider order mismatch");
+                inbox.complete(event,()->{
+                    db.queryForList("SELECT id FROM creator WHERE id=? FOR UPDATE",local.get("creator_id"));
+                    db.update("UPDATE payment_order SET provider_link_id=?,failure_code=NULL WHERE id=? AND provider=? AND provider_link_id IS NULL",snapshot.orderId(),order,provider());
+                    if(Set.of("REFUNDED","PARTIALLY_REFUNDED","REVERSED").contains(snapshot.captureStatus())){
+                        db.update("UPDATE payment_order SET provider_capture_id=? WHERE id=? AND (provider_capture_id IS NULL OR provider_capture_id=?)",snapshot.captureId(),order,snapshot.captureId());
+                        risks.recordVerified(provider(),snapshot.captureId(),"PAYMENT.CAPTURE.REFUND_DETECTED",order,event.eventId());
+                    }else settle(order,snapshot);
+                });
+            }else if("PAYMENT.CAPTURE.REFUNDED".equals(event.type())||"PAYMENT.CAPTURE.REVERSED".equals(event.type())||"PAYMENT.CAPTURE.STATUS_RISK".equals(event.type())||event.type().startsWith("CUSTOMER.DISPUTE.")){
+                var captures=new LinkedHashSet<String>();
+                if(event.type().startsWith("CUSTOMER.DISPUTE.")){
+                    var dispute=gateway().retrieveDispute(resource);
+                    if(!resource.equals(dispute.path("dispute_id").asString()))throw new IllegalStateException("Dispute identity mismatch");
+                    for(var transaction:dispute.path("disputed_transactions")){String capture=transaction.path("seller_transaction_id").asString();if(!capture.isBlank())captures.add(capture);}
+                }else if("PAYMENT.CAPTURE.REVERSED".equals(event.type())||"PAYMENT.CAPTURE.STATUS_RISK".equals(event.type())){
+                    var capture=gateway().retrieveCapture(resource);if(!resource.equals(capture.path("id").asString()))throw new IllegalStateException("Capture identity mismatch");
+                    if("PAYMENT.CAPTURE.STATUS_RISK".equals(event.type())&&!Set.of("REFUNDED","PARTIALLY_REFUNDED","REVERSED").contains(capture.path("status").asString())){
+                        inbox.complete(event,()->{});return true;
+                    }
+                    captures.add(resource);
+                }else{
+                    var refund=gateway().retrieveRefund(resource);if(!resource.equals(refund.path("id").asString()))throw new IllegalStateException("Refund identity mismatch");
+                    for(var link:refund.path("links"))if("up".equals(link.path("rel").asString())){
+                        var uri=java.net.URI.create(link.path("href").asString());String prefix="/v2/payments/captures/";
+                        if("https".equals(uri.getScheme())&&Set.of("api-m.paypal.com","api-m.sandbox.paypal.com","api.paypal.com","api.sandbox.paypal.com").contains(uri.getHost())&&uri.getPath().startsWith(prefix))captures.add(uri.getPath().substring(prefix.length()));
+                    }
+                }
+                if(captures.isEmpty()||captures.size()>20)throw new IllegalStateException("Risk resource has no bounded payment correlation");
+                var orders=new TreeSet<String>();
+                var recovered=new LinkedHashMap<String,PayPalCheckoutGateway.Snapshot>();
+                for(String capture:captures){
+                    inbox.renew(event);
+                    var matches=db.query("SELECT id FROM payment_order WHERE provider=? AND provider_capture_id=?",(rs,n)->rs.getString(1),provider(),capture);
+                    if(matches.size()==1){orders.add(matches.get(0));continue;}
+                    if(!matches.isEmpty())throw new IllegalStateException("Ambiguous risk payment");
+                    // Refund/dispute can arrive before the completion event. Correlate without granting credits.
+                    var captured=gateway().retrieveCapture(capture);
+                    if(!capture.equals(captured.path("id").asString()))throw new IllegalStateException("Capture identity mismatch");
+                    String remote=captured.path("supplementary_data").path("related_ids").path("order_id").asString();
+                    var snapshot=gateway().retrieve(remote);
+                    if(!capture.equals(snapshot.captureId()))throw new IllegalStateException("Capture/order mismatch");
+                    var local=db.queryForMap("SELECT * FROM payment_order WHERE id=? AND provider=?",snapshot.reference(),provider());
+                    var expected=new HashMap<>(local);expected.put("provider_link_id",snapshot.orderId());check(expected,snapshot);
+                    if(local.get("provider_link_id")!=null&&!snapshot.orderId().equals(local.get("provider_link_id")))throw new IllegalStateException("Provider order mismatch");
+                    orders.add(snapshot.reference());recovered.put(snapshot.reference(),snapshot);
+                }
+                var owners=new TreeSet<String>();
+                for(String order:orders)owners.add(db.queryForObject("SELECT creator_id FROM payment_order WHERE id=? AND provider=?",String.class,order,provider()));
+                inbox.complete(event,()->{
+                    for(String owner:owners)db.queryForList("SELECT id FROM creator WHERE id=? FOR UPDATE",owner);
+                    for(var entry:recovered.entrySet()){
+                        var snapshot=entry.getValue();
+                        db.update("UPDATE payment_order SET provider_link_id=?,provider_capture_id=? WHERE id=? AND provider=? AND (provider_link_id IS NULL OR provider_link_id=?) AND (provider_capture_id IS NULL OR provider_capture_id=?)",snapshot.orderId(),snapshot.captureId(),entry.getKey(),provider(),snapshot.orderId(),snapshot.captureId());
+                    }
+                    for(String order:orders)risks.recordVerified(provider(),resource,event.type(),order,event.eventId());
+                });
+            }else inbox.complete(event,()->{});
+        }catch(RuntimeException failed){inbox.retry(event);}
+        return true;
+    }
+    /** Bounded, read-only provider reconciliation for existing linked orders; never captures or recreates. */
+    public void reconcileOrders(){
+        if(!ready())return;
+        db.update("UPDATE payment_order SET status='CREATION_UNKNOWN',failure_code='CREATE_PROCESS_INTERRUPTED' WHERE provider=? AND status='CREATING' AND provider_link_id IS NULL AND created_at<TIMESTAMPADD(MINUTE,-5,CURRENT_TIMESTAMP)",provider());
+        var rows=db.queryForList("SELECT id,creator_id FROM payment_order WHERE provider=? AND status IN ('PENDING','CANCELLED') AND provider_link_id IS NOT NULL AND (reconcile_after IS NULL OR reconcile_after<CURRENT_TIMESTAMP) ORDER BY reconcile_after,created_at,id LIMIT 10",provider());
+        for(var row:rows){
+            if(db.update("UPDATE payment_order SET reconcile_after=TIMESTAMPADD(MINUTE,5,CURRENT_TIMESTAMP) WHERE id=? AND (reconcile_after IS NULL OR reconcile_after<CURRENT_TIMESTAMP)",row.get("id"))!=1)continue;
+            try{order((String)row.get("creator_id"),(String)row.get("id"));}catch(RuntimeException ignored){/* persisted due time permits a later retry */}
+        }
+        reconcilePaidCaptures();
+    }
+    /** Detect a missed refund callback for recent paid orders. Disputes still require their verified webhook. */
+    private void reconcilePaidCaptures(){
+        if(!inboxEnabled||inbox==null)return;
+        var rows=db.queryForList("SELECT id,provider_link_id,provider_capture_id,amount,currency FROM payment_order WHERE provider=? AND status='PAID' AND provider_capture_id IS NOT NULL AND created_at>=TIMESTAMPADD(DAY,-30,CURRENT_TIMESTAMP) AND (reconcile_after IS NULL OR reconcile_after<CURRENT_TIMESTAMP) ORDER BY reconcile_after,created_at,id LIMIT 10",provider());
+        for(var row:rows){
+            if(db.update("UPDATE payment_order SET reconcile_after=TIMESTAMPADD(MINUTE,5,CURRENT_TIMESTAMP) WHERE id=? AND provider=? AND status='PAID' AND (reconcile_after IS NULL OR reconcile_after<CURRENT_TIMESTAMP)",row.get("id"),provider())!=1)continue;
+            try{
+                String id=(String)row.get("provider_capture_id");var capture=gateway().retrieveCapture(id);
+                if(!id.equals(capture.path("id").asString()))throw new IllegalStateException("Capture identity mismatch");
+                String remote=capture.path("supplementary_data").path("related_ids").path("order_id").asString();
+                if(!remote.isBlank()&&!Objects.equals(remote,row.get("provider_link_id")))throw new IllegalStateException("Capture order mismatch");
+                if(!Objects.equals(row.get("currency"),capture.path("amount").path("currency_code").asString())||((BigDecimal)row.get("amount")).compareTo(new BigDecimal(capture.path("amount").path("value").asString()))!=0)throw new IllegalStateException("Capture amount mismatch");
+                String status=capture.path("status").asString();
+                if(!Set.of("REFUNDED","PARTIALLY_REFUNDED","REVERSED").contains(status))continue;
+                String eventId="reconcile-"+UUID.nameUUIDFromBytes((provider()+":"+id+":"+status).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                String payload=new tools.jackson.databind.ObjectMapper().writeValueAsString(new TreeMap<>(Map.of("resourceId",id,"orderId",Objects.toString(row.get("provider_link_id"),""))));
+                // Stable provider/capture/status identity prevents a recurring scan from reopening a reviewed case.
+                inbox.acceptVerified(provider(),eventId,"PAYMENT.CAPTURE.STATUS_RISK",payload);
+            }catch(RuntimeException ignored){/* persisted due time permits a later retry; no balance adjustment */}
+        }
     }
 }

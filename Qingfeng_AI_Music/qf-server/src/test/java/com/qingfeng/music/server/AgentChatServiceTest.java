@@ -25,7 +25,9 @@ class AgentChatServiceTest {
     final SongCard song=new SongCard("work","妈妈","温暖民谣","原来的副歌","/audio/current","SUCCEEDED",null,1,"lyrics","asset",null);
     AgentChatService service;
     @BeforeEach void setup(){
-        when(conversations.listMessages("owner","conversation")).thenAnswer(call->List.copyOf(messages));
+        when(conversations.listRecentMessages(eq("owner"),eq("conversation"),anyInt())).thenAnswer(call->List.copyOf(messages));
+        when(conversations.listRecentActionMessages(eq("owner"),eq("conversation"),anyInt())).thenAnswer(call->List.copyOf(messages));
+        when(conversations.historyPage(eq("owner"),eq("conversation"),isNull(),anyInt())).thenAnswer(call->new ConversationService.MessagePage(List.copyOf(messages),false,messages.isEmpty()?0:1,messages.size(),0));
         when(conversations.appendMessage(anyString(),anyString(),anyString(),anyString(),anyString(),anyString(),nullable(String.class))).thenAnswer(call->{
             var message=new AgentMessage(UUID.randomUUID().toString(),"conversation",messages.size()+1,call.getArgument(2),call.getArgument(3),call.getArgument(4),call.getArgument(5),call.getArgument(6),Instant.now());
             messages.add(message);return message;
@@ -40,6 +42,22 @@ class AgentChatServiceTest {
         service=new AgentChatService(conversations,tools,model,store,social);
     }
     String key(){return UUID.randomUUID().toString();}
+    @Test void epochResetReplacesHistoryAndResetsCursorInsteadOfKeepingPreviousSequence(){
+        when(conversations.historyPage(eq("owner"),eq("conversation"),isNull(),anyInt())).thenReturn(new ConversationService.MessagePage(List.of(),false,0,0,5));
+        when(conversations.historyEpoch("owner","conversation")).thenReturn(5L);
+        var snapshot=service.state("owner","conversation",100L,4L);
+        assertEquals("replace",snapshot.messagesMode());assertEquals(0,snapshot.latestSeq());assertEquals(5,snapshot.historyEpoch());assertFalse(snapshot.hasNewerMessages());
+    }
+    @Test void incrementalPageReportsMoreMessagesEvenWhenMusicIsFinished(){
+        for(int i=1;i<=150;i++)messages.add(new AgentMessage("m"+i,"conversation",i,"assistant","TEXT","DONE","{\"text\":\"历史\"}",null,Instant.now()));
+        when(conversations.listMessagesAfter("owner","conversation",0L,100)).thenReturn(List.copyOf(messages.subList(0,100)));
+        var snapshot=service.state("owner","conversation",0L,0L);
+        assertEquals("append",snapshot.messagesMode());assertEquals(100,snapshot.latestSeq());assertTrue(snapshot.hasNewerMessages());assertEquals(100,snapshot.messages().size());
+    }
+    @Test void repeatedResetsDuringSnapshotNeverReturnMixedEpochState(){
+        when(conversations.historyEpoch("owner","conversation")).thenReturn(0L,1L,2L);
+        assertEquals("AGENT_CONVERSATION_CONFLICT",assertThrows(com.qingfeng.music.common.exception.DomainException.class,()->service.state("owner","conversation",0L,0L)).code());
+    }
     AgentChatModel.Plan plan(String action){return new AgentChatModel.Plan(action,Map.of("text","妈妈的生日"),"我可以帮你继续创作。");}
     @Test void conversationalReplyUsesHistoryAndCurrentLyricsWithoutGenerating(){
         messages.add(new AgentMessage("1","conversation",1,"user","TEXT","DONE","{\"text\":\"给妈妈写首歌\"}",null,Instant.now()));

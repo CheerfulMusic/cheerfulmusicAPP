@@ -5,6 +5,10 @@ spring:
       - classpath:invite-gate.properties
   application:
     name: qingfeng-music
+  task:
+    scheduling:
+      pool:
+        size: 4
   profiles:
     # 当前开发阶段默认启用真实草稿保存；无数据库演示可显式指定 local。
     default: mysql
@@ -26,6 +30,9 @@ server:
     enabled: true
     mime-types: text/html,text/css,application/javascript,application/json,image/svg+xml
 qingfeng:
+  payment:
+    inbox:
+      scheduler-enabled: true
   quick:
     enabled: true
     workers: 4
@@ -78,6 +85,11 @@ qingfeng:
     section-editing-enabled: true
     scheduler-enabled: true
 management:
+  health:
+    redis:
+      enabled: ${qingfeng.redis.enabled:false}
+    rabbit:
+      enabled: ${qingfeng.events.rabbit.enabled:false}
   endpoints:
     web:
       exposure:

@@ -35,6 +35,14 @@ public final class JdbcConversationRepository implements ConversationRepository 
                 row.contentJson, row.taskId, row.createdAt)).toList();
     }
 
+    private List<AgentMessage> messages(List<MessageRow> rows) {
+        return rows.stream().map(row->new AgentMessage(row.id,row.conversationId,row.seq,row.role,row.kind,row.state,row.contentJson,row.taskId,row.createdAt)).toList();
+    }
+    @Override public List<AgentMessage> messagesBefore(String id,long before,int limit) { return messages(mapper.messagesBefore(id,before,limit)); }
+    @Override public List<AgentMessage> messagesAfter(String id,long after,int limit) { return messages(mapper.messagesAfter(id,after,limit)); }
+    @Override public long historyEpoch(String id) { return mapper.historyEpoch(id); }
+    @Override public List<AgentMessage> recentActionMessages(String id,int limit) { return messages(mapper.recentActionMessages(id,limit)); }
+
     @Override
     public long nextSeq(String conversationId) { return mapper.nextSeq(conversationId); }
 

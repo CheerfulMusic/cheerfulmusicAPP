@@ -8,7 +8,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 public class LyricsService implements LyricsApi {
     private final WorkApi works; private final LyricsRepository repository;
-    public LyricsService(WorkApi works,LyricsRepository repository){this.works=works;this.repository=repository;}
+    private final com.qingfeng.music.agent.retrieval.SemanticIndexQueue index;
+    public LyricsService(WorkApi works,LyricsRepository repository){this(works,repository,com.qingfeng.music.agent.retrieval.SemanticIndexQueue.NONE);}
+    public LyricsService(WorkApi works,LyricsRepository repository,com.qingfeng.music.agent.retrieval.SemanticIndexQueue index){this.works=works;this.repository=repository;this.index=index;}
     public Revision save(String owner,String work,long version,String title,String lyrics){
         return save(owner,work,version,title,lyrics,null);
     }
@@ -27,7 +29,7 @@ public class LyricsService implements LyricsApi {
         var revision=get(owner,work,id);
         if(revision.confirmed())return revision;
         if(works.get(owner,work).version()!=revision.workVersion())throw new DomainException("WORK_VERSION_CONFLICT","作品已修改，请为当前作品保存新版歌词后确认");
-        repository.confirm(work,id);return get(owner,work,id);
+        repository.confirm(work,id);index.changed(owner,work);return get(owner,work,id);
     }
     public Revision get(String owner,String work,String id){works.get(owner,work);return repository.find(work,id).orElseThrow(()->new DomainException("LYRICS_NOT_FOUND","歌词版本不存在"));}
     public List<Revision> list(String owner,String work){works.get(owner,work);return repository.list(work);}

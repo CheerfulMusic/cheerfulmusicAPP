@@ -6,6 +6,7 @@ import com.qingfeng.music.agent.api.AgentChatModel.Step;
 import com.qingfeng.music.agent.application.AgentChatPolicy;
 import com.qingfeng.music.agent.application.AgentToolDispatcher;
 import com.qingfeng.music.common.exception.DomainException;
+import com.qingfeng.music.common.concurrent.AgentRequestScope;
 import com.qingfeng.music.conversation.api.AgentMessage;
 import com.qingfeng.music.conversation.application.ConversationService;
 import com.qingfeng.music.server.web.app.AgentConversationController.MessageView;
@@ -19,7 +20,10 @@ import java.util.*;
 public final class AgentChatService {
     public record Continuation(String requestKey,String text) {}
     public record Snapshot(List<MessageView> messages, SongCard songCard, String taskId,
-                           String action, String shareUrl, boolean liked, Continuation continuation) {}
+                           String action, String shareUrl, boolean liked, Continuation continuation,
+                           String messagesMode,boolean hasOlderMessages,long oldestSeq,long latestSeq,long historyEpoch,boolean hasNewerMessages) {
+        public Snapshot(List<MessageView> messages,SongCard songCard,String taskId,String action,String shareUrl,boolean liked,Continuation continuation){this(messages,songCard,taskId,action,shareUrl,liked,continuation,"replace",false,0,0,0,false);}
+    }
     private record Outcome(String action,String shareUrl,String songId,String revisionId,String assetId) {}
     private record Pending(List<Step> steps,String authorizedText,String songId,String revisionId,
                            String taskId,String continuationKey,Instant createdAt) {
@@ -43,11 +47,13 @@ public final class AgentChatService {
         for(var capability:capabilities())if(!ids.add(capability.id()))throw new IllegalArgumentException("Duplicate agent capability: "+capability.id());
     }
     public Snapshot state(String owner,String conversation){return snapshot(owner,conversation,null);}
+    public Snapshot state(String owner,String conversation,Long afterSeq,Long historyEpoch){return snapshot(owner,conversation,null,null,afterSeq,historyEpoch);}
     public Snapshot send(String owner,String conversation,String text,String key,String locale) {
         if(text==null||text.isBlank()||text.length()>4000)throw new DomainException("INVALID_AGENT_MESSAGE","请输入 1–4000 字的消息。");
         try{UUID.fromString(key);}catch(Exception ignored){throw new DomainException("INVALID_REQUEST_KEY","缺少有效的消息请求标识。");}
         text=text.trim();
-        var history=conversations.listMessages(owner,conversation);
+        AgentRequestScope.check();
+        var history=conversations.listRecentMessages(owner,conversation,80);
         var claim=turns.claim(owner,conversation,key,text);
         if(!claim.fresh()) {
             var previous=json.readValue(claim.resultJson(),Outcome.class);
@@ -84,6 +90,7 @@ public final class AgentChatService {
             final String originalIntent=authorizedText;
             String writtenLyricsWork=null;
             for(int i=0;i<steps.size();i++) {
+                AgentRequestScope.check();
                 turns.assertActive(owner,conversation,key);
                 current=current(owner);
                 Step step=steps.get(i);String proposed=step.action();
@@ -118,6 +125,7 @@ public final class AgentChatService {
                     var items=capabilities().stream().map(c->new Item(c.id(),c.description(),c.effect().equals("native")?"在对话内打开专用操作窗口":"可通过对话执行",Map.of())).toList();
                     appendResult(owner,conversation,new Result("以下是已接入的功能。社区公开发布、平台发行和无缝音频延长尚未提供。","capabilities",items,List.of(),proposed));action=proposed;
                 } else if(SOCIAL.contains(proposed)&&social!=null) {
+                    AgentRequestScope.check();
                     var result=social.execute(owner,conversation,proposed,authorizedText,stepKey,current);
                     turns.assertActive(owner,conversation,key);action=result.action();shareUrl=result.shareUrl();if(shareUrl!=null)sharedCard=current;
                     if(action!=null&&CLIENT_MEDIA.contains(action)){clientAction=action;clientCard=current;}
@@ -125,6 +133,7 @@ public final class AgentChatService {
                     body.put("songId",current==null?null:current.songId());body.put("revisionId",current==null?null:current.revisionId());body.put("assetId",current==null?null:current.assetId());append(owner,conversation,body);
                     if(action==null)break;
                 } else if(executor!=null) {
+                    AgentRequestScope.check();
                     var result=executor.execute(owner,conversation,proposed,args,authorizedText,stepKey,current);
                     turns.assertActive(owner,conversation,key);appendResult(owner,conversation,result);action=result.action();
                     if(action==null||"native".equals(capability.effect()))break;
@@ -135,6 +144,7 @@ public final class AgentChatService {
                     if(tool==AgentTool.GENERATE_SONG&&current!=null&&Objects.equals(writtenLyricsWork,current.songId())) {
                         args.put("mode","regenerate");args.put("revisionId",current.revisionId());
                     }
+                    AgentRequestScope.check();
                     var result=tools.dispatch(tool,arguments(tool,args,authorizedText,current),owner,stepKey);
                     turns.assertActive(owner,conversation,key);
                     if(ToolResult.BUSY.equals(result.status())){append(owner,conversation,Map.of("text",result.progress()==null?"已有任务正在生成，请完成后再试。":result.progress()));break;}
@@ -156,7 +166,8 @@ public final class AgentChatService {
                 // A query can resolve the IDs needed by the original instruction ('上一版').
                 // Replan once using only persisted tool results; original authorization never grows.
                 if(i+1==steps.size()&&modelCalls==1&&!confirmation&&!continuation&&"read".equals(capability.effect())) {
-                    var observed=conversations.listMessages(owner,conversation);var state=conversations.state(owner,conversation);
+                    AgentRequestScope.check();
+                    var observed=conversations.listRecentMessages(owner,conversation,80);var state=conversations.state(owner,conversation);
                     var next=model.respond(new AgentChatModel.Context(originalIntent,locale==null?"zh-CN":locale,history(observed),updated,
                         state==null?null:state.currentSongJson(),capabilities(),results(observed)));
                     modelCalls++;
@@ -230,14 +241,31 @@ public final class AgentChatService {
         return snapshot(owner,conversation,action,null);
     }
     private Snapshot snapshot(String owner,String conversation,String action,Outcome expected) {
-        var history=conversations.listMessages(owner,conversation);
-        var messages=history.stream().map(m->new MessageView(m.id(),m.conversationId(),m.seq(),m.role(),m.kind(),m.state(),m.contentJson(),m.taskId(),m.createdAt()==null?"":m.createdAt().toString())).toList();
+        return snapshot(owner,conversation,action,expected,null,null);
+    }
+    private Snapshot snapshot(String owner,String conversation,String action,Outcome expected,Long afterSeq,Long expectedEpoch) {
+        return snapshot(owner,conversation,action,expected,afterSeq,expectedEpoch,0);
+    }
+    private Snapshot snapshot(String owner,String conversation,String action,Outcome expected,Long afterSeq,Long expectedEpoch,int retry) {
+        long startedEpoch=conversations.historyEpoch(owner,conversation);
+        var history=conversations.listRecentMessages(owner,conversation,80);
+        var page=conversations.historyPage(owner,conversation,null,40);
+        long epoch=page.historyEpoch();boolean delta=afterSeq!=null&&afterSeq>=0&&afterSeq<=page.latestSeq()&&expectedEpoch!=null&&expectedEpoch==epoch;
+        List<AgentMessage> visible;
+        if(delta){
+            var merged=new TreeMap<Long,AgentMessage>();
+            conversations.listMessagesAfter(owner,conversation,afterSeq,100).forEach(m->merged.put(m.seq(),m));
+            // The user turn changes RUNNING -> DONE without changing seq; upsert its latest version.
+            for(int i=history.size()-1;i>=0;i--)if("user".equals(history.get(i).role())){var m=history.get(i);if(m.seq()<=afterSeq)merged.put(m.seq(),m);break;}
+            visible=List.copyOf(merged.values());
+        }else visible=page.messages();
+        var messages=visible.stream().map(m->new MessageView(m.id(),m.conversationId(),m.seq(),m.role(),m.kind(),m.state(),m.contentJson(),m.taskId(),m.createdAt()==null?"":m.createdAt().toString())).toList();
         SongCard card=current(owner);String shareUrl=null;
         if(action!=null&&CLIENT_MEDIA.contains(action)&&(expected==null||!sameMedia(expected,card)))action=null;
         if(card!=null&&card.revisionId()!=null&&card.assetId()!=null){
-            for(int i=messages.size()-1;i>=0;i--){
-                if(!"assistant".equals(messages.get(i).role()))continue;
-                var content=json.readTree(messages.get(i).contentJson());
+            var actions=conversations.listRecentActionMessages(owner,conversation,40);
+            for(int i=actions.size()-1;i>=0;i--){
+                var content=json.readTree(actions.get(i).contentJson());
                 if(!Objects.equals(card.songId(),content.path("songId").asText(null)))continue;
                 if("revoke_share".equals(content.path("action").asText()))break;
                 if(!"share".equals(content.path("action").asText())||!Objects.equals(card.revisionId(),content.path("revisionId").asText(null))||!Objects.equals(card.assetId(),content.path("assetId").asText(null)))continue;
@@ -245,7 +273,13 @@ public final class AgentChatService {
             }
         }
         var p=pending(history);Continuation continuation=p!=null&&p.automatic()&&pendingValid(p,card,true)?new Continuation(p.continuationKey(),CONTINUE):null;
-        return new Snapshot(messages,card,card==null?null:card.taskId(),action,shareUrl,social!=null&&card!=null&&social.liked(owner,card),continuation);
+        long oldest=messages.isEmpty()?0:messages.get(0).seq();
+        long latest=delta?(messages.isEmpty()?afterSeq:Math.max(afterSeq,messages.get(messages.size()-1).seq())):page.latestSeq();
+        if(startedEpoch!=epoch||conversations.historyEpoch(owner,conversation)!=epoch){
+            if(retry==0)return snapshot(owner,conversation,action,expected,afterSeq,expectedEpoch,1);
+            throw new DomainException("AGENT_CONVERSATION_CONFLICT","会话正在更新，请重新读取当前状态。");
+        }
+        return new Snapshot(messages,card,card==null?null:card.taskId(),action,shareUrl,social!=null&&card!=null&&social.liked(owner,card),continuation,delta?"append":"replace",page.hasOlderMessages(),oldest,latest,epoch,delta&&page.latestSeq()>latest);
     }
     private static boolean sameMedia(Outcome expected,SongCard card) {
         return card!=null&&expected.songId()!=null&&expected.assetId()!=null

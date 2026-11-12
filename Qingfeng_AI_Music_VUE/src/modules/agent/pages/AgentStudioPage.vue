@@ -16,7 +16,7 @@ import AgentResultCard from '../components/AgentResultCard.vue'
 const AgentNativeDialog = defineAsyncComponent(() => import('../components/AgentNativeDialog.vue'))
 
 const conversation = useAgentConversation(result => { void handleResult(result) })
-const { messages, songCard, shareUrl, liked, taskRunning, loading, sending, error, refreshError, pending } = conversation
+const { messages, songCard, shareUrl, liked, taskRunning, loading, sending, error, refreshError, pending, hasOlderMessages, loadingOlder, historyError } = conversation
 const player = usePlayer(), { credits, refreshCredits } = useCredits()
 const input = ref(''), chat = ref<HTMLElement>(), fileInput = ref<HTMLInputElement>(), notice = ref('')
 const confirmingReset = ref(false)
@@ -163,7 +163,12 @@ function useReference() {
 function playReference() {
   if (reference.value) void player.toggle({ id: 'agent-reference', title: reference.value.name, audio: reference.value.url, cover: defaultCover(), provenance: 'IMPORTED' })
 }
-watch(() => messages.value.length, () => { void scrollChat() })
+async function loadOlder() {
+  const height = chat.value?.scrollHeight ?? 0, top = chat.value?.scrollTop ?? 0
+  await conversation.loadOlder(); await nextTick()
+  if (chat.value) chat.value.scrollTop = top + chat.value.scrollHeight - height
+}
+watch(() => messages.value.at(-1)?.seq, () => { void scrollChat() })
 watch(() => JSON.stringify([accountState.value.authenticated, accountState.value.email, accountState.value.name, logtoState.value.authenticated, logtoState.value.email, logtoState.value.phoneMasked, logtoState.value.name]), () => {
   input.value = ''; notice.value = ''; confirmingReset.value = false; nativePanel.value = null
   clearReference(); void conversation.changeIdentity()
@@ -187,6 +192,8 @@ onBeforeUnmount(() => { recognition?.stop?.(); clearReference() })
         <button type="button" @click="confirmingReset = false">{{ tr('保留对话', 'Keep chat') }}</button>
       </div>
       <div ref="chat" class="agent-chat" role="log" aria-live="polite">
+        <button v-if="hasOlderMessages" class="agent-history-more" type="button" :disabled="loadingOlder || loading" @click="loadOlder">{{ loadingOlder ? tr('正在加载…', 'Loading…') : tr('查看更早的对话', 'Load earlier messages') }}</button>
+        <p v-if="historyError" class="agent-upload-error" role="status">{{ historyError }}</p>
         <div v-if="!messages.length" class="agent-hero">
           <h1>{{ tr('把你的故事，变成一首歌。', 'Turn your story into a song.') }}</h1>
           <p class="agent-hero-tagline">{{ tr('每个人，都可以是歌手。', 'Everyone can be a singer.') }}</p>

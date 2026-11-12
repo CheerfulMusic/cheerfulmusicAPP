@@ -8,6 +8,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.time.Clock;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
@@ -23,6 +24,10 @@ public final class PayPalCheckoutGateway {
                            String captureId, String captureStatus, BigDecimal amount, String currency) {}
     public record WebhookHeaders(String authAlgo, String certUrl, String transmissionId,
                                  String transmissionSig, String transmissionTime) {}
+    public static final class CreationRejected extends RuntimeException {}
+    @org.springframework.web.bind.annotation.ResponseStatus(value=org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE,reason="支付通道繁忙，请稍后再试")
+    public static final class ProviderBusy extends RuntimeException {}
+    static final class ProviderHttpException extends RuntimeException { final int status; ProviderHttpException(int status){super("PayPal HTTP failure");this.status=status;} }
     interface Transport { JsonNode send(String method, String path, Map<String,String> headers, String body); }
     private static final ObjectMapper JSON = new ObjectMapper();
     private final Environment environment;
@@ -52,7 +57,9 @@ public final class PayPalCheckoutGateway {
                 "amount",Map.of("currency_code",currency,"value",amount.setScale(2).toPlainString()));
         Map<String,Object> body=localPopup ? Map.of("intent","CAPTURE","purchase_units",List.of(purchase))
             : Map.of("intent","CAPTURE","purchase_units",List.of(purchase),"payment_source",Map.of("paypal",Map.of("experience_context",Map.of("return_url",returnUrl,"cancel_url",cancelUrl,"user_action","PAY_NOW"))));
-        JsonNode order=transport.send("POST","/v2/checkout/orders",Map.of("PayPal-Request-Id",reference,"Prefer","return=representation"),JSON.writeValueAsString(body));
+        JsonNode order;
+        try{order=transport.send("POST","/v2/checkout/orders",Map.of("PayPal-Request-Id",reference,"Prefer","return=representation"),JSON.writeValueAsString(body));}
+        catch(ProviderHttpException failure){if(List.of(400,401,403,404,422).contains(failure.status))throw new CreationRejected();throw failure;}
         String id=order.path("id").asString(); requireOrderId(id);
         String approval=approvalUrl(order);
         return new Created(id,approval);
@@ -66,6 +73,10 @@ public final class PayPalCheckoutGateway {
         return approval;
     }
     public Snapshot retrieve(String orderId) { requireOrderId(orderId); return snapshot(transport.send("GET","/v2/checkout/orders/"+orderId,Map.of(),null),orderId); }
+    /** Read-only authoritative resources for risk correlation; never follows a URL from an event. */
+    public JsonNode retrieveCapture(String captureId){requireOrderId(captureId);return transport.send("GET","/v2/payments/captures/"+captureId,Map.of(),null);}
+    public JsonNode retrieveRefund(String refundId){requireOrderId(refundId);return transport.send("GET","/v2/payments/refunds/"+refundId,Map.of(),null);}
+    public JsonNode retrieveDispute(String disputeId){if(disputeId==null||!disputeId.matches("[A-Za-z0-9-]{1,128}"))throw new IllegalArgumentException("Invalid dispute ID");return transport.send("GET","/v1/customer/disputes/"+disputeId,Map.of(),null);}
     public CheckoutView retrieveCheckout(String orderId) {
         requireOrderId(orderId);
         JsonNode order=transport.send("GET","/v2/checkout/orders/"+orderId,Map.of(),null);
@@ -105,25 +116,58 @@ public final class PayPalCheckoutGateway {
         if(!(production || local) || u.getUserInfo()!=null || u.getFragment()!=null) throw new IllegalArgumentException("Invalid return URL");
     }
 
-    private static final class HttpTransport implements Transport {
-        private final String base, basic; private final HttpClient client=HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
+    static final class HttpTransport implements Transport {
+        private static final HttpClient CLIENT=HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).followRedirects(HttpClient.Redirect.NEVER).build();
+        interface Exchange { JsonNode request(String method,String path,Map<String,String> headers,String body); }
+        private record Token(String value,long until){}
+        private final String base, basic;
+        private final Clock clock;
+        private final Exchange exchange;
+        private final java.util.concurrent.Semaphore permits=new java.util.concurrent.Semaphore(32);
+        private volatile Token token;
         HttpTransport(Environment environment,String clientId,String secret){
+            this(environment,clientId,secret,Clock.systemUTC(),null);
+        }
+        HttpTransport(Environment environment,String clientId,String secret,Clock clock,Exchange exchange){
             if(environment==null || clientId==null || clientId.isBlank() || secret==null || secret.isBlank()) throw new IllegalArgumentException("Missing PayPal credentials");
             base=environment==Environment.SANDBOX?"https://api-m.sandbox.paypal.com":"https://api-m.paypal.com";
             basic=Base64.getEncoder().encodeToString((clientId+":"+secret).getBytes(StandardCharsets.UTF_8));
+            this.clock=clock;this.exchange=exchange==null?this::request:exchange;
         }
         public JsonNode send(String method,String path,Map<String,String> headers,String body){
-            JsonNode token=request("POST","/v1/oauth2/token",Map.of("Authorization","Basic "+basic,"Content-Type","application/x-www-form-urlencoded"),"grant_type=client_credentials");
-            String access=token.path("access_token").asString(); if(access.isBlank())throw new IllegalStateException("PayPal authorization failed");
-            var auth=new java.util.HashMap<>(headers);auth.put("Authorization","Bearer "+access);auth.put("Content-Type","application/json");
-            return request(method,path,auth,body);
+            // Bound waiting for both OAuth single-flight and provider HTTP; reject before any remote call.
+            if(!permits.tryAcquire())throw new ProviderBusy();
+            try{return sendAdmitted(method,path,headers,body);}finally{permits.release();}
+        }
+        private JsonNode sendAdmitted(String method,String path,Map<String,String> headers,String body){
+            for(int attempt=0;attempt<2;attempt++){
+                Token current=accessToken();
+                var auth=new java.util.HashMap<>(headers);auth.put("Authorization","Bearer "+current.value());auth.put("Content-Type","application/json");
+                try{return exchange.request(method,path,auth,body);}
+                catch(ProviderHttpException failed){
+                    if(failed.status!=401||attempt!=0)throw failed;
+                    synchronized(this){if(token==current)token=null;}
+                }
+            }
+            throw new IllegalStateException("PayPal authorization failed");
+        }
+        private Token accessToken(){
+            Token current=token;if(current!=null&&clock.millis()<current.until())return current;
+            synchronized(this){
+                current=token;if(current!=null&&clock.millis()<current.until())return current;
+                JsonNode response=exchange.request("POST","/v1/oauth2/token",Map.of("Authorization","Basic "+basic,"Content-Type","application/x-www-form-urlencoded"),"grant_type=client_credentials");
+                String access=response.path("access_token").asString();long seconds=response.path("expires_in").asLong(0);
+                if(access.isBlank()||seconds<=0)throw new IllegalStateException("PayPal authorization failed");
+                long lifetime=Math.max(1,Math.min(seconds,86400)-Math.min(60,seconds/10));
+                token=new Token(access,clock.millis()+lifetime*1000);return token;
+            }
         }
         private JsonNode request(String method,String path,Map<String,String> headers,String body){
             try {
                 var request=HttpRequest.newBuilder(URI.create(base+path)).timeout(Duration.ofSeconds(25));headers.forEach(request::header);
                 request.method(method,body==null?HttpRequest.BodyPublishers.noBody():HttpRequest.BodyPublishers.ofString(body));
-                var response=client.send(request.build(),HttpResponse.BodyHandlers.ofString());
-                if(response.statusCode()<200 || response.statusCode()>=300)throw new IllegalStateException("PayPal request failed: HTTP "+response.statusCode());
+                var response=CLIENT.send(request.build(),HttpResponse.BodyHandlers.ofString());
+                if(response.statusCode()<200 || response.statusCode()>=300)throw new ProviderHttpException(response.statusCode());
                 return JSON.readTree(response.body());
             } catch(InterruptedException e){Thread.currentThread().interrupt();throw new IllegalStateException("PayPal request interrupted",e);}catch(IOException e){throw new IllegalStateException("PayPal request failed",e);}
         }
