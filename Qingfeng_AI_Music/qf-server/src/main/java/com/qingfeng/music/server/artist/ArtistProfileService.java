@@ -1,5 +1,8 @@
 package com.qingfeng.music.server.artist;
 
+import static com.qingfeng.music.server.artist.ArtistImage.Kind.AVATAR;
+import static com.qingfeng.music.server.artist.ArtistImage.Kind.COVER;
+
 import com.qingfeng.music.common.exception.DomainException;
 import com.qingfeng.music.cover.api.SharedCoverAccess;
 import com.qingfeng.music.identity.api.IdentityApi;
@@ -23,18 +26,21 @@ import org.springframework.web.multipart.MultipartFile;
 @Profile({"mysql", "test"})
 public class ArtistProfileService {
     public record MyProfile(String publicId, String stageName, String tagline, String avatarKey,
-                            boolean published, List<Release> songs) {}
+                            String coverKey, String featuredReleaseId, boolean published, List<Release> songs) {}
     public record Release(String id, long version, String title, String workId, String assetId, String coverId) {}
-    public record PublicProfile(String stageName, String tagline, String avatarKey, List<PublicSong> songs) {}
+    public record PublicProfile(String stageName, String tagline, String avatarKey, String coverKey,
+                                String featuredReleaseId, List<PublicSong> songs) {}
     public record PublicSong(String id, long version, String title, boolean hasCover) {}
     public record ReleaseSelection(boolean profileReady, boolean published, Release song) {}
     private record ProfileRow(String creatorId, String publicId, String stageName, String tagline,
-                              String avatarKey, boolean published) {}
+                              String avatarKey, String coverKey, String featuredReleaseId, boolean published) {}
 
-    private static final String PROFILE_COLUMNS = "creator_id,public_id,stage_name,tagline,avatar_key,published";
+    private static final String PROFILE_COLUMNS =
+            "creator_id,public_id,stage_name,tagline,avatar_key,cover_key,featured_release_id,published";
     private static final RowMapper<ProfileRow> PROFILE_ROW = (rs, row) -> new ProfileRow(
             rs.getString("creator_id"), rs.getString("public_id"), rs.getString("stage_name"),
-            rs.getString("tagline"), rs.getString("avatar_key"), rs.getBoolean("published"));
+            rs.getString("tagline"), rs.getString("avatar_key"), rs.getString("cover_key"),
+            rs.getString("featured_release_id"), rs.getBoolean("published"));
     private static final RowMapper<Release> RELEASE_ROW = (rs, row) -> new Release(
             rs.getString("id"), rs.getLong("version"), rs.getString("title"), rs.getString("work_id"),
             rs.getString("asset_id"), rs.getString("cover_id"));
@@ -68,32 +74,33 @@ public class ArtistProfileService {
     @Transactional(readOnly = true)
     public MyProfile mine(String creator) {
         return findOwner(creator, false).map(this::ownerView)
-                .orElseGet(() -> new MyProfile(null, "", "", null, false, List.of()));
+                .orElseGet(() -> new MyProfile(null, "", "", null, null, null, false, List.of()));
     }
 
     @Transactional
-    public MyProfile save(String creator, String name, String tagline, MultipartFile file, boolean removeAvatar) {
+    public MyProfile save(String creator, String name, String tagline, MultipartFile avatarFile, boolean removeAvatar,
+                          MultipartFile coverFile, boolean removeCover, String featuredReleaseId) {
         String stageName = text(name, 30, "INVALID_ARTIST_NAME", "艺名最多 30 个字符。", false);
         String signature = text(tagline, 120, "INVALID_ARTIST_TAGLINE", "个性签名最多 120 个字符。", true);
-        if (file != null && removeAvatar) {
-            throw new DomainException("INVALID_ARTIST_AVATAR", "请重新选择头像后保存。");
-        }
-        byte[] avatar = file == null ? null : ArtistAvatar.jpeg(file);
+        if (avatarFile != null && removeAvatar) throw AVATAR.invalid("请重新选择头像后保存。");
+        if (coverFile != null && removeCover) throw COVER.invalid("请重新选择封面后保存。");
+        byte[] avatar = avatarFile == null ? null : ArtistImage.jpeg(avatarFile, AVATAR);
+        byte[] cover = coverFile == null ? null : ArtistImage.jpeg(coverFile, COVER);
         db.queryForObject("SELECT id FROM creator WHERE id=? FOR UPDATE", String.class, creator);
         var existing = findOwner(creator, true);
-        String key = avatar == null ? null : uuid();
+        String featured = requestedFeature(creator, featuredReleaseId, existing.map(ProfileRow::featuredReleaseId).orElse(null));
         if (existing.isEmpty()) {
             db.update("""
-                    INSERT INTO artist_profile(creator_id,public_id,stage_name,tagline,avatar_key,avatar_jpeg,published)
-                    VALUES (?,?,?,?,?,?,FALSE)
-                    """, creator, uuid(), stageName, signature, key, avatar);
+                    INSERT INTO artist_profile(creator_id,public_id,stage_name,tagline,published)
+                    VALUES (?,?,?,?,FALSE)
+                    """, creator, uuid(), stageName, signature);
         } else {
             if (existing.get().published()) requireStageName(stageName);
-            db.update("UPDATE artist_profile SET stage_name=?,tagline=? WHERE creator_id=?", stageName, signature, creator);
-            if (file != null || removeAvatar) {
-                db.update("UPDATE artist_profile SET avatar_key=?,avatar_jpeg=? WHERE creator_id=?", key, avatar, creator);
-            }
+            db.update("UPDATE artist_profile SET stage_name=?,tagline=?,featured_release_id=? WHERE creator_id=?",
+                    stageName, signature, featured, creator);
         }
+        if (avatarFile != null || removeAvatar) updateImage(creator, AVATAR, avatar);
+        if (coverFile != null || removeCover) updateImage(creator, COVER, cover);
         return ownerView(findOwner(creator, false).orElseThrow());
     }
 
@@ -140,28 +147,45 @@ public class ArtistProfileService {
 
     @Transactional
     public void removeSong(String creator, String work) {
-        requireOwnerProfile(creator);
+        var profile = requireOwnerProfile(creator);
         db.update("""
                 UPDATE artist_song_release SET show_on_profile=FALSE,version=version+1
                 WHERE creator_id=? AND work_id=? AND show_on_profile=TRUE
                 """, creator, work);
+        if (profile.featuredReleaseId() != null) {
+            db.update("""
+                    UPDATE artist_profile SET featured_release_id=NULL WHERE creator_id=? AND featured_release_id=(
+                        SELECT id FROM artist_song_release WHERE creator_id=? AND work_id=?
+                    )
+                    """, creator, creator, work);
+        }
     }
 
     @Transactional(readOnly = true)
     public PublicProfile publishedProfile(String publicId) {
         var profile = db.query("SELECT " + PROFILE_COLUMNS + " FROM artist_profile WHERE public_id=? AND published=TRUE",
                 PROFILE_ROW, publicId).stream().findFirst().orElseThrow(ArtistProfileService::missing);
-        var songs = releases(profile.creatorId()).stream()
+        var visible = releases(profile.creatorId());
+        var songs = visible.stream()
                 .map(song -> new PublicSong(song.id(), song.version(), song.title(), song.coverId() != null)).toList();
-        return new PublicProfile(profile.stageName(), profile.tagline(), profile.avatarKey(), songs);
+        return new PublicProfile(profile.stageName(), profile.tagline(), profile.avatarKey(), profile.coverKey(),
+                visibleFeature(profile, visible), songs);
     }
 
     public byte[] publicAvatar(String publicId, String key) {
-        return avatar("public_id=? AND published=TRUE", publicId, key);
+        return image(AVATAR, "public_id=? AND published=TRUE", publicId, key);
     }
 
     public byte[] ownerAvatar(String creator, String key) {
-        return avatar("creator_id=?", creator, key);
+        return image(AVATAR, "creator_id=?", creator, key);
+    }
+
+    public byte[] publicProfileCover(String publicId, String key) {
+        return image(COVER, "public_id=? AND published=TRUE", publicId, key);
+    }
+
+    public byte[] ownerProfileCover(String creator, String key) {
+        return image(COVER, "creator_id=?", creator, key);
     }
 
     public MediaApi.Content publicAudio(String publicId, String song, long version) {
@@ -177,9 +201,15 @@ public class ArtistProfileService {
         return covers.content(release.workId(), release.coverId());
     }
 
-    private byte[] avatar(String ownerCondition, String identityKey, String avatarKey) {
-        return db.query("SELECT avatar_jpeg FROM artist_profile WHERE " + ownerCondition + " AND avatar_key=?",
-                (rs, row) -> rs.getBytes(1), identityKey, avatarKey).stream().findFirst()
+    private void updateImage(String creator, ArtistImage.Kind kind, byte[] data) {
+        db.update("UPDATE artist_profile SET " + kind.column + "_key=?," + kind.column + "_jpeg=? WHERE creator_id=?",
+                data == null ? null : uuid(), data, creator);
+    }
+
+    private byte[] image(ArtistImage.Kind kind, String ownerCondition, String identityKey, String imageKey) {
+        return db.query("SELECT " + kind.column + "_jpeg FROM artist_profile WHERE " + ownerCondition
+                        + " AND " + kind.column + "_key=?",
+                (rs, row) -> rs.getBytes(1), identityKey, imageKey).stream().filter(Objects::nonNull).findFirst()
                 .orElseThrow(ArtistProfileService::missing);
     }
 
@@ -212,8 +242,21 @@ public class ArtistProfileService {
     }
 
     private MyProfile ownerView(ProfileRow row) {
-        return new MyProfile(row.publicId(), row.stageName(), row.tagline(), row.avatarKey(), row.published(),
-                releases(row.creatorId()));
+        var songs = releases(row.creatorId());
+        return new MyProfile(row.publicId(), row.stageName(), row.tagline(), row.avatarKey(), row.coverKey(),
+                visibleFeature(row, songs), row.published(), songs);
+    }
+
+    private String requestedFeature(String creator, String requested, String saved) {
+        if (requested == null) return saved;
+        if (requested.isEmpty()) return null;
+        if (requested.length() == 36 && db.query(PROFILE_RELEASES + " AND r.id=?", RELEASE_ROW, creator, requested)
+                .stream().anyMatch(song -> song.id().equals(requested))) return requested;
+        throw new DomainException("INVALID_ARTIST_FEATURED_RELEASE", "请选择仍在主页展示的歌曲。");
+    }
+
+    private static String visibleFeature(ProfileRow row, List<Release> songs) {
+        return songs.stream().anyMatch(song -> song.id().equals(row.featuredReleaseId())) ? row.featuredReleaseId() : null;
     }
 
     private static String text(String value, int max, String code, String message, boolean multiline) {

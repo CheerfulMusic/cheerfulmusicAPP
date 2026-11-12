@@ -21,7 +21,7 @@ public final class InviteGateFilter extends OncePerRequestFilter {
     private static final String GOOGLE_CALLBACK = "/api/public/auth/google/callback";
     private static final String PUBLIC_ID = "[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}";
     private static final Pattern ARTIST_READ = Pattern.compile("/api/public/artists/" + PUBLIC_ID
-            + "(?:/avatar/" + PUBLIC_ID + "|/songs/" + PUBLIC_ID + "/[1-9][0-9]{0,18}/(?:audio|cover))?");
+            + "(?:/(?:avatar|cover)/" + PUBLIC_ID + "|/songs/" + PUBLIC_ID + "/[1-9][0-9]{0,18}/(?:audio|cover))?");
 
     private final InviteGateService gate;
 

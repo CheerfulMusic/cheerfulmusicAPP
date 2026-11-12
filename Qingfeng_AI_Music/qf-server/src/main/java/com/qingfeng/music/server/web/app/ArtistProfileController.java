@@ -42,8 +42,12 @@ public class ArtistProfileController {
     public ResponseEntity<MyProfile> save(@AuthenticationPrincipal CreatorPrincipal principal,
             @RequestParam String stageName, @RequestParam String tagline,
             @RequestParam(defaultValue = "false") boolean removeAvatar,
-            @RequestParam(required = false) MultipartFile avatar) {
-        return noStore(profiles.save(account(principal), stageName, tagline, avatar, removeAvatar));
+            @RequestParam(required = false) MultipartFile avatar,
+            @RequestParam(defaultValue = "false") boolean removeCover,
+            @RequestParam(required = false) MultipartFile cover,
+            @RequestParam(required = false) String featuredReleaseId) {
+        return noStore(profiles.save(account(principal), stageName, tagline, avatar, removeAvatar,
+                cover, removeCover, featuredReleaseId));
     }
 
     @PutMapping("/visibility")
@@ -54,8 +58,12 @@ public class ArtistProfileController {
 
     @GetMapping("/avatar/{key}")
     public ResponseEntity<byte[]> avatar(@AuthenticationPrincipal CreatorPrincipal principal, @PathVariable String key) {
-        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).contentType(MediaType.IMAGE_JPEG)
-                .body(profiles.ownerAvatar(account(principal), key));
+        return jpeg(profiles.ownerAvatar(account(principal), key));
+    }
+
+    @GetMapping("/cover/{key}")
+    public ResponseEntity<byte[]> cover(@AuthenticationPrincipal CreatorPrincipal principal, @PathVariable String key) {
+        return jpeg(profiles.ownerProfileCover(account(principal), key));
     }
 
     @GetMapping("/releases/{work}")
@@ -86,5 +94,9 @@ public class ArtistProfileController {
 
     private static <T> ResponseEntity<T> noStore(T body) {
         return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(body);
+    }
+
+    private static ResponseEntity<byte[]> jpeg(byte[] body) {
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).contentType(MediaType.IMAGE_JPEG).body(body);
     }
 }

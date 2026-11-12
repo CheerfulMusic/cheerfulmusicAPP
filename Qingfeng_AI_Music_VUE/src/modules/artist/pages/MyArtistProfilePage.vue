@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import { ApiError } from '../../../shared/http/api-client'
 import { t } from '../../../shared/i18n'
 import NavIcon from '../../../shared/ui/NavIcon.vue'
 import {
-  artistHomeUrl, getArtistProfile, ownerAvatarUrl, ownerTrack, removeSongFromArtist, saveArtistProfile,
+  artistHomeUrl, getArtistProfile, ownerArtistCoverUrl, ownerAvatarUrl, ownerTrack, removeSongFromArtist, saveArtistProfile,
   setArtistVisibility, type ArtistProfile, type ArtistRelease,
 } from '../api/artist'
 import ArtistAvatar from '../components/ArtistAvatar.vue'
@@ -11,12 +12,16 @@ import ArtistHome from '../components/ArtistHome.vue'
 import ProfileAccount from '../components/ProfileAccount.vue'
 import ProfileWorks from '../components/ProfileWorks.vue'
 
+interface ImageDraft { file: File; url: string }
+
 const profile = ref<ArtistProfile>()
 const stageName = ref('')
 const tagline = ref('')
-const avatar = ref<File>()
-const localAvatar = ref('')
+const avatar = ref<ImageDraft>()
+const cover = ref<ImageDraft>()
 const removeAvatar = ref(false)
+const removeCover = ref(false)
+const featuredReleaseId = ref<string | null>(null)
 const editing = ref(false)
 const preview = ref(false)
 const loading = ref(true)
@@ -31,28 +36,52 @@ const workCount = ref<number | null>(null)
 const editButton = ref<HTMLButtonElement>()
 const nameInput = ref<HTMLInputElement>()
 const avatarInput = ref<HTMLInputElement>()
+const coverInput = ref<HTMLInputElement>()
 const waveform = [7, 15, 34, 18, 9, 17, 29, 12, 22, 53, 16, 24, 10, 33, 17, 8]
-const avatarSrc = computed(() => localAvatar.value || (removeAvatar.value ? undefined
+const avatarSrc = computed(() => avatar.value?.url || (removeAvatar.value ? undefined
   : profile.value?.avatarKey ? ownerAvatarUrl(profile.value.avatarKey) : undefined))
-const dirty = computed(() => editing.value && Boolean(avatar.value || removeAvatar.value
-  || stageName.value.trim() !== profile.value?.stageName || tagline.value.trim() !== profile.value?.tagline))
+const coverSrc = computed(() => cover.value?.url || (removeCover.value ? undefined
+  : profile.value?.coverKey ? ownerArtistCoverUrl(profile.value.coverKey) : undefined))
+const savedFeatured = computed(() => profile.value?.songs.find(song => song.id === profile.value?.featuredReleaseId))
+const previewFeatured = computed(() => editing.value
+  ? profile.value?.songs.find(song => song.id === featuredReleaseId.value)
+  : savedFeatured.value)
+const featuredChanged = computed(() => featuredReleaseId.value !== (savedFeatured.value?.id ?? null))
+const dirty = computed(() => editing.value && Boolean(
+  avatar.value || removeAvatar.value || cover.value || removeCover.value
+  || stageName.value.trim() !== profile.value?.stageName || tagline.value.trim() !== profile.value?.tagline
+  || featuredChanged.value,
+))
 const tracks = computed(() => profile.value?.songs.map(ownerTrack) || [])
 const homeRoute = computed(() => ({ name: 'artist-home', params: { id: profile.value?.publicId || '' } }))
 const link = computed(() => profile.value?.publicId ? artistHomeUrl(profile.value.publicId) : '')
 
-function clearAvatarDraft() {
-  if (localAvatar.value) URL.revokeObjectURL(localAvatar.value)
-  localAvatar.value = ''
+function revokeImage(draft?: ImageDraft) {
+  if (draft) URL.revokeObjectURL(draft.url)
+}
+function clearImageDrafts() {
+  revokeImage(avatar.value)
+  revokeImage(cover.value)
   avatar.value = undefined
+  cover.value = undefined
+}
+function updateProfile(value: ArtistProfile) {
+  const keepFeaturedDraft = editing.value && featuredChanged.value && (
+    featuredReleaseId.value === null || value.songs.some(song => song.id === featuredReleaseId.value)
+  )
+  profile.value = value
+  if (!keepFeaturedDraft) featuredReleaseId.value = savedFeatured.value?.id ?? null
 }
 function apply(value: ArtistProfile) {
   profile.value = value
   stageName.value = value.stageName
   tagline.value = value.tagline
   removeAvatar.value = false
-  clearAvatarDraft()
+  removeCover.value = false
+  featuredReleaseId.value = savedFeatured.value?.id ?? null
+  clearImageDrafts()
 }
-function chooseAvatar(event: Event) {
+function chooseImage(event: Event, kind: 'avatar' | 'cover') {
   const input = event.target as HTMLInputElement
   const file = input.files?.[0]
   input.value = ''
@@ -61,15 +90,23 @@ function chooseAvatar(event: Event) {
     error.value = '请选择 5 MB 以内的 JPG 或 PNG 图片。'
     return
   }
-  clearAvatarDraft()
+  const draft = kind === 'avatar' ? avatar : cover
+  const remove = kind === 'avatar' ? removeAvatar : removeCover
+  const url = URL.createObjectURL(file)
+  revokeImage(draft.value)
+  draft.value = { file, url }
+  remove.value = false
   error.value = ''
-  removeAvatar.value = false
-  avatar.value = file
-  localAvatar.value = URL.createObjectURL(file)
 }
 function useDefaultAvatar() {
-  clearAvatarDraft()
+  revokeImage(avatar.value)
+  avatar.value = undefined
   removeAvatar.value = Boolean(profile.value?.avatarKey)
+}
+function useDefaultCover() {
+  revokeImage(cover.value)
+  cover.value = undefined
+  removeCover.value = Boolean(profile.value?.coverKey)
 }
 async function setEditing(value: boolean) {
   editing.value = value
@@ -105,10 +142,17 @@ async function save() {
   error.value = ''
   busy.value = true
   try {
-    apply(await saveArtistProfile(stageName.value.trim(), tagline.value.trim(), avatar.value, removeAvatar.value))
+    apply(await saveArtistProfile(stageName.value.trim(), tagline.value.trim(), avatar.value?.file, removeAvatar.value, {
+      cover: cover.value?.file,
+      removeCover: removeCover.value,
+      featuredReleaseId: featuredChanged.value ? featuredReleaseId.value : undefined,
+    }))
     notice.value = profile.value?.published ? '歌手主页已更新。' : '资料已保存。'
   } catch (cause) {
     report(cause, '资料保存失败，请重试。')
+    if (cause instanceof ApiError && cause.code === 'INVALID_ARTIST_FEATURED_RELEASE') {
+      try { updateProfile(await getArtistProfile()) } catch { /* 保留草稿，仍可手动选择最新发布后重试。 */ }
+    }
     return
   }
   finally { busy.value = false }
@@ -121,7 +165,7 @@ async function changeVisibility(published: boolean) {
   error.value = ''
   busy.value = true
   try {
-    profile.value = await setArtistVisibility(published)
+    updateProfile(await setArtistVisibility(published))
     notice.value = published ? '歌手主页已发布。' : '歌手主页已隐藏。'
     showLink.value = false
     if (published) await showPreview(false)
@@ -134,7 +178,7 @@ async function remove(song: ArtistRelease) {
   error.value = ''
   busy.value = true
   try {
-    profile.value = await removeSongFromArtist(song.workId)
+    updateProfile(await removeSongFromArtist(song.workId))
     notice.value = '歌曲已移出主页。'
   } catch (cause) { report(cause, '暂时无法移出歌曲，请重试。') }
   finally { busy.value = false }
@@ -156,7 +200,7 @@ async function showPreview(value: boolean) {
   else editHeading.value?.focus()
 }
 onMounted(load)
-onBeforeUnmount(clearAvatarDraft)
+onBeforeUnmount(clearImageDrafts)
 </script>
 
 <template>
@@ -170,7 +214,14 @@ onBeforeUnmount(clearAvatarDraft)
         <button type="button" class="text-button" @click="showPreview(false)">{{ t('返回我的资料') }}</button>
         <span>{{ t('访客视角预览') }}</span>
       </div>
-      <ArtistHome :name="editing ? stageName : profile.stageName" :tagline="editing ? tagline : profile.tagline" :avatar="avatarSrc" :tracks="tracks" />
+      <ArtistHome
+        :name="editing ? stageName : profile.stageName"
+        :tagline="editing ? tagline : profile.tagline"
+        :avatar="avatarSrc"
+        :cover="coverSrc"
+        :tracks="tracks"
+        :featured-track-id="previewFeatured?.assetId"
+      />
       <div v-if="!profile.published" class="artist-preview-publish">
         <p v-if="dirty || !profile.stageName">{{ t('请先保存艺名和资料，再发布主页。') }}</p>
         <p v-else>{{ t('发布后，访客可以查看这些资料和试听上方的歌曲。') }}</p>
@@ -187,7 +238,7 @@ onBeforeUnmount(clearAvatarDraft)
           <ArtistAvatar v-if="avatarSrc" :name="stageName" :src="avatarSrc" />
           <span v-else class="profile-avatar-default" aria-hidden="true"><img src="/brand/logo-symbol.svg" alt=""></span>
           <template v-if="editing">
-            <input ref="avatarInput" class="profile-avatar-input" type="file" accept="image/jpeg,image/png" tabindex="-1" :aria-label="t('更换头像')" :disabled="busy" @change="chooseAvatar">
+            <input ref="avatarInput" class="profile-avatar-input" type="file" accept="image/jpeg,image/png" tabindex="-1" :aria-label="t('更换头像')" :disabled="busy" @change="chooseImage($event, 'avatar')">
             <button class="profile-avatar-camera" type="button" :aria-label="t('更换头像')" :title="t('更换头像')" :disabled="busy" @click="avatarInput?.click()">
               <span aria-hidden="true"></span>
             </button>
@@ -222,6 +273,29 @@ onBeforeUnmount(clearAvatarDraft)
                   <small aria-hidden="true">{{ tagline.length }} / 120</small>
                 </span>
               </label>
+              <div class="profile-form-row">
+                <span>{{ t('主页封面') }}</span>
+                <div class="profile-cover-settings">
+                  <img v-if="coverSrc" class="profile-cover-thumbnail" :src="coverSrc" alt="">
+                  <div class="profile-inline-actions">
+                    <input ref="coverInput" type="file" accept="image/jpeg,image/png" :aria-label="t('主页封面')" hidden @change="chooseImage($event, 'cover')">
+                    <button type="button" class="profile-pill" @click="coverInput?.click()">{{ t('更换封面') }}</button>
+                    <button v-if="coverSrc" type="button" class="profile-pill" @click="useDefaultCover">{{ t('恢复默认封面') }}</button>
+                    <small class="profile-field-hint">{{ t('JPG 或 PNG，最多 5 MB') }}</small>
+                  </div>
+                </div>
+              </div>
+              <label v-if="profile.songs.length" class="profile-form-row">
+                <span>{{ t('代表作') }}</span>
+                <select v-model="featuredReleaseId">
+                  <option :value="null">{{ t('自动使用最新发布') }}</option>
+                  <option v-for="song in profile.songs" :key="song.id" :value="song.id">{{ song.title }}</option>
+                </select>
+              </label>
+              <div v-else class="profile-form-row">
+                <span>{{ t('代表作') }}</span>
+                <span class="profile-field-hint">{{ t('发布作品后可选择代表作。') }}</span>
+              </div>
             </template>
             <dl v-else class="profile-values">
               <div class="profile-form-row">
@@ -231,6 +305,17 @@ onBeforeUnmount(clearAvatarDraft)
               <div class="profile-form-row">
                 <dt>{{ t('个性签名') }}</dt>
                 <dd :class="{ empty: !profile.tagline }">{{ profile.tagline || '—' }}</dd>
+              </div>
+              <div class="profile-form-row">
+                <dt>{{ t('主页封面') }}</dt>
+                <dd>
+                  <img v-if="coverSrc" class="profile-cover-thumbnail" :src="coverSrc" :alt="t('自定义封面')">
+                  <span v-else class="empty">{{ t('默认封面') }}</span>
+                </dd>
+              </div>
+              <div class="profile-form-row">
+                <dt>{{ t('代表作') }}</dt>
+                <dd :class="{ empty: !savedFeatured }">{{ savedFeatured?.title || t(profile.songs.length ? '自动使用最新发布' : '发布作品后可选择代表作。') }}</dd>
               </div>
             </dl>
             <div class="profile-form-row">
@@ -324,11 +409,18 @@ onBeforeUnmount(clearAvatarDraft)
 .profile-values .profile-form-row { align-items: start; padding-block: 5px; }
 .profile-values dd { white-space: pre-wrap; overflow-wrap: anywhere; }
 .profile-values .empty { color: var(--muted); }
-.profile-form-row input, .profile-form-row textarea {
+.profile-form-row input, .profile-form-row textarea, .profile-form-row select {
   width: 100%; min-width: 0; padding: 7px 11px; border: 1px solid #e9dbdf; border-radius: 9px;
   background: #fffafb; color: var(--ink); font: inherit; line-height: 1.45;
 }
-.profile-form-row input { min-height: 34px; }
+.profile-form-row input, .profile-form-row select { min-height: 34px; }
+.profile-cover-settings { display: grid; gap: 7px; min-width: 0; }
+.profile-cover-thumbnail {
+  display: block; width: min(100%, 180px); aspect-ratio: 4 / 1; object-fit: cover;
+  border: 1px solid var(--profile-line); border-radius: 8px;
+}
+.profile-field-hint { color: var(--muted); }
+.profile-inline-actions .profile-field-hint { font-size: 11px; }
 .profile-tagline { align-items: start; }
 .profile-tagline > span:first-child { padding-top: 8px; }
 .profile-signature-input { position: relative; display: flex; min-width: 0; }

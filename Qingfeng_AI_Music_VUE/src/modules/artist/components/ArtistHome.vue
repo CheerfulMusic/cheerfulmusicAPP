@@ -1,13 +1,28 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { t } from '../../../shared/i18n'
 import { usePlayer, type PlayableTrack } from '../../../shared/player/store'
 import PlaybackIcon from '../../../shared/ui/PlaybackIcon.vue'
 import ArtistAvatar from './ArtistAvatar.vue'
 
-const props = defineProps<{ name: string; tagline: string; avatar?: string; tracks: PlayableTrack[] }>()
+const props = defineProps<{
+  name: string
+  tagline: string
+  avatar?: string
+  cover?: string
+  tracks: PlayableTrack[]
+  featuredTrackId?: string | null
+}>()
 const player = usePlayer()
-const featured = computed(() => props.tracks[0])
+const failedCover = ref<string>()
+const customCover = computed(() => props.cover === failedCover.value ? undefined : props.cover)
+const pinnedTrack = computed(() => props.tracks.find(track => track.id === props.featuredTrackId))
+const featured = computed(() => pinnedTrack.value ?? props.tracks[0])
+const featuredAction = computed(() => {
+  const playing = featured.value && active(featured.value)
+  if (pinnedTrack.value) return playing ? '暂停代表作' : '播放代表作'
+  return playing ? '暂停最新作品' : '播放最新作品'
+})
 const featureTime = computed(() => {
   if (player.current?.audio !== featured.value?.audio || !player.duration) return undefined
   return { position: player.time, duration: player.duration }
@@ -24,14 +39,15 @@ function play(track: PlayableTrack) {
 
 <template>
   <div class="artist-home">
-    <header class="artist-hero">
+    <header class="artist-hero" :class="{ 'has-custom-cover': customCover }">
+      <img v-if="customCover" :key="customCover" class="artist-cover-image" :src="customCover" alt="" @error="failedCover = customCover">
       <ArtistAvatar :name="name" :src="avatar" />
       <div class="artist-identity">
         <h1>{{ name || t('你的艺名') }}</h1>
         <div v-if="featured || $slots.actions" class="artist-hero-actions">
           <button v-if="featured" type="button" class="artist-action artist-action-primary" @click="play(featured)">
             <PlaybackIcon :playing="active(featured)" />
-            {{ t(active(featured) ? '暂停最新作品' : '播放最新作品') }}
+            {{ t(featuredAction) }}
           </button>
           <slot name="actions" />
         </div>
@@ -50,7 +66,7 @@ function play(track: PlayableTrack) {
             <span class="artist-play" aria-hidden="true"><PlaybackIcon :playing="active(featured)" /></span>
           </button>
           <div class="artist-feature-copy">
-            <span class="artist-feature-label">{{ t('最新发布') }}</span>
+            <span class="artist-feature-label">{{ t(pinnedTrack ? '代表作' : '最新发布') }}</span>
             <h2 id="artist-featured-title">{{ featured.title }}</h2>
             <progress v-if="featureTime" class="artist-feature-progress" :aria-label="t('播放进度')" :value="featureTime.position" :max="featureTime.duration" />
           </div>
@@ -89,6 +105,8 @@ function play(track: PlayableTrack) {
 }
 .artist-hero {
   --artist-avatar-size: clamp(92px, 11.2vw, 168px);
+  position: relative;
+  isolation: isolate;
   display: flex;
   align-items: center;
   gap: clamp(20px, 3.4vw, 34px);
@@ -99,6 +117,24 @@ function play(track: PlayableTrack) {
   background:
     linear-gradient(90deg, #fce6e9b0, #fce6e929 58%, transparent 76%),
     #f8dce3 url('../../../assets/artist/artist-sunset-cover.webp') center 72% / cover no-repeat;
+}
+.artist-cover-image {
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  object-fit: cover;
+}
+.artist-hero.has-custom-cover::before {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #fff1f4ef, #fff1f4b3 46%, #fff1f440);
+  content: '';
+  pointer-events: none;
 }
 .artist-hero :deep(.artist-avatar) {
   border: clamp(3px, .4vw, 5px) solid #fffafa;
@@ -211,6 +247,7 @@ function play(track: PlayableTrack) {
 }
 @media (max-width: 450px) {
   .artist-hero { --artist-avatar-size: 80px; align-items: flex-start; flex-direction: column; gap: 12px; padding: 20px; }
+  .artist-hero.has-custom-cover::before { background: linear-gradient(90deg, #fff1f4eb, #fff1f4a6); }
   .artist-hero-actions { margin-top: 12px; }
   .artist-page-nav { padding-inline: 4px; gap: 18px; }
   .artist-track-list { padding-inline: 9px; }

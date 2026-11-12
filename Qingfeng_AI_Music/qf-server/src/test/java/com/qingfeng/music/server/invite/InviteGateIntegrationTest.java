@@ -2,12 +2,18 @@ package com.qingfeng.music.server.invite;
 
 import java.net.*;
 import java.net.http.*;
+import java.awt.Color;
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.regex.Pattern;
+import javax.imageio.ImageIO;
 import com.qingfeng.music.identity.api.IdentityApi;
 import com.qingfeng.music.media.api.MediaApi;
 import com.qingfeng.music.work.api.WorkApi;
@@ -25,7 +31,10 @@ import static org.junit.jupiter.api.Assertions.*;
 @ActiveProfiles("test")
 class InviteGateIntegrationTest {
     @Value("${local.server.port}") int port;
+    private static final String ARTIST_PROFILE = "/api/app/artist-profile";
     record Browser(HttpClient http, CookieManager cookies, String csrf) {}
+    private record ArtistSession(HttpClient http, String csrf, String creator) {}
+    private record ArtistRelease(String work, String id) {}
     private HttpResponse<String> send(HttpClient client, String method, String path, String body, String csrf) throws Exception {
         var builder = HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + path));
         if (csrf != null) builder.header("X-XSRF-TOKEN", csrf);
@@ -203,10 +212,10 @@ class InviteGateIntegrationTest {
         for (String secret : List.of("private-recipient", "private-story", "private-message", creator, work, first, cover))
             assertFalse(page.body().contains(secret));
         media.select(creator, work, second, media.selection(creator, work).version());
-        assertArrayEquals(firstBytes, readAudio(visitor, songPath + "/1/audio").body());
+        assertArrayEquals(firstBytes, readBytes(visitor, songPath + "/1/audio").body());
         var replacement = send(owner.http(), "PUT", releasePath, songRequest(second, cover), csrf);
         assertEquals(200, replacement.statusCode(), replacement.body());
-        assertEquals(404, readAudio(visitor, songPath + "/1/audio").statusCode());
+        assertEquals(404, readBytes(visitor, songPath + "/1/audio").statusCode());
         var ranged = visitor.send(HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + songPath + "/2/audio"))
                 .header("Range", "bytes=44-47").GET().build(), HttpResponse.BodyHandlers.ofByteArray());
         assertEquals(206, ranged.statusCode());
@@ -218,16 +227,150 @@ class InviteGateIntegrationTest {
         for (String path : List.of(publicPath, avatar, songPath + "/2/audio", songPath + "/2/cover"))
             assertEquals(404, send(visitor, "GET", path, null, null).statusCode(), path);
         assertEquals(200, send(owner.http(), "PUT", mine + "/visibility", "{\"published\":true}", csrf).statusCode());
-        assertEquals(200, readAudio(visitor, songPath + "/2/audio").statusCode());
+        assertEquals(200, readBytes(visitor, songPath + "/2/audio").statusCode());
         assertEquals(200, send(owner.http(), "DELETE", releasePath, null, csrf).statusCode());
-        assertEquals(404, readAudio(visitor, songPath + "/2/audio").statusCode());
+        assertEquals(404, readBytes(visitor, songPath + "/2/audio").statusCode());
         assertTrue(send(visitor, "GET", publicPath, null, null).body().contains("\"songs\":[]"));
         assertEquals(second, media.selection(creator, work).assetId());
         assertEquals(200, send(owner.http(), "PUT", releasePath, songRequest(second, cover), csrf).statusCode());
-        assertEquals(200, readAudio(visitor, songPath + "/4/audio").statusCode());
+        assertEquals(200, readBytes(visitor, songPath + "/4/audio").statusCode());
         works.delete(creator, work, true);
-        assertEquals(404, readAudio(visitor, songPath + "/4/audio").statusCode());
+        assertEquals(404, readBytes(visitor, songPath + "/4/audio").statusCode());
         assertTrue(send(visitor, "GET", publicPath, null, null).body().contains("\"songs\":[]"));
+    }
+
+    @Test void artistHomepageCoverAndFeaturedSongRespectPublicationAndOwnership() throws Exception {
+        var owner = artistSession("Custom artist");
+        var older = releaseArtistSong(owner, "Older song", 7);
+        var latest = releaseArtistSong(owner, "Latest song", 8);
+        var other = artistSession("Other artist");
+        var foreign = releaseArtistSong(other, "Foreign song", 9);
+        byte[] cover = bannerImage(Color.PINK);
+        byte[] replacementCover = bannerImage(Color.BLUE);
+        var pinned = postArtistProfile(owner.http(), owner.csrf(), Map.of(
+                "stageName", "Custom artist", "tagline", "Custom tagline", "featuredReleaseId", older.id()), "cover", cover);
+        assertEquals(200, pinned.statusCode(), pinned.body());
+        assertEquals(older.id(), field(pinned.body(), "featuredReleaseId"));
+        String coverKey = field(pinned.body(), "coverKey");
+        String publicPath = "/api/public/artists/" + field(pinned.body(), "publicId");
+        String publicCover = publicPath + "/cover/" + coverKey;
+        String privateCover = ARTIST_PROFILE + "/cover/" + coverKey;
+
+        var visitor = HttpClient.newHttpClient();
+        var ownerImage = readBytes(owner.http(), privateCover);
+        assertEquals(200, ownerImage.statusCode());
+        assertEquals("image/jpeg", ownerImage.headers().firstValue("content-type").orElse(""));
+        var decodedCover = ImageIO.read(new ByteArrayInputStream(ownerImage.body()));
+        assertNotNull(decodedCover);
+        assertEquals(640, decodedCover.getWidth());
+        assertEquals(240, decodedCover.getHeight());
+        assertEquals(404, send(other.http(), "GET", privateCover, null, null).statusCode());
+        assertEquals(403, send(visitor, "GET", privateCover, null, null).statusCode());
+        assertEquals(404, send(visitor, "GET", publicPath, null, null).statusCode());
+        assertEquals(404, send(visitor, "GET", publicCover, null, null).statusCode());
+        assertEquals(404, send(visitor, "HEAD", publicCover, null, null).statusCode());
+
+        assertEquals(200, send(owner.http(), "PUT", ARTIST_PROFILE + "/visibility",
+                "{\"published\":true}", owner.csrf()).statusCode());
+        var published = send(visitor, "GET", publicPath, null, null);
+        assertEquals(200, published.statusCode(), published.body());
+        assertEquals(older.id(), field(published.body(), "featuredReleaseId"));
+        assertEquals(coverKey, field(published.body(), "coverKey"));
+        assertEquals(latest.id(), field(published.body(), "id"), "Pinning should not change the order of songs");
+        var guestImage = readBytes(visitor, publicCover);
+        assertEquals(200, guestImage.statusCode());
+        assertArrayEquals(ownerImage.body(), guestImage.body());
+        assertEquals(200, send(visitor, "HEAD", publicCover, null, null).statusCode());
+
+        var ordinaryEdit = postArtistProfile(owner.http(), owner.csrf(), Map.of(
+                "stageName", "Renamed artist", "tagline", "Renamed tagline"), "cover", null);
+        assertEquals(200, ordinaryEdit.statusCode(), ordinaryEdit.body());
+        assertEquals(coverKey, field(ordinaryEdit.body(), "coverKey"));
+        assertEquals(older.id(), field(ordinaryEdit.body(), "featuredReleaseId"));
+        assertFeaturedUpdateRejected(owner, foreign.id(), replacementCover);
+        assertArrayEquals(ownerImage.body(), readBytes(visitor, publicCover).body());
+
+        var automatic = postArtistProfile(owner.http(), owner.csrf(), Map.of(
+                "stageName", "Renamed artist", "tagline", "Renamed tagline", "featuredReleaseId", ""), "cover", null);
+        assertEquals(200, automatic.statusCode(), automatic.body());
+        assertTrue(automatic.body().contains("\"featuredReleaseId\":null"), automatic.body());
+        var publicAutomatic = send(visitor, "GET", publicPath, null, null);
+        assertEquals(200, publicAutomatic.statusCode(), publicAutomatic.body());
+        assertTrue(publicAutomatic.body().contains("\"featuredReleaseId\":null"), publicAutomatic.body());
+        assertEquals(latest.id(), field(publicAutomatic.body(), "id"));
+
+        var repinned = postArtistProfile(owner.http(), owner.csrf(), Map.of(
+                "stageName", "Renamed artist", "tagline", "Renamed tagline", "featuredReleaseId", older.id()), "cover", null);
+        assertEquals(200, repinned.statusCode(), repinned.body());
+        assertEquals(older.id(), field(repinned.body(), "featuredReleaseId"));
+        assertEquals(200, send(owner.http(), "DELETE", ARTIST_PROFILE + "/releases/" + older.work(),
+                null, owner.csrf()).statusCode());
+        var afterRemoval = send(visitor, "GET", publicPath, null, null);
+        assertEquals(200, afterRemoval.statusCode(), afterRemoval.body());
+        assertTrue(afterRemoval.body().contains("\"featuredReleaseId\":null"), afterRemoval.body());
+        assertEquals(latest.id(), field(afterRemoval.body(), "id"));
+        assertFeaturedUpdateRejected(owner, older.id(), replacementCover);
+        assertArrayEquals(ownerImage.body(), readBytes(visitor, publicCover).body());
+
+        var resetCover = postArtistProfile(owner.http(), owner.csrf(), Map.of(
+                "stageName", "Renamed artist", "tagline", "Renamed tagline", "removeCover", "true"), "cover", null);
+        assertEquals(200, resetCover.statusCode(), resetCover.body());
+        assertTrue(resetCover.body().contains("\"coverKey\":null"), resetCover.body());
+        var publicReset = send(visitor, "GET", publicPath, null, null);
+        assertEquals(200, publicReset.statusCode(), publicReset.body());
+        assertTrue(publicReset.body().contains("\"coverKey\":null"), publicReset.body());
+        assertEquals(404, send(visitor, "GET", publicCover, null, null).statusCode());
+        assertEquals(404, send(visitor, "HEAD", publicCover, null, null).statusCode());
+        assertEquals(404, send(owner.http(), "GET", privateCover, null, null).statusCode());
+    }
+
+    private ArtistSession artistSession(String name) throws Exception {
+        var browser = browser();
+        assertEquals(200, enter(browser).statusCode());
+        String csrf = field(send(browser.http(), "GET", "/api/public/csrf", null, null).body(), "token");
+        var session = send(browser.http(), "POST", "/api/public/session", "{}", csrf);
+        assertEquals(200, session.statusCode(), session.body());
+        String creator = field(session.body(), "creatorId");
+        linkFixtureAccount(creator);
+        var profile = saveArtist(browser, csrf, name, null);
+        assertEquals(200, profile.statusCode(), profile.body());
+        return new ArtistSession(browser.http(), csrf, creator);
+    }
+
+    private ArtistRelease releaseArtistSong(ArtistSession owner, String title, int sample) throws Exception {
+        String work = works.create(owner.creator(),
+                new WorkApi.Draft("Friend", "生日", "Story", "Message", "民谣", title)).id();
+        String asset = media.importAudio(owner.creator(), work, new ByteArrayInputStream(wav(sample))).id();
+        var release = send(owner.http(), "PUT", ARTIST_PROFILE + "/releases/" + work,
+                "{\"assetId\":\"" + asset + "\",\"title\":\"" + title + "\"}", owner.csrf());
+        assertEquals(200, release.statusCode(), release.body());
+        return new ArtistRelease(work, field(release.body(), "id"));
+    }
+
+    private void assertFeaturedUpdateRejected(ArtistSession owner, String release, byte[] cover) throws Exception {
+        var before = send(owner.http(), "GET", ARTIST_PROFILE, null, null);
+        assertEquals(200, before.statusCode(), before.body());
+        var rejected = postArtistProfile(owner.http(), owner.csrf(), Map.of(
+                "stageName", "Rejected name", "tagline", "Rejected tagline", "featuredReleaseId", release), "cover", cover);
+        assertEquals(400, rejected.statusCode(), rejected.body());
+        assertTrue(rejected.body().contains("INVALID_ARTIST_FEATURED_RELEASE"), rejected.body());
+        var after = send(owner.http(), "GET", ARTIST_PROFILE, null, null);
+        assertEquals(200, after.statusCode(), after.body());
+        assertEquals(before.body(), after.body(), "Rejected update should preserve all profile fields");
+    }
+
+    private static byte[] bannerImage(Color color) throws Exception {
+        var image = new BufferedImage(640, 240, BufferedImage.TYPE_INT_RGB);
+        var graphics = image.createGraphics();
+        try {
+            graphics.setColor(color);
+            graphics.fillRect(0, 0, image.getWidth(), image.getHeight());
+        } finally {
+            graphics.dispose();
+        }
+        var bytes = new ByteArrayOutputStream();
+        ImageIO.write(image, "png", bytes);
+        return bytes.toByteArray();
     }
 
     private void linkFixtureAccount(String creator) {
@@ -238,22 +381,28 @@ class InviteGateIntegrationTest {
     }
 
     private HttpResponse<String> saveArtist(Browser browser, String csrf, String name, byte[] avatar) throws Exception {
+        return postArtistProfile(browser.http(), csrf, Map.of("stageName", name, "tagline", "A test tagline"), "avatar", avatar);
+    }
+
+    private HttpResponse<String> postArtistProfile(HttpClient client, String csrf, Map<String, String> fields,
+            String imageField, byte[] image) throws Exception {
         String boundary = "ArtistBoundary";
-        var body = new java.io.ByteArrayOutputStream();
-        body.write(("--" + boundary + "\r\nContent-Disposition: form-data; name=\"stageName\"\r\n\r\n" + name
-                + "\r\n--" + boundary + "\r\nContent-Disposition: form-data; name=\"tagline\"\r\n\r\nA test tagline\r\n")
-                .getBytes(StandardCharsets.UTF_8));
-        if (avatar != null) {
-            body.write(("--" + boundary + "\r\nContent-Disposition: form-data; name=\"avatar\"; filename=\"avatar.png\"\r\n"
+        var body = new ByteArrayOutputStream();
+        for (var field : fields.entrySet()) {
+            body.write(("--" + boundary + "\r\nContent-Disposition: form-data; name=\"" + field.getKey() + "\"\r\n\r\n"
+                    + field.getValue() + "\r\n").getBytes(StandardCharsets.UTF_8));
+        }
+        if (image != null) {
+            body.write(("--" + boundary + "\r\nContent-Disposition: form-data; name=\"" + imageField + "\"; filename=\"image.png\"\r\n"
                     + "Content-Type: image/png\r\n\r\n").getBytes(StandardCharsets.UTF_8));
-            body.write(avatar);
+            body.write(image);
             body.write("\r\n".getBytes(StandardCharsets.UTF_8));
         }
         body.write(("--" + boundary + "--\r\n").getBytes(StandardCharsets.UTF_8));
-        var request = HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + "/api/app/artist-profile"))
+        var request = HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + ARTIST_PROFILE))
                 .header("X-XSRF-TOKEN", csrf).header("Content-Type", "multipart/form-data; boundary=" + boundary)
                 .POST(HttpRequest.BodyPublishers.ofByteArray(body.toByteArray())).build();
-        return browser.http().send(request, HttpResponse.BodyHandlers.ofString());
+        return client.send(request, HttpResponse.BodyHandlers.ofString());
     }
 
     private static String songRequest(String asset, String cover) {
@@ -268,8 +417,8 @@ class InviteGateIntegrationTest {
                 .put("data".getBytes(StandardCharsets.US_ASCII)).putInt(4).putInt(sample).array();
     }
 
-    private HttpResponse<byte[]> readAudio(HttpClient visitor, String path) throws Exception {
-        return visitor.send(HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + path)).GET().build(),
+    private HttpResponse<byte[]> readBytes(HttpClient client, String path) throws Exception {
+        return client.send(HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + path)).GET().build(),
                 HttpResponse.BodyHandlers.ofByteArray());
     }
 

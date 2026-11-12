@@ -28,8 +28,12 @@ public class ArtistPageApiController {
 
     @GetMapping("/avatar/{key}")
     public ResponseEntity<byte[]> avatar(@PathVariable String artist, @PathVariable String key) {
-        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).contentType(MediaType.IMAGE_JPEG)
-                .body(profiles.publicAvatar(artist, key));
+        return jpeg(profiles.publicAvatar(artist, key));
+    }
+
+    @GetMapping("/cover/{key}")
+    public ResponseEntity<byte[]> cover(@PathVariable String artist, @PathVariable String key) {
+        return jpeg(profiles.publicProfileCover(artist, key));
     }
 
     @GetMapping("/songs/{song}/{version}/audio")
@@ -42,5 +46,9 @@ public class ArtistPageApiController {
     public ResponseEntity<Resource> cover(@PathVariable String artist, @PathVariable String song,
             @PathVariable long version) {
         return AudioResponse.from(profiles.publicCover(artist, song, version), false);
+    }
+
+    private static ResponseEntity<byte[]> jpeg(byte[] body) {
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).contentType(MediaType.IMAGE_JPEG).body(body);
     }
 }

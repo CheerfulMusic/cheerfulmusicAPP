@@ -21,6 +21,8 @@ export interface ArtistProfile {
   stageName: string
   tagline: string
   avatarKey: string | null
+  coverKey: string | null
+  featuredReleaseId: string | null
   published: boolean
   songs: ArtistRelease[]
 }
@@ -29,6 +31,8 @@ export interface PublicArtist {
   stageName: string
   tagline: string
   avatarKey: string | null
+  coverKey: string | null
+  featuredReleaseId: string | null
   songs: PublishedSong[]
 }
 
@@ -59,12 +63,23 @@ export async function getArtistProfile() {
   return requestJson<ArtistProfile>(mine)
 }
 
-export function saveArtistProfile(stageName: string, tagline: string, avatar?: File, removeAvatar = false) {
+interface HomeCustomization {
+  cover?: File
+  removeCover?: boolean
+  featuredReleaseId?: string | null
+}
+
+export function saveArtistProfile(stageName: string, tagline: string, avatar?: File, removeAvatar = false, home?: HomeCustomization) {
   const form = new FormData()
   form.set('stageName', stageName)
   form.set('tagline', tagline)
   form.set('removeAvatar', String(removeAvatar))
   if (avatar) form.set('avatar', avatar)
+  if (home) {
+    if (home.featuredReleaseId !== undefined) form.set('featuredReleaseId', home.featuredReleaseId ?? '')
+    form.set('removeCover', String(home.removeCover ?? false))
+    if (home.cover) form.set('cover', home.cover)
+  }
   return uploadForm<ArtistProfile>(mine, form)
 }
 
@@ -91,6 +106,8 @@ export async function removeSongFromArtist(work: string) {
 export const getPublicArtist = (id: string) => requestJson<PublicArtist>(publicArtist(id))
 export const ownerAvatarUrl = (key: string) => apiUrl(`${mine}/avatar/${encodeURIComponent(key)}`)
 export const publicAvatarUrl = (id: string, key: string) => apiUrl(`${publicArtist(id)}/avatar/${encodeURIComponent(key)}`)
+export const ownerArtistCoverUrl = (key: string) => apiUrl(`${mine}/cover/${encodeURIComponent(key)}`)
+export const publicArtistCoverUrl = (id: string, key: string) => apiUrl(`${publicArtist(id)}/cover/${encodeURIComponent(key)}`)
 
 export function publicTrack(id: string, song: PublishedSong) {
   const path = `${publicArtist(id)}/songs/${encodeURIComponent(song.id)}/${song.version}`

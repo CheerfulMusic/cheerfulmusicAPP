@@ -3,7 +3,7 @@ import { computed, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { ApiError } from '../../../shared/http/api-client'
 import { t } from '../../../shared/i18n'
-import { artistHomeUrl, getPublicArtist, publicAvatarUrl, publicTrack, type PublicArtist } from '../api/artist'
+import { artistHomeUrl, getPublicArtist, publicArtistCoverUrl, publicAvatarUrl, publicTrack, type PublicArtist } from '../api/artist'
 import ArtistHome from '../components/ArtistHome.vue'
 import ArtistShareButton from '../components/ArtistShareButton.vue'
 
@@ -14,6 +14,7 @@ const loading = ref(true)
 const missing = ref(false)
 const error = ref('')
 const avatar = computed(() => artist.value?.avatarKey ? publicAvatarUrl(id.value, artist.value.avatarKey) : undefined)
+const cover = computed(() => artist.value?.coverKey ? publicArtistCoverUrl(id.value, artist.value.coverKey) : undefined)
 const tracks = computed(() => artist.value?.songs.map(song => publicTrack(id.value, song)) || [])
 let turn = 0
 
@@ -38,7 +39,7 @@ watch(id, load, { immediate: true })
 </script>
 
 <template>
-  <ArtistHome v-if="artist" :name="artist.stageName" :tagline="artist.tagline" :avatar="avatar" :tracks="tracks">
+  <ArtistHome v-if="artist" :name="artist.stageName" :tagline="artist.tagline" :avatar="avatar" :cover="cover" :tracks="tracks" :featured-track-id="artist.featuredReleaseId">
     <template #actions>
       <ArtistShareButton :key="id" :url="artistHomeUrl(id)" :name="artist.stageName" />
     </template>
