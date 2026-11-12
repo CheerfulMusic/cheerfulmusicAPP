@@ -50,7 +50,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class CostControlBatchTest {
 
     /** 歌词生成单次积分（商用契约值，与 application.yml 的 qingfeng.credits.lyrics-cost 一致）。 */
-    static final long LYRICS_COST = 5L;
+    static final long LYRICS_COST = 1L;
     /** AI 改写单次超额积分。 */
     static final long REWRITE_COST = 1L;
 
@@ -84,7 +84,7 @@ class CostControlBatchTest {
 
     @Test
     void commercialConfiguredValuesMatchContract() {
-        assertEquals(5L, env.getProperty("qingfeng.credits.lyrics-cost", Long.class));
+        assertEquals(1L, env.getProperty("qingfeng.credits.lyrics-cost", Long.class));
         assertEquals(1L, env.getProperty("qingfeng.credits.rewrite-cost", Long.class));
         assertEquals(5L, env.getProperty("qingfeng.credits.rewrite-free-per-day", Long.class));
         assertEquals(20, env.getProperty("qingfeng.usage.cover.daily-per-creator", Integer.class));
@@ -96,7 +96,7 @@ class CostControlBatchTest {
     // ===== 1. 歌词生成积分：5 积分/次，批量循环不超额、失败退还、幂等 =====
 
     @Test
-    void lyricsGenerationChargesExactlyFiveCreditsPerCallInBatch() {
+    void lyricsGenerationChargesExactlyOneCreditPerCallInBatch() {
         String owner = identity.create().creatorId();
         credits.credit(owner, LYRICS_COST * 20, "fund-" + owner);
         String work = works.create(owner, new Draft("妈妈", "生日", "一起做饭", "愿你快乐", "民谣", "故事")).id();
@@ -106,7 +106,7 @@ class CostControlBatchTest {
             assertNotNull(revision.id());
         }
         assertEquals(20, lyricsWriter.calls.get());
-        assertEquals(0, credits.balance(owner)); // 20 * 5 = 100，正好扣完
+        assertEquals(0, credits.balance(owner)); // 20 次扣完
         var rows = consumptions(owner);
         assertEquals(20, rows.size());
         for (var row : rows) {
@@ -131,7 +131,7 @@ class CostControlBatchTest {
         lyricsWriter.failure = new DomainException("LYRICS_PROVIDER_TIMEOUT", "超时");
         String failedKey = UUID.randomUUID().toString();
         assertThrows(DomainException.class, () -> composer.compose(owner, work, 0, failedKey, "zh-CN"));
-        assertEquals(LYRICS_COST * 5, credits.balance(owner)); // 25，已原额退还
+        assertEquals(LYRICS_COST * 5, credits.balance(owner)); // 已原额退还
         var rows = consumptions(owner);
         assertEquals(1, rows.size());
         assertEquals("FAILED", rows.get(0).status());
@@ -149,7 +149,7 @@ class CostControlBatchTest {
         var second = composer.compose(owner, work, 0, key, "zh-CN");
         assertEquals(first.id(), second.id());
         assertEquals(1, lyricsWriter.calls.get());
-        assertEquals(LYRICS_COST * 4, credits.balance(owner)); // 25 - 5 = 20，仅一次扣费
+        assertEquals(LYRICS_COST * 4, credits.balance(owner)); // 仅一次扣费
         var rows = consumptions(owner);
         assertEquals(1, rows.size());
         assertEquals("SUCCEEDED", rows.get(0).status());
