@@ -187,7 +187,12 @@ onBeforeUnmount(() => { recognition?.stop?.(); clearReference() })
         <button type="button" @click="confirmingReset = false">{{ tr('保留对话', 'Keep chat') }}</button>
       </div>
       <div ref="chat" class="agent-chat" role="log" aria-live="polite">
-        <div v-if="!messages.length" class="agent-hero"><span class="agent-hero-icon" aria-hidden="true"><svg viewBox="0 0 48 48"><path d="M25 9l12 2.6v16.2a6 6 0 1 1-3.4-5.4V18.3l-8 1.7v11.4a6 6 0 1 1-3.4-5.4V12z"/></svg></span><h1>{{ tr('今天，想创作一首什么歌？', 'What would you like to create today?') }}</h1><p>{{ tr('告诉我你的灵感，剩下的交给我。', 'Tell me your inspiration. Let’s make it a song.') }}</p></div>
+        <div v-if="!messages.length" class="agent-hero">
+          <h1>{{ tr('把你的故事，变成一首歌。', 'Turn your story into a song.') }}</h1>
+          <p class="agent-hero-tagline">{{ tr('每个人，都可以是歌手。', 'Everyone can be a singer.') }}</p>
+          <p>{{ tr('一个故事、一种心情，甚至一张照片。', 'A story, a feeling, or even a photo.') }}</p>
+          <p>{{ tr('告诉我你的灵感，剩下的交给 AI。', 'Share your inspiration. Let AI take it from here.') }}</p>
+        </div>
         <p v-if="loading" class="agent-typing" role="status">{{ tr('正在恢复对话…', 'Loading conversation…') }}</p>
         <div v-if="!messages.length && !loading && !error" class="agent-message assistant">
           <div class="agent-bubble"><p>{{ tr('你好！告诉我你想做什么：聊灵感、写歌、找作品、选版本、换封面、分享，或查积分和订单。需要选择时，我会把选项放在对话里。', 'Hi! Ask for ideas, write a song, find your music, compare versions, change artwork, share, or check credits and orders. I will show any choices right here.') }}</p></div>
