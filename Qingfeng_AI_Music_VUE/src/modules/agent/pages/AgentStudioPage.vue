@@ -11,6 +11,7 @@ import { analyzeAudioFile, cancelAnalysis, forgetAnalysis, MAX_REFERENCE_BYTES }
 import { BPM_CONFIDENCE_THRESHOLD } from '../model/audio-features'
 import { requestReferenceAnalysis } from '../api/reference'
 import { showLoginDialog } from '../../../shared/identity/login-dialog'
+import { loadWork } from '../../studio/api/works'
 import { assistantResult, uploadTarget, type AgentCommand } from '../model/assistant-result'
 import AgentResultCard from '../components/AgentResultCard.vue'
 const AgentNativeDialog = defineAsyncComponent(() => import('../components/AgentNativeDialog.vue'))
@@ -20,6 +21,18 @@ const { messages, songCard, shareUrl, liked, taskRunning, loading, sending, erro
 const player = usePlayer(), { credits, refreshCredits } = useCredits()
 const input = ref(''), chat = ref<HTMLElement>(), fileInput = ref<HTMLInputElement>(), notice = ref('')
 const confirmingReset = ref(false)
+const previewTab = ref<'lyrics' | 'story' | 'more'>('lyrics')
+const showQueue = ref(false)
+const story = ref(''), storyLoading = ref(false), storyError = ref(false)
+let storyVersion = 0
+async function fetchStory() {
+  const id = songCard.value?.songId, version = ++storyVersion
+  story.value = ''; storyError.value = false; storyLoading.value = !!id
+  if (!id) return
+  try { const work = await loadWork(id); if (version === storyVersion) story.value = work.story?.trim() || '' }
+  catch { if (version === storyVersion) storyError.value = true }
+  finally { if (version === storyVersion) storyLoading.value = false }
+}
 const nativePanel = ref<{ kind: 'recharge' | 'account' | 'privacy' | 'photo' | 'upload_cover' | 'upload_audio'; workId?: string } | null>(null)
 const lastAssistantId = computed(() => [...messages.value].reverse().find(message => message.role === 'assistant')?.id)
 const chatMessages = computed(() => messages.value.map(message => ({ ...message, result: assistantResult(message) })))
@@ -168,13 +181,18 @@ async function loadOlder() {
   await conversation.loadOlder(); await nextTick()
   if (chat.value) chat.value.scrollTop = top + chat.value.scrollHeight - height
 }
+watch(() => [previewTab.value, songCard.value?.songId], ([tab]) => {
+  storyVersion++; story.value = ''; storyError.value = false; storyLoading.value = false
+  if (tab === 'story') void fetchStory()
+})
 watch(() => messages.value.at(-1)?.seq, () => { void scrollChat() })
 watch(() => JSON.stringify([accountState.value.authenticated, accountState.value.email, accountState.value.name, logtoState.value.authenticated, logtoState.value.email, logtoState.value.phoneMasked, logtoState.value.name]), () => {
+  storyVersion++; story.value = ''; storyError.value = false; storyLoading.value = false; previewTab.value = 'lyrics'; showQueue.value = false
   input.value = ''; notice.value = ''; confirmingReset.value = false; nativePanel.value = null
   clearReference(); void conversation.changeIdentity()
 })
 onMounted(() => { void conversation.refresh(); void refreshCredits().catch(() => undefined) })
-onBeforeUnmount(() => { recognition?.stop?.(); clearReference() })
+onBeforeUnmount(() => { storyVersion++; recognition?.stop?.(); clearReference() })
 </script>
 
 <template>
@@ -237,17 +255,37 @@ onBeforeUnmount(() => { recognition?.stop?.(); clearReference() })
       </div>
     </section>
     <aside class="agent-preview" :aria-label="tr('当前作品', 'Current song')">
-      <div class="agent-preview-head"><strong>{{ tr('当前作品', 'Current song') }}</strong></div>
       <template v-if="songCard?.songId">
-        <div class="agent-preview-cover"><img :src="safeLink(songCard.coverUrl) || defaultCover()" :alt="tr('歌曲封面', 'Song artwork')"/></div>
-        <div class="agent-preview-meta"><strong>{{ songCard.title || tr('未命名作品', 'Untitled song') }}</strong><span>{{ songCard.style }}</span></div>
+        <div class="agent-album">
+          <div class="agent-record" aria-hidden="true"></div>
+          <div class="agent-album-art"><img :src="safeLink(songCard.coverUrl) || defaultCover()" :alt="tr('歌曲封面', 'Song artwork')"/>
+            <button type="button" class="agent-album-like" :disabled="blocked" :aria-pressed="liked" :aria-label="liked ? tr('取消喜欢', 'Unlike') : tr('喜欢', 'Like')" @click="send(liked ? '取消点赞当前作品' : '给当前作品点赞')">{{ liked ? '♥' : '♡' }}</button>
+          </div>
+        </div>
+        <div class="agent-preview-meta"><strong>{{ songCard.title || tr('未命名作品', 'Untitled song') }}</strong><span v-if="songCard.style">{{ songCard.style }}</span></div>
         <p class="agent-song-status" role="status">{{ statusText }}</p>
-        <div v-if="playable" class="agent-preview-progress agent-preview-playrow"><button type="button" class="agent-preview-play" :aria-label="isPlaying ? tr('暂停', 'Pause') : tr('播放', 'Play')" @click="togglePlay"><svg viewBox="0 0 24 24" aria-hidden="true"><path v-if="isPlaying" d="M9 6v12M15 6v12"/><path v-else d="m9 6 9 6-9 6V6Z"/></svg></button><input class="agent-preview-range" type="range" min="0" :max="duration || 1" :value="playTime" :disabled="!currentPlaying || !duration" :aria-label="tr('播放进度', 'Playback position')" @input="player.seek(Number(($event.target as HTMLInputElement).value))"/><span class="agent-preview-time">{{ formatTime(playTime) }} / {{ formatTime(duration) }}</span></div>
+        <div class="agent-player">
+          <input class="agent-preview-range" type="range" min="0" :max="duration || 1" :value="playTime" :disabled="!currentPlaying || !duration" :aria-label="tr('播放进度', 'Playback position')" @input="player.seek(Number(($event.target as HTMLInputElement).value))"/>
+          <div class="agent-player-times"><span>{{ formatTime(playTime) }}</span><span>{{ formatTime(duration) }}</span></div>
+          <div class="agent-player-controls">
+            <button type="button" :disabled="!currentPlaying" :aria-pressed="currentPlaying && player.repeatOne" :aria-label="tr('单曲循环', 'Repeat one')" @click="player.toggleRepeat()">⇄</button>
+            <button type="button" :disabled="!currentPlaying || !player.hasQueue" :aria-label="tr('上一首', 'Previous track')" @click="player.next(-1)">◀▏</button>
+            <button type="button" class="agent-preview-play" :disabled="!playable" :aria-label="isPlaying ? tr('暂停', 'Pause') : tr('播放', 'Play')" @click="togglePlay"><svg viewBox="0 0 24 24" aria-hidden="true"><path v-if="isPlaying" d="M9 6v12M15 6v12"/><path v-else d="m9 6 9 6-9 6V6Z"/></svg></button>
+            <button type="button" :disabled="!currentPlaying || !player.hasQueue" :aria-label="tr('下一首', 'Next track')" @click="player.next()">▕▶</button>
+            <button type="button" :disabled="!player.tracks.length" :aria-expanded="showQueue" :aria-label="tr('播放列表', 'Playback queue')" @click="showQueue = !showQueue">☷</button>
+          </div>
+        </div>
+        <div v-if="showQueue && player.tracks.length" class="agent-play-queue" :aria-label="tr('播放列表', 'Playback queue')"><button v-for="track in player.tracks" :key="track.id" type="button" :aria-current="player.current?.id === track.id ? 'true' : undefined" @click="player.toggle(track)">{{ track.title }}</button></div>
+        <p v-if="player.current && !currentPlaying" class="agent-player-other">{{ tr('播放器正在播放其他作品', 'The player is on another song') }}</p>
         <p v-if="currentPlaying && player.error" class="agent-upload-error" role="alert">{{ player.error }}</p>
-        <div class="agent-preview-actions"><button type="button" :disabled="blocked" :aria-pressed="liked" @click="send(liked ? '取消点赞当前作品' : '给当前作品点赞')">{{ liked ? tr('已喜欢', 'Liked') : tr('喜欢', 'Like') }}</button><button type="button" :disabled="blocked || !playable" @click="send('下载当前作品')">{{ tr('下载', 'Download') }}</button><button type="button" :disabled="blocked || !playable" @click="send('分享当前作品')">{{ tr('分享', 'Share') }}</button></div>
+        <div class="agent-preview-tabs" role="tablist" :aria-label="tr('作品详情', 'Song details')">
+          <button v-for="tab in (['lyrics', 'story', 'more'] as const)" :key="tab" type="button" role="tab" :aria-selected="previewTab === tab" @click="previewTab = tab">{{ tab === 'lyrics' ? tr('歌词', 'Lyrics') : tab === 'story' ? tr('作品故事', 'Story') : tr('更多', 'More') }}</button>
+        </div>
+        <div v-if="previewTab === 'lyrics'" class="agent-tab-content agent-real-lyrics" role="tabpanel"><strong v-if="songCard.lyrics" class="agent-lyrics-title">♫ {{ songCard.title }}</strong><p>{{ songCard.lyrics || tr('还没有歌词，可以在对话中让我写。', 'No lyrics yet. Ask me to write them.') }}</p></div>
+        <div v-else-if="previewTab === 'story'" class="agent-tab-content agent-story-empty" role="tabpanel"><p v-if="storyLoading">{{ tr('正在加载作品故事…', 'Loading story…') }}</p><p v-else-if="storyError">{{ tr('作品故事加载失败', 'Unable to load story') }} <button type="button" @click="fetchStory">{{ tr('重试', 'Retry') }}</button></p><p v-else>{{ story || tr('暂无作品故事', 'No story yet') }}</p></div>
+        <div v-else class="agent-tab-content agent-song-actions" role="tabpanel"><button v-if="!taskRunning" type="button" class="agent-start-button" :disabled="blocked || !songCard.lyrics" @click="send('用当前歌词生成音乐')">{{ audioUrl ? tr('重新生成音乐', 'Generate another version') : tr('生成音乐', 'Generate music') }}</button><button v-else type="button" :disabled="blocked" @click="send('停止生成')">{{ tr('停止生成', 'Cancel generation') }}</button><button type="button" :disabled="blocked" @click="input = tr('把副歌改得更温柔，保留其他部分', 'Make the chorus gentler and keep the rest')">{{ tr('修改歌词', 'Revise lyrics') }}</button></div>
         <div v-if="publicLink" class="agent-share-link"><a :href="publicLink" target="_blank" rel="noopener noreferrer">{{ tr('打开分享页面', 'Open share page') }}</a><button type="button" @click="copyShare">{{ tr('复制链接', 'Copy link') }}</button></div>
-        <div class="agent-song-actions"><button v-if="!taskRunning" type="button" class="agent-start-button" :disabled="blocked || !songCard.lyrics" @click="send('用当前歌词生成音乐')">{{ audioUrl ? tr('重新生成音乐', 'Generate another version') : tr('生成音乐', 'Generate music') }}</button><button v-else type="button" :disabled="blocked" @click="send('停止生成')">{{ tr('停止生成', 'Cancel generation') }}</button><button type="button" :disabled="blocked" @click="input = tr('把副歌改得更温柔，保留其他部分', 'Make the chorus gentler and keep the rest')">{{ tr('修改歌词', 'Revise lyrics') }}</button></div>
-        <details class="agent-real-lyrics" open><summary>{{ tr('歌词', 'Lyrics') }}</summary><p>{{ songCard.lyrics || tr('还没有歌词，可以在对话中让我写。', 'No lyrics yet. Ask me to write them.') }}</p></details>
+        <div class="agent-preview-actions agent-bottom-actions"><button type="button" :disabled="blocked || !playable" @click="send('下载当前作品')">↓ {{ tr('下载', 'Download') }}</button><button type="button" :disabled="blocked || !playable" @click="send('分享当前作品')">♧ {{ tr('分享', 'Share') }}</button><button type="button" :disabled="blocked" @click="input = tr('参考当前作品，帮我创作一首同风格的新歌', 'Create a new song inspired by the style of the current song')">✦ {{ tr('改编同款', 'Create a version') }}</button></div>
       </template>
       <div v-else class="agent-empty-song"><span aria-hidden="true">♫</span><strong>{{ tr('从一句灵感开始', 'Start with an idea') }}</strong><p>{{ tr('写好歌词后，作品会出现在这里。音乐完成后，就能试听、下载和分享。', 'Your song will appear here when its lyrics are ready. Once the music is generated, you can listen, download and share.') }}</p></div>
     </aside>
@@ -277,5 +315,21 @@ onBeforeUnmount(() => { recognition?.stop?.(); clearReference() })
 .agent-reset-trigger { align-self: flex-end; border: 0; background: transparent; color: #9b8278; font-size: 12px; }
 .agent-reset-confirm { margin-block: 10px; padding: 12px; border: 1px solid #f1d7c9; border-radius: 12px; background: #fff9f5; font-size: 12px; line-height: 1.7; color: #845f50; }
 .agent-reset-confirm button { margin-right: 12px; }
+
+.agent-preview { display:flex; flex-direction:column; height:100%; box-sizing:border-box; padding:24px; border-radius:24px; background:#fff9f6; box-shadow:0 12px 34px #ee9b8040; }
+.agent-album { position:relative; padding:4px 20% 0 0; margin:0 0 4px; }
+.agent-record { position:absolute; width:72%; aspect-ratio:1; right:0; top:7%; border-radius:50%; background:repeating-radial-gradient(circle,#171719 0 3px,#353537 4px 5px,#111 6px 9px); box-shadow:0 8px 24px #6b3d3a44; }
+.agent-album-art { position:relative; width:100%; aspect-ratio:1; border-radius:20px 0 0 20px; overflow:hidden; box-shadow:0 12px 24px #dc958245; }
+.agent-album-art img { display:block; width:100%; height:100%; object-fit:cover; }
+.agent-album-like { position:absolute; right:8px; top:8px; border:0; border-radius:18px; padding:2px 9px; background:#533e4980; color:#fff; font-size:22px; line-height:1; cursor:pointer; }
+.agent-album-like[aria-pressed="true"] { color:#ff4c37; }
+.agent-preview-meta strong { font-size:22px; }.agent-preview-meta span { font-size:13px; color:#6e625f; }
+.agent-song-status { margin:10px 0 16px; color:#8e7971; }
+.agent-player { display:grid; gap:7px; }.agent-player .agent-preview-range { width:100%; background:#e9d9d8; accent-color:#ff5134; }.agent-player-times { display:flex; justify-content:space-between; font-size:10px; color:#6a5b58; }
+.agent-player-controls { display:flex; justify-content:space-between; align-items:center; margin:8px 0 14px; }.agent-player-controls > button:not(.agent-preview-play) { border:0; background:transparent; color:#423b3a; font-size:19px; cursor:pointer; }.agent-player-controls .agent-preview-play { flex:0 0 48px; width:48px; height:48px; }.agent-player-controls button[aria-pressed="true"] { color:#ff5134; }.agent-play-queue { max-height:120px; overflow:auto; display:grid; gap:4px; }.agent-play-queue button { border:0; padding:7px; background:#fff5ef; color:#6e625f; text-align:left; }.agent-play-queue button[aria-current="true"] { color:#ef4a30; font-weight:700; }.agent-player-other { font-size:11px; color:#8b7d78; }
+.agent-preview-tabs { display:flex; border-bottom:1px solid #f1ded8; }.agent-preview-tabs button { flex:1; border:0; border-bottom:2px solid transparent; background:transparent; color:#8b7d78; padding:12px 4px; cursor:pointer; }.agent-preview-tabs button[aria-selected="true"] { color:#352e2c; border-color:#ff5134; font-weight:700; }
+.agent-tab-content { min-height:160px; max-height:240px; overflow:auto; }.agent-real-lyrics { padding-top:14px; border:0; }.agent-real-lyrics p { line-height:2; margin:8px 0; white-space:pre-wrap; }.agent-lyrics-title { color:#fa4d32; font-size:13px; }.agent-story-empty { padding:20px 0; color:#8b7d78; font-size:13px; white-space:pre-wrap; overflow-wrap:anywhere; }.agent-song-actions { align-content:start; }
+.agent-bottom-actions { margin-top:auto; padding-top:16px; }.agent-bottom-actions > button:last-child { color:#f04e32; }
+@media (max-width: 800px) { .agent-preview { height:auto; }.agent-album { max-width:350px; }.agent-tab-content { min-height:100px; } }
 button:disabled { opacity: .5; cursor: not-allowed; }
 </style>

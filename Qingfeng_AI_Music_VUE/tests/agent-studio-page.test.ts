@@ -3,10 +3,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { effectScope } from 'vue'
-const api = vi.hoisted(() => ({ current: vi.fn(), state: vi.fn(), history: vi.fn(), send: vi.fn(), reset: vi.fn(), analyse: vi.fn(), cancel: vi.fn(), forget: vi.fn() }))
+const api = vi.hoisted(() => ({ current: vi.fn(), state: vi.fn(), history: vi.fn(), send: vi.fn(), reset: vi.fn(), analyse: vi.fn(), cancel: vi.fn(), forget: vi.fn(), loadWork: vi.fn() }))
 vi.mock('../src/modules/agent/api/chat', () => ({ getCurrentConversation: api.current, getConversationState: api.state, getConversationHistory: api.history, sendMessage: api.send, resetConversation: api.reset }))
 vi.mock('../src/shared/credits/useCredits', () => ({ useCredits: () => ({ credits: null, refreshCredits: vi.fn(async () => undefined) }) }))
 vi.mock('../src/modules/agent/model/audio-analysis', () => ({ analyzeAudioFile: api.analyse, cancelAnalysis: api.cancel, forgetAnalysis: api.forget, MAX_REFERENCE_BYTES: 20 * 1024 * 1024 }))
+vi.mock('../src/modules/studio/api/works', () => ({ loadWork: api.loadWork }))
 vi.mock('../src/modules/agent/api/reference', () => ({ requestReferenceAnalysis: vi.fn(async () => undefined) }))
 import AgentStudioPage from '../src/modules/agent/pages/AgentStudioPage.vue'
 import { useAgentConversation } from '../src/modules/agent/composables/useAgentConversation'
@@ -30,7 +31,7 @@ async function page(snapshot = state()) {
 beforeEach(() => {
   vi.clearAllMocks(); sessionStorage.clear(); setLocale('zh-CN')
   api.current.mockResolvedValue({ id: 'c1', currentWorkId: null })
-  api.state.mockResolvedValue(state()); api.send.mockResolvedValue(state())
+  api.state.mockResolvedValue(state()); api.send.mockResolvedValue(state()); api.loadWork.mockReset().mockResolvedValue({ story: '' })
 })
 afterEach(() => { for (const wrapper of wrappers.splice(0)) wrapper.unmount(); vi.useRealTimers() })
 
@@ -131,7 +132,7 @@ describe('真实 Agent 对话与作品', () => {
     const { wrapper, toggle } = await page(state({ messages: [message('歌词已写好')], songCard: song, liked: true }))
     expect(wrapper.find('.agent-preview-meta strong').text()).toBe('给妈妈的歌')
     expect(wrapper.find('.agent-real-lyrics').text()).toContain('妈妈的灯\n照亮回家的路')
-    expect(wrapper.find('[aria-pressed="true"]').text()).toBe('已喜欢')
+    expect(wrapper.find('[aria-label="取消喜欢"]').attributes('aria-pressed')).toBe('true')
     await wrapper.find('.agent-preview-play').trigger('click')
     expect(toggle).toHaveBeenCalledWith(expect.objectContaining({ id: 'work-real:revision-real:asset-real', title: '给妈妈的歌', audio: expect.stringContaining('/api/app/works/work-real/audio/asset-real'), provenance: 'GENERATED' }))
     expect(wrapper.text()).not.toContain('示例歌词')
@@ -139,19 +140,20 @@ describe('真实 Agent 对话与作品', () => {
   it('分享和点赞按钮走对话，显示服务端真实分享链接', async () => {
     const { wrapper } = await page(state({ songCard: song }))
     api.send.mockResolvedValue(state({ songCard: song, liked: true, action: 'like' }))
-    await wrapper.find('.agent-preview-actions button').trigger('click'); await flushPromises()
+    await wrapper.find('.agent-album-like').trigger('click'); await flushPromises()
     expect(api.send.mock.calls[0]?.[1]).toBe('给当前作品点赞')
     expect(wrapper.find('[aria-pressed="true"]').exists()).toBe(true)
     api.send.mockResolvedValue(state({ songCard: song, liked: true, action: 'share', shareUrl: '/gift/real-token' }))
-    await wrapper.findAll('.agent-preview-actions button')[2]!.trigger('click'); await flushPromises()
+    await wrapper.findAll('.agent-preview-actions button')[1]!.trigger('click'); await flushPromises()
     expect(api.send.mock.calls[1]?.[1]).toBe('分享当前作品')
     expect(wrapper.find('.agent-share-link a').attributes('href')).toMatch(/\/gift\/real-token$/)
   })
   it('只有歌词时没有可播放的试听曲，生成音乐仍在同一会话完成', async () => {
     const { wrapper } = await page(state({ songCard: { ...song, audioUrl: '', status: 'DRAFT' } }))
-    expect(wrapper.find('.agent-preview-play').exists()).toBe(false)
-    expect(wrapper.findAll('.agent-preview-actions button')[1]!.attributes('disabled')).toBeDefined()
+    expect(wrapper.find('.agent-preview-play').attributes('disabled')).toBeDefined()
+    expect(wrapper.findAll('.agent-preview-actions button')[0]!.attributes('disabled')).toBeDefined()
     api.send.mockResolvedValue(state({ songCard: { ...song, audioUrl: '', status: 'QUEUED' }, taskId: 'task-1', messages: [message('已提交音乐生成。')] }))
+    await wrapper.findAll('[role="tab"]')[2]!.trigger('click')
     await wrapper.find('.agent-start-button').trigger('click'); await flushPromises()
     expect(api.send.mock.calls[0]?.[1]).toBe('用当前歌词生成音乐')
     expect(wrapper.text()).toContain('音乐生成中，完成后会自动更新')
@@ -159,8 +161,63 @@ describe('真实 Agent 对话与作品', () => {
   })
   it('不把恶意链接绑定到音频或分享控件', async () => {
     const { wrapper } = await page(state({ songCard: { ...song, audioUrl: 'javascript:alert(1)' }, shareUrl: 'javascript:alert(2)' }))
-    expect(wrapper.find('.agent-preview-play').exists()).toBe(false)
+    expect(wrapper.find('.agent-preview-play').attributes('disabled')).toBeDefined()
     expect(wrapper.find('.agent-share-link').exists()).toBe(false)
+  })
+  it('作品标签切换时保留真实歌词，并对未提供的故事显示空状态', async () => {
+    const { wrapper } = await page(state({ songCard: song }))
+    const tabs = wrapper.findAll('[role="tab"]')
+    expect(tabs[0]!.attributes('aria-selected')).toBe('true')
+    expect(wrapper.find('[role="tabpanel"]').text()).toContain('妈妈的灯')
+    await tabs[1]!.trigger('click'); await flushPromises()
+    expect(api.loadWork).toHaveBeenCalledWith('work-real')
+    expect(tabs[1]!.attributes('aria-selected')).toBe('true')
+    expect(wrapper.find('[role="tabpanel"]').text()).toContain('暂无作品故事')
+    await tabs[0]!.trigger('click')
+    expect(wrapper.find('[role="tabpanel"]').text()).toContain('妈妈的灯')
+  })
+  it('作品故事查询失败可重试，显示服务端返回的故事', async () => {
+    api.loadWork.mockRejectedValueOnce(new Error('网络失败')).mockResolvedValueOnce({ story: '写给远方家人的歌' })
+    const { wrapper } = await page(state({ songCard: song }))
+    await wrapper.findAll('[role="tab"]')[1]!.trigger('click'); await flushPromises()
+    expect(wrapper.find('[role="tabpanel"]').text()).toContain('作品故事加载失败')
+    await wrapper.find('[role="tabpanel"] button').trigger('click'); await flushPromises()
+    expect(api.loadWork).toHaveBeenCalledTimes(2)
+    expect(wrapper.find('[role="tabpanel"]').text()).toContain('写给远方家人的歌')
+  })
+  it('切换作品后忽略上一作品迟到的故事', async () => {
+    let resolveOld!: (value: unknown) => void
+    api.loadWork.mockImplementationOnce(() => new Promise(resolve => { resolveOld = resolve })).mockResolvedValueOnce({ story: '新作品的故事' })
+    const { wrapper } = await page(state({ songCard: song }))
+    await wrapper.findAll('[role="tab"]')[1]!.trigger('click'); await flushPromises()
+    api.send.mockResolvedValue(state({ songCard: { ...song, songId: 'new-work', title: '新作品' } }))
+    await wrapper.find('textarea').setValue('打开新作品'); await wrapper.find('form').trigger('submit'); await flushPromises()
+    resolveOld({ story: '不应显示的旧故事' }); await flushPromises()
+    expect(api.loadWork).toHaveBeenLastCalledWith('new-work')
+    expect(wrapper.find('[role="tabpanel"]').text()).toContain('新作品的故事')
+    expect(wrapper.find('[role="tabpanel"]').text()).not.toContain('不应显示的旧故事')
+  })
+  it('进度条仅控制当前版本的真实播放进度', async () => {
+    const { wrapper, player } = await page(state({ songCard: song }))
+    const seek = vi.spyOn(player, 'seek')
+    const range = wrapper.find('.agent-preview-range')
+    expect(range.attributes('disabled')).toBeDefined()
+    player.current = { id: 'work-real:revision-real:asset-real', title: song.title, cover: '', audio: new URL(song.audioUrl, window.location.origin).href }
+    player.duration = 120; player.time = 30
+    await wrapper.vm.$nextTick()
+    expect(range.attributes('disabled')).toBeUndefined()
+    expect(range.attributes('max')).toBe('120')
+    await range.setValue('75')
+    expect(seek).toHaveBeenCalledWith(75)
+    player.current = { ...player.current, id: 'another-version' }
+    await wrapper.vm.$nextTick()
+    expect(range.attributes('disabled')).toBeDefined()
+  })
+  it('改编同款只填入创作意图，不自动发起可能消耗积分的请求', async () => {
+    const { wrapper } = await page(state({ songCard: song }))
+    await wrapper.findAll('.agent-preview-actions button')[2]!.trigger('click')
+    expect((wrapper.find('textarea').element as HTMLTextAreaElement).value).toContain('参考当前作品')
+    expect(api.send).not.toHaveBeenCalled()
   })
   it('文本播放不会暂停正在播放的同一作品；下载请求服务端附件响应', async () => {
     const { wrapper, player, toggle } = await page(state({ songCard: song }))
@@ -172,7 +229,7 @@ describe('真实 Agent 对话与作品', () => {
     const clicked: string[] = []
     const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) { clicked.push(this.href) })
     api.send.mockResolvedValue(state({ songCard: song, action: 'download' }))
-    await wrapper.findAll('.agent-preview-actions button')[1]!.trigger('click'); await flushPromises()
+    await wrapper.findAll('.agent-preview-actions button')[0]!.trigger('click'); await flushPromises()
     expect(clicked[0]).toContain('/work-real/audio/asset-real?download=true')
     click.mockRestore()
   })
