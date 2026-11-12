@@ -7,7 +7,7 @@ import PlaybackIcon from '../../../shared/ui/PlaybackIcon.vue'
 import type {Work} from '../../studio'
 import {audioUrl,cancelTask,type AudioAsset,type GenerationTask} from '../api/detail'
 import {getAudioSelection,listSectionEdits,sectionContext,selectAudio,submitSectionEdit,type SectionContext,type SectionEdit,type SectionInput} from '../api/section-edits'
-import {hintedLine,lyricSlices,replaceLyrics,suggestedWindow,validWindow,windowLines,alignWindow,type EditHint} from '../model/section-edit'
+import {hintedLine,lyricSlices,replaceLyrics,sectionReplacement,suggestedWindow,validWindow,windowLines,alignWindow,type EditHint} from '../model/section-edit'
 const props=defineProps<{work:Work;asset:AudioAsset;title:string;cover?:string;open:boolean;hint?:EditHint;tasks:GenerationTask[]}>()
 const emit=defineEmits<{close:[];refresh:[];adopted:[]}>()
 const player=usePlayer(),dialog=ref<HTMLDialogElement>(),context=ref<SectionContext>(),items=ref<SectionEdit[]>([]),loading=ref(false),sending=ref(false),adopting=ref(false),error=ref(''),notice=ref('')
@@ -56,10 +56,19 @@ async function openEditor(){
     context.value=found
     if(!found.available)return
     const window=alignWindow(suggestedWindow(found.duration!,props.hint),found.lines||[],found.duration!);start.value=window.start;end.value=window.end
-    first.value=hintedLine(slices.value,props.hint);last.value=first.value
+    const selected=hintedLine(slices.value,props.hint)
+    first.value=selected;last.value=selected
     const covered=windowLines(slices.value,found.lines||[],start.value,end.value)
-    if(covered.length){first.value=Math.min(...covered);last.value=Math.max(...covered)}
+    if(covered.length){
+      const lines=selected>=0?[...covered,selected]:covered
+      first.value=Math.min(...lines);last.value=Math.max(...lines)
+    }
     replacement.value=original.value
+    if(props.hint?.replacement&&selected>=0){
+      replacement.value=sectionReplacement(original.value,slices.value[first.value]!,slices.value[selected]!,props.hint.replacement)
+    }else if(props.hint?.replacement){
+      first.value=-1;last.value=-1;replacement.value=''
+    }
     const draft=saved as {first:number;last:number;replacement:string;start:number;end:number;uncertain?:SectionInput}|null
     if(draft&&Number.isInteger(draft.first)&&Number.isInteger(draft.last)&&draft.first>=0&&draft.last>=draft.first&&draft.last<slices.value.length&&typeof draft.replacement==='string'&&draft.replacement.length<=5000&&validWindow(draft.start,draft.end,found.duration!)){
       if(draft.uncertain?.sourceAssetId===props.asset.id&&/^[a-f0-9-]{36}$/i.test(draft.uncertain.requestKey)){first.value=draft.first;last.value=draft.last;replacement.value=draft.replacement;start.value=draft.start;end.value=draft.end;uncertain.value=draft.uncertain}
@@ -127,6 +136,7 @@ defineExpose({compare})
           <label class="field">{{ t('从哪句开始修改') }}<select :value="first" :disabled="locked" @change="pick(Number(($event.target as HTMLSelectElement).value),Number(($event.target as HTMLSelectElement).value))"><option value="-1" disabled>{{ t('请选择要修改的歌词') }}</option><option v-for="(line,index) in slices" :key="line.start" :value="index">{{ line.text }}</option></select></label>
           <label v-if="first>=0" class="field">{{ t('到哪句结束') }}<select :value="last" :disabled="locked" @change="pick(first,Number(($event.target as HTMLSelectElement).value))"><option v-for="(line,index) in slices" v-show="index>=first" :key="line.start" :value="index" :disabled="index<first">{{ line.text }}</option></select></label>
           <div v-if="original" class="section-original"><span>{{ t('原歌词') }}</span><pre>{{ original }}</pre></div>
+          <p v-if="hint?.replacement&&first<0" class="notice" role="status">{{ t('请在原歌词中选中这一句，再填入你的修改。') }} <strong>{{ hint.replacement }}</strong></p>
           <label class="field">{{ t('想改成什么') }}<textarea v-model="replacement" :disabled="locked||first<0" maxlength="5000" rows="5" :placeholder="t('尽量保持原来的字数和断句，更容易贴合原曲。')"></textarea></label>
           <p class="save-info">{{ t('未选中的歌词会保留，原曲也会保留。') }}</p>
           <p v-if="full.length>5000" class="section-range-error">{{ t('修改后的完整歌词不能超过5000字，请缩短后重试。') }}</p>

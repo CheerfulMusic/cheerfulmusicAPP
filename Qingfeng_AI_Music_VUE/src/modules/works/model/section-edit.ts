@@ -1,5 +1,5 @@
 export interface LyricSlice {text:string;start:number;end:number}
-export interface EditHint {text:string;start?:number;end?:number;occurrence?:number}
+export interface EditHint {text:string;start?:number;end?:number;occurrence?:number;replacement?:string}
 /** 偏移使用JS/Java一致的UTF-16计数，保留原换行和未修改文字。 */
 export function lyricSlices(text:string):LyricSlice[]{
   const rows:LyricSlice[]=[]
@@ -50,3 +50,8 @@ export function alignWindow(range:{start:number;end:number},timed:{start:number;
 }
 export function validWindow(start:number,end:number,duration:number){return Number.isFinite(start)&&Number.isFinite(end)&&Number.isFinite(duration)&&start>=0&&end<=duration&&end-start>=10-1e-8&&end-start<=duration/2+1e-8}
 export function replaceLyrics(source:string,from:number,to:number,replacement:string){return source.slice(0,from)+replacement.trim()+source.slice(to)}
+
+export function sectionReplacement(original:string, first:LyricSlice, selected:LyricSlice, replacement:string){
+  const prefix=selected.text.match(/^[ \t]*(?:\[[^\]]+\][ \t]*)+/)?.[0]||''
+  return original.slice(0,selected.start-first.start)+prefix+replacement.trim()+original.slice(selected.end-first.start)
+}

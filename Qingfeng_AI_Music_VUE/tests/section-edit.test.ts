@@ -1,6 +1,11 @@
 import {describe,it,expect} from 'vitest'
-import {lyricSlices,hintedLine,suggestedWindow,validWindow,replaceLyrics,windowLines,alignWindow} from '../src/modules/works/model/section-edit'
+import {lyricSlices,hintedLine,suggestedWindow,validWindow,replaceLyrics,windowLines,alignWindow,sectionReplacement} from '../src/modules/works/model/section-edit'
 describe('局部改词定位',()=>{
+  it('prepares the whole re-sung section and changes only the chosen line',()=>{
+    const original='海风吹过\r\n[Chorus] 灯还亮着\r\n雨停了'
+    const [first,selected]=lyricSlices(original)
+    expect(sectionReplacement(original,first!,selected!,'灯为你亮着')).toBe('海风吹过\r\n[Chorus] 灯为你亮着\r\n雨停了')
+  })
   it('扩展范围覆盖完整的相邻演唱句，不截断邻句',()=>{expect(alignWindow({start:10,end:20},[{start:12,end:16},{start:18,end:22},{start:24,end:30}],120)).toEqual({start:10,end:22})})
   it('只替换指定歌词行，保留中英、emoji、原换行和其他段落',()=>{
     const source='[Verse]\r\nHome 🌙 等着你\r\n门口的灯还亮着\r\n[Chorus]\r\nHome 🌙 等着你'
