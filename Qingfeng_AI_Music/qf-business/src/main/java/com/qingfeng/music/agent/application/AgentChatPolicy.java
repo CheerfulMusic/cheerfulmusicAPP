@@ -94,7 +94,7 @@ public final class AgentChatPolicy {
         return explicitSocial(text);
     }
     public static boolean requiresConfirmation(String action) {
-        return Set.of("delete_work","erase_analytics","close_checking").contains(action);
+        return Set.of("delete_work","erase_analytics","close_checking","generate_avatar").contains(action);
     }
     public static boolean actionRequested(String action,String text) {
         if(action==null)return false;
@@ -122,6 +122,7 @@ public final class AgentChatPolicy {
             case "update_work" -> requested(text,"(?:修改|更新|设置|保存|更改|改|换).{0,15}(?:收礼人|收件人|场景|故事|寄语|标题|歌名|送给)|(?:收礼人|收件人|场景|故事|寄语|标题|歌名).{0,10}(?:改|换|设)|(?:update|set|save).{0,15}(?:recipient|occasion|story|message|title)");
             case "delete_work" -> requested(text,"删除|删掉|移除作品|delete|remove.{0,12}(?:song|work)");
             case "edit_cover" -> requested(text,"(?:生成|画|绘制|制作|修改|换|重做|设计).{0,15}(?:封面|cover)|(?:封面|cover).{0,12}(?:改|换)|(?:generate|edit|create).{0,12}cover");
+            case "generate_avatar" -> requested(text,"(?:生成|画|绘制|制作|设计|创建).{0,60}(?:头像|avatar|profile picture)|(?:头像|avatar|profile picture).{0,30}(?:生成|画|绘制|制作|设计)|(?:generate|draw|create|make).{0,60}(?:avatar|profile picture)");
             case "upload_cover" -> requested(text,"(?:上传|导入|选择文件).{0,12}(?:封面|图片)|upload.{0,12}(?:cover|image)");
             case "upload_audio" -> requested(text,"(?:上传|导入|选择文件).{0,12}(?:音频|音乐|歌曲|伴奏)|upload.{0,12}(?:audio|music)");
             case "favorite_music" -> requested(text,"收藏|加入收藏|favorite|bookmark")&&!has(surface(text),"取消收藏|移出收藏|删除收藏|unfavorite|unbookmark");

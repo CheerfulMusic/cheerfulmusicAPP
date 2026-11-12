@@ -14,12 +14,23 @@ import { showLoginDialog } from '../../../shared/identity/login-dialog'
 import { loadWork } from '../../studio/api/works'
 import { assistantResult, uploadTarget, type AgentCommand } from '../model/assistant-result'
 import AgentResultCard from '../components/AgentResultCard.vue'
+import UserAvatarDialog from '../components/UserAvatarDialog.vue'
+import { useUserAvatar } from '../composables/useUserAvatar'
+import { useAvatarGeneration } from '../composables/useAvatarGeneration'
 const AgentNativeDialog = defineAsyncComponent(() => import('../components/AgentNativeDialog.vue'))
 
 const conversation = useAgentConversation(result => { void handleResult(result) })
 const { messages, songCard, shareUrl, liked, taskRunning, loading, sending, error, refreshError, pending, hasOlderMessages, loadingOlder, historyError } = conversation
 const player = usePlayer(), { credits, refreshCredits } = useCredits()
 const input = ref(''), chat = ref<HTMLElement>(), fileInput = ref<HTMLInputElement>(), notice = ref('')
+const avatar = useUserAvatar()
+const avatarGeneration = useAvatarGeneration(avatar.refresh)
+const avatarDialog = ref(false)
+async function uploadAvatar(file: File) { if (await avatar.upload(file)) avatarDialog.value = false }
+function generateAvatar(description: string) {
+  avatarDialog.value = false
+  void send(tr(`帮我生成头像：${description}`, `Generate an avatar: ${description}`))
+}
 const confirmingReset = ref(false)
 const previewTab = ref<'lyrics' | 'story' | 'more'>('lyrics')
 const showQueue = ref(false)
@@ -84,6 +95,7 @@ function download() {
 }
 async function handleResult(result?: ConversationSnapshot) {
   if (!result) return
+  if (result.action === 'generate_avatar') avatarGeneration.start()
   if (result.action === 'play' && !isPlaying.value) togglePlay()
   if (result.action === 'download') download()
   if (result.action === 'login') showLoginDialog()
@@ -186,13 +198,24 @@ watch(() => [previewTab.value, songCard.value?.songId], ([tab]) => {
   if (tab === 'story') void fetchStory()
 })
 watch(() => messages.value.at(-1)?.seq, () => { void scrollChat() })
+let avatarRefreshScheduled = false, avatarDisposed = false
+function avatarIdentityChanged() {
+  avatarGeneration.stop(); avatar.clear(); avatarDialog.value = false
+  if (avatarRefreshScheduled) return
+  avatarRefreshScheduled = true
+  queueMicrotask(() => {
+    avatarRefreshScheduled = false
+    if (!avatarDisposed) { void avatar.refresh(); avatarGeneration.start() }
+  })
+}
 watch(() => JSON.stringify([accountState.value.authenticated, accountState.value.email, accountState.value.name, logtoState.value.authenticated, logtoState.value.email, logtoState.value.phoneMasked, logtoState.value.name]), () => {
+  avatarIdentityChanged()
   storyVersion++; story.value = ''; storyError.value = false; storyLoading.value = false; previewTab.value = 'lyrics'; showQueue.value = false
   input.value = ''; notice.value = ''; confirmingReset.value = false; nativePanel.value = null
   clearReference(); void conversation.changeIdentity()
 })
-onMounted(() => { void conversation.refresh(); void refreshCredits().catch(() => undefined) })
-onBeforeUnmount(() => { storyVersion++; recognition?.stop?.(); clearReference() })
+onMounted(() => { window.addEventListener('qingfeng:identity-changed', avatarIdentityChanged); void avatar.refresh(); avatarGeneration.start(); void conversation.refresh(); void refreshCredits().catch(() => undefined) })
+onBeforeUnmount(() => { avatarDisposed = true; window.removeEventListener('qingfeng:identity-changed', avatarIdentityChanged); avatar.clear(); storyVersion++; recognition?.stop?.(); clearReference() })
 </script>
 
 <template>
@@ -225,14 +248,14 @@ onBeforeUnmount(() => { storyVersion++; recognition?.stop?.(); clearReference() 
         <div v-for="message in chatMessages" :key="message.id" class="agent-message" :class="message.role">
           <div v-if="message.role === 'assistant'" class="agent-bot-avatar" aria-hidden="true"><img :src="'/brand/logo-symbol.svg'" alt=""/></div>
           <div class="agent-message-content"><div v-if="messageText(message)" class="agent-bubble" :class="{ 'agent-message-failed': message.state === 'FAILED' }"><p>{{ messageText(message) }}</p></div><AgentResultCard v-if="message.result" :result="message.result" :disabled="blocked" :current="message.id === lastAssistantId" @command="runCommand"/></div>
-          <div v-if="message.role === 'user'" class="agent-user-avatar" aria-hidden="true"><svg viewBox="0 0 48 48"><circle cx="24" cy="17" r="8.4" fill="#f0b49c"/><path d="M7 44c1.9-9.6 8.6-14.4 17-14.4S39.1 34.4 41 44z" fill="#f0b49c"/></svg></div>
+          <button v-if="message.role === 'user'" type="button" class="agent-user-avatar" :aria-label="tr('设置头像', 'Change avatar')" @click="avatarDialog = true"><img v-if="avatar.avatarUrl.value" :src="avatar.avatarUrl.value" alt="" @error="avatar.avatarUrl.value = ''"/><svg v-else viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="17" r="8.4" fill="#f0b49c"/><path d="M7 44c1.9-9.6 8.6-14.4 17-14.4S39.1 34.4 41 44z" fill="#f0b49c"/></svg></button>
         </div>
         <div v-if="pending" class="agent-message user agent-pending"><div class="agent-bubble"><p>{{ pending.text }}</p><small>{{ sending ? tr('发送中…', 'Sending…') : tr('结果待确认', 'Awaiting confirmation') }}</small></div></div>
         <p v-if="sending" class="agent-typing" role="status"><span class="agent-typing-spinner" aria-hidden="true"/>{{ tr('正在处理你的请求…', 'Working on your request…') }}</p>
         <div v-if="!messages.length && !loading" class="agent-quick-card"><strong>{{ tr('试着说', 'Try saying') }}</strong><div class="agent-quick-grid"><button v-for="prompt in prompts" :key="prompt" type="button" :disabled="blocked" @click="send(prompt)"><span>{{ prompt }}</span></button></div></div>
       </div>
       <div class="agent-composer">
-        <nav class="agent-capabilities" :aria-label="tr('对话功能', 'Conversation tools')"><button type="button" :disabled="blocked" @click="send('查看我的作品')">{{ tr('我的作品', 'My songs') }}</button><button type="button" :disabled="blocked" @click="send('查看当前作品版本')">{{ tr('作品版本', 'Versions') }}</button><button type="button" :disabled="blocked" @click="send('查看我的积分')">{{ tr('积分', 'Credits') }}</button><button type="button" :disabled="blocked" @click="send('我要充值')">{{ tr('充值', 'Recharge') }}</button><button type="button" :disabled="blocked" @click="send('查看所有功能')">{{ tr('所有功能', 'All tools') }}</button></nav>
+        <nav class="agent-capabilities" :aria-label="tr('对话功能', 'Conversation tools')"><button type="button" :disabled="blocked" @click="send('查看我的作品')">{{ tr('我的作品', 'My songs') }}</button><button type="button" :disabled="blocked" @click="send('查看当前作品版本')">{{ tr('作品版本', 'Versions') }}</button><button type="button" :disabled="blocked" @click="send('查看我的积分')">{{ tr('积分', 'Credits') }}</button><button type="button" :disabled="blocked" @click="send('我要充值')">{{ tr('充值', 'Recharge') }}</button><button type="button" :disabled="blocked" @click="send('查看所有功能')">{{ tr('所有功能', 'All tools') }}</button><button type="button" @click="avatarDialog = true">{{ tr('设置头像', 'Avatar') }}</button></nav>
         <p v-if="error" class="agent-upload-error" role="alert">{{ error }} <button type="button" :disabled="sending || loading" @click="pending ? retry() : conversation.refresh()">{{ tr('重试', 'Retry') }}</button></p>
         <button v-if="pending?.rejected && !sending" type="button" @click="editRejected">{{ tr('修改未发送的内容', 'Edit rejected message') }}</button>
         <p v-else-if="pending && !sending" class="agent-section-hint">{{ tr('上次请求的结果尚未确认。重试会核对同一次请求。', 'The previous request is unconfirmed. Retry checks the same request.') }} <button type="button" @click="retry">{{ tr('重试原请求', 'Retry request') }}</button></p>
@@ -251,9 +274,11 @@ onBeforeUnmount(() => { storyVersion++; recognition?.stop?.(); clearReference() 
         <p v-if="reference" class="agent-section-hint">{{ analyzing ? tr('正在分析参考音乐…', 'Analysing audio…') : reference.summary || tr('音频仅供本机试听。', 'Audio stays on this device.') }}</p>
         <p v-if="referenceError" class="agent-upload-error" role="status">{{ referenceError }}</p>
         <p v-if="notice" class="agent-voice-hint" role="status">{{ notice }}</p>
+        <p v-if="avatarGeneration.message.value" class="agent-section-hint" role="status">{{ avatarGeneration.message.value }}</p>
         <p v-if="credits" class="agent-section-hint">{{ tr('当前', 'Balance') }} {{ credits.balance }} {{ tr('积分 · 生成歌词', 'credits · Lyrics') }} {{ credits.lyricsCost }} · {{ tr('生成音乐', 'Music') }} {{ credits.musicCost }}</p>
       </div>
     </section>
+    <Teleport to="body"><UserAvatarDialog v-if="avatarDialog" :busy="avatar.busy.value" :error="avatar.error.value" :disabled="blocked" :generation-available="avatarGeneration.available.value" @close="avatarDialog = false" @upload="uploadAvatar" @generate="generateAvatar"/></Teleport>
     <aside class="agent-preview" :aria-label="tr('当前作品', 'Current song')">
       <template v-if="songCard?.songId">
         <div class="agent-album">

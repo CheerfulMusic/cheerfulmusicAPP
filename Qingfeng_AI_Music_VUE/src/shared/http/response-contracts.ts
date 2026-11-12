@@ -54,6 +54,8 @@ export function validResponse(path:string,method:string,value:unknown):boolean{
  if(value==null)return method==='GET'&&/^app\/works\/[^/]+\/quick-creations\/latest$/.test(path)||emptyResponseAllowed(path,method)
  if(/^app\/works\/[^/]+\/quick-creations(?:\/[^/]+(?:\/retry)?)?$/.test(path))return quickCreation(value)
  if(path==='public/csrf')return obj(value)&&text(value.token)
+ if(path==='app/avatar')return ['GET','POST'].includes(method)&&obj(value)&&((value.imageUrl===null&&value.version===null)||(value.imageUrl==='/api/app/avatar/image'&&text(value.version)))
+ if(path==='app/avatar/generation/latest')return method==='GET'&&obj(value)&&typeof value.available==='boolean'&&['NONE','SUBMITTING','RUNNING','SUCCEEDED','FAILED','UNKNOWN','SUPERSEDED'].includes(String(value.status))&&(value.status==='NONE'?value.id===null:text(value.id))
  if(path==='public/invite/status')return method==='GET'&&obj(value)&&typeof value.enabled==='boolean'&&typeof value.admitted==='boolean'&&str(value.csrfToken)&&str(value.expiresAt)
  if(path==='public/invite/enter')return method==='POST'&&obj(value)&&value.admitted===true
  if(path==='app/inspiration/rewrite')return obj(value)&&text(value.text)&&(value.text as string).length<=4000
