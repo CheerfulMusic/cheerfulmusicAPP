@@ -32,39 +32,13 @@ const editor=ref<HTMLTextAreaElement>()
 const selection=ref<LyricLineSelection>()
 const linePreview=ref<{selection:NonNullable<typeof selection.value>;text:string}>()
 const lineBusy=ref(false),lineError=ref('')
-const mirror=ref<HTMLDivElement>(), marker=ref<HTMLSpanElement>(), toolbar=ref<HTMLDivElement>()
-const toolbarPosition=ref<{left:string;top:string}>()
+const canPolishLine=computed(()=>selection.value?.source===text.value&&!lineBusy.value&&!blocked.value&&!saving.value)
 const lineActions: {id:LyricRewriteAction;label:string;icon:string}[] = [
  {id:'REWRITE',label:'改写选句',icon:'m13 5 6 6M4 16l12-12 4 4L8 20H4v-4Z'},
  {id:'RHYME',label:'更押韵',icon:'M7 17l5-5m3-3 3-3M4 17a2 2 0 1 0 4 0 2 2 0 1 0-4 0Zm7-5a2 2 0 1 0 4 0 2 2 0 1 0-4 0Zm6-7a2 2 0 1 0 4 0 2 2 0 1 0-4 0Z'},
  {id:'COLLOQUIAL',label:'更口语化',icon:'M12 4a8 8 0 0 0-6 13l-1 3 4-1a8 8 0 1 0 3-15ZM8 12h.01m4 0h.01m4 0h.01'},
  {id:'SHORTEN',label:'缩短一句',icon:'m4 20 6-6m-6 0h6v6M20 4l-6 6m6 0h-6V4'},
 ]
-function placeToolbar(){
- const el=editor.value, copy=mirror.value, selected=marker.value, bar=toolbar.value
- if(!el||!copy||!selected||!bar||!window.matchMedia?.('(min-width: 761px)').matches){toolbarPosition.value=undefined;return}
- const style=getComputedStyle(el)
- copy.style.width=`${el.clientWidth+parseFloat(style.borderLeftWidth)+parseFloat(style.borderRightWidth)}px`
- const area=copy.getBoundingClientRect()
- const boxes=Array.from(selected.getClientRects())
- const visible=boxes.filter(box=>box.bottom-area.top-el.scrollTop>0&&box.top-area.top-el.scrollTop<el.clientHeight)
- const last=visible.at(-1)
- if(!last||bar.offsetWidth+16>el.clientWidth){toolbarPosition.value=undefined;return}
- const x=last.right-area.left-el.scrollLeft, y=last.top-area.top-el.scrollTop
- const side=x+bar.offsetWidth+20<=el.clientWidth
- const left=side?x+14:Math.min(Math.max(last.left-area.left-el.scrollLeft,8),el.clientWidth-bar.offsetWidth-8)
- const below=y+last.height+7
- const top=side?y+(last.height-bar.offsetHeight)/2:below+bar.offsetHeight<=el.clientHeight?below:y-bar.offsetHeight-7
- toolbarPosition.value={left:`${left}px`,top:`${Math.max(4,top)}px`}
-}
-watch([selection,lineBusy],placeToolbar,{flush:'post'})
-let editorObserver:ResizeObserver|undefined
-onMounted(()=>{
- if(typeof ResizeObserver==='undefined'||!editor.value)return
- editorObserver=new ResizeObserver(placeToolbar)
- editorObserver.observe(editor.value)
-})
-onBeforeUnmount(()=>editorObserver?.disconnect())
 function captureSelection(){
  const el=editor.value
  if(!el||lineBusy.value)return
@@ -73,7 +47,7 @@ function captureSelection(){
 }
 async function previewLine(action:LyricRewriteAction){
  const chosen=selection.value
- if(!chosen||chosen.source!==text.value||lineBusy.value||blocked.value||saving.value)return
+ if(!chosen||!canPolishLine.value)return
  lineBusy.value=true;lineError.value='';linePreview.value=undefined
  try{
    const text=await suggestLyricLine(props.work.id,chosen,action,active.value?.language||language.value)
@@ -253,15 +227,12 @@ defineExpose({prepareForGeneration,preserveDraftForNavigation,needsSave,canSave,
         <CreditCostHint v-if="credits&&credits.enabled&&credits.lyricsCost>0" :cost="credits.lyricsCost" :balance="credits.balance" :busy="composing" variant="regenerate"/>
       </div>
     </div>
-    <div class="lyric-text-stage">
-      <textarea id="song-lyrics" ref="editor" v-model="text" maxlength="12000" class="lyrics-edit lyric-text" :aria-label="t('歌词')" aria-describedby="lyric-editor-help" :disabled="blocked||saving" :placeholder="t('写下主歌、副歌，或者你想唱给TA听的话……')" @select="captureSelection" @keyup="captureSelection" @pointerup="captureSelection" @scroll.passive="placeToolbar"></textarea>
-      <div v-if="selection" ref="mirror" class="lyric-text lyric-mirror" aria-hidden="true">{{ text.slice(0,selection.start) }}<span ref="marker">{{ selection.line }}</span>{{ text.slice(selection.end) }}</div>
-      <div v-if="selection||lineBusy" ref="toolbar" class="lyric-line-tools" :class="{'is-anchored':toolbarPosition}" :style="toolbarPosition" role="group" :aria-label="t('选句润色')">
-        <span v-if="lineBusy" class="line-busy" role="status">{{ t('正在润色…') }}</span>
-        <button v-for="action in lineBusy?[]:lineActions" :key="action.id" type="button" :disabled="blocked||saving" @pointerdown.prevent @click="previewLine(action.id)">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path :d="action.icon"/></svg>{{ t(action.id==='REWRITE'?'改写':action.label) }}
-        </button>
-      </div>
+    <textarea id="song-lyrics" ref="editor" v-model="text" maxlength="12000" class="lyrics-edit lyric-text" :aria-label="t('歌词')" aria-describedby="lyric-editor-help" :disabled="blocked||saving" :placeholder="t('写下主歌、副歌，或者你想唱给TA听的话……')" @select="captureSelection" @keyup="captureSelection" @pointerup="captureSelection"></textarea>
+    <div class="lyric-line-tools" role="group" :aria-label="t('选句润色')">
+      <button v-for="action in lineActions" :key="action.id" type="button" :disabled="!canPolishLine" @pointerdown.prevent @click="previewLine(action.id)">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path :d="action.icon"/></svg>{{ t(action.label) }}
+      </button>
+      <span v-if="lineBusy" class="line-busy" role="status">{{ t('正在润色…') }}</span>
     </div>
   </div>
   <p v-if="lineError" class="notice error" role="alert">{{ t(lineError) }}</p>
@@ -299,18 +270,14 @@ defineExpose({prepareForGeneration,preserveDraftForNavigation,needsSave,canSave,
 .lyric-rewrite-all svg { width:16px; height:16px; flex:none; fill:none; stroke:currentColor; stroke-width:1.6; stroke-linecap:round; stroke-linejoin:round; }
 .lyric-quiet-action:disabled { opacity:.63; cursor:default; }
 .lyric-quiet-action svg,.lyric-version-strip svg,.lyric-line-tools svg { width:16px; height:16px; flex:none; fill:none; stroke:currentColor; stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round; }
-.lyric-text-stage { position:relative; min-width:0; }
 .lyric-text { box-sizing:border-box; width:100%; padding:16px clamp(14px,1.85vw,30px); border:1px solid #e8e0e2; border-radius:13px; color:#211d1d; background:#fffdfd; font:inherit; font-size:clamp(15px,1.2vw,19px); font-weight:400; line-height:1.42; letter-spacing:normal; white-space:pre-wrap; overflow-wrap:break-word; }
-.lyric-text-stage textarea.lyric-text { display:block; height:clamp(260px,37vh,352px); min-height:220px; resize:vertical; }
-.lyric-text-stage textarea::selection { background:#ffebd0; color:#211d1d; }
-.lyric-mirror { position:absolute; top:0; left:0; height:0; overflow:hidden; visibility:hidden; pointer-events:none; }
-.lyric-line-tools { display:flex; align-items:center; flex-wrap:wrap; width:max-content; max-width:100%; min-height:40px; margin-top:8px; padding:3px 6px; border:1px solid #ede5e6; border-radius:23px; background:#fffdfd; box-shadow:0 5px 18px #3c2b2d15; }
-.lyric-line-tools.is-anchored { position:absolute; z-index:1; margin:0; }
-.lyric-line-tools button { display:inline-flex; align-items:center; gap:6px; min-height:30px; padding:4px 10px; border:0; border-radius:0; background:none; color:#221c1c; font:inherit; font-size:13px; white-space:nowrap; cursor:pointer; }
-.lyric-line-tools button+button { border-left:1px solid #ece5e6; }
-.lyric-line-tools button:hover:not(:disabled) { color:#bb321e; }
-.lyric-line-tools button:disabled { opacity:.55; cursor:default; }
-.line-busy { padding:3px 10px; color:#6f5852; font-size:13px; }
+textarea.lyric-text { display:block; height:clamp(260px,37vh,352px); min-height:220px; resize:vertical; }
+textarea.lyric-text::selection { background:#ffebd0; color:#211d1d; }
+.lyric-line-tools { display:flex; align-items:center; flex-wrap:wrap; gap:8px; margin-top:10px; }
+.lyric-line-tools button { display:inline-flex; align-items:center; gap:6px; min-height:42px; padding:8px 14px; border:1px solid var(--line); border-radius:24px; background:var(--surface); color:var(--ink); font:inherit; font-size:13px; font-weight:600; white-space:nowrap; cursor:pointer; }
+.lyric-line-tools button:hover:not(:disabled) { color:var(--accent-text); border-color:var(--accent-border); }
+.lyric-line-tools button:disabled { opacity:.5; cursor:not-allowed; }
+.line-busy { color:var(--muted); font-size:13px; }
 .lyrics-history { margin-top:12px; }
 .lyric-version-strip { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px 14px; min-height:42px; padding:7px 13px; border-radius:12px; background:#f7f2f0; color:#74635d; cursor:pointer; font-size:13px; list-style:none; }
 .lyric-version-strip::-webkit-details-marker { display:none; }
@@ -322,9 +289,7 @@ defineExpose({prepareForGeneration,preserveDraftForNavigation,needsSave,canSave,
 .lyric-line-preview p { overflow-wrap:anywhere; }
 .lyric-history-preview { max-height:220px; overflow:auto; white-space:pre-wrap; overflow-wrap:anywhere; font:inherit; padding:14px; border-radius:12px; background:#fff6f3; }
 @media(max-width:760px) {
- .lyric-line-tools { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); width:100%; border-radius:13px; }
- .lyric-line-tools button { justify-content:center; min-height:40px; }
- .lyric-line-tools button:nth-of-type(odd) { border-left:0; }
+ .lyric-line-tools button { min-height:44px; }
  .lyric-editor-label { align-items:start; flex-direction:column; gap:6px; font-size:12px; }
  .lyric-editor-actions { width:100%; justify-content:space-between; }
  .lyric-quiet-action { flex:none; min-height:24px; }
