@@ -38,7 +38,7 @@ public class DefaultAgentSocialActions implements AgentSocialActions {
         if (current == null || current.songId() == null || current.songId().isBlank()) {
             return new Result("还没有选定作品。先写一首歌词或创作一首歌，再继续这个操作。", null, null, current);
         }
-        works.get(creatorId, current.songId());
+        var work = works.get(creatorId, current.songId());
         return switch (action) {
             case "like", "unlike" -> {
                 boolean active = reactions.setLiked(creatorId, current.songId(), "like".equals(action));
@@ -49,7 +49,9 @@ public class DefaultAgentSocialActions implements AgentSocialActions {
                 if (current.revisionId() == null || current.revisionId().isBlank()) {
                     throw new DomainException("AGENT_AUDIO_NOT_READY", "这段音频还没有对应的歌词版本，暂时无法创建分享链接。");
                 }
-                var created = shares.create(creatorId, current.songId(), current.revisionId(), current.assetId());
+                var created = work!=null&&current.title()!=null&&current.title().equals(work.title())&&!"智能创作".equals(work.title())
+                        ? shares.createWithWorkTitle(creatorId,current.songId(),current.revisionId(),current.assetId(),work.title())
+                        : shares.create(creatorId, current.songId(), current.revisionId(), current.assetId());
                 yield new Result("分享链接已创建，有效期为 7 天。持有链接的人可以查看作品标题、歌词、封面与寄语并试听。", "share", "/gift/" + created.token(), current);
             }
             case "revoke_share" -> {

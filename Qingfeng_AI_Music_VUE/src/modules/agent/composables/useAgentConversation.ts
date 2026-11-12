@@ -1,17 +1,19 @@
 import { computed, onScopeDispose, ref } from 'vue'
 import { getConversationState, getCurrentConversation, resetConversation, sendMessage } from '../api/chat'
 import { ApiError } from '../../../shared/http/api-client'
-import type { ConversationSnapshot, Message, SongCard } from '../model/conversation'
+import { isAgentContinuation, type AgentContinuation, type ConversationSnapshot, type Message, type SongCard } from '../model/conversation'
 
 interface PendingTurn { text: string; requestKey: string; locale: string; rejected?: boolean }
 const recoveryKey = (id: string) => `qingfeng.agent.pending.${id}`
 
 /** Only unacknowledged requests are kept locally, so retry reuses the original idempotency key. */
-export function useAgentConversation() {
+export function useAgentConversation(onContinuation?: (snapshot: ConversationSnapshot) => void) {
   const conversationId = ref(''), messages = ref<Message[]>([]), songCard = ref<SongCard | null>(null)
   const taskId = ref<string | null>(null), shareUrl = ref<string | null>(null), liked = ref(false)
   const loading = ref(false), sending = ref(false), error = ref(''), refreshError = ref('')
   const pending = ref<PendingTurn | null>(null)
+  const continuation = ref<AgentContinuation | null>(null)
+  const autoStarted = new Set<string>()
   const taskRunning = computed(() => !!taskId.value && ['QUEUED', 'SUBMITTING', 'RUNNING', 'SAVING', 'SUBMISSION_UNKNOWN'].includes(songCard.value?.status || ''))
   let disposed = false, timer: ReturnType<typeof setTimeout> | undefined, refreshVersion = 0
 
@@ -34,9 +36,21 @@ export function useAgentConversation() {
     taskId.value = snapshot.taskId
     shareUrl.value = snapshot.shareUrl
     liked.value = snapshot.liked
+    continuation.value = isAgentContinuation(snapshot.continuation) ? snapshot.continuation : null
   }
   function schedulePoll() {
     clearTimeout(timer)
+    if (!disposed && !sending.value && !loading.value && !pending.value && continuation.value && !autoStarted.has(continuation.value.requestKey)) {
+      timer = setTimeout(() => {
+        if (disposed || sending.value || loading.value || pending.value || !continuation.value) return
+        const next = continuation.value
+        if (autoStarted.has(next.requestKey)) return
+        autoStarted.add(next.requestKey)
+        pending.value = { text: next.text, requestKey: next.requestKey, locale: 'zh-CN' }; remember()
+        void deliver().then(result => { if (result) onContinuation?.(result) })
+      }, 0)
+      return
+    }
     if (!disposed && taskRunning.value && !sending.value) timer = setTimeout(() => { void poll() }, 3000)
   }
   async function poll() {
@@ -96,7 +110,7 @@ export function useAgentConversation() {
     try {
       await resetConversation(conversationId.value)
       if (disposed || version !== refreshVersion) return false
-      pending.value = null; remember(); messages.value = []; songCard.value = null
+      pending.value = null; remember(); continuation.value = null; autoStarted.clear(); messages.value = []; songCard.value = null
       taskId.value = null; shareUrl.value = null; liked.value = false; error.value = ''; refreshError.value = ''
       return true
     } catch (cause) {
@@ -106,7 +120,7 @@ export function useAgentConversation() {
   }
   /** A reply started under a different identity must never repopulate the new account's screen. */
   async function changeIdentity() {
-    refreshVersion++; clearTimeout(timer)
+    refreshVersion++; clearTimeout(timer); continuation.value = null; autoStarted.clear()
     conversationId.value = ''; messages.value = []; songCard.value = null; taskId.value = null
     shareUrl.value = null; liked.value = false; pending.value = null; error.value = ''; refreshError.value = ''
     loading.value = false; sending.value = false

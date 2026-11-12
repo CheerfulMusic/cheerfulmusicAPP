@@ -12,7 +12,12 @@ public record SongCard(
         String audioUrl,
         String status,
         String coverUrl,
-        long revision, String revisionId, String assetId, String taskId) {
+        long revision, String revisionId, String assetId, String taskId, String audioOrigin) {
+
+    public SongCard(String songId, String title, String style, String lyrics, String audioUrl,
+                    String status, String coverUrl, long revision, String revisionId, String assetId, String taskId) {
+        this(songId,title,style,lyrics,audioUrl,status,coverUrl,revision,revisionId,assetId,taskId,null);
+    }
 
     public SongCard(String songId, String title, String style, String lyrics, String audioUrl,
                     String status, String coverUrl, long revision) {

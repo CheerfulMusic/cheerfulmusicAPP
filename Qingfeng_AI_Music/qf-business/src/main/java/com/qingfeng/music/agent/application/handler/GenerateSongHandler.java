@@ -53,7 +53,7 @@ public class GenerateSongHandler implements AgentToolHandler {
         snapshot=SongCardProjector.withPointers(snapshot,task.revisionId(),task.id());
         var base=projector.project(ctx.creatorId(),workId,snapshot);
         // A just-submitted task may not yet be visible to a reader; expose its real task ID/status regardless.
-        var card=new SongCard(workId,task.title(),base.style(),task.lyrics(),base.audioUrl(),task.status().name(),base.coverUrl(),base.revision(),task.revisionId(),base.assetId(),task.id());
+        var card=new SongCard(workId,task.title(),base.style(),task.lyrics(),base.audioUrl(),task.status().name(),base.coverUrl(),base.revision(),task.revisionId(),base.assetId(),task.id(),base.audioOrigin());
         return new AgentToolResult(card,workId,snapshot,ctx.state()==null?0:ctx.state().revision(),task.id(),false);
     }
     static String mapLanguage(String language) { return AgentCreationSupport.lyricLanguage(language); }

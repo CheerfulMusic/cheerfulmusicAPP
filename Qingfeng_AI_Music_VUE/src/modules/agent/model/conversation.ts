@@ -15,11 +15,21 @@ export interface SongCard {
   coverUrl: string | null
   revision: number
   revisionId?: string | null
+  audioOrigin?: 'IMPORTED' | 'GENERATED' | null
   assetId?: string | null
   taskId?: string | null
 }
 
+export interface AgentContinuation { requestKey: string; text: '继续已安排的操作' }
+export function isAgentContinuation(value: unknown): value is AgentContinuation {
+  if (!value || typeof value !== 'object') return false
+  const candidate = value as Record<string, unknown>
+  return candidate.text === '继续已安排的操作' && typeof candidate.requestKey === 'string'
+    && /^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i.test(candidate.requestKey)
+}
+
 export interface ConversationSnapshot {
+  continuation?: AgentContinuation | null
   messages: Message[]
   songCard: SongCard | null
   taskId: string | null

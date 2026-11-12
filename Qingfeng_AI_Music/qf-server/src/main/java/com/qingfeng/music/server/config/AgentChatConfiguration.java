@@ -74,8 +74,8 @@ public class AgentChatConfiguration {
     }
 
     @Bean
-    GetCurrentSongHandler getCurrentSongHandler(WorkApi works, LyricsApi lyrics, MediaApi media, GenerationApi generation) {
-        return new GetCurrentSongHandler(works, lyrics, media, generation);
+    GetCurrentSongHandler getCurrentSongHandler(WorkApi works, LyricsApi lyrics, MediaApi media, GenerationApi generation, com.qingfeng.music.cover.api.CoverApi covers) {
+        return new GetCurrentSongHandler(works, lyrics, media, generation).withCovers(covers);
     }
 
     @Bean

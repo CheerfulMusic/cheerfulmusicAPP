@@ -15,7 +15,7 @@ import { setLocale } from '../src/shared/i18n'
 import { ApiError } from '../src/shared/http/api-client'
 import type { ConversationSnapshot, Message, SongCard } from '../src/modules/agent/model/conversation'
 
-const song: SongCard = { songId: 'work-real', title: '给妈妈的歌', style: '钢琴民谣', lyrics: '妈妈的灯\n照亮回家的路', audioUrl: '/api/app/works/work-real/audio/asset-real', status: 'SUCCEEDED', coverUrl: null, revision: 2, revisionId: 'revision-real', assetId: 'asset-real', taskId: null }
+const song: SongCard = { songId: 'work-real', title: '给妈妈的歌', style: '钢琴民谣', lyrics: '妈妈的灯\n照亮回家的路', audioUrl: '/api/app/works/work-real/audio/asset-real', status: 'SUCCEEDED', coverUrl: null, revision: 2, revisionId: 'revision-real', assetId: 'asset-real', audioOrigin: 'GENERATED', taskId: null }
 const message = (text: string, seq = 1, role: Message['role'] = 'assistant'): Message => ({ id: `m-${seq}`, conversationId: 'c1', seq, role, kind: 'TEXT', state: 'DONE', contentJson: JSON.stringify({ text }), taskId: null, createdAt: '2026-11-12T00:00:00Z' })
 const state = (overrides: Partial<ConversationSnapshot> = {}): ConversationSnapshot => ({ messages: [], songCard: null, taskId: null, action: null, shareUrl: null, liked: false, ...overrides })
 const wrappers: Array<{ unmount(): void }> = []
@@ -35,6 +35,27 @@ beforeEach(() => {
 afterEach(() => { for (const wrapper of wrappers.splice(0)) wrapper.unmount(); vi.useRealTimers() })
 
 describe('真实 Agent 对话与作品', () => {
+  it('作品列表选择按钮走同一消息接口，超时后重试保留原请求键', async () => {
+    const result = { ...message('找到你的作品'), contentJson: JSON.stringify({ text: '找到你的作品', kind: 'works', items: [{ id: 'w2', title: '旅行日记', subtitle: '已完成', data: { workId: 'w2' } }], commands: [{ kind: 'send', label: '选择旅行日记', text: '选择作品 w2' }] }) }
+    const { wrapper } = await page(state({ messages: [result] }))
+    expect(wrapper.find('.agent-result-items').text()).toContain('旅行日记')
+    api.send.mockRejectedValueOnce(new Error('网络中断'))
+    await wrapper.find('.agent-result-commands button').trigger('click'); await flushPromises()
+    const first = api.send.mock.calls[0]!
+    expect(first[1]).toBe('选择作品 w2')
+    expect(wrapper.find('.agent-result-commands button').attributes('disabled')).toBeDefined()
+    api.send.mockResolvedValue(state({ songCard: { ...song, songId: 'w2', title: '旅行日记' } }))
+    await wrapper.find('.agent-upload-error button').trigger('click'); await flushPromises()
+    expect(api.send.mock.calls[1]![2]).toBe(first[2])
+    expect(wrapper.find('.agent-preview-meta').text()).toContain('旅行日记')
+  })
+  it('导入音频保留真实来源，未知来源不声称是AI生成', async () => {
+    for (const audioOrigin of ['IMPORTED', undefined] as const) {
+      const { wrapper, toggle } = await page(state({ songCard: { ...song, audioOrigin } }))
+      await wrapper.find('.agent-preview-play').trigger('click')
+      expect(toggle).toHaveBeenCalledWith(expect.objectContaining({ provenance: audioOrigin }))
+    }
+  })
   it('中文输入法选词的Enter不会提前发送，确认输入后的Enter才提交', async () => {
     const { wrapper } = await page()
     const input = wrapper.find('textarea')
@@ -108,6 +129,50 @@ describe('真实 Agent 对话与作品', () => {
 })
 
 describe('会话恢复与任务生命周期', () => {
+  it('任务完成后用服务端派生键继续已授权步骤，重复快照不会形成循环', async () => {
+    vi.useFakeTimers()
+    const continuation = { requestKey: '12345678-1234-1234-1234-123456789012', text: '继续已安排的操作' as const }
+    const callback = vi.fn()
+    const scope = effectScope(), conversation = scope.run(() => useAgentConversation(callback))!
+    api.state.mockResolvedValueOnce(state({ songCard: { ...song, status: 'RUNNING', audioUrl: '' }, taskId: 'task-1' }))
+      .mockResolvedValue(state({ songCard: song, continuation }))
+    api.send.mockResolvedValue(state({ songCard: song, continuation, action: 'share', shareUrl: '/gift/result' }))
+    await conversation.refresh(); await vi.advanceTimersByTimeAsync(3100)
+    expect(api.send).toHaveBeenCalledWith('c1', continuation.text, continuation.requestKey, 'zh-CN')
+    expect(conversation.shareUrl.value).toBe('/gift/result')
+    expect(callback).toHaveBeenCalledOnce()
+    await vi.advanceTimersByTimeAsync(10000)
+    expect(api.send).toHaveBeenCalledTimes(1)
+    scope.stop()
+  })
+  it('自动继续超时后仅手动重试原键，不覆盖已经存在的未确认请求', async () => {
+    vi.useFakeTimers()
+    const continuation = { requestKey: '12345678-1234-1234-1234-123456789012', text: '继续已安排的操作' as const }
+    let scope = effectScope(), conversation = scope.run(() => useAgentConversation())!
+    api.state.mockResolvedValue(state({ continuation }))
+    api.send.mockRejectedValueOnce(new Error('超时'))
+    await conversation.refresh(); await vi.advanceTimersByTimeAsync(10)
+    expect(conversation.pending.value?.requestKey).toBe(continuation.requestKey)
+    await vi.advanceTimersByTimeAsync(10000); expect(api.send).toHaveBeenCalledTimes(1)
+    scope.stop()
+    scope = effectScope(); conversation = scope.run(() => useAgentConversation())!
+    await conversation.refresh(); await vi.advanceTimersByTimeAsync(10)
+    expect(api.send).toHaveBeenCalledTimes(1)
+    api.send.mockResolvedValue(state())
+    await conversation.retry(); expect(api.send.mock.calls[1]![2]).toBe(continuation.requestKey)
+    scope.stop()
+  })
+  it('账号切换使已安排但未发出的自动继续失效', async () => {
+    vi.useFakeTimers()
+    const continuation = { requestKey: '12345678-1234-1234-1234-123456789012', text: '继续已安排的操作' as const }
+    const scope = effectScope(), conversation = scope.run(() => useAgentConversation())!
+    api.state.mockResolvedValueOnce(state({ continuation })).mockResolvedValue(state())
+    await conversation.refresh()
+    api.current.mockResolvedValue({ id: 'c2', currentWorkId: null })
+    await conversation.changeIdentity(); await vi.advanceTimersByTimeAsync(10)
+    expect(api.send).not.toHaveBeenCalled()
+    scope.stop()
+  })
   it('切换账户时不携带旧请求，并忽略旧账户的迟到结果', async () => {
     let resolveOld!: (value: ConversationSnapshot) => void
     const scope = effectScope(), conversation = scope.run(() => useAgentConversation())!

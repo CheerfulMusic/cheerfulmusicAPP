@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { defineAsyncComponent, computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { defaultCover, locale } from '../../../shared/i18n'
 import { usePlayer, type PlayableTrack } from '../../../shared/player/store'
 import { useCredits } from '../../../shared/credits/useCredits'
@@ -10,19 +10,30 @@ import { messageText, type ConversationSnapshot } from '../model/conversation'
 import { analyzeAudioFile, cancelAnalysis, forgetAnalysis, MAX_REFERENCE_BYTES } from '../model/audio-analysis'
 import { BPM_CONFIDENCE_THRESHOLD } from '../model/audio-features'
 import { requestReferenceAnalysis } from '../api/reference'
+import { showLoginDialog } from '../../../shared/identity/login-dialog'
+import { assistantResult, uploadTarget, type AgentCommand } from '../model/assistant-result'
+import AgentResultCard from '../components/AgentResultCard.vue'
+const AgentNativeDialog = defineAsyncComponent(() => import('../components/AgentNativeDialog.vue'))
 
-const conversation = useAgentConversation()
+const conversation = useAgentConversation(result => { void handleResult(result) })
 const { messages, songCard, shareUrl, liked, taskRunning, loading, sending, error, refreshError, pending } = conversation
 const player = usePlayer(), { credits, refreshCredits } = useCredits()
 const input = ref(''), chat = ref<HTMLElement>(), fileInput = ref<HTMLInputElement>(), notice = ref('')
 const confirmingReset = ref(false)
+const nativePanel = ref<{ kind: 'recharge' | 'account' | 'privacy' | 'upload_cover' | 'upload_audio'; workId?: string } | null>(null)
+const lastAssistantId = computed(() => [...messages.value].reverse().find(message => message.role === 'assistant')?.id)
+const chatMessages = computed(() => messages.value.map(message => ({ ...message, result: assistantResult(message) })))
 const blocked = computed(() => loading.value || sending.value || !!pending.value)
 const english = computed(() => locale.value === 'en')
 const tr = (zh: string, en: string) => english.value ? en : zh
 const prompts = computed(() => [
   tr('你好，你可以帮我做什么？', 'Hi, what can you help me with?'),
   tr('帮我写一首关于旅行的歌词', 'Write lyrics about travelling'),
-  tr('写一首送给妈妈的生日歌，先给我歌词', 'Write birthday lyrics for my mother'),
+  tr('查看我的作品', 'Show my songs'),
+  tr('给我一些创作灵感', 'Give me songwriting ideas'),
+  tr('查看我的积分和用量', 'Show my credits and usage'),
+  tr('查看我的订单', 'Show my orders'),
+  tr('查看推荐音乐', 'Show recommended music'),
 ])
 function safeLink(value?: string | null): string {
   if (!value) return ''
@@ -33,7 +44,7 @@ const publicLink = computed(() => safeLink(shareUrl.value))
 const playable = computed<PlayableTrack | null>(() => {
   const card = songCard.value
   if (!card?.songId || !audioUrl.value) return null
-  return { id: `${card.songId}:${card.revisionId || card.revision}:${card.assetId || audioUrl.value}`, title: card.title, cover: safeLink(card.coverUrl) || defaultCover(), audio: audioUrl.value, provenance: 'GENERATED' }
+  return { id: `${card.songId}:${card.revisionId || card.revision}:${card.assetId || audioUrl.value}`, title: card.title, cover: safeLink(card.coverUrl) || defaultCover(), audio: audioUrl.value, provenance: card.audioOrigin || undefined }
 })
 const currentPlaying = computed(() => !!playable.value && player.current?.id === playable.value.id && player.current.audio === playable.value.audio)
 const isPlaying = computed(() => currentPlaying.value && (player.playing || player.starting))
@@ -61,6 +72,8 @@ async function handleResult(result?: ConversationSnapshot) {
   if (!result) return
   if (result.action === 'play' && !isPlaying.value) togglePlay()
   if (result.action === 'download') download()
+  if (result.action === 'login') showLoginDialog()
+  if (result.action === 'recharge' || result.action === 'account' || result.action === 'privacy') nativePanel.value = { kind: result.action }
   void refreshCredits().catch(() => undefined)
   await scrollChat()
 }
@@ -72,6 +85,15 @@ async function send(extra?: string) {
   if (!extra) input.value = ''
   const result = await conversation.send(text, locale.value)
   await handleResult(result)
+}
+function runCommand(command: AgentCommand) {
+  if (blocked.value) return
+  if (command.kind === 'send') { void send(command.text); return }
+  if (command.kind === 'login') { showLoginDialog(); return }
+  if (command.kind === 'recharge' || command.kind === 'account' || command.kind === 'privacy') { nativePanel.value = { kind: command.kind }; return }
+  const target = uploadTarget(command)
+  if (target) { nativePanel.value = target; return }
+  if (command.kind === 'upload' && !command.text) fileInput.value?.click()
 }
 function onEnter(event: KeyboardEvent) {
   if (event.isComposing || event.keyCode === 229) return
@@ -142,7 +164,7 @@ function playReference() {
 }
 watch(() => messages.value.length, () => { void scrollChat() })
 watch(() => JSON.stringify([accountState.value.authenticated, accountState.value.email, accountState.value.name, logtoState.value.authenticated, logtoState.value.email, logtoState.value.phoneMasked, logtoState.value.name]), () => {
-  input.value = ''; notice.value = ''; confirmingReset.value = false
+  input.value = ''; notice.value = ''; confirmingReset.value = false; nativePanel.value = null
   clearReference(); void conversation.changeIdentity()
 })
 onMounted(() => { void conversation.refresh(); void refreshCredits().catch(() => undefined) })
@@ -155,7 +177,7 @@ onBeforeUnmount(() => { recognition?.stop?.(); clearReference() })
     <section class="agent-conversation" :aria-label="tr('音乐创作对话', 'Music conversation')">
       <header class="agent-conversation-head">
         <span class="agent-conversation-pill">♫ {{ tr('音乐创作助手', 'Music creation assistant') }}</span>
-        <p class="agent-conversation-sub">{{ tr('聊灵感、写歌词、生成音乐，接着分享给喜欢的人。', 'Chat, write lyrics, create music and share it.') }}</p>
+        <p class="agent-conversation-sub">{{ tr('创作、作品、积分和账号，在这里接着聊、接着办。', 'Create music, manage songs, credits and your account in one conversation.') }}</p>
         <button type="button" class="agent-reset-trigger" :disabled="loading || sending" @click="confirmingReset = !confirmingReset">{{ tr('重新开始', 'Start over') }}</button>
       </header>
       <div v-if="confirmingReset" class="agent-reset-confirm" role="alert">
@@ -166,22 +188,23 @@ onBeforeUnmount(() => { recognition?.stop?.(); clearReference() })
       <div ref="chat" class="agent-chat" role="log" aria-live="polite">
         <p v-if="loading" class="agent-typing" role="status">{{ tr('正在恢复对话…', 'Loading conversation…') }}</p>
         <div v-if="!messages.length && !loading && !error" class="agent-message assistant">
-          <div class="agent-bubble"><p>{{ tr('你好！我们可以先聊聊，也可以直接写歌。告诉我你的想法，我会记住这首作品，和你一起修改、生成音乐、分享。', 'Hi! We can chat or start a song. Tell me your idea and we can write, revise, generate and share it together.') }}</p></div>
+          <div class="agent-bubble"><p>{{ tr('你好！告诉我你想做什么：聊灵感、写歌、找作品、选版本、换封面、分享，或查积分和订单。需要选择时，我会把选项放在对话里。', 'Hi! Ask for ideas, write a song, find your music, compare versions, change artwork, share, or check credits and orders. I will show any choices right here.') }}</p></div>
         </div>
-        <div v-for="message in messages" :key="message.id" class="agent-message" :class="message.role">
-          <div v-if="messageText(message)" class="agent-bubble" :class="{ 'agent-message-failed': message.state === 'FAILED' }"><p>{{ messageText(message) }}</p></div>
+        <div v-for="message in chatMessages" :key="message.id" class="agent-message" :class="message.role">
+          <div class="agent-message-content"><div v-if="messageText(message)" class="agent-bubble" :class="{ 'agent-message-failed': message.state === 'FAILED' }"><p>{{ messageText(message) }}</p></div><AgentResultCard v-if="message.result" :result="message.result" :disabled="blocked" :current="message.id === lastAssistantId" @command="runCommand"/></div>
         </div>
         <div v-if="pending" class="agent-message user agent-pending"><div class="agent-bubble"><p>{{ pending.text }}</p><small>{{ sending ? tr('发送中…', 'Sending…') : tr('结果待确认', 'Awaiting confirmation') }}</small></div></div>
         <p v-if="sending" class="agent-typing" role="status">{{ tr('正在处理你的请求…', 'Working on your request…') }}</p>
         <div v-if="!messages.length && !loading" class="agent-quick-card"><strong>{{ tr('试着说', 'Try saying') }}</strong><div class="agent-quick-grid"><button v-for="prompt in prompts" :key="prompt" type="button" :disabled="blocked" @click="send(prompt)"><span>{{ prompt }}</span></button></div></div>
       </div>
       <div class="agent-composer">
+        <nav class="agent-capabilities" :aria-label="tr('对话功能', 'Conversation tools')"><button type="button" :disabled="blocked" @click="send('查看我的作品')">{{ tr('我的作品', 'My songs') }}</button><button type="button" :disabled="blocked" @click="send('查看当前作品版本')">{{ tr('作品版本', 'Versions') }}</button><button type="button" :disabled="blocked" @click="send('查看我的积分')">{{ tr('积分', 'Credits') }}</button><button type="button" :disabled="blocked" @click="send('我要充值')">{{ tr('充值', 'Recharge') }}</button><button type="button" :disabled="blocked" @click="send('查看所有功能')">{{ tr('所有功能', 'All tools') }}</button></nav>
         <p v-if="error" class="agent-upload-error" role="alert">{{ error }} <button type="button" :disabled="sending || loading" @click="pending ? retry() : conversation.refresh()">{{ tr('重试', 'Retry') }}</button></p>
         <button v-if="pending?.rejected && !sending" type="button" @click="editRejected">{{ tr('修改未发送的内容', 'Edit rejected message') }}</button>
         <p v-else-if="pending && !sending" class="agent-section-hint">{{ tr('上次请求的结果尚未确认。重试会核对同一次请求。', 'The previous request is unconfirmed. Retry checks the same request.') }} <button type="button" @click="retry">{{ tr('重试原请求', 'Retry request') }}</button></p>
         <p v-if="refreshError" class="agent-upload-error" role="status">{{ refreshError }}</p>
         <form class="agent-composer-box" @submit.prevent="send()">
-          <textarea v-model="input" rows="2" maxlength="4000" :placeholder="tr('聊聊你的想法，或说「把副歌改得更温柔」…', 'Share an idea, or say “make the chorus gentler”…')" :aria-label="tr('创作消息', 'Message')" @keydown.enter.exact="onEnter"/>
+          <textarea v-model="input" rows="2" maxlength="4000" :placeholder="tr('告诉我你想做什么，比如「找出上次的歌，换个封面」…', 'Tell me what to do, e.g. “find my last song and change its artwork”…')" :aria-label="tr('创作消息', 'Message')" @keydown.enter.exact="onEnter"/>
           <button type="button" class="agent-composer-clip" :aria-label="tr('参考音乐', 'Reference audio')" @click="fileInput?.click()">＋</button>
           <button type="button" class="agent-composer-mic" :aria-label="tr('语音输入', 'Voice input')" @click="startVoice">♩</button>
           <button type="submit" class="agent-composer-send" :disabled="!input.trim() || blocked" :aria-busy="sending" :aria-label="tr('发送', 'Send')">↑</button>
@@ -209,10 +232,12 @@ onBeforeUnmount(() => { recognition?.stop?.(); clearReference() })
       </template>
       <div v-else class="agent-empty-song"><span aria-hidden="true">♫</span><strong>{{ tr('从一句灵感开始', 'Start with an idea') }}</strong><p>{{ tr('写好歌词后，作品会出现在这里。音乐完成后，就能试听、下载和分享。', 'Your song will appear here when its lyrics are ready. Once the music is generated, you can listen, download and share.') }}</p></div>
     </aside>
+    <AgentNativeDialog v-if="nativePanel" :key="`${nativePanel.kind}:${nativePanel.workId || ''}`" :kind="nativePanel.kind" :work-id="nativePanel.workId" @close="nativePanel = null" @refresh="conversation.refresh()" @send="send"/>
   </div>
 </template>
 
 <style scoped>
+.agent-message-content{max-width:min(90%,720px);min-width:0}.agent-message-content .agent-bubble{max-width:100%}.agent-capabilities{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}.agent-capabilities button{background:#fff8f3;border:1px solid #f0d9cb;color:#956d55;border-radius:18px;padding:6px 12px;font-size:12px;cursor:pointer}.agent-capabilities button:focus-visible{outline:3px solid #ffa279;outline-offset:2px}
 .agent-composer-box textarea { flex: 1; min-width: 0; resize: vertical; max-height: 180px; border: 0; outline: 0; background: transparent; padding: 8px; color: #4a3b39; font: inherit; line-height: 1.6; }
 .agent-bubble p, .agent-real-lyrics p { white-space: pre-wrap; overflow-wrap: anywhere; }
 .agent-pending small { color: #fff; font-size: 11px; opacity: .8; }

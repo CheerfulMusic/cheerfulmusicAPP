@@ -40,6 +40,13 @@ class AgentChatFlowIntegrationTest {
         @Bean @Primary AgentChatModel conversationModel() {
             return context -> {
                 String text = context.text();
+                if (text.equals("查看我的作品")) return new AgentChatModel.Plan("list_works",Map.of(),"查看作品。");
+                if (text.equals("选择第二首")) return new AgentChatModel.Plan("select_work",Map.of("index",2),"选择第二首。");
+                if (text.equals("把当前作品改名为夏天")) return new AgentChatModel.Plan("rename_work",Map.of("title","夏天"),"修改标题。");
+                if (text.equals("删除当前作品")) return new AgentChatModel.Plan("delete_work",Map.of(),"删除选定作品。");
+                if (text.equals("查看我的积分")) return new AgentChatModel.Plan("get_credits",Map.of(),"查询积分。");
+                if (text.equals("用当前歌词生成音乐然后分享")) return new AgentChatModel.Plan(null,Map.of(),"生成后分享。",List.of(
+                    new AgentChatModel.Step("generate_song",Map.of("mode","regenerate")),new AgentChatModel.Step("share",Map.of())));
                 if (text.equals("你好")) return new AgentChatModel.Plan("chat", Map.of(), "你好，今天想聊些什么？");
                 if (text.contains("先写歌词")) return new AgentChatModel.Plan("generate_lyrics", Map.of("text", text, "mode", "new", "language", "yue"), "我来写歌词。");
                 if (text.contains("副歌")) return new AgentChatModel.Plan("generate_lyrics", Map.of("text", text, "mode", "rewrite", "revisionId", context.song().revisionId()), "我来改副歌。");
@@ -72,6 +79,7 @@ class AgentChatFlowIntegrationTest {
     @Autowired MediaService media;
     @Autowired com.qingfeng.music.settings.MusicSettings settings;
     @Autowired com.qingfeng.music.agent.api.AgentTurnStore turns;
+    @Autowired WorkApi works;
     private final ObjectMapper json = new ObjectMapper();
     private record Browser(HttpClient http, String csrf, String creator, String conversation) {}
     private HttpResponse<String> request(HttpClient client, String method, String path, Object body, String csrf) throws Exception {
@@ -161,5 +169,56 @@ class AgentChatFlowIntegrationTest {
         turns.claim(browser.creator(),browser.conversation(),UUID.randomUUID().toString(),"用当前歌词生成音乐");
         assertEquals(409,request(browser.http(),"POST","/api/app/agent/conversations/"+browser.conversation()+"/reset",Map.of(),browser.csrf()).statusCode());
         assertEquals("RUNNING",state(browser).path("messages").get(0).path("state").asText());
+    }
+
+    @Test void applicationCatalogAndOwnedLibraryAreOperableInsideChat() throws Exception {
+        Browser browser=browser(),other=browser();
+        works.create(browser.creator(),new WorkApi.Draft("朋友","友情","一起旅行","","温暖民谣","旅行"));
+        works.create(browser.creator(),new WorkApi.Draft("朋友","友情","海边的故事","","温暖民谣","海边"));
+        works.create(other.creator(),new WorkApi.Draft("朋友","友情","他人的私人故事","","温暖民谣","不可见的作品"));
+        var catalog=say(browser,"查看所有功能");
+        assertTrue(catalog.path("messages").toString().contains("update_music_settings"));
+        assertTrue(catalog.path("messages").toString().contains("payment_catalog"));
+        var listed=say(browser,"查看我的作品");
+        var contents=lastText(listed);
+        assertEquals("works",contents.path("kind").asText());assertEquals(2,contents.path("items").size());
+        assertFalse(contents.toString().contains("不可见的作品"));
+        String selected=contents.path("items").get(1).path("id").asText();
+        assertEquals(selected,say(browser,"选择第二首").path("songCard").path("songId").asText());
+        var renamed=say(browser,"把当前作品改名为夏天");
+        assertEquals("夏天",renamed.path("songCard").path("title").asText());assertEquals("夏天",works.get(browser.creator(),selected).title());
+        var prompt=say(browser,"删除当前作品");assertEquals("confirmation",lastText(prompt).path("kind").asText());
+        assertNotNull(works.get(browser.creator(),selected));
+        var deleted=say(browser,"确认执行");assertTrue(deleted.path("songCard").isNull());
+        assertEquals(1,works.list(browser.creator(),0).size());assertEquals(1,works.list(other.creator(),0).size());
+        var credit=say(browser,"查看我的积分");assertEquals("credits",lastText(credit).path("kind").asText());
+        assertEquals(4,lastText(credit).path("items").size());
+    }
+    private JsonNode lastText(JsonNode snapshot) {
+        var messages=snapshot.path("messages");
+        for(int i=messages.size()-1;i>=0;i--)if("assistant".equals(messages.get(i).path("role").asText())&&"TEXT".equals(messages.get(i).path("kind").asText()))return json.readTree(messages.get(i).path("contentJson").asText());
+        fail("No assistant text result");return null;
+    }
+
+    @Test void successfulTaskResumesOnlyThePersistedAuthorizedShareOnce() throws Exception {
+        Browser browser=browser();
+        say(browser,"先写歌词，不生成音乐");
+        var started=say(browser,"用当前歌词生成音乐然后分享");
+        String work=started.path("songCard").path("songId").asText(),task=started.path("taskId").asText();
+        assertFalse(task.isBlank(),started.toString());assertEquals("waiting",lastText(started).path("kind").asText());
+        assertTrue(started.path("continuation").isNull());
+        assertEquals(0,db.queryForObject("SELECT COUNT(*) FROM share_link WHERE work_id=?",Integer.class,work));
+        var wav=ByteBuffer.allocate(48).order(ByteOrder.LITTLE_ENDIAN);
+        wav.put("RIFF".getBytes()).putInt(40).put("WAVEfmt ".getBytes()).putInt(16).putShort((short)1).putShort((short)1).putInt(8000).putInt(16000).putShort((short)2).putShort((short)16).put("data".getBytes()).putInt(4).putInt(0);
+        String asset=media.store(task,work,new ByteArrayInputStream(wav.array()));
+        db.update("UPDATE generation_task SET status='SUCCEEDED',asset_id=? WHERE id=?",asset,task);
+        var ready=state(browser);var next=ready.path("continuation");
+        assertEquals("继续已安排的操作",next.path("text").asText(),ready.toString());
+        String key=next.path("requestKey").asText();UUID.fromString(key);
+        var shared=say(browser,next.path("text").asText(),key);
+        assertTrue(shared.path("shareUrl").asText().startsWith("/gift/"),shared.toString());
+        assertTrue(shared.path("continuation").isNull());
+        assertEquals(shared.path("shareUrl").asText(),say(browser,next.path("text").asText(),key).path("shareUrl").asText());
+        assertEquals(1,db.queryForObject("SELECT COUNT(*) FROM share_link WHERE work_id=?",Integer.class,work));
     }
 }

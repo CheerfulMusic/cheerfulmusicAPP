@@ -126,6 +126,7 @@ public class AgentToolDispatcher {
         m.put("revision", Long.toString(card.revision()));
         m.put("revisionId", card.revisionId());
         m.put("assetId", card.assetId());
+        m.put("audioOrigin", card.audioOrigin());
         m.put("taskId", card.taskId());
         return AgentJson.write(m);
     }

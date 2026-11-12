@@ -22,6 +22,7 @@ public class GetCurrentSongHandler implements AgentToolHandler {
     public GetCurrentSongHandler(WorkApi works, LyricsApi lyrics, MediaApi media, com.qingfeng.music.generation.api.GenerationApi generation) {
         this.projector = new SongCardProjector(works, lyrics, media).withGeneration(generation);
     }
+    public GetCurrentSongHandler withCovers(com.qingfeng.music.cover.api.CoverApi covers) { projector.withCovers(covers); return this; }
 
     @Override
     public AgentTool tool() {

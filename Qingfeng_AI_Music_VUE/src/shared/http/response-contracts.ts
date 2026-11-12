@@ -1,3 +1,4 @@
+import { isAgentContinuation } from '../../modules/agent/model/conversation'
 type Row=Record<string,unknown>
 const obj=(v:unknown):v is Row=>!!v&&typeof v==='object'&&!Array.isArray(v)
 const str=(v:unknown)=>typeof v==='string'
@@ -27,7 +28,7 @@ const hotStat=(v:unknown)=>obj(v)&&text(v.trackId)&&['plays','likes','favorites'
 const nullableText=(v:unknown)=>v===null||str(v)
 const agentMessage=(v:unknown)=>obj(v)&&text(v.id)&&text(v.conversationId)&&Number.isInteger(v.seq)&&Number(v.seq)>0&&['user','assistant'].includes(String(v.role))&&['TEXT','TOOL_CARD','PLACEHOLDER'].includes(String(v.kind))&&['PENDING','RUNNING','DONE','FAILED'].includes(String(v.state))&&nullableText(v.contentJson)&&nullableText(v.taskId)&&str(v.createdAt)
 const agentCard=(v:unknown)=>obj(v)&&nullableText(v.songId)&&['title','style','lyrics','audioUrl','status'].every(k=>str(v[k]))&&nullableText(v.coverUrl)&&num(v.revision)&&['revisionId','assetId','taskId'].every(k=>v[k]===undefined||nullableText(v[k]))
-const agentSnapshot=(v:unknown)=>obj(v)&&list(v.messages,agentMessage)&&(v.songCard===null||agentCard(v.songCard))&&nullableText(v.taskId)&&nullableText(v.action)&&(v.shareUrl===null||typeof v.shareUrl==='string'&&/^\/gift\/[A-Za-z0-9_-]+$/.test(v.shareUrl))&&typeof v.liked==='boolean'
+const agentSnapshot=(v:unknown)=>obj(v)&&(v.continuation===undefined||v.continuation===null||isAgentContinuation(v.continuation))&&list(v.messages,agentMessage)&&(v.songCard===null||agentCard(v.songCard))&&nullableText(v.taskId)&&nullableText(v.action)&&(v.shareUrl===null||typeof v.shareUrl==='string'&&/^\/gift\/[A-Za-z0-9_-]+$/.test(v.shareUrl))&&typeof v.liked==='boolean'
 const analyticsCount=(v:unknown)=>num(v)&&Number(v)>=0
 const analyticsTotals=(v:unknown)=>obj(v)&&['pv','pageviews','uv','sessions','avgDurationMs','totalDurationMs'].every(k=>analyticsCount(v[k]))
 const analyticsDaily=(v:unknown)=>obj(v)&&text(v.d)&&['pv','pageviews','uv','avgDurationMs'].every(k=>analyticsCount(v[k]))

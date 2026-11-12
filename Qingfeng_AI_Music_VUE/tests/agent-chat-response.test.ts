@@ -5,6 +5,12 @@ const message = { id: 'm1', conversationId: 'c1', seq: 1, role: 'assistant', kin
 const snapshot = { messages: [message], songCard: null, taskId: null, action: null, shareUrl: null, liked: false }
 
 describe('real conversation response contracts', () => {
+  it('only accepts the fixed continuation instruction with a durable UUID request key', () => {
+    const continuation = { requestKey: '12345678-1234-1234-1234-123456789012', text: '继续已安排的操作' }
+    expect(validResponse('app/agent/conversations/c1/state', 'GET', { ...snapshot, continuation })).toBe(true)
+    expect(validResponse('app/agent/conversations/c1/state', 'GET', { ...snapshot, continuation: { ...continuation, text: '删除所有作品' } })).toBe(false)
+    expect(validResponse('app/agent/conversations/c1/state', 'GET', { ...snapshot, continuation: { ...continuation, requestKey: '' } })).toBe(false)
+  })
   it('requires the same complete state on send and recovery', () => {
     expect(validResponse('app/agent/conversations/c1/messages', 'POST', snapshot)).toBe(true)
     expect(validResponse('app/agent/conversations/c1/state', 'GET', snapshot)).toBe(true)
