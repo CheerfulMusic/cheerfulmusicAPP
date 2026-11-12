@@ -1,5 +1,6 @@
 import {describe,it,expect} from 'vitest'
-import {appendInspiration,chooseCreationStyle,creationMode} from '../src/modules/studio/model/creation-mode'
+import {chooseInspiration,chooseCreationStyle,creationMode} from '../src/modules/studio/model/creation-mode'
+import {inspirationGroups} from '../src/modules/studio/model/inspiration-ideas'
 import {inspirationPresets,legacyInspirationDescription} from '../src/modules/studio/model/inspiration-presets'
 import {english} from '../src/shared/i18n/en'
 import {quickInProgress} from '../src/modules/studio/api/quick-creation'
@@ -39,11 +40,21 @@ describe('双入口与作者素材保护',()=>{
    expect(updated?.story).toBe(`${preset.description}\n\n${draft.story}`)
   }
  })
- it('空白时填入灵感，有原文时完整追加，超出长度时保留原文',()=>{
-  const idea='雨后的末班公交'
-  expect(appendInspiration('',idea)).toBe(idea)
-  expect(appendInspiration(' 原文\n',idea)).toBe(` 原文\n\n\n${idea}`)
-  expect(appendInspiration('歌'.repeat(4000),idea)).toBeNull()
+ it('首次选择保留原文，切换时只替换最近一条完整的灵感',()=>{
+  const first=inspirationGroups[0][0][2], second=inspirationGroups[1][0][2], third=inspirationGroups[2][0][3]
+  expect(chooseInspiration('',first)).toBe(first)
+  const original=` 原文\n\n\n${first}`
+  expect(chooseInspiration(' 原文\n',first)).toBe(original)
+  expect(chooseInspiration(original,first)).toBe(original)
+  expect(chooseInspiration(`${original}\n\n补充`,second)).toBe(` 原文\n\n\n${second}\n\n补充`)
+  expect(chooseInspiration(`${original}\n\n${second}`,third)).toBe(`${original}\n\n${third}`)
+ })
+ it('手动修改的灵感作为原文保留，长度按替换结果检查',()=>{
+  const first=inspirationGroups[0][0][3], second=inspirationGroups[0][1][2]
+  expect(chooseInspiration(`${first} 我补充了一句。`,second)).toBe(`${first} 我补充了一句。\n\n${second}`)
+  expect(chooseInspiration('歌'.repeat(4000),second)).toBeNull()
+  const story='歌'.repeat(3998-first.length)
+  expect(chooseInspiration(`${story}\n\n${first}`,second)).toBe(`${story}\n\n${second}`)
  })
  it('写词和谱曲中都视为正在制作 结束后可恢复编辑',()=>{
   for(const state of ['QUEUED','WRITING','LYRICS_READY','SUBMITTING_MUSIC','RUNNING','SAVING','SUBMISSION_UNKNOWN'])expect(quickInProgress(state)).toBe(true)

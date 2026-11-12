@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import CreationMusicChoices from '../components/CreationMusicChoices.vue'
-import QuickInspirationPanel from '../components/QuickInspirationPanel.vue'
-import {appendInspiration,creationMode,chooseCreationStyle,inspirationLimit,type CreationMode} from '../model/creation-mode'
+import InspirationPanel from '../components/InspirationPanel.vue'
+import {chooseInspiration,creationMode,chooseCreationStyle,inspirationLimit,type CreationMode} from '../model/creation-mode'
 import {legacyPreferences,validMusicPreferences} from '../../works/model/music-preferences'
 import {loadMusicCatalog,loadMusicSettings,saveMusicSettings,type MusicCatalog,type MusicPreferences} from '../../works/api/music-settings'
 import QuickCreationProgress from '../components/QuickCreationProgress.vue'
@@ -59,7 +59,6 @@ const { credits, refreshCredits } = useCredits()
 const compiledParams=computed(()=>splitStyle(draft.style).tail)
 const omittedParams=ref<string[]>([])
 const validationError=ref('')
-const inspirationOpen=ref(false)
 const inspirationInput=ref<HTMLTextAreaElement>()
 const rewriting=ref(false), rewriteError=ref(''), rewriteStatus=ref('')
 const rewriteKey=ref('')
@@ -69,7 +68,6 @@ const continuationFailed=ref(false)
 const resetting=ref(false)
 const draft=reactive<DraftInput>({recipient:'',occasion:String(route.query.occasion||''),story:'',message:'',style:styleFromInspiration(route.query.style),title:'',vocalGender:'AUTO'})
 const inspirationEditsDisabled=computed(()=>!initialized.value||resetting.value||composing.value||rewriting.value||quickLocked.value)
-watch(mode,()=>{inspirationOpen.value=false})
 
 function chooseStyle(preset:InspirationPreset) {
   if(inspirationEditsDisabled.value)return
@@ -82,13 +80,12 @@ function chooseStyle(preset:InspirationPreset) {
 
 async function useInspiration(description:string) {
   if(inspirationEditsDisabled.value)return
-  const story=appendInspiration(draft.story,description)
+  const story=chooseInspiration(draft.story,description)
   if(story===null){
     validationError.value='请先缩短创作描述，为灵感留出空间。'
     return
   }
   draft.story=story
-  inspirationOpen.value=false
   rewriteBackup.value=undefined;rewriteError.value='';rewriteStatus.value='';validationError.value=''
   await nextTick()
   inspirationInput.value?.focus()
@@ -139,7 +136,6 @@ async function initialize() {
   remember()
   const turn=++initSequence,query={...route.query}
   quickSession.reset()
-  inspirationOpen.value=false
   // Agent 创作整理好的灵感只预填新建草稿；成功接手并写入本机副本后才清除，失败时保留供刷新重试。
   const agentBrief=shouldApplyAgentBrief(query)?readAgentBrief():undefined
   // Agent 识别到的参数在这里一次性编译：补充描述进风格文本，语言与段落各有自己的去处。
@@ -475,7 +471,7 @@ onBeforeUnmount(()=>{
 </script>
 <template>
   <div class="story-studio inspiration-studio single-inspiration-studio dual-creation-studio"
-    :class="{'custom-creation-mode':mode==='custom','studio-quick-locked':quickLocked,'studio-inspiration-open':inspirationOpen}">
+    :class="{'custom-creation-mode':mode==='custom','studio-quick-locked':quickLocked}">
     <StudioAtmosphere/>
     <div class="story-introduction">
       <h1>{{ t('从这一刻起，你也是歌手。') }}</h1>
@@ -525,8 +521,7 @@ onBeforeUnmount(()=>{
             <p v-else-if="rewriteStatus" class="inspiration-rewrite-message" role="status">{{ t(rewriteStatus) }}</p>
           </div>
           <p v-if="validationError" id="story-validation" class="story-validation" role="alert">{{ t(validationError) }}</p>
-          <QuickInspirationPanel v-if="mode==='quick'" v-model:expanded="inspirationOpen" :has-text="!!draft.story.trim()"
-            :disabled="inspirationEditsDisabled" @choose="useInspiration"/>
+          <InspirationPanel :disabled="inspirationEditsDisabled" @choose="useInspiration"/>
           <div v-if="mode==='quick'" class="inspiration-examples" role="group" aria-labelledby="quick-style-label" aria-describedby="inspiration-guidance">
             <span id="quick-style-label">{{ t('选一种风格') }}</span>
             <button v-for="example in inspirationPresets" :key="example.label" type="button" :disabled="rewriting" :aria-pressed="draft.style===example.style" @click="chooseStyle(example)">{{ t(example.label) }}</button>
