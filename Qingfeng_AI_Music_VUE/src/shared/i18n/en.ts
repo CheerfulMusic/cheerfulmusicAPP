@@ -1,5 +1,6 @@
 /** Chinese source copy is the stable message key; business option values stay unchanged. */
 export const english: Record<string, string> = {
+  '继续核对 Stripe 订单': 'Continue checking the Stripe order',
   '用照片写一首歌': 'Write a song from a photo',
   '← 返回开始创作': '← Back to Create',
   '选一张想写进歌里的照片，也可以告诉我们它背后的故事。': 'Choose a photo to turn into a song. You can also tell us the story behind it.',

@@ -26,7 +26,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 @SpringBootTest(webEnvironment=SpringBootTest.WebEnvironment.RANDOM_PORT,properties={
     "spring.datasource.url=jdbc:h2:mem:avatar_generation_http;MODE=MySQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1",
-    "qingfeng.agent.chat.enabled=true", "qingfeng.avatar.ai.sponsor-enabled=true",
+    "qingfeng.agent.chat.enabled=true", "qingfeng.credits.enabled=true",
     "qingfeng.generation.scheduler-enabled=false", "qingfeng.cover.ai.scheduler-enabled=false",
     "qingfeng.avatar.ai.scheduler-enabled=false", "qingfeng.agent.admission.user-rpm=60"})
 @ActiveProfiles("test") @Import(AvatarGenerationHttpTest.Offline.class)
@@ -42,6 +42,7 @@ class AvatarGenerationHttpTest {
         };}
     }
     @Value("${local.server.port}") int port;
+    @Autowired com.qingfeng.music.credits.CreditsLedger credits;
     private final ObjectMapper json=new ObjectMapper();
     private HttpResponse<String> call(HttpClient client,String method,String path,Object body,String csrf)throws Exception {
         var b=HttpRequest.newBuilder(URI.create("http://127.0.0.1:"+port+path));
@@ -50,13 +51,14 @@ class AvatarGenerationHttpTest {
         return client.send(b.method(method,body==null?HttpRequest.BodyPublishers.noBody():HttpRequest.BodyPublishers.ofString(json.writeValueAsString(body))).build(),HttpResponse.BodyHandlers.ofString());
     }
     private JsonNode ok(HttpResponse<String> response){assertEquals(200,response.statusCode(),response.body());return json.readTree(response.body());}
-    private record Browser(HttpClient client,String csrf,String conversation) {}
+    private record Browser(HttpClient client,String csrf,String conversation,String owner) {}
     private Browser browser() throws Exception {
         var client=HttpClient.newBuilder().cookieHandler(new CookieManager(null,CookiePolicy.ACCEPT_ALL)).build();
         String csrf=ok(call(client,"GET","/api/public/csrf",null,null)).path("token").asText();
-        ok(call(client,"POST","/api/public/session",Map.of(),csrf));
+        String owner=ok(call(client,"POST","/api/public/session",Map.of(),csrf)).path("creatorId").asText();
+        credits.credit(owner,20,"avatar-http-test:"+UUID.randomUUID());
         String conversation=ok(call(client,"GET","/api/app/agent/conversations/current",null,null)).path("id").asText();
-        return new Browser(client,csrf,conversation);
+        return new Browser(client,csrf,conversation,owner);
     }
     @Test void anonymousCsrfConfirmationAndOwnerIsolation() throws Exception {
         submits.set(0);
@@ -69,8 +71,11 @@ class AvatarGenerationHttpTest {
         assertEquals(404,call(bob.client(),"POST",messages,request,bob.csrf()).statusCode());
         ok(call(alice.client(),"POST",messages,request,alice.csrf()));
         assertEquals(0,submits.get(),"paid provider must not run before user confirmation");
+        assertEquals(20,credits.balance(alice.owner()));
         ok(call(alice.client(),"POST",messages,Map.of("text","确认执行","requestKey",UUID.randomUUID().toString()),alice.csrf()));
         assertEquals(1,submits.get());
+        assertEquals(15,credits.balance(alice.owner()));
+        assertEquals(20,credits.balance(bob.owner()));
         assertEquals("RUNNING",ok(call(alice.client(),"GET","/api/app/avatar/generation/latest",null,null)).path("status").asText());
         assertEquals("NONE",ok(call(bob.client(),"GET","/api/app/avatar/generation/latest",null,null)).path("status").asText());
     }

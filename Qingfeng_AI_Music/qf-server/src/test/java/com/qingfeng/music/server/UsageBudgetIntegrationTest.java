@@ -68,10 +68,10 @@ class UsageBudgetIntegrationTest {
         assertEquals("GLOBAL_DAILY_QUOTA_EXCEEDED",assertThrows(DomainException.class,()->submit(fixture())).code());assertEquals(3,reservations());
     }
     @Test void rejectedLyricsClaimRollsBackAndCanBeRetriedAfterSlotIsFree(){
-        var f=fixture();String first=UUID.randomUUID().toString(),second=UUID.randomUUID().toString();assertTrue(requests.claim(f.owner,f.work,first,"first"));
-        assertEquals("PERSONAL_GENERATION_BUSY",assertThrows(DomainException.class,()->composer.compose(f.owner,f.work,0,second,"zh-CN")).code());assertTrue(requests.find(f.work,second).isEmpty());assertEquals(1,reservations());assertEquals(0,writer.calls.get());
+        var f=fixture();var other=fixture(f.owner);String first=UUID.randomUUID().toString(),second=UUID.randomUUID().toString();assertTrue(requests.claim(f.owner,f.work,first,"first"));
+        assertEquals("PERSONAL_GENERATION_BUSY",assertThrows(DomainException.class,()->composer.compose(other.owner,other.work,0,second,"zh-CN")).code());assertTrue(requests.find(other.work,second).isEmpty());assertEquals(1,reservations());assertEquals(0,writer.calls.get());
         jdbc.update("UPDATE lyrics_composition_request SET status='SUCCEEDED' WHERE work_id=? AND request_key=?",f.work,first);
-        composer.compose(f.owner,f.work,0,second,"zh-CN");assertEquals(1,writer.calls.get());assertEquals(2,reservations());
+        composer.compose(other.owner,other.work,0,second,"zh-CN");assertEquals(1,writer.calls.get());assertEquals(2,reservations());
     }
     @Test void failedLyricsReleaseConcurrencyKeepDailyCostAndNeverResubmitTheSameKey(){
         var f=fixture();String key=UUID.randomUUID().toString();writer.failure=new DomainException("LYRICS_RESPONSE_INVALID","结果不完整");
@@ -82,19 +82,30 @@ class UsageBudgetIntegrationTest {
         writer.failure=null;composer.compose(f.owner,f.work,0,UUID.randomUUID().toString(),"zh-CN");
         assertEquals(2,writer.calls.get());assertEquals(2,reservations());assertEquals(2,lyrics.list(f.owner,f.work).size());assertEquals(0,budget.allowance(f.owner,Kind.LYRICS).dailyRemaining());
     }
-    @Test void stalePendingRequestsRecoverWithoutModelCallAndLateResultsCannotBeSaved(){
+    @Test void stalePendingRequestsKeepUnknownCapacityAndAcceptOneLateResultWithoutResubmission(){
         var f=fixture();String key=UUID.randomUUID().toString();requests.claim(f.owner,f.work,key,"hash");
         jdbc.update("UPDATE lyrics_composition_request SET created_at=TIMESTAMPADD(SECOND,-181,CURRENT_TIMESTAMP) WHERE work_id=? AND request_key=?",f.work,key);
-        assertEquals(0,budget.allowance(f.owner,Kind.LYRICS).active());
-        assertEquals("FAILED",composer.requestState(f.owner,f.work,key).status());assertEquals("LYRICS_REQUEST_TIMEOUT",composer.requestState(f.owner,f.work,key).errorCode());assertEquals(0,writer.calls.get());
-        var saved=new java.util.concurrent.atomic.AtomicBoolean();assertThrows(DomainException.class,()->requests.completeWithRevision(f.work,key,f.revision,()->saved.set(true)));assertFalse(saved.get());
+        assertEquals("UNKNOWN",composer.requestState(f.owner,f.work,key).status());assertEquals("LYRICS_REQUEST_TIMEOUT",composer.requestState(f.owner,f.work,key).errorCode());assertEquals(0,writer.calls.get());
+        assertEquals(1,budget.allowance(f.owner,Kind.LYRICS).active());assertEquals(1,budget.allowance(f.owner,Kind.LYRICS).dailyRemaining());
+        assertFalse(requests.claim(f.owner,f.work,key,"hash"));
+        assertEquals("LYRICS_REQUEST_PENDING",assertThrows(DomainException.class,()->composer.compose(f.owner,f.work,0,UUID.randomUUID().toString(),"en")).code());
+        assertEquals(1,reservations());assertEquals(0,writer.calls.get());
+        var saves=new AtomicInteger();requests.completeWithRevision(f.work,key,f.revision,saves::incrementAndGet);
+        assertEquals("SUCCEEDED",composer.requestState(f.owner,f.work,key).status());assertEquals(f.revision,composer.requestState(f.owner,f.work,key).revisionId());
+        assertEquals(0,budget.allowance(f.owner,Kind.LYRICS).active());assertEquals(1,budget.allowance(f.owner,Kind.LYRICS).dailyRemaining());
+        assertThrows(DomainException.class,()->requests.completeWithRevision(f.work,key,f.revision,saves::incrementAndGet));assertEquals(1,saves.get());assertEquals(0,writer.calls.get());
         composer.compose(f.owner,f.work,0,UUID.randomUUID().toString(),"en");assertEquals(1,writer.calls.get());assertEquals(2,reservations());
     }
-    @Test void aNewWorkCanClaimAfterAnOldWorkTimedOutUnderTheSameCreator(){
+    @Test void anUnknownOldWorkKeepsOwnerCapacityUntilItsLateCompletion(){
         var f=fixture();String key=UUID.randomUUID().toString();requests.claim(f.owner,f.work,key,"hash");
         jdbc.update("UPDATE lyrics_composition_request SET created_at=TIMESTAMPADD(SECOND,-181,CURRENT_TIMESTAMP) WHERE work_id=?",f.work);
-        var other=fixture(f.owner);composer.compose(other.owner,other.work,0,UUID.randomUUID().toString(),"en");
-        assertEquals("FAILED",requests.find(f.work,key).orElseThrow().status());assertEquals(1,writer.calls.get());
+        var other=fixture(f.owner);String rejectedKey=UUID.randomUUID().toString();
+        assertEquals("PERSONAL_GENERATION_BUSY",assertThrows(DomainException.class,()->composer.compose(other.owner,other.work,0,rejectedKey,"en")).code());
+        assertEquals("UNKNOWN",requests.find(f.work,key).orElseThrow().status());assertEquals(1,budget.allowance(f.owner,Kind.LYRICS).active());
+        assertTrue(requests.find(other.work,rejectedKey).isEmpty());assertEquals(1,reservations());assertEquals(0,writer.calls.get());
+        requests.completeWithRevision(f.work,key,f.revision,()->{});assertEquals(0,budget.allowance(f.owner,Kind.LYRICS).active());
+        composer.compose(other.owner,other.work,0,rejectedKey,"en");
+        assertEquals("SUCCEEDED",requests.find(f.work,key).orElseThrow().status());assertEquals(1,writer.calls.get());assertEquals(2,reservations());
     }
     @Test void revisionSaveFailureRollsBackCompletionAndRequestStatusIsOwnerScoped(){
         var f=fixture();String key=UUID.randomUUID().toString();requests.claim(f.owner,f.work,key,"hash");

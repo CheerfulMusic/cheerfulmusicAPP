@@ -7,14 +7,30 @@ import java.time.*;
 import java.util.Map;
 import org.springframework.context.annotation.*;
 import org.springframework.core.env.Environment;
+import org.springframework.core.env.Profiles;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 @Configuration(proxyBeanMethods=false) @Profile({"mysql","test"})
 public class UsageConfiguration {
-    @Bean com.qingfeng.music.credits.CreditsLedger creditsLedger(JdbcTemplate jdbc, PlatformTransactionManager manager) {
-        return new com.qingfeng.music.infrastructure.persistence.credits.JdbcCreditsLedger(jdbc,new TransactionTemplate(manager));
+    @org.springframework.beans.factory.annotation.Value("${qingfeng.credits.writer-fence.enabled:false}") private boolean fenced;
+    @org.springframework.beans.factory.annotation.Value("${qingfeng.credits.writer-fence.expected-database:}") private String expectedDatabase;
+    @org.springframework.beans.factory.annotation.Value("${qingfeng.credits.writer-fence.expected-port:0}") private int expectedPort;
+    @Bean com.qingfeng.music.credits.CreditsLedger creditsLedger(JdbcTemplate jdbc, PlatformTransactionManager manager,Environment environment) {
+        var transactions=new TransactionTemplate(manager);
+        var base=new com.qingfeng.music.infrastructure.persistence.credits.JdbcCreditsLedger(jdbc,transactions);
+        if(!fenced){
+            if(environment.acceptsProfiles(Profiles.of("mysql")))throw new IllegalStateException("MySQL runtime requires the verified entitlement writer; legacy mode is test compatibility only");
+            if(CreditSchemaReadiness.installed(jdbc))throw new IllegalStateException("Entitlement schema installed: a legacy credit writer cannot start");
+            return base;
+        }
+        var identity=jdbc.queryForMap("SELECT DATABASE() database_name,@@port database_port");
+        if(expectedDatabase==null||expectedDatabase.isBlank()||expectedPort<1||!expectedDatabase.equals(identity.get("database_name"))
+                ||expectedPort!=((Number)identity.get("database_port")).intValue())
+            throw new IllegalStateException("credit entitlement writer requires an explicitly matched database identity");
+        CreditSchemaReadiness.requireActive(jdbc);
+        return new com.qingfeng.music.infrastructure.persistence.credits.JdbcFencedCreditsLedger(base,jdbc,transactions);
     }
     @Bean com.qingfeng.music.credits.CreditsPricing creditsPricing(Environment env) {
         return new com.qingfeng.music.infrastructure.persistence.credits.EnvironmentCreditsPricing(env);

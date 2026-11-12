@@ -9,6 +9,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 /** 每个账号串行化；余额与不可变流水和订单/任务在同一事务内提交。 */
 public final class JdbcCreditsLedger implements CreditsLedger {
+    record Mutation(boolean inserted,long amount) {}
     private final JdbcTemplate jdbc;
     private final TransactionTemplate transactions;
     public JdbcCreditsLedger(JdbcTemplate jdbc, TransactionTemplate transactions) { this.jdbc=jdbc; this.transactions=transactions; }
@@ -20,44 +21,71 @@ public final class JdbcCreditsLedger implements CreditsLedger {
         Long value=jdbc.queryForObject("SELECT COALESCE(SUM(amount),0) FROM credit_ledger WHERE owner_id=?",Long.class,owner);
         return value==null?0:value;
     }
-    public void refund(String owner, String reference) {
-        transactions.executeWithoutResult(tx->{
+    public void refund(String owner, String reference) { refundTracked(owner,reference); }
+    Mutation refundTracked(String owner, String reference) {
+        return transactions.execute(tx->{
             lockCreator(owner);
             var rows=jdbc.query("SELECT owner_id, amount FROM credit_ledger WHERE entry_type='DEBIT' AND reference_id=? FOR UPDATE",(rs,n)->new Entry(rs.getString(1),rs.getLong(2)),reference);
-            if(rows.isEmpty()) return;
+            if(rows.isEmpty()) return new Mutation(false,0);
             Entry debit=rows.get(0);
             if(!debit.owner().equals(owner)) throw new DomainException("CREDIT_REFERENCE_CONFLICT","积分记录不匹配");
-            insert("REFUND",owner,Math.negateExact(debit.amount()),reference);
+            long amount=Math.negateExact(debit.amount());
+            return new Mutation(insert("REFUND",owner,amount,reference,false),amount);
         });
     }
     private void change(String type,String owner,long signed,String reference) {
         if(owner==null||owner.isBlank()||reference==null||reference.isBlank()||reference.length()>160||signed==0 || (type.equals("CREDIT") && signed<0) || (type.equals("DEBIT") && signed>0)) throw new IllegalArgumentException("invalid credit entry");
         transactions.executeWithoutResult(tx->{
             lockCreator(owner);
-            insert(type,owner,signed,reference);
+            insert(type,owner,signed,reference,true);
         });
     }
+    /** The integrated rights writer needs the insert result, not a gap-locking pre-read. */
+    Mutation creditTracked(String owner,long amount,String reference) {
+        if(amount<=0)throw new IllegalArgumentException("amount must be positive");
+        return tracked("CREDIT",owner,amount,reference);
+    }
+    Mutation debitTracked(String owner,long amount,String reference) {
+        if(amount<=0)throw new IllegalArgumentException("amount must be positive");
+        return tracked("DEBIT",owner,Math.negateExact(amount),reference);
+    }
+    private Mutation tracked(String type,String owner,long signed,String reference) {
+        if(owner==null||owner.isBlank()||reference==null||reference.isBlank()||reference.length()>160)
+            throw new IllegalArgumentException("invalid credit entry");
+        return transactions.execute(status->{lockCreator(owner);return new Mutation(insert(type,owner,signed,reference,false),signed);});
+    }
+    /** Internal financial adjustment: creates/refunds debt without disguising it as consumption. */
+    Mutation appendFinancial(String owner,long signed,String reference,String type) {
+        if(signed==0||!("PAYMENT_ADJUST".equals(type)&&signed<0
+                ||("PAYMENT_RETURN".equals(type)||"REFUND_RETURN".equals(type))&&signed>0))
+            throw new IllegalArgumentException("invalid financial adjustment");
+        return transactions.execute(status->{lockCreator(owner);return new Mutation(insert(type,owner,signed,reference,false),signed);});
+    }
+    long lockedBalance(String owner) {lockCreator(owner);return account(owner);}
     private void lockCreator(String owner){
         if(owner==null||owner.isBlank()||jdbc.queryForList("SELECT id FROM creator WHERE id=? FOR UPDATE",owner).isEmpty())
             throw new DomainException("CREDIT_OWNER_MISSING","账号不存在。");
     }
-    private void insert(String type,String owner,long signed,String reference) {
+    private boolean insert(String type,String owner,long signed,String reference,boolean legacyRiskHold) {
         long available=account(owner);
         // Insert first: the unique key is the replay guard. No empty-range FOR UPDATE across different accounts.
         try{jdbc.update("INSERT INTO credit_ledger(entry_type,reference_id,owner_id,amount,created_at) VALUES(?,?,?,?,?)",type,reference,owner,signed,Timestamp.from(Instant.now()));}
         catch(org.springframework.dao.DuplicateKeyException duplicate){
             var existing=jdbc.query("SELECT owner_id,amount FROM credit_ledger WHERE entry_type=? AND reference_id=? FOR UPDATE",(rs,n)->new Entry(rs.getString(1),rs.getLong(2)),type,reference);
             if(existing.isEmpty()||!existing.get(0).equals(new Entry(owner,signed)))throw new DomainException("CREDIT_REFERENCE_CONFLICT","积分记录不匹配");
-            return;
+            return false;
         }
-        if(signed<0){
-            Integer frozen=jdbc.queryForObject("SELECT payment_risk_frozen FROM creator WHERE id=? FOR UPDATE",Integer.class,owner);
-            if(frozen!=null&&frozen!=0)throw new DomainException("PAYMENT_RISK_REVIEW","账号有待核查的支付退款或争议，付费创作暂时冻结，请联系支持。");
+        if("DEBIT".equals(type)){
+            if(legacyRiskHold){
+                Integer frozen=jdbc.queryForObject("SELECT payment_risk_frozen FROM creator WHERE id=? FOR UPDATE",Integer.class,owner);
+                if(frozen!=null&&frozen!=0)throw new DomainException("PAYMENT_RISK_REVIEW","账号有待核查的支付退款或争议，付费创作暂时冻结，请联系支持。");
+            }
             if(available<Math.negateExact(signed))throw new DomainException("INSUFFICIENT_CREDITS","积分不足，请先充值。");
         }
         long next=Math.addExact(available,signed);
         if(jdbc.update("UPDATE credit_account SET balance=?,updated_at=CURRENT_TIMESTAMP WHERE owner_id=? AND balance=?",next,owner,available)!=1)
             throw new IllegalStateException("Account balance changed outside its owner lock");
+        return true;
     }
     private long account(String owner){
         var present=jdbc.query("SELECT owner_id FROM credit_account WHERE owner_id=?",(rs,n)->rs.getString(1),owner);

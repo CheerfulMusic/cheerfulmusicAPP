@@ -38,10 +38,23 @@ qingfeng:
     workers: 4
   credits:
     enabled: true
+    writer-fence:
+      enabled: ${CREDIT_WRITER_FENCE_ENABLED:false}
+      expected-database: ${CREDIT_WRITER_EXPECTED_DATABASE:}
+      expected-port: ${CREDIT_WRITER_EXPECTED_PORT:0}
     music-cost: 15
     lyrics-cost: 5
     rewrite-cost: 1
     rewrite-free-per-day: 5
+  stripe:
+    enabled: false
+    accepting-new-orders: false
+    environment: ${STRIPE_ENVIRONMENT:sandbox}
+    account-id: ${STRIPE_ACCOUNT_ID:}
+    api-key: ${STRIPE_SECRET_KEY:}
+    webhook-secret: ${STRIPE_WEBHOOK_SECRET:}
+    success-url: ${STRIPE_SUCCESS_URL:}
+    cancel-url: ${STRIPE_CANCEL_URL:}
   auth:
     google:
       enabled: ${GOOGLE_LOGIN_ENABLED:false}

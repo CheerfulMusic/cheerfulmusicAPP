@@ -110,19 +110,20 @@ class CreditLockOrderMySqlTest {
         String owner = identity.create().creatorId();
         long fund = 200; // 16 次 × 5 积分 = 80，留足余额，确保 16 次都真正走「扣费→失败→退款」
         credits.credit(owner, fund, "fund-" + owner);
-        String work = works.create(owner, new Draft("妈妈", "生日", "一起做饭", "愿你快乐", "民谣", "故事")).id();
-        lyricsWriter.failure = new DomainException("LYRICS_PROVIDER_TIMEOUT", "模型超时");
         int tasks = 16;
+        var workIds=new ArrayList<String>();for(int i=0;i<tasks;i++)workIds.add(works.create(owner,new Draft("妈妈","生日","一起做饭","愿你快乐","民谣","故事")).id());
+        var index=new AtomicInteger();lyricsWriter.failure=new DomainException("LYRICS_PROVIDER_UNAVAILABLE","供应商明确拒绝受理");
         var results = runConcurrently(16, tasks, () -> {
             try {
-                composer.compose(owner, work, 0, UUID.randomUUID().toString(), "zh-CN");
+                composer.compose(owner, workIds.get(index.getAndIncrement()), 0, UUID.randomUUID().toString(), "zh-CN");
                 return "OK";
             } catch (DomainException e) {
                 return e.code();
             }
         });
         // 若发生死锁，CannotAcquireLockException(DataAccessException) 会从 Future.get() 抛出，测试即失败。
-        assertTrue(results.stream().noneMatch("OK"::equals), "所有并发生成均因模型失败而中止");
+        assertEquals(tasks,results.stream().filter("LYRICS_PROVIDER_UNAVAILABLE"::equals).count(),"每笔均进入实际扣费与明确拒绝退款路径");
+        assertEquals(tasks,lyricsWriter.calls.get());
         assertEquals(fund, credits.balance(owner), "并发失败下账本净零（每笔扣费均被精确退还）");
         long sum = jdbc.queryForObject("SELECT COALESCE(SUM(amount),0) FROM credit_ledger WHERE owner_id=?", Long.class, owner);
         assertEquals(sum, credits.balance(owner), "账本余额等于流水合计");
@@ -257,6 +258,7 @@ class CreditLockOrderMySqlTest {
             return out;
         } finally {
             pool.shutdownNow();
+            assertTrue(pool.awaitTermination(15,TimeUnit.SECONDS),"全部并发任务必须结束才能开始下一项测试");
         }
     }
 

@@ -1,0 +1,237 @@
+package com.qingfeng.music.server.payment;
+
+import java.math.BigDecimal;
+import java.util.*;
+import org.flywaydb.core.Flyway;
+import org.junit.jupiter.api.*;
+import org.springframework.dao.DataAccessException;
+import org.springframework.dao.DuplicateKeyException;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.datasource.DriverManagerDataSource;
+import org.springframework.jdbc.support.JdbcTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
+import com.qingfeng.music.server.config.CreditSchemaReadiness;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+import static org.junit.jupiter.api.Assertions.*;
+
+/** Actual canonical V1..V39 -> V40 on a new isolated schema. No application or provider client. */
+@TestMethodOrder(MethodOrderer.OrderAnnotation.class)
+class CreditEntitlementV40MySqlMigrationTest {
+    private static JdbcTemplate db;
+    private static TransactionTemplate tx;
+    private static JsonNode reference;
+    private static String owner, order;
+    private static final String NATIVE = "txn_migration_identity";
+    private static final String MERCHANT = "acct_migration_offline";
+    private static final String CAPTURE = "pi_migration_offline";
+
+    private static String required(String key) {
+        String value = System.getenv(key);
+        if (value == null || value.isBlank()) throw new IllegalStateException("Explicit isolated migration environment required: " + key);
+        return value;
+    }
+    private static long number(String sql, Object... args) { return Objects.requireNonNull(db.queryForObject(sql, Long.class, args)); }
+
+    @BeforeAll static void migrateActualCanonicalChain() throws Exception {
+        String database = required("P0_INTEGRATION_MIGRATION_MYSQL_DATABASE");
+        String url = required("P0_INTEGRATION_MIGRATION_MYSQL_URL");
+        if (!database.matches("p0_integration_migration_20261112r[0-9]+")
+                || !url.matches("jdbc:mysql://127\\.0\\.0\\.1:23316/" + database + "(?:\\?.*)?")
+                || url.toLowerCase(Locale.ROOT).contains("password="))
+            throw new IllegalStateException("Only the explicitly isolated migration cohort is permitted");
+        var source = new DriverManagerDataSource(url, required("P0_INTEGRATION_MIGRATION_MYSQL_USER"), required("P0_INTEGRATION_MIGRATION_MYSQL_PASSWORD"));
+        db = new JdbcTemplate(source);
+        tx = new TransactionTemplate(new JdbcTransactionManager(source));
+        try (var connection = source.getConnection(); var statement = connection.createStatement()) {
+            try (var identity = statement.executeQuery("SELECT VERSION(),@@server_uuid,@@datadir,@@port,@@bind_address,DATABASE(),CURRENT_ROLE()")) {
+                assertTrue(identity.next()); assertEquals("8.0.46", identity.getString(1));
+                assertEquals("05c27d3c-dda3-11f1-aba0-84a938421519", identity.getString(2));
+                assertEquals(required("P0_INTEGRATION_MIGRATION_MYSQL_UUID"), identity.getString(2));
+                assertEquals("r:/data/", identity.getString(3).replace('\\', '/').toLowerCase(Locale.ROOT));
+                assertEquals(23316, identity.getInt(4)); assertEquals("127.0.0.1", identity.getString(5));
+                assertEquals(database, identity.getString(6)); assertEquals("NONE", identity.getString(7));
+            }
+            int grants = 0;
+            try (var rows = statement.executeQuery("SHOW GRANTS")) { while (rows.next()) {
+                String grant = rows.getString(1);
+                assertTrue(grant.startsWith("GRANT USAGE ON *.*") || grant.contains("ON `" + database + "`.*"));
+                assertFalse(grant.contains("WITH GRANT OPTION")); grants++;
+            }}
+            assertEquals(2, grants);
+            try (var rows = statement.executeQuery("SELECT SCHEMA_NAME FROM information_schema.SCHEMATA")) { while (rows.next())
+                assertTrue(Set.of(database, "information_schema", "performance_schema").contains(rows.getString(1)));
+            }
+        }
+        assertEquals(0, number("SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE()"), "Never clear or reuse a prior cohort");
+        try (var resource = Objects.requireNonNull(CreditEntitlementV40MySqlMigrationTest.class.getResourceAsStream("/credit-migration-reference.json"))) {
+            reference = new ObjectMapper().readTree(resource);
+        }
+        assertEquals("7a7778afba67bb1b554068b4ca7a5fa6e173b1a6", reference.path("core_commit").asString());
+        Flyway.configure().dataSource(source).locations("classpath:db/migration").cleanDisabled(true).target("39").load().migrate();
+        assertEquals(39, number("SELECT COUNT(*) FROM flyway_schema_history WHERE success=1 AND version IS NOT NULL"));
+        for (var migration : reference.path("core")) assertHistory(migration);
+        owner = UUID.randomUUID().toString(); order = UUID.randomUUID().toString();
+        db.update("INSERT INTO creator(id,created_at) VALUES(?,CURRENT_TIMESTAMP)", owner);
+        db.update("INSERT INTO credit_ledger(entry_type,reference_id,owner_id,amount,created_at) VALUES('CREDIT','migration-original-credit',?,100,CURRENT_TIMESTAMP)", owner);
+        db.update("INSERT INTO credit_account(owner_id,balance,updated_at) VALUES(?,100,CURRENT_TIMESTAMP)", owner);
+        db.update("INSERT INTO payment_order(id,creator_id,package_id,amount,currency,credits,status,created_at,provider,provider_capture_id) VALUES(?,?,'starter-USD',?,'USD',100,'PAID',CURRENT_TIMESTAMP,'STRIPE_SANDBOX',?)", order, owner, new BigDecimal("9.90"), CAPTURE);
+        db.update("INSERT INTO payment_webhook_inbox(provider,event_id,event_type,payload,payload_hash,status,attempts,next_attempt_at,created_at,updated_at) VALUES('STRIPE','evt_migration_legacy','refund.updated','{}',?,'PENDING',2,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)", "0".repeat(64));
+        var original = db.queryForMap("SELECT entry_type,reference_id,owner_id,amount,created_at FROM credit_ledger WHERE reference_id='migration-original-credit'");
+        var originalInbox = db.queryForMap("SELECT provider,event_id,event_type,payload,payload_hash,status,attempts,next_attempt_at,created_at,updated_at FROM payment_webhook_inbox WHERE event_id='evt_migration_legacy'");
+        Flyway.configure().dataSource(source).locations("classpath:db/migration").cleanDisabled(true).target("40").load().migrate();
+        assertEquals(original, db.queryForMap("SELECT entry_type,reference_id,owner_id,amount,created_at FROM credit_ledger WHERE reference_id='migration-original-credit'"));
+        assertEquals(originalInbox, db.queryForMap("SELECT provider,event_id,event_type,payload,payload_hash,status,attempts,next_attempt_at,created_at,updated_at FROM payment_webhook_inbox WHERE event_id='evt_migration_legacy'"));
+        assertEquals(100, number("SELECT balance FROM credit_account WHERE owner_id=?", owner));
+        assertEquals(0, number("SELECT COUNT(*) FROM p0_credit_batch"));
+        assertEquals(0, number("SELECT COUNT(*) FROM p0_credit_native_identity"));
+    }
+
+    private static void assertHistory(JsonNode migration) {
+        var actual = db.queryForMap("SELECT script,checksum,success FROM flyway_schema_history WHERE version=?", migration.path("version").asString());
+        assertEquals(migration.path("script").asString(), actual.get("script"));
+        assertEquals(migration.path("checksum").asInt(), ((Number) actual.get("checksum")).intValue());
+        Object success = actual.get("success");
+        assertTrue(Boolean.TRUE.equals(success) || success instanceof Number value && value.intValue() == 1,
+            "A migration must have an explicit successful Boolean/numeric JDBC result");
+    }
+
+    @Test @Order(1) void canonical39ChecksumsRemainAndActual40IsNotAnOldPaymentRename() {
+        assertEquals(40, number("SELECT COUNT(*) FROM flyway_schema_history WHERE success=1 AND version IS NOT NULL"));
+        for (var migration : reference.path("core")) assertHistory(migration);
+        assertHistory(reference.path("integration"));
+        assertEquals(0, number("SELECT COUNT(*) FROM flyway_schema_history WHERE script IN ('V33__credit_entitlement_recovery.sql','V34__payment_return_evidence.sql')"));
+        assertEquals(1, number("SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='site_event' AND COLUMN_NAME='country' AND COLUMN_TYPE='varchar(64)' AND IS_NULLABLE='YES'"));
+        assertEquals(1, number("SELECT COUNT(*) FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='site_event' AND INDEX_NAME='idx_site_event_country' AND COLUMN_NAME='country'"));
+        assertEquals(1, number("SELECT COUNT(*) FROM credit_ledger"));
+    }
+
+    @Test @Order(2) void expectedTablesAndAppendOnlyTriggersExistButNoCutoverIsActivated() {
+        assertEquals(19, reference.path("integration_tables").size());
+        for (var table : reference.path("integration_tables")) assertEquals("InnoDB", db.queryForObject("SELECT ENGINE FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=?", String.class, table.asString()));
+        assertEquals(17, reference.path("triggers").size());
+        for (var trigger : reference.path("triggers")) {
+            var actual = db.queryForMap("SELECT ACTION_TIMING,ACTION_STATEMENT FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA=DATABASE() AND TRIGGER_NAME=?", trigger.asString());
+            assertEquals("BEFORE", actual.get("ACTION_TIMING")); assertTrue(actual.get("ACTION_STATEMENT").toString().contains("SIGNAL"));
+        }
+        assertEquals(3, number("SELECT protocol FROM p0_credit_writer_policy WHERE id=1"));
+        assertNotEquals("P0_CREDIT_WRITER_V1", db.queryForObject("SELECT epoch FROM p0_credit_writer_policy WHERE id=1", String.class));
+        assertEquals("PREPARING", db.queryForObject("SELECT status FROM p0_credit_cutover_state WHERE id=1", String.class));
+        assertEquals(0, number("SELECT COUNT(*) FROM p0_credit_cutover_state WHERE activated_at IS NOT NULL"));
+    }
+
+    @Test @Order(3) void preparingAndStaleEpochCannotAppendAndJournalCannotBeRewritten() {
+        tx.executeWithoutResult(status -> {
+            String epoch = db.queryForObject("SELECT epoch FROM p0_credit_writer_policy WHERE id=1", String.class);
+            db.update("SET @qf_credit_writer_epoch=?", epoch);
+            try {
+                assertThrows(DataAccessException.class, () -> db.update("INSERT INTO credit_ledger VALUES('CREDIT','preparing-must-reject',?,1,CURRENT_TIMESTAMP)", owner));
+                db.update("UPDATE p0_credit_cutover_state SET status='ACTIVE',activated_at=CURRENT_TIMESTAMP WHERE id=1");
+                db.execute("SET @qf_credit_writer_epoch='P0_CREDIT_WRITER_V1'");
+                assertThrows(DataAccessException.class, () -> db.update("INSERT INTO credit_ledger VALUES('CREDIT','old-epoch-must-reject',?,1,CURRENT_TIMESTAMP)", owner));
+                assertThrows(DataAccessException.class, () -> db.update("UPDATE credit_ledger SET amount=amount WHERE reference_id='migration-original-credit'"));
+                assertThrows(DataAccessException.class, () -> db.update("DELETE FROM credit_ledger WHERE reference_id='migration-original-credit'"));
+            } finally { db.execute("SET @qf_credit_writer_epoch=NULL"); status.setRollbackOnly(); }
+        });
+        assertEquals(1, number("SELECT COUNT(*) FROM credit_ledger"));
+        assertEquals("PREPARING", db.queryForObject("SELECT status FROM p0_credit_cutover_state WHERE id=1", String.class));
+    }
+
+    private static void nativeIdentity(String external, String kind, String resource, long amount) {
+        db.update("INSERT INTO p0_credit_native_identity(provider,merchant,environment,external_id,owner_id,order_id,capture_id,kind,resource_id,amount_minor,currency,created_at) VALUES('STRIPE',?,'sandbox',?,?,?,?,?,?,?,'USD',CURRENT_TIMESTAMP)", MERCHANT, external, owner, order, CAPTURE, kind, resource, amount);
+    }
+
+    @Test @Order(4) void nativeReturnRegistryAndBindingNamespacesRejectConflictingClaims() {
+        nativeIdentity(NATIVE, "REFUND_RETURN", "re_migration", 198);
+        assertThrows(DuplicateKeyException.class, () -> nativeIdentity(NATIVE, "DISPUTE_RETURN", "dp_migration", 990));
+        assertThrows(DuplicateKeyException.class, () -> nativeIdentity("txn_another", "REFUND_RETURN", "re_migration", 198));
+        nativeIdentity("refund:" + "a".repeat(64), "REFUND_BINDING", "re_migration_binding", 198);
+        nativeIdentity("dispute:" + "b".repeat(64), "DISPUTE_BINDING", "dp_migration_binding", 990);
+        assertThrows(DataAccessException.class, () -> nativeIdentity("invalid_kind", "OTHER", "invalid_resource", 1));
+        assertThrows(DataAccessException.class, () -> nativeIdentity("invalid_amount", "REFUND_RETURN", "invalid_amount", 0));
+        assertEquals(3, number("SELECT COUNT(*) FROM p0_credit_native_identity"));
+    }
+
+    @Test @Order(5) void nativeBindingsAreDatabaseAppendOnly() {
+        assertThrows(DataAccessException.class, () -> db.update("UPDATE p0_credit_native_identity SET amount_minor=amount_minor WHERE external_id=?", NATIVE));
+        assertThrows(DataAccessException.class, () -> db.update("DELETE FROM p0_credit_native_identity WHERE external_id=?", NATIVE));
+        assertEquals(198, number("SELECT amount_minor FROM p0_credit_native_identity WHERE external_id=?", NATIVE));
+    }
+
+    @Test @Order(6) void batchConstraintAllowsConsumedRefundDebtButRejectsUnsupportedHold() {
+        tx.executeWithoutResult(status -> {
+            db.update("INSERT INTO p0_credit_batch(reference,owner_id,source_type,source_id,original,consumed,adjusted,held,created_at) VALUES('migration-debt-check',?,'PAYMENT',?,100,80,40,0,CURRENT_TIMESTAMP)", owner, order);
+            assertThrows(DataAccessException.class, () -> db.update("UPDATE p0_credit_batch SET held=1 WHERE reference='migration-debt-check'"));
+            assertEquals(80, number("SELECT consumed FROM p0_credit_batch WHERE reference='migration-debt-check'"));
+            status.setRollbackOnly();
+        });
+        assertEquals(0, number("SELECT COUNT(*) FROM p0_credit_batch"));
+    }
+
+    @Test @Order(7) void successfulRefundFactsStayAppendOnlyInIntegratedSchema() {
+        db.update("INSERT INTO p0_credit_refund VALUES('STRIPE',?,'sandbox','re_fact_migration',?,?,?,198,'USD')", MERCHANT, owner, order, CAPTURE);
+        assertThrows(DataAccessException.class, () -> db.update("UPDATE p0_credit_refund SET amount_minor=amount_minor WHERE external_id='re_fact_migration'"));
+        assertThrows(DataAccessException.class, () -> db.update("DELETE FROM p0_credit_refund WHERE external_id='re_fact_migration'"));
+        assertEquals(198, number("SELECT amount_minor FROM p0_credit_refund WHERE external_id='re_fact_migration'"));
+    }
+
+    private static void inbox(String merchant, String environment, String event) {
+        db.update("INSERT INTO payment_webhook_inbox(provider,merchant_scope,env_scope,event_id,event_type,payload,payload_hash,status,attempts,next_attempt_at,created_at,updated_at) VALUES('STRIPE',?,?,?,'refund.updated','{}',?,'MANUAL',0,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)", merchant, environment, event, "1".repeat(64));
+    }
+
+    @Test @Order(8) void inboxPreservesUnknownLegacyRowsAndSeparatesCaseSensitiveScopes() {
+        var legacy = db.queryForMap("SELECT merchant_scope,env_scope,attempts FROM payment_webhook_inbox WHERE event_id='evt_migration_legacy'");
+        assertEquals("LEGACY_UNKNOWN", legacy.get("merchant_scope"));
+        assertEquals("LEGACY_UNKNOWN", legacy.get("env_scope"));
+        assertEquals(2, ((Number) legacy.get("attempts")).intValue());
+        inbox("acct_Scope", "sandbox", "evt_scope_Case");
+        assertThrows(DuplicateKeyException.class, () -> inbox("acct_Scope", "sandbox", "evt_scope_Case"));
+        inbox("acct_scope", "sandbox", "evt_scope_Case");
+        inbox("acct_Scope", "live", "evt_scope_Case");
+        inbox("acct_Scope", "sandbox", "evt_scope_case");
+        assertEquals(4, number("SELECT COUNT(*) FROM payment_webhook_inbox WHERE event_id IN ('evt_scope_Case','evt_scope_case')"));
+        assertEquals(4, number("SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='payment_webhook_inbox' AND COLUMN_NAME IN ('provider','merchant_scope','env_scope','event_id') AND COLLATION_NAME='utf8mb4_bin'"));
+    }
+
+    @Test @Order(9) void manualReviewAndSystemAttemptAreSeparateAppendOnlyScopedEvidence() {
+        inbox("acct_audit", "sandbox", "evt_audit");
+        String review = UUID.randomUUID().toString(), attempt = UUID.randomUUID().toString();
+        db.update("INSERT INTO payment_inbox_review(id,provider,merchant_scope,env_scope,event_id,reviewer,reason,action,created_at) VALUES(?,'STRIPE','acct_audit','sandbox','evt_audit','operator-test','synthetic approved resume','RESUME',CURRENT_TIMESTAMP)", review);
+        db.update("INSERT INTO payment_inbox_attempt(id,provider,merchant_scope,env_scope,event_id,attempt,result,evidence_id,created_at) VALUES(?,'STRIPE','acct_audit','sandbox','evt_audit',0,'WAITING','synthetic verified pending',CURRENT_TIMESTAMP)", attempt);
+        assertThrows(DataAccessException.class, () -> db.update("UPDATE payment_inbox_review SET reason=reason WHERE id=?", review));
+        assertThrows(DataAccessException.class, () -> db.update("DELETE FROM payment_inbox_review WHERE id=?", review));
+        assertThrows(DataAccessException.class, () -> db.update("UPDATE payment_inbox_attempt SET result=result WHERE id=?", attempt));
+        assertThrows(DataAccessException.class, () -> db.update("DELETE FROM payment_inbox_attempt WHERE id=?", attempt));
+        assertThrows(DataAccessException.class, () -> db.update("INSERT INTO payment_inbox_review(id,provider,merchant_scope,env_scope,event_id,reviewer,reason,action,created_at) VALUES(?,'STRIPE','acct_audit','sandbox','evt_audit','SYSTEM','not a human resume','WAITING',CURRENT_TIMESTAMP)", UUID.randomUUID().toString()));
+        assertThrows(DataAccessException.class, () -> db.update("INSERT INTO payment_inbox_attempt(id,provider,merchant_scope,env_scope,event_id,attempt,result,created_at) VALUES(?,'STRIPE','acct_audit','sandbox','evt_audit',-1,'FAILED',CURRENT_TIMESTAMP)", UUID.randomUUID().toString()));
+        assertThrows(DataAccessException.class, () -> db.update("INSERT INTO payment_inbox_attempt(id,provider,merchant_scope,env_scope,event_id,attempt,result,created_at) VALUES(?,'STRIPE','wrong_merchant','sandbox','evt_audit',0,'FAILED',CURRENT_TIMESTAMP)", UUID.randomUUID().toString()));
+        assertEquals(1, number("SELECT COUNT(*) FROM payment_inbox_review WHERE id=?", review));
+        assertEquals(1, number("SELECT COUNT(*) FROM payment_inbox_attempt WHERE id=? AND result='WAITING' AND attempt=0", attempt));
+    }
+
+    @Test @Order(10) void opaqueNativeTransactionAndResourceIdsRemainCaseSensitive() {
+        nativeIdentity("txn_migration_Case", "REFUND_RETURN", "re_migration_Case", 1);
+        nativeIdentity("txn_migration_case", "REFUND_RETURN", "re_migration_case", 1);
+        assertEquals(2, number("SELECT COUNT(*) FROM p0_credit_native_identity WHERE external_id IN ('txn_migration_Case','txn_migration_case')"));
+        assertEquals(1, number("SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='p0_credit_native_identity' AND COLUMN_NAME='external_id' AND COLLATION_NAME='utf8mb4_bin'"));
+    }
+
+    @Test @Order(11) void sharedReadinessRequiresEveryRealMysqlPrerequisiteAndAnExplicitActivation() {
+        assertTrue(CreditSchemaReadiness.installed(db));
+        assertFalse(CreditSchemaReadiness.ready(db), "PREPARING is never a usable financial schema");
+        assertThrows(IllegalStateException.class, () -> CreditSchemaReadiness.requireActive(db));
+        tx.executeWithoutResult(status -> {
+            try {
+                assertEquals(1, db.update("UPDATE p0_credit_cutover_state SET status='ACTIVE',activated_at=CURRENT_TIMESTAMP,evidence='ISOLATED_READINESS_GATE_ONLY' WHERE id=1 AND status='PREPARING'"));
+                for (var entry : CreditSchemaReadiness.CHECKS.entrySet()) {
+                    Integer actual = db.queryForObject(entry.getValue().sql(), Integer.class);
+                    assertEquals(Integer.valueOf(entry.getValue().expected()), actual, entry.getKey());
+                }
+                CreditSchemaReadiness.requireActive(db);
+                assertTrue(CreditSchemaReadiness.ready(db));
+            } finally { status.setRollbackOnly(); }
+        });
+        assertEquals("PREPARING", db.queryForObject("SELECT status FROM p0_credit_cutover_state WHERE id=1", String.class));
+        assertFalse(CreditSchemaReadiness.ready(db));
+    }
+}

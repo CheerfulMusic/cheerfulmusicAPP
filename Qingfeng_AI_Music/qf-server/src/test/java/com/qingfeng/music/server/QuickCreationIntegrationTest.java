@@ -136,10 +136,14 @@ class QuickCreationIntegrationTest {
     }
     @Test void pendingLyricsAfterRestartAreQueriedAndNeverAutomaticallyResubmitted(){
         var flow=start();var entry=repository.find(work.id(),flow.id()).orElseThrow();
-        requests.claim(owner,work.id(),entry.lyricsKey(),"offline-existing");int before=writer.calls.get();
+        requests.claim(owner,work.id(),entry.lyricsKey(),"offline-existing");int before=writer.calls.get(),purchases=music.purchases.get();
         service.runOnce();assertEquals("WRITING",service.get(owner,work.id(),flow.id()).status());assertEquals(before,writer.calls.get());
         jdbc.update("UPDATE lyrics_composition_request SET created_at=TIMESTAMPADD(SECOND,-181,CURRENT_TIMESTAMP) WHERE work_id=? AND request_key=?",work.id(),entry.lyricsKey());
-        due(flow.id());service.runOnce();assertEquals("FAILED",service.get(owner,work.id(),flow.id()).status());assertEquals(before,writer.calls.get());
+        due(flow.id());assertTrue(service.runOnce());var unknown=service.get(owner,work.id(),flow.id());
+        assertEquals("SUBMISSION_UNKNOWN",unknown.status());assertEquals("LYRICS_SUBMISSION_UNKNOWN",unknown.errorCode());assertFalse(unknown.canRetry());assertNull(unknown.taskId());
+        assertEquals("UNKNOWN",composer.requestState(owner,work.id(),entry.lyricsKey()).status());
+        assertEquals("LYRICS_REQUEST_PENDING",assertThrows(DomainException.class,()->service.retry(owner,work.id(),flow.id())).code());
+        assertFalse(service.runOnce());assertEquals(before,writer.calls.get());assertEquals(purchases,music.purchases.get());
     }
     @Test void aCompletedLyricWhoseCheckpointWasLostIsReusedAfterRestart(){
         var flow=start();var entry=repository.find(work.id(),flow.id()).orElseThrow();

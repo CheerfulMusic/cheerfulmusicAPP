@@ -1,0 +1,304 @@
+{
+  "core_commit": "7a7778afba67bb1b554068b4ca7a5fa6e173b1a6",
+  "core": [
+    {
+      "version": "1",
+      "script": "V1__creator_and_work.sql",
+      "sha256_lf": "33f0c5fab59fe616443e971b8adcf1b0f6137f029fa0c4423f645b7ce1cc62a9",
+      "checksum": 538142715
+    },
+    {
+      "version": "2",
+      "script": "V2__lyrics_media_and_sharing.sql",
+      "sha256_lf": "3eb701d1971842ca02cc2e0340b29ca1455042fa35aadfb02c9aa39276baa3c6",
+      "checksum": -1436069016
+    },
+    {
+      "version": "3",
+      "script": "V3__generation_snapshot.sql",
+      "sha256_lf": "c8690dc83f20884591e985be56954935bcdf01b0f456bfe0f55a22c91f21281e",
+      "checksum": 450934865
+    },
+    {
+      "version": "4",
+      "script": "V4__durable_execution_and_recovery.sql",
+      "sha256_lf": "7710acedeaa91caa49869bbe3ac4c9e6875dbdbfbec61f01e38764f404699e6c",
+      "checksum": -1736453801
+    },
+    {
+      "version": "5",
+      "script": "V5__media_capacity.sql",
+      "sha256_lf": "78992a6ef3b11b362217d06674ebfb3bd5e67ce778e9ab3d19ef918f18cc1ce3",
+      "checksum": 1102267465
+    },
+    {
+      "version": "6",
+      "script": "V6__lyrics_composition_request.sql",
+      "sha256_lf": "dc21322d0cb1b343876ee61b29ce4aa3f9a99429c9f559798b1da690001ce7b6",
+      "checksum": -1737383812
+    },
+    {
+      "version": "7",
+      "script": "V7__model_usage_budget.sql",
+      "sha256_lf": "47bc70beb40abaa7b82b4b0eea71647872233b2c1a9e571c2c13c7a9414aa29d",
+      "checksum": 1279307865
+    },
+    {
+      "version": "8",
+      "script": "V8__playback_lyrics.sql",
+      "sha256_lf": "bf9293fca2c2219b6b8001e34478d101b67d07a408aa0cc74a0ed5f4d4d7f3da",
+      "checksum": -1356775397
+    },
+    {
+      "version": "9",
+      "script": "V9__vocal_gender.sql",
+      "sha256_lf": "7622d709fcee77c476056977365d69d3e56ba123593219288ac28f1ba198b35b",
+      "checksum": 824137486
+    },
+    {
+      "version": "10",
+      "script": "V10__cover_assets.sql",
+      "sha256_lf": "c3e80ebcb4b79026c7ccc61ce55be02a0695d2251aa62c6327f685d3803ecfaf",
+      "checksum": 736144287
+    },
+    {
+      "version": "11",
+      "script": "V11__lyrics_request_recovery.sql",
+      "sha256_lf": "114bfd16c036be78a5ae20e771ccc297bf05e254034268011485c473b0f14cde",
+      "checksum": 1637439073
+    },
+    {
+      "version": "12",
+      "script": "V12__section_edits_and_audio_selection.sql",
+      "sha256_lf": "c77eee8f5076afe07a7c310f856f5a7b24c8fb322aae6de99cebdd5644b19d65",
+      "checksum": -535410927
+    },
+    {
+      "version": "13",
+      "script": "V13__music_preferences.sql",
+      "sha256_lf": "41b181d6aa42fcc69cd56d4fc7cc0017e239d91f4d0cd5bccaed5eeaa2dd67ee",
+      "checksum": -1476587036
+    },
+    {
+      "version": "14",
+      "script": "V14__google_identity.sql",
+      "sha256_lf": "89910320d5abc2372091b562cbdec4430dcde284963277c95129c985fdd6da9d",
+      "checksum": -39770866
+    },
+    {
+      "version": "15",
+      "script": "V15__credits_ledger.sql",
+      "sha256_lf": "df2c99fc9f8ae3f290080dd8303e3237ce235de50db79a720955dd9e5721b38d",
+      "checksum": 310859359
+    },
+    {
+      "version": "16",
+      "script": "V16__payment_orders.sql",
+      "sha256_lf": "7f98f984dd6042a64ddd6b6660c2df6bdc96cda279b2d7c4b7a3dfe0d50e001a",
+      "checksum": 1150889748
+    },
+    {
+      "version": "17",
+      "script": "V17__authing_identity.sql",
+      "sha256_lf": "89612dd7c9c88d9b824d932dc40a168474c3141b1f28304ed6b61d2a210fb06f",
+      "checksum": 1163199747
+    },
+    {
+      "version": "18",
+      "script": "V18__payment_risk_events.sql",
+      "sha256_lf": "fc317f0cb74cfce0527f56ceb8ced68741074b8d34d5045298866c3ec7e55df2",
+      "checksum": -96810779
+    },
+    {
+      "version": "19",
+      "script": "V19__payment_provider.sql",
+      "sha256_lf": "4435d36b7be94eefb3b9097bc16766b2a61190d308068557b52dd2c42fd434eb",
+      "checksum": 532491053
+    },
+    {
+      "version": "20",
+      "script": "V20__oidc_identity.sql",
+      "sha256_lf": "2914ef9f3aaffefeca9e39accd205a5e643fa14ec449d3294c25bce1a02d8057",
+      "checksum": -1593549317
+    },
+    {
+      "version": "21",
+      "script": "V21__referral_pending.sql",
+      "sha256_lf": "84767bbd69e7b9b71217dc190758402c34b73e35028ad8292a3354719dfb3ef8",
+      "checksum": 536798996
+    },
+    {
+      "version": "22",
+      "script": "V22__welcome_dialog_receipt.sql",
+      "sha256_lf": "da375956b919fe577347ef71fa1f845751f98fb0922bfa8ac5de75d25f97af83",
+      "checksum": -803772943
+    },
+    {
+      "version": "23",
+      "script": "V23__creative_plans_and_audio_candidates.sql",
+      "sha256_lf": "ab4eb4529bf1110a7a686d0310d8a9e9c25042b9e8e58e7b8a656412b488135f",
+      "checksum": -1326033405
+    },
+    {
+      "version": "24",
+      "script": "V24__site_events.sql",
+      "sha256_lf": "c32a8c5fb26151ee0d993a8f0512e58805111bda3233e1dbf5d1d8debed9b99f",
+      "checksum": 618884578
+    },
+    {
+      "version": "25",
+      "script": "V25__site_event_identity_duration.sql",
+      "sha256_lf": "3e0c1c43c39f75a8cb62c157e8d38e1c09f3ac250f931a9979b0e94d976ad0df",
+      "checksum": -2026059724
+    },
+    {
+      "version": "26",
+      "script": "V26__hot_song_engagement.sql",
+      "sha256_lf": "39c1eeb5b3e468c266779f3498db3954f5dc6c43138489ab7bafba6145b1dc3c",
+      "checksum": 217027247
+    },
+    {
+      "version": "27",
+      "script": "V27__work_soft_delete.sql",
+      "sha256_lf": "561c0cf05a6adeba05c4c75c9255c84e10a254a73383a419f1bf0f5d689cc435",
+      "checksum": 136625465
+    },
+    {
+      "version": "28",
+      "script": "V28__quick_creation.sql",
+      "sha256_lf": "a148c5b31da60edc20f0e6aa75e5e4d9878bcb5b0e599fded3285ee5f9efe17b",
+      "checksum": -1640394573
+    },
+    {
+      "version": "29",
+      "script": "V29__lyric_revision_settings.sql",
+      "sha256_lf": "bea0dcd5522fbdc20fc162bb253b0e8d29b081fcb45e7bbd45c1cd360fb51f05",
+      "checksum": 2883319
+    },
+    {
+      "version": "30",
+      "script": "V30__credit_consumption.sql",
+      "sha256_lf": "b83b7cc543cdbf0a792d4d271f70b6ee6cf71780472de2bd3773d322ba603ce6",
+      "checksum": -1260832643
+    },
+    {
+      "version": "31",
+      "script": "V31__rewrite_charges.sql",
+      "sha256_lf": "e96e5847dd2ee3e5330bf07479e042918bb1ebbd28b2ab7d66bbd3396352440d",
+      "checksum": -1919872149
+    },
+    {
+      "version": "32",
+      "script": "V32__agent_conversation.sql",
+      "sha256_lf": "73284eeb282b80c2516f18dbcfdd80d8eede8af966234057d6e41a0605c58597",
+      "checksum": -1723317546
+    },
+    {
+      "version": "33",
+      "script": "V33__site_event_geo.sql",
+      "sha256_lf": "bc3644cf7efbb931ad2fa8aff135efa9e95462874d292f996b6d0cf9d4c026b8",
+      "checksum": 931387468
+    },
+    {
+      "version": "34",
+      "script": "V34__payment_inbox_and_account_balance.sql",
+      "sha256_lf": "d99864ffacded9d290beb173445ec7d0af127425e22551305fd93dbee8451e56",
+      "checksum": 307683175
+    },
+    {
+      "version": "35",
+      "script": "V35__agent_admission.sql",
+      "sha256_lf": "73b119fb6abd8ff2f1b4cc22e931367ec81b439f06c918b03bdb0f325eb177db",
+      "checksum": -1119439450
+    },
+    {
+      "version": "36",
+      "script": "V36__agent_history_and_semantic_index.sql",
+      "sha256_lf": "1af23bb27379ea22dbea0a3e9b8973dc097a61477850836a859bc193486e71ee",
+      "checksum": 2136712453
+    },
+    {
+      "version": "37",
+      "script": "V37__durable_task_outbox.sql",
+      "sha256_lf": "bf2a38f0c9657f1a9c20414b9ba1b41268dedf207b6077fcf2b09e668829a2bb",
+      "checksum": -601673516
+    },
+    {
+      "version": "38",
+      "script": "V38__creator_avatar.sql",
+      "sha256_lf": "32fa67ea71515c743c7c0bf18e909c54e5d7f4c6bcd42ac77c1b1c8840b6ab93",
+      "checksum": -471116779
+    },
+    {
+      "version": "39",
+      "script": "V39__avatar_generation_task.sql",
+      "sha256_lf": "9cb8edb9e62742186da6d1b843cdfeb7b6813e572a0027441279313371350559",
+      "checksum": -674578620
+    }
+  ],
+  "integration": {
+    "version": "40",
+    "script": "V40__credit_entitlement_integration.sql",
+    "sha256_lf": "eb2868df1676875014762fe4b2e61615a69941e2fde7ce3f60002f526bb563f4",
+    "checksum": -1311214355
+  },
+  "p0_tables": [
+    "p0_credit_writer_policy",
+    "p0_credit_cutover_state",
+    "p0_credit_batch",
+    "p0_credit_allocation",
+    "p0_credit_payment_binding",
+    "p0_credit_refund",
+    "p0_credit_dispute",
+    "p0_credit_return",
+    "p0_credit_financial_audit",
+    "p0_legacy_debit_mapping",
+    "p0_credit_recovery",
+    "p0_credit_recovery_audit",
+    "p0_credit_recovery_approval",
+    "p0_credit_refund_terminal",
+    "p0_credit_refund_return",
+    "p0_stripe_dispute_proof",
+    "p0_credit_native_identity"
+  ],
+  "triggers": [
+    "p0_credit_ledger_insert_fence",
+    "p0_credit_ledger_update_fence",
+    "p0_credit_ledger_delete_fence",
+    "p0_refund_success_immutable_update",
+    "p0_refund_success_immutable_delete",
+    "p0_refund_terminal_immutable_update",
+    "p0_refund_terminal_immutable_delete",
+    "p0_refund_return_immutable_update",
+    "p0_refund_return_immutable_delete",
+    "p0_stripe_proof_immutable_update",
+    "p0_stripe_proof_immutable_delete",
+    "payment_inbox_review_immutable_update",
+    "payment_inbox_review_immutable_delete",
+    "payment_inbox_attempt_immutable_update",
+    "payment_inbox_attempt_immutable_delete",
+    "p0_native_identity_immutable_update",
+    "p0_native_identity_immutable_delete"
+  ],
+  "integration_tables": [
+    "p0_credit_writer_policy",
+    "p0_credit_cutover_state",
+    "p0_credit_batch",
+    "p0_credit_allocation",
+    "p0_credit_payment_binding",
+    "p0_credit_refund",
+    "p0_credit_dispute",
+    "p0_credit_return",
+    "p0_credit_financial_audit",
+    "p0_legacy_debit_mapping",
+    "p0_credit_recovery",
+    "p0_credit_recovery_audit",
+    "p0_credit_recovery_approval",
+    "p0_credit_refund_terminal",
+    "p0_credit_refund_return",
+    "p0_stripe_dispute_proof",
+    "payment_inbox_review",
+    "payment_inbox_attempt",
+    "p0_credit_native_identity"
+  ]
+}

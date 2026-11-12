@@ -22,10 +22,14 @@ class GateTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory(dir=base)
         self.addCleanup(self.temp.cleanup); self.root = Path(self.temp.name)
 
-    def jar(self, corrupt_nested=False, versions=(1,2), bad_audio=False, implicit_import=False):
+    def jar(self, corrupt_nested=False, versions=None, bad_audio=False, implicit_import=False):
         nested = io.BytesIO()
         with zipfile.ZipFile(nested,"w") as z:
-            for v in versions: z.writestr("db/migration/V%d__fixture.sql"%v,"SELECT %d;"%v)
+            if versions is None:
+                for migration in sorted((ROOT / "Qingfeng_AI_Music/qf-infrastructure/src/main/resources/db/migration").glob("V*__*.sql")):
+                    z.writestr("db/migration/" + migration.name, migration.read_bytes())
+            else:
+                for v in versions: z.writestr("db/migration/V%d__fixture.sql"%v,"SELECT %d;"%v)
         path=self.root/"app.jar"; prefix="BOOT-INF/classes/static/"
         audio=b"ID3synthetic-fixture"
         with zipfile.ZipFile(path,"w") as z:
@@ -88,8 +92,8 @@ class GateTests(unittest.TestCase):
         fixture_jar=self.jar()
         archive=io.BytesIO()
         with zipfile.ZipFile(archive,"w") as z:
-            for version in (1,2):
-                z.writestr("Qingfeng_AI_Music/qf-infrastructure/src/main/resources/db/migration/V%d__fixture.sql"%version,"SELECT %d;"%version)
+            for migration in sorted((ROOT / "Qingfeng_AI_Music/qf-infrastructure/src/main/resources/db/migration").glob("V*__*.sql")):
+                z.writestr("Qingfeng_AI_Music/qf-infrastructure/src/main/resources/db/migration/" + migration.name,migration.read_bytes())
             z.writestr("Qingfeng_AI_Music_VUE/package.json","{}")
         source={"sourceCommit":"a"*40,"frontendSourceTree":"b"*40}
         calls=[]

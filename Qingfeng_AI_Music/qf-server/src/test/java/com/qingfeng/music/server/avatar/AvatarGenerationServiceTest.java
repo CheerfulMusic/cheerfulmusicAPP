@@ -18,12 +18,19 @@ class AvatarGenerationServiceTest {
     JdbcTemplate db; AvatarService avatars; AvatarImageProvider provider; AvatarGenerationService service;
     @BeforeEach void setup() {
         var ds=new DriverManagerDataSource("jdbc:h2:mem:"+UUID.randomUUID()+";MODE=MySQL;DB_CLOSE_DELAY=-1","sa","");
-        db=new JdbcTemplate(ds); db.execute("CREATE TABLE creator (id VARCHAR(36) PRIMARY KEY)");
+        db=new JdbcTemplate(ds); db.execute("CREATE TABLE creator (id VARCHAR(36) PRIMARY KEY,payment_risk_frozen INT NOT NULL DEFAULT 0)");
+        db.execute("CREATE TABLE credit_account (owner_id VARCHAR(36) PRIMARY KEY,balance BIGINT NOT NULL,updated_at TIMESTAMP NOT NULL)");
+        db.execute("CREATE TABLE credit_ledger (entry_type VARCHAR(16) NOT NULL,reference_id VARCHAR(160) NOT NULL,owner_id VARCHAR(36) NOT NULL,amount BIGINT NOT NULL,created_at TIMESTAMP NOT NULL,PRIMARY KEY(entry_type,reference_id))");
         db.execute("CREATE TABLE avatar_generation_task (id VARCHAR(36) PRIMARY KEY,creator_id VARCHAR(36) NOT NULL,request_key VARCHAR(36) NOT NULL,prompt VARCHAR(1000) NOT NULL,expected_version VARCHAR(36),status VARCHAR(24) NOT NULL,provider_task_id VARCHAR(255),lease_token VARCHAR(36),lease_until TIMESTAMP,next_attempt_at TIMESTAMP,failures INT NOT NULL DEFAULT 0,created_at TIMESTAMP NOT NULL,updated_at TIMESTAMP NOT NULL,UNIQUE(creator_id,request_key))");
         db.update("INSERT INTO creator(id) VALUES ('alice'),('bob')");
         avatars=mock(AvatarService.class); provider=mock(AvatarImageProvider.class);
         when(avatars.current(anyString())).thenReturn(new AvatarService.View(null,null)); when(provider.configured()).thenReturn(true);
-        service=new AvatarGenerationService(db,new TransactionTemplate(new DataSourceTransactionManager(ds)),avatars,provider,true,3);
+        var transaction=new TransactionTemplate(new DataSourceTransactionManager(ds));
+        var ledger=new com.qingfeng.music.infrastructure.persistence.credits.JdbcCreditsLedger(db,transaction);
+        ledger.credit("alice",100,"seed:alice"); ledger.credit("bob",100,"seed:bob");
+        var pricing=mock(com.qingfeng.music.credits.CreditsPricing.class);
+        when(pricing.enabled()).thenReturn(true);
+        service=new AvatarGenerationService(db,transaction,avatars,provider,ledger,pricing,3);
     }
     @Test void oneSubmissionPerRequestAndAccountIsolation() {
         String key=UUID.randomUUID().toString(); when(provider.submit(anyString())).thenReturn("provider-task");
@@ -106,7 +113,8 @@ class AvatarGenerationServiceTest {
         var generator=mock(AvatarGenerationService.class);
         var action=new AgentAvatarActions(generator);
         when(generator.start(anyString(),anyString(),anyString())).thenReturn(new AvatarGenerationService.View("t","FAILED",true),new AvatarGenerationService.View("t","SUPERSEDED",true),new AvatarGenerationService.View("t","SUCCEEDED",true));
-        assertTrue(action.execute("alice","c","generate_avatar",java.util.Map.of("prompt","猫"),"",UUID.randomUUID().toString(),null).reply().contains("没有生成"));
+        String failure=action.execute("alice","c","generate_avatar",java.util.Map.of("prompt","猫"),"",UUID.randomUUID().toString(),null).reply();
+        assertTrue(failure.contains("失败")); assertTrue(failure.contains("退还"));
         assertTrue(action.execute("alice","c","generate_avatar",java.util.Map.of("prompt","猫"),"",UUID.randomUUID().toString(),null).reply().contains("保留"));
         assertTrue(action.execute("alice","c","generate_avatar",java.util.Map.of("prompt","猫"),"",UUID.randomUUID().toString(),null).reply().contains("已生成"));
     }

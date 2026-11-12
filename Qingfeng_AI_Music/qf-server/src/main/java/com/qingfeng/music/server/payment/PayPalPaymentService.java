@@ -180,6 +180,11 @@ public class PayPalPaymentService implements VerifiedPaymentProcessor {
             Object old=row.get("provider_capture_id"); if(old!=null&&!old.equals(s.captureId())) throw new ResponseStatusException(HttpStatus.CONFLICT,"支付记录不匹配");
             ledger.credit((String)row.get("creator_id"),((Number)row.get("credits")).longValue(),"payment:"+id);
             db.update("UPDATE payment_order SET status='PAID',provider_capture_id=? WHERE id=?",s.captureId(),id);
+            if(ledger instanceof com.qingfeng.music.infrastructure.persistence.credits.JdbcFencedCreditsLedger fenced){
+                fenced.bindPayment("PAYPAL",merchantId,environment,owner,id,s.captureId(),s.currency());
+                if(!db.queryForList("SELECT id FROM payment_risk_case WHERE order_id=? AND owner_id=? AND provider=? AND status IN ('OPEN','REVIEW') FOR UPDATE",id,owner,provider()).isEmpty())
+                    fenced.holdPaymentForReview("PAYPAL",merchantId,environment,owner,id,s.captureId(),s.currency(),"paypal-unresolved-pre-settlement-risk");
+            }
         });
     }
     public void webhook(PayPalCheckoutGateway.WebhookHeaders headers,byte[] body){
@@ -195,11 +200,15 @@ public class PayPalPaymentService implements VerifiedPaymentProcessor {
         if(resourceId.isBlank())resourceId=resource.path("dispute_id").asString();
         normalized.put("resourceId",resourceId);
         normalized.put("orderId",resource.path("supplementary_data").path("related_ids").path("order_id").asString());
-        inbox.acceptVerified(provider(),eventId,type,new tools.jackson.databind.ObjectMapper().writeValueAsString(normalized));
+        String pointer=new tools.jackson.databind.ObjectMapper().writeValueAsString(normalized);
+        if(ledger instanceof com.qingfeng.music.infrastructure.persistence.credits.JdbcFencedCreditsLedger)
+            inbox.acceptVerified(provider(),merchantId,environment,eventId,type,pointer);
+        else inbox.acceptVerified(provider(),eventId,type,pointer);
     }
     public boolean processNextEvent(){
         if(!ready()||!inboxEnabled||inbox==null)return false;
-        var found=inbox.claim(provider());if(found.isEmpty())return false;
+        boolean fencedMode=ledger instanceof com.qingfeng.music.infrastructure.persistence.credits.JdbcFencedCreditsLedger;
+        var found=fencedMode?inbox.claim(provider(),merchantId,environment):inbox.claim(provider());if(found.isEmpty())return false;
         var event=found.get();
         try{
             var payload=new tools.jackson.databind.ObjectMapper().readTree(event.payload());
@@ -213,7 +222,17 @@ public class PayPalPaymentService implements VerifiedPaymentProcessor {
                 var local=db.queryForMap("SELECT * FROM payment_order WHERE id=? AND provider=?",order,provider());
                 var expected=new HashMap<>(local);expected.put("provider_link_id",snapshot.orderId());check(expected,snapshot);
                 if(local.get("provider_link_id")!=null&&!snapshot.orderId().equals(local.get("provider_link_id")))throw new IllegalStateException("Provider order mismatch");
-                inbox.complete(event,()->{
+                if(fencedMode&&Set.of("REFUNDED","PARTIALLY_REFUNDED","REVERSED").contains(snapshot.captureStatus())){
+                    String owner=(String)local.get("creator_id");
+                    inbox.waitForProvider(event,owner,()->{
+                        risks.recordVerified(provider(),snapshot.captureId(),"PAYMENT.CAPTURE.REFUND_DETECTED",order,event.eventId());
+                        var current=db.queryForMap("SELECT status,currency FROM payment_order WHERE id=? AND creator_id=? AND provider=? FOR UPDATE",order,owner,provider());
+                        if("PAID".equals(current.get("status")))((com.qingfeng.music.infrastructure.persistence.credits.JdbcFencedCreditsLedger)ledger)
+                            .holdPaymentForReview("PAYPAL",merchantId,environment,owner,order,snapshot.captureId(),(String)current.get("currency"),event.eventId());
+                    },"paypal-capture-risk-needs-funds-evidence");
+                    return true;
+                }
+                inbox.completeOwned(event,(String)local.get("creator_id"),()->{
                     db.queryForList("SELECT id FROM creator WHERE id=? FOR UPDATE",local.get("creator_id"));
                     db.update("UPDATE payment_order SET provider_link_id=?,failure_code=NULL WHERE id=? AND provider=? AND provider_link_id IS NULL",snapshot.orderId(),order,provider());
                     if(Set.of("REFUNDED","PARTIALLY_REFUNDED","REVERSED").contains(snapshot.captureStatus())){
@@ -223,9 +242,11 @@ public class PayPalPaymentService implements VerifiedPaymentProcessor {
                 });
             }else if("PAYMENT.CAPTURE.REFUNDED".equals(event.type())||"PAYMENT.CAPTURE.REVERSED".equals(event.type())||"PAYMENT.CAPTURE.STATUS_RISK".equals(event.type())||event.type().startsWith("CUSTOMER.DISPUTE.")){
                 var captures=new LinkedHashSet<String>();
+                PayPalEntitlementAdapter.Fact financial=null;
                 if(event.type().startsWith("CUSTOMER.DISPUTE.")){
                     var dispute=gateway().retrieveDispute(resource);
                     if(!resource.equals(dispute.path("dispute_id").asString()))throw new IllegalStateException("Dispute identity mismatch");
+                    if(fencedMode)financial=PayPalEntitlementAdapter.dispute(dispute);
                     for(var transaction:dispute.path("disputed_transactions")){String capture=transaction.path("seller_transaction_id").asString();if(!capture.isBlank())captures.add(capture);}
                 }else if("PAYMENT.CAPTURE.REVERSED".equals(event.type())||"PAYMENT.CAPTURE.STATUS_RISK".equals(event.type())){
                     var capture=gateway().retrieveCapture(resource);if(!resource.equals(capture.path("id").asString()))throw new IllegalStateException("Capture identity mismatch");
@@ -235,12 +256,14 @@ public class PayPalPaymentService implements VerifiedPaymentProcessor {
                     captures.add(resource);
                 }else{
                     var refund=gateway().retrieveRefund(resource);if(!resource.equals(refund.path("id").asString()))throw new IllegalStateException("Refund identity mismatch");
+                    if(fencedMode){financial=PayPalEntitlementAdapter.refund(refund,environment);captures.add(financial.capture());}
                     for(var link:refund.path("links"))if("up".equals(link.path("rel").asString())){
                         var uri=java.net.URI.create(link.path("href").asString());String prefix="/v2/payments/captures/";
                         if("https".equals(uri.getScheme())&&Set.of("api-m.paypal.com","api-m.sandbox.paypal.com","api.paypal.com","api.sandbox.paypal.com").contains(uri.getHost())&&uri.getPath().startsWith(prefix))captures.add(uri.getPath().substring(prefix.length()));
                     }
                 }
                 if(captures.isEmpty()||captures.size()>20)throw new IllegalStateException("Risk resource has no bounded payment correlation");
+                if(fencedMode&&captures.size()!=1)throw new IllegalStateException("One financial identity cannot span multiple original payments");
                 var orders=new TreeSet<String>();
                 var recovered=new LinkedHashMap<String,PayPalCheckoutGateway.Snapshot>();
                 for(String capture:captures){
@@ -261,13 +284,51 @@ public class PayPalPaymentService implements VerifiedPaymentProcessor {
                 }
                 var owners=new TreeSet<String>();
                 for(String order:orders)owners.add(db.queryForObject("SELECT creator_id FROM payment_order WHERE id=? AND provider=?",String.class,order,provider()));
-                inbox.complete(event,()->{
+                if(fencedMode&&(orders.size()!=1||owners.size()!=1))throw new IllegalStateException("Financial identity must bind one owner and order");
+                var fact=financial;
+                if(fencedMode&&fact==null){
+                    String order=orders.first(),owner=owners.first(),capture=captures.iterator().next();
+                    inbox.waitForProvider(event,owner,()->{
+                        risks.recordVerified(provider(),resource,event.type(),order,event.eventId());
+                        var local=db.queryForMap("SELECT status,currency FROM payment_order WHERE id=? AND creator_id=? AND provider=? FOR UPDATE",order,owner,provider());
+                        if("PAID".equals(local.get("status")))((com.qingfeng.music.infrastructure.persistence.credits.JdbcFencedCreditsLedger)ledger)
+                            .holdPaymentForReview("PAYPAL",merchantId,environment,owner,order,capture,(String)local.get("currency"),event.eventId());
+                    },"paypal-capture-risk-needs-funds-evidence");
+                    return true;
+                }
+                if(fencedMode&&fact!=null){
+                    String order=orders.first(),owner=owners.first();
+                    if(!"PAID".equals(db.queryForObject("SELECT status FROM payment_order WHERE id=? AND creator_id=? AND provider=?",String.class,order,owner,provider()))){
+                        // A financial event cannot synthesize the original successful payment.
+                        // Keep it durable and retry after authoritative completion/reconciliation.
+                        inbox.waitForProvider(event,owner,()->{
+                            risks.recordVerified(provider(),resource,event.type(),order,event.eventId());
+                            var current=db.queryForMap("SELECT status FROM payment_order WHERE id=? AND creator_id=? AND provider=? FOR UPDATE",order,owner,provider());
+                            if("PAID".equals(current.get("status"))&&(event.type().startsWith("CUSTOMER.DISPUTE.")||"COMPLETED".equals(fact.state())))
+                                PayPalEntitlementAdapter.apply((com.qingfeng.music.infrastructure.persistence.credits.JdbcFencedCreditsLedger)ledger,merchantId,environment,owner,order,fact,event.type().startsWith("CUSTOMER.DISPUTE."));
+                        },"paypal-original-payment-unsettled");
+                        return true;
+                    }
+                    if(!event.type().startsWith("CUSTOMER.DISPUTE.")&&!"COMPLETED".equals(fact.state())){
+                        inbox.waitForProvider(event,owner,()->risks.recordVerified(provider(),resource,event.type(),order,event.eventId()),"paypal-refund-not-successful");
+                        return true;
+                    }
+                    if(event.type().startsWith("CUSTOMER.DISPUTE.")&&Set.of("UNKNOWN","LOST").contains(fact.state())){
+                        inbox.waitForProvider(event,owner,()->{
+                            risks.recordVerified(provider(),resource,event.type(),order,event.eventId());
+                            PayPalEntitlementAdapter.apply((com.qingfeng.music.infrastructure.persistence.credits.JdbcFencedCreditsLedger)ledger,merchantId,environment,owner,order,fact,true);
+                        },"paypal-dispute-needs-final-principal-evidence");
+                        return true;
+                    }
+                }
+                inbox.completeOwned(event,owners,()->{
                     for(String owner:owners)db.queryForList("SELECT id FROM creator WHERE id=? FOR UPDATE",owner);
                     for(var entry:recovered.entrySet()){
                         var snapshot=entry.getValue();
                         db.update("UPDATE payment_order SET provider_link_id=?,provider_capture_id=? WHERE id=? AND provider=? AND (provider_link_id IS NULL OR provider_link_id=?) AND (provider_capture_id IS NULL OR provider_capture_id=?)",snapshot.orderId(),snapshot.captureId(),entry.getKey(),provider(),snapshot.orderId(),snapshot.captureId());
                     }
                     for(String order:orders)risks.recordVerified(provider(),resource,event.type(),order,event.eventId());
+                    if(fencedMode&&fact!=null)PayPalEntitlementAdapter.apply((com.qingfeng.music.infrastructure.persistence.credits.JdbcFencedCreditsLedger)ledger,merchantId,environment,owners.first(),orders.first(),fact,event.type().startsWith("CUSTOMER.DISPUTE."));
                 });
             }else inbox.complete(event,()->{});
         }catch(RuntimeException failed){inbox.retry(event);}
@@ -301,7 +362,9 @@ public class PayPalPaymentService implements VerifiedPaymentProcessor {
                 String eventId="reconcile-"+UUID.nameUUIDFromBytes((provider()+":"+id+":"+status).getBytes(java.nio.charset.StandardCharsets.UTF_8));
                 String payload=new tools.jackson.databind.ObjectMapper().writeValueAsString(new TreeMap<>(Map.of("resourceId",id,"orderId",Objects.toString(row.get("provider_link_id"),""))));
                 // Stable provider/capture/status identity prevents a recurring scan from reopening a reviewed case.
-                inbox.acceptVerified(provider(),eventId,"PAYMENT.CAPTURE.STATUS_RISK",payload);
+                if(ledger instanceof com.qingfeng.music.infrastructure.persistence.credits.JdbcFencedCreditsLedger)
+                    inbox.acceptVerified(provider(),merchantId,environment,eventId,"PAYMENT.CAPTURE.STATUS_RISK",payload);
+                else inbox.acceptVerified(provider(),eventId,"PAYMENT.CAPTURE.STATUS_RISK",payload);
             }catch(RuntimeException ignored){/* persisted due time permits a later retry; no balance adjustment */}
         }
     }

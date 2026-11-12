@@ -196,7 +196,9 @@ class CostControlConcurrencyTest {
         // 先耗尽 5 次免费（使用合法 UUID 请求键），使第 6 次走积分扣费。
         for (int i = 0; i < 5; i++) rewriteService.rewrite(owner, "我想感谢爸爸", "zh-CN", UUID.randomUUID().toString());
         String chargedKey = UUID.randomUUID().toString();
-        rewriteService.rewrite(owner, "我想感谢爸爸", "zh-CN", chargedKey); // 计费 1 积分
+        var reserved=rewriteCharges.reserve(owner,chargedKey); // 独立验证已预扣、明确失败的退款路径。
+        assertTrue(reserved.fresh());assertFalse(reserved.free());assertEquals(REWRITE_COST,reserved.cost());
+        rewriteCharges.submitted(owner,chargedKey);
         long beforeFail = credits.balance(owner);
         assertEquals(19, beforeFail);
         rewriteCharges.fail(owner, chargedKey);
@@ -206,6 +208,21 @@ class CostControlConcurrencyTest {
         int refunded = jdbc.queryForObject(
             "SELECT refunded FROM rewrite_consumption WHERE creator_id=? AND request_key=?", Integer.class, owner, chargedKey);
         assertEquals(1, refunded, "仅标记一次已退");
+        assertEquals("FAILED",jdbc.queryForObject("SELECT status FROM rewrite_consumption WHERE creator_id=? AND request_key=?",String.class,owner,chargedKey));
+        assertEquals(1,jdbc.queryForObject("SELECT COUNT(*) FROM credit_ledger WHERE owner_id=? AND entry_type='REFUND'",Integer.class,owner));
+    }
+
+    /** 已交付成功的改写不能被旧 fail 调用重新退款。 */
+    @Test
+    void succeededRewriteCannotBeRefundedByALateFailure(){
+        String owner=identity.create().creatorId();credits.credit(owner,20,"fund-"+owner);
+        for(int i=0;i<5;i++)rewriteService.rewrite(owner,"我想感谢爸爸","zh-CN",UUID.randomUUID().toString());
+        String key=UUID.randomUUID().toString();String result=rewriteService.rewrite(owner,"我想感谢爸爸","zh-CN",key);assertEquals(19,credits.balance(owner));
+        rewriteCharges.fail(owner,key);rewriteCharges.fail(owner,key);assertEquals(19,credits.balance(owner));assertEquals(result,rewriteService.rewrite(owner,"我想感谢爸爸","zh-CN",key));
+        assertEquals("SUCCEEDED",jdbc.queryForObject("SELECT status FROM rewrite_consumption WHERE creator_id=? AND request_key=?",String.class,owner,key));
+        assertEquals(0,jdbc.queryForObject("SELECT refunded FROM rewrite_consumption WHERE creator_id=? AND request_key=?",Integer.class,owner,key));
+        assertEquals(0,jdbc.queryForObject("SELECT COUNT(*) FROM credit_ledger WHERE owner_id=? AND entry_type='REFUND'",Integer.class,owner));
+        assertEquals(6,rewriter.calls.get());
     }
 
     /** 并发歌词生成全部失败时，每笔扣费精确退还一次，账本净零、流水状态一致。 */
@@ -214,18 +231,21 @@ class CostControlConcurrencyTest {
         String owner = identity.create().creatorId();
         long fund = 60;
         credits.credit(owner, fund, "fund-" + owner);
-        String work = works.create(owner, new Draft("妈妈", "生日", "一起做饭", "愿你快乐", "民谣", "故事")).id();
-        lyricsWriter.failure = new DomainException("LYRICS_PROVIDER_TIMEOUT", "模型超时");
         int tasks = 10;
+        var distinctWorks=new ArrayList<String>();for(int i=0;i<tasks;i++)distinctWorks.add(works.create(owner,new Draft("妈妈","生日","一起做饭","愿你快乐","民谣","故事")).id());
+        // 十个独立作品的明确拒绝；同作品未决请求防重和超时未知不属于已确认失败退款。
+        lyricsWriter.failure = new DomainException("LYRICS_PROVIDER_UNAVAILABLE", "供应商明确拒绝受理");
+        var workIndex=new AtomicInteger();
         var results = runConcurrently(16, tasks, () -> {
             try {
-                composer.compose(owner, work, 0, UUID.randomUUID().toString(), "zh-CN");
+                composer.compose(owner, distinctWorks.get(workIndex.getAndIncrement()), 0, UUID.randomUUID().toString(), "zh-CN");
                 return "OK";
             } catch (DomainException e) {
                 return e.code();
             }
         });
-        assertTrue(results.stream().noneMatch("OK"::equals), "所有并发生成均因模型失败而中止");
+        assertEquals(tasks,results.stream().filter("LYRICS_PROVIDER_UNAVAILABLE"::equals).count(), "十笔均实际调用模型并得到明确拒绝");
+        assertEquals(tasks,lyricsWriter.calls.get());
         assertEquals(fund, credits.balance(owner), "并发失败下账本净零（每笔扣费均被精确退还）");
         var rows = consumptions(owner);
         assertEquals(tasks, rows.size(), "每次生成均留下一条流水");
@@ -234,6 +254,7 @@ class CostControlConcurrencyTest {
             assertEquals(1, row.refunded(), "每笔失败仅退款一次");
             assertEquals(LYRICS_COST, row.amount());
         }
+        assertEquals(tasks,jdbc.queryForObject("SELECT COUNT(*) FROM credit_ledger WHERE owner_id=? AND entry_type='REFUND'",Integer.class,owner));
     }
 
     // ===== 并发执行辅助 =====
@@ -255,6 +276,7 @@ class CostControlConcurrencyTest {
             return out;
         } finally {
             pool.shutdownNow();
+            assertTrue(pool.awaitTermination(15,TimeUnit.SECONDS),"全部并发任务必须结束才能开始下一项测试");
         }
     }
 

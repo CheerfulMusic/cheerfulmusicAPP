@@ -27,8 +27,8 @@ import org.springframework.test.context.ActiveProfiles;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * 歌词生成的积分扣费链路：成功才扣、失败必退、重复提交只扣一次、并发不超额。
- * 使用真实数据库与真实积分账本，不使用 mock 替代验收。
+ * 歌词扣费：确定失败才退，未知结果保留预扣；重复提交只扣一次，并发不超额。
+ * 本类是 H2 应用回归；真实 MySQL 验收由独立集成测试负责。
  */
 @SpringBootTest(webEnvironment=SpringBootTest.WebEnvironment.RANDOM_PORT,properties={
     "spring.datasource.url=jdbc:h2:mem:lyrics_credits;MODE=MySQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1",
@@ -114,7 +114,7 @@ class LyricsCreditsIntegrationTest {
 
     @Test void failedGenerationRefundsTheReservedCredits(){
         var f=fixture();fund(f,20);
-        writer.failure=new DomainException("LYRICS_PROVIDER_TIMEOUT","歌词编写超时，可以重新编写；已有内容仍会保留。");
+        writer.failure=new DomainException("LYRICS_RESPONSE_INVALID","模型已返回无效结果，本次生成失败。");
         String key=UUID.randomUUID().toString();
         assertThrows(DomainException.class,()->composer.compose(f.owner,f.work,0,key,"zh-CN"));
         assertEquals(20,credits.balance(f.owner));
@@ -122,8 +122,29 @@ class LyricsCreditsIntegrationTest {
         assertEquals(1,rows.size());
         assertEquals("FAILED",rows.get(0).status());
         assertEquals(1,rows.get(0).refunded());
+        assertEquals("FAILED",composer.requestState(f.owner,f.work,key).status());
+        assertEquals("LYRICS_RESPONSE_INVALID",composer.requestState(f.owner,f.work,key).errorCode());
+    }
+
+    @Test void providerTimeoutRetainsChargeAndRejectsSameOrDifferentKeyUntilReconciled(){
+        var f=fixture();fund(f,20);String key=UUID.randomUUID().toString();
+        writer.failure=new DomainException("LYRICS_PROVIDER_TIMEOUT","供应商结果尚未确认");
+        assertThrows(DomainException.class,()->composer.compose(f.owner,f.work,0,key,"zh-CN"));
+        assertEquals(20-LYRICS_COST,credits.balance(f.owner));
         assertEquals("UNKNOWN",composer.requestState(f.owner,f.work,key).status());
-        assertEquals("LYRICS_PROVIDER_TIMEOUT",composer.requestState(f.owner,f.work,key).errorCode());
+        assertEquals("UNKNOWN",consumptions(f.owner).get(0).status());
+        assertEquals(0,consumptions(f.owner).get(0).refunded());
+        assertEquals("LYRICS_REQUEST_PENDING",assertThrows(DomainException.class,()->composer.compose(f.owner,f.work,0,key,"zh-CN")).code());
+        assertEquals("LYRICS_REQUEST_PENDING",assertThrows(DomainException.class,()->composer.compose(f.owner,f.work,0,UUID.randomUUID().toString(),"zh-CN")).code());
+        requests.failed(f.work,key,"LYRICS_PROVIDER_TIMEOUT");
+        assertEquals(1,writer.calls.get());assertEquals(1,consumptions(f.owner).size());
+        assertEquals(0,jdbc.queryForObject("SELECT COUNT(*) FROM credit_ledger WHERE entry_type='REFUND' AND reference_id=?",Integer.class,"lyrics:"+f.work+":"+key));
+        // A verified late result settles the original reservation; it never charges again.
+        var revision=lyrics.save(f.owner,f.work,0,"晚到的歌词","[Chorus]\n愿你的每一天都有光");
+        requests.complete(f.work,key,revision.id());
+        assertEquals("SUCCEEDED",composer.requestState(f.owner,f.work,key).status());
+        assertEquals(revision.id(),composer.compose(f.owner,f.work,0,key,"zh-CN").id());
+        assertEquals(20-LYRICS_COST,credits.balance(f.owner));assertEquals(0,consumptions(f.owner).get(0).refunded());
     }
 
     @Test void emptyLyricsResultDoesNotCharge(){
@@ -169,10 +190,11 @@ class LyricsCreditsIntegrationTest {
 
     @Test void concurrentRequestsNeverOverspend() throws Exception{
         var f=fixture();fund(f,LYRICS_COST);
+        var otherWork=fixture(f.owner);
         var pool=Executors.newFixedThreadPool(2);var start=new CountDownLatch(1);
         try{
             var a=pool.submit(()->attempt(f,UUID.randomUUID().toString(),start));
-            var b=pool.submit(()->attempt(f,UUID.randomUUID().toString(),start));
+            var b=pool.submit(()->attempt(otherWork,UUID.randomUUID().toString(),start));
             start.countDown();
             var outcomes=List.of(a.get(20,TimeUnit.SECONDS),b.get(20,TimeUnit.SECONDS));
             assertEquals(1,outcomes.stream().filter("ok"::equals).count());
@@ -182,15 +204,15 @@ class LyricsCreditsIntegrationTest {
         }finally{pool.shutdownNow();}
     }
 
-    @Test void staleRequestIsRefundedWhenRecovered(){
+    @Test void staleRequestIsUnknownWithoutAProviderFailureProof(){
         var f=fixture();fund(f,20);
         String key=UUID.randomUUID().toString();
         requests.claim(f.owner,f.work,key,"hash");
         assertEquals(20-LYRICS_COST,credits.balance(f.owner));
         jdbc.update("UPDATE lyrics_composition_request SET created_at=TIMESTAMPADD(SECOND,-181,CURRENT_TIMESTAMP) WHERE work_id=? AND request_key=?",f.work,key);
-        assertEquals("FAILED",composer.requestState(f.owner,f.work,key).status());
-        assertEquals(20,credits.balance(f.owner));
-        assertEquals(1,consumptions(f.owner).get(0).refunded());
+        assertEquals("UNKNOWN",composer.requestState(f.owner,f.work,key).status());
+        assertEquals(20-LYRICS_COST,credits.balance(f.owner));
+        assertEquals(0,consumptions(f.owner).get(0).refunded());
     }
 
     @Test void creditsEndpointMatchesRealBalanceAndPublishedPrice() throws Exception {
@@ -246,12 +268,12 @@ class LyricsCreditsIntegrationTest {
     @Test void refundIsIdempotentAndTraceableToTheOriginalConsumption(){
         var f=fixture();fund(f,20);
         String key=UUID.randomUUID().toString();
-        writer.failure=new DomainException("LYRICS_PROVIDER_TIMEOUT","歌词编写超时，可以重新编写；已有内容仍会保留。");
+        writer.failure=new DomainException("LYRICS_RESPONSE_INVALID","模型已返回无效结果，本次生成失败。");
         assertThrows(DomainException.class,()->composer.compose(f.owner,f.work,0,key,"zh-CN"));
         assertEquals(20,credits.balance(f.owner));
         // 重复结算失败与超时清扫都不得二次退款。
-        requests.failed(f.work,key,"LYRICS_PROVIDER_TIMEOUT");
-        requests.failed(f.work,key,"LYRICS_PROVIDER_TIMEOUT");
+        requests.failed(f.work,key,"LYRICS_RESPONSE_INVALID");
+        requests.failed(f.work,key,"LYRICS_RESPONSE_INVALID");
         assertEquals(20,credits.balance(f.owner));
         String reference="lyrics:"+f.work+":"+key;
         assertEquals(1,jdbc.queryForObject("SELECT COUNT(*) FROM credit_ledger WHERE entry_type='DEBIT' AND reference_id=?",Integer.class,reference));
@@ -261,8 +283,8 @@ class LyricsCreditsIntegrationTest {
         assertEquals(1,jdbc.queryForObject("SELECT refunded FROM credit_consumption WHERE consumption_type='LYRICS_GENERATION' AND request_key=?",Integer.class,key));
     }
 
-    /** 超时清扫重复触发也只退一次。 */
-    @Test void staleSweepRefundsOnlyOnce(){
+    /** 重复超时清扫不能将未知结果伪装为确定失败。 */
+    @Test void staleSweepNeverRefundsAnUnconfirmedSubmission(){
         var f=fixture();fund(f,20);
         String key=UUID.randomUUID().toString();
         requests.claim(f.owner,f.work,key,"hash");
@@ -271,8 +293,9 @@ class LyricsCreditsIntegrationTest {
         composer.requestState(f.owner,f.work,key);
         composer.requestState(f.owner,f.work,key);
         composer.requestState(f.owner,f.work,key);
-        assertEquals(20,credits.balance(f.owner));
-        assertEquals(1,jdbc.queryForObject("SELECT COUNT(*) FROM credit_ledger WHERE entry_type='REFUND' AND reference_id=?",Integer.class,"lyrics:"+f.work+":"+key));
+        assertEquals("UNKNOWN",composer.requestState(f.owner,f.work,key).status());
+        assertEquals(20-LYRICS_COST,credits.balance(f.owner));
+        assertEquals(0,jdbc.queryForObject("SELECT COUNT(*) FROM credit_ledger WHERE entry_type='REFUND' AND reference_id=?",Integer.class,"lyrics:"+f.work+":"+key));
     }
 
     /** 充值到账后余额接口立刻反映新余额；同一订单重复入账只加一次。 */
@@ -292,7 +315,7 @@ class LyricsCreditsIntegrationTest {
         var session=sessionOwner();
         var f=fixture(session.owner());
         fund(f,20);
-        writer.failure=new DomainException("LYRICS_PROVIDER_TIMEOUT","歌词编写超时，可以重新编写；已有内容仍会保留。");
+        writer.failure=new DomainException("LYRICS_RESPONSE_INVALID","模型已返回无效结果，本次生成失败。");
         assertThrows(DomainException.class,()->composer.compose(f.owner,f.work,0,UUID.randomUUID().toString(),"zh-CN"));
         assertEquals(20,credits.balance(f.owner));
         assertEquals(20,creditsEndpointBalance(session));

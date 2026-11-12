@@ -63,6 +63,21 @@ describe('user avatar', () => {
 })
 
 describe('avatar generation', () => {
+  it('discloses the credit cost and recovery policy in both languages before sending', () => {
+    const dialog = mount(UserAvatarDialog, { props: { busy: false, error: '', disabled: false, generationAvailable: true } })
+    try {
+      expect(dialog.text()).toContain('消耗 5 积分')
+      expect(dialog.text()).toContain('积分会退回')
+      expect(dialog.text()).toContain('等待核实')
+      setLocale('en')
+    } finally { dialog.unmount() }
+    const englishDialog = mount(UserAvatarDialog, { props: { busy: false, error: '', disabled: false, generationAvailable: true } })
+    try {
+      expect(englishDialog.text()).toContain('costs 5 credits')
+      expect(englishDialog.text()).toContain('Credits are returned')
+      expect(englishDialog.text()).toContain('pending verification')
+    } finally { englishDialog.unmount() }
+  })
   it('explains unavailable generation while leaving upload available', () => {
     const dialog = mount(UserAvatarDialog, { props: { busy: false, error: '', disabled: false, generationAvailable: false } })
     try {
@@ -70,6 +85,42 @@ describe('avatar generation', () => {
       expect(dialog.find('input[type=file]').attributes('disabled')).toBeUndefined()
       expect(dialog.find('button.avatar-generate').attributes('disabled')).toBeDefined()
     } finally { dialog.unmount() }
+  })
+  it.each(['FAILED', 'SUPERSEDED'])('reports conditional refunds for %s tasks', async status => {
+    api.get.mockResolvedValue({ id: 'task', status, available: true })
+    const scope = effectScope(), generation = scope.run(() => useAvatarGeneration(async () => undefined))!
+    try {
+      generation.start(); await vi.waitFor(() => expect(generation.message.value).toContain('如本次已扣积分，已退还'))
+    } finally { scope.stop() }
+  })
+  it.each(['SUCCEEDED', 'FAILED', 'SUPERSEDED'])('refreshes credits once when %s is observed', async status => {
+    api.get.mockResolvedValue({ id: 'task', status, available: true })
+    const refreshCredits = vi.fn(async () => undefined), scope = effectScope()
+    const generation = scope.run(() => useAvatarGeneration(async () => undefined, refreshCredits))!
+    try {
+      generation.start(); await vi.waitFor(() => expect(refreshCredits).toHaveBeenCalledTimes(1))
+      generation.start(); await vi.waitFor(() => expect(api.get).toHaveBeenCalledTimes(2))
+      expect(refreshCredits).toHaveBeenCalledTimes(1)
+    } finally { scope.stop() }
+  })
+  it('does not refresh credits for a delayed terminal response after an identity change', async () => {
+    let resolve!: (value: unknown) => void
+    api.get.mockImplementation(() => new Promise(done => { resolve = done }))
+    const refreshCredits = vi.fn(async () => undefined), scope = effectScope()
+    const generation = scope.run(() => useAvatarGeneration(async () => undefined, refreshCredits))!
+    try {
+      generation.start(); await vi.waitFor(() => expect(api.get).toHaveBeenCalled())
+      api.owner = 'owner-b'; resolve({ id: 'task', status: 'FAILED', available: true })
+      await Promise.resolve(); await Promise.resolve()
+      expect(refreshCredits).not.toHaveBeenCalled()
+    } finally { scope.stop() }
+  })
+  it('keeps the terminal message when balance refresh fails', async () => {
+    api.get.mockResolvedValue({ id: 'task', status: 'FAILED', available: true })
+    const scope = effectScope(), generation = scope.run(() => useAvatarGeneration(async () => undefined, async () => { throw new Error('offline') }))!
+    try {
+      generation.start(); await vi.waitFor(() => expect(generation.message.value).toContain('已退还'))
+    } finally { scope.stop() }
   })
   it('resumes a running task and refreshes the avatar when it succeeds', async () => {
     vi.useFakeTimers()

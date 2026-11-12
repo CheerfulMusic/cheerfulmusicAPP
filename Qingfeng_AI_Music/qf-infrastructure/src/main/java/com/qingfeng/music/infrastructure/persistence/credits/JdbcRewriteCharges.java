@@ -17,11 +17,11 @@ import org.springframework.transaction.support.TransactionTemplate;
  * 预扣、免费额度占用与积分扣减在同一事务内完成；失败时退款与状态流转同事务，
  * 不会出现「退款失败却显示已退」的中间态。唯一键 (creator_id, request_key) 保证幂等。
  *
- * 并发上限统计在途（RESERVED）记录并落在数据库上，因此跨实例有效；
- * 进程崩溃留下的孤儿记录会被回收，不会永久占用并发额度。
+ * 并发上限统计 RESERVED/SUBMITTED/UNKNOWN，因此跨实例有效。
+ * 只有未提交到供应商的 RESERVED 能安全回收；已提交的未知结果必须核对。
  */
 public final class JdbcRewriteCharges implements RewriteCharges {
-    /** 超过这个时长仍在途的请求视为进程崩溃遗留，按失败处理并退还积分。 */
+    /** Age can expire a never-submitted reservation, never establish a provider rejection. */
     static final int STALE_SECONDS = 300;
     private final JdbcTemplate jdbc;
     private final TransactionTemplate transactions;
@@ -40,8 +40,10 @@ public final class JdbcRewriteCharges implements RewriteCharges {
         // 避免在一个 creator 锁内跨 owner 退款造成锁序反转（creatorA→creatorB vs creatorB→creatorA）。
         reapStale();
         return transactions.execute(tx -> {
-            lockCreator(owner); // 统一锁序：creator → credit_lock（admit/debit 内部再取 credit_lock）
-            var prior = jdbc.query("SELECT status,amount,charged,result_text FROM rewrite_consumption WHERE creator_id=? AND request_key=?", (rs, n) -> new Prior(rs.getString(1), rs.getLong(2), rs.getInt(3), rs.getString(4)), owner, requestKey);
+            lockCreator(owner);
+            // All reserve paths take admission before any rewrite row, avoiding row -> admission cycles.
+            lockAdmission();
+            var prior = jdbc.query("SELECT status,amount,charged,result_text FROM rewrite_consumption WHERE creator_id=? AND request_key=? FOR UPDATE", (rs, n) -> new Prior(rs.getString(1), rs.getLong(2), rs.getInt(3), rs.getString(4)), owner, requestKey);
             if (!prior.isEmpty()) {
                 var row = prior.get(0);
                 return new Reservation(false, row.charged() == 0, row.amount(), row.status(), row.result());
@@ -59,17 +61,36 @@ public final class JdbcRewriteCharges implements RewriteCharges {
     }
 
     public void succeed(String owner, String requestKey, String result) {
-        transactions.executeWithoutResult(tx ->
-            jdbc.update("UPDATE rewrite_consumption SET status='SUCCEEDED',result_text=?,updated_at=CURRENT_TIMESTAMP WHERE creator_id=? AND request_key=?", result, owner, requestKey));
+        transactions.executeWithoutResult(tx -> {
+            lockCreator(owner);
+            lockAdmission();
+            var rows=jdbc.queryForList("SELECT status,result_text FROM rewrite_consumption WHERE creator_id=? AND request_key=? FOR UPDATE",owner,requestKey);
+            if(rows.size()!=1)throw new DomainException("REWRITE_REQUEST_FAILED","改写记录不存在。");
+            var row=rows.get(0);
+            if("SUCCEEDED".equals(row.get("status"))){if(!java.util.Objects.equals(result,row.get("result_text")))throw new DomainException("REWRITE_RESULT_CONFLICT","改写结果待人工核对。");return;}
+            if(!java.util.Set.of("SUBMITTED","UNKNOWN").contains(row.get("status")))throw new DomainException("REWRITE_REQUEST_FAILED","改写请求已结束。");
+            jdbc.update("UPDATE rewrite_consumption SET status='SUCCEEDED',result_text=?,updated_at=CURRENT_TIMESTAMP WHERE creator_id=? AND request_key=?",result,owner,requestKey);
+        });
     }
+
+    public void submitted(String owner,String requestKey){transactions.executeWithoutResult(tx->{lockCreator(owner);
+        lockAdmission();
+        if(jdbc.update("UPDATE rewrite_consumption SET status='SUBMITTED',updated_at=CURRENT_TIMESTAMP WHERE creator_id=? AND request_key=? AND status='RESERVED'",owner,requestKey)!=1)
+            throw new DomainException("REWRITE_REQUEST_PENDING","改写已提交或结束，请勿重复提交。");
+    });}
+    public void unknown(String owner,String requestKey){transactions.executeWithoutResult(tx->{lockCreator(owner);
+        lockAdmission();
+        jdbc.update("UPDATE rewrite_consumption SET status='UNKNOWN',updated_at=CURRENT_TIMESTAMP WHERE creator_id=? AND request_key=? AND status='SUBMITTED'",owner,requestKey);
+    });}
 
     public void fail(String owner, String requestKey) {
         transactions.executeWithoutResult(tx -> {
             lockCreator(owner); // 统一锁序：creator → rewrite 行 → credit_lock
-            var rows = jdbc.query("SELECT amount,charged,refunded FROM rewrite_consumption WHERE creator_id=? AND request_key=? FOR UPDATE", (rs, n) -> new Charge(rs.getLong(1), rs.getInt(2), rs.getInt(3)), owner, requestKey);
+            lockAdmission();
+            var rows = jdbc.query("SELECT amount,charged,refunded,status FROM rewrite_consumption WHERE creator_id=? AND request_key=? FOR UPDATE", (rs, n) -> new Charge(rs.getLong(1), rs.getInt(2), rs.getInt(3),rs.getString(4)), owner, requestKey);
             if (rows.isEmpty()) return;
             var row = rows.get(0);
-            if (row.refunded() == 1) return;
+            if (row.refunded() == 1 || !java.util.Set.of("RESERVED","SUBMITTED").contains(row.status())) return;
             if (row.charged() == 1) credits.refund(owner, CreditReferences.of("rewrite", owner, requestKey));
             jdbc.update("UPDATE rewrite_consumption SET status='FAILED',refunded=1,updated_at=CURRENT_TIMESTAMP WHERE creator_id=? AND request_key=?", owner, requestKey);
         });
@@ -87,22 +108,25 @@ public final class JdbcRewriteCharges implements RewriteCharges {
      * 统计落在数据库上，因此多副本部署时上限不会随实例数放大。
      */
     private void admit(String owner) {
-        jdbc.queryForObject("SELECT id FROM rewrite_admission_lock WHERE id=1 FOR UPDATE", Integer.class);
-        Integer inflight = jdbc.queryForObject("SELECT COUNT(*) FROM rewrite_consumption WHERE status='RESERVED'", Integer.class);
-        if (inflight != null && inflight >= globalConcurrency) throw busy();
-        Integer mine = jdbc.queryForObject("SELECT COUNT(*) FROM rewrite_consumption WHERE status='RESERVED' AND creator_id=?", Integer.class, owner);
-        if (mine != null && mine >= perCreatorConcurrency) throw busy();
+        int inflight=jdbc.queryForList("SELECT id FROM rewrite_consumption WHERE status IN ('RESERVED','SUBMITTED','UNKNOWN') FOR UPDATE").size();
+        if (inflight >= globalConcurrency) throw busy();
+        int mine=jdbc.queryForList("SELECT id FROM rewrite_consumption WHERE status IN ('RESERVED','SUBMITTED','UNKNOWN') AND creator_id=? FOR UPDATE",owner).size();
+        if (mine >= perCreatorConcurrency) throw busy();
     }
 
-    /** 回收进程崩溃遗留的在途记录：按失败处理并退还已扣积分，不让它永久占用并发额度。 */
+    /** Only RESERVED proves the provider was not called; submitted stale work stays UNKNOWN. */
     private void reapStale() {
-        var stale = jdbc.query("SELECT creator_id,request_key FROM rewrite_consumption WHERE status='RESERVED' AND created_at<TIMESTAMPADD(SECOND,-?,CURRENT_TIMESTAMP)", (rs, n) -> new String[]{rs.getString(1), rs.getString(2)}, STALE_SECONDS);
+        if(org.springframework.transaction.support.TransactionSynchronizationManager.isActualTransactionActive())return;
+        var stale = jdbc.query("SELECT creator_id,request_key FROM rewrite_consumption WHERE status IN ('RESERVED','SUBMITTED') AND created_at<TIMESTAMPADD(SECOND,-?,CURRENT_TIMESTAMP)", (rs, n) -> new String[]{rs.getString(1), rs.getString(2)}, STALE_SECONDS);
         for (var row : stale) {
             try {
                 // 每条 stale 记录单独一个事务，统一锁序 creator → rewrite 行 → credit_lock；
                 // 先按 RESERVED 条件更新状态（并发下仅一个事务能命中），命中后才退款，二者同事务，失败一起回滚。
                 transactions.executeWithoutResult(tx -> {
                     lockCreator(row[0]);
+                    lockAdmission();
+                    // Persisted submission may already have incurred provider cost. Keep debit/quota.
+                    jdbc.update("UPDATE rewrite_consumption SET status='UNKNOWN',updated_at=CURRENT_TIMESTAMP WHERE creator_id=? AND request_key=? AND status='SUBMITTED'",row[0],row[1]);
                     int updated = jdbc.update("UPDATE rewrite_consumption SET status='FAILED',refunded=1,updated_at=CURRENT_TIMESTAMP WHERE creator_id=? AND request_key=? AND status='RESERVED'", row[0], row[1]);
                     if (updated == 1) credits.refund(row[0], CreditReferences.of("rewrite", row[0], row[1]));
                 });
@@ -113,8 +137,10 @@ public final class JdbcRewriteCharges implements RewriteCharges {
     }
 
     private DomainException busy() { return new DomainException("REWRITE_GENERATION_BUSY", "AI改写正在处理中，请稍后再试。"); }
+    /** Reserve and every status writer acquire admission before any rewrite/status-index row. */
+    private void lockAdmission(){jdbc.queryForObject("SELECT id FROM rewrite_admission_lock WHERE id=1 FOR UPDATE",Integer.class);}
     /** 以 creator 行的排他锁作为积分事务的第一把锁，建立与账本/额度一致的全局锁序。 */
     private void lockCreator(String owner) { if (owner != null && !owner.isBlank()) jdbc.queryForList("SELECT id FROM creator WHERE id=? FOR UPDATE", owner); }
     private record Prior(String status, long amount, int charged, String result) {}
-    private record Charge(long amount, int charged, int refunded) {}
+    private record Charge(long amount, int charged, int refunded,String status) {}
 }
