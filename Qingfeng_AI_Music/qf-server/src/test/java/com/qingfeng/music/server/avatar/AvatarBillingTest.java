@@ -63,7 +63,7 @@ class AvatarBillingTest {
         assertEquals(first.id(),service.start("alice",key,"猫").id()); verify(provider,times(1)).submit("猫");
         when(provider.query("remote")).thenReturn(new AvatarImageProvider.Result("SUCCEEDED","https://example.test/result"));
         when(provider.download(anyString())).thenReturn(new ByteArrayInputStream(new byte[]{1}));
-        when(avatars.saveIfVersion(eq("alice"),isNull(),any(),eq(first.id()))).thenReturn(Optional.of(new AvatarService.View("image",first.id())));
+        when(avatars.saveGenerated(eq("alice"),isNull(),any(),eq(first.id()),anyString())).thenReturn(Optional.of(new AvatarService.View("image",first.id())));
         service.runOnce(); service.runOnce();
         assertEquals("SUCCEEDED",service.latest("alice").status()); assertEquals(15,ledger.balance("alice")); assertEquals(0,count("REFUND"));
     }
@@ -120,7 +120,7 @@ class AvatarBillingTest {
         when(provider.submit(anyString())).thenReturn("remote"); var task=service.start("alice",UUID.randomUUID().toString(),"猫");
         when(provider.query("remote")).thenReturn(new AvatarImageProvider.Result("SUCCEEDED","https://example.test/result"));
         when(provider.download(anyString())).thenReturn(new ByteArrayInputStream(new byte[]{1}));
-        when(avatars.saveIfVersion(eq("alice"),eq("old-version"),any(),eq(task.id()))).thenReturn(Optional.empty());
+        when(avatars.saveGenerated(eq("alice"),eq("old-version"),any(),eq(task.id()),anyString())).thenReturn(Optional.empty());
         when(avatars.current("alice")).thenReturn(new AvatarService.View("new","new-version"));
         service.runOnce(); service.runOnce();
         assertEquals("SUPERSEDED",service.latest("alice").status()); assertEquals(20,ledger.balance("alice")); assertEquals(1,count("REFUND"));

@@ -119,6 +119,8 @@ public final class AgentLibraryActions implements AgentApplicationActions {
                 yield ok(action,"作品已改名为《"+title+"》。");
             }
             case "update_work" -> {
+                if(java.util.stream.Stream.of("recipient","occasion","story","message","title").map(args::get).noneMatch(value->value instanceof String textValue&&!textValue.isBlank()))
+                    throw invalid("请提供要修改的作品资料；未填写的字段会保留原值。");
                 var draft=new WorkApi.Draft(field(args,"recipient",work.recipient(),80),field(args,"occasion",work.occasion(),32),field(args,"story",work.story(),4000),field(args,"message",work.message(),500),work.style(),field(args,"title",work.title(),100),work.vocalGender());
                 works.update(owner,id,work.version(),draft);
                 if(args.containsKey("title")&&id.equals(conversations.current(owner).currentWorkId())) {
@@ -320,7 +322,7 @@ public final class AgentLibraryActions implements AgentApplicationActions {
     private static Command send(String label,String text) { return new Command(label,text,"send"); }
     private static String value(Map<String,Object> args,String key,String fallback) { Object value=args.get(key); return value==null||value.toString().isBlank()?fallback:value.toString().trim(); }
     private static String required(Map<String,Object> args,String key,int max) { String text=value(args,key,null); if(text==null||text.length()>max) throw invalid("请提供有效的 "+key+"。"); return text; }
-    private static String field(Map<String,Object> args,String key,String fallback,int max) { String text=args.containsKey(key)?Objects.toString(args.get(key),"").trim():fallback; if(text.length()>max)throw invalid(key+" 超出长度限制。");return text; }
+    private static String field(Map<String,Object> args,String key,String fallback,int max) { String text=Objects.toString(args.get(key),"").trim();if(text.isBlank())text=fallback;if(text.length()>max)throw invalid(key+" 超出长度限制。");return text; }
     private static long number(Map<String,Object> args,String key,long fallback) { try { return Long.parseLong(value(args,key,Long.toString(fallback))); } catch(NumberFormatException error) { throw invalid("序号或版本参数无效。"); } }
     private static DomainException invalid(String message) { return new DomainException("INVALID_AGENT_APPLICATION_ARGUMENT",message); }
     private static class AmbiguousWork extends RuntimeException {}

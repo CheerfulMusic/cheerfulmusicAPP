@@ -91,6 +91,26 @@ class AgentLibraryActionsTest {
         run("rename_work",Map.of("title","新名字"));
         verify(works).update("owner","W",2,new WorkApi.Draft("妈妈","生日","原故事","祝福","民谣","新名字","FEMALE"));
     }
+    @Test void nativeAndLegacyStoryUpdatesPreserveUnmentionedPrivateDraftFields(){
+        String args="{\"story\":\"新的故事\",\"recipient\":null,\"occasion\":\"\",\"message\":null,\"title\":null}";
+        var context=new AgentChatModel.Context("修改故事为新的故事","zh-CN",List.of(),card(),null,actions.capabilities(),null);
+        var codecJson=new tools.jackson.databind.ObjectMapper();
+        var nativeMessage=codecJson.writeValueAsString(Map.of("tool_calls",List.of(Map.of("id","one","type","function","function",Map.of("name","update_work","arguments",args)))));
+        var nativePlan=com.qingfeng.music.infrastructure.provider.AgentPlanCodec.parseMessage(nativeMessage,context);
+        var legacyPlan=com.qingfeng.music.infrastructure.provider.AgentPlanCodec.parse("{\"action\":\"update_work\",\"reply\":\"更新故事\",\"args\":"+args+"}",context);
+        for(var plan:List.of(nativePlan,legacyPlan))run(plan.action(),plan.args());
+        verify(works,times(2)).update("owner","W",2,new WorkApi.Draft("妈妈","生日","新的故事","祝福","民谣","海风","FEMALE"));
+    }
+    @Test void directMutationAlsoTreatsNullAndBlankFieldsAsUnspecified(){
+        var args=new LinkedHashMap<String,Object>();args.put("story","新的故事");args.put("recipient",null);args.put("message","");args.put("title","  ");
+        run("update_work",args);
+        verify(works).update("owner","W",2,new WorkApi.Draft("妈妈","生日","新的故事","祝福","民谣","海风","FEMALE"));
+    }
+    @Test void whollyUnspecifiedDraftUpdateDoesNotWriteOrIncrementTheVersion(){
+        var args=new LinkedHashMap<String,Object>();args.put("title",null);args.put("story"," ");
+        assertThrows(DomainException.class,()->run("update_work",args));
+        verify(works,never()).update(anyString(),anyString(),anyLong(),any());
+    }
     @Test void deletingAWorkWithAnInFlightTaskDoesNotDelete(){
         when(generation.list("owner","W")).thenReturn(List.of(new GenerationApi.Task("T","W","R",2,KEY,"歌名","歌词","民谣","stub",GenerationStatus.RUNNING,NOW)));
         assertThrows(DomainException.class,()->run("delete_work",Map.of("workId","W","expectedVersion",2)));

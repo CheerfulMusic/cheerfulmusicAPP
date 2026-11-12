@@ -58,7 +58,7 @@ class AvatarGenerationServiceTest {
         when(provider.submit(anyString())).thenReturn("remote"); var task=service.start("alice",UUID.randomUUID().toString(),"猫");
         when(provider.query("remote")).thenReturn(new AvatarImageProvider.Result("SUCCEEDED","https://provider.example/image"));
         when(provider.download(anyString())).thenReturn(new ByteArrayInputStream(new byte[]{1}));
-        when(avatars.saveIfVersion(eq("alice"),eq("old-version"),any(),eq(task.id()))).thenReturn(Optional.empty());
+        when(avatars.saveGenerated(eq("alice"),eq("old-version"),any(),eq(task.id()),anyString())).thenReturn(Optional.empty());
         when(avatars.current("alice")).thenReturn(new AvatarService.View("new","new-version"));
         service.runOnce(); assertEquals("SUPERSEDED",service.latest("alice").status());
     }
@@ -87,7 +87,7 @@ class AvatarGenerationServiceTest {
         when(provider.submit(anyString())).thenReturn("remote"); var task=service.start("alice",UUID.randomUUID().toString(),"猫");
         when(provider.query("remote")).thenReturn(new AvatarImageProvider.Result("SUCCEEDED","https://provider.example/image"));
         when(provider.download(anyString())).thenReturn(new ByteArrayInputStream(new byte[]{1}));
-        when(avatars.saveIfVersion(eq("alice"),isNull(),any(),eq(task.id()))).thenThrow(new DomainException("INVALID_COVER_IMAGE","invalid"));
+        when(avatars.saveGenerated(eq("alice"),isNull(),any(),eq(task.id()),anyString())).thenThrow(new DomainException("INVALID_COVER_IMAGE","invalid"));
         service.runOnce(); assertEquals("FAILED",service.latest("alice").status());
     }
     @Test void disabledProviderFailsBeforeCreatingAnyTask() {

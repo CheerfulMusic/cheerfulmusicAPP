@@ -16,4 +16,12 @@ it('preserves the supplied draft and records the sole new-user bonus amendment',
   expect(terms.originalSourceSha256).toBe(previous.sourceSha256)
   expect(terms.paragraphs).toEqual(previous.paragraphs.map(p=>p.replace('one-time award of 100 Promotional Credits','one-time award of 50 Promotional Credits')))
 })
+it('keeps the public static terms reached by the production route consistent with the 50-credit promotion',()=>{
+  const publicTerms=readFileSync('public/legal/terms.html','utf8')
+  const router=readFileSync('src/app/router/index.ts','utf8')
+  expect(router).toContain("window.location.replace('/legal/terms.html')")
+  const page=new DOMParser().parseFromString(publicTerms,'text/html')
+  expect(page.body.textContent).toContain('one-time award of 50 Promotional Credits')
+  expect(page.body.textContent).not.toContain('one-time award of 100 Promotional Credits')
+})
 

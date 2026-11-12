@@ -98,6 +98,117 @@ class AgentPlanServiceTest {
         verify(tools,never()).dispatch(eq(AgentTool.GENERATE_SONG),any(),anyString(),anyString());
         assertTrue(last().contains("INVALID_AGENT_PLAN"));
     }
+    @Test void unresolvedClearIntentDoesNotExecuteSettingsOrStartPaidGenerationThroughEitherProtocol(){
+        String text="先去掉所有乐器，再生成音乐";
+        String nativeMessage="{\"tool_calls\":[{\"id\":\"a\",\"type\":\"function\",\"function\":{\"name\":\"set_style\",\"arguments\":\"{\\\"instruments\\\":[]}\"}},{\"id\":\"b\",\"type\":\"function\",\"function\":{\"name\":\"generate_song\",\"arguments\":\"{}\"}}]}";
+        String legacy="{\"reply\":\"开始\",\"steps\":[{\"action\":\"set_style\",\"args\":{\"instruments\":[]}},{\"action\":\"generate_song\",\"args\":{}}]}";
+        when(model.respond(any())).thenAnswer(call->com.qingfeng.music.infrastructure.provider.AgentPlanCodec.parseMessage(nativeMessage,call.getArgument(0)));
+        service.send("owner","conversation",text,key(),"zh-CN");assertTrue(last().contains("尚未执行"));
+        when(model.respond(any())).thenAnswer(call->com.qingfeng.music.infrastructure.provider.AgentPlanCodec.parse(legacy,call.getArgument(0)));
+        service.send("owner","conversation",text,key(),"zh-CN");assertTrue(last().contains("尚未执行"));
+        verify(tools,never()).dispatch(eq(AgentTool.SET_STYLE),any(),anyString(),anyString());
+        verify(tools,never()).dispatch(eq(AgentTool.GENERATE_SONG),any(),anyString(),anyString());
+    }
+    @Test void aBadModelCannotShareTheCurrentWorkWhenNamedOrNumberedTargetSelectionWasOmitted(){
+        var works=mock(com.qingfeng.music.work.api.WorkApi.class);var shares=mock(com.qingfeng.music.sharing.api.SharingApi.class);
+        var media=mock(com.qingfeng.music.media.api.MediaApi.class);var generation=mock(com.qingfeng.music.generation.api.GenerationApi.class);
+        var reactions=mock(com.qingfeng.music.server.agent.AgentWorkReactions.class);
+        var protectedSocial=spy(new com.qingfeng.music.server.agent.DefaultAgentSocialActions(works,shares,media,generation,reactions));
+        service=new AgentChatService(conversations,tools,model,store,protectedSocial,List.of(library));
+        current.set(card("work","old-revision","task-1","SUCCEEDED"));when(model.respond(any())).thenReturn(plan(step("share")));
+        for(String text:List.of("分享第二首","分享《毕业》","分享毕业","分享上一版")) {
+            var result=service.send("owner","conversation",text,key(),"zh-CN");assertNull(result.action());assertTrue(last().contains("还没有确认"));
+        }
+        verify(protectedSocial,never()).execute(anyString(),anyString(),eq("share"),anyString(),anyString(),any());verifyNoInteractions(shares,media);
+    }
+    @Test void successfullyResolvedTargetCanStillCreateItsRealShareAndReplayDoesNotCreateAnother(){
+        var works=mock(com.qingfeng.music.work.api.WorkApi.class);var shares=mock(com.qingfeng.music.sharing.api.SharingApi.class);
+        var media=mock(com.qingfeng.music.media.api.MediaApi.class);var generation=mock(com.qingfeng.music.generation.api.GenerationApi.class);
+        var reactions=mock(com.qingfeng.music.server.agent.AgentWorkReactions.class);
+        var protectedSocial=new com.qingfeng.music.server.agent.DefaultAgentSocialActions(works,shares,media,generation,reactions);
+        when(works.get("owner","target")).thenReturn(new com.qingfeng.music.work.api.WorkApi.Work("target","","","","","民谣","作品",1,Instant.EPOCH,Instant.EPOCH,"AUTO"));
+        when(shares.createWithWorkTitle("owner","target","target-revision","asset-1","作品")).thenReturn(new com.qingfeng.music.sharing.api.SharingApi.Created("share-id","target-token",Instant.now().plusSeconds(3600)));
+        var selector=new AgentApplicationActions(){
+            public List<Capability> capabilities(){return List.of(new Capability("select_work","选择作品","workId","write"));}
+            public Result execute(String owner,String conversation,String action,Map<String,Object> args,String text,String key,SongCard song){current.set(card("target","target-revision","target-task","SUCCEEDED"));return new Result("已选择第二首","text",List.of(),List.of(),action);}
+        };
+        service=new AgentChatService(conversations,tools,model,store,protectedSocial,List.of(library,selector));
+        when(model.respond(any())).thenReturn(plan(new Step("select_work",Map.of("workId","target")),step("share")));
+        String request=key();var result=service.send("owner","conversation","分享第二首",request,"zh-CN");
+        assertEquals("share",result.action());assertEquals("/gift/target-token",result.shareUrl());
+        service.send("owner","conversation","分享第二首",request,"zh-CN");
+        verify(shares,times(1)).createWithWorkTitle("owner","target","target-revision","asset-1","作品");
+        verify(media,times(1)).get("owner","target","asset-1");
+    }
+    @Test void selectingACoverCannotResolveAWorkAndSelectingAWorkCannotResolveAnOldVersion(){
+        var selectors=new AgentApplicationActions(){
+            public List<Capability> capabilities(){return List.of(new Capability("select_cover","选择封面","coverId","write"),new Capability("select_work","选择作品","workId","write"));}
+            public Result execute(String owner,String conversation,String action,Map<String,Object> args,String text,String key,SongCard song){return new Result("已选择","text",List.of(),List.of(),action);}
+        };
+        service=new AgentChatService(conversations,tools,model,store,social,List.of(library,selectors));
+        current.set(card("work","old-revision","task","SUCCEEDED"));
+        when(model.respond(any())).thenReturn(plan(new Step("select_cover",Map.of("coverId","cover")),step("share")));
+        service.send("owner","conversation","分享第二首",key(),"zh-CN");assertTrue(last().contains("还没有确认"));
+        when(model.respond(any())).thenReturn(plan(new Step("select_work",Map.of("workId","work")),step("share")));
+        service.send("owner","conversation","分享上一版",key(),"zh-CN");assertTrue(last().contains("还没有确认"));
+        verify(social,never()).execute(anyString(),anyString(),eq("share"),anyString(),anyString(),any());
+    }
+    @Test void targetResolutionProofSurvivesAsyncGenerationButCannotBeInventedByGeneration(){
+        var selector=new AgentApplicationActions(){
+            public List<Capability> capabilities(){return List.of(new Capability("select_work","选择作品","workId","write"));}
+            public Result execute(String owner,String conversation,String action,Map<String,Object> args,String text,String key,SongCard song){current.set(card("target","target-revision",null,"DRAFT"));return new Result("已选择","text",List.of(),List.of(),action);}
+        };
+        service=new AgentChatService(conversations,tools,model,store,social,List.of(library,selector));
+        when(model.respond(any())).thenReturn(plan(new Step("select_work",Map.of("workId","target")),step("generate_song"),step("share")));
+        service.send("owner","conversation","给第二首生成音乐，然后分享第二首",key(),"zh-CN");finishMusic();
+        var next=service.state("owner","conversation").continuation();assertNotNull(next);
+        service=new AgentChatService(conversations,tools,model,store,social,List.of(library,selector));
+        service.send("owner","conversation",next.text(),next.requestKey(),"zh-CN");
+        verify(social,times(1)).execute(eq("owner"),eq("conversation"),eq("share"),anyString(),anyString(),argThat(card->"target".equals(card.songId())));
+        clearInvocations(social);
+        when(model.respond(any())).thenReturn(plan(step("generate_song"),step("share")));
+        service.send("owner","conversation","生成音乐，然后分享第二首",key(),"zh-CN");finishMusic();
+        next=service.state("owner","conversation").continuation();assertNotNull(next);
+        service.send("owner","conversation",next.text(),next.requestKey(),"zh-CN");
+        verify(social,never()).execute(anyString(),anyString(),eq("share"),anyString(),anyString(),any());assertTrue(last().contains("还没有确认"));
+    }
+    @Test void equivalentPaidRewriteVariantsAreRejectedBeforeAnyChargeOrProviderCall(){
+        var charges=mock(com.qingfeng.music.credits.RewriteCharges.class);
+        var writer=mock(com.qingfeng.music.lyrics.application.InspirationRewriter.class);
+        var rewriter=new com.qingfeng.music.lyrics.application.InspirationRewriteService(writer,true,1,charges);
+        service=new AgentChatService(conversations,tools,model,store,social,List.of(library,paidRewriter(rewriter)));
+        var first=new Step("rewrite_inspiration",Map.of("text","夏天的海风"));
+        var withNull=new LinkedHashMap<String,Object>();withNull.put("text","夏天的海风");withNull.put("language",null);
+        for(var second:List.of(new Step("rewrite_inspiration",Map.of("text","夏天的海风","language","zh-CN")),new Step("rewrite_inspiration",withNull),new Step("rewrite_inspiration",Map.of("text","另一份海风灵感")))){
+            when(model.respond(any())).thenReturn(plan(first,second));
+            service.send("owner","conversation","润色我的灵感",key(),"zh-CN");
+            assertTrue(last().contains("INVALID_AGENT_PLAN"));
+        }
+        verifyNoInteractions(charges,writer);
+    }
+    @Test void paidRewriteCannotBeChargedAgainByAReplanAndSameTurnReplayDoesNotRunItAgain(){
+        var charges=mock(com.qingfeng.music.credits.RewriteCharges.class);
+        when(charges.reserve(anyString(),anyString())).thenReturn(new com.qingfeng.music.credits.RewriteCharges.Reservation(true,false,3,"RESERVED",null));
+        var writer=mock(com.qingfeng.music.lyrics.application.InspirationRewriter.class);when(writer.isConfigured()).thenReturn(true);when(writer.rewrite(anyString(),anyString())).thenReturn("夏日海风吹来熟悉的回忆");
+        var rewriter=new com.qingfeng.music.lyrics.application.InspirationRewriteService(writer,true,1,charges);
+        service=new AgentChatService(conversations,tools,model,store,social,List.of(library,paidRewriter(rewriter)));
+        when(model.respond(any())).thenReturn(plan(new Step("rewrite_inspiration",Map.of("text","夏天的海风")),step("list_versions")),plan(new Step("rewrite_inspiration",Map.of("text","夏天的海风","language","zh-CN"))));
+        String request=key();String text="润色我的灵感，然后查看版本";
+        service.send("owner","conversation",text,request,"zh-CN");
+        assertTrue(last().contains("INVALID_AGENT_PLAN"));
+        service.send("owner","conversation",text,request,"zh-CN");
+        verify(charges,times(1)).reserve(eq("owner"),anyString());verify(charges,times(1)).succeed(eq("owner"),anyString(),anyString());
+        verify(writer,times(1)).rewrite("夏天的海风","zh-CN");verify(model,times(2)).respond(any());
+    }
+    private AgentApplicationActions paidRewriter(com.qingfeng.music.lyrics.application.InspirationRewriteService rewriter){
+        return new AgentApplicationActions(){
+            public List<Capability> capabilities(){return List.of(new Capability("rewrite_inspiration","润色灵感","text,language","paid"));}
+            public Result execute(String owner,String conversation,String action,Map<String,Object> args,String text,String key,SongCard current){
+                Object language=args.get("language");String rewritten=rewriter.rewrite(owner,args.get("text").toString(),language==null?"zh-CN":language.toString(),key);
+                return new Result(rewritten,"text",List.of(),List.of(),action);
+            }
+        };
+    }
     @Test void unrelatedNegativeDoesNotBlockRequestedMusicButCannotAuthorizeSharing() {
         when(model.respond(any())).thenReturn(plan(step("generate_song"),step("share")));
         service.send("owner","conversation","不要分享，生成音乐",key(),"zh-CN");finishMusic();
