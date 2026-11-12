@@ -51,6 +51,7 @@ describe('Chinese and English interface', () => {
     expect(localizedCover('/media/brand-cover-en.svg')).toBe('/media/brand-cover-light.svg')
   })
 
+  // This scan reads the full source tree and can exceed the default timeout on Windows.
   it('has English copy for every literal interface key and keeps interpolation placeholders', () => {
     const missing: string[] = []
     for (const file of globSync('src/**/*.{vue,ts}')) {
@@ -65,5 +66,5 @@ describe('Chinese and English interface', () => {
       expect([...value.matchAll(/\{\w+\}/g)].map(m => m[0]).sort(), key)
         .toEqual([...key.matchAll(/\{\w+\}/g)].map(m => m[0]).sort())
     }
-  })
+  }, 15_000)
 })
