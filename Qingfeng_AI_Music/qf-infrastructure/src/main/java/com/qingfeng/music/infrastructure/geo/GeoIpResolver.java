@@ -4,9 +4,7 @@ import jakarta.annotation.PostConstruct;
 import org.lionsoul.ip2region.xdb.LongByteArray;
 import org.lionsoul.ip2region.xdb.Searcher;
 import org.lionsoul.ip2region.xdb.Version;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.Resource;
-import org.springframework.stereotype.Component;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -16,14 +14,17 @@ import java.io.InputStream;
  * 绝不对外暴露、也绝不持久化原始 IP——符合看板隐私最小化约定：site_event 只落 country 列。
  * 数据文件 ip2region.xdb 随 JAR 打包（src/main/resources）。若资源缺失或加载失败，
  * resolver 降级为不可用（resolveCountry 返回 null），不影响主流程与启动。
+ *
+ * <p>本类不在启动类 {@code com.qingfeng.music.server} 的默认组件扫描范围内，
+ * 由 {@code com.qingfeng.music.server.config.GeoIpConfiguration} 以 {@code @Bean}
+ * 显式装配；不要改回 {@code @Component}（扫描不到，会导致国家分布恒为空）。
  */
-@Component
 public class GeoIpResolver {
     private final Resource resource;
     private volatile Searcher searcher;
     private volatile boolean available;
 
-    public GeoIpResolver(@Value("classpath:ip2region.xdb") Resource resource) {
+    public GeoIpResolver(Resource resource) {
         this.resource = resource;
     }
 
