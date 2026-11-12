@@ -21,6 +21,7 @@ const tagline = ref('')
 const avatar = ref<File>()
 const localAvatar = ref('')
 const removeAvatar = ref(false)
+const editing = ref(false)
 const preview = ref(false)
 const loading = ref(true)
 const busy = ref(false)
@@ -31,12 +32,13 @@ const editHeading = ref<HTMLElement>()
 const linkInput = ref<HTMLInputElement>()
 const showLink = ref(false)
 const workCount = ref<number | null>(null)
+const editButton = ref<HTMLButtonElement>()
 const nameInput = ref<HTMLInputElement>()
 const avatarInput = ref<HTMLInputElement>()
 const waveform = [7, 15, 34, 18, 9, 17, 29, 12, 22, 53, 16, 24, 10, 33, 17, 8]
 const avatarSrc = computed(() => localAvatar.value || (removeAvatar.value ? undefined
   : profile.value?.avatarKey ? ownerAvatarUrl(profile.value.avatarKey) : undefined))
-const dirty = computed(() => Boolean(avatar.value || removeAvatar.value
+const dirty = computed(() => editing.value && Boolean(avatar.value || removeAvatar.value
   || stageName.value.trim() !== profile.value?.stageName || tagline.value.trim() !== profile.value?.tagline))
 const tracks = computed(() => profile.value?.songs.map(ownerTrack) || [])
 const homeRoute = computed(() => ({ name: 'artist-home', params: { id: profile.value?.publicId || '' } }))
@@ -77,9 +79,23 @@ function useDefaultAvatar() {
   clearAvatarDraft()
   removeAvatar.value = Boolean(profile.value?.avatarKey)
 }
+async function setEditing(value: boolean) {
+  editing.value = value
+  await nextTick()
+  const target = value ? nameInput.value : editButton.value
+  target?.focus()
+}
+function editProfile() {
+  if (!profile.value || busy.value) return
+  apply(profile.value)
+  notice.value = ''
+  error.value = ''
+  void setEditing(true)
+}
 function cancelEdits() {
   if (profile.value) apply(profile.value)
   error.value = ''
+  void setEditing(false)
 }
 function report(cause: unknown, fallback: string) {
   error.value = cause instanceof Error ? cause.message : fallback
@@ -99,8 +115,12 @@ async function save() {
   try {
     apply(await saveArtistProfile(stageName.value.trim(), tagline.value.trim(), avatar.value, removeAvatar.value))
     notice.value = profile.value?.published ? '歌手主页已更新。' : '资料已保存。'
-  } catch (cause) { report(cause, '资料保存失败，请重试。') }
+  } catch (cause) {
+    report(cause, '资料保存失败，请重试。')
+    return
+  }
   finally { busy.value = false }
+  await setEditing(false)
 }
 async function changeVisibility(published: boolean) {
   if (busy.value || (published && (dirty.value || !profile.value?.stageName))) return
@@ -158,7 +178,7 @@ onBeforeUnmount(clearAvatarDraft)
         <button type="button" class="text-button" @click="showPreview(false)">{{ t('返回我的资料') }}</button>
         <span>{{ t('访客视角预览') }}</span>
       </div>
-      <ArtistHome :name="stageName" :tagline="tagline" :avatar="avatarSrc" :tracks="tracks" />
+      <ArtistHome :name="editing ? stageName : profile.stageName" :tagline="editing ? tagline : profile.tagline" :avatar="avatarSrc" :tracks="tracks" />
       <div v-if="!profile.published" class="artist-preview-publish">
         <p v-if="dirty || !profile.stageName">{{ t('请先保存艺名和资料，再发布主页。') }}</p>
         <p v-else>{{ t('发布后，访客可以查看这些资料和试听上方的歌曲。') }}</p>
@@ -174,10 +194,12 @@ onBeforeUnmount(clearAvatarDraft)
         <div class="profile-avatar-wrap">
           <ArtistAvatar v-if="avatarSrc" :name="stageName" :src="avatarSrc" />
           <span v-else class="profile-avatar-default" aria-hidden="true"><img src="/brand/logo-symbol.svg" alt=""></span>
-          <input ref="avatarInput" class="profile-avatar-input" type="file" accept="image/jpeg,image/png" tabindex="-1" :aria-label="t('更换头像')" :disabled="busy" @change="chooseAvatar">
-          <button class="profile-avatar-camera" type="button" :aria-label="t('更换头像')" :title="t('更换头像')" :disabled="busy" @click="avatarInput?.click()">
-            <span aria-hidden="true"></span>
-          </button>
+          <template v-if="editing">
+            <input ref="avatarInput" class="profile-avatar-input" type="file" accept="image/jpeg,image/png" tabindex="-1" :aria-label="t('更换头像')" :disabled="busy" @change="chooseAvatar">
+            <button class="profile-avatar-camera" type="button" :aria-label="t('更换头像')" :title="t('更换头像')" :disabled="busy" @click="avatarInput?.click()">
+              <span aria-hidden="true"></span>
+            </button>
+          </template>
         </div>
         <div class="profile-summary-copy">
           <h2 id="profile-summary-name">{{ profile.stageName || t('你的艺名') }}</h2>
@@ -189,24 +211,36 @@ onBeforeUnmount(clearAvatarDraft)
         </div>
         <div class="profile-summary-actions">
           <div class="profile-wave" aria-hidden="true"><span v-for="(height, index) in waveform" :key="index" :style="{ height: height + 'px' }"></span></div>
-          <button type="button" class="profile-pill profile-edit-button" :disabled="busy" @click="nameInput?.focus()">{{ t('编辑资料') }}</button>
+          <button v-if="!editing" ref="editButton" type="button" class="profile-pill profile-edit-button" :disabled="busy" @click="editProfile">{{ t('编辑资料') }}</button>
         </div>
       </section>
       <div class="profile-columns">
         <form class="profile-card profile-form" aria-labelledby="profile-basic-title" @submit.prevent="save">
           <h2 id="profile-basic-title" class="profile-card-title"><NavIcon name="account" />{{ t('基本信息') }}</h2>
           <fieldset :disabled="busy">
-            <label class="profile-form-row">
-              <span>{{ t('艺名') }}</span>
-              <input ref="nameInput" v-model="stageName" maxlength="30" :required="profile.published" :placeholder="t('填写你想在主页显示的名字')">
-            </label>
-            <label class="profile-form-row profile-tagline">
-              <span>{{ t('个性签名') }}</span>
-              <span class="profile-signature-input">
-                <textarea v-model="tagline" rows="2" maxlength="120" :placeholder="t('写一句话介绍自己（选填）')" />
-                <small aria-hidden="true">{{ tagline.length }} / 120</small>
-              </span>
-            </label>
+            <template v-if="editing">
+              <label class="profile-form-row">
+                <span>{{ t('艺名') }}</span>
+                <input ref="nameInput" v-model="stageName" maxlength="30" :required="profile.published" :placeholder="t('填写你想在主页显示的名字')">
+              </label>
+              <label class="profile-form-row profile-tagline">
+                <span>{{ t('个性签名') }}</span>
+                <span class="profile-signature-input">
+                  <textarea v-model="tagline" rows="2" maxlength="120" :placeholder="t('写一句话介绍自己（选填）')" />
+                  <small aria-hidden="true">{{ tagline.length }} / 120</small>
+                </span>
+              </label>
+            </template>
+            <dl v-else class="profile-values">
+              <div class="profile-form-row">
+                <dt>{{ t('艺名') }}</dt>
+                <dd :class="{ empty: !profile.stageName }">{{ profile.stageName || '—' }}</dd>
+              </div>
+              <div class="profile-form-row">
+                <dt>{{ t('个性签名') }}</dt>
+                <dd :class="{ empty: !profile.tagline }">{{ profile.tagline || '—' }}</dd>
+              </div>
+            </dl>
             <div class="profile-form-row">
               <span>{{ t('歌手主页') }}</span>
               <div class="profile-inline-actions">
@@ -223,12 +257,12 @@ onBeforeUnmount(clearAvatarDraft)
               <span>{{ t('主页链接') }}</span>
               <input ref="linkInput" readonly :value="link" @focus="linkInput?.select()">
             </label>
-            <div class="profile-form-row profile-form-footer">
+            <div v-if="editing" class="profile-form-row profile-form-footer">
               <div class="profile-inline-actions">
                 <button type="submit" class="profile-pill profile-save" :disabled="!dirty">
                   {{ t(busy ? '正在保存…' : '保存修改') }}
                 </button>
-                <button type="button" class="profile-pill" :disabled="!dirty" @click="cancelEdits">{{ t('取消') }}</button>
+                <button type="button" class="profile-pill" @click="cancelEdits">{{ t('取消') }}</button>
                 <button v-if="avatarSrc" type="button" class="profile-avatar-reset" @click="useDefaultAvatar">{{ t('使用默认头像') }}</button>
               </div>
             </div>
@@ -292,7 +326,11 @@ onBeforeUnmount(clearAvatarDraft)
 .profile-card-title svg { flex: none; width: 17px; height: 17px; color: var(--accent-text); }
 .profile-form fieldset { padding: 0; margin: 0; min-width: 0; border: 0; }
 .profile-form-row { display: grid; grid-template-columns: 80px minmax(0, 1fr); align-items: center; gap: 8px 12px; margin: 0 0 13px; font-size: 13px; }
-.profile-form-row > span:first-child { font-weight: 560; }
+.profile-form-row > span:first-child, .profile-values dt { font-weight: 560; }
+.profile-values, .profile-values dd { margin: 0; }
+.profile-values .profile-form-row { align-items: start; padding-block: 5px; }
+.profile-values dd { white-space: pre-wrap; overflow-wrap: anywhere; }
+.profile-values .empty { color: var(--muted); }
 .profile-form-row input, .profile-form-row textarea {
   width: 100%; min-width: 0; padding: 7px 11px; border: 1px solid #e9dbdf; border-radius: 9px;
   background: #fffafb; color: var(--ink); font: inherit; line-height: 1.45;
