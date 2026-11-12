@@ -102,9 +102,9 @@ class AgentPlanServiceTest {
         String text="先去掉所有乐器，再生成音乐";
         String nativeMessage="{\"tool_calls\":[{\"id\":\"a\",\"type\":\"function\",\"function\":{\"name\":\"set_style\",\"arguments\":\"{\\\"instruments\\\":[]}\"}},{\"id\":\"b\",\"type\":\"function\",\"function\":{\"name\":\"generate_song\",\"arguments\":\"{}\"}}]}";
         String legacy="{\"reply\":\"开始\",\"steps\":[{\"action\":\"set_style\",\"args\":{\"instruments\":[]}},{\"action\":\"generate_song\",\"args\":{}}]}";
-        when(model.respond(any())).thenAnswer(call->com.qingfeng.music.infrastructure.provider.AgentPlanCodec.parseMessage(nativeMessage,call.getArgument(0)));
+        doAnswer(call->com.qingfeng.music.infrastructure.provider.AgentPlanCodec.parseMessage(nativeMessage,call.getArgument(0))).when(model).respond(any());
         service.send("owner","conversation",text,key(),"zh-CN");assertTrue(last().contains("尚未执行"));
-        when(model.respond(any())).thenAnswer(call->com.qingfeng.music.infrastructure.provider.AgentPlanCodec.parse(legacy,call.getArgument(0)));
+        doAnswer(call->com.qingfeng.music.infrastructure.provider.AgentPlanCodec.parse(legacy,call.getArgument(0))).when(model).respond(any());
         service.send("owner","conversation",text,key(),"zh-CN");assertTrue(last().contains("尚未执行"));
         verify(tools,never()).dispatch(eq(AgentTool.SET_STYLE),any(),anyString(),anyString());
         verify(tools,never()).dispatch(eq(AgentTool.GENERATE_SONG),any(),anyString(),anyString());
@@ -116,7 +116,7 @@ class AgentPlanServiceTest {
         var protectedSocial=spy(new com.qingfeng.music.server.agent.DefaultAgentSocialActions(works,shares,media,generation,reactions));
         service=new AgentChatService(conversations,tools,model,store,protectedSocial,List.of(library));
         current.set(card("work","old-revision","task-1","SUCCEEDED"));when(model.respond(any())).thenReturn(plan(step("share")));
-        for(String text:List.of("分享第二首","分享《毕业》","分享毕业","分享上一版")) {
+        for(String text:List.of("分享第二首","分享《毕业》","分享毕业","分享上一版","完成后分享第二首","完成后分享毕业")) {
             var result=service.send("owner","conversation",text,key(),"zh-CN");assertNull(result.action());assertTrue(last().contains("还没有确认"));
         }
         verify(protectedSocial,never()).execute(anyString(),anyString(),eq("share"),anyString(),anyString(),any());verifyNoInteractions(shares,media);

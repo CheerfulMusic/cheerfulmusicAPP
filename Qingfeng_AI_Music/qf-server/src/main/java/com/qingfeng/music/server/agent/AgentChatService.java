@@ -334,8 +334,9 @@ public final class AgentChatService {
         if(java.util.regex.Pattern.compile("第[一二三四五六七八九十百0-9]+|(?:上|下)(?:一)?(?:首|版)|[《》“”‘’「」\\\"']|workId|revisionId|assetId",java.util.regex.Pattern.CASE_INSENSITIVE).matcher(text).find())return true;
         for(String clause:text.split("[，。；,;\\n]|(?:然后|接着|并且|并|再)")) {
             if(!AgentChatPolicy.explicitAction(action,clause))continue;
-            if(action.equals(AgentChatPolicy.currentSocial(clause)))continue;
-            if(clause.strip().matches("(?i)(?:please )?(?:share|play|download|like|unlike|cancel)(?: (?:it|this(?: song| work)?|the current (?:song|work|task)))?[.!]*"))continue;
+            String targetClause=clause.strip().replaceFirst("^(?:生成完成后|生成好后|完成之后|完成后)","").strip();
+            if(action.equals(AgentChatPolicy.currentSocial(targetClause)))continue;
+            if(targetClause.matches("(?i)(?:please )?(?:share|play|download|like|unlike|cancel)(?: (?:it|this(?: song| work)?|the current (?:song|work|task)))?[.!]*"))continue;
             return true;
         }
         return false;
