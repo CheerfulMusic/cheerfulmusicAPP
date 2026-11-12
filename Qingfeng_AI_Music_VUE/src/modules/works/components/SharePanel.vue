@@ -74,7 +74,7 @@ async function copy() {
   if (!checkLink()) return
   const turn = generation
   try { await navigator.clipboard.writeText(link.value); if (turn === generation) notice.value = '已复制分享链接，发给朋友即可收听。' }
-  catch { if (turn === generation) notice.value = '请选中下方链接手动复制。' }
+  catch { if (turn === generation) notice.value = '请选中链接手动复制。' }
 }
 async function share() {
   if (sharing.value || !song.value || !checkLink()) return
@@ -150,7 +150,18 @@ onBeforeUnmount(() => { generation++; clearPoster(); dialog.value?.close() })
           <button class="button secondary" type="button" :aria-expanded="posterOpen" @click="openPoster">{{ t(posterOpen ? '收起音乐海报' : '制作音乐海报') }}</button>
         </div>
         <p class="share-platform-note">{{ t('卡片展示由接收应用决定，点击后进入公开收听页。') }}</p>
-        <section v-if="posterOpen" class="share-poster-workspace" :aria-label="t('音乐海报')">
+      </template>
+      <section v-if="link" class="share-link-panel" :aria-label="t('歌曲分享链接')">
+        <div class="share-link-heading">
+          <label for="song-share-link">{{ t('歌曲分享链接') }}</label>
+          <a class="text-button" :href="link" target="_blank" rel="noopener noreferrer">{{ t('预览收听页') }} ↗</a>
+        </div>
+        <div class="share-link-actions">
+          <input id="song-share-link" :value="link" readonly @focus="($event.target as HTMLInputElement).select()">
+          <button class="button share-copy-link" type="button" @click="copy">{{ t('复制分享链接') }}</button>
+        </div>
+      </section>
+      <section v-if="song && link && !busy && posterOpen" class="share-poster-workspace" :aria-label="t('音乐海报')">
           <div class="share-poster-options">
             <h3>{{ t('把这一句，分享出去') }}</h3>
             <label>{{ t('海报歌词') }}<select v-model="quote"><option value="">{{ t('不展示歌词') }}</option><option v-for="line in quotes" :key="line" :value="line">{{ line }}</option></select></label>
@@ -161,10 +172,8 @@ onBeforeUnmount(() => { generation++; clearPoster(); dialog.value?.close() })
             <div v-if="posterUrl" class="share-poster-downloads"><button class="button" type="button" @click="savePoster">{{ t('保存海报') }}</button><button class="text-button" type="button" :disabled="sharing" @click="sharePoster">{{ t('分享海报图片') }}</button></div>
           </div>
           <div class="share-poster-preview"><img v-if="posterUrl" :src="posterUrl" :alt="t('音乐海报预览，可长按保存')"><p v-else role="status">{{ t(posterBusy ? '正在制作海报…' : '生成预览后可保存图片') }}</p></div>
-        </section>
-      </template>
+      </section>
       <template v-if="link">
-        <details class="share-link-backup" :open="!!error"><summary>{{ t('复制链接或预览收听页') }}</summary><label class="field">{{ t('歌曲分享链接') }}<input :value="link" readonly @focus="($event.target as HTMLInputElement).select()"></label><div class="actions"><button class="button secondary" type="button" @click="copy">{{ t('复制分享链接') }}</button><a class="text-button" :href="link" target="_blank" rel="noopener noreferrer">{{ t('预览收听页') }} ↗</a></div></details>
         <p class="save-info">{{ t('收听链接有效期至') }} {{ formatDate(expires) }}</p>
         <p v-if="localShareAddress(link)" class="notice">{{ t('当前链接是本机或内网地址，朋友的设备需要能访问此地址才能收听。') }}</p>
       </template>
@@ -185,7 +194,15 @@ onBeforeUnmount(() => { generation++; clearPoster(); dialog.value?.close() })
 .share-card-copy{min-width:0}.share-card-copy>span{font-size:12px;color:#8b7771}.share-card-copy h3{margin:12px 0;font-size:25px;font-weight:700;line-height:1.4;overflow-wrap:anywhere;color:#222223}.share-card-copy p{margin:0}
 .share-primary-actions{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:24px}.song-share-content .button{display:inline-flex;align-items:center;justify-content:center;min-height:50px;padding:12px 20px;border:1px solid #f93822;border-radius:999px;background:#f93822;color:white;font-weight:600;white-space:normal;text-align:center}.song-share-content .button.secondary{color:#d8311e;background:#fff0eb;border-color:#f9b4a6}.share-platform-note{text-align:center;font-size:12px!important;margin:12px 0 20px}
 .share-poster-workspace{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,240px);gap:24px;padding:22px 0;border-top:1px solid #edddd5}.share-poster-options h3{margin:0 0 18px;color:#222223;font-size:18px;font-weight:700}.share-poster-options label{display:block;margin:16px 0;font-size:13px;color:#64534d}.share-poster-options input,.share-poster-options select{display:block;width:100%;min-height:46px;margin-top:8px;background:white;border:1px solid #dfc6bd;border-radius:10px;padding:10px;color:#282320;font-size:16px}.share-poster-options .button{width:100%}.share-poster-downloads{display:grid;gap:15px;margin-top:20px}.share-poster-downloads .text-button{justify-content:center;min-height:44px;color:#ce3422}.share-poster-preview{background:#efe4df;border-radius:12px;min-height:230px;display:grid;place-items:center;padding:12px;align-self:start}.share-poster-preview img{display:block;width:100%;height:auto;border-radius:4px;box-shadow:0 8px 25px #48362a18}.share-poster-preview p{text-align:center;padding:16px}
-.share-link-backup{border-top:1px solid #edddd5;padding-top:17px;font-size:14px}.share-link-backup summary,.song-share-manage summary{cursor:pointer;min-height:36px;align-content:center}.share-link-backup .field{font-size:13px;margin:15px 0}.share-link-backup input{font-size:16px;background:white;color:#463830;width:100%}.share-link-backup .actions{gap:20px;margin:12px 0;flex-wrap:wrap}.share-link-backup .text-button{min-height:44px}
+.share-link-panel { margin:18px 0 14px; padding:13px 16px 16px; border:1px solid #f9b4a6; border-radius:16px; background:#fff0eb; }
+.share-link-heading { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:4px 12px; margin-bottom:8px; }
+.share-link-heading label { font-size:14px; font-weight:650; }
+.share-link-heading .text-button { color:#ad2d1d; font-size:13px; }
+.share-link-actions { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:stretch; gap:10px; }
+.share-link-actions input { width:100%; min-width:0; min-height:46px; padding:9px 12px; border:1px solid #dfc6bd; border-radius:10px; background:white; color:#463830; font-size:16px; }
+.song-share-content .share-copy-link { min-height:46px; font-size:15px; font-weight:700; }
+.song-share-manage summary { cursor:pointer; min-height:36px; align-content:center; }
 .song-share-content .save-info{font-size:12px}.song-share-note{margin-top:20px}.song-share-manage{font-size:12px;color:#8c7268}.song-share-content button:focus-visible,.song-share-content a:focus-visible{outline:3px solid #ed8a76;outline-offset:3px}
 @media(max-width:560px){.song-share-content{padding:28px 20px}.song-share-content h2{font-size:24px}.share-song-card{gap:16px;padding:14px}.share-card-art{width:104px;flex-basis:104px}.share-card-copy h3{font-size:20px;margin:8px 0}.share-card-copy p{font-size:12px}.share-primary-actions{gap:10px}.share-primary-actions>.button{padding:12px 8px;font-size:14px}.share-poster-workspace{grid-template-columns:1fr;gap:18px}.share-poster-preview{width:min(100%,220px);justify-self:center;grid-row:1}.song-share-dialog{max-height:calc(100dvh - 16px)}}
+@media(max-width:480px) { .share-link-actions { grid-template-columns:1fr; } }
 </style>

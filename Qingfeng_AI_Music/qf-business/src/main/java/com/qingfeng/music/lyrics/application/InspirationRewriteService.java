@@ -4,6 +4,7 @@ import com.qingfeng.music.common.exception.DomainException;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Semaphore;
+import java.util.function.UnaryOperator;
 
 /**
  * AI 改写：每次调用都会产生真实模型请求，因此纳入积分体系。
@@ -37,9 +38,14 @@ public final class InspirationRewriteService {
     }
 
     public String rewrite(String owner, String text, String language, String requestKey) {
+        return rewrite(owner, text, language, requestKey, 4000, 4000, UnaryOperator.identity());
+    }
+
+    String rewrite(String owner, String text, String language, String requestKey, int inputLimit, int outputLimit,
+                   UnaryOperator<String> validateAndAssemble) {
         if (owner == null || owner.isBlank()) throw new DomainException("INVALID_REWRITE_REQUEST", "请刷新页面后重试改写。");
-        if (text == null || text.isBlank() || text.length() > 4000 || !Set.of("zh-CN", "en", "mixed").contains(language == null ? "" : language))
-            throw new DomainException("INVALID_REWRITE_REQUEST", "请填写1至4000字的创作灵感后再改写。");
+        if (text == null || text.isBlank() || text.length() > inputLimit || !Set.of("zh-CN", "en", "mixed").contains(language == null ? "" : language))
+            throw new DomainException("INVALID_REWRITE_REQUEST", inputLimit==4000 ? "请填写1至4000字的创作灵感后再改写。" : "歌词内容无效，请检查歌词后再重写。");
         if (!enabled || !writer.isConfigured()) throw new DomainException("REWRITE_PROVIDER_UNAVAILABLE", "AI改写暂不可用，请稍后再试；原文仍会保留。");
         if (requestKey == null || !requestKey.matches("[0-9a-fA-F-]{36}")) throw new DomainException("INVALID_REWRITE_REQUEST", "改写请求标识无效，请刷新后重试。");
         if (!active.add(owner)) throw busy();
@@ -51,10 +57,11 @@ public final class InspirationRewriteService {
             if (!reservation.fresh()) return replay(reservation);
             try {
                 String result = writer.rewrite(text.trim(), language);
-                if (result == null || result.isBlank() || result.length() > 4000)
+                if (result == null || result.isBlank() || result.length() > outputLimit)
                     throw new DomainException("INVALID_REWRITE_RESPONSE", "改写结果不完整，请稍后重试；原文仍会保留。");
-                charges.succeed(owner, requestKey, result.trim());
-                return result.trim();
+                String validated = validateAndAssemble.apply(result.trim());
+                charges.succeed(owner, requestKey, validated);
+                return validated;
             } catch (RuntimeException error) {
                 // 失败退还已扣积分；免费额度不退还。
                 charges.fail(owner, requestKey);

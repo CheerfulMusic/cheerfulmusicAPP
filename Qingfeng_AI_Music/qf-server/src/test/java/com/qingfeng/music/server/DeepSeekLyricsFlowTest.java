@@ -4,6 +4,8 @@ import com.qingfeng.music.work.api.WorkApi;
 import com.qingfeng.music.lyrics.api.LyricsApi;
 import com.qingfeng.music.lyrics.application.*;
 import com.qingfeng.music.common.exception.DomainException;
+import com.qingfeng.music.credits.RewriteCharges;
+import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
@@ -26,6 +28,50 @@ class DeepSeekLyricsFlowTest {
   public Draft write(WorkApi.Work work,String language){lastWork=work;lastLanguage=language;calls.incrementAndGet();return new Draft("风中的故事",language.equals("en")?"[Verse]\nA little memory stays with me":"[Verse]\n把你的名字写在风里\n[Chorus]\n每个日落都想起你");}
  }
  @Autowired IdentityApi identity;@Autowired WorkApi works;@Autowired LyricsApi lyrics;@Autowired LyricsCompositionService composer;@Autowired FakeWriter writer;
+ @Autowired RewriteCharges rewriteCharges;
+ @Test void selectionPreviewKeepsOriginalPositionsAndDoesNotCreateAVersion(){
+  String owner=identity.create().creatorId(),other=identity.create().creatorId();
+  var work=works.create(owner,new WorkApi.Draft("","","晚饭后的故事","","民谣",""));
+  String source="[Verse 1]\n晚饭后的碗还泡在水里\n  这一晚没有特别的事。  \n\n[Chorus]\n这一晚没有特别的事。\n就让它慢慢地过\n";
+  var calls=new AtomicInteger();
+  var previewWriter=new InspirationRewriter(){
+   public boolean isConfigured(){return true;}
+   public String rewrite(String prompt,String language){
+    calls.incrementAndGet();
+    assertTrue(prompt.contains("原样保留的行号：[2, 5]"));
+    assertTrue(prompt.contains("2\t  这一晚没有特别的事。  \n3\t\n4\t[Chorus]"));
+    return "6\t让灯亮着，听一会儿风\n1\t洗碗池里的水渐渐凉了";
+   }
+  };
+  var service=new LyricSelectionRewriteService(works,new InspirationRewriteService(previewWriter,true,2,rewriteCharges));
+  UUID key=UUID.randomUUID();
+  assertThrows(DomainException.class,()->service.preview(other,work.id(),0,key,source,List.of(2,5),"zh-CN"));
+  assertEquals("WORK_VERSION_CONFLICT",assertThrows(DomainException.class,
+      ()->service.preview(owner,work.id(),1,key,source,List.of(2,5),"zh-CN")).code());
+  String expected="[Verse 1]\n洗碗池里的水渐渐凉了\n  这一晚没有特别的事。  \n\n[Chorus]\n这一晚没有特别的事。\n让灯亮着，听一会儿风\n";
+  assertEquals(expected,service.preview(owner,work.id(),0,key,source,List.of(2,5),"zh-CN"));
+  assertEquals(expected,service.preview(owner,work.id(),0,key,source,List.of(5,2),"zh-CN"));
+  assertEquals(1,calls.get());
+  assertTrue(lyrics.list(owner,work.id()).isEmpty());
+ }
+ @Test void selectionPreviewRejectsMissingDuplicateAndProtectedPositions(){
+  String owner=identity.create().creatorId();
+  var work=works.create(owner,new WorkApi.Draft("","","晚饭后的故事","","民谣",""));
+  String source="[Verse]\n第一句\n要保留的句子\n最后一句";
+  for(String answer:List.of("1\t新句", "1\t新句\n1\t另一个新句", "1\t新句\n2\t改掉原句\n3\t新末句", "1\t第一句\n3\t新末句")){
+   var previewWriter=new InspirationRewriter(){
+    public boolean isConfigured(){return true;}
+    public String rewrite(String prompt,String language){return answer;}
+   };
+   var service=new LyricSelectionRewriteService(works,new InspirationRewriteService(previewWriter,true,2,rewriteCharges));
+   UUID key=UUID.randomUUID();
+   assertEquals("INVALID_REWRITE_RESPONSE",assertThrows(DomainException.class,
+       ()->service.preview(owner,work.id(),0,key,source,List.of(2),"zh-CN")).code());
+   assertEquals("REWRITE_REQUEST_FAILED",assertThrows(DomainException.class,
+       ()->service.preview(owner,work.id(),0,key,source,List.of(2),"zh-CN")).code());
+  }
+  assertTrue(lyrics.list(owner,work.id()).isEmpty());
+ }
  @Test void templateReachesWriterAndMismatchNeverCreatesRevisionOrRetries(){
   String owner=identity.create().creatorId();var work=works.create(owner,new WorkApi.Draft("","","一段真实的故事","","民谣",""));
   var structure=new LyricsStructure("ABC",true);String key=UUID.randomUUID().toString();

@@ -33,6 +33,10 @@ export async function rewriteLyricLine(work:string, input:{requestId:string;acti
   await ensureCreator()
   return requestJson<{text:string}>(`app/works/${work}/lyrics/rewrite-line`,'POST',input,35000)
 }
+export async function rewriteLyricSelection(work: string, input: {requestId: string; workVersion: number; lyrics: string; keptLines: number[]; language: string}) {
+  await ensureCreator()
+  return requestJson<{lyrics: string}>(`app/works/${encodeURIComponent(work)}/lyrics/rewrite-selection`, 'POST', input, 110000)
+}
 export const confirmRevision = (work: string, revision: string) => call<Revision>(`app/works/${work}/lyrics/${revision}/confirm`, 'POST', {})
 export const listAudio = (work: string) => call<AudioAsset[]>(`app/works/${work}/audio`)
 export const listTasks = (work: string) => call<GenerationTask[]>(`app/works/${work}/generations`)

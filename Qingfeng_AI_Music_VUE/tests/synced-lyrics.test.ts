@@ -3,16 +3,16 @@ import {afterEach,beforeEach,expect,it,vi} from 'vitest'
 import {createApp,h,nextTick,reactive,type App} from 'vue'
 import SyncedLyrics from '../src/modules/works/components/SyncedLyrics.vue'
 import type {PlaybackLyrics} from '../src/modules/works/api/detail'
-const api=vi.hoisted(()=>({get:vi.fn(),sync:vi.fn()}))
+const api=vi.hoisted(()=>({get:vi.fn(),sync:vi.fn(),rewrite:vi.fn()}))
 let player:ReturnType<typeof reactive<{current:{id:string}|null;playing:boolean;time:number;seekVersion:number}>>
 vi.mock('../src/shared/player/store',()=>({usePlayer:()=>player}))
-vi.mock('../src/modules/works/api/detail',()=>({getPlaybackLyrics:api.get,syncPlaybackLyrics:api.sync}))
+vi.mock('../src/modules/works/api/detail',()=>({getPlaybackLyrics:api.get,syncPlaybackLyrics:api.sync,rewriteLyricLine:api.rewrite}))
 let app:App|undefined
-const scroll=vi.fn(),seek=vi.fn()
+const scroll=vi.fn(),seek=vi.fn(),edit=vi.fn()
 const lines=[{text:'第一句',start:10,end:15},{text:'第二句',start:18,end:25},{text:'第三句',start:30,end:35}]
 const snapshot=(status:PlaybackLyrics['status']='NOT_REQUESTED',canSync=true):PlaybackLyrics=>({status,canSync,text:'[Verse]\n第一句\n第二句\n第三句',lines:status==='READY'?lines:[]})
 async function flush(){for(let i=0;i<12;i++)await nextTick()}
-function mount(){const props=reactive({workId:'work-a',assetId:'audio-a',lyrics:'离线歌词'});app=createApp({setup:()=>()=>h(SyncedLyrics,{...props,onSeek:seek})});app.mount(document.body.appendChild(document.createElement('div')));return props}
+function mount(editable=false){const props=reactive({workId:'work-a',assetId:'audio-a',lyrics:'离线歌词',editable});app=createApp({setup:()=>()=>h(SyncedLyrics,{...props,onSeek:seek,onEdit:edit})});app.mount(document.body.appendChild(document.createElement('div')));return props}
 function deferred<T>(){let resolve!:(value:T)=>void;return{promise:new Promise<T>(r=>resolve=r),resolve}}
 beforeEach(()=>{
  vi.useFakeTimers();vi.clearAllMocks();sessionStorage.clear();player=reactive({current:null,playing:false,time:0,seekVersion:0})
@@ -61,6 +61,27 @@ it('does not sync unsupported audio and still displays the full lyrics',async()=
 })
 it('seeks to the selected timed lyric, including while paused',async()=>{
  api.get.mockResolvedValue(snapshot('READY'));player.current={id:'audio-a'};mount();await flush();document.querySelectorAll<HTMLButtonElement>('.lyric-lines button')[1]!.click();await flush();expect(seek).toHaveBeenCalledWith(18);expect(api.sync).not.toHaveBeenCalled()
+})
+it('keeps seeking independent from editing and sends the selected repeated line to the section editor',async()=>{
+ const ready=snapshot('READY')
+ ready.lines=[{text:'副歌',start:10,end:14},{text:'副歌',start:32,end:37}]
+ api.get.mockResolvedValue(ready);api.rewrite.mockResolvedValue({text:'新的副歌'})
+ player.current={id:'audio-a'};player.playing=true;player.time=33
+ mount(true);await flush()
+ document.querySelector<HTMLButtonElement>('[data-line="1"] button:first-child')!.click()
+ expect(seek).toHaveBeenCalledWith(32)
+ document.querySelector<HTMLButtonElement>('[data-line="1"] .lyric-edit-line')!.click();await flush()
+ expect(seek).toHaveBeenCalledTimes(1)
+ const field=document.querySelector<HTMLTextAreaElement>('.playback-line-draft textarea')!
+ expect(field.value).toBe('副歌')
+ scroll.mockClear();player.time=11;await flush()
+ expect(scroll).not.toHaveBeenCalled()
+ document.querySelector<HTMLButtonElement>('.playback-line-actions .text-button')!.click();await flush()
+ expect(field.value).toBe('副歌')
+ document.querySelector<HTMLButtonElement>('.playback-line-suggestion button')!.click();await flush()
+ expect(field.value).toBe('新的副歌')
+ document.querySelector('form.playback-line-draft')!.dispatchEvent(new Event('submit',{cancelable:true}));await flush()
+ expect(edit).toHaveBeenCalledExactlyOnceWith({text:'副歌',start:32,end:37,occurrence:1,replacement:'新的副歌'})
 })
 it('stops polling after five consecutive failures and cleans all timers on unmount',async()=>{
  api.get.mockRejectedValue(new Error('offline'));mount();await flush();await vi.advanceTimersByTimeAsync(90000);await flush();expect(api.get).toHaveBeenCalledTimes(5);app!.unmount();app=undefined;await vi.advanceTimersByTimeAsync(200000);expect(api.get).toHaveBeenCalledTimes(5)
