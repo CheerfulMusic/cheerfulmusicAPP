@@ -32,3 +32,12 @@
 验证结果：前端 94 个文件、749 项测试通过，TypeScript/Vite 构建通过。后端已运行集合累计 1197 项通过、72 项条件测试跳过；完成现有环境可运行的 verify 后，对最终改词边界、HTTP 兼容及扣费事务另做针对回归，均通过。并发相同请求只扣一次、准入入库失败时扣费回滚、执行器拒绝退款、旧请求重放及积分不足均有测试。
 
 无参数 `mvn verify` 发现 6 组已有支付测试需要未配置的专用隔离 MySQL：CreditEntitlementV40MySqlMigrationTest、CreditHistoricalCutoverMySqlTest、DisputeOverlapMySqlTest、IntegratedCreditAccountMySqlTest、IntegratedPaymentApplicationMySqlTest、LegacyCore40ApplicationMySqlTest。随后仅排除上述 6 组重跑可运行集合；这不代表完整支付／真实 MySQL／资金验收通过。
+
+## 1 积分 / 5 次改动补充
+
+- 当前本地 main 的 V45 已被支付重构占用，本次使用 V46，不更改 V45 或旧迁移校验和。
+- 现有启动默认 Flyway target=44，且 V45 有独立金融切换要求。本次不修改这些保护。发布时必须先确认 V45 的实际验收/激活情况，并经现有迁移流程安装 V46；不能为上线对话功能直接把 target 调成 latest。
+- 前后端应作为同一候选版本发布：新前端会随发送提交付费授权，不能单独配旧的“每轮 1 积分”后端上线。
+- 本次开发未修改生产数据或生产服务。后端额度行为使用隔离 H2 验证，真实 MySQL 迁移和生产上线仍需单独验收。
+
+本次验证：合并最新 main 后，前端 98 个文件 / 778 项测试通过，TypeScript/Vite 构建通过；Agent 准入 16 项、执行器 2 项及歌词配置 7 项针对性测试通过。清理旧迁移构建缓存后执行后端 clean verify（排除 6 组已知需专用 MySQL 的支付测试），server 报告 1336 项中 72 项跳过、1 项错误：新加入的 CreditCarryForwardCutoverMySqlTest 缺少 P0_CARRY_FORWARD_MYSQL_* 隔离资源。其余 1263 项通过；完整后端验收未通过，不得据此发布。未连接主库补测。
