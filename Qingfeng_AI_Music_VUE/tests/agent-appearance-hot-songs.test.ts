@@ -1,0 +1,27 @@
+// @vitest-environment happy-dom
+import { beforeEach, expect, it, vi } from 'vitest'
+import { mount, flushPromises } from '@vue/test-utils'
+import { defineComponent, nextTick } from 'vue'
+import { appearanceKey, defaults, sanitizeAppearance, useChatAppearance } from '../src/modules/agent/composables/useChatAppearance'
+import ChatAppearance from '../src/modules/agent/components/ChatAppearance.vue'
+const hot = vi.hoisted(() => ({load:vi.fn(),record:vi.fn(),toggle:vi.fn(),queue:vi.fn()}))
+vi.mock('../src/modules/home/model/hot-songs', async () => { const {ref}=await import('vue'); return {loadHotSongs:hot.load,recordPlay:hot.record,sortByHeat:(tracks:any[])=>[...tracks].reverse(),hotFailure:ref(''),hotLoading:ref(false)} })
+vi.mock('../src/shared/player/store', () => ({usePlayer:()=>({setQueue:hot.queue,toggle:hot.toggle,current:null,playing:false,starting:false,error:''})}))
+import AgentHotSongs from '../src/modules/agent/components/AgentHotSongs.vue'
+beforeEach(()=>{localStorage.clear();vi.clearAllMocks()})
+it('rejects unsafe stored styles and bounds font size and corners',()=>{
+ expect(sanitizeAppearance({font:'__proto__',border:'url(x)',color:'red;display:none',size:900,radius:-8})).toEqual({...defaults,size:20,radius:4})
+ expect(sanitizeAppearance(null)).toEqual(defaults)
+})
+it('updates existing conversation styles, persists and restores defaults',async()=>{
+ const Host=defineComponent({components:{ChatAppearance},setup:useChatAppearance,template:'<div :style="style"><ChatAppearance v-model="appearance" @reset="reset"/><p>Existing message</p></div>'})
+ const w=mount(Host);await w.get('.literary').trigger('click');await w.get('input[aria-label="字号"]').setValue('18');
+ expect(w.attributes('style')).toContain('--chat-size: 18px');expect(w.attributes('style')).toContain('SimSun');
+ await nextTick();expect(JSON.parse(localStorage.getItem(appearanceKey)!).font).toBe('literary');w.unmount()
+ const restored=mount(Host);expect(restored.attributes('style')).toContain('--chat-size: 18px');await restored.get('.appearance-panel footer button').trigger('click');expect(restored.attributes('style')).toContain('--chat-size: 15px');restored.unmount()
+})
+it('shows six ranked catalog tracks and offers style inspiration without starting playback',async()=>{
+ const w=mount(AgentHotSongs);await flushPromises();expect(hot.load).toHaveBeenCalledOnce();expect(w.findAll('li')).toHaveLength(6)
+ await w.findAll('.hot-inspire')[0].trigger('click');expect(w.emitted('inspire')?.[0]?.[0]).toBeTruthy();expect(hot.toggle).not.toHaveBeenCalled()
+ await w.findAll('.hot-song-play')[0].trigger('click');expect(hot.queue).toHaveBeenCalledOnce();expect(hot.toggle).toHaveBeenCalledOnce();expect(hot.record).not.toHaveBeenCalled();w.unmount()
+})

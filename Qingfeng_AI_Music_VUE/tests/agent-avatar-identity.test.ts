@@ -19,6 +19,7 @@ vi.mock('../src/modules/agent/composables/useAvatarGeneration', async () => {
 })
 vi.mock('../src/modules/agent/api/chat', () => ({ getCurrentConversation: mocks.current, getConversationState: mocks.state, getConversationHistory: vi.fn(), sendMessage: vi.fn(), resetConversation: vi.fn() }))
 vi.mock('../src/shared/credits/useCredits', () => ({ useCredits: () => ({ credits: null, refreshCredits: vi.fn(async () => undefined) }) }))
+vi.mock('../src/modules/agent/components/AgentHotSongs.vue', () => ({ default: { template: '<section class="agent-hot-songs">热歌推荐榜</section>' } }))
 import AgentStudioPage from '../src/modules/agent/pages/AgentStudioPage.vue'
 
 beforeEach(() => { vi.clearAllMocks(); setLocale('zh-CN'); mocks.refresh.mockResolvedValue(undefined); mocks.current.mockResolvedValue({ id: 'c1' }); mocks.state.mockResolvedValue({ messages: [], songCard: null, taskId: null, action: null, shareUrl: null, liked: false }) })

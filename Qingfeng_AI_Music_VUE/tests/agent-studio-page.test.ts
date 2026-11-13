@@ -25,6 +25,7 @@ vi.mock('../src/shared/credits/useCredits', () => ({ useCredits: () => ({ credit
 vi.mock('../src/modules/agent/model/audio-analysis', () => ({ analyzeAudioFile: api.analyse, cancelAnalysis: api.cancel, forgetAnalysis: api.forget, MAX_REFERENCE_BYTES: 20 * 1024 * 1024 }))
 vi.mock('../src/modules/studio/api/works', () => ({ loadWork: api.loadWork }))
 vi.mock('../src/modules/agent/api/reference', () => ({ requestReferenceAnalysis: vi.fn(async () => undefined) }))
+vi.mock('../src/modules/agent/components/AgentHotSongs.vue', () => ({ default: { template: '<section class="agent-hot-songs">热歌推荐榜</section>' } }))
 import AgentStudioPage from '../src/modules/agent/pages/AgentStudioPage.vue'
 import { useAgentConversation } from '../src/modules/agent/composables/useAgentConversation'
 import { usePlayer } from '../src/shared/player/store'
@@ -135,7 +136,7 @@ describe('真实 Agent 对话与作品', () => {
   it('问候调用真实消息接口，不生成本地创作方案或假歌曲', async () => {
     api.send.mockResolvedValue(state({ messages: [message('你好', 1, 'user'), message('你好！我可以和你聊天、一起写歌。', 2)] }))
     const { wrapper } = await page()
-    expect(wrapper.find('.agent-empty-song').exists()).toBe(true)
+    expect(wrapper.find('.agent-hot-songs').exists()).toBe(true)
     expect(wrapper.find('.agent-preview-play').exists()).toBe(false)
     await wrapper.find('textarea').setValue('你好')
     await wrapper.find('form').trigger('submit'); await flushPromises()
