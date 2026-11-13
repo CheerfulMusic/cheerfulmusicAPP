@@ -1,0 +1,55 @@
+{
+  "version": 2,
+  "scope": "payment-four-channel",
+  "releaseId": "<REVIEWED_UNIQUE_RELEASE_ID>",
+  "schemaVersions": {"core": 44, "financial": 45, "protocol": 3},
+  "releaseChannels": ["card", "apple_pay", "wechat_pay", "paypal"],
+  "stageChannels": {
+    "closed": [],
+    "canary": ["card", "apple_pay", "wechat_pay", "paypal"],
+    "open": ["card", "apple_pay", "wechat_pay", "paypal"]
+  },
+  "paypalMerchantId": "<VERIFIED_LIVE_PAYPAL_MERCHANT_ID>",
+  "database": {"uuid": "f71f7437-d6a8-11f1-baa2-00163e1ce234", "schema": "qingfeng_music", "port": 3306},
+  "expected": {"directory": "/opt/qingfeng-music/releases/20261113-agent-final-880e0d5", "sourceCommit": "880e0d57569e30d66f2604f97aa341f2b163b991", "jarSha256": "250b2eccbad5c231c03b1f3f13a8265fc7ce0f55a85f303410c2e5fbfad9a517"},
+  "candidate": {"directory": "/opt/qingfeng-music/releases/<REVIEWED_UNIQUE_RELEASE_ID>", "sourceCommit": "<40HEX>", "jarSha256": "<64HEX>", "contractSha256": "<64HEX>"},
+  "writerInventoryVerified": false,
+  "writerUnits": ["qingfeng-music.service", "qingfeng-music-backup.timer", "qingfeng-music-backup.service"],
+  "restoreDatabase": "qf_stripe_restore_<UNIQUE_LOWERCASE_SUFFIX>",
+  "orchestratorSha256": "<REVIEWED_GUARDED_RELEASE_PY_64HEX>",
+  "guardSha256": "<REVIEWED_VERIFY_RELEASE_PY_64HEX>",
+  "gateSha256": "<REVIEWED_RELEASE_GATE_PY_64HEX>",
+  "approvedPolicy": "/etc/qingfeng-music/<REVIEWED_POLICY>.json",
+  "approvedPolicySha256": "<64HEX>",
+  "closedProperties": "/etc/qingfeng-music/<CLOSED_PRIVATE_CONFIGURATION>.properties",
+  "canaryProperties": "/etc/qingfeng-music/<CANARY_PRIVATE_CONFIGURATION>.properties",
+  "openProperties": "/etc/qingfeng-music/<OPEN_PRIVATE_CONFIGURATION>.properties",
+  "operator": {
+    "java": {"path": "<VERIFIED_ABSOLUTE_SERVER_JAVA17_BINARY>", "sha256": "<64HEX>"},
+    "databaseProperties": {"path": "/etc/qingfeng-music/<OPERATOR_DB_PRIVATE>.properties", "sha256": "<64HEX>"},
+    "migrationProperties": {"path": "/etc/qingfeng-music/<V45_MIGRATION_APPROVAL>.properties", "sha256": "<64HEX>"},
+    "carryForwardProperties": {"path": "/etc/qingfeng-music/<FROZEN_CARRY_APPROVAL>.properties", "sha256": "<64HEX>"}
+  },
+  "operatorIdentity": {"mode": "existing-local-root-empty-password", "username": "root", "runtimeAccountUnchanged": true},
+  "mediaCron": {
+    "entry": "*/10 * * * * /usr/bin/python3 /opt/qingfeng-music/monitor/media_health_check.py 2>>/var/log/qingfeng-media-health.log",
+    "expectedCrontabSha256": "d9e07440030536e80da716a63d2b8a326980ae953b7f435a30cb9a7805f40aa9",
+    "scriptSha256": "30de9ebe4320dd2af7ecbfed08df814c3f632c8b83d38a88771369b9e725814a"
+  },
+  "restoreEvidence": {
+    "artifact": {"path": "<FINAL_SAME_SOURCE_ARTIFACT_RESULTS_JSON>", "sha256": "<64HEX>"},
+    "packagedFinancial": {"path": "<ACTUAL_PACKAGED_LOCAL_SYNTHETIC_COMMAND_RESULTS_JSON>", "sha256": "<64HEX>"},
+    "isolatedBackupRestore": {"path": "<ACTUAL_NONEMPTY_LOCAL_BACKUP_RESTORE_RESULTS_JSON>", "sha256": "<64HEX>"},
+    "isolatedJarStartup": {"path": "<SAME_JAR_RESTORED_SYNTHETIC_DB_STARTUP_RESULTS_JSON>", "sha256": "<64HEX>"}
+  },
+  "receipts": {
+    "build": {"path": "<ACTUAL_BUILD_RECEIPT>", "sha256": "<64HEX>"},
+    "restore": {"path": "<ACTUAL_RESTORE_AND_ISOLATED_V45_COMPATIBILITY_RECEIPT>", "sha256": "<64HEX>"},
+    "schemaAuthorization": {"path": "<APPROVED_EXACT_V45_DDL_SCOPE>", "sha256": "<64HEX>"},
+    "historyAuthorization": {"path": "<APPROVED_EXACT_FROZEN_BALANCE_PLAN_SCOPE>", "sha256": "<64HEX>"},
+    "cutover": {"path": "<ACTUAL_CARRY_VERIFY_NATIVE_JSON>", "sha256": "<64HEX>"},
+    "canaryFunding": {"path": "<ACTUAL_EXPLICIT_CHANNEL_FUNDING_AUTHORIZATION>", "sha256": "<64HEX>"},
+    "business": {"path": "<ACTUAL_FOUR_CHANNEL_LIVE_PAYMENT_ACCEPTANCE>", "sha256": "<64HEX>"},
+    "mediaRecovery": {"path": "<ACTUAL_MEDIA_LOCK_AND_FINANCIAL_COMPATIBILITY_ACCEPTANCE>", "sha256": "<64HEX>"}
+  }
+}

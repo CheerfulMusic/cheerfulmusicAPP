@@ -26,7 +26,8 @@ class GuardTest(unittest.TestCase):
             z.writestr(prefix + 'release-commit.txt', source)
             z.writestr(prefix + 'application.yml', 'spring: {}')
             z.writestr(prefix + 'application-mysql.yml', 'spring: {}')
-            z.writestr(prefix + 'db/migration/V1__fixture.sql', 'SELECT 1;')
+            for migration in sorted((Path(__file__).resolve().parents[1] / 'qf-infrastructure/src/main/resources/db/migration').glob('V*__*.sql')):
+                z.writestr(prefix + 'db/migration/' + migration.name, migration.read_bytes())
             z.writestr(prefix + 'static/index.html', '<script src="/assets/index-abc.js"></script>')
             z.writestr(prefix + 'static/assets/index-abc.js', 'IdentityPage-abc.js RechargePage-abc.js AnalyticsPage-abc.js `/media/sample.mp3`')
             audio = b'ID3original-audio'

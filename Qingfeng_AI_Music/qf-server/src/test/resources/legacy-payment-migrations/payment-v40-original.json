@@ -1,0 +1,9 @@
+{
+  "purpose": "TEST_ONLY_ORIGINAL_EXECUTED_PAYMENT_V40_NOT_CANONICAL_PRODUCTION_MIGRATION",
+  "source_commit": "c780f7a90ac3952fda8dea9ab38a7a42b901e7ed",
+  "script": "V40__credit_entitlement_integration.sql",
+  "sha256_raw": "eb2868df1676875014762fe4b2e61615a69941e2fde7ce3f60002f526bb563f4",
+  "flyway_checksum": -1311214355,
+  "canonical_chain_rejects_this_version_40": true,
+  "production_location_registered": false
+}

@@ -22,8 +22,10 @@ beforeEach(()=>{
   if(path==='app/credits')return reply({enabled:true,balance:0,musicCost:15})
   if(path==='app/paypal/catalog')return reply({enabled:true,packages:[{id:'standard-USD',title:'300 Credits',credits:300,amount:12.99,currency:'USD'}]})
   if(path==='app/payments/catalog')return reply({enabled:false,packages:[]})
+  if(path==='app/stripe/catalog')return reply({enabled:false,packages:[]})
   if(path==='app/paypal/sdk-config')return reply({enabled:false,clientId:'',environment:'production'})
   if(path==='app/payments/orders')return reply({orders:[]})
+  if(path==='app/stripe/orders')return reply({orders:[]})
   if(path==='app/paypal/orders'){if(historyFails)throw new TypeError('offline');return reply({orders:[order]})}
   if(path===`app/paypal/orders/${id}/close`){status='CANCELLED';return reply({...order,status})}
   if(path===`app/paypal/orders/${id}`)return reply(order)

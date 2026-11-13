@@ -84,10 +84,10 @@ public final class JdbcUsageBudget implements UsageBudget {
     }
     private int active(Kind kind, String owner) {
         String table=switch(kind){case MUSIC->"generation_task";case LYRICS->"lyrics_composition_request";case TIMING->"media_lyrics_timeline";case COVER->"cover_edit_task";};
-        String states=switch(kind){case MUSIC,COVER->"'QUEUED','SUBMITTING','RUNNING','SAVING','SUBMISSION_UNKNOWN'";case LYRICS->"'PENDING'";case TIMING->"'FETCHING','UNKNOWN'";};
+        String states=switch(kind){case MUSIC,COVER->"'QUEUED','SUBMITTING','RUNNING','SAVING','SUBMISSION_UNKNOWN'";case LYRICS->"'PENDING','UNKNOWN'";case TIMING->"'FETCHING','UNKNOWN'";};
         String column=kind==Kind.TIMING?"state":"status";
         String sql="SELECT COUNT(*) FROM "+table+" r JOIN music_work w ON w.id=r.work_id WHERE r."+column+" IN ("+states+")";
-        if(kind==Kind.LYRICS)sql+=" AND r.created_at>=TIMESTAMPADD(SECOND,-180,CURRENT_TIMESTAMP)";
+        // Age cannot establish non-acceptance by a provider. UNKNOWN keeps its capacity reservation.
         return owner==null?count(sql):count(sql+" AND w.owner_id=?",owner);
     }
     private int count(String sql, Object... args) { return jdbc.queryForObject(sql,Integer.class,args); }

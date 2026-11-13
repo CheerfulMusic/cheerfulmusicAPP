@@ -5,4 +5,6 @@ public interface VerifiedPaymentProcessor {
     String provider();
     /** Claims at most one persisted event; false means this provider has no due event. */
     boolean processNextEvent();
+    /** Bounded authoritative GET reconciliation for this provider; never initiates funds. */
+    default void reconcileOrders() {}
 }

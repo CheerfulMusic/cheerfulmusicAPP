@@ -93,7 +93,7 @@ class CostControlBatchTest {
         assertEquals(20L, env.getProperty("qingfeng.reference.analysis.daily-per-creator", Long.class));
     }
 
-    // ===== 1. 歌词生成积分：5 积分/次，批量循环不超额、失败退还、幂等 =====
+    // ===== 1. 歌词生成积分：1 积分/次，批量循环不超额、失败退还、幂等 =====
 
     @Test
     void lyricsGenerationChargesExactlyOneCreditPerCallInBatch() {
@@ -127,15 +127,17 @@ class CostControlBatchTest {
         String owner = identity.create().creatorId();
         credits.credit(owner, LYRICS_COST * 5, "fund-" + owner);
         String work = works.create(owner, new Draft("妈妈", "生日", "一起做饭", "愿你快乐", "民谣", "故事")).id();
-        // 失败退还：扣费后模型异常，积分应退回原额，流水标记已退。
-        lyricsWriter.failure = new DomainException("LYRICS_PROVIDER_TIMEOUT", "超时");
+        // 已确认未受理才退款；超时的未知结果由独立边界用例验证保留扣费。
+        lyricsWriter.failure = new DomainException("LYRICS_PROVIDER_UNAVAILABLE", "供应商明确拒绝受理");
         String failedKey = UUID.randomUUID().toString();
-        assertThrows(DomainException.class, () -> composer.compose(owner, work, 0, failedKey, "zh-CN"));
+        assertEquals("LYRICS_PROVIDER_UNAVAILABLE",assertThrows(DomainException.class, () -> composer.compose(owner, work, 0, failedKey, "zh-CN")).code());
         assertEquals(LYRICS_COST * 5, credits.balance(owner)); // 已原额退还
         var rows = consumptions(owner);
         assertEquals(1, rows.size());
         assertEquals("FAILED", rows.get(0).status());
         assertEquals(1, rows.get(0).refunded());
+        assertEquals(1,lyricsWriter.calls.get());
+        assertEquals(1,jdbc.queryForObject("SELECT COUNT(*) FROM credit_ledger WHERE owner_id=? AND entry_type='REFUND'",Integer.class,owner));
     }
 
     @Test

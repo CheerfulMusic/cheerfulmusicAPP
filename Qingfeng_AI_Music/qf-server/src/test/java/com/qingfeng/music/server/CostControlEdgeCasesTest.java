@@ -8,6 +8,7 @@ import com.qingfeng.music.infrastructure.persistence.usage.JdbcUsageBudget;
 import com.qingfeng.music.lyrics.application.InspirationRewriter;
 import com.qingfeng.music.lyrics.application.LyricsCompositionService;
 import com.qingfeng.music.lyrics.application.LyricsWriter;
+import com.qingfeng.music.lyrics.application.CompositionRequests;
 import com.qingfeng.music.usage.UsageBudget.Kind;
 import com.qingfeng.music.work.api.WorkApi;
 import com.qingfeng.music.work.api.WorkApi.Draft;
@@ -78,6 +79,7 @@ class CostControlEdgeCasesTest {
     @Autowired JdbcTemplate jdbc;
     @Autowired PlatformTransactionManager manager;
     @Autowired RecordingLyricsWriter lyricsWriter;
+    @Autowired CompositionRequests requests;
 
     @BeforeEach
     void reset() {
@@ -161,9 +163,9 @@ class CostControlEdgeCasesTest {
         assertEquals(1, rows.get(0).refunded());
     }
 
-    /** 超时/结果未知（LYRICS_PROVIDER_TIMEOUT）走 UNKNOWN 终态，同样全额退款且流水一致。 */
+    /** 超时不证明未受理：UNKNOWN 保留扣费和准入，不能退款或重投，晚到成功可结算。 */
     @Test
-    void timeoutOutcomeIsRefundedAndMarkedUnknown() {
+    void timeoutOutcomePreservesChargeAndIsMarkedUnknown() {
         String owner = identity.create().creatorId();
         long fund = 100;
         credits.credit(owner, fund, "fund-" + owner);
@@ -171,15 +173,24 @@ class CostControlEdgeCasesTest {
         String key = UUID.randomUUID().toString();
         lyricsWriter.failure = new DomainException("LYRICS_PROVIDER_TIMEOUT", "上游超时");
         assertThrows(DomainException.class, () -> composer.compose(owner, work, 0, key, "zh-CN"));
-        assertEquals(fund, credits.balance(owner), "超时未交付结果，全额退款");
+        assertEquals(fund-LYRICS_COST, credits.balance(owner), "未知结果不能盲目退还积分");
         String status = jdbc.queryForObject(
             "SELECT status FROM lyrics_composition_request WHERE work_id=? AND request_key=?", String.class, work, key);
-        assertEquals("UNKNOWN", status, "超时保留不确定终态，避免误判为成功");
+        assertEquals("UNKNOWN", status, "超时保持未决状态，避免误判为成功或确认失败");
         var rows = consumptions(owner);
         assertEquals(1, rows.size());
-        assertEquals("FAILED", rows.get(0).status());
-        assertEquals(1, rows.get(0).refunded());
+        assertEquals("UNKNOWN", rows.get(0).status());
+        assertEquals(0, rows.get(0).refunded());
         assertEquals(LYRICS_COST, rows.get(0).amount());
+        assertEquals("LYRICS_REQUEST_PENDING",assertThrows(DomainException.class,()->composer.compose(owner,work,0,key,"zh-CN")).code());
+        assertEquals("LYRICS_REQUEST_PENDING",assertThrows(DomainException.class,()->composer.compose(owner,work,0,UUID.randomUUID().toString(),"zh-CN")).code());
+        assertEquals(1,lyricsWriter.calls.get());assertEquals(fund-LYRICS_COST,credits.balance(owner));
+        jdbc.update("UPDATE lyrics_composition_request SET created_at=TIMESTAMPADD(SECOND,-600,CURRENT_TIMESTAMP) WHERE work_id=? AND request_key=?",work,key);
+        assertEquals(1,usageBudget.allowance(owner,Kind.LYRICS).active(),"时间经过不能释放未知供应商任务的额度");
+        requests.complete(work,key,UUID.randomUUID().toString());
+        assertEquals("SUCCEEDED",requests.find(work,key).orElseThrow().status());assertEquals(fund-LYRICS_COST,credits.balance(owner));
+        var completed=consumptions(owner);assertEquals(1,completed.size());assertEquals("SUCCEEDED",completed.get(0).status());assertEquals(0,completed.get(0).refunded());
+        assertEquals(0,jdbc.queryForObject("SELECT COUNT(*) FROM credit_ledger WHERE owner_id=? AND entry_type='REFUND'",Integer.class,owner));
     }
 
     /** 取消歌曲生成：退款并释放额度；重复取消、取消被否决均不破坏账本。 */
@@ -272,6 +283,7 @@ class CostControlEdgeCasesTest {
             return out;
         } finally {
             pool.shutdownNow();
+            assertTrue(pool.awaitTermination(15,TimeUnit.SECONDS),"全部并发任务必须结束才能开始下一项测试");
         }
     }
 

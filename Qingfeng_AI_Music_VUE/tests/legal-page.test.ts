@@ -24,4 +24,3 @@ it('keeps the public static terms reached by the production route consistent wit
   expect(page.body.textContent).toContain('one-time award of 50 Promotional Credits')
   expect(page.body.textContent).not.toContain('one-time award of 100 Promotional Credits')
 })
-
