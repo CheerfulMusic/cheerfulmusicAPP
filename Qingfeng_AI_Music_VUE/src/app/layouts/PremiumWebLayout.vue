@@ -104,7 +104,7 @@ onBeforeUnmount(() => {
       <section id="consumer-navigation" ref="menu" class="consumer-mobile-menu" role="dialog" :aria-label="t('音乐网站导航')" aria-modal="true">
         <div class="consumer-menu-heading"><strong>{{ t('想从哪里开始？') }}</strong><button class="consumer-menu-close" :aria-label="t('关闭导航')" @click="closeMenu"><NavIcon name="close"/></button></div>
         <nav :aria-label="t('手机导航')"><RouterLink v-for="item in navigation" :key="item.to" :to="item.to" :class="{'is-active':isActive(item.to), 'agent-menu-link':item.agent}"><NavIcon :name="item.icon"/>{{ t(item.label) }}<span v-if="item.agent" class="agent-nav-new">New</span></RouterLink><RouterLink to="/works"><NavIcon name="music"/>{{ t('我的音乐') }}</RouterLink><RouterLink v-if="accountState.authenticated || logtoState.authenticated" to="/account" :class="{'is-active':route.name==='identity'}"><NavIcon name="account"/>{{ t('账号与登录') }}</RouterLink><button v-else type="button" class="mobile-login-link" @click="menuOpen=false; showLoginDialog()"><NavIcon name="account"/>{{ t('登录/注册') }}</button></nav>
-        <RouterLink class="consumer-menu-create" to="/create">{{ t('为重要的人，制作一首歌') }} <NavIcon name="arrow"/></RouterLink>
+        <RouterLink class="consumer-menu-create" to="/create">{{ t('去制作一首歌') }} <NavIcon name="arrow"/></RouterLink>
         <p v-if="creditBalance !== null" class="consumer-menu-credits">{{ t('可用积分') }}：{{ creditBalance }}</p>
         <RouterLink class="consumer-recovery-link" to="/recharge">{{ locale === 'en' ? 'Recharge credits' : '充值创作积分' }}</RouterLink>
         <RouterLink class="consumer-recovery-link" to="/account">{{ t('找回之前的音乐') }}</RouterLink>
