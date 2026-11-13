@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import { defineAsyncComponent, computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import '../playful.css'
+import { routerKey } from 'vue-router'
+import { defineAsyncComponent, computed, inject, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { defaultCover, locale } from '../../../shared/i18n'
 import { usePlayer, type PlayableTrack } from '../../../shared/player/store'
 import { useCredits } from '../../../shared/credits/useCredits'
@@ -15,8 +17,11 @@ import { loadWork } from '../../studio/api/works'
 import { assistantResult, uploadTarget, type AgentCommand } from '../model/assistant-result'
 import AgentResultCard from '../components/AgentResultCard.vue'
 import AgentProgressCard from '../components/AgentProgressCard.vue'
+import AgentMessageText from '../components/AgentMessageText.vue'
 import { agentProgress } from '../model/progress'
 import UserAvatarDialog from '../components/UserAvatarDialog.vue'
+import { useProfileAvatar } from '../composables/useProfileAvatar'
+import { useMusicClicks } from '../composables/useMusicClicks'
 import { useUserAvatar } from '../composables/useUserAvatar'
 import { downloadSong, downloadStatus } from '../../works/api/download'
 import { useAvatarGeneration } from '../composables/useAvatarGeneration'
@@ -27,6 +32,11 @@ const { messages, songCard, shareUrl, liked, taskRunning, loading, sending, erro
 const player = usePlayer(), { credits, refreshCredits } = useCredits()
 const input = ref(''), chat = ref<HTMLElement>(), fileInput = ref<HTMLInputElement>(), notice = ref('')
 const avatar = useUserAvatar()
+const profileRouter = inject(routerKey, null)
+function avatarImageFailed(event: Event) { const img = event.target as HTMLImageElement; if (!img.src.endsWith('/brand/music-person.svg')) img.src = '/brand/music-person.svg' }
+function openProfile(event: MouseEvent) { if (!profileRouter || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey || event.button !== 0) return; event.preventDefault(); void profileRouter.push('/profile') }
+const profileAvatar = useProfileAvatar()
+const { sparks, burst } = useMusicClicks()
 const avatarGeneration = useAvatarGeneration(avatar.refresh, refreshCredits)
 const avatarDialog = ref(false)
 async function uploadAvatar(file: File) { if (await avatar.upload(file)) avatarDialog.value = false }
@@ -49,7 +59,7 @@ async function fetchStory() {
 }
 const nativePanel = ref<{ kind: 'recharge' | 'account' | 'privacy' | 'photo' | 'upload_cover' | 'upload_audio'; workId?: string } | null>(null)
 const lastAssistantId = computed(() => [...messages.value].reverse().find(message => message.role === 'assistant' && !agentProgress(message))?.id)
-const chatMessages = computed(() => messages.value.map(message => ({ ...message, progress: agentProgress(message), result: agentProgress(message) ? null : assistantResult(message) })))
+const chatMessages = computed(() => messages.value.filter((message, index) => { const progress = agentProgress(message); const user = messages.value.slice(0, index).reverse().find(item => item.role === 'user'); return !progress || !['planning', 'tool_started'].includes(progress.stage) || !user || !['DONE', 'FAILED'].includes(user.state) }).map(message => ({ ...message, progress: agentProgress(message), result: agentProgress(message) ? null : assistantResult(message) })))
 const pendingAlreadySaved = computed(() => !!pending.value && messages.value.some(message => {
   if (message.role !== 'user') return false
   try { return JSON.parse(message.contentJson || '{}').requestKey === pending.value?.requestKey } catch { return false }
@@ -209,12 +219,12 @@ watch(() => [previewTab.value, songCard.value?.songId], ([tab]) => {
 watch(() => messages.value.at(-1)?.seq, () => { void scrollChat() })
 let avatarRefreshScheduled = false, avatarDisposed = false
 function avatarIdentityChanged() {
-  avatarGeneration.stop(); avatar.clear(); avatarDialog.value = false
+  avatarGeneration.stop(); avatar.clear(); profileAvatar.clear(); avatarDialog.value = false
   if (avatarRefreshScheduled) return
   avatarRefreshScheduled = true
   queueMicrotask(() => {
     avatarRefreshScheduled = false
-    if (!avatarDisposed) { void avatar.refresh(); avatarGeneration.start() }
+    if (!avatarDisposed) { void avatar.refresh(); void profileAvatar.refresh(); avatarGeneration.start() }
   })
 }
 watch(() => JSON.stringify([accountState.value.authenticated, accountState.value.email, accountState.value.name, logtoState.value.authenticated, logtoState.value.email, logtoState.value.phoneMasked, logtoState.value.name]), () => {
@@ -223,12 +233,13 @@ watch(() => JSON.stringify([accountState.value.authenticated, accountState.value
   input.value = ''; notice.value = ''; confirmingReset.value = false; nativePanel.value = null
   clearReference(); void conversation.changeIdentity()
 })
-onMounted(() => { window.addEventListener('qingfeng:identity-changed', avatarIdentityChanged); void avatar.refresh(); avatarGeneration.start(); void conversation.refresh(); void refreshCredits().catch(() => undefined) })
-onBeforeUnmount(() => { avatarDisposed = true; window.removeEventListener('qingfeng:identity-changed', avatarIdentityChanged); avatar.clear(); storyVersion++; recognition?.stop?.(); clearReference() })
+onMounted(() => { window.addEventListener('qingfeng:identity-changed', avatarIdentityChanged); void avatar.refresh(); void profileAvatar.refresh(); avatarGeneration.start(); void conversation.refresh(); void refreshCredits().catch(() => undefined) })
+onBeforeUnmount(() => { avatarDisposed = true; window.removeEventListener('qingfeng:identity-changed', avatarIdentityChanged); avatar.clear(); profileAvatar.clear(); storyVersion++; recognition?.stop?.(); clearReference() })
 </script>
 
 <template>
-  <div class="agent-studio">
+  <div class="agent-studio agent-playful" @click.capture="burst">
+    <Teleport to="body"><div class="agent-click-sparks" aria-hidden="true"><span v-for="spark in sparks" :key="spark.id" :style="{ left: `${spark.x}px`, top: `${spark.y}px` }"><i>♪</i><i>✦</i><i>♫</i></span></div></Teleport>
     <div class="agent-scenery" aria-hidden="true"><span/><span/><span/></div>
     <section class="agent-conversation" :aria-label="tr('音乐创作对话', 'Music conversation')">
       <header class="agent-conversation-head">
@@ -245,6 +256,7 @@ onBeforeUnmount(() => { avatarDisposed = true; window.removeEventListener('qingf
         <button v-if="hasOlderMessages" class="agent-history-more" type="button" :disabled="loadingOlder || loading" @click="loadOlder">{{ loadingOlder ? tr('正在加载…', 'Loading…') : tr('查看更早的对话', 'Load earlier messages') }}</button>
         <p v-if="historyError" class="agent-upload-error" role="status">{{ historyError }}</p>
         <div v-if="!messages.length" class="agent-hero">
+          <div class="agent-hero-friend" aria-hidden="true"><img :src="'/brand/music-person.svg'" alt=""/><span>♪</span><span>✦</span></div>
           <h1>{{ tr('把你的故事，变成一首歌。', 'Turn your story into a song.') }}</h1>
           <p class="agent-hero-tagline">{{ tr('每个人，都可以是歌手。', 'Everyone can be a singer.') }}</p>
           <p>{{ tr('一个故事、一种心情，甚至一张照片。', 'A story, a feeling, or even a photo.') }}</p>
@@ -256,8 +268,8 @@ onBeforeUnmount(() => { avatarDisposed = true; window.removeEventListener('qingf
         </div>
         <div v-for="message in chatMessages" :key="message.id" class="agent-message" :class="message.role">
           <div v-if="message.role === 'assistant'" class="agent-bot-avatar" aria-hidden="true"><img :src="'/brand/logo-symbol.svg'" alt=""/></div>
-          <div class="agent-message-content"><AgentProgressCard v-if="message.progress" :progress="message.progress"/><div v-else-if="messageText(message)" class="agent-bubble" :class="{ 'agent-message-failed': message.state === 'FAILED' }"><p>{{ messageText(message) }}</p></div><AgentResultCard v-if="message.result" :result="message.result" :disabled="blocked" :current="message.id === lastAssistantId" @command="runCommand"/></div>
-          <button v-if="message.role === 'user'" type="button" class="agent-user-avatar" :aria-label="tr('设置头像', 'Change avatar')" @click="avatarDialog = true"><img v-if="avatar.avatarUrl.value" :src="avatar.avatarUrl.value" alt="" @error="avatar.avatarUrl.value = ''"/><svg v-else viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="17" r="8.4" fill="#f0b49c"/><path d="M7 44c1.9-9.6 8.6-14.4 17-14.4S39.1 34.4 41 44z" fill="#f0b49c"/></svg></button>
+          <div class="agent-message-content"><AgentProgressCard v-if="message.progress" :progress="message.progress"/><div v-else-if="messageText(message)" class="agent-bubble" :class="{ 'agent-message-failed': message.state === 'FAILED' }"><AgentMessageText :text="messageText(message)"/></div><AgentResultCard v-if="message.result" :result="message.result" :disabled="blocked" :current="message.id === lastAssistantId" @command="runCommand"/></div>
+          <a v-if="message.role === 'user'" href="/profile" class="agent-user-avatar" @click="openProfile" :aria-label="tr('我的资料，修改头像', 'My profile, change avatar')" :title="tr('我的资料 · 点击修改头像', 'My profile · Change avatar')"><img :src="avatar.avatarUrl.value || profileAvatar.imageUrl.value || '/brand/music-person.svg'" :alt="tr('我的头像', 'My avatar')" @error="avatarImageFailed"/></a>
         </div>
         <div v-if="pending && !pendingAlreadySaved" class="agent-message user agent-pending"><div class="agent-bubble"><p>{{ pending.text }}</p><small>{{ sending ? tr('发送中…', 'Sending…') : tr('结果待确认', 'Awaiting confirmation') }}</small></div></div>
         <p v-if="sending" class="agent-typing" role="status"><span class="agent-typing-spinner" aria-hidden="true"/>{{ tr('正在处理你的请求…', 'Working on your request…') }}</p>
@@ -291,8 +303,9 @@ onBeforeUnmount(() => { avatarDisposed = true; window.removeEventListener('qingf
     <aside class="agent-preview" :aria-label="tr('当前作品', 'Current song')">
       <template v-if="songCard?.songId">
         <div class="agent-album">
-          <div class="agent-record" aria-hidden="true"></div>
-          <div class="agent-album-art"><img :src="safeLink(songCard.coverUrl) || defaultCover()" :alt="tr('歌曲封面', 'Song artwork')"/>
+          <div class="agent-record" :class="{ 'is-spinning': isPlaying }" aria-hidden="true"><span/></div>
+          <div class="agent-album-art"><span class="agent-album-badge">{{ taskRunning ? tr('创作中', 'Creating') : tr('我的作品', 'My song') }}</span><img :src="safeLink(songCard.coverUrl) || defaultCover()" :alt="tr('歌曲封面', 'Song artwork')"/>
+            <button v-if="playable" type="button" class="agent-cover-play" :aria-label="isPlaying ? tr('暂停这首歌', 'Pause this song') : tr('播放这首歌', 'Play this song')" @click="togglePlay">{{ isPlaying ? 'Ⅱ' : '▶' }}</button>
             <button type="button" class="agent-album-like" :disabled="blocked" :aria-pressed="liked" :aria-label="liked ? tr('取消喜欢', 'Unlike') : tr('喜欢', 'Like')" @click="send(liked ? '取消点赞当前作品' : '给当前作品点赞')">{{ liked ? '♥' : '♡' }}</button>
           </div>
         </div>
