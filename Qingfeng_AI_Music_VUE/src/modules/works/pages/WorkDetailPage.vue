@@ -404,7 +404,7 @@ async function backToStory(){
     <p v-if="pendingTask&&!generationOpen&&!quickBusy&&(!quickJourney||asset)" class="notice" role="status">{{ t(generationProblem(pendingTask.errorCode)||'音乐正在后台制作，可以继续浏览，稍后回来查看。') }} <button class="text-button" @click="showProgress">{{ t('查看生成进度') }}</button></p>
     <section v-if="latestFailure&&!pendingTask" class="notice" role="status"><p>{{ t(generationProblem(latestFailure.errorCode)||'音乐服务未完成这次创作，歌词和设置已保留。') }}</p><button v-if="latestFailure.errorCode==='AUDIO_ARCHIVE_FAILED'" class="button secondary" :disabled="submitting" @click="retryArchive(latestFailure)">{{ t('仅重试保存音频') }}</button></section>
     <GenerationRecovery v-if="pendingTask?.status==='SUBMISSION_UNKNOWN'" :task="pendingTask" :busy="submitting" @refresh="refreshTasks" @close="closeChecking(pendingTask)"/>
-    <SongResult v-if="asset" :work="work" :asset="asset" :title="songTitle" :cover="artwork" :pending="!!pendingTask" :checking="submissionUnknown" :busy="submitting||quickBusy||!tasksReady||taskReadIssue||!quickChecked||quickReadIssue||(!pendingTask&&!submissionUnknown&&(!modelReady||!generationLyricsReady))" :lyrics="giftRevision?.lyrics||''" :language="giftRevision?.language" :section-open="sectionOpen" :publication-label="publicationLabel" :can-publish-to-discover="!!(publicationMatches && publicationState?.published && publicationState.publicId && !publicationState.song?.onDiscover)" @gift="sendGift" @publish="openSongPublication()" @discover="openSongPublication(true)" @regenerate="openMusicAdjustment" @cover="openCover" @edit="openSection"/>
+    <SongResult v-if="asset" :work="work" :asset="asset" :title="songTitle" :cover="artwork" :pending="!!pendingTask" :checking="submissionUnknown" :busy="submitting||quickBusy||!tasksReady||taskReadIssue||!quickChecked||quickReadIssue||(!pendingTask&&!submissionUnknown&&(!modelReady||!generationLyricsReady))" :lyrics="giftRevision?.lyrics||''" :language="giftRevision?.language" :section-open="sectionOpen" :publication-label="publicationLabel" :can-publish-to-discover="!!(publicationMatches && publicationState?.published && publicationState.publicId && !publicationState.song?.onDiscover)" @gift="sendGift" @premium="premiumOpen=true" @publish="openSongPublication()" @discover="openSongPublication(true)" @regenerate="openMusicAdjustment" @cover="openCover" @edit="openSection"/>
     <MusicSettingsSnapshot v-if="asset&&tasks.find(task=>task.assetId===asset?.id)" :work-id="work.id" :task-id="tasks.find(task=>task.assetId===asset?.id)!.id"/>
     <SectionEditor v-if="asset" ref="sectionEditor" :key="work.id" :work="work" :asset="asset" :title="songTitle" :cover="artwork" :tasks="tasks" :open="sectionOpen" :hint="sectionHint" @close="sectionOpen=false" @refresh="refreshTasks" @adopted="sectionAdopted"/>
     <MusicSettingsPanel v-if="remake" :work="work" :remake="remake" :busy="submitting" :submit-error="remakeError" @apply="generate(false,$event)" @close="remake=undefined"/>
@@ -426,7 +426,7 @@ async function backToStory(){
           </div>
         </section>
         <div v-if="asset" class="creation-action-bar work-primary-bar" :class="{'context-editor-open':coverOpen}">
-          <template v-if="asset"><button class="button creation-primary" @click="sendGift">{{ t('分享歌曲') }}</button><button class="button secondary premium-studio-entry" type="button" @click="premiumOpen=true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3v7m0 4v7M12 3v12m0 4v2M19 3v2m0 4v12M2 10h6v4H2zm7 5h6v4H9zm7-10h6v4h-6z"/></svg><span>{{ t('定制化音乐制作') }}</span></button></template>
+          <button class="button creation-primary" @click="sendGift">{{ t('分享歌曲') }}</button>
         </div>
         <p v-if="!modelReady&&!asset" class="notice">{{ t('音乐生成暂不可用，可以先编辑并保存歌词，稍后再试。') }}</p>
         <AudioPanel id="work-audio" tabindex="-1" :key="work.id+'-'+mediaRefresh" :work="work" :cover="artwork" @selected="asset=$event" @load-state="mediaState=$event" @compare="sectionEditor?.compare($event)"/>
@@ -505,17 +505,6 @@ async function backToStory(){
  .credit-issue { margin-top:20px; padding:14px 16px; gap:12px; }
  .credit-issue-actions { width:100%; }
  .credit-issue .credit-issue-topup { flex:1; }
-}
-.work-primary-bar > .premium-studio-entry { display:inline-flex; align-items:center; justify-content:center; gap:8px; min-height:50px; padding:12px 22px; border:1px solid #c38a32; border-radius:26px; background:linear-gradient(120deg,#ffe9b5,#f3cd77); color:#704311; box-shadow:0 5px 16px #b9782226; font-size:15px; font-weight:650; line-height:1.4; }
-.premium-studio-entry svg { width:19px; height:19px; flex:none; fill:none; stroke:currentColor; stroke-width:1.6; stroke-linecap:round; stroke-linejoin:round; }
-.premium-studio-entry > span { min-width:0; }
-.work-primary-bar > .premium-studio-entry:hover { background:linear-gradient(120deg,#ffe19b,#edbc59); border-color:#a66b1b; color:#593207; }
-.premium-studio-entry:focus-visible { outline:2px solid #93601a; outline-offset:3px; }
-@media(max-width:600px) {
- .work-primary-bar:has(.premium-studio-entry) { align-items:stretch; }
- .work-primary-bar:has(.premium-studio-entry) > .creation-primary { flex:1.1 1 0; width:auto; min-width:0; min-height:50px; }
- .work-primary-bar > .premium-studio-entry { flex:1 1 0; min-width:0; padding:10px; font-size:12px; gap:6px; }
- .premium-studio-entry svg { width:18px; height:18px; }
 }
 .story-back-actions .description-back-button { display:inline-flex; align-items:center; justify-content:center; gap:9px; min-height:48px; padding:11px 20px; border:1px solid #ec9e87; border-radius:24px; background:#fff0e8; color:#b93422; font:inherit; font-size:17px; font-weight:600; line-height:1.5; cursor:pointer; text-decoration:none; }
 .description-back-button svg { width:20px; height:20px; flex:none; fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
