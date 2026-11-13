@@ -904,7 +904,7 @@ export const english: Record<string, string> = {
   '音乐网站导航': 'Music navigation',
   '想从哪里开始？': 'Where shall we begin?',
   '手机导航': 'Mobile navigation',
-  '为重要的人，制作一首歌': 'Make a song for someone special',
+  '去制作一首歌': 'Make a song',
   '找回之前的音乐': 'Recover your music',
   '青风音乐': 'Cheerful Music',
   '把心意，唱给你听。': 'Let your heart be heard.',
