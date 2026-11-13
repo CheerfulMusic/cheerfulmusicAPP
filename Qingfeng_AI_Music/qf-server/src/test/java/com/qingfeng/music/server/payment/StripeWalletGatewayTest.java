@@ -94,4 +94,16 @@ class StripeWalletGatewayTest {
         var f=fixture("GB");for(int i=0;i<2;i++)f.gateway().createSession("same-order","Credits",new BigDecimal("178.80"),"CNY","wechat_pay");
         assertEquals(fields(f.requests().get(1)),fields(f.requests().get(2)));assertEquals(f.requests().get(1).headers().firstValue("Idempotency-Key"),f.requests().get(2).headers().firstValue("Idempotency-Key"));assertEquals("17880",fields(f.requests().get(1)).get("line_items[0][price_data][unit_amount]"));
     }
+    @Test void cancellationExpiresOnlyExactSessionWithStableIdempotencyKey() throws Exception {
+        var f=fixture("GB");
+        f.gateway().expireSession("cs_test_cancel_fixture");
+        f.gateway().expireSession("cs_test_cancel_fixture");
+        var first=f.requests().get(1);var second=f.requests().get(2);
+        assertEquals("POST",first.method());
+        assertEquals("/v1/checkout/sessions/cs_test_cancel_fixture/expire",first.uri().getPath());
+        assertEquals("expire-session:cs_test_cancel_fixture",first.headers().firstValue("Idempotency-Key").orElseThrow());
+        assertEquals(first.headers().firstValue("Idempotency-Key"),second.headers().firstValue("Idempotency-Key"));
+        assertEquals(0,first.bodyPublisher().orElseThrow().contentLength());
+    }
+
 }

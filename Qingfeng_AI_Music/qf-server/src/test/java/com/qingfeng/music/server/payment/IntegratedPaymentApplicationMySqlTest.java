@@ -165,6 +165,14 @@ class IntegratedPaymentApplicationMySqlTest {
                 assertEquals("wechat_pay",StripePaymentMethods.checkoutMethodForStoredOffer((String)stored.get("package_id")));assertEquals(amount,stored.get("amount"));assertEquals(currency,stored.get("currency"));
                 String session="cs_test_"+unique();var fact=walletSession(session,order,amount,currency,false);SESSIONS.put(session,fact);return fact;
             }).when(gateway).createSession(anyString(),anyString(),any(),anyString(),anyString());
+            doAnswer(call->{
+                String id=call.getArgument(0);
+                return SESSIONS.compute(id,(key,fact)->{
+                    if(fact==null)throw new AssertionError("Unknown cancellation fixture; external calls forbidden");
+                    if(!"open".equals(fact.path("status").asString()))throw new StripeCheckoutGateway.StripeRemoteException(400);
+                    var expired=(tools.jackson.databind.node.ObjectNode)fact.deepCopy();expired.put("status","expired");return expired;
+                });
+            }).when(gateway).expireSession(anyString());
             doAnswer(call->known(SESSIONS,call.getArgument(0))).when(gateway).retrieveSession(anyString());doAnswer(call->known(REFUNDS,call.getArgument(0))).when(gateway).retrieveRefund(anyString());doAnswer(call->known(DISPUTES,call.getArgument(0))).when(gateway).retrieveDispute(anyString());doAnswer(call->known(CHARGES,call.getArgument(0))).when(gateway).retrieveCharge(anyString());doAnswer(call->known(BALANCES,call.getArgument(0))).when(gateway).retrieveBalanceTransaction(anyString());
             doThrow(new AssertionError("Unexpected external refund-list query")).when(gateway).refundsForCharge(anyString());doThrow(new AssertionError("Unexpected external dispute-list query")).when(gateway).disputesForCharge(anyString());return gateway;
         }
@@ -731,4 +739,30 @@ class IntegratedPaymentApplicationMySqlTest {
         assertPaidAgentDeniedWithoutFinancialOrAdmissionMutation(customer,conversation,UUID.randomUUID().toString(),"synthetic paid fully frozen boundary");
         assertEquals(119,ledger.balance(customer.creatorId()));assertEquals(20,held(a));assertEquals(99,held(b));
     }
+    @Test @Order(32) void cancelledCheckoutUsesAuthenticatedHttpAndConcurrentMySqlTransactionsWithoutLosingLatePayment() throws Exception {
+        var buyer=owner();var p=pending(buyer);String path="/api/app/stripe/orders/"+p.order()+"/cancel";
+        var stranger=owner();assertEquals(404,business(stranger,path,"POST","{}").statusCode());
+        assertEquals("open",SESSIONS.get(p.session()).path("status").asString());
+        var pool=Executors.newFixedThreadPool(4);var start=new CountDownLatch(1);
+        try {
+            var futures=new ArrayList<Future<HttpResponse<String>>>();
+            for(int i=0;i<8;i++)futures.add(pool.submit(()->{awaitDownload(start);return business(buyer,path,"POST","{}");}));
+            start.countDown();
+            for(var future:futures){var response=future.get(30,TimeUnit.SECONDS);assertEquals(200,response.statusCode(),response.body());assertEquals("CANCELLED",JSON.readTree(response.body()).path("status").asString());}
+        } finally {start.countDown();pool.shutdownNow();assertTrue(pool.awaitTermination(15,TimeUnit.SECONDS));}
+        assertEquals("expired",SESSIONS.get(p.session()).path("status").asString());
+        assertEquals("CANCELLED",db.queryForObject("SELECT status FROM payment_order WHERE id=?",String.class,p.order()));
+        assertEquals(0,number("SELECT COUNT(*) FROM credit_ledger WHERE reference_id=?","payment:"+p.order()));
+        assertEquals(0,ledger.balance(buyer.creatorId()));
+        // A verified late successful payment must never be discarded because of a local terminal label.
+        SESSIONS.put(p.session(),session(p.session(),p.order(),true));
+        accepted("checkout.session.completed",p.session(),"evt_"+unique());drain();
+        accepted("checkout.session.completed",p.session(),"evt_"+unique());drain();
+        assertEquals("PAID",JSON.readTree(business(buyer,path,"POST","{}").body()).path("status").asString());
+        assertEquals(100,ledger.balance(buyer.creatorId()));
+        assertEquals(1,number("SELECT COUNT(*) FROM credit_ledger WHERE reference_id=? AND entry_type='CREDIT'","payment:"+p.order()));
+        assertEquals(100,number("SELECT SUM(amount) FROM credit_ledger WHERE owner_id=?",buyer.creatorId()));
+        assertEquals(1,number("SELECT COUNT(*) FROM p0_credit_batch WHERE reference=?","payment:"+p.order()));
+    }
+
 }

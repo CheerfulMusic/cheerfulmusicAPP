@@ -120,6 +120,7 @@ export function validResponse(path:string,method:string,value:unknown):boolean{
  if(path==='app/paypal/sdk-config')return method==='GET'&&obj(value)&&typeof value.enabled==='boolean'&&str(value.clientId)&&['sandbox','production'].includes(String(value.environment))&&(!value.enabled||text(value.clientId))
  if(path==='app/payments/orders'||path==='app/paypal/orders'||path==='app/stripe/orders')return method==='POST'?obj(value)&&text(value.orderId)&&text(value.checkoutUrl)&&(path!=='app/paypal/orders'||value.paypalOrderId===undefined||text(value.paypalOrderId)):method==='GET'&&obj(value)&&list(value.orders,o=>paymentOrder(o)&&obj(o)&&text(o.createdAt))
  if(/^app\/(payments|paypal|stripe)\/orders\/[^/]+$/.test(path))return method==='GET'&&paymentOrder(value)
+ if(/^app\/stripe\/orders\/[^/]+\/cancel$/.test(path))return method==='POST'&&paymentOrder(value)
  if(/^app\/stripe\/orders\/[^/]+\/resume$/.test(path))return method==='POST'&&obj(value)&&text(value.orderId)&&(['PAID','CANCELLED'].includes(String(value.status))||text(value.checkoutUrl))
  if(/^app\/paypal\/orders\/[^/]+\/resume$/.test(path))return method==='POST'&&obj(value)&&text(value.orderId)&&(['APPROVED','PAID'].includes(String(value.status))||value.status==='CHECKOUT'&&text(value.checkoutUrl))
  if(/^app\/paypal\/orders\/[^/]+\/(capture|close)$/.test(path))return method==='POST'&&paymentOrder(value)

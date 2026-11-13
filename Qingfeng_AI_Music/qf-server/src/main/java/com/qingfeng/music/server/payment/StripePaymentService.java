@@ -212,6 +212,50 @@ public final class StripePaymentService implements VerifiedPaymentProcessor {
         return createOrResume(creator.id(),id);
     }
 
+    /** Cancellation closes Checkout, never refunds money or deletes financial history. */
+    public Map<String,Object> cancel(CreatorPrincipal creator,String id) {
+        String owner=creator.id();
+        var row=ownedOrder(owner,id); // ownership before any supplier operation
+        if ("PAID".equals(row.get("status"))) return orderView(id,row);
+        if (!schemaReady()) throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,"Stripe 订单核对暂不可用");
+        String sessionId=(String)row.get("provider_link_id");
+        if (sessionId==null || sessionId.isBlank())
+            throw new ResponseStatusException(HttpStatus.CONFLICT,"创建结果未知，暂不能取消，请核对订单");
+        JsonNode session=gateway.retrieveSession(sessionId);
+        verifyCancellationSession(row,sessionId,session);
+        if ("open".equals(text(session.path("status"))) && "unpaid".equals(text(session.path("payment_status")))) {
+            try { gateway.expireSession(sessionId); }
+            catch (StripeCheckoutGateway.StripeRemoteException uncertain) {
+                // Payment or another cancellation may have won the race. Only fresh supplier facts decide.
+            }
+            session=gateway.retrieveSession(sessionId);
+            verifyCancellationSession(row,sessionId,session);
+        }
+        if ("complete".equals(text(session.path("status"))) && "paid".equals(text(session.path("payment_status")))) {
+            settleIfPaid(id,sessionId,session);
+            return orderView(id,ownedOrder(owner,id));
+        }
+        if (!"expired".equals(text(session.path("status"))) || !"unpaid".equals(text(session.path("payment_status"))))
+            throw new ResponseStatusException(HttpStatus.CONFLICT,"支付处理中或状态尚未确认，暂不能取消");
+        // No supplier I/O under locks; same owner -> order sequence as settlement.
+        tx.executeWithoutResult(state->{
+            if(db.queryForList("SELECT id FROM creator WHERE id=? FOR UPDATE",owner).size()!=1)
+                throw new ResponseStatusException(HttpStatus.NOT_FOUND);
+            var rows=db.queryForList("SELECT * FROM payment_order WHERE id=? AND provider=? FOR UPDATE",id,gateway.provider());
+            if(rows.size()!=1 || !owner.equals(rows.get(0).get("creator_id")) || !sessionId.equals(rows.get(0).get("provider_link_id")))
+                throw new ResponseStatusException(HttpStatus.CONFLICT,"支付订单关联不匹配");
+            db.update("UPDATE payment_order SET status='CANCELLED' WHERE id=? AND creator_id=? AND provider=? AND provider_link_id=? AND status IN ('CREATING','CREATION_UNKNOWN','PENDING')",
+                id,owner,gateway.provider(),sessionId);
+        });
+        return orderView(id,ownedOrder(owner,id));
+    }
+
+    private void verifyCancellationSession(Map<String,Object> row,String sessionId,JsonNode session) {
+        verifySession(row,session);
+        if(!sessionId.equals(text(session.path("id"))) || !session.path("livemode").isBoolean())
+            throw new ResponseStatusException(HttpStatus.CONFLICT,"Stripe Checkout identity mismatch");
+    }
+
     public Map<String,Object> orders(CreatorPrincipal creator) {
         var rows=db.query("SELECT id,status,credits,created_at,amount,currency,package_id FROM payment_order WHERE creator_id=? AND provider=? ORDER BY created_at DESC,id DESC LIMIT 50",
             (rs,n)->Map.<String,Object>of("orderId",rs.getString(1),"status",rs.getString(2),"credits",rs.getLong(3),"createdAt",rs.getTimestamp(4).toInstant().toString(),

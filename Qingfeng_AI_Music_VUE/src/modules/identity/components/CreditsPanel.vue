@@ -158,6 +158,24 @@ async function resumeStripe(order: Order) {
   finally { busy.value = false }
   if (currentCreatorId() === creatorId) await load()
 }
+async function cancelStripe(order: Order) {
+  if (isPreview || busy.value || order.provider !== 'stripe' || order.status !== 'PENDING') return
+  const creatorId = currentCreatorId()
+  if (!creatorId || !window.confirm(t('确认取消此订单？已付款或支付处理中的订单不会取消。'))) return
+  busy.value = true; error.value = ''; orderNotice.value = ''
+  let notice = '取消未成功，订单可能已授权或状态尚未确认；请刷新核对，勿重复付款。'
+  try {
+    const result = await requestJson<{orderId:string;status:string}>(`app/stripe/orders/${encodeURIComponent(order.orderId)}/cancel`, 'POST', undefined, 60000)
+    if (currentCreatorId() !== creatorId || result.orderId !== order.orderId) return
+    if (result.status === 'CANCELLED') notice = '订单已取消，原支付链接已关闭。'
+    else if (result.status === 'PAID') { notice = '订单已付款，不能取消；积分余额已更新。'; announceCreditsChanged() }
+  } catch { /* Unknown outcomes remain visible until authoritative reconciliation. */ }
+  finally { busy.value = false }
+  if (currentCreatorId() === creatorId) {
+    await load()
+    if (currentCreatorId() === creatorId) orderNotice.value = notice
+  }
+}
 async function cancelPaypal(order: Order) {
   if (isPreview || busy.value || order.provider !== 'paypal' || order.status !== 'PENDING') return
   const creatorId = currentCreatorId()
@@ -226,6 +244,8 @@ watch(signedIn, (current, previous) => { if (current !== previous) void load() }
           </div>
           <div v-if="isPendingOrder(order.status) && order.provider === 'stripe'" class="order-actions">
             <button type="button" class="order-action primary" :disabled="busy" @click="resumeStripe(order)">{{ t('继续核对 Stripe 订单') }}</button>
+            <button v-if="order.status === 'PENDING'" type="button" class="order-action cancel-order" :disabled="busy" @click="cancelStripe(order)">{{ t('取消订单') }}</button>
+            <p v-else class="subtle">{{ t('订单创建结果尚未确认，请刷新核对，暂不能直接取消。') }}</p>
           </div>
         </li></ul>
       </section>
