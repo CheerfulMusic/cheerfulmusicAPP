@@ -4,6 +4,10 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { effectScope } from 'vue'
 vi.mock('../src/modules/agent/api/events', () => ({ observeConversation: (_id: string, _seq: number, _epoch: number | undefined, _receive: unknown, signal: AbortSignal) => new Promise<void>(resolve => signal.addEventListener('abort', () => resolve(), { once: true })) }))
+vi.mock('../src/modules/agent/composables/useProfileAvatar', async () => {
+  const { ref } = await import('vue')
+  return { useProfileAvatar: () => ({ imageUrl: ref('/brand/music-person.svg'), refresh: vi.fn(async () => undefined), clear: vi.fn() }) }
+})
 vi.mock('../src/modules/agent/composables/useUserAvatar', async () => {
   const { ref } = await import('vue')
   return { useUserAvatar: () => ({ avatarUrl: ref(''), busy: ref(false), error: ref(''), refresh: vi.fn(async () => undefined), clear: vi.fn(), upload: vi.fn() }) }
@@ -393,4 +397,12 @@ describe('会话恢复与任务生命周期', () => {
     await vi.advanceTimersByTimeAsync(10000)
     expect(api.state).toHaveBeenCalledTimes(3)
   })
+})
+
+it('用户头像显示资料头像并链接到可修改头像的我的资料页', async () => {
+  const { wrapper } = await page(state({ messages: [message('写一首歌', 1, 'user')] }))
+  const avatar = wrapper.get('a.agent-user-avatar')
+  expect(avatar.attributes('href')).toBe('/profile')
+  expect(avatar.attributes('aria-label')).toContain('修改头像')
+  expect(avatar.get('img').attributes('src')).toBe('/brand/music-person.svg')
 })

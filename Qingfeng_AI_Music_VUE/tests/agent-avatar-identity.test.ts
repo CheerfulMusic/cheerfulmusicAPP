@@ -5,6 +5,10 @@ import { createPinia } from 'pinia'
 import { setLocale } from '../src/shared/i18n'
 
 const mocks = vi.hoisted(() => ({ clear: vi.fn(), refresh: vi.fn(), start: vi.fn(), stop: vi.fn(), current: vi.fn(), state: vi.fn() }))
+vi.mock('../src/modules/agent/composables/useProfileAvatar', async () => {
+  const { ref } = await import('vue')
+  return { useProfileAvatar: () => ({ imageUrl: ref('/brand/music-person.svg'), refresh: vi.fn(async () => undefined), clear: vi.fn() }) }
+})
 vi.mock('../src/modules/agent/composables/useUserAvatar', async () => {
   const { ref } = await import('vue')
   return { useUserAvatar: () => ({ avatarUrl: ref('/api/app/avatar/image?v=old'), busy: ref(false), error: ref(''), clear: mocks.clear, refresh: mocks.refresh, upload: vi.fn() }) }
