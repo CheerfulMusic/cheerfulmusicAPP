@@ -5,19 +5,30 @@ It does not prove OAuth login, reading a restored nonzero balance over HTTP, or 
 No daily runtime, production database, external provider or Windows service is used.
 """
 from pathlib import Path
-import datetime, hashlib, http.cookiejar, json, os, socket, subprocess, sys, time
+import argparse, datetime, hashlib, http.cookiejar, json, os, re, socket, subprocess, sys, time
 import urllib.request, urllib.error
 import pymysql
+from java_runtime import resolve_java_binary, stop_owned_process
 
 sys.stdout.reconfigure(encoding='utf-8',errors='backslashreplace')
 WORK=Path(__file__).resolve().parents[2]
 ROOT=Path(subprocess.check_output(['git','-C',str(WORK),'rev-parse','--path-format=absolute','--git-common-dir']).decode('utf-8').strip()).parent
 BASE=ROOT/'.cache/payment-main-integration-20261112'
-CFG=json.loads((BASE/'restore-db-private-r2.json').read_text(encoding='utf-8'))
-assert CFG['host']=='127.0.0.1' and CFG['port']==23316 and CFG['database']=='p0_integration_restore_20261112r2'
+parser=argparse.ArgumentParser(description=__doc__)
+parser.add_argument('--restore-revision',required=True)
+parser.add_argument('--full-evidence',required=True)
+parser.add_argument('--restore-evidence',required=True)
+args=parser.parse_args()
+assert re.fullmatch(r'r[0-9]+',args.restore_revision)
+assert re.fullmatch(r'maven-full-[0-9TZ]+/results.json',args.full_evidence)
+assert re.fullmatch(r'backup-restore-[0-9TZ]+/results.json',args.restore_evidence)
+CFG=json.loads((BASE/('restore-db-private-'+args.restore_revision+'.json')).read_text(encoding='utf-8'))
+assert CFG['host']=='127.0.0.1' and CFG['port']==23316 and CFG['database']=='p0_integration_restore_20261112'+args.restore_revision
 assert CFG['uuid']=='05c27d3c-dda3-11f1-aba0-84a938421519'
-RECEIPTS=[json.loads(p.read_text(encoding='utf-8')) for p in BASE.glob('backup-restore-*/results.json')]
-assert any(r.get('status')=='PASS' and r.get('restore_database')==CFG['database'] for r in RECEIPTS),'Complete restore proof required'
+full=json.loads((BASE/args.full_evidence).read_text(encoding='utf-8'))
+assert full['status']=='PASS' and full['exit_code']==0 and full['totals']['failures']==full['totals']['errors']==0
+restored=json.loads((BASE/args.restore_evidence).read_text(encoding='utf-8'))
+assert restored['status']=='PASS' and restored['restore_database']==CFG['database'],'Complete restore proof required'
 COMMIT=subprocess.check_output(['git','-C',str(WORK),'rev-parse','HEAD']).decode().strip()
 artifacts=[json.loads(p.read_text(encoding='utf-8')) for p in sorted(BASE.glob('artifact-*/results.json'))]
 artifacts=[a for a in artifacts if a.get('status')=='PASS' and a.get('source_commit')==COMMIT]
@@ -58,7 +69,7 @@ with socket.socket() as probe:
     probe.bind(('127.0.0.1',0));PORT=probe.getsockname()[1]
 blocked=('SECRET','TOKEN','PASSWORD','KEY','CREDENTIAL','CREDIT_','CONFIG','DATABASE','CONNECTION','DSN','INVITE_GATE','PAYPAL','STRIPE','MYSQL','SPRING_','JAVA_TOOL_OPTIONS','_JAVA_OPTIONS','JDK_JAVA_OPTIONS','MAVEN_OPTS','OPENAI','ANTHROPIC','KIE_','OSS_','AWS_','VITE_','QF_','P0_')
 env={k:v for k,v in os.environ.items() if not any(s in k.upper() for s in blocked)}
-url='jdbc:mysql://127.0.0.1:23316/'+CFG['database']+'?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC'
+url='jdbc:mysql://127.0.0.1:23316/'+CFG['database']+'?useSSL=false&allowPublicKeyRetrieval=true&connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true'
 env.update({'MYSQL_URL':url,'MYSQL_USERNAME':CFG['user'],'MYSQL_PASSWORD':CFG['password'],
     'SPRING_DATASOURCE_URL':url,'SPRING_DATASOURCE_USERNAME':CFG['user'],'SPRING_DATASOURCE_PASSWORD':CFG['password'],
     'CREDIT_WRITER_FENCE_ENABLED':'true','CREDIT_WRITER_EXPECTED_DATABASE':CFG['database'],'CREDIT_WRITER_EXPECTED_PORT':'23316','CREDIT_SCHEMA_TARGET':'44'})
@@ -73,7 +84,7 @@ flags={'spring.config.location':'classpath:/application.yml','spring.profiles.ac
     'qingfeng.redis.enabled':'false','qingfeng.analytics.retention.scheduler-enabled':'false','qingfeng.invite-gate.enabled':'false',
     'qingfeng.auth.google.enabled':'false','qingfeng.auth.logto.enabled':'false','qingfeng.inspiration.rewrite.enabled':'false',
     'qingfeng.media.directory':str(OUT/'audio'),'qingfeng.cover.directory':str(OUT/'covers')}
-cmd=['java','-jar',str(JAR)]+['--'+k+'='+v for k,v in flags.items()]
+cmd=[str(resolve_java_binary()),'-jar',str(JAR)]+['--'+k+'='+v for k,v in flags.items()]
 result={'status':'FAIL','scope':'PACKAGED_RESTORED_SYNTHETIC_DB_STARTUP_ONLY','jar_sha256':hashlib.sha256(JAR.read_bytes()).hexdigest(),
     'source_commit':COMMIT,
     'database':CFG['database'],'uuid':CFG['uuid'],'port':PORT,'production_access':False,'vendor_calls':False,'migrations_enabled':False,
@@ -124,9 +135,11 @@ try:
                        'payment_catalogs_disabled':True,'unsigned_unconfigured_webhook_status':503,'provider_or_money_actions':0})
 finally:
     if process is not None:
-        process.terminate()
-        try:process.wait(timeout=20)
-        except subprocess.TimeoutExpired:process.kill();process.wait(timeout=5)
-        result['owned_process_stopped']=process.poll() is not None
+        result['owned_process_stopped']=stop_owned_process(process,PORT)
+        if not result['owned_process_stopped']:
+            result['status']='FAIL'
+            result['cleanup_error']='OWNED_APPLICATION_PROCESS_OR_PORT_NOT_CLOSED'
     path=OUT/'results.json';path.write_text(json.dumps(result,indent=2),encoding='utf-8')
     print(json.dumps({'status':result['status'],'evidence':str(path),'owned_process_stopped':result.get('owned_process_stopped')}))
+
+raise SystemExit(0 if result['status']=='PASS' and result.get('owned_process_stopped') else 1)
