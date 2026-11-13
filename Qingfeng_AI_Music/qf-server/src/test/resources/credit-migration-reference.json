@@ -1,5 +1,5 @@
 {
-  "core_commit": "b8a924f624f7b1643c483cf2cc963ab56f1d03ff",
+  "core_commit": "0530c444a38db2363e0a6296c52a416b09a14d5f",
   "core": [
     {
       "version": "1",
@@ -237,16 +237,34 @@
     },
     {
       "version": "40",
-      "script": "V40__shared_download_entitlement.sql",
+      "script": "V40__artist_profiles_and_releases.sql",
+      "sha256_lf": "6961661d242cb88d9744f38da7fe2c46211e48ffa23c51a30431ed5cde50b6ac",
+      "checksum": 1424328127
+    },
+    {
+      "version": "41",
+      "script": "V41__artist_home_customization.sql",
+      "sha256_lf": "5a518704c89fde820ceb60561b60d3c7df1bc1559b455e9afcdd5767796f29d7",
+      "checksum": -860312848
+    },
+    {
+      "version": "42",
+      "script": "V42__shared_download_entitlement.sql",
       "sha256_lf": "cfa29d81a1e69515436e357111ec31fd81f8f7709add6b7b5241b7b2462fffec",
       "checksum": -500011050
+    },
+    {
+      "version": "43",
+      "script": "V43__lyric_revision_custom_sections.sql",
+      "sha256_lf": "c6c7032590c2b19bf7f14a5fd08b9a1554a4344da96e3d211c336dcebf9e3d6a",
+      "checksum": -2135468013
     }
   ],
   "integration": {
-    "version": "41",
-    "script": "V41__credit_entitlement_integration.sql",
-    "sha256_lf": "5b71ce9b5cb86e11c7e2ab8582dcc35cf9f024272632aabb84a4341546a97086",
-    "checksum": -340729157
+    "version": "44",
+    "script": "V44__credit_entitlement_integration.sql",
+    "sha256_lf": "5f93d318f7583906f424fe0a5e41afac5ba1d147f91ee4527c88f1a1ee51433b",
+    "checksum": 789542731
   },
   "p0_tables": [
     "p0_credit_writer_policy",

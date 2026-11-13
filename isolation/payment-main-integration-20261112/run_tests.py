@@ -43,7 +43,7 @@ env = {k:v for k,v in os.environ.items() if not any(x in k.upper() for x in bloc
 env.update({'QF_EXECUTION_MYSQL_TEST_PORT':str(args.compatibility_port),
             'QF_QUICK_MYSQL_TEST_PORT':str(args.compatibility_port),
             'QF_DOWNLOAD_MYSQL_TEST_PORT':str(args.compatibility_port),
-            'SPRING_FLYWAY_TARGET':'40'})
+            'SPRING_FLYWAY_TARGET':'43'})
 for label, prefix, revision in (
     ('migration','P0_INTEGRATION_MIGRATION_MYSQL_',args.migration_revision),
     ('credits','P0_INTEGRATED_CREDITS_MYSQL_',args.credits_revision),
@@ -68,7 +68,7 @@ else:
     cmd += ['verify']
 (folder/'invocation.json').write_text(json.dumps({'command':cmd,'cwd':str(WORK/'Qingfeng_AI_Music'),
     'production_credentials_inherited':False,'mysql_ports':[23316,args.compatibility_port],
-    'legacy_mysql_target':'40','new_contract_target':'41 explicit in tests'},indent=2),encoding='utf-8')
+    'legacy_mysql_target':'43','new_contract_target':'44 explicit in tests'},indent=2),encoding='utf-8')
 print(json.dumps({'log':str(folder/'maven.log'),'mode':args.mode}),flush=True)
 with (folder/'maven.log').open('w',encoding='utf-8') as log:
     result=subprocess.run(cmd,cwd=WORK/'Qingfeng_AI_Music',env=env,stdout=log,stderr=subprocess.STDOUT)

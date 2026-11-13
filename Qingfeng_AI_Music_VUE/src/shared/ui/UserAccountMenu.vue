@@ -64,12 +64,13 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', outside))
       {{ t('登录/注册') }}
     </button>
     <template v-else>
-      <button ref="trigger" type="button" class="account-trigger" :class="{ 'is-active': route.name === 'identity' }" :aria-label="t('账号与登录')" :aria-expanded="open" aria-controls="user-account-panel" @click="toggle" @keydown.down.prevent="!open && toggle()">
+      <button ref="trigger" type="button" class="account-trigger" :class="{ 'is-active': route.name === 'identity' || route.name === 'artist-profile' }" :aria-label="t('账号与登录')" :aria-expanded="open" aria-controls="user-account-panel" @click="toggle" @keydown.down.prevent="!open && toggle()">
         <span class="account-trigger-avatar" aria-hidden="true">{{ initials }}</span><span class="account-trigger-name">{{ displayName }}</span><svg class="account-chevron" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m4 6 4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </button>
       <div v-if="open" id="user-account-panel" ref="panel" class="account-popover">
         <div class="account-popover-identity"><strong>{{ displayName }}</strong><span v-if="contact">{{ contact }}</span><small>{{ t(logtoState.authenticated ? '音乐账号' : 'Google 账号') }}</small></div>
         <nav :aria-label="t('账号菜单')">
+          <RouterLink to="/profile"><NavIcon name="account" />{{ t('我的资料') }}</RouterLink>
           <RouterLink to="/account"><NavIcon name="account" />{{ t('账号与登录') }}</RouterLink>
           <RouterLink to="/works"><NavIcon name="music" />{{ t('我的音乐') }}</RouterLink>
           <RouterLink v-if="analyticsAllowed" to="/analytics"><NavIcon name="account" />数据看板</RouterLink>

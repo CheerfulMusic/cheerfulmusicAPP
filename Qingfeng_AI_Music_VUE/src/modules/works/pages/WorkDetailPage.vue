@@ -24,6 +24,11 @@ import QuickCreationProgress from '../../studio/components/QuickCreationProgress
 import type {QuickCreation} from '../../studio/api/quick-creation'
 import AudioPanel from '../components/AudioPanel.vue'
 import SharePanel from '../components/SharePanel.vue'
+import PublishSongDialog from '../../artist/components/PublishSongDialog.vue'
+import type { SongPublication } from '../../artist/api/artist'
+import { accountState, refreshAccountState } from '../../../shared/identity/account-state'
+import { logtoState, refreshLogtoState } from '../../../shared/identity/logto-state'
+import { showLoginDialog } from '../../../shared/identity/login-dialog'
 import MusicGenerationDialog from '../components/MusicGenerationDialog.vue'
 import { songSettings } from '../model/song-settings'
 import {restoreRemakeSettings} from '../model/remake-settings'
@@ -91,6 +96,24 @@ function openCover(){coverOpen.value=true;void nextTick(()=>document.getElementB
 watch(asset,value=>{if(value&&listenAfterLoad.value){listenAfterLoad.value=false;void viewGeneratedMusic()}})
 const currentStep=computed(()=>shared.value?4:giftStage.value?3:asset.value||pendingTask.value||quickJourney.value?2:1)
 const songTitle=computed(()=>tasks.value.find(task=>task.assetId===asset.value?.id)?.title||work.value?.title||revision.value?.title||t('我的音乐'))
+const publication = ref<SongPublication>()
+let checkingPublicationLogin = false
+async function openSongPublication() {
+  const currentWork = work.value?.id
+  const currentAsset = asset.value?.id
+  if (!currentWork || !currentAsset || checkingPublicationLogin) return
+  if (!accountState.value.authenticated && !logtoState.value.authenticated) {
+    checkingPublicationLogin = true
+    try { await Promise.allSettled([refreshAccountState(), refreshLogtoState()]) }
+    finally { checkingPublicationLogin = false }
+    if (work.value?.id !== currentWork || asset.value?.id !== currentAsset) return
+    if (!accountState.value.authenticated && !logtoState.value.authenticated) {
+      showLoginDialog()
+      return
+    }
+  }
+  publication.value = { workId: currentWork, assetId: currentAsset, coverId: covers.value?.currentCoverId || null, title: songTitle.value }
+}
 const playingSettings=computed(()=>songSettings(asset.value,tasks.value))
 const displayedStyle=computed(()=>!asset.value?t(work.value?.style||''):asset.value.origin==='IMPORTED'?t('导入音频'):t(playingSettings.value?.style||'风格记录暂不可用'))
 watch([()=>asset.value?.id,()=>covers.value?.currentCoverId],()=>{shared.value=false})
@@ -204,7 +227,7 @@ async function closeChecking(task:GenerationTask){
 }
 async function load() {
  quickBusy.value=false;quickRevision.value='';mediaState.value='loading';tasksReady.value=false;taskReadIssue.value=false;quickChecked.value=false;quickReadIssue.value=false;modelReady.value=false;draftOpened.value=false;listenAfterLoad.value=false;quickFlow.value=null;dismissedDirection.value=false;lyricBase.value=null;lyricsReady.value=false
- const turn=++sequence;polling=false;premiumOpen.value=false;giftStage.value=false;shared.value=false;coverOpen.value=false;covers.value=undefined
+ const turn=++sequence;polling=false;premiumOpen.value=false;giftStage.value=false;shared.value=false;coverOpen.value=false;covers.value=undefined;publication.value=undefined
  generationOpen.value=false;trackedTaskId.value='';submissionIssue.value='';submissionUnknown.value=false;progressIssue.value=false;submitting.value=false;loading.value=true;error.value='';revision.value=null;asset.value=null;tasks.value=[];giftRevision.value=null;work.value=undefined;lyricDirty.value=false;requestKey.value='';pendingIntent.value=undefined;generationNotice.value='';inputIssue.value=false;creditIssue.value=false;credits.value=undefined
  try{
   const id=String(route.params.id),found=await loadWork(id);if(turn!==sequence)return
@@ -340,7 +363,7 @@ async function backToStory(){
     <p v-if="pendingTask&&!generationOpen&&!quickBusy&&(!quickJourney||asset)" class="notice" role="status">{{ t(generationProblem(pendingTask.errorCode)||'音乐正在后台制作，可以继续浏览，稍后回来查看。') }} <button class="text-button" @click="showProgress">{{ t('查看生成进度') }}</button></p>
     <section v-if="latestFailure&&!pendingTask" class="notice" role="status"><p>{{ t(generationProblem(latestFailure.errorCode)||'音乐服务未完成这次创作，歌词和设置已保留。') }}</p><button v-if="latestFailure.errorCode==='AUDIO_ARCHIVE_FAILED'" class="button secondary" :disabled="submitting" @click="retryArchive(latestFailure)">{{ t('仅重试保存音频') }}</button></section>
     <GenerationRecovery v-if="pendingTask?.status==='SUBMISSION_UNKNOWN'" :task="pendingTask" :busy="submitting" @refresh="refreshTasks" @close="closeChecking(pendingTask)"/>
-    <SongResult v-if="asset" :work="work" :asset="asset" :title="songTitle" :cover="artwork" :pending="!!pendingTask" :checking="submissionUnknown" :busy="submitting||quickBusy||!tasksReady||taskReadIssue||!quickChecked||quickReadIssue||(!pendingTask&&!submissionUnknown&&(!modelReady||!generationLyricsReady))" :lyrics="giftRevision?.lyrics||''" :language="giftRevision?.language" :section-open="sectionOpen" @gift="sendGift" @regenerate="openMusicAdjustment" @cover="openCover" @edit="openSection"/>
+    <SongResult v-if="asset" :work="work" :asset="asset" :title="songTitle" :cover="artwork" :pending="!!pendingTask" :checking="submissionUnknown" :busy="submitting||quickBusy||!tasksReady||taskReadIssue||!quickChecked||quickReadIssue||(!pendingTask&&!submissionUnknown&&(!modelReady||!generationLyricsReady))" :lyrics="giftRevision?.lyrics||''" :language="giftRevision?.language" :section-open="sectionOpen" @gift="sendGift" @publish="openSongPublication" @regenerate="openMusicAdjustment" @cover="openCover" @edit="openSection"/>
     <MusicSettingsSnapshot v-if="asset&&tasks.find(task=>task.assetId===asset?.id)" :work-id="work.id" :task-id="tasks.find(task=>task.assetId===asset?.id)!.id"/>
     <SectionEditor v-if="asset" ref="sectionEditor" :key="work.id" :work="work" :asset="asset" :title="songTitle" :cover="artwork" :tasks="tasks" :open="sectionOpen" :hint="sectionHint" @close="sectionOpen=false" @refresh="refreshTasks" @adopted="sectionAdopted"/>
     <MusicSettingsPanel v-if="remake" :work="work" :remake="remake" :busy="submitting" :submit-error="remakeError" @apply="generate(false,$event)" @close="remake=undefined"/>
@@ -388,6 +411,7 @@ async function backToStory(){
     </div>
   </template>
   <PremiumStudioDialog v-if="work&&asset&&premiumOpen" :open="premiumOpen" :work-id="work.id" :asset="asset" :title="songTitle" :cover="artwork" @close="premiumOpen=false"/>
+  <PublishSongDialog v-if="publication" :source="publication" :cover="coverUrl(publication.workId, publication.coverId)" @close="publication=undefined"/>
   <MusicGenerationDialog :open="generationOpen" :status="generationStatus" :title="trackedTask?.title||work?.title||''" :error="submissionIssue" :error-code="trackedTask?.errorCode" :sync-issue="progressIssue||trackedTask?.errorCode==='QUERY_RETRY'" :created-at="trackedTask?.createdAt" :submit-after="trackedTask?.nextAttemptAt" :cancelling="cancelling||submitting" :cover="artwork" @cancel="cancelGeneration" @archive="trackedTask&&retryArchive(trackedTask)" @close="generationOpen=false" @view="viewGeneratedMusic"/>
 </template>
 <style scoped>

@@ -75,9 +75,9 @@ class IntegratedCreditAccountMySqlTest {
                 assertTrue(Set.of(database,"information_schema","performance_schema").contains(rows.getString(1)));}
         }
         assertEquals(0,number("SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE()"),"Never clear or reuse an earlier cohort");
-        Flyway.configure().dataSource(source).locations("classpath:db/migration").cleanDisabled(true).target("40").load().migrate();
-        assertEquals(40,number("SELECT COUNT(*) FROM flyway_schema_history WHERE success=1 AND version IS NOT NULL"));
-        assertEquals("V40__shared_download_entitlement.sql",db.queryForObject("SELECT script FROM flyway_schema_history WHERE version='40'",String.class));assertEquals(-500011050,number("SELECT checksum FROM flyway_schema_history WHERE version='40'"));
+        Flyway.configure().dataSource(source).locations("classpath:db/migration").cleanDisabled(true).target("43").load().migrate();
+        assertEquals(43,number("SELECT COUNT(*) FROM flyway_schema_history WHERE success=1 AND version IS NOT NULL"));
+        assertEquals("V42__shared_download_entitlement.sql",db.queryForObject("SELECT script FROM flyway_schema_history WHERE version='42'",String.class));assertEquals(-500011050,number("SELECT checksum FROM flyway_schema_history WHERE version='42'"));
         assertEquals(1,number("SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='shared_download_entitlement'"));
         tx=new TransactionTemplate(new JdbcTransactionManager(source));
         // Synthetic pre-integration history, not a production import or reconstructed FIFO allocation.
@@ -86,9 +86,9 @@ class IntegratedCreditAccountMySqlTest {
         db.update("INSERT INTO payment_order(id,creator_id,package_id,amount,currency,credits,status,created_at,provider,provider_capture_id) VALUES(?,?, 'starter-USD',9.90,'USD',100,'PAID',CURRENT_TIMESTAMP,'STRIPE_SANDBOX',?)",order,owner,capture);
         db.update("INSERT INTO credit_ledger VALUES('CREDIT',?,?,100,CURRENT_TIMESTAMP)","payment:"+order,owner);
         db.update("INSERT INTO credit_ledger VALUES('PAYMENT_ADJUST',?,?,-20,CURRENT_TIMESTAMP)","legacy-adjust:"+unique(),owner);
-        Flyway.configure().dataSource(source).locations("classpath:db/migration").cleanDisabled(true).target("41").load().migrate();
-        assertEquals(41,number("SELECT COUNT(*) FROM flyway_schema_history WHERE success=1 AND version IS NOT NULL"));
-        assertEquals("V41__credit_entitlement_integration.sql",db.queryForObject("SELECT script FROM flyway_schema_history WHERE version='41'",String.class));assertEquals(-340729157,number("SELECT checksum FROM flyway_schema_history WHERE version='41'"));
+        Flyway.configure().dataSource(source).locations("classpath:db/migration").cleanDisabled(true).target("44").load().migrate();
+        assertEquals(44,number("SELECT COUNT(*) FROM flyway_schema_history WHERE success=1 AND version IS NOT NULL"));
+        assertEquals("V44__credit_entitlement_integration.sql",db.queryForObject("SELECT script FROM flyway_schema_history WHERE version='44'",String.class));assertEquals(789542731,number("SELECT checksum FROM flyway_schema_history WHERE version='44'"));
         assertEquals(1,number("SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='shared_download_entitlement'"));
         assertEquals(3,number("SELECT protocol FROM p0_credit_writer_policy WHERE id=1"));
         db.update("INSERT INTO p0_credit_batch(reference,owner_id,source_type,source_id,original,consumed,adjusted,held,status,created_at) VALUES(?,?,'PAYMENT',?,100,0,20,0,'ACTIVE',CURRENT_TIMESTAMP)","payment:"+order,owner,order);

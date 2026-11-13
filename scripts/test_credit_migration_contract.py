@@ -43,12 +43,12 @@ class CreditMigrationContractTests(unittest.TestCase):
             items[name] = output.getvalue()
         return self.rewrite_jar(path, apply)
 
-    def test_core_40_originals_and_v41_are_one_exact_contract(self):
+    def test_core_43_originals_and_v44_are_one_exact_contract(self):
         actual = {p.name: gate.normalized_migration_sha(p.read_bytes()) for p in SQL.glob("V*__*.sql")}
         contract = gate.verify_migration_set(actual)
-        self.assertEqual("b8a924f624f7b1643c483cf2cc963ab56f1d03ff", contract["coreSourceCommit"])
-        self.assertEqual(41, len(actual))
-        self.assertEqual(40, len(gate.CORE_MIGRATION_SHA256))
+        self.assertEqual("0530c444a38db2363e0a6296c52a416b09a14d5f", contract["coreSourceCommit"])
+        self.assertEqual(44, len(actual))
+        self.assertEqual(43, len(gate.CORE_MIGRATION_SHA256))
 
     def test_legacy_fixtures_keep_the_original_executed_bytes(self):
         expected = {
@@ -66,7 +66,7 @@ class CreditMigrationContractTests(unittest.TestCase):
         self.assertEqual(-1311214355, original["flyway_checksum"])
         self.assertFalse(original["production_location_registered"])
 
-    def test_v41_requires_actual_core40_and_preserves_financial_algorithm_without_activation(self):
+    def test_v44_requires_actual_core43_and_preserves_financial_algorithm_without_activation(self):
         text = (SQL / gate.INTEGRATED_MIGRATION).read_text(encoding="utf-8")
         tables = re.findall(r"CREATE TABLE (\w+)", text)
         self.assertEqual(19, len(tables))
@@ -86,7 +86,14 @@ class CreditMigrationContractTests(unittest.TestCase):
         self.assertEqual(17, len(re.findall(r"CREATE TRIGGER (\w+)", text)))
         self.assertIn("CREATE TEMPORARY TABLE p0_v41_core40_prerequisite", text)
         self.assertIn("CHECK (verified = 1)", text)
-        self.assertIn("V40__shared_download_entitlement.sql", text)
+        for name, checksum in (
+            ("V40__artist_profiles_and_releases.sql", "1424328127"),
+            ("V41__artist_home_customization.sql", "-860312848"),
+            ("V42__shared_download_entitlement.sql", "-500011050"),
+            ("V43__lyric_revision_custom_sections.sql", "-2135468013"),
+        ):
+            self.assertIn(name, text)
+            self.assertIn("checksum=" + checksum, text)
         self.assertIn("checksum=-500011050", text)
         self.assertIn("REFERENCED_TABLE_SCHEMA=DATABASE()", text)
         self.assertLess(text.index("DROP TEMPORARY TABLE"), text.index("CREATE TABLE p0_credit_writer_policy"))
@@ -96,8 +103,8 @@ class CreditMigrationContractTests(unittest.TestCase):
 
     def test_complete_packaged_chain_is_verified(self):
         actual = gate.inspect_artifact(self.fixture.jar())
-        self.assertEqual(41, len(actual["migrations"]))
-        self.assertEqual("41", actual["migrationContract"]["integrationVersion"])
+        self.assertEqual(44, len(actual["migrations"]))
+        self.assertEqual("44", actual["migrationContract"]["integrationVersion"])
 
     def test_old_v33_cannot_be_added_beside_canonical_v33(self):
         jar = self.nested_change(self.fixture.jar(), lambda items: items.update({
@@ -117,9 +124,9 @@ class CreditMigrationContractTests(unittest.TestCase):
         with self.assertRaisesRegex(gate.GateError, "Test-only or alternate"):
             gate.inspect_artifact(jar)
 
-    def test_missing_v41_does_not_pass_as_an_old_complete_chain(self):
+    def test_missing_v44_does_not_pass_as_an_old_complete_chain(self):
         jar = self.nested_change(self.fixture.jar(), lambda items: items.pop("db/migration/" + gate.INTEGRATED_MIGRATION))
-        with self.assertRaisesRegex(gate.GateError, "exactly core V1..V40"):
+        with self.assertRaisesRegex(gate.GateError, "exactly core V1..V43"):
             gate.inspect_artifact(jar)
 
     def test_core_edit_is_rejected_even_with_all_versions_present(self):

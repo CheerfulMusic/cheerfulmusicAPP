@@ -1,26 +1,123 @@
 <script setup lang="ts">
 import { computed, ref, useId, watch, onBeforeUnmount, nextTick } from 'vue'
 import { locale } from '../../../shared/i18n'
-import { lyricTemplates, lyricSections, normalizeLyricsStructure, type LyricsStructure } from '../model/lyrics-structure'
+import {
+  lyricTemplates, lyricSections, lyricSectionNames, maxCustomLyricSections, normalizeLyricsStructure,
+  validCustomLyricSections, type LyricSection, type LyricsStructure, type PresetLyricsStructure,
+} from '../model/lyrics-structure'
 const model=defineModel<LyricsStructure>({required:true})
 const props=defineProps<{disabled?:boolean}>()
 const en=computed(()=>locale.value==='en'), id=useId()
 const trigger=ref<HTMLButtonElement>(), dialog=ref<HTMLDialogElement>()
-const draft=ref<LyricsStructure>(normalizeLyricsStructure()), opened=ref(false)
-const selectedLabel=computed(()=>model.value.templateId==='AUTO'?(en.value?'Flexible':'自由结构'):model.value.templateId)
-const sectionNames:Record<string,string>={'Verse':'主歌','Verse 1':'主歌一','Verse 2':'主歌二','Pre-Chorus':'预副歌','Chorus':'副歌','Chorus 2':'第二副歌','Bridge':'桥段','Interlude':'间奏'}
-const name=(section:string)=>en.value?section:sectionNames[section]||section
-const sections=computed(()=>lyricSections(draft.value).map(name).join(' → '))
+const customEntry=ref<HTMLButtonElement>(), back=ref<HTMLButtonElement>(), addButton=ref<HTMLButtonElement>()
+const confirmButton=ref<HTMLButtonElement>(), body=ref<HTMLDivElement>()
+const opened=ref(false), editingCustom=ref(false), addingSection=ref(false)
+const draft=ref<PresetLyricsStructure>()
+const customRows=ref<{id:number;section:LyricSection}[]>()
+const starterSections:LyricSection[]=['Verse','Chorus','Verse','Chorus']
+const sectionOptions:LyricSection[]=['Verse','Pre-Chorus','Chorus','Chorus 2','Bridge','Interlude']
+let rowId=0
+const createRow=(section:LyricSection)=>({id:++rowId,section})
+const name=(section:LyricSection)=>en.value?section:lyricSectionNames[section]
+const customSections=computed(()=>customRows.value?.map(row=>row.section)??[])
+const canUseCustom=computed(()=>validCustomLyricSections(customSections.value))
+const sections=computed(()=>(editingCustom.value?customSections.value:draft.value?lyricSections(draft.value):[]).map(name).join(' → '))
+const selectedLabel=computed(()=>{
+  const value=model.value
+  if(value.templateId==='CUSTOM')return en.value?`Custom (${value.customSections.length})`:`自定义（${value.customSections.length} 段）`
+  return value.templateId==='AUTO'?(en.value?'Let AI arrange':'让 AI 安排'):value.templateId
+})
 const captions:Record<string,[string,string]>={AAB:['双主歌铺陈','Two verses before the hook'],ABB:['双副歌递进','Two developing choruses'],ABC:['预副歌铺垫','Build into the chorus'],ABCD:['桥段带来转折','Add a contrasting bridge']}
 async function open(){
- if(props.disabled)return
- draft.value=normalizeLyricsStructure(model.value)
+ if(props.disabled||dialog.value?.open)return
+ const current=normalizeLyricsStructure(model.value)
+ if(current.templateId==='CUSTOM'){
+   draft.value=undefined
+   customRows.value=current.customSections.map(createRow)
+   editingCustom.value=true
+ }else{
+   draft.value=current
+   customRows.value=undefined
+   editingCustom.value=false
+ }
+ addingSection.value=false
  await nextTick()
- if(!dialog.value?.open){dialog.value?.showModal();opened.value=true}
+ if(props.disabled||!dialog.value||dialog.value.open)return
+ dialog.value.showModal()
+ opened.value=true
+ if(body.value)body.value.scrollTop=0
 }
 function close(){dialog.value?.close();opened.value=false;trigger.value?.focus({preventScroll:true})}
-function confirm(){if(props.disabled)return;model.value={...draft.value};close()}
-function choose(templateId:LyricsStructure['templateId']){draft.value={templateId,chorusFirst:templateId==='AUTO'?false:draft.value.chorusFirst}}
+function confirm(){
+ if(props.disabled)return
+ if(editingCustom.value){
+   if(!canUseCustom.value)return
+   model.value={templateId:'CUSTOM',chorusFirst:false,customSections:[...customSections.value]}
+ }else{
+   if(!draft.value)return
+   model.value={...draft.value}
+ }
+ close()
+}
+function choose(templateId:PresetLyricsStructure['templateId']){
+ draft.value={templateId,chorusFirst:templateId!=='AUTO'&&draft.value?.chorusFirst===true}
+}
+function toggleChorusFirst(){
+ const preset=draft.value
+ if(preset&&preset.templateId!=='AUTO')draft.value={...preset,chorusFirst:!preset.chorusFirst}
+}
+async function showCustom(){
+ if(!customRows.value){
+   const preset=draft.value?lyricSections(draft.value):[]
+   customRows.value=(preset.length?preset:starterSections).map(createRow)
+ }
+ editingCustom.value=true
+ await nextTick()
+ if(body.value)body.value.scrollTop=0
+ back.value?.focus({preventScroll:true})
+}
+async function showTemplates(){
+ editingCustom.value=false
+ addingSection.value=false
+ await nextTick()
+ if(body.value)body.value.scrollTop=0
+ customEntry.value?.focus({preventScroll:true})
+}
+async function addSection(section:LyricSection){
+ const rows=customRows.value
+ if(!rows||rows.length>=maxCustomLyricSections)return
+ rows.push(createRow(section))
+ addingSection.value=false
+ await nextTick()
+ if(body.value)body.value.scrollTop=body.value.scrollHeight
+ if(addButton.value?.disabled)confirmButton.value?.focus()
+ else addButton.value?.focus()
+}
+async function moveSection(index:number,offset:-1|1){
+ const rows=customRows.value, target=index+offset, row=rows?.[index]
+ if(!rows||!row||target<0||target>=rows.length)return
+ rows.splice(index,1)
+ rows.splice(target,0,row)
+ await nextTick()
+ const selector=`[data-section-id="${row.id}"]`
+ const move=dialog.value?.querySelector<HTMLButtonElement>(`${selector} [data-move="${offset}"]:enabled`)
+ const focusTarget=move??dialog.value?.querySelector<HTMLButtonElement>(`${selector} [data-remove]`)
+ focusTarget?.focus({preventScroll:true})
+}
+async function removeSection(index:number){
+ const rows=customRows.value
+ if(!rows)return
+ rows.splice(index,1)
+ const next=rows[Math.min(index,rows.length-1)]
+ await nextTick()
+ const button=next?dialog.value?.querySelector<HTMLButtonElement>(`[data-section-id="${next.id}"] [data-remove]`):addButton.value
+ button?.focus({preventScroll:true})
+}
+function cancel(event:Event){
+ event.preventDefault()
+ if(addingSection.value){addingSection.value=false;addButton.value?.focus();return}
+ close()
+}
 watch(()=>props.disabled,value=>{if(value&&opened.value)close()})
 onBeforeUnmount(()=>dialog.value?.close())
 </script>
@@ -30,30 +127,66 @@ onBeforeUnmount(()=>dialog.value?.close())
     <span>{{ en?'Lyric template':'歌词模板' }} · <strong>{{ selectedLabel }}</strong><span v-if="model.chorusFirst"> · {{ en?'Chorus first':'副歌先行' }}</span></span>
   </button>
   <Teleport to="body">
-    <dialog ref="dialog" :id="id+'-dialog'" class="lyrics-template-dialog" :aria-labelledby="id+'-title'" :aria-describedby="id+'-description'" @cancel.prevent="close" @close="opened=false">
+    <dialog ref="dialog" :id="id+'-dialog'" class="lyrics-template-dialog" :aria-labelledby="id+'-title'" :aria-describedby="id+'-description'" @cancel="cancel" @close="opened=false">
       <header class="template-dialog-header">
-        <h2 :id="id+'-title'">{{ en?'Choose a lyric template':'选择歌词模板' }}</h2>
-        <p :id="id+'-description'">{{ en?'Choose how your song unfolds Your words and melody stay original':'选择歌词的展开方式 不固定歌词内容或旋律' }}</p>
+        <button v-if="editingCustom" ref="back" class="template-back" type="button" @click="showTemplates"><span aria-hidden="true">‹</span> {{ en?'Back to templates':'返回模板' }}</button>
+        <h2 :id="id+'-title'">{{ editingCustom?(en?'Custom lyric structure':'自定义歌词结构'):(en?'Choose a lyric template':'选择歌词模板') }}</h2>
+        <p :id="id+'-description'">{{ editingCustom?(en?'Add sections and arrange them in the order you want.':'添加段落，按你想要的顺序排列。'):(en?'Choose how your lyrics unfold.':'选择歌词的展开方式。') }}</p>
         <button class="template-dialog-close" type="button" :aria-label="en?'Cancel and close':'取消并关闭'" @click="close">×</button>
       </header>
-      <div class="template-dialog-body">
+      <div ref="body" v-if="editingCustom" class="template-dialog-body">
+        <div class="custom-section-heading"><h3>{{ en?'Section order':'段落顺序' }}</h3><span>{{ en?`${customSections.length} sections`:`${customSections.length} 段` }}</span></div>
+        <ol v-if="customRows?.length" class="custom-section-list">
+          <li v-for="(row,index) in customRows" :key="row.id" :data-section-id="row.id">
+            <span class="custom-section-index" aria-hidden="true">{{ index+1 }}</span>
+            <span class="custom-section-name">{{ name(row.section) }} <small v-if="row.section==='Interlude'">{{ en?'Instrumental':'器乐' }}</small></span>
+            <div class="custom-section-actions">
+              <button type="button" :disabled="index===0" :aria-label="en?`Move section ${index+1} up`:`上移第 ${index+1} 段`" data-move="-1" @click="moveSection(index,-1)">↑</button>
+              <button type="button" :disabled="index===customRows.length-1" :aria-label="en?`Move section ${index+1} down`:`下移第 ${index+1} 段`" data-move="1" @click="moveSection(index,1)">↓</button>
+              <button type="button" :aria-label="en?`Remove section ${index+1}`:`删除第 ${index+1} 段`" data-remove @click="removeSection(index)">×</button>
+            </div>
+          </li>
+        </ol>
+        <p v-if="!canUseCustom" class="template-help" role="status">{{ en?'Add at least one section with lyrics.':'请添加至少一个有歌词的段落。' }}</p>
+      </div>
+      <div v-else ref="body" class="template-dialog-body">
+        <button ref="customEntry" class="template-option template-custom-entry" type="button" @click="showCustom">
+          <span><strong>{{ en?'Custom':'自定义' }}</strong><small>{{ en?'Add and arrange your own sections':'自己添加、排列歌词段落' }}</small></span><span aria-hidden="true">›</span>
+        </button>
         <fieldset class="template-options" :disabled="disabled">
           <legend class="template-sr-only">{{ en?'Song structure':'歌曲结构' }}</legend>
-          <label class="template-option template-auto" :class="{selected:draft.templateId==='AUTO'}">
-            <input type="radio" :name="id+'-template'" value="AUTO" :checked="draft.templateId==='AUTO'" @change="choose('AUTO')">
-            <span><strong>{{ en?'Flexible':'自由结构' }}</strong><small>{{ en?'Let AI arrange the sections around your story':'由 AI 根据故事与风格安排段落' }}</small></span>
-          </label>
-          <label v-for="(sequence,key) in lyricTemplates" :key="key" class="template-option" :class="{selected:draft.templateId===key}">
-            <input type="radio" :name="id+'-template'" :value="key" :checked="draft.templateId===key" @change="choose(key)">
+          <label v-for="(sequence,key) in lyricTemplates" :key="key" class="template-option" :class="{selected:draft?.templateId===key}">
+            <input type="radio" :name="id+'-template'" :value="key" :checked="draft?.templateId===key" @change="choose(key)">
             <span><strong>{{ key }} <span>{{ captions[key]![en?1:0] }}</span></strong><small>{{ sequence.map(name).join(' → ') }}</small></span>
           </label>
+          <label class="template-option template-auto" :class="{selected:draft?.templateId==='AUTO'}">
+            <input type="radio" :name="id+'-template'" value="AUTO" :checked="draft?.templateId==='AUTO'" @change="choose('AUTO')">
+            <span><strong>{{ en?'Let AI arrange':'让 AI 安排' }}</strong><small>{{ en?'AI arranges the sections around your story':'由 AI 根据故事与风格安排段落' }}</small></span>
+          </label>
         </fieldset>
-        <div class="template-chorus-row"><div><strong>{{ en?'Chorus first':'副歌先行' }}</strong><p>{{ en?'Move the first chorus to the start':'把第一个副歌移到开头' }}</p></div><button class="chorus-first" type="button" :aria-label="en?'Chorus first':'副歌先行'" :aria-pressed="draft.chorusFirst" :disabled="disabled||draft.templateId==='AUTO'" @click="draft={...draft,chorusFirst:!draft.chorusFirst}"><span></span></button></div>
-        <p v-if="draft.templateId==='AUTO'" class="template-help">{{ en?'Choose a template to enable chorus first':'选择一种模板后可开启副歌先行' }}</p>
-        <div v-else class="template-preview-box"><strong>{{ en?'Selected section order':'当前段落顺序' }}</strong><p class="template-preview" aria-live="polite">{{ sections }}</p><small>{{ en?'Interlude is instrumental Chorus 2 is a variation of the chorus':'间奏不填写歌词 第二副歌保留记忆点并有所变化' }}</small></div>
-        <p class="template-help">{{ en?'Applies on your next generation only Existing lyrics stay unchanged':'确认后仅用于下次生成 不会直接改动已有歌词' }}</p>
+        <template v-if="draft&&draft.templateId!=='AUTO'">
+          <div class="template-chorus-row"><div><strong>{{ en?'Chorus first':'副歌先行' }}</strong><p>{{ en?'Move the first chorus to the start':'把第一个副歌移到开头' }}</p></div><button class="chorus-first" type="button" :aria-label="en?'Chorus first':'副歌先行'" :aria-pressed="draft.chorusFirst" :disabled="disabled" @click="toggleChorusFirst"><span></span></button></div>
+          <div class="template-preview-box"><strong>{{ en?'Selected section order':'当前段落顺序' }}</strong><p class="template-preview" aria-live="polite">{{ sections }}</p><small>{{ en?'Interlude is instrumental. Chorus 2 varies the chorus.':'间奏不填写歌词，第二副歌保留记忆点并有所变化。' }}</small></div>
+        </template>
       </div>
-      <footer class="template-dialog-actions"><button class="template-cancel" type="button" @click="close">{{ en?'Cancel':'取消' }}</button><button class="template-confirm" type="button" :disabled="disabled" @click="confirm">{{ en?'Confirm selection':'确认选择' }}</button></footer>
+      <div v-if="editingCustom" class="custom-section-tools">
+        <button ref="addButton" class="custom-section-add" type="button" :aria-expanded="addingSection" :aria-controls="id+'-section-options'" :disabled="customSections.length>=maxCustomLyricSections" @click="addingSection=!addingSection">
+          <span aria-hidden="true">＋</span> {{ en?'Add a section':'添加段落' }}
+        </button>
+        <p v-if="customSections.length>=maxCustomLyricSections" class="template-help">{{ en?`Up to ${maxCustomLyricSections} sections per song.`:`每首歌最多可添加 ${maxCustomLyricSections} 段。` }}</p>
+        <div v-show="addingSection" :id="id+'-section-options'" class="custom-section-options">
+          <button v-for="section in sectionOptions" :key="section" type="button" @click="addSection(section)">{{ name(section) }}</button>
+        </div>
+        <div v-if="sections" class="template-preview-box custom-section-preview">
+          <strong>{{ en?'Generation order preview':'生成顺序预览' }}</strong>
+          <p class="template-preview" aria-live="polite">{{ sections }}</p>
+        </div>
+      </div>
+      <footer class="template-dialog-actions">
+        <p>{{ en?'Applies the next time you generate lyrics.':'用于下次生成歌词' }}</p>
+        <button class="template-cancel" type="button" @click="close">{{ en?'Cancel':'取消' }}</button>
+        <button ref="confirmButton" class="template-confirm" type="button" :disabled="disabled||(editingCustom?!canUseCustom:!draft)" @click="confirm">{{ editingCustom?(en?'Use this structure':'使用此结构'):(en?'Confirm selection':'确认选择') }}</button>
+      </footer>
     </dialog>
   </Teleport>
 </template>
@@ -61,14 +194,30 @@ onBeforeUnmount(()=>dialog.value?.close())
 .lyrics-template-trigger{display:inline-flex;align-items:center;justify-content:center;gap:6px;max-width:100%;min-height:38px;padding:8px 13px;border:1px solid #efcfc4;border-radius:24px;background:#fff8f3;color:#a8422d;font:inherit;font-size:12px;line-height:1.5;cursor:pointer;text-align:left}
 .lyrics-template-trigger svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.5;flex:none}.lyrics-template-trigger strong{font-weight:600}
 .lyrics-template-trigger:hover:not(:disabled){background:#ffede5;border-color:#ef8067}button:disabled{opacity:.5;cursor:not-allowed}button:focus-visible{outline:2px solid #f93822;outline-offset:3px}
-.lyrics-template-dialog{width:min(620px,calc(100% - 32px));max-width:none;max-height:calc(100dvh - 48px);padding:0;border:1px solid #f0d9d0;border-radius:24px;background:#fffaf8;color:#332824;box-shadow:0 24px 90px #48292a30;overflow:hidden}
+.lyrics-template-dialog{box-sizing:border-box;width:min(620px,calc(100% - 32px));max-width:none;max-height:calc(100dvh - 48px);padding:0;border:1px solid #f0d9d0;border-radius:24px;background:#fffaf8;color:#332824;box-shadow:0 24px 90px #48292a30;overflow:hidden}
 .lyrics-template-dialog[open]{display:flex;flex-direction:column}.lyrics-template-dialog::backdrop{background:#39272e66;backdrop-filter:blur(6px)}
 .template-dialog-header{position:relative;padding:26px 56px 18px 26px;flex:none}.template-dialog-header h2{margin:0 0 8px;font-size:24px;font-weight:650;line-height:1.4;color:#332824}.template-dialog-header p{margin:0;color:#8a7166;font-size:13px;line-height:1.8}
 .template-dialog-close{position:absolute;right:15px;top:15px;width:40px;height:40px;border:0;border-radius:50%;background:transparent;color:#826e65;font-size:28px;cursor:pointer}
 .template-dialog-body{padding:0 26px 18px;overflow:auto;overscroll-behavior:contain;min-height:0}.template-options{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:0;margin:0;border:0;min-width:0}
 .template-option{display:flex;align-items:flex-start;gap:9px;min-width:0;padding:14px 12px;border:1px solid #ead9d0;border-radius:14px;background:#fff;cursor:pointer}.template-option.selected{border-color:#f93822;background:#fff0e9}.template-option:focus-within{outline:2px solid #f93822;outline-offset:2px}.template-option input{margin:5px 0 0;accent-color:#f93822;flex:none}.template-option>span{min-width:0}.template-option strong{font-size:14px;line-height:1.7;font-weight:650}.template-option strong span{font-size:12px;font-weight:400;margin-left:6px}.template-option small{display:block;font-size:11px;line-height:1.85;color:#886f64;margin-top:5px;overflow-wrap:anywhere}.template-auto{grid-column:1/-1}
+.template-custom-entry{width:100%;margin-bottom:10px;padding-inline:15px;align-items:center;justify-content:space-between;text-align:left;font:inherit;color:#a53b29;background:#fff0e9;border-color:#ef9f8d}
+.template-custom-entry:hover{background:#ffe8df;border-color:#f93822}.template-custom-entry strong{font-size:16px}.template-custom-entry>span:last-child{font-size:24px;line-height:1}
+.template-back{display:inline-flex;align-items:center;gap:5px;min-height:36px;margin:0 0 6px;padding:0;border:0;background:transparent;color:#855f50;font:inherit;font-size:13px;cursor:pointer}.template-back span{font-size:22px;line-height:1}
+.custom-section-heading{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:8px}.custom-section-heading h3{margin:0;font-size:14px}.custom-section-heading span{color:#806659;font-size:12px;font-variant-numeric:tabular-nums}
+.custom-section-list{list-style:none;margin:0;padding:0 12px;border:1px solid #ead9d0;border-radius:14px;background:#fff}
+.custom-section-list li{display:grid;grid-template-columns:24px minmax(0,1fr) auto;align-items:center;gap:8px;min-height:43px}.custom-section-list li+li{border-top:1px solid #f0e4df}
+.custom-section-index{color:#806659;font-size:12px;text-align:center;font-variant-numeric:tabular-nums}.custom-section-name{font-size:14px;overflow-wrap:anywhere}.custom-section-name small{margin-inline-start:4px;font-size:11px;color:#806659}
+.custom-section-actions{display:flex;gap:2px}.custom-section-actions button{width:35px;min-height:34px;padding:0;border:0;border-radius:8px;background:transparent;color:#765c50;font:inherit;font-size:18px;cursor:pointer}
+.custom-section-actions button:hover:enabled{color:#a53b29;background:#ffede4}
+.custom-section-add,.custom-section-options button{min-height:38px;border:1px solid #ead2c7;border-radius:20px;background:#fff;color:#864531;font:inherit;font-size:13px;cursor:pointer}
+.custom-section-add{width:100%;border-style:dashed;border-radius:12px;font-weight:600}.custom-section-add:hover:enabled,.custom-section-options button:hover{background:#fff0e9;border-color:#ef9f8d}
+.custom-section-options{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}.custom-section-options button{padding:5px 13px}
 .template-chorus-row{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-top:20px}.template-chorus-row strong{font-size:14px;font-weight:600}.template-chorus-row p{font-size:12px;color:#8a7166;margin:4px 0;line-height:1.6}.chorus-first{flex:none;position:relative;width:46px;height:27px;border:0;border-radius:20px;background:#d6c9c2;cursor:pointer;padding:3px}.chorus-first span{display:block;width:21px;height:21px;background:#fff;border-radius:50%;box-shadow:0 1px 4px #6d4b3526;transform:translateX(0)}.chorus-first[aria-pressed=true]{background:#f93822}.chorus-first[aria-pressed=true] span{transform:translateX(19px)}
 .template-preview-box{padding:12px 14px;margin-top:14px;border-radius:12px;background:#ffede4}.template-preview-box>strong{font-size:12px;font-weight:600;color:#a34630}.template-preview{font-size:13px;line-height:1.85;color:#6c4f40;margin:6px 0;overflow-wrap:anywhere}.template-preview-box small,.template-help{font-size:11px;line-height:1.8;color:#8a7166}.template-help{margin:12px 0 0}
-.template-dialog-actions{display:flex;gap:12px;padding:16px 26px;border-top:1px solid #efdfd6;background:#fffaf8;flex:none}.template-dialog-actions button{min-height:44px;border-radius:26px;font:inherit;font-size:14px;font-weight:600;cursor:pointer}.template-cancel{flex:1;border:1px solid #e6cfc4;background:transparent;color:#81675b}.template-confirm{flex:2;border:0;background:#f93822;color:#fff}.template-sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
+.custom-section-tools{flex:none;padding:0 26px 12px}.custom-section-preview{margin:8px 0 0;padding:8px 12px}.custom-section-preview .template-preview{max-height:3.7em;margin:3px 0 0;overflow:auto}
+.template-dialog-actions{display:flex;align-items:center;flex-wrap:wrap;gap:12px;padding:16px 26px;border-top:1px solid #efdfd6;background:#fffaf8;flex:none}.template-dialog-actions p{margin:0 auto 0 0;color:#806659;font-size:12px}.template-dialog-actions button{min-width:88px;min-height:44px;padding:0 16px;border-radius:26px;font:inherit;font-size:14px;font-weight:600;cursor:pointer}.template-cancel{border:1px solid #e6cfc4;background:transparent;color:#81675b}.template-confirm{border:0;background:#f93822;color:#fff}.template-sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
 @media(max-width:600px){.lyrics-template-dialog{width:100%;max-height:88dvh;margin:0;inset:auto 0 0;border-radius:24px 24px 0 0;border-bottom:0}.template-dialog-header{padding:24px 52px 16px 20px}.template-dialog-header h2{font-size:22px}.template-dialog-body{padding:0 20px 16px}.template-options{grid-template-columns:1fr}.template-option{padding:11px 12px}.template-option small{margin-top:3px}.template-dialog-actions{padding:14px 20px calc(14px + env(safe-area-inset-bottom))}.lyrics-template-trigger{font-size:11px;padding:7px 10px}}
+@media(max-width:600px){.custom-section-tools{padding-inline:20px}}
+@media(max-width:440px){.template-dialog-actions p{flex-basis:100%}.template-dialog-actions button{flex:1}}
+@media(pointer:coarse){.template-back,.custom-section-add,.custom-section-options button{min-height:44px}.custom-section-actions button{width:44px;min-height:44px}}
 </style>

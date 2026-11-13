@@ -10,7 +10,14 @@ public interface LyricsApi {
     Revision get(String creator,String work,String revision);
     List<Revision> list(String creator,String work);
     record Revision(String id,String workId,long workVersion,String title,String lyrics,String source,boolean confirmed,
-                    Instant createdAt,String language,String templateId,Boolean chorusFirst) {
+                    Instant createdAt,String language,String templateId,Boolean chorusFirst,List<String> customSections) {
+        public Revision {
+            customSections = customSections == null ? null : List.copyOf(customSections);
+        }
+        public Revision(String id,String workId,long workVersion,String title,String lyrics,String source,boolean confirmed,
+                        Instant createdAt,String language,String templateId,Boolean chorusFirst) {
+            this(id,workId,workVersion,title,lyrics,source,confirmed,createdAt,language,templateId,chorusFirst,null);
+        }
         public Revision(String id,String workId,long workVersion,String title,String lyrics,String source,boolean confirmed,Instant createdAt) {
             this(id,workId,workVersion,title,lyrics,source,confirmed,createdAt,null,null,null);
         }

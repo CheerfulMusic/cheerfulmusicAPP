@@ -11,7 +11,7 @@ import org.springframework.core.io.ClassPathResource;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.init.ResourceDatabasePopulator;
 
-/** Test-classpath-only H2 bridge. It never executes, records or certifies MySQL V41. */
+/** Test-classpath-only H2 bridge. It never executes, records or certifies MySQL V44. */
 @AutoConfiguration(before = FlywayAutoConfiguration.class)
 @Profile("test")
 public class H2InboxCompatibilityAutoConfiguration {
@@ -30,7 +30,7 @@ public class H2InboxCompatibilityAutoConfiguration {
                 flyway.migrate();
                 return;
             }
-            Flyway.configure().configuration(flyway.getConfiguration()).target("40").load().migrate();
+            Flyway.configure().configuration(flyway.getConfiguration()).target("43").load().migrate();
             var db = new JdbcTemplate(source);
             Integer scoped = db.queryForObject("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=CURRENT_SCHEMA AND table_name='payment_webhook_inbox' AND column_name IN ('merchant_scope','env_scope')", Integer.class);
             if (Integer.valueOf(0).equals(scoped)) {

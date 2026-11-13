@@ -75,8 +75,8 @@ class CreditEntitlementV40MySqlMigrationTest {
             reference = new ObjectMapper().readTree(resource);
         }
         assertEquals("b8a924f624f7b1643c483cf2cc963ab56f1d03ff", reference.path("core_commit").asString());
-        Flyway.configure().dataSource(source).locations("classpath:db/migration").cleanDisabled(true).target("40").load().migrate();
-        assertEquals(40, number("SELECT COUNT(*) FROM flyway_schema_history WHERE success=1 AND version IS NOT NULL"));
+        Flyway.configure().dataSource(source).locations("classpath:db/migration").cleanDisabled(true).target("43").load().migrate();
+        assertEquals(43, number("SELECT COUNT(*) FROM flyway_schema_history WHERE success=1 AND version IS NOT NULL"));
         for (var migration : reference.path("core")) assertHistory(migration);
         owner = UUID.randomUUID().toString(); order = UUID.randomUUID().toString();
         db.update("INSERT INTO creator(id,created_at) VALUES(?,CURRENT_TIMESTAMP)", owner);
@@ -91,7 +91,7 @@ class CreditEntitlementV40MySqlMigrationTest {
         var original = db.queryForMap("SELECT entry_type,reference_id,owner_id,amount,created_at FROM credit_ledger WHERE reference_id='migration-original-credit'");
         var originalInbox = db.queryForMap("SELECT provider,event_id,event_type,payload,payload_hash,status,attempts,next_attempt_at,created_at,updated_at FROM payment_webhook_inbox WHERE event_id='evt_migration_legacy'");
         var originalDownload = db.queryForMap("SELECT * FROM shared_download_entitlement WHERE id=?", grant);
-        Flyway.configure().dataSource(source).locations("classpath:db/migration").cleanDisabled(true).target("41").load().migrate();
+        Flyway.configure().dataSource(source).locations("classpath:db/migration").cleanDisabled(true).target("44").load().migrate();
         assertEquals(original, db.queryForMap("SELECT entry_type,reference_id,owner_id,amount,created_at FROM credit_ledger WHERE reference_id='migration-original-credit'"));
         assertEquals(originalInbox, db.queryForMap("SELECT provider,event_id,event_type,payload,payload_hash,status,attempts,next_attempt_at,created_at,updated_at FROM payment_webhook_inbox WHERE event_id='evt_migration_legacy'"));
         assertEquals(originalDownload, db.queryForMap("SELECT * FROM shared_download_entitlement WHERE id=?", grant), "V41 must retain every original core40 download grant field");
@@ -111,15 +111,15 @@ class CreditEntitlementV40MySqlMigrationTest {
     }
 
     @Test @Order(1) void canonical40ChecksumsRemainAndActual41PreservesDownloadAndFinancialFacts() {
-        assertEquals(41, number("SELECT COUNT(*) FROM flyway_schema_history WHERE success=1 AND version IS NOT NULL"));
+        assertEquals(44, number("SELECT COUNT(*) FROM flyway_schema_history WHERE success=1 AND version IS NOT NULL"));
         for (var migration : reference.path("core")) assertHistory(migration);
         assertHistory(reference.path("integration"));
         assertEquals(0, number("SELECT COUNT(*) FROM flyway_schema_history WHERE script IN ('V33__credit_entitlement_recovery.sql','V34__payment_return_evidence.sql')"));
         assertEquals(1, number("SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='site_event' AND COLUMN_NAME='country' AND COLUMN_TYPE='varchar(64)' AND IS_NULLABLE='YES'"));
         assertEquals(1, number("SELECT COUNT(*) FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='site_event' AND INDEX_NAME='idx_site_event_country' AND COLUMN_NAME='country'"));
         assertEquals(1, number("SELECT COUNT(*) FROM credit_ledger"));
-        assertEquals(-500011050, number("SELECT checksum FROM flyway_schema_history WHERE version='40'"));
-        assertEquals("V40__shared_download_entitlement.sql", db.queryForObject("SELECT script FROM flyway_schema_history WHERE version='40'", String.class));
+        assertEquals(-500011050, number("SELECT checksum FROM flyway_schema_history WHERE version='42'"));
+        assertEquals("V42__shared_download_entitlement.sql", db.queryForObject("SELECT script FROM flyway_schema_history WHERE version='42'", String.class));
         assertEquals(1, number("SELECT COUNT(*) FROM shared_download_entitlement WHERE title='original synthetic download'"));
     }
 
@@ -302,7 +302,7 @@ class CreditEntitlementV40MySqlMigrationTest {
         assertEquals(-1311214355, legacy.queryForObject("SELECT checksum FROM flyway_schema_history WHERE version='40'", Integer.class));
         var history = legacy.queryForList("SELECT * FROM flyway_schema_history ORDER BY installed_rank");
         var tables = legacy.queryForList("SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() ORDER BY TABLE_NAME");
-        var canonical = Flyway.configure().dataSource(source).locations("classpath:db/migration").cleanDisabled(true).target("41").load();
+        var canonical = Flyway.configure().dataSource(source).locations("classpath:db/migration").cleanDisabled(true).target("44").load();
         var validation = canonical.validateWithResult();
         assertFalse(validation.validationSuccessful);
         assertTrue(validation.invalidMigrations.stream().anyMatch(item -> "40".equals(item.version)), "The actual original payment40 history must be identified as incompatible");
@@ -314,6 +314,7 @@ class CreditEntitlementV40MySqlMigrationTest {
         assertEquals(history, legacy.queryForList("SELECT * FROM flyway_schema_history ORDER BY installed_rank"));
         assertEquals(tables, legacy.queryForList("SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() ORDER BY TABLE_NAME"));
         assertEquals(0, legacy.queryForObject("SELECT COUNT(*) FROM flyway_schema_history WHERE version='41'", Integer.class));
+        assertEquals(0, legacy.queryForObject("SELECT COUNT(*) FROM flyway_schema_history WHERE version='44'", Integer.class));
         assertEquals(0, legacy.queryForObject("SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='shared_download_entitlement'", Integer.class));
     }
 }

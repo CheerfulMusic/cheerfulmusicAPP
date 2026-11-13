@@ -37,4 +37,28 @@ class LyricsStructureTest {
         var abc=new LyricsStructure("ABC",false);
         assertThrows(DomainException.class,()->abc.validate(render(abc).replaceFirst("唱出今天的故事", "")));
     }
+
+    @Test void customStructureKeepsRepeatedSectionsAndAllowsAnInstrumentalEnding() {
+        var selected=List.of("Chorus","Verse 2","Chorus","Interlude");
+        var structure=new LyricsStructure("CUSTOM",false,selected);
+        assertEquals(selected,structure.sections());
+        assertTrue(structure.instruction().contains("[Chorus] → [Verse 2] → [Chorus] → [Interlude]"));
+        var lyrics=render(structure);
+        assertDoesNotThrow(()->structure.validate(lyrics));
+        assertThrows(DomainException.class,()->structure.validate(lyrics+"\n这一段没有歌词"));
+        assertThrows(DomainException.class,()->structure.validate(lyrics.replaceFirst("\\[Chorus]","[Verse 2]")));
+        assertThrows(DomainException.class,()->structure.validate(lyrics.replaceFirst("\\[Chorus]\\n唱出今天的故事\\n","")));
+    }
+
+    @Test void customStructureRequiresSupportedSectionsAndAtLeastOneLyricSection() {
+        assertThrows(DomainException.class,()->new LyricsStructure("CUSTOM",false));
+        for(var invalid:List.of(List.<String>of(),List.of("Interlude","Interlude"),List.of("verse"),
+            Arrays.asList("Verse",null),Collections.nCopies(LyricsStructure.MAX_CUSTOM_SECTIONS+1,"Verse"))) {
+            assertEquals("INVALID_LYRICS_REQUEST",assertThrows(DomainException.class,
+                ()->new LyricsStructure("CUSTOM",false,invalid)).code());
+        }
+        assertThrows(DomainException.class,()->new LyricsStructure("CUSTOM",true,List.of("Chorus")));
+        assertThrows(DomainException.class,()->new LyricsStructure("AAB",false,List.of("Chorus")));
+        assertDoesNotThrow(()->new LyricsStructure("CUSTOM",false,Collections.nCopies(LyricsStructure.MAX_CUSTOM_SECTIONS,"Verse")));
+    }
 }

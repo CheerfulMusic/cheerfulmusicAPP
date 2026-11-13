@@ -12,4 +12,5 @@ public class LyricsRow {
     public String language;
     public String templateId;
     public Boolean chorusFirst;
+    public String customSections;
 }

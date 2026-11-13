@@ -24,9 +24,9 @@ public class UsageConfiguration {
         if(!fenced){
             if(CreditSchemaReadiness.installed(jdbc))throw new IllegalStateException("Entitlement schema installed: a legacy credit writer cannot start");
             String product=jdbc.execute((ConnectionCallback<String>)connection->connection.getMetaData().getDatabaseProductName());
-            if("MySQL".equals(product))CreditSchemaReadiness.requireCore40Ready(jdbc);
+            if("MySQL".equals(product))CreditSchemaReadiness.requireCore43Ready(jdbc);
             else if(!"H2".equals(product)||!environment.acceptsProfiles(Profiles.of("test"))||environment.acceptsProfiles(Profiles.of("mysql")))
-                throw new IllegalStateException("Only verified MySQL core40 or explicit H2 test compatibility may use the legacy writer");
+                throw new IllegalStateException("Only verified MySQL core43 or explicit H2 test compatibility may use the legacy writer");
             return base;
         }
         var identity=jdbc.queryForMap("SELECT DATABASE() database_name,@@port database_port");

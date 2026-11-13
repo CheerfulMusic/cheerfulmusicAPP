@@ -51,7 +51,7 @@ with connection() as db,db.cursor() as cur:
     cur.execute('SHOW DATABASES');assert set(r[0] for r in cur.fetchall())<={CFG['database'],'information_schema','performance_schema'}
     cur.execute('SHOW GRANTS');grants=[r[0] for r in cur.fetchall()];assert len(grants)==2 and all(g.startswith('GRANT USAGE ON *.*') or 'ON `'+CFG['database']+'`.*' in g for g in grants)
     cur.execute("SELECT status FROM p0_credit_cutover_state WHERE id=1");assert cur.fetchone()==('ACTIVE',)
-    cur.execute("SELECT COUNT(*) FROM flyway_schema_history WHERE success=1 AND version IS NOT NULL");assert cur.fetchone()==(41,)
+    cur.execute("SELECT COUNT(*) FROM flyway_schema_history WHERE success=1 AND version IS NOT NULL");assert cur.fetchone()==(44,)
 financial_before=financial_snapshot()
 assert financial_before['credit_ledger']['rows']>0 and financial_before['credit_account']['rows']>0,'A restored nonempty financial fixture is required'
 with socket.socket() as probe:
@@ -61,7 +61,7 @@ env={k:v for k,v in os.environ.items() if not any(s in k.upper() for s in blocke
 url='jdbc:mysql://127.0.0.1:23316/'+CFG['database']+'?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC'
 env.update({'MYSQL_URL':url,'MYSQL_USERNAME':CFG['user'],'MYSQL_PASSWORD':CFG['password'],
     'SPRING_DATASOURCE_URL':url,'SPRING_DATASOURCE_USERNAME':CFG['user'],'SPRING_DATASOURCE_PASSWORD':CFG['password'],
-    'CREDIT_WRITER_FENCE_ENABLED':'true','CREDIT_WRITER_EXPECTED_DATABASE':CFG['database'],'CREDIT_WRITER_EXPECTED_PORT':'23316','CREDIT_SCHEMA_TARGET':'41'})
+    'CREDIT_WRITER_FENCE_ENABLED':'true','CREDIT_WRITER_EXPECTED_DATABASE':CFG['database'],'CREDIT_WRITER_EXPECTED_PORT':'23316','CREDIT_SCHEMA_TARGET':'44'})
 flags={'spring.config.location':'classpath:/application.yml','spring.profiles.active':'mysql','server.address':'127.0.0.1','server.port':str(PORT),
     'spring.flyway.enabled':'false','spring.sql.init.mode':'never','qingfeng.stripe.enabled':'false','qingfeng.stripe.accepting-new-orders':'false',
     'qingfeng.paypal.enabled':'false','qingfeng.paypal.accepting-new-orders':'false','qingfeng.payments.enabled':'false','qingfeng.payment.mock':'false',

@@ -62,29 +62,29 @@ class CreditSchemaRolloutConfigurationTest {
         var environment = environment();
         for (var source : new YamlPropertySourceLoader().load("committed-defaults", new ClassPathResource("application.yml")))
             environment.getPropertySources().addLast(source);
-        assertEquals("40", environment.getProperty("spring.flyway.target"));
+        assertEquals("43", environment.getProperty("spring.flyway.target"));
         assertEquals("false", environment.getProperty("qingfeng.credits.writer-fence.enabled"));
         assertEquals("false", environment.getProperty("qingfeng.stripe.enabled"));
-        environment.setProperty("CREDIT_SCHEMA_TARGET", "41");
-        assertEquals("41", environment.getProperty("spring.flyway.target"));
+        environment.setProperty("CREDIT_SCHEMA_TARGET", "44");
+        assertEquals("44", environment.getProperty("spring.flyway.target"));
         assertEquals("false", environment.getProperty("qingfeng.credits.writer-fence.enabled"));
         assertEquals("false", environment.getProperty("qingfeng.stripe.enabled"));
     }
 
     @Test void verifiedUninstalledMysqlCore40KeepsTheExistingWriter() throws Exception {
         var db = database("MySQL");
-        allow(db, CreditSchemaReadiness.CORE40_CHECKS);
+        allow(db, CreditSchemaReadiness.CORE43_CHECKS);
         assertInstanceOf(JdbcCreditsLedger.class, configuration(false).creditsLedger(db, manager, environment("mysql")));
-        for (var check : CreditSchemaReadiness.CORE40_CHECKS.values())
+        for (var check : CreditSchemaReadiness.CORE43_CHECKS.values())
             verify(db).queryForObject(check.sql(), Integer.class);
-        verify(db, never()).queryForObject(CreditSchemaReadiness.CHECKS.get("v41_exact_history").sql(), Integer.class);
+        verify(db, never()).queryForObject(CreditSchemaReadiness.CHECKS.get("v44_exact_history").sql(), Integer.class);
         verifyNoInteractions(manager);
     }
 
     @Test void MysqlUnderTestProfileStillRequiresTheActualCore40Gate() throws Exception {
         var db = database("MySQL");
-        allow(db, CreditSchemaReadiness.CORE40_CHECKS);
-        var missing = CreditSchemaReadiness.CORE40_CHECKS.get("core_account_primary_key");
+        allow(db, CreditSchemaReadiness.CORE43_CHECKS);
+        var missing = CreditSchemaReadiness.CORE43_CHECKS.get("core_account_primary_key");
         when(db.queryForObject(missing.sql(), Integer.class)).thenReturn(0);
         assertThrows(IllegalStateException.class, () -> configuration(false).creditsLedger(db, manager, environment("test")));
     }
@@ -92,7 +92,7 @@ class CreditSchemaRolloutConfigurationTest {
     @Test void explicitH2TestCompatibilityDoesNotClaimMysqlReadiness() throws Exception {
         var db = database("H2");
         assertInstanceOf(JdbcCreditsLedger.class, configuration(false).creditsLedger(db, manager, environment("test")));
-        for (var check : CreditSchemaReadiness.CORE40_CHECKS.values())
+        for (var check : CreditSchemaReadiness.CORE43_CHECKS.values())
             verify(db, never()).queryForObject(check.sql(), Integer.class);
         assertThrows(IllegalStateException.class, () -> configuration(false).creditsLedger(db, manager, environment("mysql")));
     }
@@ -118,9 +118,9 @@ class CreditSchemaRolloutConfigurationTest {
     }
 
     @Test void everyCore40HistoryStructureAndPartialInboxCheckIsRequired() throws Exception {
-        for (var entry : CreditSchemaReadiness.CORE40_CHECKS.entrySet()) {
+        for (var entry : CreditSchemaReadiness.CORE43_CHECKS.entrySet()) {
             var db = database("MySQL");
-            allow(db, CreditSchemaReadiness.CORE40_CHECKS);
+            allow(db, CreditSchemaReadiness.CORE43_CHECKS);
             when(db.queryForObject(entry.getValue().sql(), Integer.class)).thenReturn(entry.getValue().expected() + 1);
             var failure = assertThrows(IllegalStateException.class,
                 () -> configuration(false).creditsLedger(db, manager, environment("mysql")), entry.getKey());
@@ -143,7 +143,7 @@ class CreditSchemaRolloutConfigurationTest {
             var db = database("MySQL");
             when(db.queryForMap("SELECT DATABASE() database_name,@@port database_port")).thenReturn(identity);
             assertThrows(IllegalStateException.class, () -> configuration(true).creditsLedger(db, manager, environment("mysql")));
-            verify(db, never()).queryForObject(CreditSchemaReadiness.CHECKS.get("v41_exact_history").sql(), Integer.class);
+            verify(db, never()).queryForObject(CreditSchemaReadiness.CHECKS.get("v44_exact_history").sql(), Integer.class);
         }
     }
 
