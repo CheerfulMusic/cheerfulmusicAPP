@@ -234,7 +234,8 @@ def validate_configuration(original, candidate, accepting, canary=False, channel
     need(params.get('connectionTimeZone') == ['UTC']
          and params.get('forceConnectionTimeZoneToSession') == ['true'], 'ACTUAL_UTC_SESSION_PARAMETERS_REQUIRED')
     old_params = parse_qs(old.query)
-    mutable = {'serverTimezone', 'connectionTimeZone', 'forceConnectionTimeZoneToSession'}
+    need(params.get('connectionCollation') == ['utf8mb4_unicode_ci'], 'PRODUCTION_EPOCH_COLLATION_REQUIRED')
+    mutable = {'serverTimezone', 'connectionTimeZone', 'forceConnectionTimeZoneToSession', 'connectionCollation'}
     need({k: v for k, v in params.items() if k not in mutable}
          == {k: v for k, v in old_params.items() if k not in mutable}, 'UNRELATED_JDBC_PARAMETER_CHANGE')
 

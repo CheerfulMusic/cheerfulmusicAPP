@@ -33,7 +33,7 @@ class RuntimeConfigurationContract(unittest.TestCase):
                     'qingfeng.paypal.enabled': 'true', 'qingfeng.paypal.accepting-new-orders': 'true',
                     'qingfeng.media.storage': 'oss'}
         self.closed = {**self.old,
-            'spring.datasource.url': 'jdbc:mysql://127.0.0.1:3306/qingfeng_music?connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true',
+            'spring.datasource.url': 'jdbc:mysql://127.0.0.1:3306/qingfeng_music?connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true&connectionCollation=utf8mb4_unicode_ci',
             'qingfeng.stripe.enabled': 'true', 'qingfeng.stripe.accepting-new-orders': 'false',
             'qingfeng.stripe.environment': 'live', 'qingfeng.stripe.account-id': release.ACCOUNT,
             'qingfeng.stripe.business-country': 'GB', 'qingfeng.stripe.payment-methods.card.enabled': 'true',
@@ -70,6 +70,12 @@ class RuntimeConfigurationContract(unittest.TestCase):
 
     def test_utc_change_cannot_silently_enable_an_unrelated_jdbc_capability(self):
         self.reject('UNRELATED_JDBC_PARAMETER_CHANGE', **{'spring.datasource.url': self.closed['spring.datasource.url'] + '&allowLoadLocalInfile=true'})
+
+    def test_production_epoch_collation_cannot_be_missing_wrong_or_ambiguous(self):
+        url=self.closed['spring.datasource.url']
+        for changed in (url.replace('&connectionCollation=utf8mb4_unicode_ci',''),url.replace('utf8mb4_unicode_ci','utf8mb4_0900_ai_ci'),url+'&connectionCollation=utf8mb4_unicode_ci'):
+            with self.subTest(url=changed):
+                self.reject('PRODUCTION_EPOCH_COLLATION_REQUIRED',**{'spring.datasource.url':changed})
 
     def test_sandbox_or_placeholders_cannot_enter_live(self):
         self.reject('LITERAL_LIVE_API_CREDENTIAL_REQUIRED', **{'qingfeng.stripe.api-key': 'sk_' + 'test_' + 'SyntheticOfflineFixture'})
@@ -402,7 +408,7 @@ class Financial45OperatorContract(unittest.TestCase):
             'candidate.jar.sha256': self.jar, 'source.sha256': self.source, 'plan.sha256': self.plan_sha,
             'migration.version': '45', 'migration.sha256': release.FINANCIAL_SQL_SHA256,
             'core.manifest.sha256': release.CORE_MANIFEST_SHA256, 'migration.authorized': 'true'}
-        self.db = {'spring.datasource.url': 'jdbc:mysql://127.0.0.1:3306/qingfeng_music?connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true',
+        self.db = {'spring.datasource.url': 'jdbc:mysql://127.0.0.1:3306/qingfeng_music?connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true&connectionCollation=utf8mb4_unicode_ci',
                    'spring.datasource.username': 'synthetic', 'spring.datasource.password': 'synthetic-not-real'}
         self.inputs = (Path('/usr/lib/jvm/synthetic-java17/bin/java'), Path('/private/db.properties'),
                        Path('/private/approved.properties'), self.values, self.db)
