@@ -45,6 +45,50 @@ with zipfile.ZipFile(io.BytesIO(raw)) as archive:
         target=(EXPORT/item.filename).resolve()
         assert target.is_relative_to(EXPORT.resolve()) and not item.filename.startswith(('/','\\'))
     archive.extractall(EXPORT)
+# Java 17 embeds pattern-variable character offsets in debug local names. Git
+# exports retain committed EOL, which can differ from the executed test compile.
+# Verify every production source against both Git and the immutable test snapshot,
+# then reproduce only those exact tested EOL bytes inside this fresh export. The
+# final production .class comparison below remains an exact raw-byte SHA check.
+java_manifest_path=TESTED.parent/'tested-production-java-inputs.json'
+java_manifest=json.loads(java_manifest_path.read_text(encoding='utf-8'))
+assert java_manifest['status']=='PASS' and java_manifest['files']
+assert Path(java_manifest['test_evidence']).resolve()==(TESTED.parent/'results.json').resolve()
+java_snapshot_root=(TESTED.parent/'java-inputs').resolve()
+assert java_snapshot_root.is_relative_to(TESTED.parent.resolve())
+java_export_root=(EXPORT/'Qingfeng_AI_Music').resolve()
+java_export_inputs={}
+for module in ('qf-common','qf-business','qf-infrastructure','qf-server'):
+    for path in (java_export_root/module/'src/main/java').rglob('*.java'):
+        assert not path.is_symlink() and path.resolve().is_relative_to(java_export_root)
+        java_export_inputs[path.relative_to(java_export_root).as_posix()]=path
+assert set(java_export_inputs)==set(java_manifest['files']),'Production Java source set differs from the complete tested snapshot'
+java_materializations=[]
+prepared_java=[]
+for relative,entry in sorted(java_manifest['files'].items()):
+    snapshot=(java_snapshot_root/relative).resolve()
+    assert snapshot.is_relative_to(java_snapshot_root) and snapshot.is_file() and not snapshot.is_symlink()
+    tested_bytes=snapshot.read_bytes()
+    assert len(tested_bytes)==entry['bytes'] and digest(tested_bytes)==entry['sha256'],'Tested Java snapshot changed: '+relative
+    tested_lf=tested_bytes.replace(b'\r\n',b'\n')
+    assert b'\r' not in tested_lf and digest(tested_lf)==entry['lf_sha256'],'Invalid tested Java EOL snapshot: '+relative
+    path=java_export_inputs[relative]
+    git_bytes=path.read_bytes()
+    assert git_bytes.replace(b'\r\n',b'\n')==tested_lf,'Production Java differs from Git beyond CRLF/LF: '+relative
+    prepared_java.append((path,tested_bytes))
+    if git_bytes!=tested_bytes:
+        java_materializations.append({'path':relative,'git_export_sha256':digest(git_bytes),
+                                      'tested_sha256':entry['sha256'],'lf_sha256':entry['lf_sha256'],
+                                      'git_bytes':len(git_bytes),'tested_bytes':len(tested_bytes)})
+# Validate the entire source set before materializing any export file.
+for path,tested_bytes in prepared_java:
+    if path.read_bytes()!=tested_bytes:path.write_bytes(tested_bytes)
+    assert path.read_bytes()==tested_bytes
+java_materialization_path=OUT/'java-eol-materializations.json'
+java_materialization_path.write_text(json.dumps({'status':'PASS','scope':'JAVA_INPUT_PREPARATION_ONLY',
+    'source_commit':COMMIT,'input_count':len(prepared_java),'tested_input_manifest_sha256':digest(java_manifest_path.read_bytes()),
+    'all_git_sources_equal_after_crlf_normalization':True,'all_export_java_bytes_equal_tested_snapshot':True,
+    'changes':java_materializations},indent=2),encoding='utf-8')
 inputs=json.loads((FRONT/'inputs.json').read_text(encoding='utf-8'))
 assert receipt['input_count']==len(inputs) and 'build/preview-media.ts' in inputs and any(name.startswith('public/') for name in inputs)
 frontend_export=EXPORT/'Qingfeng_AI_Music_VUE'
@@ -78,6 +122,10 @@ record={'status':'FAIL','source_commit':COMMIT,'frontend_source_tree':git('rev-p
     'source_archive_sha256':digest(raw),'fresh_export':True,'runtime_credentials_loaded':False,'test_execution':'NOT_RUN_IN_PACKAGING_ALREADY_RECORDED_SEPARATELY',
     'frontend_receipt_sha256':digest((FRONT/'evidence.json').read_bytes()),'frontend_complete_input_manifest_sha256':digest((FRONT/'inputs.json').read_bytes()),
     'frontend_input_count':len(inputs),'frontend_test_counts':counts,'committed_frontend_inputs_match_acceptance':True,
+    'tested_java_input_manifest_sha256':digest(java_manifest_path.read_bytes()),'production_java_input_count':len(prepared_java),
+    'all_java_inputs_match_git_except_crlf':True,'all_export_java_bytes_equal_tested_snapshot':True,
+    'java_eol_materialization_count':len(java_materializations),'java_eol_materialization_evidence':str(java_materialization_path),
+    'java_eol_materialization_evidence_sha256':digest(java_materialization_path.read_bytes()),
     'command':cmd,'allow_release':False,'allow_live':False}
 print(json.dumps({'log':str(OUT/'build.log'),'source_commit':COMMIT}),flush=True)
 with (OUT/'build.log').open('w',encoding='utf-8') as log:

@@ -109,6 +109,7 @@ sparse checkout 在合并时再次省略 12 个媒体文件。本轮只从固定
 - `.cache/payment-main-integration-20261112/maven-full-20261112T164749261443Z/results.json` 为真实 FAIL：1247 total、1 failure、0 error、8 skipped。唯一失败是新增 ACTIVE 第19项只接受旧 Usage 后置门禁原文；新 Flyway 门禁在此前正确拒启，日志包含精确预迁移审批提示。修复仅让该新增断言接受第二个完整准确的 writer 门禁原因；拒启、Ready=false、25表逐行SHA、余额及原应用仍有效等断言全部保留，没有接受任意启动异常，也未改变原18项断言。该轮 legacy core40 第5项真实 target41/latest 拒绝与零41 DDL已通过，不能因此把整轮FAIL改写成PASS。
 - `.cache/payment-main-integration-20261112/maven-full-20261112T165559381498Z/interruption.json` 记录 **ABORTED**：回合中断，最后日志为2026-11-13 01:02:20（Asia/Shanghai），进程已消失且无最终results.json。部分执行不计PASS，保留库及日志；不得由部分XML补造完整成功收据。随后使用全新r12资源执行 `.cache/payment-main-integration-20261112/maven-full-20261113T030731559249Z/`，真实结果为1247 total、1239 PASS、0 failure、0 error、8 skipped/BLOCKED；中断记录不被覆盖。
 - runner 已改为先归档既有测试报告，再执行离线 `mvn ... clean verify`。新证据153735为独立实际执行结果；保留失败日志、报告和原库，不通过删除断言或跳过并发获得 PASS。
+- 首次 fresh Git export 制品校验为 **FAIL**，证据 `.cache/payment-main-integration-20261112/artifact-20261113T031448196630Z/{failure.json,class-comparison-failure.json}`：Maven package exit0、649类齐全，但2类原始SHA不同；父代理的 `javap -v` 检查确认仅为javac17模式匹配临时debug名受CRLF字符偏移影响。已保存030731 passing reactor的354个生产Java精确输入（同目录 `tested-production-java-inputs.json` / `java-inputs/`），逐个与Git除CRLF/LF外一致；builder仅在fresh export恢复已测试换行，继续要求原649类raw SHA完全相等，不忽略debug、不更改业务源码或预期类清单。修正后的制品实际结果仍由delivery判定，首次FAIL保留。
 - 之前媒体缺失、Endive输入校验顺序、原主线真实锁序、UNKNOWN预期及请求键夹具长度等失败记录继续保留。明确失败退款断言保留；UNKNOWN按真实业务规则保留预扣、禁止重投。
 
 ## 7. 历史订单与真实数据

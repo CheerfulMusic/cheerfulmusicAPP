@@ -120,6 +120,7 @@
 | 项目 | 真实状态 | 必须保留的限定 |
 | --- | --- | --- |
 | 未clean的旧target残留payment40 | FAIL，1095 total/0failure/394error/8skip | `.cache/payment-main-integration-20261112/maven-full-20261112T152158595213Z/`，日志重复version40；394为上下文错误，不能说394个业务缺陷都修好了 |
+| 首次fresh export原始类字节校验 | FAIL，package exit0，649类中2类SHA不同 | `artifact-20261113T031448196630Z/{failure.json,class-comparison-failure.json}`（同公共cache目录）；javap核实javac17临时debug名的CRLF偏移。保留354个已测试Java原字节，fresh export仅恢复换行并继续要求649类raw SHA全等；不忽略debug或改预期。修正后实际制品仍待delivery |
 | 新门禁164749 clean verify | FAIL，1247 total/1failure/0error/8skip | `.cache/payment-main-integration-20261112/maven-full-20261112T164749261443Z/`；新增ACTIVE19只匹配旧后置门禁原文，新预迁移gate更早正确拒启；仅补第二个完整准确原因，Ready及25表SHA等资金断言保留，原18项未改 |
 | 165559新r11运行中断 | ABORTED，不计PASS | `.cache/payment-main-integration-20261112/maven-full-20261112T165559381498Z/interruption.json`；最后日志2026-11-13 01:02:20 Asia/Shanghai，无最终results；日志及库保留，随后当前r12实际重新验收，旧中断不被覆盖 |
 | 修复前160457 clean verify | 历史PASS command，1200实际PASS/8BLOCKED | 只覆盖兼容修复前代码；旧失败及153735检查点保留，未删失败断言 |
