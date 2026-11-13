@@ -64,6 +64,11 @@ class SmsBridgeServiceTest {
         assertEquals(429,assertThrows(SmsBridgeService.Failure.class,()->limited.deliver(List.of("Bearer "+SECRET),"application/json",-1,
             new ByteArrayInputStream(body("447400123458","123456","2001:0db8:0:0:0:0:0:1")))).status());
         assertEquals(2,sent.get());
+        var mapped=new SmsBridgeService(true,SECRET,(phone,code)->{},200,1,time,GB);
+        mapped.deliver(List.of("Bearer "+SECRET),"application/json",-1,
+            new ByteArrayInputStream(body("447400123458","123456","203.0.113.1")));
+        assertEquals(429,assertThrows(SmsBridgeService.Failure.class,()->mapped.deliver(List.of("Bearer "+SECRET),"application/json",-1,
+            new ByteArrayInputStream(body("447400123459","123456","::ffff:203.0.113.1")))).status());
         assertEquals(400,assertThrows(SmsBridgeService.Failure.class,()->limited.deliver(List.of("Bearer "+SECRET),"application/json",-1,
             new ByteArrayInputStream(body("447400123459","123456","localhost")))).status());
     }

@@ -89,7 +89,10 @@ public final class SmsBridgeService {
             if(ip.contains(":")){
                 if(!ip.matches("[0-9A-Fa-f:.]{2,45}"))throw new Failure(400,"INVALID_SMS_DELIVERY");
                 parsed=InetAddress.getByName(ip);
-                if(!(parsed instanceof Inet6Address))throw new Failure(400,"INVALID_SMS_DELIVERY");
+                // Java normalizes IPv4-mapped IPv6 literals to Inet4Address.
+                if(!(parsed instanceof Inet6Address)
+                    && !(ip.toLowerCase(Locale.ROOT).startsWith("::ffff:") && parsed instanceof Inet4Address))
+                    throw new Failure(400,"INVALID_SMS_DELIVERY");
             }else{
                 String[] parts=ip.split("\\.",-1);
                 if(parts.length!=4)throw new Failure(400,"INVALID_SMS_DELIVERY");
