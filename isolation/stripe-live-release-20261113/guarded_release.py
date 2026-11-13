@@ -410,7 +410,7 @@ def backup(plan, out):
     objects = source_objects()
     env = {'PATH': '/usr/sbin:/usr/bin:/sbin:/bin', 'LANG': 'C.UTF-8',
            'MYSQL_HISTFILE': '/dev/null', 'MYSQL_TEST_LOGIN_FILE': '/dev/null'}
-    base = ['--no-defaults', '--protocol=SOCKET', '--user=root', '--connect-timeout=5']
+    base = ['--no-defaults', '--protocol=SOCKET', '--user=root']
     identity = {k: observation[k] for k in ('uuid', 'schema', 'port')}
     # Dump stays on the approved production host in a private directory. The tool
     # does not export real user data to an ordinary developer/test database.
