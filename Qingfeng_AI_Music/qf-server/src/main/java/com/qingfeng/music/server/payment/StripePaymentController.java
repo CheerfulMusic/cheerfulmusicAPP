@@ -11,14 +11,14 @@ import org.springframework.web.bind.annotation.*;
 public class StripePaymentController {
     private final StripePaymentService payments;
     public StripePaymentController(StripePaymentService payments) { this.payments=payments; }
-    public record OrderRequest(String packageId) {}
+    public record OrderRequest(String packageId,String paymentMethod) {}
 
     @GetMapping("/api/app/stripe/catalog")
     public Map<String,Object> catalog() { return payments.catalog(); }
 
     @PostMapping("/api/app/stripe/orders")
     public Map<String,Object> create(@AuthenticationPrincipal CreatorPrincipal creator,@RequestBody OrderRequest request) {
-        return payments.create(creator,request.packageId());
+        return payments.create(creator,request.packageId(),request.paymentMethod());
     }
 
     @GetMapping("/api/app/stripe/orders")

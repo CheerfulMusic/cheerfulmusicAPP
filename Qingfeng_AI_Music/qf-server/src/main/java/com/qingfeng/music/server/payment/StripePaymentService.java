@@ -18,7 +18,7 @@ import org.springframework.web.server.ResponseStatusException;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
-/** USD card checkout, webhook inbox and bounded reconciliation for Stripe. */
+/** Hosted card/Apple Pay and WeChat checkout using immutable server-owned offers. */
 @Service
 @Profile({"mysql", "test"})
 public final class StripePaymentService implements VerifiedPaymentProcessor {
@@ -31,6 +31,7 @@ public final class StripePaymentService implements VerifiedPaymentProcessor {
     private final TransactionTemplate tx;
     private final CreditsLedger ledger;
     private final PaymentCatalog catalog;
+    private final StripePaymentMethods paymentMethods;
     private final StripeCheckoutGateway gateway;
     private final ObjectMapper json;
     private final PaymentInbox inbox;
@@ -41,10 +42,16 @@ public final class StripePaymentService implements VerifiedPaymentProcessor {
                                 PaymentCatalog catalog, StripeCheckoutGateway gateway, ObjectMapper json) {
         this(db,tx,ledger,catalog,gateway,json,new PaymentInbox(db,tx));
     }
-    @org.springframework.beans.factory.annotation.Autowired
     public StripePaymentService(JdbcTemplate db, TransactionTemplate tx, CreditsLedger ledger,
                                 PaymentCatalog catalog, StripeCheckoutGateway gateway, ObjectMapper json, PaymentInbox inbox) {
+        this(db,tx,ledger,catalog,gateway,json,inbox,new org.springframework.core.env.StandardEnvironment());
+    }
+    @org.springframework.beans.factory.annotation.Autowired
+    public StripePaymentService(JdbcTemplate db, TransactionTemplate tx, CreditsLedger ledger,
+                                PaymentCatalog catalog, StripeCheckoutGateway gateway, ObjectMapper json, PaymentInbox inbox,
+                                org.springframework.core.env.Environment environment) {
         this.db=db; this.tx=tx; this.ledger=ledger; this.catalog=catalog; this.gateway=gateway; this.json=json; this.inbox=inbox;
+        this.paymentMethods=new StripePaymentMethods(catalog,environment);
     }
     public record Resolution(boolean verified,String evidenceId,Runnable apply,String ownerId,boolean pending){
         public Resolution(boolean verified,String evidenceId,Runnable apply,String ownerId){this(verified,evidenceId,apply,ownerId,false);}
@@ -64,14 +71,19 @@ public final class StripePaymentService implements VerifiedPaymentProcessor {
 
     public Map<String,Object> catalog() {
         boolean open=schemaReady() && acceptingNewOrders;
-        return Map.of("enabled",open,"packages",open?catalog.packages().stream().filter(p->"USD".equals(p.currency())).map(PaymentCatalog.Package::asMap).toList():List.of());
+        return Map.of("enabled",open,"packages",open?paymentMethods.legacyPackages().stream().map(PaymentCatalog.Package::asMap).toList():List.of(),
+            "paymentMethods",paymentMethods.catalog(open));
     }
 
     public Map<String,Object> create(CreatorPrincipal creator, String packageId) {
+        return create(creator,packageId,null);
+    }
+
+    public Map<String,Object> create(CreatorPrincipal creator, String packageId,String paymentMethod) {
         if (!schemaReady() || !acceptingNewOrders) throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,"Stripe 充值暂未开放");
-        gateway.verifyAccount();
-        var selected=catalog.find(packageId).filter(p->"USD".equals(p.currency()))
-            .orElseThrow(()->new ResponseStatusException(HttpStatus.BAD_REQUEST,"套餐不存在"));
+        var offer=paymentMethods.select(packageId,paymentMethod);
+        gateway.verifyNewPurchase(StripePaymentMethods.checkoutMethodForStoredOffer(offer.id()),offer.currency());
+        var selected=new PaymentCatalog.Package(offer.id(),offer.title(),offer.amount(),offer.currency(),offer.credits());
         String id=UUID.randomUUID().toString();
         reserve(creator.id(),id,selected);
         return createOrResume(creator.id(),id);
@@ -103,7 +115,11 @@ public final class StripePaymentService implements VerifiedPaymentProcessor {
             if (Duration.between(created,Instant.now()).compareTo(Duration.ofHours(20))>=0)
                 throw new ResponseStatusException(HttpStatus.CONFLICT,"创建结果未知，订单需要人工核对");
             try {
-                session=gateway.createSession(id,"Qingfeng music credits",(BigDecimal)row.get("amount"),(String)row.get("currency"));
+                String method=StripePaymentMethods.checkoutMethodForStoredOffer((String)row.get("package_id"));
+                // Preserve the original card API and its exact idempotency request for legacy orders.
+                session="card".equals(method)
+                    ?gateway.createSession(id,"Qingfeng music credits",(BigDecimal)row.get("amount"),(String)row.get("currency"))
+                    :gateway.createSession(id,"Qingfeng music credits",(BigDecimal)row.get("amount"),(String)row.get("currency"),method);
             } catch (StripeCheckoutGateway.StripeRemoteException failure) {
                 throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,"支付创建结果待核对，请勿重复下单");
             }
@@ -148,8 +164,9 @@ public final class StripePaymentService implements VerifiedPaymentProcessor {
     }
 
     public Map<String,Object> orders(CreatorPrincipal creator) {
-        var rows=db.query("SELECT id,status,credits,created_at FROM payment_order WHERE creator_id=? AND provider=? ORDER BY created_at DESC,id DESC LIMIT 50",
-            (rs,n)->Map.<String,Object>of("orderId",rs.getString(1),"status",rs.getString(2),"credits",rs.getLong(3),"createdAt",rs.getTimestamp(4).toInstant().toString()),creator.id(),gateway.provider());
+        var rows=db.query("SELECT id,status,credits,created_at,amount,currency,package_id FROM payment_order WHERE creator_id=? AND provider=? ORDER BY created_at DESC,id DESC LIMIT 50",
+            (rs,n)->Map.<String,Object>of("orderId",rs.getString(1),"status",rs.getString(2),"credits",rs.getLong(3),"createdAt",rs.getTimestamp(4).toInstant().toString(),
+                "amount",rs.getBigDecimal(5),"currency",rs.getString(6),"packageId",rs.getString(7),"paymentMethod",StripePaymentMethods.checkoutMethodForStoredOffer(rs.getString(7))),creator.id(),gateway.provider());
         return Map.of("orders",rows);
     }
 
@@ -227,6 +244,12 @@ public final class StripePaymentService implements VerifiedPaymentProcessor {
         if ("checkout.session.async_payment_failed".equals(kind)&&"complete".equals(providerStatus)&&"unpaid".equals(paymentStatus)) {
             String owner=(String)row.get("creator_id");
             return new Resolution(true,"stripe-session-failed:"+sessionId,()->db.update("UPDATE payment_order SET status='FAILED' WHERE id=? AND provider=? AND status IN ('CREATING','PENDING')",orderId,gateway.provider()),owner);
+        }
+        if("wechat_pay".equals(StripePaymentMethods.checkoutMethodForStoredOffer((String)row.get("package_id")))
+            &&"unpaid".equals(paymentStatus)&&Set.of("open","complete").contains(providerStatus)) {
+            // A shopper completing the UI is not proof that the wallet payment settled.
+            // Keep the durable pointer without spending the technical-failure retry budget.
+            return Resolution.pending("stripe-session-awaiting-payment:"+sessionId,()->{},(String)row.get("creator_id"));
         }
         return new Resolution(false,null,null);
     }
@@ -496,7 +519,12 @@ public final class StripePaymentService implements VerifiedPaymentProcessor {
     }
 
     private Map<String,Object> orderView(String id,Map<String,Object> row) {
-        return Map.of("orderId",id,"status",row.get("status"),"credits",((Number)row.get("credits")).longValue());
+        var view=new LinkedHashMap<String,Object>();
+        view.put("orderId",id);view.put("status",row.get("status"));view.put("credits",((Number)row.get("credits")).longValue());
+        if(row.get("amount")!=null)view.put("amount",row.get("amount"));
+        if(row.get("currency")!=null)view.put("currency",row.get("currency"));
+        if(row.get("package_id")!=null){view.put("packageId",row.get("package_id"));view.put("paymentMethod",StripePaymentMethods.checkoutMethodForStoredOffer((String)row.get("package_id")));}
+        return view;
     }
 
     private JdbcFencedCreditsLedger fencedLedger() {

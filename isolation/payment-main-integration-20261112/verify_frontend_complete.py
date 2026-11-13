@@ -88,7 +88,9 @@ if (OUT / 'vitest.json').is_file():
     record['test_runner_success'] = tests.get('success') is True
 if len(record['steps']) == 2 and all(step['exit_code'] == 0 for step in record['steps']) and record['inputs_unchanged']:
     counts = record['test_counts']
-    assert record['test_runner_success'] and counts['numTotalTests'] == counts['numPassedTests'] == 717
+    # Keep the accepted baseline while allowing new features to add meaningful cases.
+    # Every discovered test must execute and pass; no failed or skipped tests are admitted.
+    assert record['test_runner_success'] and counts['numTotalTests'] == counts['numPassedTests'] and counts['numTotalTests'] >= 717
     assert counts['numFailedTests'] == counts['numPendingTests'] == counts['numFailedTestSuites'] == 0
     manifest = [{'path': path.relative_to(dist).as_posix(), 'bytes': path.stat().st_size, 'sha256': digest(path.read_bytes())}
                 for path in sorted(dist.rglob('*')) if path.is_file()]

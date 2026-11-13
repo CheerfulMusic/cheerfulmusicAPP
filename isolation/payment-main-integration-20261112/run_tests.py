@@ -25,7 +25,7 @@ parser.add_argument('--compatibility-port', type=int, default=57326)
 args = parser.parse_args()
 WORK=Path(args.workspace).resolve()
 assert WORK!=ROOT and (WORK/'.git').exists(),'Run in an explicit isolated worktree'
-assert args.compatibility_port == 57326
+assert args.compatibility_port in (57326,57336)
 stamp = datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')
 folder = OUT / ('maven-' + args.mode + '-' + stamp)
 folder.mkdir(parents=True, exist_ok=False)

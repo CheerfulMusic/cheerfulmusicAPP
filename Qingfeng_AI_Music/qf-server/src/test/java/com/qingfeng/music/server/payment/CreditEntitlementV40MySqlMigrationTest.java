@@ -21,7 +21,7 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 import static org.junit.jupiter.api.Assertions.*;
 
-/** Historical CI selector retained: actual canonical V1..V40 -> V41 on fresh isolated schemas.
+/** Historical CI selector retained: actual canonical V1..V43 -> V44 on fresh isolated schemas.
  * No application/provider client. The original isolated payment40 history is separately rejected. */
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class CreditEntitlementV40MySqlMigrationTest {
@@ -74,7 +74,11 @@ class CreditEntitlementV40MySqlMigrationTest {
         try (var resource = Objects.requireNonNull(CreditEntitlementV40MySqlMigrationTest.class.getResourceAsStream("/credit-migration-reference.json"))) {
             reference = new ObjectMapper().readTree(resource);
         }
-        assertEquals("b8a924f624f7b1643c483cf2cc963ab56f1d03ff", reference.path("core_commit").asString());
+        assertEquals("0530c444a38db2363e0a6296c52a416b09a14d5f", reference.path("core_commit").asString());
+        assertEquals(43, reference.path("core").size());
+        assertEquals("44", reference.path("integration").path("version").asString());
+        assertEquals("V44__credit_entitlement_integration.sql", reference.path("integration").path("script").asString());
+        assertEquals(789542731, reference.path("integration").path("checksum").asInt());
         Flyway.configure().dataSource(source).locations("classpath:db/migration").cleanDisabled(true).target("43").load().migrate();
         assertEquals(43, number("SELECT COUNT(*) FROM flyway_schema_history WHERE success=1 AND version IS NOT NULL"));
         for (var migration : reference.path("core")) assertHistory(migration);
@@ -94,7 +98,7 @@ class CreditEntitlementV40MySqlMigrationTest {
         Flyway.configure().dataSource(source).locations("classpath:db/migration").cleanDisabled(true).target("44").load().migrate();
         assertEquals(original, db.queryForMap("SELECT entry_type,reference_id,owner_id,amount,created_at FROM credit_ledger WHERE reference_id='migration-original-credit'"));
         assertEquals(originalInbox, db.queryForMap("SELECT provider,event_id,event_type,payload,payload_hash,status,attempts,next_attempt_at,created_at,updated_at FROM payment_webhook_inbox WHERE event_id='evt_migration_legacy'"));
-        assertEquals(originalDownload, db.queryForMap("SELECT * FROM shared_download_entitlement WHERE id=?", grant), "V41 must retain every original core40 download grant field");
+        assertEquals(originalDownload, db.queryForMap("SELECT * FROM shared_download_entitlement WHERE id=?", grant), "V44 must retain every original core42 download grant field");
         assertEquals(1, number("SELECT COUNT(*) FROM shared_download_entitlement"));
         assertEquals(100, number("SELECT balance FROM credit_account WHERE owner_id=?", owner));
         assertEquals(0, number("SELECT COUNT(*) FROM p0_credit_batch"));
@@ -110,7 +114,7 @@ class CreditEntitlementV40MySqlMigrationTest {
             "A migration must have an explicit successful Boolean/numeric JDBC result");
     }
 
-    @Test @Order(1) void canonical40ChecksumsRemainAndActual41PreservesDownloadAndFinancialFacts() {
+    @Test @Order(1) void canonical43ChecksumsRemainAndActual44PreservesDownloadAndFinancialFacts() {
         assertEquals(44, number("SELECT COUNT(*) FROM flyway_schema_history WHERE success=1 AND version IS NOT NULL"));
         for (var migration : reference.path("core")) assertHistory(migration);
         assertHistory(reference.path("integration"));

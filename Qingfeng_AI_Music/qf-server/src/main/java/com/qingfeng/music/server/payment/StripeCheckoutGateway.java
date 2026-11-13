@@ -33,15 +33,21 @@ public final class StripeCheckoutGateway {
     private static final HttpClient HTTP = HttpClient.newBuilder()
         .connectTimeout(Duration.ofSeconds(5)).followRedirects(HttpClient.Redirect.NEVER).build();
     private final ObjectMapper json;
+    private final HttpClient http;
     private volatile boolean accountVerified;
+    private volatile String verifiedCountry = "";
+    private volatile boolean verifiedChargesEnabled;
     @Value("${qingfeng.stripe.environment:sandbox}") private String environment;
     @Value("${qingfeng.stripe.account-id:}") private String accountId;
     @Value("${qingfeng.stripe.api-key:}") private String apiKey;
     @Value("${qingfeng.stripe.webhook-secret:}") private String webhookSecret;
     @Value("${qingfeng.stripe.success-url:}") private String successUrl;
     @Value("${qingfeng.stripe.cancel-url:}") private String cancelUrl;
+    @Value("${qingfeng.stripe.business-country:GB}") private String businessCountry;
 
-    public StripeCheckoutGateway(ObjectMapper json) { this.json = json; }
+    @org.springframework.beans.factory.annotation.Autowired
+    public StripeCheckoutGateway(ObjectMapper json) { this(json, HTTP); }
+    StripeCheckoutGateway(ObjectMapper json, HttpClient http) { this.json = json; this.http = java.util.Objects.requireNonNull(http); }
 
     public boolean configured() {
         boolean sandbox = "sandbox".equalsIgnoreCase(environment)
@@ -65,31 +71,63 @@ public final class StripeCheckoutGateway {
         synchronized (this) {
             if (accountVerified) return;
             JsonNode account=send("GET","/account",null,null);
-            if (!accountId.equals(account.path("id").asString())
-                || (isLive()&&!account.path("charges_enabled").asBoolean(false)))
-                throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,"Stripe account is not the configured active merchant");
+            if (!accountId.equals(account.path("id").asString()))
+                throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,"Stripe account is not the configured merchant");
+            verifiedCountry=account.path("country").asString("").trim().toUpperCase(java.util.Locale.ROOT);
+            verifiedChargesEnabled=account.path("charges_enabled").asBoolean(false);
             accountVerified=true;
         }
     }
 
     public JsonNode createSession(String orderId, String title, BigDecimal amount, String currency) {
+        return createSession(orderId,title,amount,currency,"card");
+    }
+
+    public JsonNode createSession(String orderId, String title, BigDecimal amount, String currency, String checkoutMethod) {
         requireConfigured();
+        Map<String,String> fields=sessionFields(orderId,title,amount,currency,checkoutMethod);
+        fields.put("success_url",returnUrl(true));
+        fields.put("cancel_url",returnUrl(false));
+        verifyNewPurchase(checkoutMethod,currency);
+        return post("/checkout/sessions", fields, "checkout-session:" + orderId);
+    }
+
+    /** Reject a definitely unsupported purchase before the caller reserves a local order. */
+    public void verifyNewPurchase(String checkoutMethod,String currency) {
+        if(!("card".equals(checkoutMethod)||"wechat_pay".equals(checkoutMethod))
+            || !("USD".equals(currency)||"CNY".equals(currency)&&"wechat_pay".equals(checkoutMethod)))
+            throw new IllegalArgumentException("Unsupported Stripe checkout method or currency");
         verifyAccount();
-        if (!"USD".equals(currency)) throw new IllegalArgumentException("Stripe launch currently supports USD only");
+        // Receiving an existing payment/return remains possible when new charges are paused.
+        if(isLive()&&!verifiedChargesEnabled)
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,"Stripe new payments are currently unavailable");
+        if("wechat_pay".equals(checkoutMethod)) {
+            if(!verifiedCountry.equals(businessCountry==null?"":businessCountry.trim().toUpperCase(java.util.Locale.ROOT))
+                || !("CNY".equals(currency)&&java.util.Set.of("GB","US").contains(verifiedCountry)
+                     || "USD".equals(currency)&&"US".equals(verifiedCountry)))
+                throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,"WeChat Pay account country or currency is not supported");
+        }
+    }
+
+    /** Deterministic request from the immutable order snapshot, not today's price or browser input. */
+    static Map<String,String> sessionFields(String orderId,String title,BigDecimal amount,String currency,String checkoutMethod) {
+        if(!("card".equals(checkoutMethod)||"wechat_pay".equals(checkoutMethod))
+            || !("USD".equals(currency)||"CNY".equals(currency)&&"wechat_pay".equals(checkoutMethod)))
+            throw new IllegalArgumentException("Unsupported Stripe checkout method or currency");
+        if(amount==null||amount.signum()<=0)throw new IllegalArgumentException("Invalid Stripe payment amount");
         long minor = amount.movePointRight(2).longValueExact();
         Map<String, String> fields = new LinkedHashMap<>();
         fields.put("mode", "payment");
-        fields.put("payment_method_types[0]", "card");
+        fields.put("payment_method_types[0]", checkoutMethod);
+        if("wechat_pay".equals(checkoutMethod))fields.put("payment_method_options[wechat_pay][client]","web");
         fields.put("line_items[0][quantity]", "1");
-        fields.put("line_items[0][price_data][currency]", "usd");
+        fields.put("line_items[0][price_data][currency]", currency.toLowerCase(java.util.Locale.ROOT));
         fields.put("line_items[0][price_data][unit_amount]", Long.toString(minor));
         fields.put("line_items[0][price_data][product_data][name]", title);
-        fields.put("success_url", returnUrl(true));
-        fields.put("cancel_url", returnUrl(false));
         fields.put("client_reference_id", orderId);
         fields.put("metadata[order_id]", orderId);
         fields.put("payment_intent_data[metadata][order_id]", orderId);
-        return post("/checkout/sessions", fields, "checkout-session:" + orderId);
+        return fields;
     }
 
     public JsonNode retrieveSession(String sessionId) {
@@ -169,7 +207,7 @@ public final class StripeCheckoutGateway {
             if (form == null) request.GET();
             else request.header("Content-Type", "application/x-www-form-urlencoded")
                 .POST(HttpRequest.BodyPublishers.ofString(form, StandardCharsets.UTF_8));
-            HttpResponse<String> response = HTTP.send(request.build(), HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+            HttpResponse<String> response = http.send(request.build(), HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
             if (response.statusCode() < 200 || response.statusCode() >= 300)
                 throw new StripeRemoteException(response.statusCode());
             return json.readTree(response.body());

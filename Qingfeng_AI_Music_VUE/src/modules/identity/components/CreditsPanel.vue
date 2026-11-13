@@ -7,7 +7,7 @@ import { logtoState } from '../../../shared/identity/logto-state'
 import { t, locale } from '../../../shared/i18n'
 import { readPendingOrders, savePendingOrders } from '../model/payment-orders'
 import { canCapturePaypal, paypalReturn } from '../model/paypal-return'
-import { isPendingOrder, mergeOrderHistory, trustedCheckoutUrl, type Order, type Provider } from '../model/order-history'
+import { isPendingOrder, mergeOrderHistory, orderAmount, trustedCheckoutUrl, type Order, type Provider } from '../model/order-history'
 
 const props = withDefaults(defineProps<{ preview?: boolean }>(), { preview: false })
 // Preview is only reachable in a development build and must never call the payment API.
@@ -77,9 +77,9 @@ async function load() {
         for (const id of pending) {
           const existing = unresolved.find(order => order.orderId === id)
           try {
-            const result = await requestJson<{orderId:string;status:string;credits:number}>(`${base}/${encodeURIComponent(id)}`)
+            const result = await requestJson<{orderId:string;status:string;credits:number;amount?:number;currency?:string;packageId?:string;paymentMethod?:Order['paymentMethod']}>(`${base}/${encodeURIComponent(id)}`)
             if (currentCreatorId() !== creatorId || result.orderId !== id) throw new Error('Identity or order changed')
-            const updated: Order = {orderId:id, status:result.status as Order['status'], credits:result.credits, ...(existing?.createdAt ? {createdAt:existing.createdAt} : {}), provider}
+            const updated: Order = {...existing, orderId:id, status:result.status as Order['status'], credits:result.credits, ...(result.amount !== undefined && result.currency ? {amount:result.amount,currency:result.currency} : {}), ...(result.packageId ? {packageId:result.packageId} : {}), ...(result.paymentMethod ? {paymentMethod:result.paymentMethod} : {}), provider}
             recent = mergeOrderHistory(recent, [updated])
             if (!isPendingOrder(updated.status)) { paid.push(id); if (result.status === 'PAID') paidAny = true }
             else stillPending.push(updated)
@@ -209,12 +209,14 @@ watch(signedIn, (current, previous) => { if (current !== previous) void load() }
     <template v-else>
       <div v-if="credits && (signedIn || credits.enabled)" class="balance"><span>{{ t('可用积分') }}</span><strong>{{ credits.balance }}</strong><small v-if="credits.enabled">{{ t('每次歌曲生成消耗 {count} 积分', {count: credits.musicCost}) }}</small></div>
       <p v-if="orderNotice" class="subtle" role="status">{{ t(orderNotice) }}</p>
+      <p class="wallet-entry"><RouterLink to="/recharge">{{ locale==='en'?'View card, Apple Pay and WeChat Pay options':'查看银行卡、Apple Pay 和微信支付方式' }}</RouterLink></p>
       <p v-if="catalogError" class="subtle" role="status">{{ t('部分积分或支付信息暂时无法读取，请稍后刷新。') }}</p>
       <section v-if="signedIn" class="history" :aria-label="t('最近订单')">
         <h3>{{ t('我的订单') }}</h3><p class="history-help">{{ t('待付款订单可继续支付或申请取消；是否可取消由服务端核对付款状态。') }}</p>
         <p v-if="!recentOrders.length" class="subtle">{{ t(purchaseUncertain ? '订单暂时无法读取，请稍后刷新。' : '暂无订单。') }}</p>
         <ul v-else class="orders"><li v-for="order in recentOrders" :key="`${order.provider}:${order.orderId}`">
           <div><strong>{{ t(orderStatus(order.status)) }}</strong> · {{ order.provider === 'paypal' ? 'PayPal' : order.provider === 'stripe' ? 'Stripe' : 'Airwallex' }}<template v-if="order.credits != null"> · {{ order.credits }} {{ t('积分') }}</template><template v-if="orderTime(order.createdAt)"> · {{ orderTime(order.createdAt) }}</template></div>
+          <div v-if="orderAmount(order)" class="order-amount">{{ orderAmount(order) }}<span v-if="order.paymentMethod==='wechat_pay'"> · {{ locale==='en'?'WeChat Pay':'微信支付' }}</span></div>
           <div class="order-number">{{ t('订单号') }}：<code>{{ order.orderId }}</code></div>
           <div v-if="isPendingOrder(order.status) && order.provider === 'paypal'" class="order-actions">
             <button v-if="paypalApproved.includes(order.orderId)" type="button" class="order-action primary" :disabled="busy" @click="retryPaypal(order)">{{ t('重新确认支付') }}</button>
