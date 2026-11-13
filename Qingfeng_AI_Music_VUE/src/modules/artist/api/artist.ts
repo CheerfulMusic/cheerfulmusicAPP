@@ -57,11 +57,22 @@ export interface DiscoverSong {
   stageName: string
   song: PublishedSong
   publishedAt: string
+  genre?: string
+  plays?: number
+}
+
+export interface DiscoverArtist {
+  artistId: string
+  stageName: string
+  avatarKey: string | null
+  songs: number
+  plays: number
 }
 
 interface DiscoverPage {
   songs: DiscoverSong[]
   hasMore: boolean
+  artists?: DiscoverArtist[]
 }
 
 const mine = 'app/artist-profile'
@@ -128,8 +139,16 @@ export async function withdrawSongFromDiscover(work: string) {
   return requestJson<ArtistProfile>(`${release(work)}/discover`, 'DELETE')
 }
 
-export function listDiscoverSongs(featured: boolean, offset: number) {
-  return requestJson<DiscoverPage>(`public/discover?featured=${featured}&offset=${offset}`)
+export function listDiscoverSongs(tab: 'latest' | 'featured' | 'popular', offset: number, genre: string, query: string) {
+  const params = new URLSearchParams({
+    featured: String(tab === 'featured'), popular: String(tab === 'popular'),
+    offset: String(offset), genre, q: query,
+  })
+  return requestJson<DiscoverPage>(`public/discover?${params}`)
+}
+
+export function recordDiscoverPlay(song: PublishedSong) {
+  return requestJson<void>(`public/discover/songs/${encodeURIComponent(song.id)}/${song.version}/play`, 'POST')
 }
 
 export const getPublicArtist = (id: string) => requestJson<PublicArtist>(publicArtist(id))

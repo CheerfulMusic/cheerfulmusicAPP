@@ -33,8 +33,10 @@ public class ArtistProfileService {
                                 String featuredReleaseId, List<PublicSong> songs) {}
     public record PublicSong(String id, long version, String title, boolean hasCover) {}
     public record ReleaseSelection(boolean profileReady, boolean published, String publicId, String stageName, Release song) {}
-    public record DiscoverSong(String artistId, String stageName, PublicSong song, Instant publishedAt) {}
-    public record DiscoverPage(List<DiscoverSong> songs, boolean hasMore) {}
+    public record DiscoverSong(String artistId, String stageName, PublicSong song, Instant publishedAt,
+                               String genre, long plays) {}
+    public record DiscoverArtist(String artistId, String stageName, String avatarKey, long songs, long plays) {}
+    public record DiscoverPage(List<DiscoverSong> songs, boolean hasMore, List<DiscoverArtist> artists) {}
     private record ProfileRow(String creatorId, String publicId, String stageName, String tagline,
                               String avatarKey, String coverKey, String featuredReleaseId, boolean published) {}
 
@@ -52,6 +54,25 @@ public class ArtistProfileService {
                 (r.discover_published_at IS NOT NULL) AS on_discover FROM artist_song_release r
             JOIN music_work w ON w.id=r.work_id AND w.owner_id=r.creator_id AND w.deleted_at IS NULL
             WHERE r.creator_id=? AND r.show_on_profile=TRUE
+            """;
+    private static final String DISCOVER_RELEASES = """
+            FROM artist_song_release r
+            JOIN artist_profile p ON p.creator_id=r.creator_id AND p.published=TRUE
+            JOIN music_work w ON w.id=r.work_id AND w.owner_id=r.creator_id AND w.deleted_at IS NULL
+            LEFT JOIN hot_song_metric m ON m.track_id=CONCAT('discover:',r.id)
+            WHERE r.show_on_profile=TRUE AND r.discover_published_at IS NOT NULL
+            """;
+    // Publish only known genres. The original style text can contain private creation instructions.
+    private static final String DISCOVER_GENRE = """
+            CASE
+              WHEN w.style LIKE '%民谣%' OR LOWER(w.style) LIKE '%folk%' THEN 'folk'
+              WHEN w.style LIKE '%古风%' OR w.style LIKE '%国风%' THEN 'guofeng'
+              WHEN w.style LIKE '%摇滚%' OR LOWER(w.style) LIKE '%rock%' THEN 'rock'
+              WHEN w.style LIKE '%电子%' OR LOWER(w.style) LIKE '%electronic%' THEN 'electronic'
+              WHEN w.style LIKE '%纯音乐%' OR LOWER(w.style) LIKE '%instrumental%' THEN 'instrumental'
+              WHEN w.style LIKE '%流行%' OR LOWER(w.style) LIKE '%pop%' THEN 'pop'
+              ELSE 'other'
+            END
             """;
 
     private final JdbcTemplate db;
@@ -208,21 +229,45 @@ public class ArtistProfileService {
     }
 
     @Transactional(readOnly = true)
-    public DiscoverPage discover(boolean featured, int offset) {
+    public DiscoverPage discover(boolean featured, boolean popular, String genre, String query, int offset) {
         int pageSize = 24;
+        String keyword = "%" + query.strip().toLowerCase(java.util.Locale.ROOT)
+                .replace("!", "!!").replace("%", "!%").replace("_", "!_") + "%";
+        String order = popular ? " ORDER BY plays DESC, r.discover_published_at DESC,r.id DESC"
+                : " ORDER BY r.discover_published_at DESC,r.id DESC";
         var songs = db.query("""
-                SELECT p.public_id,p.stage_name,r.id,r.version,r.title,r.cover_id,r.discover_published_at
-                FROM artist_song_release r
-                JOIN artist_profile p ON p.creator_id=r.creator_id AND p.published=TRUE
-                JOIN music_work w ON w.id=r.work_id AND w.owner_id=r.creator_id AND w.deleted_at IS NULL
-                WHERE r.show_on_profile=TRUE AND r.discover_published_at IS NOT NULL
-                """ + (featured ? " AND r.discover_featured=TRUE" : "") + """
-                 ORDER BY r.discover_published_at DESC,r.id DESC LIMIT ? OFFSET ?
-                """, (rs, row) -> new DiscoverSong(rs.getString("public_id"), rs.getString("stage_name"),
-                new PublicSong(rs.getString("id"), rs.getLong("version"), rs.getString("title"),
-                        rs.getString("cover_id") != null), rs.getTimestamp("discover_published_at").toInstant()),
-                pageSize + 1, offset);
-        return new DiscoverPage(songs.stream().limit(pageSize).toList(), songs.size() > pageSize);
+                SELECT p.public_id,p.stage_name,r.id,r.version,r.title,r.cover_id,r.discover_published_at,
+                       COALESCE(m.plays,0) AS plays,
+                """ + DISCOVER_GENRE + " AS genre " + DISCOVER_RELEASES
+                + (featured ? " AND r.discover_featured=TRUE" : "") + """
+                 AND (LOWER(r.title) LIKE ? ESCAPE '!' OR LOWER(p.stage_name) LIKE ? ESCAPE '!')
+                 AND (?='' OR
+                """ + DISCOVER_GENRE + "=?)" + order + " LIMIT ? OFFSET ?",
+                (rs, row) -> new DiscoverSong(rs.getString("public_id"), rs.getString("stage_name"),
+                        new PublicSong(rs.getString("id"), rs.getLong("version"), rs.getString("title"),
+                                rs.getString("cover_id") != null), rs.getTimestamp("discover_published_at").toInstant(),
+                        rs.getString("genre"), rs.getLong("plays")), keyword, keyword, genre, genre, pageSize + 1, offset);
+        var artists = offset == 0 ? db.query("""
+                SELECT p.public_id,p.stage_name,p.avatar_key,COUNT(*) AS songs,COALESCE(SUM(m.plays),0) AS plays
+                """ + DISCOVER_RELEASES + """
+                GROUP BY p.public_id,p.stage_name,p.avatar_key
+                ORDER BY plays DESC,songs DESC,p.public_id LIMIT 12
+                """, (rs, row) -> new DiscoverArtist(rs.getString("public_id"), rs.getString("stage_name"),
+                rs.getString("avatar_key"), rs.getLong("songs"), rs.getLong("plays"))) : List.<DiscoverArtist>of();
+        return new DiscoverPage(songs.stream().limit(pageSize).toList(), songs.size() > pageSize, artists);
+    }
+
+    public void recordDiscoverPlay(String song, long version) {
+        if (db.query("SELECT r.id " + DISCOVER_RELEASES + " AND r.id=? AND r.version=?",
+                (rs, row) -> rs.getString(1), song, version).isEmpty()) throw missing();
+        String track = "discover:" + song;
+        String increment = "UPDATE hot_song_metric SET plays=plays+1,updated_at=CURRENT_TIMESTAMP WHERE track_id=?";
+        if (db.update(increment, track) > 0) return;
+        try {
+            db.update("INSERT INTO hot_song_metric(track_id,plays,updated_at) VALUES (?,1,CURRENT_TIMESTAMP)", track);
+        } catch (org.springframework.dao.DuplicateKeyException raced) {
+            db.update(increment, track);
+        }
     }
 
     @Transactional(readOnly = true)

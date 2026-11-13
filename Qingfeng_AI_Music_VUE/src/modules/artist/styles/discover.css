@@ -1,0 +1,143 @@
+.discover {
+  --discover-ink: #241d27;
+  --discover-muted: #6f6575;
+  --discover-accent: #c52b20;
+  --discover-pink: #faedf5;
+  --discover-card: #fffbfe;
+  min-height: 75vh;
+  padding-bottom: 52px;
+  color: var(--discover-ink);
+  background: linear-gradient(155deg, #fff5fa 0%, #fdf5f9 53%, #fbeef5 100%);
+}
+.discover-width { width: min(90%, 1440px); margin-inline: auto; }
+.discover-header { background: #fffbfdf2; border-bottom: 1px solid #f3e6ee; }
+.discover-header-inner {
+  display: grid;
+  grid-template-columns: auto auto minmax(160px, 340px) 1fr;
+  align-items: center;
+  gap: clamp(24px, 4.5vw, 72px);
+  min-height: 79px;
+}
+.discover-brand :deep(.brand-logo) { gap: 10px; }
+.discover-brand :deep(.brand-logo > img) { width: 44px; height: 44px; }
+.discover-nav { display: flex; align-items: center; gap: clamp(16px, 3vw, 45px); min-height: 79px; }
+.discover-nav a { position: relative; padding: 24px 0; white-space: nowrap; font-size: 1.06rem; font-weight: 720; }
+.discover-nav a[aria-current="page"], .discover-nav a:hover { color: var(--discover-accent); }
+.discover-nav a[aria-current="page"]::after { content: ''; position: absolute; inset: auto 0 2px; height: 3px; border-radius: 3px; background: #ff4938; }
+.discover-search {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  min-height: 46px;
+  border: 1px solid #eedee9;
+  border-radius: 30px;
+  background: #f8edf5;
+}
+.discover-search:focus-within { border-color: #d88e9b; }
+.discover-search-submit { display: grid; place-items: center; width: 44px; height: 42px; flex: none; border: 0; border-radius: 50%; background: transparent; color: var(--discover-ink); }
+.discover-search-submit svg { width: 21px; height: 21px; }
+.discover-search input { min-width: 0; width: 100%; border: 0; background: transparent; color: var(--discover-ink); padding: 8px 12px 8px 0; font-size: .9rem; }
+.discover-search input:focus { outline: 0; }
+.discover-search input::placeholder { color: var(--discover-muted); }
+.discover-login { justify-self: end; padding: 11px 22px; border-radius: 40px; background: linear-gradient(115deg,#fd6446,#ec3022); color: #fff; font-size: .9rem; font-weight: 720; white-space: nowrap; }
+.discover-login:hover { background: #d53125; }
+.discover-hero {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  min-height: 196px;
+  display: grid;
+  align-items: center;
+  background: radial-gradient(ellipse 32% 100% at 48% 154%, #f9dce9 99%, transparent),
+    radial-gradient(ellipse 40% 62% at 85% 131%, #f9e4ee 99%, transparent), #fcecf5;
+}
+.discover-hero::before { content: ''; position: absolute; z-index: -1; inset: 0 max(4%,calc((100% - 1440px) / 2 + 40px)) 0 auto; width: min(42%, 490px); background: url('../../../assets/discover/banner.webp') center / 100% 100% no-repeat; mask-image: radial-gradient(ellipse 58% 67% at 56% 45%, black 64%, transparent 100%); }
+.discover-hero-content { padding: 24px clamp(0px,1vw,18px); }
+.discover-hero h1 { margin: 0; font-family: inherit; font-size: clamp(2.5rem, 5.1vw, 4rem); font-weight: 850; line-height: 1.1; letter-spacing: -.045em; }
+.discover-hero p { margin: 9px 0 0; color: var(--discover-muted); font-size: clamp(.96rem, 1.8vw, 1.38rem); line-height: 1.45; }
+.discover-hero p span { color: #b97816; margin-inline-start: 3px; }
+.discover-content { display: grid; grid-template-columns: minmax(0, 2.43fr) minmax(250px, 1fr); align-items: start; gap: 22px; }
+.discover-main { min-width: 0; padding: 19px 0 0; }
+.discover-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-bottom: clamp(20px, 3vw, 34px); }
+.discover-tabs { display: flex; gap: 0; border-radius: 40px; background: #f7e9f3; }
+.discover-tabs button { min-height: 49px; min-width: clamp(66px, 7vw, 112px); padding: 8px clamp(11px,2.15vw,33px); border: 0; border-radius: 40px; color: var(--discover-ink); background: transparent; font-size: clamp(.84rem,1.4vw,1.12rem); font-weight: 750; white-space: nowrap; }
+.discover-tabs button[aria-pressed="true"] { color: white; background: linear-gradient(110deg,#f74530,#e93423); }
+.discover-tabs button:not([aria-pressed="true"]):hover { color: var(--discover-accent); }
+.discover-genre { max-width: 100%; min-height: 48px; padding: 8px 12px; border: 1px solid #efdee9; border-radius: 32px; background: #fffbfe; color: var(--discover-ink); font: inherit; font-size: .93rem; }
+.discover-query { display: flex; align-items: center; gap: 12px; margin: 0 0 16px; color: var(--discover-muted); overflow-wrap: anywhere; }
+.discover-songs, .discover-side-list { list-style: none; margin: 0; padding: 0; }
+.discover-songs { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 18px; }
+.discover-song { min-width: 0; padding: clamp(8px, .9vw, 14px); border-radius: 23px; background: var(--discover-card); box-shadow: 0 11px 32px #7732520a; }
+.discover-art { position: relative; overflow: hidden; aspect-ratio: 1.73; border-radius: 15px; background: #f1dced; }
+.discover-art > img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.discover-play { position: absolute; inset: auto auto 10px 12px; display: grid; place-items: center; width: 41px; height: 41px; border: 0; border-radius: 50%; background: #fffdfb; color: #35252e; box-shadow: 0 2px 12px #39192c26; }
+.discover-play:hover, .discover-play[aria-pressed="true"] { background: #ec3d2b; color: white; }
+.discover-play svg, .discover-playlist-icon svg { width: 16px; height: 16px; }
+.discover-duration { position: absolute; inset: auto 9px 10px auto; padding: 3px 8px; border-radius: 8px; color: #fff; background: #271e2ac7; font-size: .79rem; font-variant-numeric: tabular-nums; }
+.discover-song-details { padding: 11px 9px 2px; }
+.discover-song h2 { margin: 0 0 2px; color: var(--discover-ink); font: inherit; font-size: clamp(1rem,1.4vw,1.24rem); font-weight: 780; line-height: 1.35; overflow-wrap: anywhere; }
+.discover-song a { color: var(--discover-muted); font-size: .91rem; overflow-wrap: anywhere; }
+.discover-song a:hover { color: var(--discover-accent); text-decoration: underline; }
+.discover-song-meta { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 5px; min-height: 30px; margin-top: 8px; color: var(--discover-muted); font-size: .82rem; }
+.discover-song-meta span { display: inline-flex; gap: 3px; align-items: center; }
+.discover-song-meta svg { width: 15px; height: 15px; }
+.discover-song-genre { padding: 1px 8px; border-radius: 12px; background: #f8ecf4; }
+.discover-sidebar { display: grid; gap: 22px; padding-top: 4px; }
+.discover-side-panel { padding: clamp(15px, 1.55vw, 24px); border-radius: 24px; background: var(--discover-card); box-shadow: 0 12px 35px #7732520a; scroll-margin-top: 16px; }
+.discover-side-heading { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 16px; }
+.discover-side-heading h2 { margin: 0; font: inherit; font-size: clamp(1.22rem,1.9vw,1.55rem); font-weight: 800; }
+.discover-side-heading a, .discover-side-heading button { border: 0; padding: 3px 0; background: none; color: var(--discover-muted); font-size: .84rem; white-space: nowrap; }
+.discover-side-heading a:hover, .discover-side-heading button:hover { color: var(--discover-accent); }
+.discover-side-list { display: grid; gap: 12px; }
+.discover-side-row { display: grid; grid-template-columns: 54px minmax(0,1fr) auto; align-items: center; gap: 12px; width: 100%; color: var(--discover-ink); text-align: start; }
+.discover-side-row strong, .discover-side-row div > span, .discover-playlist > span > span { display: block; overflow-wrap: anywhere; }
+.discover-side-row strong { font-size: 1rem; line-height: 1.4; }
+.discover-side-row div > span, .discover-playlist > span > span { margin-top: 2px; color: var(--discover-muted); font-size: .82rem; }
+.discover-side-row :deep(.artist-avatar) { width: 54px; height: 54px; background: linear-gradient(145deg,#d6c7f6,#f9cfde); color: #51355d; font-size: 1.25rem; }
+.discover-side-arrow { color: var(--discover-accent); font-size: 1.45rem; }
+.discover-playlist { grid-template-columns: clamp(55px,5.7vw,86px) minmax(0,1fr) auto; border: 0; padding: 0; background: none; }
+.discover-playlist > img { width: 100%; aspect-ratio: 1.11; object-fit: cover; border-radius: 12px; }
+.discover-playlist-icon { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; color: var(--discover-accent); background: #fae9f0; }
+.discover-side-row:hover strong { color: var(--discover-accent); }
+.discover-side-empty { margin: 0; color: var(--discover-muted); font-size: .87rem; }
+.discover-message { padding: 30px 20px; border-radius: 20px; background: var(--discover-card); color: var(--discover-muted); }
+.discover-message p { margin: 0 0 10px; color: inherit; }
+.discover-more { margin-top: 20px; text-align: center; }
+@media (max-width: 1050px) {
+  .discover-header-inner { gap: 22px; }
+  .discover-content { grid-template-columns: minmax(0,1.85fr) minmax(232px,1fr); }
+  .discover-songs { grid-template-columns: repeat(2,minmax(0,1fr)); }
+}
+@media (max-width: 760px) {
+  .discover-header-inner { grid-template-columns: auto 1fr auto; gap: 5px 16px; padding-block: 10px; }
+  .discover-nav { order: 4; grid-column: 1 / -1; justify-content: space-between; min-height: 40px; }
+  .discover-nav a { padding: 9px 0; font-size: .95rem; }
+  .discover-nav a[aria-current="page"]::after { bottom: 0; }
+  .discover-login { grid-column: 3; padding: 8px 12px; font-size: .8rem; }
+  .discover-search { min-height: 38px; }
+  .discover-search-submit { width: 36px; height: 36px; }
+  .discover-search input { font-size: .8rem; }
+  .discover-hero { min-height: 153px; }
+  .discover-hero::before { inset-inline-end: 0; width: 47%; }
+  .discover-content { grid-template-columns: minmax(0,1fr); }
+  .discover-sidebar { grid-template-columns: repeat(2,minmax(0,1fr)); }
+}
+@media (max-width: 480px) {
+  .discover-width { width: calc(100% - 28px); }
+  .discover-header-inner { grid-template-columns: 1fr auto; }
+  .discover-login { grid-column: 2; grid-row: 1; }
+  .discover-search { grid-column: 1 / -1; }
+  .discover-brand :deep(.brand-logo) { max-width: 170px; }
+  .discover-hero { min-height: 136px; }
+  .discover-hero::before { width: 48%; }
+  .discover-hero h1 { font-size: clamp(2rem, 9vw, 2.5rem); }
+  .discover-toolbar { gap: 6px; }
+  .discover-tabs button { min-width: 0; min-height: 42px; padding-inline: 11px; }
+  .discover-genre { min-height: 40px; padding-inline: 6px; font-size: .82rem; }
+  .discover-songs { gap: 10px; }
+  .discover-song { border-radius: 16px; }
+  .discover-art { border-radius: 10px; }
+  .discover-play { width: 35px; height: 35px; inset: auto auto 6px 6px; }
+  .discover-song-details { padding: 8px 3px 0; }
+  .discover-sidebar { grid-template-columns: 1fr; gap: 12px; }
+}

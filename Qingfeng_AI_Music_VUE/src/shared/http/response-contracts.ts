@@ -30,7 +30,11 @@ const artistSong=(v:unknown):v is Row=>obj(v)&&text(v.id)&&Number.isSafeInteger(
 const publicArtistSong=(v:unknown)=>artistSong(v)&&typeof v.hasCover==='boolean'
 const artistRelease=(v:unknown)=>artistSong(v)&&text(v.workId)&&text(v.assetId)&&nullableText(v.coverId)
   &&(v.onDiscover===undefined||typeof v.onDiscover==='boolean')
+const nonnegativeCount=(v:unknown)=>Number.isSafeInteger(v)&&Number(v)>=0
 const discoverSong=(v:unknown)=>obj(v)&&text(v.artistId)&&text(v.stageName)&&publicArtistSong(v.song)&&text(v.publishedAt)
+  &&(v.genre===undefined||str(v.genre))&&(v.plays===undefined||nonnegativeCount(v.plays))
+const discoverArtist=(v:unknown)=>obj(v)&&text(v.artistId)&&text(v.stageName)&&nullableText(v.avatarKey)
+  &&nonnegativeCount(v.songs)&&nonnegativeCount(v.plays)
 const artistFields=(v:unknown):v is Row=>obj(v)&&str(v.stageName)&&str(v.tagline)&&nullableText(v.avatarKey)
   &&nullableText(v.coverKey)&&nullableText(v.featuredReleaseId)
 const myArtist=(v:unknown)=>artistFields(v)&&nullableText(v.publicId)&&typeof v.published==='boolean'&&list(v.songs,artistRelease)
@@ -55,7 +59,7 @@ const analyticsSummaryBody=(v:unknown)=>{
 }
 const analyticsAccessBody=(v:unknown)=>obj(v)&&typeof v.allowed==='boolean'&&(v.allowed!==true||text(v.viewer))
 const quickCreation=(v:unknown)=>obj(v)&&text(v.id)&&text(v.workId)&&['QUEUED','WRITING','LYRICS_READY','SUBMITTING_MUSIC','MUSIC_QUEUED','SUBMITTING','RUNNING','SAVING','SUBMISSION_UNKNOWN','SUCCEEDED','FAILED','CANCELLED'].includes(String(v.status))&&['revisionId','taskId','errorCode'].every(k=>v[k]===null||text(v[k]))&&typeof v.canRetry==='boolean'&&text(v.createdAt)
-export const emptyResponseAllowed=(path:string,method:string)=>method==='DELETE'&&/^app\/works\/[^/]+\/shares$/.test(path)||method==='POST'&&/^app\/works\/[^/]+\/generations\/[^/]+\/retry-archive$/.test(path)||method==='GET'&&(/^app\/works\/[^/]+\/generations\/[^/]+\/music-settings$/.test(path)||/^app\/works\/[^/]+\/quick-creations\/latest$/.test(path))
+export const emptyResponseAllowed=(path:string,method:string)=>method==='DELETE'&&/^app\/works\/[^/]+\/shares$/.test(path)||method==='POST'&&(/^app\/works\/[^/]+\/generations\/[^/]+\/retry-archive$/.test(path)||/^public\/discover\/songs\/[^/]+\/\d+\/play$/.test(path))||method==='GET'&&(/^app\/works\/[^/]+\/generations\/[^/]+\/music-settings$/.test(path)||/^app\/works\/[^/]+\/quick-creations\/latest$/.test(path))
 /** 校验应用实际依赖的字段。HTTP 200只代表传输成功，不代表业务结果完整。 */
 export function validResponse(path:string,method:string,value:unknown):boolean{
  path=path.split('?')[0]!
@@ -87,6 +91,7 @@ export function validResponse(path:string,method:string,value:unknown):boolean{
  if(path==='public/hot-songs')return method==='GET'&&obj(value)&&list(value.songs,hotStat)
  if(/^public\/artists\/[^/]+$/.test(path))return method==='GET'&&artistFields(value)&&list(value.songs,publicArtistSong)
  if(path==='public/discover')return method==='GET'&&obj(value)&&typeof value.hasMore==='boolean'&&list(value.songs,discoverSong)
+  &&(value.artists===undefined||list(value.artists,discoverArtist))
  if(path==='app/artist-profile'||path==='app/artist-profile/visibility')return myArtist(value)
  if(/^app\/artist-profile\/releases\/[^/]+$/.test(path)){
   if(method==='DELETE')return myArtist(value)

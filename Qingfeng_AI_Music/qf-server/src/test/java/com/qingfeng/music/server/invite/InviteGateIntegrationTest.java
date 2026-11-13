@@ -425,6 +425,17 @@ class InviteGateIntegrationTest {
         assertFalse(firstFeed.body().contains(owner.creator()));
         assertEquals(200, send(owner.http(), "PUT", publishPath, version, owner.csrf()).statusCode());
         assertEquals(firstFeed.body(), send(visitor, "GET", feed, null, null).body());
+        assertTrue(send(visitor, "GET", feed + "?genre=folk&q=discover", null, null).body().contains(song.id()));
+        assertTrue(send(visitor, "GET", feed + "?q=Discover%20artist", null, null).body().contains(song.id()));
+        assertFalse(send(visitor, "GET", feed + "?genre=rock", null, null).body().contains(song.id()));
+        assertFalse(send(visitor, "GET", feed + "?q=%25", null, null).body().contains(song.id()));
+        assertFalse(firstFeed.body().contains("民谣"), "Private style text should not be returned");
+        String playPath = feed + "/songs/" + song.id() + "/1/play";
+        assertEquals(204, send(visitor, "POST", playPath, null, null).statusCode());
+        assertEquals(404, send(visitor, "POST", playPath.replace("/1/", "/2/"), null, null).statusCode());
+        var popular = send(visitor, "GET", feed + "?popular=true", null, null);
+        assertTrue(popular.body().contains("\"plays\":1"), popular.body());
+        assertTrue(popular.body().contains("\"artists\":[{\"artistId\":\"" + artistId + "\""), popular.body());
         assertFalse(send(visitor, "GET", feed + "?featured=true", null, null).body().contains(song.id()));
         assertEquals(403, send(owner.http(), "PUT", "/api/app/discover/editor/songs/" + song.id(),
                 "{\"featured\":true}", owner.csrf()).statusCode());
@@ -435,6 +446,7 @@ class InviteGateIntegrationTest {
         assertEquals(200, readBytes(visitor, audio).statusCode());
         assertEquals(200, send(owner.http(), "DELETE", publishPath, null, owner.csrf()).statusCode());
         assertFalse(send(visitor, "GET", feed, null, null).body().contains(song.id()));
+        assertEquals(404, send(visitor, "POST", playPath, null, null).statusCode());
         assertEquals(200, readBytes(visitor, audio).statusCode());
         assertEquals(200, send(owner.http(), "PUT", publishPath, version, owner.csrf()).statusCode());
         assertFalse(send(visitor, "GET", feed + "?featured=true", null, null).body().contains(song.id()));

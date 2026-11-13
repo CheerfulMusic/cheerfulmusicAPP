@@ -27,7 +27,7 @@ public class WebSecurityConfiguration {
         var invite=inviteGate.getIfAvailable();
         if (invite!=null) http.addFilterBefore(invite, org.springframework.security.web.csrf.CsrfFilter.class);
         if (filter!=null) http.addFilterAfter(new ApiRateLimitFilter(java.time.Clock.systemUTC(),env.getProperty("qingfeng.redis.enabled",Boolean.class,false)&&env.getProperty("qingfeng.redis.api-rate-limit-enabled",Boolean.class,true)?new RedisApiRateGate(redis.getObject()):null),CreatorSessionFilter.class);
-        return http.csrf(csrf -> csrf.ignoringRequestMatchers("/api/public/payments/airwallex/webhook", "/api/public/paypal/webhook", "/api/public/events", "/api/public/hot-songs/*/play")
+        return http.csrf(csrf -> csrf.ignoringRequestMatchers("/api/public/payments/airwallex/webhook", "/api/public/paypal/webhook", "/api/public/events", "/api/public/hot-songs/*/play", "/api/public/discover/songs/*/*/play")
             .ignoringRequestMatchers(request->"POST".equals(request.getMethod())&&"/api/public/auth/sms/deliver".equals(request.getServletPath()))
             .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse()).csrfTokenRequestHandler(new CsrfTokenRequestAttributeHandler()))
             .authorizeHttpRequests(auth -> auth
@@ -41,6 +41,7 @@ public class WebSecurityConfiguration {
                 .requestMatchers(org.springframework.http.HttpMethod.GET,"/api/public/hot-songs").permitAll()
                 .requestMatchers(org.springframework.http.HttpMethod.GET,"/api/public/discover").permitAll()
                 .requestMatchers(org.springframework.http.HttpMethod.HEAD,"/api/public/discover").permitAll()
+                .requestMatchers(org.springframework.http.HttpMethod.POST,"/api/public/discover/songs/*/*/play").permitAll()
                 .requestMatchers(org.springframework.http.HttpMethod.POST,"/api/public/hot-songs/*/play").permitAll()
                 .requestMatchers(org.springframework.http.HttpMethod.GET,"/api/public/auth/google/status",GoogleOAuthFlow.CALLBACK).permitAll()
                 .requestMatchers(org.springframework.http.HttpMethod.POST,"/api/public/auth/google/start","/api/public/session/logout").permitAll()

@@ -21,6 +21,7 @@ const menuButton = ref<HTMLButtonElement>(), menu = ref<HTMLElement>()
 const publicListening = computed(() => route.name === 'gift' || route.name === 'artist-home' || route.name === 'discover')
 const isHome = computed(() => route.name === 'home')
 const isAgent = computed(() => route.name === 'agent')
+const isDiscover = computed(() => route.name === 'discover')
 const authenticated = computed(() => accountState.value.authenticated || logtoState.value.authenticated)
 const navigation = [
   { to: '/', label: '首页', icon: 'home', agent: false },
@@ -75,7 +76,7 @@ onBeforeUnmount(() => {
 <template>
   <div class="music-shell consumer-shell" :class="{'gift-shell':publicListening, 'home-light-shell':isHome, 'agent-shell':isAgent}">
     <a class="skip-link" href="#main-content">{{ t('跳到主要内容') }}</a>
-    <header class="consumer-header">
+    <header v-if="!isDiscover" class="consumer-header">
       <div class="consumer-header-inner">
         <RouterLink class="consumer-brand" to="/" :aria-label="t('Cheerful Music 青风音乐首页')"><BrandLogo :compact="mobile || publicListening" standalone/></RouterLink>
         <nav v-if="!publicListening" class="consumer-navigation" :aria-label="t('主导航')">
@@ -113,7 +114,7 @@ onBeforeUnmount(() => {
       </section>
     </template>
     <div class="music-shell-body">
-      <main id="main-content" :class="{workspace:route.name!=='home'}" tabindex="-1"><slot/></main>
+      <main id="main-content" :class="{workspace:!isHome && !isDiscover}" tabindex="-1"><slot/></main>
       <SiteFooter/>
     </div>
     <GlobalPlayer/>

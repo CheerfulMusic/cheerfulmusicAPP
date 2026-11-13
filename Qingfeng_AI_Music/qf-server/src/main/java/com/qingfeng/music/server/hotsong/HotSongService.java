@@ -10,6 +10,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -42,7 +43,9 @@ public class HotSongService {
     /** 首页只需要聚合数字；没有记录时返回 0，不写空行。 */
     public List<Stat> stats() {
         Map<String, Stat> found = new LinkedHashMap<>();
-        for (var row : db.queryForList("SELECT " + COLUMNS + " FROM hot_song_metric")) {
+        String placeholders = String.join(",", Collections.nCopies(TRACKS.size(), "?"));
+        for (var row : db.queryForList("SELECT " + COLUMNS + " FROM hot_song_metric WHERE track_id IN (" + placeholders + ")",
+                TRACKS.toArray())) {
             var stat = new Stat(text(row.get("track_id")), number(row.get("plays")),
                     number(row.get("likes")), number(row.get("favorites")), number(row.get("comments")));
             found.put(stat.trackId(), stat);
