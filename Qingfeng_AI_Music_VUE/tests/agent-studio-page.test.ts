@@ -3,10 +3,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { effectScope } from 'vue'
+const avatarRefs = vi.hoisted(() => ({ account: null as null | { value: string }, profile: null as null | { value: string } }))
 vi.mock('../src/modules/agent/api/events', () => ({ observeConversation: (_id: string, _seq: number, _epoch: number | undefined, _receive: unknown, signal: AbortSignal) => new Promise<void>(resolve => signal.addEventListener('abort', () => resolve(), { once: true })) }))
+vi.mock('../src/modules/agent/composables/useProfileAvatar', async () => {
+  const { ref } = await import('vue')
+  return { useProfileAvatar: () => { const imageUrl = ref('/brand/music-person.svg'); avatarRefs.profile = imageUrl; return { imageUrl, refresh: vi.fn(async () => undefined), clear: vi.fn() } } }
+})
 vi.mock('../src/modules/agent/composables/useUserAvatar', async () => {
   const { ref } = await import('vue')
-  return { useUserAvatar: () => ({ avatarUrl: ref(''), busy: ref(false), error: ref(''), refresh: vi.fn(async () => undefined), clear: vi.fn(), upload: vi.fn() }) }
+  return { useUserAvatar: () => { const avatarUrl = ref(''); avatarRefs.account = avatarUrl; return { avatarUrl, busy: ref(false), error: ref(''), refresh: vi.fn(async () => undefined), clear: vi.fn(), upload: vi.fn() } } }
 })
 vi.mock('../src/modules/agent/composables/useAvatarGeneration', async () => {
   const { ref } = await import('vue')
@@ -393,4 +398,26 @@ describe('会话恢复与任务生命周期', () => {
     await vi.advanceTimersByTimeAsync(10000)
     expect(api.state).toHaveBeenCalledTimes(3)
   })
+})
+
+it('用户头像显示资料头像并链接到可修改头像的我的资料页', async () => {
+  const { wrapper } = await page(state({ messages: [message('写一首歌', 1, 'user')] }))
+  const avatar = wrapper.get('a.agent-user-avatar')
+  expect(avatar.attributes('href')).toBe('/profile')
+  expect(avatar.attributes('aria-label')).toContain('修改头像')
+  expect(avatar.get('img').attributes('src')).toBe('/brand/music-person.svg')
+})
+
+it('账号头像更新时优先展示上传或 AI 生成的结果，缺省时回退资料头像', async () => {
+  const { wrapper } = await page(state({ messages: [message('写一首歌', 1, 'user')] }))
+  avatarRefs.profile!.value = '/artist/avatar'
+  avatarRefs.account!.value = '/api/app/avatar/image?v=uploaded'
+  await flushPromises()
+  expect(wrapper.get('a.agent-user-avatar img').attributes('src')).toBe('/api/app/avatar/image?v=uploaded')
+  avatarRefs.account!.value = '/api/app/avatar/image?v=generated'
+  await flushPromises()
+  expect(wrapper.get('a.agent-user-avatar img').attributes('src')).toBe('/api/app/avatar/image?v=generated')
+  avatarRefs.account!.value = ''
+  await flushPromises()
+  expect(wrapper.get('a.agent-user-avatar img').attributes('src')).toBe('/artist/avatar')
 })
