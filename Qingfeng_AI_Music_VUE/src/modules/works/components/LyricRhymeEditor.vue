@@ -131,6 +131,7 @@ onBeforeUnmount(() => { alive = false })
 .rhyme-reference select{display:block;width:100%;min-width:0;min-height:36px;padding:6px 10px;border:1px solid var(--line);border-radius:8px;background:var(--paper);color:var(--ink);font:inherit}
 .rhyme-controls{justify-content:flex-start}
 .rhyme-controls label{display:inline-flex;align-items:center;gap:5px}
+.rhyme-controls input[type=checkbox]{width:auto;min-width:0;flex:none;margin:0;padding:0}
 .rhyme-generate{margin-left:auto;padding:6px 12px;min-height:34px;font-size:inherit}
 .lyric-rhyme-editor p{margin:0;line-height:1.5}
 .rhyme-result{display:grid;gap:8px}
