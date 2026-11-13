@@ -95,3 +95,11 @@ Reporting成功资金事实的获取在数据库事务外；结算、退款、�
 ## 8. 正式制品演练边界
 
 首个实际fat-JAR的core44校验、无授权拒绝、45迁移与幂等重放已实际成功；carry-apply因使用迁移专库而被HISTORY_APPLY_NOT_ISOLATED正确拒绝。只修改隔离演练脚本，改用既有严格白名单的历史切换专库（--history-revision），不放宽Java库白名单、不移动生产数据。旧失败收据保留。正式执行必须以最终提交、最终JAR及完整plan/validate/reject/migrate/replay/apply/activate/verify的同制品收据为准。
+
+## 9. 最后发布工具及Agent补充验证
+
+完整应用MySQL额外31项专项实际通过（maven-targeted-20261113T131504408882Z/results.json），新增Order41从真实Boot注入Agent付费入口：负余额与全部冻结时，完整金融表、admission、DEBIT和分摊精确快照均不变；仅A冻结时仅从B扣费。先确认免费额度已耗尽，避免误测免费分支。原Order25—28及全部原断言保留。该31项是补充专项，不冒充重新执行了1509项全量，也不替代供应商资金验收；生产Java代码未变。
+
+只读确认生产配置存在三组完全同值的重复键，媒体cron末尾有已存在的stderr重定向。发布工具仅接受trim后完全同值的重复项，异值仍拒绝；只接受经核验的完整cron命令，不接受任意命令。原67项保留并新增4项边界，71/71通过，根忽略证据 `.cache/payment-final-go-live-20261113-new/operator-syntax-71-tests.json`。未修改生产原配置或cron。
+
+最终受审脚本SHA `224550dd9b4780c3c5234da283ea5266907d0210cd3270d2c4aa4f8c1289d3b2`，测试SHA `220556f0b16dade4ce3780c40192077fc859a083bff4c9746933a04a6650e29c`。本报告前表67项为此前阶段记录；实际执行应使用最后71项验证的脚本及新制品绑定。

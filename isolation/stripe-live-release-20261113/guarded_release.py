@@ -49,7 +49,7 @@ CARRY_CLASS = OPERATOR_PACKAGE + 'CreditCarryForwardCommand'
 CORE_MANIFEST_SHA256 = '736294575e354900170114f8eb9568abaf15223a0bf7c9872d314d65559905e1'
 ROOT_CRONTAB = Path('/var/spool/cron/root')
 MEDIA_SCRIPT = Path('/opt/qingfeng-music/monitor/media_health_check.py')
-MEDIA_ENTRY = '*/10 * * * * /usr/bin/python3 /opt/qingfeng-music/monitor/media_health_check.py'
+MEDIA_ENTRY = '*/10 * * * * /usr/bin/python3 /opt/qingfeng-music/monitor/media_health_check.py 2>>/var/log/qingfeng-media-health.log'
 MEDIA_PAUSE_MARKER = '# QINGFENG_RELEASE_PAUSED '
 
 
@@ -129,7 +129,7 @@ def property_map(path):
         need(not line.endswith('\\') and '=' in line, 'UNSUPPORTED_PROPERTIES_SYNTAX')
         key, value = line.split('=', 1)
         key, value = key.strip(), value.strip()
-        need(key not in result, 'DUPLICATE_PRIVATE_PROPERTY')
+        need(key not in result or result[key] == value, 'DUPLICATE_PRIVATE_PROPERTY')
         result[key] = value
     return result
 

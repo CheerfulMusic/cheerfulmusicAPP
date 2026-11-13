@@ -694,4 +694,41 @@ class IntegratedPaymentApplicationMySqlTest {
             }
         }finally{if(application!=null)application.close();settings=originalSettings;start();}
     }
+    private static void assertPaidAgentDeniedWithoutFinancialOrAdmissionMutation(IdentityApi.Session user,String conversation,String key,String text){
+        var before=exactFinancialSnapshot();
+        var admissions=db.queryForList("SELECT * FROM agent_request_admission WHERE creator_id=? ORDER BY id",user.creatorId());
+        assertEquals("INSUFFICIENT_CREDITS",assertThrows(DomainException.class,()->agentAdmission().acquire(user.creatorId(),conversation,key,text,null,true)).code());
+        assertEquals(before,exactFinancialSnapshot(),"Rejected paid Agent admission must leave every financial table, debit and allocation unchanged");
+        assertEquals(admissions,db.queryForList("SELECT * FROM agent_request_admission WHERE creator_id=? ORDER BY id",user.creatorId()),"Rejected paid Agent admission must not insert a reservation or change an existing turn");
+        assertEquals(0,number("SELECT COUNT(*) FROM agent_request_admission WHERE conversation_id=? AND request_key=?",conversation,key));
+        String debit="agent-chat:"+shareHash(conversation+":"+key);
+        assertEquals(0,number("SELECT COUNT(*) FROM credit_ledger WHERE reference_id=?",debit));
+        assertEquals(0,number("SELECT COUNT(*) FROM p0_credit_allocation WHERE debit_reference=?",debit));
+    }
+
+    @Test @Order(41) void negativeAndFrozenAgentPaidAdmissionPreservesExactMySqlStateAndSpendsOnlyUnfrozenOrder() throws Exception {
+        assertTrue(application.isActive());assertSame(ledger,application.getBean(CreditsLedger.class));
+        assertInstanceOf(JdbcFencedCreditsLedger.class,ledger);assertInstanceOf(com.qingfeng.music.server.agent.JdbcAgentAdmission.class,agentAdmission());
+        var negative=paid();var debtor=negative.owner();String debtConversation=useOneFreeAgentTurn(debtor),debtKey=UUID.randomUUID().toString();
+        assertEquals(7248,number("SELECT SUM(reserved_tokens) FROM agent_request_admission WHERE creator_id=?",debtor.creatorId()));
+        assertEquals("AGENT_CHAT_PAYMENT_REQUIRED",assertThrows(DomainException.class,()->agentAdmission().acquire(debtor.creatorId(),debtConversation,debtKey,"synthetic paid debt boundary",null)).code(),"The free allowance must be exhausted before asserting the paid-credit rejection");
+        ledger.debit(debtor.creatorId(),80,"agent-negative-before-refund:"+unique());refund(negative,990);assertEquals(-80,ledger.balance(debtor.creatorId()));
+        assertPaidAgentDeniedWithoutFinancialOrAdmissionMutation(debtor,debtConversation,debtKey,"synthetic paid debt boundary");assertEquals(-80,ledger.balance(debtor.creatorId()));
+
+        var customer=owner();var a=paid(customer);ledger.debit(customer.creatorId(),80,"agent-frozen-a-used:"+unique());var b=paid(customer);
+        String conversation=useOneFreeAgentTurn(customer);assertEquals(7248,number("SELECT SUM(reserved_tokens) FROM agent_request_admission WHERE creator_id=?",customer.creatorId()));
+        dispute(a,"dp_"+unique(),"under_review",List.of());assertEquals(20,held(a));assertEquals(0,held(b));assertEquals(120,ledger.balance(customer.creatorId()));
+        var frozenA=db.queryForMap("SELECT * FROM p0_credit_batch WHERE reference=?","payment:"+a.order());
+        var ticket=agentAdmission().acquire(customer.creatorId(),conversation,UUID.randomUUID().toString(),"synthetic paid unfrozen order boundary",null,true);
+        assertFalse(ticket.replay());assertEquals(119,ledger.balance(customer.creatorId()));
+        assertEquals(frozenA,db.queryForMap("SELECT * FROM p0_credit_batch WHERE reference=?","payment:"+a.order()),"Agent must not consume or alter frozen order A");
+        assertEquals(0,number("SELECT COUNT(*) FROM p0_credit_allocation WHERE debit_reference=? AND batch_reference=?",agentDebit(ticket),"payment:"+a.order()));
+        assertEquals(1,number("SELECT amount FROM p0_credit_allocation WHERE debit_reference=? AND batch_reference=?",agentDebit(ticket),"payment:"+b.order()));
+        assertEquals(1,number("SELECT COUNT(*) FROM credit_ledger WHERE owner_id=? AND entry_type='DEBIT' AND reference_id=?",customer.creatorId(),agentDebit(ticket)));
+        agentAdmission().start(ticket);agentAdmission().finish(ticket,true);
+
+        dispute(b,"dp_"+unique(),"under_review",List.of());assertEquals(20,held(a));assertEquals(99,held(b));assertEquals(119,ledger.balance(customer.creatorId()));
+        assertPaidAgentDeniedWithoutFinancialOrAdmissionMutation(customer,conversation,UUID.randomUUID().toString(),"synthetic paid fully frozen boundary");
+        assertEquals(119,ledger.balance(customer.creatorId()));assertEquals(20,held(a));assertEquals(99,held(b));
+    }
 }

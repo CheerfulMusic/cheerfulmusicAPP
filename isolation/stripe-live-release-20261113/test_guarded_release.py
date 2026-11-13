@@ -952,5 +952,33 @@ class PrivateAcceptanceContract(unittest.TestCase):
         with self.assertRaises(release.Blocked):release.validate_business_acceptance(self.fixture.plan,value)
 
 
+class ObservedProductionSyntaxContract(unittest.TestCase):
+    def test_same_trimmed_value_duplicate_properties_preserve_the_effective_value(self):
+        with tempfile.TemporaryDirectory() as folder:
+            p=Path(folder)/'same.properties'
+            p.write_text('scheduler.enabled = false\nscheduler.enabled=false\nflyway.enabled=false\nflyway.enabled = false \nflyway.enabled=false\nflyway.enabled=false\nsql.init=never\nsql.init = never\nsql.init=never\n')
+            self.assertEqual({'scheduler.enabled':'false','flyway.enabled':'false','sql.init':'never'},release.property_map(p))
+
+    def test_different_duplicate_values_and_continuations_still_fail_closed(self):
+        with tempfile.TemporaryDirectory() as folder:
+            p=Path(folder)/'different.properties'
+            for body in ('a=false\na=true\n','a=false\na=FALSE\n','a=value\\\nnext=bad\n'):
+                p.write_text(body)
+                with self.subTest(body=body),self.assertRaises(release.Blocked):release.property_map(p)
+
+    def test_reviewed_media_entry_is_only_the_exact_observed_command_with_redirection(self):
+        expected='*/10 * * * * /usr/bin/python3 /opt/qingfeng-music/monitor/media_health_check.py 2>>/var/log/qingfeng-media-health.log'
+        self.assertEqual(expected,release.MEDIA_ENTRY)
+        for wrong in (expected.split(' 2>>')[0],expected+'; true',expected.replace('/usr/bin/python3','python3')):
+            with self.subTest(wrong=wrong),self.assertRaises(release.Blocked):
+                release.validate_media_cron({'mediaCron':{'entry':wrong,'expectedCrontabSha256':'a'*64,'scriptSha256':'b'*64}})
+
+    def test_pausing_observed_media_command_preserves_every_other_line_verbatim(self):
+        other='17 * * * * /usr/bin/python3 /opt/other.py 2>>/var/log/other.log'
+        original=('MAILTO=root\n'+other+'\n'+release.MEDIA_ENTRY+'\n').encode()
+        actual=release.paused_crontab(original)
+        self.assertEqual(('MAILTO=root\n'+other+'\n'+release.MEDIA_PAUSE_MARKER+release.MEDIA_ENTRY+'\n').encode(),actual)
+
+
 if __name__ == '__main__':
     unittest.main()

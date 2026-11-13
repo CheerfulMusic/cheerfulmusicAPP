@@ -32,7 +32,7 @@
   },
   "operatorIdentity": {"mode": "existing-local-root-empty-password", "username": "root", "runtimeAccountUnchanged": true},
   "mediaCron": {
-    "entry": "*/10 * * * * /usr/bin/python3 /opt/qingfeng-music/monitor/media_health_check.py",
+    "entry": "*/10 * * * * /usr/bin/python3 /opt/qingfeng-music/monitor/media_health_check.py 2>>/var/log/qingfeng-media-health.log",
     "expectedCrontabSha256": "d9e07440030536e80da716a63d2b8a326980ae953b7f435a30cb9a7805f40aa9",
     "scriptSha256": "30de9ebe4320dd2af7ecbfed08df814c3f632c8b83d38a88771369b9e725814a"
   },

@@ -41,6 +41,8 @@
 
 若 cron 已暂停但旧媒体检查超过30秒仍未结束，命令返回 BLOCKED，保留原文和已暂停状态，不伪报进程排空。进程确实结束后可重入同一 `cron-pause`：只核对已暂停内容、原文 SHA 和无 PID，再完成收据，不重新安装 crontab、不覆盖原文。已有 PASS 收据的重放仍须重新核对当前 crontab 和进程；出现其他编辑即阻断。
 
+本轮后续真实只读语法盘点确认媒体任务完整原文是 `*/10 * * * * /usr/bin/python3 /opt/qingfeng-music/monitor/media_health_check.py 2>>/var/log/qingfeng-media-health.log`，root crontab SHA仍为`d9e07440030536e80da716a63d2b8a326980ae953b7f435a30cb9a7805f40aa9`。执行器与样例仅接受这一条完整命令，保留重定向，不放宽为任意同脚本命令；本次未修改生产cron。当前配置三个重复键的trim后值均一致，解析器只接受这种相同值重复，任一冲突值或续行语法仍拒绝；不修改生产配置来让解析器通过。
+
 ## Java 与配置输入
 
 执行器固定候选 fat JAR 的 `PropertiesLauncher` 和两个受审主类，不启动 Spring：
@@ -99,5 +101,7 @@ DDL 隐式提交，不能把异常回滚描述为 schema 回退。V45 开始后�
 ## 本编排工具的实际离线证据
 
 `python -B isolation/stripe-live-release-20261113/test_guarded_release.py` 本轮实际执行 **67/67 通过**。原52个测试全部保留。追加9项覆盖复合证明缺项/失败/作用域错误、不同 JAR/source、CLI步骤及迁移CRC错配、恢复快照变化、R0/R1真实计划绑定，以及 DDL 尝试或 schema/配置变化时严拒启动旧 writer、纯 DDL 前恢复顺序；另追加6项覆盖私有报价身份/单次/到期/精确金额/公开禁用，以及晚到回调保留创建快照。原有 Java隔离、审批、锁、cron等断言未删改；这些是离线契约测试，不能替代真实MySQL、生产恢复或资金验收。
+
+精确生产语法适配后再次实际执行 **71/71 通过**，原67项完全保留，另加4项证明同值重复可解析、异值/续行仍拒绝、非精确cron命令拒绝及暂停只改变指定完整任务。根忽略目录证据为 `.cache/payment-final-go-live-20261113-new/operator-syntax-71-tests.json`，绑定本次脚本/测试SHA；没有执行生产暂停、配置修改、数据库或供应商操作。
 
 此前52项证据位于本临时工作树 `.cache/payment-v45-release-20261113/operator-contract-tests-20261113T105745501371Z.json`；61项阶段证据为同目录 `operator-contract-tests-final-20261113.json`，67项临时报价追加证据为 `operator-contract-tests-acceptance-20261113.json`，均绑定当时脚本和测试 SHA、保留实际输出，不覆盖旧证据。临时报价 Java聚焦47项实际PASS，根目录证据 `.cache/payment-main-integration-20261112/maven-targeted-20261113T121822145949Z/results.json`（含原方法、纯策略、H2服务事务/并发/晚到快照；不冒称MySQL或供应商验收）。新增完整应用MySQL Order40必须另随新隔离队列全量实际运行，未运行不能填写PASS。作用域为离线编排契约；本代理本轮仅只读核对过服务器文件/进程，不曾生产修改、查询业务数据或调用供应商，未执行真实迁移或批准资金操作。真实 Java/MySQL 与生产执行结果必须另附同候选实际证据。
