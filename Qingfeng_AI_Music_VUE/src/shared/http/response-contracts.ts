@@ -75,6 +75,7 @@ export function validResponse(path:string,method:string,value:unknown):boolean{
  if(path==='public/auth/google/status')return method==='GET'&&obj(value)&&typeof value.enabled==='boolean'&&typeof value.authenticated==='boolean'&&(!value.authenticated||value.enabled)&&['email','name'].every(k=>!(k in value)||str(value[k]))
  if(path==='public/auth/google/start')return method==='POST'&&obj(value)&&googleAuthorizationUrl(value.authorizationUrl)
  if(path==='public/auth/native/status')return method==='GET'&&obj(value)&&['emailPasswordEnabled','passwordResetEnabled','emailCodeEnabled','phoneEnabled','phoneInternationalEnabled','authenticated'].every(k=>typeof value[k]==='boolean')&&['email','phoneMasked','name'].every(k=>!(k in value)||str(value[k]))
+   &&(value.phoneAllowedRegions===undefined||list(value.phoneAllowedRegions,r=>str(r)&&/^[A-Z]{2}$/.test(r as string)))
  if(path==='public/auth/native/code')return method==='POST'&&obj(value)&&value.sent===true&&num(value.resendAfter)&&Number(value.resendAfter)>=0&&Number(value.resendAfter)<=3600
  if(['public/auth/native/password/sign-in','public/auth/native/register','public/auth/native/email/sign-in','public/auth/native/phone/sign-in'].includes(path))return method==='POST'&&obj(value)&&value.authenticated===true
  if(path==='public/auth/native/password/reset')return method==='POST'&&obj(value)&&value.reset===true
