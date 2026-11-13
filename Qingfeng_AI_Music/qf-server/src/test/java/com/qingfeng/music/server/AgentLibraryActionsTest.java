@@ -177,4 +177,17 @@ class AgentLibraryActionsTest {
         assertTrue(result.items().stream().allMatch(i->i.subtitle().contains("试听样曲")));
     }
     static AgentMessage message(String body){return new AgentMessage("M","C",1,"assistant","TEXT","DONE",body,null,NOW);}
+
+    @Test void exactLastLinePreservesEverythingElseAndDoesNotCallGeneration(){
+        String before="[桥段]\r\n你在身旁\r\n\r\n结尾副歌\r\n九年\r\n只想和你 再吃一遍西山大桥的糯米饭\r\n";
+        String after="[桥段]\r\n你在身旁\r\n\r\n结尾副歌\r\n九年\r\n再吃一遍，西山大桥的糯米饭\r\n";
+        var old=new LyricsApi.Revision("old","W",2,"海风",before,"MANUAL",true,NOW);
+        var saved=new LyricsApi.Revision("new","W",2,"海风",after,"MANUAL",true,NOW);
+        when(lyrics.get("owner","W","old")).thenReturn(old);
+        when(lyrics.save("owner","W",2,"海风",after,"old")).thenReturn(saved);when(lyrics.confirm("owner","W","new")).thenReturn(saved);
+        var card=new SongCard("W","海风","",before,"","LYRICS_READY",null,2,"old",null,null);
+        var result=actions.execute("owner","C","replace_lyric_line",Map.of(),"把最后一句改成：再吃一遍，西山大桥的糯米饭",KEY,card);
+        assertTrue(result.reply().contains("已保存"));verify(lyrics).save("owner","W",2,"海风",after,"old");verifyNoInteractions(inspiration,generation);
+    }
+
 }
