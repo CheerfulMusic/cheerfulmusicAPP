@@ -142,6 +142,7 @@ public final class AgentChatPolicy {
             case "rewrite_inspiration" -> requested(text,"(?:改写|润色|优化|整理|扩写).{0,15}(?:灵感|创意|想法|提示词)|(?:灵感|创意|想法).{0,12}(?:改写|润色|优化)|rewrite.{0,15}(?:idea|inspiration|prompt)");
             case "retry_archive" -> requested(text,"(?:重试|重新|恢复).{0,12}(?:归档|保存|下载)|retry.{0,12}archiv");
             case "close_checking" -> requested(text,"(?:关闭|结束|终止).{0,12}(?:核查|核对|检查)|close.{0,12}check");
+            case "replace_lyric_line" -> ExactLyricEdit.parse(text)!=null;
             case "save_lyrics" -> requested(text,"(?:保存|使用|用|采用|确认).{0,15}(?:歌词|这些词)|save.{0,12}lyrics");
             case "update_music_settings" -> settingsRequested(text)||requested(text,"(?:更新|修改|设置|保存|更换|用).{0,15}(?:音乐参数|创作参数|参数|模板|预设|配方|负面提示|提示词)|(?:update|save|set).{0,12}(?:settings|recipe|prompt)");
             case "simplify_music_brief" -> requested(text,"(?:精简|简化|压缩|整理).{0,15}(?:描述|创作要求|音乐要求|提示词|brief)|simplify.{0,15}(?:brief|prompt)");

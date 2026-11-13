@@ -16,13 +16,13 @@ import java.util.Map;
 @ConditionalOnProperty(name="qingfeng.agent.chat.enabled",havingValue="true")
 @RequestMapping("/api/app/agent/conversations/{id}")
 public class AgentChatController {
-    public record Request(String text,String requestKey,String locale) {}
+    public record Request(String text,String requestKey,String locale,Boolean paidConfirmed) { public Request(String text,String requestKey,String locale){this(text,requestKey,locale,false);} }
     private final AgentChatService chat;
     private final AgentChatExecutor executor;
     public AgentChatController(AgentChatService chat,AgentChatExecutor executor){this.chat=chat;this.executor=executor;}
     @PostMapping("/messages")
     public org.springframework.web.context.request.async.DeferredResult<AgentChatService.Snapshot> send(@AuthenticationPrincipal CreatorPrincipal creator,@PathVariable String id,@RequestBody Request request){
-        return executor.submit(creator.id(),id,request.text(),request.requestKey(),request.locale());
+        return Boolean.TRUE.equals(request.paidConfirmed())?executor.submit(creator.id(),id,request.text(),request.requestKey(),request.locale(),true):executor.submit(creator.id(),id,request.text(),request.requestKey(),request.locale());
     }
     @GetMapping("/state")
     public AgentChatService.Snapshot state(@AuthenticationPrincipal CreatorPrincipal creator,@PathVariable String id,@RequestParam(required=false)Long afterSeq,@RequestParam(required=false)Long historyEpoch){return chat.state(creator.id(),id,afterSeq,historyEpoch);}

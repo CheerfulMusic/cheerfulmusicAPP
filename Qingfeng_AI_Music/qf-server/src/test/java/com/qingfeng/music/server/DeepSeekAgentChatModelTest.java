@@ -77,7 +77,7 @@ class DeepSeekAgentChatModelTest {
                 new com.qingfeng.music.server.agent.AgentAccountActions(null,null,null,null,null,null,null,null,null,null),
                 new com.qingfeng.music.server.agent.retrieval.SemanticRetrievalActions(null,null,null));
         var service=new com.qingfeng.music.server.agent.AgentChatService(null,null,null,null,null,applications);
-        var capabilities=service.capabilities();assertEquals(67,capabilities.size());
+        var capabilities=service.capabilities();assertEquals(68,capabilities.size());
         for(int lyricCharacters:List.of(4000,8000)) {
             var song=new SongCard("work","给妈妈","温暖民谣","歌词".repeat(lyricCharacters/2),"","DRAFT",null,1,"revision-1",null,null);
             withResponse("可以，我们先聊这首歌。",(model,request)->{

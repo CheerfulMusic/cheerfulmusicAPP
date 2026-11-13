@@ -58,6 +58,17 @@ class AgentPlanServiceTest {
         restart();
     }
     void restart(){service=new AgentChatService(conversations,tools,model,store,social,List.of(library));}
+    @Test void exactReplacementBypassesPlannerAndReplaysWithoutRepeatingTheEdit(){
+        var edits=mock(AgentApplicationActions.class);
+        when(edits.capabilities()).thenReturn(List.of(new AgentApplicationActions.Capability("replace_lyric_line","精确替换","","write")));
+        when(edits.supports("replace_lyric_line")).thenReturn(true);
+        when(edits.prepare(anyString(),anyString(),eq("replace_lyric_line"),anyMap(),any())).thenReturn(Map.of());
+        when(edits.execute(anyString(),anyString(),eq("replace_lyric_line"),anyMap(),anyString(),anyString(),any())).thenReturn(new AgentApplicationActions.Result("已保存","text",List.of(),List.of(),"replace_lyric_line"));
+        service=new AgentChatService(conversations,tools,model,store,social,List.of(edits));
+        String key=key();String text="把最后一句改成：我该怎么说，不要再生成回忆";
+        service.send("owner","conversation",text,key,"zh-CN");service.send("owner","conversation",text,key,"zh-CN");
+        verifyNoInteractions(model);verify(edits,times(1)).execute(anyString(),anyString(),eq("replace_lyric_line"),anyMap(),eq(text),anyString(),any());
+    }
     String key(){return UUID.randomUUID().toString();}
     SongCard card(String work,String revision,String task,String status){return new SongCard(work,"作品","民谣","歌词","SUCCEEDED".equals(status)?"/audio/real":"",status,null,1,revision,"SUCCEEDED".equals(status)?"asset-1":null,task);}
     AgentChatModel.Plan plan(Step... steps){return new AgentChatModel.Plan(null,Map.of(),"准备处理",List.of(steps));}

@@ -18,9 +18,12 @@ public final class AgentChatExecutor implements AutoCloseable {
         heartbeat=Executors.newSingleThreadScheduledExecutor(r->{var t=new Thread(r,"agent-chat-admission");t.setDaemon(true);return t;});
     }
     public DeferredResult<AgentChatService.Snapshot> submit(String owner,String conversation,String text,String key,String locale){
+        return submit(owner,conversation,text,key,locale,false);
+    }
+    public DeferredResult<AgentChatService.Snapshot> submit(String owner,String conversation,String text,String key,String locale,boolean paidConfirmed){
         if(!slots.tryAcquire())throw new DomainException("AGENT_BUSY","当前对话请求较多，请稍后再试；本次尚未开始执行。");
         AgentAdmission.Ticket ticket;
-        try{ticket=admission.acquire(owner,conversation,key,text,locale);}catch(RuntimeException e){slots.release();throw e;}
+        try{ticket=paidConfirmed?admission.acquire(owner,conversation,key,text,locale,true):admission.acquire(owner,conversation,key,text,locale);}catch(RuntimeException e){slots.release();throw e;}
         var scope=new AgentRequestScope(deadline,promptBytes);
         var result=new DeferredResult<AgentChatService.Snapshot>(deadline.toMillis()+1000);
         result.onTimeout(()->{scope.cancel();result.setErrorResult(AgentRequestScope.expired());});

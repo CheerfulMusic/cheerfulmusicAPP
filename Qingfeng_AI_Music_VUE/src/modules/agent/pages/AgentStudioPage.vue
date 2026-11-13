@@ -296,6 +296,7 @@ onBeforeUnmount(() => { avatarDisposed = true; window.removeEventListener('qingf
         <p v-if="referenceError" class="agent-upload-error" role="status">{{ referenceError }}</p>
         <p v-if="notice" class="agent-voice-hint" role="status">{{ notice }}</p>
         <p v-if="avatarGeneration.message.value" class="agent-section-hint" role="status">{{ avatarGeneration.message.value }}</p>
+        <p class="agent-section-hint">{{ tr('免费对话额度用完后，确认消耗 1 积分继续一轮；创作工具另计费。精确替换首句、末句不收对话积分。', 'After the free allowance, confirm 1 credit per turn; creative tools are billed separately. Exact first/last line replacements are free.') }}</p>
         <p v-if="credits" class="agent-section-hint">{{ tr('当前', 'Balance') }} {{ credits.balance }} {{ tr('积分 · 生成歌词', 'credits · Lyrics') }} {{ credits.lyricsCost }} · {{ tr('生成音乐', 'Music') }} {{ credits.musicCost }}</p>
       </div>
     </section>

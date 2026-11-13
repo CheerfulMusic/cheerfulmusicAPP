@@ -64,4 +64,56 @@ class AgentAdmissionTest {
     @Test void abandonedBeforeStartCanRetryWithoutSpendingTokens(){
         var gate=gate(limits(1,60,7248));String key=key();var first=gate.acquire("o0","c0",key,"你好",null);gate.abandon(first);assertFalse(gate.acquire("o0","c0",key,"你好",null).replay());
     }
+
+    com.qingfeng.music.credits.CreditsLedger billing(){
+        jdbc.execute("ALTER TABLE creator ADD payment_risk_frozen INT DEFAULT 0 NOT NULL");
+        new ResourceDatabasePopulator(new ClassPathResource("db/migration/V15__credits_ledger.sql")).execute(source);
+        jdbc.execute("CREATE TABLE credit_account(owner_id VARCHAR(36) PRIMARY KEY,balance BIGINT NOT NULL,updated_at TIMESTAMP)");
+        var ledger=new com.qingfeng.music.infrastructure.persistence.credits.JdbcCreditsLedger(jdbc,new TransactionTemplate(new DataSourceTransactionManager(source)));
+        ledger.credit("o0",3,"seed");return ledger;
+    }
+    JdbcAgentAdmission paidGate(com.qingfeng.music.credits.CreditsLedger ledger){
+        return gate(new AgentAdmission.Limits(8,1,60,60,1000000,7248,1024,Duration.ofSeconds(60))).withCredits(ledger);
+    }
+    void useFree(AgentAdmission gate){var t=gate.acquire("o0","c0",key(),"你好",null);gate.start(t);gate.finish(t,true);}
+    @Test void paidTurnRequiresConsentDebitsOnceAndReplaysWithoutAnotherCharge(){
+        var ledger=billing();var gate=paidGate(ledger);useFree(gate);String key=key();
+        assertEquals("AGENT_CHAT_PAYMENT_REQUIRED",assertThrows(DomainException.class,()->gate.acquire("o0","c0",key,"继续聊",null)).code());
+        assertEquals(3,ledger.balance("o0"));var t=gate.acquire("o0","c0",key,"继续聊",null,true);assertEquals(2,ledger.balance("o0"));
+        gate.start(t);gate.finish(t,true);assertTrue(gate.acquire("o0","c0",key,"继续聊",null).replay());assertEquals(2,ledger.balance("o0"));
+    }
+    @Test void rejectedBeforeExecutionRefundsOnceAndNeverReusesRefundedDebit(){
+        var ledger=billing();var gate=paidGate(ledger);useFree(gate);String key=key();var t=gate.acquire("o0","c0",key,"继续",null,true);
+        gate.abandon(t);gate.abandon(t);assertEquals(3,ledger.balance("o0"));
+        assertEquals("AGENT_REQUEST_ABANDONED",assertThrows(DomainException.class,()->gate.acquire("o0","c0",key,"继续",null,true)).code());
+        assertFalse(gate.acquire("o0","c0",key(),"新请求",null,true).replay());assertEquals(2,ledger.balance("o0"));
+    }
+    @Test void insufficientBalanceRollsBackAdmissionAndExactEditRemainsFree(){
+        var ledger=billing();var gate=paidGate(ledger);useFree(gate);ledger.debit("o0",3,"empty");
+        long before=jdbc.queryForObject("SELECT COUNT(*) FROM agent_request_admission",Long.class);
+        assertEquals("INSUFFICIENT_CREDITS",assertThrows(DomainException.class,()->gate.acquire("o0","c0",key(),"继续",null,true)).code());
+        assertEquals(before,jdbc.queryForObject("SELECT COUNT(*) FROM agent_request_admission",Long.class));
+        var t=gate.acquire("o0","c0",key(),"把最后一句改成：再吃一遍，西山大桥的糯米饭",null);assertEquals(0,ledger.balance("o0"));
+        assertEquals(0,jdbc.queryForObject("SELECT reserved_tokens FROM agent_request_admission WHERE id=?",Long.class,t.id()));
+    }
+    @Test void consentNeverBypassesGlobalCapacity(){
+        var ledger=billing();var gate=gate(limits(8,60,7248)).withCredits(ledger);useFree(gate);
+        assertEquals("AGENT_TOKEN_BUDGET_EXCEEDED",assertThrows(DomainException.class,()->gate.acquire("o0","c0",key(),"继续",null,true)).code());assertEquals(3,ledger.balance("o0"));
+    }
+    @Test void failedReservationRollsBackTheDebitInTheSameTransaction(){
+        var ledger=billing();var gate=paidGate(ledger);useFree(gate);
+        jdbc.execute("ALTER TABLE agent_request_admission ADD CONSTRAINT test_reject_new CHECK(state<>'RESERVED')");
+        assertThrows(org.springframework.dao.DataIntegrityViolationException.class,()->gate.acquire("o0","c0",key(),"继续",null,true));
+        assertEquals(3,ledger.balance("o0"));assertEquals(0,jdbc.queryForObject("SELECT COUNT(*) FROM credit_ledger WHERE entry_type='DEBIT'",Integer.class));
+    }
+    @Test void concurrentDuplicatePaidRequestsDebitOnlyOnce() throws Exception {
+        var ledger=billing();var gate=paidGate(ledger);useFree(gate);String key=key();
+        var pool=Executors.newFixedThreadPool(2);var start=new CountDownLatch(1);var accepted=new AtomicInteger();
+        try{
+            Callable<Void> attempt=()->{start.await();try{gate.acquire("o0","c0",key,"继续",null,true);accepted.incrementAndGet();}catch(DomainException error){assertEquals("AGENT_TURN_IN_PROGRESS",error.code());}return null;};
+            var a=pool.submit(attempt);var b=pool.submit(attempt);start.countDown();a.get(10,TimeUnit.SECONDS);b.get(10,TimeUnit.SECONDS);
+            assertEquals(1,accepted.get());assertEquals(2,ledger.balance("o0"));
+        }finally{pool.shutdownNow();}
+    }
+
 }

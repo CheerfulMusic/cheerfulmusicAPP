@@ -79,8 +79,10 @@ public final class AgentChatService {
                 authorizedText=pending.authorizedText();
                 plan=new AgentChatModel.Plan(null,Map.of(),"",pending.steps());
             } else {
+                var exact=com.qingfeng.music.agent.application.ExactLyricEdit.parse(text);
                 String fast=AgentChatPolicy.currentSocial(text);
-                if(fast!=null)plan=new AgentChatModel.Plan(fast,Map.of(),"");
+                if(exact!=null)plan=new AgentChatModel.Plan("replace_lyric_line",Map.of(),"");
+                else if(fast!=null)plan=new AgentChatModel.Plan(fast,Map.of(),"");
                 else if(text.matches("(?:查看|列出|显示)?(?:全部|所有|可用)(?:功能|能力)|能力清单"))plan=new AgentChatModel.Plan("list_capabilities",Map.of(),"");
                 else {
                     var state=conversations.state(owner,conversation);
@@ -114,7 +116,7 @@ public final class AgentChatService {
                     } else append(owner,conversation,Map.of("text","我还没有执行这项操作。请明确告诉我需要处理的作品和动作；也可以继续讨论想法。"));
                     break;
                 }
-                if(!explicitlyConfirmed&&AgentChatPolicy.chatOnly(authorizedText)&&!"read".equals(capability.effect())){
+                if(!explicitlyConfirmed&&!"replace_lyric_line".equals(proposed)&&AgentChatPolicy.chatOnly(authorizedText)&&!"read".equals(capability.effect())){
                     append(owner,conversation,Map.of("text","我们可以先讨论这个功能，需要执行时再告诉我具体要求。"));break;
                 }
                 AgentApplicationActions executor=executor(proposed);

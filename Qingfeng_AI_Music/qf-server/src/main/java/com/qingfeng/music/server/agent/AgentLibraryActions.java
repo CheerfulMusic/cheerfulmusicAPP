@@ -44,6 +44,7 @@ public final class AgentLibraryActions implements AgentApplicationActions {
         cap("delete_work","删除指定作品，必须展示具体作品并确认","workId?:作品ID,expectedVersion:确认时的作品版本","destructive"),
         cap("list_versions","查看当前或指定作品的歌词历史版本","workId?:作品ID","read"),
         cap("select_version","切换当前作品歌词版本","workId?:作品ID,revisionId?:版本ID,index?:上次版本列表序号","write"),
+        cap("replace_lyric_line","按用户明确给定的文字精确替换当前歌词第一句或最后一句，保留其他文本，不调用写词模型","","write"),
         cap("save_lyrics","保存用户提供的完整歌词与标题，不调用生成模型","workId?:作品ID,title:标题,lyrics:完整歌词,baseRevisionId?:基础版本","write"),
         cap("list_audio","列出作品所有音频候选及历史版本","workId?:作品ID","read"),
         cap("select_audio","选择作品的某个真实音频候选，切换对应歌词。导入音频仅在用户明确指定时关联歌词","workId?:作品ID,assetId?:音频ID,index?:上次音频列表序号,revisionId?:用户明确指定的导入音频歌词版本","write"),
@@ -145,6 +146,22 @@ public final class AgentLibraryActions implements AgentApplicationActions {
                 var selected=lyrics.get(owner,id,revision);
                 point(owner,conversation,id,selected.id(),null,null);
                 yield ok(action,"已切换到所选歌词版本《"+selected.title()+"》。生成或改词将以此版本为基础。");
+            }
+            case "replace_lyric_line" -> {
+                var request=com.qingfeng.music.agent.application.ExactLyricEdit.parse(text);
+                if(request==null)throw invalid("请明确指定第一句或最后一句，以及替换文字。");
+                if(current==null||current.revisionId()==null||!id.equals(current.songId()))throw invalid("请先打开要修改的作品和歌词版本。");
+                var state=conversations.state(owner,conversation);
+                var active=conversations.current(owner);
+                if(!conversation.equals(active.id())||!id.equals(active.currentWorkId()))throw invalid("当前会话或作品已切换，请重新打开要修改的歌词。");
+                if(state.currentSongJson()!=null){var selected=AgentJson.read(state.currentSongJson());Object revision=selected.get("revisionId");if(revision!=null&&!current.revisionId().equals(revision))throw invalid("当前歌词版本已切换，请重新确认要修改的版本。");}
+                var base=lyrics.get(owner,id,current.revisionId());
+                if(base.workVersion()!=work.version())throw invalid("作品已修改，请重新选择当前歌词版本。");
+                String updated=request.apply(base.lyrics());
+                if(updated.equals(base.lyrics()))yield ok(action,"当前"+request.position()+"句已经是：\n"+request.replacement()+"\n无需重复修改。");
+                var saved=lyrics.save(owner,id,work.version(),base.title(),updated,base.id());
+                var confirmed=lyrics.confirm(owner,id,saved.id());point(owner,conversation,id,confirmed.id(),null,null);
+                yield ok(action,"已将《"+base.title()+"》的"+request.position()+"句修改为：\n"+request.replacement()+"\n其他歌词保持不变，已保存。已有音频不会随歌词修改而改变。");
             }
             case "save_lyrics" -> {
                 var revision=lyrics.save(owner,id,work.version(),required(args,"title",100),required(args,"lyrics",12000),value(args,"baseRevisionId",null));
