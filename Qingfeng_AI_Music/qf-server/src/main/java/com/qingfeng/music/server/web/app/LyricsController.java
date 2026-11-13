@@ -33,13 +33,14 @@ public class LyricsController {
  public record RhymeLineRequest(@NotNull UUID requestId, @NotBlank @Size(max=160) String line,
      @NotEmpty @Size(max=40) List<@NotBlank @Size(max=160) String> lines, @NotNull @PositiveOrZero Integer lineIndex,
      @PositiveOrZero Integer referenceIndex, @NotBlank @Pattern(regexp="zh-CN|en|mixed") String language,
-     Boolean allowNear, Boolean allowCrossLanguage){}
+     Boolean allowNear, Boolean allowCrossLanguage, Boolean rewriteIfAlreadyRhymes){}
  @PostMapping("/rhyme-line")
  public LyricRhymePreview.Result rhymeLine(@AuthenticationPrincipal CreatorPrincipal creator,@PathVariable String work,
      @Valid @RequestBody RhymeLineRequest request){
      return lineRewrite.previewRhyme(creator.id(),work,request.requestId(),new LyricRhymePreview.Request(
          request.line(),request.lines(),request.lineIndex(),request.referenceIndex(),request.language(),
-         Boolean.TRUE.equals(request.allowNear()),Boolean.TRUE.equals(request.allowCrossLanguage())));
+         Boolean.TRUE.equals(request.allowNear()),Boolean.TRUE.equals(request.allowCrossLanguage()),
+         Boolean.TRUE.equals(request.rewriteIfAlreadyRhymes())));
  }
  public record SelectionRewriteRequest(@NotNull UUID requestId, @NotNull @PositiveOrZero Long workVersion,
      @NotBlank @Size(max=12000) String lyrics, @NotEmpty @Size(max=12000) List<@NotNull @PositiveOrZero Integer> keptLines,

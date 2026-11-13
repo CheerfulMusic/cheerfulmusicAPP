@@ -15,7 +15,7 @@ import java.util.stream.IntStream;
 /** Analyzes one section and verifies the sound of each proposed replacement. */
 public final class LyricRhymePreview {
     public record Request(String line, List<String> lines, int lineIndex, Integer referenceIndex,
-                          String language, boolean allowNear, boolean allowCrossLanguage) {}
+                          String language, boolean allowNear, boolean allowCrossLanguage, boolean rewriteIfAlreadyRhymes) {}
 
     public enum Status { SUGGESTIONS, CHOOSE_REFERENCE, ALREADY_RHYMES, NO_MATCH, UNKNOWN_PRONUNCIATION }
     public record Ending(String word, String sound) {}
@@ -51,8 +51,8 @@ public final class LyricRhymePreview {
         var analysis = new Analysis(request, referenceIndex, original, reference, LyricRhyme.syllableCount(request.line()), null);
         if (!original.language().equals(reference.language()) && !request.allowCrossLanguage())
             return new Analysis(analysis.result(Status.NO_MATCH, List.of()));
-        if (LyricRhyme.match(original, reference, false) == LyricRhyme.Match.EXACT
-            && !sameEnding(original, reference)) return new Analysis(analysis.result(Status.ALREADY_RHYMES, List.of()));
+        if (analysis.alreadyRhymes() && !request.rewriteIfAlreadyRhymes())
+            return new Analysis(analysis.result(Status.ALREADY_RHYMES, List.of()));
         return analysis;
     }
 
@@ -135,6 +135,10 @@ public final class LyricRhymePreview {
             return new Result(status, referenceIndex, ending(reference), ending(original), candidates);
         }
 
+        boolean alreadyRhymes() {
+            return LyricRhyme.match(original, reference, false) == LyricRhyme.Match.EXACT && !sameEnding(original, reference);
+        }
+
         String prompt() {
             var context = new StringBuilder();
             for (int i = 0; i < request.lines().size(); i++) {
@@ -148,10 +152,12 @@ public final class LyricRhymePreview {
                 + "\n原句尾音：" + original.word() + "（" + original.pronunciation() + "）"
                 + "\n原句音节数：" + (originalSyllables < 0 ? "沿用原句节奏" : originalSyllables)
                 + "\n允许同语言近韵：" + request.allowNear() + "；允许跨语言近韵：" + request.allowCrossLanguage()
+                + (alreadyRhymes() ? "\n原句已经与参考句同韵。保留同韵并换一种自然表达，可以保留原句尾词。" : "")
                 + "\n同段歌词（含参考句）：\n" + context;
         }
 
         Result select(String output) {
+            boolean preserveExact = alreadyRhymes();
             String originalLanguages = languageRuns(request.line());
             var originalMatch = LyricRhyme.match(original, reference, request.allowCrossLanguage());
             var seen = new LinkedHashSet<String>();
@@ -163,8 +169,9 @@ public final class LyricRhymePreview {
                     || !languageRuns(text).equals(originalLanguages)) continue;
                 var tail = LyricRhyme.tail(text).orElse(null);
                 if (tail == null || !Objects.equals(tail.language(), original.language())
-                    || sameEnding(tail, original) || sameEnding(tail, reference)) continue;
+                    || (!preserveExact && sameEnding(tail, original)) || sameEnding(tail, reference)) continue;
                 var match = LyricRhyme.match(tail, reference, request.allowCrossLanguage());
+                if (preserveExact && match != LyricRhyme.Match.EXACT) continue;
                 if (match == LyricRhyme.Match.NONE || match == LyricRhyme.Match.NEAR && !request.allowNear()) continue;
                 if (match != LyricRhyme.Match.EXACT && match == originalMatch && tail.key().equals(original.key())) continue;
                 int syllables = LyricRhyme.syllableCount(text);

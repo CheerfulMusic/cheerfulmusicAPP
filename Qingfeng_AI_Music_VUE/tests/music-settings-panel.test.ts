@@ -159,7 +159,7 @@ it('compares the Mandarin rhyme endings and applies the chosen candidate in the 
   await rhyme.get('.rhyme-generate').trigger('click')
   await flushPromises()
   expect(api.rhyme).toHaveBeenLastCalledWith(work.id, expect.objectContaining({
-    line: '灯在等你', lines: ['灯在等你', '夜风吹过山城'], lineIndex: 0, referenceIndex: 1, language: 'zh-CN',
+    line: '灯在等你', lines: ['灯在等你', '夜风吹过山城'], lineIndex: 0, referenceIndex: 1, language: 'zh-CN', rewriteIfAlreadyRhymes: true,
   }))
   expect(rhyme.findAll('mark').map(mark => mark.text())).toEqual(['城 · eng', '你 · i', '更 · eng'])
   expect(editor.element.value).toBe(revision.lyrics)
@@ -167,6 +167,36 @@ it('compares the Mandarin rhyme endings and applies the chosen candidate in the 
   expect(editor.element.value).toBe('[Verse]\n等你到三更\n夜风吹过山城')
   expect(panel.find('.lyric-rhyme-editor').exists()).toBe(false)
   expect(api.rewrite).not.toHaveBeenCalled()
+})
+
+it('offers a rewrite when the automatic check finds that the original line already rhymes', async () => {
+  api.snapshot.mockResolvedValue({ preferences })
+  const ends = { referenceIndex: 1, reference: { word: '城', sound: 'chéng' }, original: { word: '灯', sound: 'dēng' } }
+  api.rhyme.mockResolvedValueOnce({ ...ends, status: 'ALREADY_RHYMES', candidates: [] }).mockResolvedValueOnce({
+    ...ends, status: 'SUGGESTIONS',
+    candidates: [{ text: '替你守到三更', ending: { word: '更', sound: 'gēng' }, match: 'EXACT' }],
+  })
+  const panel = mountAdjustment()
+  await flushPromises()
+  const editor = panel.get<HTMLTextAreaElement>('.music-settings-lyrics textarea')
+  const original = '[Verse]\n还为你留盏灯\n夜风吹过山城'
+  await editor.setValue(original)
+  editor.element.setSelectionRange(original.indexOf('还为你'), original.indexOf('还为你'))
+  await editor.trigger('click')
+  await panel.findAll('button').find(button => button.text() === '更押韵')!.trigger('click')
+  await flushPromises()
+  expect(api.rhyme).toHaveBeenNthCalledWith(1, work.id, expect.objectContaining({ rewriteIfAlreadyRhymes: false }))
+  const rhyme = panel.get('.lyric-rhyme-editor')
+  const generate = rhyme.get('.rhyme-generate')
+  expect(generate.text()).toBe('保留押韵，换一句')
+  await generate.trigger('click')
+  await flushPromises()
+  expect(api.rhyme).toHaveBeenNthCalledWith(2, work.id, expect.objectContaining({
+    line: '还为你留盏灯', lineIndex: 0, rewriteIfAlreadyRhymes: true,
+  }))
+  expect(editor.element.value).toBe(original)
+  await rhyme.findAll('button').find(button => button.text() === '采用这句')!.trigger('click')
+  expect(editor.element.value).toBe('[Verse]\n替你守到三更\n夜风吹过山城')
 })
 
 it('uses the current English stanza, preserving inline section headers and unrelated lyrics', async () => {

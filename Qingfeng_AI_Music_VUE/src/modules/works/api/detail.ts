@@ -43,6 +43,7 @@ export interface LyricRhymeRequest {
   language: string
   allowNear?: boolean
   allowCrossLanguage?: boolean
+  rewriteIfAlreadyRhymes?: boolean
 }
 export interface LyricRhymeEnding { word: string; sound: string }
 export interface LyricRhymeCandidate {

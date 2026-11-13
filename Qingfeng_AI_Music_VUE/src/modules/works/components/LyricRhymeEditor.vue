@@ -29,7 +29,7 @@ const referenceOptions = computed(() => props.section.lines.map((line, index) =>
   .filter(option => option.index !== props.section.lineIndex))
 const statuses = {
   CHOOSE_REFERENCE: '请选择想和这句押韵的参考句。',
-  ALREADY_RHYMES: '原句已与参考句押韵。',
+  ALREADY_RHYMES: '原句已与参考句押韵，可以按同一个韵换一句。',
   NO_MATCH: '暂时没有合适的押韵改写。可以更换参考句或保留原句。',
   UNKNOWN_PRONUNCIATION: '暂时无法确认韵脚读音，可以换一句参考。',
   SUGGESTIONS: '',
@@ -51,7 +51,7 @@ function canApply(text: string) {
     && text.length <= (props.maxReplacementLength ?? 160)
 }
 
-async function generate() {
+async function generate(rewriteIfAlreadyRhymes = false) {
   if (!canGenerate.value) return
   clearResult()
   busy.value = true
@@ -65,6 +65,7 @@ async function generate() {
       language: language.value,
       allowNear: allowNear.value,
       allowCrossLanguage: allowCrossLanguage.value,
+      rewriteIfAlreadyRhymes,
     })
     if (!alive) return
     result.value = response
@@ -102,7 +103,9 @@ onBeforeUnmount(() => { alive = false })
       <div class="rhyme-controls">
         <label><input v-model="allowNear" type="checkbox" :disabled="busy || disabled" @change="clearResult">{{ t('允许近韵') }}</label>
         <label v-if="language === 'mixed'"><input v-model="allowCrossLanguage" type="checkbox" :disabled="busy || disabled" @change="clearResult">{{ t('允许跨语言近韵') }}</label>
-        <button type="button" class="button secondary rhyme-generate" :disabled="!canGenerate" @click="generate">{{ t('生成押韵建议') }}</button>
+        <button type="button" class="button secondary rhyme-generate" :disabled="!canGenerate" @click="generate(true)">
+          {{ t(result?.status === 'ALREADY_RHYMES' ? '保留押韵，换一句' : '生成押韵建议') }}
+        </button>
       </div>
       <p v-if="busy" role="status">{{ t('正在找韵脚和改写建议…') }}</p>
       <p v-else-if="error" role="alert">{{ t(error) }}</p>
