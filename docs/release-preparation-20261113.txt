@@ -1,0 +1,75 @@
+人人是歌手 — 发布准备验证报告（2026-11-13）
+
+结论
+RESTORE_VERIFICATION: PASS
+RELEASE_CONTEXT: BLOCKED
+DEPLOYMENT_READINESS: BLOCKED
+本报告和恢复收据均不构成部署授权。未执行生产迁移、重启、current 切换或生产数据写入。
+
+1. 恢复失败原因与修复
+原备份 database.sql：5,215,682 字节，SHA256 84016b66726e5c91bb82c6463ddc3b8aed4a10a136f7a3f67348e0730d49d450。
+此前恢复导出：5,221,842 字节，SHA256 d240f98ee6f372e034e3d74462630d48d13764d301e9e264e672ad615ca43aff。
+差异为 280 个字符列显式增加 CHARACTER SET utf8mb4，共 6,160 字节。相同 utf8mb4 COLLATE 已确定字符集，属于冗余声明。
+修复只接受 CREATE TABLE 的特定字符列类型中、紧邻 utf8mb4 COLLATE 的冗余字符集；不规范化 INSERT、默认值、注释或任意字符串。
+所有其他导出字节必须完全一致。逐表比较完整行和结构，防止漏表、漏行、改金额、改字段、改排序规则、默认值或索引。
+
+2. 实际恢复证据
+对既有备份新建隔离验证目录；原备份及旧失败日志保持原样。
+58 张表、12,010 行通过。所有表 SQL COUNT 与单行 INSERT 数量一致，全部列名与顺序核对一致。
+credit_account、credit_ledger、credit_consumption、payment_order、payment_webhook_inbox 等关键业务表全部字段逐行一致。
+完整 V1—V44 迁移记录、脚本名称、校验值、成功状态与同一次备份 history.tsv 一致。
+这是备份保真验证，不是支付业务正确性或真实付款验收。
+隔离环境：独立 PID/网络/IPC/UTS 和挂载空间，UID 65534，CapEff=0，NoNewPrivs=1；无生产目录、配置或 socket；MySQL 关闭网络、事件、local infile、binlog。
+隔离 MySQL 正常停止后才输出成功；父验证器校验退出码、备份和历史哈希、生产控制文件未变后，独占创建收据。
+原始 SQL 哈希保留；收据同时保留规范化哈希、逐表完整行哈希、结构哈希、行数及列名。
+收据路径：/var/backups/qingfeng-music/restore-check-99cc1682ca0548e5a35d51cfa3fc48cf/receipt.json
+收据 SHA256：cf4cec7a2005ebfb63982a597a749fa88dde2c82b367aabf3a175bb779723d30
+本地收据：.cache/release-preparation-20261113/restore-receipt.json
+收据仅证明 2026-11-13 10:45:45 UTC 的指定备份可恢复；不证明它包含之后的新交易，不允许用其覆盖生产库。
+
+3. 发布上下文
+使用既有 main 工作树：.cache/worktrees/welcome-credits-20261106。
+生产完整 SHA：0530c444a38db2363e0a6296c52a416b09a14d5f。
+生产 JAR SHA256：e7193ed14ceb273b3eca1e78798bf4995c11bbabcbb494bff44e9baf105314ce。
+本次修改前本地 main：e7f730543782bf00bec17be7a3c0581d2e91772d。
+fetch 后 origin/main：b14c48469a46ac26c98ff03a7b6bf22c98ec2bea。
+界面独立候选：7d45e0c1dffa7a482f6bda0f8b165cee50001ca8；包含生产基线和 origin/dev/yth，与生产相比无后端源码差异。
+支付 Agent 最近状态：用户已要求停止部署，保留 V45 源码。工作树 HEAD 为 e7f730543782bf00bec17be7a3c0581d2e91772d，但存在已暂存、未暂存和未跟踪修改；V45 尚未形成可发布的完整提交，不能用 HEAD 代表这些修复。
+另一界面 Agent 最近状态：正在只读部署诊断；本轮未向任何 Agent 下达部署指令。
+最终发布范围未确认，支付与界面组合候选 SHA 不存在。7d45e0c 仅为独立界面候选，不是已批准发布版本。
+
+4. 迁移与依赖
+按 Flyway CRC32 规则逐文件核验：生产基线、界面候选、本地 main、远端 main 的 V1—V43 均与生产已执行历史一致。
+实际生产已执行 V44__discover_song_publication.sql，checksum=-1983576296；不能假设生产只到 V43。
+本地 main 的 V44__credit_entitlement_integration.sql，checksum=789542731，与生产 V44 冲突。
+远端 main 的社区 V44 与生产一致。
+支付工作树准备把权益账本迁移移至 V45，但仍未提交、未完成验收。仅改编号不能证明支付协议与历史数据兼容。
+不得盲目合并远端后上线，也不得使用本地 main 当前支付 V44 替换生产历史。
+
+5. guard、锁、备份和回滚
+服务器正式 guard 以 qfmusic 服务账号执行，返回 RELEASE_GUARD_OK，退出码 0。
+policy 当前批准的源码仅为 0530c444a38db2363e0a6296c52a416b09a14d5f；未增加候选许可。
+现有生产部署计划 tools.python=/usr/bin/python3.11；systemd ExecStartPre 同样使用 python3.11。
+新恢复脚本强制 Python 3.11，并同时持有已有发布锁、备份锁；演练完成后两锁均已释放。
+生产 current、JAR、配置、policy、guard、release_gate、Nginx 配置哈希演练前后相同；服务 active，health UP。
+旧 server-0530-deploy-reviewed.py 写死 DATABASE_VERSION=43、V1—V43 范围，不能直接用于当前 V44。
+旧脚本 finalize_policy 只留下新制品，旧制品会被拒绝；不能据此声称随时可自动回滚。
+旧 cutover-executor-draft.py 仍缺生产 adapter/drain/rollback 实现，不解除其阻断。
+只发布界面时，0530c44 是待复核的回滚目标；若上线支付 V45 并产生新协议写入，不能假定 0530c44 可以回滚。
+不得还原旧数据库覆盖新增交易；配置保留须按切换阶段及所有权检查执行。
+
+6. 下一步
+A. 由用户最终确认界面独立发布或支付+界面组合发布，指定唯一发布执行者。
+B. 支付 Agent 提交完整 V45 修复，并完成历史账本、订单、回调、退款及争议验收；保留社区 V44。
+C. 在确认范围后形成唯一完整候选 SHA，解决 main/远端及未提交改动的冲突；重新构建并绑定测试证据。
+D. 更新既有切换脚本的真实历史基线和恢复收据消费逻辑，不能只把版本常量 43 改为 44。
+E. 为精确新旧制品核验 schema/写入协议兼容、锁、在途请求排空、回滚许可及配置保留，再交付可审查发布计划。
+F. 实际发布前取得新备份并复验、重新核对线上基线和并发活动。本阶段不部署。
+
+补充：实际合并冲突检查
+使用 git merge-tree（不切换分支、不修改工作区）检查本地 main 与 origin/main。
+确认两处内容冲突：
+- Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/security/WebSecurityConfiguration.java
+- Qingfeng_AI_Music_VUE/src/shared/i18n/en.ts
+首次因 partial clone 的 promisor 对象缺失且直连中断失败；使用已有临时 Git 代理后完成检查。此问题与 SSH 无关，未修改持久 Git 配置。
+这些冲突尚未解决；在发布范围确定前，不擅自合并支付和社区安全规则。
