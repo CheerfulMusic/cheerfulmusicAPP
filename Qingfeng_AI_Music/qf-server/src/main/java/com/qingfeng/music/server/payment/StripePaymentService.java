@@ -39,6 +39,8 @@ public final class StripePaymentService implements VerifiedPaymentProcessor {
     private java.time.Clock reconciliationClock=java.time.Clock.systemUTC();
     @Value("${qingfeng.stripe.enabled:false}") private boolean enabled;
     @Value("${qingfeng.stripe.accepting-new-orders:false}") private boolean acceptingNewOrders;
+    @Value("${qingfeng.stripe.canary-owner-ids:}") private String canaryOwnerIds="";
+    @Value("${qingfeng.payment.legacy-orders-read-only:false}") private boolean legacyOrdersReadOnly;
 
     public StripePaymentService(JdbcTemplate db, TransactionTemplate tx, CreditsLedger ledger,
                                 PaymentCatalog catalog, StripeCheckoutGateway gateway, ObjectMapper json) {
@@ -72,9 +74,23 @@ public final class StripePaymentService implements VerifiedPaymentProcessor {
     }
 
     public Map<String,Object> catalog() {
-        boolean open=schemaReady() && acceptingNewOrders;
+        return catalog(null);
+    }
+
+    public Map<String,Object> catalog(CreatorPrincipal creator) {
+        boolean open=schemaReady() && purchaseAllowed(creator);
         return Map.of("enabled",open,"packages",open?paymentMethods.legacyPackages().stream().map(PaymentCatalog.Package::asMap).toList():List.of(),
             "paymentMethods",paymentMethods.catalog(open));
+    }
+
+    /** Internal first-payment verification uses authenticated principals, never a request owner field. */
+    private boolean purchaseAllowed(CreatorPrincipal creator) {
+        if(acceptingNewOrders)return true;
+        if(creator==null||creator.id()==null||canaryOwnerIds==null||canaryOwnerIds.isBlank())return false;
+        String[] owners=canaryOwnerIds.split(",",-1);
+        if(owners.length>3)return false;
+        for(String owner:owners)if(!owner.trim().matches("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"))return false;
+        return Arrays.stream(owners).map(String::trim).anyMatch(creator.id()::equals);
     }
 
     public Map<String,Object> create(CreatorPrincipal creator, String packageId) {
@@ -82,7 +98,8 @@ public final class StripePaymentService implements VerifiedPaymentProcessor {
     }
 
     public Map<String,Object> create(CreatorPrincipal creator, String packageId,String paymentMethod) {
-        if (!schemaReady() || !acceptingNewOrders) throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,"Stripe 充值暂未开放");
+        if (!schemaReady() || !purchaseAllowed(creator)) throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,"Stripe 充值暂未开放");
+        if(creator==null||creator.id()==null)throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
         var offer=paymentMethods.select(packageId,paymentMethod);
         gateway.verifyNewPurchase(StripePaymentMethods.checkoutMethodForStoredOffer(offer.id()),offer.currency());
         var selected=new PaymentCatalog.Package(offer.id(),offer.title(),offer.amount(),offer.currency(),offer.credits());
@@ -96,9 +113,14 @@ public final class StripePaymentService implements VerifiedPaymentProcessor {
             if(db.queryForList("SELECT id FROM creator WHERE id=? FOR UPDATE",owner).isEmpty()) throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
             Integer identities=db.queryForObject("SELECT (SELECT COUNT(*) FROM creator_google_identity WHERE creator_id=?) + (SELECT COUNT(*) FROM creator_oidc_identity WHERE creator_id=?)",Integer.class,owner,owner);
             if(identities==null||identities==0) throw new ResponseStatusException(HttpStatus.FORBIDDEN,"请先登录账号");
-            Integer pending=db.queryForObject("SELECT COUNT(*) FROM payment_order WHERE creator_id=? AND status IN ('CREATING','CREATION_UNKNOWN','PENDING')",Integer.class,owner);
+            Integer pending;
+            if(legacyOrdersReadOnly){
+                var boundary=db.queryForObject("SELECT activated_at FROM p0_credit_cutover_state WHERE id=1 AND status='ACTIVE'",java.sql.Timestamp.class);
+                if(boundary==null)throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,"积分切换尚未完成");
+                pending=db.queryForObject("SELECT COUNT(*) FROM payment_order WHERE creator_id=? AND status IN ('CREATING','CREATION_UNKNOWN','PENDING') AND created_at>?",Integer.class,owner,boundary);
+            }else pending=db.queryForObject("SELECT COUNT(*) FROM payment_order WHERE creator_id=? AND status IN ('CREATING','CREATION_UNKNOWN','PENDING')",Integer.class,owner);
             if(pending!=null&&pending>0) throw new ResponseStatusException(HttpStatus.CONFLICT,"已有待核对订单，请先查看订单状态");
-            db.update("INSERT INTO payment_order(id,creator_id,package_id,amount,currency,credits,status,created_at,provider) VALUES(?,?,?,?,?,?,?,CURRENT_TIMESTAMP,?)",
+            db.update("INSERT INTO payment_order(id,creator_id,package_id,amount,currency,credits,status,created_at,provider) VALUES(?,?,?,?,?,?,?,CURRENT_TIMESTAMP(6),?)",
                 id,owner,pack.id(),pack.amount(),pack.currency(),pack.credits(),"CREATING",gateway.provider());
             // Capture the original merchant and financial snapshot before any remote POST.
             // This joins the order transaction, so no order can lose its recovery pointer.

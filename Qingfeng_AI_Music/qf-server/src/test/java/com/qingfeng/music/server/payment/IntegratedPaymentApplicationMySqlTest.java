@@ -7,6 +7,8 @@ import com.qingfeng.music.identity.api.IdentityApi;
 import com.qingfeng.music.infrastructure.persistence.credits.JdbcFencedCreditsLedger;
 import com.qingfeng.music.infrastructure.persistence.usage.JdbcUsageBudget;
 import com.qingfeng.music.server.MusicApplication;
+import com.qingfeng.music.server.agent.AgentAdmission;
+import com.qingfeng.music.conversation.application.ConversationService;
 import com.qingfeng.music.server.avatar.AvatarGenerationService;
 import com.qingfeng.music.server.avatar.AvatarImageProvider;
 import com.qingfeng.music.server.avatar.AvatarService;
@@ -120,6 +122,12 @@ class IntegratedPaymentApplicationMySqlTest {
         values.put("qingfeng.paypal.enabled",true);values.put("qingfeng.paypal.environment","sandbox");values.put("qingfeng.paypal.client-id","offline-fixture");values.put("qingfeng.paypal.client-secret","offline-fixture");values.put("qingfeng.paypal.merchant-id",PAYPAL_MERCHANT);values.put("qingfeng.paypal.webhook-id","offline-fixture");
         for(String key:List.of("qingfeng.payment.inbox.scheduler-enabled","qingfeng.events.dispatcher-enabled","qingfeng.events.rabbit.enabled","qingfeng.redis.enabled","qingfeng.generation.enabled","qingfeng.generation.scheduler-enabled","qingfeng.cover.ai.enabled","qingfeng.cover.ai.scheduler-enabled","qingfeng.analytics.retention.scheduler-enabled","qingfeng.quick.enabled","qingfeng.invite-gate.enabled","qingfeng.payments.enabled","qingfeng.agent.chat.enabled","qingfeng.auth.google.enabled","qingfeng.auth.logto.enabled","qingfeng.reference.analysis.enabled","qingfeng.music-settings.simplify.enabled","qingfeng.lyrics.timing.enabled","qingfeng.inspiration.rewrite.enabled"))values.put(key,false);
         values.put("qingfeng.avatar.ai.enabled",false);values.put("qingfeng.avatar.ai.scheduler-enabled",false);
+        // Exercise the actual injected paid-chat admission with the fenced MySQL ledger.
+        // Planning and all external AI calls remain forbidden by the offline model below.
+        values.put("qingfeng.agent.chat.enabled",true);values.put("qingfeng.agent.intent.llm-enabled",false);values.put("qingfeng.agent.legacy-pending.enabled",false);
+        values.put("qingfeng.agent.admission.mode","db");values.put("qingfeng.agent.admission.max-prompt-bytes",1024);
+        values.put("qingfeng.agent.admission.user-daily-tokens",7248);values.put("qingfeng.agent.admission.global-daily-tokens",10000000);
+        values.put("qingfeng.agent.admission.user-rpm",1000);values.put("qingfeng.agent.admission.global-rpm",1000);
         values.put("qingfeng.cover.directory","./target/integrated-payment-covers");values.put("qingfeng.media.directory","./target/integrated-payment-audio");return values;
     }
     static void start(){
@@ -143,6 +151,9 @@ class IntegratedPaymentApplicationMySqlTest {
     }
 
     @TestConfiguration(proxyBeanMethods=false) static class OfflineGateways {
+        @Bean @Primary com.qingfeng.music.agent.api.AgentChatModel offlineAgentChatModel(){
+            return context->{throw new AssertionError("Financial admission tests must never invoke a planning model or external AI");};
+        }
         @Bean @Primary StripeCheckoutGateway offlineStripe(ObjectMapper json){
             var gateway=spy(new StripeCheckoutGateway(json));doNothing().when(gateway).verifyAccount();
             doAnswer(call->{String method=call.getArgument(0),currency=call.getArgument(1);assertTrue("card".equals(method)&&"USD".equals(currency)||"wechat_pay".equals(method)&&"CNY".equals(currency),"Only explicit synthetic merchant purchase scopes are permitted");return null;}).when(gateway).verifyNewPurchase(anyString(),anyString());
@@ -502,6 +513,120 @@ class IntegratedPaymentApplicationMySqlTest {
             statement.execute("SET time_zone='+00:00'");assertDoesNotThrow(()->guard.run(null));
         }
         assertEquals(before,exactFinancialSnapshot());
+    }
+
+    private static AgentAdmission agentAdmission(){return application.getBean(AgentAdmission.class);}
+    private static String useOneFreeAgentTurn(IdentityApi.Session user){
+        String conversation=application.getBean(ConversationService.class).current(user.creatorId()).id();
+        var admission=agentAdmission();long before=ledger.balance(user.creatorId());
+        var free=admission.acquire(user.creatorId(),conversation,UUID.randomUUID().toString(),"synthetic free chat",null);
+        admission.start(free);admission.finish(free,true);
+        assertEquals(before,ledger.balance(user.creatorId()));
+        assertEquals(7248,number("SELECT reserved_tokens FROM agent_request_admission WHERE id=?",free.id()));
+        return conversation;
+    }
+    private static String agentDebit(AgentAdmission.Ticket ticket){return "agent-chat:"+ticket.id();}
+
+    @Test @Order(25) void injectedAgentAdmissionChargesTheNewStripeBatchOnceUnderConcurrentDuplicateRequests() throws Exception {
+        var payment=paid();var user=payment.owner();String conversation=useOneFreeAgentTurn(user),key=UUID.randomUUID().toString();var admission=agentAdmission();
+        assertInstanceOf(com.qingfeng.music.server.agent.JdbcAgentAdmission.class,admission);
+        assertEquals("AGENT_CHAT_PAYMENT_REQUIRED",assertThrows(DomainException.class,()->admission.acquire(user.creatorId(),conversation,key,"synthetic paid chat",null)).code());
+        assertEquals(100,ledger.balance(user.creatorId()));
+        var pool=Executors.newFixedThreadPool(4);var barrier=new CyclicBarrier(4);var tickets=new ConcurrentLinkedQueue<AgentAdmission.Ticket>();
+        try{
+            var futures=new ArrayList<Future<?>>();for(int i=0;i<4;i++)futures.add(pool.submit(()->{
+                barrier.await(10,TimeUnit.SECONDS);
+                try{tickets.add(admission.acquire(user.creatorId(),conversation,key,"synthetic paid chat",null,true));}
+                catch(DomainException failure){assertEquals("AGENT_TURN_IN_PROGRESS",failure.code());}
+                return null;
+            }));
+            for(var future:futures)future.get(30,TimeUnit.SECONDS);
+        }finally{pool.shutdownNow();assertTrue(pool.awaitTermination(10,TimeUnit.SECONDS));}
+        assertEquals(1,tickets.size());var ticket=tickets.element();String debit=agentDebit(ticket);
+        assertEquals(99,ledger.balance(user.creatorId()));
+        assertEquals(1,number("SELECT COUNT(*) FROM credit_ledger WHERE owner_id=? AND entry_type='DEBIT' AND reference_id=?",user.creatorId(),debit));
+        assertEquals(1,number("SELECT amount FROM p0_credit_allocation WHERE debit_reference=? AND batch_reference=? AND owner_id=?",debit,"payment:"+payment.order(),user.creatorId()));
+        admission.start(ticket);admission.finish(ticket,true);
+        assertTrue(admission.acquire(user.creatorId(),conversation,key,"synthetic paid chat",null,true).replay());
+        assertTrue(admission.acquire(user.creatorId(),conversation,key,"synthetic paid chat",null).replay());
+        assertEquals(99,ledger.balance(user.creatorId()));
+        assertEquals(1,number("SELECT consumed FROM p0_credit_batch WHERE reference=?","payment:"+payment.order()));
+    }
+
+    @Test @Order(26) void injectedAgentAdmissionRejectsNegativeBalanceAndTheSameUnacceptedRequestCanSpendAfterRecharge() throws Exception {
+        var payment=paid();var user=payment.owner();String conversation=useOneFreeAgentTurn(user),key=UUID.randomUUID().toString();var admission=agentAdmission();
+        ledger.debit(user.creatorId(),80,"synthetic-agent-before-refund:"+unique());refund(payment,990);assertEquals(-80,ledger.balance(user.creatorId()));
+        long admissions=number("SELECT COUNT(*) FROM agent_request_admission WHERE creator_id=?",user.creatorId());
+        assertEquals("INSUFFICIENT_CREDITS",assertThrows(DomainException.class,()->admission.acquire(user.creatorId(),conversation,key,"synthetic debt chat",null,true)).code());
+        assertEquals(-80,ledger.balance(user.creatorId()));
+        assertEquals(admissions,number("SELECT COUNT(*) FROM agent_request_admission WHERE creator_id=?",user.creatorId()));
+        assertEquals(0,number("SELECT COUNT(*) FROM agent_request_admission WHERE conversation_id=? AND request_key=?",conversation,key));
+        var recharge=paid(user);assertEquals(20,ledger.balance(user.creatorId()));
+        var accepted=admission.acquire(user.creatorId(),conversation,key,"synthetic debt chat",null,true);
+        assertFalse(accepted.replay());assertEquals(19,ledger.balance(user.creatorId()));
+        assertEquals(1,number("SELECT amount FROM p0_credit_allocation WHERE debit_reference=? AND batch_reference=?",agentDebit(accepted),"payment:"+recharge.order()));
+        admission.start(accepted);admission.finish(accepted,true);
+    }
+
+    @Test @Order(27) void injectedAgentAdmissionSkipsOnlyTheDisputedOrderAndCannotSpendItsFrozenRemainder() throws Exception {
+        var user=owner();var a=paid(user);ledger.debit(user.creatorId(),80,"synthetic-agent-used-a:"+unique());var b=paid(user);
+        String conversation=useOneFreeAgentTurn(user),dispute="dp_"+unique();var admission=agentAdmission();
+        dispute(a,dispute,"under_review",List.of());assertEquals(20,held(a));assertEquals(0,held(b));
+        var ticket=admission.acquire(user.creatorId(),conversation,UUID.randomUUID().toString(),"synthetic unfrozen chat",null,true);
+        assertEquals(119,ledger.balance(user.creatorId()));assertEquals(20,held(a));
+        assertEquals(0,number("SELECT COUNT(*) FROM p0_credit_allocation WHERE debit_reference=? AND batch_reference=?",agentDebit(ticket),"payment:"+a.order()));
+        assertEquals(1,number("SELECT amount FROM p0_credit_allocation WHERE debit_reference=? AND batch_reference=?",agentDebit(ticket),"payment:"+b.order()));
+        admission.start(ticket);admission.finish(ticket,true);ledger.debit(user.creatorId(),99,"synthetic-agent-empty-b:"+unique());
+        String key=UUID.randomUUID().toString();
+        assertEquals("INSUFFICIENT_CREDITS",assertThrows(DomainException.class,()->admission.acquire(user.creatorId(),conversation,key,"synthetic frozen chat",null,true)).code());
+        assertEquals(20,ledger.balance(user.creatorId()));assertEquals(0,number("SELECT COUNT(*) FROM agent_request_admission WHERE conversation_id=? AND request_key=?",conversation,key));
+        dispute(a,dispute,"won",List.of());assertEquals(0,held(a));
+        var unfrozen=admission.acquire(user.creatorId(),conversation,key,"synthetic frozen chat",null,true);assertEquals(19,ledger.balance(user.creatorId()));
+        assertEquals(1,number("SELECT amount FROM p0_credit_allocation WHERE debit_reference=? AND batch_reference=?",agentDebit(unfrozen),"payment:"+a.order()));
+        admission.start(unfrozen);admission.finish(unfrozen,true);
+    }
+
+    @Test @Order(28) void injectedAgentAdmissionAbandonRestoresTheOriginalNowFrozenBatchExactlyOnce() throws Exception {
+        var payment=paid();var user=payment.owner();String conversation=useOneFreeAgentTurn(user),key=UUID.randomUUID().toString();var admission=agentAdmission();
+        var ticket=admission.acquire(user.creatorId(),conversation,key,"synthetic rejected before execution",null,true);assertEquals(99,ledger.balance(user.creatorId()));
+        dispute(payment,"dp_"+unique(),"under_review",List.of());assertEquals(99,held(payment));
+        admission.abandon(ticket);admission.abandon(ticket);assertEquals(100,ledger.balance(user.creatorId()));assertEquals(100,held(payment));
+        assertEquals(0,number("SELECT consumed FROM p0_credit_batch WHERE reference=?","payment:"+payment.order()));
+        assertEquals(1,number("SELECT restored FROM p0_credit_allocation WHERE debit_reference=? AND batch_reference=?",agentDebit(ticket),"payment:"+payment.order()));
+        assertEquals(1,number("SELECT COUNT(*) FROM credit_ledger WHERE owner_id=? AND reference_id=? AND entry_type='REFUND'",user.creatorId(),agentDebit(ticket)));
+        assertEquals(0,number("SELECT SUM(amount) FROM credit_ledger WHERE owner_id=? AND reference_id=?",user.creatorId(),agentDebit(ticket)));
+        assertEquals("ABANDONED",db.queryForObject("SELECT state FROM agent_request_admission WHERE id=?",String.class,ticket.id()));
+        assertEquals("AGENT_REQUEST_ABANDONED",assertThrows(DomainException.class,()->admission.acquire(user.creatorId(),conversation,key,"synthetic rejected before execution",null,true)).code());
+        assertEquals(100,ledger.balance(user.creatorId()));assertEquals(100,held(payment));
+    }
+
+    @Test @Order(29) void legacyPaypalHttpReadsAndVerifiedWebhooksPreserveTheOldOrderWhileNewStripeStillSettles() throws Exception {
+        var user=owner();var response=business(user,"/api/app/paypal/orders","POST","{\"packageId\":\"starter-USD\"}");
+        assertEquals(200,response.statusCode(),response.body());String order=JSON.readTree(response.body()).path("orderId").asString();
+        String remote=db.queryForObject("SELECT provider_link_id FROM payment_order WHERE id=?",String.class,order),capture="C"+unique().substring(0,20);
+        db.update("UPDATE payment_order SET created_at=TIMESTAMPADD(SECOND,-1,(SELECT activated_at FROM p0_credit_cutover_state WHERE id=1)) WHERE id=?",order);
+        PAYPAL_ORDERS.put(remote,new PayPalCheckoutGateway.Snapshot(remote,order,"COMPLETED",PAYPAL_MERCHANT,capture,"COMPLETED",new BigDecimal("9.90"),"USD"));
+        var original=db.queryForMap("SELECT * FROM payment_order WHERE id=?",order);Object previous=org.springframework.test.util.ReflectionTestUtils.getField(paypal,"legacyOrdersReadOnly");
+        Object previousStripe=org.springframework.test.util.ReflectionTestUtils.getField(stripe,"legacyOrdersReadOnly");
+        try{
+            org.springframework.test.util.ReflectionTestUtils.setField(paypal,"legacyOrdersReadOnly",true);
+            var read=business(user,"/api/app/paypal/orders/"+order,"GET",null);assertEquals(200,read.statusCode(),read.body());assertEquals("PENDING",JSON.readTree(read.body()).path("status").asString());
+            var history=business(user,"/api/app/paypal/orders","GET",null);assertEquals(200,history.statusCode(),history.body());
+            assertTrue(JSON.readTree(history.body()).path("orders").get(0).path("legacyReadOnly").asBoolean());
+            assertEquals(409,business(user,"/api/app/paypal/orders/"+order+"/capture","POST","{}").statusCode());
+            String event="WH-"+unique(),body=JSON.writeValueAsString(Map.of("id",event,"event_type","PAYMENT.CAPTURE.COMPLETED","resource",Map.of("id",capture,"supplementary_data",Map.of("related_ids",Map.of("order_id",remote)))));
+            for(int i=0;i<2;i++)assertEquals(200,request("/api/public/paypal/webhook","POST",body,null,null).statusCode());
+            drain();assertEquals(original,db.queryForMap("SELECT * FROM payment_order WHERE id=?",order));assertEquals(0,ledger.balance(user.creatorId()));
+            assertEquals(0,number("SELECT COUNT(*) FROM credit_ledger WHERE reference_id=?","payment:"+order));
+            assertEquals(1,number("SELECT COUNT(*) FROM payment_webhook_inbox WHERE provider='PAYPAL_SANDBOX' AND merchant_scope=? AND env_scope='sandbox' AND event_id=? AND status='MANUAL' AND last_error='LEGACY_ORDER_READ_ONLY'",PAYPAL_MERCHANT,event));
+            assertEquals(1,number("SELECT COUNT(*) FROM payment_inbox_attempt WHERE provider='PAYPAL_SANDBOX' AND merchant_scope=? AND env_scope='sandbox' AND event_id=? AND result='MANUAL'",PAYPAL_MERCHANT,event));
+            org.springframework.test.util.ReflectionTestUtils.setField(stripe,"legacyOrdersReadOnly",true);
+            var fresh=paid(user);assertEquals(100,ledger.balance(user.creatorId()));assertEquals("PAID",db.queryForObject("SELECT status FROM payment_order WHERE id=?",String.class,fresh.order()));
+            assertEquals(original,db.queryForMap("SELECT * FROM payment_order WHERE id=?",order));
+        }finally{
+            org.springframework.test.util.ReflectionTestUtils.setField(paypal,"legacyOrdersReadOnly",previous);
+            org.springframework.test.util.ReflectionTestUtils.setField(stripe,"legacyOrdersReadOnly",previousStripe);
+        }
     }
 
 }

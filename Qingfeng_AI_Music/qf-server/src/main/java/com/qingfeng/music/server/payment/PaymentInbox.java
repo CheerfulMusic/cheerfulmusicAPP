@@ -117,6 +117,30 @@ public class PaymentInbox {
             if(changed==1)audit(delivery,exhausted?"MANUAL":"FAILED",null);
         });
     }
+    /** Quarantine a verified pointer without claiming that the provider or order is resolved. */
+    public void markManual(Delivery delivery,String reason){
+        requireScoped();
+        if(reason==null||!reason.matches("[A-Z0-9_]{1,80}"))throw new IllegalArgumentException("Bounded manual review reason required");
+        tx.executeWithoutResult(s->{
+            if(db.update("UPDATE payment_webhook_inbox SET status='MANUAL',lease_token=NULL,lease_until=NULL,last_error=?,updated_at=CURRENT_TIMESTAMP WHERE provider=? AND merchant_scope=? AND env_scope=? AND event_id=? AND lease_token=? AND status='PROCESSING' AND lease_until>CURRENT_TIMESTAMP",reason,delivery.provider(),delivery.merchant(),delivery.environment(),delivery.eventId(),delivery.token())!=1)
+                throw new IllegalStateException("Payment event lease expired before manual quarantine");
+            audit(delivery,"MANUAL",reason);
+        });
+    }
+    /** Verified legacy channels without an automatic processor keep an auditable immutable pointer. */
+    public void acceptManualVerified(String provider,String eventId,String type,String payload,String reason){
+        requireScoped();
+        if(reason==null||!reason.matches("[A-Z0-9_]{1,80}"))throw new IllegalArgumentException("Bounded manual review reason required");
+        // Its duplicate-key transaction must finish before the quarantine transaction starts.
+        // A crash between them preserves a PENDING pointer for the provider retry; no legacy processor consumes it.
+        acceptVerified(provider,LEGACY_SCOPE,LEGACY_SCOPE,eventId,type,payload);
+        tx.executeWithoutResult(s->{
+            int changed=db.update("UPDATE payment_webhook_inbox SET status='MANUAL',last_error=?,updated_at=CURRENT_TIMESTAMP WHERE provider=? AND merchant_scope=? AND env_scope=? AND event_id=? AND status='PENDING' AND attempts=0 AND lease_token IS NULL",reason,provider,LEGACY_SCOPE,LEGACY_SCOPE,eventId);
+            if(changed==1)audit(new Delivery(provider,eventId,type,payload,"",0,LEGACY_SCOPE,LEGACY_SCOPE),"MANUAL",reason);
+            else if(!"MANUAL".equals(db.queryForObject("SELECT status FROM payment_webhook_inbox WHERE provider=? AND merchant_scope=? AND env_scope=? AND event_id=?",String.class,provider,LEGACY_SCOPE,LEGACY_SCOPE,eventId)))
+                throw new IllegalStateException("Verified legacy event was already processed outside manual quarantine");
+        });
+    }
     /** Internal finance operation only: an explicit immutable pointer fingerprint and reason are mandatory. */
     public void resumeReviewed(String provider,String merchant,String environment,String eventId,String expectedType,String expectedPayloadHash,String reviewer,String reason){
         requireScoped();

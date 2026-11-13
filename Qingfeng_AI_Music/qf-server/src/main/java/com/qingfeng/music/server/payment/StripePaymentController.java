@@ -14,6 +14,8 @@ public class StripePaymentController {
     public record OrderRequest(String packageId,String paymentMethod) {}
 
     @GetMapping("/api/app/stripe/catalog")
+    public Map<String,Object> catalog(@AuthenticationPrincipal CreatorPrincipal creator) { return payments.catalog(creator); }
+
     public Map<String,Object> catalog() { return payments.catalog(); }
 
     @PostMapping("/api/app/stripe/orders")

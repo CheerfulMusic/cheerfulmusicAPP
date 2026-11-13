@@ -18,6 +18,7 @@ public class PayPalPaymentService implements VerifiedPaymentProcessor {
     private final JdbcTemplate db; private final TransactionTemplate tx; private final CreditsLedger ledger; private final PaymentCatalog catalog;
     @Value("${qingfeng.paypal.enabled:false}") private boolean enabled;
     @Value("${qingfeng.paypal.accepting-new-orders:true}") private boolean acceptingNewOrders = true;
+    @Value("${qingfeng.payment.legacy-orders-read-only:false}") private boolean legacyOrdersReadOnly;
     @Value("${qingfeng.paypal.environment:sandbox}") private String environment;
     @Value("${qingfeng.paypal.client-id:}") private String clientId;
     @Value("${qingfeng.paypal.client-secret:}") private String clientSecret;
@@ -94,14 +95,18 @@ public class PayPalPaymentService implements VerifiedPaymentProcessor {
         var rows=db.queryForList("SELECT * FROM payment_order WHERE id=? AND creator_id=? AND provider=?",id,owner,provider());
         if(rows.isEmpty()) throw new ResponseStatusException(HttpStatus.NOT_FOUND); return rows.get(0);
     }
+    private PaymentLegacyOrderBoundary legacyBoundary(){return new PaymentLegacyOrderBoundary(db,legacyOrdersReadOnly);}
+    private void mutableOrder(String id){legacyBoundary().requireMutable(db.queryForMap("SELECT * FROM payment_order WHERE id=? AND provider=?",id,provider()));}
     /** Attach an existing provider order after an uncertain create; this never creates or captures an order. */
     public Map<String,Object> recover(String owner,String id,String remote){
         if(!ready())throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE);
         var original=row(owner,id);
+        legacyBoundary().requireMutable(original);
         var snapshot=gateway().retrieve(remote);
         tx.executeWithoutResult(t->{
             db.queryForList("SELECT id FROM creator WHERE id=? FOR UPDATE",owner);
             var locked=db.queryForMap("SELECT * FROM payment_order WHERE id=? AND creator_id=? AND provider=? FOR UPDATE",id,owner,provider());
+            legacyBoundary().requireMutable(locked);
             String prior=(String)locked.get("provider_link_id");
             if(prior!=null&&!prior.equals(remote))throw new ResponseStatusException(HttpStatus.CONFLICT,"原支付单不匹配");
             if(!Set.of("CREATING","CREATION_UNKNOWN","PENDING","PAID").contains(locked.get("status")))throw new ResponseStatusException(HttpStatus.CONFLICT,"订单不能恢复");
@@ -114,7 +119,7 @@ public class PayPalPaymentService implements VerifiedPaymentProcessor {
     public Map<String,Object> order(String owner,String id){
         var r=row(owner,id);
         String remote=(String)r.get("provider_link_id");
-        if(ready() && !"PAID".equals(r.get("status")) && remote!=null){
+        if(!legacyBoundary().readOnly(r) && ready() && !"PAID".equals(r.get("status")) && remote!=null){
             PayPalCheckoutGateway.Snapshot snapshot;
             try { snapshot=gateway().retrieve(remote); }
             catch (RuntimeException ex) { return Map.of("orderId",id,"status",r.get("status"),"credits",r.get("credits")); }
@@ -127,9 +132,17 @@ public class PayPalPaymentService implements VerifiedPaymentProcessor {
         }
         return Map.of("orderId",id,"status",r.get("status"),"credits",r.get("credits"));
     }
-    public Map<String,Object> orders(String owner){return Map.of("orders",db.query("SELECT id,status,credits,created_at FROM payment_order WHERE creator_id=? AND provider=? ORDER BY created_at DESC,id DESC LIMIT 50",(rs,n)->Map.of("orderId",rs.getString(1),"status",rs.getString(2),"credits",rs.getLong(3),"createdAt",rs.getTimestamp(4).toInstant().toString()),owner,provider()));}
+    public Map<String,Object> orders(String owner){
+        var activation=legacyBoundary().activation();
+        return Map.of("orders",db.query("SELECT id,status,credits,created_at FROM payment_order WHERE creator_id=? AND provider=? ORDER BY created_at DESC,id DESC LIMIT 50",(rs,n)->{
+            var view=new HashMap<String,Object>(Map.of("orderId",rs.getString(1),"status",rs.getString(2),"credits",rs.getLong(3),"createdAt",rs.getTimestamp(4).toInstant().toString()));
+            if(activation!=null&&!rs.getTimestamp(4).after(activation))view.put("legacyReadOnly",true);
+            return view;
+        },owner,provider()));
+    }
     public Map<String,Object> close(String owner,String id){
         var r=row(owner,id);
+        legacyBoundary().requireMutable(r);
         if("PAID".equals(r.get("status")) || "CANCELLED".equals(r.get("status"))) return order(owner,id);
         String remote=(String)r.get("provider_link_id");
         if(!ready() || remote==null) throw new ResponseStatusException(HttpStatus.CONFLICT,"订单待核对");
@@ -143,6 +156,7 @@ public class PayPalPaymentService implements VerifiedPaymentProcessor {
     public Map<String,Object> resume(String owner,String id){
         if(!ready()) throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,"PayPal 尚未开放");
         var r=row(owner,id);
+        legacyBoundary().requireMutable(r);
         if("PAID".equals(r.get("status"))) return Map.of("orderId",id,"status","PAID");
         if("CANCELLED".equals(r.get("status"))) throw new ResponseStatusException(HttpStatus.CONFLICT,"订单已取消");
         String remote=(String)r.get("provider_link_id");
@@ -161,7 +175,7 @@ public class PayPalPaymentService implements VerifiedPaymentProcessor {
     }
     public Map<String,Object> capture(String owner,String id){
         if(!ready()) throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE);
-        var r=row(owner,id); if("PAID".equals(r.get("status"))) return order(owner,id);
+        var r=row(owner,id);legacyBoundary().requireMutable(r); if("PAID".equals(r.get("status"))) return order(owner,id);
         String remote=(String)r.get("provider_link_id"); if(remote==null) throw new ResponseStatusException(HttpStatus.CONFLICT,"订单待核对");
         var gateway=gateway(); var before=gateway.retrieve(remote); check(r,before);
         if("COMPLETED".equals(before.orderStatus())) { settle(id,before); return order(owner,id); }
@@ -176,6 +190,7 @@ public class PayPalPaymentService implements VerifiedPaymentProcessor {
             var rows=db.queryForList("SELECT * FROM payment_order WHERE id=? AND provider=? FOR UPDATE",id,provider());
             if(rows.isEmpty()) throw new ResponseStatusException(HttpStatus.NOT_FOUND);
             var row=rows.get(0);check(row,s);
+            legacyBoundary().requireMutable(row);
             if(!"COMPLETED".equals(s.orderStatus()) || !"COMPLETED".equals(s.captureStatus()) || s.captureId()==null || s.captureId().isBlank()) throw new ResponseStatusException(HttpStatus.CONFLICT,"PayPal 付款尚未完成");
             Object old=row.get("provider_capture_id"); if(old!=null&&!old.equals(s.captureId())) throw new ResponseStatusException(HttpStatus.CONFLICT,"支付记录不匹配");
             ledger.credit((String)row.get("creator_id"),((Number)row.get("credits")).longValue(),"payment:"+id);
@@ -190,6 +205,7 @@ public class PayPalPaymentService implements VerifiedPaymentProcessor {
     /** Two independent authoritative GETs are required before recovering original receipt. */
     private PayPalCaptureRecoveryProof.Proven recoverOriginalCapture(String order,String captureId){
         var local=db.queryForMap("SELECT * FROM payment_order WHERE id=? AND provider=?",order,provider());
+        legacyBoundary().requireMutable(local);
         var capture=gateway().retrieveCapture(captureId);
         if(!captureId.equals(capture.path("id").asString()))throw new IllegalStateException("Capture recovery identity mismatch");
         String remote=capture.path("supplementary_data").path("related_ids").path("order_id").asString();
@@ -203,6 +219,7 @@ public class PayPalPaymentService implements VerifiedPaymentProcessor {
         tx.executeWithoutResult(t->{
             if(db.queryForList("SELECT id FROM creator WHERE id=? FOR UPDATE",proof.owner()).size()!=1)throw new IllegalStateException("Capture recovery owner missing");
             var local=db.queryForMap("SELECT * FROM payment_order WHERE id=? AND creator_id=? AND provider=? FOR UPDATE",proof.order(),proof.owner(),provider());
+            legacyBoundary().requireMutable(local);
             proof.assertCurrent(local,merchantId,environment);
             if(!"PAID".equals(local.get("status"))){
                 ledger.credit(proof.owner(),proof.credits(),"payment:"+proof.order());
@@ -240,6 +257,12 @@ public class PayPalPaymentService implements VerifiedPaymentProcessor {
         try{
             var payload=new tools.jackson.databind.ObjectMapper().readTree(event.payload());
             String resource=payload.path("resourceId").asString();
+            if(legacyOrdersReadOnly){
+                // Validate activation even when correlation is absent; never resolve unknown old money by guessing.
+                legacyBoundary().activation();
+                var known=db.queryForList("SELECT * FROM payment_order WHERE provider=? AND (provider_link_id=? OR provider_capture_id=?)",provider(),payload.path("orderId").asString(),resource);
+                for(var local:known)legacyBoundary().requireMutable(local);
+            }
             if("PAYMENT.CAPTURE.COMPLETED".equals(event.type())){
                 String remote=payload.path("orderId").asString();
                 if(remote.isBlank())remote=gateway().retrieveCapture(resource).path("supplementary_data").path("related_ids").path("order_id").asString();
@@ -247,6 +270,7 @@ public class PayPalPaymentService implements VerifiedPaymentProcessor {
                 if(!resource.equals(snapshot.captureId()))throw new IllegalStateException("Capture correlation mismatch");
                 String order=snapshot.reference();
                 var local=db.queryForMap("SELECT * FROM payment_order WHERE id=? AND provider=?",order,provider());
+                legacyBoundary().requireMutable(local);
                 var expected=new HashMap<>(local);expected.put("provider_link_id",snapshot.orderId());check(expected,snapshot);
                 if(local.get("provider_link_id")!=null&&!snapshot.orderId().equals(local.get("provider_link_id")))throw new IllegalStateException("Provider order mismatch");
                 if(fencedMode&&Set.of("REFUNDED","PARTIALLY_REFUNDED","REVERSED").contains(snapshot.captureStatus())){
@@ -315,7 +339,7 @@ public class PayPalPaymentService implements VerifiedPaymentProcessor {
                     orders.add(snapshot.reference());recovered.put(snapshot.reference(),snapshot);
                 }
                 var owners=new TreeSet<String>();
-                for(String order:orders)owners.add(db.queryForObject("SELECT creator_id FROM payment_order WHERE id=? AND provider=?",String.class,order,provider()));
+                for(String order:orders){mutableOrder(order);owners.add(db.queryForObject("SELECT creator_id FROM payment_order WHERE id=? AND provider=?",String.class,order,provider()));}
                 if(fencedMode&&(orders.size()!=1||owners.size()!=1))throw new IllegalStateException("Financial identity must bind one owner and order");
                 var fact=financial;
                 if(fencedMode&&fact==null){
@@ -364,15 +388,21 @@ public class PayPalPaymentService implements VerifiedPaymentProcessor {
                     for(String order:orders)risks.recordVerified(provider(),resource,event.type(),order,event.eventId());
                     if(fencedMode&&fact!=null)PayPalEntitlementAdapter.apply((com.qingfeng.music.infrastructure.persistence.credits.JdbcFencedCreditsLedger)ledger,merchantId,environment,owners.first(),orders.first(),fact,event.type().startsWith("CUSTOMER.DISPUTE."));
                 });
-            }else inbox.complete(event,()->{});
-        }catch(RuntimeException failed){inbox.retry(event);}
+            }else if(legacyOrdersReadOnly)inbox.markManual(event,"LEGACY_CHANNEL_EVENT_CORRELATION_REQUIRED");
+            else inbox.complete(event,()->{});
+        }catch(PaymentLegacyOrderBoundary.ReadOnlyOrder historical){inbox.markManual(event,"LEGACY_ORDER_READ_ONLY");}
+        catch(RuntimeException failed){
+            if(legacyOrdersReadOnly)inbox.markManual(event,"LEGACY_CHANNEL_UNRESOLVED");else inbox.retry(event);
+        }
         return true;
     }
     /** Bounded, read-only provider reconciliation for existing linked orders; never captures or recreates. */
     public void reconcileOrders(){
         if(!ready())return;
-        db.update("UPDATE payment_order SET status='CREATION_UNKNOWN',failure_code='CREATE_PROCESS_INTERRUPTED' WHERE provider=? AND status='CREATING' AND provider_link_id IS NULL AND created_at<TIMESTAMPADD(MINUTE,-5,CURRENT_TIMESTAMP)",provider());
-        var rows=db.queryForList("SELECT id,creator_id FROM payment_order WHERE provider=? AND status IN ('PENDING','CANCELLED') AND provider_link_id IS NOT NULL AND (reconcile_after IS NULL OR reconcile_after<CURRENT_TIMESTAMP) ORDER BY reconcile_after,created_at,id LIMIT 10",provider());
+        var activation=legacyBoundary().activation();String boundary=activation==null?"":" AND created_at>?";
+        Object[] arguments=activation==null?new Object[]{provider()}:new Object[]{provider(),activation};
+        db.update("UPDATE payment_order SET status='CREATION_UNKNOWN',failure_code='CREATE_PROCESS_INTERRUPTED' WHERE provider=? AND status='CREATING' AND provider_link_id IS NULL AND created_at<TIMESTAMPADD(MINUTE,-5,CURRENT_TIMESTAMP)"+boundary,arguments);
+        var rows=db.queryForList("SELECT id,creator_id FROM payment_order WHERE provider=? AND status IN ('PENDING','CANCELLED') AND provider_link_id IS NOT NULL AND (reconcile_after IS NULL OR reconcile_after<CURRENT_TIMESTAMP)"+boundary+" ORDER BY reconcile_after,created_at,id LIMIT 10",arguments);
         for(var row:rows){
             if(db.update("UPDATE payment_order SET reconcile_after=TIMESTAMPADD(MINUTE,5,CURRENT_TIMESTAMP) WHERE id=? AND (reconcile_after IS NULL OR reconcile_after<CURRENT_TIMESTAMP)",row.get("id"))!=1)continue;
             try{order((String)row.get("creator_id"),(String)row.get("id"));}catch(RuntimeException ignored){/* persisted due time permits a later retry */}
@@ -382,7 +412,9 @@ public class PayPalPaymentService implements VerifiedPaymentProcessor {
     /** Detect a missed refund callback for recent paid orders. Disputes still require their verified webhook. */
     private void reconcilePaidCaptures(){
         if(!inboxEnabled||inbox==null)return;
-        var rows=db.queryForList("SELECT id,provider_link_id,provider_capture_id,amount,currency FROM payment_order WHERE provider=? AND status='PAID' AND provider_capture_id IS NOT NULL AND created_at>=TIMESTAMPADD(DAY,-30,CURRENT_TIMESTAMP) AND (reconcile_after IS NULL OR reconcile_after<CURRENT_TIMESTAMP) ORDER BY reconcile_after,created_at,id LIMIT 10",provider());
+        var activation=legacyBoundary().activation();String boundary=activation==null?"":" AND created_at>?";
+        Object[] arguments=activation==null?new Object[]{provider()}:new Object[]{provider(),activation};
+        var rows=db.queryForList("SELECT id,provider_link_id,provider_capture_id,amount,currency FROM payment_order WHERE provider=? AND status='PAID' AND provider_capture_id IS NOT NULL AND created_at>=TIMESTAMPADD(DAY,-30,CURRENT_TIMESTAMP) AND (reconcile_after IS NULL OR reconcile_after<CURRENT_TIMESTAMP)"+boundary+" ORDER BY reconcile_after,created_at,id LIMIT 10",arguments);
         for(var row:rows){
             if(db.update("UPDATE payment_order SET reconcile_after=TIMESTAMPADD(MINUTE,5,CURRENT_TIMESTAMP) WHERE id=? AND provider=? AND status='PAID' AND (reconcile_after IS NULL OR reconcile_after<CURRENT_TIMESTAMP)",row.get("id"),provider())!=1)continue;
             try{

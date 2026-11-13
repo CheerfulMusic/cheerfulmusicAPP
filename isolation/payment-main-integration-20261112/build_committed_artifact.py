@@ -4,7 +4,7 @@ Uses the separately verified frontend dist, checks every byte, and never loads
 runtime credentials or deploys. Test evidence is not replaced by packaging.
 """
 from pathlib import Path
-import datetime, hashlib, importlib.util, io, json, os, shutil, subprocess, sys, zipfile
+import argparse, datetime, hashlib, importlib.util, io, json, os, shutil, subprocess, sys, zipfile
 sys.stdout.reconfigure(encoding='utf-8',errors='backslashreplace')
 WORK=Path(__file__).resolve().parents[2]
 def git(*args):return subprocess.check_output(['git','-C',str(WORK),*args]).decode('utf-8').strip()
@@ -12,10 +12,20 @@ ROOT=Path(git('rev-parse','--path-format=absolute','--git-common-dir')).parent
 assert WORK!=ROOT and not git('status','--porcelain=v1','--untracked-files=all'),'A clean isolated source commit is required'
 COMMIT=git('rev-parse','HEAD')
 BASE=ROOT/'.cache/payment-main-integration-20261112'
-TESTED=BASE/'maven-full-20261113T030731559249Z/tested-production-classes.json'
+parser=argparse.ArgumentParser(description=__doc__)
+parser.add_argument('--full-evidence',required=True)
+parser.add_argument('--frontend-evidence',required=True)
+args=parser.parse_args()
+full_path=(BASE/args.full_evidence).resolve()
+front_path=(BASE/args.frontend_evidence).resolve()
+assert full_path.is_relative_to(BASE.resolve()) and front_path.is_relative_to(BASE.resolve())
+assert full_path.name=='results.json' and front_path.name=='evidence.json'
+full=json.loads(full_path.read_text(encoding='utf-8'))
+assert full['status']=='PASS' and full['exit_code']==0 and full['totals']['failures']==full['totals']['errors']==0
+TESTED=full_path.parent/'tested-production-classes.json'
 tested=json.loads(TESTED.read_text(encoding='utf-8'))
 assert tested['maven_exit_code']==0 and tested['failures']==0 and tested['errors']==0
-FRONT=BASE/'frontend/complete-acceptance-20261113T030939326320Z'
+FRONT=front_path.parent
 receipt=json.loads((FRONT/'evidence.json').read_text(encoding='utf-8'))
 assert receipt['status']=='PASS' and receipt['manifest_version']==2 and receipt['complete_input_inventory']
 assert receipt['inputs_unchanged'] and not receipt['sensitive_environment_loaded'] and not receipt['runtime_env_files_loaded']

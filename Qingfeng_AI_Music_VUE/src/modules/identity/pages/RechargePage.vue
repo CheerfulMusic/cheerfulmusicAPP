@@ -74,12 +74,15 @@ async function refresh() {
     if(b.status==='fulfilled') { musicCost.value=Number.isFinite(b.value.musicCost) && b.value.musicCost > 0 ? b.value.musicCost : null; if(b.value.enabled) balance.value=b.value.balance }
     if(signedIn.value && (paypalAvailable.value||methods.value.some(method => method.enabled))) {
       const endpoints=['app/paypal/orders','app/stripe/orders','app/payments/orders']
-      const histories=await Promise.allSettled(endpoints.map(url=>requestJson<{orders:{orderId:string;status:string}[]}>(url)))
+      const histories=await Promise.allSettled(endpoints.map(url=>requestJson<{orders:{orderId:string;status:string;legacyReadOnly?:boolean}[]}>(url)))
       let hasUnresolved=false, stripePaid=false
       for(let i=0;i<histories.length;i++) {
         const history=histories[i]
         if(history.status==='rejected'){hasUnresolved=true;continue}
         for(const order of history.value.orders.filter(order=>isPendingOrder(order.status as OrderStatus))) {
+          // Only an explicit server-side old-channel isolation decision releases this block.
+          // A new Stripe order still needs its own authoritative status, regardless of other channels.
+          if(endpoints[i]!=='app/stripe/orders' && order.legacyReadOnly===true)continue
           if(endpoints[i]==='app/stripe/orders') {
             try {
               const current=await requestJson<{orderId:string;status:string}>(`app/stripe/orders/${encodeURIComponent(order.orderId)}`)

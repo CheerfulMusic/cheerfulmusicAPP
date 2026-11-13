@@ -213,6 +213,51 @@ class StripeWalletPaymentServiceTest {
         String existingSession=sessionId(order);doThrow(new StripeCheckoutGateway.StripeRemoteException(504)).when(gateway).retrieveSession(existingSession);assertEquals("PENDING",service.order(owner,order).get("status"));verifyNoInteractions(ledger);
     }
 
+    @Test void canaryUsesOnlyTheAuthenticatedOwnerAndKeepsPublicPurchasesClosed(){
+        var chosen=owner();var stranger=owner();
+        ReflectionTestUtils.setField(service,"acceptingNewOrders",false);
+        ReflectionTestUtils.setField(service,"canaryOwnerIds",chosen.id());
+        assertEquals(false,service.catalog().get("enabled"));
+        assertEquals(false,service.catalog(stranger).get("enabled"));
+        assertEquals(true,new StripePaymentController(service).catalog(chosen).get("enabled"));
+        assertEquals(503,assertThrows(ResponseStatusException.class,()->service.create(stranger,"starter-USD","card")).getStatusCode().value());
+        assertEquals(503,assertThrows(ResponseStatusException.class,()->service.create(null,"starter-USD","card")).getStatusCode().value());
+        assertEquals(0,number("SELECT COUNT(*) FROM payment_order"));
+        String id=order(service.create(chosen,"starter-USD","apple_pay"));
+        assertEquals(chosen.id(),stored(id).get("creator_id"));
+        assertEquals(new BigDecimal("9.90"),stored(id).get("amount"));
+        assertEquals(1,creates.size());
+        assertEquals("card",creates.get(0).method());
+    }
+
+    @Test void malformedOrOversizedCanaryListsFailClosedAndNeverContactTheProvider(){
+        var chosen=owner();ReflectionTestUtils.setField(service,"acceptingNewOrders",false);
+        for(String config:List.of("",chosen.id()+",",chosen.id()+",not-a-uuid",chosen.id()+","+UUID.randomUUID()+","+UUID.randomUUID()+","+UUID.randomUUID())){
+            ReflectionTestUtils.setField(service,"canaryOwnerIds",config);
+            assertEquals(false,service.catalog(chosen).get("enabled"));
+            assertEquals(503,assertThrows(ResponseStatusException.class,()->service.create(chosen,"starter-USD","card")).getStatusCode().value());
+        }
+        assertEquals(0,number("SELECT COUNT(*) FROM payment_order"));assertTrue(creates.isEmpty());
+        verify(gateway,never()).verifyNewPurchase(anyString(),anyString());
+        ReflectionTestUtils.setField(service,"canaryOwnerIds",chosen.id());
+        ReflectionTestUtils.setField(service,"enabled",false);
+        assertEquals(false,service.catalog(chosen).get("enabled"));
+        assertEquals(503,assertThrows(ResponseStatusException.class,()->service.create(chosen,"starter-USD","card")).getStatusCode().value());
+    }
+
+    @Test void readOnlyHistoricalPendingOrderIsPreservedWithoutBlockingANewStripeOrder(){
+        var chosen=owner();String old=UUID.randomUUID().toString();
+        db.execute("CREATE TABLE p0_credit_cutover_state(id INT PRIMARY KEY,status VARCHAR(20),activated_at TIMESTAMP(6))");
+        db.execute("INSERT INTO p0_credit_cutover_state VALUES(1,'ACTIVE',TIMESTAMPADD(MINUTE,-1,CURRENT_TIMESTAMP))");
+        db.update("INSERT INTO payment_order(id,creator_id,package_id,amount,currency,credits,status,created_at,provider) VALUES(?,?,'starter-USD',9.90,'USD',100,'PENDING',TIMESTAMPADD(HOUR,-1,CURRENT_TIMESTAMP),'PAYPAL_LIVE')",old,chosen.id());
+        ReflectionTestUtils.setField(service,"legacyOrdersReadOnly",true);
+        String fresh=order(service.create(chosen,"starter-USD","card"));
+        assertEquals("PENDING",stored(old).get("status"));assertNull(stored(old).get("provider_capture_id"));
+        assertEquals(chosen.id(),stored(fresh).get("creator_id"));
+        assertEquals(409,assertThrows(ResponseStatusException.class,()->service.create(chosen,"starter-USD","card")).getStatusCode().value());
+        assertEquals(2,number("SELECT COUNT(*) FROM payment_order"));assertEquals(1,creates.size());
+    }
+
     @Test void cnyRefundUsesOriginalOrderAndExactMinorUnitsWhilePendingOrWrongCurrencyNeverDeduct(){
         var owner=owner();String order=order(service.create(owner,"starter-CNY-wechat_pay","wechat_pay"));fact(order,"complete","paid");service.order(owner,order);clearInvocations(ledger);
         String intent=(String)stored(order).get("provider_capture_id"),refund="re_walletfixture12345678";

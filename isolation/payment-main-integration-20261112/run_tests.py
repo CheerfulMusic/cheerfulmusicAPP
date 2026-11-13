@@ -4,7 +4,7 @@ Credentials live only in ignored local files and child-process environment. This
 never connects to a database itself and never uses the daily 13306 production tunnel.
 """
 from pathlib import Path
-import argparse, datetime, json, os, shutil, subprocess, sys
+import argparse, datetime, hashlib, json, os, shutil, subprocess, sys
 import xml.etree.ElementTree as ET
 sys.stdout.reconfigure(encoding='utf-8',errors='backslashreplace')
 
@@ -23,6 +23,7 @@ parser.add_argument('--legacy40-revision',default='r6')
 parser.add_argument('--core40-revision',default='r9')
 parser.add_argument('--compatibility-port', type=int, default=57326)
 parser.add_argument('--go-live-revision', default='')
+parser.add_argument('--carry-forward-revision', default='')
 args = parser.parse_args()
 WORK=Path(args.workspace).resolve()
 assert WORK!=ROOT and (WORK/'.git').exists(),'Run in an explicit isolated worktree'
@@ -30,6 +31,17 @@ assert args.compatibility_port in (57326,57336)
 stamp = datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')
 folder = OUT / ('maven-' + args.mode + '-' + stamp)
 folder.mkdir(parents=True, exist_ok=False)
+def production_inputs():
+    inputs={}
+    for module in ('qf-common','qf-business','qf-infrastructure','qf-server'):
+        base=WORK/'Qingfeng_AI_Music'/module
+        for directory in ('src/main/java','src/main/resources'):
+            for path in (base/directory).rglob('*'):
+                if path.is_file():inputs[path.relative_to(WORK/'Qingfeng_AI_Music').as_posix()]=path.read_bytes()
+        inputs[module+'/pom.xml']=(base/'pom.xml').read_bytes()
+    inputs['pom.xml']=(WORK/'Qingfeng_AI_Music/pom.xml').read_bytes()
+    return inputs
+inputs_before=production_inputs() if args.mode=='full' else None
 # Maven copies resources but does not remove deleted migration files. Preserve
 # generated reports first, then use a fresh reactor output for every verification.
 for module in ('','qf-common','qf-business','qf-infrastructure','qf-server'):
@@ -68,6 +80,15 @@ if args.go_live_revision:
         assert cfg['database']==database_prefix+args.go_live_revision
         env[prefix+'URL']='jdbc:mysql://127.0.0.1:23316/'+cfg['database']+'?useSSL=false&allowPublicKeyRetrieval=true&connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true'
         env[prefix+'DATABASE']=cfg['database'];env[prefix+'USER']=cfg['user'];env[prefix+'PASSWORD']=cfg['password'];env[prefix+'UUID']=cfg['uuid']
+if args.carry_forward_revision:
+    revision=args.carry_forward_revision
+    assert revision.startswith('r') and revision[1:].isdigit()
+    cfg=json.loads((ROOT/'.cache/payment-go-live-execution-20261113'/('history-db-private-'+revision+'.json')).read_text())
+    assert cfg['host']=='127.0.0.1' and cfg['port']==23316 and cfg['uuid']=='05c27d3c-dda3-11f1-aba0-84a938421519'
+    assert cfg['database']=='p0_historical_cutover_20261113'+revision
+    prefix='P0_CARRY_FORWARD_MYSQL_'
+    env[prefix+'URL']='jdbc:mysql://127.0.0.1:23316/'+cfg['database']+'?useSSL=false&allowPublicKeyRetrieval=true&connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true'
+    for key in ('database','user','password','uuid'):env[prefix+key.upper()]=cfg[key]
 cmd = ['mvn.cmd','-o','-Dmaven.repo.local='+str(ROOT/'.cache/maven'),'clean']
 if args.mode=='compile': cmd += ['-DskipTests','compile']
 elif args.mode=='package':
@@ -88,11 +109,31 @@ for path in (WORK/'Qingfeng_AI_Music').glob('*/target/surefire-reports/TEST-*.xm
     if path.stat().st_mtime < datetime.datetime.strptime(stamp,'%Y%m%dT%H%M%S%fZ').replace(tzinfo=datetime.timezone.utc).timestamp()-2: continue
     element=ET.parse(path).getroot()
     suites.append({'name':element.get('name'),**{key:int(element.get(key,'0')) for key in ('tests','failures','errors','skipped')}})
-summary={'exit_code':result.returncode,'status':'PASS' if result.returncode==0 else 'FAIL',
+exit_code=result.returncode
+if inputs_before is not None and inputs_before!=production_inputs():exit_code=exit_code or 2
+summary={'exit_code':exit_code,'status':'PASS' if exit_code==0 else 'FAIL',
     'totals':{key:sum(s[key] for s in suites) for key in ('tests','failures','errors','skipped')},'suites':suites}
+if inputs_before is not None:
+    summary['production_inputs_unchanged']=inputs_before==production_inputs()
+    if exit_code==0:
+        digest=lambda data:hashlib.sha256(data).hexdigest()
+        java={}
+        for relative,data in sorted(inputs_before.items()):
+            if '/src/main/java/' not in relative or not relative.endswith('.java'):continue
+            path=folder/'java-inputs'/relative;path.parent.mkdir(parents=True,exist_ok=True)
+            with path.open('xb') as output:output.write(data)
+            java[relative]={'bytes':len(data),'sha256':digest(data),'lf_sha256':digest(data.replace(b'\r\n',b'\n'))}
+        (folder/'tested-production-java-inputs.json').write_text(json.dumps({'status':'PASS','test_evidence':str(folder/'results.json'),'files':java},indent=2),encoding='utf-8')
+        classes={}
+        for module in ('qf-common','qf-business','qf-infrastructure','qf-server'):
+            base=WORK/'Qingfeng_AI_Music'/module/'target/classes'
+            for path in base.rglob('*.class'):classes[module+'/'+path.relative_to(base).as_posix()]=digest(path.read_bytes())
+        assert classes and java,'A complete test compile is required'
+        (folder/'tested-production-classes.json').write_text(json.dumps({'maven_exit_code':0,'failures':0,'errors':0,'classes':classes,'test_evidence':str(folder/'results.json')},indent=2),encoding='utf-8')
+        (folder/'tested-production-inputs.json').write_text(json.dumps({relative:{'bytes':len(data),'sha256':digest(data)} for relative,data in sorted(inputs_before.items())},indent=2),encoding='utf-8')
 (folder/'results.json').write_text(json.dumps(summary,indent=2),encoding='utf-8')
 print(json.dumps({'evidence':str(folder/'results.json'),**{k:v for k,v in summary.items() if k!='suites'}}),flush=True)
-if result.returncode:
+if exit_code:
     text=(folder/'maven.log').read_text(encoding='utf-8',errors='replace')
     print('\n'.join(text.splitlines()[-65:]))
-sys.exit(result.returncode)
+sys.exit(exit_code)

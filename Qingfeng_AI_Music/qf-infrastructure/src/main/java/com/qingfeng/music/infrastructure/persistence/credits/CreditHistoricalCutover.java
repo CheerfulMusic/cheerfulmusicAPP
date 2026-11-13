@@ -74,6 +74,123 @@ public final class CreditHistoricalCutover {
     public record Applied(String sourceSha256, String planSha256, int owners, int debitMappings,
                           long journalTotal, boolean replay, String state, String engine) {}
 
+    /** Explicit balance preservation, never an attestation about the funding of old orders. */
+    public static Plan carryForwardPlan(Snapshot source, String evidence) {
+        require(evidence != null && !evidence.isBlank() && evidence.length() <= 128,
+                "CARRY_FORWARD_APPROVAL_REQUIRED");
+        var credits = new HashSet<String>();
+        source.journal().stream().filter(row -> "CREDIT".equals(row.type())).forEach(row -> credits.add(row.reference()));
+        var orders = new HashSet<String>();
+        source.orders().forEach(order -> orders.add(order.id()));
+        Plan strict = dryRun(source, new Approval(credits, orders, evidence));
+        // These facts remain untouched and unknown. No old order is bound to a payment
+        // batch and no historic consumption allocation or cash provenance is invented.
+        Set<String> provenanceOnly = Set.of("PAYMENT_ATTRIBUTION_REQUIRES_VERIFIED_MAPPING",
+                "PAID_ORDER_ATTRIBUTION_REQUIRES_VERIFIED_MAPPING",
+                "HISTORICAL_FINANCIAL_FACTS_REQUIRE_VERIFIED_MAPPING",
+                "HISTORICAL_RISK_FACTS_REQUIRE_VERIFIED_MAPPING");
+        var issues = strict.issues().stream().filter(issue -> !provenanceOnly.contains(issue.code())).toList();
+        var scopedIssues = new ArrayList<>(issues);
+        for (Order order : source.orders()) if (order.createdAt() == null)
+            scopedIssues.add(new Issue("HISTORICAL_ORDER_TIME_MISSING", order.owner(), order.id()));
+        String sha = digest(encode(out -> {
+            field(out, "preserve-existing-balances-new-stripe-only-v1");
+            field(out, source.sha256()); field(out, evidence);
+        }));
+        return new Plan(source, strict.approval(), strict.openings(), strict.debits(), scopedIssues, sha);
+    }
+
+    /** Hashes are verified against external evidence files by the standalone command. */
+    public record OperationalApproval(Identity destination, String sourceSha256, String planSha256,
+            String stoppedWritersSha256, String backupRestoreSha256, String compatibleRollbackSha256,
+            String legacyPaymentBoundarySha256) {
+        public OperationalApproval {
+            Objects.requireNonNull(destination);
+            for (String value : Arrays.asList(sourceSha256, planSha256, stoppedWritersSha256,
+                    backupRestoreSha256, compatibleRollbackSha256, legacyPaymentBoundarySha256))
+                require(value != null && value.matches("[a-f0-9]{64}"), "CARRY_FORWARD_PROOF_REQUIRED");
+        }
+    }
+
+    public Applied applyCarryForward(Plan plan, OperationalApproval approval) {
+        verifyCarryForwardApproval(plan, approval);
+        return apply(plan, plan.sha256(), () -> verifyControlledDestination(approval.destination()));
+    }
+
+    /** Activation is separate from import and requires all four release proofs again. */
+    public Applied activateCarryForward(Plan plan, OperationalApproval approval) {
+        verifyCarryForwardApproval(plan, approval);
+        var write = new TransactionTemplate(transactions.getTransactionManager());
+        write.setIsolationLevel(TransactionDefinition.ISOLATION_SERIALIZABLE);
+        return Objects.requireNonNull(write.execute(status -> {
+            verifyControlledDestination(approval.destination());
+            db.queryForList("SELECT id FROM creator ORDER BY id FOR UPDATE");
+            var policy = db.queryForMap("SELECT epoch,protocol FROM p0_credit_writer_policy WHERE id=1 FOR UPDATE");
+            require(number(policy, "protocol") == 3 && !policy.get("epoch").toString().isBlank(), "WRITER_PROTOCOL_MISMATCH");
+            var state = db.queryForMap("SELECT status,evidence,activated_at FROM p0_credit_cutover_state WHERE id=1 FOR UPDATE");
+            String evidence = "history:" + plan.source().sha256();
+            require(evidence.equals(state.get("evidence")), "HISTORY_ACTIVATION_EVIDENCE_MISMATCH");
+            require(plan.source().sha256().equals(readSnapshot(true).sha256()), "HISTORY_SOURCE_DRIFT");
+            for (String table : EMPTY_FINANCIAL_TABLES)
+                require(count("SELECT COUNT(*) FROM " + table) == 0, "EXISTING_FINANCIAL_FACTS_BLOCK_ACTIVATION");
+            verifyProjection(plan, evidence);
+            Timestamp activation = db.queryForObject("SELECT CURRENT_TIMESTAMP(6)", Timestamp.class);
+            require(activation != null && plan.source().orders().stream().allMatch(order -> order.createdAt() != null
+                    && order.createdAt().isBefore(activation.toInstant())), "HISTORY_ORDER_TIME_BOUNDARY_NOT_STRICT");
+            boolean replay = "ACTIVE".equals(state.get("status"));
+            if (replay) require(state.get("activated_at") != null, "HISTORY_ACTIVE_WITHOUT_TIMESTAMP");
+            else require(db.update("UPDATE p0_credit_cutover_state SET status='ACTIVE',activated_at=CURRENT_TIMESTAMP(6) WHERE id=1 AND status='PREPARING' AND evidence=? AND activated_at IS NULL", evidence) == 1,
+                    "HISTORY_ACTIVATION_STATE_CONFLICT");
+            long total = 0; for (Opening opening : plan.openings()) total = Math.addExact(total, opening.remaining());
+            return new Applied(plan.source().sha256(), plan.sha256(), plan.openings().size(), plan.debits().size(),
+                    total, replay, "ACTIVE", plan.source().identity().engine());
+        }));
+    }
+
+    /** Pre-start verification. Once new writes begin the old source hash must no longer be replayed. */
+    public Applied verifyCarryForward(Plan plan, OperationalApproval approval) {
+        verifyCarryForwardApproval(plan, approval);
+        var read = new TransactionTemplate(transactions.getTransactionManager());
+        read.setReadOnly(true);
+        read.setIsolationLevel(TransactionDefinition.ISOLATION_REPEATABLE_READ);
+        return Objects.requireNonNull(read.execute(status -> {
+            verifyControlledDestination(approval.destination());
+            require(plan.source().sha256().equals(readSnapshot(false).sha256()), "HISTORY_SOURCE_DRIFT");
+            var policy = db.queryForMap("SELECT epoch,protocol FROM p0_credit_writer_policy WHERE id=1");
+            require(number(policy, "protocol") == 3 && !policy.get("epoch").toString().isBlank(), "WRITER_PROTOCOL_MISMATCH");
+            var state = db.queryForMap("SELECT status,evidence,activated_at FROM p0_credit_cutover_state WHERE id=1");
+            String evidence = "history:" + plan.source().sha256();
+            require("ACTIVE".equals(state.get("status")) && state.get("activated_at") != null
+                    && evidence.equals(state.get("evidence")), "HISTORY_CUTOVER_NOT_ACTIVE");
+            verifyProjection(plan, evidence);
+            long total = 0; for (Opening opening : plan.openings()) total = Math.addExact(total, opening.remaining());
+            return new Applied(plan.source().sha256(), plan.sha256(), plan.openings().size(), plan.debits().size(), total,
+                    true, "ACTIVE", plan.source().identity().engine());
+        }));
+    }
+
+    private void verifyCarryForwardApproval(Plan plan, OperationalApproval approval) {
+        require(plan.ready() && plan.equals(carryForwardPlan(plan.source(), plan.approval().evidence())), "INVALID_OR_BLOCKED_CARRY_FORWARD_PLAN");
+        require(plan.source().identity().equals(approval.destination())
+                && plan.source().sha256().equals(approval.sourceSha256())
+                && plan.sha256().equals(approval.planSha256()), "CARRY_FORWARD_APPROVAL_MISMATCH");
+    }
+
+    private void verifyControlledDestination(Identity expected) {
+        Identity actual = identity();
+        require(actual.equals(expected) && "MySQL".equals(actual.engine()) && "8.0.46".equals(actual.version()),
+                "CARRY_FORWARD_DATABASE_IDENTITY_CHANGED");
+        if ("f71f7437-d6a8-11f1-baa2-00163e1ce234".equals(actual.serverUuid()))
+            require(actual.port() == 3306 && "qingfeng_music".equals(actual.database()), "CARRY_FORWARD_PRODUCTION_IDENTITY_MISMATCH");
+        else verifyIsolatedDestination(expected);
+        // An account without PROCESS only sees its own sessions. This is an
+        // additional same-account guard, NOT proof that all other accounts are
+        // absent. The command also requires a fresh privileged global observer
+        // receipt before every apply/activate/verify operation.
+        require(count("SELECT COUNT(*) FROM information_schema.PROCESSLIST WHERE ID<>CONNECTION_ID() AND (DB=DATABASE() OR USER=SUBSTRING_INDEX(CURRENT_USER(),'@',1))") == 0,
+                "CARRY_FORWARD_OTHER_DATABASE_CONNECTIONS_PRESENT");
+    }
+
     /** SELECT-only consistent snapshot. Credentials, personal details and event payloads are never read. */
     public Snapshot inventory() {
         var read = new TransactionTemplate(transactions.getTransactionManager());
@@ -182,10 +299,15 @@ public final class CreditHistoricalCutover {
     public Applied applyIsolated(Plan plan, String approvedPlanSha256) {
         require(plan.ready() && plan.equals(dryRun(plan.source(), plan.approval())), "INVALID_OR_BLOCKED_HISTORY_PLAN");
         require(plan.sha256().equals(approvedPlanSha256), "HISTORY_PLAN_APPROVAL_MISMATCH");
+        return apply(plan, approvedPlanSha256, () -> verifyIsolatedDestination(plan.source().identity()));
+    }
+
+    private Applied apply(Plan plan, String approvedPlanSha256, Runnable destinationGuard) {
+        require(plan.sha256().equals(approvedPlanSha256), "HISTORY_PLAN_APPROVAL_MISMATCH");
         var write = new TransactionTemplate(transactions.getTransactionManager());
         write.setIsolationLevel(TransactionDefinition.ISOLATION_SERIALIZABLE);
         return Objects.requireNonNull(write.execute(status -> {
-            verifyIsolatedDestination(plan.source().identity());
+            destinationGuard.run();
             db.queryForList("SELECT id FROM creator ORDER BY id FOR UPDATE");
             var policy = db.queryForMap("SELECT epoch,protocol FROM p0_credit_writer_policy WHERE id=1 FOR UPDATE");
             require(((Number) policy.get("protocol")).intValue() == 3 && !policy.get("epoch").toString().isBlank(), "WRITER_PROTOCOL_MISMATCH");
@@ -200,6 +322,8 @@ public final class CreditHistoricalCutover {
                 require(count("SELECT COUNT(*) FROM " + table) == 0, "EXISTING_FINANCIAL_FACTS_BLOCK_IMPORT");
             Timestamp boundary = db.queryForObject("SELECT CURRENT_TIMESTAMP(6)", Timestamp.class);
             require(boundary != null && current.journal().stream().allMatch(row -> row.createdAt().isBefore(boundary.toInstant())), "HISTORY_TIME_BOUNDARY_NOT_STRICT");
+            require(current.orders().stream().allMatch(order -> order.createdAt() != null
+                    && order.createdAt().isBefore(boundary.toInstant())), "HISTORY_ORDER_TIME_BOUNDARY_NOT_STRICT");
             if (!replay) {
                 require(count("SELECT COUNT(*) FROM p0_credit_batch") == 0 && count("SELECT COUNT(*) FROM p0_legacy_debit_mapping") == 0,
                         "PARTIAL_HISTORY_IMPORT_REQUIRES_REVIEW");
