@@ -107,6 +107,11 @@ class IntegratedPaymentApplicationMySqlTest {
         db.update("INSERT INTO p0_legacy_debit_mapping VALUES('synthetic-legacy-debit',?,25,0,'UNKNOWN')",legacyOwner);
         assertEquals(75,number("SELECT SUM(amount) FROM credit_ledger"));assertEquals(75,number("SELECT SUM(original-consumed-adjusted) FROM p0_credit_batch"));
         assertEquals(1,db.update("UPDATE p0_credit_cutover_state SET status='ACTIVE',activated_at=CURRENT_TIMESTAMP,evidence='SYNTHETIC_APPLICATION_MAPPING_NO_PRODUCTION_DATA' WHERE id=1 AND status='PREPARING'"));
+        // Main now includes durable Agent chat packs. Preserve the V45 financial assertions
+        // above, then install the real additive V46 before starting the current application.
+        Flyway.configure().dataSource(source).locations("classpath:db/migration").cleanDisabled(true).target("46").load().migrate();
+        assertEquals(1,number("SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='agent_chat_allowance'"));
+        assertEquals(1,number("SELECT COUNT(*) FROM flyway_schema_history WHERE version='46' AND success=1"));
         CreditSchemaReadiness.requireActive(db);settings=configuration();start();
     }
     static void assertHistory(JsonNode expected){var row=db.queryForMap("SELECT script,checksum,success FROM flyway_schema_history WHERE version=?",expected.path("version").asString());assertEquals(expected.path("script").asString(),row.get("script"));assertEquals(expected.path("checksum").asInt(),((Number)row.get("checksum")).intValue());assertTrue(Boolean.TRUE.equals(row.get("success"))||row.get("success") instanceof Number n&&n.intValue()==1);}
@@ -165,6 +170,14 @@ class IntegratedPaymentApplicationMySqlTest {
                 assertEquals("wechat_pay",StripePaymentMethods.checkoutMethodForStoredOffer((String)stored.get("package_id")));assertEquals(amount,stored.get("amount"));assertEquals(currency,stored.get("currency"));
                 String session="cs_test_"+unique();var fact=walletSession(session,order,amount,currency,false);SESSIONS.put(session,fact);return fact;
             }).when(gateway).createSession(anyString(),anyString(),any(),anyString(),anyString());
+            doAnswer(call->{
+                String id=call.getArgument(0);
+                return SESSIONS.compute(id,(key,fact)->{
+                    if(fact==null)throw new AssertionError("Unknown cancellation fixture; external calls forbidden");
+                    if(!"open".equals(fact.path("status").asString()))throw new StripeCheckoutGateway.StripeRemoteException(400);
+                    var expired=(tools.jackson.databind.node.ObjectNode)fact.deepCopy();expired.put("status","expired");return expired;
+                });
+            }).when(gateway).expireSession(anyString());
             doAnswer(call->known(SESSIONS,call.getArgument(0))).when(gateway).retrieveSession(anyString());doAnswer(call->known(REFUNDS,call.getArgument(0))).when(gateway).retrieveRefund(anyString());doAnswer(call->known(DISPUTES,call.getArgument(0))).when(gateway).retrieveDispute(anyString());doAnswer(call->known(CHARGES,call.getArgument(0))).when(gateway).retrieveCharge(anyString());doAnswer(call->known(BALANCES,call.getArgument(0))).when(gateway).retrieveBalanceTransaction(anyString());
             doThrow(new AssertionError("Unexpected external refund-list query")).when(gateway).refundsForCharge(anyString());doThrow(new AssertionError("Unexpected external dispute-list query")).when(gateway).disputesForCharge(anyString());return gateway;
         }
@@ -214,7 +227,7 @@ class IntegratedPaymentApplicationMySqlTest {
     }
 
     @Test @Order(1) void actualCore40AndIntegration41FullApplicationUseOnlyTheProvenIsolatedDatabase() throws Exception {
-        assertEquals(database,db.queryForObject("SELECT DATABASE()",String.class));assertEquals(45,number("SELECT COUNT(*) FROM flyway_schema_history WHERE success=1 AND version IS NOT NULL"));assertEquals(3,number("SELECT protocol FROM p0_credit_writer_policy WHERE id=1"));assertEquals(75,ledger.balance(legacyOwner));assertEquals(25,number("SELECT amount FROM p0_legacy_debit_mapping WHERE reference='synthetic-legacy-debit'"));
+        assertEquals(database,db.queryForObject("SELECT DATABASE()",String.class));assertEquals(46,number("SELECT COUNT(*) FROM flyway_schema_history WHERE success=1 AND version IS NOT NULL"));assertEquals(3,number("SELECT protocol FROM p0_credit_writer_policy WHERE id=1"));assertEquals(75,ledger.balance(legacyOwner));assertEquals(25,number("SELECT amount FROM p0_legacy_debit_mapping WHERE reference='synthetic-legacy-debit'"));
         assertEquals("V42__shared_download_entitlement.sql",db.queryForObject("SELECT script FROM flyway_schema_history WHERE version='42'",String.class));assertEquals(-500011050,number("SELECT checksum FROM flyway_schema_history WHERE version='42'"));assertEquals(-2125061473,number("SELECT checksum FROM flyway_schema_history WHERE version='45'"));assertEquals(0,number("SELECT COUNT(*) FROM shared_download_entitlement"));
         assertInstanceOf(JdbcFencedCreditsLedger.class,ledger);assertNotNull(application.getBean(PaymentInbox.class));assertNotNull(application.getBean(JdbcUsageBudget.class));assertTrue(application.getBeansOfType(PaymentInboxRunner.class).isEmpty());assertTrue(CreditSchemaReadiness.ready(db));
         var prices=application.getBean(CreditsPricing.class);assertEquals(5,prices.cost(CreditsPricing.Kind.MUSIC));assertEquals(1,prices.cost(CreditsPricing.Kind.LYRICS));assertEquals(1,prices.cost(CreditsPricing.Kind.REWRITE));assertEquals(5,prices.freePerDay(CreditsPricing.Kind.REWRITE));
@@ -275,7 +288,7 @@ class IntegratedPaymentApplicationMySqlTest {
         assertEquals(0,number("SELECT COUNT(*) FROM p0_credit_refund_return WHERE order_id=?",p.order()));
         var before=application;application.close();start();assertNotSame(before,application);assertEquals(80,ledger.balance(p.owner().creatorId()));
         assertEquals("PAID",db.queryForObject("SELECT status FROM payment_order WHERE id=?",String.class,p.order()));
-        assertEquals(45,number("SELECT COUNT(*) FROM flyway_schema_history WHERE success=1 AND version IS NOT NULL"));
+        assertEquals(46,number("SELECT COUNT(*) FROM flyway_schema_history WHERE success=1 AND version IS NOT NULL"));
         REFUNDS.put(refund,proven);assertEquals("pending",BALANCES.get(credit).path("status").asString());
         due(event);drain();assertEquals(100,ledger.balance(p.owner().creatorId()));
         assertEquals("DONE",db.queryForObject("SELECT status FROM payment_webhook_inbox WHERE event_id=?",String.class,event));
@@ -414,12 +427,12 @@ class IntegratedPaymentApplicationMySqlTest {
         snapshot.put("journal_sum",db.queryForObject("SELECT COALESCE(SUM(amount),0) FROM credit_ledger",BigDecimal.class).toPlainString());snapshot.put("account_sum",db.queryForObject("SELECT COALESCE(SUM(balance),0) FROM credit_account",BigDecimal.class).toPlainString());snapshot.put("batch_projection",db.queryForObject("SELECT COALESCE(SUM(CAST(original AS DECIMAL(65,0))-consumed-adjusted),0) FROM p0_credit_batch",BigDecimal.class).toPlainString());return snapshot;
     }
     @Test @Order(19) void installedActive41RejectsAFalseWriterBeforeReadyAndLeavesEveryFinancialFactUnchanged(){
-        assertTrue(application.isActive());assertInstanceOf(JdbcFencedCreditsLedger.class,ledger);assertEquals(45,number("SELECT COUNT(*) FROM flyway_schema_history WHERE success=1 AND version IS NOT NULL"));var before=exactFinancialSnapshot();
+        assertTrue(application.isActive());assertInstanceOf(JdbcFencedCreditsLedger.class,ledger);assertEquals(46,number("SELECT COUNT(*) FROM flyway_schema_history WHERE success=1 AND version IS NOT NULL"));var before=exactFinancialSnapshot();
         var attempted=new LinkedHashMap<>(settings);attempted.put("qingfeng.credits.writer-fence.enabled",false);var environment=new StandardEnvironment();environment.getPropertySources().remove(StandardEnvironment.SYSTEM_ENVIRONMENT_PROPERTY_SOURCE_NAME);environment.getPropertySources().remove(StandardEnvironment.SYSTEM_PROPERTIES_PROPERTY_SOURCE_NAME);environment.getPropertySources().addFirst(new MapPropertySource("isolated-rejected-legacy-writer-only",attempted));
         var ready=new java.util.concurrent.atomic.AtomicBoolean();
         var rejected=new SpringApplicationBuilder(MusicApplication.class,OfflineGateways.class).environment(environment).profiles("mysql").web(WebApplicationType.SERVLET).logStartupInfo(false).listeners((org.springframework.context.ApplicationListener<org.springframework.boot.context.event.ApplicationReadyEvent>)event->ready.set(true)).initializers(context->context.getBeanFactory().registerSingleton("acceptanceOnlyTestConfigurationFilter",new AcceptanceOnlyTestFilter()));
         RuntimeException failure=assertThrows(RuntimeException.class,()->{try(var unsafe=rejected.run()){fail("Installed V41 must never start a legacy credit writer");}});boolean rejectedByWriterGate=false;for(Throwable cause=failure;cause!=null;cause=cause.getCause())if(cause.getMessage()!=null&&(cause.getMessage().contains("Entitlement schema installed: a legacy credit writer cannot start")||cause.getMessage().contains("A legacy credit writer cannot automatically apply financial V45. Financial V45 requires separately approved migration, historical mapping and activation before application startup")))rejectedByWriterGate=true;
-        assertTrue(rejectedByWriterGate,"An unrelated configuration/provider exception is not evidence of a writer gate");assertFalse(ready.get());assertTrue(application.isActive());assertSame(ledger,application.getBean(CreditsLedger.class));assertEquals(before,exactFinancialSnapshot());assertEquals(45,number("SELECT COUNT(*) FROM flyway_schema_history WHERE success=1 AND version IS NOT NULL"));
+        assertTrue(rejectedByWriterGate,"An unrelated configuration/provider exception is not evidence of a writer gate");assertFalse(ready.get());assertTrue(application.isActive());assertSame(ledger,application.getBean(CreditsLedger.class));assertEquals(before,exactFinancialSnapshot());assertEquals(46,number("SELECT COUNT(*) FROM flyway_schema_history WHERE success=1 AND version IS NOT NULL"));
         for(String owner:OWNERS)assertEquals(number("SELECT COALESCE(SUM(amount),0) FROM credit_ledger WHERE owner_id=?",owner),ledger.balance(owner));
     }
 
@@ -576,7 +589,7 @@ class IntegratedPaymentApplicationMySqlTest {
         assertEquals(119,ledger.balance(user.creatorId()));assertEquals(20,held(a));
         assertEquals(0,number("SELECT COUNT(*) FROM p0_credit_allocation WHERE debit_reference=? AND batch_reference=?",agentDebit(ticket),"payment:"+a.order()));
         assertEquals(1,number("SELECT amount FROM p0_credit_allocation WHERE debit_reference=? AND batch_reference=?",agentDebit(ticket),"payment:"+b.order()));
-        admission.start(ticket);admission.finish(ticket,true);ledger.debit(user.creatorId(),99,"synthetic-agent-empty-b:"+unique());
+        admission.start(ticket);admission.finish(ticket,true);consumeAlreadyPurchasedAgentPack(user,conversation);ledger.debit(user.creatorId(),99,"synthetic-agent-empty-b:"+unique());
         String key=UUID.randomUUID().toString();
         assertEquals("INSUFFICIENT_CREDITS",assertThrows(DomainException.class,()->admission.acquire(user.creatorId(),conversation,key,"synthetic frozen chat",null,true)).code());
         assertEquals(20,ledger.balance(user.creatorId()));assertEquals(0,number("SELECT COUNT(*) FROM agent_request_admission WHERE conversation_id=? AND request_key=?",conversation,key));
@@ -727,8 +740,50 @@ class IntegratedPaymentApplicationMySqlTest {
         assertEquals(1,number("SELECT COUNT(*) FROM credit_ledger WHERE owner_id=? AND entry_type='DEBIT' AND reference_id=?",customer.creatorId(),agentDebit(ticket)));
         agentAdmission().start(ticket);agentAdmission().finish(ticket,true);
 
+        consumeAlreadyPurchasedAgentPack(customer,conversation);
         dispute(b,"dp_"+unique(),"under_review",List.of());assertEquals(20,held(a));assertEquals(99,held(b));assertEquals(119,ledger.balance(customer.creatorId()));
         assertPaidAgentDeniedWithoutFinancialOrAdmissionMutation(customer,conversation,UUID.randomUUID().toString(),"synthetic paid fully frozen boundary");
         assertEquals(119,ledger.balance(customer.creatorId()));assertEquals(20,held(a));assertEquals(99,held(b));
     }
+    private static void consumeAlreadyPurchasedAgentPack(IdentityApi.Session customer,String conversation) {
+        // V46 buys five turns for one credit. Exhaust the four prepaid turns through
+        // the real service before testing whether a NEW credit charge is refused.
+        assertEquals(4,number("SELECT remaining_turns FROM agent_chat_allowance WHERE creator_id=?",customer.creatorId()));
+        long before=ledger.balance(customer.creatorId());
+        long entries=number("SELECT COUNT(*) FROM credit_ledger WHERE owner_id=?",customer.creatorId());
+        for(int i=0;i<4;i++) {
+            var ticket=agentAdmission().acquire(customer.creatorId(),conversation,UUID.randomUUID().toString(),"synthetic existing prepaid turn "+i,null,true);
+            agentAdmission().start(ticket);agentAdmission().finish(ticket,true);
+            assertEquals(before,ledger.balance(customer.creatorId()));
+            assertEquals(entries,number("SELECT COUNT(*) FROM credit_ledger WHERE owner_id=?",customer.creatorId()));
+            assertEquals(3-i,number("SELECT remaining_turns FROM agent_chat_allowance WHERE creator_id=?",customer.creatorId()));
+        }
+    }
+
+    @Test @Order(32) void cancelledCheckoutUsesAuthenticatedHttpAndConcurrentMySqlTransactionsWithoutLosingLatePayment() throws Exception {
+        var buyer=owner();var p=pending(buyer);String path="/api/app/stripe/orders/"+p.order()+"/cancel";
+        var stranger=owner();assertEquals(404,business(stranger,path,"POST","{}").statusCode());
+        assertEquals("open",SESSIONS.get(p.session()).path("status").asString());
+        var pool=Executors.newFixedThreadPool(4);var start=new CountDownLatch(1);
+        try {
+            var futures=new ArrayList<Future<HttpResponse<String>>>();
+            for(int i=0;i<8;i++)futures.add(pool.submit(()->{awaitDownload(start);return business(buyer,path,"POST","{}");}));
+            start.countDown();
+            for(var future:futures){var response=future.get(30,TimeUnit.SECONDS);assertEquals(200,response.statusCode(),response.body());assertEquals("CANCELLED",JSON.readTree(response.body()).path("status").asString());}
+        } finally {start.countDown();pool.shutdownNow();assertTrue(pool.awaitTermination(15,TimeUnit.SECONDS));}
+        assertEquals("expired",SESSIONS.get(p.session()).path("status").asString());
+        assertEquals("CANCELLED",db.queryForObject("SELECT status FROM payment_order WHERE id=?",String.class,p.order()));
+        assertEquals(0,number("SELECT COUNT(*) FROM credit_ledger WHERE reference_id=?","payment:"+p.order()));
+        assertEquals(0,ledger.balance(buyer.creatorId()));
+        // A verified late successful payment must never be discarded because of a local terminal label.
+        SESSIONS.put(p.session(),session(p.session(),p.order(),true));
+        accepted("checkout.session.completed",p.session(),"evt_"+unique());drain();
+        accepted("checkout.session.completed",p.session(),"evt_"+unique());drain();
+        assertEquals("PAID",JSON.readTree(business(buyer,path,"POST","{}").body()).path("status").asString());
+        assertEquals(100,ledger.balance(buyer.creatorId()));
+        assertEquals(1,number("SELECT COUNT(*) FROM credit_ledger WHERE reference_id=? AND entry_type='CREDIT'","payment:"+p.order()));
+        assertEquals(100,number("SELECT SUM(amount) FROM credit_ledger WHERE owner_id=?",buyer.creatorId()));
+        assertEquals(1,number("SELECT COUNT(*) FROM p0_credit_batch WHERE reference=?","payment:"+p.order()));
+    }
+
 }

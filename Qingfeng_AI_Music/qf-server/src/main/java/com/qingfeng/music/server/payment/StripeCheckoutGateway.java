@@ -130,6 +130,11 @@ public final class StripeCheckoutGateway {
         return fields;
     }
 
+    public JsonNode expireSession(String sessionId) {
+        verifyAccount();
+        return post("/checkout/sessions/" + safeId(sessionId) + "/expire", Map.of(), "expire-session:" + sessionId);
+    }
+
     public JsonNode retrieveSession(String sessionId) {
         verifyAccount();
         return get("/checkout/sessions/" + safeId(sessionId), "expand%5B%5D=payment_intent");

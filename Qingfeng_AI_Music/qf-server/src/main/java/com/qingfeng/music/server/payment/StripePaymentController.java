@@ -32,6 +32,9 @@ public class StripePaymentController {
     @PostMapping("/api/app/stripe/orders/{id}/resume")
     public Map<String,Object> resume(@AuthenticationPrincipal CreatorPrincipal creator,@PathVariable String id) { return payments.resume(creator,id); }
 
+    @PostMapping("/api/app/stripe/orders/{id}/cancel")
+    public Map<String,Object> cancel(@AuthenticationPrincipal CreatorPrincipal creator,@PathVariable String id) { return payments.cancel(creator,id); }
+
     @PostMapping("/api/public/stripe/webhook")
     public Map<String,Object> webhook(@RequestHeader(value="Stripe-Signature",required=false) String signature,@RequestBody byte[] rawBody) {
         return payments.webhook(signature,rawBody);
