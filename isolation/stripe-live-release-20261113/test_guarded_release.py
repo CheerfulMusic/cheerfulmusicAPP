@@ -980,5 +980,26 @@ class ObservedProductionSyntaxContract(unittest.TestCase):
         self.assertEqual(('MAILTO=root\n'+other+'\n'+release.MEDIA_PAUSE_MARKER+release.MEDIA_ENTRY+'\n').encode(),actual)
 
 
+class NativeDumpCompatibilityContract(unittest.TestCase):
+    def test_backup_invokes_supported_dump_options_and_keeps_process_timeout(self):
+        with tempfile.TemporaryDirectory() as d, contextlib.ExitStack() as stack:
+            out=Path(d)/'backup'
+            for name in ('check_release','check_build_receipt','current_matches','stop_units'):
+                stack.enter_context(mock.patch.object(release,name))
+            stack.enter_context(mock.patch.object(release,'property_map',return_value={'spring.datasource.url':'jdbc:mysql://127.0.0.1:3306/qingfeng_music'}))
+            stack.enter_context(mock.patch.object(release,'root_observation',return_value={'uuid':release.UUID,'schema':release.DATABASE,'port':3306}))
+            stack.enter_context(mock.patch.object(release,'source_objects',return_value={}))
+            dump=stack.enter_context(mock.patch.object(release.subprocess,'run',return_value=mock.Mock(returncode=7)))
+            with self.assertRaisesRegex(release.Blocked,'DATABASE_DUMP_FAILED'):
+                release.backup({'expected':{}},out)
+            args=dump.call_args.args[0]
+            self.assertEqual('mysqldump',args[0])
+            self.assertNotIn('--connect-timeout=5',args)
+            self.assertIn('--single-transaction',args)
+            self.assertIn('--set-gtid-purged=OFF',args)
+            self.assertEqual(300,dump.call_args.kwargs['timeout'])
+            self.assertFalse((out/'backup-receipt.json').exists())
+
+
 if __name__ == '__main__':
     unittest.main()
