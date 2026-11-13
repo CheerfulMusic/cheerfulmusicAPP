@@ -11,7 +11,9 @@ public final class CreditSchemaReadiness {
     public record Check(String sql, int expected) {}
     public static final int V41_CHECKSUM = -340729157;
     public static final Map<String, Check> CHECKS = checks();
-    public static final String INSTALLED_SQL = "SELECT (SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME IN ('p0_credit_writer_policy','p0_credit_cutover_state','p0_credit_batch','p0_credit_allocation','p0_credit_payment_binding','p0_credit_refund','p0_credit_dispute','p0_credit_return','p0_credit_financial_audit','p0_legacy_debit_mapping','p0_credit_recovery','p0_credit_recovery_audit','p0_credit_recovery_approval','p0_credit_refund_terminal','p0_credit_refund_return','p0_stripe_dispute_proof','p0_credit_native_identity')) + (SELECT COUNT(*) FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA=DATABASE() AND TRIGGER_NAME IN ('p0_credit_ledger_insert_fence','p0_credit_ledger_update_fence','p0_credit_ledger_delete_fence'))";
+    public static final Map<String, Check> CORE40_CHECKS = core40Checks();
+    public static final String INSTALLED_SQL = "SELECT (SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND LEFT(TABLE_NAME,3)='p0_') + (SELECT COUNT(*) FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA=DATABASE() AND LEFT(TRIGGER_NAME,3)='p0_')";
+    public static final String INSTALLED_HISTORY_SQL = "SELECT COUNT(*) FROM flyway_schema_history WHERE version='41' OR (version='40' AND script='V40__credit_entitlement_integration.sql')";
     private static Map<String, Check> checks() {
         var checks = new LinkedHashMap<String, Check>();
         checks.put("v41_only_once", new Check("SELECT COUNT(*) FROM flyway_schema_history WHERE version='41'", 1));
@@ -43,6 +45,30 @@ public final class CreditSchemaReadiness {
         return Collections.unmodifiableMap(checks);
     }
 
+    private static Map<String, Check> core40Checks() {
+        var checks = new LinkedHashMap<String, Check>();
+        for (String key : new String[]{"core34_exact_history", "core40_download_prerequisites",
+                "canonical_financial_tables", "core_account_columns", "core_creator_risk_flag",
+                "core_account_primary_key", "core_account_owner_foreign_key", "core_journal_columns",
+                "core_journal_primary_key", "core_provider_link_unique", "core_provider_capture_unique",
+                "legacy_global_provider_keys_absent"})
+            checks.put(key, CHECKS.get(key));
+        checks.put("core34_only_once", new Check("SELECT COUNT(*) FROM flyway_schema_history WHERE version='34'", 1));
+        checks.put("core40_inbox_primary_key", new Check("SELECT COUNT(*) FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='payment_webhook_inbox' AND INDEX_NAME='PRIMARY' AND NON_UNIQUE=0 AND SUB_PART IS NULL AND ((SEQ_IN_INDEX=1 AND COLUMN_NAME='provider') OR (SEQ_IN_INDEX=2 AND COLUMN_NAME='event_id')) AND (SELECT COUNT(*) FROM information_schema.STATISTICS s WHERE s.TABLE_SCHEMA=DATABASE() AND s.TABLE_NAME='payment_webhook_inbox' AND s.INDEX_NAME='PRIMARY')=2", 2));
+        checks.put("core40_inbox_scopes_absent", new Check("SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='payment_webhook_inbox' AND COLUMN_NAME IN ('merchant_scope','env_scope')", 0));
+        checks.put("core40_entitlement_audits_absent", new Check("SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME IN ('payment_inbox_review','payment_inbox_attempt')", 0));
+        return Collections.unmodifiableMap(checks);
+    }
+
+    /** Verified unchanged core writer, only before any entitlement installation. */
+    public static void requireCore40Ready(JdbcTemplate db) {
+        for (var entry : CORE40_CHECKS.entrySet()) {
+            Integer actual = db.queryForObject(entry.getValue().sql(), Integer.class);
+            if (actual == null || actual.intValue() != entry.getValue().expected())
+                throw new IllegalStateException("Core40 credit schema prerequisite failed: " + entry.getKey());
+        }
+    }
+
     public static boolean ready(JdbcTemplate db) {
         try { requireActive(db); return true; }
         catch (RuntimeException incomplete) { return false; }
@@ -61,7 +87,7 @@ public final class CreditSchemaReadiness {
         Integer objects = db.queryForObject(INSTALLED_SQL, Integer.class);
         if (objects == null) throw new IllegalStateException("Credit schema installation status is unknown");
         if (objects > 0) return true;
-        Integer history = db.queryForObject("SELECT COUNT(*) FROM flyway_schema_history WHERE version='41' OR (version='40' AND script='V40__credit_entitlement_integration.sql')", Integer.class);
+        Integer history = db.queryForObject(INSTALLED_HISTORY_SQL, Integer.class);
         if (history == null) throw new IllegalStateException("Credit migration history status is unknown");
         return history > 0;
     }

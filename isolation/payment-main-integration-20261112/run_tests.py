@@ -4,7 +4,7 @@ Credentials live only in ignored local files and child-process environment. This
 never connects to a database itself and never uses the daily 13306 production tunnel.
 """
 from pathlib import Path
-import argparse, datetime, json, os, subprocess, sys
+import argparse, datetime, json, os, shutil, subprocess, sys
 import xml.etree.ElementTree as ET
 sys.stdout.reconfigure(encoding='utf-8',errors='backslashreplace')
 
@@ -19,6 +19,8 @@ parser.add_argument('--tests', default='')
 parser.add_argument('--migration-revision', default='r1')
 parser.add_argument('--credits-revision', default='r1')
 parser.add_argument('--application-revision', default='r1')
+parser.add_argument('--legacy40-revision',default='r6')
+parser.add_argument('--core40-revision',default='r9')
 parser.add_argument('--compatibility-port', type=int, default=57326)
 args = parser.parse_args()
 WORK=Path(args.workspace).resolve()
@@ -27,25 +29,35 @@ assert args.compatibility_port == 57326
 stamp = datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')
 folder = OUT / ('maven-' + args.mode + '-' + stamp)
 folder.mkdir(parents=True, exist_ok=False)
-blocked = ('SECRET','TOKEN','PASSWORD','KEY','CREDENTIAL','CONFIG','DATABASE','CONNECTION','DSN','INVITE_GATE','PAYPAL','STRIPE','MYSQL','SPRING_',
+# Maven copies resources but does not remove deleted migration files. Preserve
+# generated reports first, then use a fresh reactor output for every verification.
+for module in ('','qf-common','qf-business','qf-infrastructure','qf-server'):
+    target=(WORK/'Qingfeng_AI_Music'/module/'target').resolve()
+    assert target.is_relative_to(WORK) and target.name=='target'
+    reports=target/'surefire-reports'
+    if reports.is_dir():shutil.copytree(reports,folder/'previous-reports'/(module or 'parent'))
+blocked = ('SECRET','TOKEN','PASSWORD','KEY','CREDENTIAL','CREDIT_','CONFIG','DATABASE','CONNECTION','DSN','INVITE_GATE','PAYPAL','STRIPE','MYSQL','SPRING_',
            'JAVA_TOOL_OPTIONS','_JAVA_OPTIONS','JDK_JAVA_OPTIONS','MAVEN_OPTS','OPENAI',
            'ANTHROPIC','KIE_','OSS_','AWS_','VITE_','QF_','P0_')
 env = {k:v for k,v in os.environ.items() if not any(x in k.upper() for x in blocked)}
 env.update({'QF_EXECUTION_MYSQL_TEST_PORT':str(args.compatibility_port),
             'QF_QUICK_MYSQL_TEST_PORT':str(args.compatibility_port),
-            'SPRING_FLYWAY_TARGET':'39'})
+            'QF_DOWNLOAD_MYSQL_TEST_PORT':str(args.compatibility_port),
+            'SPRING_FLYWAY_TARGET':'40'})
 for label, prefix, revision in (
     ('migration','P0_INTEGRATION_MIGRATION_MYSQL_',args.migration_revision),
     ('credits','P0_INTEGRATED_CREDITS_MYSQL_',args.credits_revision),
-    ('application','P0_INTEGRATION_APPLICATION_MYSQL_',args.application_revision)):
+    ('application','P0_INTEGRATION_APPLICATION_MYSQL_',args.application_revision),
+    ('legacy40','P0_INTEGRATION_LEGACY40_MYSQL_',args.legacy40_revision),
+    ('core40','P0_CORE40_APPLICATION_MYSQL_',args.core40_revision)):
     assert revision.startswith('r') and revision[1:].isdigit()
     cfg = json.loads((OUT / (label+'-db-private-'+revision+'.json')).read_text())
     assert cfg['host']=='127.0.0.1' and cfg['port']==23316 and cfg['uuid']=='05c27d3c-dda3-11f1-aba0-84a938421519'
-    assert cfg['database'].startswith('p0_integr') and cfg['database'].endswith(revision)
+    assert cfg['database'].startswith('p0_core40_application_' if label=='core40' else 'p0_integr') and cfg['database'].endswith(revision)
     env[prefix+'URL']='jdbc:mysql://127.0.0.1:23316/'+cfg['database']+'?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC'
     env[prefix+'DATABASE']=cfg['database']
     env[prefix+'USER']=cfg['user']; env[prefix+'PASSWORD']=cfg['password']; env[prefix+'UUID']=cfg['uuid']
-cmd = ['mvn.cmd','-o','-Dmaven.repo.local='+str(ROOT/'.cache/maven')]
+cmd = ['mvn.cmd','-o','-Dmaven.repo.local='+str(ROOT/'.cache/maven'),'clean']
 if args.mode=='compile': cmd += ['-DskipTests','compile']
 elif args.mode=='package':
     assert len(args.release_source)==40 and all(c in '0123456789abcdef' for c in args.release_source)
@@ -56,7 +68,7 @@ else:
     cmd += ['verify']
 (folder/'invocation.json').write_text(json.dumps({'command':cmd,'cwd':str(WORK/'Qingfeng_AI_Music'),
     'production_credentials_inherited':False,'mysql_ports':[23316,args.compatibility_port],
-    'legacy_mysql_target':'39','new_contract_target':'40 explicit in tests'},indent=2),encoding='utf-8')
+    'legacy_mysql_target':'40','new_contract_target':'41 explicit in tests'},indent=2),encoding='utf-8')
 print(json.dumps({'log':str(folder/'maven.log'),'mode':args.mode}),flush=True)
 with (folder/'maven.log').open('w',encoding='utf-8') as log:
     result=subprocess.run(cmd,cwd=WORK/'Qingfeng_AI_Music',env=env,stdout=log,stderr=subprocess.STDOUT)

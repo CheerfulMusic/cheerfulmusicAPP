@@ -7,7 +7,7 @@ ROOT=Path(subprocess.check_output(['git','-C',str(SOURCE_ROOT),'rev-parse','--pa
 OUT=ROOT/'.cache/payment-main-integration-20261112'
 revision=sys.argv[1];assert re.fullmatch(r'r[0-9]+',revision)
 labels=sys.argv[2:] or ['migration','credits','application']
-names={'migration':'p0_integration_migration_20261112','credits':'p0_integrated_credits_20261112','application':'p0_integration_application_20261112'}
+names={'migration':'p0_integration_migration_20261112','credits':'p0_integrated_credits_20261112','application':'p0_integration_application_20261112','legacy40':'p0_integration_legacy40_20261112','core40':'p0_core40_application_20261112'}
 assert labels and set(labels)<=set(names)
 admin=json.loads((ROOT/'.cache/payment-mysql-8046-20261111/private-connection.json').read_text())
 assert admin['host']=='127.0.0.1' and admin['port']==23316

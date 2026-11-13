@@ -39,7 +39,7 @@ public class LyricsController {
          request.lyrics(),request.keptLines(),request.language()));
  }
  public record ComposeRequest(@NotNull @PositiveOrZero Long workVersion,@NotBlank @Pattern(regexp="[0-9a-fA-F-]{36}")String requestKey,@NotBlank @Pattern(regexp="zh-CN|en|mixed")String language,@Size(max=1000)String instructions,@Pattern(regexp="[0-9a-fA-F-]{36}")String baseRevisionId,@Pattern(regexp="AUTO|AAB|ABB|ABC|ABCD")String templateId,boolean chorusFirst){}
- @PostMapping("/generate") public LyricsApi.Revision compose(@AuthenticationPrincipal CreatorPrincipal creator,@PathVariable String work,@Valid @RequestBody ComposeRequest request){return composer.compose(creator.id(),work,request.workVersion(),request.requestKey(),request.language(),request.instructions(),request.baseRevisionId(),request.templateId(),request.chorusFirst());}
+ @PostMapping("/generate") public LyricsApi.Revision compose(@AuthenticationPrincipal CreatorPrincipal creator,@PathVariable String work,@Valid @RequestBody ComposeRequest request){return composer.composeCustom(creator.id(),work,request.workVersion(),request.requestKey(),request.language(),request.instructions(),request.baseRevisionId(),request.templateId(),request.chorusFirst());}
  @PostMapping(value="/generate-photo", consumes="multipart/form-data")
  public LyricsApi.Revision composePhoto(@AuthenticationPrincipal CreatorPrincipal creator, @PathVariable String work,
      @RequestParam @PositiveOrZero long workVersion, @RequestParam UUID requestKey,

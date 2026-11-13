@@ -31,7 +31,17 @@ public final class AgentChatPolicy {
         return requested(text,"(?:写|创作|生成|编|改|修改|改写|重写|优化|润色|续写).{0,12}(?:歌词|词|段|一句)|(?:写|创作)(?:一|这)?首歌|(?:主歌|副歌).{0,10}(?:改|短|长|温柔|力量)|(?:write|rewrite|change|edit|generate).{0,15}(?:lyrics|chorus|verse)|write.{0,10}song");
     }
     public static boolean settingsRequested(String text) {
+        if(clearAllMusicOptionsRequested(text,"instruments")||clearAllMusicOptionsRequested(text,"genre"))return true;
         return requested(text,"(?:改|换|设|调|加|减少|增加|去掉|用).{0,12}(?:风格|声|bpm|拍|钢琴|吉他|乐器|语|配器|民谣|摇滚|爵士|流行|电子)|\\d{2,3}\\s*(?:bpm|拍)|change.{0,12}(?:style|voice|tempo|instrument)");
+    }
+    /** Only an explicit, complete instruction can clear an entire settings category. */
+    public static boolean clearAllMusicOptionsRequested(String text,String group) {
+        if(text==null||text.length()>160)return false;
+        String labels=switch(group){case "instruments"->"(?:乐器|配器)(?:选项)?";case "genre"->"(?:风格|曲风)(?:选项)?";default->null;};
+        if(labels==null)return false;
+        String english=group.equals("instruments")?"instruments(?: options)?":"(?:genres|music styles|genre options)";
+        String whole=text.strip().replaceFirst("[。.!！]+$","").strip();
+        return whole.matches("(?i)(?:(?:请|帮我|请帮我)?(?:清空|移除|去掉)(?:全部|所有)"+labels+"|(?:please )?(?:clear|remove) all "+english+")");
     }
     public static boolean confirmed(String text) {
         return text != null && text.trim().matches("(?i)(确认生成|确认开始|确认执行|确认删除|确认处理|继续执行|确认|开始生成|生成吧|yes|confirm|go ahead)[。！! ]*");

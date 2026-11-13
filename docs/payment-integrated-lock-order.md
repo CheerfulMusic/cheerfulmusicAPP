@@ -1,6 +1,6 @@
 # 支付整合：协议 3 锁序及权益写入契约
 
-本文件记录候选实现的代码契约（CODE_CONFIRMED），不代表 MySQL、Sandbox 或生产验收通过。实际命令和结果由整合验收报告记录。本轮未连接生产、未执行真实资金操作。
+本文件记录候选实现的代码契约（CODE_CONFIRMED），不代表 MySQL、Sandbox 或生产验收通过。实际命令和结果由整合验收报告记录。对应隔离测试不连接生产、不执行真实资金操作；另行批准的生产只读盘点见整合报告，不等同于生产修改或资金验收。
 
 ## 统一写入与锁序
 
@@ -42,14 +42,14 @@
 
 ## 旧写入者与风险标志
 
-V40 的 protocol 3、epoch、ACTIVE journal 触发器拒绝未持有效会话 epoch 的旧 writer。包装账本在每次写操作内设置并恢复会话 epoch。裸 `JdbcCreditsLedger` 保留旧风险标志语义但无法绕过真实 MySQL 的 ACTIVE 触发器；包装后的消费按订单批次冻结与负余额准入，不因 `creator.payment_risk_frozen` 冻结其他正常批次。
+canonical V41 的 protocol 3、epoch、ACTIVE journal 触发器拒绝未持有效会话 epoch 的旧 writer。包装账本在每次写操作内设置并恢复会话 epoch。裸 `JdbcCreditsLedger` 保留旧风险标志语义但无法绕过真实 MySQL 的 ACTIVE 触发器；包装后的消费按订单批次冻结与负余额准入，不因 `creator.payment_risk_frozen` 冻结其他正常批次。
 
-协议不是生产权限隔离的替代品。正式切换仍须停写、排空和保存异步事实、备份恢复验证、旧账号撤权及切换核验；V40 初始 PREPARING，不能自动宣告历史映射完成或激活。
+协议不是生产权限隔离的替代品。正式切换仍须停写、排空和保存异步事实、备份恢复验证、旧账号撤权及切换核验；V41 初始 PREPARING，不能自动宣告历史映射完成或激活。原支付 V40 仅保留在历史测试夹具中，不能与主线下载 V40 混用或 repair 冒充。
 
-MySQL 正式运行 profile 必须显式开启并验证协议 3；缺少 V40、处于 PREPARING、数据库身份不匹配、关闭 fence 或触发器不完整均拒绝启动。H2 / core39 的旧账本模式只用于兼容回归，不是新生产运行方式。
+分阶段兼容：默认 Flyway target40、fence=false，仅完整且精确的 core40 可以使用既有账本及旧 Inbox；这保留原有能力，不代表资金治理已经启用。新 scoped Inbox 接口不得在旧布局降级。启用新账本时必须显式匹配数据库/端口并通过全部 ACTIVE41 检查；PREPARING、错误库、触发器不完整均拒启。V41 已安装时关闭 fence 也拒启。mysql 的迁移前置门禁禁止启动过程自行安装 V41，即使外部设置 target=latest/41；只有已审批安装、映射并 ACTIVE 的精确 V41 才能继续正常 Flyway 校验。H2 仅用于明确 test profile 的兼容回归，不是 MySQL 资金验收。
 
 PayPal capture 级撤销或退款风险缺少确切退款/实际损失时，使用对应批次的持久 `REVIEW` 状态及剩余 hold，不伪造原生争议 ID，不永久扣回。Inbox 保持 WAITING，超过等待期限进入 MANUAL；消费失败原分摊恢复后同样保持该 hold。风险后台 RELEASE 只结束审核，不自动解除权益保留。解除 REVIEW 仍需独立的权威资金覆盖证明和审批；不能宣称此路径已自动闭环。
 
 ## 验收边界
 
-`IntegratedCreditAccountMySqlTest` 使用标准事务管理器、真实 V1—V40、独立空库和虚构历史，验证上述当前写入契约、旧锁不阻断、邀请、快照、FIFO、订单冻结、负债、退款/争议身份及 UNKNOWN。它不是完整 Spring 应用、历史生产切换或真实支付验收。保留主线原测试；H2 结果不替代该真实 MySQL 验收。
+`IntegratedCreditAccountMySqlTest` 使用标准事务管理器、真实 core1—40 加 canonical41、独立空库和虚构历史，验证上述当前写入契约、旧锁不阻断、邀请、快照、FIFO、订单冻结、负债、退款/争议身份及 UNKNOWN。它不是完整 Spring 应用、历史生产切换或真实支付验收。完整应用分别由 ACTIVE41 及 legacy core40 专项覆盖。保留主线原测试；H2 结果不替代真实 MySQL 验收。

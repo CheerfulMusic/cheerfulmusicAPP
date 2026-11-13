@@ -107,9 +107,11 @@ public final class AvatarGenerationService {
                 return;
             }
             try(InputStream image=provider.download(result.imageUrl())) {
-                boolean applied=avatars.saveIfVersion(task.owner(),task.expected(),image,task.id()).isPresent();
+                boolean applied=avatars.saveGenerated(task.owner(),task.expected(),image,task.id(),token).isPresent();
                 done(id,token,applied||id.equals(avatars.current(task.owner()).version())?"SUCCEEDED":"SUPERSEDED");
             }
+        } catch(AvatarService.GenerationLeaseLost ignored) {
+            // A recovered or expired worker cannot install an image or settle the current task.
         } catch(DomainException failure) {
             if("INVALID_COVER_IMAGE".equals(failure.code())) done(id,token,"FAILED"); else retry(id,token);
         } catch(Exception failure) { retry(id,token); }

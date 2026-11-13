@@ -16,6 +16,13 @@ import com.qingfeng.music.server.download.SharedDownloadGrants;
 import com.qingfeng.music.media.api.MediaApi;
 import com.qingfeng.music.media.api.SharedMediaAccess;
 import com.qingfeng.music.work.api.WorkApi;
+import com.qingfeng.music.lyrics.api.LyricsApi;
+import com.qingfeng.music.lyrics.application.LyricsWriter;
+import com.qingfeng.music.lyrics.application.LyricsCompositionService;
+import com.qingfeng.music.lyrics.application.CompositionRequests;
+import com.qingfeng.music.lyrics.application.FallbackLyricsWriter;
+import com.qingfeng.music.infrastructure.persistence.lyrics.LyricsMapper;
+import com.qingfeng.music.infrastructure.persistence.lyrics.MyBatisLyricsRepository;
 import java.io.ByteArrayInputStream;
 import com.qingfeng.music.usage.UsageBudget;
 import java.math.BigDecimal;
@@ -328,5 +335,52 @@ class IntegratedPaymentApplicationMySqlTest {
             var purchase=secondPool.submit(()->{purchaseStarted.countDown();return assertThrows(DomainException.class,()->removedShared.unlock(later.creatorId(),removed.token())).code();});assertTrue(purchaseStarted.await(10,TimeUnit.SECONDS));assertThrows(TimeoutException.class,()->purchase.get(200,TimeUnit.MILLISECONDS));continueDeletion.countDown();deletion.get(30,TimeUnit.SECONDS);assertEquals("SHARE_NOT_FOUND",purchase.get(30,TimeUnit.SECONDS));
             assertEquals(20,ledger.balance(later.creatorId()));assertEquals(0,downloadDebits(later.creatorId()));assertTrue(removedShared.list(later.creatorId()).isEmpty());assertEquals(1,number("SELECT COUNT(*) FROM music_work WHERE id=? AND deleted_at IS NOT NULL",removed.work()));
         }finally{continueDeletion.countDown();secondPool.shutdownNow();assertTrue(secondPool.awaitTermination(15,TimeUnit.SECONDS));}
+    }
+
+    private static final class OfflineCustomLyrics implements LyricsWriter {
+        final String source,failure;final java.util.concurrent.atomic.AtomicInteger calls=new java.util.concurrent.atomic.AtomicInteger();
+        OfflineCustomLyrics(String source,String failure){this.source=source;this.failure=failure;}
+        public boolean isConfigured(){return true;}
+        public String source(){return source;}
+        public Draft write(WorkApi.Work work,String language){calls.incrementAndGet();if(failure!=null)throw new DomainException(failure,"synthetic provider outcome");return new Draft("Synthetic song","[Verse]\nA fictional line\n[Chorus]\nA fictional chorus");}
+    }
+    private static LyricsCompositionService customComposer(LyricsWriter shared,LyricsWriter primary,LyricsWriter backup){
+        return new LyricsCompositionService(application.getBean(WorkApi.class),application.getBean(LyricsApi.class),new MyBatisLyricsRepository(application.getBean(LyricsMapper.class)),shared,new FallbackLyricsWriter(primary,backup),application.getBean(CompositionRequests.class),true);
+    }
+    @Test @Order(18) void activeCustomComposerNeverFailsOverOrRefundsUnknownButDefiniteNonAcceptanceFailsOverWithOneCharge() throws Exception {
+        assertInstanceOf(JdbcFencedCreditsLedger.class,ledger);assertEquals(1,application.getBean(CreditsPricing.class).cost(CreditsPricing.Kind.LYRICS));
+        var shared=new OfflineCustomLyrics("UNSELECTED_SHARED",null);var primary=new OfflineCustomLyrics("OPENAI","LYRICS_PROVIDER_TIMEOUT");var backup=new OfflineCustomLyrics("DEEPSEEK",null);var composer=customComposer(shared,primary,backup);
+        var uncertain=owner();String owner=uncertain.creatorId(),work=work(owner),key=UUID.randomUUID().toString();ledger.credit(owner,10,"gift:custom-unknown:"+unique());
+        assertEquals("LYRICS_PROVIDER_TIMEOUT",assertThrows(DomainException.class,()->composer.composeCustom(owner,work,0,key,"en","",null,null,false)).code());
+        assertEquals("UNKNOWN",composer.requestState(owner,work,key).status());assertEquals(9,ledger.balance(owner));assertEquals(1,primary.calls.get());assertEquals(0,backup.calls.get());assertEquals(0,shared.calls.get());
+        assertEquals("LYRICS_REQUEST_PENDING",assertThrows(DomainException.class,()->composer.composeCustom(owner,work,0,key,"en","",null,null,false)).code());
+        assertEquals("LYRICS_REQUEST_PENDING",assertThrows(DomainException.class,()->composer.composeCustom(owner,work,0,UUID.randomUUID().toString(),"en","",null,null,false)).code());
+        assertEquals(1,primary.calls.get());assertEquals(0,backup.calls.get());assertEquals(9,ledger.balance(owner));assertEquals(0,number("SELECT COUNT(*) FROM credit_ledger WHERE owner_id=? AND entry_type='REFUND'",owner));assertEquals(1,number("SELECT COUNT(*) FROM credit_consumption WHERE owner_id=? AND work_id=? AND request_key=? AND task_status='UNKNOWN' AND refunded=0 AND amount=1",owner,work,key));
+        assertTrue(application.getBean(LyricsApi.class).list(owner,work).isEmpty());
+        for(String failure:List.of("LYRICS_PROVIDER_CONNECT_FAILED","LYRICS_PROVIDER_REJECTED")){
+            var known=owner();String knownOwner=known.creatorId(),knownWork=work(knownOwner),knownKey=UUID.randomUUID().toString();ledger.credit(knownOwner,10,"gift:custom-failover:"+unique());
+            var refused=new OfflineCustomLyrics("OPENAI",failure);var successful=new OfflineCustomLyrics("DEEPSEEK",null);var safe=customComposer(shared,refused,successful);
+            var revision=safe.composeCustom(knownOwner,knownWork,0,knownKey,"en","",null,null,false);assertEquals("DEEPSEEK",revision.source());assertEquals(revision.id(),safe.composeCustom(knownOwner,knownWork,0,knownKey,"en","",null,null,false).id());
+            assertEquals(1,refused.calls.get());assertEquals(1,successful.calls.get());assertEquals(0,shared.calls.get());assertEquals(9,ledger.balance(knownOwner));
+            String reference=com.qingfeng.music.credits.CreditReferences.of("LYRICS",knownWork,knownKey);assertEquals(1,number("SELECT COUNT(*) FROM credit_ledger WHERE owner_id=? AND entry_type='DEBIT' AND reference_id=? AND amount=-1",knownOwner,reference));assertEquals(0,number("SELECT COUNT(*) FROM credit_ledger WHERE owner_id=? AND entry_type='REFUND'",knownOwner));assertEquals(1,number("SELECT COUNT(*) FROM credit_consumption WHERE owner_id=? AND work_id=? AND request_key=? AND task_status='SUCCEEDED' AND refunded=0 AND amount=1",knownOwner,knownWork,knownKey));assertEquals(1,application.getBean(LyricsApi.class).list(knownOwner,knownWork).size());
+        }
+    }
+
+    private static Map<String,String> exactFinancialSnapshot(){
+        var snapshot=new TreeMap<String,String>();
+        for(String table:List.of("flyway_schema_history","credit_ledger","credit_account","payment_order","payment_webhook_inbox","payment_inbox_attempt","payment_inbox_review","shared_download_entitlement","p0_credit_writer_policy","p0_credit_cutover_state","p0_credit_batch","p0_credit_allocation","p0_credit_payment_binding","p0_credit_refund","p0_credit_dispute","p0_credit_return","p0_credit_financial_audit","p0_legacy_debit_mapping","p0_credit_recovery","p0_credit_recovery_audit","p0_credit_recovery_approval","p0_credit_refund_terminal","p0_credit_refund_return","p0_stripe_dispute_proof","p0_credit_native_identity")){
+            var rows=new ArrayList<String>();db.query("SELECT * FROM "+table,(org.springframework.jdbc.core.RowCallbackHandler)rs->{var row=new StringBuilder();for(int i=1;i<=rs.getMetaData().getColumnCount();i++){String value=rs.getString(i);if(value==null)row.append("N;");else row.append('S').append(value.length()).append(':').append(value);}rows.add(row.toString());});Collections.sort(rows);var canonical=new StringBuilder();for(String row:rows)canonical.append(row.length()).append(':').append(row);
+            snapshot.put(table,"rows="+rows.size()+";sha256="+shareHash(canonical.toString()));
+        }
+        snapshot.put("journal_sum",db.queryForObject("SELECT COALESCE(SUM(amount),0) FROM credit_ledger",BigDecimal.class).toPlainString());snapshot.put("account_sum",db.queryForObject("SELECT COALESCE(SUM(balance),0) FROM credit_account",BigDecimal.class).toPlainString());snapshot.put("batch_projection",db.queryForObject("SELECT COALESCE(SUM(CAST(original AS DECIMAL(65,0))-consumed-adjusted),0) FROM p0_credit_batch",BigDecimal.class).toPlainString());return snapshot;
+    }
+    @Test @Order(19) void installedActive41RejectsAFalseWriterBeforeReadyAndLeavesEveryFinancialFactUnchanged(){
+        assertTrue(application.isActive());assertInstanceOf(JdbcFencedCreditsLedger.class,ledger);assertEquals(41,number("SELECT COUNT(*) FROM flyway_schema_history WHERE success=1 AND version IS NOT NULL"));var before=exactFinancialSnapshot();
+        var attempted=new LinkedHashMap<>(settings);attempted.put("qingfeng.credits.writer-fence.enabled",false);var environment=new StandardEnvironment();environment.getPropertySources().remove(StandardEnvironment.SYSTEM_ENVIRONMENT_PROPERTY_SOURCE_NAME);environment.getPropertySources().remove(StandardEnvironment.SYSTEM_PROPERTIES_PROPERTY_SOURCE_NAME);environment.getPropertySources().addFirst(new MapPropertySource("isolated-rejected-legacy-writer-only",attempted));
+        var ready=new java.util.concurrent.atomic.AtomicBoolean();
+        var rejected=new SpringApplicationBuilder(MusicApplication.class,OfflineGateways.class).environment(environment).profiles("mysql").web(WebApplicationType.SERVLET).logStartupInfo(false).listeners((org.springframework.context.ApplicationListener<org.springframework.boot.context.event.ApplicationReadyEvent>)event->ready.set(true)).initializers(context->context.getBeanFactory().registerSingleton("acceptanceOnlyTestConfigurationFilter",new AcceptanceOnlyTestFilter()));
+        RuntimeException failure=assertThrows(RuntimeException.class,()->{try(var unsafe=rejected.run()){fail("Installed V41 must never start a legacy credit writer");}});boolean rejectedByWriterGate=false;for(Throwable cause=failure;cause!=null;cause=cause.getCause())if(cause.getMessage()!=null&&(cause.getMessage().contains("Entitlement schema installed: a legacy credit writer cannot start")||cause.getMessage().contains("A legacy credit writer cannot automatically apply financial V41. Financial V41 requires separately approved migration, historical mapping and activation before application startup")))rejectedByWriterGate=true;
+        assertTrue(rejectedByWriterGate,"An unrelated configuration/provider exception is not evidence of a writer gate");assertFalse(ready.get());assertTrue(application.isActive());assertSame(ledger,application.getBean(CreditsLedger.class));assertEquals(before,exactFinancialSnapshot());assertEquals(41,number("SELECT COUNT(*) FROM flyway_schema_history WHERE success=1 AND version IS NOT NULL"));
+        for(String owner:OWNERS)assertEquals(number("SELECT COALESCE(SUM(amount),0) FROM credit_ledger WHERE owner_id=?",owner),ledger.balance(owner));
     }
 }

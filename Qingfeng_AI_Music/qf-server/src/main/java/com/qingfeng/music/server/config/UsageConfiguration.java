@@ -8,6 +8,7 @@ import java.util.Map;
 import org.springframework.context.annotation.*;
 import org.springframework.core.env.Environment;
 import org.springframework.core.env.Profiles;
+import org.springframework.jdbc.core.ConnectionCallback;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -21,8 +22,11 @@ public class UsageConfiguration {
         var transactions=new TransactionTemplate(manager);
         var base=new com.qingfeng.music.infrastructure.persistence.credits.JdbcCreditsLedger(jdbc,transactions);
         if(!fenced){
-            if(environment.acceptsProfiles(Profiles.of("mysql")))throw new IllegalStateException("MySQL runtime requires the verified entitlement writer; legacy mode is test compatibility only");
             if(CreditSchemaReadiness.installed(jdbc))throw new IllegalStateException("Entitlement schema installed: a legacy credit writer cannot start");
+            String product=jdbc.execute((ConnectionCallback<String>)connection->connection.getMetaData().getDatabaseProductName());
+            if("MySQL".equals(product))CreditSchemaReadiness.requireCore40Ready(jdbc);
+            else if(!"H2".equals(product)||!environment.acceptsProfiles(Profiles.of("test"))||environment.acceptsProfiles(Profiles.of("mysql")))
+                throw new IllegalStateException("Only verified MySQL core40 or explicit H2 test compatibility may use the legacy writer");
             return base;
         }
         var identity=jdbc.queryForMap("SELECT DATABASE() database_name,@@port database_port");

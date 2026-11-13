@@ -60,7 +60,7 @@ public final class AgentStateEventStream implements AutoCloseable {
         subscription.emitter.onError(error->subscription.release());
         try{
             // Ownership is checked before returning an SSE response, never by trusting the path ID.
-            subscription.send(reader.read(owner,conversation,afterSeq,epoch));
+            subscription.initialRead();
             if(scheduler!=null){
                 subscription.future=scheduler.scheduleWithFixedDelay(subscription::poll,intervalMillis,intervalMillis,TimeUnit.MILLISECONDS);
                 if(subscription.closed.get())subscription.future.cancel(false);
@@ -73,9 +73,17 @@ public final class AgentStateEventStream implements AutoCloseable {
     void pollOnce(){List<Subscription> copy;synchronized(this){copy=List.copyOf(subscriptions);}copy.forEach(Subscription::poll);}
     synchronized int active(){return subscriptions.size();}
     private final class Subscription {
-        final String owner,conversation;final SseEmitter emitter;final AtomicBoolean closed=new AtomicBoolean();
+        final String owner,conversation;final SseEmitter emitter;final AtomicBoolean closed=new AtomicBoolean(),retired=new AtomicBoolean();
+        private int inFlight;
+        private boolean completeRequested;
         Long cursor,epoch;String previous;volatile ScheduledFuture<?> future;
         Subscription(String owner,String conversation,Long cursor,Long epoch,SseEmitter emitter){this.owner=owner;this.conversation=conversation;this.cursor=cursor;this.epoch=epoch;this.emitter=emitter;}
+        synchronized boolean begin(){if(closed.get())return false;inFlight++;return true;}
+        void end(){synchronized(this){inFlight--;}retire();}
+        void initialRead()throws IOException{
+            if(!begin())throw new DomainException("AGENT_STREAM_UNAVAILABLE","实时进度连接已结束，请使用状态刷新。");
+            try{send(reader.read(owner,conversation,cursor,epoch));}finally{end();}
+        }
         void send(AgentChatService.Snapshot snapshot)throws IOException{
             if(closed.get())return;
             String encoded=json.writeValueAsString(snapshot);
@@ -86,19 +94,32 @@ public final class AgentStateEventStream implements AutoCloseable {
             cursor=snapshot.latestSeq();epoch=snapshot.historyEpoch();
         }
         void poll(){
-            if(closed.get())return;
+            if(!begin())return;
             try{send(reader.read(owner,conversation,cursor,epoch));}
             catch(Exception failure){
-                try{emitter.send(SseEmitter.event().name("error").data(Map.of("code","AGENT_STREAM_UNAVAILABLE","message","实时进度暂时断开，请通过状态刷新查看结果。")));}catch(Exception ignored){}
+                if(!closed.get())try{emitter.send(SseEmitter.event().name("error").data(Map.of("code","AGENT_STREAM_UNAVAILABLE","message","实时进度暂时断开，请通过状态刷新查看结果。")));}catch(Exception ignored){}
                 complete();
-            }
+            }finally{end();}
         }
-        void release(){
-            if(!closed.compareAndSet(false,true))return;
+        void release(){stop(false);}
+        void complete(){stop(true);}
+        void stop(boolean complete){
+            synchronized(this){closed.set(true);completeRequested|=complete;}
             if(future!=null)future.cancel(false);
-            synchronized(AgentStateEventStream.this){subscriptions.remove(this);ownerCounts.computeIfPresent(owner,(key,count)->count<=1?null:count-1);}
+            retire();
         }
-        void complete(){release();try{emitter.complete();}catch(Exception ignored){}}
+        void retire(){
+            boolean complete;
+            synchronized(this){
+                if(!closed.get()||inFlight!=0||!retired.compareAndSet(false,true))return;
+                complete=completeRequested;
+            }
+            // A timeout closes observation immediately, but capacity belongs to its actual read/write
+            // until that work exits. complete() also takes Spring's write lock, so never call it from
+            // the timeout callback while an in-flight send owns that lock.
+            try{if(complete)emitter.complete();}catch(Exception ignored){}
+            finally{synchronized(AgentStateEventStream.this){subscriptions.remove(this);ownerCounts.computeIfPresent(owner,(key,count)->count<=1?null:count-1);}}
+        }
     }
     @jakarta.annotation.PreDestroy @Override public void close(){
         List<Subscription> copy;synchronized(this){stopped=true;copy=List.copyOf(subscriptions);}

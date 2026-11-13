@@ -59,6 +59,63 @@ class AgentPlanCodecTest {
         }
     }
 
+    @Test void optionalNullsAndBlankMutationFieldsAreOmittedInBothProtocols() {
+        String arguments="{\"story\":\"新的故事\",\"title\":null,\"recipient\":\"  \",\"message\":null}";
+        var nativePlan=AgentPlanCodec.parseMessage(calls(call("one","update_work",arguments)),context("update_work"));
+        var legacyPlan=AgentPlanCodec.parse("{\"action\":\"update_work\",\"reply\":\"更新故事\",\"args\":"+arguments+"}",context("update_work"));
+        assertEquals(Map.of("story","新的故事"),nativePlan.args());
+        assertEquals(nativePlan.args(),legacyPlan.args());
+        var settings=AgentPlanCodec.parseMessage(calls(call("two","update_music_settings","{\"freeText\":null,\"negativeText\":\"  \",\"recipeId\":null,\"choices\":{\"instruments\":null},\"vocalGender\":\"FEMALE\"}")),context("update_music_settings"));
+        assertEquals(Map.of("vocalGender","FEMALE"),settings.args());
+        var audio=AgentPlanCodec.parseMessage(calls(call("three","select_audio","{\"assetId\":\"imported\",\"revisionId\":null}")),context("select_audio"));
+        assertEquals(Map.of("assetId","imported"),audio.args());
+    }
+
+    @Test void emptyMusicCategoriesCannotEraseSettingsUnlessTheWholeRequestExplicitlyClearsThatCategory() {
+        String arguments="{\"vocalGender\":\"FEMALE\",\"choices\":{\"genre\":[],\"instruments\":[],\"emotion\":[]}}";
+        for(String text:List.of("改成女声","不要清空所有乐器","解释‘清空所有乐器’","\"clear all instruments\"","清空所有乐器再生成音乐","先查看积分，然后清空所有乐器","do not clear all instruments","clear all instruments and change genre")) {
+            var input=new AgentChatModel.Context(text,"zh-CN",List.of(),null,null,context("update_music_settings").capabilities(),null);
+            var nativePlan=AgentPlanCodec.parseMessage(calls(call("one","update_music_settings",arguments)),input);
+            var legacyPlan=AgentPlanCodec.parse("{\"action\":\"update_music_settings\",\"reply\":\"更新\",\"args\":"+arguments+"}",input);
+            if("改成女声".equals(text))assertEquals(Map.of("vocalGender","FEMALE"),nativePlan.args(),text);
+            else {assertEquals("chat",nativePlan.action(),text);assertTrue(nativePlan.args().isEmpty());assertTrue(nativePlan.reply().contains("尚未执行"));}
+            assertEquals(nativePlan.action(),legacyPlan.action(),text);assertEquals(nativePlan.args(),legacyPlan.args(),text);
+        }
+        for(String text:List.of("请清空所有乐器。","去掉全部配器","please clear all instruments")) {
+            var input=new AgentChatModel.Context(text,"zh-CN",List.of(),null,null,context("update_music_settings","set_style").capabilities(),null);
+            var plan=AgentPlanCodec.parseMessage(calls(call("one","update_music_settings",arguments)),input);
+            assertEquals(Map.of("instruments",List.of()),plan.args().get("choices"),text);
+            var style=AgentPlanCodec.parseMessage(calls(call("two","set_style","{\"instruments\":[],\"bpm\":90}")),input);
+            assertEquals(List.of(),style.args().get("instruments"));
+        }
+        var input=new AgentChatModel.Context("clear all genre options","en",List.of(),null,null,context("update_music_settings").capabilities(),null);
+        assertEquals(Map.of("genre",List.of()),AgentPlanCodec.parseMessage(calls(call("one","update_music_settings",arguments)),input).args().get("choices"));
+        assertFalse(AgentPlanCodec.parseMessage(calls(call("one","set_style","{\"instruments\":[],\"bpm\":90}")),context("set_style")).args().containsKey("instruments"));
+    }
+
+    @Test void unresolvedClearingStopsTheWholePlanRatherThanGeneratingWithOldSettings() {
+        for(String text:List.of("先去掉所有乐器，再生成音乐","清空情绪选项再生成音乐","清空寄语然后生成音乐")) {
+            String action=text.contains("寄语")?"update_work":"set_style";
+            String args=text.contains("寄语")?"{\"message\":null}":"{\"instruments\":[]}";
+            var input=new AgentChatModel.Context(text,"zh-CN",List.of(),null,null,context(action,"generate_song").capabilities(),null);
+            var nativePlan=AgentPlanCodec.parseMessage(calls(call("one",action,args),call("two","generate_song","{}")),input);
+            var legacyPlan=AgentPlanCodec.parse("{\"reply\":\"开始\",\"steps\":[{\"action\":\""+action+"\",\"args\":"+args+"},{\"action\":\"generate_song\",\"args\":{}}]}",input);
+            assertEquals("chat",nativePlan.action());assertEquals(1,nativePlan.orderedSteps().size());assertEquals(nativePlan,legacyPlan);
+        }
+        var input=new AgentChatModel.Context("去掉所有乐器","zh-CN",List.of(),null,null,context("set_style").capabilities(),null);
+        var valid=AgentPlanCodec.parseMessage(calls(call("one","set_style","{\"instruments\":[],\"mood\":null}")),input);
+        assertEquals("set_style",valid.action());assertEquals(Map.of("instruments",List.of()),valid.args());
+    }
+
+    @Test void legacyPlansCannotBypassReviewedTypesBoundsOrConfirmationFields() {
+        for(String args:List.of("{\"title\":null}","{\"title\":\"\"}","{\"title\":{\"text\":\"wrong type\"}}","{\"title\":\"晴天\",\"owner\":\"foreign\"}"))
+            assertThrows(IllegalArgumentException.class,()->AgentPlanCodec.parse("{\"action\":\"rename_work\",\"reply\":\"开始\",\"args\":"+args+"}",context("rename_work")));
+        assertThrows(IllegalArgumentException.class,()->AgentPlanCodec.parse("{\"action\":\"delete_work\",\"reply\":\"开始\",\"args\":{\"workId\":\"work\",\"confirmed\":true,\"expectedVersion\":1}}",context("delete_work")));
+        assertThrows(IllegalArgumentException.class,()->AgentPlanCodec.parse("{\"reply\":\"开始\",\"steps\":[{\"action\":\"set_style\",\"args\":{\"bpm\":90.5}}]}",context("set_style")));
+        var wholeNumber=AgentPlanCodec.parse("{\"action\":\"set_style\",\"reply\":\"开始\",\"args\":{\"bpm\":90.0}}",context("set_style"));
+        assertEquals(Integer.valueOf(90),wholeNumber.args().get("bpm"));
+    }
+
     @Test void schemaIntegersNormalizeWholeJsonNumbersForTheExistingBusinessArgumentParser() {
         var plan=AgentPlanCodec.parseMessage(calls(call("one","set_style","{\"bpm\":90.0}")),context("set_style"));
         assertInstanceOf(Integer.class,plan.args().get("bpm"));

@@ -44,6 +44,31 @@ class AgentStudioActionsTest {
         verify(conversations).applyToolResult(eq("owner"),eq("C"),isNull(),eq("{}"),eq("W"),snapshot.capture(),isNull(),eq(4L));
         var state=AgentJson.read(snapshot.getValue());assertFalse(state.containsKey("style"));assertEquals("A",state.get("assetId"));assertEquals("R",state.get("revisionId"));assertEquals("yue",state.get("language"));assertEquals("更温暖",state.get("baseFreeText"));
     }
+    @Test void bothModelProtocolsPreserveExistingSettingsWhenUnusedFieldsAreEmpty(){
+        String args="{\"vocalGender\":\"MALE\",\"freeText\":null,\"negativeText\":\"  \",\"recipeId\":null,\"choices\":{\"genre\":[],\"instruments\":[]}}";
+        var context=new AgentChatModel.Context("改成男声","zh-CN",List.of(),null,null,actions.capabilities(),null);
+        var json=new tools.jackson.databind.ObjectMapper();
+        String message=json.writeValueAsString(Map.of("tool_calls",List.of(Map.of("id","one","type","function","function",Map.of("name","update_music_settings","arguments",args)))));
+        var nativePlan=com.qingfeng.music.infrastructure.provider.AgentPlanCodec.parseMessage(message,context);
+        var legacyPlan=com.qingfeng.music.infrastructure.provider.AgentPlanCodec.parse("{\"action\":\"update_music_settings\",\"reply\":\"更新\",\"args\":"+args+"}",context);
+        for(var plan:List.of(nativePlan,legacyPlan))run(plan.action(),plan.args());
+        var changed=org.mockito.ArgumentCaptor.forClass(MusicSettings.Preferences.class);
+        verify(settings,times(2)).save(eq("owner"),eq("W"),eq(2L),changed.capture());
+        for(var value:changed.getAllValues()){
+            assertEquals("MALE",value.vocalGender());assertEquals(prefs.choices(),value.choices());
+            assertEquals(prefs.freeText(),value.freeText());assertEquals(prefs.negativeText(),value.negativeText());
+        }
+    }
+    @Test void explicitClearAllInstrumentsDoesNotClearTheUnrequestedGenre(){
+        String args="{\"choices\":{\"genre\":[],\"instruments\":[]}}";
+        var context=new AgentChatModel.Context("清空所有乐器","zh-CN",List.of(),null,null,actions.capabilities(),null);
+        var plan=com.qingfeng.music.infrastructure.provider.AgentPlanCodec.parse("{\"action\":\"update_music_settings\",\"reply\":\"更新\",\"args\":"+args+"}",context);
+        assertTrue(com.qingfeng.music.agent.application.AgentChatPolicy.actionRequested(plan.action(),context.text()));
+        run(plan.action(),plan.args());
+        var changed=org.mockito.ArgumentCaptor.forClass(MusicSettings.Preferences.class);verify(settings).save(eq("owner"),eq("W"),eq(2L),changed.capture());
+        assertEquals(List.of(),changed.getValue().choices().get("instruments"));assertEquals(List.of("folk"),changed.getValue().choices().get("genre"));
+        assertEquals(prefs.freeText(),changed.getValue().freeText());assertEquals(prefs.negativeText(),changed.getValue().negativeText());
+    }
     @Test void aNewDraftWithoutSavedSettingsCanReadAndUpdateItsMusicSettings(){
         when(settings.get("owner","W")).thenReturn(new MusicSettings.View(work,null));
         when(settings.preview(any())).thenAnswer(i->direction(i.getArgument(0)));

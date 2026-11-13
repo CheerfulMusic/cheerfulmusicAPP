@@ -8,6 +8,9 @@ import java.net.URI;
 import java.net.http.*;
 import java.time.Duration;
 import java.util.*;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 /** Real conversation, with the current owned work and recent turns; credentials remain server-side. */
 public final class DeepSeekAgentChatModel implements AgentChatModel {
@@ -47,12 +50,19 @@ public final class DeepSeekAgentChatModel implements AgentChatModel {
     private final boolean enabled;
     private final HttpClient http;
     private final URI endpoint;
+    private final Duration responseTimeout;
     private final ObjectMapper json=new ObjectMapper();
     public DeepSeekAgentChatModel(String key,String model,boolean enabled) {
         this(key,model,enabled,URI.create("https://api.deepseek.com/chat/completions"),HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).followRedirects(HttpClient.Redirect.NEVER).build());
     }
     public DeepSeekAgentChatModel(String key,String model,boolean enabled,URI endpoint,HttpClient http) {
-        this.key=key==null?"":key;this.model=model==null||model.isBlank()?"deepseek-flash":model;this.enabled=enabled;this.endpoint=endpoint;this.http=http;
+        this(key,model,enabled,endpoint,http,Duration.ofSeconds(45));
+    }
+    /** A shorter response deadline is injectable for offline transport tests; production keeps 45 seconds. */
+    public DeepSeekAgentChatModel(String key,String model,boolean enabled,URI endpoint,HttpClient http,Duration responseTimeout) {
+        if(responseTimeout==null||responseTimeout.isNegative()||responseTimeout.isZero()||responseTimeout.compareTo(Duration.ofSeconds(45))>0)
+            throw new IllegalArgumentException("Invalid agent response deadline");
+        this.key=key==null?"":key;this.model=model==null||model.isBlank()?"deepseek-flash":model;this.enabled=enabled;this.endpoint=endpoint;this.http=http;this.responseTimeout=responseTimeout;
     }
     @Override public Plan respond(Context context) {
         if(!enabled||key.isBlank())throw new DomainException("AGENT_CHAT_UNAVAILABLE","对话模型暂未启用或尚未配置。你的消息已保留，本次没有启动创作工具。");
@@ -85,9 +95,9 @@ public final class DeepSeekAgentChatModel implements AgentChatModel {
                 messages.remove(firstHistory);historyCount--;encoded=json.writeValueAsString(body);
             }
             if(encoded.getBytes(java.nio.charset.StandardCharsets.UTF_8).length>com.qingfeng.music.common.concurrent.AgentRequestScope.maxPromptBytes())throw new DomainException("AGENT_CONTEXT_TOO_LARGE","当前对话内容过长，请缩短本次要求或开始新的会话。");
-            var request=HttpRequest.newBuilder(endpoint).timeout(com.qingfeng.music.common.concurrent.AgentRequestScope.timeout(Duration.ofSeconds(45))).header("Authorization","Bearer "+key).header("Content-Type","application/json")
+            var request=HttpRequest.newBuilder(endpoint).timeout(com.qingfeng.music.common.concurrent.AgentRequestScope.timeout(responseTimeout)).header("Authorization","Bearer "+key).header("Content-Type","application/json")
                     .POST(HttpRequest.BodyPublishers.ofString(encoded)).build();
-            var response=http.send(request,ignored->boundedBody());
+            var response=readResponse(request);
             if(response.statusCode()/100!=2)throw new IllegalStateException("provider response");
             com.qingfeng.music.common.concurrent.AgentRequestScope.check();
             var choice=json.readTree(response.body()).path("choices").path(0);
@@ -95,14 +105,33 @@ public final class DeepSeekAgentChatModel implements AgentChatModel {
             return AgentPlanCodec.parseMessage(json.writeValueAsString(choice.path("message")),context);
         } catch(DomainException error) {throw error;
         } catch(InterruptedException error) {
-            Thread.currentThread().interrupt();throw new DomainException("AGENT_CHAT_UNAVAILABLE","对话模型请求已中断，后续步骤已停止。请查看已有作品和任务状态。");
+            Thread.currentThread().interrupt();com.qingfeng.music.common.concurrent.AgentRequestScope.check();
+            throw new DomainException("AGENT_CHAT_UNAVAILABLE","对话模型请求已中断，后续步骤已停止。请查看已有作品和任务状态。");
         } catch(Exception error) {
             com.qingfeng.music.common.concurrent.AgentRequestScope.check();
             throw new DomainException("AGENT_CHAT_UNAVAILABLE","对话模型暂时没有返回有效结果，后续步骤已停止。请查看已有作品和任务状态。");
         }
     }
 
-    /** Bound bytes before decoding JSON; HttpClient still owns timeout/cancellation and backpressure. */
+    /** HttpRequest.timeout in Java 17 ends at response headers, so also bound complete body delivery. */
+    private HttpResponse<String> readResponse(HttpRequest request) throws InterruptedException,ExecutionException,HttpTimeoutException {
+        long deadline=System.nanoTime()+request.timeout().orElse(responseTimeout).toNanos();
+        var response=http.sendAsync(request,ignored->boundedBody());
+        try {
+            while(true){
+                com.qingfeng.music.common.concurrent.AgentRequestScope.check();
+                long remaining=deadline-System.nanoTime();
+                if(remaining<=0)throw new HttpTimeoutException("Agent response deadline exceeded");
+                try{return response.get(Math.min(remaining,TimeUnit.MILLISECONDS.toNanos(250)),TimeUnit.NANOSECONDS);}
+                catch(TimeoutException pending){/* Recheck cooperative cancellation while waiting for the body. */}
+            }
+        } finally {
+            // Cancel the original HttpClient future, not a derived timeout stage: this aborts body reading.
+            if(!response.isDone())response.cancel(true);
+        }
+    }
+
+    /** Bound bytes before decoding JSON; the caller also enforces a complete-response deadline. */
     private static HttpResponse.BodySubscriber<String> boundedBody() {
         return new HttpResponse.BodySubscriber<>() {
             private final HttpResponse.BodySubscriber<String> delegate=HttpResponse.BodySubscribers.ofString(java.nio.charset.StandardCharsets.UTF_8);
