@@ -75,8 +75,8 @@ class IntegratedCreditAccountMySqlTest {
                 assertTrue(Set.of(database,"information_schema","performance_schema").contains(rows.getString(1)));}
         }
         assertEquals(0,number("SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE()"),"Never clear or reuse an earlier cohort");
-        Flyway.configure().dataSource(source).locations("classpath:db/migration").cleanDisabled(true).target("43").load().migrate();
-        assertEquals(43,number("SELECT COUNT(*) FROM flyway_schema_history WHERE success=1 AND version IS NOT NULL"));
+        Flyway.configure().dataSource(source).locations("classpath:db/migration").cleanDisabled(true).target("44").load().migrate();
+        assertEquals(44,number("SELECT COUNT(*) FROM flyway_schema_history WHERE success=1 AND version IS NOT NULL"));
         assertEquals("V42__shared_download_entitlement.sql",db.queryForObject("SELECT script FROM flyway_schema_history WHERE version='42'",String.class));assertEquals(-500011050,number("SELECT checksum FROM flyway_schema_history WHERE version='42'"));
         assertEquals(1,number("SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='shared_download_entitlement'"));
         tx=new TransactionTemplate(new JdbcTransactionManager(source));
@@ -86,9 +86,9 @@ class IntegratedCreditAccountMySqlTest {
         db.update("INSERT INTO payment_order(id,creator_id,package_id,amount,currency,credits,status,created_at,provider,provider_capture_id) VALUES(?,?, 'starter-USD',9.90,'USD',100,'PAID',CURRENT_TIMESTAMP,'STRIPE_SANDBOX',?)",order,owner,capture);
         db.update("INSERT INTO credit_ledger VALUES('CREDIT',?,?,100,CURRENT_TIMESTAMP)","payment:"+order,owner);
         db.update("INSERT INTO credit_ledger VALUES('PAYMENT_ADJUST',?,?,-20,CURRENT_TIMESTAMP)","legacy-adjust:"+unique(),owner);
-        Flyway.configure().dataSource(source).locations("classpath:db/migration").cleanDisabled(true).target("44").load().migrate();
-        assertEquals(44,number("SELECT COUNT(*) FROM flyway_schema_history WHERE success=1 AND version IS NOT NULL"));
-        assertEquals("V44__credit_entitlement_integration.sql",db.queryForObject("SELECT script FROM flyway_schema_history WHERE version='44'",String.class));assertEquals(789542731,number("SELECT checksum FROM flyway_schema_history WHERE version='44'"));
+        Flyway.configure().dataSource(source).locations("classpath:db/migration").cleanDisabled(true).target("45").load().migrate();
+        assertEquals(45,number("SELECT COUNT(*) FROM flyway_schema_history WHERE success=1 AND version IS NOT NULL"));
+        assertEquals("V45__credit_entitlement_integration.sql",db.queryForObject("SELECT script FROM flyway_schema_history WHERE version='45'",String.class));assertEquals(-2125061473,number("SELECT checksum FROM flyway_schema_history WHERE version='45'"));
         assertEquals(1,number("SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='shared_download_entitlement'"));
         assertEquals(3,number("SELECT protocol FROM p0_credit_writer_policy WHERE id=1"));
         db.update("INSERT INTO p0_credit_batch(reference,owner_id,source_type,source_id,original,consumed,adjusted,held,status,created_at) VALUES(?,?,'PAYMENT',?,100,0,20,0,'ACTIVE',CURRENT_TIMESTAMP)","payment:"+order,owner,order);
@@ -498,4 +498,114 @@ class IntegratedCreditAccountMySqlTest {
         for(String owner:tested){assertEquals(14,ledger.balance(owner));assertEquals(6,number("SELECT COUNT(*) FROM rewrite_consumption WHERE creator_id=? AND status='SUCCEEDED' AND refunded=0",owner));assertEquals(6,number("SELECT COUNT(*) FROM credit_ledger WHERE owner_id=? AND entry_type='DEBIT'",owner));}
     }
     private static JdbcRewriteCharges rewriteCharges(){CreditsPricing pricing=new CreditsPricing(){public boolean enabled(){return true;}public long cost(Kind kind){return 1;}public long freePerDay(Kind kind){return 0;}};return new JdbcRewriteCharges(db,tx,ledger,pricing,new JdbcDailyQuota(db,Clock.systemUTC(),ZoneOffset.UTC),100,1);}
+
+    private static final String PAYPAL_MERCHANT="MERCHANT123",REPORT_PROOF="a".repeat(64);
+    private static Paid paypalPaid(){
+        String owner=newOwner(),id=unique(),capture="CAP"+unique().replace("-","").substring(0,20),remote="ORD"+unique().replace("-","").substring(0,20);
+        tx.executeWithoutResult(t->{
+            db.queryForList("SELECT id FROM creator WHERE id=? FOR UPDATE",owner);
+            db.update("INSERT INTO payment_order(id,creator_id,package_id,amount,currency,credits,status,created_at,provider,provider_link_id,provider_capture_id) VALUES(?,?,'starter-USD',9.90,'USD',100,'PAID',CURRENT_TIMESTAMP,'PAYPAL_SANDBOX',?,?)",id,owner,remote,capture);
+            ledger.credit(owner,100,"payment:"+id);ledger.bindPayment("PAYPAL",PAYPAL_MERCHANT,ENV,owner,id,capture,"USD");
+        });return new Paid(owner,id,capture,PAYPAL_MERCHANT);
+    }
+    private static PaymentRiskService paypalRisks(){return new PaymentRiskService(db,tx,ledger);}
+    private static Map<String,String> paypalReview(Paid p){
+        var risks=paypalRisks();risks.recordVerified("PAYPAL_SANDBOX",p.capture(),"PAYMENT.CAPTURE.STATUS_RISK",p.order(),"ev-original");
+        ledger.holdPaymentForReview("PAYPAL",p.merchant(),ENV,p.owner(),p.order(),p.capture(),"USD","synthetic-provider-risk");
+        var row=db.queryForMap("SELECT id,last_event_id FROM payment_risk_case WHERE order_id=?",p.order());
+        return Map.of((String)row.get("id"),(String)row.get("last_event_id"));
+    }
+    private static void closePaypalCases(Map<String,String> cases){cases.forEach((id,event)->paypalRisks().resolveCase(id,event,"RELEASE","isolated-proof-fixture","Synthetic complete native reporting proof for isolated transaction test"));}
+    private static void paypalRelease(Paid p,Map<String,String> cases,long refunds,long losses){ledger.releasePaymentReview("PAYPAL",p.merchant(),ENV,p.owner(),p.order(),p.capture(),"USD",refunds,losses,cases,REPORT_PROOF);}
+
+    @Test void paypalCompleteReviewReleaseIsAuditedOrderScopedIdempotentAndNeverMintsCredits(){
+        var p=paypalPaid();var other=paid(p.owner(),ACCOUNT,100);var cases=paypalReview(p);assertEquals(100,held(p));assertEquals(0,held(other));
+        closePaypalCases(cases);assertEquals(100,held(p),"manual review closure alone must not clear the entitlement hold");
+        paypalRelease(p,cases,0,0);paypalRelease(p,cases,0,0);
+        assertEquals("ACTIVE",db.queryForObject("SELECT status FROM p0_credit_batch WHERE reference=?",String.class,"payment:"+p.order()));
+        assertEquals(0,held(p));assertEquals(0,held(other));assertEquals(200,ledger.balance(p.owner()));
+        assertEquals(1,number("SELECT COUNT(*) FROM p0_credit_financial_audit WHERE order_id=? AND fact LIKE 'REVIEW_RELEASE:%'",p.order()));
+        assertEquals(0,number("SELECT COUNT(*) FROM credit_ledger WHERE owner_id=? AND entry_type IN ('PAYMENT_ADJUST','PAYMENT_RETURN','REFUND_RETURN')",p.owner()));
+    }
+    @Test void paypalReviewCannotBeClearedByOpenDisputeWrongScopeStaleEventOrMissingCases(){
+        var p=paypalPaid();var cases=paypalReview(p);
+        assertThrows(IllegalStateException.class,()->paypalRelease(p,cases,0,0));closePaypalCases(cases);
+        assertThrows(IllegalStateException.class,()->paypalRelease(p,Map.of(),0,0));
+        assertThrows(IllegalStateException.class,()->ledger.releasePaymentReview("PAYPAL","OTHER1234",ENV,p.owner(),p.order(),p.capture(),"USD",0,0,cases,REPORT_PROOF));
+        ledger.paymentDispute("PAYPAL",p.merchant(),ENV,"PP-D-"+unique(),p.owner(),p.order(),p.capture(),330,"USD",1,"OPEN",null);
+        assertThrows(IllegalStateException.class,()->paypalRelease(p,cases,0,0));assertEquals(100,held(p));assertEquals(100,ledger.balance(p.owner()));
+        assertEquals(0,number("SELECT COUNT(*) FROM p0_credit_financial_audit WHERE order_id=? AND fact LIKE 'REVIEW_RELEASE:%'",p.order()));
+    }
+    @Test void paypalReleaseRacingNewRiskEventCannotLeaveNewAuthoritativeRiskUnheld() throws Exception {
+        for(int attempt=0;attempt<5;attempt++){
+            var p=paypalPaid();var cases=paypalReview(p);closePaypalCases(cases);var releaseRejected=new java.util.concurrent.atomic.AtomicBoolean();
+            concurrent(List.of(()->{try{paypalRelease(p,cases,0,0);}catch(IllegalStateException stale){assertTrue(stale.getMessage().startsWith("PAYMENT_REVIEW_"));releaseRejected.set(true);}},()->tx.executeWithoutResult(t->{
+                db.queryForList("SELECT id FROM creator WHERE id=? FOR UPDATE",p.owner());
+                paypalRisks().recordVerified("PAYPAL_SANDBOX",p.capture(),"PAYMENT.CAPTURE.REVERSED",p.order(),"ev-new");
+                ledger.holdPaymentForReview("PAYPAL",p.merchant(),ENV,p.owner(),p.order(),p.capture(),"USD","new-authoritative-risk");
+            })));
+            assertEquals("REVIEW",db.queryForObject("SELECT status FROM p0_credit_batch WHERE reference=?",String.class,"payment:"+p.order()));
+            assertEquals("ev-new",db.queryForObject("SELECT last_event_id FROM payment_risk_case WHERE order_id=?",String.class,p.order()));
+            assertEquals(100,held(p));assertEquals(100,ledger.balance(p.owner()));
+            assertEquals(releaseRejected.get()?0:1,number("SELECT COUNT(*) FROM p0_credit_financial_audit WHERE order_id=? AND fact LIKE 'REVIEW_RELEASE:%'",p.order()));
+        }
+    }
+    @Test void paypalRefundCommitWhileOldProofWaitsForOwnerLockRejectsStaleRelease() throws Exception {
+        var p=paypalPaid();var cases=paypalReview(p);closePaypalCases(cases);
+        var ownerLocked=new CountDownLatch(1);var releaseAttempted=new CountDownLatch(1);var rejected=new java.util.concurrent.atomic.AtomicBoolean();
+        concurrent(List.of(()->tx.executeWithoutResult(t->{
+            db.queryForList("SELECT id FROM creator WHERE id=? FOR UPDATE",p.owner());ownerLocked.countDown();
+            try{assertTrue(releaseAttempted.await(10,TimeUnit.SECONDS));}catch(InterruptedException interrupted){Thread.currentThread().interrupt();throw new IllegalStateException(interrupted);}
+            ledger.paymentRefund("PAYPAL",p.merchant(),ENV,"REF"+unique().replace("-","").substring(0,20),p.owner(),p.order(),p.capture(),198,"USD");
+        }),()->{
+            try{assertTrue(ownerLocked.await(10,TimeUnit.SECONDS));}catch(InterruptedException interrupted){Thread.currentThread().interrupt();throw new IllegalStateException(interrupted);}
+            releaseAttempted.countDown();var stale=assertThrows(IllegalStateException.class,()->paypalRelease(p,cases,0,0));assertEquals("PAYMENT_REVIEW_FINANCIAL_FACT_CHANGED",stale.getMessage());rejected.set(true);
+        }));
+        assertTrue(rejected.get());assertEquals(80,ledger.balance(p.owner()));assertEquals(80,held(p));assertEquals(20,adjusted(p));
+        paypalRelease(p,cases,198,0);assertEquals(80,ledger.balance(p.owner()));assertEquals(0,held(p));
+        assertEquals(1,number("SELECT COUNT(*) FROM p0_credit_refund WHERE order_id=?",p.order()));
+    }
+    private static void nativePaypalLoss(Paid p,String dispute,long loss){
+        db.update("INSERT INTO p0_stripe_dispute_proof(provider,merchant,environment,dispute_id,order_id,capture_id,owner_id,loss_minor,withdrawal_id,charge_balance_id,settlement_currency,settlement_principal_minor,evidence_sha256,created_at) VALUES('PAYPAL',?,?,?,?,?,?,?,?,?,'USD',990,?,CURRENT_TIMESTAMP)",p.merchant(),ENV,dispute,p.order(),p.capture(),p.owner(),loss,"WITH"+unique().replace("-","").substring(0,20),p.capture(),REPORT_PROOF);
+    }
+    private static void settlePaypalLoss(Paid p,String dispute,long version,long loss,String proof){ledger.settlePayPalReportedLoss(p.merchant(),ENV,dispute,p.owner(),p.order(),p.capture(),990,"USD",version,loss,proof);}
+    @Test void paypalLateReportingFillsSameVersionUnknownPrincipalOnlyWithExactPersistedNativeProof(){
+        var p=paypalPaid();String dispute="PP-D-"+unique();ledger.paymentDispute("PAYPAL",p.merchant(),ENV,dispute,p.owner(),p.order(),p.capture(),990,"USD",7,"LOST",null);
+        assertEquals(100,held(p));assertEquals(100,ledger.balance(p.owner()));
+        assertThrows(IllegalStateException.class,()->settlePaypalLoss(p,dispute,7,330,REPORT_PROOF));
+        assertThrows(IllegalStateException.class,()->ledger.paymentDispute("PAYPAL",p.merchant(),ENV,dispute,p.owner(),p.order(),p.capture(),990,"USD",7,"LOST",330L),"generic same-version transition must remain blocked");
+        nativePaypalLoss(p,dispute,330);
+        assertThrows(IllegalStateException.class,()->settlePaypalLoss(p,dispute,7,330,"b".repeat(64)));
+        assertThrows(IllegalStateException.class,()->settlePaypalLoss(p,dispute,6,330,REPORT_PROOF));
+        assertThrows(IllegalStateException.class,()->ledger.settlePayPalReportedLoss("OTHER1234",ENV,dispute,p.owner(),p.order(),p.capture(),990,"USD",7,330,REPORT_PROOF));
+        var other=paypalPaid();assertThrows(IllegalStateException.class,()->settlePaypalLoss(other,dispute,7,330,REPORT_PROOF));
+        settlePaypalLoss(p,dispute,7,330,REPORT_PROOF);settlePaypalLoss(p,dispute,7,330,REPORT_PROOF);
+        assertEquals(66,ledger.balance(p.owner()));assertEquals(34,adjusted(p));assertEquals(0,held(p));assertEquals(100,ledger.balance(other.owner()));
+        assertEquals(1,number("SELECT COUNT(*) FROM credit_ledger WHERE owner_id=? AND entry_type='PAYMENT_ADJUST'",p.owner()));
+        assertEquals(330,number("SELECT loss_minor FROM p0_credit_dispute WHERE external_id=?",dispute));assertEquals(7,number("SELECT version FROM p0_credit_dispute WHERE external_id=?",dispute));
+    }
+    @Test void paypalLateSameVersionReportingIsConcurrentIdempotentAndCannotBypassRefundOverlap() throws Exception {
+        var p=paypalPaid();String dispute="PP-D-"+unique();ledger.paymentDispute("PAYPAL",p.merchant(),ENV,dispute,p.owner(),p.order(),p.capture(),990,"USD",7,"LOST",null);nativePaypalLoss(p,dispute,330);
+        concurrent(List.of(()->settlePaypalLoss(p,dispute,7,330,REPORT_PROOF),()->settlePaypalLoss(p,dispute,7,330,REPORT_PROOF)));
+        assertEquals(66,ledger.balance(p.owner()));assertEquals(34,adjusted(p));assertEquals(1,number("SELECT COUNT(*) FROM credit_ledger WHERE owner_id=? AND entry_type='PAYMENT_ADJUST'",p.owner()));
+        var q=paypalPaid();String conflicting="PP-D-"+unique();ledger.paymentRefund("PAYPAL",q.merchant(),ENV,"REF"+unique().replace("-","").substring(0,20),q.owner(),q.order(),q.capture(),198,"USD");
+        ledger.paymentDispute("PAYPAL",q.merchant(),ENV,conflicting,q.owner(),q.order(),q.capture(),990,"USD",7,"LOST",null);nativePaypalLoss(q,conflicting,330);
+        assertThrows(IllegalStateException.class,()->settlePaypalLoss(q,conflicting,7,330,REPORT_PROOF));assertEquals(80,ledger.balance(q.owner()));assertEquals(20,adjusted(q));assertEquals(80,held(q));
+        assertEquals(1,number("SELECT COUNT(*) FROM credit_ledger WHERE owner_id=? AND entry_type='PAYMENT_ADJUST'",q.owner()));
+    }
+    @Test void humanHoldCommittedWhileReportReleaseWaitsForOwnerLockCannotBeAutomaticallyOverridden() throws Exception {
+        var p=paypalPaid();var cases=paypalReview(p);closePaypalCases(cases);var entry=cases.entrySet().iterator().next();
+        var ownerLocked=new CountDownLatch(1);var reportReturned=new CountDownLatch(1);
+        concurrent(List.of(()->tx.executeWithoutResult(t->{
+            db.queryForList("SELECT id FROM creator WHERE id=? FOR UPDATE",p.owner());ownerLocked.countDown();
+            try{assertTrue(reportReturned.await(10,TimeUnit.SECONDS));}catch(InterruptedException interrupted){Thread.currentThread().interrupt();throw new IllegalStateException(interrupted);}
+            paypalRisks().resolveCase(entry.getKey(),entry.getValue(),"HOLD","human-reviewer","Manual decision must take precedence over a previously fetched reporting proof");
+        }),()->{
+            try{assertTrue(ownerLocked.await(10,TimeUnit.SECONDS));}catch(InterruptedException interrupted){Thread.currentThread().interrupt();throw new IllegalStateException(interrupted);}
+            reportReturned.countDown();var rejected=assertThrows(IllegalStateException.class,()->paypalRelease(p,cases,0,0));assertEquals("PAYMENT_REVIEW_CASE_NOT_RESOLVED",rejected.getMessage());
+        }));
+        assertEquals(100,held(p));assertEquals(100,ledger.balance(p.owner()));assertEquals("REVIEW",db.queryForObject("SELECT status FROM p0_credit_batch WHERE reference=?",String.class,"payment:"+p.order()));
+        assertEquals("HOLD",db.queryForObject("SELECT decision FROM payment_risk_case WHERE id=?",String.class,entry.getKey()));assertEquals("human-reviewer",db.queryForObject("SELECT reviewed_by FROM payment_risk_case WHERE id=?",String.class,entry.getKey()));
+        assertEquals(0,number("SELECT COUNT(*) FROM p0_credit_financial_audit WHERE order_id=? AND fact LIKE 'REVIEW_RELEASE:%'",p.order()));
+    }
 }

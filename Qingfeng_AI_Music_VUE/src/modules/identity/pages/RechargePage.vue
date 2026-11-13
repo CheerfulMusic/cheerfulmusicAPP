@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, shallowRef } from 'vue'
+import { computed, onMounted, onUnmounted, ref, shallowRef } from 'vue'
 import { locale } from '../../../shared/i18n'
 import { currentCreatorId, ensureCreator, requestJson } from '../../../shared/http/api-client'
 import { accountState, refreshAccountState } from '../../../shared/identity/account-state'
@@ -8,7 +8,7 @@ import { logtoState, refreshLogtoState } from '../../../shared/identity/logto-st
 import { readPendingOrders, savePendingOrders } from '../model/payment-orders'
 import { preparePaypalCheckout, type PaypalCheckout, type PaypalSdkConfig } from '../api/paypal-sdk'
 import { isPendingOrder, trustedCheckoutUrl, type OrderStatus } from '../model/order-history'
-import { paymentCurrencySymbol, preferredCurrency, stripeMethods, stripeOrderRequest, type CreditPack, type PaymentCatalog, type PaymentCurrency, type StripeCatalog, type StripePaymentMethodId } from '../model/stripe-payment-methods'
+import { paymentCurrencySymbol, preferredCurrency, selectableCreditPack, stripeMethods, stripeOrderRequest, type CreditPack, type PaymentCatalog, type PaymentCurrency, type StripeCatalog, type StripePaymentMethodId } from '../model/stripe-payment-methods'
 
 const props = defineProps<{ embedded?: boolean }>()
 const emit = defineEmits<{ login: []; orders: [] }>()
@@ -24,7 +24,11 @@ const currentMethod = computed(() => methods.value.find(method => method.id === 
 const provider = computed(() => paymentChoice.value === 'paypal' ? 'paypal' : 'stripe')
 const available = computed(() => provider.value === 'paypal' ? paypalAvailable.value : !!currentMethod.value?.enabled)
 const catalog = computed(() => provider.value === 'paypal' ? paypalCatalog.value : currentMethod.value?.packages ?? [])
-const chosen = computed(() => catalog.value.find(pack => pack.currency === currency.value && pack.credits === selected.value))
+const quoteNow = ref(Date.now())
+let quoteTimer: ReturnType<typeof setInterval> | undefined
+const acceptancePack = computed(() => catalog.value.find(pack => pack.currency === currency.value && pack.acceptance === true))
+const acceptanceExpired = computed(() => !!acceptancePack.value && !selectableCreditPack(acceptancePack.value, quoteNow.value))
+const chosen = computed(() => catalog.value.find(pack => pack.currency === currency.value && pack.credits === selected.value && selectableCreditPack(pack, quoteNow.value)))
 const tiers = computed(() => [100,300,700].map(credits => {
   const real = catalog.value.find(pack => pack.currency === currency.value && pack.credits === credits)
   return { credits, amount:real?.amount ?? null, real:!!real }
@@ -39,9 +43,13 @@ function selectPayment(choice: PaymentChoice) {
   if (busy.value) return
   paymentChoice.value = choice
   currency.value = choice === 'paypal' ? 'USD' : preferredCurrency(methods.value.find(method => method.id === choice), currency.value)
+  selected.value = acceptancePack.value ? 1 : selected.value === 1 ? 300 : selected.value
 }
 function selectCurrency(value: PaymentCurrency) {
-  if (!busy.value && currencyOptions.value.some(option => option.currency === value && option.enabled)) currency.value = value
+  if (!busy.value && currencyOptions.value.some(option => option.currency === value && option.enabled)) {
+    currency.value = value
+    selected.value = acceptancePack.value ? 1 : selected.value === 1 ? 300 : selected.value
+  }
 }
 function methodName(id: StripePaymentMethodId) {
   return id === 'apple_pay' ? 'Apple Pay' : id === 'wechat_pay' ? (en.value ? 'WeChat Pay' : '微信支付') : (en.value ? 'International credit / debit card' : '国际信用卡 / 借记卡')
@@ -67,10 +75,12 @@ async function refresh() {
     paypalAvailable.value=p.status==='fulfilled'&&p.value.enabled
     paypalCatalog.value=p.status==='fulfilled'?p.value.packages.filter(pack=>pack.currency==='USD'):[]
     stripeCatalog.value=s.status==='fulfilled'?s.value:{enabled:false,packages:[]}
+    quoteNow.value=Date.now()
     if(!paypalAvailable.value && paymentChoice.value==='paypal') {
       const first = methods.value.find(method => method.enabled) ?? methods.value.find(method => method.id==='card')
       if(first)selectPayment(first.id)
     }
+    if(acceptancePack.value)selected.value=1
     if(b.status==='fulfilled') { musicCost.value=Number.isFinite(b.value.musicCost) && b.value.musicCost > 0 ? b.value.musicCost : null; if(b.value.enabled) balance.value=b.value.balance }
     if(signedIn.value && (paypalAvailable.value||methods.value.some(method => method.enabled))) {
       const endpoints=['app/paypal/orders','app/stripe/orders','app/payments/orders']
@@ -115,7 +125,7 @@ async function refresh() {
   finally { loading.value=false }
 }
 async function checkout() {
-  if(busy.value || !available.value || !chosen.value || blocked.value || !signedIn.value) return
+  if(busy.value || !available.value || !selectableCreditPack(chosen.value) || blocked.value || !signedIn.value) return
   busy.value=true; error.value=''
   try {
     const owner=currentCreatorId(), pack=chosen.value
@@ -141,7 +151,8 @@ async function checkout() {
   } catch { blocked.value=true; error.value=en.value?'We could not confirm the order. Check your account before trying again.':'订单状态暂时无法确认，请先到账号页核对，避免重复付款。' }
   finally { busy.value=false }
 }
-onMounted(refresh)
+onMounted(() => { quoteTimer=setInterval(() => {quoteNow.value=Date.now()},1000); void refresh() })
+onUnmounted(() => { if(quoteTimer !== undefined)clearInterval(quoteTimer) })
 </script>
 <template>
   <div class="recharge">
@@ -170,8 +181,14 @@ onMounted(refresh)
           </div>
           <p v-if="paymentChoice==='wechat_pay' && currencyOptions.some(option=>option.currency==='USD'&&!option.enabled)" class="currency-note" data-testid="wechat-usd-unavailable">{{ en?'WeChat Pay in USD is not supported for this merchant account. Choose the CNY quote instead.':'当前商户账户不支持微信美元付款，可选择人民币报价；美元套餐仍可使用银行卡或 Apple Pay。' }}</p>
           <div v-if="!available" class="notice">{{ loading ? (en?'Checking payment availability…':'正在检查支付状态…') : availabilityMessage(currentMethod?.reason) }}</div>
+          <div v-if="acceptancePack" class="notice" data-testid="acceptance-offer">
+            <strong>{{ en?'Temporary payment verification':'临时收款验收套餐' }}</strong>
+            <p>{{ en?'Only available to this account: 1 credit, one purchase per payment method.':'仅当前账号可用：1 积分，每个支付渠道限购一次。' }}</p>
+            <p>{{ en?'Expires at':'到期时间' }} {{ acceptancePack.expiresAt }}</p>
+            <button type="button" data-testid="select-acceptance-offer" :disabled="busy||acceptanceExpired||!available" :aria-pressed="selected===1" @click="selected=1">{{ acceptanceExpired?(en?'Offer expired':'报价已过期'):symbol+acceptancePack.amount.toFixed(2) }}</button>
+          </div>
           <div class="plans">
-            <button v-for="(tier,i) in tiers" :key="tier.credits" type="button" class="plan" :class="{selected:selected===tier.credits}" :aria-pressed="selected===tier.credits" :disabled="busy||!tier.real" @click="selected=tier.credits">
+            <button v-for="(tier,i) in tiers" :key="tier.credits" type="button" class="plan" :class="{selected:selected===tier.credits}" :aria-pressed="selected===tier.credits" :disabled="busy||!tier.real||!!acceptancePack" @click="selected=tier.credits">
               <span v-if="i===1" class="badge">{{ en?'POPULAR':'热门选择' }}</span><span class="plan-name">{{ en?['STARTER','CREATOR','STUDIO'][i]:['灵感起步','创作畅享','灵感满满'][i] }}</span><strong>{{ tier.credits }} <small>{{ en?'credits':'积分' }}</small></strong>
               <span class="plan-price">{{ tier.amount===null?'—':symbol+tier.amount.toFixed(2) }}</span><span v-if="tier.amount===null" class="quote-unavailable">{{ en?'No server quote':'暂无服务端报价' }}</span><span v-if="songCount(tier.credits) !== null" class="plan-info">{{ en?`About ${songCount(tier.credits)} song generations`:`约可生成 ${songCount(tier.credits)} 次歌曲` }}</span><span class="radio" aria-hidden="true"></span>
             </button>

@@ -18,7 +18,7 @@ HEX40 = re.compile(r"[0-9a-f]{40}")
 HEX64 = re.compile(r"[0-9a-f]{64}")
 
 # Immutable canonical core source; EOL normalization matches cross-platform source exports.
-CORE_MIGRATION_SOURCE = '0530c444a38db2363e0a6296c52a416b09a14d5f'
+CORE_MIGRATION_SOURCE = 'e6c351f21ece6fb096ff425ca4b690232632de21'
 CORE_MIGRATION_SHA256 = {
     "V10__cover_assets.sql": "c3e80ebcb4b79026c7ccc61ce55be02a0695d2251aa62c6327f685d3803ecfaf",
     "V11__lyrics_request_recovery.sql": "114bfd16c036be78a5ae20e771ccc297bf05e254034268011485c473b0f14cde",
@@ -55,6 +55,7 @@ CORE_MIGRATION_SHA256 = {
     "V40__artist_profiles_and_releases.sql": "6961661d242cb88d9744f38da7fe2c46211e48ffa23c51a30431ed5cde50b6ac",
     "V41__artist_home_customization.sql": "5a518704c89fde820ceb60561b60d3c7df1bc1559b455e9afcdd5767796f29d7",
     "V42__shared_download_entitlement.sql": "cfa29d81a1e69515436e357111ec31fd81f8f7709add6b7b5241b7b2462fffec",
+    "V44__discover_song_publication.sql": "70124e97c6ce679b7f854bff29881d500833a74c39a05a9fccec2c69face1790",
     "V43__lyric_revision_custom_sections.sql": "c6c7032590c2b19bf7f14a5fd08b9a1554a4344da96e3d211c336dcebf9e3d6a",
     "V3__generation_snapshot.sql": "c8690dc83f20884591e985be56954935bcdf01b0f456bfe0f55a22c91f21281e",
     "V4__durable_execution_and_recovery.sql": "7710acedeaa91caa49869bbe3ac4c9e6875dbdbfbec61f01e38764f404699e6c",
@@ -64,8 +65,8 @@ CORE_MIGRATION_SHA256 = {
     "V8__playback_lyrics.sql": "bf9293fca2c2219b6b8001e34478d101b67d07a408aa0cc74a0ed5f4d4d7f3da",
     "V9__vocal_gender.sql": "7622d709fcee77c476056977365d69d3e56ba123593219288ac28f1ba198b35b"
 }
-INTEGRATED_MIGRATION = 'V44__credit_entitlement_integration.sql'
-INTEGRATED_MIGRATION_SHA256 = '5f93d318f7583906f424fe0a5e41afac5ba1d147f91ee4527c88f1a1ee51433b'
+INTEGRATED_MIGRATION = 'V45__credit_entitlement_integration.sql'
+INTEGRATED_MIGRATION_SHA256 = '3dd5cebf19dee960ecefb2239668139918d363496fe87710f817c5b3a3241685'
 
 
 class GateError(ValueError):
@@ -137,12 +138,12 @@ def normalized_migration_sha(data):
 def verify_migration_set(normalized):
     expected = {**CORE_MIGRATION_SHA256, INTEGRATED_MIGRATION: INTEGRATED_MIGRATION_SHA256}
     if set(normalized) != set(expected):
-        raise GateError("Canonical migration chain must contain exactly core V1..V43 and integrated V44")
+        raise GateError("Canonical migration chain must contain exactly core V1..V44 and integrated V45")
     for name, digest in expected.items():
         if normalized[name] != digest:
             raise GateError("Canonical migration source changed: " + name)
-    return {"coreSourceCommit": CORE_MIGRATION_SOURCE, "coreVersions": "1..43",
-            "integrationVersion": "44", "normalization": "UTF-8/no BOM/LF",
+    return {"coreSourceCommit": CORE_MIGRATION_SOURCE, "coreVersions": "1..44",
+            "integrationVersion": "45", "normalization": "UTF-8/no BOM/LF",
             "normalizedSha256": dict(sorted(normalized.items()))}
 
 

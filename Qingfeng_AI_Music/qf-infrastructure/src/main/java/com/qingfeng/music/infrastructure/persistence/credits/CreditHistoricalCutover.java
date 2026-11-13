@@ -94,7 +94,7 @@ public final class CreditHistoricalCutover {
         for (Order order : source.orders()) if (order.createdAt() == null)
             scopedIssues.add(new Issue("HISTORICAL_ORDER_TIME_MISSING", order.owner(), order.id()));
         String sha = digest(encode(out -> {
-            field(out, "preserve-existing-balances-new-stripe-only-v1");
+            field(out, "preserve-existing-balances-fenced-payments-v2");
             field(out, source.sha256()); field(out, evidence);
         }));
         return new Plan(source, strict.approval(), strict.openings(), strict.debits(), scopedIssues, sha);
@@ -401,7 +401,7 @@ public final class CreditHistoricalCutover {
                         rs.getBigDecimal(7).toPlainString(), rs.getString(8), rs.getLong(9), rs.getTimestamp(10).toInstant()));
         List<String> risk = db.query("SELECT id,provider,resource_id,event_type,order_id,owner_id,status,last_event_id FROM payment_risk_case ORDER BY id" + suffix,
                 (rs, n) -> digest(encode(out -> { for (int i = 1; i <= 8; i++) field(out, rs.getString(i)); })));
-        return new Snapshot(identity, owners, journal, orders, risk, history.stream().filter(row -> row.version() <= 43).toList());
+        return new Snapshot(identity, owners, journal, orders, risk, history.stream().filter(row -> row.version() <= 44).toList());
     }
 
     private Identity identity() {
@@ -448,8 +448,8 @@ public final class CreditHistoricalCutover {
                 text.lines().forEach(line -> crc.update(line.getBytes(StandardCharsets.UTF_8)));
                 require(expected.put(version, new History(version, name, (int) crc.getValue())) == null, "DUPLICATE_CLASSPATH_MIGRATION");
             }
-            require(expected.size() == 44, "HISTORY_RESOURCE_CHAIN_INCOMPLETE");
-            require(actual.size() == 43 || actual.size() == 44, "HISTORY_CHAIN_LENGTH_MISMATCH");
+            require(expected.size() == 45, "HISTORY_RESOURCE_CHAIN_INCOMPLETE");
+            require(actual.size() == 44 || actual.size() == 45, "HISTORY_CHAIN_LENGTH_MISMATCH");
             for (int i = 0; i < actual.size(); i++)
                 require(actual.get(i).version() == i + 1 && actual.get(i).equals(expected.get(i + 1)), "HISTORY_SCRIPT_OR_CHECKSUM_MISMATCH");
         } catch (java.io.IOException invalid) { throw new IllegalStateException("HISTORY_RESOURCE_UNREADABLE", invalid); }

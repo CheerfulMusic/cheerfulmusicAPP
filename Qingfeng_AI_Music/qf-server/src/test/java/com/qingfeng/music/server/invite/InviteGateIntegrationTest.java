@@ -18,6 +18,7 @@ import com.qingfeng.music.credits.CreditsLedger;
 import com.qingfeng.music.identity.api.IdentityApi;
 import com.qingfeng.music.lyrics.api.LyricsApi;
 import com.qingfeng.music.media.api.MediaApi;
+import com.qingfeng.music.server.artist.ArtistProfileService;
 import com.qingfeng.music.sharing.api.SharingApi;
 import com.qingfeng.music.work.api.WorkApi;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -30,7 +31,7 @@ import static org.junit.jupiter.api.Assertions.*;
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = {
     "qingfeng.invite-gate.enabled=true", "qingfeng.invite-gate.codes=QF-TEST-INVITATION-2026",
     "qingfeng.invite-gate.signing-key=test-only-private-signing-key-with-more-than-32-characters", "qingfeng.invite-gate.attempts-per-minute=100",
-    "spring.flyway.target=43"
+    "spring.flyway.target=44"
 })
 @ActiveProfiles("test")
 class InviteGateIntegrationTest {
@@ -116,6 +117,7 @@ class InviteGateIntegrationTest {
     @Autowired LyricsApi lyrics;
     @Autowired WorkApi works;
     @Autowired MediaApi media;
+    @Autowired ArtistProfileService artistProfiles;
     @Autowired SharingApi sharing;
     @Autowired CreditsLedger credits;
 
@@ -391,6 +393,93 @@ class InviteGateIntegrationTest {
         assertEquals(404, send(visitor, "GET", publicCover, null, null).statusCode());
         assertEquals(404, send(visitor, "HEAD", publicCover, null, null).statusCode());
         assertEquals(404, send(owner.http(), "GET", privateCover, null, null).statusCode());
+    }
+
+    @Test void discoverRequiresExplicitPublicationAndTracksArtistVisibility() throws Exception {
+        var owner = artistSession("Discover artist");
+        var other = artistSession("Another artist");
+        var visitor = HttpClient.newHttpClient();
+        var song = releaseArtistSong(owner, "First Discover song", 7);
+        var profile = send(owner.http(), "GET", ARTIST_PROFILE, null, null);
+        String artistId = field(profile.body(), "publicId");
+        String publicArtist = "/api/public/artists/" + artistId;
+        String releasePath = ARTIST_PROFILE + "/releases/" + song.work();
+        String publishPath = releasePath + "/discover";
+        String feed = "/api/public/discover";
+        String version = "{\"version\":1}";
+
+        assertEquals(200, send(visitor, "GET", feed, null, null).statusCode());
+        assertFalse(send(visitor, "GET", feed, null, null).body().contains(song.id()));
+        assertEquals(409, send(owner.http(), "PUT", publishPath, version, owner.csrf()).statusCode());
+        assertEquals(200, send(owner.http(), "PUT", ARTIST_PROFILE + "/visibility",
+                "{\"published\":true}", owner.csrf()).statusCode());
+        assertEquals(200, send(other.http(), "PUT", ARTIST_PROFILE + "/visibility",
+                "{\"published\":true}", other.csrf()).statusCode());
+        assertTrue(send(visitor, "GET", publicArtist, null, null).body().contains(song.id()));
+        assertFalse(send(visitor, "GET", feed, null, null).body().contains(song.id()));
+        assertEquals(403, send(owner.http(), "PUT", publishPath, version, null).statusCode());
+        assertEquals(404, send(other.http(), "PUT", publishPath, version, other.csrf()).statusCode());
+        assertEquals(409, send(owner.http(), "PUT", publishPath, "{\"version\":2}", owner.csrf()).statusCode());
+
+        var published = send(owner.http(), "PUT", publishPath, version, owner.csrf());
+        assertEquals(200, published.statusCode(), published.body());
+        assertTrue(published.body().contains("\"onDiscover\":true"));
+        var firstFeed = send(visitor, "GET", feed, null, null);
+        assertEquals("no-store", firstFeed.headers().firstValue("cache-control").orElseThrow());
+        assertTrue(firstFeed.body().contains(song.id()));
+        assertTrue(firstFeed.body().contains(artistId));
+        assertFalse(firstFeed.body().contains(song.work()));
+        assertFalse(firstFeed.body().contains(owner.creator()));
+        assertEquals(200, send(owner.http(), "PUT", publishPath, version, owner.csrf()).statusCode());
+        assertEquals(firstFeed.body(), send(visitor, "GET", feed, null, null).body());
+        assertTrue(send(visitor, "GET", feed + "?genre=folk&q=discover", null, null).body().contains(song.id()));
+        assertTrue(send(visitor, "GET", feed + "?q=Discover%20artist", null, null).body().contains(song.id()));
+        assertFalse(send(visitor, "GET", feed + "?genre=rock", null, null).body().contains(song.id()));
+        assertFalse(send(visitor, "GET", feed + "?q=%25", null, null).body().contains(song.id()));
+        assertFalse(firstFeed.body().contains("民谣"), "Private style text should not be returned");
+        String playPath = feed + "/songs/" + song.id() + "/1/play";
+        assertEquals(204, send(visitor, "POST", playPath, null, null).statusCode());
+        assertEquals(404, send(visitor, "POST", playPath.replace("/1/", "/2/"), null, null).statusCode());
+        var popular = send(visitor, "GET", feed + "?popular=true", null, null);
+        assertTrue(popular.body().contains("\"plays\":1"), popular.body());
+        assertTrue(popular.body().contains("\"artists\":[{\"artistId\":\"" + artistId + "\""), popular.body());
+        assertFalse(send(visitor, "GET", feed + "?featured=true", null, null).body().contains(song.id()));
+        assertEquals(403, send(owner.http(), "PUT", "/api/app/discover/editor/songs/" + song.id(),
+                "{\"featured\":true}", owner.csrf()).statusCode());
+        artistProfiles.setDiscoverFeatured(song.id(), true);
+        assertTrue(send(visitor, "GET", feed + "?featured=true", null, null).body().contains(song.id()));
+
+        String audio = publicArtist + "/songs/" + song.id() + "/1/audio";
+        assertEquals(200, readBytes(visitor, audio).statusCode());
+        assertEquals(200, send(owner.http(), "DELETE", publishPath, null, owner.csrf()).statusCode());
+        assertFalse(send(visitor, "GET", feed, null, null).body().contains(song.id()));
+        assertEquals(404, send(visitor, "POST", playPath, null, null).statusCode());
+        assertEquals(200, readBytes(visitor, audio).statusCode());
+        assertEquals(200, send(owner.http(), "PUT", publishPath, version, owner.csrf()).statusCode());
+        assertFalse(send(visitor, "GET", feed + "?featured=true", null, null).body().contains(song.id()));
+
+        assertEquals(200, send(owner.http(), "PUT", ARTIST_PROFILE + "/visibility",
+                "{\"published\":false}", owner.csrf()).statusCode());
+        assertFalse(send(visitor, "GET", feed, null, null).body().contains(song.id()));
+        assertEquals(404, readBytes(visitor, audio).statusCode());
+        assertEquals(200, send(owner.http(), "PUT", ARTIST_PROFILE + "/visibility",
+                "{\"published\":true}", owner.csrf()).statusCode());
+        assertFalse(send(visitor, "GET", feed, null, null).body().contains(song.id()));
+        assertEquals(200, readBytes(visitor, audio).statusCode());
+
+        assertEquals(200, send(owner.http(), "PUT", publishPath, version, owner.csrf()).statusCode());
+        String replacement = media.importAudio(owner.creator(), song.work(), new ByteArrayInputStream(wav(9))).id();
+        assertEquals(200, send(owner.http(), "PUT", releasePath,
+                "{\"assetId\":\"" + replacement + "\",\"title\":\"Updated Discover song\"}", owner.csrf()).statusCode());
+        assertFalse(send(visitor, "GET", feed, null, null).body().contains(song.id()));
+        assertEquals(404, readBytes(visitor, audio).statusCode());
+        assertEquals(409, send(owner.http(), "PUT", publishPath, version, owner.csrf()).statusCode());
+        assertEquals(200, send(owner.http(), "PUT", publishPath, "{\"version\":2}", owner.csrf()).statusCode());
+        assertTrue(send(visitor, "GET", feed, null, null).body().contains("Updated Discover song"));
+        assertEquals(200, send(owner.http(), "DELETE", releasePath, null, owner.csrf()).statusCode());
+        assertFalse(send(visitor, "GET", feed, null, null).body().contains(song.id()));
+        assertEquals(404, readBytes(visitor, audio.replace("/1/", "/2/")).statusCode());
+        assertNotNull(media.locate(owner.creator(), song.work(), replacement));
     }
 
     private ArtistSession artistSession(String name) throws Exception {

@@ -12,9 +12,10 @@ export async function generateLyrics(work: string, workVersion: number, requestK
   await ensureCreator()
   return requestJson<Revision>(`app/works/${work}/lyrics/generate`, 'POST', {workVersion, requestKey, language, instructions, baseRevisionId, ...structure}, 120000)
 }
-export function generatePhotoLyrics(work: string, version: number, key: string, language: string, photo: File) {
+export function generatePhotoLyrics(work: string, version: number, key: string, language: string, photos: readonly File[]) {
   const form = new FormData()
-  form.set('photo', photo)
+  const partName = photos.length === 1 ? 'photo' : 'photos'
+  for (const photo of photos) form.append(partName, photo)
   form.set('workVersion', String(version))
   form.set('requestKey', key)
   form.set('language', language)

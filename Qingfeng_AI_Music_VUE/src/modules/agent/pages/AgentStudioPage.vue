@@ -1,5 +1,8 @@
 <script setup lang="ts">
 import '../playful.css'
+import ChatAppearance from '../components/ChatAppearance.vue'
+import AgentHotSongs from '../components/AgentHotSongs.vue'
+import { useChatAppearance } from '../composables/useChatAppearance'
 import { routerKey } from 'vue-router'
 import { defineAsyncComponent, computed, inject, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { defaultCover, locale } from '../../../shared/i18n'
@@ -37,6 +40,7 @@ function avatarImageFailed(event: Event) { const img = event.target as HTMLImage
 function openProfile(event: MouseEvent) { if (!profileRouter || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey || event.button !== 0) return; event.preventDefault(); void profileRouter.push('/profile') }
 const profileAvatar = useProfileAvatar()
 const { sparks, burst } = useMusicClicks()
+const { appearance, style: appearanceStyle, reset: resetAppearance } = useChatAppearance()
 const avatarGeneration = useAvatarGeneration(avatar.refresh, refreshCredits)
 const avatarDialog = ref(false)
 async function uploadAvatar(file: File) { if (await avatar.upload(file)) avatarDialog.value = false }
@@ -238,14 +242,14 @@ onBeforeUnmount(() => { avatarDisposed = true; window.removeEventListener('qingf
 </script>
 
 <template>
-  <div class="agent-studio agent-playful" @click.capture="burst">
-    <Teleport to="body"><div class="agent-click-sparks" aria-hidden="true"><span v-for="spark in sparks" :key="spark.id" :style="{ left: `${spark.x}px`, top: `${spark.y}px` }"><i>♪</i><i>✦</i><i>♫</i></span></div></Teleport>
+  <div class="agent-studio agent-playful" :style="appearanceStyle" @click.capture="burst">
+    <Teleport to="body"><div class="agent-click-sparks" aria-hidden="true"><span v-for="spark in sparks" :key="spark.id" :style="{ left: `${spark.x}px`, top: `${spark.y}px` }"><i/><b/></span></div></Teleport>
     <div class="agent-scenery" aria-hidden="true"><span/><span/><span/></div>
     <section class="agent-conversation" :aria-label="tr('音乐创作对话', 'Music conversation')">
       <header class="agent-conversation-head">
-        <span class="agent-conversation-pill">♫ {{ tr('音乐创作助手', 'Music creation assistant') }}</span>
+        <span class="agent-conversation-pill"><i class="studio-status-dot" aria-hidden="true"/> {{ tr('音乐创作助手', 'Music creation assistant') }}</span>
         <p class="agent-conversation-sub">{{ tr('创作、作品、积分和账号，在这里接着聊、接着办。', 'Create music, manage songs, credits and your account in one conversation.') }}</p>
-        <button type="button" class="agent-reset-trigger" :disabled="loading || sending" @click="confirmingReset = !confirmingReset">{{ tr('重新开始', 'Start over') }}</button>
+        <ChatAppearance v-model="appearance" @reset="resetAppearance"/><button type="button" class="agent-reset-trigger" :disabled="loading || sending" @click="confirmingReset = !confirmingReset">{{ tr('重新开始', 'Start over') }}</button>
       </header>
       <div v-if="confirmingReset" class="agent-reset-confirm" role="alert">
         <p>{{ tr('这会清空聊天及当前作品关联，已保存的作品仍在「我的音乐」。已提交的音乐任务不会被取消；如需停止，请先查看当前任务。', 'This clears the chat and current song selection. Saved songs remain in My Music. Submitted music jobs keep running; review the current task first if you want to stop it.') }}</p>
@@ -256,7 +260,7 @@ onBeforeUnmount(() => { avatarDisposed = true; window.removeEventListener('qingf
         <button v-if="hasOlderMessages" class="agent-history-more" type="button" :disabled="loadingOlder || loading" @click="loadOlder">{{ loadingOlder ? tr('正在加载…', 'Loading…') : tr('查看更早的对话', 'Load earlier messages') }}</button>
         <p v-if="historyError" class="agent-upload-error" role="status">{{ historyError }}</p>
         <div v-if="!messages.length" class="agent-hero">
-          <div class="agent-hero-friend" aria-hidden="true"><img :src="'/brand/music-person.svg'" alt=""/><span>♪</span><span>✦</span></div>
+          <div class="agent-hero-orbit" aria-hidden="true"><span/><i>♫</i></div><span class="agent-hero-eyebrow">YOUR PERSONAL MUSIC STUDIO</span>
           <h1>{{ tr('把你的故事，变成一首歌。', 'Turn your story into a song.') }}</h1>
           <p class="agent-hero-tagline">{{ tr('每个人，都可以是歌手。', 'Everyone can be a singer.') }}</p>
           <p>{{ tr('一个故事、一种心情，甚至一张照片。', 'A story, a feeling, or even a photo.') }}</p>
@@ -301,7 +305,7 @@ onBeforeUnmount(() => { avatarDisposed = true; window.removeEventListener('qingf
       </div>
     </section>
     <Teleport to="body"><UserAvatarDialog v-if="avatarDialog" :busy="avatar.busy.value" :error="avatar.error.value" :disabled="blocked" :generation-available="avatarGeneration.available.value" @close="avatarDialog = false" @upload="uploadAvatar" @generate="generateAvatar"/></Teleport>
-    <aside class="agent-preview" :aria-label="tr('当前作品', 'Current song')">
+    <aside class="agent-preview" :aria-label="songCard?.songId ? tr('当前作品', 'Current song') : tr('热歌推荐', 'Song recommendations')">
       <template v-if="songCard?.songId">
         <div class="agent-album">
           <div class="agent-record" :class="{ 'is-spinning': isPlaying }" aria-hidden="true"><span/></div>
@@ -335,7 +339,7 @@ onBeforeUnmount(() => { avatarDisposed = true; window.removeEventListener('qingf
         <div v-if="publicLink" class="agent-share-link"><a :href="publicLink" target="_blank" rel="noopener noreferrer">{{ tr('打开分享页面', 'Open share page') }}</a><button type="button" @click="copyShare">{{ tr('复制链接', 'Copy link') }}</button></div>
         <div class="agent-preview-actions agent-bottom-actions"><button type="button" :disabled="blocked || !playable" @click="send('下载当前作品')">↓ {{ downloadUnlocked ? tr('免费下载', 'Free download') : tr('下载（首次10积分）', 'Download (10 credits first time)') }}</button><button type="button" :disabled="blocked || !playable" @click="send('分享当前作品')">♧ {{ tr('分享', 'Share') }}</button><button type="button" :disabled="blocked" @click="input = tr('参考当前作品，帮我创作一首同风格的新歌', 'Create a new song inspired by the style of the current song')">✦ {{ tr('改编同款', 'Create a version') }}</button></div>
       </template>
-      <div v-else class="agent-empty-song"><span aria-hidden="true">♫</span><strong>{{ tr('从一句灵感开始', 'Start with an idea') }}</strong><p>{{ tr('写好歌词后，作品会出现在这里。音乐完成后，就能试听、下载和分享。', 'Your song will appear here when its lyrics are ready. Once the music is generated, you can listen, download and share.') }}</p></div>
+      <AgentHotSongs v-else @inspire="input = tr(`帮我创作一首${$event}风格的歌，主题是`, `Help me create a ${$event} song about `)"/>
     </aside>
     <AgentNativeDialog v-if="nativePanel" :key="`${nativePanel.kind}:${nativePanel.workId || ''}`" :kind="nativePanel.kind" :work-id="nativePanel.workId" @close="nativePanel = null" @refresh="conversation.refresh()" @send="send"/>
   </div>

@@ -40,7 +40,7 @@ class CreditCarryForwardCutoverMySqlTest {
         assertEquals("05c27d3c-dda3-11f1-aba0-84a938421519",db.queryForObject("SELECT @@server_uuid",String.class));
         assertEquals(required("UUID"),db.queryForObject("SELECT @@server_uuid",String.class));
         assertEquals(0,count("SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE()"),"Never clear/reuse a previous cohort");
-        Flyway.configure().dataSource(source).locations("classpath:db/migration").cleanDisabled(true).target("43").load().migrate();
+        Flyway.configure().dataSource(source).locations("classpath:db/migration").cleanDisabled(true).target("44").load().migrate();
         db.update("INSERT INTO creator(id,created_at) VALUES(?,?),(?,?)",A,OLD,B,OLD);
         db.update("INSERT INTO payment_order(id,creator_id,package_id,amount,currency,credits,provider,status,provider_capture_id,provider_link_id,created_at) VALUES(?,?,'historical-snapshot',9.90,'USD',100,'PAYPAL_LIVE','PAID','old-capture','old-link',?)",ORDER,A,OLD);
         db.update("INSERT INTO credit_ledger VALUES('CREDIT',?,?,100,?),('DEBIT','returned',?,-20,?),('REFUND','returned',?,20,?),('DEBIT','unreturned',?,-30,?),('CREDIT','admin:unattributed',?,45,?)",
@@ -51,7 +51,7 @@ class CreditCarryForwardCutoverMySqlTest {
         plan=CreditHistoricalCutover.carryForwardPlan(snapshot,"synthetic-preserve-existing-balances-v1");
         assertTrue(plan.ready(),plan.issues().toString());
         assertFalse(CreditHistoricalCutover.dryRun(snapshot,plan.approval()).ready());
-        Flyway.configure().dataSource(source).locations("classpath:db/migration").cleanDisabled(true).target("44").load().migrate();
+        Flyway.configure().dataSource(source).locations("classpath:db/migration").cleanDisabled(true).target("45").load().migrate();
         assertEquals(snapshot.sha256(),tool.inventory().sha256());
     }
     @Test @org.junit.jupiter.api.Order(1) void readOnlyPlanKeepsPaidOrderAndMissingCacheUnchanged() {

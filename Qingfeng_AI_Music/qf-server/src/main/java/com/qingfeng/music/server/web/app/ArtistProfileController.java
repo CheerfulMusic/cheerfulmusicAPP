@@ -8,6 +8,7 @@ import com.qingfeng.music.server.security.CreatorPrincipal;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 import org.springframework.context.annotation.Profile;
 import org.springframework.http.CacheControl;
@@ -32,6 +33,7 @@ public class ArtistProfileController {
     public record Visibility(@NotNull Boolean published) {}
     public record SongRequest(@NotBlank @Size(max = 36) String assetId, @Size(max = 36) String coverId,
                               @NotBlank @Size(max = 100) String title) {}
+    public record DiscoverRequest(@NotNull @Positive Long version) {}
 
     @GetMapping
     public ResponseEntity<MyProfile> mine(@AuthenticationPrincipal CreatorPrincipal principal) {
@@ -83,6 +85,18 @@ public class ArtistProfileController {
         String creator = account(principal);
         profiles.removeSong(creator, work);
         return noStore(profiles.mine(creator));
+    }
+
+    @PutMapping("/releases/{work}/discover")
+    public ResponseEntity<Release> publishToDiscover(@AuthenticationPrincipal CreatorPrincipal principal,
+            @PathVariable String work, @Valid @RequestBody DiscoverRequest request) {
+        return noStore(profiles.publishToDiscover(account(principal), work, request.version()));
+    }
+
+    @DeleteMapping("/releases/{work}/discover")
+    public ResponseEntity<MyProfile> withdrawFromDiscover(@AuthenticationPrincipal CreatorPrincipal principal,
+            @PathVariable String work) {
+        return noStore(profiles.withdrawFromDiscover(account(principal), work));
     }
 
     private String account(CreatorPrincipal principal) {

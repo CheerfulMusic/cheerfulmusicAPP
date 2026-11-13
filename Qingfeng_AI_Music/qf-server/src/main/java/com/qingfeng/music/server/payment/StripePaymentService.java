@@ -33,6 +33,7 @@ public final class StripePaymentService implements VerifiedPaymentProcessor {
     private final CreditsLedger ledger;
     private final PaymentCatalog catalog;
     private final StripePaymentMethods paymentMethods;
+    private final PaymentAcceptanceOffers acceptanceOffers;
     private final StripeCheckoutGateway gateway;
     private final ObjectMapper json;
     private final PaymentInbox inbox;
@@ -56,6 +57,7 @@ public final class StripePaymentService implements VerifiedPaymentProcessor {
                                 org.springframework.core.env.Environment environment) {
         this.db=db; this.tx=tx; this.ledger=ledger; this.catalog=catalog; this.gateway=gateway; this.json=json; this.inbox=inbox;
         this.paymentMethods=new StripePaymentMethods(catalog,environment);
+        this.acceptanceOffers=new PaymentAcceptanceOffers(environment);
     }
     public record Resolution(boolean verified,String evidenceId,Runnable apply,String ownerId,boolean pending){
         public Resolution(boolean verified,String evidenceId,Runnable apply,String ownerId){this(verified,evidenceId,apply,ownerId,false);}
@@ -79,8 +81,21 @@ public final class StripePaymentService implements VerifiedPaymentProcessor {
 
     public Map<String,Object> catalog(CreatorPrincipal creator) {
         boolean open=schemaReady() && purchaseAllowed(creator);
-        return Map.of("enabled",open,"packages",open?paymentMethods.legacyPackages().stream().map(PaymentCatalog.Package::asMap).toList():List.of(),
-            "paymentMethods",paymentMethods.catalog(open));
+        var methods=paymentMethods.catalog(open);
+        boolean privateAcceptance=!acceptingNewOrders&&creator!=null&&acceptanceOffers.configuredFor(creator.id());
+        if(open&&privateAcceptance){
+            methods=methods.stream().map(method->{
+                String channel=(String)method.get("id");
+                var result=new LinkedHashMap<String,Object>(method);
+                result.put("packages",List.of());
+                acceptanceOffers.offer(creator.id(),channel).filter(pack->Boolean.TRUE.equals(method.get("enabled"))
+                    && acceptanceOffers.unused(db,creator.id(),pack.id(),provider())).ifPresent(pack->{
+                    result.put("packages",List.of(acceptanceOffers.view(pack,channel)));
+                });return Map.copyOf(result);
+            }).toList();
+        }
+        return Map.of("enabled",open,"packages",open&&!privateAcceptance?paymentMethods.legacyPackages().stream().map(PaymentCatalog.Package::asMap).toList():List.of(),
+            "paymentMethods",methods);
     }
 
     /** Internal first-payment verification uses authenticated principals, never a request owner field. */
@@ -100,7 +115,13 @@ public final class StripePaymentService implements VerifiedPaymentProcessor {
     public Map<String,Object> create(CreatorPrincipal creator, String packageId,String paymentMethod) {
         if (!schemaReady() || !purchaseAllowed(creator)) throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,"Stripe 充值暂未开放");
         if(creator==null||creator.id()==null)throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
-        var offer=paymentMethods.select(packageId,paymentMethod);
+        if(PaymentAcceptanceOffers.isAcceptance(packageId)&&acceptingNewOrders)
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,"PAYMENT_ACCEPTANCE_CANARY_ONLY");
+        if(!acceptingNewOrders&&acceptanceOffers.configuredFor(creator.id())&&!PaymentAcceptanceOffers.isAcceptance(packageId))
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,"PAYMENT_ACCEPTANCE_PRIVATE_SKU_REQUIRED");
+        var offer=PaymentAcceptanceOffers.isAcceptance(packageId)
+            ?paymentMethods.selectAcceptance(acceptanceOffers.select(creator.id(),packageId,paymentMethod),paymentMethod)
+            :paymentMethods.select(packageId,paymentMethod);
         gateway.verifyNewPurchase(StripePaymentMethods.checkoutMethodForStoredOffer(offer.id()),offer.currency());
         var selected=new PaymentCatalog.Package(offer.id(),offer.title(),offer.amount(),offer.currency(),offer.credits());
         String id=UUID.randomUUID().toString();
@@ -113,6 +134,7 @@ public final class StripePaymentService implements VerifiedPaymentProcessor {
             if(db.queryForList("SELECT id FROM creator WHERE id=? FOR UPDATE",owner).isEmpty()) throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
             Integer identities=db.queryForObject("SELECT (SELECT COUNT(*) FROM creator_google_identity WHERE creator_id=?) + (SELECT COUNT(*) FROM creator_oidc_identity WHERE creator_id=?)",Integer.class,owner,owner);
             if(identities==null||identities==0) throw new ResponseStatusException(HttpStatus.FORBIDDEN,"请先登录账号");
+            acceptanceOffers.requireReservation(db,owner,pack.id(),provider());
             Integer pending;
             if(legacyOrdersReadOnly){
                 var boundary=db.queryForObject("SELECT activated_at FROM p0_credit_cutover_state WHERE id=1 AND status='ACTIVE'",java.sql.Timestamp.class);

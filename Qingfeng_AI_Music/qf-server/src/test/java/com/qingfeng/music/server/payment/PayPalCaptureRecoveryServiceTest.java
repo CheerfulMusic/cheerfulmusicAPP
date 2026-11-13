@@ -27,6 +27,8 @@ class PayPalCaptureRecoveryServiceTest {
         var ds=new DriverManagerDataSource("jdbc:h2:mem:paypal_recovery_"+UUID.randomUUID()+";MODE=MySQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1","sa","");ds.setDriverClassName("org.h2.Driver");db=new JdbcTemplate(ds);tx=new TransactionTemplate(new DataSourceTransactionManager(ds));
         db.execute("CREATE TABLE creator(id VARCHAR(36) PRIMARY KEY)");
         db.execute("CREATE TABLE payment_order(id VARCHAR(36) PRIMARY KEY,creator_id VARCHAR(36),package_id VARCHAR(80),amount DECIMAL(18,2),currency VARCHAR(3),credits BIGINT,status VARCHAR(24),created_at TIMESTAMP(6),provider VARCHAR(24),provider_link_id VARCHAR(128),provider_capture_id VARCHAR(128),failure_code VARCHAR(80))");
+        db.execute("CREATE TABLE p0_credit_batch(reference VARCHAR(128) PRIMARY KEY,status VARCHAR(24))");
+        db.execute("CREATE TABLE p0_stripe_dispute_proof(provider VARCHAR(24),merchant VARCHAR(64),environment VARCHAR(24),order_id VARCHAR(36),dispute_id VARCHAR(128))");
         owner=UUID.randomUUID().toString();order=UUID.randomUUID().toString();db.update("INSERT INTO creator VALUES(?)",owner);
         db.update("INSERT INTO payment_order VALUES(?,?,?,9.90,'USD',100,'PENDING',CURRENT_TIMESTAMP,'PAYPAL_SANDBOX','REMOTE123',NULL,NULL)",order,owner,"starter-USD");
         gateway=mock(PayPalCheckoutGateway.class);inbox=mock(PaymentInbox.class);risks=mock(PaymentRiskService.class);ledger=mock(JdbcFencedCreditsLedger.class);

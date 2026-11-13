@@ -14,6 +14,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Map;
 import java.util.UUID;
@@ -48,14 +49,24 @@ class PhotoLyricsIntegrationTest {
     static class OfflinePhoto {
         @Bean AtomicInteger photoCalls(){return new AtomicInteger();}
         @Bean @Primary PhotoLyricsWriter offlinePhotoWriter(AtomicInteger photoCalls){
-            return (work,language,image,direction)->{
+            return (work,language,images,direction)->{
                 photoCalls.incrementAndGet();
-                assertEquals("",work.story());
                 assertEquals("zh-CN",language);
                 try{
-                    var decoded=ImageIO.read(new ByteArrayInputStream(image));
-                    assertEquals(1600,decoded.getWidth());
-                    assertEquals(800,decoded.getHeight());
+                    for (byte[] image : images) {
+                        var decoded=ImageIO.read(new ByteArrayInputStream(image));
+                        assertEquals(1600,decoded.getWidth());
+                        assertEquals(800,decoded.getHeight());
+                    }
+                    if ("照片故事".equals(work.story())) {
+                        assertEquals(5,images.size());
+                        var first=ImageIO.read(new ByteArrayInputStream(images.get(0)));
+                        var last=ImageIO.read(new ByteArrayInputStream(images.get(4)));
+                        assertTrue(new Color(first.getRGB(0,0)).getRed() > 200);
+                        assertTrue(new Color(last.getRGB(0,0)).getBlue() > 200);
+                    } else {
+                        assertEquals(1,images.size());
+                    }
                 }catch(java.io.IOException invalid){throw new AssertionError(invalid);}
                 return new LyricsWriter.Draft("海边","[Verse]\n风吹过海面",
                     new CreativePlan("",ARRANGEMENT,"","温暖民谣","Warm folk","AUTO","两个人坐在海边。"),"OPENAI");
@@ -64,6 +75,7 @@ class PhotoLyricsIntegrationTest {
     }
 
     @Test void uploadCreatesOneUnconfirmedRevisionAndItsPlanReachesTheMusicTask() throws Exception {
+        int initialCalls=photoCalls.get();
         var session=session();
         var capabilities=JSON.readTree(call(session,"GET","/api/public/system/info",null).body()).path("capabilities");
         assertTrue(capabilities.path("photoLyrics").asBoolean());
@@ -75,7 +87,7 @@ class PhotoLyricsIntegrationTest {
         assertEquals(400,upload(session,root,key,new byte[]{1,2,3}).statusCode());
         assertEquals(400,upload(session,root,key,Arrays.copyOf(png,png.length+1)).statusCode());
         assertEquals(404,upload(session(),root,key,png).statusCode());
-        assertEquals(0,photoCalls.get());
+        assertEquals(initialCalls,photoCalls.get());
 
         var created=upload(session,root,key,png);
         String revision=field(created,"id");
@@ -83,7 +95,7 @@ class PhotoLyricsIntegrationTest {
         assertEquals("OPENAI",field(created,"source"));
         assertEquals(revision,field(upload(session,root,key,png),"id"));
         assertEquals(409,upload(session,root,key,photo(Color.BLUE)).statusCode());
-        assertEquals(1,photoCalls.get());
+        assertEquals(initialCalls+1,photoCalls.get());
         assertEquals(revision,field(call(session,"GET",root+"/lyrics/requests/"+key,null),"revisionId"));
         var settings=JSON.readTree(call(session,"GET",root+"/music-settings",null).body());
         assertEquals("两个人坐在海边。",settings.path("photoInspiration").path("summary").asText());
@@ -95,6 +107,27 @@ class PhotoLyricsIntegrationTest {
         String task=field(call(session,"POST",root+"/generations",generate),"id");
         var snapshot=call(session,"GET",root+"/generations/"+task+"/music-settings",null);
         assertTrue(field(snapshot,"style").contains(ARRANGEMENT));
+    }
+
+    @Test void validatesMultiPhotoUploadsAndReplaysOnlyTheSameOrderedBatch() throws Exception {
+        int initialCalls=photoCalls.get();
+        var session=session();
+        String work=field(call(session,"POST","/api/app/works",Map.of(
+            "recipient","","occasion","","story","照片故事","message","","style","自动推荐","title","照片创作")),"id");
+        String root="/api/app/works/"+work;
+        String key=UUID.randomUUID().toString();
+        byte[] first=photo(Color.ORANGE), last=photo(Color.BLUE), other=photo(Color.GREEN);
+        assertEquals(400,uploadParts(session,root,key,"photos").statusCode());
+        assertEquals(400,uploadParts(session,root,key,"photos",first,last,other,other,other,other).statusCode());
+        assertEquals(400,uploadParts(session,root,key,"photo",first,last).statusCode());
+        assertEquals(400,uploadParts(session,root,key,"photos",first,new byte[]{1,2,3}).statusCode());
+        assertEquals(400,uploadParts(session,root,key,"photos",withTextChunk(first,5*1024*1024),last).statusCode());
+        assertEquals(initialCalls,photoCalls.get());
+
+        String revision=field(uploadParts(session,root,key,"photos",first,other,other,other,last),"id");
+        assertEquals(revision,field(uploadParts(session,root,key,"photos",first,other,other,other,last),"id"));
+        assertEquals(409,uploadParts(session,root,key,"photos",last,other,other,other,first).statusCode());
+        assertEquals(initialCalls+1,photoCalls.get());
     }
 
     private byte[] photo(Color color) throws Exception {
@@ -143,16 +176,26 @@ class PhotoLyricsIntegrationTest {
             :HttpRequest.BodyPublishers.ofString(JSON.writeValueAsString(body))).build(),HttpResponse.BodyHandlers.ofString());
     }
     private HttpResponse<String> upload(Session session,String root,String key,byte[] photo) throws Exception {
+        return uploadParts(session,root,key,"photo",photo);
+    }
+    private HttpResponse<String> uploadParts(Session session,String root,String key,String field,byte[]... photos) throws Exception {
         String boundary="PhotoIntegrationBoundary";
         var prefix=new StringBuilder();
         Map.of("workVersion","0","requestKey",key,"language","zh-CN").forEach((name,value)->
             prefix.append("--").append(boundary).append("\r\nContent-Disposition: form-data; name=\"").append(name)
                 .append("\"\r\n\r\n").append(value).append("\r\n"));
-        prefix.append("--").append(boundary).append("\r\nContent-Disposition: form-data; name=\"photo\"; filename=\"photo.png\"\r\nContent-Type: image/png\r\n\r\n");
+        var body=new ArrayList<HttpRequest.BodyPublisher>();
+        body.add(HttpRequest.BodyPublishers.ofString(prefix.toString()));
+        for(byte[] photo : photos) {
+            body.add(HttpRequest.BodyPublishers.ofString("--"+boundary+"\r\nContent-Disposition: form-data; name=\""+field
+                +"\"; filename=\"photo.png\"\r\nContent-Type: image/png\r\n\r\n"));
+            body.add(HttpRequest.BodyPublishers.ofByteArray(photo));
+            body.add(HttpRequest.BodyPublishers.ofString("\r\n"));
+        }
+        body.add(HttpRequest.BodyPublishers.ofString("--"+boundary+"--\r\n"));
         return session.client().send(request(session,root+"/lyrics/generate-photo")
             .header("Content-Type","multipart/form-data; boundary="+boundary)
-            .POST(HttpRequest.BodyPublishers.concat(HttpRequest.BodyPublishers.ofString(prefix.toString()),
-                HttpRequest.BodyPublishers.ofByteArray(photo),HttpRequest.BodyPublishers.ofString("\r\n--"+boundary+"--\r\n")))
+            .POST(HttpRequest.BodyPublishers.concat(body.toArray(HttpRequest.BodyPublisher[]::new)))
             .build(),HttpResponse.BodyHandlers.ofString());
     }
     private HttpRequest.Builder request(Session session,String path){

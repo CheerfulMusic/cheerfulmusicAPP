@@ -6,6 +6,7 @@ import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.util.List;
 import javax.imageio.ImageIO;
 import javax.imageio.stream.MemoryCacheImageInputStream;
 import javax.imageio.stream.MemoryCacheImageOutputStream;
@@ -13,11 +14,25 @@ import org.springframework.web.multipart.MultipartFile;
 
 final class PhotoLyricsImage {
     private static final int MAX_BYTES = 10 * 1024 * 1024;
+    private static final int MAX_BATCH_BYTES = 5 * 1024 * 1024;
+    private static final int MAX_PHOTOS = 5;
     private static final int MAX_EDGE = 1600;
 
     private PhotoLyricsImage() {}
 
-    static byte[] jpeg(MultipartFile file) {
+    static List<byte[]> jpegs(List<MultipartFile> photo, List<MultipartFile> photos) {
+        // The original single-file field keeps its 10 MB limit.
+        if (photo != null && photo.size() == 1 && photos == null) return List.of(jpeg(photo.get(0)));
+        if (photo != null || photos == null || photos.isEmpty() || photos.size() > MAX_PHOTOS) {
+            throw new DomainException("INVALID_LYRICS_REQUEST", "请选择 1–5 张照片。");
+        }
+        if (photos.stream().mapToLong(MultipartFile::getSize).sum() > MAX_BATCH_BYTES) {
+            throw new DomainException("INVALID_LYRICS_REQUEST", "上传的照片合计不能超过 5 MB。");
+        }
+        return photos.stream().map(PhotoLyricsImage::jpeg).toList();
+    }
+
+    private static byte[] jpeg(MultipartFile file) {
         if (file.isEmpty() || file.getSize() > MAX_BYTES) throw invalid();
         try (var source = file.getInputStream(); var input = new MemoryCacheImageInputStream(source)) {
             var readers = ImageIO.getImageReaders(input);

@@ -12,20 +12,20 @@ import org.springframework.jdbc.core.JdbcTemplate;
 @Configuration(proxyBeanMethods = false)
 @Profile("mysql")
 public class CreditSchemaMigrationConfiguration {
-    private static final MigrationVersion CORE43 = MigrationVersion.fromVersion("43");
-    private static final String CUTOVER_REQUIRED = "Financial V44 requires separately approved migration, historical mapping and activation before application startup";
+    private static final MigrationVersion CORE44 = MigrationVersion.fromVersion("44");
+    private static final String CUTOVER_REQUIRED = "Financial V45 requires separately approved migration, historical mapping and activation before application startup";
 
     @Bean
     FlywayMigrationStrategy creditSchemaMigrationStrategy(Environment environment) {
         return flyway -> {
             var target = flyway.getConfiguration().getTarget();
             // Null/latest/current/next are not a fixed core-only target.
-            if (target != null && !target.isPredefined() && target.compareTo(CORE43) <= 0) {
+            if (target != null && !target.isPredefined() && target.compareTo(CORE44) <= 0) {
                 flyway.migrate();
                 return;
             }
             if (!environment.getProperty("qingfeng.credits.writer-fence.enabled", Boolean.class, false))
-                throw new IllegalStateException("A legacy credit writer cannot automatically apply financial V44. " + CUTOVER_REQUIRED);
+                throw new IllegalStateException("A legacy credit writer cannot automatically apply financial V45. " + CUTOVER_REQUIRED);
             String expectedDatabase = environment.getProperty("qingfeng.credits.writer-fence.expected-database", "");
             int expectedPort = environment.getProperty("qingfeng.credits.writer-fence.expected-port", Integer.class, 0);
             if (expectedDatabase.isBlank() || expectedPort < 1)
@@ -38,7 +38,7 @@ public class CreditSchemaMigrationConfiguration {
                 if (!expectedDatabase.equals(identity.get("database_name"))
                         || !(identity.get("database_port") instanceof Number port) || port.intValue() != expectedPort)
                     throw new IllegalStateException("Financial database identity does not match");
-                // Never install, repair, map, or activate V44 here. Only an already
+                // Never install, repair, map, or activate V45 here. Only an already
                 // exact ACTIVE installation may continue through normal validation.
                 CreditSchemaReadiness.requireActive(db);
             } catch (RuntimeException incomplete) {

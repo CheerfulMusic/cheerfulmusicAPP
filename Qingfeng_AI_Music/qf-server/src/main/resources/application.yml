@@ -1,7 +1,7 @@
 spring:
   flyway:
     # Financial V44 requires a separately approved cutover, mapping, and activation.
-    target: ${CREDIT_SCHEMA_TARGET:43}
+    target: ${CREDIT_SCHEMA_TARGET:44}
   config:
     import:
       - classpath:usage-limits.properties

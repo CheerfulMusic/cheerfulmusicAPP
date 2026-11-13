@@ -4,6 +4,7 @@ import contextlib
 import copy
 import io
 import json
+import tempfile
 from pathlib import Path
 import unittest
 from unittest import mock
@@ -45,7 +46,7 @@ class RuntimeConfigurationContract(unittest.TestCase):
             'qingfeng.credits.writer-fence.expected-port': '3306',
             'qingfeng.payment.legacy-orders-read-only': 'true',
             'qingfeng.paypal.accepting-new-orders': 'false',
-            'spring.flyway.enabled': 'false', 'spring.flyway.target': '44', 'spring.sql.init.mode': 'never'}
+            'spring.flyway.enabled': 'false', 'spring.flyway.target': '45', 'spring.sql.init.mode': 'never'}
 
     def reject(self, code, **changes):
         with self.assertRaisesRegex(release.Blocked, code):
@@ -384,6 +385,571 @@ class FourChannelReleaseContract(unittest.TestCase):
         stop.assert_not_called()
         write.assert_not_called()
         start.assert_not_called()
+
+
+class Financial45OperatorContract(unittest.TestCase):
+    """Operator ordering and refusal tests. Mock execution is never DB evidence."""
+    def setUp(self):
+        FourChannelReleaseContract.setUp(self)
+        self.plan['candidate']['directory'] = str(release.APP / 'releases' / 'synthetic-v45')
+        self.plan['database'] = {'uuid': release.UUID, 'schema': release.DATABASE, 'port': 3306}
+        self.plan['schemaVersions'] = {'core': 44, 'financial': 45, 'protocol': 3}
+        self.plan['operator'] = {name: {'path': '/private/' + name, 'sha256': 'b' * 64}
+            for name in ('java', 'databaseProperties', 'migrationProperties', 'carryForwardProperties')}
+        self.source, self.plan_sha = 'c' * 64, 'd' * 64
+        self.values = {'expected.uuid': release.UUID, 'expected.database': release.DATABASE, 'expected.port': '3306',
+            'candidate.jar.path': str(Path(self.plan['candidate']['directory']) / 'app.jar'),
+            'candidate.jar.sha256': self.jar, 'source.sha256': self.source, 'plan.sha256': self.plan_sha,
+            'migration.version': '45', 'migration.sha256': release.FINANCIAL_SQL_SHA256,
+            'core.manifest.sha256': release.CORE_MANIFEST_SHA256, 'migration.authorized': 'true'}
+        self.db = {'spring.datasource.url': 'jdbc:mysql://127.0.0.1:3306/qingfeng_music?connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true',
+                   'spring.datasource.username': 'synthetic', 'spring.datasource.password': 'synthetic-not-real'}
+        self.inputs = (Path('/usr/lib/jvm/synthetic-java17/bin/java'), Path('/private/db.properties'),
+                       Path('/private/approved.properties'), self.values, self.db)
+        self.native = {'status': 'PASS', 'candidateJarSha256': self.jar, 'databaseUuid': release.UUID,
+            'database': release.DATABASE, 'port': 3306, 'sourceSha256': self.source,
+            'planSha256': self.plan_sha, 'schemaVersion': 45, 'coreVersion': 44, 'migrationsExecuted': 1,
+            'financialMigrationSha256': release.FINANCIAL_SQL_SHA256, 'coreManifestSha256': release.CORE_MANIFEST_SHA256,
+            'state': 'PREPARING', 'protocol': 3}
+
+    def test_core44_is_not_the_financial_runtime_target_anymore(self):
+        RuntimeConfigurationContract.setUp(self)
+        release.validate_configuration(self.old, self.closed, False)
+        with self.assertRaisesRegex(release.Blocked, 'RUNTIME_MODE_OR_FINANCIAL_GUARD_MISMATCH'):
+            release.validate_configuration(self.old, {**self.closed, 'spring.flyway.target': '44'}, False)
+
+    def test_operator_input_requires_exact_database_artifact_and_canonical_45(self):
+        paths = {'java': self.inputs[0], 'databaseProperties': self.inputs[1],
+                 'migrationProperties': self.inputs[2], 'carryForwardProperties': self.inputs[2]}
+        def maps(path): return self.db if path == self.inputs[1] else self.values
+        with mock.patch.object(release, 'operator_file', side_effect=lambda plan, name: paths[name]), \
+             mock.patch.object(release, 'property_map', side_effect=maps):
+            release.operator_inputs(self.plan, 'migration')
+            for key, value in (('migration.version', '44'), ('migration.sha256', 'e' * 64),
+                               ('core.manifest.sha256', 'e' * 64), ('expected.database', 'other'),
+                               ('candidate.jar.sha256', 'e' * 64)):
+                original = self.values[key]
+                self.values[key] = value
+                with self.subTest(key=key), self.assertRaises(release.Blocked):
+                    release.operator_inputs(self.plan, 'migration')
+                self.values[key] = original
+
+    def test_operator_connection_cannot_target_remote_or_non_utc_or_unresolved_credentials(self):
+        paths = {'java': self.inputs[0], 'databaseProperties': self.inputs[1], 'migrationProperties': self.inputs[2]}
+        for changes in ({'spring.datasource.url': self.db['spring.datasource.url'].replace('127.0.0.1', 'cheerfulmusic.com')},
+                        {'spring.datasource.url': self.db['spring.datasource.url'].replace('forceConnectionTimeZoneToSession=true', 'forceConnectionTimeZoneToSession=false')},
+                        {'spring.datasource.password': '${PASSWORD}'}):
+            changed = {**self.db, **changes}
+            with self.subTest(changes=list(changes)), mock.patch.object(release, 'operator_file', side_effect=lambda plan, name: paths[name]), \
+                 mock.patch.object(release, 'property_map', side_effect=lambda p: changed if p == self.inputs[1] else self.values), \
+                 self.assertRaises(release.Blocked):
+                release.operator_inputs(self.plan, 'migration')
+
+    def test_java_operator_launch_uses_pinned_fat_jar_and_sanitized_environment(self):
+        native = {**self.native, 'unapprovedOutput': 'must-not-enter-evidence'}
+        with mock.patch.object(release, 'operator_inputs', return_value=self.inputs), \
+             mock.patch.object(release, 'command', return_value=b'private Flyway/driver output suppressed\n' + json.dumps(native).encode()) as run:
+            result = release.run_operator(self.plan, 'migration', 'migrate')
+        args = run.call_args.args[0]
+        self.assertIn('-Dloader.main=' + release.MIGRATION_CLASS, args)
+        self.assertIn('-Dloader.config.location=file:/dev/null', args)
+        self.assertIn('org.springframework.boot.loader.launch.PropertiesLauncher', args)
+        self.assertNotIn('-jar', args)
+        self.assertEqual({'PATH', 'LANG', 'HOME'}, set(run.call_args.kwargs['env']))
+        self.assertNotIn('unapprovedOutput', result)
+        self.assertEqual(self.source, result['sourceSha256'])
+
+    def test_operator_native_database_source_and_artifact_mismatches_are_rejected(self):
+        for changes in ({'status': 'BLOCKED'}, {'databaseUuid': 'wrong'}, {'database': 'other'},
+                        {'candidateJarSha256': 'e' * 64}, {'sourceSha256': ''}):
+            with self.subTest(changes=changes), mock.patch.object(release, 'operator_inputs', return_value=self.inputs), \
+                 mock.patch.object(release, 'command', return_value=json.dumps({**self.native, **changes}).encode()), \
+                 self.assertRaises(release.Blocked):
+                release.run_operator(self.plan, 'migration', 'migrate')
+
+    def test_schema_validate_is_read_only_and_cannot_be_reported_as_migration(self):
+        native = {**self.native, 'schemaVersion': 44, 'migrationsExecuted': 0}
+        with contextlib.ExitStack() as stack:
+            for name in ('check_release', 'check_build_receipt', 'current_matches'):
+                stack.enter_context(mock.patch.object(release, name))
+            stack.enter_context(mock.patch.object(release, 'operator_inputs', return_value=self.inputs))
+            runner = stack.enter_context(mock.patch.object(release, 'run_operator', return_value=native))
+            backup = stack.enter_context(mock.patch.object(release, 'check_operator_backup'))
+            writer = stack.enter_context(mock.patch.object(release, 'fresh_operator_contract'))
+            result = release.operator_stage(self.plan, Path('unused'), 'schema-validate')
+        self.assertEqual(44, result['schemaVersion'])
+        self.assertEqual('validate', runner.call_args.args[2])
+        backup.assert_not_called()
+        writer.assert_not_called()
+
+    def test_no_ddl_before_stopped_writers_actual_restore_and_precise_authorization(self):
+        for failure_point in ('stopped', 'check_operator_backup', 'approved_operator_scope'):
+            with self.subTest(failure_point=failure_point), contextlib.ExitStack() as stack:
+                for name in ('check_release', 'check_build_receipt', 'current_matches', 'stopped', 'verify_media_paused'):
+                    stack.enter_context(mock.patch.object(release, name))
+                stack.enter_context(mock.patch.object(release, 'operator_inputs', return_value=self.inputs))
+                stack.enter_context(mock.patch.object(release, 'check_operator_backup', return_value={'tableFingerprint': {}}))
+                stack.enter_context(mock.patch.object(release, 'approved_operator_scope'))
+                stack.enter_context(mock.patch.object(release, failure_point, side_effect=release.Blocked('SYNTHETIC_PRECONDITION_FAILURE')))
+                runner = stack.enter_context(mock.patch.object(release, 'run_operator'))
+                with self.assertRaisesRegex(release.Blocked, 'SYNTHETIC_PRECONDITION_FAILURE'):
+                    release.operator_stage(self.plan, Path('unused'), 'migrate-45')
+                runner.assert_not_called()
+
+    def test_schema_authorization_is_approval_not_a_fake_test_pass_and_is_scope_bound(self):
+        approved = {'status': 'APPROVED', 'operation': 'MIGRATE_CANONICAL_44_TO_FINANCIAL_45',
+                    'database': self.plan.get('database'), 'candidateJarSha256': self.jar,
+                    'sourceSha256': self.source, 'userAuthorizationEvidenceSha256': 'e' * 64,
+                    'coreVersion': 44, 'financialVersion': 45, 'financialMigrationSha256': release.FINANCIAL_SQL_SHA256}
+        self.plan['receipts'] = {'schemaAuthorization': {'path': '/synthetic', 'sha256': 'f' * 64}}
+        for changes in ({'status': 'PASS'}, {'sourceSha256': 'e' * 64}, {'financialVersion': 44},
+                        {'userAuthorizationEvidenceSha256': ''}):
+            with self.subTest(changes=changes), mock.patch.object(release, 'pinned_json', return_value={**approved, **changes}), \
+                 self.assertRaises(release.Blocked):
+                release.approved_operator_scope(self.plan, 'schemaAuthorization', self.values, 'MIGRATE_CANONICAL_44_TO_FINANCIAL_45')
+
+    def test_migration_stage_writes_only_native_pass_receipt_and_does_not_activate_or_start(self):
+        with contextlib.ExitStack() as stack:
+            for name in ('check_release', 'check_build_receipt', 'current_matches', 'stopped', 'approved_operator_scope', 'root_observation', 'verify_media_paused'):
+                stack.enter_context(mock.patch.object(release, name))
+            stack.enter_context(mock.patch.object(release, 'operator_inputs', return_value=self.inputs))
+            stack.enter_context(mock.patch.object(release, 'check_operator_backup', return_value={'tableFingerprint': {'native': 'same'}}))
+            stack.enter_context(mock.patch.object(release, 'fingerprint', return_value={'native': 'same'}))
+            stack.enter_context(mock.patch.object(release, 'fresh_operator_contract', return_value=Path('/private/effective.properties')))
+            runner = stack.enter_context(mock.patch.object(release, 'run_operator', return_value=self.native))
+            output = stack.enter_context(mock.patch.object(release, 'exclusive_json'))
+            start = stack.enter_context(mock.patch.object(release, 'startup'))
+            result = release.operator_stage(self.plan, Path('unused'), 'migrate-45')
+        self.assertEqual(('migration', 'migrate'), runner.call_args.args[1:3])
+        self.assertEqual('PREPARING', result['state'])
+        self.assertEqual('migration-45-receipt.json', output.call_args.args[0].name)
+        start.assert_not_called()
+
+    def test_java_failure_after_ddl_never_starts_old_or_new_writer_or_fakes_receipt(self):
+        with contextlib.ExitStack() as stack:
+            for name in ('check_release', 'check_build_receipt', 'current_matches', 'stopped', 'approved_operator_scope', 'verify_media_paused'):
+                stack.enter_context(mock.patch.object(release, name))
+            stack.enter_context(mock.patch.object(release, 'operator_inputs', return_value=self.inputs))
+            stack.enter_context(mock.patch.object(release, 'check_operator_backup', return_value={'tableFingerprint': {}}))
+            stack.enter_context(mock.patch.object(release, 'fingerprint', return_value={}))
+            stack.enter_context(mock.patch.object(release, 'fresh_operator_contract', return_value=Path('/private/effective.properties')))
+            stack.enter_context(mock.patch.object(release, 'run_operator', side_effect=release.Blocked('SYNTHETIC_DDL_TIMEOUT')))
+            start = stack.enter_context(mock.patch.object(release, 'startup'))
+            output = stack.enter_context(mock.patch.object(release, 'exclusive_json'))
+            with self.assertRaisesRegex(release.Blocked, 'SYNTHETIC_DDL_TIMEOUT'):
+                release.operator_stage(self.plan, Path('unused'), 'migrate-45')
+        start.assert_not_called()
+        output.assert_not_called()
+
+    def test_fresh_writer_proof_changes_only_observation_not_external_approval_or_other_proof_pins(self):
+        cache = Path(__file__).resolve().parents[2] / '.cache'
+        cache.mkdir(exist_ok=True)
+        values = {**self.values}
+        values['candidate.jar.path'] = Path(values['candidate.jar.path']).as_posix()
+        for kind in ('backup-restore', 'rollback', 'legacy-boundary'):
+            values['receipt.' + kind + '.path'] = '/private/' + kind + '.json'
+            values['receipt.' + kind + '.sha256'] = 'e' * 64
+        with tempfile.TemporaryDirectory(prefix='writer-contract-', dir=cache) as temporary:
+            with mock.patch.object(release, 'stopped'), \
+                 mock.patch.object(release, 'pinned_json', return_value={'status': 'PASS'}) as proof, \
+                 mock.patch.object(release, 'property_map', return_value=self.db), \
+                 mock.patch.object(release, 'root_observation', return_value={'otherConnections': 0, 'otherApplicationAccountConnections': 0}):
+                effective = release.fresh_operator_contract(self.plan, Path(temporary), 'carry', 'carry-apply', values, self.db)
+            actual = release.property_map(effective)
+            self.assertEqual(self.source, actual['source.sha256'])
+            self.assertEqual(self.plan_sha, actual['plan.sha256'])
+            self.assertEqual(self.jar, actual['candidate.jar.sha256'])
+            for kind in ('backup-restore', 'rollback', 'legacy-boundary'):
+                self.assertEqual(values['receipt.' + kind + '.sha256'], actual['receipt.' + kind + '.sha256'])
+            self.assertEqual(3, proof.call_count)
+            observed = json.loads(Path(actual['receipt.writers.path']).read_text())
+            self.assertEqual(0, observed['otherApplicationAccountConnections'])
+            self.assertTrue(observed['globalProcesslistVerified'])
+            self.assertEqual(self.source, observed['sourceSha256'])
+            self.assertEqual(release.sha(actual['receipt.writers.path']), actual['receipt.writers.sha256'])
+
+    def test_root_observer_rejects_remaining_application_connections_even_on_other_schema(self):
+        base = {'uuid': release.UUID, 'schema': release.DATABASE, 'port': 3306, 'otherConnections': 0}
+        with mock.patch.object(release, 'mysql', return_value=b'GRANT ALL PRIVILEGES ON *.* TO root'), \
+             mock.patch.object(release, 'json_rows', side_effect=[[base], [{'connections': 1}]]), \
+             self.assertRaisesRegex(release.Blocked, 'OTHER_APPLICATION_ACCOUNT_CONNECTIONS_REMAIN'):
+            release.root_observation(self.plan, 'synthetic')
+
+    def test_reviewed_existing_local_root_is_operator_only_and_requires_literal_empty_password_key(self):
+        paths = {'java': self.inputs[0], 'databaseProperties': self.inputs[1], 'migrationProperties': self.inputs[2]}
+        values = {**self.values, 'allow-local-root-with-empty-password': 'true'}
+        db = {**self.db, 'spring.datasource.username': 'root', 'spring.datasource.password': ''}
+        self.plan['operatorIdentity'] = {'mode': 'existing-local-root-empty-password', 'username': 'root', 'runtimeAccountUnchanged': True}
+        with mock.patch.object(release, 'operator_file', side_effect=lambda plan, name: paths[name]), \
+             mock.patch.object(release, 'property_map', side_effect=lambda p: db if p == self.inputs[1] else values):
+            release.operator_inputs(self.plan, 'migration')
+            for changed_db, changed_values, changed_plan in (
+                (db, self.values, self.plan),
+                ({k: v for k, v in db.items() if k != 'spring.datasource.password'}, values, self.plan),
+                ({**db, 'spring.datasource.username': 'another_admin'}, values, self.plan),
+                (db, values, {**self.plan, 'operatorIdentity': {}})):
+                with self.subTest(dbkeys=list(changed_db), flag=changed_values.get('allow-local-root-with-empty-password')), \
+                     mock.patch.object(release, 'property_map', side_effect=lambda p: changed_db if p == self.inputs[1] else changed_values), \
+                     self.assertRaises(release.Blocked):
+                    release.operator_inputs(changed_plan, 'migration')
+
+    def test_operator_cannot_override_identity_through_query_credentials_even_if_blank(self):
+        paths = {'java': self.inputs[0], 'databaseProperties': self.inputs[1], 'migrationProperties': self.inputs[2]}
+        for suffix in ('&user=root', '&password=', '&PassWord=hidden', '&password1=hidden'):
+            db = {**self.db, 'spring.datasource.url': self.db['spring.datasource.url'] + suffix}
+            with self.subTest(parameter=suffix.split('=')[0]), \
+                 mock.patch.object(release, 'operator_file', side_effect=lambda plan, name: paths[name]), \
+                 mock.patch.object(release, 'property_map', side_effect=lambda p: db if p == self.inputs[1] else self.values), \
+                 self.assertRaisesRegex(release.Blocked, 'OPERATOR_URL_CREDENTIAL_OVERRIDE_FORBIDDEN'):
+                release.operator_inputs(self.plan, 'migration')
+
+    def test_admin_cutover_still_observes_original_runtime_account_and_does_not_replace_it(self):
+        cache = Path(__file__).resolve().parents[2] / '.cache'
+        cache.mkdir(exist_ok=True)
+        values = {**self.values, 'allow-local-root-with-empty-password': 'true'}
+        values['candidate.jar.path'] = Path(values['candidate.jar.path']).as_posix()
+        for kind in ('backup-restore', 'rollback', 'legacy-boundary'):
+            values['receipt.' + kind + '.path'] = '/private/' + kind + '.json'
+            values['receipt.' + kind + '.sha256'] = 'e' * 64
+        db = {**self.db, 'spring.datasource.username': 'root', 'spring.datasource.password': ''}
+        self.plan['operatorIdentity'] = {'mode': 'existing-local-root-empty-password', 'username': 'root', 'runtimeAccountUnchanged': True}
+        with tempfile.TemporaryDirectory(prefix='admin-writer-contract-', dir=cache) as temporary, \
+             mock.patch.object(release, 'stopped'), mock.patch.object(release, 'pinned_json', return_value={'status': 'PASS'}), \
+             mock.patch.object(release, 'property_map', return_value=self.db), \
+             mock.patch.object(release, 'root_observation', return_value={'otherConnections': 0, 'otherApplicationAccountConnections': 0}) as observe:
+            release.fresh_operator_contract(self.plan, Path(temporary), 'migration', 'migrate-45', values, db)
+        self.assertEqual(['synthetic', 'root'], [call.args[1] for call in observe.call_args_list])
+        self.assertEqual('synthetic', self.db['spring.datasource.username'])
+        self.assertEqual('synthetic-not-real', self.db['spring.datasource.password'])
+
+
+class MediaCronReleaseContract(unittest.TestCase):
+    def test_pause_changes_one_exact_job_and_preserves_other_jobs_and_environment(self):
+        original = ('MAILTO=ops@example.invalid\n# personal note\n'
+                    '5 2 * * * /usr/local/bin/unrelated-backup\n' + release.MEDIA_ENTRY + '\n').encode()
+        paused = release.paused_crontab(original)
+        self.assertIn((release.MEDIA_PAUSE_MARKER + release.MEDIA_ENTRY + '\n').encode(), paused)
+        self.assertEqual(['MAILTO=ops@example.invalid', '5 2 * * * /usr/local/bin/unrelated-backup'], release.cron_active_lines(paused))
+        self.assertIn(b'# personal note\n', paused)
+        for bad in (b'# no project job\n', original + release.MEDIA_ENTRY.encode() + b'\n'):
+            with self.subTest(bad=bad), self.assertRaisesRegex(release.Blocked, 'EXACTLY_ONE_PROJECT_MEDIA_CRON_REQUIRED'):
+                release.paused_crontab(bad)
+
+    def test_intervening_crontab_edit_blocks_before_install_or_temporary_file_creation(self):
+        with mock.patch.object(release, 'secure', return_value=Path('unused')), \
+             mock.patch.object(release, 'sha', return_value='b' * 64), \
+             mock.patch.object(release.os, 'open') as create, mock.patch.object(release, 'command') as install:
+            with self.assertRaisesRegex(release.Blocked, 'ROOT_CRONTAB_CHANGED_DO_NOT_OVERWRITE'):
+                release.install_crontab_checked('a' * 64, b'not-a-real-crontab', Path('unused'))
+        create.assert_not_called()
+        install.assert_not_called()
+
+    def test_pause_receipt_is_private_and_resume_cannot_overwrite_new_jobs_or_restore_unsafe_monitor(self):
+        cache = Path(__file__).resolve().parents[2] / '.cache'
+        cache.mkdir(exist_ok=True)
+        with tempfile.TemporaryDirectory(prefix='cron-contract-', dir=cache) as temporary:
+            root = Path(temporary)
+            spool, evidence = root / 'root-crontab', root / 'private-backup'
+            original = ('# existing comment\n' + release.MEDIA_ENTRY + '\n'
+                        '5 2 * * * /usr/local/bin/unrelated-backup\n').encode()
+            spool.write_bytes(original)
+            control = {'entry': release.MEDIA_ENTRY, 'scriptSha256': 'd' * 64,
+                       'expectedCrontabSha256': release.sha(spool)}
+            plan = {'releaseId': 'synthetic-only', 'candidate': {'jarSha256': 'a' * 64}, 'mediaCron': control}
+            def native_install(args, **kwargs):
+                self.assertEqual(['crontab', '-u', 'root'], args[:3])
+                spool.write_bytes(Path(args[3]).read_bytes())
+                return b''
+            with mock.patch.object(release, 'ROOT_CRONTAB', spool), \
+                 mock.patch.object(release, 'secure', side_effect=lambda p, **kwargs: Path(p)), \
+                 mock.patch.object(release, 'current_matches'), \
+                 mock.patch.object(release, 'validate_media_cron', return_value=control), \
+                 mock.patch.object(release, 'media_cron_directory', return_value=evidence), \
+                 mock.patch.object(release, 'media_process_ids', return_value=[]), \
+                 mock.patch.object(release, 'command', side_effect=native_install) as install:
+                result = release.media_cron_stage(plan, 'cron-pause')
+                self.assertEqual('PASS', result['status'])
+                self.assertFalse(result['wholeCronServiceStopped'])
+                self.assertEqual(original, (evidence / 'root-crontab-before.txt').read_bytes())
+                paused = spool.read_bytes()
+                self.assertEqual(1, install.call_count)
+                spool.write_bytes(paused + b'7 3 * * * /new-concurrent-job\n')
+                with self.assertRaisesRegex(release.Blocked, 'PROJECT_MEDIA_CRON_NOT_PAUSED_OR_PROCESS_STILL_RUNNING'):
+                    release.media_cron_stage(plan, 'cron-resume')
+                self.assertEqual(1, install.call_count)
+                self.assertIn(b'/new-concurrent-job', spool.read_bytes())
+                # Even without a concurrent edit, the old script's missing
+                # release lock must block resume; do not invent a PASS proof.
+                spool.write_bytes(paused)
+                proof = {'candidateJarSha256': 'a' * 64, 'mediaScriptSha256': 'd' * 64,
+                         'releaseLockCooperates': False, 'configurationWritesAtomic': True,
+                         'applicationHealthVerified': True, 'ledgerWriterCompatible': True}
+                with mock.patch.object(release, 'receipt', return_value=proof), \
+                     mock.patch.object(release, 'sha', side_effect=lambda p: 'd' * 64 if p == release.MEDIA_SCRIPT else __import__('hashlib').sha256(Path(p).read_bytes()).hexdigest()), \
+                     self.assertRaisesRegex(release.Blocked, 'MEDIA_SELF_HEAL_COMPATIBILITY_REQUIRED'):
+                    release.media_cron_stage(plan, 'cron-resume')
+                self.assertEqual(1, install.call_count)
+
+    def test_pause_does_not_claim_process_drained_when_script_remains_running(self):
+        cache = Path(__file__).resolve().parents[2] / '.cache'
+        cache.mkdir(exist_ok=True)
+        with tempfile.TemporaryDirectory(prefix='cron-drain-', dir=cache) as temporary:
+            root = Path(temporary)
+            spool, evidence = root / 'root-crontab', root / 'private-backup'
+            spool.write_bytes((release.MEDIA_ENTRY + '\n').encode())
+            control = {'expectedCrontabSha256': release.sha(spool), 'scriptSha256': 'd' * 64}
+            def install_paused(*args):
+                value = (release.MEDIA_PAUSE_MARKER + release.MEDIA_ENTRY + '\n').encode()
+                spool.write_bytes(value)
+                return value
+            with mock.patch.object(release, 'ROOT_CRONTAB', spool), \
+                 mock.patch.object(release, 'secure', side_effect=lambda p, **kwargs: Path(p)), \
+                 mock.patch.object(release, 'current_matches'), \
+                 mock.patch.object(release, 'validate_media_cron', return_value=control), \
+                 mock.patch.object(release, 'media_cron_directory', return_value=evidence), \
+                 mock.patch.object(release, 'install_crontab_checked', side_effect=install_paused), \
+                 mock.patch.object(release, 'media_process_ids', return_value=[12345]), \
+                 mock.patch.object(release.time, 'monotonic', side_effect=[0, 31]), \
+                 self.assertRaisesRegex(release.Blocked, 'PROJECT_MEDIA_PROCESS_NOT_DRAINED_CRON_REMAINS_PAUSED'):
+                release.media_cron_stage({'releaseId': 'synthetic-only'}, 'cron-pause')
+            self.assertFalse((evidence / 'paused-receipt.json').exists())
+            original = (evidence / 'root-crontab-before.txt').read_bytes()
+            with mock.patch.object(release, 'ROOT_CRONTAB', spool), \
+                 mock.patch.object(release, 'secure', side_effect=lambda p, **kwargs: Path(p)), \
+                 mock.patch.object(release, 'current_matches'), \
+                 mock.patch.object(release, 'validate_media_cron', return_value=control), \
+                 mock.patch.object(release, 'media_cron_directory', return_value=evidence), \
+                 mock.patch.object(release, 'media_process_ids', return_value=[]), \
+                 mock.patch.object(release, 'command') as no_reinstall:
+                result = release.media_cron_stage({'releaseId': 'synthetic-only'}, 'cron-pause')
+            self.assertEqual('PASS', result['status'])
+            self.assertEqual(original, (evidence / 'root-crontab-before.txt').read_bytes())
+            no_reinstall.assert_not_called()
+
+
+class CompositeRestoreContract(unittest.TestCase):
+    """Synthetic validator fixtures only. These tests never attest an actual restore."""
+    def setUp(self):
+        self.jar, self.commit = 'a' * 64, 'b' * 40
+        self.plan = {'database': {'uuid': release.UUID, 'schema': release.DATABASE, 'port': 3306},
+                     'candidate': {'sourceCommit': self.commit, 'jarSha256': self.jar}}
+        self.backup = {'status': 'PASS', 'database': self.plan['database'], 'databaseSha256': 'c' * 64,
+                       'tableFingerprint': {'credit_ledger': {}}}
+        self.actual = {'status': 'PASS', 'scope': 'ACTUAL_SERVER_LOCAL_DATA_RESTORE_ONLY',
+            'backupDatabaseSha256': 'c' * 64, 'actualRestoreExecuted': True, 'dataIntegrityVerified': True,
+            'sourceUnchanged': True, 'creditJournalVerified': True, 'fullBaseTableCount': 1,
+            'applicationStarted': False, 'supplierCalls': False}
+        isolation = {'uuid': '05c27d3c-dda3-11f1-aba0-84a938421519', 'port': 23316,
+                     'single_schema_grants': True, 'production_schema_visible': False}
+        history = [{'version': str(i), 'script': 'V' + str(i) + '__fixture.sql', 'checksum': 1,
+                    'success': 1, 'type': 'SQL'} for i in range(1, 46)]
+        history[-1].update(script='V45__credit_entitlement_integration.sql', checksum=-2125061473)
+        snapshot = {'financial_conservation': 'PASS', 'flyway': history, 'triggers': [{} for _ in range(17)]}
+        self.raw = {
+            'artifact': {'status': 'PASS', 'source_commit': self.commit, 'jar_sha256': self.jar, 'fresh_export': True,
+                         'runtime_credentials_loaded': False, 'all_production_class_bytes_match_tested': True,
+                         'all_frontend_bytes_match_acceptance': True},
+            'packagedFinancial': {'status': 'PASS', 'scope': 'PACKAGED_LOCAL_SYNTHETIC_MYSQL_COMMANDS_ONLY',
+                'source_commit': self.commit, 'jar_sha256': self.jar, 'isolation': isolation,
+                'production_access': False, 'vendor_calls': False, 'spring_application_started': False,
+                'original_money_unchanged': True, 'migrations_executed': 1, 'replay_migrations_executed': 0,
+                'final_state': 'ACTIVE', 'historical_allocations_fabricated': False,
+                'stages': [{'stage': name, 'status': 'BLOCKED' if name == 'reject-without-authorization' else 'PASS',
+                    'exit_code': 2 if name == 'reject-without-authorization' else 0} for name in
+                    ('read-only-plan', 'validate-core44', 'reject-without-authorization', 'migrate-financial45',
+                     'replay-financial45', 'apply-carry-forward', 'activate-carry-forward', 'verify-carry-forward')]},
+            'isolatedBackupRestore': {'status': 'PASS', 'scope': 'LOCAL_23316_ISOLATED_APPLICATION_COHORT_ONLY',
+                'stage': 'COMPLETE', 'production_access': False, 'provider_calls': False,
+                'original_database_writes': False, 'services_started': False, 'source_unchanged_after_restore': True,
+                'source_identity': isolation, 'restore_identity': isolation, 'restore_database': 'synthetic_restore',
+                'source_snapshot': snapshot, 'restore_snapshot': snapshot,
+                'restore_comparison': {'semantic_ddl_columns_indexes_foreign_keys_checks_equal': True}},
+            'isolatedJarStartup': {'status': 'PASS', 'scope': 'PACKAGED_RESTORED_SYNTHETIC_DB_STARTUP_ONLY',
+                'source_commit': self.commit, 'jar_sha256': self.jar, 'uuid': isolation['uuid'], 'database': 'synthetic_restore',
+                'production_access': False, 'vendor_calls': False, 'migrations_enabled': False, 'provider_or_money_actions': 0,
+                'owned_process_stopped': True, 'restored_financial_facts_unchanged': True, 'payment_catalogs_disabled': True,
+                'financial_snapshot_before': {'credit_ledger': {'rows': 3}},
+                'financial_snapshot_after': {'credit_ledger': {'rows': 3}}}}
+        self.refs = {name: {'path': '/synthetic/' + name + '.json', 'sha256': 'd' * 64} for name in self.raw}
+
+    def validate(self, raw=None, frozen=None):
+        return release.validate_restore_evidence(self.plan, self.backup, self.actual,
+                    self.raw if raw is None else raw, self.refs, frozen)
+
+    def test_preplan_composition_keeps_data_scopes_and_never_invents_frozen_source(self):
+        value = self.validate()
+        self.assertEqual('PASS', value['status'])
+        self.assertFalse(value['sourceBound'])
+        self.assertNotIn('sourceSha256', value)
+        self.assertFalse(value['productionCloneApplicationStarted'])
+        self.assertFalse(value['productionCloneMigratedTo45'])
+        self.assertEqual('LOCAL_SYNTHETIC_ONLY', value['compatibilityData'])
+        self.assertEqual(self.refs, value['rawEvidence'])
+        self.assertEqual('NOT_TESTED', value['realPaymentAcceptance'])
+
+    def test_missing_failed_or_other_scope_proofs_never_compose_pass(self):
+        for name in self.raw:
+            for field, value in (('status', 'FAIL'), ('scope', 'MOCK_CONTRACT_ONLY')):
+                if field == 'scope' and name == 'artifact': continue
+                raw = copy.deepcopy(self.raw); raw[name][field] = value
+                with self.subTest(name=name, field=field), self.assertRaises(release.Blocked): self.validate(raw)
+            raw = copy.deepcopy(self.raw); del raw[name]
+            with self.subTest(missing=name), self.assertRaises(release.Blocked): self.validate(raw)
+
+    def test_different_jars_commits_or_restore_schema_are_rejected(self):
+        for name in ('artifact', 'packagedFinancial', 'isolatedJarStartup'):
+            for field, value in (('source_commit', 'e' * 40), ('jar_sha256', 'e' * 64)):
+                raw = copy.deepcopy(self.raw); raw[name][field] = value
+                with self.subTest(name=name, field=field), self.assertRaises(release.Blocked): self.validate(raw)
+        raw = copy.deepcopy(self.raw); raw['isolatedJarStartup']['database'] = 'different'
+        with self.assertRaises(release.Blocked): self.validate(raw)
+
+    def test_incomplete_command_execution_and_mutated_restored_finance_are_rejected(self):
+        raw = copy.deepcopy(self.raw); raw['packagedFinancial']['stages'].pop()
+        with self.assertRaises(release.Blocked): self.validate(raw)
+        raw = copy.deepcopy(self.raw); raw['isolatedJarStartup']['financial_snapshot_after']['credit_ledger']['rows'] = 4
+        with self.assertRaises(release.Blocked): self.validate(raw)
+        raw = copy.deepcopy(self.raw); raw['isolatedBackupRestore']['restore_snapshot']['flyway'][-1]['checksum'] = 0
+        with self.assertRaises(release.Blocked): self.validate(raw)
+
+    def test_source_binding_requires_real_same_database_read_only_plan(self):
+        frozen = {'status': 'PASS', 'state': 'READ_ONLY_PLAN', 'databaseUuid': release.UUID,
+            'database': release.DATABASE, 'port': 3306, 'issues': [], 'sourceSha256': 'e' * 64, 'planSha256': 'f' * 64}
+        bound = self.validate(frozen=frozen)
+        self.assertTrue(bound['sourceBound'])
+        self.assertEqual(frozen['sourceSha256'], bound['sourceSha256'])
+        for key, value in (('status', 'BLOCKED'), ('state', 'ACTIVE'), ('database', 'different'),
+                           ('issues', ['SOURCE_MISMATCH']), ('sourceSha256', '')):
+            with self.subTest(key=key), self.assertRaises(release.Blocked): self.validate(frozen={**frozen, key: value})
+
+    def test_wrong_actual_backup_or_production_app_claim_is_rejected(self):
+        for key, value in (('backupDatabaseSha256', 'f' * 64), ('applicationStarted', True),
+                           ('sourceUnchanged', False), ('fullBaseTableCount', 2)):
+            actual = {**self.actual, key: value}
+            with self.subTest(key=key), self.assertRaises(release.Blocked):
+                release.validate_restore_evidence(self.plan, self.backup, actual, self.raw, self.refs)
+
+
+class PreDdlAbortContract(unittest.TestCase):
+    def test_any_migration_attempt_or_native_stage_receipt_blocks_before_startup(self):
+        cache = Path(__file__).resolve().parents[2] / '.cache'; cache.mkdir(exist_ok=True)
+        for filename in ('operator-approval-migrate-45-synthetic.properties', 'writer-observation-migrate-45-synthetic.json',
+                         'migration-45-receipt.json', 'carry-apply-receipt.json', 'carry-activate-receipt.json', 'carry-verify-receipt.json'):
+            with tempfile.TemporaryDirectory(dir=cache) as temporary, mock.patch.object(release, 'current_matches'), \
+                 mock.patch.object(release, 'startup') as start, mock.patch.object(release, 'install_crontab_checked') as cron:
+                out = Path(temporary); (out / filename).write_text('synthetic only')
+                with self.subTest(filename=filename), self.assertRaisesRegex(release.Blocked, 'ABORT_FORBIDDEN_AFTER_FINANCIAL_MIGRATION_ATTEMPT'):
+                    release.abort_before_ddl({}, out)
+                start.assert_not_called(); cron.assert_not_called()
+
+    def test_changed_old_controls_and_financial_schema_failure_never_start_old_writer(self):
+        cache = Path(__file__).resolve().parents[2] / '.cache'; cache.mkdir(exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=cache) as temporary:
+            directory = Path(temporary); (directory / 'pre-ddl-controls.json').write_text('{"original":"value"}')
+            for altered in (True, False):
+                with contextlib.ExitStack() as stack:
+                    stack.enter_context(mock.patch.object(release, 'current_matches'))
+                    stack.enter_context(mock.patch.object(release, 'media_cron_directory', return_value=directory))
+                    stack.enter_context(mock.patch.object(release, 'secure', side_effect=lambda p, **k: Path(p)))
+                    stack.enter_context(mock.patch.object(release, 'pre_ddl_controls', return_value={'original': 'changed' if altered else 'value'}))
+                    stack.enter_context(mock.patch.object(release, 'check_release'))
+                    stack.enter_context(mock.patch.object(release, 'verify_pre_ddl_schema', side_effect=release.Blocked('PARTIAL_DDL_PRESENT')))
+                    start = stack.enter_context(mock.patch.object(release, 'startup'))
+                    cron = stack.enter_context(mock.patch.object(release, 'install_crontab_checked'))
+                    with self.assertRaises(release.Blocked): release.abort_before_ddl({}, directory)
+                    start.assert_not_called(); cron.assert_not_called()
+
+    def test_safe_abort_verifies_actual_old_process_then_restores_only_original_cron(self):
+        cache = Path(__file__).resolve().parents[2] / '.cache'; cache.mkdir(exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=cache) as temporary, contextlib.ExitStack() as stack:
+            directory = Path(temporary); controls = {'files': {'synthetic': 'hash'}}
+            (directory / 'pre-ddl-controls.json').write_text(json.dumps(controls))
+            original = (release.MEDIA_ENTRY + '\n7 2 * * * /unrelated-job\n').encode()
+            (directory / 'root-crontab-before.txt').write_bytes(original)
+            spool = directory / 'spool'; spool.write_bytes(release.paused_crontab(original))
+            plan = {'expected': {'sourceCommit': 'a' * 40, 'jarSha256': 'b' * 64}}
+            for name in ('current_matches', 'check_release', 'verify_pre_ddl_schema'):
+                stack.enter_context(mock.patch.object(release, name))
+            stack.enter_context(mock.patch.object(release, 'ROOT_CRONTAB', spool))
+            stack.enter_context(mock.patch.object(release, 'media_cron_directory', return_value=directory))
+            stack.enter_context(mock.patch.object(release, 'secure', side_effect=lambda p, **k: Path(p)))
+            stack.enter_context(mock.patch.object(release, 'pre_ddl_controls', return_value=controls))
+            stack.enter_context(mock.patch.object(release, 'validate_media_cron', return_value={'expectedCrontabSha256': __import__('hashlib').sha256(original).hexdigest()}))
+            stack.enter_context(mock.patch.object(release, 'media_process_ids', return_value=[]))
+            order = []
+            stack.enter_context(mock.patch.object(release, 'startup', side_effect=lambda: order.append('start')))
+            verify = stack.enter_context(mock.patch.object(release, 'running_artifact_matches', side_effect=lambda p: order.append('actual-old-jar')))
+            cron = stack.enter_context(mock.patch.object(release, 'install_crontab_checked', side_effect=lambda *a: order.append('restore-original-cron')))
+            value = release.abort_before_ddl(plan, directory)
+            self.assertEqual(['start', 'actual-old-jar', 'restore-original-cron'], order)
+            self.assertFalse(value['databaseRestored']); self.assertFalse(value['configurationRestored'])
+            self.assertFalse(value['financialDdlExecuted'])
+            self.assertEqual(plan['expected'], verify.call_args.args[0]['candidate'])
+            self.assertEqual(original, cron.call_args.args[1])
+
+
+class PrivateAcceptanceContract(unittest.TestCase):
+    def setUp(self):
+        self.fixture=FourChannelReleaseContract();self.fixture.setUp()
+        self.scope={'ownerId':self.fixture.owner,'nonce':'abcdef01','expiresAt':'2100-01-01T00:00:00Z','wechatCnyMinor':300}
+
+    def funding(self):
+        value=self.fixture.funding(release.CHANNELS);value['approvedTransactionLimit']=4;value['temporaryOffer']=self.scope.copy()
+        for channel,quote in value['channelQuotes'].items():
+            amount=300 if channel=='wechat_pay' else 1 if channel=='paypal' else 50
+            quote.update(packageId='accept-abcdef01-'+channel+('-CNY' if channel=='wechat_pay' else '-USD'),
+                         credits=1,maxPurchases=1,ownerId=self.fixture.owner,selectedPackageAmountMinor=amount,approvedMaximumMinor=amount)
+        return value
+
+    def test_explicit_private_quotes_are_one_approved_transaction_each_without_changing_public_amounts(self):
+        release.validate_canary_funding(self.funding(),self.fixture.jar,release.CHANNELS)
+        missing=self.funding();del missing['temporaryOffer']
+        with self.assertRaises(release.Blocked):release.validate_canary_funding(missing,self.fixture.jar,release.CHANNELS)
+
+    def test_private_identity_currency_price_credit_and_limit_cannot_be_substituted(self):
+        for change in ({'packageId':'starter-USD'},{'ownerId':'another-owner'},{'credits':100},{'maxPurchases':2},
+                       {'selectedPackageAmountMinor':1},{'approvedTransactionLimit':2},{'currency':'CNY'}):
+            value=self.funding();value['channelQuotes']['card'].update(change)
+            with self.subTest(change=change),self.assertRaises(release.Blocked):release.validate_canary_funding(value,self.fixture.jar,release.CHANNELS)
+
+    def test_expired_or_unapproved_wechat_minimum_is_rejected(self):
+        for change in ({'expiresAt':'2000-01-01T00:00:00Z'},{'nonce':'bad'},{'wechatCnyMinor':100},{'ownerId':'one,two'}):
+            value=self.funding();value['temporaryOffer'].update(change)
+            with self.subTest(change=change),self.assertRaises(release.Blocked):release.validate_canary_funding(value,self.fixture.jar,release.CHANNELS)
+
+    def test_runtime_private_prices_require_single_owner_canary_and_are_forbidden_at_public_open(self):
+        config=self.fixture.configuration(release.CHANNELS,canary=True)
+        config.update({'qingfeng.payment.acceptance.enabled':'true','qingfeng.payment.acceptance.owner-id':self.fixture.owner,
+                       'qingfeng.payment.acceptance.nonce':'abcdef01','qingfeng.payment.acceptance.expires-at':self.scope['expiresAt'],
+                       'qingfeng.payment.acceptance.wechat-cny':'3.00'})
+        release.validate_configuration(self.fixture.old,config,False,True,release.CHANNELS,self.fixture.paypal)
+        with self.assertRaises(release.Blocked):release.validate_configuration(self.fixture.old,config,False,False,[],self.fixture.paypal)
+        opened=self.fixture.configuration(release.CHANNELS,accepting=True)
+        opened.update({k:v for k,v in config.items() if k.startswith('qingfeng.payment.acceptance.')})
+        for enabled in ('true','false'):
+            opened['qingfeng.payment.acceptance.enabled']=enabled
+            with self.assertRaises(release.Blocked):release.validate_configuration(self.fixture.old,opened,True,False,release.CHANNELS,self.fixture.paypal)
+
+    def business(self):
+        value=self.fixture.business();value['temporaryOffer']=self.scope.copy()
+        for channel,proof in value['channelAcceptance'].items():
+            proof.update(packageId='accept-abcdef01-'+channel+('-CNY' if channel=='wechat_pay' else '-USD'),
+                         credits=1,maxPurchases=1,ownerId=self.fixture.owner,orderCreatedAt='2026-11-13T10:00:00Z',
+                         amountMinor=300 if channel=='wechat_pay' else 1 if channel=='paypal' else 50)
+        return value
+
+    def test_private_actual_acceptance_preserves_all_native_channel_requirements_and_order_snapshot(self):
+        release.validate_business_acceptance(self.fixture.plan,self.business())
+        for change in ({'walletType':''},{'credits':100},{'ownerId':'other'},{'packageId':'accept-deadbeef-apple_pay-USD'},
+                       {'orderCreatedAt':'2100-01-01T00:00:00Z'},{'providerReadback':'NOT_TESTED'}):
+            value=self.business();value['channelAcceptance']['apple_pay'].update(change)
+            with self.subTest(change=change),self.assertRaises(release.Blocked):release.validate_business_acceptance(self.fixture.plan,value)
+
+    def test_late_delivery_after_offer_expiry_can_accept_only_an_earlier_reserved_snapshot(self):
+        value=self.business();value['temporaryOffer']['expiresAt']='2026-11-13T11:00:00Z'
+        release.validate_business_acceptance(self.fixture.plan,value)
+        value['channelAcceptance']['paypal']['orderCreatedAt']='2026-11-13T12:00:00Z'
+        with self.assertRaises(release.Blocked):release.validate_business_acceptance(self.fixture.plan,value)
 
 
 if __name__ == '__main__':

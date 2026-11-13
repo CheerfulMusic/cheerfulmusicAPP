@@ -49,11 +49,11 @@ class DisputeOverlapMySqlTest {
                 assertTrue(Set.of(database,"information_schema","performance_schema").contains(rows.getString(1)));}
         }
         assertEquals(0,n("SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE()"),"Do not reuse or clean old cohorts");
-        Flyway.configure().dataSource(source).locations("classpath:db/migration").cleanDisabled(true).target("43").load().migrate();
-        assertEquals(43,n("SELECT COUNT(*) FROM flyway_schema_history WHERE success=1 AND version IS NOT NULL"));
         Flyway.configure().dataSource(source).locations("classpath:db/migration").cleanDisabled(true).target("44").load().migrate();
         assertEquals(44,n("SELECT COUNT(*) FROM flyway_schema_history WHERE success=1 AND version IS NOT NULL"));
-        assertEquals(789542731,n("SELECT checksum FROM flyway_schema_history WHERE version='44'"));
+        Flyway.configure().dataSource(source).locations("classpath:db/migration").cleanDisabled(true).target("45").load().migrate();
+        assertEquals(45,n("SELECT COUNT(*) FROM flyway_schema_history WHERE success=1 AND version IS NOT NULL"));
+        assertEquals(-2125061473,n("SELECT checksum FROM flyway_schema_history WHERE version='45'"));
         assertEquals(1,db.update("UPDATE p0_credit_cutover_state SET status='ACTIVE',activated_at=CURRENT_TIMESTAMP,evidence='SYNTHETIC_DISPUTE_OVERLAP' WHERE id=1 AND status='PREPARING'"));
         tx=new TransactionTemplate(new JdbcTransactionManager(source));restartLedger();
     }

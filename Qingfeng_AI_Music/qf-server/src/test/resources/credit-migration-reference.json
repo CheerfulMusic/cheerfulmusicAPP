@@ -1,5 +1,5 @@
 {
-  "core_commit": "0530c444a38db2363e0a6296c52a416b09a14d5f",
+  "core_commit": "e6c351f21ece6fb096ff425ca4b690232632de21",
   "core": [
     {
       "version": "1",
@@ -258,13 +258,19 @@
       "script": "V43__lyric_revision_custom_sections.sql",
       "sha256_lf": "c6c7032590c2b19bf7f14a5fd08b9a1554a4344da96e3d211c336dcebf9e3d6a",
       "checksum": -2135468013
+    },
+    {
+      "version": "44",
+      "script": "V44__discover_song_publication.sql",
+      "sha256_lf": "70124e97c6ce679b7f854bff29881d500833a74c39a05a9fccec2c69face1790",
+      "checksum": -1983576296
     }
   ],
   "integration": {
-    "version": "44",
-    "script": "V44__credit_entitlement_integration.sql",
-    "sha256_lf": "5f93d318f7583906f424fe0a5e41afac5ba1d147f91ee4527c88f1a1ee51433b",
-    "checksum": 789542731
+    "version": "45",
+    "script": "V45__credit_entitlement_integration.sql",
+    "sha256_lf": "3dd5cebf19dee960ecefb2239668139918d363496fe87710f817c5b3a3241685",
+    "checksum": -2125061473
   },
   "p0_tables": [
     "p0_credit_writer_policy",

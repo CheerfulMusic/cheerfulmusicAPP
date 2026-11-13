@@ -45,13 +45,14 @@ public final class CreditCarryForwardCommand {
         String database = required(contract, "expected.database");
         require(database.equals(target.group(2)) && port == Integer.parseInt(required(contract, "expected.port")), "CARRY_FORWARD_JDBC_TARGET_MISMATCH");
         Identity destination = new Identity("MySQL", "8.0.46", database, required(contract, "expected.uuid"), port);
-        var source = new DriverManagerDataSource(url, required(connection, "spring.datasource.username"), required(connection, "spring.datasource.password"));
+        var source = new DriverManagerDataSource(url, required(connection, "spring.datasource.username"), connectionPassword(connection, contract));
         var driver = new Properties();
         driver.setProperty("connectionTimeZone", "UTC");
         driver.setProperty("forceConnectionTimeZoneToSession", "true");
         source.setConnectionProperties(driver);
         var db = new JdbcTemplate(source);
         verifyJdbcClock(db);
+        verifyOperatorIdentity(db, connection, contract);
         var cutover = new CreditHistoricalCutover(db, new TransactionTemplate(new JdbcTransactionManager(source)));
         Snapshot snapshot = cutover.inventory();
         require(snapshot.identity().equals(destination), "CARRY_FORWARD_DATABASE_IDENTITY_CHANGED");
@@ -109,6 +110,42 @@ public final class CreditCarryForwardCommand {
         });
     }
 
+    /**
+     * Operator-only exception for an explicitly approved, existing local root account.
+     * It is never an application configuration or permission change. A missing password
+     * property, a blank nonempty password, another account or a URL credential override
+     * cannot use this exception.
+     */
+    public static String connectionPassword(Properties connection, Properties contract) {
+        String url = required(connection, "spring.datasource.url");
+        int query = url.indexOf('?');
+        if (query >= 0) for (String option : url.substring(query + 1).split("[&;]", -1)) {
+            int equals = option.indexOf('=');
+            String key;
+            try { key = java.net.URLDecoder.decode(equals < 0 ? option : option.substring(0, equals), StandardCharsets.UTF_8).strip().toLowerCase(Locale.ROOT); }
+            catch (IllegalArgumentException invalid) { throw new IllegalStateException("CARRY_FORWARD_INVALID_JDBC_OPTION"); }
+            require(!Set.of("user", "username", "password", "password1", "password2", "password3", "pwd").contains(key),
+                    "CARRY_FORWARD_JDBC_CREDENTIAL_OVERRIDE_FORBIDDEN");
+        }
+        require(connection.containsKey("spring.datasource.password"), "CARRY_FORWARD_PROPERTY_REQUIRED");
+        String password = connection.getProperty("spring.datasource.password");
+        require(password != null && !password.contains("${"), "CARRY_FORWARD_PROPERTY_REQUIRED");
+        if (!password.isBlank()) return password;
+        require(password.isEmpty()
+                && "true".equals(contract.getProperty("allow-local-root-with-empty-password"))
+                && "root".equals(required(connection, "spring.datasource.username"))
+                && url.matches("jdbc:mysql://(?:127\\.0\\.0\\.1|localhost)(?::[0-9]+)?/[A-Za-z0-9_]+(?:\\?[^\\r\\n#]*)?"),
+                "CARRY_FORWARD_EMPTY_PASSWORD_NOT_APPROVED");
+        return password;
+    }
+
+    /** Confirm the server-authenticated account for the exceptional root path. */
+    public static void verifyOperatorIdentity(JdbcTemplate db, Properties connection, Properties contract) {
+        if (connectionPassword(connection, contract).isEmpty())
+            require("root".equals(db.queryForObject("SELECT SUBSTRING_INDEX(CURRENT_USER(),'@',1)", String.class)),
+                    "CARRY_FORWARD_OPERATOR_IDENTITY_MISMATCH");
+    }
+
     /** Every receipt binds this exact physical database, frozen source and candidate artifact. */
     public static Map<String, String> validateReceipts(Properties contract, Identity identity, String sourceSha, String jarSha) throws Exception {
         var hashes = new LinkedHashMap<String, String>();
@@ -133,10 +170,14 @@ public final class CreditCarryForwardCommand {
                             && zero(receipt, "otherSchemaConnections") && zero(receipt, "otherApplicationAccountConnections"), "CARRY_FORWARD_WRITERS_NOT_STOPPED");
                 }
                 case "backup-restore" -> require(truth(receipt, "restoreVerified") && truth(receipt, "originalJournalUnchanged"), "CARRY_FORWARD_BACKUP_RESTORE_NOT_VERIFIED");
-                case "rollback" -> require(receipt.path("protocol").asInt() == 3 && receipt.path("schemaVersion").asInt() == 44
+                case "rollback" -> require(receipt.path("protocol").asInt() == 3 && receipt.path("schemaVersion").asInt() == 45
                         && truth(receipt, "newPurchasesDisabled") && truth(receipt, "restoredStartupVerified")
                         && isSha(receipt.path("rollbackJarSha256").asText()), "CARRY_FORWARD_ROLLBACK_NOT_VERIFIED");
-                case "legacy-boundary" -> require(truth(receipt, "legacyOrdersReadOnly") && truth(receipt, "balancesPreserved") && truth(receipt, "newStripeOnly"), "CARRY_FORWARD_LEGACY_BOUNDARY_NOT_VERIFIED");
+                case "legacy-boundary" -> require(receipt.path("contractVersion").asInt() == 2
+                        && truth(receipt, "legacyOrdersReadOnly") && truth(receipt, "balancesPreserved")
+                        && truth(receipt, "allNewOrdersUseFencedLedger")
+                        && "LIVE".equals(receipt.path("paymentEnvironment").asText())
+                        && validPaymentProviders(receipt.path("allowedNewPaymentProviders")), "CARRY_FORWARD_LEGACY_BOUNDARY_NOT_VERIFIED");
                 default -> throw new IllegalStateException("INVALID_CARRY_FORWARD_RECEIPT");
             }
             hashes.put(kind, expected);
@@ -144,6 +185,12 @@ public final class CreditCarryForwardCommand {
         return Map.copyOf(hashes);
     }
 
+    private static boolean validPaymentProviders(JsonNode providers) {
+        if (!providers.isArray() || providers.size() != 2) return false;
+        var values = new HashSet<String>();
+        for (JsonNode provider : providers) if (!provider.isString() || !values.add(provider.asText())) return false;
+        return values.equals(Set.of("STRIPE_LIVE", "PAYPAL_LIVE"));
+    }
     private static boolean truth(JsonNode receipt, String field) { return receipt.path(field).isBoolean() && receipt.path(field).asBoolean(); }
     private static boolean zero(JsonNode receipt, String field) { return receipt.path(field).isIntegralNumber() && receipt.path(field).asLong() == 0; }
     private static boolean isSha(String value) { return value != null && value.matches("[a-f0-9]{64}"); }

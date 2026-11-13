@@ -9,10 +9,66 @@ import java.time.Instant;
 import java.util.*;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.springframework.jdbc.core.JdbcTemplate;
 import tools.jackson.databind.json.JsonMapper;
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.*;
 
 class CreditCarryForwardCommandTest {
+    private Properties localOperator() {
+        var connection=new Properties();connection.setProperty("spring.datasource.url","jdbc:mysql://127.0.0.1:23316/isolated_operator");
+        connection.setProperty("spring.datasource.username","root");connection.setProperty("spring.datasource.password","");return connection;
+    }
+    private Properties operatorApproval() {
+        var approval=new Properties();approval.setProperty("allow-local-root-with-empty-password","true");return approval;
+    }
+    @Test void explicitLocalRootEmptyPasswordExceptionDoesNotChangeNormalNonemptyCredentials() {
+        var local=localOperator();assertEquals("",CreditCarryForwardCommand.connectionPassword(local,operatorApproval()));
+        local.setProperty("spring.datasource.url","jdbc:mysql://localhost:23316/isolated_operator?connectionTimeZone=UTC");
+        assertEquals("",CreditCarryForwardCommand.connectionPassword(local,operatorApproval()));
+        local.setProperty("spring.datasource.username","isolated_runtime");local.setProperty("spring.datasource.password","synthetic-nonempty");
+        assertEquals("synthetic-nonempty",CreditCarryForwardCommand.connectionPassword(local,new Properties()));
+    }
+    @Test void missingOrBroadenedRootExceptionIsRejectedWithoutOpeningADatabase() {
+        assertThrows(IllegalStateException.class,()->CreditCarryForwardCommand.connectionPassword(localOperator(),new Properties()));
+        for(String flag:List.of("false","TRUE"," true ")){
+            var approval=operatorApproval();approval.setProperty("allow-local-root-with-empty-password",flag);
+            assertThrows(IllegalStateException.class,()->CreditCarryForwardCommand.connectionPassword(localOperator(),approval));
+        }
+        for(String username:List.of("isolated_runtime","ROOT","root ")){
+            var connection=localOperator();connection.setProperty("spring.datasource.username",username);
+            assertThrows(IllegalStateException.class,()->CreditCarryForwardCommand.connectionPassword(connection,operatorApproval()));
+        }
+        for(String password:List.of(" ","\t","${MYSQL_PASSWORD}")){
+            var connection=localOperator();connection.setProperty("spring.datasource.password",password);
+            assertThrows(IllegalStateException.class,()->CreditCarryForwardCommand.connectionPassword(connection,operatorApproval()));
+        }
+        var absent=localOperator();absent.remove("spring.datasource.password");
+        assertThrows(IllegalStateException.class,()->CreditCarryForwardCommand.connectionPassword(absent,operatorApproval()));
+        for(String url:List.of("jdbc:mysql://192.0.2.1:3306/isolated_operator","jdbc:mysql://localhost.example.invalid/isolated_operator","jdbc:mysql://root@localhost/isolated_operator")){
+            var connection=localOperator();connection.setProperty("spring.datasource.url",url);
+            assertThrows(IllegalStateException.class,()->CreditCarryForwardCommand.connectionPassword(connection,operatorApproval()));
+        }
+    }
+    @Test void jdbcCredentialOverridesIncludingEncodedOrMalformedKeysCannotBypassTheOperatorContract() {
+        for(String option:List.of("user=other","username=other","password=other","password1=other","password2=other","password3=other","pwd=other",
+                "USER=other","%75ser=other","%20password%20=other","useSSL=false;password=other","%ZZ=other")){
+            var connection=localOperator();connection.setProperty("spring.datasource.url","jdbc:mysql://127.0.0.1:23316/isolated_operator?"+option);
+            assertThrows(IllegalStateException.class,()->CreditCarryForwardCommand.connectionPassword(connection,operatorApproval()),option);
+            connection.setProperty("spring.datasource.password","synthetic-nonempty");
+            assertThrows(IllegalStateException.class,()->CreditCarryForwardCommand.connectionPassword(connection,operatorApproval()),option);
+        }
+    }
+    @Test void exceptionalRootPathRequiresTheServerAuthenticatedIdentityAndNormalAccountsDoNotUseIt() {
+        var db=mock(JdbcTemplate.class);String query="SELECT SUBSTRING_INDEX(CURRENT_USER(),'@',1)";
+        when(db.queryForObject(query,String.class)).thenReturn("unexpected_account");
+        assertEquals("CARRY_FORWARD_OPERATOR_IDENTITY_MISMATCH",assertThrows(IllegalStateException.class,
+            ()->CreditCarryForwardCommand.verifyOperatorIdentity(db,localOperator(),operatorApproval())).getMessage());
+        when(db.queryForObject(query,String.class)).thenReturn("root");
+        assertDoesNotThrow(()->CreditCarryForwardCommand.verifyOperatorIdentity(db,localOperator(),operatorApproval()));
+        reset(db);var connection=localOperator();connection.setProperty("spring.datasource.username","isolated_runtime");connection.setProperty("spring.datasource.password","synthetic-nonempty");
+        CreditCarryForwardCommand.verifyOperatorIdentity(db,connection,new Properties());verifyNoInteractions(db);
+    }
     private static final Instant OLD = Instant.parse("2020-01-01T00:00:00Z");
     private static final Identity ID = new Identity("MySQL", "8.0.46", "synthetic", "synthetic-uuid", 23316);
     @TempDir Path directory;
@@ -64,10 +120,11 @@ class CreditCarryForwardCommandTest {
         result.put("port", ID.port()); result.put("sourceSha256", "a".repeat(64)); result.put("candidateJarSha256", "b".repeat(64));
         result.put("recordedAt", Instant.now().toString());
         for (String key : List.of("serviceInactive", "otherWritersStopped", "connectionsDrained", "restoreVerified", "originalJournalUnchanged",
-                "newPurchasesDisabled", "restoredStartupVerified", "legacyOrdersReadOnly", "balancesPreserved", "newStripeOnly",
+                "newPurchasesDisabled", "restoredStartupVerified", "legacyOrdersReadOnly", "balancesPreserved", "allNewOrdersUseFencedLedger",
                 "globalProcesslistVerified", "observerHasProcessPrivilege")) result.put(key, true);
         result.put("otherSchemaConnections", 0); result.put("otherApplicationAccountConnections", 0);
-        result.put("protocol", 3); result.put("schemaVersion", 44); result.put("rollbackJarSha256", "c".repeat(64)); return result;
+        result.put("contractVersion", 2); result.put("paymentEnvironment", "LIVE"); result.put("allowedNewPaymentProviders", List.of("STRIPE_LIVE", "PAYPAL_LIVE"));
+        result.put("protocol", 3); result.put("schemaVersion", 45); result.put("rollbackJarSha256", "c".repeat(64)); return result;
     }
     private Properties receipts(Map<String, Object> receipt) throws Exception {
         var contract = new Properties();
@@ -102,6 +159,24 @@ class CreditCarryForwardCommandTest {
         assertThrows(IllegalStateException.class, () -> CreditCarryForwardCommand.validateReceipts(receipts(stale), ID, "a".repeat(64), "b".repeat(64)));
         var wrongProtocol = receipt(); wrongProtocol.put("protocol", 2);
         assertThrows(IllegalStateException.class, () -> CreditCarryForwardCommand.validateReceipts(receipts(wrongProtocol), ID, "a".repeat(64), "b".repeat(64)));
+    }
+    @Test void legacyBoundaryV2RequiresBothFencedLiveProvidersAndRejectsTheOldStripeOnlyClaim() throws Exception {
+        for (String missing : List.of("contractVersion", "allNewOrdersUseFencedLedger", "paymentEnvironment", "allowedNewPaymentProviders")) {
+            var incomplete=receipt();incomplete.remove(missing);
+            assertThrows(IllegalStateException.class, () -> CreditCarryForwardCommand.validateReceipts(receipts(incomplete), ID, "a".repeat(64), "b".repeat(64)),missing);
+        }
+        for (Object providers : List.of(List.of("STRIPE_LIVE"), List.of("PAYPAL_LIVE"),
+                List.of("STRIPE_LIVE","PAYPAL_LIVE","PAYPAL_LIVE"),List.of("STRIPE_LIVE","PAYPAL_SANDBOX"),
+                List.of("STRIPE_LIVE","PAYPAL_LIVE","AIRWALLEX"),"STRIPE_LIVE,PAYPAL_LIVE")) {
+            var incompatible=receipt();incompatible.put("allowedNewPaymentProviders",providers);
+            assertThrows(IllegalStateException.class, () -> CreditCarryForwardCommand.validateReceipts(receipts(incompatible), ID, "a".repeat(64), "b".repeat(64)));
+        }
+        var old=receipt();old.put("contractVersion",1);old.put("newStripeOnly",true);
+        assertThrows(IllegalStateException.class, () -> CreditCarryForwardCommand.validateReceipts(receipts(old), ID, "a".repeat(64), "b".repeat(64)));
+        var sandbox=receipt();sandbox.put("paymentEnvironment","SANDBOX");
+        assertThrows(IllegalStateException.class, () -> CreditCarryForwardCommand.validateReceipts(receipts(sandbox), ID, "a".repeat(64), "b".repeat(64)));
+        var oldSchema=receipt();oldSchema.put("schemaVersion",44);
+        assertThrows(IllegalStateException.class, () -> CreditCarryForwardCommand.validateReceipts(receipts(oldSchema), ID, "a".repeat(64), "b".repeat(64)));
     }
     @Test void nonPrivilegedPartialVisibilityActiveGlobalConnectionAndExpiredStopObservationBlock() throws Exception {
         for (String key : List.of("globalProcesslistVerified", "observerHasProcessPrivilege")) {

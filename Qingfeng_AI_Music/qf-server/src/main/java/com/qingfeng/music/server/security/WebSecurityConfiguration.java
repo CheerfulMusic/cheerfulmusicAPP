@@ -27,18 +27,21 @@ public class WebSecurityConfiguration {
         var invite=inviteGate.getIfAvailable();
         if (invite!=null) http.addFilterBefore(invite, org.springframework.security.web.csrf.CsrfFilter.class);
         if (filter!=null) http.addFilterAfter(new ApiRateLimitFilter(java.time.Clock.systemUTC(),env.getProperty("qingfeng.redis.enabled",Boolean.class,false)&&env.getProperty("qingfeng.redis.api-rate-limit-enabled",Boolean.class,true)?new RedisApiRateGate(redis.getObject()):null),CreatorSessionFilter.class);
-        return http.csrf(csrf -> csrf.ignoringRequestMatchers("/api/public/payments/airwallex/webhook", "/api/public/paypal/webhook", "/api/public/events", "/api/public/hot-songs/*/play")
+        return http.csrf(csrf -> csrf.ignoringRequestMatchers("/api/public/payments/airwallex/webhook", "/api/public/paypal/webhook", "/api/public/events", "/api/public/hot-songs/*/play", "/api/public/discover/songs/*/*/play")
             .ignoringRequestMatchers(request->"POST".equals(request.getMethod())&&java.util.Set.of("/api/public/auth/sms/deliver","/api/public/stripe/webhook").contains(request.getServletPath()))
             .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse()).csrfTokenRequestHandler(new CsrfTokenRequestAttributeHandler()))
             .authorizeHttpRequests(auth -> auth
                 .dispatcherTypeMatchers(jakarta.servlet.DispatcherType.ERROR,jakarta.servlet.DispatcherType.ASYNC).permitAll()
                 .requestMatchers(org.springframework.http.HttpMethod.GET,"/api/public/invite/status").permitAll()
                 .requestMatchers(org.springframework.http.HttpMethod.POST,"/api/public/invite/enter").permitAll()
-                .requestMatchers(org.springframework.http.HttpMethod.GET,"/","/index.html","/assets/**","/brand/**","/media/**","/create","/create/photo","/works","/works/*","/gift/*","/account","/profile","/artist/*","/recharge","/analytics","/agent","/legal/**").permitAll()
-                .requestMatchers(org.springframework.http.HttpMethod.HEAD,"/gift/*","/brand/share-default-cover.png").permitAll()
+                .requestMatchers(org.springframework.http.HttpMethod.GET,"/","/index.html","/assets/**","/brand/**","/media/**","/create","/create/photo","/works","/works/*","/gift/*","/account","/profile","/artist/*","/discover","/recharge","/analytics","/agent","/legal/**").permitAll()
+                .requestMatchers(org.springframework.http.HttpMethod.HEAD,"/gift/*","/discover","/brand/share-default-cover.png").permitAll()
                 .requestMatchers("/api/public/system/info", "/api/public/csrf", "/api/public/session", "/api/public/session/recover", "/actuator/health").permitAll()
                 .requestMatchers(org.springframework.http.HttpMethod.POST,"/api/public/events").permitAll()
                 .requestMatchers(org.springframework.http.HttpMethod.GET,"/api/public/hot-songs").permitAll()
+                .requestMatchers(org.springframework.http.HttpMethod.GET,"/api/public/discover").permitAll()
+                .requestMatchers(org.springframework.http.HttpMethod.HEAD,"/api/public/discover").permitAll()
+                .requestMatchers(org.springframework.http.HttpMethod.POST,"/api/public/discover/songs/*/*/play").permitAll()
                 .requestMatchers(org.springframework.http.HttpMethod.POST,"/api/public/hot-songs/*/play").permitAll()
                 .requestMatchers(org.springframework.http.HttpMethod.GET,"/api/public/auth/google/status",GoogleOAuthFlow.CALLBACK).permitAll()
                 .requestMatchers(org.springframework.http.HttpMethod.POST,"/api/public/auth/google/start","/api/public/session/logout").permitAll()

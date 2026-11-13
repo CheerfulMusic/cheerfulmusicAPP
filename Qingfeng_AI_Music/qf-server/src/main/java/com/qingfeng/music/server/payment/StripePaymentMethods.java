@@ -91,10 +91,24 @@ public final class StripePaymentMethods {
      * Existing Stripe package ids and Apple Pay selections retain the card route.
      */
     public static String checkoutMethodForStoredOffer(String packageId) {
+        if (PaymentAcceptanceOffers.isAcceptance(packageId)) {
+            String method=PaymentAcceptanceOffers.storedMethod(packageId);
+            if("paypal".equals(method))throw new IllegalArgumentException("PayPal offer cannot route to Stripe");
+            return "wechat_pay".equals(method)?"wechat_pay":"card";
+        }
         if (packageId != null && WECHAT_OFFER.matcher(packageId).matches()) return "wechat_pay";
         if (packageId != null && packageId.endsWith("-wechat_pay"))
             throw new IllegalArgumentException("Invalid persisted WeChat offer");
         return "card";
+    }
+
+    public Offer selectAcceptance(PaymentCatalog.Package pack,String method){
+        if(!METHODS.contains(method)||!PaymentAcceptanceOffers.storedMethod(pack.id()).equals(method))
+            throw rejected(HttpStatus.BAD_REQUEST,"PAYMENT_METHOD_UNSUPPORTED");
+        String reason=disabledReason(method,true);
+        if(!reason.isEmpty())throw rejected(HttpStatus.SERVICE_UNAVAILABLE,reason);
+        if(!supportedCurrencies(method).contains(pack.currency()))throw rejected(HttpStatus.BAD_REQUEST,"CURRENCY_UNSUPPORTED");
+        return new Offer(pack.id(),pack.title(),pack.amount(),pack.currency(),pack.credits(),method);
     }
 
     private Map<String, Object> method(String id, boolean purchasingOpen) {

@@ -14,6 +14,7 @@ export interface ArtistRelease extends Omit<PublishedSong, 'hasCover'> {
   workId: string
   assetId: string
   coverId: string | null
+  onDiscover?: boolean
 }
 
 export interface ArtistProfile {
@@ -46,7 +47,32 @@ export interface SongPublication {
 interface ReleaseSelection {
   profileReady: boolean
   published: boolean
+  publicId?: string | null
+  stageName?: string
   song: ArtistRelease | null
+}
+
+export interface DiscoverSong {
+  artistId: string
+  stageName: string
+  song: PublishedSong
+  publishedAt: string
+  genre?: string
+  plays?: number
+}
+
+export interface DiscoverArtist {
+  artistId: string
+  stageName: string
+  avatarKey: string | null
+  songs: number
+  plays: number
+}
+
+interface DiscoverPage {
+  songs: DiscoverSong[]
+  hasMore: boolean
+  artists?: DiscoverArtist[]
 }
 
 const mine = 'app/artist-profile'
@@ -101,6 +127,28 @@ export async function publishSong({ workId, ...song }: SongPublication) {
 export async function removeSongFromArtist(work: string) {
   await ensureCreator()
   return requestJson<ArtistProfile>(release(work), 'DELETE')
+}
+
+export async function publishSongToDiscover(work: string, version: number) {
+  await ensureCreator()
+  return requestJson<ArtistRelease>(`${release(work)}/discover`, 'PUT', { version })
+}
+
+export async function withdrawSongFromDiscover(work: string) {
+  await ensureCreator()
+  return requestJson<ArtistProfile>(`${release(work)}/discover`, 'DELETE')
+}
+
+export function listDiscoverSongs(tab: 'latest' | 'featured' | 'popular', offset: number, genre: string, query: string) {
+  const params = new URLSearchParams({
+    featured: String(tab === 'featured'), popular: String(tab === 'popular'),
+    offset: String(offset), genre, q: query,
+  })
+  return requestJson<DiscoverPage>(`public/discover?${params}`)
+}
+
+export function recordDiscoverPlay(song: PublishedSong) {
+  return requestJson<void>(`public/discover/songs/${encodeURIComponent(song.id)}/${song.version}/play`, 'POST')
 }
 
 export const getPublicArtist = (id: string) => requestJson<PublicArtist>(publicArtist(id))

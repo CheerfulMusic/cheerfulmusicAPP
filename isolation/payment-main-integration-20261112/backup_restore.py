@@ -27,7 +27,7 @@ MYSQL_BIN = Path("R:/mysql-8.0.46-winx64/bin")
 SOURCE_PRIVATE = "application-db-private-r6.json"
 TARGET_PRIVATE = "restore-db-private-r2.json"
 SOURCE_REVISION = "r6"
-INTEGRATION_CHECKSUM = 789542731
+INTEGRATION_CHECKSUM = -2125061473
 
 
 class GuardFailure(RuntimeError):
@@ -322,9 +322,9 @@ def snapshot(conn, cfg, references):
                          "redundant_column_charset_declarations": removed,
                          "structure_metadata": metadata[name]})
     history = query(conn, "SELECT version,script,checksum,success,type FROM flyway_schema_history ORDER BY installed_rank")
-    require(len(history) == 44 and {row["version"] for row in history} == {str(n) for n in range(1, 45)}
+    require(len(history) == 45 and {row["version"] for row in history} == {str(n) for n in range(1, 46)}
             and all(row["success"] == 1 and row["type"] == "SQL" for row in history),
-            "EXACT_44_SUCCESSFUL_SQL_MIGRATIONS_REQUIRED")
+            "EXACT_45_SUCCESSFUL_SQL_MIGRATIONS_REQUIRED")
     expected = {row["version"]: row for row in references["core"] + [references["integration"]]}
     for row in history:
         require(row["script"] == expected[row["version"]]["script"]
@@ -426,9 +426,9 @@ def execute(workspace, root, out, proof):
     require(not target_private.exists(), "RESTORE_PRIVATE_FILE_ALREADY_EXISTS")
     references_path = workspace / "Qingfeng_AI_Music/qf-server/src/test/resources/credit-migration-reference.json"
     references = json.loads(references_path.read_text(encoding="utf-8"))
-    require(references["integration"]["version"] == "44"
+    require(references["integration"]["version"] == "45"
             and references["integration"]["checksum"] == INTEGRATION_CHECKSUM,
-            "FINAL_V44_REFERENCE_REQUIRED")
+            "FINAL_V45_REFERENCE_REQUIRED")
     proof["reference_manifest_sha256"] = digest(references_path.read_bytes())
     with connect(pymysql, source_cfg) as source:
         proof["source_identity"] = scoped_proof(source, source_cfg)

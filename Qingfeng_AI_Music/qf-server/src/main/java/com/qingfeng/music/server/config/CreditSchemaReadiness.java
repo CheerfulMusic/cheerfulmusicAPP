@@ -5,19 +5,50 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import org.springframework.jdbc.core.JdbcTemplate;
 
-/** Read-only protocol-3 startup/payment gate for the immutable canonical V1..V44 schema. */
+/** Read-only protocol-3 startup/payment gate for core V1..V44 and financial V45. */
 public final class CreditSchemaReadiness {
     private CreditSchemaReadiness() {}
     public record Check(String sql, int expected) {}
-    public static final int V44_CHECKSUM = 789542731;
+    public static final int V45_CHECKSUM = -2125061473;
     public static final Map<String, Check> CHECKS = checks();
-    public static final Map<String, Check> CORE43_CHECKS = core43Checks();
+    public static final Map<String, Check> CORE44_CHECKS = core44Checks();
     public static final String INSTALLED_SQL = "SELECT (SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND LEFT(TABLE_NAME,3)='p0_') + (SELECT COUNT(*) FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA=DATABASE() AND LEFT(TRIGGER_NAME,3)='p0_')";
-    public static final String INSTALLED_HISTORY_SQL = "SELECT COUNT(*) FROM flyway_schema_history WHERE version='44' OR (version='41' AND script='V41__credit_entitlement_integration.sql') OR (version='40' AND script='V40__credit_entitlement_integration.sql')";
+    public static final String INSTALLED_HISTORY_SQL = "SELECT COUNT(*) FROM flyway_schema_history WHERE version='45' OR (version='44' AND script='V44__credit_entitlement_integration.sql') OR (version='41' AND script='V41__credit_entitlement_integration.sql') OR (version='40' AND script='V40__credit_entitlement_integration.sql')";
+    private static final String DISCOVER_STRUCTURE_SQL = """
+            SELECT CASE WHEN
+              (SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE()
+                AND TABLE_NAME='artist_song_release' AND TABLE_TYPE='BASE TABLE' AND ENGINE='InnoDB') = 1
+              AND (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE()
+                AND TABLE_NAME='artist_song_release' AND (
+                  (COLUMN_NAME='discover_published_at' AND DATA_TYPE='timestamp' AND DATETIME_PRECISION=6
+                    AND IS_NULLABLE='YES' AND COLUMN_DEFAULT IS NULL)
+                  OR (COLUMN_NAME='discover_featured' AND COLUMN_TYPE='tinyint(1)'
+                    AND IS_NULLABLE='NO' AND COLUMN_DEFAULT='0'))) = 2
+              AND (SELECT COUNT(*) FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=DATABASE()
+                AND TABLE_NAME='artist_song_release' AND INDEX_NAME='idx_artist_release_discover_latest') = 2
+              AND (SELECT COUNT(*) FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=DATABASE()
+                AND TABLE_NAME='artist_song_release' AND INDEX_NAME='idx_artist_release_discover_latest'
+                AND NON_UNIQUE=1 AND SUB_PART IS NULL AND INDEX_TYPE='BTREE' AND IS_VISIBLE='YES'
+                AND COLLATION='A' AND EXPRESSION IS NULL AND (
+                  (SEQ_IN_INDEX=1 AND COLUMN_NAME='discover_published_at')
+                  OR (SEQ_IN_INDEX=2 AND COLUMN_NAME='id'))) = 2
+              AND (SELECT COUNT(*) FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=DATABASE()
+                AND TABLE_NAME='artist_song_release' AND INDEX_NAME='idx_artist_release_discover_featured') = 3
+              AND (SELECT COUNT(*) FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=DATABASE()
+                AND TABLE_NAME='artist_song_release' AND INDEX_NAME='idx_artist_release_discover_featured'
+                AND NON_UNIQUE=1 AND SUB_PART IS NULL AND INDEX_TYPE='BTREE' AND IS_VISIBLE='YES'
+                AND COLLATION='A' AND EXPRESSION IS NULL AND (
+                  (SEQ_IN_INDEX=1 AND COLUMN_NAME='discover_featured')
+                  OR (SEQ_IN_INDEX=2 AND COLUMN_NAME='discover_published_at')
+                  OR (SEQ_IN_INDEX=3 AND COLUMN_NAME='id'))) = 3
+            THEN 1 ELSE 0 END
+            """;
     private static Map<String, Check> checks() {
         var checks = new LinkedHashMap<String, Check>();
-        checks.put("v44_only_once", new Check("SELECT COUNT(*) FROM flyway_schema_history WHERE version='44'", 1));
-        checks.put("v44_exact_history", new Check("SELECT COUNT(*) FROM flyway_schema_history WHERE version='44' AND script='V44__credit_entitlement_integration.sql' AND checksum=789542731 AND success=1 AND type='SQL'", 1));
+        checks.put("v45_only_once", new Check("SELECT COUNT(*) FROM flyway_schema_history WHERE version='45'", 1));
+        checks.put("v45_exact_history", new Check("SELECT COUNT(*) FROM flyway_schema_history WHERE version='45' AND script='V45__credit_entitlement_integration.sql' AND checksum=-2125061473 AND success=1 AND type='SQL'", 1));
+        checks.put("core44_exact_history", new Check("SELECT CASE WHEN (SELECT COUNT(*) FROM flyway_schema_history WHERE version='44' AND script='V44__discover_song_publication.sql' AND checksum=-1983576296 AND success=1 AND type='SQL') = 1 AND (SELECT COUNT(*) FROM flyway_schema_history WHERE version='44') = 1 THEN 1 ELSE 0 END", 1));
+        checks.put("core44_discover_structure", new Check(DISCOVER_STRUCTURE_SQL, 1));
         checks.put("core43_download_prerequisites", new Check("SELECT CASE WHEN (SELECT COUNT(*) FROM flyway_schema_history WHERE version='42' AND script='V42__shared_download_entitlement.sql' AND checksum=-500011050 AND success=1 AND type='SQL') = 1 AND (SELECT COUNT(*) FROM flyway_schema_history WHERE version='42') = 1 AND (SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='shared_download_entitlement' AND TABLE_TYPE='BASE TABLE' AND ENGINE='InnoDB') = 1 AND (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='shared_download_entitlement') = 6 AND (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='shared_download_entitlement' AND IS_NULLABLE='NO' AND ( (COLUMN_NAME IN ('id','owner_id','work_id','asset_id') AND DATA_TYPE='varchar' AND CHARACTER_MAXIMUM_LENGTH=36 AND COLUMN_DEFAULT IS NULL) OR (COLUMN_NAME='title' AND DATA_TYPE='varchar' AND CHARACTER_MAXIMUM_LENGTH=255 AND COLUMN_DEFAULT IS NULL) OR (COLUMN_NAME='created_at' AND DATA_TYPE='timestamp' AND DATETIME_PRECISION=0 AND LOWER(REPLACE(COLUMN_DEFAULT,'()',''))='current_timestamp'))) = 6 AND (SELECT COUNT(*) FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='shared_download_entitlement' AND INDEX_NAME='PRIMARY') = 1 AND (SELECT COUNT(*) FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='shared_download_entitlement' AND INDEX_NAME='PRIMARY' AND NON_UNIQUE=0 AND SEQ_IN_INDEX=1 AND COLUMN_NAME='id' AND SUB_PART IS NULL) = 1 AND (SELECT COUNT(*) FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='shared_download_entitlement' AND INDEX_NAME='uq_shared_download_owner_asset') = 3 AND (SELECT COUNT(*) FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='shared_download_entitlement' AND INDEX_NAME='uq_shared_download_owner_asset' AND NON_UNIQUE=0 AND SUB_PART IS NULL AND ( (SEQ_IN_INDEX=1 AND COLUMN_NAME='owner_id') OR (SEQ_IN_INDEX=2 AND COLUMN_NAME='work_id') OR (SEQ_IN_INDEX=3 AND COLUMN_NAME='asset_id'))) = 3 AND (SELECT COUNT(*) FROM information_schema.KEY_COLUMN_USAGE WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='shared_download_entitlement' AND REFERENCED_TABLE_NAME IS NOT NULL) = 3 AND (SELECT COUNT(*) FROM information_schema.KEY_COLUMN_USAGE WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='shared_download_entitlement' AND REFERENCED_TABLE_SCHEMA=DATABASE() AND REFERENCED_COLUMN_NAME='id' AND ORDINAL_POSITION=1 AND ( (CONSTRAINT_NAME='fk_shared_download_owner' AND COLUMN_NAME='owner_id' AND REFERENCED_TABLE_NAME='creator') OR (CONSTRAINT_NAME='fk_shared_download_work' AND COLUMN_NAME='work_id' AND REFERENCED_TABLE_NAME='music_work') OR (CONSTRAINT_NAME='fk_shared_download_asset' AND COLUMN_NAME='asset_id' AND REFERENCED_TABLE_NAME='media_asset'))) = 3 THEN 1 ELSE 0 END", 1));
         checks.put("core40_exact_history", new Check("SELECT CASE WHEN (SELECT COUNT(*) FROM flyway_schema_history WHERE version='40' AND script='V40__artist_profiles_and_releases.sql' AND checksum=1424328127 AND success=1 AND type='SQL') = 1 AND (SELECT COUNT(*) FROM flyway_schema_history WHERE version='40') = 1 THEN 1 ELSE 0 END", 1));
         checks.put("core41_exact_history", new Check("SELECT CASE WHEN (SELECT COUNT(*) FROM flyway_schema_history WHERE version='41' AND script='V41__artist_home_customization.sql' AND checksum=-860312848 AND success=1 AND type='SQL') = 1 AND (SELECT COUNT(*) FROM flyway_schema_history WHERE version='41') = 1 THEN 1 ELSE 0 END", 1));
@@ -48,27 +79,27 @@ public final class CreditSchemaReadiness {
         return Collections.unmodifiableMap(checks);
     }
 
-    private static Map<String, Check> core43Checks() {
+    private static Map<String, Check> core44Checks() {
         var checks = new LinkedHashMap<String, Check>();
-        for (String key : new String[]{"core34_exact_history", "core40_exact_history", "core41_exact_history", "core43_exact_history", "core43_download_prerequisites",
+        for (String key : new String[]{"core34_exact_history", "core40_exact_history", "core41_exact_history", "core43_exact_history", "core44_exact_history", "core44_discover_structure", "core43_download_prerequisites",
                 "canonical_financial_tables", "core_account_columns", "core_creator_risk_flag",
                 "core_account_primary_key", "core_account_owner_foreign_key", "core_journal_columns",
                 "core_journal_primary_key", "core_provider_link_unique", "core_provider_capture_unique",
                 "legacy_global_provider_keys_absent"})
             checks.put(key, CHECKS.get(key));
         checks.put("core34_only_once", new Check("SELECT COUNT(*) FROM flyway_schema_history WHERE version='34'", 1));
-        checks.put("core43_inbox_primary_key", new Check("SELECT COUNT(*) FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='payment_webhook_inbox' AND INDEX_NAME='PRIMARY' AND NON_UNIQUE=0 AND SUB_PART IS NULL AND ((SEQ_IN_INDEX=1 AND COLUMN_NAME='provider') OR (SEQ_IN_INDEX=2 AND COLUMN_NAME='event_id')) AND (SELECT COUNT(*) FROM information_schema.STATISTICS s WHERE s.TABLE_SCHEMA=DATABASE() AND s.TABLE_NAME='payment_webhook_inbox' AND s.INDEX_NAME='PRIMARY')=2", 2));
-        checks.put("core43_inbox_scopes_absent", new Check("SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='payment_webhook_inbox' AND COLUMN_NAME IN ('merchant_scope','env_scope')", 0));
-        checks.put("core43_entitlement_audits_absent", new Check("SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME IN ('payment_inbox_review','payment_inbox_attempt')", 0));
+        checks.put("core44_inbox_primary_key", new Check("SELECT COUNT(*) FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='payment_webhook_inbox' AND INDEX_NAME='PRIMARY' AND NON_UNIQUE=0 AND SUB_PART IS NULL AND ((SEQ_IN_INDEX=1 AND COLUMN_NAME='provider') OR (SEQ_IN_INDEX=2 AND COLUMN_NAME='event_id')) AND (SELECT COUNT(*) FROM information_schema.STATISTICS s WHERE s.TABLE_SCHEMA=DATABASE() AND s.TABLE_NAME='payment_webhook_inbox' AND s.INDEX_NAME='PRIMARY')=2", 2));
+        checks.put("core44_inbox_scopes_absent", new Check("SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='payment_webhook_inbox' AND COLUMN_NAME IN ('merchant_scope','env_scope')", 0));
+        checks.put("core44_entitlement_audits_absent", new Check("SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME IN ('payment_inbox_review','payment_inbox_attempt')", 0));
         return Collections.unmodifiableMap(checks);
     }
 
     /** Verified unchanged core writer, only before any entitlement installation. */
-    public static void requireCore43Ready(JdbcTemplate db) {
-        for (var entry : CORE43_CHECKS.entrySet()) {
+    public static void requireCore44Ready(JdbcTemplate db) {
+        for (var entry : CORE44_CHECKS.entrySet()) {
             Integer actual = db.queryForObject(entry.getValue().sql(), Integer.class);
             if (actual == null || actual.intValue() != entry.getValue().expected())
-                throw new IllegalStateException("Core43 credit schema prerequisite failed: " + entry.getKey());
+                throw new IllegalStateException("Core44 credit schema prerequisite failed: " + entry.getKey());
         }
     }
 
@@ -83,6 +114,18 @@ public final class CreditSchemaReadiness {
             if (actual == null || actual.intValue() != entry.getValue().expected())
                 throw new IllegalStateException("Credit schema prerequisite failed: " + entry.getKey());
         }
+    }
+
+    /** Migration verification only; never grants the ACTIVE runtime writing permission. */
+    public static void requireInstalled(JdbcTemplate db) {
+        for (var entry : CHECKS.entrySet()) {
+            if ("protocol3_active".equals(entry.getKey())) continue;
+            Integer actual = db.queryForObject(entry.getValue().sql(), Integer.class);
+            if (actual == null || actual.intValue() != entry.getValue().expected())
+                throw new IllegalStateException("Credit schema prerequisite failed: " + entry.getKey());
+        }
+        Integer policy = db.queryForObject("SELECT COUNT(*) FROM p0_credit_writer_policy p JOIN p0_credit_cutover_state c ON p.id=c.id WHERE p.id=1 AND p.protocol=3 AND p.epoch IS NOT NULL AND CHAR_LENGTH(p.epoch)>0 AND c.status IN ('PREPARING','ACTIVE')", Integer.class);
+        if (policy == null || policy != 1) throw new IllegalStateException("Credit schema prerequisite failed: protocol3_installed");
     }
 
     /** Detect partial installations too; never allow an unfenced writer into an installed schema. */

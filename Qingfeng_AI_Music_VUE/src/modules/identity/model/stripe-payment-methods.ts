@@ -1,6 +1,6 @@
 export type PaymentCurrency = 'USD' | 'CNY'
 export type StripePaymentMethodId = 'card' | 'apple_pay' | 'wechat_pay'
-export type CreditPack = { id: string; title: string; amount: number; currency: string; credits: number; paymentMethod?: StripePaymentMethodId }
+export type CreditPack = { id: string; title: string; amount: number; currency: string; credits: number; paymentMethod?: StripePaymentMethodId; acceptance?: boolean; expiresAt?: string; maxPurchases?: number }
 export type CurrencyOption = { currency: PaymentCurrency; enabled: boolean; reason: string }
 export type StripePaymentMethod = {
   id: StripePaymentMethodId
@@ -28,6 +28,14 @@ export function validCreditPack(value: unknown): value is CreditPack {
     && Math.abs(value.amount * 100 - Math.round(value.amount * 100)) < 0.000001
     && Number.isSafeInteger(value.credits) && Number(value.credits) > 0
     && (value.paymentMethod === undefined || isStripeMethod(value.paymentMethod))
+    && (value.acceptance === true
+      ? value.credits === 1 && value.maxPurchases === 1 && typeof value.expiresAt === 'string'
+        && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/.test(value.expiresAt) && Number.isFinite(Date.parse(value.expiresAt))
+      : (value.acceptance === undefined || value.acceptance === false) && value.expiresAt === undefined && value.maxPurchases === undefined)
+}
+
+export function selectableCreditPack(pack: CreditPack | undefined, now = Date.now()): pack is CreditPack {
+  return validCreditPack(pack) && (pack.acceptance !== true || Date.parse(pack.expiresAt!) > now)
 }
 
 /** New method metadata is optional only for old servers; a partial new contract fails closed. */
@@ -78,7 +86,7 @@ export function preferredCurrency(method: StripePaymentMethod | undefined, curre
 
 /** The browser sends identifiers only; the server owns the amount and order snapshot. */
 export function stripeOrderRequest(method: StripePaymentMethod | undefined, pack: CreditPack | undefined, currency: PaymentCurrency) {
-  if (!method?.enabled || !pack || !validCreditPack(pack) || !method.currencies.includes(currency)
+  if (!method?.enabled || !selectableCreditPack(pack) || !method.currencies.includes(currency)
     || pack.currency !== currency || !method.packages.some(offer => offer.id === pack.id && offer.currency === pack.currency
       && offer.amount === pack.amount && offer.credits === pack.credits)) throw new Error('Payment selection is not available')
   return { packageId: pack.id, paymentMethod: method.id }

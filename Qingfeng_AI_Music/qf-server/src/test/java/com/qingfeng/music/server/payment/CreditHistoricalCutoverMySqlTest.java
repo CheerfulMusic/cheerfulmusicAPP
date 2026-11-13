@@ -43,19 +43,19 @@ class CreditHistoricalCutoverMySqlTest {
         assertEquals("05c27d3c-dda3-11f1-aba0-84a938421519",db.queryForObject("SELECT @@server_uuid",String.class));
         assertEquals(required("P0_HISTORICAL_CUTOVER_MYSQL_UUID"),db.queryForObject("SELECT @@server_uuid",String.class));
         assertEquals(0,count("SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE()"),"Never clear or reuse a prior cohort");
-        Flyway.configure().dataSource(source).locations("classpath:db/migration").cleanDisabled(true).target("43").load().migrate();
+        Flyway.configure().dataSource(source).locations("classpath:db/migration").cleanDisabled(true).target("44").load().migrate();
         db.update("INSERT INTO creator(id,created_at) VALUES(?,?),(?,?)",A,OLD,B,OLD);
         db.update("INSERT INTO credit_ledger VALUES('CREDIT',?,?,100,?),('DEBIT','old-returned',?,-30,?),('REFUND','old-returned',?,30,?),('DEBIT','old-unreturned',?,-20,?),('CREDIT','admin:approved',?,45,?)",
                 "first-login:"+A,A,OLD,A,OLD,A,OLD,A,OLD,B,OLD);
         db.update("INSERT INTO credit_account(owner_id,balance,updated_at) VALUES(?,80,?),(?,45,?)",A,OLD,B,OLD);
         Snapshot core43=tool.inventory();
-        assertEquals(43,core43.coreHistory().size());
+        assertEquals(44,core43.coreHistory().size());
         plan=CreditHistoricalCutover.dryRun(core43,new Approval(Set.of("admin:approved"),Set.of(),"synthetic-history-approval-r1"));
         assertTrue(plan.ready(),plan.issues().toString());
-        Flyway.configure().dataSource(source).locations("classpath:db/migration").cleanDisabled(true).target("44").load().migrate();
-        assertEquals(44,count("SELECT COUNT(*) FROM flyway_schema_history WHERE success=1 AND version IS NOT NULL"));
-        assertEquals(789542731,count("SELECT checksum FROM flyway_schema_history WHERE version='44'"));
-        assertEquals(core43.sha256(),tool.inventory().sha256(),"V44 DDL must not rewrite source money facts");
+        Flyway.configure().dataSource(source).locations("classpath:db/migration").cleanDisabled(true).target("45").load().migrate();
+        assertEquals(45,count("SELECT COUNT(*) FROM flyway_schema_history WHERE success=1 AND version IS NOT NULL"));
+        assertEquals(-2125061473,count("SELECT checksum FROM flyway_schema_history WHERE version='45'"));
+        assertEquals(core43.sha256(),tool.inventory().sha256(),"V45 DDL must not rewrite source money facts");
     }
     @Test @Order(1) void dryRunIsReadOnlyAndApprovalShaIsMandatory() {
         String before=tool.inventory().sha256();

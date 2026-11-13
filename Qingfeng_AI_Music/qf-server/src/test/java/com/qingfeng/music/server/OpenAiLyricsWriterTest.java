@@ -79,8 +79,9 @@ class OpenAiLyricsWriterTest {
         output.put("photoSummary","夕阳下，两个人坐在海边。");
         try(var fixture=new Fixture(200,JSON.writeValueAsString(completed(output)))){
             byte[] jpeg={-1,-40,-1,-39};
+            byte[] second={-1,-40,2,-39};
             var direction=new com.qingfeng.music.lyrics.application.LyricsWriter.Direction("","","AUTO");
-            var draft=fixture.writer().writePhoto(WORK,"zh-CN",jpeg,direction);
+            var draft=fixture.writer().writePhoto(WORK,"zh-CN",List.of(jpeg,second),direction);
             var request=fixture.received.get();
             var parts=request.path("input").path(0).path("content");
             assertEquals("input_text",parts.path(0).path("type").asText());
@@ -89,6 +90,9 @@ class OpenAiLyricsWriterTest {
             assertEquals("",material.path("preferredTitle").asText());
             assertEquals("input_image",parts.path(1).path("type").asText());
             assertEquals("data:image/jpeg;base64,"+Base64.getEncoder().encodeToString(jpeg),parts.path(1).path("image_url").asText());
+            assertEquals("input_image",parts.path(2).path("type").asText());
+            assertEquals("data:image/jpeg;base64,"+Base64.getEncoder().encodeToString(second),parts.path(2).path("image_url").asText());
+            assertEquals(3,parts.size());
             assertTrue(request.path("text").path("format").path("schema").path("properties").has("photoSummary"));
             assertEquals(output.get("photoSummary"),draft.plan().photoSummary());
             assertEquals("Acoustic guitar",draft.plan().suggestedArrangement());
@@ -98,7 +102,7 @@ class OpenAiLyricsWriterTest {
         try(var fixture=new Fixture(200,JSON.writeValueAsString(completed(result())))){
             var direction=new com.qingfeng.music.lyrics.application.LyricsWriter.Direction("","","AUTO");
             assertEquals("LYRICS_RESPONSE_INVALID",assertThrows(DomainException.class,
-                ()->fixture.writer().writePhoto(WORK,"zh-CN",new byte[]{1},direction)).code());
+                ()->fixture.writer().writePhoto(WORK,"zh-CN",List.of(new byte[]{1}),direction)).code());
             assertEquals(1,fixture.calls.get());
         }
     }

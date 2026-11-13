@@ -1,15 +1,18 @@
 #!/usr/bin/env python3.11
 """Explicit Linux production release stages. Import/--help never operate a server.
 
-This tool does not migrate, activate a ledger, approve an artifact, make a payment,
-or restore over the production database. A separate restore-check creates a new
-private server-local schema and never starts an application there.
+Explicit operator stages can validate/migrate canonical core44 to financial45,
+and apply/activate/verify an approved immutable historical carry-forward plan.
+They never start Spring or call a payment supplier. The tool does not approve an
+artifact or restore over production. restore-check creates a new private
+server-local schema and never starts an application there.
 All failures expose fixed codes; subprocess output and private configuration are
 never copied to stdout or an evidence file.
 """
 import argparse
 import datetime as dt
 import hashlib
+import io
 import json
 import os
 from pathlib import Path
@@ -20,6 +23,8 @@ import subprocess
 import sys
 import time
 import urllib.request
+import zipfile
+import zlib
 from urllib.parse import parse_qs, urlsplit
 
 APP = Path('/opt/qingfeng-music')
@@ -35,6 +40,17 @@ CHANNELS = frozenset(('card', 'apple_pay', 'wechat_pay', 'paypal'))
 STRIPE_CHANNELS = CHANNELS - {'paypal'}
 USD_QUOTES = (990, 2590, 4990)
 CNY_QUOTES = (6880, 17880, 33880)
+CORE_VERSION = 44
+FINANCIAL_VERSION = 45
+FINANCIAL_SQL_SHA256 = '3dd5cebf19dee960ecefb2239668139918d363496fe87710f817c5b3a3241685'
+OPERATOR_PACKAGE = 'com.qingfeng.music.infrastructure.persistence.credits.'
+MIGRATION_CLASS = 'com.qingfeng.music.server.config.FinancialMigrationCommand'
+CARRY_CLASS = OPERATOR_PACKAGE + 'CreditCarryForwardCommand'
+CORE_MANIFEST_SHA256 = '736294575e354900170114f8eb9568abaf15223a0bf7c9872d314d65559905e1'
+ROOT_CRONTAB = Path('/var/spool/cron/root')
+MEDIA_SCRIPT = Path('/opt/qingfeng-music/monitor/media_health_check.py')
+MEDIA_ENTRY = '*/10 * * * * /usr/bin/python3 /opt/qingfeng-music/monitor/media_health_check.py'
+MEDIA_PAUSE_MARKER = '# QINGFENG_RELEASE_PAUSED '
 
 
 class Blocked(RuntimeError):
@@ -95,10 +111,10 @@ def receipt(plan, name):
     return value
 
 
-def command(args, timeout=30, env=None, data=None):
+def command(args, timeout=30, env=None, data=None, cwd=None):
     try:
         run = subprocess.run(args, input=data, env=env, stdout=subprocess.PIPE,
-                             stderr=subprocess.PIPE, timeout=timeout, check=False)
+                             stderr=subprocess.PIPE, timeout=timeout, check=False, cwd=cwd)
     except (OSError, subprocess.TimeoutExpired):
         raise Blocked('COMMAND_UNAVAILABLE_OR_TIMEOUT') from None
     need(run.returncode == 0, 'COMMAND_FAILED')
@@ -120,7 +136,7 @@ def property_map(path):
 
 def validate_configuration(original, candidate, accepting, canary=False, channels=None, paypal_merchant_id=None):
     """Preserve all unrelated effective properties; print no values on errors."""
-    allowed = ('qingfeng.stripe.', 'qingfeng.credits.writer-fence.',
+    allowed = ('qingfeng.stripe.', 'qingfeng.credits.writer-fence.', 'qingfeng.payment.acceptance.',
                'qingfeng.payment.legacy-orders.')
     exact = {'spring.datasource.url', 'spring.flyway.enabled', 'spring.flyway.target',
              'spring.sql.init.mode', 'qingfeng.payment.legacy-orders-read-only',
@@ -147,7 +163,7 @@ def validate_configuration(original, candidate, accepting, canary=False, channel
         'qingfeng.credits.writer-fence.expected-database': DATABASE,
         'qingfeng.credits.writer-fence.expected-port': '3306',
         'spring.flyway.enabled': 'false',
-        'spring.flyway.target': '44',
+        'spring.flyway.target': str(FINANCIAL_VERSION),
         'spring.sql.init.mode': 'never',
         'qingfeng.payment.legacy-orders-read-only': 'true',
         'qingfeng.paypal.accepting-new-orders': 'false',
@@ -177,6 +193,15 @@ def validate_configuration(original, candidate, accepting, canary=False, channel
              'PAYPAL_CANARY_MUST_USE_SAME_EXPLICIT_OWNERS')
     else:
         need(not paypal_owners and not paypal_owner_value.strip(), 'PAYPAL_CANARY_OWNERS_MUST_BE_EMPTY')
+    acceptance = candidate.get('qingfeng.payment.acceptance.enabled', 'false')
+    need(acceptance in ('true', 'false'), 'EXPLICIT_ACCEPTANCE_OFFER_MODE_REQUIRED')
+    if acceptance == 'true':
+        need(canary and not accepting and len(owners) == 1, 'PRIVATE_ACCEPTANCE_ONLY_SINGLE_OWNER_CANARY')
+        scope = acceptance_configuration(candidate)
+        need(scope['ownerId'] == owners[0], 'PRIVATE_ACCEPTANCE_OWNER_MISMATCH')
+    if accepting:
+        need(acceptance == 'false' and all(not candidate.get('qingfeng.payment.acceptance.' + key, '').strip()
+             for key in ('owner-id', 'nonce', 'expires-at')), 'PUBLIC_OPEN_MUST_CLEAR_PRIVATE_ACCEPTANCE')
     if explicit_channels and 'wechat_pay' in channels:
         need(all(candidate.get('qingfeng.stripe.prices.cny.' + name) == price
                  for name, price in (('starter', '68.80'), ('standard', '178.80'), ('plus', '338.80'))),
@@ -255,6 +280,16 @@ def validate_plan(plan):
          and len(units) == len(set(units))
          and all(re.fullmatch(r'[A-Za-z0-9_.@-]+\.(?:service|timer)', v) for v in units),
          'EXACT_WRITER_AND_SELF_HEAL_INVENTORY_REQUIRED')
+    if 'operator' in plan:
+        need(plan.get('schemaVersions') == {'core': CORE_VERSION, 'financial': FINANCIAL_VERSION, 'protocol': 3},
+             'EXPLICIT_CORE44_FINANCIAL45_PROTOCOL3_REQUIRED')
+        need(isinstance(plan['operator'], dict) and set(plan['operator']) == {
+            'java', 'databaseProperties', 'migrationProperties', 'carryForwardProperties'},
+             'EXPLICIT_PINNED_OPERATOR_INPUTS_REQUIRED')
+        need(isinstance(plan.get('orchestratorSha256'), str)
+             and bool(HEX64.fullmatch(plan['orchestratorSha256']))
+             and sha(secure(Path(__file__).resolve())) == plan['orchestratorSha256'],
+             'RUNNING_ORCHESTRATOR_DIFFERS_FROM_APPROVED_SOURCE')
 
 
 def current_matches(plan, candidate=False):
@@ -337,7 +372,7 @@ def fingerprint(database):
     return result
 
 
-def root_observation(plan):
+def root_observation(plan, application_user=None):
     # Every same-schema connection is visible; an application account without
     # PROCESS cannot substitute for this root observation.
     grants = mysql('SHOW GRANTS FOR CURRENT_USER;').decode()
@@ -347,6 +382,12 @@ def root_observation(plan):
                     "'otherConnections',(SELECT COUNT(*) FROM information_schema.PROCESSLIST WHERE DB=DATABASE() AND ID<>CONNECTION_ID()));")[0]
     need({k: row[k] for k in ('uuid', 'schema', 'port')} == plan['database'], 'ROOT_OBSERVER_DATABASE_IDENTITY_MISMATCH')
     need(row['otherConnections'] == 0, 'OTHER_SOURCE_SCHEMA_CONNECTIONS_REMAIN')
+    if application_user is not None:
+        need(bool(re.fullmatch(r'[A-Za-z0-9_.-]{1,64}', application_user)), 'APPLICATION_ACCOUNT_IDENTITY_REQUIRED')
+        accounts = json_rows("SELECT JSON_OBJECT('connections',COUNT(*)) FROM information_schema.PROCESSLIST "
+                             "WHERE ID<>CONNECTION_ID() AND USER='" + application_user + "';")[0]
+        need(accounts['connections'] == 0, 'OTHER_APPLICATION_ACCOUNT_CONNECTIONS_REMAIN')
+        row['otherApplicationAccountConnections'] = accounts['connections']
     return row
 
 
@@ -354,6 +395,9 @@ def backup(plan, out):
     check_release(plan)
     check_build_receipt(plan)
     current_matches(plan)
+    if 'operator' in plan:
+        check_closed_configuration(plan)
+        verify_media_paused(plan)
     need(not out.exists(), 'BACKUP_EXISTS_NEVER_OVERWRITE')
     out.mkdir(mode=0o700, parents=True)
     stop_units(plan)
@@ -442,7 +486,7 @@ def restore_check(plan, out):
               'sourceUnchanged': True, 'fullBaseTableCount': len(source),
               'creditJournalVerified': restored['credit_ledger'] == source['credit_ledger'],
               'applicationStarted': False, 'supplierCalls': False,
-              'migration44': 'NOT_PERFORMED', 'compatibleApplicationRecovery': 'NOT_TESTED',
+              'migration45': 'NOT_PERFORMED', 'compatibleApplicationRecovery': 'NOT_TESTED',
               'recordedUtc': dt.datetime.now(dt.timezone.utc).isoformat()}
     exclusive_json(out / 'actual-data-restore-receipt.json', result)
     return result
@@ -455,8 +499,11 @@ def check_release(plan):
     need((secure(directory / 'source-commit.txt')).read_text().strip() == candidate['sourceCommit'],
          'CANDIDATE_SOURCE_MISMATCH')
     need(sha(secure(directory / 'release-contract.json')) == candidate['contractSha256'], 'CONTRACT_PIN_MISMATCH')
-    guard = secure(APP / 'verify-release.py')
-    need(sha(guard) == plan['guardSha256'] and sha(secure(APP / 'release_gate.py')) == plan['gateSha256'],
+    # Verify with the reviewed candidate tools before changing the installed
+    # guard. An old core44 service remains recoverable before financial DDL.
+    tool_directory = directory / 'release-tools' if 'operator' in plan else APP
+    guard = secure(tool_directory / 'verify-release.py')
+    need(sha(guard) == plan['guardSha256'] and sha(secure(tool_directory / 'release_gate.py')) == plan['gateSha256'],
          'INSTALLED_GUARD_DIFFERS_FROM_REVIEWED_SOURCE')
     policy = secure(plan['approvedPolicy'])
     need(sha(policy) == plan['approvedPolicySha256'], 'APPROVED_POLICY_PIN_MISMATCH')
@@ -474,7 +521,7 @@ def check_install_receipts(plan, out):
     need(restore.get('backupDatabaseSha256') == local['databaseSha256']
          and restore.get('candidateJarSha256') == plan['candidate']['jarSha256']
          and all(restore.get(k) is True for k in ('actualRestoreExecuted', 'dataIntegrityVerified',
-             'migration44Verified', 'compatibleRecoveryVerified')), 'REAL_BACKUP_RESTORE_ACCEPTANCE_REQUIRED')
+             'migration45Verified', 'compatibleRecoveryVerified')), 'REAL_BACKUP_RESTORE_ACCEPTANCE_REQUIRED')
     cutover = receipt(plan, 'cutover')
     need(cutover.get('state') == 'ACTIVE' and cutover.get('protocol') == 3
          and cutover.get('databaseUuid') == UUID and cutover.get('database') == DATABASE
@@ -494,6 +541,558 @@ def check_build_receipt(plan):
          and all(build.get(k) == 'PASS' for k in ('fetchAll', 'mergedMainAndDev', 'frontendTest',
                      'frontendBuild', 'backendVerify', 'realMySql', 'negativeAndFrozenAgentRegression')),
          'SAME_CANDIDATE_RELEASE_CHECKS_REQUIRED')
+
+
+def check_closed_configuration(plan):
+    original = property_map(secure(ETC / 'application.properties', private=True))
+    candidate = property_map(secure(plan['closedProperties'], private=True))
+    validate_configuration(original, candidate, False, channels=plan_channels(plan, 'closed'),
+                           paypal_merchant_id=plan.get('paypalMerchantId'))
+
+
+def operator_file(plan, name):
+    entry = plan['operator'][name]
+    need(isinstance(entry, dict) and set(entry) == {'path', 'sha256'}
+         and isinstance(entry['sha256'], str) and bool(HEX64.fullmatch(entry['sha256'])),
+         'PINNED_OPERATOR_INPUT_REQUIRED')
+    path = secure(entry['path'], private=name != 'java')
+    need(sha(path) == entry['sha256'], 'OPERATOR_INPUT_DIGEST_MISMATCH')
+    return path
+
+
+def operator_inputs(plan, kind):
+    need('operator' in plan and plan.get('schemaVersions') == {'core': 44, 'financial': 45, 'protocol': 3},
+         'EXPLICIT_CORE44_FINANCIAL45_PROTOCOL3_REQUIRED')
+    java = operator_file(plan, 'java')
+    need(java.as_posix().startswith('/usr/lib/jvm/') and java.name == 'java', 'PINNED_SERVER_JAVA_BINARY_REQUIRED')
+    connection = operator_file(plan, 'databaseProperties')
+    contract = operator_file(plan, 'migrationProperties' if kind == 'migration' else 'carryForwardProperties')
+    values, db = property_map(contract), property_map(connection)
+    need(all(values.get(k) == v for k, v in {
+        'expected.uuid': UUID, 'expected.database': DATABASE, 'expected.port': '3306',
+        'candidate.jar.path': str(Path(plan['candidate']['directory']) / 'app.jar'),
+        'candidate.jar.sha256': plan['candidate']['jarSha256'],
+    }.items()), 'OPERATOR_DATABASE_OR_CANDIDATE_BINDING_MISMATCH')
+    parsed = urlsplit(db.get('spring.datasource.url', '').removeprefix('jdbc:'))
+    params = parse_qs(parsed.query, keep_blank_values=True)
+    need((parsed.hostname, parsed.port or 3306, parsed.path) == ('127.0.0.1', 3306, '/' + DATABASE)
+         and parsed.username is None and parsed.password is None
+         and params.get('connectionTimeZone') == ['UTC']
+         and params.get('forceConnectionTimeZoneToSession') == ['true'], 'OPERATOR_LOCAL_UTC_DATABASE_REQUIRED')
+    need(not any(key.casefold() in ('user', 'username', 'password', 'password1', 'password2', 'password3')
+                 for key in params), 'OPERATOR_URL_CREDENTIAL_OVERRIDE_FORBIDDEN')
+    local_admin = values.get('allow-local-root-with-empty-password') == 'true'
+    if local_admin:
+        need(plan.get('operatorIdentity') == {'mode': 'existing-local-root-empty-password',
+              'username': 'root', 'runtimeAccountUnchanged': True}
+             and db.get('spring.datasource.username') == 'root'
+             and 'spring.datasource.password' in db and db['spring.datasource.password'] == '',
+             'EXACT_REVIEWED_LOCAL_ADMINISTRATOR_REQUIRED')
+    else:
+        need(all(isinstance(db.get(k), str) and db[k] and '${' not in db[k]
+                 for k in ('spring.datasource.username', 'spring.datasource.password')), 'LITERAL_OPERATOR_DATABASE_CREDENTIALS_REQUIRED')
+    if kind == 'migration':
+        need(values.get('migration.version') == '45' and values.get('migration.sha256') == FINANCIAL_SQL_SHA256
+             and values.get('core.manifest.sha256') == CORE_MANIFEST_SHA256,
+             'CANONICAL_CORE44_FINANCIAL45_INPUT_REQUIRED')
+    return java, connection, contract, values, db
+
+
+def run_operator(plan, kind, mode, contract=None):
+    java, connection, approved_contract, values, db = operator_inputs(plan, kind)
+    # No inherited JAVA_TOOL_OPTIONS/JDK_JAVA_OPTIONS/CLASSPATH/LOADER_PATH,
+    # external loader.properties, Spring application or supplier credentials.
+    env = {'PATH': '/usr/sbin:/usr/bin:/sbin:/bin', 'LANG': 'C.UTF-8', 'HOME': '/nonexistent'}
+    jar = Path(plan['candidate']['directory']) / 'app.jar'
+    args = [str(java), '-Dloader.config.location=file:/dev/null', '-Dloader.path=',
+            '-Dloader.main=' + (MIGRATION_CLASS if kind == 'migration' else CARRY_CLASS),
+            '-cp', str(jar), 'org.springframework.boot.loader.launch.PropertiesLauncher',
+            mode, str(connection), str(contract or approved_contract)]
+    output = command(args, timeout=300, env=env, cwd=str(jar.parent))
+    # Flyway can log before the final JSON. Never copy its output or driver
+    # errors into a receipt, even when it contains SQL or a connection URL.
+    try:
+        result = json.loads(output.decode('utf-8').strip().splitlines()[-1])
+    except (UnicodeError, ValueError, IndexError):
+        raise Blocked('OPERATOR_FINAL_JSON_REQUIRED') from None
+    need(isinstance(result, dict) and result.get('status') == 'PASS', 'OPERATOR_DID_NOT_PASS')
+    need(result.get('databaseUuid') == UUID and result.get('database') == DATABASE and result.get('port') == 3306,
+         'OPERATOR_ACTUAL_DATABASE_IDENTITY_MISMATCH')
+    need(isinstance(result.get('sourceSha256'), str) and bool(HEX64.fullmatch(result['sourceSha256'])),
+         'OPERATOR_ACTUAL_SOURCE_HASH_REQUIRED')
+    need(mode == 'plan' or result.get('candidateJarSha256') == plan['candidate']['jarSha256'],
+         'OPERATOR_ACTUAL_CANDIDATE_MISMATCH')
+    allowed = {'status', 'mode', 'databaseUuid', 'database', 'port', 'engine', 'sourceSha256', 'planSha256',
+               'owners', 'debitMappings', 'preservedOrders', 'issues', 'state', 'protocol', 'journalTotal', 'replay',
+               'candidateJarSha256', 'oldWriterStoppedEvidenceSha256', 'backupRestoreEvidenceSha256',
+               'rollbackCompatibilityEvidenceSha256', 'legacyOrderIsolationEvidenceSha256',
+               'schemaVersion', 'coreVersion', 'migrationsExecuted', 'financialMigrationSha256', 'coreManifestSha256'}
+    return {key: value for key, value in result.items() if key in allowed}
+
+
+def check_operator_backup(plan, out):
+    local = json.loads(secure(out / 'backup-receipt.json').read_text())
+    need(local.get('status') == 'PASS' and local.get('oldWritersStopped') is True
+         and local.get('database') == plan['database']
+         and sha(secure(out / 'database.sql', private=True)) == local.get('databaseSha256'), 'FINAL_BACKUP_NOT_VALID')
+    actual = json.loads(secure(out / 'actual-data-restore-receipt.json').read_text())
+    need(actual.get('status') == 'PASS' and actual.get('backupDatabaseSha256') == local['databaseSha256']
+         and all(actual.get(k) is True for k in ('actualRestoreExecuted', 'dataIntegrityVerified',
+             'sourceUnchanged', 'creditJournalVerified'))
+         and actual.get('applicationStarted') is False and actual.get('supplierCalls') is False,
+         'ACTUAL_PRIVATE_BACKUP_RESTORE_REQUIRED')
+    restore = receipt(plan, 'restore')
+    need(restore.get('backupDatabaseSha256') == local['databaseSha256']
+         and restore.get('candidateJarSha256') == plan['candidate']['jarSha256']
+         and all(restore.get(k) is True for k in ('actualRestoreExecuted', 'dataIntegrityVerified',
+              'migration45Verified', 'compatibleRecoveryVerified')), 'REAL_BACKUP_RESTORE_ACCEPTANCE_REQUIRED')
+    return local
+
+
+def validate_restore_evidence(plan, backup, actual, evidence, references, frozen=None):
+    """Compose differently scoped real executions; never relabel synthetic data as production."""
+    jar, commit = plan['candidate']['jarSha256'], plan['candidate']['sourceCommit']
+    need(backup.get('status') == 'PASS' and backup.get('database') == plan['database']
+         and actual.get('status') == 'PASS'
+         and actual.get('scope') == 'ACTUAL_SERVER_LOCAL_DATA_RESTORE_ONLY'
+         and actual.get('backupDatabaseSha256') == backup.get('databaseSha256')
+         and all(actual.get(k) is True for k in ('actualRestoreExecuted', 'dataIntegrityVerified', 'sourceUnchanged', 'creditJournalVerified'))
+         and actual.get('applicationStarted') is False and actual.get('supplierCalls') is False
+         and actual.get('fullBaseTableCount') == len(backup.get('tableFingerprint', {}))
+         and actual.get('fullBaseTableCount', 0) > 0, 'ACTUAL_BACKUP_DATA_RESTORE_EVIDENCE_REQUIRED')
+    need(set(evidence) == set(references) == {'artifact', 'packagedFinancial', 'isolatedBackupRestore', 'isolatedJarStartup'},
+         'ALL_RAW_RESTORE_COMPATIBILITY_EVIDENCE_REQUIRED')
+    for item in references.values():
+        need(isinstance(item, dict) and set(item) == {'path', 'sha256'}
+             and isinstance(item['path'], str) and bool(item['path'])
+             and isinstance(item['sha256'], str) and bool(HEX64.fullmatch(item['sha256'])), 'RAW_RESTORE_EVIDENCE_PIN_REQUIRED')
+    a, p, b, s = (evidence[k] for k in ('artifact', 'packagedFinancial', 'isolatedBackupRestore', 'isolatedJarStartup'))
+    need(all(v.get('status') == 'PASS' for v in (a, p, b, s)), 'RAW_RESTORE_EVIDENCE_NOT_PASS')
+    need(a.get('source_commit') == commit and a.get('jar_sha256') == jar
+         and a.get('fresh_export') is True and a.get('runtime_credentials_loaded') is False
+         and a.get('all_production_class_bytes_match_tested') is True
+         and a.get('all_frontend_bytes_match_acceptance') is True, 'EXACT_ACCEPTED_RESTORE_ARTIFACT_REQUIRED')
+    need(p.get('scope') == 'PACKAGED_LOCAL_SYNTHETIC_MYSQL_COMMANDS_ONLY'
+         and p.get('source_commit') == commit and p.get('jar_sha256') == jar
+         and p.get('production_access') is False and p.get('vendor_calls') is False
+         and p.get('spring_application_started') is False and p.get('original_money_unchanged') is True
+         and p.get('migrations_executed') == 1 and p.get('replay_migrations_executed') == 0
+         and p.get('final_state') == 'ACTIVE' and p.get('historical_allocations_fabricated') is False,
+         'ACTUAL_PACKAGED_FINANCIAL45_ACCEPTANCE_REQUIRED')
+    isolation = p.get('isolation', {})
+    need(isolation.get('uuid') == '05c27d3c-dda3-11f1-aba0-84a938421519'
+         and isolation.get('port') == 23316 and isolation.get('single_schema_grants') is True
+         and isolation.get('production_schema_visible') is False, 'PACKAGED_COMMAND_ISOLATION_REQUIRED')
+    stages = p.get('stages', [])
+    expected = {'read-only-plan', 'validate-core44', 'reject-without-authorization', 'migrate-financial45',
+                'replay-financial45', 'apply-carry-forward', 'activate-carry-forward', 'verify-carry-forward'}
+    need(isinstance(stages, list) and len(stages) == len(expected)
+         and {v.get('stage') for v in stages} == expected
+         and all(v.get('status') == ('BLOCKED' if v['stage'] == 'reject-without-authorization' else 'PASS')
+                 and v.get('exit_code') == (2 if v['stage'] == 'reject-without-authorization' else 0) for v in stages),
+         'PACKAGED_OPERATOR_STAGE_RESULTS_REQUIRED')
+    need(b.get('scope') == 'LOCAL_23316_ISOLATED_APPLICATION_COHORT_ONLY'
+         and b.get('stage') == 'COMPLETE' and b.get('production_access') is False
+         and b.get('provider_calls') is False and b.get('original_database_writes') is False
+         and b.get('services_started') is False and b.get('source_unchanged_after_restore') is True
+         and b.get('restore_comparison', {}).get('semantic_ddl_columns_indexes_foreign_keys_checks_equal') is True,
+         'ISOLATED_NONEMPTY_BACKUP_RESTORE_REQUIRED')
+    for key in ('source_identity', 'restore_identity'):
+        identity = b.get(key, {})
+        need(identity.get('uuid') == isolation['uuid'] and identity.get('port') == 23316
+             and identity.get('single_schema_grants') is True, 'ISOLATED_BACKUP_ACCOUNT_SCOPE_REQUIRED')
+    for key in ('source_snapshot', 'restore_snapshot'):
+        snap = b.get(key, {}); history = snap.get('flyway', [])
+        need(snap.get('financial_conservation') == 'PASS' and len(snap.get('triggers', [])) == 17
+             and len(history) == 45 and {v.get('version') for v in history} == {str(n) for n in range(1, 46)}
+             and all(v.get('success') == 1 and v.get('type') == 'SQL' for v in history)
+             and any(v.get('version') == '45' and v.get('script') == 'V45__credit_entitlement_integration.sql'
+                     and v.get('checksum') == -2125061473 for v in history), 'EXACT_RESTORED_FINANCIAL45_REQUIRED')
+    need(s.get('scope') == 'PACKAGED_RESTORED_SYNTHETIC_DB_STARTUP_ONLY'
+         and s.get('source_commit') == commit and s.get('jar_sha256') == jar
+         and s.get('uuid') == isolation['uuid'] and s.get('database') == b.get('restore_database')
+         and s.get('production_access') is False and s.get('vendor_calls') is False
+         and s.get('migrations_enabled') is False and s.get('provider_or_money_actions') == 0
+         and all(s.get(k) is True for k in ('owned_process_stopped', 'restored_financial_facts_unchanged', 'payment_catalogs_disabled'))
+         and s.get('financial_snapshot_before') == s.get('financial_snapshot_after')
+         and s.get('financial_snapshot_before', {}).get('credit_ledger', {}).get('rows', 0) > 0,
+         'SAME_ARTIFACT_RESTORED_NONEMPTY_STARTUP_REQUIRED')
+    result = {'status': 'PASS', 'version': 1, 'scope': 'COMPOSITE_REAL_DATA_RESTORE_AND_ISOLATED_COMPATIBILITY',
+        'database': plan['database'], 'candidateJarSha256': jar, 'sourceCommit': commit,
+        'backupDatabaseSha256': backup['databaseSha256'], 'actualRestoreExecuted': True,
+        'dataIntegrityVerified': True, 'migration45Verified': True, 'compatibleRecoveryVerified': True,
+        'productionCloneApplicationStarted': False, 'productionCloneMigratedTo45': False,
+        'compatibilityData': 'LOCAL_SYNTHETIC_ONLY', 'realPaymentAcceptance': 'NOT_TESTED',
+        'rawEvidence': references, 'sourceBound': False,
+        'recordedUtc': dt.datetime.now(dt.timezone.utc).isoformat()}
+    if frozen is not None:
+        need(frozen.get('status') == 'PASS' and frozen.get('state') == 'READ_ONLY_PLAN'
+             and frozen.get('databaseUuid') == plan['database']['uuid']
+             and frozen.get('database') == plan['database']['schema'] and frozen.get('port') == plan['database']['port']
+             and frozen.get('issues') == [] and bool(HEX64.fullmatch(frozen.get('sourceSha256', '')))
+             and bool(HEX64.fullmatch(frozen.get('planSha256', ''))), 'ACTUAL_FROZEN_CARRY_PLAN_REQUIRED')
+        result.update(sourceBound=True, sourceSha256=frozen['sourceSha256'], planSha256=frozen['planSha256'])
+    return result
+
+
+def compose_restore(plan, out, bind=False):
+    current_matches(plan); stopped(plan); verify_media_paused(plan); root_observation(plan)
+    backup = json.loads(secure(out / 'backup-receipt.json').read_text())
+    actual_path = secure(out / 'actual-data-restore-receipt.json')
+    actual = json.loads(actual_path.read_text())
+    need(sha(secure(out / 'database.sql', private=True)) == backup.get('databaseSha256')
+         and fingerprint(DATABASE) == backup.get('tableFingerprint'), 'FROZEN_BACKUP_SOURCE_CHANGED')
+    references = plan.get('restoreEvidence', {})
+    evidence = {key: pinned_json(item['path'], item['sha256']) for key, item in references.items()}
+    frozen_path = secure(out / 'carry-forward-plan.json') if bind else None
+    frozen = json.loads(frozen_path.read_text()) if bind else None
+    result = validate_restore_evidence(plan, backup, actual, evidence, references, frozen)
+    result['actualDataRestoreEvidence'] = {'path': str(actual_path), 'sha256': sha(actual_path)}
+    result['backupEvidence'] = {'path': str(out / 'backup-receipt.json'), 'sha256': sha(out / 'backup-receipt.json')}
+    if bind: result['frozenPlanEvidence'] = {'path': str(frozen_path), 'sha256': sha(frozen_path)}
+    exclusive_json(out / ('restore-composite-bound.json' if bind else 'restore-composite-preplan.json'), result)
+    return result
+
+
+def approved_operator_scope(plan, name, values, operation):
+    entry = plan['receipts'][name]
+    approved = pinned_json(entry['path'], entry['sha256'])
+    need(approved.get('status') == 'APPROVED' and approved.get('operation') == operation
+         and approved.get('database') == plan['database']
+         and approved.get('candidateJarSha256') == plan['candidate']['jarSha256']
+         and approved.get('sourceSha256') == values.get('source.sha256')
+         and isinstance(approved.get('userAuthorizationEvidenceSha256'), str)
+         and bool(HEX64.fullmatch(approved['userAuthorizationEvidenceSha256'])), 'EXACT_OPERATION_AUTHORIZATION_REQUIRED')
+    if name == 'schemaAuthorization':
+        need(approved.get('coreVersion') == 44 and approved.get('financialVersion') == 45
+             and approved.get('financialMigrationSha256') == FINANCIAL_SQL_SHA256,
+             'EXACT_V45_DDL_AUTHORIZATION_REQUIRED')
+    else:
+        need(approved.get('planSha256') == values.get('plan.sha256')
+             and approved.get('legacyOrdersReadOnly') is True
+             and approved.get('balancesPreserved') is True
+             and approved.get('historicalFundingProvenance') == 'UNKNOWN_UNCHANGED',
+             'EXACT_PRESERVED_BALANCES_AUTHORIZATION_REQUIRED')
+    return approved
+
+
+def fresh_operator_contract(plan, out, kind, phase, values, db):
+    stopped(plan)
+    for proof in ('backup-restore', 'rollback', 'legacy-boundary'):
+        need(pinned_json(values.get('receipt.' + proof + '.path'),
+                         values.get('receipt.' + proof + '.sha256')).get('status') == 'PASS',
+             'PINNED_OPERATIONAL_PROOF_NOT_PASS')
+    original = property_map(out / 'configuration/application.properties')
+    if values.get('allow-local-root-with-empty-password') == 'true':
+        need(plan.get('operatorIdentity') == {'mode': 'existing-local-root-empty-password',
+             'username': 'root', 'runtimeAccountUnchanged': True}
+             and db.get('spring.datasource.username') == 'root'
+             and 'spring.datasource.password' in db and db['spring.datasource.password'] == '',
+             'EXACT_REVIEWED_LOCAL_ADMINISTRATOR_REQUIRED')
+    else:
+        need(all(original.get(k) == db.get(k) for k in ('spring.datasource.username', 'spring.datasource.password')),
+             'OPERATOR_DATABASE_ACCOUNT_CHANGED')
+    observed = root_observation(plan, original.get('spring.datasource.username'))
+    if db['spring.datasource.username'] != original.get('spring.datasource.username'):
+        root_observation(plan, db['spring.datasource.username'])
+    stamp = dt.datetime.now(dt.timezone.utc)
+    suffix = phase + '-' + stamp.strftime('%Y%m%dT%H%M%S%fZ')
+    writers = {'status': 'PASS', 'databaseUuid': UUID, 'database': DATABASE, 'port': 3306,
+        'sourceSha256': values['source.sha256'], 'candidateJarSha256': plan['candidate']['jarSha256'],
+        'recordedAt': stamp.isoformat(), 'serviceInactive': True, 'otherWritersStopped': True,
+        'connectionsDrained': True, 'globalProcesslistVerified': True, 'observerHasProcessPrivilege': True,
+        'otherSchemaConnections': observed['otherConnections'],
+        'otherApplicationAccountConnections': observed['otherApplicationAccountConnections']}
+    writer_path = out / ('writer-observation-' + suffix + '.json')
+    exclusive_json(writer_path, writers)
+    effective = {**values, 'receipt.writers.path': writer_path.as_posix(), 'receipt.writers.sha256': sha(writer_path)}
+    target = out / ('operator-approval-' + suffix + '.properties')
+    # This only refreshes actual writer observations. It cannot change the
+    # externally approved source/plan/JAR, authorization or other three proofs.
+    need(all('\n' not in key + value and '\r' not in key + value and '\\' not in key + value
+             for key, value in effective.items()), 'UNSAFE_OPERATOR_PROPERTIES_ENCODING')
+    fd = os.open(target, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+    with os.fdopen(fd, 'w', encoding='utf-8') as stream:
+        stream.write(''.join(key + '=' + effective[key] + '\n' for key in sorted(effective)))
+        stream.flush()
+        os.fsync(stream.fileno())
+    return target
+
+
+def operator_stage(plan, out, operation):
+    check_release(plan)
+    check_build_receipt(plan)
+    current_matches(plan)
+    kind = 'migration' if operation in ('schema-validate', 'migrate-45') else 'carry'
+    java, connection, contract, values, db = operator_inputs(plan, kind)
+    if operation == 'schema-validate':
+        result = run_operator(plan, 'migration', 'validate')
+        need(result.get('coreVersion') == 44 and result.get('schemaVersion') in (44, 45)
+             and type(result.get('migrationsExecuted')) is int and result.get('migrationsExecuted') == 0
+             and result.get('financialMigrationSha256') == FINANCIAL_SQL_SHA256
+             and result.get('coreManifestSha256') == CORE_MANIFEST_SHA256,
+             'READ_ONLY_CANONICAL_SCHEMA_VALIDATION_REQUIRED')
+        return result
+    verify_media_paused(plan)
+    stopped(plan)
+    local = check_operator_backup(plan, out)
+    if operation == 'carry-plan':
+        result = run_operator(plan, 'carry', 'plan')
+        need(result.get('state') == 'READ_ONLY_PLAN' and bool(HEX64.fullmatch(result.get('planSha256', ''))),
+             'FROZEN_CARRY_FORWARD_PLAN_REQUIRED')
+        exclusive_json(out / 'carry-forward-plan.json', result)
+        return result
+    need(bool(HEX64.fullmatch(values.get('source.sha256', ''))), 'APPROVED_FROZEN_SOURCE_REQUIRED')
+    if operation == 'migrate-45':
+        approved_operator_scope(plan, 'schemaAuthorization', values, 'MIGRATE_CANONICAL_44_TO_FINANCIAL_45')
+        need(values.get('migration.authorized') == 'true', 'EXPLICIT_V45_MIGRATION_AUTHORIZATION_REQUIRED')
+        need(fingerprint(DATABASE) == local['tableFingerprint'], 'PRODUCTION_SOURCE_CHANGED_SINCE_BACKUP')
+        mode, expected_state = 'migrate', None
+    else:
+        need(operation in ('carry-apply', 'carry-activate', 'carry-verify'), 'EXPLICIT_OPERATOR_STAGE_REQUIRED')
+        approved_operator_scope(plan, 'historyAuthorization', values, 'PRESERVE_EXISTING_NET_BALANCES')
+        frozen = json.loads(secure(out / 'carry-forward-plan.json').read_text())
+        need(frozen.get('sourceSha256') == values.get('source.sha256')
+             and frozen.get('planSha256') == values.get('plan.sha256'), 'APPROVED_CARRY_PLAN_CHANGED')
+        migrated = json.loads(secure(out / 'migration-45-receipt.json').read_text())
+        need(migrated.get('status') == 'PASS' and migrated.get('schemaVersion') == 45
+             and migrated.get('candidateJarSha256') == plan['candidate']['jarSha256']
+             and migrated.get('sourceSha256') == values['source.sha256'], 'ACTUAL_FINANCIAL45_MIGRATION_REQUIRED')
+        mode = operation.removeprefix('carry-')
+        previous = 'carry-apply-receipt.json' if mode == 'activate' else 'carry-activate-receipt.json' if mode == 'verify' else None
+        if previous:
+            prior = json.loads(secure(out / previous).read_text())
+            need(prior.get('status') == 'PASS' and prior.get('protocol') == 3
+                 and prior.get('state') == ('PREPARING' if mode == 'activate' else 'ACTIVE')
+                 and prior.get('candidateJarSha256') == plan['candidate']['jarSha256']
+                 and prior.get('sourceSha256') == values['source.sha256']
+                 and prior.get('planSha256') == values['plan.sha256'], 'PREVIOUS_EXPLICIT_CARRY_STAGE_REQUIRED')
+        expected_state = 'PREPARING' if mode == 'apply' else 'ACTIVE'
+    effective = fresh_operator_contract(plan, out, kind, operation, values, db)
+    result = run_operator(plan, kind, mode, effective)
+    need(result.get('sourceSha256') == values['source.sha256'], 'OPERATOR_FROZEN_SOURCE_DRIFT')
+    if kind == 'migration':
+        need(result.get('schemaVersion') == 45 and result.get('coreVersion') == 44
+             and type(result.get('migrationsExecuted')) is int and result['migrationsExecuted'] in (0, 1)
+             and result.get('financialMigrationSha256') == FINANCIAL_SQL_SHA256
+             and result.get('coreManifestSha256') == CORE_MANIFEST_SHA256
+             and result.get('state') == 'PREPARING',
+             'ACTUAL_CANONICAL_FINANCIAL45_REQUIRED')
+    else:
+        need(result.get('state') == expected_state and result.get('protocol') == 3
+             and result.get('planSha256') == values['plan.sha256'], 'EXACT_CARRY_STAGE_RESULT_REQUIRED')
+    stopped(plan)
+    root_observation(plan, db['spring.datasource.username'])
+    exclusive_json(out / ('migration-45-receipt.json' if kind == 'migration' else operation + '-receipt.json'), result)
+    return result
+
+
+def media_process_ids():
+    found = []
+    for process in Path('/proc').iterdir():
+        if not process.name.isdigit():
+            continue
+        try:
+            args = (process / 'cmdline').read_bytes().split(b'\0')
+            if str(MEDIA_SCRIPT).encode() in args:
+                found.append(int(process.name))
+        except FileNotFoundError:
+            continue
+    return found
+
+
+def media_cron_directory(plan):
+    return BACKUPS / ('stripe-live-' + plan['releaseId'] + '-cron')
+
+
+def validate_media_cron(plan):
+    control = plan.get('mediaCron')
+    need(isinstance(control, dict) and control.get('entry') == MEDIA_ENTRY
+         and isinstance(control.get('expectedCrontabSha256'), str)
+         and bool(HEX64.fullmatch(control['expectedCrontabSha256']))
+         and isinstance(control.get('scriptSha256'), str) and bool(HEX64.fullmatch(control['scriptSha256'])),
+         'EXPLICIT_PINNED_PROJECT_MEDIA_CRON_REQUIRED')
+    need(sha(secure(MEDIA_SCRIPT)) == control['scriptSha256'], 'MEDIA_SCRIPT_CHANGED_SINCE_REVIEW')
+    return control
+
+
+def cron_active_lines(raw):
+    return [line for line in raw.decode('utf-8').splitlines() if line.strip() and not line.lstrip().startswith('#')]
+
+
+def paused_crontab(raw):
+    lines = raw.decode('utf-8').splitlines(keepends=True)
+    need(sum(line.rstrip('\r\n') == MEDIA_ENTRY for line in lines) == 1, 'EXACTLY_ONE_PROJECT_MEDIA_CRON_REQUIRED')
+    return ''.join(MEDIA_PAUSE_MARKER + line if line.rstrip('\r\n') == MEDIA_ENTRY else line for line in lines).encode('utf-8')
+
+
+def install_crontab_checked(expected_sha, content, temporary):
+    # Native crontab installs a complete file atomically and reloads Cronie.
+    # Compare immediately before installation; never overwrite an observed
+    # intervening edit. The same release lock serializes all project releases.
+    need(sha(secure(ROOT_CRONTAB, private=True)) == expected_sha, 'ROOT_CRONTAB_CHANGED_DO_NOT_OVERWRITE')
+    fd = os.open(temporary, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+    with os.fdopen(fd, 'wb') as stream:
+        stream.write(content)
+        stream.flush()
+        os.fsync(stream.fileno())
+    need(sha(ROOT_CRONTAB) == expected_sha, 'ROOT_CRONTAB_CHANGED_DO_NOT_OVERWRITE')
+    command(['crontab', '-u', 'root', str(temporary)])
+    installed = secure(ROOT_CRONTAB, private=True).read_bytes()
+    # Cronie may refresh its generated comment header. Every active job and
+    # environment line, including unrelated jobs, must remain byte-identical.
+    need(cron_active_lines(installed) == cron_active_lines(content), 'CRONTAB_ACTIVE_ENTRIES_DIFFER_FROM_APPROVED_CONTENT')
+    return installed
+
+
+def verify_media_paused(plan):
+    validate_media_cron(plan)
+    directory = media_cron_directory(plan)
+    observed = json.loads(secure(directory / 'paused-receipt.json').read_text())
+    need(observed.get('status') == 'PASS' and observed.get('releaseId') == plan['releaseId']
+         and sha(secure(ROOT_CRONTAB, private=True)) == observed.get('pausedCrontabSha256')
+         and MEDIA_ENTRY not in cron_active_lines(ROOT_CRONTAB.read_bytes())
+         and not media_process_ids(), 'PROJECT_MEDIA_CRON_NOT_PAUSED_OR_PROCESS_STILL_RUNNING')
+
+
+def pre_ddl_controls(plan):
+    current_matches(plan)
+    files = [ETC / 'application.properties', ETC / 'release-policy.json',
+             APP / 'verify-release.py', APP / 'release_gate.py']
+    files += [ETC / name for name in ('usage-limits.properties', 'invite-gate.properties') if (ETC / name).exists()]
+    return {'expected': plan['expected'], 'files': {str(path): sha(secure(path)) for path in files},
+            'unitSha256': hashlib.sha256(command(['systemctl', 'cat', SERVICE])).hexdigest()}
+
+
+def verify_pre_ddl_schema(plan):
+    """No table/row/privilege changes: compare the complete core history and reject financial remnants."""
+    expected = {}
+    def collect(archive, prefix):
+        for name in archive.namelist():
+            if name.startswith(prefix) and re.fullmatch(r'V[1-9][0-9]*__[A-Za-z0-9_]+\.sql', name[len(prefix):]):
+                script = name[len(prefix):]; version = int(script[1:script.index('__')])
+                if version <= CORE_VERSION:
+                    need(version not in expected, 'ABORT_DUPLICATE_CORE_MIGRATION')
+                    text = archive.read(name).decode('utf-8-sig').replace('\r\n', '\n').replace('\r', '\n')
+                    crc = zlib.crc32(''.join(text.splitlines()).encode('utf-8'))
+                    expected[version] = {'version': str(version), 'script': script,
+                        'checksum': crc if crc < 2 ** 31 else crc - 2 ** 32, 'success': 1, 'type': 'SQL'}
+    with zipfile.ZipFile(secure(Path(plan['candidate']['directory']) / 'app.jar')) as jar:
+        collect(jar, 'BOOT-INF/classes/db/migration/')
+        for name in jar.namelist():
+            if name.startswith('BOOT-INF/lib/') and name.endswith('.jar'):
+                with zipfile.ZipFile(io.BytesIO(jar.read(name))) as nested: collect(nested, 'db/migration/')
+    need(set(expected) == set(range(1, 45)), 'ABORT_EXACT_CORE44_ARTIFACT_REQUIRED')
+    actual = json_rows("SELECT JSON_OBJECT('version',version,'script',script,'checksum',checksum,'success',success,'type',type) "
+                       "FROM flyway_schema_history WHERE version IS NOT NULL ORDER BY CAST(version AS UNSIGNED);")
+    need(actual == [expected[n] for n in range(1, 45)], 'ABORT_REQUIRES_UNCHANGED_SUCCESSFUL_CORE44_HISTORY')
+    remaining = json_rows("SELECT JSON_OBJECT('tables',(SELECT COUNT(*) FROM information_schema.TABLES "
+        "WHERE TABLE_SCHEMA=DATABASE() AND (LEFT(TABLE_NAME,3)='p0_' OR TABLE_NAME IN ('payment_inbox_review','payment_inbox_attempt'))),"
+        "'triggers',(SELECT COUNT(*) FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA=DATABASE() AND LEFT(TRIGGER_NAME,3)='p0_'),"
+        "'columns',(SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='payment_webhook_inbox' "
+        "AND COLUMN_NAME IN ('merchant_scope','env_scope')));")[0]
+    need(remaining == {'tables': 0, 'triggers': 0, 'columns': 0}, 'ABORT_FINANCIAL_SCHEMA_OR_PARTIAL_DDL_PRESENT')
+
+
+def abort_before_ddl(plan, out):
+    """Only resume the unchanged, already-approved old baseline. Never restore SQL or configuration."""
+    current_matches(plan)
+    need(not any(out.glob('operator-approval-migrate-45-*.properties'))
+         and not any(out.glob('writer-observation-migrate-45-*.json'))
+         and not any((out / name).exists() for name in ('migration-45-receipt.json', 'carry-apply-receipt.json',
+             'carry-activate-receipt.json', 'carry-verify-receipt.json')), 'ABORT_FORBIDDEN_AFTER_FINANCIAL_MIGRATION_ATTEMPT')
+    directory = media_cron_directory(plan)
+    original_controls = json.loads(secure(directory / 'pre-ddl-controls.json').read_text())
+    need(original_controls == pre_ddl_controls(plan), 'ABORT_OLD_RUNTIME_CONTROLS_CHANGED')
+    check_release(plan)
+    verify_pre_ddl_schema(plan)
+    if (out / 'backup-receipt.json').exists():
+        backup = json.loads(secure(out / 'backup-receipt.json').read_text())
+        need(backup.get('status') == 'PASS' and backup.get('database') == plan['database']
+             and fingerprint(DATABASE) == backup.get('tableFingerprint'), 'ABORT_SOURCE_CHANGED_SINCE_BACKUP')
+    control = validate_media_cron(plan)
+    original = secure(directory / 'root-crontab-before.txt', private=True).read_bytes()
+    need(hashlib.sha256(original).hexdigest() == control['expectedCrontabSha256'], 'ABORT_ORIGINAL_CRON_CHANGED')
+    current_cron = secure(ROOT_CRONTAB, private=True).read_bytes()
+    need(cron_active_lines(current_cron) == cron_active_lines(paused_crontab(original))
+         and current_cron.decode().splitlines().count(MEDIA_PAUSE_MARKER + MEDIA_ENTRY) == 1
+         and not media_process_ids(), 'ABORT_CRON_CHANGED_OR_OLD_MEDIA_PROCESS_ACTIVE')
+    cron_sha = hashlib.sha256(current_cron).hexdigest()
+    startup()
+    current_matches(plan)
+    need(pre_ddl_controls(plan) == original_controls, 'ABORT_OLD_RUNTIME_CONTROLS_CHANGED')
+    running_artifact_matches({**plan, 'candidate': plan['expected']})
+    install_crontab_checked(cron_sha, original, directory / 'abort-resume-install.txt')
+    result = {'status': 'PASS', 'scope': 'ABORTED_BEFORE_DDL_OLD_BASELINE_RESUMED',
+        'sourceCommit': plan['expected']['sourceCommit'], 'jarSha256': plan['expected']['jarSha256'],
+        'databaseRestored': False, 'configurationRestored': False, 'schemaVersion': 44,
+        'financialDdlExecuted': False, 'oldArtifactActuallyRunning': True, 'originalProjectCronResumed': True,
+        'recordedUtc': dt.datetime.now(dt.timezone.utc).isoformat()}
+    exclusive_json(directory / 'abort-before-ddl-receipt.json', result)
+    return result
+
+
+def media_cron_stage(plan, operation):
+    current_matches(plan, candidate=operation == 'cron-resume')
+    control = validate_media_cron(plan)
+    directory = media_cron_directory(plan)
+    if operation == 'cron-pause':
+        if directory.exists():
+            if (directory / 'paused-receipt.json').exists():
+                verify_media_paused(plan)
+                return {**json.loads(secure(directory / 'paused-receipt.json').read_text()), 'replay': True}
+            # A previous invocation may have paused the job but timed out
+            # waiting for an already-running check. Complete only observation;
+            # never reinstall a crontab or overwrite the original backup.
+            original = secure(directory / 'root-crontab-before.txt', private=True).read_bytes()
+            need(hashlib.sha256(original).hexdigest() == control['expectedCrontabSha256'], 'ORIGINAL_CRON_BACKUP_CHANGED')
+            installed = secure(ROOT_CRONTAB, private=True).read_bytes()
+            need(cron_active_lines(installed) == cron_active_lines(paused_crontab(original)),
+                 'INCOMPLETE_CRON_PAUSE_CHANGED_REQUIRES_REVIEW')
+        else:
+            original = secure(ROOT_CRONTAB, private=True).read_bytes()
+            need(hashlib.sha256(original).hexdigest() == control['expectedCrontabSha256'], 'ROOT_CRONTAB_CHANGED_DO_NOT_OVERWRITE')
+            paused = paused_crontab(original)
+            directory.mkdir(mode=0o700, parents=True)
+            if 'operator' in plan:
+                exclusive_json(directory / 'pre-ddl-controls.json', pre_ddl_controls(plan))
+            fd = os.open(directory / 'root-crontab-before.txt', os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+            with os.fdopen(fd, 'wb') as stream:
+                stream.write(original)
+                stream.flush()
+                os.fsync(stream.fileno())
+            installed = install_crontab_checked(control['expectedCrontabSha256'], paused, directory / 'pause-install.txt')
+        need(installed.decode('utf-8').splitlines().count(MEDIA_PAUSE_MARKER + MEDIA_ENTRY) == 1,
+             'PROJECT_MEDIA_CRON_PAUSE_MARKER_MISSING')
+        deadline = time.monotonic() + 30
+        while media_process_ids() and time.monotonic() < deadline:
+            time.sleep(1)
+        need(not media_process_ids(), 'PROJECT_MEDIA_PROCESS_NOT_DRAINED_CRON_REMAINS_PAUSED')
+        result = {'status': 'PASS', 'scope': 'PROJECT_MEDIA_CRON_PAUSED_ONLY', 'releaseId': plan['releaseId'],
+            'originalCrontabSha256': control['expectedCrontabSha256'],
+            'pausedCrontabSha256': hashlib.sha256(installed).hexdigest(), 'mediaScriptSha256': control['scriptSha256'],
+            'otherCronEntriesPreserved': True, 'mediaProcessCount': 0, 'wholeCronServiceStopped': False,
+            'mediaAutomaticRecovery': 'PAUSED_REQUIRES_COMPATIBILITY_REVIEW',
+            'recordedUtc': dt.datetime.now(dt.timezone.utc).isoformat()}
+        exclusive_json(directory / 'paused-receipt.json', result)
+        return result
+    need(operation == 'cron-resume', 'EXPLICIT_PROJECT_CRON_STAGE_REQUIRED')
+    verify_media_paused(plan)
+    proof = receipt(plan, 'mediaRecovery')
+    need(proof.get('candidateJarSha256') == plan['candidate']['jarSha256']
+         and proof.get('mediaScriptSha256') == sha(MEDIA_SCRIPT)
+         and all(proof.get(k) is True for k in ('releaseLockCooperates', 'configurationWritesAtomic',
+                     'applicationHealthVerified', 'ledgerWriterCompatible')), 'MEDIA_SELF_HEAL_COMPATIBILITY_REQUIRED')
+    # Current reviewed script has no release lock; no honest receipt currently
+    # satisfies this resume gate. Do not automatically restore an unsafe writer.
+    paused = json.loads(secure(directory / 'paused-receipt.json').read_text())
+    original = secure(directory / 'root-crontab-before.txt', private=True).read_bytes()
+    need(hashlib.sha256(original).hexdigest() == paused['originalCrontabSha256'], 'ORIGINAL_CRON_BACKUP_CHANGED')
+    install_crontab_checked(paused['pausedCrontabSha256'], original, directory / 'resume-install.txt')
+    result = {'status': 'PASS', 'scope': 'PROJECT_MEDIA_CRON_RESUMED_WITH_COMPATIBILITY_PROOF',
+              'releaseId': plan['releaseId'], 'restoredCrontabSha256': sha(ROOT_CRONTAB)}
+    exclusive_json(directory / 'resumed-receipt.json', result)
+    return result
 
 
 def atomic_copy(source, target, mode, group=None):
@@ -546,11 +1145,58 @@ def running_artifact_matches(plan):
     need(matches, 'ACTUAL_PROCESS_ARTIFACT_NOT_VERIFIED')
 
 
+def temporary_offer_scope(value, future=True):
+    need(isinstance(value, dict) and set(value) == {'ownerId', 'nonce', 'expiresAt', 'wechatCnyMinor'}
+         and isinstance(value.get('ownerId'), str)
+         and bool(re.fullmatch(r'[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}', value['ownerId']))
+         and isinstance(value.get('nonce'), str) and bool(re.fullmatch(r'[0-9a-f]{8}', value['nonce']))
+         and type(value.get('wechatCnyMinor')) is int and value['wechatCnyMinor'] >= 300,
+         'EXACT_PRIVATE_ACCEPTANCE_SCOPE_REQUIRED')
+    try:
+        raw = value['expiresAt']; need(isinstance(raw, str) and raw.endswith('Z'), 'PRIVATE_ACCEPTANCE_EXPIRY_REQUIRED')
+        expires = dt.datetime.fromisoformat(raw.removesuffix('Z') + '+00:00')
+        need(not future or expires > dt.datetime.now(dt.timezone.utc), 'PRIVATE_ACCEPTANCE_EXPIRED')
+    except (TypeError, ValueError, OverflowError):
+        raise Blocked('PRIVATE_ACCEPTANCE_EXPIRY_REQUIRED') from None
+    return value
+
+
+def acceptance_configuration(config):
+    import decimal
+    try:
+        amount = decimal.Decimal(config.get('qingfeng.payment.acceptance.wechat-cny', '3.00')) * 100
+        need(amount.is_finite() and amount == int(amount), 'PRIVATE_ACCEPTANCE_WECHAT_QUOTE_REQUIRED')
+        minor = int(amount)
+    except (decimal.InvalidOperation, ValueError, OverflowError):
+        raise Blocked('PRIVATE_ACCEPTANCE_WECHAT_QUOTE_REQUIRED') from None
+    return temporary_offer_scope({'ownerId': config.get('qingfeng.payment.acceptance.owner-id'),
+        'nonce': config.get('qingfeng.payment.acceptance.nonce'),
+        'expiresAt': config.get('qingfeng.payment.acceptance.expires-at'), 'wechatCnyMinor': minor})
+
+
+def temporary_quote(scope, channel, quote, amount_key, reserved=False):
+    currency = 'CNY' if channel == 'wechat_pay' else 'USD'
+    need(quote.get('packageId') == 'accept-' + scope['nonce'] + '-' + channel + '-' + currency
+         and quote.get('credits') == 1 and type(quote.get('credits')) is int
+         and quote.get('maxPurchases') == 1 and type(quote.get('maxPurchases')) is int
+         and quote.get('ownerId') == scope['ownerId']
+         and quote.get('currency') == currency and quote.get(amount_key) ==
+             (scope['wechatCnyMinor'] if channel == 'wechat_pay' else 1 if channel == 'paypal' else 50),
+         'EXACT_PRIVATE_ACCEPTANCE_QUOTE_REQUIRED')
+    if reserved:
+        try:
+            created = quote['orderCreatedAt']; need(isinstance(created, str) and created.endswith('Z'), 'PRIVATE_ACCEPTANCE_RESERVATION_TIME_REQUIRED')
+            need(dt.datetime.fromisoformat(created.removesuffix('Z') + '+00:00') <
+                 dt.datetime.fromisoformat(scope['expiresAt'].removesuffix('Z') + '+00:00'), 'PRIVATE_ACCEPTANCE_RESERVED_AFTER_EXPIRY')
+        except (KeyError, TypeError, ValueError, OverflowError):
+            raise Blocked('PRIVATE_ACCEPTANCE_RESERVATION_TIME_REQUIRED') from None
+
+
 def validate_canary_funding(funding, jar_sha, channels=None):
-    # No temporary price is invented here. Current USD catalog snapshots
-    # remain 9.90/25.90/49.90. An authorization for USD0.01 cannot enable a
-    # test Checkout whose actual catalog price is higher.
+    # Public USD/CNY quotes remain unchanged. A private temporary quote requires
+    # the explicit owner/nonce/expiry and one exact approved transaction per SKU.
     if channels is not None:
+        temporary = temporary_offer_scope(funding['temporaryOffer']) if 'temporaryOffer' in funding else None
         selected = channel_set(channels)
         quotes = funding.get('channelQuotes')
         need(bool(selected) and funding.get('candidateJarSha256') == jar_sha
@@ -566,13 +1212,16 @@ def validate_canary_funding(funding, jar_sha, channels=None):
             limit = quote.get('approvedMaximumMinor')
             currency = 'CNY' if channel == 'wechat_pay' else 'USD'
             need(quote.get('currency') == currency and type(amount) is int
-                 and amount in (CNY_QUOTES if currency == 'CNY' else USD_QUOTES)
+                 and (temporary is not None or amount in (CNY_QUOTES if currency == 'CNY' else USD_QUOTES))
                  and type(limit) is int and amount <= limit
                  and type(quote.get('approvedTransactionLimit')) is int
                  and 1 <= quote['approvedTransactionLimit'] <= 2
                  and isinstance(quote.get('authorizationEvidenceSha256'), str)
                  and bool(HEX64.fullmatch(quote.get('authorizationEvidenceSha256', ''))),
                  'ACTUAL_CANARY_QUOTE_EXCEEDS_APPROVED_FUNDS_SCOPE')
+            if temporary is not None:
+                temporary_quote(temporary, channel, quote, 'selectedPackageAmountMinor')
+                need(quote['approvedTransactionLimit'] == 1, 'PRIVATE_ACCEPTANCE_EXACTLY_ONE_TRANSACTION')
             count += quote['approvedTransactionLimit']
         need(count == funding['approvedTransactionLimit'], 'CHANNEL_FUNDING_TRANSACTION_SCOPE_MISMATCH')
         return
@@ -599,6 +1248,7 @@ def validate_business_acceptance(plan, business):
     if selected is None:
         return
     proofs = business.get('channelAcceptance')
+    temporary = temporary_offer_scope(business['temporaryOffer'], future=False) if 'temporaryOffer' in business else None
     need(isinstance(proofs, dict) and set(proofs) == selected, 'EVERY_RELEASE_CHANNEL_REQUIRES_REAL_ACCEPTANCE')
     payments, orders, entries, evidence = set(), set(), set(), set()
     for channel in sorted(selected):
@@ -616,12 +1266,14 @@ def validate_business_acceptance(plan, business):
              and proof.get('paymentMethodType') == ('card' if channel == 'apple_pay' else channel)
              and proof.get('walletType', '') == ('apple_pay' if channel == 'apple_pay' else '')
              and proof.get('currency') == currency and type(amount) is int
-             and amount in (CNY_QUOTES if currency == 'CNY' else USD_QUOTES)
+             and (temporary is not None or amount in (CNY_QUOTES if currency == 'CNY' else USD_QUOTES))
              and all(proof.get(k) == 'PASS' for k in ('providerReadback', 'signedWebhook',
                      'creditedExactlyOnce', 'ownershipAndCurrency', 'ledgerReconciled'))
              and isinstance(proof.get('sourceEvidenceSha256'), str)
              and bool(HEX64.fullmatch(proof.get('sourceEvidenceSha256', ''))),
              'REAL_CHANNEL_PAYMENT_ACCEPTANCE_REQUIRED')
+        if temporary is not None:
+            temporary_quote(temporary, channel, proof, 'amountMinor', reserved=True)
         references = []
         for field in ('providerPaymentId', 'orderId', 'ledgerEntryId'):
             value = proof.get(field)
@@ -642,6 +1294,8 @@ def install(plan, out, operation):
     check_release(plan)
     check_install_receipts(plan, out)
     current_matches(plan, candidate=operation in ('canary', 'open', 'recover'))
+    if 'operator' in plan:
+        verify_media_paused(plan)
     stage = 'open' if operation == 'open' else 'canary' if operation == 'canary' else 'closed'
     channels = plan_channels(plan, stage)
     if operation == 'canary':
@@ -654,9 +1308,27 @@ def install(plan, out, operation):
     old = property_map(out / 'configuration/application.properties')
     new = property_map(configuration)
     validate_configuration(old, new, operation == 'open', operation == 'canary', channels, plan.get('paypalMerchantId'))
+    if operation == 'canary':
+        funding = receipt(plan, 'canaryFunding')
+        if 'temporaryOffer' in funding:
+            need(new.get('qingfeng.payment.acceptance.enabled') == 'true'
+                 and acceptance_configuration(new) == temporary_offer_scope(funding['temporaryOffer']),
+                 'CANARY_PRIVATE_QUOTE_CONFIGURATION_MISMATCH')
+        else:
+            need(new.get('qingfeng.payment.acceptance.enabled', 'false') == 'false',
+                 'PRIVATE_ACCEPTANCE_REQUIRES_EXPLICIT_FUNDING')
+    if operation == 'open' and 'temporaryOffer' in business:
+        funding = receipt(plan, 'canaryFunding')
+        need(funding.get('candidateJarSha256') == plan['candidate']['jarSha256']
+             and temporary_offer_scope(funding.get('temporaryOffer'), future=False) ==
+                 temporary_offer_scope(business['temporaryOffer'], future=False), 'LIVE_ACCEPTANCE_TEMPORARY_FUNDING_MISMATCH')
     stop_units(plan)
     current_matches(plan, candidate=operation in ('canary', 'open', 'recover'))
     atomic_copy(plan['approvedPolicy'], ETC / 'release-policy.json', 0o644)
+    if 'operator' in plan:
+        reviewed = Path(plan['candidate']['directory']) / 'release-tools'
+        atomic_copy(reviewed / 'verify-release.py', APP / 'verify-release.py', 0o755)
+        atomic_copy(reviewed / 'release_gate.py', APP / 'release_gate.py', 0o644)
     atomic_copy(configuration, ETC / 'application.properties', 0o640, group='qfmusic')
     if operation == 'install':
         link = APP / ('.current-' + plan['releaseId'])
@@ -693,7 +1365,10 @@ def main():
                           'productionMutation': False}))
         return 2
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('operation', choices=('inspect', 'backup', 'restore-check', 'install', 'canary', 'open', 'recover'))
+    parser.add_argument('operation', choices=('inspect', 'schema-validate', 'cron-pause', 'cron-resume', 'backup', 'restore-check',
+        'compose-restore', 'bind-restore', 'abort-before-ddl',
+        'carry-plan', 'migrate-45', 'carry-apply', 'carry-activate', 'carry-verify',
+        'install', 'canary', 'open', 'recover'))
     parser.add_argument('--plan', required=True)
     parser.add_argument('--plan-sha256', required=True)
     parser.add_argument('--execute-approved', action='store_true')
@@ -717,7 +1392,20 @@ def main():
                      'sourceCommit': plan['candidate']['sourceCommit']}
         else:
             need(args.execute_approved, 'EXPLICIT_EXECUTION_FLAG_REQUIRED')
-            value = backup(plan, out) if args.operation == 'backup' else restore_check(plan, out) if args.operation == 'restore-check' else install(plan, out, args.operation)
+            if args.operation == 'backup':
+                value = backup(plan, out)
+            elif args.operation == 'restore-check':
+                value = restore_check(plan, out)
+            elif args.operation in ('compose-restore', 'bind-restore'):
+                value = compose_restore(plan, out, bind=args.operation == 'bind-restore')
+            elif args.operation == 'abort-before-ddl':
+                value = abort_before_ddl(plan, out)
+            elif args.operation in ('schema-validate', 'carry-plan', 'migrate-45', 'carry-apply', 'carry-activate', 'carry-verify'):
+                value = operator_stage(plan, out, args.operation)
+            elif args.operation in ('cron-pause', 'cron-resume'):
+                value = media_cron_stage(plan, args.operation)
+            else:
+                value = install(plan, out, args.operation)
         print(json.dumps(value))
         return 0
     except (Blocked, OSError, ValueError, KeyError, TypeError, subprocess.TimeoutExpired) as error:

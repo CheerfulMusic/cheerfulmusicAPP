@@ -1,4 +1,5 @@
--- V44 integrates financial entitlements only after immutable canonical core V1..V43.
+-- V45 integrates financial entitlements only after immutable canonical core V1..V44.
+-- Core V44 is discover_song_publication, checksum -1983576296, preserved unchanged.
 -- Core V42 is shared_download_entitlement, checksum -500011050, from b8a924f.
 -- The isolated c780 payment V40 is preserved byte-for-byte as a TEST-ONLY fixture.
 -- Its database history is incompatible with this chain: do not repair, baseline,
@@ -7,7 +8,7 @@
 -- unchanged. No download grant, historical identity, balance, FIFO, or approval
 -- is created or inferred. Stop old writers and retain a verified pre-cutover backup.
 -- DDL implicitly commits; this migration never activates financial writes.
--- Enforce actual core43 history AND download structure before persistent financial
+-- Enforce actual core44 history, discover and download structure before persistent financial
 -- DDL. The temporary CHECK guard deliberately aborts on any mismatch.
 CREATE TEMPORARY TABLE p0_v41_core40_prerequisite (
   verified INTEGER NOT NULL,
@@ -21,6 +22,35 @@ SELECT CASE WHEN
   AND (SELECT COUNT(*) FROM flyway_schema_history WHERE version='41') = 1
   AND   (SELECT COUNT(*) FROM flyway_schema_history WHERE version='43' AND script='V43__lyric_revision_custom_sections.sql' AND checksum=-2135468013 AND success=1 AND type='SQL') = 1
   AND (SELECT COUNT(*) FROM flyway_schema_history WHERE version='43') = 1
+  AND (SELECT COUNT(*) FROM flyway_schema_history WHERE version='44'
+    AND script='V44__discover_song_publication.sql' AND checksum=-1983576296
+    AND success=1 AND type='SQL') = 1
+  AND (SELECT COUNT(*) FROM flyway_schema_history WHERE version='44') = 1
+  AND (SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE()
+    AND TABLE_NAME='artist_song_release' AND TABLE_TYPE='BASE TABLE' AND ENGINE='InnoDB') = 1
+  AND (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE()
+    AND TABLE_NAME='artist_song_release' AND (
+      (COLUMN_NAME='discover_published_at' AND DATA_TYPE='timestamp' AND DATETIME_PRECISION=6
+        AND IS_NULLABLE='YES' AND COLUMN_DEFAULT IS NULL)
+      OR (COLUMN_NAME='discover_featured' AND COLUMN_TYPE='tinyint(1)'
+        AND IS_NULLABLE='NO' AND COLUMN_DEFAULT='0'))) = 2
+  AND (SELECT COUNT(*) FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=DATABASE()
+    AND TABLE_NAME='artist_song_release' AND INDEX_NAME='idx_artist_release_discover_latest') = 2
+  AND (SELECT COUNT(*) FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=DATABASE()
+    AND TABLE_NAME='artist_song_release' AND INDEX_NAME='idx_artist_release_discover_latest'
+    AND NON_UNIQUE=1 AND SUB_PART IS NULL AND INDEX_TYPE='BTREE' AND IS_VISIBLE='YES'
+    AND COLLATION='A' AND EXPRESSION IS NULL AND (
+      (SEQ_IN_INDEX=1 AND COLUMN_NAME='discover_published_at')
+      OR (SEQ_IN_INDEX=2 AND COLUMN_NAME='id'))) = 2
+  AND (SELECT COUNT(*) FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=DATABASE()
+    AND TABLE_NAME='artist_song_release' AND INDEX_NAME='idx_artist_release_discover_featured') = 3
+  AND (SELECT COUNT(*) FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=DATABASE()
+    AND TABLE_NAME='artist_song_release' AND INDEX_NAME='idx_artist_release_discover_featured'
+    AND NON_UNIQUE=1 AND SUB_PART IS NULL AND INDEX_TYPE='BTREE' AND IS_VISIBLE='YES'
+    AND COLLATION='A' AND EXPRESSION IS NULL AND (
+      (SEQ_IN_INDEX=1 AND COLUMN_NAME='discover_featured')
+      OR (SEQ_IN_INDEX=2 AND COLUMN_NAME='discover_published_at')
+      OR (SEQ_IN_INDEX=3 AND COLUMN_NAME='id'))) = 3
   AND   (SELECT COUNT(*) FROM flyway_schema_history WHERE version='42'
     AND script='V42__shared_download_entitlement.sql' AND checksum=-500011050
     AND success=1 AND type='SQL') = 1

@@ -1,5 +1,5 @@
 import { isAgentContinuation } from '../../modules/agent/model/conversation'
-import { isStripeMethod, validStripeMethods } from '../../modules/identity/model/stripe-payment-methods'
+import { isStripeMethod, validCreditPack, validStripeMethods } from '../../modules/identity/model/stripe-payment-methods'
 type Row=Record<string,unknown>
 const obj=(v:unknown):v is Row=>!!v&&typeof v==='object'&&!Array.isArray(v)
 const str=(v:unknown)=>typeof v==='string'
@@ -30,7 +30,14 @@ const direction=(v:unknown)=>obj(v)&&preferences(v.preferences)&&num(v.catalogVe
 const hotStat=(v:unknown)=>obj(v)&&text(v.trackId)&&['plays','likes','favorites','comments'].every(k=>num(v[k])&&Number(v[k])>=0)
 const nullableText=(v:unknown)=>v===null||str(v)
 const artistSong=(v:unknown):v is Row=>obj(v)&&text(v.id)&&Number.isSafeInteger(v.version)&&Number(v.version)>0&&text(v.title)
+const publicArtistSong=(v:unknown)=>artistSong(v)&&typeof v.hasCover==='boolean'
 const artistRelease=(v:unknown)=>artistSong(v)&&text(v.workId)&&text(v.assetId)&&nullableText(v.coverId)
+  &&(v.onDiscover===undefined||typeof v.onDiscover==='boolean')
+const nonnegativeCount=(v:unknown)=>Number.isSafeInteger(v)&&Number(v)>=0
+const discoverSong=(v:unknown)=>obj(v)&&text(v.artistId)&&text(v.stageName)&&publicArtistSong(v.song)&&text(v.publishedAt)
+  &&(v.genre===undefined||str(v.genre))&&(v.plays===undefined||nonnegativeCount(v.plays))
+const discoverArtist=(v:unknown)=>obj(v)&&text(v.artistId)&&text(v.stageName)&&nullableText(v.avatarKey)
+  &&nonnegativeCount(v.songs)&&nonnegativeCount(v.plays)
 const artistFields=(v:unknown):v is Row=>obj(v)&&str(v.stageName)&&str(v.tagline)&&nullableText(v.avatarKey)
   &&nullableText(v.coverKey)&&nullableText(v.featuredReleaseId)
 const myArtist=(v:unknown)=>artistFields(v)&&nullableText(v.publicId)&&typeof v.published==='boolean'&&list(v.songs,artistRelease)
@@ -55,7 +62,7 @@ const analyticsSummaryBody=(v:unknown)=>{
 }
 const analyticsAccessBody=(v:unknown)=>obj(v)&&typeof v.allowed==='boolean'&&(v.allowed!==true||text(v.viewer))
 const quickCreation=(v:unknown)=>obj(v)&&text(v.id)&&text(v.workId)&&['QUEUED','WRITING','LYRICS_READY','SUBMITTING_MUSIC','MUSIC_QUEUED','SUBMITTING','RUNNING','SAVING','SUBMISSION_UNKNOWN','SUCCEEDED','FAILED','CANCELLED'].includes(String(v.status))&&['revisionId','taskId','errorCode'].every(k=>v[k]===null||text(v[k]))&&typeof v.canRetry==='boolean'&&text(v.createdAt)
-export const emptyResponseAllowed=(path:string,method:string)=>method==='DELETE'&&/^app\/works\/[^/]+\/shares$/.test(path)||method==='POST'&&/^app\/works\/[^/]+\/generations\/[^/]+\/retry-archive$/.test(path)||method==='GET'&&(/^app\/works\/[^/]+\/generations\/[^/]+\/music-settings$/.test(path)||/^app\/works\/[^/]+\/quick-creations\/latest$/.test(path))
+export const emptyResponseAllowed=(path:string,method:string)=>method==='DELETE'&&/^app\/works\/[^/]+\/shares$/.test(path)||method==='POST'&&(/^app\/works\/[^/]+\/generations\/[^/]+\/retry-archive$/.test(path)||/^public\/discover\/songs\/[^/]+\/\d+\/play$/.test(path))||method==='GET'&&(/^app\/works\/[^/]+\/generations\/[^/]+\/music-settings$/.test(path)||/^app\/works\/[^/]+\/quick-creations\/latest$/.test(path))
 /** 校验应用实际依赖的字段。HTTP 200只代表传输成功，不代表业务结果完整。 */
 export function validResponse(path:string,method:string,value:unknown):boolean{
  path=path.split('?')[0]!
@@ -85,13 +92,19 @@ export function validResponse(path:string,method:string,value:unknown):boolean{
  if(path==='public/auth/logto/start')return method==='POST'&&obj(value)&&logtoAuthorizationUrl(value.authorizationUrl)
  if(path==='public/system/info'||path==='public/system/photo-preview')return obj(value)&&text(value.name)&&text(value.version)&&obj(value.capabilities)&&['lyricsGeneration','musicGeneration','giftSharing','workPersistence'].every(k=>typeof (value.capabilities as Row)[k]==='boolean')
  if(path==='public/hot-songs')return method==='GET'&&obj(value)&&list(value.songs,hotStat)
- if(/^public\/artists\/[^/]+$/.test(path))return method==='GET'&&artistFields(value)&&list(value.songs,song=>artistSong(song)&&typeof song.hasCover==='boolean')
+ if(/^public\/artists\/[^/]+$/.test(path))return method==='GET'&&artistFields(value)&&list(value.songs,publicArtistSong)
+ if(path==='public/discover')return method==='GET'&&obj(value)&&typeof value.hasMore==='boolean'&&list(value.songs,discoverSong)
+  &&(value.artists===undefined||list(value.artists,discoverArtist))
  if(path==='app/artist-profile'||path==='app/artist-profile/visibility')return myArtist(value)
  if(/^app\/artist-profile\/releases\/[^/]+$/.test(path)){
   if(method==='DELETE')return myArtist(value)
   if(method==='PUT')return artistRelease(value)
-  return method==='GET'&&obj(value)&&typeof value.profileReady==='boolean'&&typeof value.published==='boolean'&&(value.song===null||artistRelease(value.song))
+  return method==='GET'&&obj(value)&&typeof value.profileReady==='boolean'&&typeof value.published==='boolean'
+    &&(value.publicId===undefined||nullableText(value.publicId))&&(value.stageName===undefined||str(value.stageName))
+    &&(value.song===null||artistRelease(value.song))
  }
+ if(/^app\/artist-profile\/releases\/[^/]+\/discover$/.test(path))
+  return method==='DELETE'?myArtist(value):method==='PUT'&&artistRelease(value)&&obj(value)&&value.onDiscover===true
  if(/^public\/hot-songs\/[^/]+\/play$/.test(path))return method==='POST'&&hotStat(value)
  if(path==='app/analytics/page-users')return method==='GET'&&obj(value)&&typeof value.allowed==='boolean'&&(value.allowed!==true||(num(value.days)&&text(value.pagePath)&&list(value.users,u=>obj(u)&&text(u.creatorId)&&text(u.accountType)&&(u.name===null||str(u.name))&&(u.email===null||str(u.email))&&(u.phoneMasked===null||str(u.phoneMasked))&&num(u.avgDurationMs)&&num(u.samples)&&Number(u.samples)>=0)))
  if(path==='app/analytics/access')return method==='GET'&&analyticsAccessBody(value)
@@ -103,7 +116,7 @@ export function validResponse(path:string,method:string,value:unknown):boolean{
  if(path==='app/credits')return method==='GET'&&obj(value)&&typeof value.enabled==='boolean'&&num(value.balance)&&num(value.musicCost)
  if(path==='app/referrals')return method==='GET'&&obj(value)&&text(value.code)
  if(path==='app/referrals/accept')return method==='POST'&&obj(value)&&value.accepted===true
- if(path==='app/payments/catalog'||path==='app/paypal/catalog'||path==='app/stripe/catalog')return method==='GET'&&obj(value)&&typeof value.enabled==='boolean'&&list(value.packages,p=>obj(p)&&text(p.id)&&str(p.title)&&num(p.amount)&&Number(p.amount)>0&&text(p.currency)&&num(p.credits)&&Number(p.credits)>0)&&(path!=='app/stripe/catalog'||value.paymentMethods===undefined||validStripeMethods(value.paymentMethods))
+ if(path==='app/payments/catalog'||path==='app/paypal/catalog'||path==='app/stripe/catalog')return method==='GET'&&obj(value)&&typeof value.enabled==='boolean'&&list(value.packages,validCreditPack)&&(path!=='app/stripe/catalog'||value.paymentMethods===undefined||validStripeMethods(value.paymentMethods))
  if(path==='app/paypal/sdk-config')return method==='GET'&&obj(value)&&typeof value.enabled==='boolean'&&str(value.clientId)&&['sandbox','production'].includes(String(value.environment))&&(!value.enabled||text(value.clientId))
  if(path==='app/payments/orders'||path==='app/paypal/orders'||path==='app/stripe/orders')return method==='POST'?obj(value)&&text(value.orderId)&&text(value.checkoutUrl)&&(path!=='app/paypal/orders'||value.paypalOrderId===undefined||text(value.paypalOrderId)):method==='GET'&&obj(value)&&list(value.orders,o=>paymentOrder(o)&&obj(o)&&text(o.createdAt))
  if(/^app\/(payments|paypal|stripe)\/orders\/[^/]+$/.test(path))return method==='GET'&&paymentOrder(value)

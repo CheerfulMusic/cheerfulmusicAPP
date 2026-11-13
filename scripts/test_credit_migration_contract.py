@@ -43,12 +43,12 @@ class CreditMigrationContractTests(unittest.TestCase):
             items[name] = output.getvalue()
         return self.rewrite_jar(path, apply)
 
-    def test_core_43_originals_and_v44_are_one_exact_contract(self):
+    def test_core_44_originals_and_v45_are_one_exact_contract(self):
         actual = {p.name: gate.normalized_migration_sha(p.read_bytes()) for p in SQL.glob("V*__*.sql")}
         contract = gate.verify_migration_set(actual)
-        self.assertEqual("0530c444a38db2363e0a6296c52a416b09a14d5f", contract["coreSourceCommit"])
-        self.assertEqual(44, len(actual))
-        self.assertEqual(43, len(gate.CORE_MIGRATION_SHA256))
+        self.assertEqual("e6c351f21ece6fb096ff425ca4b690232632de21", contract["coreSourceCommit"])
+        self.assertEqual(45, len(actual))
+        self.assertEqual(44, len(gate.CORE_MIGRATION_SHA256))
 
     def test_legacy_fixtures_keep_the_original_executed_bytes(self):
         expected = {
@@ -66,7 +66,7 @@ class CreditMigrationContractTests(unittest.TestCase):
         self.assertEqual(-1311214355, original["flyway_checksum"])
         self.assertFalse(original["production_location_registered"])
 
-    def test_v44_requires_actual_core43_and_preserves_financial_algorithm_without_activation(self):
+    def test_v45_requires_actual_core44_and_preserves_financial_algorithm_without_activation(self):
         text = (SQL / gate.INTEGRATED_MIGRATION).read_text(encoding="utf-8")
         tables = re.findall(r"CREATE TABLE (\w+)", text)
         self.assertEqual(19, len(tables))
@@ -91,6 +91,7 @@ class CreditMigrationContractTests(unittest.TestCase):
             ("V41__artist_home_customization.sql", "-860312848"),
             ("V42__shared_download_entitlement.sql", "-500011050"),
             ("V43__lyric_revision_custom_sections.sql", "-2135468013"),
+            ("V44__discover_song_publication.sql", "-1983576296"),
         ):
             self.assertIn(name, text)
             self.assertIn("checksum=" + checksum, text)
@@ -103,8 +104,8 @@ class CreditMigrationContractTests(unittest.TestCase):
 
     def test_complete_packaged_chain_is_verified(self):
         actual = gate.inspect_artifact(self.fixture.jar())
-        self.assertEqual(44, len(actual["migrations"]))
-        self.assertEqual("44", actual["migrationContract"]["integrationVersion"])
+        self.assertEqual(45, len(actual["migrations"]))
+        self.assertEqual("45", actual["migrationContract"]["integrationVersion"])
 
     def test_old_v33_cannot_be_added_beside_canonical_v33(self):
         jar = self.nested_change(self.fixture.jar(), lambda items: items.update({
@@ -124,13 +125,28 @@ class CreditMigrationContractTests(unittest.TestCase):
         with self.assertRaisesRegex(gate.GateError, "Test-only or alternate"):
             gate.inspect_artifact(jar)
 
-    def test_missing_v44_does_not_pass_as_an_old_complete_chain(self):
+    def test_missing_v45_does_not_pass_as_an_old_complete_chain(self):
         jar = self.nested_change(self.fixture.jar(), lambda items: items.pop("db/migration/" + gate.INTEGRATED_MIGRATION))
-        with self.assertRaisesRegex(gate.GateError, "exactly core V1..V43"):
+        with self.assertRaisesRegex(gate.GateError, "exactly core V1..V44"):
             gate.inspect_artifact(jar)
 
     def test_core_edit_is_rejected_even_with_all_versions_present(self):
         jar = self.nested_change(self.fixture.jar(), lambda items: items.update({"db/migration/V33__site_event_geo.sql": b"SELECT 1;"}))
+        with self.assertRaisesRegex(gate.GateError, "Canonical migration source changed"):
+            gate.inspect_artifact(jar)
+
+    def test_discover44_is_mandatory_and_cannot_be_replaced_by_the_old_financial44(self):
+        jar = self.nested_change(self.fixture.jar(), lambda items: items.pop("db/migration/V44__discover_song_publication.sql"))
+        with self.assertRaisesRegex(gate.GateError, "Missing or noncontiguous migration chain"):
+            gate.inspect_artifact(jar)
+        jar = self.nested_change(self.fixture.jar(), lambda items: items.update({
+            "db/migration/V44__credit_entitlement_integration.sql": b"SELECT 1;"}))
+        with self.assertRaisesRegex(gate.GateError, "Duplicate migration version"):
+            gate.inspect_artifact(jar)
+
+    def test_changed_discover44_is_rejected_without_repairing_any_history(self):
+        jar = self.nested_change(self.fixture.jar(), lambda items: items.update({
+            "db/migration/V44__discover_song_publication.sql": b"ALTER TABLE artist_song_release ADD COLUMN wrong_name INT;"}))
         with self.assertRaisesRegex(gate.GateError, "Canonical migration source changed"):
             gate.inspect_artifact(jar)
 

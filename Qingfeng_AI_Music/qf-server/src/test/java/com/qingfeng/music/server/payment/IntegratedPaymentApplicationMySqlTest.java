@@ -90,15 +90,15 @@ class IntegratedPaymentApplicationMySqlTest {
             try(var facts=statement.executeQuery("SELECT SCHEMA_NAME FROM information_schema.SCHEMATA")){while(facts.next())assertTrue(Set.of(database,"information_schema","performance_schema").contains(facts.getString(1)));}
         }
         assertEquals(0,number("SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE()"),"Never clear or reuse a previous acceptance cohort");
-        Flyway.configure().dataSource(source).locations("classpath:db/migration").cleanDisabled(true).target("43").load().migrate();
-        assertEquals(43,number("SELECT COUNT(*) FROM flyway_schema_history WHERE success=1 AND version IS NOT NULL"));assertEquals("V42__shared_download_entitlement.sql",db.queryForObject("SELECT script FROM flyway_schema_history WHERE version='42'",String.class));assertEquals(-500011050,number("SELECT checksum FROM flyway_schema_history WHERE version='42'"));
+        Flyway.configure().dataSource(source).locations("classpath:db/migration").cleanDisabled(true).target("44").load().migrate();
+        assertEquals(44,number("SELECT COUNT(*) FROM flyway_schema_history WHERE success=1 AND version IS NOT NULL"));assertEquals("V42__shared_download_entitlement.sql",db.queryForObject("SELECT script FROM flyway_schema_history WHERE version='42'",String.class));assertEquals(-500011050,number("SELECT checksum FROM flyway_schema_history WHERE version='42'"));
         assertEquals(1,number("SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='shared_download_entitlement'"));
         legacyOwner=UUID.randomUUID().toString();OWNERS.add(legacyOwner);
         db.update("INSERT INTO creator(id,created_at) VALUES(?,CURRENT_TIMESTAMP)",legacyOwner);
         db.update("INSERT INTO credit_ledger VALUES('CREDIT','synthetic-legacy-gift',?,100,CURRENT_TIMESTAMP)",legacyOwner);
         db.update("INSERT INTO credit_ledger VALUES('DEBIT','synthetic-legacy-debit',?,-25,CURRENT_TIMESTAMP)",legacyOwner);
         db.update("INSERT INTO credit_account(owner_id,balance,updated_at) VALUES(?,75,CURRENT_TIMESTAMP)",legacyOwner);
-        Flyway.configure().dataSource(source).locations("classpath:db/migration").cleanDisabled(true).target("44").load().migrate();
+        Flyway.configure().dataSource(source).locations("classpath:db/migration").cleanDisabled(true).target("45").load().migrate();
         try(var resource=Objects.requireNonNull(IntegratedPaymentApplicationMySqlTest.class.getResourceAsStream("/credit-migration-reference.json"))){
             var manifest=JSON.readTree(resource);for(var m:manifest.path("core"))assertHistory(m);assertHistory(manifest.path("integration"));
         }
@@ -114,7 +114,7 @@ class IntegratedPaymentApplicationMySqlTest {
         Map<String,Object> values=new LinkedHashMap<>();
         values.put("spring.datasource.url",url);values.put("spring.datasource.username",user);values.put("spring.datasource.password",password);values.put("spring.datasource.driver-class-name","com.mysql.cj.jdbc.Driver");
         values.put("spring.datasource.hikari.maximum-pool-size",16);values.put("spring.datasource.hikari.connection-init-sql","SET SESSION innodb_lock_wait_timeout=5");
-        values.put("spring.flyway.target","44");values.put("spring.flyway.clean-disabled",true);values.put("spring.sql.init.mode","never");values.put("server.address","127.0.0.1");values.put("server.port",0);
+        values.put("spring.flyway.target","45");values.put("spring.flyway.clean-disabled",true);values.put("spring.sql.init.mode","never");values.put("server.address","127.0.0.1");values.put("server.port",0);
         values.put("qingfeng.credits.writer-fence.enabled",true);values.put("qingfeng.credits.writer-fence.expected-database",database);values.put("qingfeng.credits.writer-fence.expected-port",23316);values.put("qingfeng.credits.enabled",true);
         values.put("qingfeng.stripe.enabled",true);values.put("qingfeng.stripe.accepting-new-orders",true);values.put("qingfeng.stripe.environment","sandbox");values.put("qingfeng.stripe.account-id",ACCOUNT);values.put("qingfeng.stripe.api-key","sk_test_integrated_offline_fixture");values.put("qingfeng.stripe.webhook-secret",SECRET);
         values.put("qingfeng.stripe.business-country","GB");values.put("qingfeng.stripe.payment-methods.card.enabled",true);values.put("qingfeng.stripe.payment-methods.apple-pay.enabled",true);values.put("qingfeng.stripe.payment-methods.wechat-pay.enabled",true);
@@ -136,7 +136,7 @@ class IntegratedPaymentApplicationMySqlTest {
         application=new SpringApplicationBuilder(MusicApplication.class,OfflineGateways.class).environment(environment).profiles("mysql").web(WebApplicationType.SERVLET).logStartupInfo(false)
             .initializers(context->context.getBeanFactory().registerSingleton("acceptanceOnlyTestConfigurationFilter",new AcceptanceOnlyTestFilter())).run();
         db=application.getBean(JdbcTemplate.class);ledger=application.getBean(CreditsLedger.class);stripe=application.getBean(StripePaymentService.class);paypal=application.getBean(PayPalPaymentService.class);inbox=application.getBean(PaymentInbox.class);identity=application.getBean(IdentityApi.class);usage=application.getBean(JdbcUsageBudget.class);manager=application.getBean(PlatformTransactionManager.class);port=application.getEnvironment().getRequiredProperty("local.server.port",Integer.class);
-        assertInstanceOf(JdbcFencedCreditsLedger.class,ledger);assertEquals("44",application.getEnvironment().getProperty("spring.flyway.target"));assertTrue(CreditSchemaReadiness.ready(db));
+        assertInstanceOf(JdbcFencedCreditsLedger.class,ledger);assertEquals("45",application.getEnvironment().getProperty("spring.flyway.target"));assertTrue(CreditSchemaReadiness.ready(db));
     }
     @AfterAll static void close(){if(application!=null)application.close();}
     @AfterEach void allFinancialProjectionsRemainEqual(){for(String owner:OWNERS){long book=number("SELECT COALESCE(SUM(amount),0) FROM credit_ledger WHERE owner_id=?",owner);assertEquals(book,number("SELECT COALESCE(SUM(balance),0) FROM credit_account WHERE owner_id=?",owner));assertEquals(book,number("SELECT COALESCE(SUM(CAST(original AS DECIMAL(65,0))-consumed-adjusted),0) FROM p0_credit_batch WHERE owner_id=?",owner));assertEquals(book,ledger.balance(owner));}}
@@ -214,8 +214,8 @@ class IntegratedPaymentApplicationMySqlTest {
     }
 
     @Test @Order(1) void actualCore40AndIntegration41FullApplicationUseOnlyTheProvenIsolatedDatabase() throws Exception {
-        assertEquals(database,db.queryForObject("SELECT DATABASE()",String.class));assertEquals(44,number("SELECT COUNT(*) FROM flyway_schema_history WHERE success=1 AND version IS NOT NULL"));assertEquals(3,number("SELECT protocol FROM p0_credit_writer_policy WHERE id=1"));assertEquals(75,ledger.balance(legacyOwner));assertEquals(25,number("SELECT amount FROM p0_legacy_debit_mapping WHERE reference='synthetic-legacy-debit'"));
-        assertEquals("V42__shared_download_entitlement.sql",db.queryForObject("SELECT script FROM flyway_schema_history WHERE version='42'",String.class));assertEquals(-500011050,number("SELECT checksum FROM flyway_schema_history WHERE version='42'"));assertEquals(789542731,number("SELECT checksum FROM flyway_schema_history WHERE version='44'"));assertEquals(0,number("SELECT COUNT(*) FROM shared_download_entitlement"));
+        assertEquals(database,db.queryForObject("SELECT DATABASE()",String.class));assertEquals(45,number("SELECT COUNT(*) FROM flyway_schema_history WHERE success=1 AND version IS NOT NULL"));assertEquals(3,number("SELECT protocol FROM p0_credit_writer_policy WHERE id=1"));assertEquals(75,ledger.balance(legacyOwner));assertEquals(25,number("SELECT amount FROM p0_legacy_debit_mapping WHERE reference='synthetic-legacy-debit'"));
+        assertEquals("V42__shared_download_entitlement.sql",db.queryForObject("SELECT script FROM flyway_schema_history WHERE version='42'",String.class));assertEquals(-500011050,number("SELECT checksum FROM flyway_schema_history WHERE version='42'"));assertEquals(-2125061473,number("SELECT checksum FROM flyway_schema_history WHERE version='45'"));assertEquals(0,number("SELECT COUNT(*) FROM shared_download_entitlement"));
         assertInstanceOf(JdbcFencedCreditsLedger.class,ledger);assertNotNull(application.getBean(PaymentInbox.class));assertNotNull(application.getBean(JdbcUsageBudget.class));assertTrue(application.getBeansOfType(PaymentInboxRunner.class).isEmpty());assertTrue(CreditSchemaReadiness.ready(db));
         var prices=application.getBean(CreditsPricing.class);assertEquals(5,prices.cost(CreditsPricing.Kind.MUSIC));assertEquals(1,prices.cost(CreditsPricing.Kind.LYRICS));assertEquals(1,prices.cost(CreditsPricing.Kind.REWRITE));assertEquals(5,prices.freePerDay(CreditsPricing.Kind.REWRITE));
         var health=request("/actuator/health","GET",null,null,null);assertEquals(200,health.statusCode());assertEquals("UP",JSON.readTree(health.body()).path("status").asString());
@@ -275,7 +275,7 @@ class IntegratedPaymentApplicationMySqlTest {
         assertEquals(0,number("SELECT COUNT(*) FROM p0_credit_refund_return WHERE order_id=?",p.order()));
         var before=application;application.close();start();assertNotSame(before,application);assertEquals(80,ledger.balance(p.owner().creatorId()));
         assertEquals("PAID",db.queryForObject("SELECT status FROM payment_order WHERE id=?",String.class,p.order()));
-        assertEquals(44,number("SELECT COUNT(*) FROM flyway_schema_history WHERE success=1 AND version IS NOT NULL"));
+        assertEquals(45,number("SELECT COUNT(*) FROM flyway_schema_history WHERE success=1 AND version IS NOT NULL"));
         REFUNDS.put(refund,proven);assertEquals("pending",BALANCES.get(credit).path("status").asString());
         due(event);drain();assertEquals(100,ledger.balance(p.owner().creatorId()));
         assertEquals("DONE",db.queryForObject("SELECT status FROM payment_webhook_inbox WHERE event_id=?",String.class,event));
@@ -414,12 +414,12 @@ class IntegratedPaymentApplicationMySqlTest {
         snapshot.put("journal_sum",db.queryForObject("SELECT COALESCE(SUM(amount),0) FROM credit_ledger",BigDecimal.class).toPlainString());snapshot.put("account_sum",db.queryForObject("SELECT COALESCE(SUM(balance),0) FROM credit_account",BigDecimal.class).toPlainString());snapshot.put("batch_projection",db.queryForObject("SELECT COALESCE(SUM(CAST(original AS DECIMAL(65,0))-consumed-adjusted),0) FROM p0_credit_batch",BigDecimal.class).toPlainString());return snapshot;
     }
     @Test @Order(19) void installedActive41RejectsAFalseWriterBeforeReadyAndLeavesEveryFinancialFactUnchanged(){
-        assertTrue(application.isActive());assertInstanceOf(JdbcFencedCreditsLedger.class,ledger);assertEquals(44,number("SELECT COUNT(*) FROM flyway_schema_history WHERE success=1 AND version IS NOT NULL"));var before=exactFinancialSnapshot();
+        assertTrue(application.isActive());assertInstanceOf(JdbcFencedCreditsLedger.class,ledger);assertEquals(45,number("SELECT COUNT(*) FROM flyway_schema_history WHERE success=1 AND version IS NOT NULL"));var before=exactFinancialSnapshot();
         var attempted=new LinkedHashMap<>(settings);attempted.put("qingfeng.credits.writer-fence.enabled",false);var environment=new StandardEnvironment();environment.getPropertySources().remove(StandardEnvironment.SYSTEM_ENVIRONMENT_PROPERTY_SOURCE_NAME);environment.getPropertySources().remove(StandardEnvironment.SYSTEM_PROPERTIES_PROPERTY_SOURCE_NAME);environment.getPropertySources().addFirst(new MapPropertySource("isolated-rejected-legacy-writer-only",attempted));
         var ready=new java.util.concurrent.atomic.AtomicBoolean();
         var rejected=new SpringApplicationBuilder(MusicApplication.class,OfflineGateways.class).environment(environment).profiles("mysql").web(WebApplicationType.SERVLET).logStartupInfo(false).listeners((org.springframework.context.ApplicationListener<org.springframework.boot.context.event.ApplicationReadyEvent>)event->ready.set(true)).initializers(context->context.getBeanFactory().registerSingleton("acceptanceOnlyTestConfigurationFilter",new AcceptanceOnlyTestFilter()));
-        RuntimeException failure=assertThrows(RuntimeException.class,()->{try(var unsafe=rejected.run()){fail("Installed V41 must never start a legacy credit writer");}});boolean rejectedByWriterGate=false;for(Throwable cause=failure;cause!=null;cause=cause.getCause())if(cause.getMessage()!=null&&(cause.getMessage().contains("Entitlement schema installed: a legacy credit writer cannot start")||cause.getMessage().contains("A legacy credit writer cannot automatically apply financial V44. Financial V44 requires separately approved migration, historical mapping and activation before application startup")))rejectedByWriterGate=true;
-        assertTrue(rejectedByWriterGate,"An unrelated configuration/provider exception is not evidence of a writer gate");assertFalse(ready.get());assertTrue(application.isActive());assertSame(ledger,application.getBean(CreditsLedger.class));assertEquals(before,exactFinancialSnapshot());assertEquals(44,number("SELECT COUNT(*) FROM flyway_schema_history WHERE success=1 AND version IS NOT NULL"));
+        RuntimeException failure=assertThrows(RuntimeException.class,()->{try(var unsafe=rejected.run()){fail("Installed V41 must never start a legacy credit writer");}});boolean rejectedByWriterGate=false;for(Throwable cause=failure;cause!=null;cause=cause.getCause())if(cause.getMessage()!=null&&(cause.getMessage().contains("Entitlement schema installed: a legacy credit writer cannot start")||cause.getMessage().contains("A legacy credit writer cannot automatically apply financial V45. Financial V45 requires separately approved migration, historical mapping and activation before application startup")))rejectedByWriterGate=true;
+        assertTrue(rejectedByWriterGate,"An unrelated configuration/provider exception is not evidence of a writer gate");assertFalse(ready.get());assertTrue(application.isActive());assertSame(ledger,application.getBean(CreditsLedger.class));assertEquals(before,exactFinancialSnapshot());assertEquals(45,number("SELECT COUNT(*) FROM flyway_schema_history WHERE success=1 AND version IS NOT NULL"));
         for(String owner:OWNERS)assertEquals(number("SELECT COALESCE(SUM(amount),0) FROM credit_ledger WHERE owner_id=?",owner),ledger.balance(owner));
     }
 
@@ -629,4 +629,69 @@ class IntegratedPaymentApplicationMySqlTest {
         }
     }
 
+    @Test @Order(40) void privateAcceptanceOffersUseRealInnoDbCreatorLockAndLateSettlementKeepsOneCreditSnapshots() throws Exception {
+        var customer=owner();String ownerId=customer.creatorId();var originalSettings=new LinkedHashMap<>(settings);
+        String nonce="ab12cd34",expiry=Instant.now().plusSeconds(3600).toString();
+        var legacyRows=new LinkedHashMap<String,Map<String,Object>>();
+        for(String status:List.of("PENDING","CREATION_UNKNOWN")){
+            String id=UUID.randomUUID().toString();
+            db.update("INSERT INTO payment_order(id,creator_id,package_id,amount,currency,credits,status,created_at,provider) VALUES(?,?,'starter-USD',9.90,'USD',100,?,TIMESTAMPADD(SECOND,-1,(SELECT activated_at FROM p0_credit_cutover_state WHERE id=1)),'PAYPAL_SANDBOX')",id,ownerId,status);
+            legacyRows.put(id,db.queryForMap("SELECT * FROM payment_order WHERE id=?",id));
+        }
+        try{
+            application.close();settings=new LinkedHashMap<>(originalSettings);
+            settings.put("qingfeng.payment.acceptance.enabled",true);settings.put("qingfeng.payment.acceptance.owner-id",ownerId);
+            settings.put("qingfeng.payment.acceptance.nonce",nonce);settings.put("qingfeng.payment.acceptance.expires-at",expiry);settings.put("qingfeng.payment.acceptance.wechat-cny","3.00");
+            settings.put("qingfeng.stripe.accepting-new-orders",false);settings.put("qingfeng.paypal.accepting-new-orders",false);
+            settings.put("qingfeng.payment.legacy-orders-read-only",true);
+            settings.put("qingfeng.stripe.canary-owner-ids",ownerId);settings.put("qingfeng.paypal.canary-owner-ids",ownerId);start();
+            assertTrue(Set.of(401,403).contains(request("/api/app/stripe/orders","POST","{\"packageId\":\"accept-"+nonce+"-card-USD\",\"paymentMethod\":\"card\"}",null,null).statusCode()));
+            assertEquals(403,business(customer,"/api/app/stripe/orders","POST","{\"packageId\":\"starter-USD\",\"paymentMethod\":\"card\"}").statusCode());
+            assertEquals(403,business(customer,"/api/app/paypal/orders","POST","{\"packageId\":\"starter-USD\"}").statusCode());
+            var principal=new com.qingfeng.music.server.security.CreatorPrincipal(ownerId);var paidOrders=new LinkedHashMap<String,Paid>();
+            int credited=0;
+            for(String channel:List.of("card","apple_pay","wechat_pay","paypal")){
+                String sku="accept-"+nonce+"-"+channel+(channel.equals("wechat_pay")?"-CNY":"-USD");
+                var successes=new ConcurrentLinkedQueue<Map<String,Object>>();var pool=Executors.newFixedThreadPool(4);var barrier=new CyclicBarrier(4);
+                try{
+                    var futures=new ArrayList<Future<?>>();for(int i=0;i<4;i++)futures.add(pool.submit(()->{
+                        barrier.await(10,TimeUnit.SECONDS);
+                        try{successes.add(channel.equals("paypal")?paypal.create(ownerId,sku):stripe.create(principal,sku,channel));}
+                        catch(org.springframework.web.server.ResponseStatusException conflict){assertEquals(409,conflict.getStatusCode().value());}
+                        return null;
+                    }));for(var future:futures)future.get(30,TimeUnit.SECONDS);
+                }finally{pool.shutdownNow();assertTrue(pool.awaitTermination(10,TimeUnit.SECONDS));}
+                assertEquals(1,successes.size(),"One permanent creator+SKU+provider reservation, all states counted");
+                assertEquals(1,number("SELECT COUNT(*) FROM payment_order WHERE creator_id=? AND package_id=?",ownerId,sku));
+                String order=(String)successes.element().get("orderId");var row=db.queryForMap("SELECT * FROM payment_order WHERE id=?",order);
+                assertEquals(1,((Number)row.get("credits")).longValue());assertEquals(new BigDecimal(channel.equals("wechat_pay")?"3.00":channel.equals("paypal")?"0.01":"0.50"),row.get("amount"));
+                if(channel.equals("paypal")){paidOrders.put(channel,new Paid(customer,order,(String)row.get("provider_link_id"),""));continue;}
+                String session=(String)row.get("provider_link_id");
+                var snapshot=new LinkedHashMap<String,Object>();snapshot.put("id",session);snapshot.put("url","https://checkout.stripe.com/c/pay/"+session+"#offline-acceptance");snapshot.put("status","complete");snapshot.put("payment_status","paid");snapshot.put("payment_intent","pi_"+session.substring(8));snapshot.put("metadata",Map.of("order_id",order));snapshot.put("client_reference_id",order);snapshot.put("mode","payment");snapshot.put("amount_total",((BigDecimal)row.get("amount")).movePointRight(2).longValueExact());snapshot.put("currency",((String)row.get("currency")).toLowerCase(Locale.ROOT));snapshot.put("livemode",false);snapshot.put("payment_method_types",List.of(channel.equals("wechat_pay")?"wechat_pay":"card"));SESSIONS.put(session,JSON.valueToTree(snapshot));
+                var payment=new Paid(customer,order,session,SESSIONS.get(session).path("payment_intent").asString());paidOrders.put(channel,payment);
+                String event="evt_"+unique();accepted("checkout.session.completed",session,event);accepted("checkout.session.completed",session,event);drain();
+                assertEquals(++credited,ledger.balance(ownerId));assertEquals(1,number("SELECT COUNT(*) FROM credit_ledger WHERE reference_id=? AND entry_type='CREDIT'","payment:"+order));
+                assertThrows(org.springframework.web.server.ResponseStatusException.class,()->stripe.create(principal,sku,channel));
+            }
+            // Turn the whole exception off and remove its principal before the last actual supplier fact arrives.
+            application.close();settings.put("qingfeng.payment.acceptance.enabled",false);settings.put("qingfeng.payment.acceptance.owner-id","");settings.put("qingfeng.payment.acceptance.nonce","");
+            settings.put("qingfeng.payment.acceptance.expires-at","");settings.put("qingfeng.stripe.canary-owner-ids","");settings.put("qingfeng.paypal.canary-owner-ids","");start();
+            var p=paidOrders.get("paypal");String capture="C"+unique().substring(0,20);
+            PAYPAL_ORDERS.put(p.session(),new PayPalCheckoutGateway.Snapshot(p.session(),p.order(),"COMPLETED",PAYPAL_MERCHANT,capture,"COMPLETED",new BigDecimal("0.01"),"USD"));
+            String event="WH-"+unique(),body=JSON.writeValueAsString(Map.of("id",event,"event_type","PAYMENT.CAPTURE.COMPLETED","resource",Map.of("id",capture,"supplementary_data",Map.of("related_ids",Map.of("order_id",p.session())))));
+            assertEquals(200,request("/api/public/paypal/webhook","POST",body,null,null).statusCode());assertEquals(200,request("/api/public/paypal/webhook","POST",body,null,null).statusCode());drain();
+            assertEquals(4,ledger.balance(ownerId));assertEquals("PAID",db.queryForObject("SELECT status FROM payment_order WHERE id=?",String.class,p.order()));
+            assertEquals(1,number("SELECT COUNT(*) FROM credit_ledger WHERE reference_id=? AND entry_type='CREDIT'","payment:"+p.order()));
+            refund(paidOrders.get("card"),50);assertEquals(3,ledger.balance(ownerId));
+            var wechat=paidOrders.get("wechat_pay");String refund="re_"+unique();
+            REFUNDS.put(refund,JSON.valueToTree(Map.of("id",refund,"object","refund","status","succeeded","livemode",false,"payment_intent",wechat.intent(),"currency","cny","amount",300)));
+            accepted("refund.updated",refund,"evt_"+unique());accepted("refund.updated",refund,"evt_"+unique());drain();assertEquals(2,ledger.balance(ownerId));
+            assertEquals(2,number("SELECT SUM(adjusted) FROM p0_credit_batch WHERE owner_id=? AND source_type='PAYMENT'",ownerId));
+            assertEquals(4,number("SELECT COUNT(*) FROM payment_order WHERE creator_id=? AND package_id LIKE ?",ownerId,"accept-"+nonce+"-%"));
+            for(var legacy:legacyRows.entrySet()){
+                assertEquals(legacy.getValue(),db.queryForMap("SELECT * FROM payment_order WHERE id=?",legacy.getKey()));
+                assertEquals(0,number("SELECT COUNT(*) FROM credit_ledger WHERE reference_id=?","payment:"+legacy.getKey()));
+            }
+        }finally{if(application!=null)application.close();settings=originalSettings;start();}
+    }
 }

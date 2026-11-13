@@ -18,18 +18,24 @@ const route = useRoute(), player = usePlayer()
 const screen = window.matchMedia('(max-width: 1200px)')
 const mobile = ref(screen.matches), menuOpen = ref(false)
 const menuButton = ref<HTMLButtonElement>(), menu = ref<HTMLElement>()
-const publicListening = computed(() => route.name === 'gift' || route.name === 'artist-home')
+const publicListening = computed(() => route.name === 'gift' || route.name === 'artist-home' || route.name === 'discover')
 const isHome = computed(() => route.name === 'home')
 const isAgent = computed(() => route.name === 'agent')
+const isDiscover = computed(() => route.name === 'discover')
+const isPhotoStudio = computed(() => route.name === 'photo-studio')
 const authenticated = computed(() => accountState.value.authenticated || logtoState.value.authenticated)
 const navigation = [
   { to: '/', label: '首页', icon: 'home', agent: false },
   { to: '/create', label: '开始创作', icon: 'home', agent: false },
   { to: '/agent', label: 'Agent 创作', icon: 'agent', agent: true },
   { to: '/#inspiration', label: '推荐', icon: 'music', agent: false },
+  { to: '/discover', label: '发现', icon: 'music', agent: false },
   { to: '/#how', label: '如何制作', icon: 'guide', agent: false },
 ]
-const isActive = (to: string) => to.startsWith('/#') ? route.name === 'home' && route.hash === to.slice(1) : route.path === to && !route.hash
+const isActive = (to: string) => {
+  if (to.startsWith('/#')) return route.name === 'home' && route.hash === to.slice(1)
+  return (to === '/create' && isPhotoStudio.value) || (route.path === to && !route.hash)
+}
 function resize() { mobile.value = screen.matches; if (!mobile.value) menuOpen.value = false }
 async function closeMenu() { menuOpen.value = false; await nextTick(); menuButton.value?.focus() }
 function onKey(event: KeyboardEvent) {
@@ -74,7 +80,7 @@ onBeforeUnmount(() => {
 <template>
   <div class="music-shell consumer-shell" :class="{'gift-shell':publicListening, 'home-light-shell':isHome, 'agent-shell':isAgent}">
     <a class="skip-link" href="#main-content">{{ t('跳到主要内容') }}</a>
-    <header class="consumer-header">
+    <header v-if="!isDiscover" class="consumer-header">
       <div class="consumer-header-inner">
         <RouterLink class="consumer-brand" to="/" :aria-label="t('Cheerful Music 青风音乐首页')"><BrandLogo :compact="mobile || publicListening" standalone/></RouterLink>
         <nav v-if="!publicListening" class="consumer-navigation" :aria-label="t('主导航')">
@@ -87,6 +93,7 @@ onBeforeUnmount(() => {
           </template>
         </nav>
         <div class="consumer-header-actions">
+          <RouterLink v-if="route.name === 'artist-home'" class="consumer-discover-link" to="/discover">{{ t('发现') }}</RouterLink>
           <LanguageSwitcher/>
           <RouterLink v-if="!publicListening" class="consumer-my-music" :class="{'is-active':route.path.startsWith('/works')}" to="/works"><NavIcon name="music"/><span>{{ t('我的音乐') }}</span></RouterLink>
           <RouterLink v-if="!publicListening" class="consumer-recharge" to="/recharge">{{ locale === 'en' ? 'Credits' : '充值' }}</RouterLink>
@@ -111,12 +118,17 @@ onBeforeUnmount(() => {
       </section>
     </template>
     <div class="music-shell-body">
-      <main id="main-content" :class="{workspace:route.name!=='home'}" tabindex="-1"><slot/></main>
+      <main id="main-content" :class="{workspace:!isHome && !isDiscover, 'photo-workspace':isPhotoStudio}" tabindex="-1"><slot/></main>
       <SiteFooter/>
     </div>
     <GlobalPlayer/>
   </div>
 </template>
+
+<style scoped>
+.consumer-discover-link { color: var(--accent-text); font-size: .85rem; white-space: nowrap; }
+.consumer-shell .workspace.photo-workspace { max-width:none; padding:0; }
+</style>
 
 <style scoped>
 .consumer-recharge { color:#ee5741; font-size:13px; font-weight:700; text-decoration:none; white-space:nowrap; }

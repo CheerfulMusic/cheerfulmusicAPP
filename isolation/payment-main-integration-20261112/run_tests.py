@@ -27,10 +27,29 @@ parser.add_argument('--carry-forward-revision', default='')
 args = parser.parse_args()
 WORK=Path(args.workspace).resolve()
 assert WORK!=ROOT and (WORK/'.git').exists(),'Run in an explicit isolated worktree'
-assert args.compatibility_port in (57326,57336)
+assert args.compatibility_port in (57326,57336,57346)
 stamp = datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')
 folder = OUT / ('maven-' + args.mode + '-' + stamp)
 folder.mkdir(parents=True, exist_ok=False)
+if args.compatibility_port == 57346:
+    # This new cohort has a distinct instance identity and data directory; a
+    # loopback URL or a test schema name alone never authorizes fixture writes.
+    import pymysql
+    with pymysql.connect(host='127.0.0.1',port=57346,user='root',password='',
+                         connect_timeout=2,read_timeout=5) as isolated,isolated.cursor() as check:
+        check.execute('SELECT @@server_uuid,@@datadir,@@port,@@bind_address,VERSION()')
+        identity=check.fetchone()
+        assert identity[0]=='47427132-df4d-11f1-89e2-84a938421519'
+        assert identity[1].replace('\\','/').lower()=='r:/v45-compatibility-r1/'
+        assert identity[2:]==(57346,'127.0.0.1','8.0.46')
+        check.execute('SHOW DATABASES');visible={row[0] for row in check.fetchall()}
+        assert visible<={'information_schema','mysql','performance_schema','sys',
+                         'qf_execution_concurrency_test','qf_quick_creation_test'}
+        assert 'qingfeng_music' not in visible
+        check.execute('SELECT COUNT(*) FROM information_schema.PROCESSLIST WHERE ID<>CONNECTION_ID() AND USER=\'root\'')
+        assert check.fetchone()==(0,),'Exclusive compatibility instance is in use; never clear a shared test schema'
+    (folder/'compatibility-identity.json').write_text(json.dumps({'status':'PASS','identity':identity,
+        'visible_schemas':sorted(visible),'production_schema_visible':False},indent=2),encoding='utf-8')
 def production_inputs():
     inputs={}
     for module in ('qf-common','qf-business','qf-infrastructure','qf-server'):
@@ -56,7 +75,7 @@ env = {k:v for k,v in os.environ.items() if not any(x in k.upper() for x in bloc
 env.update({'QF_EXECUTION_MYSQL_TEST_PORT':str(args.compatibility_port),
             'QF_QUICK_MYSQL_TEST_PORT':str(args.compatibility_port),
             'QF_DOWNLOAD_MYSQL_TEST_PORT':str(args.compatibility_port),
-            'SPRING_FLYWAY_TARGET':'43'})
+            'SPRING_FLYWAY_TARGET':'44'})
 for label, prefix, revision in (
     ('migration','P0_INTEGRATION_MIGRATION_MYSQL_',args.migration_revision),
     ('credits','P0_INTEGRATED_CREDITS_MYSQL_',args.credits_revision),
@@ -100,7 +119,7 @@ else:
     cmd += ['verify']
 (folder/'invocation.json').write_text(json.dumps({'command':cmd,'cwd':str(WORK/'Qingfeng_AI_Music'),
     'production_credentials_inherited':False,'mysql_ports':[23316,args.compatibility_port],
-    'legacy_mysql_target':'43','new_contract_target':'44 explicit in tests'},indent=2),encoding='utf-8')
+    'legacy_mysql_target':'44','new_contract_target':'45 explicit in tests'},indent=2),encoding='utf-8')
 print(json.dumps({'log':str(folder/'maven.log'),'mode':args.mode}),flush=True)
 with (folder/'maven.log').open('w',encoding='utf-8') as log:
     result=subprocess.run(cmd,cwd=WORK/'Qingfeng_AI_Music',env=env,stdout=log,stderr=subprocess.STDOUT)

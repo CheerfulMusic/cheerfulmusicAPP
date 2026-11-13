@@ -25,7 +25,7 @@ import type {QuickCreation} from '../../studio/api/quick-creation'
 import AudioPanel from '../components/AudioPanel.vue'
 import SharePanel from '../components/SharePanel.vue'
 import PublishSongDialog from '../../artist/components/PublishSongDialog.vue'
-import type { SongPublication } from '../../artist/api/artist'
+import { getSongPublication, type SongPublication } from '../../artist/api/artist'
 import { accountState, refreshAccountState } from '../../../shared/identity/account-state'
 import { logtoState, refreshLogtoState } from '../../../shared/identity/logto-state'
 import { showLoginDialog } from '../../../shared/identity/login-dialog'
@@ -91,14 +91,30 @@ watch([()=>asset.value?.id,()=>work.value?.version],()=>{regenerationRevision.va
 watch(generated,value=>{if(value)lyricDirty.value=false})
 function sectionAdopted(){giftStage.value=false;shared.value=false;mediaRefresh.value++;void refreshTasks()}
 const artwork=computed(()=>coverUrl(work.value?.id||'',covers.value?.currentCoverId))
+const publicationCoverReady = ref(false)
 function updateCover(value:CoverState){covers.value=value;if(player.current?.audio.includes(`/app/works/${work.value?.id}/audio/`))player.updateCover(player.current.id,artwork.value)}
 function openCover(){coverOpen.value=true;void nextTick(()=>document.getElementById('cover-editor')?.scrollIntoView({block:'start',behavior:'smooth'}))}
 watch(asset,value=>{if(value&&listenAfterLoad.value){listenAfterLoad.value=false;void viewGeneratedMusic()}})
 const currentStep=computed(()=>shared.value?4:giftStage.value?3:asset.value||pendingTask.value||quickJourney.value?2:1)
 const songTitle=computed(()=>tasks.value.find(task=>task.assetId===asset.value?.id)?.title||work.value?.title||revision.value?.title||t('我的音乐'))
 const publication = ref<SongPublication>()
+const publicationState = ref<Awaited<ReturnType<typeof getSongPublication>>>()
+const publicationDiscover = ref(false)
+let publicationStateRequest = 0
+const resumePublication = computed(() => route.query.show === 'publication' || route.query.show === 'discover')
+const publicationMatches = computed(() => {
+  const song = publicationState.value?.song
+  return song && song.assetId === asset.value?.id && song.title === songTitle.value.trim()
+    && song.coverId === (covers.value?.currentCoverId || null)
+})
+const publicationLabel = computed(() => {
+  const state = publicationState.value
+  if (!state?.published || !state.song) return '公开到主页'
+  if (!publicationMatches.value) return '更新主页版本'
+  return state.song.onDiscover ? '已发布到发现' : '已在主页展示'
+})
 let checkingPublicationLogin = false
-async function openSongPublication() {
+async function openSongPublication(discover = false) {
   const currentWork = work.value?.id
   const currentAsset = asset.value?.id
   if (!currentWork || !currentAsset || checkingPublicationLogin) return
@@ -112,8 +128,31 @@ async function openSongPublication() {
       return
     }
   }
+  publicationDiscover.value = discover
   publication.value = { workId: currentWork, assetId: currentAsset, coverId: covers.value?.currentCoverId || null, title: songTitle.value }
 }
+watch([() => work.value?.id, () => !!asset.value, () => accountState.value.authenticated,
+  () => logtoState.value.authenticated], async ([id, ready, google, logto], _, onCleanup) => {
+  publicationState.value = undefined
+  const request = ++publicationStateRequest
+  if (!id || !ready || (!google && !logto)) return
+  let active = true
+  onCleanup(() => { active = false })
+  try {
+    const state = await getSongPublication(id)
+    if (active && request === publicationStateRequest) publicationState.value = state
+  } catch { /* The dialog can retry when the author opens it. */ }
+}, { immediate: true })
+function updatePublicationState(state: Awaited<ReturnType<typeof getSongPublication>>) {
+  ++publicationStateRequest
+  publicationState.value = state
+}
+watch([resumePublication, () => asset.value?.id, publicationCoverReady, tasksReady], ([resume, ready]) => {
+  if (!resume || !ready || !tasksReady.value || !publicationCoverReady.value) return
+  const { show, ...query } = route.query
+  if (!publication.value) void openSongPublication(show === 'discover')
+  void router.replace({ query, hash: route.hash })
+})
 const playingSettings=computed(()=>songSettings(asset.value,tasks.value))
 const displayedStyle=computed(()=>!asset.value?t(work.value?.style||''):asset.value.origin==='IMPORTED'?t('导入音频'):t(playingSettings.value?.style||'风格记录暂不可用'))
 watch([()=>asset.value?.id,()=>covers.value?.currentCoverId],()=>{shared.value=false})
@@ -226,6 +265,7 @@ async function closeChecking(task:GenerationTask){
   finally{submitting.value=false}
 }
 async function load() {
+ publicationCoverReady.value=false
  quickBusy.value=false;quickRevision.value='';mediaState.value='loading';tasksReady.value=false;taskReadIssue.value=false;quickChecked.value=false;quickReadIssue.value=false;modelReady.value=false;draftOpened.value=false;listenAfterLoad.value=false;quickFlow.value=null;dismissedDirection.value=false;lyricBase.value=null;lyricsReady.value=false
  const turn=++sequence;polling=false;premiumOpen.value=false;giftStage.value=false;shared.value=false;coverOpen.value=false;covers.value=undefined;publication.value=undefined
  generationOpen.value=false;trackedTaskId.value='';submissionIssue.value='';submissionUnknown.value=false;progressIssue.value=false;submitting.value=false;loading.value=true;error.value='';revision.value=null;asset.value=null;tasks.value=[];giftRevision.value=null;work.value=undefined;lyricDirty.value=false;requestKey.value='';pendingIntent.value=undefined;generationNotice.value='';inputIssue.value=false;creditIssue.value=false;credits.value=undefined
@@ -236,6 +276,7 @@ async function load() {
   void refreshTasks();void updateAllowance()
   void getSystemInfo().then(system=>{if(turn===sequence)modelReady.value=system.capabilities.musicGeneration}).catch(()=>{})
   void loadCovers(id).then(value=>{if(turn===sequence)updateCover(value)}).catch(()=>{/* 使用默认封面，保留歌曲试听。 */})
+    .finally(()=>{if(turn===sequence)publicationCoverReady.value=true})
  }catch(e){if(turn===sequence)error.value=e instanceof ApiError&&[401,404].includes(e.status)?'这是私人作品编辑页。如果你是收到分享的朋友，请向作者索取“分享歌曲”中复制的收听链接。':e instanceof Error?e.message:'作品读取失败'}finally{if(turn===sequence)loading.value=false}
 }
 watch(() => route.params.id, load, { immediate: true })
@@ -363,7 +404,7 @@ async function backToStory(){
     <p v-if="pendingTask&&!generationOpen&&!quickBusy&&(!quickJourney||asset)" class="notice" role="status">{{ t(generationProblem(pendingTask.errorCode)||'音乐正在后台制作，可以继续浏览，稍后回来查看。') }} <button class="text-button" @click="showProgress">{{ t('查看生成进度') }}</button></p>
     <section v-if="latestFailure&&!pendingTask" class="notice" role="status"><p>{{ t(generationProblem(latestFailure.errorCode)||'音乐服务未完成这次创作，歌词和设置已保留。') }}</p><button v-if="latestFailure.errorCode==='AUDIO_ARCHIVE_FAILED'" class="button secondary" :disabled="submitting" @click="retryArchive(latestFailure)">{{ t('仅重试保存音频') }}</button></section>
     <GenerationRecovery v-if="pendingTask?.status==='SUBMISSION_UNKNOWN'" :task="pendingTask" :busy="submitting" @refresh="refreshTasks" @close="closeChecking(pendingTask)"/>
-    <SongResult v-if="asset" :work="work" :asset="asset" :title="songTitle" :cover="artwork" :pending="!!pendingTask" :checking="submissionUnknown" :busy="submitting||quickBusy||!tasksReady||taskReadIssue||!quickChecked||quickReadIssue||(!pendingTask&&!submissionUnknown&&(!modelReady||!generationLyricsReady))" :lyrics="giftRevision?.lyrics||''" :language="giftRevision?.language" :section-open="sectionOpen" @gift="sendGift" @publish="openSongPublication" @regenerate="openMusicAdjustment" @cover="openCover" @edit="openSection"/>
+    <SongResult v-if="asset" :work="work" :asset="asset" :title="songTitle" :cover="artwork" :pending="!!pendingTask" :checking="submissionUnknown" :busy="submitting||quickBusy||!tasksReady||taskReadIssue||!quickChecked||quickReadIssue||(!pendingTask&&!submissionUnknown&&(!modelReady||!generationLyricsReady))" :lyrics="giftRevision?.lyrics||''" :language="giftRevision?.language" :section-open="sectionOpen" :publication-label="publicationLabel" :can-publish-to-discover="!!(publicationMatches && publicationState?.published && publicationState.publicId && !publicationState.song?.onDiscover)" @gift="sendGift" @publish="openSongPublication()" @discover="openSongPublication(true)" @regenerate="openMusicAdjustment" @cover="openCover" @edit="openSection"/>
     <MusicSettingsSnapshot v-if="asset&&tasks.find(task=>task.assetId===asset?.id)" :work-id="work.id" :task-id="tasks.find(task=>task.assetId===asset?.id)!.id"/>
     <SectionEditor v-if="asset" ref="sectionEditor" :key="work.id" :work="work" :asset="asset" :title="songTitle" :cover="artwork" :tasks="tasks" :open="sectionOpen" :hint="sectionHint" @close="sectionOpen=false" @refresh="refreshTasks" @adopted="sectionAdopted"/>
     <MusicSettingsPanel v-if="remake" :work="work" :remake="remake" :busy="submitting" :submit-error="remakeError" @apply="generate(false,$event)" @close="remake=undefined"/>
@@ -411,7 +452,7 @@ async function backToStory(){
     </div>
   </template>
   <PremiumStudioDialog v-if="work&&asset&&premiumOpen" :open="premiumOpen" :work-id="work.id" :asset="asset" :title="songTitle" :cover="artwork" @close="premiumOpen=false"/>
-  <PublishSongDialog v-if="publication" :source="publication" :cover="coverUrl(publication.workId, publication.coverId)" @close="publication=undefined"/>
+  <PublishSongDialog v-if="publication" :source="publication" :discover="publicationDiscover" :cover="coverUrl(publication.workId, publication.coverId)" @change="updatePublicationState" @close="publication=undefined"/>
   <MusicGenerationDialog :open="generationOpen" :status="generationStatus" :title="trackedTask?.title||work?.title||''" :error="submissionIssue" :error-code="trackedTask?.errorCode" :sync-issue="progressIssue||trackedTask?.errorCode==='QUERY_RETRY'" :created-at="trackedTask?.createdAt" :submit-after="trackedTask?.nextAttemptAt" :cancelling="cancelling||submitting" :cover="artwork" @cancel="cancelGeneration" @archive="trackedTask&&retryArchive(trackedTask)" @close="generationOpen=false" @view="viewGeneratedMusic"/>
 </template>
 <style scoped>

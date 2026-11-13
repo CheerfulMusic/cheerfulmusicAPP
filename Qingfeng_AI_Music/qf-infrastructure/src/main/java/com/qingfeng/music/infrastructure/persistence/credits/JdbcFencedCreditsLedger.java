@@ -123,6 +123,77 @@ public final class JdbcFencedCreditsLedger implements CreditsLedger {
         if(changed==1)db.update("INSERT INTO p0_credit_financial_audit(order_id,fact,delta,created_at) VALUES(?,?,0,CURRENT_TIMESTAMP)",id,"CAPTURE_REVIEW");
         refreshHold("payment:"+id);
     });}
+    /** Called only after complete authenticated PayPal reporting proof. The caller must snapshot risk
+     * event identities BEFORE its network reads, then auditably resolve those exact cases in this same
+     * owner transaction. Neither an administrator's RELEASE alone nor a stale provider proof suffices. */
+    public void releasePaymentReview(String provider,String merchant,String environment,String owner,String id,String capture,
+            String currency,long expectedRefunds,long expectedLosses,Map<String,String> expectedRiskEvents,String evidenceSha256){
+        if(!"PAYPAL".equals(provider)||expectedRefunds<0||expectedLosses<0||expectedRiskEvents==null
+                ||expectedRiskEvents.size()>100||evidenceSha256==null||!evidenceSha256.matches("[a-f0-9]{64}"))
+            throw new IllegalArgumentException("complete scoped reporting proof required");
+        var expected=Map.copyOf(expectedRiskEvents);
+        write(owner,()->{
+            var o=order(owner,id,capture,currency);merchant(id,provider,merchant,environment);
+            var cases=db.queryForList("SELECT id,last_event_id,status,decision FROM payment_risk_case WHERE owner_id=? AND order_id=? AND provider=? ORDER BY id FOR UPDATE",owner,id,provider+"_"+environment.toUpperCase(Locale.ROOT));
+            var actual=new TreeMap<String,String>();
+            for(var row:cases){
+                actual.put((String)row.get("id"),(String)row.get("last_event_id"));
+                if(!"CLOSED".equals(row.get("status"))||!"RELEASE".equals(row.get("decision")))
+                    throw new IllegalStateException("PAYMENT_REVIEW_CASE_NOT_RESOLVED");
+            }
+            if(!actual.equals(expected))throw new IllegalStateException("PAYMENT_REVIEW_EVENT_CHANGED");
+            for(var dispute:currentDisputes(id))
+                if(Set.of("OPEN","UNDER_REVIEW","UNKNOWN").contains(dispute.get("state"))
+                    ||"LOST".equals(dispute.get("state"))&&dispute.get("loss_minor")==null)
+                    throw new IllegalStateException("PAYMENT_REVIEW_DISPUTE_UNRESOLVED");
+            long refunds=effectiveRefunds(id),losses=currentLosses(id),paid=minor(o.get("amount"));
+            if(refunds!=expectedRefunds||losses!=expectedLosses||refunds>paid||losses>paid)
+                throw new IllegalStateException("PAYMENT_REVIEW_FINANCIAL_FACT_CHANGED");
+            String batch="payment:"+id;
+            String state=db.queryForObject("SELECT status FROM p0_credit_batch WHERE reference=? AND owner_id=? FOR UPDATE",String.class,batch,owner);
+            if(!Set.of("ACTIVE","REVIEW").contains(state))throw new IllegalStateException("PAYMENT_REVIEW_BATCH_NOT_RELEASABLE");
+            if("REVIEW".equals(state)){
+                if(expected.isEmpty())throw new IllegalStateException("PAYMENT_REVIEW_CASE_REQUIRED");
+                db.update("UPDATE p0_credit_batch SET status='ACTIVE' WHERE reference=? AND owner_id=? AND status='REVIEW'",batch,owner);
+                db.update("INSERT INTO p0_credit_financial_audit(order_id,fact,delta,created_at) VALUES(?,?,0,CURRENT_TIMESTAMP)",id,"REVIEW_RELEASE:"+evidenceSha256);
+            }
+            refreshHold(batch);
+        });
+    }
+    /** Reporting may arrive after the same authoritative dispute version was recorded
+     * as LOST/null. Only an already persisted PAYPAL native principal proof may fill
+     * that missing amount; the generic dispute/version contract remains unchanged. */
+    public void settlePayPalReportedLoss(String merchant,String environment,String dispute,String owner,String id,String capture,
+            long disputed,String currency,long version,long loss,String evidenceSha256){
+        if(loss<=0||version<=0||evidenceSha256==null||!evidenceSha256.matches("[a-f0-9]{64}"))throw new IllegalArgumentException("verified PayPal principal required");
+        write(owner,()->{
+            var order=order(owner,id,capture,currency);merchant(id,"PAYPAL",merchant,environment);
+            var proofs=db.queryForList("SELECT * FROM p0_stripe_dispute_proof WHERE provider='PAYPAL' AND merchant=? AND environment=? AND dispute_id=? FOR UPDATE",merchant,environment,dispute);
+            if(proofs.size()!=1)throw new IllegalStateException("PAYPAL_NATIVE_LOSS_PROOF_REQUIRED");
+            var proof=proofs.get(0);
+            if(!owner.equals(proof.get("owner_id"))||!id.equals(proof.get("order_id"))||!capture.equals(proof.get("capture_id"))
+                    ||!capture.equals(proof.get("charge_balance_id"))||!currency.equals(proof.get("settlement_currency"))
+                    ||loss!=((Number)proof.get("loss_minor")).longValue()||minor(order.get("amount"))!=((Number)proof.get("settlement_principal_minor")).longValue()
+                    ||!evidenceSha256.equals(proof.get("evidence_sha256"))||!(proof.get("withdrawal_id") instanceof String nativeId)||!nativeId.matches("[A-Za-z0-9]{1,32}"))
+                throw new IllegalStateException("PAYPAL_NATIVE_LOSS_PROOF_SCOPE_CONFLICT");
+            if(effectiveRefunds(id)!=0||currentDisputes(id).stream().anyMatch(row->!dispute.equals(row.get("external_id"))))
+                throw new IllegalStateException("PAYPAL_OVERLAP_REQUIRES_VERIFIED_RESOLUTION");
+            var rows=db.queryForList("SELECT * FROM p0_credit_dispute WHERE provider='PAYPAL' AND merchant=? AND environment=? AND external_id=? FOR UPDATE",merchant,environment,dispute);
+            if(!rows.isEmpty()){
+                var row=rows.get(0);long priorVersion=((Number)row.get("version")).longValue();
+                if(version<priorVersion)throw new IllegalStateException("PAYPAL_NATIVE_LOSS_PROOF_STALE_VERSION");
+                if(version==priorVersion&&"LOST".equals(row.get("state"))&&row.get("loss_minor")==null){
+                    if(!owner.equals(row.get("owner_id"))||!id.equals(row.get("order_id"))||!capture.equals(row.get("capture_id"))
+                            ||!currency.equals(row.get("currency"))||disputed!=((Number)row.get("amount_minor")).longValue()
+                            ||loss>disputed||disputed>minor(order.get("amount")))throw new IllegalStateException("global dispute identity conflict");
+                    nativeIdentity.requireResource("PAYPAL",merchant,environment,"DISPUTE_BINDING",dispute,owner,id,capture,currency);
+                    db.update("UPDATE p0_credit_dispute SET loss_minor=? WHERE provider='PAYPAL' AND merchant=? AND environment=? AND external_id=? AND version=? AND state='LOST' AND loss_minor IS NULL",loss,merchant,environment,dispute,version);
+                    adjust(owner,id,target(((Number)order.get("credits")).longValue(),loss,minor(order.get("amount"))),dispute);return;
+                }
+            }
+            paymentDispute("PAYPAL",merchant,environment,dispute,owner,id,capture,disputed,currency,version,"LOST",loss);
+        });
+    }
     private static long minor(Object amount){return new BigDecimal(amount.toString()).movePointRight(2).longValueExact();}
     private static long target(long credits,long lost,long paid){return BigInteger.valueOf(credits).multiply(BigInteger.valueOf(lost)).add(BigInteger.valueOf(paid-1)).divide(BigInteger.valueOf(paid)).longValueExact();}
     private void adjust(String owner,String id,long newTarget,String fact){

@@ -270,4 +270,134 @@ class StripeWalletPaymentServiceTest {
         verify(ledger).paymentRefund("STRIPE",MERCHANT,"sandbox",refund,owner.id(),order,intent,1376L,"CNY");
         verify(ledger,never()).credit(anyString(),anyLong(),anyString());assertEquals(new BigDecimal("68.80"),stored(order).get("amount"));
     }
+
+    private StripePaymentService acceptanceService(CreatorPrincipal chosen,String expiry){
+        var env=walletEnvironment("GB",true).withProperty("qingfeng.payment.acceptance.enabled","true")
+            .withProperty("qingfeng.payment.acceptance.owner-id",chosen.id()).withProperty("qingfeng.payment.acceptance.nonce","abcdef01")
+            .withProperty("qingfeng.payment.acceptance.expires-at",expiry);
+        var result=service(env);ReflectionTestUtils.setField(result,"acceptingNewOrders",false);ReflectionTestUtils.setField(result,"canaryOwnerIds",chosen.id());return result;
+    }
+    private static String acceptanceId(String channel){return "accept-abcdef01-"+channel+("wechat_pay".equals(channel)?"-CNY":"-USD");}
+
+    @Test void privateAcceptanceIsAbsentForPublicStrangerAndExpiredOwnerAndCannotBuyOrdinarySku(){
+        var chosen=owner();service=acceptanceService(chosen,"2100-01-01T00:00:00Z");
+        assertFalse(service.catalog().toString().contains("accept-"));assertFalse(service.catalog(owner()).toString().contains("accept-"));
+        assertTrue(service.catalog(chosen).toString().contains(acceptanceId("card")));
+        assertFalse(service.catalog(chosen).toString().contains("starter-USD"));
+        assertThrows(ResponseStatusException.class,()->service.create(chosen,"starter-USD","card"));
+        assertThrows(ResponseStatusException.class,()->service.create(null,acceptanceId("card"),"card"));
+        var expired=acceptanceService(chosen,"2000-01-01T00:00:00Z");assertFalse(expired.catalog(chosen).toString().contains("accept-"));
+        assertThrows(ResponseStatusException.class,()->expired.create(chosen,acceptanceId("card"),"card"));
+        assertThrows(ResponseStatusException.class,()->expired.create(chosen,"starter-USD","card"));
+        assertEquals(0,number("SELECT COUNT(*) FROM payment_order"));assertTrue(creates.isEmpty());
+    }
+    @Test void everyPrivateChannelHasAnIndependentImmutableOneCreditSnapshotAndFailedNeverReleasesItsSlot(){
+        var chosen=owner();service=acceptanceService(chosen,"2100-01-01T00:00:00Z");
+        for(String channel:List.of("card","apple_pay","wechat_pay")){
+            String id=order(service.create(chosen,acceptanceId(channel),channel));var saved=stored(id);
+            assertEquals(1,((Number)saved.get("credits")).longValue());assertEquals(new BigDecimal("wechat_pay".equals(channel)?"3.00":"0.50"),saved.get("amount"));
+            db.update("UPDATE payment_order SET status='FAILED' WHERE id=?",id);
+            assertThrows(ResponseStatusException.class,()->service.create(chosen,acceptanceId(channel),channel));
+            assertFalse(service.catalog(chosen).toString().contains(acceptanceId(channel)));
+        }
+        assertEquals(3,number("SELECT COUNT(*) FROM payment_order"));assertEquals(3,creates.size());verifyNoInteractions(ledger);
+    }
+    @Test void concurrentPrivateCreatesReserveOneOrderUnderTheExistingCreatorRowLock()throws Exception{
+        var chosen=owner();service=acceptanceService(chosen,"2100-01-01T00:00:00Z");
+        var start=new java.util.concurrent.CountDownLatch(1);var pool=java.util.concurrent.Executors.newFixedThreadPool(2);
+        java.util.concurrent.Callable<Boolean> task=()->{start.await();try{service.create(chosen,acceptanceId("card"),"card");return true;}catch(ResponseStatusException duplicate){assertEquals(409,duplicate.getStatusCode().value());return false;}};
+        try{var a=pool.submit(task);var b=pool.submit(task);start.countDown();assertEquals(1,(a.get()?1:0)+(b.get()?1:0));}finally{pool.shutdownNow();}
+        assertEquals(1,number("SELECT COUNT(*) FROM payment_order"));assertEquals(1,creates.size());verifyNoInteractions(ledger);
+    }
+    @Test void latePaidAndRefundUseOriginalPrivateSnapshotAfterAcceptanceIsExpiredOrDisabled(){
+        var chosen=owner();service=acceptanceService(chosen,"2100-01-01T00:00:00Z");
+        String id=order(service.create(chosen,acceptanceId("wechat_pay"),"wechat_pay"));fact(id,"complete","paid");
+        service=acceptanceService(chosen,"2000-01-01T00:00:00Z");assertEquals("PAID",service.order(chosen,id).get("status"));
+        verify(ledger).credit(chosen.id(),1L,"payment:"+id);clearInvocations(ledger);
+        // The next deployment can remove the entire acceptance configuration.
+        service=service(walletEnvironment("GB",false));String intent=(String)stored(id).get("provider_capture_id"),refund="re_acceptance12345678";
+        when(gateway.retrieveRefund(refund)).thenReturn(json.valueToTree(Map.of("id",refund,"status","succeeded","payment_intent",intent,"amount",300,"currency","cny")));
+        StripePaymentService.Resolution resolution=ReflectionTestUtils.invokeMethod(service,"reconcileRefund",refund);resolution.apply().run();
+        verify(ledger).paymentRefund("STRIPE",MERCHANT,"sandbox",refund,chosen.id(),id,intent,300L,"CNY");
+        assertEquals(new BigDecimal("3.00"),stored(id).get("amount"));assertEquals(1,((Number)stored(id).get("credits")).longValue());
+    }
+    @Test void publicPurchasesCannotUseTemporarySkuEvenIfMisconfiguredAcceptanceRemainsEnabled(){
+        var chosen=owner();service=acceptanceService(chosen,"2100-01-01T00:00:00Z");ReflectionTestUtils.setField(service,"acceptingNewOrders",true);
+        assertFalse(service.catalog(chosen).toString().contains("accept-"));assertThrows(ResponseStatusException.class,()->service.create(chosen,acceptanceId("card"),"card"));
+        assertEquals(0,number("SELECT COUNT(*) FROM payment_order"));assertTrue(creates.isEmpty());
+    }
+
+    private PayPalPaymentService paypalAcceptance(CreatorPrincipal chosen,String expiry,PayPalCheckoutGateway remote){
+        db.execute("CREATE TABLE IF NOT EXISTS payment_risk_case(id VARCHAR(36),order_id VARCHAR(36),owner_id VARCHAR(36),provider VARCHAR(32),status VARCHAR(20))");
+        var env=walletEnvironment("GB",true).withProperty("qingfeng.payment.acceptance.enabled","true")
+            .withProperty("qingfeng.payment.acceptance.owner-id",chosen.id()).withProperty("qingfeng.payment.acceptance.nonce","abcdef01")
+            .withProperty("qingfeng.payment.acceptance.expires-at",expiry);
+        var result=new PayPalPaymentService(db,tx,ledger,new PaymentCatalog(env),env){@Override PayPalCheckoutGateway gateway(){return remote;}};
+        for(var entry:Map.<String,Object>of("enabled",true,"acceptingNewOrders",false,"canaryOwnerIds",chosen.id(),"environment","sandbox", "clientId","synthetic-client","clientSecret","synthetic-secret","merchantId",MERCHANT,"webhookId","synthetic-webhook","returnBase","http://127.0.0.1/account").entrySet())
+            ReflectionTestUtils.setField(result,entry.getKey(),entry.getValue());
+        return result;
+    }
+    private PayPalCheckoutGateway paypalRemote(){
+        var remote=mock(PayPalCheckoutGateway.class);
+        when(remote.create(anyString(),anyString(),any(),anyString(),anyString(),anyString()))
+            .thenAnswer(call->new PayPalCheckoutGateway.Created("PAYPAL_"+call.getArgument(0),"https://www.sandbox.paypal.com/checkoutnow?token=synthetic"));
+        return remote;
+    }
+
+    @Test void paypalPrivatePriceIsOwnerOnlyAndNormalAndFailedSkuCannotBeUsedForExtraPayments(){
+        var chosen=owner();var remote=paypalRemote();var paypal=paypalAcceptance(chosen,"2100-01-01T00:00:00Z",remote);
+        assertFalse(paypal.catalog().toString().contains("accept-"));assertFalse(paypal.catalog(owner()).toString().contains("accept-"));
+        assertTrue(paypal.catalog(chosen).toString().contains(acceptanceId("paypal")));assertFalse(paypal.catalog(chosen).toString().contains("starter-USD"));
+        assertThrows(ResponseStatusException.class,()->paypal.create(chosen.id(),"starter-USD"));
+        assertThrows(ResponseStatusException.class,()->paypal.create(owner().id(),acceptanceId("paypal")));
+        String id=order(paypal.create(chosen.id(),acceptanceId("paypal")));assertEquals(new BigDecimal("0.01"),stored(id).get("amount"));assertEquals(1,((Number)stored(id).get("credits")).longValue());
+        db.update("UPDATE payment_order SET status='FAILED' WHERE id=?",id);
+        assertThrows(ResponseStatusException.class,()->paypal.create(chosen.id(),acceptanceId("paypal")));assertFalse(paypal.catalog(chosen).toString().contains("accept-"));
+        verify(remote,times(1)).create(anyString(),anyString(),eq(new BigDecimal("0.01")),eq("USD"),anyString(),anyString());verifyNoInteractions(ledger);
+    }
+    @Test void paypalPrivateConcurrentCreatesShareTheSameCreatorLockAndOnePermanentSlot()throws Exception{
+        var chosen=owner();var remote=paypalRemote();var paypal=paypalAcceptance(chosen,"2100-01-01T00:00:00Z",remote);
+        var start=new java.util.concurrent.CountDownLatch(1);var pool=java.util.concurrent.Executors.newFixedThreadPool(2);
+        java.util.concurrent.Callable<Boolean> task=()->{start.await();try{paypal.create(chosen.id(),acceptanceId("paypal"));return true;}catch(ResponseStatusException duplicate){assertEquals(409,duplicate.getStatusCode().value());return false;}};
+        try{var a=pool.submit(task);var b=pool.submit(task);start.countDown();assertEquals(1,(a.get()?1:0)+(b.get()?1:0));}finally{pool.shutdownNow();}
+        assertEquals(1,number("SELECT COUNT(*) FROM payment_order"));verify(remote,times(1)).create(anyString(),anyString(),any(),anyString(),anyString(),anyString());verifyNoInteractions(ledger);
+    }
+    @Test void paypalLateCompletedCaptureKeepsTheOriginalCentAndOneCreditSnapshotAfterExpiry(){
+        var chosen=owner();var remote=paypalRemote();var paypal=paypalAcceptance(chosen,"2100-01-01T00:00:00Z",remote);
+        String id=order(paypal.create(chosen.id(),acceptanceId("paypal")));String linked=(String)stored(id).get("provider_link_id");
+        var expired=paypalAcceptance(chosen,"2000-01-01T00:00:00Z",remote);
+        assertThrows(ResponseStatusException.class,()->expired.create(chosen.id(),acceptanceId("paypal")));
+        var wrong=new PayPalCheckoutGateway.Snapshot(linked,id,"COMPLETED",MERCHANT,"CAP_ACCEPT1","COMPLETED",new BigDecimal("0.02"),"USD");
+        assertThrows(ResponseStatusException.class,()->expired.settle(id,wrong));verifyNoInteractions(ledger);
+        var valid=new PayPalCheckoutGateway.Snapshot(linked,id,"COMPLETED",MERCHANT,"CAP_ACCEPT1","COMPLETED",new BigDecimal("0.01"),"USD");
+        expired.settle(id,valid);assertEquals("PAID",stored(id).get("status"));verify(ledger).credit(chosen.id(),1L,"payment:"+id);
+        assertEquals(new BigDecimal("0.01"),stored(id).get("amount"));assertEquals(1,((Number)stored(id).get("credits")).longValue());
+    }
+
+    @Test void paypalExcludesOnlyTheOrdersAlreadyIsolatedByAnActiveLegacyReadOnlyBoundary(){
+        var chosen=owner();var remote=paypalRemote();var paypal=paypalAcceptance(chosen,"2100-01-01T00:00:00Z",remote);
+        db.execute("CREATE TABLE p0_credit_cutover_state(id INT PRIMARY KEY,status VARCHAR(20),activated_at TIMESTAMP(6))");
+        db.execute("INSERT INTO p0_credit_cutover_state VALUES(1,'ACTIVE',TIMESTAMPADD(MINUTE,-1,CURRENT_TIMESTAMP))");
+        var oldOrders=new ArrayList<String>();
+        for(String status:List.of("PENDING","CREATION_UNKNOWN")){
+            String id=UUID.randomUUID().toString();oldOrders.add(id);
+            db.update("INSERT INTO payment_order(id,creator_id,package_id,amount,currency,credits,status,created_at,provider) VALUES(?,?,'starter-USD',9.90,'USD',100,?,TIMESTAMPADD(HOUR,-1,CURRENT_TIMESTAMP),'PAYPAL_SANDBOX')",id,chosen.id(),status);
+        }
+        assertThrows(ResponseStatusException.class,()->paypal.create(chosen.id(),acceptanceId("paypal")));verifyNoInteractions(remote);
+        ReflectionTestUtils.setField(paypal,"legacyOrdersReadOnly",true);
+        String fresh=order(paypal.create(chosen.id(),acceptanceId("paypal")));
+        assertEquals("PENDING",stored(oldOrders.get(0)).get("status"));assertEquals("CREATION_UNKNOWN",stored(oldOrders.get(1)).get("status"));
+        for(String old:oldOrders){assertNull(stored(old).get("provider_capture_id"));assertNull(stored(old).get("provider_link_id"));}
+        assertEquals("PENDING",stored(fresh).get("status"));assertEquals(3,number("SELECT COUNT(*) FROM payment_order"));
+        assertThrows(ResponseStatusException.class,()->paypal.create(chosen.id(),acceptanceId("paypal")));verify(remote,times(1)).create(anyString(),anyString(),any(),anyString(),anyString(),anyString());verifyNoInteractions(ledger);
+    }
+    @Test void paypalCannotIgnoreAnUnknownOrderWithoutAConfirmedActiveCutoverOrAfterTheBoundary(){
+        var chosen=owner();var remote=paypalRemote();var paypal=paypalAcceptance(chosen,"2100-01-01T00:00:00Z",remote);
+        db.execute("CREATE TABLE p0_credit_cutover_state(id INT PRIMARY KEY,status VARCHAR(20),activated_at TIMESTAMP(6))");
+        db.execute("INSERT INTO p0_credit_cutover_state VALUES(1,'PREPARING',NULL)");ReflectionTestUtils.setField(paypal,"legacyOrdersReadOnly",true);
+        assertEquals(503,assertThrows(ResponseStatusException.class,()->paypal.create(chosen.id(),acceptanceId("paypal"))).getStatusCode().value());
+        db.execute("UPDATE p0_credit_cutover_state SET status='ACTIVE',activated_at=TIMESTAMPADD(MINUTE,-1,CURRENT_TIMESTAMP)");
+        db.update("INSERT INTO payment_order(id,creator_id,package_id,amount,currency,credits,status,created_at,provider) VALUES(?,?,'starter-USD',9.90,'USD',100,'CREATION_UNKNOWN',CURRENT_TIMESTAMP,'PAYPAL_SANDBOX')",UUID.randomUUID().toString(),chosen.id());
+        assertEquals(409,assertThrows(ResponseStatusException.class,()->paypal.create(chosen.id(),acceptanceId("paypal"))).getStatusCode().value());verifyNoInteractions(remote);verifyNoInteractions(ledger);
+    }
 }

@@ -29,13 +29,14 @@ public class PayPalPaymentService implements VerifiedPaymentProcessor {
     @Value("${qingfeng.paypal.public-live-enabled:false}") private boolean publicLiveEnabled;
     @Value("${qingfeng.paypal.return-base-url:https://cheerfulmusic.com/account}") private String returnBase;
     private final Environment configuration;
+    private final PaymentAcceptanceOffers acceptanceOffers;
     private volatile PayPalCheckoutGateway sharedGateway;
     private PaymentInbox inbox;
     private PaymentRiskService risks;
     @Value("${qingfeng.payment.inbox.enabled:true}") private boolean inboxEnabled=true;
     @org.springframework.beans.factory.annotation.Autowired
     void infrastructure(PaymentInbox inbox,PaymentRiskService risks){this.inbox=inbox;this.risks=risks;}
-    public PayPalPaymentService(JdbcTemplate db,TransactionTemplate tx,CreditsLedger ledger,PaymentCatalog catalog,Environment configuration){this.db=db;this.tx=tx;this.ledger=ledger;this.catalog=catalog;this.configuration=configuration;}
+    public PayPalPaymentService(JdbcTemplate db,TransactionTemplate tx,CreditsLedger ledger,PaymentCatalog catalog,Environment configuration){this.db=db;this.tx=tx;this.ledger=ledger;this.catalog=catalog;this.configuration=configuration;this.acceptanceOffers=new PaymentAcceptanceOffers(configuration);}
     /** Local official PayPal Live checkout: popup-only, no public webhook, isolated on the 3309 database. */
     boolean localLive(){return environment.equals("live") && liveEnabled
         && Arrays.asList(configuration.getActiveProfiles()).contains("paypal-live")
@@ -61,7 +62,15 @@ public class PayPalPaymentService implements VerifiedPaymentProcessor {
         synchronized(this){if(sharedGateway==null)sharedGateway=new PayPalCheckoutGateway(environment.equals("live")?PayPalCheckoutGateway.Environment.LIVE:PayPalCheckoutGateway.Environment.SANDBOX,clientId,clientSecret,merchantId,webhookId,localLive());return sharedGateway;}
     }
     public Map<String,Object> catalog(){return catalog(null);}
-    public Map<String,Object> catalog(com.qingfeng.music.server.security.CreatorPrincipal principal){return Map.of("enabled",ready() && purchaseAllowed(principal==null?null:principal.id()),"settlementEnabled",ready(),"environment",environment.equals("live")?"live":"sandbox","popupOnly",localLive(),"packages",ready()?catalog.packages().stream().map(PaymentCatalog.Package::asMap).toList():List.of());}
+    public Map<String,Object> catalog(com.qingfeng.music.server.security.CreatorPrincipal principal){
+        boolean open=ready()&&purchaseAllowed(principal==null?null:principal.id());
+        var packages=new ArrayList<Map<String,Object>>(ready()?catalog.packages().stream().map(PaymentCatalog.Package::asMap).toList():List.of());
+        boolean privateAcceptance=!acceptingNewOrders&&principal!=null&&acceptanceOffers.configuredFor(principal.id());
+        if(privateAcceptance)packages.clear();
+        if(open&&privateAcceptance)acceptanceOffers.offer(principal.id(),"paypal").filter(pack->acceptanceOffers.unused(db,principal.id(),pack.id(),provider()))
+            .ifPresent(pack->packages.add(acceptanceOffers.view(pack,"paypal")));
+        return Map.of("enabled",open,"settlementEnabled",ready(),"environment",environment.equals("live")?"live":"sandbox","popupOnly",localLive(),"packages",List.copyOf(packages));
+    }
     /** A closed public gate may admit at most three exact authenticated owner IDs.
      * Existing-order settlement never consults this new-purchase-only exception. */
     private boolean purchaseAllowed(String owner){
@@ -81,13 +90,24 @@ public class PayPalPaymentService implements VerifiedPaymentProcessor {
     public Map<String,Object> create(String owner,String packageId){
         if(!ready()) throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,"PayPal 尚未开放");
         if(!purchaseAllowed(owner)) throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,"新购买暂时暂停，已有订单仍可核对");
-        var p=catalog.find(packageId).orElseThrow(()->new ResponseStatusException(HttpStatus.BAD_REQUEST,"套餐不存在"));
+        if(PaymentAcceptanceOffers.isAcceptance(packageId)&&acceptingNewOrders)
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,"PAYMENT_ACCEPTANCE_CANARY_ONLY");
+        if(!acceptingNewOrders&&acceptanceOffers.configuredFor(owner)&&!PaymentAcceptanceOffers.isAcceptance(packageId))
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,"PAYMENT_ACCEPTANCE_PRIVATE_SKU_REQUIRED");
+        var p=PaymentAcceptanceOffers.isAcceptance(packageId)?acceptanceOffers.select(owner,packageId,"paypal")
+            :catalog.find(packageId).orElseThrow(()->new ResponseStatusException(HttpStatus.BAD_REQUEST,"套餐不存在"));
         String id=UUID.randomUUID().toString(), type=provider();
         tx.executeWithoutResult(s->{
             if(db.queryForList("SELECT id FROM creator WHERE id=? FOR UPDATE",owner).isEmpty()) throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
             Integer identity=db.queryForObject("SELECT (SELECT COUNT(*) FROM creator_google_identity WHERE creator_id=?) + (SELECT COUNT(*) FROM creator_oidc_identity WHERE creator_id=?)",Integer.class,owner,owner);
             if(identity==null||identity==0) throw new ResponseStatusException(HttpStatus.FORBIDDEN,"请先登录账号");
-            Integer pending=db.queryForObject("SELECT COUNT(*) FROM payment_order WHERE creator_id=? AND status IN ('CREATING','CREATION_UNKNOWN','PENDING')",Integer.class,owner);
+            acceptanceOffers.requireReservation(db,owner,p.id(),type);
+            Integer pending;
+            if(legacyOrdersReadOnly){
+                var boundaries=db.queryForList("SELECT activated_at FROM p0_credit_cutover_state WHERE id=1 AND status='ACTIVE'",java.sql.Timestamp.class);
+                if(boundaries.size()!=1||boundaries.get(0)==null)throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,"积分切换尚未完成");
+                pending=db.queryForObject("SELECT COUNT(*) FROM payment_order WHERE creator_id=? AND status IN ('CREATING','CREATION_UNKNOWN','PENDING') AND created_at>?",Integer.class,owner,boundaries.get(0));
+            }else pending=db.queryForObject("SELECT COUNT(*) FROM payment_order WHERE creator_id=? AND status IN ('CREATING','CREATION_UNKNOWN','PENDING')",Integer.class,owner);
             if(pending!=null && pending>0) throw new ResponseStatusException(HttpStatus.CONFLICT,"已有待核对的订单");
             db.update("INSERT INTO payment_order(id,creator_id,package_id,amount,currency,credits,status,created_at,provider) VALUES(?,?,?,?,?,?,?,CURRENT_TIMESTAMP,?)",id,owner,p.id(),p.amount(),p.currency(),p.credits(),"CREATING",type);
         });
@@ -322,7 +342,8 @@ public class PayPalPaymentService implements VerifiedPaymentProcessor {
                     for(var transaction:dispute.path("disputed_transactions")){String capture=transaction.path("seller_transaction_id").asString();if(!capture.isBlank())captures.add(capture);}
                 }else if("PAYMENT.CAPTURE.REVERSED".equals(event.type())||"PAYMENT.CAPTURE.STATUS_RISK".equals(event.type())){
                     var capture=gateway().retrieveCapture(resource);if(!resource.equals(capture.path("id").asString()))throw new IllegalStateException("Capture identity mismatch");
-                    if("PAYMENT.CAPTURE.STATUS_RISK".equals(event.type())&&!Set.of("REFUNDED","PARTIALLY_REFUNDED","REVERSED").contains(capture.path("status").asString())){
+                    if("PAYMENT.CAPTURE.STATUS_RISK".equals(event.type())&&!Set.of("REFUNDED","PARTIALLY_REFUNDED","REVERSED").contains(capture.path("status").asString())
+                            &&(!fencedMode||!hasReviewForCapture(resource))){
                         inbox.complete(event,()->{});return true;
                     }
                     captures.add(resource);
@@ -358,6 +379,27 @@ public class PayPalPaymentService implements VerifiedPaymentProcessor {
                 for(String order:orders){mutableOrder(order);owners.add(db.queryForObject("SELECT creator_id FROM payment_order WHERE id=? AND provider=?",String.class,order,provider()));}
                 if(fencedMode&&(orders.size()!=1||owners.size()!=1))throw new IllegalStateException("Financial identity must bind one owner and order");
                 var fact=financial;
+                // Financial GETs run before completeOwned's owner transaction. A denied reporting
+                // permission remains durable waiting, never a fabricated loss or a cleared hold.
+                if(fencedMode&&orders.size()==1&&"PAID".equals(db.queryForObject("SELECT status FROM payment_order WHERE id=? AND provider=?",String.class,orders.first(),provider()))){
+                    String id=orders.first(),owner=owners.first();
+                    boolean needsProof=fact==null||event.type().startsWith("CUSTOMER.DISPUTE.")&&("LOST".equals(fact.state())||"WON".equals(fact.state())&&(isReview(id)||hasPayPalLoss(id,resource)))
+                        ||"COMPLETED".equals(fact==null?"":fact.state())&&isReview(id);
+                    if(needsProof){
+                        try{
+                            var prepared=prepareFunds(id,owner,captures.iterator().next(),event.type().startsWith("CUSTOMER.DISPUTE.")?resource:null);
+                            inbox.completeOwned(event,owner,prepared);return true;
+                        }catch(PayPalReportingGateway.Unavailable unavailable){
+                            inbox.waitForProvider(event,owner,()->{
+                                risks.recordVerified(provider(),resource,event.type(),id,event.eventId());
+                                if(fact!=null&&event.type().startsWith("CUSTOMER.DISPUTE.")&&"LOST".equals(fact.state())&&!hasPayPalLoss(id,resource))
+                                    PayPalEntitlementAdapter.apply((com.qingfeng.music.infrastructure.persistence.credits.JdbcFencedCreditsLedger)ledger,merchantId,environment,owner,id,fact,true);
+                                else if(fact==null||isReview(id))((com.qingfeng.music.infrastructure.persistence.credits.JdbcFencedCreditsLedger)ledger)
+                                    .holdPaymentForReview("PAYPAL",merchantId,environment,owner,id,captures.iterator().next(),(String)db.queryForMap("SELECT currency FROM payment_order WHERE id=?",id).get("currency"),event.eventId());
+                            },"paypal-funds-"+unavailable.code().toLowerCase(Locale.ROOT));return true;
+                        }
+                    }
+                }
                 if(fencedMode&&fact==null){
                     String order=orders.first(),owner=owners.first(),capture=captures.iterator().next();
                     inbox.waitForProvider(event,owner,()->{
@@ -411,6 +453,137 @@ public class PayPalPaymentService implements VerifiedPaymentProcessor {
             if(legacyOrdersReadOnly)inbox.markManual(event,"LEGACY_CHANNEL_UNRESOLVED");else inbox.retry(event);
         }
         return true;
+    }
+    private boolean isReview(String id){
+        return !db.queryForList("SELECT reference FROM p0_credit_batch WHERE reference=? AND status='REVIEW'","payment:"+id).isEmpty();
+    }
+    private boolean hasPayPalLoss(String order,String dispute){
+        return !db.queryForList("SELECT dispute_id FROM p0_stripe_dispute_proof WHERE provider='PAYPAL' AND merchant=? AND environment=? AND order_id=? AND dispute_id=?",merchantId,environment,order,dispute).isEmpty();
+    }
+    private boolean hasReviewForCapture(String capture){
+        return !db.queryForList("SELECT o.id FROM payment_order o JOIN p0_credit_batch b ON b.reference=CONCAT('payment:',o.id) WHERE o.provider=? AND o.provider_capture_id=? AND b.status='REVIEW'",provider(),capture).isEmpty();
+    }
+    private record ReviewCase(String event,String status,String decision,String reviewer){}
+    private record ReviewSnapshot(Map<String,String> events,Map<String,ReviewCase> cases){}
+    private ReviewSnapshot riskSnapshot(String owner,String id){
+        var rows=db.queryForList("SELECT id,last_event_id,status,decision,reviewed_by FROM payment_risk_case WHERE owner_id=? AND order_id=? AND provider=? ORDER BY id",owner,id,provider());
+        if(rows.size()>100)throw new PayPalReportingGateway.Unavailable("REVIEW_CASE_LIMIT");
+        var events=new TreeMap<String,String>();var cases=new TreeMap<String,ReviewCase>();
+        for(var row:rows){
+            if("HOLD".equals(row.get("decision")))throw new PayPalReportingGateway.Unavailable("MANUAL_HOLD_REQUIRES_REVIEW");
+            if(!Set.of("OPEN","REVIEW","CLOSED").contains(row.get("status")))throw new PayPalReportingGateway.Unavailable("REVIEW_CASE_STATUS_UNSUPPORTED");
+            String key=(String)row.get("id"),event=(String)row.get("last_event_id");events.put(key,event);
+            cases.put(key,new ReviewCase(event,(String)row.get("status"),(String)row.get("decision"),(String)row.get("reviewed_by")));
+        }
+        return new ReviewSnapshot(Map.copyOf(events),Map.copyOf(cases));
+    }
+    private void requireReviewUnchanged(ReviewSnapshot expected,String owner,String id){
+        if(!expected.equals(riskSnapshot(owner,id)))throw new PayPalReportingGateway.Unavailable("REVIEW_CASE_CHANGED");
+    }
+    /** Immutable order/risk snapshots are taken before provider reads; the ledger checks them again under owner lock. */
+    private Runnable prepareFunds(String id,String owner,String captureId,String disputeId){
+        try{
+            var row=db.queryForMap("SELECT * FROM payment_order WHERE id=? AND creator_id=? AND provider=?",id,owner,provider());
+            var review=riskSnapshot(owner,id);
+            var scope=new PayPalFundsProof.Scope(merchantId,environment);
+            var original=new PayPalFundsProof.Order(id,captureId,(String)row.get("provider_link_id"),(String)row.get("currency"),((BigDecimal)row.get("amount")).movePointRight(2).longValueExact());
+            var capture=gateway().retrieveCapture(captureId);
+            var start=java.time.Instant.parse(capture.path("create_time").asString()).minusSeconds(60);
+            // PayPal documents up to three hours of Reporting delay. Never label a
+            // present-time window complete while its settlement watermark lags it.
+            var report=gateway().financialReport(start,java.time.Instant.now().minusSeconds(3*3600+300));
+            var disputes=gateway().disputesForCapture(captureId);
+            var fenced=(com.qingfeng.music.infrastructure.persistence.credits.JdbcFencedCreditsLedger)ledger;
+            if(disputeId!=null){
+                var dispute=gateway().retrieveDispute(disputeId);
+                var evidence=new PayPalFundsProof.Evidence(scope,capture,dispute,disputes,report);
+                var fact=PayPalEntitlementAdapter.dispute(dispute);
+                if(!disputeId.equals(fact.id())||!captureId.equals(fact.capture()))throw new IllegalStateException("Financial dispute correlation mismatch");
+                if("LOST".equals(fact.state())){
+                    var proof=PayPalFundsProof.loss(scope,original,evidence);
+                    if(!sameFinancialDispute(dispute,gateway().retrieveDispute(disputeId))||!capture.equals(gateway().retrieveCapture(captureId)))throw new IllegalStateException("Payment changed during reporting");
+                    return ()->{
+                        requireReviewUnchanged(review,owner,id);
+                        persistPayPalPrincipal(row,disputeId,proof);
+                        fenced.settlePayPalReportedLoss(merchantId,environment,disputeId,owner,id,captureId,fact.amount(),fact.currency(),fact.version(),proof.lossMinor(),proof.evidenceSha256());
+                        resolveReportedReview(fenced,review,owner,id,captureId,original.currency(),0,proof.lossMinor(),proof.evidenceSha256());
+                    };
+                }
+                if("WON".equals(fact.state())){
+                    var prior=db.queryForList("SELECT * FROM p0_stripe_dispute_proof WHERE provider='PAYPAL' AND merchant=? AND environment=? AND dispute_id=?",merchantId,environment,disputeId);
+                    if(prior.isEmpty()){
+                        var proof=PayPalFundsProof.review(scope,original,evidence);
+                        var refunds=reportedRefunds(proof.refunds(),captureId,original.currency());
+                        if(!sameFinancialDispute(dispute,gateway().retrieveDispute(disputeId))||!capture.equals(gateway().retrieveCapture(captureId)))
+                            throw new IllegalStateException("Payment changed during reporting");
+                        return ()->{
+                            requireReviewUnchanged(review,owner,id);
+                            fenced.paymentDispute("PAYPAL",merchantId,environment,disputeId,owner,id,captureId,fact.amount(),fact.currency(),fact.version(),"WON",null);
+                            for(var refund:refunds)PayPalEntitlementAdapter.apply(fenced,merchantId,environment,owner,id,refund,false);
+                            resolveReportedReview(fenced,review,owner,id,captureId,original.currency(),proof.refundedMinor(),0,proof.evidenceSha256());
+                        };
+                    }
+                    if(prior.size()!=1)throw new PayPalReportingGateway.Unavailable("RETURN_ORIGINAL_LOSS_PROOF_REQUIRED");
+                    var saved=principal(prior.get(0),original,owner);
+                    var proof=PayPalFundsProof.returned(scope,original,evidence,saved);
+                    if(!sameFinancialDispute(dispute,gateway().retrieveDispute(disputeId))||!capture.equals(gateway().retrieveCapture(captureId)))throw new IllegalStateException("Payment changed during reporting");
+                    return ()->{
+                        requireReviewUnchanged(review,owner,id);
+                        if(!saved.equals(principal(db.queryForMap("SELECT * FROM p0_stripe_dispute_proof WHERE provider='PAYPAL' AND merchant=? AND environment=? AND dispute_id=? FOR UPDATE",merchantId,environment,disputeId),original,owner)))throw new IllegalStateException("PayPal recorded principal changed");
+                        fenced.compensateReturnedFunds("PAYPAL",merchantId,environment,proof.transactionId(),disputeId,owner,id,captureId,proof.returnedMinor(),original.currency(),proof.evidenceSha256());
+                        resolveReportedReview(fenced,review,owner,id,captureId,original.currency(),0,0,proof.evidenceSha256());
+                    };
+                }
+                throw new PayPalReportingGateway.Unavailable("FINAL_DISPUTE_EVIDENCE_REQUIRED");
+            }
+            var proof=PayPalFundsProof.review(scope,original,capture,disputes,report);
+            var refunds=reportedRefunds(proof.refunds(),captureId,original.currency());
+            var after=gateway().retrieveCapture(captureId);
+            if(!capture.equals(after)||!disputes.equals(gateway().disputesForCapture(captureId)))throw new IllegalStateException("Payment changed during reporting");
+            return ()->{
+                requireReviewUnchanged(review,owner,id);
+                for(var refund:refunds)PayPalEntitlementAdapter.apply(fenced,merchantId,environment,owner,id,refund,false);
+                resolveReportedReview(fenced,review,owner,id,captureId,original.currency(),proof.refundedMinor(),proof.lossMinor(),proof.evidenceSha256());
+            };
+        }catch(PayPalReportingGateway.Unavailable unavailable){throw unavailable;}
+        catch(RuntimeException ambiguous){throw new PayPalReportingGateway.Unavailable("FINANCIAL_PROOF_INCOMPLETE");}
+    }
+    private List<PayPalEntitlementAdapter.Fact> reportedRefunds(List<PayPalFundsProof.Refund> proof,String capture,String currency){
+        var refunds=new ArrayList<PayPalEntitlementAdapter.Fact>();
+        for(var refund:proof){
+            var verified=PayPalEntitlementAdapter.refund(gateway().retrieveRefund(refund.id()),environment);
+            if(!refund.id().equals(verified.id())||!capture.equals(verified.capture())||refund.amountMinor()!=verified.amount()||!currency.equals(verified.currency())||!"COMPLETED".equals(verified.state()))
+                throw new IllegalStateException("Reported refund does not match authoritative resource");
+            refunds.add(verified);
+        }
+        return List.copyOf(refunds);
+    }
+    private boolean sameFinancialDispute(tools.jackson.databind.JsonNode before,tools.jackson.databind.JsonNode after){
+        for(String field:List.of("dispute_id","status","update_time","dispute_amount","dispute_outcome","fund_movements","disputed_transactions"))
+            if(!before.path(field).equals(after.path(field)))return false;
+        return true;
+    }
+    private PayPalFundsProof.Loss principal(Map<String,Object> saved,PayPalFundsProof.Order original,String owner){
+        if(!owner.equals(saved.get("owner_id"))||!original.orderId().equals(saved.get("order_id"))||!original.captureId().equals(saved.get("capture_id"))
+            ||!original.currency().equals(saved.get("settlement_currency"))||original.paidMinor()!=((Number)saved.get("settlement_principal_minor")).longValue())
+            throw new IllegalStateException("PayPal recorded principal scope mismatch");
+        return new PayPalFundsProof.Loss(((Number)saved.get("loss_minor")).longValue(),(String)saved.get("withdrawal_id"),(String)saved.get("charge_balance_id"),(String)saved.get("evidence_sha256"));
+    }
+    private void persistPayPalPrincipal(Map<String,Object> row,String dispute,PayPalFundsProof.Loss proof){
+        if(db.queryForObject("SELECT COUNT(*) FROM p0_credit_refund WHERE order_id=?",Long.class,row.get("id"))!=0
+            ||db.queryForObject("SELECT COUNT(*) FROM p0_credit_dispute WHERE order_id=? AND external_id<>?",Long.class,row.get("id"),dispute)!=0)
+            throw new IllegalStateException("PAYPAL_OVERLAP_REQUIRES_VERIFIED_RESOLUTION");
+        try{db.update("INSERT INTO p0_stripe_dispute_proof(provider,merchant,environment,dispute_id,order_id,capture_id,owner_id,loss_minor,withdrawal_id,charge_balance_id,settlement_currency,settlement_principal_minor,evidence_sha256,created_at) VALUES('PAYPAL',?,?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)",merchantId,environment,dispute,row.get("id"),row.get("provider_capture_id"),row.get("creator_id"),proof.lossMinor(),proof.withdrawalId(),proof.originalTransactionId(),row.get("currency"),((BigDecimal)row.get("amount")).movePointRight(2).longValueExact(),proof.evidenceSha256());}
+        catch(org.springframework.dao.DuplicateKeyException replay){
+            var old=db.queryForMap("SELECT * FROM p0_stripe_dispute_proof WHERE provider='PAYPAL' AND merchant=? AND environment=? AND dispute_id=? FOR UPDATE",merchantId,environment,dispute);
+            var bound=principal(old,new PayPalFundsProof.Order((String)row.get("id"),(String)row.get("provider_capture_id"),(String)row.get("provider_link_id"),(String)row.get("currency"),((BigDecimal)row.get("amount")).movePointRight(2).longValueExact()),(String)row.get("creator_id"));
+            if(!proof.equals(bound))throw new IllegalStateException("PayPal native principal identity conflict");
+        }
+    }
+    private void resolveReportedReview(com.qingfeng.music.infrastructure.persistence.credits.JdbcFencedCreditsLedger fenced,ReviewSnapshot expected,String owner,String id,String capture,String currency,long refunds,long losses,String proof){
+        requireReviewUnchanged(expected,owner,id);
+        for(var entry:expected.events().entrySet())risks.resolveCase(entry.getKey(),entry.getValue(),"RELEASE","paypal-authoritative-reporting","Verified PayPal native funds proof sha256:"+proof);
+        if(isReview(id))fenced.releasePaymentReview("PAYPAL",merchantId,environment,owner,id,capture,currency,refunds,losses,expected.events(),proof);
     }
     /** Bounded, read-only provider reconciliation for existing linked orders; never captures or recreates. */
     public void reconcileOrders(){

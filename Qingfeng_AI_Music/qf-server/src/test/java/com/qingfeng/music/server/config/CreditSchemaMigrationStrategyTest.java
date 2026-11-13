@@ -53,7 +53,7 @@ class CreditSchemaMigrationStrategyTest {
     }
 
     @Test void fixedCoreOnlyTargetsKeepNormalMigrationWithoutConstructingFinancialQueries() {
-        for (String target : List.of("0", "1", "34", "43", "43.0")) {
+        for (String target : List.of("0", "1", "34", "43", "43.0", "44", "44.0")) {
             var fixture = fixture(MigrationVersion.fromVersion(target));
             try (var queries = database(fixture, db -> {})) {
                 new CreditSchemaMigrationConfiguration().creditSchemaMigrationStrategy(new MockEnvironment()).migrate(fixture.flyway());
@@ -65,7 +65,7 @@ class CreditSchemaMigrationStrategyTest {
     }
 
     @Test void financialLatestAndUnresolvedTargetsCannotMigrateWithALegacyWriter() {
-        for (MigrationVersion target : new MigrationVersion[]{MigrationVersion.fromVersion("44"),
+        for (MigrationVersion target : new MigrationVersion[]{MigrationVersion.fromVersion("45"),
                 MigrationVersion.LATEST, MigrationVersion.CURRENT, MigrationVersion.NEXT, null}) {
             var fixture = fixture(target);
             try (var queries = database(fixture, db -> {})) {
@@ -94,19 +94,19 @@ class CreditSchemaMigrationStrategyTest {
                 Map.of("database_name", "wrong_database", "database_port", 23316),
                 Map.of("database_name", "isolated_strategy_contract", "database_port", 3306),
                 Map.of("database_name", "isolated_strategy_contract", "database_port", "23316"))) {
-            var fixture = fixture(MigrationVersion.fromVersion("44"));
+            var fixture = fixture(MigrationVersion.fromVersion("45"));
             try (var queries = database(fixture, db -> when(db.queryForMap("SELECT DATABASE() database_name,@@port database_port")).thenReturn(identity))) {
                 assertThrows(IllegalStateException.class, () ->
                     new CreditSchemaMigrationConfiguration().creditSchemaMigrationStrategy(approvedRuntime()).migrate(fixture.flyway()));
                 verify(fixture.flyway(), never()).migrate();
-                verify(queries.constructed().get(0), never()).queryForObject(CreditSchemaReadiness.CHECKS.get("v44_exact_history").sql(), Integer.class);
+                verify(queries.constructed().get(0), never()).queryForObject(CreditSchemaReadiness.CHECKS.get("v45_exact_history").sql(), Integer.class);
             }
         }
     }
 
     @Test void anUninstalledFinancialSchemaCannotBeInstalledByStartup() {
-        var fixture = fixture(MigrationVersion.fromVersion("44"));
-        try (var queries = database(fixture, db -> when(db.queryForObject(CreditSchemaReadiness.CHECKS.get("v44_only_once").sql(), Integer.class)).thenReturn(0))) {
+        var fixture = fixture(MigrationVersion.fromVersion("45"));
+        try (var queries = database(fixture, db -> when(db.queryForObject(CreditSchemaReadiness.CHECKS.get("v45_only_once").sql(), Integer.class)).thenReturn(0))) {
             assertThrows(IllegalStateException.class, () ->
                 new CreditSchemaMigrationConfiguration().creditSchemaMigrationStrategy(approvedRuntime()).migrate(fixture.flyway()));
             verify(fixture.flyway(), never()).migrate();
@@ -124,7 +124,7 @@ class CreditSchemaMigrationStrategyTest {
 
     @Test void everyExactActive41PrerequisiteIsCheckedBeforeAnyMigration() {
         for (var entry : CreditSchemaReadiness.CHECKS.entrySet()) {
-            var fixture = fixture(MigrationVersion.fromVersion("44"));
+            var fixture = fixture(MigrationVersion.fromVersion("45"));
             try (var queries = database(fixture, db -> when(db.queryForObject(entry.getValue().sql(), Integer.class)).thenReturn(entry.getValue().expected() + 1))) {
                 var failure = assertThrows(IllegalStateException.class, () ->
                     new CreditSchemaMigrationConfiguration().creditSchemaMigrationStrategy(approvedRuntime()).migrate(fixture.flyway()), entry.getKey());
@@ -145,7 +145,7 @@ class CreditSchemaMigrationStrategyTest {
     }
 
     @Test void anAlreadyExactActive41MayContinueNormalFlywayValidationAndMigration() {
-        for (MigrationVersion target : new MigrationVersion[]{MigrationVersion.fromVersion("44"), MigrationVersion.LATEST}) {
+        for (MigrationVersion target : new MigrationVersion[]{MigrationVersion.fromVersion("45"), MigrationVersion.LATEST}) {
             var fixture = fixture(target);
             try (var queries = database(fixture, db -> {})) {
                 new CreditSchemaMigrationConfiguration().creditSchemaMigrationStrategy(approvedRuntime()).migrate(fixture.flyway());

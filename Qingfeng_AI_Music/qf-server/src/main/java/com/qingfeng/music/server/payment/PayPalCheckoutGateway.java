@@ -77,6 +77,10 @@ public final class PayPalCheckoutGateway {
     public JsonNode retrieveCapture(String captureId){requireOrderId(captureId);return transport.send("GET","/v2/payments/captures/"+captureId,Map.of(),null);}
     public JsonNode retrieveRefund(String refundId){requireOrderId(refundId);return transport.send("GET","/v2/payments/refunds/"+refundId,Map.of(),null);}
     public JsonNode retrieveDispute(String disputeId){if(disputeId==null||!disputeId.matches("[A-Za-z0-9-]{1,128}"))throw new IllegalArgumentException("Invalid dispute ID");return transport.send("GET","/v1/customer/disputes/"+disputeId,Map.of(),null);}
+    /** Uses this gateway's authenticated merchant/environment; a webhook cannot supply a destination URL. */
+    public JsonNode financialReport(java.time.Instant start,java.time.Instant end){return reporting().read(start,end);}
+    public JsonNode disputesForCapture(String capture){requireOrderId(capture);return reporting().disputes(capture);}
+    private PayPalReportingGateway reporting(){return new PayPalReportingGateway(merchantId,path->transport.send("GET",path,Map.of(),null));}
     public CheckoutView retrieveCheckout(String orderId) {
         requireOrderId(orderId);
         JsonNode order=transport.send("GET","/v2/checkout/orders/"+orderId,Map.of(),null);
