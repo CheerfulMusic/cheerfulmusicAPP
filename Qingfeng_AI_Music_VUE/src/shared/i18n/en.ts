@@ -2068,6 +2068,8 @@ export const english: Record<string, string> = {
   "仅自己可见": "Only you",
   "更新主页版本": "Update artist page version",
   "发布到发现": "Publish to Discover",
+  "当前服务版本暂不支持发布到「发现」。请在功能上线后再试。": "This service version does not support publishing to Discover yet. Try again after the update.",
+  "这首歌需要先公开到歌手主页，才能发布到「发现」。": "Show this song on your artist page before publishing it to Discover.",
   "确认发布到发现": "Confirm publication to Discover",
   "已发布到发现": "On Discover",
   "这首歌已发布到发现。": "This song is on Discover.",

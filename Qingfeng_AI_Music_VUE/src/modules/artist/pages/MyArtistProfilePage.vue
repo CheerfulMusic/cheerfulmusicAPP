@@ -12,6 +12,7 @@ import ArtistAvatar from '../components/ArtistAvatar.vue'
 import ArtistHome from '../components/ArtistHome.vue'
 import ProfileAccount from '../components/ProfileAccount.vue'
 import ProfileWorks from '../components/ProfileWorks.vue'
+import PublishSongDialog from '../components/PublishSongDialog.vue'
 
 interface ImageDraft { file: File; url: string }
 
@@ -28,6 +29,8 @@ const editing = ref(false)
 const preview = ref(false)
 const loading = ref(true)
 const busy = ref(false)
+const discoverRelease = ref<ArtistRelease>()
+const discoverCover = computed(() => discoverRelease.value ? ownerTrack(discoverRelease.value).cover : '')
 const notice = ref('')
 const error = ref('')
 const previewHeading = ref<HTMLElement>()
@@ -78,6 +81,11 @@ function updateProfile(value: ArtistProfile) {
   )
   profile.value = value
   if (!keepFeaturedDraft) featuredReleaseId.value = savedFeatured.value?.id ?? null
+}
+function updateDiscoverRelease(song: ArtistRelease) {
+  const current = profile.value
+  if (!current) return
+  updateProfile({ ...current, songs: current.songs.map(item => item.id === song.id ? song : item) })
 }
 function apply(value: ArtistProfile) {
   profile.value = value
@@ -374,7 +382,9 @@ onBeforeUnmount(clearImageDrafts)
         <ProfileAccount />
       </div>
       <ProfileWorks :songs="profile.songs" :published="profile.published" :busy="busy"
-        @remove="remove" @withdraw="withdraw" @library-count="workCount = $event" />
+        @publish="discoverRelease = $event" @remove="remove" @withdraw="withdraw" @library-count="workCount = $event" />
+      <PublishSongDialog v-if="discoverRelease" :source="discoverRelease" :cover="discoverCover" discover
+        @published-to-discover="updateDiscoverRelease" @close="discoverRelease = undefined" />
     </template>
   </div>
 </template>

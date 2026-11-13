@@ -10,7 +10,7 @@ import { listWorks, type LibraryItem } from '../../works/api/works'
 import { ownerTrack, type ArtistRelease } from '../api/artist'
 
 const props = defineProps<{ songs: ArtistRelease[]; busy: boolean; published: boolean }>()
-const emit = defineEmits<{ remove: [song: ArtistRelease]; withdraw: [song: ArtistRelease]; 'library-count': [count: number | null] }>()
+const emit = defineEmits<{ publish: [song: ArtistRelease]; remove: [song: ArtistRelease]; withdraw: [song: ArtistRelease]; 'library-count': [count: number | null] }>()
 const player = usePlayer()
 const tab = ref<'library' | 'published'>('library')
 const works = ref<LibraryItem[]>([])
@@ -150,8 +150,9 @@ onBeforeUnmount(() => {
           <button v-if="row.release.onDiscover" type="button" class="profile-work-remove text-button" :disabled="busy" @click="emit('withdraw', row.release)">
             {{ t('从发现撤回') }}
           </button>
-          <RouterLink v-else-if="published && !busy" class="text-button"
-            :to="{ name: 'work-detail', params: { id: row.workId }, query: { show: 'discover' } }">{{ t('发布到发现') }}</RouterLink>
+          <button v-else-if="published" type="button" class="text-button" :disabled="busy" @click="emit('publish', row.release)">
+            {{ t('发布到发现') }}
+          </button>
           <button type="button" class="profile-work-remove text-button" :disabled="busy" @click="emit('remove', row.release)">
             {{ t('移出主页') }}
           </button>
