@@ -1,6 +1,6 @@
 """Exercise the actual committed fat-JAR operator entry points on a new local cohort.
 
-Requires --run, a verified artifact receipt and a never-used migration cohort.
+Requires --run, a verified artifact receipt and a never-used historical-cutover cohort.
 No Spring application, real user data, supplier call, service or production resource.
 Synthetic approval receipts are marked testOnly and cannot prove a production backup.
 """
@@ -69,7 +69,7 @@ def financial_snapshot(cfg):
     return result
 
 def execute(args):
-    need(re.fullmatch(r'r[0-9]+', args.migration_revision),'REVISION_REQUIRED')
+    need(re.fullmatch(r'r[0-9]+', args.history_revision),'REVISION_REQUIRED')
     need(re.fullmatch(r'artifact-[0-9TZ]+/results.json',args.artifact_evidence),'VERIFIED_ARTIFACT_RECEIPT_REQUIRED')
     artifact_path=(BASE/args.artifact_evidence).resolve();need(artifact_path.is_relative_to(BASE.resolve()),'ARTIFACT_RECEIPT_PATH_OUTSIDE_CACHE')
     artifact=json.loads(artifact_path.read_text('utf-8'))
@@ -77,10 +77,12 @@ def execute(args):
     need(artifact.get('status')=='PASS' and artifact.get('source_commit')==commit,'EXACT_COMMIT_ARTIFACT_REQUIRED')
     jar=Path(artifact['jar']).resolve();need(jar.is_relative_to(BASE.resolve()) and jar.is_file(),'CACHED_ARTIFACT_REQUIRED')
     jar_sha=sha(jar.read_bytes());need(jar_sha==artifact['jar_sha256'],'CANDIDATE_JAR_CHANGED')
-    cfg=json.loads((BASE/('migration-db-private-'+args.migration_revision+'.json')).read_text('utf-8'))
+    # Carry-forward permits only its dedicated historical-cutover cohort.
+    # Keep the production-code isolation guard; select the right test resource.
+    cfg=json.loads((ROOT/'.cache/payment-go-live-execution-20261113'/('history-db-private-'+args.history_revision+'.json')).read_text('utf-8'))
     need(cfg['host']=='127.0.0.1' and cfg['port']==23316 and cfg['uuid']==UUID
-         and cfg['database']=='p0_integration_migration_20261112'+args.migration_revision
-         and cfg['user']!='root','DEDICATED_LOCAL_MIGRATION_COHORT_REQUIRED')
+         and cfg['database']=='p0_historical_cutover_20261113'+args.history_revision
+         and cfg['user']!='root','DEDICATED_LOCAL_HISTORY_COHORT_REQUIRED')
     isolation=prove(cfg,empty=True)
     stamp=dt.datetime.now(dt.timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')
     out=BASE/('packaged-financial-commands-'+stamp);out.mkdir(exist_ok=False)
@@ -211,10 +213,10 @@ if __name__=='__main__':
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--run',action='store_true')
     parser.add_argument('--artifact-evidence')
-    parser.add_argument('--migration-revision')
+    parser.add_argument('--history-revision')
     args=parser.parse_args()
     if not args.run:
         print('BLOCKED: --run and a verified artifact/fresh local cohort are required; no connection opened')
         sys.exit(0)
-    need(bool(args.artifact_evidence) and bool(args.migration_revision),'EXPLICIT_ARTIFACT_AND_COHORT_REQUIRED')
+    need(bool(args.artifact_evidence) and bool(args.history_revision),'EXPLICIT_ARTIFACT_AND_COHORT_REQUIRED')
     sys.exit(execute(args))

@@ -29,7 +29,7 @@
 | 显式激活 | `carry-activate` | 原始 apply 结果已存在且匹配，同样重新观察 writer 和检查源 hash；只有 Java 实际完成才保存 ACTIVE 结果 |
 | 启动前核验 | `carry-verify` | 同一 ACTIVE 状态、投影、净余额和源 hash 均由 Java 再核验；原生 JSON 供 cutover pin，不自动补填 PASS |
 | 受控安装 | `install` | 同备份/恢复/ACTIVE/构建证明齐全；原子换配置与 current，安装精确 reviewed guard/gate，启动后核对 MainPID 实际 JAR；四渠道新购仍关闭 |
-| 受控真支付 | `canary` | 逐渠道报价与用户金额/次数授权一致，临时最低套餐仅1名精确认证owner；当前“Yth”尚未绑定生产creatorId，不得猜测或向其他用户开放 |
+| 受控真支付 | `canary` | 逐渠道报价与用户金额/次数授权一致，临时最低套餐仅1名精确认证owner；已依据用户截图只读确认唯一认证creator；实际报价必须精确绑定该ID，不得向其他用户开放 |
 | 公开新购 | `open` | 同候选四渠道独立实际 Live 付款、签名、唯一到账、归属币种和账本证明齐全；PayPal 未验不得跳过 |
 | 自愈恢复 | `cron-resume` | 当前 crontab 仍精确匹配暂停后 SHA，且有该媒体脚本 release-lock/原子配置/健康/金融兼容真实证明；现脚本无锁，保持暂停，不能自动恢复 |
 
