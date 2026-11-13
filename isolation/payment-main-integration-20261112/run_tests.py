@@ -22,6 +22,7 @@ parser.add_argument('--application-revision', default='r1')
 parser.add_argument('--legacy40-revision',default='r6')
 parser.add_argument('--core40-revision',default='r9')
 parser.add_argument('--compatibility-port', type=int, default=57326)
+parser.add_argument('--go-live-revision', default='')
 args = parser.parse_args()
 WORK=Path(args.workspace).resolve()
 assert WORK!=ROOT and (WORK/'.git').exists(),'Run in an explicit isolated worktree'
@@ -54,9 +55,19 @@ for label, prefix, revision in (
     cfg = json.loads((OUT / (label+'-db-private-'+revision+'.json')).read_text())
     assert cfg['host']=='127.0.0.1' and cfg['port']==23316 and cfg['uuid']=='05c27d3c-dda3-11f1-aba0-84a938421519'
     assert cfg['database'].startswith('p0_core40_application_' if label=='core40' else 'p0_integr') and cfg['database'].endswith(revision)
-    env[prefix+'URL']='jdbc:mysql://127.0.0.1:23316/'+cfg['database']+'?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC'
+    env[prefix+'URL']='jdbc:mysql://127.0.0.1:23316/'+cfg['database']+'?useSSL=false&allowPublicKeyRetrieval=true&connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true'
     env[prefix+'DATABASE']=cfg['database']
     env[prefix+'USER']=cfg['user']; env[prefix+'PASSWORD']=cfg['password']; env[prefix+'UUID']=cfg['uuid']
+if args.go_live_revision:
+    assert args.go_live_revision.startswith('r') and args.go_live_revision[1:].isdigit()
+    for label,prefix,database_prefix in (
+        ('overlap','P0_DISPUTE_OVERLAP_MYSQL_','p0_dispute_overlap_20261113'),
+        ('history','P0_HISTORICAL_CUTOVER_MYSQL_','p0_historical_cutover_20261113')):
+        cfg=json.loads((ROOT/'.cache/payment-go-live-execution-20261113'/(label+'-db-private-'+args.go_live_revision+'.json')).read_text())
+        assert cfg['host']=='127.0.0.1' and cfg['port']==23316 and cfg['uuid']=='05c27d3c-dda3-11f1-aba0-84a938421519'
+        assert cfg['database']==database_prefix+args.go_live_revision
+        env[prefix+'URL']='jdbc:mysql://127.0.0.1:23316/'+cfg['database']+'?useSSL=false&allowPublicKeyRetrieval=true&connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true'
+        env[prefix+'DATABASE']=cfg['database'];env[prefix+'USER']=cfg['user'];env[prefix+'PASSWORD']=cfg['password'];env[prefix+'UUID']=cfg['uuid']
 cmd = ['mvn.cmd','-o','-Dmaven.repo.local='+str(ROOT/'.cache/maven'),'clean']
 if args.mode=='compile': cmd += ['-DskipTests','compile']
 elif args.mode=='package':

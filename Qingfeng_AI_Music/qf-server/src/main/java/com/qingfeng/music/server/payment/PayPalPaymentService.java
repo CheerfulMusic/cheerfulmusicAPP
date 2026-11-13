@@ -187,6 +187,33 @@ public class PayPalPaymentService implements VerifiedPaymentProcessor {
             }
         });
     }
+    /** Two independent authoritative GETs are required before recovering original receipt. */
+    private PayPalCaptureRecoveryProof.Proven recoverOriginalCapture(String order,String captureId){
+        var local=db.queryForMap("SELECT * FROM payment_order WHERE id=? AND provider=?",order,provider());
+        var capture=gateway().retrieveCapture(captureId);
+        if(!captureId.equals(capture.path("id").asString()))throw new IllegalStateException("Capture recovery identity mismatch");
+        String remote=capture.path("supplementary_data").path("related_ids").path("order_id").asString();
+        var snapshot=gateway().retrieve(remote);
+        return PayPalCaptureRecoveryProof.verify(merchantId,environment,local,snapshot,capture);
+    }
+    /** Keep the ordinary settle contract strict; this path additionally requires original receipt proof. */
+    private void settleRecoveredCapture(PayPalCaptureRecoveryProof.Proven proof){
+        if(!(ledger instanceof com.qingfeng.music.infrastructure.persistence.credits.JdbcFencedCreditsLedger fenced))
+            throw new IllegalStateException("Original capture recovery requires the fenced ledger");
+        tx.executeWithoutResult(t->{
+            if(db.queryForList("SELECT id FROM creator WHERE id=? FOR UPDATE",proof.owner()).size()!=1)throw new IllegalStateException("Capture recovery owner missing");
+            var local=db.queryForMap("SELECT * FROM payment_order WHERE id=? AND creator_id=? AND provider=? FOR UPDATE",proof.order(),proof.owner(),provider());
+            proof.assertCurrent(local,merchantId,environment);
+            if(!"PAID".equals(local.get("status"))){
+                ledger.credit(proof.owner(),proof.credits(),"payment:"+proof.order());
+                db.update("UPDATE payment_order SET status='PAID',provider_link_id=?,provider_capture_id=?,failure_code=NULL WHERE id=? AND creator_id=? AND provider=?",proof.remoteOrder(),proof.capture(),proof.order(),proof.owner(),provider());
+            }
+            fenced.bindPayment("PAYPAL",merchantId,environment,proof.owner(),proof.order(),proof.capture(),proof.currency());
+            // This evidence proves the original receipt only. Unknown refund/reversal
+            // history continues to protect this order, without freezing other batches.
+            fenced.holdPaymentForReview("PAYPAL",merchantId,environment,proof.owner(),proof.order(),proof.capture(),proof.currency(),proof.evidence());
+        });
+    }
     public void webhook(PayPalCheckoutGateway.WebhookHeaders headers,byte[] body){
         if(!ready() || webhookId.isBlank()||!inboxEnabled||inbox==null) throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE);
         var gateway=gateway();
@@ -224,7 +251,12 @@ public class PayPalPaymentService implements VerifiedPaymentProcessor {
                 if(local.get("provider_link_id")!=null&&!snapshot.orderId().equals(local.get("provider_link_id")))throw new IllegalStateException("Provider order mismatch");
                 if(fencedMode&&Set.of("REFUNDED","PARTIALLY_REFUNDED","REVERSED").contains(snapshot.captureStatus())){
                     String owner=(String)local.get("creator_id");
+                    PayPalCaptureRecoveryProof.Proven original=null;
+                    if(!"PAID".equals(local.get("status"))&&!"REVERSED".equals(snapshot.captureStatus()))
+                        original=recoverOriginalCapture(order,snapshot.captureId());
+                    var proven=original;
                     inbox.waitForProvider(event,owner,()->{
+                        if(proven!=null)settleRecoveredCapture(proven);
                         risks.recordVerified(provider(),snapshot.captureId(),"PAYMENT.CAPTURE.REFUND_DETECTED",order,event.eventId());
                         var current=db.queryForMap("SELECT status,currency FROM payment_order WHERE id=? AND creator_id=? AND provider=? FOR UPDATE",order,owner,provider());
                         if("PAID".equals(current.get("status")))((com.qingfeng.music.infrastructure.persistence.credits.JdbcFencedCreditsLedger)ledger)
@@ -299,14 +331,16 @@ public class PayPalPaymentService implements VerifiedPaymentProcessor {
                 if(fencedMode&&fact!=null){
                     String order=orders.first(),owner=owners.first();
                     if(!"PAID".equals(db.queryForObject("SELECT status FROM payment_order WHERE id=? AND creator_id=? AND provider=?",String.class,order,owner,provider()))){
-                        // A financial event cannot synthesize the original successful payment.
-                        // Keep it durable and retry after authoritative completion/reconciliation.
+                        // The refund itself is never payment evidence. Independently bind
+                        // the original capture/order/payee/principal using authoritative GETs.
+                        var original=recoverOriginalCapture(order,fact.capture());
                         inbox.waitForProvider(event,owner,()->{
+                            settleRecoveredCapture(original);
                             risks.recordVerified(provider(),resource,event.type(),order,event.eventId());
                             var current=db.queryForMap("SELECT status FROM payment_order WHERE id=? AND creator_id=? AND provider=? FOR UPDATE",order,owner,provider());
                             if("PAID".equals(current.get("status"))&&(event.type().startsWith("CUSTOMER.DISPUTE.")||"COMPLETED".equals(fact.state())))
                                 PayPalEntitlementAdapter.apply((com.qingfeng.music.infrastructure.persistence.credits.JdbcFencedCreditsLedger)ledger,merchantId,environment,owner,order,fact,event.type().startsWith("CUSTOMER.DISPUTE."));
-                        },"paypal-original-payment-unsettled");
+                        },"paypal-original-capture-recovered-awaiting-complete-financial-evidence");
                         return true;
                     }
                     if(!event.type().startsWith("CUSTOMER.DISPUTE.")&&!"COMPLETED".equals(fact.state())){

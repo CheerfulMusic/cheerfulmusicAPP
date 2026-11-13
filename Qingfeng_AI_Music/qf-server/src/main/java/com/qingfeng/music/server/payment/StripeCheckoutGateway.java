@@ -135,6 +135,17 @@ public final class StripeCheckoutGateway {
         return get("/checkout/sessions/" + safeId(sessionId), "expand%5B%5D=payment_intent");
     }
 
+    /** One bounded GET page. A caller must not infer absence until has_more is false. */
+    public JsonNode sessionsCreatedBetween(InstantRange range,String startingAfter) {
+        if(range==null||range.from()<0||range.until()<range.from()||range.until()-range.from()>86400)
+            throw new IllegalArgumentException("Invalid Checkout reconciliation window");
+        verifyAccount();
+        String query="limit=100&created%5Bgte%5D="+range.from()+"&created%5Blte%5D="+range.until();
+        if(startingAfter!=null&&!startingAfter.isBlank())query+="&starting_after="+safeId(startingAfter);
+        return get("/checkout/sessions",query);
+    }
+    public record InstantRange(long from,long until) {}
+
     public JsonNode retrieveRefund(String refundId) { verifyAccount(); return get("/refunds/" + safeId(refundId), null); }
     public JsonNode retrieveDispute(String disputeId) {
         verifyAccount();

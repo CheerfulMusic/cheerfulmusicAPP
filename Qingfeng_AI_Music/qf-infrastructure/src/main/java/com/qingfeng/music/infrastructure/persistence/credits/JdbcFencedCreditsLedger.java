@@ -7,6 +7,8 @@ import org.springframework.jdbc.core.ConnectionCallback;
 import com.qingfeng.music.common.exception.DomainException;
 import java.math.*;
 import java.util.*;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 
 /** Protocol-3 owner-first rights writer. The journal, stored balance and batch rights commit together. */
 public final class JdbcFencedCreditsLedger implements CreditsLedger {
@@ -43,7 +45,8 @@ public final class JdbcFencedCreditsLedger implements CreditsLedger {
             db.update("INSERT INTO p0_credit_batch(reference,owner_id,source_type,source_id,original,consumed,adjusted,held,created_at) VALUES(?,?,?,?,?,0,0,0,CURRENT_TIMESTAMP)",reference,owner,reference.startsWith("payment:")?"PAYMENT":reference.startsWith("admin")?"MANUAL":"GIFT",reference,amount);
             refreshHold(reference);
         }
-        else if(db.queryForList("SELECT reference FROM p0_credit_batch WHERE reference=? FOR UPDATE",reference).isEmpty())throw new IllegalStateException("LEGACY_ATTRIBUTION_REQUIRED");
+        else if(db.queryForList("SELECT reference FROM p0_credit_batch WHERE reference=? FOR UPDATE",reference).isEmpty()
+            &&!CreditHistoricalCutover.isHistoricalCreditReplay(db,owner,amount,reference))throw new IllegalStateException("LEGACY_ATTRIBUTION_REQUIRED");
     });}
     public void debit(String owner,long amount,String reference){write(owner,()->{
         long book=delegate.lockedBalance(owner);
@@ -187,9 +190,13 @@ public final class JdbcFencedCreditsLedger implements CreditsLedger {
             throw new IllegalArgumentException("authoritative failed-refund evidence required");
     }
     private void recordTerminal(String provider,String merchant,String environment,String refund,String owner,String id,String capture,long amount,String currency,String status,String evidence){
-        var prior=failedRefund(provider,merchant,environment,refund);
-        if(!prior.isEmpty()){refundIdentity(prior.get(0),owner,id,capture,amount,currency);return;}
-        db.update("INSERT INTO p0_credit_refund_terminal(provider,merchant,environment,refund_id,owner_id,order_id,capture_id,amount_minor,currency,terminal_status,evidence_id,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)",provider,merchant,environment,refund,owner,id,capture,amount,currency,status,evidence);
+        try{db.update("INSERT INTO p0_credit_refund_terminal(provider,merchant,environment,refund_id,owner_id,order_id,capture_id,amount_minor,currency,terminal_status,evidence_id,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)",provider,merchant,environment,refund,owner,id,capture,amount,currency,status,evidence);}
+        catch(org.springframework.dao.DuplicateKeyException duplicate){
+            // The unique insert, not an empty-range lock, arbitrates terminal identity.
+            var prior=failedRefund(provider,merchant,environment,refund);
+            if(prior.size()!=1)throw new IllegalStateException("refund terminal identity conflict",duplicate);
+            refundIdentity(prior.get(0),owner,id,capture,amount,currency);return;
+        }
         db.update("INSERT INTO p0_credit_financial_audit(order_id,fact,delta,created_at) VALUES(?,?,0,CURRENT_TIMESTAMP)",id,"REFUND_TERMINAL_RECORDED");
     }
     /** Records a verified failure which never reduced local rights. Existing successful facts need funds-return proof. */
@@ -198,6 +205,9 @@ public final class JdbcFencedCreditsLedger implements CreditsLedger {
         var o=order(owner,id,capture,currency);merchant(id,provider,merchant,environment);
         if(amount<=0||amount>minor(o.get("amount")))throw new IllegalArgumentException("invalid refund amount");
         nativeIdentity.bindResource(provider,merchant,environment,"REFUND_BINDING",refund,owner,id,capture,amount,currency);
+        // Establish the real terminal fact before reading another fact table. If a
+        // prior success lacks compensation proof the enclosing transaction rolls it back.
+        recordTerminal(provider,merchant,environment,refund,owner,id,capture,amount,currency,status,verifiedEvidence);
         var success=db.queryForList("SELECT * FROM p0_credit_refund WHERE provider=? AND merchant=? AND environment=? AND external_id=? FOR UPDATE",provider,merchant,environment,refund);
         if(!success.isEmpty()){
             refundIdentity(success.get(0),owner,id,capture,amount,currency);
@@ -205,7 +215,6 @@ public final class JdbcFencedCreditsLedger implements CreditsLedger {
             if(returned.isEmpty())throw new IllegalStateException("REFUND_RETURN_REQUIRES_VERIFIED_COMPENSATION");
             refundIdentity(returned.get(0),owner,id,capture,amount,currency);
         }
-        recordTerminal(provider,merchant,environment,refund,owner,id,capture,amount,currency,status,verifiedEvidence);
     });}
     /** The adapter supplies authoritative complete-return proof, normalized to the original refund currency without FX arithmetic. */
     public void compensateRefundReturnedFunds(String provider,String merchant,String environment,String returnedId,String refund,String owner,String id,String capture,long returned,String currency,String status,String verifiedEvidence){write(owner,()->{
@@ -214,20 +223,19 @@ public final class JdbcFencedCreditsLedger implements CreditsLedger {
         if(returnedId==null||returnedId.isBlank()||returnedId.length()>128||returned<=0||returned>paid)throw new IllegalArgumentException("invalid refund return");
         nativeIdentity.bindResource(provider,merchant,environment,"REFUND_BINDING",refund,owner,id,capture,returned,currency);
         nativeIdentity.claim(provider,merchant,environment,returnedId,owner,id,capture,"REFUND_RETURN",refund,returned,currency);
+        recordTerminal(provider,merchant,environment,refund,owner,id,capture,returned,currency,status,verifiedEvidence);
         if(db.queryForObject("SELECT COUNT(*) FROM p0_credit_return WHERE provider=? AND merchant=? AND environment=? AND external_id=?",Long.class,provider,merchant,environment,returnedId)>0)
             throw new IllegalStateException("returned funds identity already belongs to a dispute");
-        var prior=db.queryForList("SELECT * FROM p0_credit_refund_return WHERE provider=? AND merchant=? AND environment=? AND external_id=? FOR UPDATE",provider,merchant,environment,returnedId);
-        if(!prior.isEmpty()){
-            var row=prior.get(0);refundIdentity(row,owner,id,capture,returned,currency);
-            if(!refund.equals(row.get("refund_id")))throw new IllegalStateException("refund returned funds identity conflict");
+        try{db.update("INSERT INTO p0_credit_refund_return(provider,merchant,environment,external_id,owner_id,order_id,refund_id,capture_id,amount_minor,currency,evidence_id,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)",provider,merchant,environment,returnedId,owner,id,refund,capture,returned,currency,verifiedEvidence);}
+        catch(org.springframework.dao.DuplicateKeyException duplicate){
+            var perRefund=db.queryForList("SELECT * FROM p0_credit_refund_return WHERE provider=? AND merchant=? AND environment=? AND refund_id=? FOR UPDATE",provider,merchant,environment,refund);
+            if(perRefund.size()!=1)throw new IllegalStateException("refund returned funds identity conflict",duplicate);
+            var row=perRefund.get(0);refundIdentity(row,owner,id,capture,returned,currency);
+            if(!returnedId.equals(row.get("external_id")))throw new IllegalStateException("refund already returned under another funds identity");
             return;
         }
-        var perRefund=db.queryForList("SELECT * FROM p0_credit_refund_return WHERE provider=? AND merchant=? AND environment=? AND refund_id=? FOR UPDATE",provider,merchant,environment,refund);
-        if(!perRefund.isEmpty())throw new IllegalStateException("refund already returned under another funds identity");
         var success=db.queryForList("SELECT * FROM p0_credit_refund WHERE provider=? AND merchant=? AND environment=? AND external_id=? FOR UPDATE",provider,merchant,environment,refund);
         if(!success.isEmpty())refundIdentity(success.get(0),owner,id,capture,returned,currency);
-        recordTerminal(provider,merchant,environment,refund,owner,id,capture,returned,currency,status,verifiedEvidence);
-        db.update("INSERT INTO p0_credit_refund_return(provider,merchant,environment,external_id,owner_id,order_id,refund_id,capture_id,amount_minor,currency,evidence_id,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)",provider,merchant,environment,returnedId,owner,id,refund,capture,returned,currency,verifiedEvidence);
         db.update("INSERT INTO p0_credit_financial_audit(order_id,fact,delta,created_at) VALUES(?,?,0,CURRENT_TIMESTAMP)",id,"REFUND_FUNDS_RETURN_CONFIRMED");
         // A return observed before local success must not mint rights or subtract absent success facts.
         if(success.isEmpty())return;
@@ -242,11 +250,12 @@ public final class JdbcFencedCreditsLedger implements CreditsLedger {
         nativeIdentity.bindResource(provider,merchant,environment,"REFUND_BINDING",refund,owner,id,capture,amount,currency);
         var terminal=failedRefund(provider,merchant,environment,refund);
         if(!terminal.isEmpty()){refundIdentity(terminal.get(0),owner,id,capture,amount,currency);return;}
-        var prior=db.queryForList("SELECT * FROM p0_credit_refund WHERE provider=? AND merchant=? AND environment=? AND external_id=? FOR UPDATE",provider,merchant,environment,refund);
-        if(!prior.isEmpty()){
-            var r=prior.get(0);if(!owner.equals(r.get("owner_id"))||!id.equals(r.get("order_id"))||!capture.equals(r.get("capture_id"))||amount!=((Number)r.get("amount_minor")).longValue()||!currency.equals(r.get("currency")))throw new IllegalStateException("global refund identity conflict");return;
+        try{db.update("INSERT INTO p0_credit_refund VALUES(?,?,?,?,?,?,?,?,?)",provider,merchant,environment,refund,owner,id,capture,amount,currency);}
+        catch(org.springframework.dao.DuplicateKeyException duplicate){
+            var prior=db.queryForList("SELECT * FROM p0_credit_refund WHERE provider=? AND merchant=? AND environment=? AND external_id=? FOR UPDATE",provider,merchant,environment,refund);
+            if(prior.size()!=1)throw new IllegalStateException("global refund identity conflict",duplicate);
+            refundIdentity(prior.get(0),owner,id,capture,amount,currency);return;
         }
-        db.update("INSERT INTO p0_credit_refund VALUES(?,?,?,?,?,?,?,?,?)",provider,merchant,environment,refund,owner,id,capture,amount,currency);
         long refunded=effectiveRefunds(id);
         long losses=currentLosses(id);
         if(refunded>paid)throw new IllegalStateException("over refund");
@@ -258,8 +267,23 @@ public final class JdbcFencedCreditsLedger implements CreditsLedger {
         if(disputed<=0||disputed>paid||version<=0||!Set.of("OPEN","UNDER_REVIEW","UNKNOWN","WON","LOST").contains(state))throw new IllegalArgumentException("invalid dispute");
         if(loss!=null&&(!"LOST".equals(state)||loss<0||loss>disputed))throw new IllegalArgumentException("final verified loss required");
         nativeIdentity.bindResource(provider,merchant,environment,"DISPUTE_BINDING",dispute,owner,id,capture,disputed,currency);
+        boolean inserted;
+        try{
+            db.update("INSERT INTO p0_credit_dispute VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",provider,merchant,environment,dispute,owner,id,capture,disputed,currency,version,state,loss);
+            inserted=true;
+        }catch(org.springframework.dao.DuplicateKeyException duplicate){inserted=false;}
         var rows=db.queryForList("SELECT * FROM p0_credit_dispute WHERE provider=? AND merchant=? AND environment=? AND external_id=? FOR UPDATE",provider,merchant,environment,dispute);
-        if(!rows.isEmpty()){
+        if(rows.size()!=1)throw new IllegalStateException("global dispute identity conflict");
+        long refunded=effectiveRefunds(id);
+        long otherLosses=currentDisputes(id).stream().filter(value->!dispute.equals(value.get("external_id"))
+            &&value.get("loss_minor") instanceof Number number&&number.longValue()>0).count();
+        boolean overlap=loss!=null&&((refunded>0&&loss>0&&loss!=paid)||otherLosses+(loss>0?1:0)>1);
+        // A verified gross loss is not yet a deduplicated net loss. Keep that observation
+        // in the append-only audit, while UNKNOWN/null prevents currentLosses from
+        // treating it as an already-applied permanent adjustment.
+        String acceptedState=overlap?"UNKNOWN":state;
+        Long acceptedLoss=overlap?null:loss;
+        if(!inserted){
             var r=rows.get(0);
             if(!owner.equals(r.get("owner_id"))||!id.equals(r.get("order_id"))||!capture.equals(r.get("capture_id"))||disputed!=((Number)r.get("amount_minor")).longValue()||!currency.equals(r.get("currency")))throw new IllegalStateException("global dispute identity conflict");
             // A final accepted win is protected even when no local loss/return ever occurred.
@@ -271,17 +295,43 @@ public final class JdbcFencedCreditsLedger implements CreditsLedger {
             if(!"WON".equals(state)&&db.queryForObject("SELECT COUNT(*) FROM p0_credit_return WHERE provider=? AND merchant=? AND environment=? AND dispute_id=?",Long.class,provider,merchant,environment,dispute)>0)
                 throw new IllegalStateException("RETURNED_DISPUTE_REQUIRES_MANUAL_REVIEW");
             long oldVersion=((Number)r.get("version")).longValue();if(version<oldVersion)return;
-            if(version==oldVersion){if(!state.equals(r.get("state"))||!Objects.equals(loss,r.get("loss_minor")))throw new IllegalStateException("conflicting dispute version");return;}
+            if(overlap&&r.get("loss_minor")!=null){
+                // Never erase a previously committed loss in order to establish a hold.
+                // An ambiguous later observation needs explicit review before release.
+                if(version==oldVersion&&(!state.equals(r.get("state"))||!Objects.equals(loss,r.get("loss_minor"))))
+                    throw new IllegalStateException("conflicting dispute version");
+                recordDisputeOverlap(id,dispute,version,loss);
+                db.update("UPDATE p0_credit_batch SET status='REVIEW' WHERE reference=?","payment:"+id);
+                refreshHold("payment:"+id);return;
+            }
+            if(version==oldVersion){
+                if(acceptedState.equals(r.get("state"))&&Objects.equals(acceptedLoss,r.get("loss_minor"))){
+                    if(overlap&&!hasDisputeOverlap(id,dispute,version,loss))throw new IllegalStateException("conflicting dispute version");
+                    return;
+                }
+                // If exact refund-return facts removed the overlap, the same authority
+                // snapshot can be re-evaluated. A generic UNKNOWN is not such proof.
+                if(!("UNKNOWN".equals(r.get("state"))&&r.get("loss_minor")==null&&!overlap&&"LOST".equals(state)
+                    &&loss!=null&&hasDisputeOverlap(id,dispute,version,loss)))throw new IllegalStateException("conflicting dispute version");
+            }
             if(r.get("loss_minor")!=null&&!"LOST".equals(state))throw new IllegalStateException("FUNDS_RETURN_REQUIRES_VERIFIED_COMPENSATION");
-            db.update("UPDATE p0_credit_dispute SET state=?,version=?,loss_minor=? WHERE provider=? AND merchant=? AND environment=? AND external_id=?",state,version,loss,provider,merchant,environment,dispute);
-        }else db.update("INSERT INTO p0_credit_dispute VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",provider,merchant,environment,dispute,owner,id,capture,disputed,currency,version,state,loss);
-        if(loss!=null){
-            long refunded=effectiveRefunds(id);
-            long cases=currentDisputes(id).stream().filter(value->value.get("loss_minor") instanceof Number number&&number.longValue()>0).count();
-            if((refunded>0&&loss>0&&loss!=paid)||cases>1)throw new IllegalStateException("OVERLAP_REQUIRES_VERIFIED_RESOLUTION");
+        }
+        db.update("UPDATE p0_credit_dispute SET state=?,version=?,loss_minor=? WHERE provider=? AND merchant=? AND environment=? AND external_id=?",acceptedState,version,acceptedLoss,provider,merchant,environment,dispute);
+        if(overlap){recordDisputeOverlap(id,dispute,version,loss);refreshHold("payment:"+id);}
+        else if(loss!=null){
             adjust(owner,id,target(((Number)o.get("credits")).longValue(),loss==0?refunded:loss,paid),dispute);
         }else refreshHold("payment:"+id);
     });}
+    private static String disputeOverlapFact(String dispute,long version,long loss){
+        try{return "LOST_OVERLAP:"+HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(dispute.getBytes(StandardCharsets.UTF_8)))+":"+version+":"+loss;}
+        catch(java.security.NoSuchAlgorithmException impossible){throw new IllegalStateException(impossible);}
+    }
+    private boolean hasDisputeOverlap(String id,String dispute,long version,long loss){
+        return db.queryForObject("SELECT COUNT(*) FROM p0_credit_financial_audit WHERE order_id=? AND fact=?",Long.class,id,disputeOverlapFact(dispute,version,loss))>0;
+    }
+    private void recordDisputeOverlap(String id,String dispute,long version,long loss){
+        if(!hasDisputeOverlap(id,dispute,version,loss))db.update("INSERT INTO p0_credit_financial_audit(order_id,fact,delta,created_at) VALUES(?,?,0,CURRENT_TIMESTAMP)",id,disputeOverlapFact(dispute,version,loss));
+    }
     public void compensateReturnedFunds(String provider,String merchant,String environment,String returnedId,String dispute,String owner,String id,String capture,long returned,String currency,String verifiedEvidence){write(owner,()->{
         var o=order(owner,id,capture,currency);merchant(id,provider,merchant,environment);
         if(verifiedEvidence==null||verifiedEvidence.isBlank())throw new IllegalStateException("authoritative returned-funds evidence required");
@@ -289,14 +339,15 @@ public final class JdbcFencedCreditsLedger implements CreditsLedger {
         nativeIdentity.claim(provider,merchant,environment,returnedId,owner,id,capture,"DISPUTE_RETURN",dispute,returned,currency);
         if(db.queryForObject("SELECT COUNT(*) FROM p0_credit_refund_return WHERE provider=? AND merchant=? AND environment=? AND external_id=?",Long.class,provider,merchant,environment,returnedId)>0)
             throw new IllegalStateException("returned funds identity already belongs to a refund");
-        var prior=db.queryForList("SELECT * FROM p0_credit_return WHERE provider=? AND merchant=? AND environment=? AND external_id=? FOR UPDATE",provider,merchant,environment,returnedId);
-        if(!prior.isEmpty()){
+        try{db.update("INSERT INTO p0_credit_return VALUES(?,?,?,?,?,?,?,?,?,?)",provider,merchant,environment,returnedId,owner,id,dispute,returned,currency,verifiedEvidence);}
+        catch(org.springframework.dao.DuplicateKeyException duplicate){
+            var prior=db.queryForList("SELECT * FROM p0_credit_return WHERE provider=? AND merchant=? AND environment=? AND external_id=? FOR UPDATE",provider,merchant,environment,returnedId);
+            if(prior.size()!=1)throw new IllegalStateException("returned funds identity conflict",duplicate);
             var r=prior.get(0);if(!owner.equals(r.get("owner_id"))||!id.equals(r.get("order_id"))||!dispute.equals(r.get("dispute_id"))||returned!=((Number)r.get("amount_minor")).longValue()||!currency.equals(r.get("currency")))throw new IllegalStateException("returned funds identity conflict");return;
         }
         var c=db.queryForMap("SELECT * FROM p0_credit_dispute WHERE provider=? AND merchant=? AND environment=? AND external_id=? FOR UPDATE",provider,merchant,environment,dispute);
         if(!owner.equals(c.get("owner_id"))||!id.equals(c.get("order_id"))||!capture.equals(c.get("capture_id"))||!"LOST".equals(c.get("state"))||c.get("loss_minor")==null||returned!=((Number)c.get("loss_minor")).longValue())throw new IllegalStateException("complete confirmed case recovery required");
         if(currentDisputes(id).stream().anyMatch(value->!dispute.equals(value.get("external_id"))&&value.get("loss_minor") instanceof Number amount&&amount.longValue()>0))throw new IllegalStateException("OVERLAP_REQUIRES_VERIFIED_RESOLUTION");
-        db.update("INSERT INTO p0_credit_return VALUES(?,?,?,?,?,?,?,?,?,?)",provider,merchant,environment,returnedId,owner,id,dispute,returned,currency,verifiedEvidence);
         db.update("UPDATE p0_credit_dispute SET state='WON',version=version+1,loss_minor=NULL WHERE provider=? AND merchant=? AND environment=? AND external_id=?",provider,merchant,environment,dispute);
         long refunds=effectiveRefunds(id);
         adjust(owner,id,target(((Number)o.get("credits")).longValue(),refunds,minor(o.get("amount"))),returnedId,true);

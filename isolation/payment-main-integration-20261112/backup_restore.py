@@ -1,4 +1,4 @@
-"""Isolated application-r6 backup/restore acceptance. Default invocation does nothing.
+"""Isolated application-cohort backup/restore acceptance. Default invocation does nothing.
 
 Never starts MySQL/the application, migrates a schema, or writes the source database.
 Run only after the central application test process has exited. Failed cohorts and
@@ -26,6 +26,7 @@ TARGET_USER = "integrated_restore_20261112r2"
 MYSQL_BIN = Path("R:/mysql-8.0.46-winx64/bin")
 SOURCE_PRIVATE = "application-db-private-r6.json"
 TARGET_PRIVATE = "restore-db-private-r2.json"
+SOURCE_REVISION = "r6"
 INTEGRATION_CHECKSUM = 789542731
 
 
@@ -435,7 +436,7 @@ def execute(workspace, root, out, proof):
         before = snapshot(source, source_cfg, references)
         proof["source_snapshot_before_backup"] = before
         proof["stage"] = "DUMP_SOURCE"
-        original = out / "application-r6-original.sql"
+        original = out / ("application-" + SOURCE_REVISION + "-original.sql")
         fd = os.open(original, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
         with os.fdopen(fd, "wb") as stream:
             command = dump_command(source_cfg)
@@ -446,7 +447,7 @@ def execute(workspace, root, out, proof):
         no_other_source_clients(source, source_cfg)
         require(before == snapshot(source, source_cfg, references), "SOURCE_CHANGED_DURING_DUMP")
         rewritten, replacements = rebind_definers(original.read_bytes(), source_cfg["user"])
-        restore_sql = out / "application-r6-restore-current-user.sql"
+        restore_sql = out / ("application-" + SOURCE_REVISION + "-restore-current-user.sql")
         fd = os.open(restore_sql, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
         with os.fdopen(fd, "wb") as stream:
             stream.write(rewritten)
@@ -515,7 +516,7 @@ def resume_empty(workspace, root, out, proof, previous):
             and prior.get("source_database") == SOURCE_DB and prior.get("restore_database") == TARGET_DB
             and prior.get("restore_empty_verified") is True,
             "RESUME_REQUIRES_THIS_FAILED_EMPTY_IMPORT_COHORT")
-    original, restore_sql = previous / "application-r6-original.sql", previous / "application-r6-restore-current-user.sql"
+    original, restore_sql = previous / ("application-" + SOURCE_REVISION + "-original.sql"), previous / ("application-" + SOURCE_REVISION + "-restore-current-user.sql")
     require(prior["backup"]["path"] == str(original)
             and prior["restore_copy"]["path"] == str(restore_sql)
             and digest(original.read_bytes()) == prior["backup"]["sha256"]
@@ -577,13 +578,23 @@ def resume_empty(workspace, root, out, proof, previous):
 
 
 def main():
+    global SOURCE_DB, TARGET_DB, TARGET_USER, SOURCE_PRIVATE, TARGET_PRIVATE, SOURCE_REVISION
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run", action="store_true")
     parser.add_argument("--source-finalized", action="store_true",
-                        help="The central source-r6 test process has exited; no source writer will restart")
+                        help="The selected isolated source test process has exited; no source writer will restart")
+    parser.add_argument("--source-revision", default="r6")
+    parser.add_argument("--restore-revision", default="r2")
     parser.add_argument("--resume-empty-run", type=Path,
                         help="Only this script's failed IMPORT cohort, still empty and hash-verified")
     args = parser.parse_args()
+    require(bool(re.fullmatch(r"r[0-9]+", args.source_revision)) and bool(re.fullmatch(r"r[0-9]+", args.restore_revision)), "ISOLATED_COHORT_REVISION_INVALID")
+    SOURCE_REVISION = args.source_revision
+    SOURCE_DB = "p0_integration_application_20261112" + SOURCE_REVISION
+    TARGET_DB = "p0_integration_restore_20261112" + args.restore_revision
+    TARGET_USER = "integrated_restore_20261112" + args.restore_revision
+    SOURCE_PRIVATE = "application-db-private-" + SOURCE_REVISION + ".json"
+    TARGET_PRIVATE = "restore-db-private-" + args.restore_revision + ".json"
     if not args.run or not args.source_finalized:
         print(json.dumps({"status": "NOT_RUN", "required": "--run --source-finalized",
                           "source": SOURCE_DB, "restore": TARGET_DB, "connections_opened": False}))
@@ -596,7 +607,7 @@ def main():
     out = base / ("backup-restore-" + now.strftime("%Y%m%dT%H%M%S%fZ"))
     out.mkdir(exist_ok=False)
     proof = {"utc": now.isoformat(), "status": "FAIL", "stage": "PRECHECK",
-             "scope": "LOCAL_23316_ISOLATED_APPLICATION_R6_ONLY",
+             "scope": "LOCAL_23316_ISOLATED_APPLICATION_COHORT_ONLY",
              "source_database": SOURCE_DB, "restore_database": TARGET_DB,
              "source_finalized_explicit": True, "production_access": False,
              "provider_calls": False, "original_database_writes": False,

@@ -129,7 +129,7 @@ class StripePaymentServiceTest {
         checkoutOrder("CREATING",null);
         String url="https://checkout.stripe.com/c/pay/cs_test_offline12345678#fidkdWxOYHwnPyd1blpxYHZxWjA0%2Fopaque";
         when(gateway.createSession("order-fixture","Qingfeng music credits",new BigDecimal("9.90"),"USD")).thenReturn(openCheckout(url));
-        when(db.update("UPDATE payment_order SET provider_link_id=?,status=CASE WHEN status='CREATING' THEN 'PENDING' ELSE status END WHERE id=? AND provider=? AND (provider_link_id IS NULL OR provider_link_id=?)",
+        when(db.update("UPDATE payment_order SET provider_link_id=?,status=CASE WHEN status IN ('CREATING','CREATION_UNKNOWN') THEN 'PENDING' ELSE status END WHERE id=? AND provider=? AND (provider_link_id IS NULL OR provider_link_id=?)",
             "cs_test_offline12345678","order-fixture","STRIPE_SANDBOX","cs_test_offline12345678")).thenAnswer(invocation->{
                 row.put("provider_link_id","cs_test_offline12345678");row.put("status","PENDING");return 1;
             });

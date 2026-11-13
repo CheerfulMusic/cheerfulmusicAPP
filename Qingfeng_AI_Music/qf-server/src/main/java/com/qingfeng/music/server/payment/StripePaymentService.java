@@ -27,6 +27,7 @@ public final class StripePaymentService implements VerifiedPaymentProcessor {
         "checkout.session.async_payment_failed", "checkout.session.expired",
         "refund.created", "refund.updated", "refund.failed", "charge.dispute.created",
         "charge.dispute.updated", "charge.dispute.closed", "charge.dispute.funds_reinstated");
+    private static final String ORDER_RECONCILE="stripe.order.reconcile";
     private final JdbcTemplate db;
     private final TransactionTemplate tx;
     private final CreditsLedger ledger;
@@ -35,6 +36,7 @@ public final class StripePaymentService implements VerifiedPaymentProcessor {
     private final StripeCheckoutGateway gateway;
     private final ObjectMapper json;
     private final PaymentInbox inbox;
+    private java.time.Clock reconciliationClock=java.time.Clock.systemUTC();
     @Value("${qingfeng.stripe.enabled:false}") private boolean enabled;
     @Value("${qingfeng.stripe.accepting-new-orders:false}") private boolean acceptingNewOrders;
 
@@ -98,6 +100,9 @@ public final class StripePaymentService implements VerifiedPaymentProcessor {
             if(pending!=null&&pending>0) throw new ResponseStatusException(HttpStatus.CONFLICT,"已有待核对订单，请先查看订单状态");
             db.update("INSERT INTO payment_order(id,creator_id,package_id,amount,currency,credits,status,created_at,provider) VALUES(?,?,?,?,?,?,?,CURRENT_TIMESTAMP,?)",
                 id,owner,pack.id(),pack.amount(),pack.currency(),pack.credits(),"CREATING",gateway.provider());
+            // Capture the original merchant and financial snapshot before any remote POST.
+            // This joins the order transaction, so no order can lose its recovery pointer.
+            enqueueOrderReconciliation(db.queryForMap("SELECT * FROM payment_order WHERE id=? AND provider=?",id,provider()),true);
         });
     }
 
@@ -127,7 +132,7 @@ public final class StripePaymentService implements VerifiedPaymentProcessor {
             String url=text(session.path("url"));
             if (sessionId.isBlank()||!trustedCheckoutUrl(url)) throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,"Stripe 返回的 Checkout Session 无效");
             String finalSessionId=sessionId;
-            db.update("UPDATE payment_order SET provider_link_id=?,status=CASE WHEN status='CREATING' THEN 'PENDING' ELSE status END WHERE id=? AND provider=? AND (provider_link_id IS NULL OR provider_link_id=?)",
+            db.update("UPDATE payment_order SET provider_link_id=?,status=CASE WHEN status IN ('CREATING','CREATION_UNKNOWN') THEN 'PENDING' ELSE status END WHERE id=? AND provider=? AND (provider_link_id IS NULL OR provider_link_id=?)",
                 sessionId,id,gateway.provider(),sessionId);
             row=ownedOrder(owner,id);
             if (!finalSessionId.equals(row.get("provider_link_id"))) throw new ResponseStatusException(HttpStatus.CONFLICT,"支付订单关联不匹配");
@@ -207,9 +212,10 @@ public final class StripePaymentService implements VerifiedPaymentProcessor {
                 || !delivery.eventId().equals(text(pointer.path("event"))))
                 throw new IllegalStateException("Stripe merchant or environment changed");
             String resource=text(pointer.path("resource")),kind=delivery.type();
-            if(resource.isBlank()||!EVENTS.contains(kind))throw new IllegalStateException("Unsupported Stripe event");
+            if(resource.isBlank()||!(EVENTS.contains(kind)||ORDER_RECONCILE.equals(kind)))throw new IllegalStateException("Unsupported Stripe event");
             Resolution result;
-            if (kind.startsWith("checkout.session.")) result=reconcileSession(kind,resource);
+            if(ORDER_RECONCILE.equals(kind))result=reconcileOrder(pointer);
+            else if (kind.startsWith("checkout.session.")) result=reconcileSession(kind,resource);
             else if (kind.startsWith("refund.")) result=reconcileRefund(resource);
             else if (kind.startsWith("charge.dispute.")) result=reconcileDispute(resource);
             else throw new IllegalStateException("Unsupported Stripe event");
@@ -218,6 +224,123 @@ public final class StripePaymentService implements VerifiedPaymentProcessor {
             else inbox.completeOwned(delivery,result.ownerId(),result.apply(),result.evidenceId());
         }catch(RuntimeException failed){inbox.retry(delivery);}
         return true;
+    }
+
+    /**
+     * Repair missing callbacks without requiring a browser or creating another checkout.
+     * Each pass has ten local candidates; the durable Inbox owns retries, leases and review.
+     */
+    @Override public void reconcileOrders(){
+        if(!schemaReady())return;
+        var candidates=db.queryForList("SELECT * FROM payment_order WHERE provider=? AND status IN ('CREATING','CREATION_UNKNOWN','PENDING') AND created_at<=TIMESTAMPADD(MINUTE,-5,CURRENT_TIMESTAMP) AND (reconcile_after IS NULL OR reconcile_after<=CURRENT_TIMESTAMP) ORDER BY reconcile_after,created_at,id LIMIT 10",provider());
+        for(var row:candidates){
+            String orderId=(String)row.get("id");
+            if(db.update("UPDATE payment_order SET reconcile_after=TIMESTAMPADD(MINUTE,5,CURRENT_TIMESTAMP) WHERE id=? AND provider=? AND status IN ('CREATING','CREATION_UNKNOWN','PENDING') AND (reconcile_after IS NULL OR reconcile_after<=CURRENT_TIMESTAMP)",orderId,provider())!=1)continue;
+            String eventId=orderReconcileId(orderId);
+            var known=db.queryForList("SELECT merchant_scope,env_scope FROM payment_webhook_inbox WHERE provider=? AND event_id=?",provider(),eventId);
+            if(!known.isEmpty()){
+                // Never adopt a previously bound order after changing the merchant secret.
+                if(known.size()!=1||!gateway.merchantId().equals(known.get(0).get("merchant_scope"))||!gateway.environment().equals(known.get(0).get("env_scope")))
+                    markReconcileOrder(row,"STRIPE_ORDER_SCOPE_REVIEW_REQUIRED",false);
+                continue;
+            }
+            // Historical orders did not record the original merchant. Preserve them for
+            // explicit evidence review rather than manufacture that missing snapshot.
+            enqueueOrderReconciliation(row,false);
+        }
+    }
+    private static String orderReconcileId(String order){return "reconcile-order-"+order;}
+    private void enqueueOrderReconciliation(Map<String,Object> row,boolean originalScope){
+        String eventId=orderReconcileId((String)row.get("id"));
+        var pointer=new TreeMap<String,Object>();
+        pointer.put("event",eventId);pointer.put("resource",row.get("id"));pointer.put("provider","STRIPE");
+        pointer.put("merchant",gateway.merchantId());pointer.put("environment",gateway.environment());
+        pointer.put("owner",row.get("creator_id"));pointer.put("amount",((BigDecimal)row.get("amount")).toPlainString());
+        pointer.put("currency",row.get("currency"));pointer.put("credits",((Number)row.get("credits")).longValue());
+        pointer.put("package",row.get("package_id"));pointer.put("created",((java.sql.Timestamp)row.get("created_at")).toInstant().toEpochMilli());
+        pointer.put("original_scope",originalScope);
+        inbox.acceptVerified(provider(),gateway.merchantId(),gateway.environment(),eventId,ORDER_RECONCILE,json.writeValueAsString(pointer));
+    }
+    private Resolution reconcileOrder(JsonNode pointer){
+        String id=text(pointer.path("resource")),owner=text(pointer.path("owner"));
+        var row=ownedOrder(owner,id);
+        if(!pointer.path("original_scope").isBoolean()||!pointer.path("original_scope").asBoolean())
+            return Resolution.pending("stripe-order-original-scope-unverified:"+id,()->markReconcileOrder(row,"STRIPE_ORDER_SCOPE_REVIEW_REQUIRED",false),owner);
+        if(!Objects.equals(row.get("id"),id)||!Objects.equals(row.get("creator_id"),owner)
+            ||!Objects.equals(row.get("currency"),text(pointer.path("currency")))
+            ||!Objects.equals(row.get("package_id"),text(pointer.path("package")))
+            ||((BigDecimal)row.get("amount")).compareTo(new BigDecimal(text(pointer.path("amount"))))!=0
+            ||((Number)row.get("credits")).longValue()!=exactInteger(pointer.path("credits"))
+            ||((java.sql.Timestamp)row.get("created_at")).toInstant().toEpochMilli()!=exactInteger(pointer.path("created")))
+            throw new IllegalStateException("Stripe original order snapshot changed");
+        if("PAID".equals(row.get("status")))return new Resolution(true,"stripe-order-already-paid:"+id,()->{},owner);
+        if(!Set.of("CREATING","CREATION_UNKNOWN","PENDING").contains(row.get("status")))
+            return new Resolution(true,"stripe-order-terminal:"+id,()->{},owner);
+        String session=(String)row.get("provider_link_id");
+        if(session==null&&"CREATING".equals(row.get("status"))
+            &&Duration.between(((java.sql.Timestamp)row.get("created_at")).toInstant(),Instant.now(reconciliationClock)).compareTo(Duration.ofMinutes(5))<0)
+            return Resolution.pending("stripe-order-create-in-flight:"+id,()->{},owner);
+        try{
+            if(session==null){
+                session=findOriginalSession(row);
+                if(session==null)return Resolution.pending("stripe-order-create-result-unknown:"+id,()->markReconcileOrder(row,"STRIPE_CREATE_RESULT_UNKNOWN",true),owner);
+            }
+            var fact=gateway.retrieveSession(session);
+            if(!fact.path("livemode").isBoolean()||!fact.path("amount_total").isIntegralNumber())
+                throw new IllegalStateException("Stripe reconciliation financial fields missing");
+            verifySession(row,fact);
+            if(!session.equals(text(fact.path("id"))))throw new IllegalStateException("Stripe reconciliation session identity mismatch");
+            String resolvedSession=session;
+            if("complete".equals(text(fact.path("status")))&&"paid".equals(text(fact.path("payment_status"))))
+                return new Resolution(true,"stripe-order-reconciled:"+session,()->settle(id,resolvedSession,fact),owner);
+            if("expired".equals(text(fact.path("status")))&&"unpaid".equals(text(fact.path("payment_status"))))
+                return new Resolution(true,"stripe-order-expired:"+session,()->linkReconciledSession(row,resolvedSession,"CANCELLED"),owner);
+            if("unpaid".equals(text(fact.path("payment_status")))&&Set.of("open","complete").contains(text(fact.path("status"))))
+                return Resolution.pending("stripe-order-awaiting-payment:"+session,()->linkReconciledSession(row,resolvedSession,"PENDING"),owner);
+            return Resolution.pending("stripe-order-provider-state-unknown:"+session,()->markReconcileOrder(row,"STRIPE_RECONCILE_STATE_UNKNOWN",false),owner);
+        }catch(StripeCheckoutGateway.StripeRemoteException unavailable){
+            // A 404, timeout or provider error cannot prove that no funds were received.
+            markReconcileOrder(row,"STRIPE_RECONCILE_PROVIDER_UNKNOWN",true);
+            throw unavailable;
+        }
+    }
+    private String findOriginalSession(Map<String,Object> row){
+        Instant created=((java.sql.Timestamp)row.get("created_at")).toInstant();
+        var window=new StripeCheckoutGateway.InstantRange(Math.max(0,created.minusSeconds(60).getEpochSecond()),created.plus(Duration.ofHours(20)).plusSeconds(60).getEpochSecond());
+        String cursor=null,match=null;var cursors=new HashSet<String>();
+        for(int page=0;page<3;page++){
+            var response=gateway.sessionsCreatedBetween(window,cursor);
+            if(response==null||!"list".equals(text(response.path("object")))||!response.path("data").isArray()
+                ||response.path("data").size()>100||!response.path("has_more").isBoolean())
+                throw new IllegalStateException("Incomplete Stripe Checkout listing");
+            for(JsonNode candidate:response.path("data")){
+                if(Objects.equals(row.get("id"),text(candidate.path("client_reference_id")))||Objects.equals(row.get("id"),text(candidate.path("metadata").path("order_id")))){
+                    verifySession(row,candidate);
+                    String found=text(candidate.path("id"));
+                    if(!found.matches("cs_[A-Za-z0-9_]{1,125}")||match!=null&&!match.equals(found))
+                        throw new IllegalStateException("Ambiguous Stripe Checkout association");
+                    match=found;
+                }
+            }
+            if(!response.path("has_more").asBoolean())return match;
+            if(response.path("data").isEmpty())throw new IllegalStateException("Invalid Stripe Checkout cursor");
+            cursor=text(response.path("data").get(response.path("data").size()-1).path("id"));
+            if(!cursor.matches("cs_[A-Za-z0-9_]{1,125}")||!cursors.add(cursor))throw new IllegalStateException("Invalid Stripe Checkout cursor");
+        }
+        // A partial listing never establishes uniqueness or absence.
+        return null;
+    }
+    private void markReconcileOrder(Map<String,Object> row,String code,boolean unknown){
+        tx.executeWithoutResult(t->{
+            String owner=(String)row.get("creator_id");db.queryForList("SELECT id FROM creator WHERE id=? FOR UPDATE",owner);
+            db.update("UPDATE payment_order SET failure_code=?,status=CASE WHEN ? AND provider_link_id IS NULL AND status='CREATING' THEN 'CREATION_UNKNOWN' ELSE status END WHERE id=? AND creator_id=? AND provider=? AND status IN ('CREATING','CREATION_UNKNOWN','PENDING')",code,unknown,row.get("id"),owner,provider());
+        });
+    }
+    private void linkReconciledSession(Map<String,Object> row,String session,String status){
+        String owner=(String)row.get("creator_id");db.queryForList("SELECT id FROM creator WHERE id=? FOR UPDATE",owner);
+        var current=ownedOrder(owner,(String)row.get("id"));
+        if(current.get("provider_link_id")!=null&&!session.equals(current.get("provider_link_id")))throw new IllegalStateException("Stripe reconciled link conflict");
+        db.update("UPDATE payment_order SET provider_link_id=?,status=?,failure_code=NULL WHERE id=? AND creator_id=? AND provider=? AND status IN ('CREATING','CREATION_UNKNOWN','PENDING') AND (provider_link_id IS NULL OR provider_link_id=?)",session,status,row.get("id"),owner,provider(),session);
     }
 
     private Resolution reconcileSession(String kind,String sessionId) {
@@ -288,7 +411,9 @@ public final class StripePaymentService implements VerifiedPaymentProcessor {
             var proof=StripeRefundReturnProof.verify(gateway.isLive(),refundId,paymentIntent,amount,currency,
                 ((BigDecimal)row.get("amount")).movePointRight(2).longValueExact(),refund,gateway.retrieveCharge(chargeId),
                 gateway.retrieveBalanceTransaction(withdrawal),gateway.retrieveBalanceTransaction(reversal));
-            if(!proof.available())return Resolution.pending(proof.transactionId(),()->{},owner);
+            // A proven native refund reversal ends the refund's economic effect.
+            // Pending merchant settlement controls payout availability, not customer rights.
+            // Identity, exact principal and terminal refund status were all verified above.
             return new Resolution(true,proof.transactionId(),()->fencedLedger().compensateRefundReturnedFunds(
                 "STRIPE",gateway.merchantId(),gateway.environment(),proof.transactionId(),refundId,owner,orderId,paymentIntent,amount,currency,refundStatus,proof.evidence()),owner);
         }

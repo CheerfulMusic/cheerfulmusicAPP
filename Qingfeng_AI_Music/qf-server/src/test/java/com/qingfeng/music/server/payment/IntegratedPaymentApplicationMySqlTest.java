@@ -57,6 +57,7 @@ class IntegratedPaymentApplicationMySqlTest {
     static final ObjectMapper JSON=new ObjectMapper();
     static final Map<String,JsonNode> SESSIONS=new ConcurrentHashMap<>(),REFUNDS=new ConcurrentHashMap<>(),DISPUTES=new ConcurrentHashMap<>(),CHARGES=new ConcurrentHashMap<>(),BALANCES=new ConcurrentHashMap<>();
     static final Map<String,PayPalCheckoutGateway.Snapshot> PAYPAL_ORDERS=new ConcurrentHashMap<>();
+    static final Map<String,JsonNode> PAYPAL_CAPTURES=new ConcurrentHashMap<>(),PAYPAL_REFUNDS=new ConcurrentHashMap<>();
     static final Set<String> OWNERS=ConcurrentHashMap.newKeySet();
     static final HttpClient HTTP=HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(3)).followRedirects(HttpClient.Redirect.NEVER).build();
     static ConfigurableApplicationContext application;
@@ -161,7 +162,7 @@ class IntegratedPaymentApplicationMySqlTest {
             when(gateway.create(anyString(),anyString(),any(),anyString(),anyString(),anyString())).thenAnswer(call->{String remote="P"+unique().substring(0,20),order=call.getArgument(0);PAYPAL_ORDERS.put(remote,new PayPalCheckoutGateway.Snapshot(remote,order,"APPROVED",PAYPAL_MERCHANT,"","",new BigDecimal("9.90"),"USD"));return new PayPalCheckoutGateway.Created(remote,"https://www.sandbox.paypal.com/checkoutnow?token="+remote);});
             when(gateway.retrieve(anyString())).thenAnswer(call->{var fact=PAYPAL_ORDERS.get(call.getArgument(0));if(fact==null)throw new AssertionError("Unregistered PayPal resource; external API forbidden");return fact;});
             when(gateway.capture(anyString(),anyString())).thenAnswer(call->{String remote=call.getArgument(0);var prior=PAYPAL_ORDERS.get(remote);if(prior==null)throw new AssertionError("Unknown capture order");var fact=new PayPalCheckoutGateway.Snapshot(remote,prior.reference(),"COMPLETED",PAYPAL_MERCHANT,"C"+unique().substring(0,20),"COMPLETED",new BigDecimal("9.90"),"USD");PAYPAL_ORDERS.put(remote,fact);return fact;});
-            when(gateway.retrieveRefund(anyString())).thenThrow(new AssertionError("Unregistered PayPal refund GET"));when(gateway.retrieveDispute(anyString())).thenThrow(new AssertionError("Unregistered PayPal dispute GET"));when(gateway.retrieveCapture(anyString())).thenThrow(new AssertionError("Unregistered PayPal capture GET"));return gateway;
+            doAnswer(call->known(PAYPAL_REFUNDS,call.getArgument(0))).when(gateway).retrieveRefund(anyString());when(gateway.retrieveDispute(anyString())).thenThrow(new AssertionError("Unregistered PayPal dispute GET"));doAnswer(call->known(PAYPAL_CAPTURES,call.getArgument(0))).when(gateway).retrieveCapture(anyString());return gateway;
         }
         @Bean @Primary PayPalPaymentService offlinePayPalService(JdbcTemplate db,PlatformTransactionManager manager,CreditsLedger credits,PaymentCatalog catalog,Environment env,PayPalCheckoutGateway offlinePayPalGateway){return new PayPalPaymentService(db,new TransactionTemplate(manager),credits,catalog,env){@Override PayPalCheckoutGateway gateway(){return offlinePayPalGateway;}};}
     }
@@ -251,10 +252,27 @@ class IntegratedPaymentApplicationMySqlTest {
         var p=paid();var other=owner();var denied=business(other,"/api/app/stripe/orders/"+p.order(),"GET",null);assertEquals(404,denied.statusCode());String body="{\"id\":\"evt_offline12345678\",\"type\":\"refund.updated\",\"livemode\":false,\"data\":{\"object\":{\"id\":\"re_offline12345678\"}}}";
         var invalid=HTTP.send(HttpRequest.newBuilder(URI.create("http://127.0.0.1:"+port+"/api/public/stripe/webhook")).header("Content-Type","application/json").header("Stripe-Signature",StripeCheckoutGatewayTest.signature(body,"whsec_wrong_offline_fixture",Instant.now().getEpochSecond())).POST(HttpRequest.BodyPublishers.ofString(body)).build(),HttpResponse.BodyHandlers.ofString());assertEquals(401,invalid.statusCode());assertEquals(0,number("SELECT COUNT(*) FROM payment_webhook_inbox WHERE event_id='evt_offline12345678'"));assertEquals(100,ledger.balance(p.owner().creatorId()));assertEquals(0,ledger.balance(other.creatorId()));
     }
-    @Test @Order(10) void fullContextRestartRetainsPendingCompensationAndAppliesAvailablePrincipalOnlyOnce() throws Exception {
-        var p=paid();String refund=refund(p,198),debit="txn_"+unique(),credit="txn_"+unique(),event="evt_"+unique();returnedRefund(p,refund,"ch_"+unique(),debit,credit,"pending");accepted("refund.failed",refund,event);drain();assertEquals(80,ledger.balance(p.owner().creatorId()));assertEquals(0,number("SELECT attempts FROM payment_webhook_inbox WHERE event_id=?",event));assertEquals("PROVIDER_PENDING",db.queryForObject("SELECT last_error FROM payment_webhook_inbox WHERE event_id=?",String.class,event));assertEquals(1,number("SELECT COUNT(*) FROM payment_inbox_attempt WHERE event_id=? AND result='WAITING'",event));
-        var before=application;application.close();start();assertNotSame(before,application);assertEquals(80,ledger.balance(p.owner().creatorId()));assertEquals("PAID",db.queryForObject("SELECT status FROM payment_order WHERE id=?",String.class,p.order()));assertEquals(44,number("SELECT COUNT(*) FROM flyway_schema_history WHERE success=1 AND version IS NOT NULL"));
-        BALANCES.put(credit,movement(credit,refund,"refund_failure",198,"available"));due(event);drain();assertEquals(100,ledger.balance(p.owner().creatorId()));accepted("refund.failed",refund,"evt_"+unique());drain();assertEquals(100,ledger.balance(p.owner().creatorId()));assertEquals(1,number("SELECT COUNT(*) FROM p0_credit_refund_return WHERE order_id=?",p.order()));assertEquals(1,number("SELECT COUNT(*) FROM credit_ledger WHERE owner_id=? AND entry_type='REFUND_RETURN'",p.owner().creatorId()));
+    // PAY-05: refund reversal proof and merchant payout availability are independent.
+    @Test @Order(10) void fullContextRestartWaitsForExactReversalThenRestoresEvenWhenMerchantSettlementIsPending() throws Exception {
+        var p=paid();String refund=refund(p,198),debit="txn_"+unique(),credit="txn_"+unique(),event="evt_"+unique();
+        returnedRefund(p,refund,"ch_"+unique(),debit,credit,"pending");var proven=REFUNDS.get(refund);
+        REFUNDS.put(refund,JSON.valueToTree(Map.of("id",refund,"object","refund","status","failed","payment_intent",p.intent(),"amount",198,"currency","usd","livemode",false)));
+        accepted("refund.failed",refund,event);drain();assertEquals(80,ledger.balance(p.owner().creatorId()));
+        assertEquals(0,number("SELECT attempts FROM payment_webhook_inbox WHERE event_id=?",event));
+        assertEquals("PROVIDER_PENDING",db.queryForObject("SELECT last_error FROM payment_webhook_inbox WHERE event_id=?",String.class,event));
+        assertEquals(1,number("SELECT COUNT(*) FROM payment_inbox_attempt WHERE event_id=? AND result='WAITING'",event));
+        assertEquals(0,number("SELECT COUNT(*) FROM p0_credit_refund_return WHERE order_id=?",p.order()));
+        var before=application;application.close();start();assertNotSame(before,application);assertEquals(80,ledger.balance(p.owner().creatorId()));
+        assertEquals("PAID",db.queryForObject("SELECT status FROM payment_order WHERE id=?",String.class,p.order()));
+        assertEquals(44,number("SELECT COUNT(*) FROM flyway_schema_history WHERE success=1 AND version IS NOT NULL"));
+        REFUNDS.put(refund,proven);assertEquals("pending",BALANCES.get(credit).path("status").asString());
+        due(event);drain();assertEquals(100,ledger.balance(p.owner().creatorId()));
+        assertEquals("DONE",db.queryForObject("SELECT status FROM payment_webhook_inbox WHERE event_id=?",String.class,event));
+        BALANCES.put(credit,movement(credit,refund,"refund_failure",198,"available"));
+        accepted("refund.failed",refund,"evt_"+unique());drain();assertEquals(100,ledger.balance(p.owner().creatorId()));
+        assertEquals(1,number("SELECT COUNT(*) FROM p0_credit_refund_return WHERE order_id=?",p.order()));
+        assertEquals(1,number("SELECT COUNT(*) FROM p0_credit_refund_terminal WHERE order_id=?",p.order()));
+        assertEquals(1,number("SELECT COUNT(*) FROM credit_ledger WHERE owner_id=? AND entry_type='REFUND_RETURN'",p.owner().creatorId()));
     }
     static AvatarGenerationService avatar(AvatarImageProvider provider){return new AvatarGenerationService(db,new TransactionTemplate(manager),application.getBean(AvatarService.class),provider,ledger,application.getBean(CreditsPricing.class),10);}
     @Test @Order(11) void currentMainAvatarChargesFiveOnceKeepsUnknownChargedAndRestoresDefinitiveFailureToItsOriginalBatch() throws Exception {
@@ -438,4 +456,52 @@ class IntegratedPaymentApplicationMySqlTest {
             assertEquals("PAYPAL_SANDBOX",db.queryForObject("SELECT provider FROM payment_order WHERE id=?",String.class,paypalOrder));assertEquals("USD",db.queryForObject("SELECT currency FROM payment_order WHERE id=?",String.class,paypalOrder));assertEquals(1,number("SELECT COUNT(*) FROM credit_ledger WHERE entry_type='CREDIT' AND reference_id=?","payment:"+old.order()));
         }finally{settings.clear();settings.putAll(original);}
     }
+    @Test @Order(22) void missingStripePaymentWebhookIsRecoveredFromDurableOriginalScopeAndGrantedExactlyOnce() throws Exception {
+        var p=pending(owner());assertEquals(0,ledger.balance(p.owner().creatorId()));
+        assertEquals(1,number("SELECT COUNT(*) FROM payment_webhook_inbox WHERE event_type='stripe.order.reconcile' AND event_id=?","reconcile-order-"+p.order()));
+        SESSIONS.put(p.session(),session(p.session(),p.order(),true));drain();
+        assertEquals("PAID",db.queryForObject("SELECT status FROM payment_order WHERE id=?",String.class,p.order()));
+        assertEquals(100,ledger.balance(p.owner().creatorId()));
+        assertEquals("DONE",db.queryForObject("SELECT status FROM payment_webhook_inbox WHERE event_id=?",String.class,"reconcile-order-"+p.order()));
+        stripe.reconcileOrders();drain();accepted("checkout.session.completed",p.session(),"evt_"+unique());drain();
+        assertEquals(100,ledger.balance(p.owner().creatorId()));
+        assertEquals(1,number("SELECT COUNT(*) FROM credit_ledger WHERE entry_type='CREDIT' AND reference_id=?","payment:"+p.order()));
+        assertEquals(1,number("SELECT COUNT(*) FROM p0_credit_payment_binding WHERE order_id=?",p.order()));
+    }
+    @Test @Order(23) void paypalRefundBeforeCompletionRecoversProvenCaptureAtomicallyAndKeepsOnlyItsRemainingRightsUnderReview() throws Exception {
+        var user=owner();var created=business(user,"/api/app/paypal/orders","POST",JSON.writeValueAsString(Map.of("packageId","starter-USD")));
+        assertEquals(200,created.statusCode(),created.body());String order=JSON.readTree(created.body()).path("orderId").asString();
+        String remote=db.queryForObject("SELECT provider_link_id FROM payment_order WHERE id=?",String.class,order);
+        String capture="C"+unique().substring(0,20),refund="R"+unique().substring(0,20);
+        PAYPAL_ORDERS.put(remote,new PayPalCheckoutGateway.Snapshot(remote,order,"COMPLETED",PAYPAL_MERCHANT,capture,"PARTIALLY_REFUNDED",new BigDecimal("9.90"),"USD"));
+        PAYPAL_CAPTURES.put(capture,JSON.valueToTree(Map.of("id",capture,"status","PARTIALLY_REFUNDED","final_capture",true,
+            "amount",Map.of("value","9.90","currency_code","USD"),"payee",Map.of("merchant_id",PAYPAL_MERCHANT),"supplementary_data",Map.of("related_ids",Map.of("order_id",remote)))));
+        PAYPAL_REFUNDS.put(refund,JSON.valueToTree(Map.of("id",refund,"status","COMPLETED","amount",Map.of("value","1.98","currency_code","USD"),
+            "links",List.of(Map.of("rel","up","href","https://api-m.sandbox.paypal.com/v2/payments/captures/"+capture)))));
+        String body=JSON.writeValueAsString(Map.of("id","WH-"+unique(),"event_type","PAYMENT.CAPTURE.REFUNDED","resource",Map.of("id",refund)));
+        assertEquals(200,request("/api/public/paypal/webhook","POST",body,null,null).statusCode());drain();
+        assertEquals("PAID",db.queryForObject("SELECT status FROM payment_order WHERE id=?",String.class,order));assertEquals(80,ledger.balance(user.creatorId()));
+        assertEquals(80,number("SELECT held FROM p0_credit_batch WHERE reference=?","payment:"+order));
+        assertEquals("REVIEW",db.queryForObject("SELECT status FROM p0_credit_batch WHERE reference=?",String.class,"payment:"+order));
+        assertEquals(1,number("SELECT COUNT(*) FROM p0_credit_refund WHERE order_id=? AND amount_minor=198",order));
+        assertEquals(200,request("/api/public/paypal/webhook","POST",body,null,null).statusCode());drain();
+        String late=JSON.writeValueAsString(Map.of("id","WH-"+unique(),"event_type","PAYMENT.CAPTURE.COMPLETED","resource",Map.of("id",capture,"supplementary_data",Map.of("related_ids",Map.of("order_id",remote)))));
+        assertEquals(200,request("/api/public/paypal/webhook","POST",late,null,null).statusCode());drain();
+        assertEquals(80,ledger.balance(user.creatorId()));assertEquals(1,number("SELECT COUNT(*) FROM credit_ledger WHERE entry_type='CREDIT' AND reference_id=?","payment:"+order));
+        paid(user);assertEquals(180,ledger.balance(user.creatorId()));ledger.debit(user.creatorId(),100,"other-order-usable:"+unique());
+        assertEquals(80,ledger.balance(user.creatorId()));assertThrows(DomainException.class,()->ledger.debit(user.creatorId(),1,"review-still-held:"+unique()));
+    }
+
+    @Test @Order(24) void actualFinancialConnectionClockGuardRejectsSessionDriftAndAcceptsUtcWithoutChangingFinancialFacts() throws Exception {
+        var before=exactFinancialSnapshot();
+        try(var connection=Objects.requireNonNull(db.getDataSource()).getConnection();var statement=connection.createStatement()){
+            var one=new org.springframework.jdbc.datasource.SingleConnectionDataSource(connection,true);
+            var guard=new com.qingfeng.music.server.config.FinancialClockStartupGuard(new JdbcTemplate(one));
+            statement.execute("SET time_zone='+08:00'");
+            var failure=assertThrows(IllegalStateException.class,()->guard.run(null));assertEquals("FINANCIAL_SESSION_MUST_USE_EXPLICIT_UTC",failure.getMessage());
+            statement.execute("SET time_zone='+00:00'");assertDoesNotThrow(()->guard.run(null));
+        }
+        assertEquals(before,exactFinancialSnapshot());
+    }
+
 }

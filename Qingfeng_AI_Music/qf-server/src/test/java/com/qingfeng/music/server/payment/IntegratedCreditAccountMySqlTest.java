@@ -398,9 +398,17 @@ class IntegratedCreditAccountMySqlTest {
         ledger.paymentDispute(PROVIDER,ACCOUNT,ENV,b,p.owner(),p.order(),p.capture(),990,"USD",2,"WON",null);assertEquals(0,held(p));assertEquals(0,adjusted(p));assertEquals(20,ledger.balance(p.owner()));
     }
 
-    @Test void excessRefundAndUnresolvedPartialRefundLossOverlapRollBackRatherThanGuess(){
+    @Test void excessRefundRollsBackAndAmbiguousLossPersistsAnOrderScopedReviewWithoutGuessing(){
         var p=paid();success(p,"re_"+unique(),900);String excessive="re_"+unique();assertThrows(IllegalStateException.class,()->success(p,excessive,91));assertEquals(9,ledger.balance(p.owner()));assertEquals(0,number("SELECT COUNT(*) FROM p0_credit_refund WHERE external_id=?",excessive));
-        var q=paid();success(q,"re_"+unique(),99);String conflict="du_"+unique();assertThrows(IllegalStateException.class,()->ledger.paymentDispute(PROVIDER,ACCOUNT,ENV,conflict,q.owner(),q.order(),q.capture(),198,"USD",1,"LOST",99L));assertEquals(90,ledger.balance(q.owner()));assertEquals(0,number("SELECT COUNT(*) FROM p0_credit_dispute WHERE external_id=?",conflict));
+        var q=paid();success(q,"re_"+unique(),99);String conflict="du_"+unique();
+        ledger.paymentDispute(PROVIDER,ACCOUNT,ENV,conflict,q.owner(),q.order(),q.capture(),198,"USD",1,"LOST",99L);
+        assertEquals(90,ledger.balance(q.owner()));assertEquals(10,adjusted(q));assertEquals(90,held(q));
+        assertEquals(1,number("SELECT COUNT(*) FROM p0_credit_dispute WHERE external_id=? AND state='UNKNOWN' AND loss_minor IS NULL",conflict));
+        assertEquals(1,number("SELECT COUNT(*) FROM p0_credit_financial_audit WHERE order_id=? AND fact LIKE 'LOST_OVERLAP:%'",q.order()));
+        assertThrows(DomainException.class,()->ledger.debit(q.owner(),1,"overlap-blocked:"+unique()));
+        ledger.paymentDispute(PROVIDER,ACCOUNT,ENV,conflict,q.owner(),q.order(),q.capture(),198,"USD",1,"LOST",99L);
+        assertEquals(90,held(q));assertEquals(90,ledger.balance(q.owner()));
+        assertEquals(1,number("SELECT COUNT(*) FROM p0_credit_financial_audit WHERE order_id=? AND fact LIKE 'LOST_OVERLAP:%'",q.order()));
     }
 
     @Test void crossOwnerRefundSuccessAndTerminalCompeteForOneImmutableNativeBinding() throws Exception {
