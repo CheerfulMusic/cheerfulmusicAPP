@@ -3,6 +3,7 @@ import com.qingfeng.music.lyrics.api.LyricsApi;
 import com.qingfeng.music.lyrics.application.LyricsCompositionService;
 import com.qingfeng.music.lyrics.application.LyricsStructure;
 import com.qingfeng.music.lyrics.application.LyricLineRewriteService;
+import com.qingfeng.music.lyrics.application.LyricRhymePreview;
 import com.qingfeng.music.lyrics.application.LyricSelectionRewriteService;
 import com.qingfeng.music.server.security.CreatorPrincipal;
 import jakarta.validation.Valid;
@@ -28,6 +29,17 @@ public class LyricsController {
  @PostMapping("/rewrite-line")
  public LineRewriteResponse rewriteLine(@AuthenticationPrincipal CreatorPrincipal creator,@PathVariable String work,@Valid @RequestBody LineRewriteRequest request){
      return new LineRewriteResponse(lineRewrite.preview(creator.id(),work,request.requestId(),request.action(),request.line(),request.context(),request.language()));
+ }
+ public record RhymeLineRequest(@NotNull UUID requestId, @NotBlank @Size(max=160) String line,
+     @NotEmpty @Size(max=40) List<@NotBlank @Size(max=160) String> lines, @NotNull @PositiveOrZero Integer lineIndex,
+     @PositiveOrZero Integer referenceIndex, @NotBlank @Pattern(regexp="zh-CN|en|mixed") String language,
+     Boolean allowNear, Boolean allowCrossLanguage){}
+ @PostMapping("/rhyme-line")
+ public LyricRhymePreview.Result rhymeLine(@AuthenticationPrincipal CreatorPrincipal creator,@PathVariable String work,
+     @Valid @RequestBody RhymeLineRequest request){
+     return lineRewrite.previewRhyme(creator.id(),work,request.requestId(),new LyricRhymePreview.Request(
+         request.line(),request.lines(),request.lineIndex(),request.referenceIndex(),request.language(),
+         Boolean.TRUE.equals(request.allowNear()),Boolean.TRUE.equals(request.allowCrossLanguage())));
  }
  public record SelectionRewriteRequest(@NotNull UUID requestId, @NotNull @PositiveOrZero Long workVersion,
      @NotBlank @Size(max=12000) String lyrics, @NotEmpty @Size(max=12000) List<@NotNull @PositiveOrZero Integer> keptLines,

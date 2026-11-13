@@ -9,7 +9,7 @@ import type { MusicCatalog, MusicPreferences } from '../src/modules/works/api/mu
 import LyricsPanel from '../src/modules/works/components/LyricsPanel.vue'
 import MusicSettingsPanel from '../src/modules/works/components/MusicSettingsPanel.vue'
 
-const api = vi.hoisted(() => ({ snapshot: vi.fn(), load: vi.fn(), preview: vi.fn(), rewrite: vi.fn(), rewriteSelection: vi.fn() }))
+const api = vi.hoisted(() => ({ snapshot: vi.fn(), load: vi.fn(), preview: vi.fn(), rewrite: vi.fn(), rhyme: vi.fn(), rewriteSelection: vi.fn() }))
 const catalog = JSON.parse(readFileSync('../Qingfeng_AI_Music/qf-infrastructure/src/main/resources/music/catalog-v1.json', 'utf8')) as MusicCatalog
 vi.mock('../src/modules/works/api/music-settings', () => ({
   loadMusicCatalog: async () => catalog,
@@ -25,6 +25,7 @@ vi.mock('../src/shared/credits/useCredits', async () => {
 })
 vi.mock('../src/modules/works/api/detail', () => ({
   rewriteLyricLine: api.rewrite,
+  rhymeLyricLine: api.rhyme,
   rewriteLyricSelection: api.rewriteSelection,
   listRevisions: async () => [revision],
 }))
@@ -50,6 +51,7 @@ function mountAdjustment() {
 enableAutoUnmount(afterEach)
 beforeEach(() => {
   vi.clearAllMocks()
+  localStorage.clear()
   api.load.mockResolvedValue({ work, direction: { preferences: { ...preferences, vocalGender: 'MALE', choices: { genre: ['rock'] } } } })
   api.preview.mockImplementation(async (_work: string, selected: MusicPreferences) => ({ preferences: selected }))
 })
@@ -108,7 +110,6 @@ it('uses the audio task’s recorded genre and voice when the legacy snapshot ha
 
 it.each([
   ['改写选句', 'REWRITE', '灯火还在等你'],
-  ['更押韵', 'RHYME', '灯火等你回城'],
   ['更口语化', 'COLLOQUIAL', '灯还等着你呢'],
   ['缩短一句', 'SHORTEN', '灯等你'],
 ])('previews %s and replaces only the selected line after confirmation', async (label, action, replacement) => {
@@ -137,6 +138,59 @@ it.each([
   await panel.findAll('button').find(button => button.text() === '采用这句')!.trigger('click')
   expect(editor.element.value).toBe(`[Verse]\n${replacement}\n夜风吹过山城`)
   expect(panel.find('.remake-lyrics-preview').exists()).toBe(false)
+})
+
+it('compares the Mandarin rhyme endings and applies the chosen candidate in the remake draft', async () => {
+  api.snapshot.mockResolvedValue({ preferences })
+  api.rhyme.mockResolvedValueOnce({ status: 'CHOOSE_REFERENCE', candidates: [] }).mockResolvedValueOnce({
+    status: 'SUGGESTIONS', referenceIndex: 1, reference: { word: '城', sound: 'eng' }, original: { word: '你', sound: 'i' },
+    candidates: [{ text: '等你到三更', ending: { word: '更', sound: 'eng' }, match: 'EXACT' }],
+  })
+  const panel = mountAdjustment()
+  await flushPromises()
+  const editor = panel.get<HTMLTextAreaElement>('.music-settings-lyrics textarea')
+  editor.element.setSelectionRange(revision.lyrics.indexOf('灯在等你'), revision.lyrics.indexOf('灯在等你'))
+  await editor.trigger('click')
+  await panel.findAll('button').find(button => button.text() === '更押韵')!.trigger('click')
+  await flushPromises()
+  const rhyme = panel.get('.lyric-rhyme-editor')
+  expect(rhyme.text()).toContain('请选择想和这句押韵的参考句。')
+  await rhyme.get('select').setValue('1')
+  await rhyme.get('.rhyme-generate').trigger('click')
+  await flushPromises()
+  expect(api.rhyme).toHaveBeenLastCalledWith(work.id, expect.objectContaining({
+    line: '灯在等你', lines: ['灯在等你', '夜风吹过山城'], lineIndex: 0, referenceIndex: 1, language: 'zh-CN',
+  }))
+  expect(rhyme.findAll('mark').map(mark => mark.text())).toEqual(['城 · eng', '你 · i', '更 · eng'])
+  expect(editor.element.value).toBe(revision.lyrics)
+  await rhyme.findAll('button').find(button => button.text() === '采用这句')!.trigger('click')
+  expect(editor.element.value).toBe('[Verse]\n等你到三更\n夜风吹过山城')
+  expect(panel.find('.lyric-rhyme-editor').exists()).toBe(false)
+  expect(api.rewrite).not.toHaveBeenCalled()
+})
+
+it('uses the current English stanza, preserving inline section headers and unrelated lyrics', async () => {
+  const panel = mount(LyricsPanel, { props: { work } })
+  await flushPromises()
+  const editor = panel.get<HTMLTextAreaElement>('textarea')
+  const original = '[Verse]\n[Pre-Chorus] I stayed awake till dawn\nI watched the fading light\n\n[Chorus]\nWe wait until it rains'
+  await editor.setValue(original)
+  const start = original.indexOf('I stayed')
+  editor.element.setSelectionRange(start, start)
+  await editor.trigger('click')
+  api.rhyme.mockResolvedValueOnce({
+    status: 'SUGGESTIONS', referenceIndex: 1, reference: { word: 'light', sound: 'aɪt' }, original: { word: 'dawn', sound: 'ɔn' },
+    candidates: [{ text: 'I stayed awake all night', ending: { word: 'night', sound: 'aɪt' }, match: 'EXACT' }],
+  })
+  await panel.findAll('button').find(button => button.text() === '更押韵')!.trigger('click')
+  await flushPromises()
+  const rhyme = panel.get('.lyric-rhyme-editor')
+  expect(api.rhyme).toHaveBeenCalledExactlyOnceWith(work.id, expect.objectContaining({
+    line: 'I stayed awake till dawn', lines: ['I stayed awake till dawn', 'I watched the fading light'], lineIndex: 0, language: 'en',
+  }))
+  expect(rhyme.findAll('mark').map(mark => mark.text())).toEqual(['light · aɪt', 'dawn · ɔn', 'night · aɪt'])
+  await rhyme.findAll('button').find(button => button.text() === '采用这句')!.trigger('click')
+  expect(editor.element.value).toBe(original.replace('I stayed awake till dawn', 'I stayed awake all night'))
 })
 
 it('keeps the creation tools below the textarea and targets the line at the caret', async () => {

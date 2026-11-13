@@ -69,6 +69,30 @@ describe('R1 响应读取与业务结果校验',()=>{
   vi.stubGlobal('fetch',vi.fn(async()=>reply({version:1,groups:[{id:'genre',options:[{id:'folk'}]}],recipes:[]})))
   await expect(requestJson('app/music-settings/catalog')).rejects.toMatchObject({code:'INVALID_RESPONSE'})
  })
+ it('单句押韵接口读取候选与可空韵脚，不把结果当成歌词版本',async()=>{
+  const path='app/works/w/lyrics/rhyme-line'
+  const ends={referenceIndex:1,original:{word:'dawn',sound:'ɔːn'},reference:{word:'light',sound:'aɪt'}}
+  const suggestions={...ends,status:'SUGGESTIONS',candidates:[{
+   text:'I stayed awake all night',ending:{word:'night',sound:'aɪt'},match:'EXACT',syllables:6,
+  }]}
+  for(const value of [
+   suggestions,
+   {status:'CHOOSE_REFERENCE',referenceIndex:null,original:ends.original,reference:null,candidates:[]},
+   {...ends,status:'UNKNOWN_PRONUNCIATION',reference:null,candidates:[]},
+   {...ends,status:'NO_MATCH',candidates:[]},
+  ]){
+   vi.stubGlobal('fetch',vi.fn(async()=>reply(value)))
+   await expect(requestJson(path,'POST',{})).resolves.toEqual(value)
+  }
+  for(const value of [
+   {...suggestions,candidates:[]},
+   {...suggestions,referenceIndex:-1},
+   {...suggestions,candidates:[{text:'I stayed awake all night',ending:null,match:'EXACT'}]},
+  ]){
+   vi.stubGlobal('fetch',vi.fn(async()=>reply(value)))
+   await expect(requestJson(path,'POST',{})).rejects.toMatchObject({code:'INVALID_RESPONSE'})
+  }
+ })
  it('上传体读取超时也保留未知语义',async()=>{
   vi.stubGlobal('fetch',vi.fn(async(url:string)=>url.endsWith('/csrf')?reply({token:'token'}):url.endsWith('/session')?reply({creatorId:'creator'}):{ok:true,status:200,text:async()=>{throw new DOMException('timed out','TimeoutError')}}))
   await expect(uploadForm('app/works/w/audio',new FormData())).rejects.toMatchObject({status:408})
