@@ -105,3 +105,26 @@ DDL 隐式提交，不能把异常回滚描述为 schema 回退。V45 开始后�
 精确生产语法适配后再次实际执行 **71/71 通过**，原67项完全保留，另加4项证明同值重复可解析、异值/续行仍拒绝、非精确cron命令拒绝及暂停只改变指定完整任务。根忽略目录证据为 `.cache/payment-final-go-live-20261113-new/operator-syntax-71-tests.json`，绑定本次脚本/测试SHA；没有执行生产暂停、配置修改、数据库或供应商操作。
 
 此前52项证据位于本临时工作树 `.cache/payment-v45-release-20261113/operator-contract-tests-20261113T105745501371Z.json`；61项阶段证据为同目录 `operator-contract-tests-final-20261113.json`，67项临时报价追加证据为 `operator-contract-tests-acceptance-20261113.json`，均绑定当时脚本和测试 SHA、保留实际输出，不覆盖旧证据。临时报价 Java聚焦47项实际PASS，根目录证据 `.cache/payment-main-integration-20261112/maven-targeted-20261113T121822145949Z/results.json`（含原方法、纯策略、H2服务事务/并发/晚到快照；不冒称MySQL或供应商验收）。新增完整应用MySQL Order40必须另随新隔离队列全量实际运行，未运行不能填写PASS。作用域为离线编排契约；本代理本轮仅只读核对过服务器文件/进程，不曾生产修改、查询业务数据或调用供应商，未执行真实迁移或批准资金操作。真实 Java/MySQL 与生产执行结果必须另附同候选实际证据。
+
+
+## 2026-11-13 实际部署与首笔微信验收补记（北京时间）
+
+本节为后续实际执行证据，取代前文“未执行”的阶段快照；不把单渠道成功当作四渠道全部通过。
+
+- 应用制品：`66a933bbe8a65a209e9213b3fbe568a679031809`；JAR SHA-256 `9ec04186de0bd1f4cf47095e3702404778ab880cecd716bebdcdceb2cfd02c8c`。实际进程打开的 JAR 已核验。部署工具有独立小修订，分别以计划 SHA 固定；不冒称业务 JAR 已重编译。
+- release：`20261113-payments-20261113T142116Z-7efd0d1e`。同事新增 V46 聊天计费代码保留在本地 main，未混入本次 V45 应用发布。
+- 第一轮因外部 SSH 数据库连接残留中止，第二轮发现原部署脚本的 `mysqldump --connect-timeout=5` 不被服务器原生 8.0.46 支持；两轮均在 DDL 前恢复旧应用、原 cron 和备份 timer。修复为删除不支持的参数，保留 subprocess 300 秒上限和失败阻断。
+- 第三轮备份实际完成。恢复副本保留在生产服务器私有 schema，未启动应用、未调用供应商。58 表行数与逐行摘要相同。SHOW CREATE TABLE 的差异只来自 char/text 列中显式且冗余的 utf8mb4 字符集声明；校验仅规范化这一受限语法，类型、长度、排序规则、默认值和注释仍严格比较。原始备份与失败收据全部保留。
+- 原生 CLI 的 plan、validate、migrate、apply、activate、verify 全部实际 PASS；V45 执行一次。158 个用户、212 条历史消费兼容映射、12 笔旧订单通过守恒核验。原历史账本和订单未覆盖、未伪造资金来源，协议3为 ACTIVE。
+- 新版先 closed 启动，再只向已确认的唯一账号开放临时一次性报价。公众新购仍关闭，绝不将 canary 描述为全面开放。
+- PayPal 既有 Live Webhook 保持 ID/URL不变，六类付款、退款、撤销和争议事件订阅实际 PATCH 后 GET核验通过；未执行真实 PayPal 资金操作。Reporting 403 与 Sandbox 凭据401仍未解除。
+
+首笔微信 CNY3.00 原生支付事实为 complete/paid，真实 charge 类型为 wechat_pay。最初积分事务失败：JDBC 默认 `utf8mb4_0900_ai_ci` 与生产 writer epoch 的 `utf8mb4_unicode_ci` 在触发器 `<>` 比较时发生 MySQL1267。先用同版本 Connector/J 做生产只读参数化比较，复现0900失败、unicode_ci通过；再仅给运行及 closed/canary/open 私有 JDBC URL增加 `connectionCollation=utf8mb4_unicode_ci`。没有 ALTER 表、修改 Flyway历史或手工改余额。
+
+修复后原订单正常变为 PAID，唯一 CREDIT=1、唯一权益批次=1、唯一支付绑定=1；用户余额、账本合计、批次净权益一致。原 signed webhook 与自动对账事件均 DONE，重试后未重复发分。真实验收收据时间为北京时间2026-11-13 22:44:06。未退款。
+
+后续发布配置门禁强制 `connectionCollation=utf8mb4_unicode_ci`，缺失、其他排序规则或重复参数均拒绝；UTC、原库、原账号、禁止任意 JDBC能力变化等原断言保留。编排离线测试目前74项通过，不能代替尚待用户完成的信用卡、Apple Pay、PayPal正式付款。
+
+执行证据：根工作区忽略目录 `.cache/payment-final-go-live-20261113-new/retry-20261113T142116Z/`，包括各阶段 `execution-*.json`、`jdbc-collation-compatibility.json`、`approved-current-plan.json`、`live-wechat-verification.json`。含原生订单身份的完整证据仅保留在服务器 root私有目录，不入Git。当前计划为 `p3-current-reviewed.json`，编排脚本 `guarded_release_collation.py`，均有SHA固定。
+
+现有备份 timer已恢复。会直接改配置并重启整应用的旧媒体自愈cron仍暂停，须另行完成锁和配置兼容改造才能恢复。不能回滚到 V44旧积分写入者；应使用已验证协议3的兼容制品与关闭新购配置恢复。
