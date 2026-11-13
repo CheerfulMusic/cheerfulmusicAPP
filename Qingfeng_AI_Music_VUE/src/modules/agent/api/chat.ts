@@ -1,5 +1,5 @@
 /** W1 会话 REST 封装：复用既有 requestJson / ensureCreator，不新增网络层。 */
-import { ensureCreator, getJson, requestJson } from '../../../shared/http/api-client'
+import { ApiError, ensureCreator, getJson, requestJson } from '../../../shared/http/api-client'
 import { isMessage, type ConversationView, type Message, type ConversationSnapshot, type ConversationHistory } from '../model/conversation'
 
 const base = 'app/agent/conversations'
@@ -17,7 +17,13 @@ export async function getConversationHistory(conversationId: string, beforeSeq: 
 
 export async function sendMessage(conversationId: string, text: string, requestKey: string, locale: string): Promise<ConversationSnapshot> {
   await ensureCreator()
-  return requestJson<ConversationSnapshot>(`${base}/${encodeURIComponent(conversationId)}/messages`, 'POST', { text, requestKey, locale }, 180000)
+  try {
+    return await requestJson<ConversationSnapshot>(`${base}/${encodeURIComponent(conversationId)}/messages`, 'POST', { text, requestKey, locale }, 180000)
+  } catch (error) {
+    if (!(error instanceof ApiError) || error.code !== 'AGENT_CHAT_PAYMENT_REQUIRED') throw error
+    if (!window.confirm(error.message)) throw new ApiError('已取消积分对话，本次未扣积分。', 400, 'AGENT_CHAT_PAYMENT_CANCELLED')
+    return requestJson<ConversationSnapshot>(`${base}/${encodeURIComponent(conversationId)}/messages`, 'POST', { text, requestKey, locale, paidConfirmed: true }, 180000)
+  }
 }
 
 export async function getCurrentConversation(): Promise<ConversationView> {

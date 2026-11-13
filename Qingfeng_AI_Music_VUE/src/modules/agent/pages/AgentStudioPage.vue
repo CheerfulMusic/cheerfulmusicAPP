@@ -15,6 +15,7 @@ import { loadWork } from '../../studio/api/works'
 import { assistantResult, uploadTarget, type AgentCommand } from '../model/assistant-result'
 import AgentResultCard from '../components/AgentResultCard.vue'
 import AgentProgressCard from '../components/AgentProgressCard.vue'
+import AgentMessageText from '../components/AgentMessageText.vue'
 import { agentProgress } from '../model/progress'
 import UserAvatarDialog from '../components/UserAvatarDialog.vue'
 import { useUserAvatar } from '../composables/useUserAvatar'
@@ -49,7 +50,7 @@ async function fetchStory() {
 }
 const nativePanel = ref<{ kind: 'recharge' | 'account' | 'privacy' | 'photo' | 'upload_cover' | 'upload_audio'; workId?: string } | null>(null)
 const lastAssistantId = computed(() => [...messages.value].reverse().find(message => message.role === 'assistant' && !agentProgress(message))?.id)
-const chatMessages = computed(() => messages.value.map(message => ({ ...message, progress: agentProgress(message), result: agentProgress(message) ? null : assistantResult(message) })))
+const chatMessages = computed(() => messages.value.filter((message, index) => { const progress = agentProgress(message); const user = messages.value.slice(0, index).reverse().find(item => item.role === 'user'); return !progress || !['planning', 'tool_started'].includes(progress.stage) || !user || !['DONE', 'FAILED'].includes(user.state) }).map(message => ({ ...message, progress: agentProgress(message), result: agentProgress(message) ? null : assistantResult(message) })))
 const pendingAlreadySaved = computed(() => !!pending.value && messages.value.some(message => {
   if (message.role !== 'user') return false
   try { return JSON.parse(message.contentJson || '{}').requestKey === pending.value?.requestKey } catch { return false }
@@ -256,7 +257,7 @@ onBeforeUnmount(() => { avatarDisposed = true; window.removeEventListener('qingf
         </div>
         <div v-for="message in chatMessages" :key="message.id" class="agent-message" :class="message.role">
           <div v-if="message.role === 'assistant'" class="agent-bot-avatar" aria-hidden="true"><img :src="'/brand/logo-symbol.svg'" alt=""/></div>
-          <div class="agent-message-content"><AgentProgressCard v-if="message.progress" :progress="message.progress"/><div v-else-if="messageText(message)" class="agent-bubble" :class="{ 'agent-message-failed': message.state === 'FAILED' }"><p>{{ messageText(message) }}</p></div><AgentResultCard v-if="message.result" :result="message.result" :disabled="blocked" :current="message.id === lastAssistantId" @command="runCommand"/></div>
+          <div class="agent-message-content"><AgentProgressCard v-if="message.progress" :progress="message.progress"/><div v-else-if="messageText(message)" class="agent-bubble" :class="{ 'agent-message-failed': message.state === 'FAILED' }"><AgentMessageText :text="messageText(message)"/></div><AgentResultCard v-if="message.result" :result="message.result" :disabled="blocked" :current="message.id === lastAssistantId" @command="runCommand"/></div>
           <button v-if="message.role === 'user'" type="button" class="agent-user-avatar" :aria-label="tr('设置头像', 'Change avatar')" @click="avatarDialog = true"><img v-if="avatar.avatarUrl.value" :src="avatar.avatarUrl.value" alt="" @error="avatar.avatarUrl.value = ''"/><svg v-else viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="17" r="8.4" fill="#f0b49c"/><path d="M7 44c1.9-9.6 8.6-14.4 17-14.4S39.1 34.4 41 44z" fill="#f0b49c"/></svg></button>
         </div>
         <div v-if="pending && !pendingAlreadySaved" class="agent-message user agent-pending"><div class="agent-bubble"><p>{{ pending.text }}</p><small>{{ sending ? tr('发送中…', 'Sending…') : tr('结果待确认', 'Awaiting confirmation') }}</small></div></div>
@@ -284,6 +285,7 @@ onBeforeUnmount(() => { avatarDisposed = true; window.removeEventListener('qingf
         <p v-if="referenceError" class="agent-upload-error" role="status">{{ referenceError }}</p>
         <p v-if="notice" class="agent-voice-hint" role="status">{{ notice }}</p>
         <p v-if="avatarGeneration.message.value" class="agent-section-hint" role="status">{{ avatarGeneration.message.value }}</p>
+        <p class="agent-section-hint">{{ tr('免费对话额度用完后，确认消耗 1 积分继续一轮；创作工具另计费。精确替换首句、末句不收对话积分。', 'After the free allowance, confirm 1 credit per turn; creative tools are billed separately. Exact first/last line replacements are free.') }}</p>
         <p v-if="credits" class="agent-section-hint">{{ tr('当前', 'Balance') }} {{ credits.balance }} {{ tr('积分 · 生成歌词', 'credits · Lyrics') }} {{ credits.lyricsCost }} · {{ tr('生成音乐', 'Music') }} {{ credits.musicCost }}</p>
       </div>
     </section>
