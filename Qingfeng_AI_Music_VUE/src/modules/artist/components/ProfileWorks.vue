@@ -9,8 +9,8 @@ import { audioUrl } from '../../works/api/detail'
 import { listWorks, type LibraryItem } from '../../works/api/works'
 import { ownerTrack, type ArtistRelease } from '../api/artist'
 
-const props = defineProps<{ songs: ArtistRelease[]; busy: boolean }>()
-const emit = defineEmits<{ remove: [song: ArtistRelease]; 'library-count': [count: number | null] }>()
+const props = defineProps<{ songs: ArtistRelease[]; busy: boolean; published: boolean }>()
+const emit = defineEmits<{ remove: [song: ArtistRelease]; withdraw: [song: ArtistRelease]; 'library-count': [count: number | null] }>()
 const player = usePlayer()
 const tab = ref<'library' | 'published'>('library')
 const works = ref<LibraryItem[]>([])
@@ -41,20 +41,28 @@ interface WorkRow {
 }
 
 const libraryRows = computed<WorkRow[]>(() => works.value.slice(0, PREVIEW_SIZE).map(item => {
-  const { id, title, recipient, style, updatedAt } = item.work
+  const { id, title, recipient, updatedAt } = item.work
   const songTitle = item.songTitle || title || (recipient ? t('写给{recipient}的歌', { recipient }) : t('我的原创歌曲'))
   const cover = coverUrl(id, item.coverId)
   const track = item.audioId
     ? { id: item.audioId, title: songTitle, cover, audio: audioUrl(id, item.audioId), provenance: item.audioOrigin ?? undefined }
     : undefined
-  return { id, workId: id, title: songTitle, cover, track, updatedAt,
-    label: t(item.status === 'COMPLETED' && style?.trim() ? style.trim() : statusLabels[item.status]) }
+  const release = props.songs.find(song => song.workId === id)
+  return { id, workId: id, title: songTitle, cover, track, updatedAt, release,
+    label: item.status === 'COMPLETED' ? publicationLabel(release) : statusLabels[item.status] }
 }))
 const publishedRows = computed<WorkRow[]>(() => props.songs.map(song => {
   const track = ownerTrack(song)
-  return { id: song.id, workId: song.workId, title: song.title, cover: track.cover, track, release: song }
+  return { id: song.id, workId: song.workId, title: song.title, cover: track.cover, track, release: song,
+    label: publicationLabel(song) }
 }))
 const rows = computed(() => tab.value === 'library' ? libraryRows.value : publishedRows.value)
+
+function publicationLabel(song?: ArtistRelease) {
+  if (!song) return '仅自己可见'
+  if (!props.published) return '主页未公开'
+  return song.onDiscover ? '已发布到发现' : '已在主页展示'
+}
 
 async function load() {
   const attempt = ++request
@@ -117,7 +125,7 @@ onBeforeUnmount(() => {
       <button type="button" class="text-button" @click="load">{{ t('重试') }}</button>
     </div>
     <div v-else-if="!rows.length" class="profile-works-message">
-      <p>{{ t(tab === 'published' ? '打开一首已完成的歌曲，选择「发布歌曲」即可加入主页。' : '第一首歌，从你的故事开始。') }}</p>
+      <p>{{ t(tab === 'published' ? '打开一首已完成的歌曲，选择「公开到主页」。' : '第一首歌，从你的故事开始。') }}</p>
       <button v-if="tab === 'published'" type="button" class="text-button" @click="tab = 'library'">{{ t('我的作品') }}</button>
       <RouterLink v-else to="/create" class="text-button">{{ t('开始创作') }}</RouterLink>
     </div>
@@ -135,13 +143,19 @@ onBeforeUnmount(() => {
             <strong>{{ row.title }}</strong>
             <time v-if="row.updatedAt" :datetime="row.updatedAt">{{ formatDate(row.updatedAt) }}</time>
           </span>
-          <span v-if="row.release" class="profile-work-open">{{ t('去作品页更换版本') }}</span>
-          <span v-else class="profile-work-label"><span v-if="row.label" :title="row.label">{{ row.label }}</span></span>
+          <span class="profile-work-label"><span v-if="row.label" :title="t(row.label)">{{ t(row.label) }}</span></span>
           <NavIcon name="arrow" />
         </RouterLink>
-        <button v-if="row.release" type="button" class="profile-work-remove text-button" :disabled="busy" @click="emit('remove', row.release)">
-          {{ t('移出主页') }}
-        </button>
+        <div v-if="row.release" class="profile-work-actions">
+          <button v-if="row.release.onDiscover" type="button" class="profile-work-remove text-button" :disabled="busy" @click="emit('withdraw', row.release)">
+            {{ t('从发现撤回') }}
+          </button>
+          <RouterLink v-else-if="published && !busy" class="text-button"
+            :to="{ name: 'work-detail', params: { id: row.workId }, query: { show: 'discover' } }">{{ t('发布到发现') }}</RouterLink>
+          <button type="button" class="profile-work-remove text-button" :disabled="busy" @click="emit('remove', row.release)">
+            {{ t('移出主页') }}
+          </button>
+        </div>
       </li>
     </ul>
   </section>
@@ -263,7 +277,6 @@ onBeforeUnmount(() => {
 .profile-work-link:hover { color: var(--accent-text); }
 .profile-work-link > svg { width: 15px; height: 15px; justify-self: center; }
 .profile-work-link.is-release { grid-template-columns: minmax(0, 1fr) auto 18px; }
-.profile-work-open { max-width: 13rem; color: var(--muted); font-size: .76rem; }
 .profile-work-copy {
   display: grid;
   gap: 3px;
@@ -297,13 +310,17 @@ onBeforeUnmount(() => {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.profile-work-remove { flex: none; font-size: .76rem; }
+.profile-work-actions { display: flex; flex-wrap: wrap; justify-content: end; gap: 2px 12px; font-size: .76rem; }
+.profile-work-actions .text-button { font-size: inherit; }
 @media (max-width: 580px) {
   .profile-work-cover { width: 52px; }
   .profile-work-link { grid-template-columns: minmax(0, 1fr) minmax(0, .65fr) 16px; gap: 7px; }
   .profile-work-link.is-release { grid-template-columns: minmax(0, 1fr) 16px; row-gap: 2px; }
-  .profile-work-open { grid-column: 1; grid-row: 2; }
+  .profile-work-link.is-release .profile-work-label { grid-column: 1; grid-row: 2; }
   .profile-work-link.is-release > svg { grid-column: 2; grid-row: 1 / span 2; }
   .profile-work-label > span { padding-inline: 5px; }
+  .profile-work-row { flex-wrap: wrap; }
+  .profile-work-link { flex-basis: calc(100% - 65px); }
+  .profile-work-actions { margin-inline-start: 54px; justify-content: start; }
 }
 </style>

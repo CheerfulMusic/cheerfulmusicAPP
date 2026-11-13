@@ -37,7 +37,7 @@ public final class InviteGateFilter extends OncePerRequestFilter {
         boolean read = "GET".equals(request.getMethod()) || "HEAD".equals(request.getMethod());
         boolean publicGift = read && path.matches("/api/public/gifts/[A-Za-z0-9_-]{43}(?:/audio|/cover)?")
                 && !CreatorSessionFilter.isGiftDownload(request);
-        boolean publicArtist = read && ARTIST_READ.matcher(path).matches();
+        boolean publicArtist = read && (ARTIST_READ.matcher(path).matches() || "/api/public/discover".equals(path));
         boolean analytics = ANALYTICS.contains(path);
         // 热歌推荐是首页公开展示，播放计次也不含个人信息；内测门禁不应让它变成 0。
         boolean hotSong = ("GET".equals(request.getMethod()) && "/api/public/hot-songs".equals(path))

@@ -27,11 +27,14 @@ import org.springframework.web.multipart.MultipartFile;
 public class ArtistProfileService {
     public record MyProfile(String publicId, String stageName, String tagline, String avatarKey,
                             String coverKey, String featuredReleaseId, boolean published, List<Release> songs) {}
-    public record Release(String id, long version, String title, String workId, String assetId, String coverId) {}
+    public record Release(String id, long version, String title, String workId, String assetId, String coverId,
+                          boolean onDiscover) {}
     public record PublicProfile(String stageName, String tagline, String avatarKey, String coverKey,
                                 String featuredReleaseId, List<PublicSong> songs) {}
     public record PublicSong(String id, long version, String title, boolean hasCover) {}
-    public record ReleaseSelection(boolean profileReady, boolean published, Release song) {}
+    public record ReleaseSelection(boolean profileReady, boolean published, String publicId, String stageName, Release song) {}
+    public record DiscoverSong(String artistId, String stageName, PublicSong song, Instant publishedAt) {}
+    public record DiscoverPage(List<DiscoverSong> songs, boolean hasMore) {}
     private record ProfileRow(String creatorId, String publicId, String stageName, String tagline,
                               String avatarKey, String coverKey, String featuredReleaseId, boolean published) {}
 
@@ -43,9 +46,10 @@ public class ArtistProfileService {
             rs.getString("featured_release_id"), rs.getBoolean("published"));
     private static final RowMapper<Release> RELEASE_ROW = (rs, row) -> new Release(
             rs.getString("id"), rs.getLong("version"), rs.getString("title"), rs.getString("work_id"),
-            rs.getString("asset_id"), rs.getString("cover_id"));
+            rs.getString("asset_id"), rs.getString("cover_id"), rs.getBoolean("on_discover"));
     private static final String PROFILE_RELEASES = """
-            SELECT r.id,r.version,r.title,r.work_id,r.asset_id,r.cover_id FROM artist_song_release r
+            SELECT r.id,r.version,r.title,r.work_id,r.asset_id,r.cover_id,
+                (r.discover_published_at IS NOT NULL) AS on_discover FROM artist_song_release r
             JOIN music_work w ON w.id=r.work_id AND w.owner_id=r.creator_id AND w.deleted_at IS NULL
             WHERE r.creator_id=? AND r.show_on_profile=TRUE
             """;
@@ -109,6 +113,12 @@ public class ArtistProfileService {
         var profile = requireOwnerProfile(creator);
         if (publish) requireStageName(profile.stageName());
         db.update("UPDATE artist_profile SET published=? WHERE creator_id=?", publish, creator);
+        if (!publish) {
+            db.update("""
+                    UPDATE artist_song_release SET discover_published_at=NULL,discover_featured=FALSE
+                    WHERE creator_id=? AND discover_published_at IS NOT NULL
+                    """, creator);
+        }
         return ownerView(findOwner(creator, false).orElseThrow());
     }
 
@@ -117,6 +127,7 @@ public class ArtistProfileService {
         var profile = findOwner(creator, false);
         return new ReleaseSelection(profile.filter(row -> !row.stageName().isBlank()).isPresent(),
                 profile.map(ProfileRow::published).orElse(false),
+                profile.map(ProfileRow::publicId).orElse(null), profile.map(ProfileRow::stageName).orElse(""),
                 ownerRelease(creator, work).orElse(null));
     }
 
@@ -140,7 +151,8 @@ public class ArtistProfileService {
                 INSERT INTO artist_song_release(id,creator_id,work_id,asset_id,cover_id,title,version,show_on_profile,published_at)
                 VALUES (?,?,?,?,?,?,1,TRUE,?)
                 ON DUPLICATE KEY UPDATE asset_id=?,cover_id=?,title=?,version=version+1,
-                    published_at=CASE WHEN show_on_profile THEN published_at ELSE ? END,show_on_profile=TRUE
+                    published_at=CASE WHEN show_on_profile THEN published_at ELSE ? END,show_on_profile=TRUE,
+                    discover_published_at=NULL,discover_featured=FALSE
                 """, uuid(), creator, work, assetId, coverId, publicTitle, now, assetId, coverId, publicTitle, now);
         return ownerRelease(creator, work).orElseThrow(ArtistProfileService::missing);
     }
@@ -149,7 +161,8 @@ public class ArtistProfileService {
     public void removeSong(String creator, String work) {
         var profile = requireOwnerProfile(creator);
         db.update("""
-                UPDATE artist_song_release SET show_on_profile=FALSE,version=version+1
+                UPDATE artist_song_release SET show_on_profile=FALSE,version=version+1,
+                    discover_published_at=NULL,discover_featured=FALSE
                 WHERE creator_id=? AND work_id=? AND show_on_profile=TRUE
                 """, creator, work);
         if (profile.featuredReleaseId() != null) {
@@ -159,6 +172,57 @@ public class ArtistProfileService {
                     )
                     """, creator, creator, work);
         }
+    }
+
+    @Transactional
+    public Release publishToDiscover(String creator, String work, long version) {
+        var profile = requireOwnerProfile(creator);
+        if (!profile.published()) {
+            throw new DomainException("ARTIST_HOME_REQUIRED", "请先公开歌手主页，再发布到发现。");
+        }
+        var song = ownerRelease(creator, work).orElseThrow(ArtistProfileService::missing);
+        if (song.version() != version) {
+            throw new DomainException("ARTIST_RELEASE_CHANGED", "主页上的歌曲版本已更新，请重新确认后发布。");
+        }
+        if (song.onDiscover()) return song;
+        db.update("UPDATE artist_song_release SET discover_published_at=? WHERE id=?",
+                Timestamp.from(Instant.now()), song.id());
+        return ownerRelease(creator, work).orElseThrow(ArtistProfileService::missing);
+    }
+
+    @Transactional
+    public MyProfile withdrawFromDiscover(String creator, String work) {
+        requireOwnerProfile(creator);
+        var song = ownerRelease(creator, work).orElseThrow(ArtistProfileService::missing);
+        db.update("UPDATE artist_song_release SET discover_published_at=NULL,discover_featured=FALSE WHERE id=?", song.id());
+        return ownerView(findOwner(creator, false).orElseThrow());
+    }
+
+    @Transactional
+    public void setDiscoverFeatured(String releaseId, boolean featured) {
+        int updated = db.update("""
+                UPDATE artist_song_release SET discover_featured=?
+                WHERE id=? AND discover_published_at IS NOT NULL AND show_on_profile=TRUE
+                """, featured, releaseId);
+        if (updated == 0) throw missing();
+    }
+
+    @Transactional(readOnly = true)
+    public DiscoverPage discover(boolean featured, int offset) {
+        int pageSize = 24;
+        var songs = db.query("""
+                SELECT p.public_id,p.stage_name,r.id,r.version,r.title,r.cover_id,r.discover_published_at
+                FROM artist_song_release r
+                JOIN artist_profile p ON p.creator_id=r.creator_id AND p.published=TRUE
+                JOIN music_work w ON w.id=r.work_id AND w.owner_id=r.creator_id AND w.deleted_at IS NULL
+                WHERE r.show_on_profile=TRUE AND r.discover_published_at IS NOT NULL
+                """ + (featured ? " AND r.discover_featured=TRUE" : "") + """
+                 ORDER BY r.discover_published_at DESC,r.id DESC LIMIT ? OFFSET ?
+                """, (rs, row) -> new DiscoverSong(rs.getString("public_id"), rs.getString("stage_name"),
+                new PublicSong(rs.getString("id"), rs.getLong("version"), rs.getString("title"),
+                        rs.getString("cover_id") != null), rs.getTimestamp("discover_published_at").toInstant()),
+                pageSize + 1, offset);
+        return new DiscoverPage(songs.stream().limit(pageSize).toList(), songs.size() > pageSize);
     }
 
     @Transactional(readOnly = true)
@@ -215,7 +279,8 @@ public class ArtistProfileService {
 
     private Release publicRelease(String publicId, String song, long version) {
         return db.query("""
-                SELECT r.id,r.version,r.title,r.work_id,r.asset_id,r.cover_id FROM artist_song_release r
+                SELECT r.id,r.version,r.title,r.work_id,r.asset_id,r.cover_id,
+                    (r.discover_published_at IS NOT NULL) AS on_discover FROM artist_song_release r
                 JOIN artist_profile p ON p.creator_id=r.creator_id
                 JOIN music_work w ON w.id=r.work_id AND w.owner_id=r.creator_id AND w.deleted_at IS NULL
                 WHERE p.public_id=? AND p.published=TRUE AND r.id=? AND r.version=? AND r.show_on_profile=TRUE

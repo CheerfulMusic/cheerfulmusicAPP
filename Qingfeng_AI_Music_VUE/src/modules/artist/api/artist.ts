@@ -14,6 +14,7 @@ export interface ArtistRelease extends Omit<PublishedSong, 'hasCover'> {
   workId: string
   assetId: string
   coverId: string | null
+  onDiscover?: boolean
 }
 
 export interface ArtistProfile {
@@ -46,7 +47,21 @@ export interface SongPublication {
 interface ReleaseSelection {
   profileReady: boolean
   published: boolean
+  publicId?: string | null
+  stageName?: string
   song: ArtistRelease | null
+}
+
+export interface DiscoverSong {
+  artistId: string
+  stageName: string
+  song: PublishedSong
+  publishedAt: string
+}
+
+interface DiscoverPage {
+  songs: DiscoverSong[]
+  hasMore: boolean
 }
 
 const mine = 'app/artist-profile'
@@ -101,6 +116,20 @@ export async function publishSong({ workId, ...song }: SongPublication) {
 export async function removeSongFromArtist(work: string) {
   await ensureCreator()
   return requestJson<ArtistProfile>(release(work), 'DELETE')
+}
+
+export async function publishSongToDiscover(work: string, version: number) {
+  await ensureCreator()
+  return requestJson<ArtistRelease>(`${release(work)}/discover`, 'PUT', { version })
+}
+
+export async function withdrawSongFromDiscover(work: string) {
+  await ensureCreator()
+  return requestJson<ArtistProfile>(`${release(work)}/discover`, 'DELETE')
+}
+
+export function listDiscoverSongs(featured: boolean, offset: number) {
+  return requestJson<DiscoverPage>(`public/discover?featured=${featured}&offset=${offset}`)
 }
 
 export const getPublicArtist = (id: string) => requestJson<PublicArtist>(publicArtist(id))

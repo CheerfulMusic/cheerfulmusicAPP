@@ -27,7 +27,10 @@ const direction=(v:unknown)=>obj(v)&&preferences(v.preferences)&&num(v.catalogVe
 const hotStat=(v:unknown)=>obj(v)&&text(v.trackId)&&['plays','likes','favorites','comments'].every(k=>num(v[k])&&Number(v[k])>=0)
 const nullableText=(v:unknown)=>v===null||str(v)
 const artistSong=(v:unknown):v is Row=>obj(v)&&text(v.id)&&Number.isSafeInteger(v.version)&&Number(v.version)>0&&text(v.title)
+const publicArtistSong=(v:unknown)=>artistSong(v)&&typeof v.hasCover==='boolean'
 const artistRelease=(v:unknown)=>artistSong(v)&&text(v.workId)&&text(v.assetId)&&nullableText(v.coverId)
+  &&(v.onDiscover===undefined||typeof v.onDiscover==='boolean')
+const discoverSong=(v:unknown)=>obj(v)&&text(v.artistId)&&text(v.stageName)&&publicArtistSong(v.song)&&text(v.publishedAt)
 const artistFields=(v:unknown):v is Row=>obj(v)&&str(v.stageName)&&str(v.tagline)&&nullableText(v.avatarKey)
   &&nullableText(v.coverKey)&&nullableText(v.featuredReleaseId)
 const myArtist=(v:unknown)=>artistFields(v)&&nullableText(v.publicId)&&typeof v.published==='boolean'&&list(v.songs,artistRelease)
@@ -82,13 +85,18 @@ export function validResponse(path:string,method:string,value:unknown):boolean{
  if(path==='public/auth/logto/start')return method==='POST'&&obj(value)&&logtoAuthorizationUrl(value.authorizationUrl)
  if(path==='public/system/info'||path==='public/system/photo-preview')return obj(value)&&text(value.name)&&text(value.version)&&obj(value.capabilities)&&['lyricsGeneration','musicGeneration','giftSharing','workPersistence'].every(k=>typeof (value.capabilities as Row)[k]==='boolean')
  if(path==='public/hot-songs')return method==='GET'&&obj(value)&&list(value.songs,hotStat)
- if(/^public\/artists\/[^/]+$/.test(path))return method==='GET'&&artistFields(value)&&list(value.songs,song=>artistSong(song)&&typeof song.hasCover==='boolean')
+ if(/^public\/artists\/[^/]+$/.test(path))return method==='GET'&&artistFields(value)&&list(value.songs,publicArtistSong)
+ if(path==='public/discover')return method==='GET'&&obj(value)&&typeof value.hasMore==='boolean'&&list(value.songs,discoverSong)
  if(path==='app/artist-profile'||path==='app/artist-profile/visibility')return myArtist(value)
  if(/^app\/artist-profile\/releases\/[^/]+$/.test(path)){
   if(method==='DELETE')return myArtist(value)
   if(method==='PUT')return artistRelease(value)
-  return method==='GET'&&obj(value)&&typeof value.profileReady==='boolean'&&typeof value.published==='boolean'&&(value.song===null||artistRelease(value.song))
+  return method==='GET'&&obj(value)&&typeof value.profileReady==='boolean'&&typeof value.published==='boolean'
+    &&(value.publicId===undefined||nullableText(value.publicId))&&(value.stageName===undefined||str(value.stageName))
+    &&(value.song===null||artistRelease(value.song))
  }
+ if(/^app\/artist-profile\/releases\/[^/]+\/discover$/.test(path))
+  return method==='DELETE'?myArtist(value):method==='PUT'&&artistRelease(value)
  if(/^public\/hot-songs\/[^/]+\/play$/.test(path))return method==='POST'&&hotStat(value)
  if(path==='app/analytics/page-users')return method==='GET'&&obj(value)&&typeof value.allowed==='boolean'&&(value.allowed!==true||(num(value.days)&&text(value.pagePath)&&list(value.users,u=>obj(u)&&text(u.creatorId)&&text(u.accountType)&&(u.name===null||str(u.name))&&(u.email===null||str(u.email))&&(u.phoneMasked===null||str(u.phoneMasked))&&num(u.avgDurationMs)&&num(u.samples)&&Number(u.samples)>=0)))
  if(path==='app/analytics/access')return method==='GET'&&analyticsAccessBody(value)

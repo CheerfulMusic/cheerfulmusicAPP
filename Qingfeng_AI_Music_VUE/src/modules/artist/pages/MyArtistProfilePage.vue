@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import { useRoute } from 'vue-router'
 import { ApiError } from '../../../shared/http/api-client'
 import { t } from '../../../shared/i18n'
 import NavIcon from '../../../shared/ui/NavIcon.vue'
 import {
   artistHomeUrl, getArtistProfile, ownerArtistCoverUrl, ownerAvatarUrl, ownerTrack, removeSongFromArtist, saveArtistProfile,
-  setArtistVisibility, type ArtistProfile, type ArtistRelease,
+  setArtistVisibility, withdrawSongFromDiscover, type ArtistProfile, type ArtistRelease,
 } from '../api/artist'
 import ArtistAvatar from '../components/ArtistAvatar.vue'
 import ArtistHome from '../components/ArtistHome.vue'
@@ -15,6 +16,7 @@ import ProfileWorks from '../components/ProfileWorks.vue'
 interface ImageDraft { file: File; url: string }
 
 const profile = ref<ArtistProfile>()
+const route = useRoute()
 const stageName = ref('')
 const tagline = ref('')
 const avatar = ref<ImageDraft>()
@@ -55,6 +57,11 @@ const dirty = computed(() => editing.value && Boolean(
 const tracks = computed(() => profile.value?.songs.map(ownerTrack) || [])
 const homeRoute = computed(() => ({ name: 'artist-home', params: { id: profile.value?.publicId || '' } }))
 const link = computed(() => profile.value?.publicId ? artistHomeUrl(profile.value.publicId) : '')
+const returnToSong = computed(() => {
+  const id = route.query.publishWork
+  return typeof id === 'string' && /^[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12}$/i.test(id)
+    ? { name: 'work-detail', params: { id }, query: { show: 'publication' } } : null
+})
 
 function revokeImage(draft?: ImageDraft) {
   if (draft) URL.revokeObjectURL(draft.url)
@@ -160,7 +167,7 @@ async function save() {
 }
 async function changeVisibility(published: boolean) {
   if (busy.value || (published && (dirty.value || !profile.value?.stageName))) return
-  if (!published && !window.confirm(t('隐藏后，访客将暂时无法访问主页和主页上的歌曲。确定隐藏吗？'))) return
+  if (!published && !window.confirm(t('隐藏主页后，访客将无法访问主页和其中的歌曲，已发布到「发现」的歌曲也会撤回。确定隐藏吗？'))) return
   notice.value = ''
   error.value = ''
   busy.value = true
@@ -173,7 +180,10 @@ async function changeVisibility(published: boolean) {
   finally { busy.value = false }
 }
 async function remove(song: ArtistRelease) {
-  if (busy.value || !window.confirm(t('从主页移出《{title}》？', { title: song.title }))) return
+  const prompt = song.onDiscover
+    ? '《{title}》将从歌手主页和「发现」移除，原作品仍保存在「我的音乐」。确定移出吗？'
+    : '从主页移出《{title}》？'
+  if (busy.value || !window.confirm(t(prompt, { title: song.title }))) return
   notice.value = ''
   error.value = ''
   busy.value = true
@@ -181,6 +191,17 @@ async function remove(song: ArtistRelease) {
     updateProfile(await removeSongFromArtist(song.workId))
     notice.value = '歌曲已移出主页。'
   } catch (cause) { report(cause, '暂时无法移出歌曲，请重试。') }
+  finally { busy.value = false }
+}
+async function withdraw(song: ArtistRelease) {
+  if (busy.value || !window.confirm(t('从「发现」撤回《{title}》？访客仍可在你的歌手主页试听。', { title: song.title }))) return
+  notice.value = ''
+  error.value = ''
+  busy.value = true
+  try {
+    updateProfile(await withdrawSongFromDiscover(song.workId))
+    notice.value = '歌曲已从发现撤回。'
+  } catch (cause) { report(cause, '暂时无法撤回歌曲，请重试。') }
   finally { busy.value = false }
 }
 async function copyLink() {
@@ -229,6 +250,9 @@ onBeforeUnmount(clearImageDrafts)
       </div>
     </template>
     <template v-else>
+      <RouterLink v-if="returnToSong" :to="returnToSong" class="button secondary profile-return-song">
+        {{ t(profile.published ? '返回歌曲继续公开' : '返回歌曲') }}
+      </RouterLink>
       <header class="profile-heading">
         <h1 ref="editHeading" tabindex="-1">{{ t('我的资料') }}</h1>
         <p>{{ t('管理个人信息、作品与账号设置') }}</p>
@@ -322,6 +346,8 @@ onBeforeUnmount(clearImageDrafts)
               <span>{{ t('歌手主页') }}</span>
               <div class="profile-inline-actions">
                 <span class="profile-visibility" :class="{ published: profile.published }">{{ t(profile.published ? '已公开' : '未公开') }}</span>
+                <button v-if="!profile.published && returnToSong && profile.stageName && !dirty" type="button"
+                  class="profile-pill profile-save" @click="changeVisibility(true)">{{ t('发布歌手主页') }}</button>
                 <button type="button" class="profile-pill" @click="showPreview(true)">{{ t('预览歌手主页') }}</button>
                 <template v-if="profile.published">
                   <RouterLink class="profile-pill" :to="homeRoute">{{ t('查看主页') }}</RouterLink>
@@ -347,12 +373,14 @@ onBeforeUnmount(clearImageDrafts)
         </form>
         <ProfileAccount />
       </div>
-      <ProfileWorks :songs="profile.songs" :busy="busy" @remove="remove" @library-count="workCount = $event" />
+      <ProfileWorks :songs="profile.songs" :published="profile.published" :busy="busy"
+        @remove="remove" @withdraw="withdraw" @library-count="workCount = $event" />
     </template>
   </div>
 </template>
 
 <style scoped>
+.profile-return-song { margin-bottom: 12px; }
 .my-artist {
   --profile-card: #fffafb;
   --profile-line: #eddee2;
