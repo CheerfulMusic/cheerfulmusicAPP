@@ -1001,5 +1001,17 @@ class NativeDumpCompatibilityContract(unittest.TestCase):
             self.assertFalse((out/'backup-receipt.json').exists())
 
 
+class RestoredDdlEquivalenceContract(unittest.TestCase):
+    def test_only_redundant_matching_column_charset_is_normalized(self):
+        a=b"CREATE TABLE `x` (\n  `a` varchar(160) COLLATE utf8mb4_unicode_ci NOT NULL,\n  `b` longtext COLLATE utf8mb4_bin\n)"
+        b=a.replace(b' COLLATE',b' CHARACTER SET utf8mb4 COLLATE')
+        self.assertEqual(a,release.canonical_ddl(b))
+        self.assertEqual(a,release.canonical_ddl(a))
+        self.assertNotEqual(a,release.canonical_ddl(b.replace(b'utf8mb4_unicode_ci',b'utf8mb4_bin')))
+        self.assertNotEqual(a,release.canonical_ddl(b.replace(b'varchar(160)',b'varchar(159)')))
+        other=b"  `a` varchar(10) CHARACTER SET latin1 COLLATE latin1_bin DEFAULT ' CHARACTER SET utf8mb4 COLLATE utf8mb4_bin'"
+        self.assertEqual(other,release.canonical_ddl(other))
+
+
 if __name__ == '__main__':
     unittest.main()

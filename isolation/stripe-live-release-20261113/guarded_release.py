@@ -353,6 +353,13 @@ def source_objects():
                      "'events',(SELECT COUNT(*) FROM information_schema.EVENTS WHERE EVENT_SCHEMA=DATABASE()));")[0]
 
 
+def canonical_ddl(raw):
+    # MySQL 8.0 dumps can render a redundant character set before an explicit
+    # matching collation. Limit normalization to the column type declaration;
+    # never alter defaults, generated expressions, comments, or other charsets.
+    return re.sub(rb"(?m)^(  `(?:[^`]|``)+` (?:var)?char\([0-9]+\)|  `(?:[^`]|``)+` (?:tiny|medium|long)?text) CHARACTER SET utf8mb4(?= COLLATE utf8mb4_[A-Za-z0-9_]+\b)", rb"\1", raw)
+
+
 def fingerprint(database):
     tables = json_rows("SELECT JSON_OBJECT('table',TABLE_NAME) FROM information_schema.TABLES "
                        "WHERE TABLE_SCHEMA=DATABASE() AND TABLE_TYPE='BASE TABLE' ORDER BY TABLE_NAME;", database)
@@ -366,7 +373,7 @@ def fingerprint(database):
         hashes = mysql("SELECT SHA2(CONCAT_WS('|'," + ','.join(parts) + "),256) FROM " + qid(name) + " ORDER BY 1;", database)
         need(len(hashes) <= 128 * 1024 * 1024 and all(re.fullmatch(rb'[0-9a-f]{64}', r) for r in hashes.splitlines()),
              'TABLE_FINGERPRINT_BUDGET_OR_ENCODING_FAILURE')
-        ddl = mysql('SHOW CREATE TABLE ' + qid(name) + ';', database)
+        ddl = canonical_ddl(mysql('SHOW CREATE TABLE ' + qid(name) + ';', database))
         result[name] = {'rows': len(hashes.splitlines()), 'rowsSha256': hashlib.sha256(hashes).hexdigest(),
                         'ddlSha256': hashlib.sha256(ddl).hexdigest()}
     return result
