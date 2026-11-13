@@ -31,6 +31,10 @@ DATABASE = 'qingfeng_music'
 ACCOUNT = 'acct_1UYNvy00Y9YXh9G3'
 HEX40 = re.compile(r'[0-9a-f]{40}')
 HEX64 = re.compile(r'[0-9a-f]{64}')
+CHANNELS = frozenset(('card', 'apple_pay', 'wechat_pay', 'paypal'))
+STRIPE_CHANNELS = CHANNELS - {'paypal'}
+USD_QUOTES = (990, 2590, 4990)
+CNY_QUOTES = (6880, 17880, 33880)
 
 
 class Blocked(RuntimeError):
@@ -114,13 +118,19 @@ def property_map(path):
     return result
 
 
-def validate_configuration(original, candidate, accepting, canary=False):
+def validate_configuration(original, candidate, accepting, canary=False, channels=None, paypal_merchant_id=None):
     """Preserve all unrelated effective properties; print no values on errors."""
     allowed = ('qingfeng.stripe.', 'qingfeng.credits.writer-fence.',
                'qingfeng.payment.legacy-orders.')
     exact = {'spring.datasource.url', 'spring.flyway.enabled', 'spring.flyway.target',
              'spring.sql.init.mode', 'qingfeng.payment.legacy-orders-read-only',
              'qingfeng.paypal.accepting-new-orders'}
+    explicit_channels = channels is not None
+    if explicit_channels:
+        channels = channel_set(channels)
+        need(not accepting or not canary, 'PUBLIC_AND_CANARY_STAGES_ARE_EXCLUSIVE')
+        need(accepting or canary or not channels, 'CLOSED_STAGE_CANNOT_ENABLE_CHANNELS')
+        exact.add('qingfeng.paypal.canary-owner-ids')
     for key in original.keys() | candidate.keys():
         if original.get(key) != candidate.get(key):
             need(key in exact or key.startswith(allowed), 'UNRELATED_CONFIGURATION_CHANGE')
@@ -142,14 +152,48 @@ def validate_configuration(original, candidate, accepting, canary=False):
         'qingfeng.payment.legacy-orders-read-only': 'true',
         'qingfeng.paypal.accepting-new-orders': 'false',
     }
+    if explicit_channels:
+        required.update({
+            'qingfeng.stripe.accepting-new-orders': 'true' if accepting and channels & STRIPE_CHANNELS else 'false',
+            'qingfeng.stripe.payment-methods.card.enabled': 'true' if 'card' in channels else 'false',
+            'qingfeng.stripe.payment-methods.apple-pay.enabled': 'true' if 'apple_pay' in channels else 'false',
+            'qingfeng.stripe.payment-methods.wechat-pay.enabled': 'true' if 'wechat_pay' in channels else 'false',
+            'qingfeng.paypal.accepting-new-orders': 'true' if accepting and 'paypal' in channels else 'false',
+        })
     need(all(candidate.get(k) == v for k, v in required.items()), 'RUNTIME_MODE_OR_FINANCIAL_GUARD_MISMATCH')
-    owners = [v.strip() for v in candidate.get('qingfeng.stripe.canary-owner-ids', '').split(',') if v.strip()]
+    owner_value = candidate.get('qingfeng.stripe.canary-owner-ids', '')
+    owners = [v.strip() for v in owner_value.split(',') if v.strip()]
     if canary:
         need(not accepting and 1 <= len(owners) <= 3 and len(owners) == len(set(owners))
+             and all(v.strip() for v in owner_value.split(','))
              and all(re.fullmatch(r'[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}', v) for v in owners),
              'EXPLICIT_MAX_THREE_CANARY_OWNERS_REQUIRED')
     else:
-        need(not owners, 'CANARY_OWNERS_MUST_BE_EMPTY')
+        need(not owners and not owner_value.strip(), 'CANARY_OWNERS_MUST_BE_EMPTY')
+    paypal_owner_value = candidate.get('qingfeng.paypal.canary-owner-ids', '')
+    paypal_owners = [v.strip() for v in paypal_owner_value.split(',') if v.strip()]
+    if explicit_channels and canary and 'paypal' in channels:
+        need(paypal_owners == owners and all(v.strip() for v in paypal_owner_value.split(',')),
+             'PAYPAL_CANARY_MUST_USE_SAME_EXPLICIT_OWNERS')
+    else:
+        need(not paypal_owners and not paypal_owner_value.strip(), 'PAYPAL_CANARY_OWNERS_MUST_BE_EMPTY')
+    if explicit_channels and 'wechat_pay' in channels:
+        need(all(candidate.get('qingfeng.stripe.prices.cny.' + name) == price
+                 for name, price in (('starter', '68.80'), ('standard', '178.80'), ('plus', '338.80'))),
+             'APPROVED_WECHAT_CNY_QUOTES_REQUIRED')
+    if explicit_channels and 'paypal' in channels:
+        need(isinstance(paypal_merchant_id, str) and bool(re.fullmatch(r'[A-Za-z0-9]{8,64}', paypal_merchant_id)),
+             'EXPLICIT_PAYPAL_MERCHANT_REQUIRED')
+        need(all(candidate.get(k) == v for k, v in {
+            'qingfeng.paypal.enabled': 'true', 'qingfeng.paypal.environment': 'live',
+            'qingfeng.paypal.live-enabled': 'true', 'qingfeng.paypal.public-live-enabled': 'true',
+            'qingfeng.paypal.return-base-url': 'https://cheerfulmusic.com/account',
+            'qingfeng.paypal.merchant-id': paypal_merchant_id,
+        }.items()), 'LIVE_PAYPAL_IDENTITY_AND_CALLBACK_GUARDS_REQUIRED')
+        need(all(isinstance(candidate.get(k), str) and bool(candidate[k].strip())
+                 and '${' not in candidate[k] and not any(c.isspace() for c in candidate[k])
+                 for k in ('qingfeng.paypal.client-id', 'qingfeng.paypal.client-secret', 'qingfeng.paypal.webhook-id')),
+             'LITERAL_PAYPAL_CREDENTIALS_AND_WEBHOOK_ID_REQUIRED')
     need(bool(re.fullmatch(r'(?:sk|rk)_live_[A-Za-z0-9]+', candidate.get('qingfeng.stripe.api-key', ''))),
          'LITERAL_LIVE_API_CREDENTIAL_REQUIRED')
     need(bool(re.fullmatch(r'whsec_[A-Za-z0-9]+', candidate.get('qingfeng.stripe.webhook-secret', ''))),
@@ -170,8 +214,32 @@ def validate_configuration(original, candidate, accepting, canary=False):
          == {k: v for k, v in old_params.items() if k not in mutable}, 'UNRELATED_JDBC_PARAMETER_CHANGE')
 
 
+def channel_set(values):
+    need(isinstance(values, (list, tuple, frozenset)) and all(isinstance(v, str) for v in values)
+         and len(values) == len(set(values)) and set(values) <= CHANNELS, 'EXPLICIT_UNIQUE_KNOWN_CHANNELS_REQUIRED')
+    channels = frozenset(values)
+    need('apple_pay' not in channels or 'card' in channels, 'APPLE_PAY_REQUIRES_CARD_CHANNEL')
+    return channels
+
+
+def plan_channels(plan, stage):
+    """Version 1 remains Stripe-only; version 2 cannot silently omit a target channel."""
+    if plan.get('version') == 1:
+        need(plan.get('scope') == 'stripe-card-apple-pay', 'PLAN_SCOPE_MISMATCH')
+        return None
+    need(plan.get('version') == 2 and plan.get('scope') == 'payment-four-channel', 'PLAN_SCOPE_MISMATCH')
+    need(channel_set(plan.get('releaseChannels')) == CHANNELS, 'ALL_FOUR_RELEASE_CHANNELS_REQUIRED')
+    stages = plan.get('stageChannels')
+    need(isinstance(stages, dict) and set(stages) == {'closed', 'canary', 'open'}, 'EXPLICIT_STAGE_CHANNEL_CONTRACT_REQUIRED')
+    closed, canary, opened = (channel_set(stages[name]) for name in ('closed', 'canary', 'open'))
+    need(not closed and bool(canary) and opened == CHANNELS, 'CLOSED_CANARY_OPEN_CHANNEL_CONTRACT_MISMATCH')
+    need(isinstance(plan.get('paypalMerchantId'), str)
+         and bool(re.fullmatch(r'[A-Za-z0-9]{8,64}', plan['paypalMerchantId'])), 'EXPLICIT_PAYPAL_MERCHANT_REQUIRED')
+    return {'closed': closed, 'canary': canary, 'open': opened}[stage]
+
+
 def validate_plan(plan):
-    need(plan.get('version') == 1 and plan.get('scope') == 'stripe-card-apple-pay', 'PLAN_SCOPE_MISMATCH')
+    plan_channels(plan, 'closed')
     need(bool(re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._-]{0,70}', plan.get('releaseId', ''))), 'RELEASE_ID_INVALID')
     need(plan.get('database') == {'uuid': UUID, 'schema': DATABASE, 'port': 3306}, 'PRODUCTION_IDENTITY_MISMATCH')
     for section in ('expected', 'candidate'):
@@ -478,10 +546,36 @@ def running_artifact_matches(plan):
     need(matches, 'ACTUAL_PROCESS_ARTIFACT_NOT_VERIFIED')
 
 
-def validate_canary_funding(funding, jar_sha):
+def validate_canary_funding(funding, jar_sha, channels=None):
     # No temporary price is invented here. Current USD catalog snapshots
     # remain 9.90/25.90/49.90. An authorization for USD0.01 cannot enable a
     # test Checkout whose actual catalog price is higher.
+    if channels is not None:
+        selected = channel_set(channels)
+        quotes = funding.get('channelQuotes')
+        need(bool(selected) and funding.get('candidateJarSha256') == jar_sha
+             and type(funding.get('approvedTransactionLimit')) is int
+             and 1 <= funding.get('approvedTransactionLimit') <= 8
+             and isinstance(quotes, dict) and set(quotes) == selected,
+             'EXACT_CHANNEL_CANARY_FUNDING_REQUIRED')
+        count = 0
+        for channel in sorted(selected):
+            quote = quotes[channel]
+            need(isinstance(quote, dict), 'EXACT_CHANNEL_CANARY_FUNDING_REQUIRED')
+            amount = quote.get('selectedPackageAmountMinor')
+            limit = quote.get('approvedMaximumMinor')
+            currency = 'CNY' if channel == 'wechat_pay' else 'USD'
+            need(quote.get('currency') == currency and type(amount) is int
+                 and amount in (CNY_QUOTES if currency == 'CNY' else USD_QUOTES)
+                 and type(limit) is int and amount <= limit
+                 and type(quote.get('approvedTransactionLimit')) is int
+                 and 1 <= quote['approvedTransactionLimit'] <= 2
+                 and isinstance(quote.get('authorizationEvidenceSha256'), str)
+                 and bool(HEX64.fullmatch(quote.get('authorizationEvidenceSha256', ''))),
+                 'ACTUAL_CANARY_QUOTE_EXCEEDS_APPROVED_FUNDS_SCOPE')
+            count += quote['approvedTransactionLimit']
+        need(count == funding['approvedTransactionLimit'], 'CHANNEL_FUNDING_TRANSACTION_SCOPE_MISMATCH')
+        return
     amount = funding.get('selectedPackageAmountMinor')
     limit = funding.get('approvedMaximumMinor')
     need(funding.get('candidateJarSha256') == jar_sha
@@ -492,24 +586,74 @@ def validate_canary_funding(funding, jar_sha):
          'ACTUAL_CANARY_QUOTE_EXCEEDS_APPROVED_FUNDS_SCOPE')
 
 
+def validate_business_acceptance(plan, business):
+    # Preserve every original Stripe-only acceptance requirement. A version-2
+    # plan adds independently bound native channel proofs; it cannot substitute
+    # a generic Checkout-created receipt or card payment for a wallet payment.
+    need(business.get('jarSha256') == plan['candidate']['jarSha256']
+         and business.get('accountId') == ACCOUNT and business.get('environment') == 'live'
+         and all(business.get(k) == 'PASS' for k in ('signedWebhook', 'creditCardPaid',
+                     'applePayDevicePaid', 'creditedExactlyOnce', 'ownershipAndCurrency')),
+         'REAL_CARD_AND_APPLE_PAY_BUSINESS_ACCEPTANCE_REQUIRED')
+    selected = plan_channels(plan, 'open')
+    if selected is None:
+        return
+    proofs = business.get('channelAcceptance')
+    need(isinstance(proofs, dict) and set(proofs) == selected, 'EVERY_RELEASE_CHANNEL_REQUIRES_REAL_ACCEPTANCE')
+    payments, orders, entries, evidence = set(), set(), set(), set()
+    for channel in sorted(selected):
+        proof = proofs[channel]
+        need(isinstance(proof, dict), 'REAL_CHANNEL_PAYMENT_ACCEPTANCE_REQUIRED')
+        is_paypal = channel == 'paypal'
+        account = plan['paypalMerchantId'] if is_paypal else ACCOUNT
+        currency = 'CNY' if channel == 'wechat_pay' else 'USD'
+        amount = proof.get('amountMinor')
+        need(proof.get('status') == 'PASS' and proof.get('candidateJarSha256') == plan['candidate']['jarSha256']
+             and proof.get('provider') == ('PAYPAL' if is_paypal else 'STRIPE')
+             and proof.get('accountId') == account and proof.get('environment') == 'live'
+             and proof.get('livemode') is True
+             and proof.get('providerStatus') == ('COMPLETED' if is_paypal else 'succeeded')
+             and proof.get('paymentMethodType') == ('card' if channel == 'apple_pay' else channel)
+             and proof.get('walletType', '') == ('apple_pay' if channel == 'apple_pay' else '')
+             and proof.get('currency') == currency and type(amount) is int
+             and amount in (CNY_QUOTES if currency == 'CNY' else USD_QUOTES)
+             and all(proof.get(k) == 'PASS' for k in ('providerReadback', 'signedWebhook',
+                     'creditedExactlyOnce', 'ownershipAndCurrency', 'ledgerReconciled'))
+             and isinstance(proof.get('sourceEvidenceSha256'), str)
+             and bool(HEX64.fullmatch(proof.get('sourceEvidenceSha256', ''))),
+             'REAL_CHANNEL_PAYMENT_ACCEPTANCE_REQUIRED')
+        references = []
+        for field in ('providerPaymentId', 'orderId', 'ledgerEntryId'):
+            value = proof.get(field)
+            need(isinstance(value, str) and bool(re.fullmatch(r'[A-Za-z0-9_-]{4,128}', value)),
+                 'BOUND_CHANNEL_PAYMENT_ORDER_LEDGER_REFERENCES_REQUIRED')
+            references.append(value)
+        payment = (proof['provider'], account, 'live', references[0])
+        need(payment not in payments and references[1] not in orders and references[2] not in entries
+             and proof['sourceEvidenceSha256'] not in evidence,
+             'SAME_PAYMENT_CANNOT_ACCEPT_MULTIPLE_CHANNELS')
+        payments.add(payment)
+        orders.add(references[1])
+        entries.add(references[2])
+        evidence.add(proof['sourceEvidenceSha256'])
+
+
 def install(plan, out, operation):
     check_release(plan)
     check_install_receipts(plan, out)
     current_matches(plan, candidate=operation in ('canary', 'open', 'recover'))
+    stage = 'open' if operation == 'open' else 'canary' if operation == 'canary' else 'closed'
+    channels = plan_channels(plan, stage)
     if operation == 'canary':
-        validate_canary_funding(receipt(plan, 'canaryFunding'), plan['candidate']['jarSha256'])
+        validate_canary_funding(receipt(plan, 'canaryFunding'), plan['candidate']['jarSha256'], channels)
     if operation == 'open':
         business = receipt(plan, 'business')
-        need(business.get('jarSha256') == plan['candidate']['jarSha256']
-             and business.get('accountId') == ACCOUNT and business.get('environment') == 'live'
-             and all(business.get(k) == 'PASS' for k in ('signedWebhook', 'creditCardPaid',
-                         'applePayDevicePaid', 'creditedExactlyOnce', 'ownershipAndCurrency')),
-             'REAL_CARD_AND_APPLE_PAY_BUSINESS_ACCEPTANCE_REQUIRED')
+        validate_business_acceptance(plan, business)
     config_key = 'openProperties' if operation == 'open' else 'canaryProperties' if operation == 'canary' else 'closedProperties'
     configuration = secure(plan[config_key], private=True)
     old = property_map(out / 'configuration/application.properties')
     new = property_map(configuration)
-    validate_configuration(old, new, operation == 'open', operation == 'canary')
+    validate_configuration(old, new, operation == 'open', operation == 'canary', channels, plan.get('paypalMerchantId'))
     stop_units(plan)
     current_matches(plan, candidate=operation in ('canary', 'open', 'recover'))
     atomic_copy(plan['approvedPolicy'], ETC / 'release-policy.json', 0o644)
@@ -534,6 +678,8 @@ def install(plan, out, operation):
     return {'status': 'OPEN_WITH_PRIOR_BUSINESS_ACCEPTANCE' if operation == 'open' else 'CANARY_ONLY_AWAITING_USER_PAYMENT' if operation == 'canary' else 'STARTED_NEW_PURCHASES_CLOSED',
             'sourceCommit': plan['candidate']['sourceCommit'],
             'jarSha256': plan['candidate']['jarSha256'],
+            'releaseChannels': sorted(CHANNELS) if channels is not None else ['apple_pay', 'card'],
+            'newPurchaseChannels': sorted(channels) if channels is not None else ['apple_pay', 'card'] if operation in ('canary', 'open') else [],
             'serviceHealth': 'UP', 'businessAcceptance': 'PREVIOUSLY_PINNED' if operation == 'open' else 'NOT_TESTED',
             'otherWriterUnits': 'REMAIN_STOPPED_PENDING_SEPARATE_REVIEW'}
 

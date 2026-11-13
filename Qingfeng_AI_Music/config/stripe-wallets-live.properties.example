@@ -1,0 +1,37 @@
+# Stripe Hosted Checkout 钱包正式环境配置契约；不含密钥，不可直接当作上线配置。
+# 只有发布验收通过，才在服务器私有配置中启用对应门禁。
+# 私钥/回调密钥分别通过 STRIPE_SECRET_KEY / STRIPE_WEBHOOK_SECRET 私有环境注入。
+# 本文件不设置 PayPal、数据库、Flyway 或历史账本切换参数。
+
+qingfeng.stripe.enabled=false
+qingfeng.stripe.accepting-new-orders=false
+qingfeng.stripe.canary-owner-ids=
+qingfeng.stripe.environment=live
+qingfeng.stripe.account-id=${STRIPE_ACCOUNT_ID:}
+qingfeng.stripe.business-country=GB
+qingfeng.stripe.success-url=https://cheerfulmusic.com/recharge?stripe_session_id={CHECKOUT_SESSION_ID}
+qingfeng.stripe.cancel-url=https://cheerfulmusic.com/recharge?stripe_cancelled=1
+
+# Apple Pay 使用 card 的 Hosted Checkout，在兼容设备和钱包上由 Stripe 展示。
+# 选择 Apple Pay 入口不等于最终付款方式是 Apple Pay；验收须核对实际 Charge 钱包类型。
+# 与发布工具 v2 closed 阶段一致，三种 Stripe 方法均默认关闭。
+# canary/open 阶段由明确的 stageChannels 契约选择，不从模板推断上线资格。
+qingfeng.stripe.payment-methods.card.enabled=false
+qingfeng.stripe.payment-methods.apple-pay.enabled=false
+# 用户已报告审核通过；实际商户和 Live Payment Method Configuration 仍须只读核对。
+# 本模板保留默认关闭，不因配置文件存在自动开放微信新购。
+qingfeng.stripe.payment-methods.wechat-pay.enabled=false
+
+# 英国商户本项目微信仅提供 CNY；不改动既有 USD 套餐，不进行隐式汇率换算。
+qingfeng.stripe.prices.cny.starter=68.80
+qingfeng.stripe.prices.cny.standard=178.80
+qingfeng.stripe.prices.cny.plus=338.80
+
+# Live Webhook 地址：https://cheerfulmusic.com/api/public/stripe/webhook
+# 使用此地址同一账户/环境下的签名密钥，不能复用 Stripe CLI 或 Sandbox 的签名密钥。
+# 事件契约：checkout.session.completed / checkout.session.async_payment_succeeded /
+# checkout.session.async_payment_failed / checkout.session.expired /
+# refund.created / refund.updated / refund.failed /
+# charge.dispute.created / charge.dispute.updated / charge.dispute.closed /
+# charge.dispute.funds_reinstated
+# 普通争议事件用于信用卡/Apple Pay；不将银行卡争议验收记为微信争议验收。

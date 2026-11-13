@@ -1,6 +1,9 @@
 # 正式环境 PayPal 收款配置模板（占位符，不含任何真实密钥）
 # 复制为服务器私有配置 /etc/qingfeng-music/application.properties 中的对应键，不要提交真实值。
-# 启用前必须完成商户与回调验收；退款、争议、拒付事件尚未实现自动处理。
+# 启用新购前必须完成当前候选的商户、回调及资金场景验收，不能以源码存在代替验收通过。
+# 已实现验签入箱、权威资源重查、成功退款幂等扣回和争议订单级冻结/胜诉解冻。
+# 最终败诉实损证明、资金返还补偿和异常恢复后的受控 REVIEW 解除仍 BLOCKED。
+# 不得据此模板宣称 PayPal 资金闭环已完成，也不得直接放开所有用户新购。
 
 # --- 必须：商户后台提供 ---
 # Live App 的 Client ID / Secret（英国商户账户下的 Live 应用，不是 Sandbox 应用）
@@ -9,8 +12,13 @@ qingfeng.paypal.client-secret=<LIVE_CLIENT_SECRET>
 # 收款商户 ID（Live 环境）
 qingfeng.paypal.merchant-id=<LIVE_MERCHANT_ID>
 # Webhook ID：在开发者控制台为 https://cheerfulmusic.com/api/public/paypal/webhook
-# 创建 Webhook 订阅后生成。当前只可订阅 PAYMENT.CAPTURE.COMPLETED；
-# 订阅退款/争议事件会导致验签后返回 503 并被 PayPal 持续重试。
+# 创建 Webhook 订阅后生成，必须与上述同一 Live App、商户和环境配对。
+# 当前处理的外部事件：PAYMENT.CAPTURE.COMPLETED、PAYMENT.CAPTURE.REFUNDED、
+# PAYMENT.CAPTURE.REVERSED，以及 CUSTOMER.DISPUTE.CREATED / UPDATED / RESOLVED。
+# 事件经 PayPal 验签后持久化入箱，再以权威 GET 结果处理；接收成功不等于权益处理完成。
+# Pending/未知退款、实损未证的败诉、拒付及关联不明事件保留等待或人工核查，
+# 不会仅因订阅退款/争议统一返回 503；配置/收件箱未就绪仍可返回 503，验签失败返回 401。
+# PAYMENT.CAPTURE.STATUS_RISK 是应用内部对账事件，不是控制台需订阅的外部事件。
 qingfeng.paypal.webhook-id=<LIVE_WEBHOOK_ID>
 
 # --- 必须：正式环境开关（三道，缺一不可） ---
@@ -19,6 +27,13 @@ qingfeng.paypal.environment=live
 qingfeng.paypal.live-enabled=true
 # 公网 Live 的第二道独立开关，默认 false。防止本地 paypal-live 配置误传到线上。
 qingfeng.paypal.public-live-enabled=true
+
+# --- 新购隔离：默认保持关闭；保留已启用通道的验签接收和既有订单处理 ---
+# 既有订单是否可变更还受历史订单只读边界约束，不能通过此开关绕过。
+qingfeng.paypal.accepting-new-orders=false
+# 可选灰度仅限最多 3 个已核对的站内用户 UUID，逗号分隔；留空不开放灰度。
+# 昵称、邮箱、支付商户 ID 不可填写。灰度真实付款及生产配置变更须另行批准。
+qingfeng.paypal.canary-owner-ids=
 
 # --- 必须：公网回调地址（写死校验，只允许这个值） ---
 qingfeng.paypal.return-base-url=https://cheerfulmusic.com/account

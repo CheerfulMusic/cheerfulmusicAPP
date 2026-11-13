@@ -12,7 +12,7 @@ public class PayPalPaymentController {
     public PayPalPaymentController(PayPalPaymentService service){this.service=service;}
     public record OrderRequest(String packageId){}
     public record RecoveryRequest(String paypalOrderId){}
-    @GetMapping("/api/app/paypal/catalog") public Map<String,Object> catalog(){return service.catalog();}
+    @GetMapping("/api/app/paypal/catalog") public Map<String,Object> catalog(@AuthenticationPrincipal CreatorPrincipal principal){return service.catalog(principal);}
     @GetMapping("/api/app/paypal/sdk-config") public Map<String,Object> sdkConfig(){return service.sdkConfig();}
     @PostMapping("/api/app/paypal/orders") public Map<String,Object> create(@AuthenticationPrincipal CreatorPrincipal principal,@RequestBody OrderRequest req){return service.create(principal.id(),req.packageId());}
     @GetMapping("/api/app/paypal/orders") public Map<String,Object> orders(@AuthenticationPrincipal CreatorPrincipal principal){return service.orders(principal.id());}
