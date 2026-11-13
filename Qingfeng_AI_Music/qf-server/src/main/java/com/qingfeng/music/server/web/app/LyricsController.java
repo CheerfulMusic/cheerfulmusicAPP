@@ -58,8 +58,10 @@ public class LyricsController {
  @PostMapping(value="/generate-photo", consumes="multipart/form-data")
  public LyricsApi.Revision composePhoto(@AuthenticationPrincipal CreatorPrincipal creator, @PathVariable String work,
      @RequestParam @PositiveOrZero long workVersion, @RequestParam UUID requestKey,
-     @RequestParam @Pattern(regexp="zh-CN|en|mixed") String language, @RequestParam MultipartFile photo) {
-     return composer.composePhoto(creator.id(),work,workVersion,requestKey.toString(),language,PhotoLyricsImage.jpeg(photo));
+     @RequestParam @Pattern(regexp="zh-CN|en|mixed") String language,
+     @RequestParam(name="photo", required=false) List<MultipartFile> photo,
+     @RequestParam(name="photos", required=false) List<MultipartFile> photos) {
+     return composer.composePhoto(creator.id(),work,workVersion,requestKey.toString(),language,PhotoLyricsImage.jpegs(photo,photos));
  }
  @GetMapping("/requests/{key}") public LyricsCompositionService.RequestState requestState(@AuthenticationPrincipal CreatorPrincipal creator,@PathVariable String work,@PathVariable String key){return composer.requestState(creator.id(),work,key);}
  public record Request(@NotNull @PositiveOrZero Long workVersion,@NotBlank @Size(max=100) String title,@NotBlank @Size(max=12000) String lyrics,@Pattern(regexp="[0-9a-fA-F-]{36}") String baseRevisionId){}
