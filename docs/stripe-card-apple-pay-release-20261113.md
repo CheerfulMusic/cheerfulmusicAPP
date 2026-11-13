@@ -4,6 +4,14 @@
 
 **当前结论：代码与隔离验收已完成，正式新购仍不允许开放。** Stripe 官方最低金额说明列出 USD 0.50、GBP 0.30；该英国账户默认结算币种为 GBP，跨币种收款须达到折算后的结算币种最低额。USD 0.01 无法用于本次真实付款验收。没有提高用户授权金额、创建真实订单、扣款、退款或制造支付成功记录。官方依据：https://docs.stripe.com/currencies#minimum-and-maximum-charge-amounts 。
 
+**最新范围：用户已明确“合并即可”，本轮到本地 main 合并为止，不再执行生产停服、迁移、配置激活或新购开放。线上新增字段和已经存在的迁移记录原样保留。**
+
+17:19 的实际只读复核确认生产历史已推进到 `V44__discover_song_publication.sql / -1983576296`；该记录与候选金融 `V44__credit_entitlement_integration.sql / 789542731` 撞号。运行0530 JAR及候选的V1—43 SQL内容一致，但运行JAR不带发现V44，已执行发现V44原件未在已检Git/工作树/发布目录中找到，来源保持UNKNOWN。用户确认新增字段保留，不等于两条不同V44已兼容。**当前候选不得直接用于支付生产发布。** 未重命名迁移、repair、忽略missing或补造V44；后续若要求支付上线，应先统一已执行迁移基线，再重新验收尚未上线的金融迁移编号。
+
+后续已保留并合入并行 main `36c990b` 的8个Agent界面/头像文件。合并后的业务候选为 `2e97f4c038df49b060cd2cac5f95506ccfd1f015`：前端760/760通过，381个完整输入，证据 `.cache/payment-main-integration-20261112/frontend/complete-acceptance-20261113T090041430451Z/evidence.json`。后端输入不变，最终fresh制品逐字节匹配1416项全量实际使用的生产类；制品证据 `.cache/payment-main-integration-20261112/artifact-20261113T090244748744Z/results.json`，JAR SHA `ca395c743f7bee60137a18e848d96faa0a803504257c972ac64ed82a5f1e581f`。该JAR在非空还原隔离库启动通过并已停止，证据 `.cache/payment-main-integration-20261112/jar-restore-20261113T090508017398Z/results.json`。它只暂存于服务器独立的 `stripe-release-staging`，没有切换current；迁移撞号使其保持NO-GO。后续仅发布工具/文档修正不冒充该旧JAR已含新提交。
+
+服务器默认Python3.6.8和Java11不能执行本工具链，另有Python3.11及现网服务Java17可用。已只读核实并为发布脚本增加执行前拒绝门禁；实际使用Java17执行的生产只读计划被 `HISTORY_SCRIPT_OR_CHECKSUM_MISMATCH` 正确阻断，没有执行写入。
+
 ## 范围与代码
 
 - 独立候选从本地 main `f77830b` 建立，合入本次实际 fetch 得到的远端 main `d9233b8`；`origin/dev/yth` 已包含。合入后的审查起点为 `f74489a600a6e420e042057301f5e90981367a2d`。最终提交及 JAR 身份以公共仓库 `.cache/stripe-live-release-20261113/delivery.json` 的实际收据为准。

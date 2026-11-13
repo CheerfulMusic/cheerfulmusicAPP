@@ -1,7 +1,11 @@
 """Offline negative-path checks. No network, MySQL, systemd or production files."""
 import importlib.util
+import contextlib
+import io
+import json
 from pathlib import Path
 import unittest
+from unittest import mock
 
 spec = importlib.util.spec_from_file_location('guarded_release', Path(__file__).with_name('guarded_release.py'))
 release = importlib.util.module_from_spec(spec)
@@ -9,6 +13,18 @@ spec.loader.exec_module(release)
 
 
 class RuntimeConfigurationContract(unittest.TestCase):
+    def test_unsupported_interpreter_cannot_parse_arguments_or_touch_files(self):
+        output=io.StringIO()
+        with mock.patch.object(release.sys,'version_info',(3,6,8)), \
+             mock.patch.object(release.argparse,'ArgumentParser',side_effect=AssertionError('no argument access')), \
+             mock.patch('builtins.open',side_effect=AssertionError('no filesystem access')), \
+             mock.patch.object(Path,'read_text',side_effect=AssertionError('no filesystem access')), \
+             contextlib.redirect_stdout(output):
+            self.assertEqual(2,release.main())
+        result=json.loads(output.getvalue())
+        self.assertEqual('PYTHON_3_9_OR_NEWER_REQUIRED',result['reason'])
+        self.assertFalse(result['productionMutation'])
+
     def setUp(self):
         self.old = {'spring.datasource.url': 'jdbc:mysql://127.0.0.1:3306/qingfeng_music?serverTimezone=Asia/Shanghai',
                     'spring.datasource.username': 'synthetic_account', 'spring.datasource.password': 'synthetic_password',

@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.11
 """Explicit Linux production release stages. Import/--help never operate a server.
 
 This tool does not migrate, activate a ledger, approve an artifact, make a payment,
@@ -392,7 +392,9 @@ def check_release(plan):
          'INSTALLED_GUARD_DIFFERS_FROM_REVIEWED_SOURCE')
     policy = secure(plan['approvedPolicy'])
     need(sha(policy) == plan['approvedPolicySha256'], 'APPROVED_POLICY_PIN_MISMATCH')
-    command(['python3', str(guard), '--release', str(directory), '--policy', str(policy)], timeout=90)
+    # The host's default python3 can be 3.6. Keep the explicitly selected,
+    # version-checked interpreter for the release gate and its 3.9+ APIs.
+    command([sys.executable, str(guard), '--release', str(directory), '--policy', str(policy)], timeout=90)
 
 
 def check_install_receipts(plan, out):
@@ -537,6 +539,13 @@ def install(plan, out, operation):
 
 
 def main():
+    # This check precedes argument/file parsing, locks and every server action.
+    # The module itself is parseable on 3.6 so a wrong launcher fails with this
+    # fixed diagnostic rather than partially executing a release phase.
+    if sys.version_info < (3, 9):
+        print(json.dumps({'status': 'BLOCKED', 'reason': 'PYTHON_3_9_OR_NEWER_REQUIRED',
+                          'productionMutation': False}))
+        return 2
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('operation', choices=('inspect', 'backup', 'restore-check', 'install', 'canary', 'open', 'recover'))
     parser.add_argument('--plan', required=True)

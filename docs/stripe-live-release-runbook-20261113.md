@@ -4,6 +4,10 @@
 
 本文和 `isolation/stripe-live-release-20261113/guarded_release.py` 是待审查的执行工具，不是生产已完成的证据。当前已执行的仅有 **12 项离线配置负例/准入测试**，没有在生产执行本脚本、迁移、重启或资金操作。最终结果以主流程实际收据为准。
 
+最终收尾在原12项基础上新增旧解释器不得访问参数/文件的拒绝用例，现13/13实际通过。用户最新要求仅合并；不因脚本测试通过执行生产切换。
+
+**当前生产切换 BLOCKED：** 主流程17:19的只读复核发现生产 Flyway 已有成功的 `V44__discover_song_publication.sql`，checksum `-1983576296`；起始16:15基线为V43，当前所检0530运行制品未包含该迁移。本任务未执行该迁移，其原始发布来源与代码对应关系仍待查。它与支付候选的 `V44__credit_entitlement_integration.sql` 撞号。以下流程仅为准备，来源与统一基线确认前不得执行backup停服、支付迁移、切换或开放收款；不得改编号、repair或补造来源绕过冲突。
+
 ## 1. 明确的职责及执行顺序
 
 | 阶段 | 工具/操作 | 必须先取得的真实证据 | 成功含义 |
@@ -82,10 +86,15 @@
 
 ## 4. 命令与故障处理
 
+服务器默认 `python3` 是3.6.8，另有Python3.11可用；本工具及release gate使用3.9+标准库API，必须显式使用已核实的 `python3.11`。`main`在读取参数/文件、获取锁或任何生产动作前检查版本，低于3.9输出 `BLOCKED/PYTHON_3_9_OR_NEWER_REQUIRED` 后退出。子release guard使用同一个 `sys.executable`，不会退回默认python3.6；不修改服务器默认解释器或系统软链接。
+
+数据库Java命令必须使用systemd实际进程已核实的Java17绝对路径 `/usr/lib/jvm/java-17-openjdk-17.0.20.0.8-1.1.0.2.1.al8.x86_64/bin/java`，先用该路径执行 `-version` 核对，再按具体classpath运行 `CreditCarryForwardCommand`。服务器默认 `java` 为Java11，禁止直接调用默认 `java` 来执行Java17候选或迁移工具；不修改系统Java alternatives。若服务有效进程路径变化，必须重新只读核实对应二进制，不能猜路径或静默降级。
+
 命令通过明确参数运行，以下以inspect为例，不包含任何凭据：
 
 ```text
-python3 guarded_release.py inspect --plan /etc/qingfeng-music/<已批准计划>.json --plan-sha256 <独立核对64hex>
+python3.11 guarded_release.py inspect --plan /etc/qingfeng-music/<已批准计划>.json --plan-sha256 <独立核对64hex>
+/usr/lib/jvm/java-17-openjdk-17.0.20.0.8-1.1.0.2.1.al8.x86_64/bin/java -version
 ```
 
 生产变更必须将operation换为具体阶段并显式添加 `--execute-approved`。每次阶段完成保存stdout的有限结构化收据；错误只输出固定BLOCKED代码，不输出底层命令、SQL、配置或驱动异常。
