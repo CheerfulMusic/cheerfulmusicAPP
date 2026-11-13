@@ -25,6 +25,7 @@ class AgentAdmissionTest {
         jdbc.execute("CREATE TABLE creator(id VARCHAR(36) PRIMARY KEY)");jdbc.execute("CREATE TABLE agent_conversation(id VARCHAR(36) PRIMARY KEY,creator_id VARCHAR(36))");
         jdbc.execute("CREATE TABLE agent_message(id VARCHAR(36) PRIMARY KEY,conversation_id VARCHAR(36),role VARCHAR(16),state VARCHAR(16))");
         new ResourceDatabasePopulator(new ClassPathResource("db/migration/V35__agent_admission.sql")).execute(source);
+        new ResourceDatabasePopulator(new ClassPathResource("db/migration/V46__agent_chat_allowance.sql")).execute(source);
         for(int i=0;i<20;i++){jdbc.update("INSERT INTO creator(id) VALUES(?)","o"+i);jdbc.update("INSERT INTO agent_conversation(id,creator_id) VALUES(?,?)","c"+i,"o"+i);}
     }
     AgentAdmission.Limits limits(int concurrent,int rpm,long tokens){return new AgentAdmission.Limits(concurrent,1,rpm,rpm,tokens,tokens,1024,Duration.ofSeconds(60));}
@@ -114,6 +115,38 @@ class AgentAdmissionTest {
             var a=pool.submit(attempt);var b=pool.submit(attempt);start.countDown();a.get(10,TimeUnit.SECONDS);b.get(10,TimeUnit.SECONDS);
             assertEquals(1,accepted.get());assertEquals(2,ledger.balance("o0"));
         }finally{pool.shutdownNow();}
+    }
+
+    @Test void oneCreditCoversFiveTurnsAndSixthBuysNextPack(){
+        var ledger=billing();var gate=paidGate(ledger);useFree(gate);
+        for(int i=1;i<=6;i++){
+            var t=gate.acquire("o0","c0",key(),"继续",null,true);gate.start(t);gate.finish(t,true);
+            assertEquals(i<=5?2:1,ledger.balance("o0"));
+        }
+        assertEquals(4,jdbc.queryForObject("SELECT remaining_turns FROM agent_chat_allowance WHERE creator_id='o0'",Integer.class));
+    }
+    @Test void remainingTurnsSurviveNewInstanceAndDayAndDoNotRequireCreditBalance(){
+        var ledger=billing();var gate=paidGate(ledger);useFree(gate);
+        var t=gate.acquire("o0","c0",key(),"继续",null,true);gate.start(t);gate.finish(t,true);
+        ledger.debit("o0",2,"spend-rest");
+        jdbc.update("UPDATE agent_request_admission SET usage_day=?",java.sql.Date.valueOf(LocalDate.now().minusDays(1)));
+        var restarted=paidGate(ledger);useFree(restarted);
+        var next=restarted.acquire("o0","c0",key(),"继续",null,true);
+        assertEquals(0,ledger.balance("o0"));assertEquals(3,jdbc.queryForObject("SELECT remaining_turns FROM agent_chat_allowance WHERE creator_id='o0'",Integer.class));
+        restarted.abandon(next);restarted.abandon(next);
+        assertEquals(4,jdbc.queryForObject("SELECT remaining_turns FROM agent_chat_allowance WHERE creator_id='o0'",Integer.class));
+    }
+
+    @Test void allowanceIsSharedAcrossConversationsAndExactEditDoesNotConsumeIt(){
+        var ledger=billing();var gate=paidGate(ledger);useFree(gate);
+        var first=gate.acquire("o0","c0",key(),"继续",null,true);gate.start(first);gate.finish(first,true);
+        jdbc.update("INSERT INTO agent_conversation(id,creator_id) VALUES('other','o0')");
+        var next=gate.acquire("o0","other",key(),"继续聊",null,true);gate.start(next);gate.finish(next,true);
+        var edit=gate.acquire("o0","other",key(),"把最后一句改成：再吃一遍，西山大桥的糯米饭",null,true);
+        assertEquals(2,ledger.balance("o0"));
+        assertEquals(3,jdbc.queryForObject("SELECT remaining_turns FROM agent_chat_allowance WHERE creator_id='o0'",Integer.class));
+        gate.abandon(edit);
+        assertEquals(3,jdbc.queryForObject("SELECT remaining_turns FROM agent_chat_allowance WHERE creator_id='o0'",Integer.class));
     }
 
 }

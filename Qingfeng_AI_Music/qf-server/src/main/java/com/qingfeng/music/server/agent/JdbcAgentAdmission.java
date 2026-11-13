@@ -39,7 +39,7 @@ public final class JdbcAgentAdmission implements AgentAdmission {
                 var row=rows.get(0);
                 if(!owner.equals(row.get("creator_id"))||!fingerprint.equals(row.get("fingerprint")))throw new DomainException("REQUEST_KEY_CONFLICT","同一请求标识不能用于不同的消息。");
                 if("DONE".equals(row.get("state")))return new Ticket(id,owner,true);
-                if("ABANDONED".equals(row.get("state")))throw denied("AGENT_REQUEST_ABANDONED","本轮尚未执行，积分已退回，请重新发送消息。");
+                if("ABANDONED".equals(row.get("state")))throw denied("AGENT_REQUEST_ABANDONED","本轮尚未执行，积分或对话次数已退回，请重新发送消息。");
                 // A lost completion acknowledgement must replay the committed turn, never re-plan it.
                 String turnId=UUID.nameUUIDFromBytes((conversation+":"+key).getBytes(StandardCharsets.UTF_8)).toString();
                 if(count("SELECT COUNT(*) FROM agent_message WHERE id=? AND conversation_id=? AND role='user' AND state='DONE'",turnId,conversation)>0){
@@ -57,12 +57,22 @@ public final class JdbcAgentAdmission implements AgentAdmission {
             long reservation=com.qingfeng.music.agent.application.ExactLyricEdit.parse(text)!=null?0:limits.reservationTokens();
             if(reservation>0&&count("SELECT COALESCE(SUM(reserved_tokens),0) FROM agent_request_admission WHERE usage_day=?",day)>limits.globalDailyTokens()-reservation)
                 throw denied("AGENT_TOKEN_BUDGET_EXCEEDED","平台今日对话容量已满，请稍后再试；本次未扣积分。");
+            boolean paidTurn=false, purchasedPack=false;
             if(reservation>0&&count("SELECT COALESCE(SUM(reserved_tokens),0) FROM agent_request_admission WHERE creator_id=? AND usage_day=?",owner,day)>limits.userDailyTokens()-reservation){
                 if(credits==null)throw denied("AGENT_TOKEN_BUDGET_EXCEEDED","今日免费对话额度已用完。");
-                if(!paidConfirmed)throw denied("AGENT_CHAT_PAYMENT_REQUIRED","今日免费对话额度已用完，继续本轮对话消耗 1 积分。写词、生成音乐等工具按各自价格另计。执行状态不明时保留扣费待核对。");
-                credits.debit(owner,1,debitReference(id));
+                if(!paidConfirmed)throw denied("AGENT_CHAT_PAYMENT_REQUIRED","今日免费对话额度已用完，1 积分可支持 5 次对话，剩余次数跨会话保留。写词、生成音乐等工具另计费。");
+                paidTurn=true;
+                if(count("SELECT COUNT(*) FROM agent_chat_allowance WHERE creator_id=?",owner)==0)
+                    jdbc.update("INSERT INTO agent_chat_allowance(creator_id,remaining_turns) VALUES(?,0)",owner);
+                if(count("SELECT remaining_turns FROM agent_chat_allowance WHERE creator_id=?",owner)==0){
+                    credits.debit(owner,1,debitReference(id));
+                    jdbc.update("UPDATE agent_chat_allowance SET remaining_turns=5 WHERE creator_id=?",owner);
+                    purchasedPack=true;
+                }
+                jdbc.update("UPDATE agent_chat_allowance SET remaining_turns=remaining_turns-1 WHERE creator_id=?",owner);
             }
             jdbc.update("INSERT INTO agent_request_admission(id,creator_id,conversation_id,request_key,fingerprint,state,usage_day,reserved_tokens,lease_until,created_at,updated_at) VALUES(?,?,?,?,?,'RESERVED',?,?,?,?,?)",id,owner,conversation,key,fingerprint,day,reservation,Timestamp.from(now.plus(limits.lease())),Timestamp.from(now),Timestamp.from(now));
+            if(paidTurn)jdbc.update("UPDATE agent_request_admission SET paid_turn=1,purchased_pack=? WHERE id=?",purchasedPack?1:0,id);
             return new Ticket(id,owner,false);
         });
     }
@@ -72,7 +82,17 @@ public final class JdbcAgentAdmission implements AgentAdmission {
     @Override public void abandon(Ticket ticket){if(ticket.replay())return;tx.executeWithoutResult(s->{
         jdbc.queryForObject("SELECT id FROM agent_admission_lock WHERE id=1 FOR UPDATE",Integer.class);
         if(count("SELECT COUNT(*) FROM agent_request_admission WHERE id=? AND state='RESERVED'",ticket.id())==0)return;
-        if(credits!=null&&count("SELECT COUNT(*) FROM credit_ledger WHERE owner_id=? AND reference_id=? AND entry_type='DEBIT'",ticket.owner(),debitReference(ticket.id()))>0){
+        if(count("SELECT paid_turn FROM agent_request_admission WHERE id=?",ticket.id())>0){
+            boolean purchased=count("SELECT purchased_pack FROM agent_request_admission WHERE id=?",ticket.id())>0;
+            long remaining=count("SELECT remaining_turns FROM agent_chat_allowance WHERE creator_id=?",ticket.owner());
+            // Refund a wholly unused pack; otherwise restore just this unused turn.
+            if(purchased&&remaining>=4){
+                credits.refund(ticket.owner(),debitReference(ticket.id()));
+                jdbc.update("UPDATE agent_chat_allowance SET remaining_turns=remaining_turns-4 WHERE creator_id=?",ticket.owner());
+            }else jdbc.update("UPDATE agent_chat_allowance SET remaining_turns=remaining_turns+1 WHERE creator_id=?",ticket.owner());
+            jdbc.update("UPDATE agent_request_admission SET state='ABANDONED',reserved_tokens=0,updated_at=CURRENT_TIMESTAMP WHERE id=?",ticket.id());
+        }else if(credits!=null&&count("SELECT COUNT(*) FROM credit_ledger WHERE owner_id=? AND reference_id=? AND entry_type='DEBIT'",ticket.owner(),debitReference(ticket.id()))>0){
+            // Pre-upgrade single-turn reservations retain their original refund semantics.
             credits.refund(ticket.owner(),debitReference(ticket.id()));
             jdbc.update("UPDATE agent_request_admission SET state='ABANDONED',reserved_tokens=0,updated_at=CURRENT_TIMESTAMP WHERE id=?",ticket.id());
         }else jdbc.update("DELETE FROM agent_request_admission WHERE id=? AND state='RESERVED'",ticket.id());
