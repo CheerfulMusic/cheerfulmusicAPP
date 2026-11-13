@@ -22,6 +22,7 @@ const publicListening = computed(() => route.name === 'gift' || route.name === '
 const isHome = computed(() => route.name === 'home')
 const isAgent = computed(() => route.name === 'agent')
 const isDiscover = computed(() => route.name === 'discover')
+const isPhotoStudio = computed(() => route.name === 'photo-studio')
 const authenticated = computed(() => accountState.value.authenticated || logtoState.value.authenticated)
 const navigation = [
   { to: '/', label: '首页', icon: 'home', agent: false },
@@ -31,7 +32,10 @@ const navigation = [
   { to: '/discover', label: '发现', icon: 'music', agent: false },
   { to: '/#how', label: '如何制作', icon: 'guide', agent: false },
 ]
-const isActive = (to: string) => to.startsWith('/#') ? route.name === 'home' && route.hash === to.slice(1) : route.path === to && !route.hash
+const isActive = (to: string) => {
+  if (to.startsWith('/#')) return route.name === 'home' && route.hash === to.slice(1)
+  return (to === '/create' && isPhotoStudio.value) || (route.path === to && !route.hash)
+}
 function resize() { mobile.value = screen.matches; if (!mobile.value) menuOpen.value = false }
 async function closeMenu() { menuOpen.value = false; await nextTick(); menuButton.value?.focus() }
 function onKey(event: KeyboardEvent) {
@@ -114,7 +118,7 @@ onBeforeUnmount(() => {
       </section>
     </template>
     <div class="music-shell-body">
-      <main id="main-content" :class="{workspace:!isHome && !isDiscover}" tabindex="-1"><slot/></main>
+      <main id="main-content" :class="{workspace:!isHome && !isDiscover, 'photo-workspace':isPhotoStudio}" tabindex="-1"><slot/></main>
       <SiteFooter/>
     </div>
     <GlobalPlayer/>
@@ -123,6 +127,7 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .consumer-discover-link { color: var(--accent-text); font-size: .85rem; white-space: nowrap; }
+.consumer-shell .workspace.photo-workspace { max-width:none; padding:0; }
 </style>
 
 <style scoped>
