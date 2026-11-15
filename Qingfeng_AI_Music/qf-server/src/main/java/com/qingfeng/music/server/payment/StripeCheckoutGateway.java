@@ -95,7 +95,7 @@ public final class StripeCheckoutGateway {
     /** Reject a definitely unsupported purchase before the caller reserves a local order. */
     public void verifyNewPurchase(String checkoutMethod,String currency) {
         if(!("card".equals(checkoutMethod)||"wechat_pay".equals(checkoutMethod))
-            || !("USD".equals(currency)||"CNY".equals(currency)&&"wechat_pay".equals(checkoutMethod)))
+            || !("USD".equals(currency)||("CNY".equals(currency)||"GBP".equals(currency))&&"wechat_pay".equals(checkoutMethod)))
             throw new IllegalArgumentException("Unsupported Stripe checkout method or currency");
         verifyAccount();
         // Receiving an existing payment/return remains possible when new charges are paused.
@@ -104,6 +104,7 @@ public final class StripeCheckoutGateway {
         if("wechat_pay".equals(checkoutMethod)) {
             if(!verifiedCountry.equals(businessCountry==null?"":businessCountry.trim().toUpperCase(java.util.Locale.ROOT))
                 || !("CNY".equals(currency)&&java.util.Set.of("GB","US").contains(verifiedCountry)
+                     || "GBP".equals(currency)&&"GB".equals(verifiedCountry)
                      || "USD".equals(currency)&&"US".equals(verifiedCountry)))
                 throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,"WeChat Pay account country or currency is not supported");
         }
@@ -112,7 +113,7 @@ public final class StripeCheckoutGateway {
     /** Deterministic request from the immutable order snapshot, not today's price or browser input. */
     static Map<String,String> sessionFields(String orderId,String title,BigDecimal amount,String currency,String checkoutMethod) {
         if(!("card".equals(checkoutMethod)||"wechat_pay".equals(checkoutMethod))
-            || !("USD".equals(currency)||"CNY".equals(currency)&&"wechat_pay".equals(checkoutMethod)))
+            || !("USD".equals(currency)||("CNY".equals(currency)||"GBP".equals(currency))&&"wechat_pay".equals(checkoutMethod)))
             throw new IllegalArgumentException("Unsupported Stripe checkout method or currency");
         if(amount==null||amount.signum()<=0)throw new IllegalArgumentException("Invalid Stripe payment amount");
         long minor = amount.movePointRight(2).longValueExact();

@@ -1,4 +1,4 @@
-export type PaymentCurrency = 'USD' | 'CNY'
+export type PaymentCurrency = 'USD' | 'CNY' | 'GBP'
 export type StripePaymentMethodId = 'card' | 'apple_pay' | 'wechat_pay'
 export type CreditPack = { id: string; title: string; amount: number; currency: string; credits: number; paymentMethod?: StripePaymentMethodId; acceptance?: boolean; expiresAt?: string; maxPurchases?: number }
 export type CurrencyOption = { currency: PaymentCurrency; enabled: boolean; reason: string }
@@ -15,7 +15,7 @@ export type PaymentCatalog = { enabled: boolean; packages: CreditPack[] }
 export type StripeCatalog = PaymentCatalog & { paymentMethods?: StripePaymentMethod[] }
 
 const methodIds: StripePaymentMethodId[] = ['card', 'apple_pay', 'wechat_pay']
-const currencies: PaymentCurrency[] = ['USD', 'CNY']
+const currencies: PaymentCurrency[] = ['USD', 'CNY', 'GBP']
 const object = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value)
 export const isStripeMethod = (value: unknown): value is StripePaymentMethodId => methodIds.includes(value as StripePaymentMethodId)
 const isCurrency = (value: unknown): value is PaymentCurrency => currencies.includes(value as PaymentCurrency)
@@ -93,5 +93,5 @@ export function stripeOrderRequest(method: StripePaymentMethod | undefined, pack
 }
 
 export function paymentCurrencySymbol(currency: string): string {
-  return currency === 'USD' ? '$' : currency === 'CNY' ? '¥' : currency
+  return currency === 'USD' ? '$' : currency === 'CNY' ? '¥' : currency === 'GBP' ? '£' : currency
 }

@@ -179,7 +179,7 @@ onUnmounted(() => { if(quoteTimer !== undefined)clearInterval(quoteTimer) })
               <button v-for="option in currencyOptions" :key="option.currency" type="button" :data-currency="option.currency" :aria-pressed="currency===option.currency" :disabled="busy||!option.enabled" @click="selectCurrency(option.currency)">{{ option.currency }} {{ paymentCurrencySymbol(option.currency) }}</button>
             </div>
           </div>
-          <p v-if="paymentChoice==='wechat_pay' && currencyOptions.some(option=>option.currency==='USD'&&!option.enabled)" class="currency-note" data-testid="wechat-usd-unavailable">{{ en?'WeChat Pay in USD is not supported for this merchant account. Choose the CNY quote instead.':'当前商户账户不支持微信美元付款，可选择人民币报价；美元套餐仍可使用银行卡或 Apple Pay。' }}</p>
+          <p v-if="paymentChoice==='wechat_pay' && currencyOptions.some(option=>option.currency==='USD'&&!option.enabled)" class="currency-note" data-testid="wechat-usd-unavailable">{{ en?'WeChat Pay in USD is not supported for this merchant account. Choose an available CNY or GBP quote instead.':'当前商户账户不支持微信美元付款，可选择已开放的人民币或英镑报价；美元套餐仍可使用银行卡或 Apple Pay。' }}</p>
           <div v-if="!available" class="notice">{{ loading ? (en?'Checking payment availability…':'正在检查支付状态…') : availabilityMessage(currentMethod?.reason) }}</div>
           <div v-if="acceptancePack" class="notice" data-testid="acceptance-offer">
             <strong>{{ en?'Temporary payment verification':'临时收款验收套餐' }}</strong>
