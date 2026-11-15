@@ -165,7 +165,7 @@ class IntegratedPaymentApplicationMySqlTest {
             doAnswer(call->{String order=call.getArgument(0),session="cs_test_"+unique();var fact=session(session,order,false);SESSIONS.put(session,fact);return fact;}).when(gateway).createSession(anyString(),anyString(),any(),anyString());
             doAnswer(call->{
                 String order=call.getArgument(0),currency=call.getArgument(3),method=call.getArgument(4);BigDecimal amount=call.getArgument(2);
-                assertEquals("wechat_pay",method,"All extended Checkout calls must be an explicitly registered wallet fixture");assertTrue(Set.of("CNY","USD").contains(currency));
+                assertEquals("wechat_pay",method,"All extended Checkout calls must be an explicitly registered wallet fixture");assertTrue(Set.of("CNY","USD","GBP").contains(currency));
                 var stored=db.queryForMap("SELECT package_id,amount,currency FROM payment_order WHERE id=? AND provider='STRIPE_SANDBOX'",order);
                 assertEquals("wechat_pay",StripePaymentMethods.checkoutMethodForStoredOffer((String)stored.get("package_id")));assertEquals(amount,stored.get("amount"));assertEquals(currency,stored.get("currency"));
                 String session="cs_test_"+unique();var fact=walletSession(session,order,amount,currency,false);SESSIONS.put(session,fact);return fact;
@@ -443,13 +443,28 @@ class IntegratedPaymentApplicationMySqlTest {
         fact.put("client_reference_id",order);fact.put("mode","payment");fact.put("amount_total",amount.movePointRight(2).longValueExact());fact.put("currency",currency.toLowerCase(Locale.ROOT));fact.put("livemode",false);fact.put("payment_method_types",List.of("wechat_pay"));return JSON.valueToTree(fact);
     }
     static Paid walletPending(IdentityApi.Session owner,String tier,String amount,long credits)throws Exception{
-        String offer=tier+"-CNY-wechat_pay";var response=business(owner,"/api/app/stripe/orders","POST",JSON.writeValueAsString(Map.of("packageId",offer,"paymentMethod","wechat_pay","amount",0.01,"currency","USD","credits",999999)));
+        return walletPending(owner,tier,amount,credits,"CNY");
+    }
+    static Paid walletPending(IdentityApi.Session owner,String tier,String amount,long credits,String currency)throws Exception{
+        String offer=tier+"-"+currency+"-wechat_pay";var response=business(owner,"/api/app/stripe/orders","POST",JSON.writeValueAsString(Map.of("packageId",offer,"paymentMethod","wechat_pay","amount",0.01,"currency","USD","credits",999999)));
         assertEquals(200,response.statusCode(),response.body());String order=JSON.readTree(response.body()).path("orderId").asString();var stored=db.queryForMap("SELECT * FROM payment_order WHERE id=?",order);
-        assertEquals(new BigDecimal(amount),stored.get("amount"));assertEquals("CNY",stored.get("currency"));assertEquals(credits,((Number)stored.get("credits")).longValue());assertEquals(offer,stored.get("package_id"));assertEquals("PENDING",stored.get("status"));assertEquals("STRIPE_SANDBOX",stored.get("provider"));
+        assertEquals(new BigDecimal(amount),stored.get("amount"));assertEquals(currency,stored.get("currency"));assertEquals(credits,((Number)stored.get("credits")).longValue());assertEquals(offer,stored.get("package_id"));assertEquals("PENDING",stored.get("status"));assertEquals("STRIPE_SANDBOX",stored.get("provider"));
         String id=(String)stored.get("provider_link_id");assertNotNull(SESSIONS.get(id));assertEquals("wechat_pay",SESSIONS.get(id).path("payment_method_types").path(0).asString());return new Paid(owner,order,id,SESSIONS.get(id).path("payment_intent").asString());
     }
     static String walletRefund(Paid paid,long amount)throws Exception{
         String refund="re_"+unique();REFUNDS.put(refund,JSON.valueToTree(Map.of("id",refund,"object","refund","status","succeeded","livemode",false,"payment_intent",paid.intent(),"currency","cny","amount",amount)));accepted("refund.updated",refund,"evt_"+unique());drain();return refund;
+    }
+    @Test @Order(20) void actualGbpHttpPaymentDuplicateEventsAndRefundPreserveLedgerAndSnapshot()throws Exception{
+        var p=walletPending(owner(),"starter","7.99",100,"GBP");
+        SESSIONS.put(p.session(),walletSession(p.session(),p.order(),new BigDecimal("7.99"),"GBP",true));
+        String event="evt_"+unique();accepted("checkout.session.completed",p.session(),event);accepted("checkout.session.completed",p.session(),event);drain();
+        assertEquals("PAID",db.queryForObject("SELECT status FROM payment_order WHERE id=?",String.class,p.order()));
+        assertEquals(100,ledger.balance(p.owner().creatorId()));assertEquals(1,number("SELECT COUNT(*) FROM credit_ledger WHERE entry_type='CREDIT' AND reference_id=?","payment:"+p.order()));
+        String refund="re_"+unique();REFUNDS.put(refund,JSON.valueToTree(Map.of("id",refund,"object","refund","status","succeeded","livemode",false,"payment_intent",p.intent(),"currency","gbp","amount",400)));
+        accepted("refund.updated",refund,"evt_"+unique());drain();assertEquals(49,ledger.balance(p.owner().creatorId()));
+        accepted("refund.updated",refund,"evt_"+unique());drain();assertEquals(49,ledger.balance(p.owner().creatorId()));
+        assertEquals(400,number("SELECT SUM(amount_minor) FROM p0_credit_refund WHERE order_id=? AND currency='GBP'",p.order()));
+        assertEquals(new BigDecimal("7.99"),db.queryForObject("SELECT amount FROM payment_order WHERE id=? AND currency='GBP'",BigDecimal.class,p.order()));
     }
     @Test @Order(20) void actualCnyHttpOrdersSignedWalletCompletionAndCumulativeRefundsKeepMoneyAndCreditsBound()throws Exception{
         var starter=walletPending(owner(),"starter","68.80",100);var standard=walletPending(owner(),"standard","178.80",300);var plus=walletPending(owner(),"plus","338.80",700);
@@ -463,7 +478,7 @@ class IntegratedPaymentApplicationMySqlTest {
         var wrong=walletPending(owner(),"starter","68.80",100);SESSIONS.put(wrong.session(),walletSession(wrong.session(),wrong.order(),new BigDecimal("68.80"),"USD",true));String badEvent="evt_"+unique();accepted("checkout.session.completed",wrong.session(),badEvent);drain();
         assertEquals("PENDING",db.queryForObject("SELECT status FROM payment_order WHERE id=?",String.class,wrong.order()));assertEquals(0,ledger.balance(wrong.owner().creatorId()));assertEquals(0,number("SELECT COUNT(*) FROM credit_ledger WHERE entry_type='CREDIT' AND reference_id=?","payment:"+wrong.order()));assertEquals(0,number("SELECT COUNT(*) FROM payment_webhook_inbox WHERE event_id=? AND status='DONE'",badEvent));
         long orders=number("SELECT COUNT(*) FROM payment_order");int remote=SESSIONS.size();var deniedOwner=owner();
-        for(String offer:List.of("starter-USD-wechat_pay","starter-GBP-wechat_pay")){var denied=business(deniedOwner,"/api/app/stripe/orders","POST",JSON.writeValueAsString(Map.of("packageId",offer,"paymentMethod","wechat_pay")));assertEquals(400,denied.statusCode(),denied.body());}
+        for(String offer:List.of("starter-USD-wechat_pay","starter-EUR-wechat_pay")){var denied=business(deniedOwner,"/api/app/stripe/orders","POST",JSON.writeValueAsString(Map.of("packageId",offer,"paymentMethod","wechat_pay")));assertEquals(400,denied.statusCode(),denied.body());}
         assertEquals(orders,number("SELECT COUNT(*) FROM payment_order"));assertEquals(remote,SESSIONS.size());
     }
     @Test @Order(21) void restartedApplicationKeepsWalletSnapshotWhenNewWalletPurchasesCloseAndPreservesUsdProviders()throws Exception{
