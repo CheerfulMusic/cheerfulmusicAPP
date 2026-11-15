@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { validResponse } from '../src/shared/http/response-contracts'
 import { orderAmount, mergeOrderHistory } from '../src/modules/identity/model/order-history'
-import { preferredCurrency, stripeMethods, stripeOrderRequest, validStripeMethods, type StripePaymentMethod } from '../src/modules/identity/model/stripe-payment-methods'
+import { paymentCurrencySymbol, preferredCurrency, stripeMethods, stripeOrderRequest, validStripeMethods, type StripePaymentMethod } from '../src/modules/identity/model/stripe-payment-methods'
 
 const usd = { id:'standard-USD', title:'300 Credits', amount:25.9, currency:'USD', credits:300 }
 const cny = { id:'standard-CNY-wechat_pay', title:'300 Credits', amount:178.8, currency:'CNY', credits:300, paymentMethod:'wechat_pay' as const }
@@ -13,6 +13,16 @@ function methods(): StripePaymentMethod[] {
 }
 
 describe('server-owned Stripe wallet choices', () => {
+  it('accepts GBP wallet offers without changing the server price or currency', () => {
+    const gbp={...cny,id:'standard-GBP-wechat_pay',currency:'GBP',amount:19.99}
+    const all=methods(); all[2]={...all[2]!,currencies:['CNY','GBP'],currencyOptions:[{currency:'CNY',enabled:true,reason:''},{currency:'GBP',enabled:true,reason:''}],packages:[cny,gbp]}
+    expect(validStripeMethods(all)).toBe(true)
+    expect(validResponse('app/stripe/catalog','GET',{enabled:true,packages:[usd],paymentMethods:all})).toBe(true)
+    expect(stripeOrderRequest(all[2],gbp,'GBP')).toEqual({packageId:gbp.id,paymentMethod:'wechat_pay'})
+    expect(() => stripeOrderRequest(all[2],{...gbp,amount:1},'GBP')).toThrow()
+    expect(() => stripeOrderRequest(all[2],gbp,'CNY')).toThrow()
+    expect(paymentCurrencySymbol('GBP')).toBe('\u00a3')
+  })
   it('keeps legacy servers card-only rather than claiming wallet activation', () => {
     const normalized=stripeMethods({enabled:true,packages:[usd]})
     expect(normalized.filter(method=>method.enabled).map(method=>method.id)).toEqual(['card'])

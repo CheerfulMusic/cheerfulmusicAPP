@@ -18,8 +18,8 @@ import org.springframework.web.server.ResponseStatusException;
  */
 public final class StripePaymentMethods {
     private static final Set<String> METHODS = Set.of("card", "apple_pay", "wechat_pay");
-    private static final Pattern WECHAT_OFFER = Pattern.compile("(starter|standard|plus)-(USD|CNY)-wechat_pay");
-    private static final List<String> WECHAT_CURRENCIES = List.of("USD", "CNY");
+    private static final Pattern WECHAT_OFFER = Pattern.compile("(starter|standard|plus)-(USD|CNY|GBP)-wechat_pay");
+    private static final List<String> WECHAT_CURRENCIES = List.of("USD", "CNY", "GBP");
 
     public record Offer(String id, String title, BigDecimal amount, String currency,
                         long credits, String paymentMethod) {
@@ -49,6 +49,10 @@ public final class StripePaymentMethods {
         offers.add(cnyOffer(catalog, environment, "starter", "68.80"));
         offers.add(cnyOffer(catalog, environment, "standard", "178.80"));
         offers.add(cnyOffer(catalog, environment, "plus", "338.80"));
+        var gbpKeys = List.of("starter", "standard", "plus");
+        long configuredGbp = gbpKeys.stream().filter(tier -> environment.containsProperty("qingfeng.stripe.prices.gbp." + tier)).count();
+        if (configuredGbp != 0 && configuredGbp != 3) throw new IllegalArgumentException("Configure all three GBP prices together");
+        for (String tier : gbpKeys) offers.add(currencyOffer(catalog, environment, tier, "GBP", switch(tier) { case "starter" -> "7.99"; case "standard" -> "19.99"; default -> "39.99"; }));
         wechatOffers = List.copyOf(offers);
     }
 
@@ -136,8 +140,8 @@ public final class StripePaymentMethods {
         // These are the two account countries explicitly supported in this release.
         // Never infer that every country in Stripe's overall currency table accepts USD.
         return switch (businessCountry) {
-            case "GB" -> List.of("CNY");
-            case "US" -> WECHAT_CURRENCIES;
+            case "GB" -> wechatOffers.stream().anyMatch(offer -> "GBP".equals(offer.currency())) ? List.of("CNY", "GBP") : List.of("CNY");
+            case "US" -> List.of("USD", "CNY");
             default -> List.of();
         };
     }
@@ -156,9 +160,13 @@ public final class StripePaymentMethods {
     }
 
     private static Offer cnyOffer(PaymentCatalog catalog, Environment environment, String tier, String defaultAmount) {
+        return currencyOffer(catalog, environment, tier, "CNY", defaultAmount);
+    }
+
+    private static Offer currencyOffer(PaymentCatalog catalog, Environment environment, String tier, String currency, String defaultAmount) {
         var original = catalog.find(tier + "-USD")
             .orElseThrow(() -> new IllegalArgumentException("Missing Stripe USD tier: " + tier));
-        String key = "qingfeng.stripe.prices.cny." + tier;
+        String key = "qingfeng.stripe.prices." + currency.toLowerCase(Locale.ROOT) + "." + tier;
         BigDecimal amount;
         try {
             amount = new BigDecimal(environment.getProperty(key, defaultAmount));
@@ -168,7 +176,7 @@ public final class StripePaymentMethods {
         } catch (NumberFormatException | ArithmeticException error) {
             throw new IllegalArgumentException("Invalid Stripe price: " + key, error);
         }
-        return wechatOffer(original, amount, "CNY");
+        return wechatOffer(original, amount, currency);
     }
 
     private static Offer wechatOffer(PaymentCatalog.Package original, BigDecimal amount, String currency) {

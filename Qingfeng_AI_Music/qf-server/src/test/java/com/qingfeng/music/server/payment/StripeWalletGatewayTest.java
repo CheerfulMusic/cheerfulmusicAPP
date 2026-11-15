@@ -63,6 +63,11 @@ class StripeWalletGatewayTest {
         var f=fixture("GB");f.gateway().createSession("order-wechat","100 Credits",new BigDecimal("68.80"),"CNY","wechat_pay");
         var form=fields(f.requests().get(1));assertEquals("wechat_pay",form.get("payment_method_types[0]"));assertEquals("web",form.get("payment_method_options[wechat_pay][client]"));assertEquals("cny",form.get("line_items[0][price_data][currency]"));assertEquals("6880",form.get("line_items[0][price_data][unit_amount]"));assertEquals("order-wechat",form.get("metadata[order_id]"));assertEquals("order-wechat",form.get("payment_intent_data[metadata][order_id]"));assertEquals("order-wechat",form.get("client_reference_id"));
     }
+    @Test void ukWechatGbpUsesExactMinorUnitsAndUsAccountCannotUseGbp() throws Exception {
+        var uk=fixture("GB");uk.gateway().createSession("gbp-order","Credits",new BigDecimal("7.80"),"GBP","wechat_pay");
+        var form=fields(uk.requests().get(1));assertEquals("gbp",form.get("line_items[0][price_data][currency]"));assertEquals("780",form.get("line_items[0][price_data][unit_amount]"));assertEquals("wechat_pay",form.get("payment_method_types[0]"));
+        var us=fixture("US");assertThrows(ResponseStatusException.class,()->us.gateway().createSession("gbp-order","Credits",new BigDecimal("7.80"),"GBP","wechat_pay"));assertEquals(1,us.requests().size());
+    }
     @Test void ukWechatUsdCannotFallBackToCardOrSendAnyCreateRequest() throws Exception {
         var f=fixture("GB");var error=assertThrows(ResponseStatusException.class,()->f.gateway().createSession("order","Credits",new BigDecimal("9.90"),"USD","wechat_pay"));assertEquals(503,error.getStatusCode().value());assertEquals(1,f.requests().size());assertEquals("GET",f.requests().get(0).method());
     }
@@ -78,7 +83,7 @@ class StripeWalletGatewayTest {
     @Test void unsupportedCurrenciesMethodsAndFractionalCentsAreRejectedBeforeAnyHttpRequest() throws Exception {
         var f=fixture("GB");
         assertThrows(IllegalArgumentException.class,()->f.gateway().createSession("order","Credits",BigDecimal.TEN,"CNY","card"));
-        assertThrows(IllegalArgumentException.class,()->f.gateway().createSession("order","Credits",BigDecimal.TEN,"GBP","wechat_pay"));
+        assertThrows(IllegalArgumentException.class,()->f.gateway().createSession("order","Credits",BigDecimal.TEN,"EUR","wechat_pay"));
         assertThrows(IllegalArgumentException.class,()->f.gateway().createSession("order","Credits",BigDecimal.TEN,"USD","unknown"));
         assertThrows(IllegalArgumentException.class,()->f.gateway().createSession("order","Credits",BigDecimal.ZERO,"CNY","wechat_pay"));
         assertThrows(ArithmeticException.class,()->f.gateway().createSession("order","Credits",new BigDecimal("68.801"),"CNY","wechat_pay"));assertTrue(f.requests().isEmpty());
