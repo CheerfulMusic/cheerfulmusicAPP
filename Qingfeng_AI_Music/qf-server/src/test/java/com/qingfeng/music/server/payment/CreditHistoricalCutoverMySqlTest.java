@@ -1,5 +1,6 @@
 package com.qingfeng.music.server.payment;
 
+import com.qingfeng.music.infrastructure.persistence.credits.LocalFinancialCohort;
 import com.qingfeng.music.infrastructure.persistence.credits.CreditHistoricalCutover;
 import com.qingfeng.music.infrastructure.persistence.credits.CreditHistoricalCutover.*;
 import com.qingfeng.music.infrastructure.persistence.credits.JdbcCreditsLedger;
@@ -37,11 +38,9 @@ class CreditHistoricalCutoverMySqlTest {
         connectionProperties.setProperty("connectionTimeZone","UTC");
         connectionProperties.setProperty("forceConnectionTimeZoneToSession","true");
         source.setConnectionProperties(connectionProperties);
-        db=new JdbcTemplate(source);tx=new TransactionTemplate(new JdbcTransactionManager(source));tool=new CreditHistoricalCutover(db,tx);
+        db=new JdbcTemplate(source);tx=new TransactionTemplate(new JdbcTransactionManager(source));
+        tool=LocalFinancialCohort.historicalCutover(db,tx,name,required("P0_HISTORICAL_CUTOVER_MYSQL_UUID"));
         assertEquals("+00:00",db.queryForObject("SELECT @@session.time_zone",String.class),"Actual session UTC is required, not only a URL label");
-        assertEquals("8.0.46",db.queryForObject("SELECT VERSION()",String.class));
-        assertEquals("05c27d3c-dda3-11f1-aba0-84a938421519",db.queryForObject("SELECT @@server_uuid",String.class));
-        assertEquals(required("P0_HISTORICAL_CUTOVER_MYSQL_UUID"),db.queryForObject("SELECT @@server_uuid",String.class));
         assertEquals(0,count("SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE()"),"Never clear or reuse a prior cohort");
         Flyway.configure().dataSource(source).locations("classpath:db/migration").cleanDisabled(true).target("44").load().migrate();
         db.update("INSERT INTO creator(id,created_at) VALUES(?,?),(?,?)",A,OLD,B,OLD);

@@ -1,5 +1,6 @@
 package com.qingfeng.music.server.payment;
 
+import com.qingfeng.music.infrastructure.persistence.credits.LocalFinancialCohort;
 import com.qingfeng.music.common.exception.DomainException;
 import com.qingfeng.music.credits.CreditsLedger;
 import com.qingfeng.music.credits.CreditsPricing;
@@ -80,8 +81,9 @@ class IntegratedPaymentApplicationMySqlTest {
         var source=new DriverManagerDataSource(url,user,password);db=new JdbcTemplate(source);
         try(var connection=source.getConnection();var statement=connection.createStatement()){
             try(var facts=statement.executeQuery("SELECT VERSION(),@@server_uuid,@@datadir,@@port,@@bind_address,DATABASE(),CURRENT_ROLE(),@@transaction_isolation")){
-                assertTrue(facts.next());assertEquals("8.0.46",facts.getString(1));assertEquals("05c27d3c-dda3-11f1-aba0-84a938421519",facts.getString(2));assertEquals(required("UUID"),facts.getString(2));
-                assertEquals("r:/data/",facts.getString(3).replace('\\','/').toLowerCase(Locale.ROOT));assertEquals(23316,facts.getInt(4));assertEquals("127.0.0.1",facts.getString(5));
+                assertTrue(facts.next());assertEquals("8.0.46",facts.getString(1));
+                LocalFinancialCohort.assertServer(required("UUID"),facts.getString(2),facts.getString(3));
+                assertEquals(23316,facts.getInt(4));assertEquals("127.0.0.1",facts.getString(5));
                 assertEquals(database,facts.getString(6));assertEquals("NONE",facts.getString(7));assertEquals("REPEATABLE-READ",facts.getString(8));
             }
             int grants=0;try(var facts=statement.executeQuery("SHOW GRANTS")){while(facts.next()){
