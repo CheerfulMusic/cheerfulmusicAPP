@@ -44,7 +44,7 @@ public class SharedDownloadGrants {
     }
     public void unlock(String owner,String token){
         tx.executeWithoutResult(status->{
-            // Creator lock first, matching credit ledger ordering; link lock serializes revocation.
+            // Buyer creator -> work -> share, matching WorkService.delete's work-before-share order.
             if(db.queryForList("SELECT id FROM creator WHERE id=? FOR UPDATE",owner).isEmpty())throw unavailable();
             var shares=find(token,true);if(shares.isEmpty())throw unavailable();Share share=shares.get(0);
             MediaApi.Content content=media.content(share.work(),share.asset());
@@ -55,8 +55,16 @@ public class SharedDownloadGrants {
         });
     }
     private List<Share> find(String token,boolean lock){
-        String sql="SELECT s.work_id,s.asset_id,s.title FROM share_link s JOIN music_work w ON w.id=s.work_id WHERE s.token_hash=? AND s.active=TRUE AND s.expires_at>CURRENT_TIMESTAMP AND w.deleted_at IS NULL"+(lock?" FOR UPDATE":"");
-        return db.query(sql,(r,n)->new Share(r.getString(1),r.getString(2),r.getString(3)),hash(token));
+        String tokenHash=hash(token);
+        if(!lock)return db.query("SELECT s.work_id,s.asset_id,s.title FROM share_link s JOIN music_work w ON w.id=s.work_id WHERE s.token_hash=? AND s.active=TRUE AND s.expires_at>CURRENT_TIMESTAMP AND w.deleted_at IS NULL",(r,n)->new Share(r.getString(1),r.getString(2),r.getString(3)),tokenHash);
+        // Locate without locking; never let the join optimizer choose share -> work locks.
+        var located=db.query("SELECT work_id FROM share_link WHERE token_hash=?",(r,n)->r.getString(1),tokenHash);
+        if(located.size()!=1)return List.of();String work=located.get(0);
+        if(db.queryForList("SELECT id FROM music_work WHERE id=? AND deleted_at IS NULL FOR UPDATE",work).isEmpty())return List.of();
+        // Current locking reads revalidate deletion, revocation, expiry and asset ownership.
+        var shares=db.query("SELECT work_id,asset_id,title FROM share_link WHERE token_hash=? AND work_id=? AND active=TRUE AND expires_at>CURRENT_TIMESTAMP FOR UPDATE",(r,n)->new Share(r.getString(1),r.getString(2),r.getString(3)),tokenHash,work);
+        if(shares.size()!=1||db.queryForList("SELECT id FROM media_asset WHERE id=? AND work_id=? FOR UPDATE",shares.get(0).asset(),work).isEmpty())return List.of();
+        return shares;
     }
     private static String hash(String token){
         if(token==null||!token.matches("[A-Za-z0-9_-]{43}"))throw unavailable();

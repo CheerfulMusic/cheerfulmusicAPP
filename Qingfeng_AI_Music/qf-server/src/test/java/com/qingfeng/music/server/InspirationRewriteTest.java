@@ -168,16 +168,16 @@ class InspirationRewriteTest {
                 new HttpConnectTimeoutException("private connect timeout detail"), new IOException("private connection detail"));
 
         var timeout = assertThrows(DomainException.class, () -> writer.rewrite("月光照着浪", "zh-CN"));
-        assertEquals("REWRITE_PROVIDER_UNAVAILABLE", timeout.code());
-        assertEquals("AI改写等待模型响应超时，请稍后重试。原文仍会保留。", timeout.getMessage());
+        assertEquals("REWRITE_PROVIDER_RESULT_UNKNOWN", timeout.code());
+        assertEquals("AI改写等待模型响应超时，结果待核对，请勿重复提交。原文仍会保留。", timeout.getMessage());
 
         var connectTimeout = assertThrows(DomainException.class, () -> writer.rewrite("月光照着浪", "zh-CN"));
-        assertEquals("REWRITE_PROVIDER_UNAVAILABLE", connectTimeout.code());
-        assertEquals("AI改写连接服务超时，请稍后重试。原文仍会保留。", connectTimeout.getMessage());
+        assertEquals("REWRITE_PROVIDER_RESULT_UNKNOWN", connectTimeout.code());
+        assertEquals("AI改写连接服务超时，结果待核对，请勿重复提交。原文仍会保留。", connectTimeout.getMessage());
 
         var disconnected = assertThrows(DomainException.class, () -> writer.rewrite("月光照着浪", "zh-CN"));
-        assertEquals("REWRITE_PROVIDER_UNAVAILABLE", disconnected.code());
-        assertEquals("AI改写连接失败，请稍后重试。原文仍会保留。", disconnected.getMessage());
+        assertEquals("REWRITE_PROVIDER_RESULT_UNKNOWN", disconnected.code());
+        assertEquals("AI改写连接中断，结果待核对，请勿重复提交。原文仍会保留。", disconnected.getMessage());
         org.mockito.Mockito.verify(client, org.mockito.Mockito.times(3)).send(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
     }
 

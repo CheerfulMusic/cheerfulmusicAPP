@@ -20,7 +20,7 @@ const props=defineProps<{work:Work;showInlineSave?:boolean}>(), emit=defineEmits
 const route=useRoute(),router=useRouter()
 const versions=ref<Revision[]>([]),active=ref<Revision|null>(null),title=ref(props.work.title||(props.work.recipient?t('写给{recipient}的歌',{recipient:props.work.recipient}):t('我的原创歌曲'))),text=ref(''),baseline=ref(''),loading=ref(true),saving=ref(false),composing=ref(false),preparing=ref(false),error=ref(''),notice=ref(''),aiReady=ref(false),localSaved=ref(false),creditShort=ref(false)
 const customLyricsReady=ref(false)
-const { credits, refreshCredits } = useCredits()
+const { credits, refreshCredits } = useCredits(() => props.work.id)
 const language=ref<string>(['zh-CN','en','mixed'].includes(String(route.query.language))?String(route.query.language):locale.value),instructions=ref(''),requestKey=ref('')
 const routeStructure=lyricsStructureFromQuery(route.query)
 const hasRouteStructure=route.query.templateId===routeStructure.templateId
@@ -259,7 +259,10 @@ async function compose(){
   if(dirty.value&&!window.confirm(t('生成新歌词后将显示新版本，当前未保存的修改会被替换，是否继续？')))return
   composing.value=true;error.value='';notice.value='';errorKind.value='compose';creditShort.value=false
   try{
-    if(!requestKey.value&&(await blockedByCredits()||!alive))return
+    if(!requestKey.value){
+      await refreshCredits()
+      if(await blockedByCredits()||!alive)return
+    }
     if(inflight)await inflight
     requestKey.value ||= crypto.randomUUID();remember()
     const created=await generateLyrics(props.work.id,props.work.version,requestKey.value,language.value,instructions.value,active.value?.id,{...structure.value})
@@ -291,7 +294,7 @@ defineExpose({prepareForGeneration,preserveDraftForNavigation,needsSave,canSave,
           {{ composing?t('正在编写歌词…'):editorText.trim()?t('AI 重写歌词'):t('根据故事生成歌词') }}
         </button>
         <button type="button" class="lyric-quiet-action" :disabled="blocked||saving||!dirty" :title="t('撤销未保存修改')" @click="revertDraft"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5 4 9l4 4M4 9h10a5 5 0 0 1 0 10h-3"/></svg>{{ t('恢复原版') }}</button>
-        <CreditCostHint v-if="!editorText.trim()&&credits&&credits.enabled&&credits.lyricsCost>0" :cost="credits.lyricsCost" :balance="credits.balance" :busy="composing" variant="regenerate"/>
+        <CreditCostHint v-if="credits&&credits.enabled&&credits.lyricsNextCost!==null" :cost="credits.lyricsNextCost" :paid-cost="credits.lyricsCost" :balance="credits.balance" :busy="composing" :variant="versions.length?'regenerate':'generate'"/>
       </div>
     </div>
     <textarea id="song-lyrics" ref="editor" v-model="text" :maxlength="lyricsMaxLength" class="lyrics-edit lyric-text" :aria-label="t('歌词')" aria-describedby="lyric-editor-help" :disabled="blocked||saving" :placeholder="t('写下主歌、副歌，或者你想唱给TA听的话……')" @input="captureSelection" @select="captureSelection" @keyup="captureSelection" @click="captureSelection"></textarea>

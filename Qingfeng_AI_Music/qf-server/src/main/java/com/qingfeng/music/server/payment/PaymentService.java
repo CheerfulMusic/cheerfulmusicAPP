@@ -21,6 +21,10 @@ public class PaymentService {
     private final PaymentGateway gateway;
     private final PaymentCatalog catalog;
     @Value("${qingfeng.payments.enabled:false}") private boolean enabled;
+    @Value("${qingfeng.payment.legacy-orders-read-only:false}") private boolean legacyOrdersReadOnly;
+    private PaymentInbox inbox;
+    @org.springframework.beans.factory.annotation.Autowired void inbox(PaymentInbox inbox){this.inbox=inbox;}
+    private PaymentLegacyOrderBoundary legacyBoundary(){return new PaymentLegacyOrderBoundary(db,legacyOrdersReadOnly);}
 
     public PaymentService(JdbcTemplate db, TransactionTemplate tx, CreditsLedger ledger, PaymentGateway gateway, PaymentCatalog catalog) {
         this.db=db; this.tx=tx; this.ledger=ledger; this.gateway=gateway; this.catalog=catalog;
@@ -63,10 +67,10 @@ public class PaymentService {
         });
     }
     public Map<String,Object> order(CreatorPrincipal creator,String id) {
-        var rows=db.queryForList("SELECT id,status,credits,provider_link_id FROM payment_order WHERE id=? AND creator_id=? AND provider='AIRWALLEX'",id,creator.id());
+        var rows=db.queryForList("SELECT * FROM payment_order WHERE id=? AND creator_id=? AND provider='AIRWALLEX'",id,creator.id());
         if(rows.isEmpty()) throw new ResponseStatusException(HttpStatus.NOT_FOUND);
         var row=rows.get(0);
-        if(configured() && !"PAID".equals(row.get("status")) && row.get("provider_link_id")!=null) {
+        if(!legacyBoundary().readOnly(row) && configured() && !"PAID".equals(row.get("status")) && row.get("provider_link_id")!=null) {
             String linkId=(String)row.get("provider_link_id");
             PaymentGateway.Snapshot remote=gateway.retrieve(linkId);
             if("PAID".equals(remote.status())) {settle(id,linkId,remote); row=db.queryForMap("SELECT id,status,credits FROM payment_order WHERE id=?",id);}
@@ -78,10 +82,12 @@ public class PaymentService {
         if(!ready()) throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE);
         if(linkId==null || !linkId.matches("[A-Za-z0-9_-]{1,128}")) throw new ResponseStatusException(HttpStatus.BAD_REQUEST);
         if(db.queryForList("SELECT id FROM payment_order WHERE id=? AND creator_id=? AND provider='AIRWALLEX'",id,creator.id()).isEmpty()) throw new ResponseStatusException(HttpStatus.NOT_FOUND);
+        legacyBoundary().requireMutable(db.queryForMap("SELECT * FROM payment_order WHERE id=? AND creator_id=? AND provider='AIRWALLEX'",id,creator.id()));
         var remote=gateway.retrieve(linkId);
         return tx.execute(t->{
             db.queryForList("SELECT id FROM creator WHERE id=? FOR UPDATE",creator.id());
             var row=db.queryForMap("SELECT * FROM payment_order WHERE id=? AND creator_id=? AND provider='AIRWALLEX' FOR UPDATE",id,creator.id());
+            legacyBoundary().requireMutable(row);
             if(!id.equals(remote.reference()) || !linkId.equals(remote.id()) || remote.reusable()
                 || !row.get("currency").equals(remote.currency()) || remote.amount()==null
                 || ((BigDecimal)row.get("amount")).compareTo(remote.amount())!=0
@@ -94,13 +100,34 @@ public class PaymentService {
         });
     }
     public Map<String,Object> orders(CreatorPrincipal creator) {
+        var activation=legacyBoundary().activation();
         var orders=db.query("SELECT id,status,credits,created_at FROM payment_order WHERE creator_id=? AND provider='AIRWALLEX' ORDER BY created_at DESC,id DESC LIMIT 50",
-            (rs,n)->Map.of("orderId",rs.getString("id"),"status",rs.getString("status"),"credits",rs.getLong("credits"),"createdAt",rs.getTimestamp("created_at").toInstant().toString()),creator.id());
+            (rs,n)->{
+                var view=new HashMap<String,Object>(Map.of("orderId",rs.getString("id"),"status",rs.getString("status"),"credits",rs.getLong("credits"),"createdAt",rs.getTimestamp("created_at").toInstant().toString()));
+                if(activation!=null&&!rs.getTimestamp("created_at").after(activation))view.put("legacyReadOnly",true);
+                return view;
+            },creator.id());
         return Map.of("orders",orders);
     }
     public void webhook(String timestamp,String signature,byte[] body) {
         PaymentGateway.Notification notification=gateway.notification(timestamp,signature,body);
         if(notification==null) return;
+        if(legacyOrdersReadOnly){
+            var rows=db.queryForList("SELECT * FROM payment_order WHERE id=? AND provider='AIRWALLEX'",notification.reference());
+            boolean review=rows.size()!=1;
+            String reason=review?"LEGACY_CHANNEL_ORDER_UNKNOWN":"LEGACY_ORDER_READ_ONLY";
+            if(!review)try{review=legacyBoundary().readOnly(rows.get(0));}
+            catch(ResponseStatusException unavailable){review=true;reason="LEGACY_CHANNEL_BOUNDARY_NOT_READY";}
+            if(review){
+                if(inbox==null)throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,"Legacy webhook archive unavailable");
+                // Signature verification precedes this path. Store correlation only, never payer data or secrets.
+                String pointer=new tools.jackson.databind.ObjectMapper().writeValueAsString(new TreeMap<>(Map.of("orderId",notification.reference(),"linkId",notification.linkId())));
+                String event;
+                try{event="verified-body-"+HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256").digest(body));}
+                catch(java.security.NoSuchAlgorithmException unavailable){throw new IllegalStateException(unavailable);}
+                inbox.acceptManualVerified("AIRWALLEX",event,"AIRWALLEX.LEGACY_VERIFIED",pointer,reason);return;
+            }
+        }
         settle(notification.reference(),notification.linkId(),gateway.retrieve(notification.linkId()));
     }
     void settle(String id,String linkId,PaymentGateway.Snapshot remote) {
@@ -110,6 +137,7 @@ public class PaymentService {
             var rows=db.queryForList("SELECT * FROM payment_order WHERE id=? AND provider='AIRWALLEX' FOR UPDATE",id);
             if(rows.isEmpty()) throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,"订单尚未就绪");
             var row=rows.get(0);
+            legacyBoundary().requireMutable(row);
             String prior=(String)row.get("provider_link_id");
             if((prior!=null && !prior.equals(linkId)) || !id.equals(remote.reference()) || !linkId.equals(remote.id())
                 || !"PAID".equals(remote.status()) || remote.reusable()

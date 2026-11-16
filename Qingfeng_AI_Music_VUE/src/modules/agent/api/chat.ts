@@ -17,7 +17,8 @@ export async function getConversationHistory(conversationId: string, beforeSeq: 
 
 export async function sendMessage(conversationId: string, text: string, requestKey: string, locale: string): Promise<ConversationSnapshot> {
   await ensureCreator()
-  return requestJson<ConversationSnapshot>(`${base}/${encodeURIComponent(conversationId)}/messages`, 'POST', { text, requestKey, locale }, 180000)
+  // Sending accepts the inline price; the server owns allowance and idempotent billing.
+  return requestJson<ConversationSnapshot>(`${base}/${encodeURIComponent(conversationId)}/messages`, 'POST', { text, requestKey, locale, paidConfirmed: true }, 180000)
 }
 
 export async function getCurrentConversation(): Promise<ConversationView> {

@@ -31,7 +31,11 @@ import static org.junit.jupiter.api.Assertions.*;
 /** Real HTTP Experience/OIDC/ES384 protocol fixture; no real messages, passwords or provider credentials. */
 @SpringBootTest(webEnvironment=SpringBootTest.WebEnvironment.RANDOM_PORT,properties={
     "spring.datasource.url=jdbc:h2:mem:native_auth;MODE=MySQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1",
-    "qingfeng.auth.logto.email-enabled=true","qingfeng.auth.logto.phone-enabled=true","qingfeng.auth.logto.phone-international-enabled=true"})
+    "qingfeng.auth.logto.email-enabled=true","qingfeng.auth.logto.phone-enabled=true","qingfeng.auth.logto.phone-international-enabled=true",
+    "qingfeng.auth.sms-bridge.enabled=true","qingfeng.auth.sms-bridge.bearer-secret=fixture_bridge_secret_with_at_least_43_safe_characters",
+    "qingfeng.auth.sms-bridge.international.enabled=true","qingfeng.auth.sms-bridge.international.allowed-regions=GB",
+    "qingfeng.auth.sms-bridge.international.access-key-id=fixture-access-id","qingfeng.auth.sms-bridge.international.access-key-secret=fixture-secret",
+    "qingfeng.auth.sms-bridge.international.sender-id=CheerMusic"})
 @ActiveProfiles("test") @Import(NativeAuthenticationIntegrationTest.Fixture.class)
 class NativeAuthenticationIntegrationTest {
     private static final ObjectMapper JSON=new ObjectMapper();
@@ -145,8 +149,13 @@ class NativeAuthenticationIntegrationTest {
         assertEquals(200,response.statusCode(),response.body());assertTrue(USERS.contains(email));assertEquals(50,credits.balance(browser.creator));
     }
     @Test void phoneOtpAndEmailOtpRegisterWithoutPasswordAndStayOnSameOrigin()throws Exception{
+        var status=JSON.readTree(send(HttpClient.newHttpClient(),"GET","/api/public/auth/native/status",null,null).body());
+        assertTrue(status.path("phoneEnabled").asBoolean());
+        assertTrue(status.path("phoneInternationalEnabled").asBoolean());
+        assertEquals("GB",status.path("phoneAllowedRegions").get(0).asText());
+        assertEquals(1,status.path("phoneAllowedRegions").size());
         for(String channel:List.of("phone","email")){
-            var browser=browser();String value="phone".equals(channel)?"+447700"+String.format("%06d",new Random().nextInt(1000000)):email();
+            var browser=browser();String value="phone".equals(channel)?"+447400"+String.format("%06d",new Random().nextInt(1000000)):email();
             var sent=code(browser,channel,value,"sign-in");assertEquals(200,sent.statusCode(),sent.body());assertFalse(sent.body().contains("verificationId"));
             var response=post(browser,"/"+channel+"/sign-in",Map.of(channel,value,"code","123456"));
             assertEquals(200,response.statusCode(),response.body());assertTrue(response.headers().firstValue("location").isEmpty());assertEquals(50,credits.balance(browser.creator));

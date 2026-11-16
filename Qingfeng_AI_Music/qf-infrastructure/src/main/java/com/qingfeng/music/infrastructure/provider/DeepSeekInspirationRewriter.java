@@ -127,7 +127,8 @@ public final class DeepSeekInspirationRewriter implements InspirationRewriter {
                 throw new DomainException("REWRITE_PROVIDER_UNAVAILABLE", "AI改写服务认证失败，请检查后端模型配置与密钥。");
             if (response.statusCode() == 402)
                 throw new DomainException("REWRITE_PROVIDER_UNAVAILABLE", "AI改写模型余额不足，请充值后重试。");
-            if (response.statusCode() != 200) throw new DomainException("REWRITE_PROVIDER_UNAVAILABLE", "AI改写服务暂时繁忙，请稍后再试。");
+            if (response.statusCode() >= 500 || response.statusCode()==408) throw new DomainException("REWRITE_PROVIDER_RESULT_UNKNOWN", "AI改写服务结果待核对；请勿重复提交，原文仍会保留。");
+            if (response.statusCode() != 200) throw new DomainException("REWRITE_PROVIDER_UNAVAILABLE", "AI改写请求未被接受，请检查后重试。");
             var choice = json.readTree(response.body()).path("choices").path(0);
             if (!choice.path("finish_reason").asText().equals("stop")) throw invalid();
             var result = json.readTree(choice.path("message").path("content").asText()).path("text");
@@ -135,16 +136,16 @@ public final class DeepSeekInspirationRewriter implements InspirationRewriter {
             return result.asText().trim();
         } catch (InterruptedException interrupted) {
             Thread.currentThread().interrupt();
-            throw new DomainException("REWRITE_PROVIDER_UNAVAILABLE", "AI改写已中断；原文仍会保留。");
+            throw new DomainException("REWRITE_PROVIDER_RESULT_UNKNOWN", "AI改写已中断，结果待核对，请勿重复提交。原文仍会保留。");
         } catch (HttpTimeoutException timeout) {
             logRequestFailure(timeout);
             String message = timeout instanceof HttpConnectTimeoutException
-                ? "AI改写连接服务超时，请稍后重试。原文仍会保留。"
-                : "AI改写等待模型响应超时，请稍后重试。原文仍会保留。";
-            throw new DomainException("REWRITE_PROVIDER_UNAVAILABLE", message);
+                ? "AI改写连接服务超时，结果待核对，请勿重复提交。原文仍会保留。"
+                : "AI改写等待模型响应超时，结果待核对，请勿重复提交。原文仍会保留。";
+            throw new DomainException("REWRITE_PROVIDER_RESULT_UNKNOWN", message);
         } catch (IOException network) {
             logRequestFailure(network);
-            throw new DomainException("REWRITE_PROVIDER_UNAVAILABLE", "AI改写连接失败，请稍后重试。原文仍会保留。");
+            throw new DomainException("REWRITE_PROVIDER_RESULT_UNKNOWN", "AI改写连接中断，结果待核对，请勿重复提交。原文仍会保留。");
         } catch (tools.jackson.core.JacksonException invalid) { throw invalid(); }
     }
 

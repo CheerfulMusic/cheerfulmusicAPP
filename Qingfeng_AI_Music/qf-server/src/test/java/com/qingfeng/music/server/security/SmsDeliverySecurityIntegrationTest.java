@@ -14,7 +14,9 @@ import static org.mockito.Mockito.*;
 @SpringBootTest(webEnvironment=SpringBootTest.WebEnvironment.RANDOM_PORT,properties={
     "spring.datasource.url=jdbc:h2:mem:sms_hook;MODE=MySQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1",
     "qingfeng.invite-gate.enabled=true","qingfeng.invite-gate.codes=fixture-beta-code","qingfeng.invite-gate.signing-key=fixture-beta-signing-secret-with-at-least-thirty-two-characters",
-    "qingfeng.auth.sms-bridge.enabled=true","qingfeng.auth.sms-bridge.bearer-secret=fixture_bridge_secret_with_at_least_43_safe_characters"})
+    "qingfeng.auth.sms-bridge.enabled=true","qingfeng.auth.sms-bridge.bearer-secret=fixture_bridge_secret_with_at_least_43_safe_characters",
+    "qingfeng.auth.logto.phone-enabled=true","qingfeng.auth.logto.phone-international-enabled=true",
+    "qingfeng.auth.sms-bridge.international.enabled=true","qingfeng.auth.sms-bridge.international.allowed-regions=GB"})
 @ActiveProfiles("test")
 class SmsDeliverySecurityIntegrationTest {
     private static final String BEARER="Bearer fixture_bridge_secret_with_at_least_43_safe_characters";
@@ -30,32 +32,39 @@ class SmsDeliverySecurityIntegrationTest {
     }
     private static String body(String phone,String code){return "{\"to\":\""+phone+"\",\"type\":\"SignIn\",\"payload\":{\"code\":\""+code+"\",\"locale\":\"en\"},\"ip\":\"203.0.113.1\"}";}
     @Test void authenticatedLogtoCallbackNeedsNeitherBetaCookieCreatorNorCsrf()throws Exception{
-        var response=request("POST",PATH,BEARER,body("447700900131","123456"));
-        assertEquals(200,response.statusCode(),response.body());assertEquals("{\"success\":true}",response.body());verify(sender).send("447700900131","123456");
+        var response=request("POST",PATH,BEARER,body("447400123131","123456"));
+        assertEquals(200,response.statusCode(),response.body());assertEquals("{\"success\":true}",response.body());verify(sender).send("447400123131","123456");
         assertTrue(response.headers().firstValue("cache-control").orElse("").contains("no-store"));assertFalse(response.body().contains("123456"));
-        assertEquals(200,request("POST",PATH,BEARER,body("+447700900131","123456")).statusCode());verify(sender,times(1)).send("447700900131","123456");
+        assertEquals(200,request("POST",PATH,BEARER,body("+447400123131","123456")).statusCode());verify(sender,times(1)).send("447400123131","123456");
     }
     @Test void missingOrWrongBearerCannotReachSender()throws Exception{
         for(String auth:Arrays.asList(null,"Bearer wrong")){
-            var response=request("POST",PATH,auth,body("447700900132","654321"));assertEquals(401,response.statusCode(),response.body());assertFalse(response.body().contains("654321"));assertFalse(response.body().contains("fixture_bridge"));
+            var response=request("POST",PATH,auth,body("447400123132","654321"));assertEquals(401,response.statusCode(),response.body());assertFalse(response.body().contains("654321"));assertFalse(response.body().contains("fixture_bridge"));
         }
         verifyNoInteractions(sender);
     }
     @Test void onlyExactPostCallbackBypassesGateAndCsrf()throws Exception{
         assertEquals(403,request("GET",PATH,BEARER,null).statusCode());
-        assertEquals(403,request("POST",PATH+"/other",BEARER,body("447700900133","123456")).statusCode());
-        assertEquals(403,request("POST","/api/public/auth/native/code",BEARER,"{\"channel\":\"phone\",\"identifier\":\"+447700900133\",\"purpose\":\"sign-in\"}").statusCode());
+        assertEquals(403,request("POST",PATH+"/other",BEARER,body("447400123133","123456")).statusCode());
+        assertEquals(403,request("POST","/api/public/auth/native/code",BEARER,"{\"channel\":\"phone\",\"identifier\":\"+447400123133\",\"purpose\":\"sign-in\"}").statusCode());
         assertEquals(403,request("POST","/api/public/auth/native/password/sign-in",BEARER,"{\"email\":\"fixture@example.test\",\"password\":\"fake-password\"}").statusCode());
         verifyNoInteractions(sender);
     }
     @Test void invalidOrOversizedPayloadIsRejectedWithoutSending()throws Exception{
-        assertEquals(400,request("POST",PATH,BEARER,body("447700900134","arbitrary text")).statusCode());
-        assertEquals(400,request("POST",PATH,BEARER,"{\"phone\":\"447700900134\",\"code\":\"123456\"}").statusCode());
+        assertEquals(400,request("POST",PATH,BEARER,body("447400123134","arbitrary text")).statusCode());
+        assertEquals(400,request("POST",PATH,BEARER,"{\"phone\":\"447400123134\",\"code\":\"123456\"}").statusCode());
         assertEquals(413,request("POST",PATH,BEARER," ".repeat(2049)).statusCode());verifyNoInteractions(sender);
     }
+    @Test void hostedLogtoConnectorCannotBypassDestinationPolicy()throws Exception{
+        for(String number:List.of("447797712345","447781123456","447924123456","393123456789")){
+            var response=request("POST",PATH,BEARER,body(number,"123456"));
+            assertTrue(response.statusCode()==400||response.statusCode()==403,response.body());
+        }
+        verifyNoInteractions(sender);
+    }
     @Test void providerErrorAndRetriesAreSanitizedAndCannotDoubleSend()throws Exception{
-        doThrow(new IllegalStateException("secret-key raw provider OTP 123456")).when(sender).send("447700900135","123456");
-        var response=request("POST",PATH,BEARER,body("447700900135","123456"));assertEquals(502,response.statusCode(),response.body());assertFalse(response.body().contains("secret-key"));assertFalse(response.body().contains("123456"));
-        assertEquals(503,request("POST",PATH,BEARER,body("447700900135","123456")).statusCode());verify(sender,times(1)).send("447700900135","123456");
+        doThrow(new IllegalStateException("secret-key raw provider OTP 123456")).when(sender).send("447400123135","123456");
+        var response=request("POST",PATH,BEARER,body("447400123135","123456"));assertEquals(502,response.statusCode(),response.body());assertFalse(response.body().contains("secret-key"));assertFalse(response.body().contains("123456"));
+        assertEquals(503,request("POST",PATH,BEARER,body("447400123135","123456")).statusCode());verify(sender,times(1)).send("447400123135","123456");
     }
 }

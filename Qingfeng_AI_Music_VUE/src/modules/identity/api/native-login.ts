@@ -8,6 +8,7 @@ export interface NativeLoginStatus {
   emailCodeEnabled: boolean
   phoneEnabled: boolean
   phoneInternationalEnabled: boolean
+  phoneAllowedRegions?: string[]
   authenticated: boolean
   email?: string
   phoneMasked?: string

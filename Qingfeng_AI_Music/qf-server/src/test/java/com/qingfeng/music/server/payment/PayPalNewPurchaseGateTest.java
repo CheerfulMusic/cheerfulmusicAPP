@@ -148,4 +148,52 @@ class PayPalNewPurchaseGateTest {
         assertEquals(HttpStatus.BAD_REQUEST,failure.getStatusCode());
         verifyNoInteractions(db,tx,ledger,gateway);
     }
+    @Test void canaryCatalogRequiresTheExactAuthenticatedOwner(){
+        String chosen="00000000-0000-0000-0000-000000000001";
+        ReflectionTestUtils.setField(service,"canaryOwnerIds",chosen);
+        assertEquals(true,service.catalog(new com.qingfeng.music.server.security.CreatorPrincipal(chosen)).get("enabled"));
+        assertEquals(false,service.catalog(new com.qingfeng.music.server.security.CreatorPrincipal("00000000-0000-0000-0000-000000000002")).get("enabled"));
+        assertEquals(false,service.catalog().get("enabled"));
+        assertEquals(true,service.sdkConfig().get("enabled"));
+        var denied=assertThrows(ResponseStatusException.class,()->service.create(owner,"starter-USD"));
+        assertEquals(HttpStatus.SERVICE_UNAVAILABLE,denied.getStatusCode());
+        var admitted=assertThrows(ResponseStatusException.class,()->service.create(chosen,"missing-package"));
+        assertEquals(HttpStatus.BAD_REQUEST,admitted.getStatusCode());
+        verifyNoInteractions(db,tx,ledger,gateway);
+    }
+    @Test void malformedOrOversizedCanaryConfigurationFailsClosedForEveryOwner(){
+        String chosen="00000000-0000-0000-0000-000000000001";
+        var principal=new com.qingfeng.music.server.security.CreatorPrincipal(chosen);
+        for(String value:List.of(chosen+",",chosen+",*",chosen+","+chosen,
+                chosen+",00000000-0000-0000-0000-000000000002,00000000-0000-0000-0000-000000000003,00000000-0000-0000-0000-000000000004")){
+            ReflectionTestUtils.setField(service,"canaryOwnerIds",value);
+            assertEquals(false,service.catalog(principal).get("enabled"),value);
+            assertEquals(HttpStatus.SERVICE_UNAVAILABLE,assertThrows(ResponseStatusException.class,()->service.create(chosen,"starter-USD")).getStatusCode());
+        }
+        verifyNoInteractions(db,tx,ledger,gateway);
+    }
+    @Test void canaryCannotBypassProviderReadinessOrChangeExistingOrderSettlement(){
+        ReflectionTestUtils.setField(service,"canaryOwnerIds","00000000-0000-0000-0000-000000000001");
+        persistence();when(gateway.retrieve(remote)).thenReturn(snapshot("COMPLETED","COMPLETED"));
+        assertEquals("PAID",service.order(owner,id).get("status"));
+        verify(ledger).credit(owner,100L,"payment:"+id);
+        ReflectionTestUtils.setField(service,"enabled",false);
+        assertEquals(false,service.catalog(new com.qingfeng.music.server.security.CreatorPrincipal("00000000-0000-0000-0000-000000000001")).get("enabled"));
+        assertEquals(HttpStatus.SERVICE_UNAVAILABLE,assertThrows(ResponseStatusException.class,()->service.create("00000000-0000-0000-0000-000000000001","starter-USD")).getStatusCode());
+        verify(gateway,never()).create(anyString(),anyString(),any(),anyString(),anyString(),anyString());
+    }
+    @Test void admittedCanaryCreatesOnlyItsOwnOrderWithTheOriginalUsdQuote(){
+        String chosen="00000000-0000-0000-0000-000000000001";
+        ReflectionTestUtils.setField(service,"canaryOwnerIds",chosen);
+        persistence();
+        when(db.queryForObject(contains("creator_google_identity"),eq(Integer.class),eq(chosen),eq(chosen))).thenReturn(1);
+        when(db.queryForObject(startsWith("SELECT COUNT(*) FROM payment_order"),eq(Integer.class),eq(chosen))).thenReturn(0);
+        when(gateway.create(anyString(),anyString(),any(),anyString(),anyString(),anyString()))
+            .thenReturn(new PayPalCheckoutGateway.Created("REMOTE2","https://www.sandbox.paypal.com/checkoutnow?token=REMOTE2"));
+        var result=service.create(chosen,"starter-USD");
+        assertEquals("REMOTE2",result.get("paypalOrderId"));
+        verify(db).update(startsWith("INSERT INTO payment_order"),anyString(),eq(chosen),eq("starter-USD"),eq(new BigDecimal("9.90")),eq("USD"),eq(100L),eq("CREATING"),eq("PAYPAL_SANDBOX"));
+        verify(gateway).create(anyString(),anyString(),eq(new BigDecimal("9.90")),eq("USD"),anyString(),anyString());
+        verifyNoInteractions(ledger);
+    }
 }

@@ -1,4 +1,7 @@
 spring:
+  flyway:
+    # Financial V44 requires a separately approved cutover, mapping, and activation.
+    target: ${CREDIT_SCHEMA_TARGET:44}
   config:
     import:
       - classpath:usage-limits.properties
@@ -38,10 +41,39 @@ qingfeng:
     workers: 4
   credits:
     enabled: true
+    writer-fence:
+      enabled: ${CREDIT_WRITER_FENCE_ENABLED:false}
+      expected-database: ${CREDIT_WRITER_EXPECTED_DATABASE:}
+      expected-port: ${CREDIT_WRITER_EXPECTED_PORT:0}
     music-cost: 5
-    lyrics-cost: 1
+    lyrics-cost: 2
     rewrite-cost: 1
     rewrite-free-per-day: 5
+  stripe:
+    enabled: false
+    accepting-new-orders: false
+    environment: ${STRIPE_ENVIRONMENT:sandbox}
+    account-id: ${STRIPE_ACCOUNT_ID:}
+    api-key: ${STRIPE_SECRET_KEY:}
+    webhook-secret: ${STRIPE_WEBHOOK_SECRET:}
+    success-url: ${STRIPE_SUCCESS_URL:}
+    cancel-url: ${STRIPE_CANCEL_URL:}
+    business-country: ${STRIPE_BUSINESS_COUNTRY:GB}
+    payment-methods:
+      card:
+        enabled: ${STRIPE_CARD_ENABLED:true}
+      apple-pay:
+        # Hosted Checkout confirms wallet availability on the customer's device.
+        enabled: ${STRIPE_APPLE_PAY_ENABLED:true}
+      wechat-pay:
+        # Enable only after Stripe approves this merchant; this does not enable Live payments.
+        enabled: ${STRIPE_WECHAT_PAY_ENABLED:false}
+    prices:
+      cny:
+        # Independent CNY prices approved by the owner, never an inferred FX conversion.
+        starter: ${STRIPE_CNY_STARTER_PRICE:68.80}
+        standard: ${STRIPE_CNY_STANDARD_PRICE:178.80}
+        plus: ${STRIPE_CNY_PLUS_PRICE:338.80}
   auth:
     google:
       enabled: ${GOOGLE_LOGIN_ENABLED:false}

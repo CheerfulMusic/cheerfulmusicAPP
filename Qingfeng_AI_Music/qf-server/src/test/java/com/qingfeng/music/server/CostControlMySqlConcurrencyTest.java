@@ -72,7 +72,7 @@ import static org.junit.jupiter.api.Assertions.*;
 @Import(CostControlMySqlConcurrencyTest.Offline.class)
 class CostControlMySqlConcurrencyTest {
 
-    static final long LYRICS_COST = 1L;
+    static final long LYRICS_COST = 2L;
     static final long REWRITE_COST = 1L;
 
     @Autowired IdentityApi identity;
@@ -208,7 +208,9 @@ class CostControlMySqlConcurrencyTest {
         // 先耗尽 5 次免费（使用合法 UUID 请求键），使第 6 次走积分扣费。
         for (int i = 0; i < 5; i++) rewriteService.rewrite(owner, "我想感谢爸爸", "zh-CN", UUID.randomUUID().toString());
         String chargedKey = UUID.randomUUID().toString();
-        rewriteService.rewrite(owner, "我想感谢爸爸", "zh-CN", chargedKey); // 计费 1 积分
+        var reserved=rewriteCharges.reserve(owner,chargedKey);
+        assertTrue(reserved.fresh());assertFalse(reserved.free());assertEquals(REWRITE_COST,reserved.cost());
+        rewriteCharges.submitted(owner,chargedKey);
         long beforeFail = credits.balance(owner);
         assertEquals(19, beforeFail);
         rewriteCharges.fail(owner, chargedKey);
@@ -218,6 +220,8 @@ class CostControlMySqlConcurrencyTest {
         int refunded = jdbc.queryForObject(
             "SELECT refunded FROM rewrite_consumption WHERE creator_id=? AND request_key=?", Integer.class, owner, chargedKey);
         assertEquals(1, refunded, "仅标记一次已退");
+        assertEquals("FAILED",jdbc.queryForObject("SELECT status FROM rewrite_consumption WHERE creator_id=? AND request_key=?",String.class,owner,chargedKey));
+        assertEquals(1,jdbc.queryForObject("SELECT COUNT(*) FROM credit_ledger WHERE entry_type='REFUND' AND owner_id=?",Integer.class,owner));
     }
 
     /**
@@ -235,9 +239,11 @@ class CostControlMySqlConcurrencyTest {
             String o = identity.create().creatorId();
             credits.credit(o, fund, "fund-" + o);
             ownerIds.add(o);
-            workIds.add(works.create(o, new Draft("妈妈", "生日", "一起做饭", "愿你快乐", "民谣", "故事")).id());
+            String work=works.create(o, new Draft("妈妈", "生日", "一起做饭", "愿你快乐", "民谣", "故事")).id();
+            useInitialLyricGrant(o,work);
+            workIds.add(work);
         }
-        lyricsWriter.failure = new DomainException("LYRICS_PROVIDER_TIMEOUT", "模型超时");
+        lyricsWriter.failure = new DomainException("LYRICS_PROVIDER_UNAVAILABLE", "供应商明确拒绝受理");
         var idx = new AtomicInteger();
         var results = runConcurrently(owners, owners, () -> {
             int i = idx.incrementAndGet() - 1;
@@ -248,7 +254,8 @@ class CostControlMySqlConcurrencyTest {
                 return e.code();
             }
         });
-        assertTrue(results.stream().noneMatch("OK"::equals), "所有并发生成均因模型失败而中止");
+        assertEquals(owners,results.stream().filter("LYRICS_PROVIDER_UNAVAILABLE"::equals).count(),"每位owner均实际得到明确拒绝");
+        assertEquals(owners,lyricsWriter.calls.get());
         for (int i = 0; i < owners; i++) {
             String o = ownerIds.get(i);
             assertEquals(fund, credits.balance(o), "并发失败下每位 owner 账本净零（扣费均被精确退还）");
@@ -280,6 +287,7 @@ class CostControlMySqlConcurrencyTest {
             return out;
         } finally {
             pool.shutdownNow();
+            assertTrue(pool.awaitTermination(15,TimeUnit.SECONDS),"全部并发任务必须结束才能开始下一项测试");
         }
     }
 
@@ -303,6 +311,12 @@ class CostControlMySqlConcurrencyTest {
     }
     int reservations(Kind kind, String owner) {
         return jdbc.queryForObject("SELECT COUNT(*) FROM model_usage_reservation WHERE kind=? AND owner_id=?", Integer.class, kind.name(), owner);
+    }
+
+    /** These tests exercise paid debit/refund, so consume each new work's first free lyric grant first. */
+    void useInitialLyricGrant(String owner,String work){
+        jdbc.update("INSERT INTO model_usage_reservation(kind,work_id,request_key,owner_id,usage_day,created_at) VALUES('LYRIC_GRANT',?,'00000000-0000-0000-0000-000000000000',?,CURRENT_DATE,CURRENT_TIMESTAMP)",work,owner);
+        jdbc.update("INSERT INTO model_usage_reservation(kind,work_id,request_key,owner_id,usage_day,created_at) VALUES('LYRIC_REDEEM',?,?,?,CURRENT_DATE,CURRENT_TIMESTAMP)",work,UUID.randomUUID().toString(),owner);
     }
 
     // ===== 离线桩 =====

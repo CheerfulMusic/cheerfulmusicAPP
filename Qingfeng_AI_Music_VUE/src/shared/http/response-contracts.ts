@@ -1,4 +1,5 @@
 import { isAgentContinuation } from '../../modules/agent/model/conversation'
+import { isStripeMethod, validCreditPack, validStripeMethods } from '../../modules/identity/model/stripe-payment-methods'
 type Row=Record<string,unknown>
 const obj=(v:unknown):v is Row=>!!v&&typeof v==='object'&&!Array.isArray(v)
 const str=(v:unknown)=>typeof v==='string'
@@ -12,7 +13,9 @@ const logtoAuthorizationUrl=(v:unknown)=>{
  try{const url=new URL(v as string);return ['http://localhost:3001','https://auth.cheerfulmusic.com'].includes(url.origin)&&url.pathname==='/oidc/auth'&&!url.username&&!url.password&&!url.hash}catch{return false}
 }
 const num=(v:unknown)=>typeof v==='number'&&Number.isFinite(v)
-const paymentOrder=(v:unknown)=>obj(v)&&text(v.orderId)&&['CREATING','PENDING','PAID','CANCELLED','FAILED','UNKNOWN'].includes(String(v.status))&&num(v.credits)
+const paymentOrder=(v:unknown)=>obj(v)&&text(v.orderId)&&['CREATING','CREATION_UNKNOWN','PENDING','PAID','CANCELLED','FAILED','UNKNOWN'].includes(String(v.status))&&num(v.credits)
+ &&(v.amount===undefined&&v.currency===undefined||num(v.amount)&&Number(v.amount)>0&&text(v.currency))
+ &&(v.packageId===undefined||text(v.packageId))&&(v.paymentMethod===undefined||isStripeMethod(v.paymentMethod))
 const list=(v:unknown,check:(v:unknown)=>boolean)=>Array.isArray(v)&&v.every(check)
 const work=(v:unknown)=>obj(v)&&text(v.id)&&num(v.version)&&['recipient','occasion','story','message','style','title','vocalGender'].every(k=>str(v[k]))
 const revision=(v:unknown)=>obj(v)&&text(v.id)&&text(v.workId)&&num(v.workVersion)&&str(v.title)&&str(v.lyrics)&&typeof v.confirmed==='boolean'
@@ -97,6 +100,7 @@ export function validResponse(path:string,method:string,value:unknown):boolean{
  if(path==='public/auth/google/status')return method==='GET'&&obj(value)&&typeof value.enabled==='boolean'&&typeof value.authenticated==='boolean'&&(!value.authenticated||value.enabled)&&['email','name'].every(k=>!(k in value)||str(value[k]))
  if(path==='public/auth/google/start')return method==='POST'&&obj(value)&&googleAuthorizationUrl(value.authorizationUrl)
  if(path==='public/auth/native/status')return method==='GET'&&obj(value)&&['emailPasswordEnabled','passwordResetEnabled','emailCodeEnabled','phoneEnabled','phoneInternationalEnabled','authenticated'].every(k=>typeof value[k]==='boolean')&&['email','phoneMasked','name'].every(k=>!(k in value)||str(value[k]))
+   &&(value.phoneAllowedRegions===undefined||list(value.phoneAllowedRegions,r=>str(r)&&/^[A-Z]{2}$/.test(r as string)))
  if(path==='public/auth/native/code')return method==='POST'&&obj(value)&&value.sent===true&&num(value.resendAfter)&&Number(value.resendAfter)>=0&&Number(value.resendAfter)<=3600
  if(['public/auth/native/password/sign-in','public/auth/native/register','public/auth/native/email/sign-in','public/auth/native/phone/sign-in'].includes(path))return method==='POST'&&obj(value)&&value.authenticated===true
  if(path==='public/auth/native/password/reset')return method==='POST'&&obj(value)&&value.reset===true
@@ -128,10 +132,12 @@ export function validResponse(path:string,method:string,value:unknown):boolean{
  if(path==='app/credits')return method==='GET'&&obj(value)&&typeof value.enabled==='boolean'&&num(value.balance)&&num(value.musicCost)
  if(path==='app/referrals')return method==='GET'&&obj(value)&&text(value.code)
  if(path==='app/referrals/accept')return method==='POST'&&obj(value)&&value.accepted===true
- if(path==='app/payments/catalog'||path==='app/paypal/catalog')return method==='GET'&&obj(value)&&typeof value.enabled==='boolean'&&list(value.packages,p=>obj(p)&&text(p.id)&&str(p.title)&&num(p.amount)&&Number(p.amount)>0&&text(p.currency)&&num(p.credits)&&Number(p.credits)>0)
+ if(path==='app/payments/catalog'||path==='app/paypal/catalog'||path==='app/stripe/catalog')return method==='GET'&&obj(value)&&typeof value.enabled==='boolean'&&list(value.packages,validCreditPack)&&(path!=='app/stripe/catalog'||value.paymentMethods===undefined||validStripeMethods(value.paymentMethods))
  if(path==='app/paypal/sdk-config')return method==='GET'&&obj(value)&&typeof value.enabled==='boolean'&&str(value.clientId)&&['sandbox','production'].includes(String(value.environment))&&(!value.enabled||text(value.clientId))
- if(path==='app/payments/orders'||path==='app/paypal/orders')return method==='POST'?obj(value)&&text(value.orderId)&&text(value.checkoutUrl)&&(path!=='app/paypal/orders'||value.paypalOrderId===undefined||text(value.paypalOrderId)):method==='GET'&&obj(value)&&list(value.orders,o=>paymentOrder(o)&&obj(o)&&text(o.createdAt))
- if(/^app\/(payments|paypal)\/orders\/[^/]+$/.test(path))return method==='GET'&&paymentOrder(value)
+ if(path==='app/payments/orders'||path==='app/paypal/orders'||path==='app/stripe/orders')return method==='POST'?obj(value)&&text(value.orderId)&&text(value.checkoutUrl)&&(path!=='app/paypal/orders'||value.paypalOrderId===undefined||text(value.paypalOrderId)):method==='GET'&&obj(value)&&list(value.orders,o=>paymentOrder(o)&&obj(o)&&text(o.createdAt))
+ if(/^app\/(payments|paypal|stripe)\/orders\/[^/]+$/.test(path))return method==='GET'&&paymentOrder(value)
+ if(/^app\/stripe\/orders\/[^/]+\/cancel$/.test(path))return method==='POST'&&paymentOrder(value)
+ if(/^app\/stripe\/orders\/[^/]+\/resume$/.test(path))return method==='POST'&&obj(value)&&text(value.orderId)&&(['PAID','CANCELLED'].includes(String(value.status))||text(value.checkoutUrl))
  if(/^app\/paypal\/orders\/[^/]+\/resume$/.test(path))return method==='POST'&&obj(value)&&text(value.orderId)&&(['APPROVED','PAID'].includes(String(value.status))||value.status==='CHECKOUT'&&text(value.checkoutUrl))
  if(/^app\/paypal\/orders\/[^/]+\/(capture|close)$/.test(path))return method==='POST'&&paymentOrder(value)
  if(path==='app/usage')return obj(value)&&['music','lyrics'].every(k=>obj(value[k])&&num((value[k] as Row).dailyRemaining)&&num((value[k] as Row).active))

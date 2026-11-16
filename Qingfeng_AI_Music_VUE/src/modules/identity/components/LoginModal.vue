@@ -8,7 +8,7 @@ import { refreshAccountState } from '../../../shared/identity/account-state'
 import { refreshLogtoState, resetLogtoState } from '../../../shared/identity/logto-state'
 import { beginGoogleLogin } from '../api/google-login'
 import { readNativeLoginStatus, registerWithEmail, resetEmailPassword, sendLoginCode, signInWithEmail, signInWithEmailCode, signInWithPhone, type CodePurpose, type NativeLoginStatus } from '../api/native-login'
-import { callingCode, countryOptions, internationalPhone, type PhoneCountry } from '../model/international-phone'
+import { callingCode, countryOptions, internationalSmsPhone, smsRegionAvailable, type PhoneCountry } from '../model/international-phone'
 import { loginCodeKey, nativeLoginError, resendSeconds } from '../model/native-login'
 import { validateLoginIdentifier } from '../model/login-identifier'
 import GoogleMark from './GoogleMark.vue'
@@ -32,16 +32,18 @@ const emailUsesCode = computed(() => emailMode.value === 'code' || !passwordAvai
 const codePurpose = computed<CodePurpose>(() => method.value === 'phone' || emailUsesCode.value ? 'sign-in' : emailMode.value === 'reset' ? 'reset' : 'register')
 const needsCode = computed(() => method.value === 'phone' || emailUsesCode.value || emailMode.value !== 'sign-in')
 const needsPassword = computed(() => method.value === 'email' && !emailUsesCode.value)
+const parsedPhone = computed(() => internationalSmsPhone(phone.value, country.value))
 const normalizedIdentifier = computed(() => {
-  if (method.value === 'phone') return internationalPhone(phone.value, country.value) || ''
+  if (method.value === 'phone') return parsedPhone.value?.number || ''
   const value = validateLoginIdentifier('email', email.value)
   return value.valid ? value.value : ''
 })
 const codeKey = computed(() => normalizedIdentifier.value ? loginCodeKey(method.value, normalizedIdentifier.value, codePurpose.value) : '')
 const remaining = computed(() => resendSeconds(resendAt.value[codeKey.value] || 0, now.value))
 const locked = computed(() => busy.value || sending.value || openingGoogle.value)
-const phoneRegionUnavailable = computed(() => method.value === 'phone' && nativeStatus.value?.phoneEnabled === true && !nativeStatus.value.phoneInternationalEnabled
-  && (selectedCallingCode.value !== '+86' || !!normalizedIdentifier.value && !normalizedIdentifier.value.startsWith('+86')))
+const phoneRegionAvailable = computed(() => smsRegionAvailable(nativeStatus.value?.phoneEnabled === true,
+  nativeStatus.value?.phoneAllowedRegions, parsedPhone.value?.region || country.value))
+const phoneRegionUnavailable = computed(() => method.value === 'phone' && nativeStatus.value?.phoneEnabled === true && !phoneRegionAvailable.value)
 const channelReady = computed(() => method.value === 'phone' ? nativeStatus.value?.phoneEnabled === true && !phoneRegionUnavailable.value
   : emailMode.value === 'reset' ? nativeStatus.value?.passwordResetEnabled === true && nativeStatus.value.emailCodeEnabled
   : emailUsesCode.value || emailMode.value !== 'sign-in' ? nativeStatus.value?.emailCodeEnabled === true : passwordAvailable.value)

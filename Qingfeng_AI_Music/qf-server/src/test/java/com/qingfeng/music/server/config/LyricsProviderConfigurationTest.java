@@ -10,11 +10,14 @@ import static org.junit.jupiter.api.Assertions.*;
 class LyricsProviderConfigurationTest {
     private final LyricsCompositionConfiguration config = new LyricsCompositionConfiguration();
 
-    @Test void explicitOpenAiUsesItsOwnKeyAndLeavesInspirationOnDeepSeek() {
+    @Test void explicitOpenAiUsesItsOwnKeyAndInspirationKeepsItsQwenConfiguration() {
         var env = new MockEnvironment().withProperty("qingfeng.lyrics.provider", "OpenAI")
-            .withProperty("qingfeng.providers.openai.api-key", "offline-openai-key");
+            .withProperty("qingfeng.providers.openai.api-key", "offline-openai-key")
+            .withProperty("qingfeng.providers.qwen.api-key", "offline-qwen-key")
+            .withProperty("qingfeng.providers.qwen.model", "offline-qwen-model");
         assertTrue(assertInstanceOf(OpenAiLyricsWriter.class, config.lyricsWriter(env)).isConfigured());
-        assertFalse(config.inspirationRewriter(env).isConfigured());
+        assertTrue(config.inspirationRewriter(env).isConfigured());
+        assertEquals("offline-qwen-model", RewriteProviderSettings.settings(env).model());
     }
     @Test void supportsEnvironmentKeyWithoutFallingBackToDeepSeek() {
         var env = new MockEnvironment().withProperty("qingfeng.lyrics.provider", "openai").withProperty("OPENAI_API_KEY", "offline-key");

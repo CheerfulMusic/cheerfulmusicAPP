@@ -2,11 +2,11 @@ import type { CreditsView } from '../identity/credit-balance'
 
 export interface CreditGate { blocked: boolean; balance: number | null; cost: number }
 
-/** 快速创作包含歌词和音乐两个独立计费步骤。价格不完整时不可猜测总价。 */
+/** 快速创作包含歌词和音乐两个独立计费步骤；新作品的首次歌词可免费。 */
 export function quickCreationCost(view: CreditsView | null): number | null {
-  if (!view || !Number.isSafeInteger(view.lyricsCost) || view.lyricsCost <= 0 ||
+  if (!view || !Number.isSafeInteger(view.lyricsNextCost) || (view.lyricsNextCost ?? -1) < 0 ||
       !Number.isSafeInteger(view.musicCost) || view.musicCost <= 0) return null
-  const total = view.lyricsCost + view.musicCost
+  const total = (view.lyricsNextCost ?? 0) + view.musicCost
   return Number.isSafeInteger(total) ? total : null
 }
 
@@ -33,7 +33,7 @@ export async function checkQuickCreationCredits(refresh: () => Promise<CreditsVi
 export async function guardCredits(
   read: () => CreditsView | null,
   refresh: () => Promise<unknown>,
-  costOf: (view: CreditsView) => number = view => view.lyricsCost,
+  costOf: (view: CreditsView) => number = view => view.lyricsNextCost ?? 0,
 ): Promise<CreditGate> {
   const before = read()
   const cost = before ? costOf(before) : 0

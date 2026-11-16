@@ -30,7 +30,10 @@ public final class RedisAgentAdmission implements AgentAdmission {
     }
     private List<String> keys(Ticket ticket){String user=JdbcAgentAdmission.hash(ticket.owner());return List.of(prefix+"active",prefix+"active:"+user,prefix+"rpm",prefix+"rpm:"+user);}
     @Override public Ticket acquire(String owner,String conversation,String key,String text,String locale){
-        Ticket ticket=durable.acquire(owner,conversation,key,text,locale);if(ticket.replay())return ticket;
+        return acquire(owner,conversation,key,text,locale,false);
+    }
+    @Override public Ticket acquire(String owner,String conversation,String key,String text,String locale,boolean paidConfirmed){
+        Ticket ticket=durable.acquire(owner,conversation,key,text,locale,paidConfirmed);if(ticket.replay())return ticket;
         try{Long allowed=redis.execute(ACQUIRE,keys(ticket),ticket.id(),Long.toString(limits.lease().toMillis()),Integer.toString(limits.globalConcurrent()),Integer.toString(limits.userConcurrent()),Integer.toString(limits.globalRpm()),Integer.toString(limits.userRpm()));
             if(!Long.valueOf(1).equals(allowed))throw new DomainException("AGENT_BUSY","当前对话请求较多，请稍后再试；本次尚未开始执行。");return ticket;
         }catch(RuntimeException e){durable.abandon(ticket);if(e instanceof DomainException d)throw d;throw unavailable();}

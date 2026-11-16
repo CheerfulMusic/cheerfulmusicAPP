@@ -55,18 +55,25 @@ public final class InspirationRewriteService {
             if (!acquired) throw busy();
             var reservation = charges.reserve(owner, requestKey);
             if (!reservation.fresh()) return replay(reservation);
+            String validated;
+            boolean received=false;
+            charges.submitted(owner,requestKey);
             try {
                 String result = writer.rewrite(text.trim(), language);
+                received=true;
                 if (result == null || result.isBlank() || result.length() > outputLimit)
                     throw new DomainException("INVALID_REWRITE_RESPONSE", "改写结果不完整，请稍后重试；原文仍会保留。");
-                String validated = validateAndAssemble.apply(result.trim());
-                charges.succeed(owner, requestKey, validated);
-                return validated;
+                validated = validateAndAssemble.apply(result.trim());
             } catch (RuntimeException error) {
-                // 失败退还已扣积分；免费额度不退还。
-                charges.fail(owner, requestKey);
+                // Only an explicit rejection or a received invalid result proves a final failure.
+                if(received || error instanceof DomainException domain && Set.of("REWRITE_PROVIDER_UNAVAILABLE","REWRITE_PROVIDER_REJECTED","INVALID_REWRITE_RESPONSE").contains(domain.code()))
+                    charges.fail(owner, requestKey);
+                else charges.unknown(owner,requestKey);
                 throw error;
             }
+            // A persistence failure after a valid provider result must not mint a refund.
+            charges.succeed(owner, requestKey, validated);
+            return validated;
         } finally {
             if (acquired) slots.release();
             active.remove(owner);

@@ -34,7 +34,14 @@ public class PaymentInboxRunner {
         }
     }
     @Scheduled(fixedDelayString="${qingfeng.payment.reconcile.scan-ms:60000}")
-    public void reconcile(){submit(reconciling,paypal::reconcileOrders);}
+    public void reconcile(){submit(reconciling,this::reconcileBatch);}
+    void reconcileBatch(){
+        // A failed provider must not suppress another provider's recovery pass.
+        for(var processor:processors){
+            try{processor.reconcileOrders();}
+            catch(RuntimeException unavailable){/* Durable orders/events remain due for the next pass. */}
+        }
+    }
     private void submit(java.util.concurrent.atomic.AtomicBoolean running,Runnable task){
         // At most one task of each kind is queued/running. Provider HTTP never blocks the shared Spring scheduler.
         if(!running.compareAndSet(false,true))return;

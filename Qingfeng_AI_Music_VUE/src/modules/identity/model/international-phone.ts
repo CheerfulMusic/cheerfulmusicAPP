@@ -11,11 +11,27 @@ export function countryOptions(language: string) {
 }
 
 /** Keep the selected region's national prefix rules; send only a complete E.164 number. */
-export function internationalPhone(raw: string, country: PhoneCountry): string | undefined {
+function parseInternationalPhone(raw: string, country: PhoneCountry) {
   const value = raw.trim().replace(/^00/, '+')
   if (!value || !/^[+\d\s().-]+$/.test(value)) return undefined
   try {
     const parsed = parsePhoneNumberFromString(value, { defaultCountry: country, extract: false })
-    return parsed?.isValid() && !parsed.ext ? parsed.number : undefined
+    return parsed?.isValid() && !parsed.ext ? parsed : undefined
   } catch { return undefined }
+}
+
+export function internationalPhone(raw: string, country: PhoneCountry): string | undefined {
+  return parseInternationalPhone(raw, country)?.number
+}
+
+/** SMS requires a mobile number with a region resolved from the number itself. */
+export function internationalSmsPhone(raw: string, country: PhoneCountry): { number: string; region: PhoneCountry } | undefined {
+  const parsed = parseInternationalPhone(raw, country)
+  return parsed?.country && parsed.getType() === 'MOBILE' ? { number: parsed.number, region: parsed.country } : undefined
+}
+
+/** An older server can still offer mainland China SMS without an international region list. */
+export function smsRegionAvailable(phoneEnabled: boolean, allowedRegions: readonly string[] | undefined, region: PhoneCountry): boolean {
+  if (!phoneEnabled) return false
+  return allowedRegions ? allowedRegions.includes(region) : region === 'CN'
 }

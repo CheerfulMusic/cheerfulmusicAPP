@@ -1,16 +1,24 @@
 # Private server configuration only. Keep enabled=false until both routes and the Logto HTTP connector are ready.
+# Delivery also requires qingfeng.auth.logto.phone-enabled=true; international delivery additionally requires
+# qingfeng.auth.logto.phone-international-enabled=true. Hosted Logto requests cannot bypass these flags.
 # Logto HTTP SMS connector: endpoint=https://cheerfulmusic.com/api/public/auth/sms/deliver
 # authorization must contain the complete "Bearer <secret>" value. Use 32+ random bytes encoded as base64url (43+ chars).
 # Native connector request: {"to":"447700900123","type":"SignIn","payload":{"code":"123456"}}
 qingfeng.auth.sms-bridge.enabled=false
 qingfeng.auth.sms-bridge.bearer-secret=
 qingfeng.auth.sms-bridge.hourly-limit=200
+# Optional Logto-provided client IP: hourly cap per hashed IP; phone/global caps still apply if absent.
+qingfeng.auth.sms-bridge.ip-hourly-limit=50
 
 # International / Hong Kong, Macao and Taiwan: SendMessageToGlobe 2018-05-01, Singapore endpoint, fixed OTP text.
 qingfeng.auth.sms-bridge.international.enabled=false
 qingfeng.auth.sms-bridge.international.access-key-id=
 qingfeng.auth.sms-bridge.international.access-key-secret=
-qingfeng.auth.sms-bridge.international.sender-id=Cheerful
+# Use the exact approved SenderID for the destinations enabled below; an empty value fails startup when this route is enabled.
+qingfeng.auth.sms-bridge.international.sender-id=
+# ISO 3166-1 alpha-2 regions, comma-separated. Empty denies all international destinations, including hosted Logto flows.
+# Enable only approved destinations, for example GB,JE after each region has passed a real delivery test.
+qingfeng.auth.sms-bridge.international.allowed-regions=
 # Optional numeric ChannelId; a console display name is not a ChannelId. Leave blank unless confirmed.
 qingfeng.auth.sms-bridge.international.channel-id=
 

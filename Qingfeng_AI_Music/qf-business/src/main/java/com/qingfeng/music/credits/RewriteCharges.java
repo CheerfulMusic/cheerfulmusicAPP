@@ -23,6 +23,12 @@ public interface RewriteCharges {
     /** 预扣：命中免费额度则不扣积分，否则扣一次积分；同一 requestKey 幂等。 */
     Reservation reserve(String owner, String requestKey);
 
+    /** Persist before any provider submission; a crash afterwards has an unknown outcome. */
+    default void submitted(String owner,String requestKey) {}
+
+    /** Preserve the original debit and quota while the provider outcome is unresolved. */
+    default void unknown(String owner,String requestKey) {}
+
     /** 改写成功：结算流水并保存结果，供同一 requestKey 幂等重放。 */
     void succeed(String owner, String requestKey, String result);
 

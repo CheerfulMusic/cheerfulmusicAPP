@@ -2,15 +2,18 @@ package com.qingfeng.music.server;
 
 import com.qingfeng.music.common.exception.DomainException;
 import com.qingfeng.music.credits.CreditsLedger;
+import com.qingfeng.music.generation.application.ExecutionRepository;
 import com.qingfeng.music.identity.api.IdentityApi;
 import com.qingfeng.music.infrastructure.persistence.usage.JdbcUsageBudget;
 import com.qingfeng.music.lyrics.application.InspirationRewriter;
 import com.qingfeng.music.lyrics.application.InspirationRewriteService;
 import com.qingfeng.music.lyrics.application.LyricsCompositionService;
 import com.qingfeng.music.lyrics.application.LyricsWriter;
+import com.qingfeng.music.lyrics.api.LyricsApi;
 import com.qingfeng.music.usage.UsageBudget.Kind;
 import com.qingfeng.music.work.api.WorkApi;
 import com.qingfeng.music.work.api.WorkApi.Draft;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -68,7 +71,7 @@ import static org.junit.jupiter.api.Assertions.*;
 @Import(CreditLockOrderMySqlTest.Offline.class)
 class CreditLockOrderMySqlTest {
 
-    static final long LYRICS_COST = 1L;
+    static final long LYRICS_COST = 2L;
 
     @Autowired IdentityApi identity;
     @Autowired WorkApi works;
@@ -76,6 +79,8 @@ class CreditLockOrderMySqlTest {
     @Autowired InspirationRewriteService rewriteService;
     @Autowired CreditsLedger credits;
     @Autowired JdbcUsageBudget usageBudget;
+    @Autowired ExecutionRepository execution;
+    @Autowired LyricsApi lyrics;
     @Autowired JdbcTemplate jdbc;
     @Autowired RecordingLyricsWriter lyricsWriter;
     @Autowired RecordingRewriter rewriter;
@@ -108,21 +113,26 @@ class CreditLockOrderMySqlTest {
     @Test
     void originalSameOwnerConcurrentFailureNoDeadlock() throws Exception {
         String owner = identity.create().creatorId();
-        long fund = 200; // 16 次 × 5 积分 = 80，留足余额，确保 16 次都真正走「扣费→失败→退款」
+        long fund = 200; // 16 次 × 2 积分，留足余额，确保都真正走「扣费→失败→退款」
         credits.credit(owner, fund, "fund-" + owner);
-        String work = works.create(owner, new Draft("妈妈", "生日", "一起做饭", "愿你快乐", "民谣", "故事")).id();
-        lyricsWriter.failure = new DomainException("LYRICS_PROVIDER_TIMEOUT", "模型超时");
         int tasks = 16;
+        var workIds=new ArrayList<String>();for(int i=0;i<tasks;i++){
+            String work=works.create(owner,new Draft("妈妈","生日","一起做饭","愿你快乐","民谣","故事")).id();
+            useInitialLyricGrant(owner,work);
+            workIds.add(work);
+        }
+        var index=new AtomicInteger();lyricsWriter.failure=new DomainException("LYRICS_PROVIDER_UNAVAILABLE","供应商明确拒绝受理");
         var results = runConcurrently(16, tasks, () -> {
             try {
-                composer.compose(owner, work, 0, UUID.randomUUID().toString(), "zh-CN");
+                composer.compose(owner, workIds.get(index.getAndIncrement()), 0, UUID.randomUUID().toString(), "zh-CN");
                 return "OK";
             } catch (DomainException e) {
                 return e.code();
             }
         });
         // 若发生死锁，CannotAcquireLockException(DataAccessException) 会从 Future.get() 抛出，测试即失败。
-        assertTrue(results.stream().noneMatch("OK"::equals), "所有并发生成均因模型失败而中止");
+        assertEquals(tasks,results.stream().filter("LYRICS_PROVIDER_UNAVAILABLE"::equals).count(),"每笔均进入实际扣费与明确拒绝退款路径");
+        assertEquals(tasks,lyricsWriter.calls.get());
         assertEquals(fund, credits.balance(owner), "并发失败下账本净零（每笔扣费均被精确退还）");
         long sum = jdbc.queryForObject("SELECT COALESCE(SUM(amount),0) FROM credit_ledger WHERE owner_id=?", Long.class, owner);
         assertEquals(sum, credits.balance(owner), "账本余额等于流水合计");
@@ -144,6 +154,7 @@ class CreditLockOrderMySqlTest {
         String owner = identity.create().creatorId();
         credits.credit(owner, 1000, "fund-" + owner);
         String work = works.create(owner, new Draft("妈妈", "生日", "一起做饭", "愿你快乐", "民谣", "故事")).id();
+        useInitialLyricGrant(owner,work);
         int seeds = 10;
         for (int i = 0; i < seeds; i++) credits.debit(owner, 1, "seed-" + i);
         int reserves = 10;
@@ -199,6 +210,7 @@ class CreditLockOrderMySqlTest {
         long fund = 100;
         credits.credit(owner, fund, "fund-" + owner);
         String work = works.create(owner, new Draft("妈妈", "生日", "一起做饭", "愿你快乐", "民谣", "故事")).id();
+        useInitialLyricGrant(owner,work);
         String key = UUID.randomUUID().toString();
         int tasks = 10;
         var results = runConcurrently(10, tasks, () -> {
@@ -215,6 +227,27 @@ class CreditLockOrderMySqlTest {
         int debits = jdbc.queryForObject("SELECT COUNT(*) FROM credit_ledger WHERE owner_id=? AND entry_type='DEBIT'", Integer.class, owner);
         assertEquals(1, debits, "同一幂等 Key 仅扣费一次");
         assertEquals(fund - LYRICS_COST, credits.balance(owner), "余额只扣一次");
+    }
+
+    /** The real task-completion hook, not a direct grant call, refreshes one lyric use exactly once. */
+    @Test
+    void successfulMusicTransitionRefreshesOneFreeLyricUseOnlyOnce() {
+        String owner = identity.create().creatorId();
+        String work = works.create(owner, new Draft("妈妈", "生日", "一起做饭", "愿你快乐", "民谣", "故事")).id();
+        usageBudget.reserve(owner,work,UUID.randomUUID().toString(),Kind.LYRICS);
+        assertEquals(1,jdbc.queryForObject("SELECT COUNT(*) FROM model_usage_reservation WHERE kind='LYRIC_REDEEM' AND work_id=?",Integer.class,work));
+        String revision=lyrics.save(owner,work,0,"新的歌","[Chorus]\n愿你的每一天都有光").id();
+        String task=UUID.randomUUID().toString(), token=UUID.randomUUID().toString();
+        jdbc.update("INSERT INTO generation_task(id,work_id,revision_id,work_version,request_key,title,lyrics,style,provider,status,created_at,submit_attempts,archive_attempts,query_failures,vocal_gender,lease_token) "
+            + "VALUES(?,?,?,0,?,?,?,?,?,'SAVING',CURRENT_TIMESTAMP(6),0,0,0,'female',?)",
+            task,work,revision,UUID.randomUUID().toString(),"新的歌","[Chorus]\n愿你的每一天都有光","民谣","KIE",token);
+        execution.succeeded(task,"wrong-token",UUID.randomUUID().toString(),Instant.now());
+        assertEquals(0,jdbc.queryForObject("SELECT COUNT(*) FROM model_usage_reservation WHERE kind='LYRIC_GRANT' AND work_id=? AND request_key=?",Integer.class,work,task));
+        execution.succeeded(task,token,UUID.randomUUID().toString(),Instant.now());
+        execution.succeeded(task,token,UUID.randomUUID().toString(),Instant.now());
+        assertEquals(1,jdbc.queryForObject("SELECT COUNT(*) FROM model_usage_reservation WHERE kind='LYRIC_GRANT' AND work_id=? AND request_key=?",Integer.class,work,task));
+        usageBudget.reserve(owner,work,UUID.randomUUID().toString(),Kind.LYRICS);
+        assertEquals(2,jdbc.queryForObject("SELECT COUNT(*) FROM model_usage_reservation WHERE kind='LYRIC_REDEEM' AND work_id=?",Integer.class,work));
     }
 
     /** 同一 owner 上大量 debit 与 refund 交错并发，账本一致、无死锁、无重复退款。 */
@@ -257,7 +290,14 @@ class CreditLockOrderMySqlTest {
             return out;
         } finally {
             pool.shutdownNow();
+            assertTrue(pool.awaitTermination(15,TimeUnit.SECONDS),"全部并发任务必须结束才能开始下一项测试");
         }
+    }
+
+    /** The lock-order tests require actual debits; a new work would otherwise use its free lyric grant. */
+    void useInitialLyricGrant(String owner,String work){
+        jdbc.update("INSERT INTO model_usage_reservation(kind,work_id,request_key,owner_id,usage_day,created_at) VALUES('LYRIC_GRANT',?,'00000000-0000-0000-0000-000000000000',?,CURRENT_DATE,CURRENT_TIMESTAMP)",work,owner);
+        jdbc.update("INSERT INTO model_usage_reservation(kind,work_id,request_key,owner_id,usage_day,created_at) VALUES('LYRIC_REDEEM',?,?,?,CURRENT_DATE,CURRENT_TIMESTAMP)",work,UUID.randomUUID().toString(),owner);
     }
 
     // ===== 离线桩 =====

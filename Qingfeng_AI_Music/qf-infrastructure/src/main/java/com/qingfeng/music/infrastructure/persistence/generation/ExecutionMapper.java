@@ -57,7 +57,7 @@ public interface ExecutionMapper {
     @Update("UPDATE generation_task SET status=#{status},archive_attempts=#{attempts},last_error_code='AUDIO_ARCHIVE_FAILED',updated_at=#{now},next_attempt_at=#{next} WHERE id=#{id} AND lease_token=#{token} AND status='SAVING'")
     void archiveFailed(@Param("id")String id,@Param("token")String token,@Param("attempts")int attempts,@Param("status")String status,@Param("now")Instant now,@Param("next")Instant next);
     @Update("UPDATE generation_task SET status='SUCCEEDED',asset_id=#{asset},last_error_code=NULL,updated_at=#{now} WHERE id=#{id} AND lease_token=#{token} AND status='SAVING'")
-    void succeeded(@Param("id")String id,@Param("token")String token,@Param("asset")String asset,@Param("now")Instant now);
+    int succeeded(@Param("id")String id,@Param("token")String token,@Param("asset")String asset,@Param("now")Instant now);
     @Update("UPDATE generation_task SET status='FAILED',last_error_code=#{code},updated_at=#{now} WHERE id=#{id} AND lease_token=#{token} AND status IN ('QUEUED','SUBMITTING','RUNNING','SUBMISSION_UNKNOWN')")
     int failed(@Param("id")String id,@Param("token")String token,@Param("code")String code,@Param("now")Instant now);
     @Update("UPDATE generation_task SET status='SAVING',archive_attempts=0,last_error_code=NULL,next_attempt_at=#{now},updated_at=#{now} WHERE id=#{id} AND work_id=#{work} AND status='FAILED' AND last_error_code='AUDIO_ARCHIVE_FAILED' AND provider_task_id IS NOT NULL AND audio_url IS NOT NULL")

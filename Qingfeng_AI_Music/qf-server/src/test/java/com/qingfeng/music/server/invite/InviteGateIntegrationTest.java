@@ -30,7 +30,8 @@ import static org.junit.jupiter.api.Assertions.*;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = {
     "qingfeng.invite-gate.enabled=true", "qingfeng.invite-gate.codes=QF-TEST-INVITATION-2026",
-    "qingfeng.invite-gate.signing-key=test-only-private-signing-key-with-more-than-32-characters", "qingfeng.invite-gate.attempts-per-minute=100"
+    "qingfeng.invite-gate.signing-key=test-only-private-signing-key-with-more-than-32-characters", "qingfeng.invite-gate.attempts-per-minute=100",
+    "spring.flyway.target=44"
 })
 @ActiveProfiles("test")
 class InviteGateIntegrationTest {
@@ -101,8 +102,14 @@ class InviteGateIntegrationTest {
         assertEquals(403, send(browser.http(), "GET", "/api/app/works", null, null).statusCode());
     }
     @Test void providerWebhooksAreNotMistakenForInteractiveVisitors() throws Exception {
-        for (String path : List.of("/api/public/payments/airwallex/webhook", "/api/public/paypal/webhook"))
+        for (String path : List.of("/api/public/payments/airwallex/webhook", "/api/public/paypal/webhook", "/api/public/stripe/webhook"))
             assertFalse(send(HttpClient.newHttpClient(), "POST", path, "{}", null).body().contains("INVITE_REQUIRED"));
+        var wrongMethod = send(HttpClient.newHttpClient(), "GET", "/api/public/stripe/webhook", null, null);
+        assertEquals(403, wrongMethod.statusCode());
+        assertTrue(wrongMethod.body().contains("INVITE_REQUIRED"));
+        var wrongPath = send(HttpClient.newHttpClient(), "POST", "/api/public/stripe/webhook/other", "{}", null);
+        assertEquals(403, wrongPath.statusCode());
+        assertTrue(wrongPath.body().contains("INVITE_REQUIRED"));
     }
 
     @org.springframework.beans.factory.annotation.Autowired org.springframework.jdbc.core.JdbcTemplate jdbc;

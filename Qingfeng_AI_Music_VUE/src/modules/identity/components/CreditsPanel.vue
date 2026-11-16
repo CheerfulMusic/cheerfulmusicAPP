@@ -7,7 +7,7 @@ import { logtoState } from '../../../shared/identity/logto-state'
 import { t, locale } from '../../../shared/i18n'
 import { readPendingOrders, savePendingOrders } from '../model/payment-orders'
 import { canCapturePaypal, paypalReturn } from '../model/paypal-return'
-import { isPendingOrder, mergeOrderHistory, trustedCheckoutUrl, type Order, type Provider } from '../model/order-history'
+import { isPendingOrder, mergeOrderHistory, orderAmount, trustedCheckoutUrl, type Order, type Provider } from '../model/order-history'
 
 const props = withDefaults(defineProps<{ preview?: boolean }>(), { preview: false })
 // Preview is only reachable in a development build and must never call the payment API.
@@ -16,7 +16,7 @@ const isPreview = import.meta.env.DEV && props.preview
 type Package = { id: string; title: string; amount: number; currency: string; credits: number }
 type Catalog = { enabled: boolean; packages: Package[] }
 type Credits = { enabled: boolean; balance: number; musicCost: number }
-const catalogs = ref<Record<Provider, Catalog>>({airwallex:{enabled:false,packages:[]},paypal:{enabled:false,packages:[]}}), credits = ref<Credits>(), loading = ref(true), busy = ref(false), error = ref('')
+const catalogs = ref<Record<Provider, Catalog>>({airwallex:{enabled:false,packages:[]},paypal:{enabled:false,packages:[]},stripe:{enabled:false,packages:[]}}), credits = ref<Credits>(), loading = ref(true), busy = ref(false), error = ref('')
 const purchaseUncertain = ref(false)
 const orderNotice = ref('')
 const unresolvedOrders = ref<Order[]>([])
@@ -26,7 +26,7 @@ const catalogError = ref(false)
 const selectedCurrency = 'USD'
 const signedIn = computed(() => accountState.value.authenticated || logtoState.value.authenticated)
 const availableCurrencies = computed(() => Object.values(catalogs.value).some(c => c.enabled && c.packages.some(p => p.currency === selectedCurrency)) ? ['USD'] : [])
-const visibleProviders = computed(() => (['paypal', 'airwallex'] as const).map(provider => ({
+const visibleProviders = computed(() => (['paypal', 'stripe', 'airwallex'] as const).map(provider => ({
   provider, packages: catalogs.value[provider].enabled ? catalogs.value[provider].packages.filter(p => p.currency === selectedCurrency) : []
 })).filter(group => group.packages.length > 0))
 let loadEpoch = 0
@@ -40,7 +40,7 @@ async function load() {
       { id: `plus-${currency}`, title: '700 Credits', amount: 49.9, currency, credits: 700 },
     ])
     credits.value = { enabled: true, balance: 0, musicCost: 5 }
-    catalogs.value = { airwallex: { enabled: false, packages: [] }, paypal: { enabled: true, packages } }
+    catalogs.value = { airwallex: { enabled: false, packages: [] }, paypal: { enabled: true, packages }, stripe: { enabled: false, packages: [] } }
     catalogError.value = false; loading.value = false
     return
   }
@@ -53,8 +53,8 @@ async function load() {
       let recent: Order[] = []
       let paidAny = false
       let historyUnavailable = false
-      for (const provider of ['airwallex','paypal'] as const) {
-        const base = provider === 'paypal' ? 'app/paypal/orders' : 'app/payments/orders'
+      for (const provider of ['airwallex','paypal','stripe'] as const) {
+        const base = provider === 'paypal' ? 'app/paypal/orders' : provider === 'stripe' ? 'app/stripe/orders' : 'app/payments/orders'
         let history: { orders: Omit<Order, 'provider'>[] }
         try { history = await requestJson<{orders:Omit<Order, 'provider'>[]}>(base) }
         catch { historyUnavailable = true; continue }
@@ -77,9 +77,9 @@ async function load() {
         for (const id of pending) {
           const existing = unresolved.find(order => order.orderId === id)
           try {
-            const result = await requestJson<{orderId:string;status:string;credits:number}>(`${base}/${encodeURIComponent(id)}`)
+            const result = await requestJson<{orderId:string;status:string;credits:number;amount?:number;currency?:string;packageId?:string;paymentMethod?:Order['paymentMethod']}>(`${base}/${encodeURIComponent(id)}`)
             if (currentCreatorId() !== creatorId || result.orderId !== id) throw new Error('Identity or order changed')
-            const updated: Order = {orderId:id, status:result.status as Order['status'], credits:result.credits, ...(existing?.createdAt ? {createdAt:existing.createdAt} : {}), provider}
+            const updated: Order = {...existing, orderId:id, status:result.status as Order['status'], credits:result.credits, ...(result.amount !== undefined && result.currency ? {amount:result.amount,currency:result.currency} : {}), ...(result.packageId ? {packageId:result.packageId} : {}), ...(result.paymentMethod ? {paymentMethod:result.paymentMethod} : {}), provider}
             recent = mergeOrderHistory(recent, [updated])
             if (!isPendingOrder(updated.status)) { paid.push(id); if (result.status === 'PAID') paidAny = true }
             else stillPending.push(updated)
@@ -101,14 +101,15 @@ async function load() {
       else if (stillPending.length) orderNotice.value = '有订单仍待确认，请稍后刷新；请先核对付款记录，避免重复支付。'
       else if (paidAny) orderNotice.value = '支付已确认，积分余额已更新。'
     }
-    const [c, a, p] = await Promise.allSettled([
-      requestJson<Credits>('app/credits'), requestJson<Catalog>('app/payments/catalog'), requestJson<Catalog>('app/paypal/catalog')
+    const [c, a, p, s] = await Promise.allSettled([
+      requestJson<Credits>('app/credits'), requestJson<Catalog>('app/payments/catalog'), requestJson<Catalog>('app/paypal/catalog'), requestJson<Catalog>('app/stripe/catalog')
     ])
     if (epoch !== loadEpoch) return
     credits.value = c.status === 'fulfilled' ? c.value : undefined
     catalogs.value.airwallex = a.status === 'fulfilled' ? a.value : { enabled: false, packages: [] }
     catalogs.value.paypal = p.status === 'fulfilled' ? p.value : { enabled: false, packages: [] }
-    catalogError.value = c.status === 'rejected' || a.status === 'rejected' || p.status === 'rejected'
+    catalogs.value.stripe = s.status === 'fulfilled' ? s.value : { enabled: false, packages: [] }
+    catalogError.value = c.status === 'rejected' || a.status === 'rejected' || p.status === 'rejected' || s.status === 'rejected'
   } catch { if (epoch === loadEpoch) error.value = '暂时无法读取积分信息，请稍后重试。' }
   finally { if (epoch === loadEpoch) loading.value = false }
 }
@@ -142,6 +143,39 @@ async function resumePaypal(order: Order) {
   } catch { orderNotice.value = '暂时无法恢复支付，请稍后刷新并核对订单状态。' }
   finally { busy.value = false }
 }
+async function resumeStripe(order: Order) {
+  if (isPreview || busy.value || order.provider !== 'stripe' || !isPendingOrder(order.status)) return
+  const creatorId = currentCreatorId()
+  if (!creatorId) return
+  busy.value = true; error.value = ''; orderNotice.value = ''
+  try {
+    const result = await requestJson<{orderId:string;status:string;checkoutUrl?:string}>(`app/stripe/orders/${encodeURIComponent(order.orderId)}/resume`, 'POST', undefined, 60000)
+    if (creatorId !== currentCreatorId() || result.orderId !== order.orderId) throw new Error('Identity or order changed')
+    if (result.checkoutUrl) { window.location.assign(trustedCheckoutUrl(result.checkoutUrl, 'stripe')); return }
+    if (result.status === 'PAID') { announceCreditsChanged(); await load(); return }
+    orderNotice.value = '订单结果仍待核对，请勿重复付款。'
+  } catch { orderNotice.value = '暂时无法恢复 Stripe 支付，请稍后刷新并核对订单状态。' }
+  finally { busy.value = false }
+  if (currentCreatorId() === creatorId) await load()
+}
+async function cancelStripe(order: Order) {
+  if (isPreview || busy.value || order.provider !== 'stripe' || order.status !== 'PENDING') return
+  const creatorId = currentCreatorId()
+  if (!creatorId || !window.confirm(t('确认取消此订单？已付款或支付处理中的订单不会取消。'))) return
+  busy.value = true; error.value = ''; orderNotice.value = ''
+  let notice = '取消未成功，订单可能已授权或状态尚未确认；请刷新核对，勿重复付款。'
+  try {
+    const result = await requestJson<{orderId:string;status:string}>(`app/stripe/orders/${encodeURIComponent(order.orderId)}/cancel`, 'POST', undefined, 60000)
+    if (currentCreatorId() !== creatorId || result.orderId !== order.orderId) return
+    if (result.status === 'CANCELLED') notice = '订单已取消，原支付链接已关闭。'
+    else if (result.status === 'PAID') { notice = '订单已付款，不能取消；积分余额已更新。'; announceCreditsChanged() }
+  } catch { /* Unknown outcomes remain visible until authoritative reconciliation. */ }
+  finally { busy.value = false }
+  if (currentCreatorId() === creatorId) {
+    await load()
+    if (currentCreatorId() === creatorId) orderNotice.value = notice
+  }
+}
 async function cancelPaypal(order: Order) {
   if (isPreview || busy.value || order.provider !== 'paypal' || order.status !== 'PENDING') return
   const creatorId = currentCreatorId()
@@ -171,7 +205,8 @@ async function buy(item: Package, provider: Provider) {
   try {
     await ensureCreator()
     const creatorId = currentCreatorId()
-    const order = await requestJson<{orderId: string; checkoutUrl: string}>(provider === 'paypal' ? 'app/paypal/orders' : 'app/payments/orders', 'POST', {packageId: item.id}, 30000)
+    const endpoint = provider === 'paypal' ? 'app/paypal/orders' : provider === 'stripe' ? 'app/stripe/orders' : 'app/payments/orders'
+    const order = await requestJson<{orderId: string; checkoutUrl: string}>(endpoint, 'POST', {packageId: item.id}, 30000)
     if (currentCreatorId() !== creatorId) throw new Error('Identity changed')
     savePendingOrders(localStorage, creatorId, [...readPendingOrders(localStorage, creatorId, provider), order.orderId],provider)
     window.location.assign(trustedCheckoutUrl(order.checkoutUrl, provider))
@@ -192,17 +227,24 @@ watch(signedIn, (current, previous) => { if (current !== previous) void load() }
     <template v-else>
       <div v-if="credits && (signedIn || credits.enabled)" class="balance"><span>{{ t('可用积分') }}</span><strong>{{ credits.balance }}</strong><small v-if="credits.enabled">{{ t('每次歌曲生成消耗 {count} 积分', {count: credits.musicCost}) }}</small></div>
       <p v-if="orderNotice" class="subtle" role="status">{{ t(orderNotice) }}</p>
+      <p class="wallet-entry"><RouterLink to="/recharge">{{ locale==='en'?'View card, Apple Pay and WeChat Pay options':'查看银行卡、Apple Pay 和微信支付方式' }}</RouterLink></p>
       <p v-if="catalogError" class="subtle" role="status">{{ t('部分积分或支付信息暂时无法读取，请稍后刷新。') }}</p>
       <section v-if="signedIn" class="history" :aria-label="t('最近订单')">
         <h3>{{ t('我的订单') }}</h3><p class="history-help">{{ t('待付款订单可继续支付或申请取消；是否可取消由服务端核对付款状态。') }}</p>
         <p v-if="!recentOrders.length" class="subtle">{{ t(purchaseUncertain ? '订单暂时无法读取，请稍后刷新。' : '暂无订单。') }}</p>
         <ul v-else class="orders"><li v-for="order in recentOrders" :key="`${order.provider}:${order.orderId}`">
-          <div><strong>{{ t(orderStatus(order.status)) }}</strong> · {{ order.provider === 'paypal' ? 'PayPal' : 'Airwallex' }}<template v-if="order.credits != null"> · {{ order.credits }} {{ t('积分') }}</template><template v-if="orderTime(order.createdAt)"> · {{ orderTime(order.createdAt) }}</template></div>
+          <div><strong>{{ t(orderStatus(order.status)) }}</strong> · {{ order.provider === 'paypal' ? 'PayPal' : order.provider === 'stripe' ? 'Stripe' : 'Airwallex' }}<template v-if="order.credits != null"> · {{ order.credits }} {{ t('积分') }}</template><template v-if="orderTime(order.createdAt)"> · {{ orderTime(order.createdAt) }}</template></div>
+          <div v-if="orderAmount(order)" class="order-amount">{{ orderAmount(order) }}<span v-if="order.paymentMethod==='wechat_pay'"> · {{ locale==='en'?'WeChat Pay':'微信支付' }}</span></div>
           <div class="order-number">{{ t('订单号') }}：<code>{{ order.orderId }}</code></div>
           <div v-if="isPendingOrder(order.status) && order.provider === 'paypal'" class="order-actions">
             <button v-if="paypalApproved.includes(order.orderId)" type="button" class="order-action primary" :disabled="busy" @click="retryPaypal(order)">{{ t('重新确认支付') }}</button>
             <button v-else-if="order.status === 'PENDING'" type="button" class="order-action primary" :disabled="busy" @click="resumePaypal(order)">{{ t('继续支付') }}</button>
             <button v-if="order.status === 'PENDING'" type="button" class="order-action cancel-order" :disabled="busy" @click="cancelPaypal(order)">{{ t('取消订单') }}</button>
+            <p v-else class="subtle">{{ t('订单创建结果尚未确认，请刷新核对，暂不能直接取消。') }}</p>
+          </div>
+          <div v-if="isPendingOrder(order.status) && order.provider === 'stripe'" class="order-actions">
+            <button type="button" class="order-action primary" :disabled="busy" @click="resumeStripe(order)">{{ t('继续核对 Stripe 订单') }}</button>
+            <button v-if="order.status === 'PENDING'" type="button" class="order-action cancel-order" :disabled="busy" @click="cancelStripe(order)">{{ t('取消订单') }}</button>
             <p v-else class="subtle">{{ t('订单创建结果尚未确认，请刷新核对，暂不能直接取消。') }}</p>
           </div>
         </li></ul>
@@ -211,8 +253,8 @@ watch(signedIn, (current, previous) => { if (current !== previous) void load() }
       <template v-else-if="availableCurrencies.length">
         <p v-if="!isPreview && !signedIn" class="subtle">{{ t('请先登录账号，再购买积分。') }}</p>
         <div class="selection-head"><div><h3>{{ t('选择积分套餐') }}</h3><p>{{ t('选择适合你的创作计划。') }}</p></div><span class="currency-label">USD $</span></div>
-        <section v-for="group in visibleProviders" :key="group.provider" class="provider-section" :aria-label="group.provider === 'paypal' ? 'PayPal' : 'Airwallex'">
-          <div class="provider-label">{{ t('支付方式') }} · {{ group.provider === 'paypal' ? 'PayPal' : 'Airwallex' }}</div>
+        <section v-for="group in visibleProviders" :key="group.provider" class="provider-section" :aria-label="group.provider === 'paypal' ? 'PayPal' : group.provider === 'stripe' ? 'Stripe' : 'Airwallex'">
+          <div class="provider-label">{{ t('支付方式') }} · {{ group.provider === 'paypal' ? 'PayPal' : group.provider === 'stripe' ? 'Stripe' : 'Airwallex' }}</div>
           <div class="packages"><article v-for="item in group.packages" :key="item.id" class="package"><div class="package-top"><span class="package-caption">{{ t('创作积分') }}</span><span aria-hidden="true">✦</span></div><strong>{{ item.credits }} <small>{{ t('积分') }}</small></strong><p class="package-price">{{ price(item) }}</p><button type="button" class="buy-button" :disabled="!isPreview && (busy || purchaseUncertain || unresolvedOrders.length > 0 || !signedIn)" @click="buy(item, group.provider)">{{ busy ? t('正在前往支付…') : t('选择此套餐') }}</button></article></div>
         </section>
         <p class="subtle">{{ t('支付完成后，积分将在确认到账后发放。') }}</p>

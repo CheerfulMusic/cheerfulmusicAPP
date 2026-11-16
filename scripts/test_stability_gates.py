@@ -5,7 +5,9 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
+import types
 import unittest
 from unittest.mock import patch
 import zipfile
@@ -22,10 +24,14 @@ class GateTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory(dir=base)
         self.addCleanup(self.temp.cleanup); self.root = Path(self.temp.name)
 
-    def jar(self, corrupt_nested=False, versions=(1,2), bad_audio=False, implicit_import=False):
+    def jar(self, corrupt_nested=False, versions=None, bad_audio=False, implicit_import=False):
         nested = io.BytesIO()
         with zipfile.ZipFile(nested,"w") as z:
-            for v in versions: z.writestr("db/migration/V%d__fixture.sql"%v,"SELECT %d;"%v)
+            if versions is None:
+                for migration in sorted((ROOT / "Qingfeng_AI_Music/qf-infrastructure/src/main/resources/db/migration").glob("V*__*.sql")):
+                    z.writestr("db/migration/" + migration.name, migration.read_bytes())
+            else:
+                for v in versions: z.writestr("db/migration/V%d__fixture.sql"%v,"SELECT %d;"%v)
         path=self.root/"app.jar"; prefix="BOOT-INF/classes/static/"
         audio=b"ID3synthetic-fixture"
         with zipfile.ZipFile(path,"w") as z:
@@ -58,6 +64,77 @@ class GateTests(unittest.TestCase):
                 "sourceCommit":"a"*40}
         return export,actual
 
+    def isolated_cohort(self):
+        cache=self.root/".cache";private=cache/"release-gate-cohorts";private.mkdir(parents=True)
+        manifest=private/"r1161605.json"
+        manifest.write_text(json.dumps({"version":1,"revision":"r1161605",
+                                        "carryForwardRevision":"r1161606","compatibilityPort":57346}))
+        names={"migration":"p0_integration_migration_20261112",
+               "credits":"p0_integrated_credits_20261112",
+               "application":"p0_integration_application_20261112",
+               "legacy40":"p0_integration_legacy40_20261112",
+               "core40":"p0_core40_application_20261112",
+               "overlap":"p0_dispute_overlap_20261113",
+               "history":"p0_historical_cutover_20261113"}
+        configs=[]
+        for label,prefix in names.items():
+            directory=(cache/("payment-go-live-execution-20261113" if label in ("overlap","history")
+                              else "payment-main-integration-20261112"));directory.mkdir(exist_ok=True)
+            for revision in (("r1161605","r1161606") if label=="history" else ("r1161605",)):
+                cfg={"host":"127.0.0.1","port":23316,"database":prefix+revision,
+                     "user":"user_"+label+revision,"password":"private_"+label+revision,
+                     "uuid":"05c27d3c-dda3-11f1-aba0-84a938421519"}
+                path=directory/(label+"-db-private-"+revision+".json");path.write_text(json.dumps(cfg));configs.append(path)
+        return cache,manifest,configs
+
+    def fake_mysql(self, table_count=0, server_uuid="05c27d3c-dda3-11f1-aba0-84a938421519"):
+        class Connection:
+            def __init__(self,parameters): self.parameters=parameters
+            def __enter__(self): return self
+            def __exit__(self,*_): pass
+            def cursor(self): return Cursor(self.parameters)
+        class Cursor:
+            def __init__(self,parameters): self.parameters=parameters
+            def __enter__(self): return self
+            def __exit__(self,*_): pass
+            def execute(self,query): self.query=query
+            def fetchone(self):
+                if self.query.startswith("SELECT COUNT(*)"):return (table_count,)
+                if self.parameters["port"]==57346:
+                    return ("47427132-df4d-11f1-89e2-84a938421519","R:\\v45-compatibility-r1\\",57346,"127.0.0.1","8.0.46")
+                return (server_uuid,"R:\\data\\",23316,"127.0.0.1","8.0.46",self.parameters["database"])
+            def fetchall(self):
+                if self.query=="SHOW GRANTS":
+                    name=self.parameters["database"]
+                    return [("GRANT USAGE ON *.* TO `user`@`127.0.0.1`",),
+                            ("GRANT ALL PRIVILEGES ON `"+name+"`.* TO `user`@`127.0.0.1`",)]
+                if self.parameters["port"]==57346:return [("information_schema",),("performance_schema",)]
+                return [("information_schema",),("performance_schema",),(self.parameters["database"],)]
+        return types.SimpleNamespace(connect=lambda **parameters:Connection(parameters))
+
+    def test_private_fresh_mysql_cohort_is_scoped_to_backend_verify(self):
+        cache,manifest,_=self.isolated_cohort()
+        with patch.dict(sys.modules,{"pymysql":self.fake_mysql()}):
+            env,secrets=gate.load_isolated_backend_cohort(cache,manifest)
+        self.assertEqual("57346",env["QF_EXECUTION_MYSQL_TEST_PORT"])
+        self.assertIn("P0_CARRY_FORWARD_MYSQL_PASSWORD",env)
+        self.assertEqual(8,len([key for key in env if key.endswith("_PASSWORD")]))
+        self.assertEqual(16,len(secrets))
+
+    def test_production_address_and_reused_mysql_cohort_are_rejected(self):
+        cache,manifest,configs=self.isolated_cohort()
+        cfg=json.loads(configs[0].read_text());cfg["host"]="cheerfulmusic.com";configs[0].write_text(json.dumps(cfg))
+        with patch.dict(sys.modules,{"pymysql":self.fake_mysql()}):
+            with self.assertRaisesRegex(gate.GateError,"configuration invalid"):
+                gate.load_isolated_backend_cohort(cache,manifest)
+        cfg["host"]="127.0.0.1";configs[0].write_text(json.dumps(cfg))
+        with patch.dict(sys.modules,{"pymysql":self.fake_mysql(table_count=1)}):
+            with self.assertRaisesRegex(gate.GateError,"not fresh"):
+                gate.load_isolated_backend_cohort(cache,manifest)
+        with patch.dict(sys.modules,{"pymysql":self.fake_mysql(server_uuid="production-uuid")}):
+            with self.assertRaisesRegex(gate.GateError,"identity changed"):
+                gate.load_isolated_backend_cohort(cache,manifest)
+
     def test_packaged_bytes_match_frozen_export(self):
         export,actual=self.frozen_export()
         gate.check_build_output(export,{"sourceCommit":"a"*40},actual)
@@ -88,8 +165,8 @@ class GateTests(unittest.TestCase):
         fixture_jar=self.jar()
         archive=io.BytesIO()
         with zipfile.ZipFile(archive,"w") as z:
-            for version in (1,2):
-                z.writestr("Qingfeng_AI_Music/qf-infrastructure/src/main/resources/db/migration/V%d__fixture.sql"%version,"SELECT %d;"%version)
+            for migration in sorted((ROOT / "Qingfeng_AI_Music/qf-infrastructure/src/main/resources/db/migration").glob("V*__*.sql")):
+                z.writestr("Qingfeng_AI_Music/qf-infrastructure/src/main/resources/db/migration/" + migration.name,migration.read_bytes())
             z.writestr("Qingfeng_AI_Music_VUE/package.json","{}")
         source={"sourceCommit":"a"*40,"frontendSourceTree":"b"*40}
         calls=[]
@@ -103,10 +180,12 @@ class GateTests(unittest.TestCase):
             for forbidden in ("MYSQL_URL","PAYPAL_CLIENT_SECRET","JAVA_TOOL_OPTIONS"):
                 self.assertNotIn(forbidden,env)
             self.assertNotEqual(env["NPM_CONFIG_USERCONFIG"],env["NPM_CONFIG_GLOBALCONFIG"])
+            self.assertEqual(subprocess.PIPE,kwargs["stdout"])
+            output=b""
             if command[0].endswith("java.exe"):
-                kwargs["stdout"].write(b'java version "17"\n')
+                output=b'java version "17"\n'
             elif command[0].endswith("node.exe"):
-                kwargs["stdout"].write(b"v24.22.1\n")
+                output=b"v24.22.1\n"
             elif "ci" in command:
                 self.assertIn("--offline",command);self.assertIn("--ignore-scripts",command)
             elif "build" in command:
@@ -118,15 +197,24 @@ class GateTests(unittest.TestCase):
                             dest=dist/name[len(prefix):];dest.parent.mkdir(parents=True,exist_ok=True);dest.write_bytes(z.read(name))
             elif "verify" in command:
                 self.assertIn("-o",command)
+                self.assertEqual("synthetic-private-password",env["P0_INTEGRATION_MIGRATION_MYSQL_PASSWORD"])
+                self.assertEqual("57346",env["QF_EXECUTION_MYSQL_TEST_PORT"])
+                output=b"Maven fixture accidentally logged synthetic-private-password"
                 target=Path(kwargs["cwd"])/"qf-server/target";target.mkdir(parents=True)
                 (target/"qf-server-0.1.0-SNAPSHOT.jar").write_bytes(fixture_jar.read_bytes())
-            return types.SimpleNamespace(returncode=0)
-        with patch.object(gate,"check_source",return_value=source),patch.object(gate,"git",side_effect=fake_git),patch.object(gate.subprocess,"check_output",return_value=archive.getvalue()),patch.object(gate.subprocess,"run",side_effect=fake_process),patch.object(gate.shutil,"which",side_effect=lambda name:"fixture-"+name),patch.dict(os.environ,{"MYSQL_URL":"synthetic-forbidden","PAYPAL_CLIENT_SECRET":"synthetic-forbidden","JAVA_TOOL_OPTIONS":"synthetic-forbidden"}):
-            result=gate.build(workspace,self.root/"unused",java,self.root/"cache")
+            else:
+                self.assertFalse(any(key.startswith("P0_") for key in env))
+            return types.SimpleNamespace(returncode=0,stdout=output)
+        backend={"P0_INTEGRATION_MIGRATION_MYSQL_PASSWORD":"synthetic-private-password",
+                 "QF_EXECUTION_MYSQL_TEST_PORT":"57346"}
+        with patch.object(gate,"check_source",return_value=source),patch.object(gate,"git",side_effect=fake_git),patch.object(gate,"load_isolated_backend_cohort",return_value=(backend,{"synthetic-private-password"})),patch.object(gate.subprocess,"check_output",return_value=archive.getvalue()),patch.object(gate.subprocess,"run",side_effect=fake_process),patch.object(gate.shutil,"which",side_effect=lambda name:"fixture-"+name),patch.dict(os.environ,{"MYSQL_URL":"synthetic-forbidden","PAYPAL_CLIENT_SECRET":"synthetic-forbidden","JAVA_TOOL_OPTIONS":"synthetic-forbidden"}):
+            result=gate.build(workspace,self.root/"unused",java,self.root/"cache","private-cohort.json")
         self.assertEqual(6,len(calls))
         self.assertEqual("VERIFIED",result["localBuild"])
         self.assertEqual("BLOCKED",result["productionRelease"])
         self.assertFalse((Path(result["package"]).parent/"source/.secrets").exists())
+        self.assertNotIn(b"synthetic-private-password",(Path(result["package"]).parent/"backendVerify.log").read_bytes())
+        self.assertNotIn(b"synthetic-private-password",(Path(result["package"])/"release-contract.json").read_bytes())
 
     def test_modified_pinned_node_runtime_is_rejected_before_execution(self):
         cache=self.root/"cache";tools=cache/"toolchains";tools.mkdir(parents=True)

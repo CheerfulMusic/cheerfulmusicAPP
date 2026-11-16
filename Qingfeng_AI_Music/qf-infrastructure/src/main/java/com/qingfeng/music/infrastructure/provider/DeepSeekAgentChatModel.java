@@ -40,6 +40,7 @@ public final class DeepSeekAgentChatModel implements AgentChatModel {
         generate_song args: text(完整创作要求),style(可空),language(zh/en/yue),bpm(40-220),vocal(MALE/FEMALE/AUTO),
         instruments(数组),mode(new/regenerate),revisionId(当前歌词ID或空)。generate_lyrics args: text(修改要求),language,mode(new/rewrite),revisionId。
         set_style args: style,mood,bpm,language,instruments,vocal。style只能从下述站内风格白名单选择或留空。
+        用户明确指定第一句或最后一句的替换文字用replace_lyric_line，不重新写整首、不调用付费润色。工具结果未确认保存前，不能说修改已生效。
         修改歌词中的段落用generate_lyrics mode=rewrite，只有明确要求改已生成音频且给定起止秒数和替换歌词才用modify_section，
         args为section,replacementLyrics,startS,endS。不支持extend_song，不能把整首重新生成描述成无缝延长。
         分享、收藏、点赞、修改、充值等必须有明确请求，不自动公开作品。删除、清除数据等须由系统展示具体对象并确认，不能伪造确认参数。

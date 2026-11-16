@@ -8,6 +8,7 @@ import {
   artistHomeUrl, getArtistProfile, ownerArtistCoverUrl, ownerAvatarUrl, ownerTrack, removeSongFromArtist, saveArtistProfile,
   setArtistVisibility, withdrawSongFromDiscover, type ArtistProfile, type ArtistRelease,
 } from '../api/artist'
+import { prepareProfileImage } from '../model/profile-image'
 import ArtistAvatar from '../components/ArtistAvatar.vue'
 import ArtistHome from '../components/ArtistHome.vue'
 import ProfileAccount from '../components/ProfileAccount.vue'
@@ -28,7 +29,10 @@ const featuredReleaseId = ref<string | null>(null)
 const editing = ref(false)
 const preview = ref(false)
 const loading = ref(true)
-const busy = ref(false)
+const saving = ref(false)
+const preparingImage = ref(false)
+const busy = computed(() => saving.value || preparingImage.value)
+let imageSelection = 0
 const discoverRelease = ref<ArtistRelease>()
 const discoverCover = computed(() => discoverRelease.value ? ownerTrack(discoverRelease.value).cover : '')
 const notice = ref('')
@@ -70,6 +74,8 @@ function revokeImage(draft?: ImageDraft) {
   if (draft) URL.revokeObjectURL(draft.url)
 }
 function clearImageDrafts() {
+  imageSelection++
+  preparingImage.value = false
   revokeImage(avatar.value)
   revokeImage(cover.value)
   avatar.value = undefined
@@ -96,29 +102,39 @@ function apply(value: ArtistProfile) {
   featuredReleaseId.value = savedFeatured.value?.id ?? null
   clearImageDrafts()
 }
-function chooseImage(event: Event, kind: 'avatar' | 'cover') {
+async function chooseImage(event: Event, kind: 'avatar' | 'cover') {
   const input = event.target as HTMLInputElement
   const file = input.files?.[0]
   input.value = ''
-  if (!file) return
-  if (!['image/jpeg', 'image/png'].includes(file.type) || file.size > 5 * 1024 * 1024) {
-    error.value = '请选择 5 MB 以内的 JPG 或 PNG 图片。'
-    return
-  }
-  const draft = kind === 'avatar' ? avatar : cover
-  const remove = kind === 'avatar' ? removeAvatar : removeCover
-  const url = URL.createObjectURL(file)
-  revokeImage(draft.value)
-  draft.value = { file, url }
-  remove.value = false
+  if (!file || busy.value) return
+  const selection = ++imageSelection
+  preparingImage.value = true
   error.value = ''
+  try {
+    const prepared = await prepareProfileImage(file)
+    if (selection !== imageSelection) return
+    const draft = kind === 'avatar' ? avatar : cover
+    const remove = kind === 'avatar' ? removeAvatar : removeCover
+    const url = URL.createObjectURL(prepared)
+    revokeImage(draft.value)
+    draft.value = { file: prepared, url }
+    remove.value = false
+  } catch (cause) {
+    if (selection === imageSelection) report(cause, '图片处理失败，请重新选择图片。')
+  } finally {
+    if (selection === imageSelection) preparingImage.value = false
+  }
 }
 function useDefaultAvatar() {
+  imageSelection++
+  preparingImage.value = false
   revokeImage(avatar.value)
   avatar.value = undefined
   removeAvatar.value = Boolean(profile.value?.avatarKey)
 }
 function useDefaultCover() {
+  imageSelection++
+  preparingImage.value = false
   revokeImage(cover.value)
   cover.value = undefined
   removeCover.value = Boolean(profile.value?.coverKey)
@@ -155,7 +171,7 @@ async function save() {
   if (busy.value || !dirty.value) return
   notice.value = ''
   error.value = ''
-  busy.value = true
+  saving.value = true
   try {
     apply(await saveArtistProfile(stageName.value.trim(), tagline.value.trim(), avatar.value?.file, removeAvatar.value, {
       cover: cover.value?.file,
@@ -170,7 +186,7 @@ async function save() {
     }
     return
   }
-  finally { busy.value = false }
+  finally { saving.value = false }
   await setEditing(false)
 }
 async function changeVisibility(published: boolean) {
@@ -178,14 +194,14 @@ async function changeVisibility(published: boolean) {
   if (!published && !window.confirm(t('隐藏主页后，访客将无法访问主页和其中的歌曲，已发布到「发现」的歌曲也会撤回。确定隐藏吗？'))) return
   notice.value = ''
   error.value = ''
-  busy.value = true
+  saving.value = true
   try {
     updateProfile(await setArtistVisibility(published))
     notice.value = published ? '歌手主页已发布。' : '歌手主页已隐藏。'
     showLink.value = false
     if (published) await showPreview(false)
   } catch (cause) { report(cause, '主页状态更新失败，请重试。') }
-  finally { busy.value = false }
+  finally { saving.value = false }
 }
 async function remove(song: ArtistRelease) {
   const prompt = song.onDiscover
@@ -194,23 +210,23 @@ async function remove(song: ArtistRelease) {
   if (busy.value || !window.confirm(t(prompt, { title: song.title }))) return
   notice.value = ''
   error.value = ''
-  busy.value = true
+  saving.value = true
   try {
     updateProfile(await removeSongFromArtist(song.workId))
     notice.value = '歌曲已移出主页。'
   } catch (cause) { report(cause, '暂时无法移出歌曲，请重试。') }
-  finally { busy.value = false }
+  finally { saving.value = false }
 }
 async function withdraw(song: ArtistRelease) {
   if (busy.value || !window.confirm(t('从「发现」撤回《{title}》？访客仍可在你的歌手主页试听。', { title: song.title }))) return
   notice.value = ''
   error.value = ''
-  busy.value = true
+  saving.value = true
   try {
     updateProfile(await withdrawSongFromDiscover(song.workId))
     notice.value = '歌曲已从发现撤回。'
   } catch (cause) { report(cause, '暂时无法撤回歌曲，请重试。') }
-  finally { busy.value = false }
+  finally { saving.value = false }
 }
 async function copyLink() {
   showLink.value = true
@@ -270,7 +286,7 @@ onBeforeUnmount(clearImageDrafts)
           <ArtistAvatar v-if="avatarSrc" :name="stageName" :src="avatarSrc" />
           <span v-else class="profile-avatar-default" aria-hidden="true"><img src="/brand/logo-symbol.svg" alt=""></span>
           <template v-if="editing">
-            <input ref="avatarInput" class="profile-avatar-input" type="file" accept="image/jpeg,image/png" tabindex="-1" :aria-label="t('更换头像')" :disabled="busy" @change="chooseImage($event, 'avatar')">
+            <input ref="avatarInput" class="profile-avatar-input" type="file" accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp" tabindex="-1" :aria-label="t('更换头像')" :disabled="busy" @change="chooseImage($event, 'avatar')">
             <button class="profile-avatar-camera" type="button" :aria-label="t('更换头像')" :title="t('更换头像')" :disabled="busy" @click="avatarInput?.click()">
               <span aria-hidden="true"></span>
             </button>
@@ -292,7 +308,7 @@ onBeforeUnmount(clearImageDrafts)
       <div class="profile-columns">
         <form class="profile-card profile-form" aria-labelledby="profile-basic-title" @submit.prevent="save">
           <h2 id="profile-basic-title" class="profile-card-title"><NavIcon name="account" />{{ t('基本信息') }}</h2>
-          <fieldset :disabled="busy">
+          <fieldset :disabled="saving">
             <template v-if="editing">
               <label class="profile-form-row">
                 <span>{{ t('艺名') }}</span>
@@ -310,10 +326,10 @@ onBeforeUnmount(clearImageDrafts)
                 <div class="profile-cover-settings">
                   <img v-if="coverSrc" class="profile-cover-thumbnail" :src="coverSrc" alt="">
                   <div class="profile-inline-actions">
-                    <input ref="coverInput" type="file" accept="image/jpeg,image/png" :aria-label="t('主页封面')" hidden @change="chooseImage($event, 'cover')">
-                    <button type="button" class="profile-pill" @click="coverInput?.click()">{{ t('更换封面') }}</button>
+                    <input ref="coverInput" type="file" accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp" :aria-label="t('主页封面')" :disabled="busy" hidden @change="chooseImage($event, 'cover')">
+                    <button type="button" class="profile-pill" :disabled="busy" @click="coverInput?.click()">{{ t('更换封面') }}</button>
                     <button v-if="coverSrc" type="button" class="profile-pill" @click="useDefaultCover">{{ t('恢复默认封面') }}</button>
-                    <small class="profile-field-hint">{{ t('JPG 或 PNG，最多 5 MB') }}</small>
+                    <small class="profile-field-hint">{{ t('JPG、PNG 或 WebP，最多 5 MB') }}</small>
                   </div>
                 </div>
               </div>
@@ -370,8 +386,8 @@ onBeforeUnmount(clearImageDrafts)
             </label>
             <div v-if="editing" class="profile-form-row profile-form-footer">
               <div class="profile-inline-actions">
-                <button type="submit" class="profile-pill profile-save" :disabled="!dirty">
-                  {{ t(busy ? '正在保存…' : '保存修改') }}
+                <button type="submit" class="profile-pill profile-save" :disabled="busy || !dirty">
+                  {{ t(preparingImage ? '正在处理图片…' : saving ? '正在保存…' : '保存修改') }}
                 </button>
                 <button type="button" class="profile-pill" @click="cancelEdits">{{ t('取消') }}</button>
                 <button v-if="avatarSrc" type="button" class="profile-avatar-reset" @click="useDefaultAvatar">{{ t('使用默认头像') }}</button>

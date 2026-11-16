@@ -1,6 +1,8 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion><parent><groupId>com.qingfeng</groupId><artifactId>qingfeng-music-parent</artifactId><version>0.1.0-SNAPSHOT</version></parent><artifactId>qf-server</artifactId><description>唯一启动模块与Web边界</description>
   <dependencies>
+    <dependency><groupId>com.stripe</groupId><artifactId>stripe-java</artifactId><version>33.4.2</version></dependency>
+    <dependency><groupId>com.googlecode.libphonenumber</groupId><artifactId>libphonenumber</artifactId><version>9.0.43</version></dependency>
     <dependency><groupId>com.h2database</groupId><artifactId>h2</artifactId><scope>test</scope></dependency>
     <dependency><groupId>com.qingfeng</groupId><artifactId>qf-business</artifactId></dependency>
     <dependency><groupId>com.qingfeng</groupId><artifactId>qf-infrastructure</artifactId></dependency>

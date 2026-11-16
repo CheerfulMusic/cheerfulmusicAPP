@@ -1,18 +1,21 @@
 import { readonly, ref } from 'vue'
 import { currentCreatorId, ensureCreator, requestJson } from '../http/api-client'
 
-export interface CreditBalanceResponse { enabled: boolean; balance: number; musicCost: number; lyricsCost: number; rewriteCost: number; rewriteFreeRemaining: number }
+export interface CreditBalanceResponse { enabled: boolean; balance: number; musicCost: number; lyricsCost: number; lyricsNextCost?: number; rewriteCost: number; rewriteFreeRemaining: number }
 /** 创作区使用的积分视图：余额与价格都来自后端，前端不硬编码价格。balance 为 null 表示还没读到真实余额。 */
-export interface CreditsView { enabled: boolean; balance: number | null; musicCost: number; lyricsCost: number; rewriteCost: number; rewriteFreeRemaining: number }
+export interface CreditsView { enabled: boolean; balance: number | null; musicCost: number; lyricsCost: number; lyricsNextCost?: number | null; rewriteCost: number; rewriteFreeRemaining: number }
 
 const state = ref<number | null>(null)
 const pricing = ref<{ musicCost: number; lyricsCost: number; rewriteCost: number } | null>(null)
+const newWorkLyricsNextCost = ref<number | null>(null)
 const rewriteFreeRemaining = ref(0)
 const enabled = ref(true)
 /** 顶栏只读余额；未登录或读取失败一律为 null，绝不展示过期数字。 */
 export const creditBalance = readonly(state)
 /** 当前生效的单次价格；读不到时为 null，不显示猜测数字。 */
 export const creditPricing = readonly(pricing)
+/** 未指定作品时，服务端报出的新作品下一次歌词生成价格。 */
+export const creditsNewWorkLyricsNextCost = readonly(newWorkLyricsNextCost)
 /** AI 改写今日剩余免费次数；读不到时为 0，界面据此告知是否要扣积分。 */
 export const creditsRewriteFreeRemaining = readonly(rewriteFreeRemaining)
 /** 积分扣费总开关；关闭时创作不扣积分，界面不展示消耗提示。 */
@@ -27,14 +30,16 @@ function normalize(data: Partial<CreditBalanceResponse> | null | undefined): Cre
     balance: Number(data.balance),
     musicCost: Number.isFinite(data.musicCost) ? Number(data.musicCost) : 0,
     lyricsCost: Number.isFinite(data.lyricsCost) ? Number(data.lyricsCost) : 0,
+    lyricsNextCost: typeof data.lyricsNextCost === 'number' && Number.isSafeInteger(data.lyricsNextCost) && data.lyricsNextCost >= 0 ? data.lyricsNextCost : null,
     rewriteCost: Number.isFinite(data.rewriteCost) ? Number(data.rewriteCost) : 0,
     rewriteFreeRemaining: Number.isFinite(data.rewriteFreeRemaining) ? Number(data.rewriteFreeRemaining) : 0,
   }
 }
 
-function apply(view: CreditsView | null) {
+function apply(view: CreditsView | null, newWorkQuote = true) {
   state.value = view ? view.balance : null
   pricing.value = view ? { musicCost: view.musicCost, lyricsCost: view.lyricsCost, rewriteCost: view.rewriteCost } : null
+  if (newWorkQuote || !view) newWorkLyricsNextCost.value = view?.lyricsNextCost ?? null
   rewriteFreeRemaining.value = view ? view.rewriteFreeRemaining : 0
   enabled.value = view ? view.enabled : true
 }
@@ -64,20 +69,22 @@ export async function refreshCreditBalance(authenticated: boolean): Promise<numb
  * 创作区读取余额与当前价格；与顶栏共用同一个 app/credits 接口和同一份状态。
  * 价格由后端下发，改价不需要重新发布前端。
  */
-export async function loadCredits(): Promise<CreditsView | null> {
+export async function loadCredits(workId?: string): Promise<CreditsView | null> {
+  // 每次读取都参与共享余额的写入排序；作品报价仍可独立返回给发起它的页面。
   const turn = ++loadTurn
   let owner = currentCreatorId()
   try {
     await ensureCreator()
     if (owner && owner !== currentCreatorId()) return null
     owner = currentCreatorId()
-    const data = await requestJson<CreditBalanceResponse>('app/credits')
+    const data = await requestJson<CreditBalanceResponse>(workId ? `app/credits?workId=${encodeURIComponent(workId)}` : 'app/credits')
     const view = normalize(data)
-    if (turn !== loadTurn || owner !== currentCreatorId()) return null
-    apply(view)
+    if (owner !== currentCreatorId() || (!workId && turn !== loadTurn)) return null
+    if (turn === loadTurn && (view || !workId)) apply(view, !workId)
     return view
   } catch {
-    if (turn === loadTurn && owner === currentCreatorId()) apply(null)
+    // 某一作品的报价失败，不代表共享余额读取失败。
+    if (!workId && turn === loadTurn && owner === currentCreatorId()) apply(null)
     return null
   }
 }

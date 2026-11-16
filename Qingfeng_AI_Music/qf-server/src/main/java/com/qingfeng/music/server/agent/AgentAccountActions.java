@@ -9,6 +9,7 @@ import com.qingfeng.music.infrastructure.persistence.usage.JdbcUsageBudget;
 import com.qingfeng.music.server.analytics.AnalyticsDataErasureService;
 import com.qingfeng.music.server.payment.PaymentService;
 import com.qingfeng.music.server.payment.PayPalPaymentService;
+import com.qingfeng.music.server.payment.StripePaymentService;
 import com.qingfeng.music.server.security.CreatorPrincipal;
 import com.qingfeng.music.usage.UsageBudget;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -28,6 +29,7 @@ public class AgentAccountActions implements AgentApplicationActions {
     private final JdbcUsageBudget usage;
     private final PaymentService payments;
     private final PayPalPaymentService paypal;
+    private final StripePaymentService stripe;
     private final IdentityApi identity;
     private final ReferralRewards referrals;
     private final AnalyticsDataErasureService erasure;
@@ -35,6 +37,13 @@ public class AgentAccountActions implements AgentApplicationActions {
     public AgentAccountActions(CreditsLedger credits, CreditsPricing pricing, RewriteCharges rewrites,
             JdbcUsageBudget usage, PaymentService payments, PayPalPaymentService paypal, IdentityApi identity,
             ReferralRewards referrals, AnalyticsDataErasureService erasure, JdbcTemplate db) {
+        this(credits,pricing,rewrites,usage,payments,paypal,identity,referrals,erasure,db,null);
+    }
+    @org.springframework.beans.factory.annotation.Autowired
+    public AgentAccountActions(CreditsLedger credits, CreditsPricing pricing, RewriteCharges rewrites,
+            JdbcUsageBudget usage, PaymentService payments, PayPalPaymentService paypal, IdentityApi identity,
+            ReferralRewards referrals, AnalyticsDataErasureService erasure, JdbcTemplate db, StripePaymentService stripe) {
+        this.stripe=stripe;
         this.credits=credits;this.pricing=pricing;this.rewrites=rewrites;this.usage=usage;
         this.payments=payments;this.paypal=paypal;this.identity=identity;this.referrals=referrals;
         this.erasure=erasure;this.db=db;
@@ -48,7 +57,7 @@ public class AgentAccountActions implements AgentApplicationActions {
             cap("get_referral","获取本人的邀请链接","{}","read"),
             cap("accept_referral","使用邀请人提供的邀请码；仍按现有首次登录规则处理","{code:邀请码}","write"),
             cap("list_orders","查看本人充值订单，包含现有支付渠道","{}","read"),
-            cap("get_order","核对指定充值订单真实状态，不自动发起扣款","{orderId:真实订单ID,provider:paypal|airwallex}","read"),
+            cap("get_order","核对指定充值订单真实状态，不自动发起扣款","{orderId:真实订单ID,provider:paypal|airwallex|stripe}","read"),
             cap("close_order","按现有规则关闭本人未付款PayPal订单","{orderId:真实订单ID}","write"),
             cap("payment_catalog","查看当前开放的充值套餐及价格","{}","read"),
             cap("recharge","在对话中打开现有充值收银台；用户选择套餐并授权实际支付","{}","native"),
@@ -102,8 +111,8 @@ public class AgentAccountActions implements AgentApplicationActions {
     private Result credits(String owner) {
         List<Item> items=List.of(new Item("balance","可用积分",credits.balance(owner)+" 积分",Map.of()),
             new Item("music","生成音乐",pricing.cost(CreditsPricing.Kind.MUSIC)+" 积分 / 次",Map.of()),
-            new Item("lyrics","生成歌词",pricing.cost(CreditsPricing.Kind.LYRICS)+" 积分 / 次",Map.of()),
-            new Item("rewrite","改写歌词",pricing.cost(CreditsPricing.Kind.REWRITE)+" 积分 / 次；免费改写剩余 "+rewrites.freeRemaining(owner)+" 次",Map.of()));
+            new Item("lyrics","整首歌词", "每首首次生成免费；每次成功生成音乐后增加一次免费机会；之后整首重写 "+pricing.cost(CreditsPricing.Kind.LYRICS)+" 积分 / 次",Map.of()),
+            new Item("rewrite","AI 改写描述/选段", "每天免费剩余 "+rewrites.freeRemaining(owner)+" 次；用完后 "+pricing.cost(CreditsPricing.Kind.REWRITE)+" 积分 / 次",Map.of()));
         return result("这是当前账号的积分与价格。", "credits",items,List.of(new Command("积分明细","查看我的积分明细","send"),new Command("充值","","recharge")),"get_credits");
     }
     private Result entries(String owner) {
@@ -131,6 +140,7 @@ public class AgentAccountActions implements AgentApplicationActions {
         List<Item> items=new ArrayList<>();List<Command> commands=new ArrayList<>();
         addOrders(items,commands,(List<Map<String,Object>>)payments.orders(new CreatorPrincipal(owner)).getOrDefault("orders",List.of()),"airwallex");
         addOrders(items,commands,(List<Map<String,Object>>)paypal.orders(owner).getOrDefault("orders",List.of()),"paypal");
+        if(stripe!=null)addOrders(items,commands,(List<Map<String,Object>>)stripe.orders(new CreatorPrincipal(owner)).getOrDefault("orders",List.of()),"stripe");
         items.sort(Comparator.comparing((Item i)->String.valueOf(i.data().getOrDefault("createdAt",""))).reversed());
         return result(items.isEmpty()?"当前账号暂无充值订单。":"这是你的充值订单，点击核对可查询最新状态。","orders",items,commands,"list_orders");
     }
@@ -143,13 +153,21 @@ public class AgentAccountActions implements AgentApplicationActions {
     }
     private Result order(String owner,Map<String,Object> args,boolean close) {
         String id=required(args,"orderId"), provider=String.valueOf(args.getOrDefault("provider","paypal"));
-        if(!Set.of("paypal","airwallex").contains(provider)||close&&!"paypal".equals(provider))throw new DomainException("INVALID_PAYMENT_PROVIDER","请选择订单原来的支付渠道。");
-        var view=close?paypal.close(owner,id):"paypal".equals(provider)?paypal.order(owner,id):payments.order(new CreatorPrincipal(owner),id);
+        if(!Set.of("paypal","airwallex","stripe").contains(provider)||close&&!"paypal".equals(provider)||"stripe".equals(provider)&&stripe==null)throw new DomainException("INVALID_PAYMENT_PROVIDER","请选择订单原来的支付渠道。");
+        // A failed lookup never falls through to a different channel or merchant environment.
+        var view=close?paypal.close(owner,id):switch(provider){
+            case "paypal" -> paypal.order(owner,id);
+            case "stripe" -> stripe.order(new CreatorPrincipal(owner),id);
+            default -> payments.order(new CreatorPrincipal(owner),id);
+        };
         return result("订单状态已核对。","orders",List.of(new Item(id,"订单 "+id,view.get("credits")+" 积分 · "+view.get("status"),Map.of("orderId",id,"provider",provider))),List.of(new Command("打开收银台","","recharge")),close?"close_order":"get_order");
     }
     @SuppressWarnings("unchecked") private Result catalog() {
         List<Item> items=new ArrayList<>();
-        for(var entry:Map.of("airwallex",payments.catalog(),"paypal",paypal.catalog()).entrySet()) {
+        Map<String,Map<String,Object>> catalogs=new LinkedHashMap<>();
+        catalogs.put("airwallex",payments.catalog());catalogs.put("paypal",paypal.catalog());
+        if(stripe!=null)catalogs.put("stripe",stripe.catalog());
+        for(var entry:catalogs.entrySet()) {
             if(!Boolean.TRUE.equals(entry.getValue().get("enabled")))continue;
             for(var pack:(List<Map<String,Object>>)entry.getValue().getOrDefault("packages",List.of()))
                 items.add(new Item(entry.getKey()+":"+pack.get("id"),String.valueOf(pack.getOrDefault("title",pack.get("id"))),pack.get("credits")+" 积分 · "+pack.get("amount")+" "+pack.get("currency"),Map.of("provider",entry.getKey())));

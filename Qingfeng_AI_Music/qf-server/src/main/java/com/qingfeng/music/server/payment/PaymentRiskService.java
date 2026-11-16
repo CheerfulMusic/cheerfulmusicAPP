@@ -13,7 +13,10 @@ public class PaymentRiskService {
     public record RiskCase(String id,String provider,String resourceId,String eventType,String orderId,String ownerId,String status,String lastEventId,String decision,String reviewedBy,String reason,Instant updatedAt) {}
     private final JdbcTemplate db;
     private final TransactionTemplate tx;
-    public PaymentRiskService(JdbcTemplate db,TransactionTemplate tx){this.db=db;this.tx=tx;}
+    private final com.qingfeng.music.credits.CreditsLedger ledger;
+    public PaymentRiskService(JdbcTemplate db,TransactionTemplate tx){this(db,tx,null);}
+    @org.springframework.beans.factory.annotation.Autowired
+    public PaymentRiskService(JdbcTemplate db,TransactionTemplate tx,com.qingfeng.music.credits.CreditsLedger ledger){this.db=db;this.tx=tx;this.ledger=ledger;}
     public List<RiskCase> listOpen(int limit){
         return db.query("SELECT * FROM payment_risk_case WHERE status IN ('OPEN','REVIEW') ORDER BY created_at LIMIT ?",(rs,n)->new RiskCase(rs.getString("id"),rs.getString("provider"),rs.getString("resource_id"),rs.getString("event_type"),rs.getString("order_id"),rs.getString("owner_id"),rs.getString("status"),rs.getString("last_event_id"),rs.getString("decision"),rs.getString("reviewed_by"),rs.getString("review_reason"),rs.getTimestamp("updated_at").toInstant()),Math.max(1,Math.min(limit,200)));
     }
@@ -32,7 +35,8 @@ public class PaymentRiskService {
             refreshHold(owner);
         });
     }
-    /** No balance adjustment. RELEASE means a human verified no unpaid entitlement remains; HOLD stays frozen. */
+    /** Audited review only. In the batch model RELEASE never asserts a provider win,
+     * returns money, changes permanent adjustments, or clears an order's entitlement hold. */
     public RiskCase resolveCase(String id,String expectedEventId,String decision,String reviewer,String reason){
         if(!Set.of("RELEASE","HOLD").contains(decision)||reviewer==null||reviewer.isBlank()||reviewer.length()>128||reason==null||reason.trim().length()<10||reason.length()>1000)
             throw new IllegalArgumentException("A named reviewer, decision and substantive audit reason are required");
@@ -50,6 +54,9 @@ public class PaymentRiskService {
         });
     }
     private void refreshHold(String owner){
+        // Protocol 3 applies provider-verified, order-scoped holds in the entitlement
+        // ledger. Legacy review cases must never freeze unrelated recharge batches.
+        if(ledger instanceof com.qingfeng.music.infrastructure.persistence.credits.JdbcFencedCreditsLedger)return;
         // Called only while holding the creator lock; closing one case cannot clear another case's hold.
         var active=db.query("SELECT id FROM payment_risk_case WHERE owner_id=? AND status IN ('OPEN','REVIEW') FOR UPDATE",(rs,n)->rs.getString(1),owner);
         db.update("UPDATE creator SET payment_risk_frozen=? WHERE id=?",active.isEmpty()?0:1,owner);
