@@ -1,0 +1,681 @@
+{
+  "model": "gpt-6.1-sol",
+  "baselineCommit": "941b26c",
+  "method": "Same baseline drafts; two rejected prompt variants followed by independent selective editorial pass. Anonymous paired model judging with alternating A/B order, original material included. Three illustrative cases, one generation each, not a statistical quality guarantee. No production database writes.",
+  "scoresFinal": {
+    "gaming": {
+      "initial": 84,
+      "reviewed": 86
+    },
+    "mother": {
+      "initial": 85,
+      "reviewed": 86
+    },
+    "sparse": {
+      "initial": 84,
+      "reviewed": 85
+    }
+  },
+  "cases": {
+    "gaming": {
+      "recipient": "自己",
+      "occasion": "总决赛后",
+      "story": "五年级开始玩英雄联盟，现在二十五岁。昨天总决赛结束，想起小时候夜里亮着的屏幕、峡谷和高地。结果有遗憾，但还是想继续看比赛。",
+      "message": "写青春变化和仍然热爱的复杂心情，不编造战队名、比分或朋友的经历。",
+      "style": "抒情摇滚"
+    },
+    "mother": {
+      "recipient": "妈妈",
+      "occasion": "生日",
+      "story": "妈妈每次把橘子剥好，放在门口的小碗里。电话里总说路上慢点。我长大后离家工作，回去时还是看见那个小碗。",
+      "message": "想让她少操心。不要编造疾病、死亡或别的往事。",
+      "style": "温暖民谣"
+    },
+    "sparse": {
+      "recipient": "自己",
+      "occasion": "普通的一天",
+      "story": "今天下班，一个人坐在公交车靠窗的位置，看着车窗里的倒影。",
+      "message": "有点累，不想励志，也不想编造爱情故事。写一首短歌，约200字。",
+      "style": "舒缓流行"
+    }
+  },
+  "attempts": {
+    "rejected-detail-emphasis": {
+      "gaming-judge": {
+        "id": "resp_0b9f80ce5bc345b3016afad250a8f887d2b9e1cd607d98325c",
+        "model": "gpt-6.1-sol",
+        "status": "completed",
+        "usage": {
+          "input_tokens": 1372,
+          "input_tokens_details": {
+            "cache_write_tokens": 1369,
+            "cache_write_tokens_details": {
+              "ttl_12h_tokens": 0,
+              "ttl_30m_tokens": 1369
+            },
+            "cached_tokens": 0
+          },
+          "output_tokens": 1178,
+          "output_tokens_details": {
+            "reasoning_tokens": 106
+          },
+          "total_tokens": 2550
+        },
+        "text": "## 结论：B 胜\n\nB 更准确地写出了“结果仍让我不甘，但我还是想看”的复杂心情；A 真诚、稳妥，但对青春变化的呈现较多停留在年龄对照与态度重申上。\n\n### 评分\n\n| 维度 | A | B |\n|---|---:|---:|\n| 情感感染力／25 | 21 | 23 |\n| 叙事与段落推进／20 | 15 | 17 |\n| 副歌记忆点／20 | 16 | 18 |\n| 语言新鲜度与具体性／20 | 14 | 16 |\n| 文字节奏与可唱潜力／15 | 13 | 12 |\n| **总分／100** | **79** | **86** |\n\n## A：表达诚恳，核心句稳，但推进偏弱\n\n**优点**\n\n- **“下一场，我还是想看”**直接回应素材，是清楚、易记的副歌落点。\n- **“不想把遗憾说成圆满”**拒绝强行释怀；**“不敢说以后每场都在／至少此刻，还想等比赛开场”**也没有把热爱夸成永恒誓言，分寸很好。\n- **“那时候还不认识青春／只是舍不得让画面结束”**自然地让童年视角与成年回望相接，是全篇较有感染力的句子。\n- 主歌与副歌句长相对整齐，具备抒情摇滚由收敛到展开的文字基础。\n\n**缺点**\n\n- 第二段的**“我又想起小时候的屏幕”“怎么一晃就到了二十五”**，基本复述第一段及副歌的信息。问题不在重复副歌，而在主歌没有充分推进。\n- **“有些期待，没学会放宽”**搭配稍生硬；**“我和那块屏幕都不算短暂”**意思可理解，但表达不够自然，也削弱了终副歌的情绪落点。\n- **“为那座高地心软”**有辨识度，但“心软”与比赛遗憾之间的关联略虚，情感更多靠概念说明。\n\n## B：矛盾感更鲜明，末段有发展\n\n**胜出理由**\n\n- **“可这一次，先让我遗憾／别急着说输赢都一样／我也想等一个圆满”**承认自己确实在乎结果，没有用“热爱超越输赢”轻轻带过失落，更贴合原始素材。\n- 副歌内部形成了“想继续看—允许遗憾—仍期待圆满”的拉扯，标题句因此不只是口号。\n- 终副歌从**“我也想等一个圆满”**推进到**“还是会盼，还是会不甘”**，并未解决矛盾，而是接纳它，收尾比单纯宣告热爱更有余味。\n- **“屏幕里等的是一个结果／屏幕外，还有从前的目光”**用同一个屏幕连接比赛与成长，没有靠堆砌物件获得具体感。\n\n**缺点**\n\n- **“以前总想快点看到结尾／如今却怕结束得太匆忙”**是常见的成长对照，也不完全贴合比赛体验：想看结果与怕结束，并非天然的年龄分界。\n- **“不是为了把昨天改写一遍”**等句偏长，副歌的口语停顿较多，需要旋律妥善处理；仅从文字看，整齐度略逊于 A。\n- **“像夜还很长”“不一样的盼望”**仍偏泛，语言新鲜度并非全篇稳定。\n\n## 素材忠实度与要求核查\n\n- **两版均未编造战队名、比分或朋友经历，也没有新增明确的外部事件。**\n- A 的**“从五年级看到二十五岁”**，把“五年级开始玩英雄联盟”扩写成长期观看比赛，属于素材未确认的经历推断；不能作为真实性细节加分。\n- B 的“以前想快点看到结尾、如今怕结束”等心理变化，也不是素材明确提供的事实，应视为创作性补写，而非真实经历佐证。\n- 两版均有抒情摇滚的段落与情绪展开潜力；**没有旋律，不能据此判断实际演唱效果。**\n\n**最终选择 B：它赢在更具体地保留了“不甘”与“继续热爱”的并存，而不是篇幅或意象数量。**",
+        "mapping": {
+          "A": "new",
+          "B": "old"
+        }
+      },
+      "gaming-new": {
+        "id": "resp_0a1997a560ef8367016afad1fb38b087d288f4de74e66d45c3",
+        "model": "gpt-6.1-sol",
+        "status": "completed",
+        "usage": {
+          "input_tokens": 3359,
+          "input_tokens_details": {
+            "cache_write_tokens": 3356,
+            "cache_write_tokens_details": {
+              "ttl_12h_tokens": 0,
+              "ttl_30m_tokens": 3356
+            },
+            "cached_tokens": 0
+          },
+          "output_tokens": 754,
+          "output_tokens_details": {
+            "reasoning_tokens": 227
+          },
+          "total_tokens": 4113
+        },
+        "text": "{\n  \"title\": \"下一场，还是想看\",\n  \"lyrics\": \"[Verse 1]\\n夜里亮着的那块屏幕\\n把房间照得有些模糊\\n五年级的我望着峡谷\\n觉得高地就是很远的去处\\n那时候还不认识青春\\n只是舍不得让画面结束\\n\\n[Chorus]\\n下一场，我还是想看\\n哪怕昨天的遗憾还没散\\n从五年级看到二十五岁\\n有些期待，没学会放宽\\n不是每次等待都有答案\\n可我还想为那座高地心软\\n\\n[Verse 2]\\n昨天总决赛已经结束\\n我又想起小时候的屏幕\\n同样的峡谷，同样的高地\\n怎么一晃就到了二十五\\n现在知道结果不能重来\\n也没因此就少一点在乎\\n\\n[Chorus]\\n下一场，我还是想看\\n哪怕昨天的遗憾还没散\\n从五年级看到二十五岁\\n有些期待，没学会放宽\\n不是每次等待都有答案\\n可我还想为那座高地心软\\n\\n[Bridge]\\n不想把遗憾说成圆满\\n也不必劝自己早点习惯\\n喜欢了这么久的一件事\\n怎么会只剩输赢可谈\\n我不是要回到五年级\\n只是长大后，还想继续看\\n\\n[Final Chorus]\\n下一场，我还是想看\\n带着昨天没放下的遗憾\\n从五年级看到二十五岁\\n我和那块屏幕都不算短暂\\n不敢说以后每场都在\\n至少此刻，还想等比赛开场\\n\\n[Outro]\\n小时候夜里亮着的屏幕\\n我记得，不只是最后的胜负\",\n  \"plan\": {\n    \"requirements\": \"\",\n    \"suggestedArrangement\": \"Consider intimate, restrained verses with clean electric guitar, opening into full-band choruses. Let the bridge pull back before a warm final lift; avoid an overly triumphant ending.\",\n    \"negativeTags\": \"\",\n    \"summaryZh\": \"按所选抒情摇滚风格编配。\",\n    \"summaryEn\": \"Arrange in the selected lyrical rock style.\",\n    \"vocalGender\": \"AUTO\"\n  }\n}"
+      },
+      "gaming-old": {
+        "id": "resp_04bcf85a9dde561f016afad1fb348c87d28a6a3a2377ced8ed",
+        "model": "gpt-6.1-sol",
+        "status": "completed",
+        "usage": {
+          "input_tokens": 2986,
+          "input_tokens_details": {
+            "cache_write_tokens": 2983,
+            "cache_write_tokens_details": {
+              "ttl_12h_tokens": 0,
+              "ttl_30m_tokens": 2983
+            },
+            "cached_tokens": 0
+          },
+          "output_tokens": 920,
+          "output_tokens_details": {
+            "reasoning_tokens": 327
+          },
+          "total_tokens": 3906
+        },
+        "text": "{\n  \"title\": \"下一场，还是想看\",\n  \"lyrics\": \"[Verse 1]\\n昨天的总决赛已经散场\\n峡谷还在我脑海里回响\\n想起小时候夜里的屏幕\\n那么亮，像夜还很长\\n从五年级开始的那一局\\n到二十五岁，还没放下\\n原来有些舍不得的东西\\n不是赢了才算数吧\\n\\n[Chorus]\\n下一场，我还是想看\\n可这一次，先让我遗憾\\n别急着说输赢都一样\\n我也想等一个圆满\\n下一场，我还是想看\\n不是为了把昨天改写一遍\\n只是想到峡谷和高地\\n就没办法说，算了，不看\\n\\n[Verse 2]\\n五年级不懂十几年有多长\\n二十五岁听见终场\\n才知道同一片峡谷\\n能装下不一样的盼望\\n以前总想快点看到结尾\\n如今却怕结束得太匆忙\\n屏幕里等的是一个结果\\n屏幕外，还有从前的目光\\n\\n[Chorus]\\n下一场，我还是想看\\n可这一次，先让我遗憾\\n别急着说输赢都一样\\n我也想等一个圆满\\n下一场，我还是想看\\n不是为了把昨天改写一遍\\n只是想到峡谷和高地\\n就没办法说，算了，不看\\n\\n[Bridge]\\n我不必装作毫不在意\\n也不必证明热爱没变\\n五年级的我想不到\\n二十五岁会这样惦念\\n不是每一次都和从前一样\\n却还是想等比赛开场\\n\\n[Final Chorus]\\n下一场，我还是想看\\n带着这一次没放下的遗憾\\n不拿一句输赢都一样\\n替自己把难过讲完\\n下一场，我还是想看\\n我知道回不去那个夜晚\\n可再看见峡谷和高地\\n还是会盼，还是会不甘\\n\\n[Outro]\\n小时候夜里亮着的屏幕\\n到二十五岁，还不舍得关\",\n  \"plan\": {\n    \"requirements\": \"\",\n    \"suggestedArrangement\": \"Consider a restrained guitar-led opening, building into full drums and overdriven guitars in the choruses. Pull back for the bridge, then let the final chorus expand without turning triumphant.\",\n    \"negativeTags\": \"\",\n    \"summaryZh\": \"抒情摇滚。\",\n    \"summaryEn\": \"Lyrical rock.\",\n    \"vocalGender\": \"AUTO\"\n  }\n}"
+      },
+      "mother-judge": {
+        "id": "resp_0b5b94b4de54025d016afad270cf4087d28b71fa43a35e6476",
+        "model": "gpt-6.1-sol",
+        "status": "completed",
+        "usage": {
+          "input_tokens": 1205,
+          "input_tokens_details": {
+            "cache_write_tokens": 1202,
+            "cache_write_tokens_details": {
+              "ttl_12h_tokens": 0,
+              "ttl_30m_tokens": 1202
+            },
+            "cached_tokens": 0
+          },
+          "output_tokens": 1079,
+          "output_tokens_details": {
+            "reasoning_tokens": 106
+          },
+          "total_tokens": 2284
+        },
+        "text": "## 结论：A 胜\n\nA的优势不在篇幅，而在于：**把原始素材中的“剥橘子”，转化成了“也照顾自己”的核心表达**。“妈，也留一瓣给自己”兼具画面、情感和副歌辨识度，也更准确回应“想让她少操心”。\n\n### 评分\n\n| 维度 | A | B |\n|---|---:|---:|\n| 情感感染力／25 | 22 | 21 |\n| 叙事与段落推进／20 | 17 | 17 |\n| 副歌记忆点／20 | 18 | 16 |\n| 语言新鲜度与具体性／20 | 17 | 16 |\n| 文字节奏与可唱潜力／15 | 12 | 13 |\n| **总分／100** | **86** | **83** |\n\n*无旋律，仅评价文字层面的可唱潜力；不因篇幅或副歌重复加减分。*\n\n## A：意象转化更完整，但部分句子偏说理\n\n**优点**\n- **核心句有记忆点。**“妈，也留一瓣给自己”既承接妈妈剥好的橘子，又自然指向“先照顾自己”，不是脱离故事的泛泛祝福。\n- **情绪体谅而不强求。**“不用一下子放心／先把自己也放在心里”承认母亲的牵挂难以立即停止，比直接要求“别操心”更温柔可信。\n- **段落有实质推进。**从回家见到小碗，到理解“长大和被你惦记／并不是只能选一件事”，最后以“我会把平安好好告诉你”回应牵挂，完成了从接受照顾到主动承担的变化。\n\n**缺点**\n- “我想让你知道我能照顾自己”“你也能安心做自己的事情”等句偏口语说明，长度和重音不够集中，谱曲时需要处理。\n- “今天的愿望，分一个给你”略显含混：当天是妈妈生日，“愿望”是谁许的、为何由“我”分给她，不够清楚。\n- “别让电话挂了，心还悬着”略有劝诫感；相较之下，末段主动报平安的表达更有效。\n\n**素材核对**\n没有编造疾病、死亡或明确的其他往事。“学着把事情做好”“把平安好好告诉你”属于当下心意与行动意愿，不作为新增真实经历加分。\n\n## B：表达顺口，但有未经提供的童年回忆\n\n**优点**\n- **回应原话自然。**从妈妈的“路上慢点”转成“妈，你也慢一点”，有对话感，适合温暖民谣。\n- **末段提出了更具体的沟通方式。**“有事我会说，不只说都好／让你放心，不靠一句我长大了”，比单纯声明自己长大更有情感分量。\n- 整体句式较顺，主歌到副歌的语气统一，可唱潜力略优于A。\n\n**缺点**\n- **存在素材外的往事。**“小时候只顾着伸手拿”新增了童年行为，原始素材并未提供；在明确要求“不要编造……别的往事”下，这是实质性偏离，不能当作真实细节奖励。\n- “我说好，你才放心一点”也补写了未提供的通话回应及母亲反应，虽属小幅戏剧化，仍不如原素材处理得克制。\n- 副歌的“慢一点—路上—心上—遗忘”较常见，且“慢”由出行提醒转为生活节奏，关联稍泛，不及A“一瓣”的转换集中。\n- “还被你当作没长大的小孩”把关怀解释为“仍视我为小孩”，略微收窄了原故事的温柔。\n\n**最终判断：A。**  \nB更顺口，但A的核心副歌更独特、主题闭合更好，也更遵守不虚构往事的要求。",
+        "mapping": {
+          "A": "old",
+          "B": "new"
+        }
+      },
+      "mother-new": {
+        "id": "resp_03f0d32e63e45236016afad21ce43087d2893f97a3be91cd1f",
+        "model": "gpt-6.1-sol",
+        "status": "completed",
+        "usage": {
+          "input_tokens": 3350,
+          "input_tokens_details": {
+            "cache_write_tokens": 136,
+            "cache_write_tokens_details": {
+              "ttl_12h_tokens": 0,
+              "ttl_30m_tokens": 136
+            },
+            "cached_tokens": 3211
+          },
+          "output_tokens": 787,
+          "output_tokens_details": {
+            "reasoning_tokens": 329
+          },
+          "total_tokens": 4137
+        },
+        "text": "{\n  \"title\": \"门口的小碗\",\n  \"lyrics\": \"[Verse 1]\\n门口的小碗，橘子剥好了\\n不用开口，就知道是给我的\\n一瓣挨着一瓣，安安静静\\n你把惦记放得这样近\\n电话里又是那句“路上慢点”\\n我说好，你才放心一点\\n\\n[Chorus]\\n妈，你也慢一点\\n别把心总放在我的路上\\n你说的慢点，我都记在心上\\n长大不是把你的话遗忘\\n只是想让你少操心一点\\n不必替我把每一步都想完\\n\\n[Verse 2]\\n离家工作，日子往前赶\\n再回去，还看见那只小碗\\n小时候只顾着伸手拿\\n如今看着，倒不急着吃完\\n原来长大，是离开了家\\n还被你当作没长大的小孩\\n\\n[Bridge]\\n今天是你的生日，妈\\n我不想只说一句祝你快乐\\n也想学着把自己照顾好\\n让你少一点放不下\\n\\n[Final Chorus]\\n妈，你也慢一点\\n别把心总放在我的路上\\n你说的慢点，我都记在心上\\n走得再远，也不是要逞强\\n有事我会说，不只说都好\\n让你放心，不靠一句我长大了\\n\\n[Outro]\\n门口的小碗，橘子剥好了\\n妈，这一瓣，你也尝尝\",\n  \"plan\": {\n    \"requirements\": \"\",\n    \"suggestedArrangement\": \"Consider gentle fingerpicked acoustic guitar, restrained bass and light brushed percussion. Keep the verses intimate; add subtle harmonies in the final chorus, then return to a sparse ending.\",\n    \"negativeTags\": \"\",\n    \"summaryZh\": \"温暖民谣。\",\n    \"summaryEn\": \"Warm folk.\",\n    \"vocalGender\": \"AUTO\"\n  }\n}"
+      },
+      "mother-old": {
+        "id": "resp_0c8b58dc5d1de9a4016afad216d28c87d2b34d5a60a9e986c4",
+        "model": "gpt-6.1-sol",
+        "status": "completed",
+        "usage": {
+          "input_tokens": 2977,
+          "input_tokens_details": {
+            "cache_write_tokens": 136,
+            "cache_write_tokens_details": {
+              "ttl_12h_tokens": 0,
+              "ttl_30m_tokens": 136
+            },
+            "cached_tokens": 2838
+          },
+          "output_tokens": 907,
+          "output_tokens_details": {
+            "reasoning_tokens": 402
+          },
+          "total_tokens": 3884
+        },
+        "text": "{\n  \"title\": \"留一瓣给自己\",\n  \"lyrics\": \"[Verse 1]\\n回去时，门口那个小碗\\n又放着你剥好的橘子\\n我已经长大，离家工作\\n你还是记着这件小事\\n一瓣一瓣，挨得那么近\\n有些话，你没说也听得清\\n\\n[Chorus]\\n妈，也留一瓣给自己\\n别总把心思放在我这里\\n你说路上慢点，我都记得\\n别让电话挂了，心还悬着\\n妈，也留一瓣给自己\\n今天的愿望，分一个给你\\n愿你少操一点心\\n不只在我回家的日子里\\n\\n[Verse 2]\\n离家以后，电话那一头\\n你总说的还是“路上慢点”\\n我想让你知道我能照顾自己\\n又知道牵挂哪能说停就停\\n在外面，我学着把事情做好\\n回家却还有人替我剥橘子\\n原来长大和被你惦记\\n并不是只能选一件事\\n\\n[Bridge]\\n今天是你的生日\\n我也有句话想叮嘱你\\n不用一下子放心\\n先把自己也放在心里\\n\\n[Final Chorus]\\n妈，也留一瓣给自己\\n别总把心思放在我这里\\n你说路上慢点，我都记得\\n我会把平安好好告诉你\\n妈，也留一瓣给自己\\n你的叮嘱，我愿意听下去\\n只盼电话挂了以后\\n你也能安心做自己的事情\\n\\n[Outro]\\n门口的小碗，还放在那里\\n这一瓣，妈，留给你\",\n  \"plan\": {\n    \"requirements\": \"\",\n    \"suggestedArrangement\": \"Warm acoustic folk with fingerpicked guitar and restrained bass. Keep verses intimate, open the chorus with light harmonies, and end sparsely with voice and guitar.\",\n    \"negativeTags\": \"\",\n    \"summaryZh\": \"按所选风格编配\",\n    \"summaryEn\": \"Arrange in the selected warm folk style.\",\n    \"vocalGender\": \"AUTO\"\n  }\n}"
+      },
+      "sparse-judge": {
+        "id": "resp_08222e93d4aa973f016afad290607c87d2aa2153137d58830e",
+        "model": "gpt-6.1-sol",
+        "status": "completed",
+        "usage": {
+          "input_tokens": 847,
+          "input_tokens_details": {
+            "cache_write_tokens": 0,
+            "cache_write_tokens_details": {
+              "ttl_12h_tokens": 0,
+              "ttl_30m_tokens": 0
+            },
+            "cached_tokens": 0
+          },
+          "output_tokens": 1072,
+          "output_tokens_details": {
+            "reasoning_tokens": 150
+          },
+          "total_tokens": 1919
+        },
+        "text": "## 结论：A 小幅胜出\n\nA 更准确地唱出了“有点累，但不想把它解释成别的”的情绪，副歌也有更鲜明的落点。B 的结构更紧凑、场景交代更直接，但部分表达略像对写歌要求的转述。\n\n### 评分\n\n| 维度 | A | B |\n|---|---:|---:|\n| 情感感染力（25） | 23 | 22 |\n| 叙事与段落推进（20） | 17 | 18 |\n| 副歌记忆点（20） | 18 | 17 |\n| 语言新鲜度与具体性（20） | 17 | 16 |\n| 文字节奏与可唱潜力（15） | 13 | 13 |\n| **总分（100）** | **88** | **86** |\n\n## A《只是有一点累》\n\n**主要优点**\n\n- **情绪分寸最准确。**“今天的累，不必说得清楚／就这样坐着，也不算耽误”没有追问疲惫的原因，也没有急着疗愈或鼓劲，贴合写给自己的普通一天。\n- **副歌有明确的核心句。**“不想把疲惫唱成勇敢”直接守住“不想励志”的要求；“只是下班，只是有一点累”则把情绪压回日常，适合作为听后能留下的歌词。\n- **结尾有画面与余韵。**“窗外归窗外／我暂时不说话”让注意力从解释心情回到车窗和当下，收得自然。\n\n**主要缺点**\n\n- “谁都没有先开口的意思”“连沉默也不用换成句子”等句子都在表达“不说话”，段落之间略有同义铺陈，第二段推进有限。\n- “也不等谁来坐在身旁”虽然没有编造爱情故事，却引入了原素材没有的“等待陪伴”联想，不如其他句子纯粹。\n- “玻璃里的人也没什么表示”等长句偏口语散文，需要旋律安排重音和停顿；这里只能判断其可唱潜力，不能认定实际演唱效果。\n\n## B《窗里的我》\n\n**主要优点**\n\n- **场景建立更利落。**“下了班，靠着公交车窗／一个人坐着”直接交代了公交、独处和下班，没有绕行。\n- **段落推进更清楚。**从看见倒影，到注意自身状态，再回到“我坐在这里，什么也不赶”，形成了轻微但完整的内在变化。\n- **副歌入口稳定。**“窗里的我，不必说什么”兼顾标题、对象与情绪，两次出现能形成辨识度；重复本身不是缺点。\n\n**主要缺点**\n\n- “也没什么值得唱成赞歌”“不想替今天写一句总结”有较明显的创作声明感，像在说明“这首歌不打算怎么写”，生活中的直接感受稍弱。\n- “看了倒影一会儿又一会儿”略显拖沓，“有点累，就只说到这里了”作为歌词也偏散文化。\n- “才发现自己还皱着眉头”是素材未提供的动作细节，属于轻度补写，不能作为“更真实、更具体”的依据加分。\n\n## 素材与要求核查\n\n两版均未虚构重大经历，也没有编造爱情故事；都没有转向励志，篇幅均与“约200字的短歌”大致相称。B 新增了皱眉动作，A 新增了不等待旁人落座的心理表态，但都未扩展成额外故事。\n\n**最终选 A：**胜在“只是下班，只是有一点累”的情绪落点更准，以及“窗外归窗外”的收尾更有余味；并非因为篇幅或意象数量。",
+        "mapping": {
+          "A": "new",
+          "B": "old"
+        }
+      },
+      "sparse-new": {
+        "id": "resp_0db8d36326847c51016afad2368d9c87d293a923fe45ec9c92",
+        "model": "gpt-6.1-sol",
+        "status": "completed",
+        "usage": {
+          "input_tokens": 3330,
+          "input_tokens_details": {
+            "cache_write_tokens": 116,
+            "cache_write_tokens_details": {
+              "ttl_12h_tokens": 0,
+              "ttl_30m_tokens": 116
+            },
+            "cached_tokens": 3211
+          },
+          "output_tokens": 794,
+          "output_tokens_details": {
+            "reasoning_tokens": 470
+          },
+          "total_tokens": 4124
+        },
+        "text": "{\n  \"title\": \"只是有一点累\",\n  \"lyrics\": \"[Verse 1]\\n下班了，坐在靠窗的位置\\n玻璃里的人也没什么表示\\n我看着自己，自己望着窗外\\n谁都没有先开口的意思\\n今天的累，不必说得清楚\\n就这样坐着，也不算耽误\\n\\n[Chorus]\\n先不问我，今天过得怎样\\n让我在车上，安静一小段\\n不想把疲惫唱成勇敢\\n也不等谁来坐在身旁\\n只是下班，只是有一点累\\n不用给这一刻另一个结尾\\n\\n[Verse 2]\\n窗外和倒影叠在一起\\n一时看景，一时看看自己\\n没有非要想明白的事\\n连沉默也不用换成句子\\n\\n[Outro]\\n玻璃里的我，先别急\\n这一小段，就这么坐着\\n窗外归窗外\\n我暂时不说话\",\n  \"plan\": {\n    \"requirements\": \"\",\n    \"suggestedArrangement\": \"Gentle pop with sparse electric piano, warm pads and a restrained beat. Keep the vocal intimate and conversational, with no dramatic final build.\",\n    \"negativeTags\": \"\",\n    \"summaryZh\": \"舒缓流行。\",\n    \"summaryEn\": \"Gentle, mellow pop.\",\n    \"vocalGender\": \"AUTO\"\n  }\n}"
+      },
+      "sparse-old": {
+        "id": "resp_05962a024e1df968016afad2370df887d298304f349488d4c9",
+        "model": "gpt-6.1-sol",
+        "status": "completed",
+        "usage": {
+          "input_tokens": 2957,
+          "input_tokens_details": {
+            "cache_write_tokens": 116,
+            "cache_write_tokens_details": {
+              "ttl_12h_tokens": 0,
+              "ttl_30m_tokens": 116
+            },
+            "cached_tokens": 2838
+          },
+          "output_tokens": 622,
+          "output_tokens_details": {
+            "reasoning_tokens": 322
+          },
+          "total_tokens": 3579
+        },
+        "text": "{\n  \"title\": \"窗里的我\",\n  \"lyrics\": \"[Verse 1]\\n下了班，靠着公交车窗\\n一个人坐着，没什么要讲\\n玻璃里那张熟悉的脸\\n也只是安静地朝我望\\n\\n[Chorus]\\n窗里的我，不必说什么\\n累了就别急着找个理由\\n今天没有特别的难过\\n也没什么值得唱成赞歌\\n车往前走，我先坐着\\n不把沉默唱成别的\\n\\n[Verse 2]\\n看了倒影一会儿又一会儿\\n才发现自己还皱着眉头\\n不想替今天写一句总结\\n有点累，就只说到这里了\\n\\n[Final Chorus]\\n窗里的我，不必说什么\\n不用比现在显得更快乐\\n车窗里外，都是这一天\\n我坐在这里，什么也不赶\",\n  \"plan\": {\n    \"requirements\": \"\",\n    \"suggestedArrangement\": \"Consider soft electric piano, restrained drums, and warm bass. Keep the vocal conversational and the chorus intimate, with no dramatic build.\",\n    \"negativeTags\": \"\",\n    \"summaryZh\": \"舒缓流行。\",\n    \"summaryEn\": \"Gentle, relaxed pop.\",\n    \"vocalGender\": \"AUTO\"\n  }\n}"
+      }
+    },
+    "rejected-emotion-emphasis": {
+      "gaming-judge": {
+        "id": "resp_0e7a71c7126c017a016afad2f1a20087d2afdfca588b18d307",
+        "model": "gpt-6.1-sol",
+        "status": "completed",
+        "usage": {
+          "input_tokens": 1417,
+          "input_tokens_details": {
+            "cache_write_tokens": 1414,
+            "cache_write_tokens_details": {
+              "ttl_12h_tokens": 0,
+              "ttl_30m_tokens": 1414
+            },
+            "cached_tokens": 0
+          },
+          "output_tokens": 1227,
+          "output_tokens_details": {
+            "reasoning_tokens": 181
+          },
+          "total_tokens": 2644
+        },
+        "text": "## 结论：A 小胜\n\nB的副歌更利落、更容易记住；A则更完整地写出了**从童年走到二十五岁，热爱的理由也在变化**，不只是在怀旧或表达赛后遗憾。按原始素材的核心诉求，A略胜。\n\n### 分项评分\n\n| 维度 | A | B |\n|---|---:|---:|\n| 情感感染力／25 | 23 | 22 |\n| 叙事与段落推进／20 | 19 | 16 |\n| 副歌记忆点／20 | 17 | 19 |\n| 语言新鲜度与具体性／20 | 16 | 16 |\n| 文字节奏与可唱潜力／15 | 12 | 13 |\n| **总分／100** | **87** | **86** |\n\n## A：情绪推进更完整，但有些句子偏议论\n\n**最有力的是末段对“为什么还看”的深化：**\n\n> “二十五岁的我有自己的期盼  \n> 不只是在替从前舍不得散场”\n\n这两句让成年后的自己不只是童年的延续，也有当下的期待。前面从小时候的屏幕写到昨天的不甘，桥段允许自己暂不释怀，最后再区分“继续热爱”和“留住过去”，段落之间确实有推进。\n\n> “我没法把昨天说成圆满  \n> 可下一场，我还是想看”\n\n没有用“输赢不重要”抹平遗憾，贴合素材里既失落、又想继续看的复杂心情。\n\n**主要缺点：**\n\n- **副歌开头稍绕。**“我还想看，不是因为不遗憾”虽能准确表达矛盾，但双重否定不如B的句子直接，第一遍听的抓取力较弱。\n- **部分表达像自我分析。**“若把遗憾从喜欢里删掉”“这两句话，我都不想隐瞒”等句子，把意思解释得很清楚，却削弱了一些歌词的留白。\n- **长句集中。**“就让不甘和期待一起留下来”“不只是在替从前舍不得散场”等需要较细的旋律切分。这里只能判断文字上的可唱潜力，不能据此断言实际演唱效果。\n\n## B：副歌更突出，但后半段的新信息偏少\n\n**最好的两句是：**\n\n> “下一场，我还是想看  \n> 可这一次，先让我遗憾”\n\n标题句直接成为反复出现的核心，下一句又给遗憾留出位置。短、明确、有情绪转折，很适合抒情摇滚副歌的集中释放。\n\n> “不拿一句输赢都一样  \n> 替自己把难过讲完”\n\n也比泛泛地宣称“热爱不变”更有说服力：它拒绝廉价安慰，而不是否认结果的重要性。\n\n**主要缺点：**\n\n- **段落推进略弱于A。**第二段、桥段和末副歌，主要都在重申“长大了、仍惦念、不必假装不在意”。不是重复副歌本身有问题，而是新增段落对情绪的推进有限。\n- **有未经素材支持的心理设定。**“以前总想快点看到结尾／如今却怕结束得太匆忙”给出了明确的今昔转变，但原素材没有这个信息，也并非继续看比赛必然包含的感受，容易显得套用青春叙事。\n- **结尾稍落入熟悉的怀旧表达。**“到二十五岁，还不舍得关”能成立，但主要落在舍不得过去；相比之下，A对成年后独立期待的表达更贴题。\n\n## 素材忠实度\n\n两版都保留了五年级、二十五岁、昨夜总决赛、屏幕、峡谷与高地等核心信息，**没有编造战队名、比分或朋友经历，也没有明确新增具体事件**。\n\nB的“以前总想……如今却怕……”属于额外设定的心理经历，应谨慎看待，不能当作真实细节加分。其余如“心里那一场”“屏幕外，还有从前的目光”属于抒情表达，不宜误判为虚构事件。\n\n**最终选择：A。**它赢在青春变化与当下热爱之间的层次；若只比较副歌的即时记忆度和文字节奏，则B更好。",
+        "mapping": {
+          "A": "new",
+          "B": "old"
+        }
+      },
+      "gaming-new": {
+        "id": "resp_02115bf4eaa0b616016afad2b72ff487d297ef6117c336deb9",
+        "model": "gpt-6.1-sol",
+        "status": "completed",
+        "usage": {
+          "input_tokens": 3381,
+          "input_tokens_details": {
+            "cache_write_tokens": 3378,
+            "cache_write_tokens_details": {
+              "ttl_12h_tokens": 0,
+              "ttl_30m_tokens": 3378
+            },
+            "cached_tokens": 0
+          },
+          "output_tokens": 998,
+          "output_tokens_details": {
+            "reasoning_tokens": 426
+          },
+          "total_tokens": 4379
+        },
+        "text": "{\n  \"title\": \"下一场，还是想看\",\n  \"lyrics\": \"[Verse 1]\\n小时候夜里亮着的屏幕\\n把峡谷照得那么近\\n五年级的我望着高地\\n总觉得故事还没到结局\\n如今说起英雄联盟\\n还是会想起那一小片亮\\n\\n[Chorus]\\n我还想看，不是因为不遗憾\\n有些结果，到现在还不甘\\n昨天的总决赛已经结束\\n心里那一场却迟迟没散\\n从五年级走到二十五岁\\n同一座高地，不同的期盼\\n我没法把昨天说成圆满\\n可下一场，我还是想看\\n\\n[Verse 2]\\n二十五岁，再看那座高地\\n已经知道结局未必如愿\\n可知道和接受隔了多远\\n昨天才又走过了一遍\\n想说不过是一场比赛\\n话到嘴边，却没那么简单\\n\\n[Chorus]\\n我还想看，不是因为不遗憾\\n有些结果，到现在还不甘\\n昨天的总决赛已经结束\\n心里那一场却迟迟没散\\n从五年级走到二十五岁\\n同一座高地，不同的期盼\\n我没法把昨天说成圆满\\n可下一场，我还是想看\\n\\n[Bridge]\\n若把遗憾从喜欢里删掉\\n昨天也就不必这样难忘\\n我不想急着替自己释怀\\n就让不甘和期待一起留下来\\n\\n[Final Chorus]\\n我还想看，不是因为不遗憾\\n也不是要把小时候留在身旁\\n二十五岁的我有自己的期盼\\n不只是在替从前舍不得散场\\n下一次，仍会希望如愿\\n也仍会怕又一次失望\\n这两句话，我都不想隐瞒\\n可下一场，我还是想看\\n\\n[Outro]\\n小时候夜里那一小片亮\\n到二十五岁，还没有看完\",\n  \"plan\": {\n    \"requirements\": \"\",\n    \"suggestedArrangement\": \"Consider clean electric guitar and restrained drums in the verses, opening into fuller distorted guitars for the choruses. Pull back for an intimate bridge, then let the final chorus expand without a triumphant finish.\",\n    \"negativeTags\": \"\",\n    \"summaryZh\": \"抒情摇滚。\",\n    \"summaryEn\": \"Lyrical rock.\",\n    \"vocalGender\": \"AUTO\"\n  }\n}"
+      },
+      "gaming-old": {
+        "id": "resp_04bcf85a9dde561f016afad1fb348c87d28a6a3a2377ced8ed",
+        "model": "gpt-6.1-sol",
+        "status": "completed",
+        "usage": {
+          "input_tokens": 2986,
+          "input_tokens_details": {
+            "cache_write_tokens": 2983,
+            "cache_write_tokens_details": {
+              "ttl_12h_tokens": 0,
+              "ttl_30m_tokens": 2983
+            },
+            "cached_tokens": 0
+          },
+          "output_tokens": 920,
+          "output_tokens_details": {
+            "reasoning_tokens": 327
+          },
+          "total_tokens": 3906
+        },
+        "text": "{\n  \"title\": \"下一场，还是想看\",\n  \"lyrics\": \"[Verse 1]\\n昨天的总决赛已经散场\\n峡谷还在我脑海里回响\\n想起小时候夜里的屏幕\\n那么亮，像夜还很长\\n从五年级开始的那一局\\n到二十五岁，还没放下\\n原来有些舍不得的东西\\n不是赢了才算数吧\\n\\n[Chorus]\\n下一场，我还是想看\\n可这一次，先让我遗憾\\n别急着说输赢都一样\\n我也想等一个圆满\\n下一场，我还是想看\\n不是为了把昨天改写一遍\\n只是想到峡谷和高地\\n就没办法说，算了，不看\\n\\n[Verse 2]\\n五年级不懂十几年有多长\\n二十五岁听见终场\\n才知道同一片峡谷\\n能装下不一样的盼望\\n以前总想快点看到结尾\\n如今却怕结束得太匆忙\\n屏幕里等的是一个结果\\n屏幕外，还有从前的目光\\n\\n[Chorus]\\n下一场，我还是想看\\n可这一次，先让我遗憾\\n别急着说输赢都一样\\n我也想等一个圆满\\n下一场，我还是想看\\n不是为了把昨天改写一遍\\n只是想到峡谷和高地\\n就没办法说，算了，不看\\n\\n[Bridge]\\n我不必装作毫不在意\\n也不必证明热爱没变\\n五年级的我想不到\\n二十五岁会这样惦念\\n不是每一次都和从前一样\\n却还是想等比赛开场\\n\\n[Final Chorus]\\n下一场，我还是想看\\n带着这一次没放下的遗憾\\n不拿一句输赢都一样\\n替自己把难过讲完\\n下一场，我还是想看\\n我知道回不去那个夜晚\\n可再看见峡谷和高地\\n还是会盼，还是会不甘\\n\\n[Outro]\\n小时候夜里亮着的屏幕\\n到二十五岁，还不舍得关\",\n  \"plan\": {\n    \"requirements\": \"\",\n    \"suggestedArrangement\": \"Consider a restrained guitar-led opening, building into full drums and overdriven guitars in the choruses. Pull back for the bridge, then let the final chorus expand without turning triumphant.\",\n    \"negativeTags\": \"\",\n    \"summaryZh\": \"抒情摇滚。\",\n    \"summaryEn\": \"Lyrical rock.\",\n    \"vocalGender\": \"AUTO\"\n  }\n}"
+      },
+      "mother-judge": {
+        "id": "resp_0b6e88884f1fdd5b016afad316cfb087d2917332e3acb5a95a",
+        "model": "gpt-6.1-sol",
+        "status": "completed",
+        "usage": {
+          "input_tokens": 1267,
+          "input_tokens_details": {
+            "cache_write_tokens": 1264,
+            "cache_write_tokens_details": {
+              "ttl_12h_tokens": 0,
+              "ttl_30m_tokens": 1264
+            },
+            "cached_tokens": 0
+          },
+          "output_tokens": 1178,
+          "output_tokens_details": {
+            "reasoning_tokens": 0
+          },
+          "total_tokens": 2445
+        },
+        "text": "## 结论：A 胜\n\nA把“想让妈妈少操心”凝成了更鲜明的副歌句——**“妈，也留一瓣给自己”**，既来自剥橘子的原始素材，又自然转向对妈妈自己的关心。B对“希望独立，又珍惜被惦记”的矛盾写得细，但副歌较分散，个别措辞也不够顺。\n\n### 分项评分\n\n| 维度 | A | B |\n|---|---:|---:|\n| 情感感染力（25） | 23 | 22 |\n| 叙事与段落推进（20） | 18 | 17 |\n| 副歌记忆点（20） | 19 | 16 |\n| 语言新鲜度与具体性（20） | 17 | 16 |\n| 文字节奏与可唱潜力（15） | 12 | 11 |\n| **总分** | **89** | **82** |\n\n*无旋律，最后一项仅评文字层面的可唱潜力，不判断实际旋律效果。*\n\n## A：核心意象转化更完整\n\n**优点**\n\n- **副歌有明确、贴题的记忆点。**“也留一瓣给自己”让橘子从妈妈照顾孩子的物件，转为孩子劝妈妈照顾自己的表达；不靠新增经历，就完成了情感转向。\n- **情感不强求，较有分寸。**“不用一下子放心／先把自己也放在心里”承认牵挂不能立刻停止，比直接要求“别操心”更体贴。\n- **段落有推进。**从回家看见小碗，到理解“长大和被你惦记／并不是只能选一件事”，再到“我会把平安好好告诉你”，由感受走向自己的回应，生日叮嘱也融入得自然。\n\n**缺点**\n\n- 部分句子偏解释性，如“我想让你知道我能照顾自己”“并不是只能选一件事”，意思准确，但歌词的凝练度稍弱。\n- “今天的愿望，分一个给你”的愿望归属略含糊：在妈妈生日的语境里，谁把愿望分给谁，不如核心副歌清楚。\n- 句长落差较大，末段“你也能安心做自己的事情”尤其偏散文化，谱曲时需要处理重音与收句。\n\n## B：心理细腻，但主钩子稍弱\n\n**优点**\n\n- **写出了独立与依恋并存的心情。**“我想让你放心，又舍不得改变／门口有只小碗，等我回去的习惯”，准确抓住了素材中的情感张力。\n- **没有把少操心理解成减少亲近。**“不用收起小碗，不用改变习惯”清楚地区分了妈妈的关爱与妈妈的担忧，表达温柔。\n- “你也有自己的今天／不必每一刻，都替我想明天”有对照感，把注意力从孩子转向妈妈本人。\n\n**缺点**\n\n- **“妈，橘子留给我，操心少一点”不如A的主句集中。**它保留了被照顾的愿望，却没有在一句里完成“也照顾自己”的转向；后续需要更多解释才能补足。\n- 副歌承载的意思偏多，从记住叮嘱、舍不得习惯，到不要事事挂心，主钩子容易被分散。\n- 个别表达不够自然：“都放在心上转”搭配稍拧；“我想少掉的，从来不是你的喜欢”中的“喜欢”不如“牵挂”贴合母子语境。\n- “让你剥着橘子，不用再把眉头皱紧一点”既长又绕，“不用再”与“皱紧一点”的组合也不够利落，可唱潜力受影响。\n\n## 素材忠实度与要求核查\n\n- **两版都没有编造疾病、死亡或重大往事**，也都保留了生日、门口小碗、剥好的橘子和“路上慢点”等核心信息，整体符合温暖民谣方向。\n- A的“学着把事情做好”“我会把平安好好告诉你”主要属于当下心意或未来承诺，不构成明显的虚构往事。\n- B有两处应收敛：**“最后总有一句”**把原素材的“总说”进一步固定成了通话顺序；**“别又绕过自己，先问我过得怎样”与“不用再把眉头皱紧一点”**则暗示了素材未提供的惯常行为和神态。不属于重大情节虚构，但在“不要编造别的往事”的约束下，不宜当作真实细节，更不能因此加分。\n\n**最终选择A：**胜在核心副歌更鲜明、情感转向更完整，也更稳妥地依靠原有素材完成表达。",
+        "mapping": {
+          "A": "old",
+          "B": "new"
+        }
+      },
+      "mother-new": {
+        "id": "resp_0f3bda34e24a82ed016afad2b7255087d2b928efc0a8ec7cc9",
+        "model": "gpt-6.1-sol",
+        "status": "completed",
+        "usage": {
+          "input_tokens": 3372,
+          "input_tokens_details": {
+            "cache_write_tokens": 136,
+            "cache_write_tokens_details": {
+              "ttl_12h_tokens": 0,
+              "ttl_30m_tokens": 136
+            },
+            "cached_tokens": 3233
+          },
+          "output_tokens": 973,
+          "output_tokens_details": {
+            "reasoning_tokens": 453
+          },
+          "total_tokens": 4345
+        },
+        "text": "{\n  \"title\": \"橘子留给我\",\n  \"lyrics\": \"[Verse 1]\\n门口的小碗，放着剥好的橘子\\n回去一眼就看见，还是老位置\\n我长大了，离家工作了\\n你还是把橘子剥得仔细\\n电话里，说过多少别的话\\n最后总有一句：“路上慢点”\\n\\n[Chorus]\\n妈，橘子留给我，操心少一点\\n那句路上慢点，我会记在心里面\\n我想让你放心，又舍不得改变\\n门口有只小碗，等我回去的习惯\\n不是要你从此，什么都不管\\n只是别把我的日子，都放在心上转\\n你也有自己的今天\\n不必每一刻，都替我想明天\\n\\n[Verse 2]\\n离家以后，才发觉有些为难\\n想说我能照顾自己，你别挂念\\n可回去看见那只小碗\\n又觉得你的惦记，可以不用说完\\n原来我最想学会的，不只是走远\\n是让你听见我，就能安心一点\\n\\n[Final Chorus]\\n妈，橘子留给我，操心少一点\\n那句路上慢点，我会记在心里面\\n不用收起小碗，不用改变习惯\\n我想少掉的，从来不是你的喜欢\\n今天你的生日，愿望许给自己一点\\n别又绕过自己，先问我过得怎样\\n我会好好过我的每一天\\n让你剥着橘子，不用再把眉头皱紧一点\\n\\n[Outro]\\n门口的小碗，还是那个小碗\\n妈，你说的慢点，我都听见\\n今天也听听，你自己的心愿\",\n  \"plan\": {\n    \"requirements\": \"\",\n    \"suggestedArrangement\": \"Warm acoustic folk with fingerpicked guitar and a close, conversational vocal. Add a restrained bass and soft brushed percussion in the chorus; return to guitar and voice for the outro.\",\n    \"negativeTags\": \"\",\n    \"summaryZh\": \"温暖民谣风格。\",\n    \"summaryEn\": \"Warm folk style.\",\n    \"vocalGender\": \"AUTO\"\n  }\n}"
+      },
+      "mother-old": {
+        "id": "resp_0c8b58dc5d1de9a4016afad216d28c87d2b34d5a60a9e986c4",
+        "model": "gpt-6.1-sol",
+        "status": "completed",
+        "usage": {
+          "input_tokens": 2977,
+          "input_tokens_details": {
+            "cache_write_tokens": 136,
+            "cache_write_tokens_details": {
+              "ttl_12h_tokens": 0,
+              "ttl_30m_tokens": 136
+            },
+            "cached_tokens": 2838
+          },
+          "output_tokens": 907,
+          "output_tokens_details": {
+            "reasoning_tokens": 402
+          },
+          "total_tokens": 3884
+        },
+        "text": "{\n  \"title\": \"留一瓣给自己\",\n  \"lyrics\": \"[Verse 1]\\n回去时，门口那个小碗\\n又放着你剥好的橘子\\n我已经长大，离家工作\\n你还是记着这件小事\\n一瓣一瓣，挨得那么近\\n有些话，你没说也听得清\\n\\n[Chorus]\\n妈，也留一瓣给自己\\n别总把心思放在我这里\\n你说路上慢点，我都记得\\n别让电话挂了，心还悬着\\n妈，也留一瓣给自己\\n今天的愿望，分一个给你\\n愿你少操一点心\\n不只在我回家的日子里\\n\\n[Verse 2]\\n离家以后，电话那一头\\n你总说的还是“路上慢点”\\n我想让你知道我能照顾自己\\n又知道牵挂哪能说停就停\\n在外面，我学着把事情做好\\n回家却还有人替我剥橘子\\n原来长大和被你惦记\\n并不是只能选一件事\\n\\n[Bridge]\\n今天是你的生日\\n我也有句话想叮嘱你\\n不用一下子放心\\n先把自己也放在心里\\n\\n[Final Chorus]\\n妈，也留一瓣给自己\\n别总把心思放在我这里\\n你说路上慢点，我都记得\\n我会把平安好好告诉你\\n妈，也留一瓣给自己\\n你的叮嘱，我愿意听下去\\n只盼电话挂了以后\\n你也能安心做自己的事情\\n\\n[Outro]\\n门口的小碗，还放在那里\\n这一瓣，妈，留给你\",\n  \"plan\": {\n    \"requirements\": \"\",\n    \"suggestedArrangement\": \"Warm acoustic folk with fingerpicked guitar and restrained bass. Keep verses intimate, open the chorus with light harmonies, and end sparsely with voice and guitar.\",\n    \"negativeTags\": \"\",\n    \"summaryZh\": \"按所选风格编配\",\n    \"summaryEn\": \"Arrange in the selected warm folk style.\",\n    \"vocalGender\": \"AUTO\"\n  }\n}"
+      },
+      "sparse-judge": {
+        "id": "resp_0c7a176a4af85105016afad338bd6087d29f56a9763bac3777",
+        "model": "gpt-6.1-sol",
+        "status": "completed",
+        "usage": {
+          "input_tokens": 858,
+          "input_tokens_details": {
+            "cache_write_tokens": 0,
+            "cache_write_tokens_details": {
+              "ttl_12h_tokens": 0,
+              "ttl_30m_tokens": 0
+            },
+            "cached_tokens": 0
+          },
+          "output_tokens": 1102,
+          "output_tokens_details": {
+            "reasoning_tokens": 202
+          },
+          "total_tokens": 1960
+        },
+        "text": "## 结论：A胜，小幅领先\n\nA更完整地写出了“累着坐一会儿，不必改变什么”的状态；B的副歌更整齐、口语节奏更顺，但部分表达转向了对“怎么写这首歌”的说明，稍微削弱了公交车内的现场感。\n\n### 分项评分\n\n| 维度 | A | B |\n|---|---:|---:|\n| 情感感染力／25 | 23 | 22 |\n| 叙事与段落推进／20 | 19 | 17 |\n| 副歌记忆点／20 | 17 | 18 |\n| 语言新鲜度与具体性／20 | 17 | 17 |\n| 文字节奏与可唱潜力／15 | 12 | 13 |\n| **总分／100** | **88** | **87** |\n\n*未提供旋律，可唱性仅按文字的句长、停顿和重音潜力判断。*\n\n### A：情绪落点更自然\n\n**优点**\n- “**我看着自己，看了一会儿／没有什么特别的事**”贴合原始素材，不刻意制造戏剧性，平淡本身就能传达疲惫。\n- “**今天只是今天／不必从疲惫里找个意思**”准确回应“不想励志”，不是劝自己振作，而是允许这一天不产生道理。\n- 段落有细微推进：看倒影、允许自己不调整情绪，最后落在“**靠着窗，把这一小段路／安安静静地坐完**”。结尾用动作收束，比再讲一次态度更有余味。\n\n**缺点**\n- “**没有谁等着听一个好故事**”偏抽象，也略有向外解释写作立场的感觉。\n- “**累／还没找到地方放下**”属于较常见的情绪表达，新鲜度有限。\n- 长短句差异较大，尤其副歌中的长句，需要旋律较细致地安排停顿，否则容易唱成散文。\n\n### B：副歌更顺口，但推进略弱\n\n**优点**\n- “**窗里的我，不必说什么**”简洁，标题与副歌互相强化，比A的副歌起句更容易形成听觉记忆。\n- “**车往前走，我先坐着**”是全篇最有效的句子之一：具体、克制，也没有把车辆前进硬转成“人生向前”的励志寓意。\n- “**不用比现在显得更快乐**”能直接触及疲惫时不想表演情绪的感受，语气适合舒缓流行。\n\n**缺点**\n- “**也没什么值得唱成赞歌**”“**不把沉默唱成别的**”“**不想替今天写一句总结**”集中讨论如何表达，稍显用力地声明“不拔高”，反而挤占了当下感受。\n- 第二段到末段主要仍在重复“不解释、不改变”的态度，情绪虽统一，段落间的变化不如A明确。\n- “**看了倒影一会儿又一会儿**”稍显拖沓；“**车窗里外，都是这一天**”有概括意味，但具体触感较弱。\n\n### 素材忠实度与要求核查\n\n- **两版都没有编造爱情故事，也没有明显励志化，篇幅均接近约200字的短歌要求。**\n- A的“终于不用接话”、B的“还皱着眉头”都是原始素材未提供的补写：前者补了心理背景，后者补了动作神态。它们不构成重大虚构经历，但**不能作为“真实细节”加分**。\n- 两版均未新增重大事件。A胜在情绪组织和结尾完成度，而不是内容更长或细节更多。",
+        "mapping": {
+          "A": "new",
+          "B": "old"
+        }
+      },
+      "sparse-new": {
+        "id": "resp_07fabac24cb23be5016afad2d9703087d282cf63c98e927715",
+        "model": "gpt-6.1-sol",
+        "status": "completed",
+        "usage": {
+          "input_tokens": 3352,
+          "input_tokens_details": {
+            "cache_write_tokens": 116,
+            "cache_write_tokens_details": {
+              "ttl_12h_tokens": 0,
+              "ttl_30m_tokens": 116
+            },
+            "cached_tokens": 3233
+          },
+          "output_tokens": 594,
+          "output_tokens_details": {
+            "reasoning_tokens": 260
+          },
+          "total_tokens": 3946
+        },
+        "text": "{\n  \"title\": \"车窗里的我\",\n  \"lyrics\": \"[Verse 1]\\n下班了，坐在靠窗的位置\\n车窗里的人也不说话\\n我看着自己，看了一会儿\\n没有什么特别的事\\n只是今天的这点累\\n还没找到地方放下\\n\\n[Chorus]\\n车窗里的我，不用打起精神\\n没有谁等着听一个好故事\\n今天只是今天\\n不必从疲惫里找个意思\\n就这样坐着，也可以\\n不急着换一种心情\\n\\n[Verse 2]\\n一个人的座位并不冷清\\n只是终于不用接话\\n倒影陪着我，隔着一层玻璃\\n我不问，它也不回答\\n有些说不上来的感觉\\n就先不替它取名字吧\\n\\n[Outro]\\n公交车还在往前开\\n我没有想那么远\\n靠着窗，把这一小段路\\n安安静静地坐完\",\n  \"plan\": {\n    \"requirements\": \"\",\n    \"suggestedArrangement\": \"建议以柔和电钢琴铺底，搭配轻鼓与低音；人声贴近口语，副歌仅轻微增加层次，结尾自然收束，不做情绪拔高。\",\n    \"negativeTags\": \"\",\n    \"summaryZh\": \"舒缓流行。\",\n    \"summaryEn\": \"Gentle, mellow pop.\",\n    \"vocalGender\": \"AUTO\"\n  }\n}"
+      },
+      "sparse-old": {
+        "id": "resp_05962a024e1df968016afad2370df887d298304f349488d4c9",
+        "model": "gpt-6.1-sol",
+        "status": "completed",
+        "usage": {
+          "input_tokens": 2957,
+          "input_tokens_details": {
+            "cache_write_tokens": 116,
+            "cache_write_tokens_details": {
+              "ttl_12h_tokens": 0,
+              "ttl_30m_tokens": 116
+            },
+            "cached_tokens": 2838
+          },
+          "output_tokens": 622,
+          "output_tokens_details": {
+            "reasoning_tokens": 322
+          },
+          "total_tokens": 3579
+        },
+        "text": "{\n  \"title\": \"窗里的我\",\n  \"lyrics\": \"[Verse 1]\\n下了班，靠着公交车窗\\n一个人坐着，没什么要讲\\n玻璃里那张熟悉的脸\\n也只是安静地朝我望\\n\\n[Chorus]\\n窗里的我，不必说什么\\n累了就别急着找个理由\\n今天没有特别的难过\\n也没什么值得唱成赞歌\\n车往前走，我先坐着\\n不把沉默唱成别的\\n\\n[Verse 2]\\n看了倒影一会儿又一会儿\\n才发现自己还皱着眉头\\n不想替今天写一句总结\\n有点累，就只说到这里了\\n\\n[Final Chorus]\\n窗里的我，不必说什么\\n不用比现在显得更快乐\\n车窗里外，都是这一天\\n我坐在这里，什么也不赶\",\n  \"plan\": {\n    \"requirements\": \"\",\n    \"suggestedArrangement\": \"Consider soft electric piano, restrained drums, and warm bass. Keep the vocal conversational and the chorus intimate, with no dramatic build.\",\n    \"negativeTags\": \"\",\n    \"summaryZh\": \"舒缓流行。\",\n    \"summaryEn\": \"Gentle, relaxed pop.\",\n    \"vocalGender\": \"AUTO\"\n  }\n}"
+      }
+    },
+    "selected-editorial-pass": {
+      "gaming-judge": {
+        "id": "resp_03846ea1b6e4bc6f016afad40349e087d2bff6b09acc61ddd6",
+        "model": "gpt-6.1-sol",
+        "status": "completed",
+        "usage": {
+          "input_tokens": 1433,
+          "input_tokens_details": {
+            "cache_write_tokens": 1430,
+            "cache_write_tokens_details": {
+              "ttl_12h_tokens": 0,
+              "ttl_30m_tokens": 1430
+            },
+            "cached_tokens": 0
+          },
+          "output_tokens": 1048,
+          "output_tokens_details": {
+            "reasoning_tokens": 124
+          },
+          "total_tokens": 2481
+        },
+        "text": "## 结论：A 小胜\n\n两版只有第二段主歌的两行不同，整体完成度接近。A更贴合原始素材中“结果有遗憾，但仍想继续看”的复杂心情；B增加了今昔对照，但也替用户补写了未经提供的心理经历。\n\n### 评分\n\n| 维度 | A | B |\n|---|---:|---:|\n| 情感感染力／25 | 23 | 22 |\n| 叙事与段落推进／20 | 17 | 16 |\n| 副歌记忆点／20 | 18 | 18 |\n| 语言新鲜度与具体性／20 | 16 | 16 |\n| 文字节奏与可唱潜力／15 | 12 | 12 |\n| **总分／100** | **86** | **84** |\n\n## A胜出的关键\n\nA写的是：\n\n> 如今比赛已经结束  \n> 不甘却没能一起散场\n\n这两句承接“二十五岁听见终场”，把**比赛结束与情绪尚未结束**分开，符合原始素材。尤其“不甘却没能一起散场”，能自然引向副歌的“先让我遗憾”，没有急着用热爱消解失落。\n\nB换成：\n\n> 以前总想快点看到结尾  \n> 如今却怕结束得太匆忙\n\n这组对照确实更直接地表现了年龄变化，但“以前总想快点看到结尾”并无素材依据，“如今却怕结束得太匆忙”也将遗憾部分转成了对结束本身的留恋。**它不是编造战队、比分或朋友事件，却属于新增的个人心理史，不能当成真实细节加分。**此外，盼望看到比赛结果与害怕比赛结束并非天然对应，转折略显预设。\n\n## 两版共同的优点\n\n- **副歌有明确抓手。**“下一场，我还是想看”直接、易记，适合作为抒情摇滚的情绪落点。\n- **没有把遗憾强行升华。**“别急着说输赢都一样／我也想等一个圆满”，允许自己在意结果，比泛泛宣告“热爱永不变”更有感染力。\n- **末次副歌有推进。**从“先让我遗憾”走到“还是会盼，还是会不甘”，不是消除矛盾，而是接受矛盾。\n- 五年级、二十五岁、夜里的屏幕、峡谷与高地，均来自素材；两版都没有编造战队名、比分或朋友经历。\n\n## 各自的缺点\n\n### A\n1. **第二段推进偏保守。**“比赛已经结束／不甘却没能一起散场”虽然准确，却与开头的“总决赛已经散场”及副歌的遗憾有一定语义重叠。\n2. **青春变化写得仍偏概括。**“不一样的盼望”“从前的目光”指出了变化，却没有充分写清盼望如何变化。\n3. “不是为了把昨天改写一遍”等长句较接近散文表达，需要旋律妥善分句；这里只能肯定其可唱潜力，不能认定实际演唱效果。\n\n### B\n1. **关键转折缺少素材支撑。**新增的“以前总想……”是其主要问题；形式上更有对比，不等于人物经历更真实。\n2. **情绪重心略有偏移。**素材更侧重结果遗憾与持续热爱，B这两句则容易让人理解为主要舍不得比赛结束。\n3. 同样存在抽象概括和部分长句口语节奏偏松的问题。\n\n**最终选择：A。**它的时间变化写得不如B那样显眼，但更忠于这份素材，也更稳地保留了“我仍想看，但请先允许我不甘”的情绪核心。",
+        "mapping": {
+          "A": "new",
+          "B": "old"
+        }
+      },
+      "gaming-new": {
+        "id": "resp_03d5fcb6a42cf706016afad3e7543887d296e91d6651a75be2",
+        "model": "gpt-6.1-sol",
+        "status": "completed",
+        "usage": {
+          "input_tokens": 3952,
+          "input_tokens_details": {
+            "cache_write_tokens": 722,
+            "cache_write_tokens_details": {
+              "ttl_12h_tokens": 0,
+              "ttl_30m_tokens": 722
+            },
+            "cached_tokens": 3227
+          },
+          "output_tokens": 931,
+          "output_tokens_details": {
+            "reasoning_tokens": 343
+          },
+          "total_tokens": 4883
+        },
+        "text": "{\n  \"title\": \"下一场，还是想看\",\n  \"lyrics\": \"[Verse 1]\\n昨天的总决赛已经散场\\n峡谷还在我脑海里回响\\n想起小时候夜里的屏幕\\n那么亮，像夜还很长\\n从五年级开始的那一局\\n到二十五岁，还没放下\\n原来有些舍不得的东西\\n不是赢了才算数吧\\n\\n[Chorus]\\n下一场，我还是想看\\n可这一次，先让我遗憾\\n别急着说输赢都一样\\n我也想等一个圆满\\n下一场，我还是想看\\n不是为了把昨天改写一遍\\n只是想到峡谷和高地\\n就没办法说，算了，不看\\n\\n[Verse 2]\\n五年级不懂十几年有多长\\n二十五岁听见终场\\n才知道同一片峡谷\\n能装下不一样的盼望\\n如今比赛已经结束\\n不甘却没能一起散场\\n屏幕里等的是一个结果\\n屏幕外，还有从前的目光\\n\\n[Chorus]\\n下一场，我还是想看\\n可这一次，先让我遗憾\\n别急着说输赢都一样\\n我也想等一个圆满\\n下一场，我还是想看\\n不是为了把昨天改写一遍\\n只是想到峡谷和高地\\n就没办法说，算了，不看\\n\\n[Bridge]\\n我不必装作毫不在意\\n也不必证明热爱没变\\n五年级的我想不到\\n二十五岁会这样惦念\\n不是每一次都和从前一样\\n却还是想等比赛开场\\n\\n[Final Chorus]\\n下一场，我还是想看\\n带着这一次没放下的遗憾\\n不拿一句输赢都一样\\n替自己把难过讲完\\n下一场，我还是想看\\n我知道回不去那个夜晚\\n可再看见峡谷和高地\\n还是会盼，还是会不甘\\n\\n[Outro]\\n小时候夜里亮着的屏幕\\n到二十五岁，还不舍得关\",\n  \"plan\": {\n    \"requirements\": \"\",\n    \"suggestedArrangement\": \"Consider a restrained guitar-led opening, building into full drums and overdriven guitars in the choruses. Pull back for the bridge, then let the final chorus expand without turning triumphant.\",\n    \"negativeTags\": \"\",\n    \"summaryZh\": \"抒情摇滚。\",\n    \"summaryEn\": \"Lyrical rock.\",\n    \"vocalGender\": \"AUTO\"\n  }\n}"
+      },
+      "gaming-old": {
+        "id": "resp_04bcf85a9dde561f016afad1fb348c87d28a6a3a2377ced8ed",
+        "model": "gpt-6.1-sol",
+        "status": "completed",
+        "usage": {
+          "input_tokens": 2986,
+          "input_tokens_details": {
+            "cache_write_tokens": 2983,
+            "cache_write_tokens_details": {
+              "ttl_12h_tokens": 0,
+              "ttl_30m_tokens": 2983
+            },
+            "cached_tokens": 0
+          },
+          "output_tokens": 920,
+          "output_tokens_details": {
+            "reasoning_tokens": 327
+          },
+          "total_tokens": 3906
+        },
+        "text": "{\n  \"title\": \"下一场，还是想看\",\n  \"lyrics\": \"[Verse 1]\\n昨天的总决赛已经散场\\n峡谷还在我脑海里回响\\n想起小时候夜里的屏幕\\n那么亮，像夜还很长\\n从五年级开始的那一局\\n到二十五岁，还没放下\\n原来有些舍不得的东西\\n不是赢了才算数吧\\n\\n[Chorus]\\n下一场，我还是想看\\n可这一次，先让我遗憾\\n别急着说输赢都一样\\n我也想等一个圆满\\n下一场，我还是想看\\n不是为了把昨天改写一遍\\n只是想到峡谷和高地\\n就没办法说，算了，不看\\n\\n[Verse 2]\\n五年级不懂十几年有多长\\n二十五岁听见终场\\n才知道同一片峡谷\\n能装下不一样的盼望\\n以前总想快点看到结尾\\n如今却怕结束得太匆忙\\n屏幕里等的是一个结果\\n屏幕外，还有从前的目光\\n\\n[Chorus]\\n下一场，我还是想看\\n可这一次，先让我遗憾\\n别急着说输赢都一样\\n我也想等一个圆满\\n下一场，我还是想看\\n不是为了把昨天改写一遍\\n只是想到峡谷和高地\\n就没办法说，算了，不看\\n\\n[Bridge]\\n我不必装作毫不在意\\n也不必证明热爱没变\\n五年级的我想不到\\n二十五岁会这样惦念\\n不是每一次都和从前一样\\n却还是想等比赛开场\\n\\n[Final Chorus]\\n下一场，我还是想看\\n带着这一次没放下的遗憾\\n不拿一句输赢都一样\\n替自己把难过讲完\\n下一场，我还是想看\\n我知道回不去那个夜晚\\n可再看见峡谷和高地\\n还是会盼，还是会不甘\\n\\n[Outro]\\n小时候夜里亮着的屏幕\\n到二十五岁，还不舍得关\",\n  \"plan\": {\n    \"requirements\": \"\",\n    \"suggestedArrangement\": \"Consider a restrained guitar-led opening, building into full drums and overdriven guitars in the choruses. Pull back for the bridge, then let the final chorus expand without turning triumphant.\",\n    \"negativeTags\": \"\",\n    \"summaryZh\": \"抒情摇滚。\",\n    \"summaryEn\": \"Lyrical rock.\",\n    \"vocalGender\": \"AUTO\"\n  }\n}"
+      },
+      "mother-judge": {
+        "id": "resp_0c039f241e2be58d016afad41ef13c87d2b68378b35d42d318",
+        "model": "gpt-6.1-sol",
+        "status": "completed",
+        "usage": {
+          "input_tokens": 1250,
+          "input_tokens_details": {
+            "cache_write_tokens": 1247,
+            "cache_write_tokens_details": {
+              "ttl_12h_tokens": 0,
+              "ttl_30m_tokens": 1247
+            },
+            "cached_tokens": 0
+          },
+          "output_tokens": 1024,
+          "output_tokens_details": {
+            "reasoning_tokens": 0
+          },
+          "total_tokens": 2274
+        },
+        "text": "## 结论：B 小幅胜出\n\n两版只有第二段主歌的三行措辞不同，整体质量非常接近。B 的口吻更自然，长句有所收束，也更贴近“把自己的日子过好，让妈妈少操心”的表达。优势主要在**文字节奏与可唱潜力**，不是故事或情感上的明显升级。\n\n### 分项评分\n\n| 维度 | A | B |\n|---|---:|---:|\n| 情感感染力（25） | 22 | 22 |\n| 叙事与段落推进（20） | 17 | 17 |\n| 副歌记忆点（20） | 18 | 18 |\n| 语言新鲜度与具体性（20） | 17 | 17 |\n| 文字节奏与可唱潜力（15） | 11 | 12 |\n| **总分（100）** | **85** | **86** |\n\n### 原始素材与要求核对\n\n两版都保留了核心素材：**门口的小碗、剥好的橘子、电话里的“路上慢点”、离家工作后回家仍被照顾**。生日场景通过“今天是你的生日”明确落地，也都回应了“想让她少操心”。\n\n**均未发现编造疾病、死亡或其他具体往事，也没有明显违反用户要求。**“我会把平安好好告诉你”属于面向未来的承诺，不是新增经历；“心还悬着”属于对牵挂的情绪表达，不应算作额外的真实性细节加分。\n\n### 两版共同的优点\n\n- **副歌核心句有效。**“妈，也留一瓣给自己”把橘子这一原有物象转成对妈妈的关心，既贴合素材，也能独立成为记忆点。\n- **没有把‘少操心’写成拒绝关爱。**“不用一下子放心／先把自己也放在心里”承认牵挂不能立即停止，温柔且有分寸。\n- **情绪有推进。**从看见小碗，到理解牵挂，再到“我会把平安好好告诉你”，由被照顾走向主动回应；结尾回到小碗，结构完整。\n\n### A：优点与缺点\n\nA 的“在外面，我学着把事情做好”有一种认真成长、努力承担的意味，与让妈妈放心的愿望相通。\n\n主要不足：\n- **部分句子解释性偏强。**“我想让你知道我能照顾自己／又知道牵挂哪能说停就停”连续使用认知表达，更像把心理分析直接写出来。\n- **长句的歌唱组织要求较高。**“我想让你知道我能照顾自己”字数较密，无旋律条件下，可预见需要较细的节拍安排。\n- “把事情做好”略偏工作与任务语境，不如日常生活表达贴近这首歌的亲密感。\n\n### B：胜出理由与缺点\n\nB 改为：\n\n> “想告诉你，我能照顾自己  \n> 可牵挂哪能说停就停”\n\n比 A 更简洁，“可”也更直接地带出“我能独立，但仍理解你的牵挂”这一转折，口语停顿更清楚。\n\n> “在外面，想把自己的日子过好”\n\n比“把事情做好”更贴近生活整体，也更自然地接住下一句“回家却还有人替我剥橘子”。\n\n主要不足：\n- 这三行仍以抽象心声为主，**没有显著提高画面感或叙事推进**，因此不宜把局部润色夸成全面提升。\n- “想把自己的日子过好”虽然亲切，但仍较常见，而且句子不短，可唱潜力只是略优于 A。\n- 两版共有的“原来长大和被你惦记／并不是只能选一件事”意思准确，却偏议论；“你也能安心做自己的事情”作为末段落点稍显平直。“今天的愿望，分一个给你”的愿望归属也略含混，生日祝愿还可以更清楚。\n\n**最终选择：B。**保留了 A 的情感骨架，又减少了少量解释腔；差距很小，主要赢在第二段主歌更顺口、更像自然说给妈妈听的话。",
+        "mapping": {
+          "A": "old",
+          "B": "new"
+        }
+      },
+      "mother-new": {
+        "id": "resp_0d055fbb9fd1d325016afad3e7424487d287a0e113cd016a95",
+        "model": "gpt-6.1-sol",
+        "status": "completed",
+        "usage": {
+          "input_tokens": 3854,
+          "input_tokens_details": {
+            "cache_write_tokens": 3851,
+            "cache_write_tokens_details": {
+              "ttl_12h_tokens": 0,
+              "ttl_30m_tokens": 3851
+            },
+            "cached_tokens": 0
+          },
+          "output_tokens": 729,
+          "output_tokens_details": {
+            "reasoning_tokens": 225
+          },
+          "total_tokens": 4583
+        },
+        "text": "{\n  \"title\": \"留一瓣给自己\",\n  \"lyrics\": \"[Verse 1]\\n回去时，门口那个小碗\\n又放着你剥好的橘子\\n我已经长大，离家工作\\n你还是记着这件小事\\n一瓣一瓣，挨得那么近\\n有些话，你没说也听得清\\n\\n[Chorus]\\n妈，也留一瓣给自己\\n别总把心思放在我这里\\n你说路上慢点，我都记得\\n别让电话挂了，心还悬着\\n妈，也留一瓣给自己\\n今天的愿望，分一个给你\\n愿你少操一点心\\n不只在我回家的日子里\\n\\n[Verse 2]\\n离家以后，电话那一头\\n你总说的还是“路上慢点”\\n想告诉你，我能照顾自己\\n可牵挂哪能说停就停\\n在外面，想把自己的日子过好\\n回家却还有人替我剥橘子\\n原来长大和被你惦记\\n并不是只能选一件事\\n\\n[Bridge]\\n今天是你的生日\\n我也有句话想叮嘱你\\n不用一下子放心\\n先把自己也放在心里\\n\\n[Final Chorus]\\n妈，也留一瓣给自己\\n别总把心思放在我这里\\n你说路上慢点，我都记得\\n我会把平安好好告诉你\\n妈，也留一瓣给自己\\n你的叮嘱，我愿意听下去\\n只盼电话挂了以后\\n你也能安心做自己的事情\\n\\n[Outro]\\n门口的小碗，还放在那里\\n这一瓣，妈，留给你\",\n  \"plan\": {\n    \"requirements\": \"\",\n    \"suggestedArrangement\": \"Warm acoustic folk with fingerpicked guitar and restrained bass. Keep verses intimate, open the chorus with light harmonies, and end sparsely with voice and guitar.\",\n    \"negativeTags\": \"\",\n    \"summaryZh\": \"按所选风格编配\",\n    \"summaryEn\": \"Arrange in the selected warm folk style.\",\n    \"vocalGender\": \"AUTO\"\n  }\n}"
+      },
+      "mother-old": {
+        "id": "resp_0c8b58dc5d1de9a4016afad216d28c87d2b34d5a60a9e986c4",
+        "model": "gpt-6.1-sol",
+        "status": "completed",
+        "usage": {
+          "input_tokens": 2977,
+          "input_tokens_details": {
+            "cache_write_tokens": 136,
+            "cache_write_tokens_details": {
+              "ttl_12h_tokens": 0,
+              "ttl_30m_tokens": 136
+            },
+            "cached_tokens": 2838
+          },
+          "output_tokens": 907,
+          "output_tokens_details": {
+            "reasoning_tokens": 402
+          },
+          "total_tokens": 3884
+        },
+        "text": "{\n  \"title\": \"留一瓣给自己\",\n  \"lyrics\": \"[Verse 1]\\n回去时，门口那个小碗\\n又放着你剥好的橘子\\n我已经长大，离家工作\\n你还是记着这件小事\\n一瓣一瓣，挨得那么近\\n有些话，你没说也听得清\\n\\n[Chorus]\\n妈，也留一瓣给自己\\n别总把心思放在我这里\\n你说路上慢点，我都记得\\n别让电话挂了，心还悬着\\n妈，也留一瓣给自己\\n今天的愿望，分一个给你\\n愿你少操一点心\\n不只在我回家的日子里\\n\\n[Verse 2]\\n离家以后，电话那一头\\n你总说的还是“路上慢点”\\n我想让你知道我能照顾自己\\n又知道牵挂哪能说停就停\\n在外面，我学着把事情做好\\n回家却还有人替我剥橘子\\n原来长大和被你惦记\\n并不是只能选一件事\\n\\n[Bridge]\\n今天是你的生日\\n我也有句话想叮嘱你\\n不用一下子放心\\n先把自己也放在心里\\n\\n[Final Chorus]\\n妈，也留一瓣给自己\\n别总把心思放在我这里\\n你说路上慢点，我都记得\\n我会把平安好好告诉你\\n妈，也留一瓣给自己\\n你的叮嘱，我愿意听下去\\n只盼电话挂了以后\\n你也能安心做自己的事情\\n\\n[Outro]\\n门口的小碗，还放在那里\\n这一瓣，妈，留给你\",\n  \"plan\": {\n    \"requirements\": \"\",\n    \"suggestedArrangement\": \"Warm acoustic folk with fingerpicked guitar and restrained bass. Keep verses intimate, open the chorus with light harmonies, and end sparsely with voice and guitar.\",\n    \"negativeTags\": \"\",\n    \"summaryZh\": \"按所选风格编配\",\n    \"summaryEn\": \"Arrange in the selected warm folk style.\",\n    \"vocalGender\": \"AUTO\"\n  }\n}"
+      },
+      "sparse-judge": {
+        "id": "resp_09ad0bcbd1a6fb82016afad43c23f887d2b8756b783ecc695b",
+        "model": "gpt-6.1-sol",
+        "status": "completed",
+        "usage": {
+          "input_tokens": 822,
+          "input_tokens_details": {
+            "cache_write_tokens": 0,
+            "cache_write_tokens_details": {
+              "ttl_12h_tokens": 0,
+              "ttl_30m_tokens": 0
+            },
+            "cached_tokens": 0
+          },
+          "output_tokens": 884,
+          "output_tokens_details": {
+            "reasoning_tokens": 180
+          },
+          "total_tokens": 1706
+        },
+        "text": "## 结论：A 小幅胜出\n\n两版只有一句不同，整体完成度接近。A更贴合原始素材中“有点累，不想励志”的克制状态；B增加了情绪辨认的动作，但“还皱着眉头”并非素材提供的事实，不能因此获得“更真实、更具体”的加分。\n\n### 分项评分\n\n| 维度 | A | B |\n|---|---:|---:|\n| 情感感染力（25） | 23 | 22 |\n| 叙事与段落推进（20） | 16 | 16 |\n| 副歌记忆点（20） | 17 | 17 |\n| 语言新鲜度与具体性（20） | 16 | 16 |\n| 文字节奏与可唱潜力（15） | 13 | 13 |\n| **总分（100）** | **85** | **84** |\n\n### 共同优点\n\n- **准确守住情绪尺度。**“车往前走，我先坐着”是全歌最有效的一句：既依托公交场景，也允许自己暂时不振作，没有把疲惫转成励志。\n- **副歌有清晰落点。**“窗里的我，不必说什么”便于记忆；末段改成“不用比现在显得更快乐”，让自我接纳稍有推进，而非机械复述。\n- **符合主要要求。**均为约200字的短歌，没有爱情支线，也没有强行升华。句式整体舒缓、口语化，具备舒缓流行的可唱潜力；没有旋律，不能据此判断实际演唱效果。\n\n### 决定胜负的一句\n\n**A：“没打算从里面找个答案”**\n\n它延续了“看倒影”这一原始动作，不额外指定身体表现，也不要求这个普通下班时刻必须带来领悟。与“不想替今天写一句总结”相接，较准确地表达了“不想解释自己”的疲惫。\n\n**B：“才发现自己还皱着眉头”**\n\n“才发现”使第二段出现一个小转折，这是结构上的作用；但“皱眉”，尤其“还”暗示此前已持续皱眉，属于新增的身体状态，素材没有依据。它不是编造爱情或重大经历，不构成明显违背要求，但也不能当作真实经历细节奖励。\n\n### 各自缺点\n\n- **A：**“不必说什么／没打算……找个答案／不想……写一句总结”语义接近，第二段推进偏弱。“赞歌”“答案”“总结”较抽象，也让歌词稍像对创作要求的解释。\n- **B：**除上述共同问题外，“皱着眉头”是较常见的疲惫表达，未明显提高语言新鲜度，反而替原素材确定了一个未经提供的表情。\n\n**最终胜者：A。**优势不在辞藻，而在少作一次情绪判定，更尊重素材原本的留白。",
+        "mapping": {
+          "A": "new",
+          "B": "old"
+        }
+      },
+      "sparse-new": {
+        "id": "resp_0eb07cbb170338e5016afad3f5039c87d287c115b44710bd98",
+        "model": "gpt-6.1-sol",
+        "status": "completed",
+        "usage": {
+          "input_tokens": 3630,
+          "input_tokens_details": {
+            "cache_write_tokens": 400,
+            "cache_write_tokens_details": {
+              "ttl_12h_tokens": 0,
+              "ttl_30m_tokens": 400
+            },
+            "cached_tokens": 3227
+          },
+          "output_tokens": 462,
+          "output_tokens_details": {
+            "reasoning_tokens": 163
+          },
+          "total_tokens": 4092
+        },
+        "text": "{\n  \"title\": \"窗里的我\",\n  \"lyrics\": \"[Verse 1]\\n下了班，靠着公交车窗\\n一个人坐着，没什么要讲\\n玻璃里那张熟悉的脸\\n也只是安静地朝我望\\n\\n[Chorus]\\n窗里的我，不必说什么\\n累了就别急着找个理由\\n今天没有特别的难过\\n也没什么值得唱成赞歌\\n车往前走，我先坐着\\n不把沉默唱成别的\\n\\n[Verse 2]\\n看了倒影一会儿又一会儿\\n没打算从里面找个答案\\n不想替今天写一句总结\\n有点累，就只说到这里了\\n\\n[Final Chorus]\\n窗里的我，不必说什么\\n不用比现在显得更快乐\\n车窗里外，都是这一天\\n我坐在这里，什么也不赶\",\n  \"plan\": {\n    \"requirements\": \"\",\n    \"suggestedArrangement\": \"Consider soft electric piano, restrained drums, and warm bass. Keep the vocal conversational and the chorus intimate, with no dramatic build.\",\n    \"negativeTags\": \"\",\n    \"summaryZh\": \"舒缓流行。\",\n    \"summaryEn\": \"Gentle, relaxed pop.\",\n    \"vocalGender\": \"AUTO\"\n  }\n}"
+      },
+      "sparse-old": {
+        "id": "resp_05962a024e1df968016afad2370df887d298304f349488d4c9",
+        "model": "gpt-6.1-sol",
+        "status": "completed",
+        "usage": {
+          "input_tokens": 2957,
+          "input_tokens_details": {
+            "cache_write_tokens": 116,
+            "cache_write_tokens_details": {
+              "ttl_12h_tokens": 0,
+              "ttl_30m_tokens": 116
+            },
+            "cached_tokens": 2838
+          },
+          "output_tokens": 622,
+          "output_tokens_details": {
+            "reasoning_tokens": 322
+          },
+          "total_tokens": 3579
+        },
+        "text": "{\n  \"title\": \"窗里的我\",\n  \"lyrics\": \"[Verse 1]\\n下了班，靠着公交车窗\\n一个人坐着，没什么要讲\\n玻璃里那张熟悉的脸\\n也只是安静地朝我望\\n\\n[Chorus]\\n窗里的我，不必说什么\\n累了就别急着找个理由\\n今天没有特别的难过\\n也没什么值得唱成赞歌\\n车往前走，我先坐着\\n不把沉默唱成别的\\n\\n[Verse 2]\\n看了倒影一会儿又一会儿\\n才发现自己还皱着眉头\\n不想替今天写一句总结\\n有点累，就只说到这里了\\n\\n[Final Chorus]\\n窗里的我，不必说什么\\n不用比现在显得更快乐\\n车窗里外，都是这一天\\n我坐在这里，什么也不赶\",\n  \"plan\": {\n    \"requirements\": \"\",\n    \"suggestedArrangement\": \"Consider soft electric piano, restrained drums, and warm bass. Keep the vocal conversational and the chorus intimate, with no dramatic build.\",\n    \"negativeTags\": \"\",\n    \"summaryZh\": \"舒缓流行。\",\n    \"summaryEn\": \"Gentle, relaxed pop.\",\n    \"vocalGender\": \"AUTO\"\n  }\n}"
+      }
+    }
+  },
+  "promptSha256": "d555221260e47953556916dac0ee9d4bd4ecb71e62d94c322b87100b53d89fae"
+}

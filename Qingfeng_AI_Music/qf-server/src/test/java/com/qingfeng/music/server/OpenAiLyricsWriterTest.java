@@ -82,7 +82,11 @@ class OpenAiLyricsWriterTest {
             assertEquals(story, material.path("story").asText());
             assertEquals(structure, material.path("revisionInstructions").asText());
             assertEquals(lyrics, draft.lyrics());
-            assertEquals(1, fixture.calls.get());
+            assertEquals(2, fixture.calls.get());
+            var review = JSON.readTree(fixture.lastReceived.get().path("input").path(0).path("content").asText());
+            assertEquals(story, review.path("originalMaterial").path("story").asText());
+            assertEquals(structure, review.path("originalMaterial").path("revisionInstructions").asText());
+            assertEquals(lyrics, review.path("candidate").path("lyrics").asText());
         }
     }
 
@@ -201,7 +205,7 @@ class OpenAiLyricsWriterTest {
         var writer = new OpenAiLyricsWriter("offline-key", "custom-model", URI.create("https://example.invalid"), client);
 
         assertEquals("门口的小碗", writer.write(WORK, "zh-CN").title());
-        verify(client, times(2)).send(any(), any());
+        verify(client, times(3)).send(any(), any());
     }
 
     @Test void doesNotRetryAConnectionFailureAfterTheRequestBodyIsUsed() throws Exception {
@@ -236,6 +240,38 @@ class OpenAiLyricsWriterTest {
         } finally { Thread.interrupted(); }
     }
 
+    @Test void reviewUsesEditedLyricsButPreservesMusicPlan() throws Exception {
+        var edited = result(); edited.put("lyrics", "[Verse 1]\n门口的小碗还在\n[Chorus]\n妈，也留一瓣给自己");
+        edited.put("plan", Map.of("requirements", "changed", "suggestedArrangement", "changed", "negativeTags", "",
+            "summaryZh", "", "summaryEn", "", "vocalGender", "FEMALE"));
+        var draft = writeWithReview(200, JSON.writeValueAsString(completed(edited)));
+        assertEquals(edited.get("lyrics"), draft.lyrics());
+        assertEquals("Acoustic guitar", draft.plan().suggestedArrangement());
+        assertEquals("AUTO", draft.plan().vocalGender());
+    }
+
+    @Test void invalidOrUnavailableReviewRetainsValidInitialDraft() throws Exception {
+        assertEquals(result().get("lyrics"), writeWithReview(503, "private-details").lyrics());
+        assertEquals(result().get("lyrics"), writeWithReview(200, "not-json").lyrics());
+        var changed = result(); changed.put("title", "different");
+        assertEquals(result().get("lyrics"), writeWithReview(200, JSON.writeValueAsString(completed(changed))).lyrics());
+        changed = result(); changed.put("lyrics", "[Verse 1]\n删掉了副歌");
+        assertEquals(result().get("lyrics"), writeWithReview(200, JSON.writeValueAsString(completed(changed))).lyrics());
+    }
+
+    private com.qingfeng.music.lyrics.application.LyricsWriter.Draft writeWithReview(int status, String body) throws Exception {
+        var client = mock(HttpClient.class);
+        @SuppressWarnings("unchecked") HttpResponse<String> first = mock(HttpResponse.class);
+        @SuppressWarnings("unchecked") HttpResponse<String> second = mock(HttpResponse.class);
+        when(first.statusCode()).thenReturn(200); when(first.body()).thenReturn(JSON.writeValueAsString(completed(result())));
+        when(second.statusCode()).thenReturn(status); when(second.body()).thenReturn(body);
+        when(client.<String>send(any(), any())).thenReturn(first, second);
+        var writer = new OpenAiLyricsWriter("offline-key", "gpt-6.1-sol", URI.create("https://example.invalid"), client);
+        var draft = writer.write(WORK, "zh-CN");
+        verify(client, times(2)).send(any(), any());
+        return draft;
+    }
+
     private static void assertInvalid(String body) throws Exception {
         try (var fixture = new Fixture(200, body)) {
             var error = assertThrows(DomainException.class, () -> fixture.writer().write(WORK, "zh-CN"));
@@ -247,14 +283,15 @@ class OpenAiLyricsWriterTest {
     private static final class Fixture implements AutoCloseable {
         final HttpServer server;
         final AtomicInteger calls = new AtomicInteger();
-        final AtomicReference<JsonNode> received = new AtomicReference<>();
+        final AtomicReference<JsonNode> received = new AtomicReference<>(), lastReceived = new AtomicReference<>();
         final AtomicReference<String> authorization = new AtomicReference<>(), path = new AtomicReference<>();
         Fixture(int status, String body) throws Exception {
             server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
             server.createContext("/", e -> {
                 calls.incrementAndGet();authorization.set(e.getRequestHeaders().getFirst("Authorization"));
                 path.set(e.getRequestURI().getPath());
-                received.set(JSON.readTree(new String(e.getRequestBody().readAllBytes(), StandardCharsets.UTF_8)));
+                lastReceived.set(JSON.readTree(new String(e.getRequestBody().readAllBytes(), StandardCharsets.UTF_8)));
+                received.compareAndSet(null, lastReceived.get());
                 byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
                 e.sendResponseHeaders(status, bytes.length);e.getResponseBody().write(bytes);e.close();
             });
