@@ -9,7 +9,8 @@ const dialog = ref<HTMLDialogElement>(), input = ref<HTMLInputElement>()
 const everAdmitted = ref(false), admitted = ref(false), checking = ref(true), submitting = ref(false)
 const status = ref<InviteStatus>(), code = ref(''), error = ref('')
 const busy = computed(() => checking.value || submitting.value)
-const accessible = computed(() => admitted.value || props.publicAccess)
+const actionRequiresInvite = ref(false)
+const accessible = computed(() => admitted.value || (props.publicAccess && !actionRequiresInvite.value))
 let disposed = false, lastCheck = 0, expiryTimer: ReturnType<typeof setTimeout> | undefined
 
 async function show() { await nextTick(); if (!disposed && !accessible.value && !dialog.value?.open) dialog.value?.showModal() }
@@ -18,9 +19,9 @@ async function apply(value: InviteStatus) {
   status.value = value; admitted.value = value.admitted
   clearTimeout(expiryTimer)
   if (value.admitted) {
-    everAdmitted.value = true; dialog.value?.close(); code.value = ''; error.value = ''
+    actionRequiresInvite.value = false; everAdmitted.value = true; dialog.value?.close(); code.value = ''; error.value = ''
     if (value.enabled) expiryTimer = setTimeout(required, Math.min(2147000000, Math.max(1000, Date.parse(value.expiresAt) - Date.now() + 1000)))
-  } else if (!props.publicAccess) { await show(); await nextTick(); input.value?.focus() }
+  } else if (!accessible.value) { await show(); await nextTick(); input.value?.focus() }
 }
 async function check() {
   if (busy.value && !checking.value) return
@@ -43,9 +44,10 @@ async function submit() {
       : cause instanceof InviteError && cause.code === 'RATE_LIMITED' ? '尝试次数较多，请一分钟后再试。' : '暂时无法验证内测资格，请检查网络后重试。'
   } finally { submitting.value = false }
 }
-function required() { admitted.value = false; void show(); if (!busy.value) void check() }
+function required() { actionRequiresInvite.value = true; admitted.value = false; void show(); if (!busy.value) void check() }
 function focus() { if (!props.publicAccess && !busy.value && Date.now() - lastCheck > 60000) void check() }
 watch(() => props.publicAccess, value => {
+  actionRequiresInvite.value = false
   if (value) dialog.value?.close()
   else { void show(); void check() }
 })
