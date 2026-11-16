@@ -41,14 +41,31 @@ class StripePaymentMethodsTest {
         assertEquals(reason, failure.getReason());
     }
 
+    @Test void gbpPricesRequireCompleteConfigurationAndStaySeparateFromExistingQuotes() {
+        var defaults=methods(wechat("GB"));
+        assertEquals(new BigDecimal("7.99"),defaults.select("starter-GBP-wechat_pay","wechat_pay").amount());
+        assertEquals(new BigDecimal("19.99"),defaults.select("standard-GBP-wechat_pay","wechat_pay").amount());
+        assertEquals(new BigDecimal("39.99"),defaults.select("plus-GBP-wechat_pay","wechat_pay").amount());
+        var env=wechat("GB").withProperty("qingfeng.stripe.prices.gbp.starter","7.80");
+        assertThrows(IllegalArgumentException.class,()->methods(env));
+        env.withProperty("qingfeng.stripe.prices.gbp.standard","20.80").withProperty("qingfeng.stripe.prices.gbp.plus","39.80");
+        var m=methods(env);assertEquals(List.of("CNY","GBP"),entry(m,true,"wechat_pay").get("currencies"));
+        assertEquals(new BigDecimal("7.80"),m.select("starter-GBP-wechat_pay","wechat_pay").amount());
+        assertEquals("wechat_pay",StripePaymentMethods.checkoutMethodForStoredOffer("starter-GBP-wechat_pay"));
+        assertEquals(new BigDecimal("68.80"),m.select("starter-CNY-wechat_pay","wechat_pay").amount());
+        for(String invalid:List.of("0","-1","1.001","NaN")) {
+            env.withProperty("qingfeng.stripe.prices.gbp.starter",invalid);
+            assertThrows(IllegalArgumentException.class,()->methods(env));
+        }
+    }
     @Test void approvedCnyQuotesAreIndependentOfTheUnchangedUsdPackages() {
         var methods = methods(wechat("GB"));
         assertEquals(List.of(new BigDecimal("9.90"), new BigDecimal("25.90"), new BigDecimal("49.90")),
             methods.legacyPackages().stream().map(PaymentCatalog.Package::amount).toList());
         assertEquals(List.of(new BigDecimal("68.80"), new BigDecimal("178.80"), new BigDecimal("338.80")),
-            packages(entry(methods, true, "wechat_pay")).stream().map(pack -> (BigDecimal) pack.get("amount")).toList());
+            packages(entry(methods, true, "wechat_pay")).stream().filter(pack -> "CNY".equals(pack.get("currency"))).map(pack -> (BigDecimal) pack.get("amount")).toList());
         assertEquals(List.of(100L, 300L, 700L),
-            packages(entry(methods, true, "wechat_pay")).stream().map(pack -> (Long) pack.get("credits")).toList());
+            packages(entry(methods, true, "wechat_pay")).stream().filter(pack -> "CNY".equals(pack.get("currency"))).map(pack -> (Long) pack.get("credits")).toList());
         assertEquals("starter-CNY-wechat_pay", methods.select("starter-CNY-wechat_pay", "wechat_pay").id());
     }
 
@@ -56,11 +73,11 @@ class StripePaymentMethodsTest {
         var methods = methods(wechat("GB"));
         var method = entry(methods, true, "wechat_pay");
         assertEquals(true, method.get("enabled"));
-        assertEquals(List.of("CNY"), method.get("currencies"));
+        assertEquals(List.of("CNY", "GBP"), method.get("currencies"));
         assertEquals(true, currency(method, "CNY").get("enabled"));
         assertEquals(false, currency(method, "USD").get("enabled"));
         assertEquals("CURRENCY_UNSUPPORTED", currency(method, "USD").get("reason"));
-        assertTrue(packages(method).stream().allMatch(pack -> "CNY".equals(pack.get("currency"))));
+        assertTrue(packages(method).stream().allMatch(pack -> List.of("CNY", "GBP").contains(pack.get("currency"))));
         rejected(HttpStatus.BAD_REQUEST, "CURRENCY_UNSUPPORTED",
             () -> methods.select("starter-USD-wechat_pay", "wechat_pay"));
     }
@@ -95,7 +112,7 @@ class StripePaymentMethodsTest {
         for (var method : methods.catalog(false)) {
             assertEquals(false, method.get("enabled"));
             assertEquals("PAYMENTS_CLOSED", method.get("reason"));
-            assertEquals(3, packages(method).size());
+            assertEquals("wechat_pay".equals(method.get("id")) ? 6 : 3, packages(method).size());
         }
         // Country support is not confused with the global purchase gate.
         assertEquals(true, currency(entry(methods, false, "wechat_pay"), "CNY").get("enabled"));
@@ -158,7 +175,7 @@ class StripePaymentMethodsTest {
         var methods = methods(wechat("US"));
         for (String id : List.of("", "CARD", " credit_card", "paypal", "bank_transfer"))
             rejected(HttpStatus.BAD_REQUEST, "PAYMENT_METHOD_UNSUPPORTED", () -> methods.select("starter-USD", id));
-        for (String offer : List.of("starter-CNY", "starter-CNY-wechat_pay?amount=1", "starter-GBP-wechat_pay",
+        for (String offer : List.of("starter-CNY", "starter-CNY-wechat_pay?amount=1", "starter-EUR-wechat_pay",
                 "unknown-CNY-wechat_pay", "starter-cny-wechat_pay"))
             rejected(HttpStatus.BAD_REQUEST, "INVALID_PAYMENT_PACKAGE", () -> methods.select(offer, "wechat_pay"));
     }
@@ -176,7 +193,7 @@ class StripePaymentMethodsTest {
         assertEquals("card", StripePaymentMethods.checkoutMethodForStoredOffer(null));
         assertEquals("card", StripePaymentMethods.checkoutMethodForStoredOffer("legacy-package"));
         assertThrows(IllegalArgumentException.class,
-            () -> StripePaymentMethods.checkoutMethodForStoredOffer("starter-GBP-wechat_pay"));
+            () -> StripePaymentMethods.checkoutMethodForStoredOffer("starter-EUR-wechat_pay"));
     }
 
     @Test void invalidCnyPricesAreRejectedInsteadOfRoundedOrConverted() {
@@ -204,7 +221,7 @@ class StripePaymentMethodsTest {
     @Test void configuredCountryIsNormalizedWithoutClaimingUnverifiedStripeApproval() {
         var methods = methods(wechat(" gb "));
         assertEquals("GB", methods.businessCountry());
-        assertEquals(List.of("CNY"), entry(methods, true, "wechat_pay").get("currencies"));
+        assertEquals(List.of("CNY", "GBP"), entry(methods, true, "wechat_pay").get("currencies"));
         assertEquals("", entry(methods, true, "wechat_pay").get("reason"));
         assertThrows(UnsupportedOperationException.class,
             () -> entry(methods, true, "wechat_pay").put("enabled", false));
