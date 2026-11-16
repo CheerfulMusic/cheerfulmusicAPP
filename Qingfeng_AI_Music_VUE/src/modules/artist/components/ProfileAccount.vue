@@ -1,13 +1,15 @@
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { platform } from '../../../platform'
 import { locale, t } from '../../../shared/i18n'
 import { accountState } from '../../../shared/identity/account-state'
 import { creditBalance, creditsEnabled, refreshCreditBalance } from '../../../shared/identity/credit-balance'
 import { logtoState } from '../../../shared/identity/logto-state'
 import { maskedPhoneLabel } from '../../../shared/identity/phone-label'
+import PhoneBinding from './PhoneBinding.vue'
 import NavIcon from '../../../shared/ui/NavIcon.vue'
 
+const binding = ref(false)
 const phone = computed(() => logtoState.value.authenticated
   ? maskedPhoneLabel(logtoState.value.phoneMasked)
   : '')
@@ -41,7 +43,7 @@ onMounted(() => {
             </svg>
             {{ t('手机号') }}
           </dt>
-          <dd>{{ phone || t('未提供') }}</dd>
+          <dd>{{ phone }} <button v-if="!phone && (logtoState.authenticated || accountState.authenticated)" type="button" @click="binding = !binding">{{ t('绑定手机号，赠送50积分') }}</button><span v-else-if="!phone">{{ t('未提供') }}</span></dd>
         </div>
         <div class="profile-account-row">
           <dt>
@@ -54,6 +56,7 @@ onMounted(() => {
           <dd>{{ email || t('未提供') }}</dd>
         </div>
       </dl>
+      <PhoneBinding v-if="binding" @bound="binding = false" />
       <RouterLink class="profile-account-row profile-account-link" to="/account">
         <span><NavIcon name="account" />{{ t('账号与登录') }}</span>
         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 4 4 4-4 4" /></svg>

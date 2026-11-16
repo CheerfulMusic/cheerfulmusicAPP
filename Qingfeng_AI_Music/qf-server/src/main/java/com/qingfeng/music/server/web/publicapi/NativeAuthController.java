@@ -84,8 +84,8 @@ public class NativeAuthController {
 
     @PostMapping("/code") public ResponseEntity<Map<String,Object>> sendCode(@RequestBody CodeRequest input,HttpServletRequest request){
         String channel=input.channel,purpose=input.purpose;
-        if(!Set.of("email","phone").contains(Objects.toString(channel,""))||!Set.of("register","reset","sign-in").contains(Objects.toString(purpose,""))
-            ||("phone".equals(channel)&&!"sign-in".equals(purpose)))throw invalid();
+        if(!Set.of("email","phone").contains(Objects.toString(channel,""))||!Set.of("register","reset","sign-in","bind").contains(Objects.toString(purpose,""))
+            ||("phone".equals(channel)&&!Set.of("sign-in","bind").contains(purpose)))throw invalid();
         String value="email".equals(channel)?email(input.identifier):phone(input.identifier);
         if("phone".equals(channel)){
             String digits=value.substring(1);
@@ -97,7 +97,9 @@ public class NativeAuthController {
             if(!destinations.availableRegions(phoneEnabled,phoneInternationalEnabled).contains(region))
                 throw new Failure(400,"LOGIN_REGION_UNAVAILABLE","当前暂不支持向该地区发送验证码");
         }
-        String creator=boundCreator(request);rate(request,value,true);
+        String creator=boundCreator(request);
+        if("bind".equals(purpose)&&(!"phone".equals(channel)||!identities.canBindPhone(creator)))throw expired();
+        rate(request,value,true);
         var client=client();var caps=client.capabilities();
         if("email".equals(channel)?!emailEnabled||!caps.emailCode()||("reset".equals(purpose)&&!caps.reset()):!phoneEnabled||!caps.phone())throw unavailable();
         HttpSession browser=request.getSession(true);browser.setMaxInactiveInterval(600);
@@ -144,6 +146,23 @@ public class NativeAuthController {
 
     @PostMapping("/phone/sign-in") public ResponseEntity<Map<String,Object>> phoneSignIn(@RequestBody Credentials input,HttpServletRequest request,HttpServletResponse response){
         return codeSignIn("phone",phone(input.phone),input.code,request,response);
+    }
+    @PostMapping("/phone/bind") public ResponseEntity<Map<String,Object>> bindPhone(@RequestBody Credentials input,HttpServletRequest request){
+        String value=phone(input.phone);code(input.code);rate(request,value,false);
+        HttpSession browser=session(request);
+        synchronized(browser){
+            Pending pending=pending(request,"phone",value,"bind");var client=client();
+            try{
+                client.verifyCode(pending.flow,"phone",value,pending.verification,input.code);
+                try{client.identify(pending.flow,pending.verification);}
+                catch(LogtoNativeClient.ProviderFailure missing){if(!"user.user_not_exist".equals(missing.code()))throw missing;client.switchToRegister(pending.flow);client.identify(pending.flow,pending.verification);}
+                var verified=client.complete(pending.flow);
+                if(verified.phone()==null||!value.equals("+"+verified.phone().replaceFirst("^\\+","")))throw invalid();
+                try{identities.bindPhone(CreatorSessionFilter.token(request),pending.creator,issuer,verified.subject(),verified.phone());}
+                catch(DomainException conflict){throw new Failure(409,"LOGIN_ACCOUNT_CONFLICT","该手机号或当前账号已绑定");}
+                browser.removeAttribute(PENDING);return ok(Map.of("bound",true));
+            }catch(LogtoNativeClient.ProviderFailure error){throw failure(error,true);}
+        }
     }
     @PostMapping("/email/sign-in") public ResponseEntity<Map<String,Object>> emailSignIn(@RequestBody Credentials input,HttpServletRequest request,HttpServletResponse response){
         return codeSignIn("email",email(input.email),input.code,request,response);

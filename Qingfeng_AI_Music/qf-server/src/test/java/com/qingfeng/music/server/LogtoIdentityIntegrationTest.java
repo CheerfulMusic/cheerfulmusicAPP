@@ -24,6 +24,28 @@ class LogtoIdentityIntegrationTest {
     private final String issuer="http://localhost:3001/oidc";
     private final WorkApi.Draft draft=new WorkApi.Draft("妈妈","生日祝福","一起做饭的回忆","谢谢你","民谣","回家的风");
 
+    @Test void googleAccountCanBindWithoutLosingItsIdentity(){
+        var guest=identity.create();
+        var signed=identity.signInWithGoogle(guest.token(),guest.creatorId(),UUID.randomUUID().toString(),"google-bind@example.test","Google");
+        logto.bindPhone(signed.token(),signed.creatorId(),issuer,UUID.randomUUID().toString(),"+8613800009876");
+        assertEquals("****9876",logto.profile(signed.creatorId()).orElseThrow().phoneMasked());
+        assertEquals("google-bind@example.test",logto.profile(signed.creatorId()).orElseThrow().email());
+    }
+    @Test void phoneBindingRewardsOnceAndRestoresOriginalAccount(){
+        var guest=identity.create();String subject=UUID.randomUUID().toString();
+        var signed=logto.signIn(guest.token(),guest.creatorId(),issuer,subject,"bind@example.test",null,null);
+        long before=db.queryForObject("SELECT COALESCE(SUM(amount),0) FROM credit_ledger WHERE owner_id=?",Long.class,signed.creatorId());
+        String phoneSubject=UUID.randomUUID().toString();
+        assertThrows(DomainException.class,()->logto.bindPhone(guest.token(),signed.creatorId(),issuer,phoneSubject,"+8613800001234"));
+        logto.bindPhone(signed.token(),signed.creatorId(),issuer,phoneSubject,"+8613800001234");
+        logto.bindPhone(signed.token(),signed.creatorId(),issuer,phoneSubject,"+8613800001234");
+        assertEquals(before+50,db.queryForObject("SELECT COALESCE(SUM(amount),0) FROM credit_ledger WHERE owner_id=?",Long.class,signed.creatorId()));
+        assertEquals("****1234",logto.profile(signed.creatorId()).orElseThrow().phoneMasked());
+        var other=identity.create();var otherSigned=logto.signIn(other.token(),other.creatorId(),issuer,UUID.randomUUID().toString(),"other@example.test",null,null);
+        assertThrows(DomainException.class,()->logto.bindPhone(otherSigned.token(),otherSigned.creatorId(),issuer,phoneSubject,"+8613800001234"));
+        var login=identity.create();
+        assertEquals(signed.creatorId(),logto.signIn(login.token(),login.creatorId(),issuer,phoneSubject,null,"+8613800001234",null).creatorId());
+    }
     @Test void bindingPreservesWorksAndRotatesBrowserSession(){
         var guest=identity.create();var work=works.create(guest.creatorId(),draft);
         var signed=logto.signIn(guest.token(),guest.creatorId(),issuer,UUID.randomUUID().toString(),"user@example.test","+8613800001234","用户");
