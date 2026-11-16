@@ -3,7 +3,7 @@ import { ensureCreator, requestJson, apiUrl, uploadForm } from '../../../shared/
 export interface Revision { id: string; workId: string; workVersion: number; title: string; lyrics: string; source: string; confirmed: boolean; createdAt: string; language?: string|null; templateId?: LyricsTemplateId|null; chorusFirst?: boolean|null; customSections?: string[]|null }
 export interface LyricsRequestState {status:'NOT_FOUND'|'PENDING'|'FAILED'|'SUCCEEDED'|'UNKNOWN';revisionId:string|null;errorCode:string|null}
 export const getLyricsRequest = (work:string,key:string) => call<LyricsRequestState>(`app/works/${work}/lyrics/requests/${encodeURIComponent(key)}`)
-export interface AudioAsset { id: string; workId: string; origin: 'IMPORTED' | 'GENERATED'; contentType: string; byteSize: number; createdAt: string;sectionEdit?:boolean }
+export interface AudioAsset { id: string; workId: string; origin: 'IMPORTED' | 'GENERATED'; contentType: string; byteSize: number; createdAt: string; sectionEdit?: boolean; generationTaskId?: string | null }
 export interface GenerationTask { id: string; revisionId: string; requestKey?:string; status: string; title: string; style?:string; vocalGender?:string; createdAt: string; assetId: string | null; errorCode: string | null; updatedAt: string; nextAttemptAt: string }
 export const closeTaskChecking=(work:string,task:string)=>call<GenerationTask>(`app/works/${work}/generations/${task}/close-checking`,'POST',{acknowledge:true})
 async function call<T>(path: string, method = 'GET', body?: unknown) { await ensureCreator(); return requestJson<T>(path, method, body) }
@@ -74,8 +74,14 @@ export const submitTask = (work: string, revisionId: string, requestKey: string)
 export interface GenerationPreflight {workVersion:number;revisionId:string;styleCharacters:number;styleLimit:number;negativeCharacters:number;negativeLimit:number;notice:string}
 export const preflightGeneration=(work:string,revisionId:string)=>call<GenerationPreflight>(`app/works/${work}/generations/preflight`,'POST',{revisionId})
 export const retryTaskArchive = (work: string, task: string) => call<void>(`app/works/${work}/generations/${task}/retry-archive`, 'POST', {})
-export const audioUrl = (work: string, asset: string, download = false) => apiUrl(`app/works/${work}/audio/${asset}${download ? '?download=true' : ''}`)
-export const createShare = (work: string, assetId: string, revisionId?: string) => call<{ id: string; token: string; expiresAt: string }>(`app/works/${work}/shares`, 'POST', { assetId, revisionId })
+export const audioUrl = (work: string, asset: string, download = false, downloadName?: string) => {
+  const path = `app/works/${work}/audio/${asset}`
+  if (!download) return apiUrl(path)
+  const query = new URLSearchParams({ download: 'true' })
+  if (downloadName) query.set('downloadName', downloadName)
+  return apiUrl(`${path}?${query}`)
+}
+export const createShare = (work: string, assetId: string, revisionId?: string, workTitle?: string) => call<{ id: string; token: string; expiresAt: string }>(`app/works/${work}/shares`, 'POST', { assetId, revisionId, workTitle })
 export const revokeShares = (work: string) => call<void>(`app/works/${work}/shares`, 'DELETE')
 
 export const cancelTask=(work:string,task:string)=>call<GenerationTask>(`app/works/${work}/generations/${task}/cancel`,'POST',{})

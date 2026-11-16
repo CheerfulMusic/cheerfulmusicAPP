@@ -7,13 +7,13 @@ import type {Work} from '../src/modules/studio'
 const api=vi.hoisted(()=>({list:vi.fn(),selection:vi.fn(),select:vi.fn(),toggle:vi.fn(),queue:vi.fn()}))
 vi.mock('../src/modules/works/api/detail',()=>({listAudio:api.list,audioUrl:(w:string,a:string)=>`/audio/${w}/${a}`}))
 vi.mock('../src/modules/works/api/section-edits',()=>({getAudioSelection:api.selection,selectAudio:api.select}))
-vi.mock('../src/shared/player/store',()=>({usePlayer:()=>({setQueue:api.queue,toggle:api.toggle})}))
+vi.mock('../src/shared/player/store',()=>({usePlayer:()=>({setQueue:api.queue,toggle:api.toggle,tracks:[],updateTitles:vi.fn()})}))
 const asset=(id='audio-a',sectionEdit=false):AudioAsset=>({id,sectionEdit,workId:'work-a',origin:'GENERATED',contentType:'audio/mpeg',byteSize:12000,createdAt:'2026-11-10T00:00:00Z'})
 const work={id:'work-a',title:'晚风',recipient:''} as Work
 function deferred<T>(){let resolve!:(v:T)=>void,reject!:(e:Error)=>void;const promise=new Promise<T>((a,b)=>{resolve=a;reject=b});return {promise,resolve,reject}}
 async function flush(){for(let i=0;i<12;i++)await nextTick()}
 let app:App|undefined
-function mount(){const selected=vi.fn(),state=vi.fn();app=createApp({render:()=>h(AudioPanel,{work,onSelected:selected,'onLoad-state':state})});app.mount(document.body.appendChild(document.createElement('div')));return {selected,state}}
+function mount(){const selected=vi.fn(),state=vi.fn(),version=vi.fn();app=createApp({render:()=>h(AudioPanel,{work,title:work.title,tasks:[],onSelected:selected,'onLoad-state':state,'onSelected-version':version})});app.mount(document.body.appendChild(document.createElement('div')));return {selected,state,version}}
 beforeEach(()=>{vi.clearAllMocks();api.list.mockResolvedValue([asset()]);api.selection.mockResolvedValue({asset:asset(),version:3});api.select.mockResolvedValue({asset:asset(),version:4})})
 afterEach(()=>{app?.unmount();app=undefined;document.body.innerHTML=''})
 it('publishes the selected song while the version list is still pending',async()=>{
@@ -39,4 +39,20 @@ it('ignores late responses after the song page unmounts',async()=>{
 })
 it('preserves version preview when the selection cannot be saved',async()=>{
  api.select.mockRejectedValue(new Error('changed'));mount();await flush();document.querySelector<HTMLButtonElement>('.audio-actions button')!.click();await flush();expect(api.toggle).toHaveBeenCalledWith(expect.objectContaining({id:'audio-a'}));expect(document.body.textContent).toContain('changed')
+})
+it('shows both recordings with distinct numbers and reports the selected version', async () => {
+ const first = asset()
+ const second = { ...asset('audio-b'), createdAt: '2026-11-10T00:01:00Z' }
+ api.list.mockResolvedValue([second, first])
+ api.selection.mockResolvedValue({ asset: first, version: 3 })
+ const { selected, version } = mount()
+ await flush()
+ expect(document.body.textContent).toContain('晚风 · 版本 1')
+ expect(document.body.textContent).toContain('晚风 · 版本 2')
+ expect(version.mock.lastCall).toEqual([1])
+ api.select.mockResolvedValue({ asset: second, version: 4 })
+ document.querySelector<HTMLInputElement>('input[value="audio-b"]')!.dispatchEvent(new Event('change'))
+ await flush()
+ expect(selected.mock.lastCall).toEqual([second])
+ expect(version.mock.lastCall).toEqual([2])
 })

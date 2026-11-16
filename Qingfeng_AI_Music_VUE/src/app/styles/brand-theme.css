@@ -69,7 +69,7 @@ input::placeholder,textarea::placeholder { color:#9a858e; opacity:1; }
 .workspace .field :is(input,textarea,select):focus,.music-settings-dialog .field :is(input,textarea):focus {
   border-color:#ef7b67; outline:2px solid #ff432d1c; outline-offset:3px;
 }
-.workspace :is(.detail-panel,.module-card,.work-overview),.song-result,.music-settings-panel,.cover-editor {
+.workspace :is(.detail-panel,.module-card,.work-overview),.song-result,.music-settings-panel {
   background:#ffffffce; border-color:var(--line); box-shadow:var(--brand-shadow); border-radius:20px;
 }
 .workspace .notice { color:var(--warning); background:var(--warning-soft); border-color:var(--warning-border); }

@@ -7,6 +7,7 @@ import PlaybackIcon from '../../../shared/ui/PlaybackIcon.vue'
 import { coverUrl } from '../../works/api/covers'
 import { audioUrl } from '../../works/api/detail'
 import { listWorks, type LibraryItem } from '../../works/api/works'
+import { librarySongTitle } from '../../works/model/song-title'
 import { ownerTrack, type ArtistRelease } from '../api/artist'
 
 const props = defineProps<{ songs: ArtistRelease[]; busy: boolean; published: boolean }>()
@@ -41,8 +42,8 @@ interface WorkRow {
 }
 
 const libraryRows = computed<WorkRow[]>(() => works.value.slice(0, PREVIEW_SIZE).map(item => {
-  const { id, title, recipient, updatedAt } = item.work
-  const songTitle = item.songTitle || title || (recipient ? t('写给{recipient}的歌', { recipient }) : t('我的原创歌曲'))
+  const { id, updatedAt } = item.work
+  const songTitle = librarySongTitle(item)
   const cover = coverUrl(id, item.coverId)
   const track = item.audioId
     ? { id: item.audioId, title: songTitle, cover, audio: audioUrl(id, item.audioId), provenance: item.audioOrigin ?? undefined }

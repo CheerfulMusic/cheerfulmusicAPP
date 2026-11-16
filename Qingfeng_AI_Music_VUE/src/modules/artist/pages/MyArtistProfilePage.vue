@@ -8,14 +8,15 @@ import {
   artistHomeUrl, getArtistProfile, ownerArtistCoverUrl, ownerAvatarUrl, ownerTrack, removeSongFromArtist, saveArtistProfile,
   setArtistVisibility, withdrawSongFromDiscover, type ArtistProfile, type ArtistRelease,
 } from '../api/artist'
-import { prepareProfileImage } from '../model/profile-image'
+import type { CropPosition, ProfileImageKind } from '../model/profile-image'
 import ArtistAvatar from '../components/ArtistAvatar.vue'
 import ArtistHome from '../components/ArtistHome.vue'
 import ProfileAccount from '../components/ProfileAccount.vue'
+import ProfileImageCropDialog from '../components/ProfileImageCropDialog.vue'
 import ProfileWorks from '../components/ProfileWorks.vue'
 import PublishSongDialog from '../components/PublishSongDialog.vue'
 
-interface ImageDraft { file: File; url: string }
+interface ImageDraft { file: File; url: string; source: File | string; position: CropPosition }
 
 const profile = ref<ArtistProfile>()
 const route = useRoute()
@@ -30,9 +31,9 @@ const editing = ref(false)
 const preview = ref(false)
 const loading = ref(true)
 const saving = ref(false)
-const preparingImage = ref(false)
-const busy = computed(() => saving.value || preparingImage.value)
-let imageSelection = 0
+const imageEditor = ref<{ kind: ProfileImageKind; source?: File | string; position?: CropPosition }>()
+const busy = computed(() => saving.value || Boolean(imageEditor.value))
+const coverDragOver = ref(false)
 const discoverRelease = ref<ArtistRelease>()
 const discoverCover = computed(() => discoverRelease.value ? ownerTrack(discoverRelease.value).cover : '')
 const notice = ref('')
@@ -44,8 +45,6 @@ const showLink = ref(false)
 const workCount = ref<number | null>(null)
 const editButton = ref<HTMLButtonElement>()
 const nameInput = ref<HTMLInputElement>()
-const avatarInput = ref<HTMLInputElement>()
-const coverInput = ref<HTMLInputElement>()
 const waveform = [7, 15, 34, 18, 9, 17, 29, 12, 22, 53, 16, 24, 10, 33, 17, 8]
 const avatarSrc = computed(() => avatar.value?.url || (removeAvatar.value ? undefined
   : profile.value?.avatarKey ? ownerAvatarUrl(profile.value.avatarKey) : undefined))
@@ -74,8 +73,8 @@ function revokeImage(draft?: ImageDraft) {
   if (draft) URL.revokeObjectURL(draft.url)
 }
 function clearImageDrafts() {
-  imageSelection++
-  preparingImage.value = false
+  imageEditor.value = undefined
+  coverDragOver.value = false
   revokeImage(avatar.value)
   revokeImage(cover.value)
   avatar.value = undefined
@@ -102,39 +101,43 @@ function apply(value: ArtistProfile) {
   featuredReleaseId.value = savedFeatured.value?.id ?? null
   clearImageDrafts()
 }
-async function chooseImage(event: Event, kind: 'avatar' | 'cover') {
-  const input = event.target as HTMLInputElement
-  const file = input.files?.[0]
-  input.value = ''
-  if (!file || busy.value) return
-  const selection = ++imageSelection
-  preparingImage.value = true
+function openImageEditor(kind: ProfileImageKind, file?: File) {
+  if (!editing.value || busy.value) return
   error.value = ''
-  try {
-    const prepared = await prepareProfileImage(file)
-    if (selection !== imageSelection) return
-    const draft = kind === 'avatar' ? avatar : cover
-    const remove = kind === 'avatar' ? removeAvatar : removeCover
-    const url = URL.createObjectURL(prepared)
-    revokeImage(draft.value)
-    draft.value = { file: prepared, url }
-    remove.value = false
-  } catch (cause) {
-    if (selection === imageSelection) report(cause, '图片处理失败，请重新选择图片。')
-  } finally {
-    if (selection === imageSelection) preparingImage.value = false
-  }
+  const draft = kind === 'avatar' ? avatar.value : cover.value
+  const saved = kind === 'avatar' ? avatarSrc.value : coverSrc.value
+  imageEditor.value = file ? { kind, source: file } : { kind, source: draft?.source ?? saved, position: draft?.position }
+}
+function applyImageCrop(file: File, source: File | string, position: CropPosition) {
+  const kind = imageEditor.value?.kind
+  if (!kind) return
+  const draft = kind === 'avatar' ? avatar : cover
+  const remove = kind === 'avatar' ? removeAvatar : removeCover
+  revokeImage(draft.value)
+  draft.value = { file, source, position, url: URL.createObjectURL(file) }
+  remove.value = false
+  imageEditor.value = undefined
+}
+function dragCover(event: DragEvent) {
+  if (busy.value || !event.dataTransfer?.types.includes('Files')) return
+  event.preventDefault()
+  event.dataTransfer.dropEffect = 'copy'
+  coverDragOver.value = true
+}
+function leaveCoverDrop(event: DragEvent) {
+  if (!(event.currentTarget as HTMLElement).contains(event.relatedTarget as Node | null)) coverDragOver.value = false
+}
+function dropCover(event: DragEvent) {
+  coverDragOver.value = false
+  const file = event.dataTransfer?.files[0]
+  if (file) openImageEditor('cover', file)
 }
 function useDefaultAvatar() {
-  imageSelection++
-  preparingImage.value = false
   revokeImage(avatar.value)
   avatar.value = undefined
   removeAvatar.value = Boolean(profile.value?.avatarKey)
 }
 function useDefaultCover() {
-  imageSelection++
-  preparingImage.value = false
   revokeImage(cover.value)
   cover.value = undefined
   removeCover.value = Boolean(profile.value?.coverKey)
@@ -285,12 +288,9 @@ onBeforeUnmount(clearImageDrafts)
         <div class="profile-avatar-wrap">
           <ArtistAvatar v-if="avatarSrc" :name="stageName" :src="avatarSrc" />
           <span v-else class="profile-avatar-default" aria-hidden="true"><img src="/brand/logo-symbol.svg" alt=""></span>
-          <template v-if="editing">
-            <input ref="avatarInput" class="profile-avatar-input" type="file" accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp" tabindex="-1" :aria-label="t('更换头像')" :disabled="busy" @change="chooseImage($event, 'avatar')">
-            <button class="profile-avatar-camera" type="button" :aria-label="t('更换头像')" :title="t('更换头像')" :disabled="busy" @click="avatarInput?.click()">
-              <span aria-hidden="true"></span>
-            </button>
-          </template>
+          <button v-if="editing" class="profile-avatar-camera" type="button" :aria-label="t('编辑头像')" :title="t('编辑头像')" :disabled="saving" @click="openImageEditor('avatar')">
+            <span aria-hidden="true"></span>
+          </button>
         </div>
         <div class="profile-summary-copy">
           <h2 id="profile-summary-name">{{ profile.stageName || t('你的艺名') }}</h2>
@@ -324,10 +324,15 @@ onBeforeUnmount(clearImageDrafts)
               <div class="profile-form-row">
                 <span>{{ t('主页封面') }}</span>
                 <div class="profile-cover-settings">
-                  <img v-if="coverSrc" class="profile-cover-thumbnail" :src="coverSrc" alt="">
+                  <button type="button" class="profile-cover-drop" :class="{ 'is-drop-target': coverDragOver }" :disabled="saving"
+                    @click="openImageEditor('cover')" @dragenter="dragCover" @dragover="dragCover" @dragleave="leaveCoverDrop" @drop.prevent="dropCover">
+                    <img v-if="coverSrc" class="profile-cover-thumbnail" :src="coverSrc" alt="">
+                    <span>
+                      <strong>{{ t(coverSrc ? '编辑主页封面' : '上传主页封面') }}</strong>
+                      <small>{{ t('也可将图片拖到这里') }}</small>
+                    </span>
+                  </button>
                   <div class="profile-inline-actions">
-                    <input ref="coverInput" type="file" accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp" :aria-label="t('主页封面')" :disabled="busy" hidden @change="chooseImage($event, 'cover')">
-                    <button type="button" class="profile-pill" :disabled="busy" @click="coverInput?.click()">{{ t('更换封面') }}</button>
                     <button v-if="coverSrc" type="button" class="profile-pill" @click="useDefaultCover">{{ t('恢复默认封面') }}</button>
                     <small class="profile-field-hint">{{ t('JPG、PNG 或 WebP，最多 5 MB') }}</small>
                   </div>
@@ -387,7 +392,7 @@ onBeforeUnmount(clearImageDrafts)
             <div v-if="editing" class="profile-form-row profile-form-footer">
               <div class="profile-inline-actions">
                 <button type="submit" class="profile-pill profile-save" :disabled="busy || !dirty">
-                  {{ t(preparingImage ? '正在处理图片…' : saving ? '正在保存…' : '保存修改') }}
+                  {{ t(saving ? '正在保存…' : '保存修改') }}
                 </button>
                 <button type="button" class="profile-pill" @click="cancelEdits">{{ t('取消') }}</button>
                 <button v-if="avatarSrc" type="button" class="profile-avatar-reset" @click="useDefaultAvatar">{{ t('使用默认头像') }}</button>
@@ -401,6 +406,8 @@ onBeforeUnmount(clearImageDrafts)
         @publish="discoverRelease = $event" @remove="remove" @withdraw="withdraw" @library-count="workCount = $event" />
       <PublishSongDialog v-if="discoverRelease" :source="discoverRelease" :cover="discoverCover" discover
         @published-to-discover="updateDiscoverRelease" @close="discoverRelease = undefined" />
+      <ProfileImageCropDialog v-if="imageEditor" :kind="imageEditor.kind" :source="imageEditor.source" :initial-position="imageEditor.position"
+        @apply="applyImageCrop" @close="imageEditor = undefined" />
     </template>
   </div>
 </template>
@@ -431,7 +438,6 @@ onBeforeUnmount(clearImageDrafts)
   background: radial-gradient(circle at 22% 18%, #ffe1c3, transparent 58%), linear-gradient(135deg, #ffb795, #eb91bb);
 }
 .profile-avatar-default img { width: 48%; height: auto; }
-.profile-avatar-input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
 .profile-avatar-camera {
   position: absolute; display: grid; place-items: center; right: 0; bottom: 0; width: 26px; height: 26px;
   padding: 0; border: 2px solid var(--profile-card); border-radius: 50%; background: #332c30; color: #fff; cursor: pointer;
@@ -469,6 +475,16 @@ onBeforeUnmount(clearImageDrafts)
 }
 .profile-form-row input, .profile-form-row select { min-height: 34px; }
 .profile-cover-settings { display: grid; gap: 7px; min-width: 0; }
+.profile-cover-drop {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px 11px; min-height: 56px; min-width: 0; padding: 8px 10px;
+  border: 1px dashed #dabfc7; border-radius: 9px; background: #fff8f6; color: var(--ink); font: inherit; text-align: left; cursor: pointer;
+}
+.profile-cover-drop :is(strong, small) { display: block; }
+.profile-cover-drop strong { font-weight: 650; }
+.profile-cover-drop small { margin-top: 2px; color: var(--muted); font-size: 11px; }
+.profile-cover-drop:hover, .profile-cover-drop.is-drop-target { border-color: var(--accent-text); background: #ffeae4; }
+.profile-cover-drop:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 3px; }
+.profile-cover-drop .profile-cover-thumbnail { width: min(100%, 136px); }
 .profile-cover-thumbnail {
   display: block; width: min(100%, 180px); aspect-ratio: 4 / 1; object-fit: cover;
   border: 1px solid var(--profile-line); border-radius: 8px;
