@@ -5,8 +5,11 @@ import com.qingfeng.music.lyrics.application.*;
 import com.qingfeng.music.common.exception.DomainException;
 import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.Test;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.net.*;
 import java.net.http.*;
+import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.*;
@@ -122,6 +125,76 @@ class InspirationRewriteTest {
             assertFalse(body.has("thinking"), "Qwen 不应收到 DeepSeek 专有的 thinking 参数");
             assertEquals("json_object", body.path("response_format").path("type").asText());
         } finally { server.stop(0); }
+    }
+
+    @Test void onlyQianwenFlashLyricLineRequestsDisableThinking() throws Exception {
+        var client = org.mockito.Mockito.mock(HttpClient.class);
+        @SuppressWarnings("unchecked") HttpResponse<String> response = org.mockito.Mockito.mock(HttpResponse.class);
+        var requests = new ArrayList<HttpRequest>();
+        org.mockito.Mockito.when(response.statusCode()).thenReturn(200);
+        org.mockito.Mockito.when(response.body()).thenReturn("""
+            {"choices":[{"finish_reason":"stop","message":{"content":"{\\\"text\\\":\\\"有效结果\\\"}"}}]}
+            """);
+        org.mockito.Mockito.when(client.<String>send(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any()))
+            .thenAnswer(call -> { requests.add(call.getArgument(0)); return response; });
+
+        URI qianwen = URI.create(DeepSeekInspirationRewriter.QWEN_ENDPOINT);
+        String flash = DeepSeekInspirationRewriter.QWEN_MODEL;
+        var lyricLine = new DeepSeekInspirationRewriter("offline-key", flash, qianwen, client).lyricLineMode();
+        var inspiration = new DeepSeekInspirationRewriter("offline-key", flash, qianwen, client);
+        var anotherModel = new DeepSeekInspirationRewriter("offline-key", "custom-model", qianwen, client).lyricLineMode();
+        var anotherProvider = new DeepSeekInspirationRewriter("offline-key", flash, URI.create("https://example.invalid"), client).lyricLineMode();
+        for (var writer : List.of(lyricLine, inspiration, anotherModel, anotherProvider)) {
+            assertEquals("有效结果", writer.rewrite("操作：RHYME_CANDIDATES\n待改写句：月光照着浪", "zh-CN"));
+        }
+
+        var json = new ObjectMapper();
+        var fastPayload = json.readTree(requestBody(requests.get(0)));
+        assertTrue(fastPayload.path("enable_thinking").isBoolean());
+        assertFalse(fastPayload.path("enable_thinking").asBoolean());
+        assertFalse(fastPayload.has("thinking"));
+        assertEquals("json_object", fastPayload.path("response_format").path("type").asText());
+        for (var request : requests.subList(1, requests.size())) {
+            assertFalse(json.readTree(requestBody(request)).has("enable_thinking"));
+        }
+    }
+
+    @Test void lyricLineTimeoutAndConnectionFailureKeepDistinctSafeMessages() throws Exception {
+        var client = org.mockito.Mockito.mock(HttpClient.class);
+        var writer = new DeepSeekInspirationRewriter("offline-key", DeepSeekInspirationRewriter.QWEN_MODEL,
+            URI.create(DeepSeekInspirationRewriter.QWEN_ENDPOINT), client).lyricLineMode();
+        org.mockito.Mockito.when(client.<String>send(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any()))
+            .thenThrow(new HttpTimeoutException("private transport timeout detail"),
+                new HttpConnectTimeoutException("private connect timeout detail"), new IOException("private connection detail"));
+
+        var timeout = assertThrows(DomainException.class, () -> writer.rewrite("月光照着浪", "zh-CN"));
+        assertEquals("REWRITE_PROVIDER_UNAVAILABLE", timeout.code());
+        assertEquals("AI改写等待模型响应超时，请稍后重试。原文仍会保留。", timeout.getMessage());
+
+        var connectTimeout = assertThrows(DomainException.class, () -> writer.rewrite("月光照着浪", "zh-CN"));
+        assertEquals("REWRITE_PROVIDER_UNAVAILABLE", connectTimeout.code());
+        assertEquals("AI改写连接服务超时，请稍后重试。原文仍会保留。", connectTimeout.getMessage());
+
+        var disconnected = assertThrows(DomainException.class, () -> writer.rewrite("月光照着浪", "zh-CN"));
+        assertEquals("REWRITE_PROVIDER_UNAVAILABLE", disconnected.code());
+        assertEquals("AI改写连接失败，请稍后重试。原文仍会保留。", disconnected.getMessage());
+        org.mockito.Mockito.verify(client, org.mockito.Mockito.times(3)).send(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+    }
+
+    private static String requestBody(HttpRequest request) throws Exception {
+        var data = new ByteArrayOutputStream();
+        var body = new CompletableFuture<String>();
+        request.bodyPublisher().orElseThrow().subscribe(new Flow.Subscriber<ByteBuffer>() {
+            @Override public void onSubscribe(Flow.Subscription subscription) { subscription.request(Long.MAX_VALUE); }
+            @Override public void onNext(ByteBuffer bytes) {
+                var chunk = new byte[bytes.remaining()];
+                bytes.get(chunk);
+                data.writeBytes(chunk);
+            }
+            @Override public void onComplete() { body.complete(data.toString(StandardCharsets.UTF_8)); }
+            @Override public void onError(Throwable error) { body.completeExceptionally(error); }
+        });
+        return body.get(1, TimeUnit.SECONDS);
     }
 
     @Test void deepSeekRequestStillSendsThinkingDisabled() throws Exception {
