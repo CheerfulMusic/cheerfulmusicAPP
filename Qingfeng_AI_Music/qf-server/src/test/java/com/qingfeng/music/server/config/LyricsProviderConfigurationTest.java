@@ -26,8 +26,8 @@ class LyricsProviderConfigurationTest {
         assertInstanceOf(OpenAiLyricsWriter.class, config.lyricsWriter(env));
         assertFalse(config.lyricsWriter(env).isConfigured());
     }
-    @Test void existingDeploymentsAndExplicitRollbackKeepDeepSeek() {
-        assertInstanceOf(DeepSeekLyricsWriter.class, config.lyricsWriter(new MockEnvironment()));
+    @Test void defaultUsesOpenAiAndExplicitRollbackKeepsDeepSeek() {
+        assertInstanceOf(OpenAiLyricsWriter.class, config.lyricsWriter(new MockEnvironment()));
         assertTrue(config.lyricsWriter(new MockEnvironment().withProperty("qingfeng.lyrics.provider", "deepseek")
             .withProperty("DEEPSEEK_API_KEY", "offline-key")).isConfigured());
     }

@@ -16,7 +16,7 @@ import tools.jackson.databind.ObjectMapper;
 
 /** GPT 写词使用官方 Responses API；失败不重发付费请求，也不覆盖已有歌词。 */
 public final class OpenAiLyricsWriter implements LyricsWriter {
-    public static final String DEFAULT_MODEL = "gpt-6.1-terra";
+    public static final String DEFAULT_MODEL = "gpt-6.1-sol";
     private static final System.Logger LOG = System.getLogger(OpenAiLyricsWriter.class.getName());
     private final String key, model;
     private final URI endpoint;

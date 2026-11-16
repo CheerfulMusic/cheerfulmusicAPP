@@ -39,7 +39,7 @@ class OpenAiLyricsWriterTest {
             String previous = "[Verse 2]\n门口的小碗还在\nTake your time, my child";
             var draft = fixture.writer().write(WORK, "mixed", "保留第二段原文", previous, "轻快民谣 女声");
             var request = fixture.received.get();
-            assertEquals(OpenAiLyricsWriter.DEFAULT_MODEL, request.path("model").asText());
+            assertEquals("gpt-6.1-sol", request.path("model").asText());
             assertEquals("Bearer offline-key", fixture.authorization.get());
             assertEquals("/v1/responses", fixture.path.get());
             assertFalse(request.path("store").asBoolean());

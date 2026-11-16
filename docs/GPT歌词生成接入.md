@@ -2,9 +2,15 @@
 
 ## 本次范围
 
-自定义创作的生成歌词和重新生成歌词使用 OpenAI。快捷创作和 Agent 的共享写词服务由 `qingfeng.lyrics.provider` 配置，默认使用 DeepSeek。OpenAI 写词使用官方 `https://api.openai.com/v1/responses`，默认型号 `gpt-6.1-terra`，`reasoning.effort=low`，单次输出上限 6000 tokens，请求超时 90 秒。型号可以通过服务端配置调整，需要使用支持 Responses、严格结构化输出和 low reasoning 的模型。
+自定义创作的生成歌词和重新生成歌词使用 OpenAI。快捷创作和 Agent 的共享写词服务由 `qingfeng.lyrics.provider` 配置，2026-11-16 起默认使用 OpenAI。OpenAI 写词使用官方 `https://api.openai.com/v1/responses`，默认型号 `gpt-6.1-sol`，`reasoning.effort=low`，单次输出上限 6000 tokens，请求超时 90 秒。型号可以通过服务端配置调整，需要使用支持 Responses、严格结构化输出和 low reasoning 的模型。
 
 复用现有写词提示词、语言选择、段落模板、保留原句要求、音乐设置与 CreativePlan；不改变歌词版本保存流程。新增 GPT 版本来源记为 `OPENAI`，DeepSeek 仍记为 `DEEPSEEK`，历史数据不改写。灵感输入框的“AI 改写”、音乐生成、封面生成仍保持各自原有提供方。
+
+## 2026-11-16 模型切换
+
+整首歌词生成的默认模型改为 `gpt-6.1-sol`，保留 Responses、low reasoning、6000 输出 token、90 秒超时及结构化输出协议。自定义创作原有 DeepSeek 兜底仍保留；共享写词服务默认不启用兜底。灵感改写、选中歌词改写和单句润色继续使用各自改写配置。
+
+私有配置或环境变量若显式指定旧 provider/model，会覆盖代码默认值；发布时须核对并将歌词配置设置为下列值。此次代码修改不代表生产模型已切换，也未验证账户对 Sol 的真实调用权限。
 
 ## 配置
 
@@ -12,7 +18,8 @@
 
 ```properties
 qingfeng.lyrics.enabled=true
-qingfeng.providers.openai.model=gpt-6.1-terra
+qingfeng.lyrics.provider=openai
+qingfeng.providers.openai.model=gpt-6.1-sol
 # qingfeng.providers.openai.api-key=（仅在私有配置填写）
 ```
 
@@ -42,6 +49,6 @@ qingfeng.providers.openai.model=gpt-6.1-terra
 
 参考：
 
-- [GPT-6.1 Terra 型号与能力](https://developers.openai.com/api/docs/models/gpt-6.1-terra)
+- [GPT-6.1 Sol 型号与能力](https://developers.openai.com/api/docs/models/gpt-6.1-sol)
 - [Responses 严格结构化输出](https://developers.openai.com/api/docs/guides/structured-outputs)
 - [当前模型迁移指南](https://developers.openai.com/api/docs/guides/latest-model)

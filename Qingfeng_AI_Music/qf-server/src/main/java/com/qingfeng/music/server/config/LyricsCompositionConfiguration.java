@@ -29,7 +29,7 @@ public class LyricsCompositionConfiguration {
         return new LyricSelectionRewriteService(works, rewriter);
     }
     @Bean LyricsWriter lyricsWriter(Environment env){
-        return switch(env.getProperty("qingfeng.lyrics.provider","deepseek").trim().toLowerCase(java.util.Locale.ROOT)){
+        return switch(env.getProperty("qingfeng.lyrics.provider","openai").trim().toLowerCase(java.util.Locale.ROOT)){
             case "openai" -> {
                 var primary = openAiWriter(env);
                 yield env.getProperty("qingfeng.lyrics.deepseek-fallback-enabled",Boolean.class,false)
