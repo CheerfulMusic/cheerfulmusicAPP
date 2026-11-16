@@ -41,16 +41,22 @@ public final class GenerationWorker {
         return runOnce(ExecutionRepository.Phase.ANY);
     }
     public boolean runOnce(ExecutionRepository.Phase phase) {
+        return runOnce(phase,provider.name());
+    }
+    public boolean runVocalAdjustment(ExecutionRepository.Phase phase){
+        return runOnce(phase,SectionEditingService.VOCAL_ADJUSTMENT_QUEUE);
+    }
+    private boolean runOnce(ExecutionRepository.Phase phase,String queue) {
         if (!provider.isConfigured()) return false;
         String token=UUID.randomUUID().toString(); Instant now=now();
         String taskId=null;ScheduledExecutorService heartbeat=null;
         try {
-            var found=repository.claim(provider.name(),token,now,now.plus(lease),phase,maxInFlight);
+            var found=repository.claim(queue,token,now,now.plus(lease),phase,maxInFlight);
             if (found.isEmpty()) return false;
             var execution=found.get(); taskId=execution.task().id();
             String claimedTask=taskId;
             heartbeat=Executors.newSingleThreadScheduledExecutor(r->{var thread=new Thread(r,"generation-lease-heartbeat");thread.setDaemon(true);return thread;});
-            heartbeat.scheduleAtFixedRate(()->{try{repository.renew(provider.name(),claimedTask,token,now(),now().plus(lease));}catch(RuntimeException ignored){/* 不延长失败租约，后续更新仍受令牌条件保护。 */}},20,20,TimeUnit.SECONDS);
+            heartbeat.scheduleAtFixedRate(()->{try{repository.renew(queue,claimedTask,token,now(),now().plus(lease));}catch(RuntimeException ignored){/* 不延长失败租约，后续更新仍受令牌条件保护。 */}},20,20,TimeUnit.SECONDS);
             switch(execution.task().status()) {
                 case QUEUED -> submit(execution);
                 case SUBMITTING -> repository.unknown(taskId,token,"WORKER_INTERRUPTED",now());
@@ -71,14 +77,18 @@ public final class GenerationWorker {
         boolean invoking=false;String externalId=null;
         try {
             var direction=settings==null?null:settings.frozen(task.workId(),task.id()).orElse(null);
-            var request=direction==null?new MusicProvider.Request(task.title(),task.lyrics(),task.style(),task.vocalGender()):new MusicProvider.Request(task.title(),task.lyrics(),direction.style(),task.vocalGender(),direction.negativeTags(),true);
+            var request=direction==null||direction.style()==null?new MusicProvider.Request(task.title(),task.lyrics(),task.style(),task.vocalGender()):new MusicProvider.Request(task.title(),task.lyrics(),direction.style(),task.vocalGender(),direction.negativeTags(),true);
             var edit=edits==null?java.util.Optional.<SectionEditRepository.Edit>empty():edits.edit(task.id());
+            var adjustment=direction==null?null:direction.vocalAdjustment();
+            if(SectionEditingService.VOCAL_ADJUSTMENT_QUEUE.equals(task.provider())&&(edit.isEmpty()||adjustment==null)){
+                throw new IllegalStateException("调整唱法任务缺少片段或唱法快照");
+            }
             provider.validate(request);
             repository.finishAttempt(attempt,"COMPLETED",null,now());
             if (!repository.startSubmission(task.id(),token,now())) return;
             attempt=repository.attempt(task.id(),"SUBMIT",now());
             invoking=true;
-            var accepted=edit.isPresent()?provider.replace(request,edit.get().replacement(),task.id()):provider.submit(request,task.id());
+            var accepted=edit.isPresent()?provider.replace(request,edit.get().replacement(adjustment),task.id()):provider.submit(request,task.id());
             if (accepted==null || accepted.providerTaskId()==null || accepted.providerTaskId().isBlank()
                 || accepted.providerTaskId().length()>255) throw new IllegalStateException("缺少供应商任务标识");
             externalId=accepted.providerTaskId();

@@ -3,10 +3,10 @@ import {afterEach,beforeEach,expect,it,vi} from 'vitest'
 import {createApp,h,nextTick,reactive,type App} from 'vue'
 import SyncedLyrics from '../src/modules/works/components/SyncedLyrics.vue'
 import type {PlaybackLyrics} from '../src/modules/works/api/detail'
-const api=vi.hoisted(()=>({get:vi.fn(),sync:vi.fn(),rewrite:vi.fn()}))
+const api=vi.hoisted(()=>({get:vi.fn(),sync:vi.fn(),rewrite:vi.fn(),rhyme:vi.fn()}))
 let player:ReturnType<typeof reactive<{current:{id:string}|null;playing:boolean;time:number;seekVersion:number}>>
 vi.mock('../src/shared/player/store',()=>({usePlayer:()=>player}))
-vi.mock('../src/modules/works/api/detail',()=>({getPlaybackLyrics:api.get,syncPlaybackLyrics:api.sync,rewriteLyricLine:api.rewrite}))
+vi.mock('../src/modules/works/api/detail',()=>({getPlaybackLyrics:api.get,syncPlaybackLyrics:api.sync,rewriteLyricLine:api.rewrite,rhymeLyricLine:api.rhyme}))
 let app:App|undefined
 const scroll=vi.fn(),seek=vi.fn(),edit=vi.fn()
 const lines=[{text:'第一句',start:10,end:15},{text:'第二句',start:18,end:25},{text:'第三句',start:30,end:35}]
@@ -82,6 +82,41 @@ it('keeps seeking independent from editing and sends the selected repeated line 
  expect(field.value).toBe('新的副歌')
  document.querySelector('form.playback-line-draft')!.dispatchEvent(new Event('submit',{cancelable:true}));await flush()
  expect(edit).toHaveBeenCalledExactlyOnceWith({text:'副歌',start:32,end:37,occurrence:1,replacement:'新的副歌'})
+})
+it('uses the selected occurrence and supports opting into cross-language rhyme before confirming the section',async()=>{
+ const ready=snapshot('READY')
+ ready.text='[Verse]\n我挥手说 farewell\n我们走到海边\n\n[Chorus]\n我挥手说 farewell\n灯火等你回来'
+ ready.lines=[
+   {text:'我挥手说 farewell',start:10,end:14},
+   {text:'我们走到海边',start:15,end:18},
+   {text:'我挥手说 farewell',start:32,end:37},
+   {text:'灯火等你回来',start:38,end:44},
+ ]
+ api.get.mockResolvedValue(ready)
+ api.rhyme.mockResolvedValueOnce({status:'NO_MATCH',referenceIndex:1,candidates:[]}).mockResolvedValueOnce({
+   status:'SUGGESTIONS',referenceIndex:1,original:{word:'farewell',sound:'ɛl'},reference:{word:'来',sound:'ai'},
+   candidates:[{text:'我挥手说 goodbye',ending:{word:'goodbye',sound:'aɪ'},match:'CROSS_LANGUAGE'}],
+ })
+ mount(true);await flush()
+ document.querySelector<HTMLButtonElement>('[data-line="2"] .lyric-edit-line')!.click();await flush()
+ Array.from(document.querySelectorAll<HTMLButtonElement>('.playback-line-actions button')).find(button=>button.textContent==='更押韵')!.click()
+ await flush()
+ const panel=document.querySelector('.lyric-rhyme-editor')!
+ const reference=panel.querySelector('select')!
+ expect(Array.from(reference.options).map(option=>option.textContent?.trim())).toEqual(['自动找参考句','第 2 句 · 灯火等你回来'])
+ reference.value='1';reference.dispatchEvent(new Event('change'));await flush()
+ panel.querySelectorAll<HTMLInputElement>('input[type=checkbox]')[1]!.click();await flush()
+ panel.querySelector<HTMLButtonElement>('.rhyme-generate')!.click();await flush()
+ expect(api.rhyme).toHaveBeenLastCalledWith('work-a',expect.objectContaining({
+   line:'我挥手说 farewell',lines:['我挥手说 farewell','灯火等你回来'],lineIndex:0,referenceIndex:1,language:'mixed',allowCrossLanguage:true,
+ }))
+ expect(panel.textContent).toContain('跨语言近韵')
+ expect(Array.from(panel.querySelectorAll('mark')).map(mark=>mark.textContent)).toEqual(['来 · ai','farewell · ɛl','goodbye · aɪ'])
+ panel.querySelector<HTMLButtonElement>('.rhyme-candidates button')!.click();await flush()
+ expect(edit).not.toHaveBeenCalled()
+ expect(document.querySelector<HTMLTextAreaElement>('.playback-line-draft textarea')!.value).toBe('我挥手说 goodbye')
+ document.querySelector('form.playback-line-draft')!.dispatchEvent(new Event('submit',{cancelable:true}));await flush()
+ expect(edit).toHaveBeenCalledExactlyOnceWith({text:'我挥手说 farewell',start:32,end:37,occurrence:1,replacement:'我挥手说 goodbye'})
 })
 it('stops polling after five consecutive failures and cleans all timers on unmount',async()=>{
  api.get.mockRejectedValue(new Error('offline'));mount();await flush();await vi.advanceTimersByTimeAsync(90000);await flush();expect(api.get).toHaveBeenCalledTimes(5);app!.unmount();app=undefined;await vi.advanceTimersByTimeAsync(200000);expect(api.get).toHaveBeenCalledTimes(5)

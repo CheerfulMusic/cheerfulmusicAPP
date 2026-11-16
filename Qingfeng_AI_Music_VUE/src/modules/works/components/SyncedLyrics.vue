@@ -5,7 +5,10 @@ import { usePlayer } from '../../../shared/player/store'
 import { ApiError } from '../../../shared/http/api-client'
 import { lyricPosition, plainLyricLines } from '../../../shared/player/lyric-timeline'
 import { getPlaybackLyrics, rewriteLyricLine, syncPlaybackLyrics, type LyricRewriteAction, type PlaybackLyrics } from '../api/detail'
-import { comparableLyric, type EditHint } from '../model/section-edit'
+import { comparableLyric, hintedLine, lyricSlices, type EditHint } from '../model/section-edit'
+import { rhymeSectionAt, type LyricRhymeSection } from '../model/lyric-rhyme'
+import { isLyricLine } from '../model/lyric-line-edit'
+import LyricRhymeEditor from './LyricRhymeEditor.vue'
 const props=withDefaults(defineProps<{workId:string;assetId:string;lyrics?:string;language?:string|null;editable?:boolean;sectionOpen?:boolean;playerTrackId?:string;autoSyncEnabled?:boolean;followEnabled?:boolean;refreshKey?:number}>(),{autoSyncEnabled:true,followEnabled:true})
 const emit=defineEmits<{seek:[time:number];edit:[hint?:EditHint]}>()
 const player=usePlayer(),data=ref<PlaybackLyrics>(),loading=ref(false),syncing=ref(false),error=ref(''),following=ref(true),viewport=ref<HTMLElement>()
@@ -23,6 +26,24 @@ const validDraft=computed(()=>{
   return !!text&&!/[\r\n\u2028\u2029]/.test(text)
 })
 const lineInput=ref<HTMLTextAreaElement>(),rewriteBusy=ref(false),suggestion=ref(''),rewriteError=ref('')
+const rhymeOpen=ref(false)
+const rhymeContext=computed<{section:LyricRhymeSection;manualOnly:boolean}|undefined>(()=>{
+  const draft=lineDraft.value
+  if(!draft||!isLyricLine(draft.text.trim()))return
+  const source=data.value?.text||props.lyrics||''
+  const original=lyricSlices(source)
+  const selected=original[hintedLine(original,draft.hint)]
+  if(selected&&comparableLyric(selected.text)===comparableLyric(draft.hint.text)){
+    const section=rhymeSectionAt(source,selected.start,draft.text)
+    if(section)return {section,manualOnly:false}
+  }
+  // Timing rows can differ from the written lines. Offer nearby rows only as explicit references.
+  const first=Math.max(0,draft.index-4)
+  const nearby=rows.value.slice(first,draft.index+5)
+  const lines=nearby.map((row,i)=>i+first===draft.index?draft.text.trim():row.text.trim())
+  const lineIndex=lines.slice(0,draft.index-first).filter(isLyricLine).length
+  return {section:{lines:lines.filter(isLyricLine),lineIndex},manualOnly:true}
+})
 const lyricFrozen=computed(()=>!!lineDraft.value||props.sectionOpen)
 const rewriteActions: {action:LyricRewriteAction; label:string}[]=[
   {action:'COLLOQUIAL',label:'更顺口'},
@@ -31,7 +52,7 @@ const rewriteActions: {action:LyricRewriteAction; label:string}[]=[
 ]
 let rewriteTurn=0
 function clearLine(){
-  rewriteTurn++;lineDraft.value=undefined;rewriteBusy.value=false;suggestion.value='';rewriteError.value=''
+  rewriteTurn++;lineDraft.value=undefined;rewriteBusy.value=false;suggestion.value='';rewriteError.value='';rhymeOpen.value=false
 }
 async function editLine(index:number){
   const line=rows.value[index]
@@ -50,8 +71,11 @@ async function editLine(index:number){
 async function suggestLine(action:LyricRewriteAction){
   const draft=lineDraft.value,text=draft?.text.trim()
   if(!draft||!text||text.length>160||rewriteBusy.value)return
+  suggestion.value='';rewriteError.value=''
+  if(action==='RHYME'){rhymeOpen.value=!!rhymeContext.value;return}
+  rhymeOpen.value=false
   const turn=++rewriteTurn
-  rewriteBusy.value=true;suggestion.value='';rewriteError.value=''
+  rewriteBusy.value=true
   try{
     const value=await rewriteLyricLine(props.workId,{requestId:crypto.randomUUID(),action,line:text,context:draft.context,language:props.language||(/[\u3400-\u9fff]/.test(text)?'zh-CN':'en')})
     if(turn!==rewriteTurn||lineDraft.value?.text.trim()!==text)return
@@ -61,6 +85,12 @@ async function suggestLine(action:LyricRewriteAction){
   }catch(e){
     if(turn===rewriteTurn)rewriteError.value=e instanceof Error?e.message:'改写暂不可用，原歌词已保留。'
   }finally{if(turn===rewriteTurn)rewriteBusy.value=false}
+}
+function applyRhyme(replacement:string){
+  if(!lineDraft.value||!rhymeOpen.value||props.sectionOpen)return
+  lineDraft.value.text=replacement
+  rhymeOpen.value=false
+  void nextTick(()=>lineInput.value?.focus({preventScroll:true}))
 }
 function confirmLine(){
   const draft=lineDraft.value
@@ -131,6 +161,7 @@ watch(()=>[player.playing,isCurrent.value,loading.value,data.value?.status],()=>
 watch(()=>[position.value.anchor,isCurrent.value,timed.value],()=>{if(following.value)void center()})
 watch(()=>player.seekVersion,()=>{if(isCurrent.value)resume(false)})
 watch(()=>props.sectionOpen,(open,wasOpen)=>{if(!open&&wasOpen)clearLine()})
+watch(rhymeContext,()=>{rhymeOpen.value=false})
 watch(lyricFrozen,value=>{if(!value)resume(false)})
 onMounted(()=>document.addEventListener('visibilitychange',visible))
 onBeforeUnmount(()=>{disposed=true;sequence++;rewriteTurn++;clearTimeout(followTimer);clearTimeout(pollTimer);document.removeEventListener('visibilitychange',visible)})
@@ -142,13 +173,15 @@ onBeforeUnmount(()=>{disposed=true;sequence++;rewriteTurn++;clearTimeout(followT
     <div v-else-if="plain.length" class="plain-lyric-lines"><p v-for="(line,index) in plain" :key="index">{{ line }}</p></div><p v-else class="lyric-empty">{{ loading?t('正在载入歌词…'):t('这首歌暂时没有可展示的歌词。') }}</p>
   </div>
   <form v-if="lineDraft" class="playback-line-draft" @submit.prevent="confirmLine">
-    <label class="field">{{ t('修改这一句') }}<textarea ref="lineInput" v-model="lineDraft.text" rows="2" maxlength="5000" @input="suggestion=''" /></label>
+    <label class="field">{{ t('修改这一句') }}<textarea ref="lineInput" v-model="lineDraft.text" rows="2" maxlength="5000" @input="suggestion='';rhymeOpen=false" /></label>
     <div class="playback-line-actions" :aria-label="t('AI 改写')">
-      <button v-for="item in rewriteActions" :key="item.action" type="button" class="text-button" :disabled="rewriteBusy||!validDraft||lineDraft.text.trim().length>160" @click="suggestLine(item.action)">{{ t(item.label) }}</button>
+      <button v-for="item in rewriteActions" :key="item.action" type="button" class="text-button" :disabled="rewriteBusy||!validDraft||lineDraft.text.trim().length>160||(item.action==='RHYME'&&!rhymeContext)" :aria-expanded="item.action==='RHYME'?rhymeOpen:undefined" @click="suggestLine(item.action)">{{ t(item.label) }}</button>
     </div>
     <p v-if="rewriteBusy" role="status">{{ t('正在改写这句歌词…') }}</p>
     <p v-if="rewriteError" role="alert">{{ t(rewriteError) }}</p>
     <div v-if="suggestion" class="playback-line-suggestion"><p>{{ suggestion }}</p><button type="button" class="text-button" @click="lineDraft.text=suggestion;suggestion=''">{{ t('使用这句') }}</button></div>
+    <LyricRhymeEditor v-if="rhymeOpen&&rhymeContext" :work-id="workId" :section="rhymeContext.section" :language="language"
+      :manual-only="rhymeContext.manualOnly" :disabled="sectionOpen" @apply="applyRhyme" @close="rhymeOpen=false" />
     <div class="playback-line-actions">
       <button type="button" class="button secondary" @click="clearLine">{{ t('取消') }}</button>
       <button type="submit" class="button" :disabled="!validDraft||lineDraft.text.trim()===lineDraft.hint.text.trim()">{{ t('确认重唱范围') }}</button>

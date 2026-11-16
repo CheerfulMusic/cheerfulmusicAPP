@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, ref, shallowRef } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, shallowRef, watch } from 'vue'
 import { t } from '../../../shared/i18n'
 import type { LyricRewriteAction } from '../api/detail'
 import { lyricRewriteError, lyricsMaxLength, selectLyricLine, suggestLyricLine, type LyricLineSelection } from '../model/lyric-line-edit'
+import { lyricSectionPrefix, rhymeSectionAt } from '../model/lyric-rhyme'
+import LyricRhymeEditor from './LyricRhymeEditor.vue'
 
 const props = defineProps<{ workId: string; language?: string | null; disabled: boolean }>()
 const lyrics = defineModel<string>({ required: true })
@@ -15,9 +17,15 @@ const selection = shallowRef<LyricLineSelection>()
 const suggestion = ref<string>()
 const busy = ref(false)
 const error = ref('')
+const rhymeOpen = ref(false)
 let alive = true
 
 const canSuggest = computed(() => !!selection.value && selection.value.source === text.value && !busy.value && !props.disabled)
+const rhymeSection = computed(() => {
+  const chosen = selection.value
+  return chosen?.source === text.value ? rhymeSectionAt(chosen.source, chosen.start) : undefined
+})
+const rhymeLimit = computed(() => lyricsMaxLength - text.value.length + (selection.value?.line.length ?? 0) - lyricSectionPrefix(selection.value?.line ?? '').length)
 const canApply = computed(() => {
   const selected = selection.value
   return canSuggest.value && !!selected && !!suggestion.value && text.value.length - selected.line.length + suggestion.value.length <= lyricsMaxLength
@@ -32,11 +40,13 @@ function captureSelection() {
   selection.value = next
   suggestion.value = undefined
   error.value = ''
+  rhymeOpen.value = false
 }
 
 async function preview(action: LyricRewriteAction) {
   const chosen = selection.value
   if (!chosen || !canSuggest.value) return
+  rhymeOpen.value = false
   busy.value = true
   error.value = ''
   suggestion.value = undefined
@@ -56,8 +66,26 @@ async function applySuggestion() {
   const chosen = selection.value
   const replacement = suggestion.value
   if (!chosen || !replacement || !canApply.value) return
+  await applyLine(chosen, replacement)
+}
+
+function openRhyme() {
+  if (!canSuggest.value || !rhymeSection.value) return
+  suggestion.value = undefined
+  error.value = ''
+  rhymeOpen.value = true
+}
+
+function applyRhyme(replacement: string) {
+  const chosen = selection.value
+  if (!chosen || !canSuggest.value || !rhymeOpen.value || replacement.length > rhymeLimit.value) return
+  void applyLine(chosen, lyricSectionPrefix(chosen.line) + replacement)
+}
+
+async function applyLine(chosen: LyricLineSelection, replacement: string) {
   text.value = chosen.source.slice(0, chosen.start) + replacement + chosen.source.slice(chosen.end)
   suggestion.value = undefined
+  rhymeOpen.value = false
   await nextTick()
   const caret = chosen.start + replacement.length
   editor.value?.focus({ preventScroll: true })
@@ -65,6 +93,7 @@ async function applySuggestion() {
   captureSelection()
 }
 
+watch(rhymeSection, () => { rhymeOpen.value = false })
 onBeforeUnmount(() => { alive = false })
 </script>
 
@@ -76,12 +105,14 @@ onBeforeUnmount(() => { alive = false })
     @select="captureSelection" @keyup="captureSelection" />
   <div class="remake-lyrics-actions" role="group" :aria-label="t('选句润色')">
     <button type="button" class="button secondary" :disabled="!canSuggest" @click="preview('REWRITE')">{{ t('改写选句') }}</button>
-    <button type="button" class="button secondary" :disabled="!canSuggest" @click="preview('RHYME')">{{ t('更押韵') }}</button>
+    <button type="button" class="button secondary" :disabled="!canSuggest || !rhymeSection" :aria-expanded="rhymeOpen" @click="openRhyme">{{ t('更押韵') }}</button>
     <button type="button" class="button secondary" :disabled="!canSuggest" @click="preview('COLLOQUIAL')">{{ t('更口语化') }}</button>
     <button type="button" class="button secondary" :disabled="!canSuggest" @click="preview('SHORTEN')">{{ t('缩短一句') }}</button>
     <span v-if="busy" role="status">{{ t('正在润色…') }}</span>
   </div>
   <p v-if="selection && !suggestion" class="remake-lyrics-selected"><strong>{{ t('已选歌词') }}</strong>{{ selection.line }}</p>
+  <LyricRhymeEditor v-if="rhymeOpen && rhymeSection" :work-id="workId" :section="rhymeSection" :language="language"
+    :disabled="disabled" :max-replacement-length="rhymeLimit" @apply="applyRhyme" @close="rhymeOpen = false" />
   <p v-if="error" class="notice error" role="alert">{{ t(error) }}</p>
   <section v-if="suggestion && selection" class="remake-lyrics-preview" :aria-label="t('改写建议')" aria-live="polite">
     <dl>

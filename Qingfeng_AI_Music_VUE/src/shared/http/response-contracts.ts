@@ -34,6 +34,21 @@ const publicArtistSong=(v:unknown)=>artistSong(v)&&typeof v.hasCover==='boolean'
 const artistRelease=(v:unknown)=>artistSong(v)&&text(v.workId)&&text(v.assetId)&&nullableText(v.coverId)
   &&(v.onDiscover===undefined||typeof v.onDiscover==='boolean')
 const nonnegativeCount=(v:unknown)=>Number.isSafeInteger(v)&&Number(v)>=0
+const rhymeEnding=(v:unknown)=>obj(v)&&text(v.word)&&text(v.sound)
+const rhymeCandidate=(v:unknown)=>obj(v)&&text(v.text)&&String(v.text).length<=160
+  &&!/[\r\n\u0085\u2028\u2029\v\f]/.test(String(v.text))
+  &&rhymeEnding(v.ending)&&['EXACT','NEAR','CROSS_LANGUAGE'].includes(String(v.match))
+  &&(v.syllables==null||nonnegativeCount(v.syllables))
+const lyricRhyme=(v:unknown)=>{
+  if(!obj(v)||!Array.isArray(v.candidates)||v.candidates.length>3||!v.candidates.every(rhymeCandidate))return false
+  if(v.original!=null&&!rhymeEnding(v.original)||v.reference!=null&&!rhymeEnding(v.reference))return false
+  if(v.status==='CHOOSE_REFERENCE')return v.referenceIndex==null&&v.reference==null&&v.candidates.length===0
+  if(!nonnegativeCount(v.referenceIndex)||Number(v.referenceIndex)>=40)return false
+  if(v.status==='UNKNOWN_PRONUNCIATION')return v.candidates.length===0
+  if(!rhymeEnding(v.original)||!rhymeEnding(v.reference))return false
+  if(v.status==='SUGGESTIONS')return v.candidates.length>0
+  return ['ALREADY_RHYMES','NO_MATCH'].includes(String(v.status))&&v.candidates.length===0
+}
 const discoverSong=(v:unknown)=>obj(v)&&text(v.artistId)&&text(v.stageName)&&publicArtistSong(v.song)&&text(v.publishedAt)
   &&(v.genre===undefined||str(v.genre))&&(v.plays===undefined||nonnegativeCount(v.plays))
 const discoverArtist=(v:unknown)=>obj(v)&&text(v.artistId)&&text(v.stageName)&&nullableText(v.avatarKey)
@@ -144,6 +159,7 @@ export function validResponse(path:string,method:string,value:unknown):boolean{
  if(/\/section-edits$/.test(path))return method==='GET'?list(value,v=>obj(v)&&text(v.taskId)&&text(v.status)&&str(v.replacementLyrics)):task(value)
  if(/\/lyrics\/requests\//.test(path))return obj(value)&&['NOT_FOUND','PENDING','FAILED','SUCCEEDED','UNKNOWN'].includes(String(value.status))&&(value.status!=='SUCCEEDED'||text(value.revisionId))
  if(/\/lyrics\/rewrite-line$/.test(path))return method==='POST'&&obj(value)&&text(value.text)&&String(value.text).length<=160&&!/[\r\n\u2028\u2029]/.test(String(value.text))
+ if(/^app\/works\/[^/]+\/lyrics\/rhyme-line$/.test(path))return method==='POST'&&lyricRhyme(value)
  if(/\/lyrics\/rewrite-selection$/.test(path))return method==='POST'&&obj(value)&&text(value.lyrics)&&String(value.lyrics).length<=12000
  if(/\/audio\/[^/]+\/lyrics(?:\/sync)?$/.test(path))return obj(value)&&text(value.status)&&str(value.text)&&list(value.lines,v=>obj(v)&&str(v.text)&&num(v.start)&&num(v.end))&&typeof value.canSync==='boolean'
  if(/\/lyrics(?:\/[^/]+(?:\/confirm)?)?$/.test(path)||/\/lyrics\/generate$/.test(path))return method==='GET'&&path.endsWith('/lyrics')?list(value,revision):revision(value)

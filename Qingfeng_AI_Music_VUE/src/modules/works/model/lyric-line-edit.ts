@@ -12,7 +12,7 @@ export interface LyricLineSelection {
   context: string
 }
 
-function isLyricLine(line: string) {
+export function isLyricLine(line: string) {
   return !!line.trim() && line.length <= 160 && !lineBreak.test(line) && !/^\s*\[.*\]\s*$/.test(line)
 }
 

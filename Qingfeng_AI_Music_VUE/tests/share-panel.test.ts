@@ -12,8 +12,9 @@ vi.mock('../src/modules/works/model/song-poster', () => ({ renderSongPoster: moc
 let app: App | undefined
 const flush = async () => { for (let i = 0; i < 5; i++) { await nextTick(); await new Promise(r => setTimeout(r, 0)) } }
 const token = 'A'.repeat(43)
-function mount() {
-  const props = reactive({ open: true, workId: 'work-a', revision: { id: 'revision-a', confirmed: true } as Revision, asset: { id: 'audio-a', origin: 'GENERATED' } as AudioAsset })
+function mount(origin: AudioAsset['origin'] = 'GENERATED') {
+  const revision = origin === 'GENERATED' ? { id: 'revision-a', confirmed: true } as Revision : null
+  const props = reactive({ open: true, workId: 'work-a', revision, asset: { id: 'audio-a', origin } as AudioAsset })
   app = createApp({ setup: () => () => h(SharePanel, props) }); app.mount(document.body.appendChild(document.createElement('div')))
   return props
 }
@@ -30,6 +31,24 @@ beforeEach(() => {
 })
 afterEach(() => { app?.unmount(); app = undefined; document.body.innerHTML = ''; vi.unstubAllGlobals(); vi.restoreAllMocks() })
 describe('share panel state and poster lifecycle', () => {
+  it('creates a fresh link for the second generated audio even when the page has no lyric revision', async () => {
+    const props = mount(); await flush()
+    expect(mocks.create).toHaveBeenLastCalledWith('work-a', 'audio-a', undefined)
+    const secondToken = 'B'.repeat(43)
+    mocks.create.mockResolvedValueOnce({ token: secondToken, expiresAt: new Date(Date.now() + 86400000).toISOString() })
+    props.asset = { ...props.asset, id: 'audio-b' }; props.revision = null
+    await flush()
+    expect(mocks.create).toHaveBeenLastCalledWith('work-a', 'audio-b', undefined)
+    expect(mocks.get).toHaveBeenLastCalledWith(`public/gifts/${secondToken}`)
+    expect(document.querySelector<HTMLInputElement>('.share-link-panel input')?.value).toContain('/gift/' + secondToken)
+    expect(button('复制分享链接')).toBeTruthy()
+  })
+  it('keeps the confirmed lyric requirement for imported audio', async () => {
+    const props = mount('IMPORTED')
+    await flush(); expect(mocks.create).not.toHaveBeenCalled()
+    props.revision = { id: 'revision-import', confirmed: true } as Revision
+    await flush(); expect(mocks.create).toHaveBeenCalledExactlyOnceWith('work-a', 'audio-a', 'revision-import')
+  })
   it('offers direct access to copy the public URL alongside the card and poster', async () => {
     const writeText = vi.fn().mockResolvedValue(undefined)
     vi.stubGlobal('navigator', { clipboard: { writeText } })

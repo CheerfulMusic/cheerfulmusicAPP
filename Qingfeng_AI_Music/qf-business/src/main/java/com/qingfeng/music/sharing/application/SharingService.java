@@ -24,11 +24,19 @@ public class SharingService implements SharingApi {
         return createSnapshot(owner,work,revisionId,assetId,title);
     }
     private Created createSnapshot(String owner,String work,String revisionId,String assetId,String workTitle){
-        var w=works.get(owner,work);var revision=lyrics.get(owner,work,revisionId);var asset=media.get(owner,work,assetId);
+        var w=works.get(owner,work);var asset=media.get(owner,work,assetId);
+        boolean generated=asset.origin().equals("GENERATED");
+        String sourceRevision=revisionId;
+        if(sourceRevision==null){
+            if(!generated)throw new DomainException("LYRICS_NOT_CONFIRMED","请先确认歌词版本");
+            sourceRevision=media.generatedRevision(owner,work,assetId).orElseThrow(() ->
+                new DomainException("LYRICS_NOT_FOUND","歌曲对应的歌词暂时无法读取，请刷新后再分享。"));
+        }
+        var revision=lyrics.get(owner,work,sourceRevision);
         if(workTitle!=null&&!workTitle.equals(w.title()))throw new DomainException("WORK_VERSION_CONFLICT","作品名称已变化，请刷新后重新分享。");
         if(!revision.confirmed())throw new DomainException("LYRICS_NOT_CONFIRMED","请先确认歌词版本");
-        if(asset.origin().equals("GENERATED")){
-            if(!media.matchesGenerationRevision(owner,work,assetId,revisionId))throw new DomainException("INVALID_GIFT_SOURCE","请选择这首歌曲生成时使用的歌词版本");
+        if(generated){
+            if(revisionId!=null&&!media.matchesGenerationRevision(owner,work,assetId,revisionId))throw new DomainException("INVALID_GIFT_SOURCE","请选择这首歌曲生成时使用的歌词版本");
         }else if(revision.workVersion()!=w.version())throw new DomainException("WORK_VERSION_CONFLICT","作品已修改，请保存并确认当前版本的歌词");
         byte[] bytes=new byte[32];random.nextBytes(bytes);String token=Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
         Instant now=Instant.now();String id=UUID.randomUUID().toString();Instant expires=now.plus(7,ChronoUnit.DAYS);

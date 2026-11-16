@@ -6,6 +6,30 @@
 @media(prefers-reduced-motion:reduce){.synced-lyrics .lyric-lines .lyric-edit-line{transition:none}}
 
 .synced-lyrics-heading:has(.lyric-edit-entry){flex-wrap:wrap;row-gap:8px}
+.section-edit-modes{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 20px;padding:0;border:0}
+.section-edit-modes legend{margin-bottom:8px;color:var(--muted);font-size:12px}
+.section-edit-modes label{display:flex;align-items:center;gap:8px;min-height:44px;padding:7px 12px;border:1px solid var(--line);border-radius:8px;font-size:13px;cursor:pointer}
+.section-edit-modes label:has(input:checked){color:var(--accent-text);border-color:var(--accent-border);background:var(--accent-soft)}
+.section-edit-modes input{margin:0;accent-color:var(--accent)}
+.section-edit-modes:disabled{opacity:.65}
+.section-vocal-options{border:0;margin:0 0 10px;min-inline-size:0;padding:0}
+.section-vocal-options legend{color:var(--ink);font-size:14px;font-weight:650;padding:0}
+.section-vocal-group{margin-top:13px}
+.section-vocal-group h3{color:var(--muted);font-size:12px;font-weight:600;margin:0 0 7px}
+.section-vocal-cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.section-vocal-card{display:flex;align-items:flex-start;gap:8px;min-height:58px;padding:8px 10px;border:1px solid var(--line);border-radius:9px;background:var(--field-background);cursor:pointer}
+.section-vocal-card:has(input:checked){border-color:var(--accent-border);background:var(--accent-soft)}
+.section-vocal-card:has(input:checked) strong{color:var(--accent-text)}
+.section-vocal-card:has(input:focus-visible),.section-vocal-more summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.section-vocal-card input{flex:none;width:14px;height:14px;margin:2px 0 0;accent-color:var(--accent)}
+.section-vocal-card strong,.section-vocal-card small{display:block;line-height:1.45}
+.section-vocal-card strong{font-size:13px;font-weight:650}
+.section-vocal-card small{color:var(--muted);font-size:12px;margin-top:3px}
+.section-vocal-options:disabled .section-vocal-card{cursor:default;opacity:.65}
+.section-vocal-more{margin-top:12px;border-top:1px solid var(--line)}
+.section-vocal-more summary{min-height:44px;padding-block:12px;color:var(--accent-text);font-size:13px;font-weight:600;cursor:pointer}
+.section-editor-footer .section-vocal-confirmation{color:var(--accent-text);font-size:12px}
+@media(max-width:700px){.section-vocal-cards{grid-template-columns:1fr}}
 .synced-lyrics .lyric-lines li.editing{color:var(--accent-text);background:var(--accent-soft);border-radius:8px}
 .synced-lyrics .lyric-lines li.editing .lyric-edit-line{opacity:1}
 .playback-line-draft{display:grid;gap:10px;margin:10px 0;padding:14px;border:1px solid var(--accent-border);border-radius:12px;background:var(--surface-raised)}

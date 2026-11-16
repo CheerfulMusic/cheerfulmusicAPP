@@ -66,10 +66,11 @@ public final class KieSunoMusicProvider implements MusicProvider {
         if(edit==null||edit.taskId()==null||!edit.taskId().matches("[A-Za-z0-9_-]{1,255}")||edit.audioId()==null||!edit.audioId().matches("[A-Za-z0-9_-]{1,255}")||!Double.isFinite(edit.start())||!Double.isFinite(edit.end())||edit.start()<0||edit.end()-edit.start()<10||edit.lyrics()==null||edit.lyrics().isBlank()||edit.lyrics().length()>5000)throw new Rejected();
         var input=new HashMap<String,Object>();
         input.put("task_id",edit.taskId());input.put("audio_id",edit.audioId());input.put("title",request.title());
-        input.put("prompt","Re-sing only this section with the revised lyrics. Follow the original melody, tempo, vocal character and transitions as closely as possible.");
+        input.put("prompt",sectionPrompt(edit));
         input.put("tags",style(request));
         input.put("infill_start_s",edit.start());input.put("infill_end_s",edit.end());
-        input.put("full_lyrics",request.confirmedLyrics());input.put("lyrics",edit.lyrics());
+        input.put("full_lyrics",request.confirmedLyrics());
+        if(edit.vocalAdjustment()==null)input.put("lyrics",edit.lyrics());
         input.put("audio_weight",sectionAudioWeight);input.put("style_weight",tuning.styleWeight());input.put("weirdness_constraint",tuning.weirdness());input.put("variety",tuning.variety());
         if(!request.vocalGender().equals("AUTO"))input.put("vocal_gender",request.vocalGender().equals("MALE")?"m":"f");
         if(!request.negativeTags().isBlank())input.put("negative_tags",request.negativeTags());
@@ -77,6 +78,24 @@ public final class KieSunoMusicProvider implements MusicProvider {
         String task=response.path("data").path("taskId").asText("");
         if(task.isBlank()||task.length()>255)throw new IllegalStateException("局部修改提交响应缺少任务编号，禁止自动重试");
         return new Submission(task);
+    }
+    private String sectionPrompt(Replacement edit){
+        if(edit.vocalAdjustment()==null){
+            return "Re-sing only this section with the revised lyrics. Follow the original melody, tempo, vocal character and transitions as closely as possible.";
+        }
+        String instruction=switch(edit.vocalAdjustment()){
+            case HIGHER -> "Sing this line slightly higher than in the original recording.";
+            case LOWER -> "Sing this line slightly lower than in the original recording.";
+            case RISING_END -> "Let the vocal melody rise on the last syllables of this line.";
+            case FALLING_END -> "Let the vocal melody fall on the last syllables of this line.";
+            case SOFTER -> "Sing this line with a lighter voice and gentler delivery, keeping the pitch close to the original.";
+            case STRONGER -> "Sing this line with more vocal power and clearer articulation, keeping the pitch close to the original.";
+            case LONGER_END -> "Sustain the final syllable of this line a little longer with a natural release into the next phrase.";
+            case MORE_CONNECTED -> "Sing this line smoothly, connecting neighboring syllables without abrupt breaks.";
+            case SPEECH_LIKE -> "Sing this line with conversational phrasing and the natural inflections of everyday speech while staying in time with the song.";
+        };
+        return "Keep all lyrics exactly as provided. Target lyric line: \""+edit.lyrics()+"\". "+instruction
+            +" Follow the original tempo, vocal character, accompaniment and transitions as closely as possible.";
     }
     public void validate(Request request) {
         if (request.title()==null || request.title().isBlank() || request.title().length()>limits.title()

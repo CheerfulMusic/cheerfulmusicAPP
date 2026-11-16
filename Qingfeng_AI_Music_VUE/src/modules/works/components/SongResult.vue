@@ -12,7 +12,7 @@ import type { Work } from '../../studio'
 import SyncedLyrics from './SyncedLyrics.vue'
 import type { EditHint } from '../model/section-edit'
 const props=defineProps<{work:Work;asset:AudioAsset;title:string;lyrics?:string;language?:string|null;cover?:string;pending?:boolean;checking?:boolean;busy?:boolean;sectionOpen?:boolean;publicationLabel:string;canPublishToDiscover:boolean}>()
-defineEmits<{gift:[];publish:[];discover:[];regenerate:[];cover:[];edit:[hint?:EditHint]}>()
+defineEmits<{gift:[];premium:[];publish:[];discover:[];regenerate:[];cover:[];edit:[hint?:EditHint]}>()
 const player=usePlayer()
 const unlocked=ref(false)
 const downloadPath=computed(()=>`app/works/${encodeURIComponent(props.work.id)}/audio/${encodeURIComponent(props.asset.id)}/download`)
@@ -22,4 +22,65 @@ const track=computed(()=>({id:props.asset.id,title:props.title,cover:props.cover
 function play(){player.setQueue([track.value],false);void player.toggle(track.value)}
 async function playFrom(time:number){if(player.current?.id!==props.asset.id||!player.playing)await player.toggle({id:props.asset.id,title:props.title,cover:props.cover||defaultCover(),audio:audioUrl(props.work.id,props.asset.id),provenance:props.asset.origin});if(player.current?.id===props.asset.id)player.seek(time)}
 </script>
-<template><section id="song-result" class="song-result" tabindex="-1" :aria-label="t('歌曲试听')"><div class="song-result-art"><img :src="cover||defaultCover()" :alt="t('歌曲封面')"><button class="result-play" :aria-label="player.current?.id===asset.id&&(player.playing||player.starting)?t('暂停'):t('试听歌曲')" @click="play"><span aria-hidden="true"><PlaybackIcon :playing="player.current?.id===asset.id&&(player.playing||player.starting)"/></span></button><button class="cover-change" @click="$emit('cover')">{{ t('更换封面') }}</button></div><div class="song-result-copy"><span class="completion-label">{{ asset.origin==='GENERATED'?t('你的专属歌曲，完成了。'):t('你的音乐礼物，准备好了。') }}</span><h2>{{ title }}</h2><p>{{ work.recipient?t('送给 {recipient}',{recipient:work.recipient}):t('我的创作') }}</p><blockquote v-if="work.message">{{ work.message }}</blockquote><AudioPreparation :track="track"/><div class="actions"><button class="button" @click="$emit('gift')">{{ t('分享歌曲') }}</button><button class="button secondary" type="button" @click="$emit('publish')">{{ t(publicationLabel) }}</button><button v-if="canPublishToDiscover" class="button secondary" type="button" @click="$emit('discover')">{{ t('发布到发现') }}</button><button class="button secondary" :disabled="busy" @click="$emit('regenerate')">{{ pending?t('查看生成进度'):checking?t('核对生成进度'):asset.origin==='GENERATED'?t('调整音乐'):t('重新制作一首') }}</button><button class="button secondary" @click="download">{{ unlocked?t('免费下载'):t('下载（首次10积分）') }}</button></div><p class="save-info">{{ work.recipient?t('先听一遍，再把这份心意送给 TA。'):t('先听一遍，继续打磨你的作品。') }}</p></div><SyncedLyrics :work-id="work.id" :asset-id="asset.id" :lyrics="lyrics" :language="language" :editable="asset.origin==='GENERATED'" :section-open="sectionOpen" @seek="playFrom" @edit="$emit('edit',$event)"/></section></template>
+<template>
+  <section id="song-result" class="song-result" tabindex="-1" :aria-label="t('歌曲试听')">
+    <div class="song-result-art">
+      <img :src="cover||defaultCover()" :alt="t('歌曲封面')">
+      <button class="result-play" :aria-label="player.current?.id===asset.id&&(player.playing||player.starting)?t('暂停'):t('试听歌曲')" @click="play">
+        <span aria-hidden="true"><PlaybackIcon :playing="player.current?.id===asset.id&&(player.playing||player.starting)"/></span>
+      </button>
+      <button class="cover-change" @click="$emit('cover')">{{ t('更换封面') }}</button>
+    </div>
+    <div class="song-result-copy">
+      <span class="completion-label">{{ asset.origin==='GENERATED'?t('你的专属歌曲，完成了。'):t('你的音乐礼物，准备好了。') }}</span>
+      <h2>{{ title }}</h2>
+      <p>{{ work.recipient?t('送给 {recipient}',{recipient:work.recipient}):t('我的创作') }}</p>
+      <blockquote v-if="work.message">{{ work.message }}</blockquote>
+      <AudioPreparation :track="track"/>
+      <div class="actions">
+        <button class="button" @click="$emit('gift')">{{ t('分享歌曲') }}</button>
+        <button class="button secondary premium-studio-entry" type="button" aria-haspopup="dialog" @click="$emit('premium')">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3v7m0 4v7M12 3v12m0 4v2M19 3v2m0 4v12M2 10h6v4H2zm7 5h6v4H9zm7-10h6v4h-6z"/></svg>
+          <span>{{ t('定制化音乐制作') }}</span>
+        </button>
+        <button class="button secondary" type="button" @click="$emit('publish')">{{ t(publicationLabel) }}</button>
+        <button v-if="canPublishToDiscover" class="button secondary" type="button" @click="$emit('discover')">{{ t('发布到发现') }}</button>
+        <button class="button secondary" :disabled="busy" @click="$emit('regenerate')">{{ pending?t('查看生成进度'):checking?t('核对生成进度'):asset.origin==='GENERATED'?t('调整音乐'):t('重新制作一首') }}</button>
+        <button class="button secondary" @click="download">{{ unlocked?t('免费下载'):t('下载（首次10积分）') }}</button>
+      </div>
+      <p class="save-info">{{ work.recipient?t('先听一遍，再把这份心意送给 TA。'):t('先听一遍，继续打磨你的作品。') }}</p>
+    </div>
+    <SyncedLyrics :work-id="work.id" :asset-id="asset.id" :lyrics="lyrics" :language="language" :editable="asset.origin==='GENERATED'" :section-open="sectionOpen" @seek="playFrom" @edit="$emit('edit',$event)"/>
+  </section>
+</template>
+
+<style scoped>
+.song-result-copy .button.premium-studio-entry {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border-color: #c38a32;
+  background: linear-gradient(120deg, #ffe9b5, #f3cd77);
+  color: #704311;
+  box-shadow: 0 3px 10px #b978221c;
+  font-weight: 650;
+}
+.premium-studio-entry svg {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.premium-studio-entry span { min-width: 0; }
+.song-result-copy .button.premium-studio-entry:hover {
+  background: linear-gradient(120deg, #ffe19b, #edbc59);
+  border-color: #a66b1b;
+  color: #593207;
+}
+.premium-studio-entry:focus-visible { outline: 2px solid #93601a; outline-offset: 3px; }
+</style>

@@ -28,10 +28,15 @@ public class ExecutionConfiguration {
             @Value("${qingfeng.generation.archive-workers:2}")int archiveWorkers){
         return new GenerationDispatcher(worker::runOnce,Duration.ofMillis(scanMillis),submitWorkers,queryWorkers,archiveWorkers);
     }
+    @Bean(destroyMethod="close")
+    @ConditionalOnProperty(name={"qingfeng.generation.enabled","qingfeng.generation.vocal-adjustment-worker-enabled"},havingValue="true")
+    GenerationDispatcher vocalAdjustmentRunner(GenerationWorker worker){
+        return new GenerationDispatcher(worker::runVocalAdjustment,Duration.ofSeconds(2),1,1,1);
+    }
     @Bean
     org.springframework.context.ApplicationListener<org.springframework.boot.context.event.ApplicationReadyEvent> generationRunnerStartup(
             org.springframework.beans.factory.ObjectProvider<GenerationDispatcher> dispatcher){
         // 等整个应用就绪后才允许付费提交；Bean创建或其他启动检查失败时不提前处理任务。
-        return event->dispatcher.ifAvailable(GenerationDispatcher::start);
+        return event->dispatcher.orderedStream().forEach(GenerationDispatcher::start);
     }
 }

@@ -24,7 +24,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import static org.junit.jupiter.api.Assertions.*;
 
-@SpringBootTest(properties={"spring.datasource.url=jdbc:h2:mem:section_edits;MODE=MySQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1","qingfeng.generation.enabled=true"})
+@SpringBootTest(properties={"spring.datasource.url=jdbc:h2:mem:section_edits;MODE=MySQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1","qingfeng.generation.enabled=true","qingfeng.generation.vocal-adjustment-enabled=true","qingfeng.generation.vocal-adjustment-worker-enabled=false"})
 @ActiveProfiles("test") @Import(SectionEditingIntegrationTest.Offline.class)
 class SectionEditingIntegrationTest {
     @TestConfiguration(proxyBeanMethods=false) static class Offline {@Bean @Primary Provider provider(){return new Provider();}}
@@ -67,8 +67,13 @@ class SectionEditingIntegrationTest {
     static byte[] wav(){var b=ByteBuffer.allocate(48).order(ByteOrder.LITTLE_ENDIAN);b.put("RIFF".getBytes()).putInt(40).put("WAVEfmt ".getBytes()).putInt(16).putShort((short)1).putShort((short)1).putInt(8000).putInt(16000).putShort((short)2).putShort((short)16).put("data".getBytes()).putInt(4).putInt(0);return b.array();}
     static class Time extends Clock {Instant now;Time(Instant now){this.now=now;}public ZoneId getZone(){return ZoneOffset.UTC;}public Clock withZone(ZoneId zone){return this;}public Instant instant(){return now;}}
     GenerationApi.Task finish(Fixture f,GenerationApi.Task task){
-        var time=new Time(task.createdAt().plusSeconds(6));var worker=new GenerationWorker(executions,provider,url->new ByteArrayInputStream(wav()),media,time,Duration.ofMinutes(2),2).withSectionEdits(edits);
-        assertTrue(worker.runOnce());time.now=time.now.plusSeconds(11);assertTrue(worker.runOnce());assertTrue(worker.runOnce());
+        var time=new Time(task.createdAt().plusSeconds(6));var worker=new GenerationWorker(executions,provider,url->new ByteArrayInputStream(wav()),media,time,Duration.ofMinutes(2),2).withSectionEdits(edits).withSettings(musicSettings);
+        java.util.function.BooleanSupplier run=worker::runOnce;
+        if(SectionEditingService.VOCAL_ADJUSTMENT_QUEUE.equals(task.provider())){
+            assertFalse(worker.runOnce());
+            run=()->worker.runVocalAdjustment(ExecutionRepository.Phase.ANY);
+        }
+        assertTrue(run.getAsBoolean());time.now=time.now.plusSeconds(11);assertTrue(run.getAsBoolean());assertTrue(run.getAsBoolean());
         return generation.list(f.owner,f.work).stream().filter(t->t.id().equals(task.id())).findFirst().orElseThrow();
     }
     @Test void replacementUsesOriginalContextAndOnlyAdoptionChangesCurrentSong(){
@@ -90,6 +95,34 @@ class SectionEditingIntegrationTest {
         try{var a=pool.submit(()->editing.submit(f.owner,f.work,request(f,key)));var b=pool.submit(()->editing.submit(f.owner,f.work,request(f,key)));assertEquals(a.get(10,TimeUnit.SECONDS).id(),b.get(10,TimeUnit.SECONDS).id());}finally{pool.shutdownNow();}
         assertEquals(1,editing.list(f.owner,f.work).size());assertEquals(2,lyrics.list(f.owner,f.work).size());assertEquals(2,jdbc.queryForObject("SELECT COUNT(*) FROM model_usage_reservation WHERE work_id=?",Integer.class,f.work));
         var q=request(f,key);assertEquals("REQUEST_KEY_CONFLICT",assertThrows(DomainException.class,()->editing.submit(f.owner,f.work,new SectionEditingService.Request(q.sourceAssetId(),0,key,10,22,q.textStart(),q.textEnd(),"另一句歌词"))).code());assertEquals(0,provider.replaces);
+    }
+    @Test void vocalAdjustmentKeepsLyricsAndSurvivesTheTaskQueueForALegacySong(){
+        var f=fixture();
+        jdbc.update("DELETE FROM generation_music_preferences WHERE task_id=?",f.task);
+        var selection=request(f,UUID.randomUUID().toString());
+        var higher=vocalRequest(selection,MusicProvider.VocalAdjustment.HIGHER);
+        var accepted=editing.submit(f.owner,f.work,higher);
+
+        assertEquals(accepted.id(),editing.submit(f.owner,f.work,higher).id());
+        var lower=vocalRequest(selection,MusicProvider.VocalAdjustment.LOWER);
+        assertEquals("REQUEST_KEY_CONFLICT",assertThrows(DomainException.class,()->editing.submit(f.owner,f.work,lower)).code());
+        assertEquals(f.revision,accepted.revisionId());
+        assertEquals(1,lyrics.list(f.owner,f.work).size());
+        assertEquals(MusicProvider.VocalAdjustment.HIGHER,editing.list(f.owner,f.work).get(0).vocalAdjustment());
+
+        var done=finish(f,accepted);
+        assertEquals(GenerationStatus.SUCCEEDED,done.status());
+        assertEquals(f.text,provider.received.confirmedLyrics());
+        assertEquals("温暖民谣",provider.received.style());
+        assertEquals("门口的小碗还在",provider.edit.lyrics());
+        assertEquals(MusicProvider.VocalAdjustment.HIGHER,provider.edit.vocalAdjustment());
+        var item=editing.list(f.owner,f.work).get(0);
+        assertEquals(f.asset,item.sourceAssetId());
+        assertEquals(done.assetId(),item.resultAssetId());
+        assertEquals(f.asset,media.selection(f.owner,f.work).assetId());
+    }
+    private SectionEditingService.Request vocalRequest(SectionEditingService.Request selection,MusicProvider.VocalAdjustment adjustment){
+        return new SectionEditingService.Request(selection.sourceAssetId(),selection.workVersion(),selection.requestKey(),selection.start(),selection.end(),selection.textStart(),selection.textEnd(),null,adjustment);
     }
     @Test void invalidRangesAndTextDoNotConsumeQuotaOrCreateVersions(){
         var f=fixture();var r=request(f,UUID.randomUUID().toString());

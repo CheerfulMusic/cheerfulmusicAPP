@@ -34,6 +34,35 @@ export async function rewriteLyricLine(work:string, input:{requestId:string;acti
   await ensureCreator()
   return requestJson<{text:string}>(`app/works/${work}/lyrics/rewrite-line`,'POST',input,35000)
 }
+export interface LyricRhymeRequest {
+  requestId: string
+  line: string
+  lines: string[]
+  lineIndex: number
+  referenceIndex?: number
+  language: string
+  allowNear?: boolean
+  allowCrossLanguage?: boolean
+  rewriteIfAlreadyRhymes?: boolean
+}
+export interface LyricRhymeEnding { word: string; sound: string }
+export interface LyricRhymeCandidate {
+  text: string
+  ending: LyricRhymeEnding
+  match: 'EXACT' | 'NEAR' | 'CROSS_LANGUAGE'
+  syllables?: number | null
+}
+export interface LyricRhymeResult {
+  status: 'SUGGESTIONS' | 'CHOOSE_REFERENCE' | 'ALREADY_RHYMES' | 'NO_MATCH' | 'UNKNOWN_PRONUNCIATION'
+  referenceIndex?: number | null
+  reference?: LyricRhymeEnding | null
+  original?: LyricRhymeEnding | null
+  candidates: LyricRhymeCandidate[]
+}
+export async function rhymeLyricLine(work: string, input: LyricRhymeRequest) {
+  await ensureCreator()
+  return requestJson<LyricRhymeResult>(`app/works/${encodeURIComponent(work)}/lyrics/rhyme-line`, 'POST', input, 60000)
+}
 export async function rewriteLyricSelection(work: string, input: {requestId: string; workVersion: number; lyrics: string; keptLines: number[]; language: string}) {
   await ensureCreator()
   return requestJson<{lyrics: string}>(`app/works/${encodeURIComponent(work)}/lyrics/rewrite-selection`, 'POST', input, 110000)
@@ -46,7 +75,7 @@ export interface GenerationPreflight {workVersion:number;revisionId:string;style
 export const preflightGeneration=(work:string,revisionId:string)=>call<GenerationPreflight>(`app/works/${work}/generations/preflight`,'POST',{revisionId})
 export const retryTaskArchive = (work: string, task: string) => call<void>(`app/works/${work}/generations/${task}/retry-archive`, 'POST', {})
 export const audioUrl = (work: string, asset: string, download = false) => apiUrl(`app/works/${work}/audio/${asset}${download ? '?download=true' : ''}`)
-export const createShare = (work: string, revisionId: string, assetId: string) => call<{ id: string; token: string; expiresAt: string }>(`app/works/${work}/shares`, 'POST', { revisionId, assetId })
+export const createShare = (work: string, assetId: string, revisionId?: string) => call<{ id: string; token: string; expiresAt: string }>(`app/works/${work}/shares`, 'POST', { assetId, revisionId })
 export const revokeShares = (work: string) => call<void>(`app/works/${work}/shares`, 'DELETE')
 
 export const cancelTask=(work:string,task:string)=>call<GenerationTask>(`app/works/${work}/generations/${task}/cancel`,'POST',{})

@@ -11,9 +11,11 @@ import { ApiError, currentCreatorId } from '../../../shared/http/api-client'
 import { readRecovery, writeRecovery, recoveryKey,checkpointRecovery } from '../../../shared/drafts/recovery'
 import RecoveryCopies from '../../../shared/drafts/RecoveryCopies.vue'
 import LyricSelectionRewriteDialog from './LyricSelectionRewriteDialog.vue'
+import LyricRhymeEditor from './LyricRhymeEditor.vue'
 import type { Work } from '../../studio'
 import { listRevisions, getRevision, getLyricsRequest, saveRevision, confirmRevision, generateLyrics, type Revision, type LyricRewriteAction } from '../api/detail'
 import { lyricRewriteError, lyricsMaxLength, selectLyricLine, suggestLyricLine, type LyricLineSelection } from '../model/lyric-line-edit'
+import { lyricSectionPrefix, rhymeSectionAt } from '../model/lyric-rhyme'
 const props=defineProps<{work:Work;showInlineSave?:boolean}>(), emit=defineEmits<{selected:[revision:Revision|null];dirty:[value:boolean];ready:[value:boolean];recoverable:[value:boolean];base:[revision:Revision|null]}>()
 const route=useRoute(),router=useRouter()
 const versions=ref<Revision[]>([]),active=ref<Revision|null>(null),title=ref(props.work.title||(props.work.recipient?t('写给{recipient}的歌',{recipient:props.work.recipient}):t('我的原创歌曲'))),text=ref(''),baseline=ref(''),loading=ref(true),saving=ref(false),composing=ref(false),preparing=ref(false),error=ref(''),notice=ref(''),aiReady=ref(false),localSaved=ref(false),creditShort=ref(false)
@@ -39,6 +41,12 @@ const lineBusy=ref(false),lineError=ref('')
 const editorText=computed(()=>text.value.replace(/\r\n?/g,'\n'))
 const rewriteDraft=ref<{source:string;workVersion:number;language:string}>()
 const selectedLine=computed(()=>selection.value?.source===editorText.value?selection.value:undefined)
+const rhymeOpen=ref(false)
+const rhymeSection=computed(()=>{
+ const chosen=selectedLine.value
+ return chosen&&rhymeSectionAt(chosen.source,chosen.start)
+})
+const rhymeLimit=computed(()=>lyricsMaxLength-editorText.value.length+(selectedLine.value?.line.length??0)-lyricSectionPrefix(selectedLine.value?.line??'').length)
 const canPolishLine=computed(()=>!!selectedLine.value&&!lineBusy.value&&!blocked.value&&!saving.value)
 const lineActions: {id:LyricRewriteAction;label:string;icon:string}[] = [
  {id:'REWRITE',label:'改写选句',icon:'m13 5 6 6M4 16l12-12 4 4L8 20H4v-4Z'},
@@ -53,12 +61,15 @@ function captureSelection(event?:Event){
  const next=selectLyricLine(source,start,end),previous=selection.value
  if(next?.source===previous?.source&&next?.start===previous?.start&&next?.end===previous?.end)return
  selection.value=next
- linePreview.value=undefined;lineError.value=''
+ linePreview.value=undefined;lineError.value='';rhymeOpen.value=false
 }
 async function previewLine(action:LyricRewriteAction){
  const chosen=selectedLine.value
  if(!chosen||!canPolishLine.value)return
- lineBusy.value=true;lineError.value='';linePreview.value=undefined
+ lineError.value='';linePreview.value=undefined
+ if(action==='RHYME'){rhymeOpen.value=true;return}
+ rhymeOpen.value=false
+ lineBusy.value=true
  const current=()=>alive&&selectedLine.value===chosen
  try{
    const text=await suggestLyricLine(props.work.id,chosen,action,active.value?.language||language.value)
@@ -75,11 +86,20 @@ const canReplaceLine=computed(()=>{
 function replaceLine(){
  const preview=linePreview.value
  if(!preview||!canReplaceLine.value||blocked.value||saving.value)return
- const {start,end,source}=preview.selection
- text.value=source.slice(0,start)+preview.text+source.slice(end)
+ applyLine(preview.selection,preview.text)
+}
+function applyRhyme(replacement:string){
+ const chosen=selectedLine.value
+ if(!chosen||!rhymeOpen.value||!canPolishLine.value||replacement.length>rhymeLimit.value)return
+ applyLine(chosen,lyricSectionPrefix(chosen.line)+replacement)
+}
+function applyLine(chosen:LyricLineSelection,replacement:string){
+ const {start,end,source}=chosen
+ text.value=source.slice(0,start)+replacement+source.slice(end)
  linePreview.value=undefined
+ rhymeOpen.value=false
  void nextTick(()=>{
-  const caret=start+preview.text.length
+  const caret=start+replacement.length
   editor.value?.focus({preventScroll:true});editor.value?.setSelectionRange(caret,caret)
   captureSelection()
  })
@@ -102,7 +122,7 @@ watch([title,text,language,structure,instructions,requestKey],remember,{flush:'s
 watch([dirty,active,composing,canGenerate],()=>{emit('dirty',dirty.value);emit('selected',dirty.value||composing.value?null:active.value);emit('ready',canGenerate.value);emit('base',active.value)},{immediate:true})
 watch(editorText,source=>{
  if(selection.value?.source===source)return
- selection.value=undefined;linePreview.value=undefined;lineError.value=''
+ selection.value=undefined;linePreview.value=undefined;lineError.value='';rhymeOpen.value=false
 })
 watch(localSaved,value=>emit('recoverable',value),{immediate:true})
 function select(value:Revision|null){active.value=value;title.value=value?.title||props.work.title||(props.work.recipient?t('写给{recipient}的歌',{recipient:props.work.recipient}):t('我的原创歌曲'));text.value=value?.lyrics||'';baseline.value=JSON.stringify(draftValue());remember()}
@@ -279,12 +299,14 @@ defineExpose({prepareForGeneration,preserveDraftForNavigation,needsSave,canSave,
     </div>
     <textarea id="song-lyrics" ref="editor" v-model="text" :maxlength="lyricsMaxLength" class="lyrics-edit lyric-text" :aria-label="t('歌词')" aria-describedby="lyric-editor-help" :disabled="blocked||saving" :placeholder="t('写下主歌、副歌，或者你想唱给TA听的话……')" @input="captureSelection" @select="captureSelection" @keyup="captureSelection" @click="captureSelection"></textarea>
     <div class="lyric-line-tools" role="group" :aria-label="t('选句润色')">
-      <button v-for="action in lineActions" :key="action.id" type="button" :disabled="!canPolishLine" @pointerdown.prevent @click="previewLine(action.id)">
+      <button v-for="action in lineActions" :key="action.id" type="button" :disabled="!canPolishLine||(action.id==='RHYME'&&!rhymeSection)" :aria-expanded="action.id==='RHYME'?rhymeOpen:undefined" @pointerdown.prevent @click="previewLine(action.id)">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path :d="action.icon"/></svg>{{ t(action.label) }}
       </button>
       <span v-if="lineBusy" class="line-busy" role="status">{{ t('正在润色…') }}</span>
     </div>
     <p v-if="selectedLine" class="lyric-selected-line"><strong>{{ t('已选歌词') }}</strong>{{ selectedLine.line }}</p>
+    <LyricRhymeEditor v-if="rhymeOpen&&rhymeSection" :work-id="work.id" :section="rhymeSection" :language="active?.language||language"
+      :disabled="blocked||saving" :max-replacement-length="rhymeLimit" @apply="applyRhyme" @close="rhymeOpen=false" />
   </div>
   <LyricSelectionRewriteDialog v-if="rewriteDraft" :work-id="work.id" :can-rewrite-all="customLyricsReady" v-bind="rewriteDraft"
     @close="rewriteDraft=undefined" @apply="applyRewrittenLyrics" @rewrite-all="rewriteAll" />
