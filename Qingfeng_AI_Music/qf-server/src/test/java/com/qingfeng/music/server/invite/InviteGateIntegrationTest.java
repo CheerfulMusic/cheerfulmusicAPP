@@ -325,6 +325,12 @@ class InviteGateIntegrationTest {
         var owner = artistSession("Custom artist");
         var older = releaseArtistSong(owner, "Older song", 7);
         var latest = releaseArtistSong(owner, "Latest song", 8);
+        // Give the ordering fixture distinct times; rapid requests can share the
+        // Windows clock tick, in which case the documented ID tie-breaker applies.
+        jdbc.update("UPDATE artist_song_release SET published_at=? WHERE id=?",
+                java.sql.Timestamp.from(java.time.Instant.parse("2026-01-01T00:00:00Z")), older.id());
+        jdbc.update("UPDATE artist_song_release SET published_at=? WHERE id=?",
+                java.sql.Timestamp.from(java.time.Instant.parse("2026-01-02T00:00:00Z")), latest.id());
         var other = artistSession("Other artist");
         var foreign = releaseArtistSong(other, "Foreign song", 9);
         byte[] cover = bannerImage(Color.PINK);
