@@ -25,7 +25,7 @@ class RecommendationOssRedirectTest {
         OSS client = mock(OSS.class);
         when(client.doesObjectExist("private-bucket", KEY)).thenReturn(true);
         when(client.generatePresignedUrl(eq("private-bucket"), eq(KEY), any(Date.class), any(HttpMethod.class)))
-            .thenReturn(new URL("https://example.invalid/sample?x-oss-signature=redacted"));
+            .thenReturn(new URL("https://example.oss-cn-hongkong.aliyuncs.com/sample?x-oss-signature=redacted"));
         var subject = new RecommendationOssRedirect(client, "private-bucket", true, CLOCK);
         var filter = new RecommendationOssFilter(subject);
         for (String method : new String[]{"GET", "HEAD"}) {
@@ -44,6 +44,25 @@ class RecommendationOssRedirectTest {
         assertTrue(subject.destination(FILE, "GET", true).isEmpty());
     }
 
+    @Test void internalEndpointCannotBeGivenToBrowsers() throws Exception {
+        OSS client = mock(OSS.class);
+        when(client.doesObjectExist("private-bucket", KEY)).thenReturn(true);
+        when(client.generatePresignedUrl(eq("private-bucket"), eq(KEY), any(Date.class), any(HttpMethod.class)))
+            .thenReturn(new URL("https://example.oss-cn-hongkong-internal.aliyuncs.com/sample"));
+        assertTrue(new RecommendationOssRedirect(client, "private-bucket", true, CLOCK).destination(FILE, "GET", false).isEmpty());
+    }
+
+    @Test void aSlowOssCheckFallsBackWithinOneSecondAndCachesFailure() throws Exception {
+        OSS client = mock(OSS.class);
+        when(client.doesObjectExist("private-bucket", KEY)).thenAnswer(invocation -> { Thread.sleep(5000); return true; });
+        var service = new RecommendationOssRedirect(client, "private-bucket", true, CLOCK);
+        long started = System.nanoTime();
+        assertTrue(service.destination(FILE, "GET", false).isEmpty());
+        assertTrue(java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started) < 2000);
+        assertTrue(service.destination(FILE, "GET", false).isEmpty());
+        verify(client, times(1)).doesObjectExist("private-bucket", KEY);
+    }
+
     @Test void disabledMissingAndOssErrorFallBackToStaticChain() throws Exception {
         OSS client = mock(OSS.class);
         var disabled = new RecommendationOssRedirect(client, "private-bucket", false, CLOCK);
@@ -51,6 +70,7 @@ class RecommendationOssRedirectTest {
         var enabled = new RecommendationOssRedirect(client, "private-bucket", true, CLOCK);
         assertTrue(enabled.destination(FILE,"GET",false).isEmpty());
         when(client.doesObjectExist("private-bucket",KEY)).thenThrow(new IllegalStateException());
+        enabled = new RecommendationOssRedirect(client, "private-bucket", true, CLOCK);
         var req = new MockHttpServletRequest("GET",FILE); req.setServletPath(FILE);
         var res = new MockHttpServletResponse(); var chain = new MockFilterChain();
         new RecommendationOssFilter(enabled).doFilter(req,res,chain);

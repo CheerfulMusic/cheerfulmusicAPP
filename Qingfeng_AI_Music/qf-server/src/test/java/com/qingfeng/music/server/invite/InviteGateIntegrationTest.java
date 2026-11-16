@@ -36,6 +36,7 @@ import static org.junit.jupiter.api.Assertions.*;
 @ActiveProfiles("test")
 class InviteGateIntegrationTest {
     @Value("${local.server.port}") int port;
+    @Autowired org.springframework.security.web.FilterChainProxy securityFilters;
     private static final String ARTIST_PROFILE = "/api/app/artist-profile";
     record Browser(HttpClient http, CookieManager cookies, String csrf) {}
     private record ArtistSession(HttpClient http, String csrf, String creator) {}
@@ -72,6 +73,16 @@ class InviteGateIntegrationTest {
             var response = send(browser.http(), "POST", path, "{}", browser.csrf());
             assertEquals(403, response.statusCode(), path); assertTrue(response.body().contains("INVITE_REQUIRED"));
         }
+        assertEquals(403, send(browser.http(), "HEAD", "/media/sample-love-v2.mp3", null, null).statusCode());
+        var filters = securityFilters.getFilters("/media/sample-love-v2.mp3");
+        int gate = -1, authorization = -1, redirect = -1;
+        for (int i = 0; i < filters.size(); i++) {
+            if (filters.get(i) instanceof InviteGateFilter) gate = i;
+            if (filters.get(i) instanceof org.springframework.security.web.access.intercept.AuthorizationFilter) authorization = i;
+            if (filters.get(i) instanceof com.qingfeng.music.server.web.RecommendationOssFilter) redirect = i;
+        }
+        assertTrue(gate >= 0 && gate < redirect, "invite gate must run before redirect");
+        assertTrue(authorization >= 0 && authorization < redirect, "security authorization must run before redirect");
         assertEquals(200, send(browser.http(), "GET", "/actuator/health", null, null).statusCode());
         var callback = send(browser.http(), "GET", "/api/public/auth/google/callback?code=not-real&state=not-real", null, null);
         assertEquals(302, callback.statusCode()); assertEquals("/account", callback.headers().firstValue("location").orElseThrow());
