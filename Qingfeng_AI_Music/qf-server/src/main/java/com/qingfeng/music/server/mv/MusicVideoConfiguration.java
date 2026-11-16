@@ -15,7 +15,14 @@ import java.nio.file.Path;
 @Configuration(proxyBeanMethods=false) @Profile({"mysql","test"})
 @ConditionalOnProperty(name="qingfeng.video.enabled",havingValue="true")
 public class MusicVideoConfiguration {
- @Bean VideoProvider videoProvider(Environment e){return new SeedanceVideoProvider(e.getRequiredProperty("qingfeng.video.base-url"),e.getProperty("qingfeng.video.api-key",""),e.getProperty("qingfeng.video.model",""));}
+ @Bean VideoProvider videoProvider(Environment e){
+  String url=e.getRequiredProperty("qingfeng.video.base-url"),key=e.getProperty("qingfeng.video.api-key",""),model=e.getProperty("qingfeng.video.model","");
+  return switch(e.getProperty("qingfeng.video.provider","seedance")){
+   case "wan" -> new WanVideoProvider(url,key,model);
+   case "seedance" -> new SeedanceVideoProvider(url,key,model);
+   default -> throw new IllegalArgumentException("Unknown video provider");
+  };
+ }
  @Bean MusicVideoService musicVideoService(JdbcTemplate db,PlatformTransactionManager manager,WorkApi works,MediaApi media,VideoProvider provider,CreditsLedger credits,Environment e){return new MusicVideoService(db,new TransactionTemplate(manager),works,media,provider,credits,e.getProperty("qingfeng.video.credits-per-project",Integer.class,0));}
  @Bean MusicVideoWorker musicVideoWorker(JdbcTemplate db,PlatformTransactionManager manager,VideoProvider provider,MediaApi media,Environment e){return new MusicVideoWorker(db,new TransactionTemplate(manager),provider,media,Path.of(e.getRequiredProperty("qingfeng.video.storage-root")),e.getProperty("qingfeng.video.ffmpeg","ffmpeg"));}
  @Bean AgentVideoActions agentVideoActions(MusicVideoService service,ConversationService conversations){return new AgentVideoActions(service,conversations);}

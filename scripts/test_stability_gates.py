@@ -305,6 +305,17 @@ class GateTests(unittest.TestCase):
         with self.assertRaisesRegex(gate.GateError,"Duplicate"):
             gate.inspect_artifact(jar)
 
+    def test_feature_migrations_require_consecutive_pinned_extensions(self):
+        migrations = {p.name: gate.normalized_migration_sha(p.read_bytes()) for p in
+            (ROOT / "Qingfeng_AI_Music/qf-infrastructure/src/main/resources/db/migration").glob("V*__*.sql")}
+        self.assertEqual("48", gate.verify_migration_set(migrations)["phoneBindingVersion"])
+        missing = dict(migrations); missing.pop("V47__music_video_projects.sql")
+        with self.assertRaises(gate.GateError): gate.verify_migration_set(missing)
+        modified = dict(migrations); modified["V48__phone_binding.sql"] = "0" * 64
+        with self.assertRaises(gate.GateError): gate.verify_migration_set(modified)
+        rollback = {k: v for k, v in migrations.items() if k not in gate.FEATURE_MIGRATION_SHA256}
+        self.assertEqual("46", gate.verify_migration_set(rollback)["agentAllowanceVersion"])
+
     def test_missing_migration_rejected(self):
         with self.assertRaisesRegex(gate.GateError,"migration chain"):gate.inspect_artifact(self.jar(versions=(1,3)))
 

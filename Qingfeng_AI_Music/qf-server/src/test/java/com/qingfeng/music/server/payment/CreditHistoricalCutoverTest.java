@@ -140,8 +140,8 @@ class CreditHistoricalCutoverTest {
         var reordered = history(resources, 45); Collections.swap(reordered, 20, 21);
         assertEquals("HISTORY_SCRIPT_OR_CHECKSUM_MISMATCH", assertThrows(IllegalStateException.class, () -> verifyHistory(reordered, resources)).getMessage());
     }
-    @Test void originalMainV47MayCoexistOnTheUnfilteredClasspathWithoutChangingHistoricalSourceVersions() throws Exception {
-        var resources = classpathMigrations(); assertEquals(47, resources.size());
+    @Test void approvedExtensionsMayCoexistWithoutChangingHistoricalSourceVersions() throws Exception {
+        var resources = classpathMigrations(); assertEquals(48, resources.size());
         var optional = resources.stream().filter(item -> V47.equals(item.getFilename())).findFirst().orElseThrow();
         try (var stream = optional.getInputStream()) { assertEquals(-48314744, checksum(stream.readAllBytes())); }
         for (int limit : List.of(44, 45)) {
@@ -177,6 +177,17 @@ class CreditHistoricalCutoverTest {
         var actual47 = history(resources, 47); assertEquals(47, actual47.size());
         assertEquals("HISTORY_CHAIN_LENGTH_MISMATCH", assertThrows(IllegalStateException.class, () -> verifyHistory(actual47, resources)).getMessage());
     }
+    @Test void phoneBindingResourceIsPinnedAndCannotSkipVideoMigration() throws Exception {
+        var resources = classpathMigrations(); var actual = history(resources, 44);
+        var missing = new ArrayList<>(resources); missing.removeIf(r -> version(r) == 47);
+        assertEquals("HISTORY_RESOURCE_CHAIN_INCOMPLETE", assertThrows(IllegalStateException.class, () -> verifyHistory(actual, missing)).getMessage());
+        for (String name : List.of("V48__phone_binding.sql", "V48__different.sql")) {
+            var modified = new ArrayList<>(resources); modified.removeIf(r -> version(r) == 48);
+            modified.add(resource(name, "SELECT 1;".getBytes(StandardCharsets.UTF_8)));
+            assertEquals("HISTORY_UNAPPROVED_RESOURCE_EXTENSION", assertThrows(IllegalStateException.class, () -> verifyHistory(actual, modified)).getMessage());
+        }
+    }
+
     @Test void remainingOpeningNeverInventsHistoricalFifoAndRefundsRetainExactReferences() {
         Snapshot source = snapshot(List.of(new Owner("a", 0, 80L)), row("CREDIT", "first-login:a", "a", 100),
                 row("DEBIT", "old-1", "a", -30), row("REFUND", "old-1", "a", 30), row("DEBIT", "old-2", "a", -20));

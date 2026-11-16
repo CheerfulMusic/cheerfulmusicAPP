@@ -1,13 +1,14 @@
 # AI 剧情 MV 接入与验收
 
-本功能默认关闭。当前适配 EcomAI Studio 所使用的 NewAPI `/videos` 网关协议，**不是直接调用 Ark API**。不填写虚构模型名，不把 API Key 放入仓库。
+本功能默认关闭。支持 Wan 3.0 异步视频接口，以及原有 NewAPI `/videos` 网关协议。不填写虚构模型名，不把 API Key 放入仓库。
 
 私有运行配置示例（仅结构；占位符须替换）：
 
 ```properties
 qingfeng.video.enabled=false
-qingfeng.video.base-url=https://YOUR-GATEWAY/v1/
-qingfeng.video.model=YOUR-SEEDANCE-MODEL-ID
+qingfeng.video.provider=wan
+qingfeng.video.base-url=https://maas.qianwenaiapi.com/api/v1/
+qingfeng.video.model=wan3.0-video
 qingfeng.video.api-key=${VIDEO_API_KEY}
 qingfeng.video.storage-root=/YOUR-PERSISTENT-PRIVATE-STORAGE/music-videos
 qingfeng.video.ffmpeg=/YOUR-FFMPEG-PATH/ffmpeg
@@ -30,7 +31,7 @@ qingfeng.video.poll-delay-ms=10000
 
 任务、分镜和扣费在同一事务内落库，owner/request_key 唯一且绑定完整内容哈希。后台通过数据库锁及 600 秒租约认领任务，每次处理一个镜头；一次模型提交不自动重试。镜头提交前标记 SUBMITTING；若进程在上游受理后、保存 ID 前中断，转 UNCERTAIN，人工对照供应商记录核对，不假设失败。
 
-轮询原任务 ID；两小时仍未确认则转 UNCERTAIN，不再自动重复生成或退款。HTTP 失败只重查原任务。各项目按最近处理时间轮转，避免长任务一直占据队首。下载只访问已配置 HTTPS 网关 `/videos/{id}/content`，不接受模型返回的任意 URL，不跟随携带凭证的重定向。下载有大小和读取时限。
+轮询原任务 ID；两小时仍未确认则转 UNCERTAIN，不再自动重复生成或退款。HTTP 失败只重查原任务。各项目按最近处理时间轮转，避免长任务一直占据队首。Wan 使用 `/services/aigc/video-generation/video-synthesis` 提交、`/tasks/{id}` 查询。成功后仅下载 HTTPS 阿里云 OSS 签名地址，不携带 API 密钥、不跟随重定向；默认 720P、关闭生成音频。原有 seedance 适配器仅访问网关 `/videos/{id}/content`。下载有大小和读取时限。
 
 镜头完成后，FFmpeg 缩放、拼接、叠加当前作品的原音频，生成 MP4；不使用模型音频。成片从原歌曲开头开始，长度不超过分镜总长及音频长度。**当前为最长 120 秒的剧情片段，不宣称覆盖任意长度整首歌曲，也不保证跨镜头人物完全一致。**
 
@@ -38,7 +39,7 @@ qingfeng.video.poll-delay-ms=10000
 
 ## 启用前仍需真实验证
 
-1. 确认网关地址、模型 ID、Key、`/videos` 请求格式和 `/content` 下载兼容性。
+1. 确认平台地址、模型 ID 和私有 Key；Wan 协议参考 [创建任务](https://platform.qianwenai.com/docs/api-reference/video-generation/wan30-video/create-task) 与 [查询结果](https://platform.qianwenai.com/docs/api-reference/video-generation/wan30-video/query-result)。
 2. 安装支持 libx264/aac 的 FFmpeg，检查服务用户可执行、存储目录权限及磁盘配额。
 3. 按供应商真实报价确定每项目积分价格（本次没有擅定收费，默认 0，禁止提交）；长短片当前同价，启用前应确认该计费策略。
 4. 小样本真实生成，验证镜头内容、人物一致性、合成音轨、成功/失败/超时、服务重启和任务恢复。
