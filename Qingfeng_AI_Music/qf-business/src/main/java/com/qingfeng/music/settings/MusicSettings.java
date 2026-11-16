@@ -2,6 +2,7 @@ package com.qingfeng.music.settings;
 
 import java.util.*;
 import com.qingfeng.music.work.api.WorkApi.Work;
+import com.qingfeng.music.generation.application.port.MusicProvider.VocalAdjustment;
 
 /** 分类偏好与提交描述分别保存，历史任务不依赖当前目录重新解释。 */
 public interface MusicSettings {
@@ -11,10 +12,16 @@ public interface MusicSettings {
     record Recipe(String id,String zh,String en,Map<String,List<String>> choices){}
     record Catalog(int version,List<Group> groups,List<Recipe> recipes){}
     record Compilation(int styleCharacters,int styleLimit,int negativeCharacters,int negativeLimit,boolean simplified,String notice){}
-    record Direction(Preferences preferences,String style,String negativeTags,String summaryZh,String summaryEn,int catalogVersion,CreativePlan creativePlan,Compilation compilation){
+    record Direction(Preferences preferences,String style,String negativeTags,String summaryZh,String summaryEn,int catalogVersion,CreativePlan creativePlan,Compilation compilation,VocalAdjustment vocalAdjustment){
+        public Direction(Preferences preferences,String style,String negativeTags,String zh,String en,int version,CreativePlan plan,Compilation compilation){
+            this(preferences,style,negativeTags,zh,en,version,plan,compilation,null);
+        }
         public Direction(Preferences preferences,String style,String negativeTags,String zh,String en,int version,CreativePlan plan){this(preferences,style,negativeTags,zh,en,version,plan,null);}
         public Direction(Preferences preferences,String style,String negativeTags,String zh,String en,int version){this(preferences,style,negativeTags,zh,en,version,null);}
         public String effectiveVoice(String voice){return voice.equals("AUTO")&&creativePlan!=null?creativePlan.vocalGender():voice;}
+        public Direction withVocalAdjustment(VocalAdjustment adjustment){
+            return new Direction(preferences,style,negativeTags,summaryZh,summaryEn,catalogVersion,creativePlan,compilation,adjustment);
+        }
     }
     record PhotoInspiration(String summary,String arrangement){}
     record View(Work work,Direction direction,PhotoInspiration photoInspiration){

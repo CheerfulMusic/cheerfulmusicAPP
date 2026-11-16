@@ -100,7 +100,7 @@ public class MusicSettingsService implements MusicSettings {
     }
     public void snapshot(String task,Direction direction){if(direction!=null)repository.snapshot(task,direction);}
     public Optional<Direction> frozen(String work,String task){return repository.task(work,task);}
-    public Optional<Direction> task(String owner,String work,String task){works.get(owner,work);return repository.task(work,task);}
+    public Optional<Direction> task(String owner,String work,String task){works.get(owner,work);return repository.task(work,task).filter(direction->direction.preferences()!=null);}
     private String text(String text,int max){String value=text==null?"":text.trim();if(value.length()>max)throw invalid();return value;}
     private DomainException invalid(){return new DomainException("INVALID_MUSIC_SETTINGS","音乐选项无效或超出数量限制，请重新选择。");}
     private DomainException conflict(String message){return new DomainException("INVALID_MUSIC_SETTINGS",message);}

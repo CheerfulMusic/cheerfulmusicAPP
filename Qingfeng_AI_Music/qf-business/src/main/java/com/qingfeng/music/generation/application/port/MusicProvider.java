@@ -18,7 +18,15 @@ public interface MusicProvider {
     default Submission replace(Request request,Replacement replacement,String requestKey){throw new Rejected();}
     /** 只读补齐旧歌曲标识，必须与已归档的音频地址匹配。 */
     default AudioInfo sourceInfo(String task,String archivedUrl){return null;}
-    record Replacement(String taskId,String audioId,double start,double end,String lyrics){}
+    enum VocalAdjustment {
+        HIGHER, LOWER, RISING_END, FALLING_END,
+        SOFTER, STRONGER, LONGER_END, MORE_CONNECTED, SPEECH_LIKE
+    }
+    record Replacement(String taskId,String audioId,double start,double end,String lyrics,VocalAdjustment vocalAdjustment){
+        public Replacement(String taskId,String audioId,double start,double end,String lyrics){
+            this(taskId,audioId,start,end,lyrics,null);
+        }
+    }
     record AudioInfo(String audioId,double duration,String audioUrl){}
 
     /** 只有供应商明确拒绝且确定未受理才可使用；超时/断连必须视为提交结果未知。 */

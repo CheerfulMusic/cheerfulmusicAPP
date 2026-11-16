@@ -18,7 +18,8 @@ public final class PlaybackLyricsService {
         var stored=repository.find(asset);
         String state=stored.map(PlaybackLyricsRepository.Stored::status).orElse("NOT_REQUESTED");
         var lines=stored.filter(s->s.status().equals("READY")).map(s->PlaybackLyrics.lines(s.words())).orElse(List.of());
-        boolean available=enabled&&provider.isConfigured()&&"kie-suno".equals(source.provider())&&source.providerTaskId()!=null&&source.audioUrl()!=null;
+        boolean suno="kie-suno".equals(source.provider())||com.qingfeng.music.generation.application.SectionEditingService.VOCAL_ADJUSTMENT_QUEUE.equals(source.provider());
+        boolean available=enabled&&provider.isConfigured()&&suno&&source.providerTaskId()!=null&&source.audioUrl()!=null;
         return new PlaybackLyrics.Snapshot(state,source.lyrics()==null?"":source.lyrics(),lines,available);
     }
     public PlaybackLyrics.Snapshot sync(String owner,String work,String asset,String key){

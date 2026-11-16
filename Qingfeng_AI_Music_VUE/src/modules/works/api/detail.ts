@@ -75,7 +75,7 @@ export interface GenerationPreflight {workVersion:number;revisionId:string;style
 export const preflightGeneration=(work:string,revisionId:string)=>call<GenerationPreflight>(`app/works/${work}/generations/preflight`,'POST',{revisionId})
 export const retryTaskArchive = (work: string, task: string) => call<void>(`app/works/${work}/generations/${task}/retry-archive`, 'POST', {})
 export const audioUrl = (work: string, asset: string, download = false) => apiUrl(`app/works/${work}/audio/${asset}${download ? '?download=true' : ''}`)
-export const createShare = (work: string, revisionId: string, assetId: string) => call<{ id: string; token: string; expiresAt: string }>(`app/works/${work}/shares`, 'POST', { revisionId, assetId })
+export const createShare = (work: string, assetId: string, revisionId?: string) => call<{ id: string; token: string; expiresAt: string }>(`app/works/${work}/shares`, 'POST', { assetId, revisionId })
 export const revokeShares = (work: string) => call<void>(`app/works/${work}/shares`, 'DELETE')
 
 export const cancelTask=(work:string,task:string)=>call<GenerationTask>(`app/works/${work}/generations/${task}/cancel`,'POST',{})

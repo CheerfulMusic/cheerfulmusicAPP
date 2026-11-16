@@ -18,6 +18,8 @@ public class SectionEditingConfiguration {
     @Bean SectionEditRepository sectionEditRepository(JdbcTemplate jdbc){return new JdbcSectionEditRepository(jdbc);}
     @Bean SectionEditingService sectionEditingService(WorkApi works,LyricsApi lyrics,MediaApi media,MusicProvider provider,TaskMapper mapper,SectionEditRepository edits,UsageBudget budget,PlatformTransactionManager manager,Environment env,com.qingfeng.music.lyrics.playback.PlaybackLyricsService playback,com.qingfeng.music.settings.MusicSettings settings){
         var tx=new TransactionTemplate(manager);tx.setIsolationLevel(org.springframework.transaction.TransactionDefinition.ISOLATION_READ_COMMITTED);
-        return new SectionEditingService(works,lyrics,media,provider,new MyBatisTaskRepository(mapper),edits,budget,tx,env.getProperty("qingfeng.generation.enabled",Boolean.class,false)&&env.getProperty("qingfeng.generation.section-editing-enabled",Boolean.class,true)).withPlayback(playback).withSettings(settings);
+        return new SectionEditingService(works,lyrics,media,provider,new MyBatisTaskRepository(mapper),edits,budget,tx,env.getProperty("qingfeng.generation.enabled",Boolean.class,false)&&env.getProperty("qingfeng.generation.section-editing-enabled",Boolean.class,true))
+            .withPlayback(playback).withSettings(settings)
+            .withVocalAdjustment(env.getProperty("qingfeng.generation.vocal-adjustment-enabled",Boolean.class,false));
     }
 }

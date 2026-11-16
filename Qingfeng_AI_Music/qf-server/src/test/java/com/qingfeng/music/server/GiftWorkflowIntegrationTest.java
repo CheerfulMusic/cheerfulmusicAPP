@@ -1,13 +1,23 @@
 package com.qingfeng.music.server;
 
+import com.qingfeng.music.generation.api.GenerationApi.Task;
+import com.qingfeng.music.generation.domain.GenerationStatus;
+import com.qingfeng.music.infrastructure.persistence.generation.MyBatisTaskRepository;
+import com.qingfeng.music.infrastructure.persistence.generation.TaskMapper;
+import com.qingfeng.music.media.application.MediaService;
+import java.io.ByteArrayInputStream;
 import java.net.*;
 import java.net.http.*;
 import java.nio.*;
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
+import java.util.UUID;
 import java.util.regex.Pattern;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -15,6 +25,9 @@ import static org.junit.jupiter.api.Assertions.*;
 @ActiveProfiles("test")
 class GiftWorkflowIntegrationTest {
  @Value("${local.server.port}")int port;
+ @Autowired TaskMapper tasks;
+ @Autowired JdbcTemplate jdbc;
+ @Autowired MediaService media;
  record Session(HttpClient client,String csrf){}
  String text(HttpResponse<byte[]> response){return new String(response.body(),StandardCharsets.UTF_8);}
  String field(String json,String key){var m=Pattern.compile("\""+key+"\"\\s*:\\s*\"([^\"]+)\"").matcher(json);assertTrue(m.find(),"缺少"+key);return m.group(1);}
@@ -63,6 +76,34 @@ class GiftWorkflowIntegrationTest {
   assertEquals(404,call(other,"GET","/api/app/works/"+w+"/covers/"+cover,null).statusCode());assertEquals(401,call(null,"GET","/api/app/works/"+w+"/covers/"+cover,null).statusCode());assertEquals(200,call(a,"PUT","/api/app/works/"+w+"/covers/selection","{\"coverId\":\""+cover+"\",\"expectedVersion\":0}").statusCode());
   String token=share(a,w,r,audio),publicPath="/api/public/gifts/"+token+"/cover";var publicCover=call(null,"GET",publicPath,null);assertEquals(200,publicCover.statusCode());assertEquals("image/jpeg",publicCover.headers().firstValue("Content-Type").orElse(""));assertEquals("nosniff",publicCover.headers().firstValue("X-Content-Type-Options").orElse(""));assertEquals(1024,javax.imageio.ImageIO.read(new java.io.ByteArrayInputStream(publicCover.body())).getWidth());
   call(a,"DELETE","/api/app/works/"+w+"/shares",null);assertEquals(404,call(null,"GET",publicPath,null).statusCode());
+ }
+ @Test void eachGeneratedCandidateSharesItsOwnAudioAndTheOriginalLyrics() throws Exception {
+  var owner = session();
+  String workId = work(owner);
+  String revisionId = lyrics(owner, workId, "两首歌曲共用的歌词");
+  assertEquals(200, call(owner, "POST", "/api/app/works/" + workId + "/lyrics/" + revisionId + "/confirm", "{}").statusCode());
+  String taskId = UUID.randomUUID().toString();
+  new MyBatisTaskRepository(tasks).insertOrRead(new Task(taskId, workId, revisionId, 0, UUID.randomUUID().toString(),
+      "给你的歌", "两首歌曲共用的歌词", "民谣", "offline", GenerationStatus.SUCCEEDED, Instant.now()));
+  byte[] original = wav(), alternate = wav();
+  alternate[44] = 1;
+  String primary = media.store(taskId, workId, new ByteArrayInputStream(original));
+  String secondary = media.storeCandidate(taskId, workId, "second", null, new ByteArrayInputStream(alternate));
+  jdbc.update("UPDATE generation_task SET asset_id=? WHERE id=?", primary, taskId);
+
+  String sharePath = "/api/app/works/" + workId + "/shares";
+  String secondaryRequest = "{\"assetId\":\"" + secondary + "\"}";
+  assertEquals(404, call(session(), "POST", sharePath, secondaryRequest).statusCode());
+  var secondaryShare = call(owner, "POST", sharePath, secondaryRequest);
+  assertEquals(200, secondaryShare.statusCode(), text(secondaryShare));
+  String secondaryGift = "/api/public/gifts/" + field(text(secondaryShare), "token");
+  assertTrue(text(call(null, "GET", secondaryGift, null)).contains("两首歌曲共用的歌词"));
+  assertArrayEquals(alternate, call(null, "GET", secondaryGift + "/audio", null).body());
+
+  var primaryShare = call(owner, "POST", sharePath, "{\"assetId\":\"" + primary + "\"}");
+  assertEquals(200, primaryShare.statusCode(), text(primaryShare));
+  String primaryToken = field(text(primaryShare), "token");
+  assertArrayEquals(original, call(null, "GET", "/api/public/gifts/" + primaryToken + "/audio", null).body());
  }
  @Test void unconfirmedLyricsAndInvalidAudioCannotBecomeGift()throws Exception{
   var a=session();String w=work(a),r=lyrics(a,w,"还未确认");

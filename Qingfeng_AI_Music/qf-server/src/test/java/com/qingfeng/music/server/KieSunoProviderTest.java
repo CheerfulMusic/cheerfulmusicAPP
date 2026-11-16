@@ -66,6 +66,28 @@ class KieSunoProviderTest {
         var source=provider.sourceInfo("original","https://audio.test/song?id=second&Expires=1");assertNotNull(source);assertEquals("correct",source.audioId());assertEquals(125,source.duration());assertEquals(1,calls.get());
         assertNull(provider.sourceInfo("original","https://audio.test/song?id=missing"));
     }
+    @Test void vocalAdjustmentsSendDistinctInstructionsWithTheOriginalLyrics(){
+        response="{\"code\":200,\"data\":{\"taskId\":\"adjusted-task\"}}";
+        var instructions=java.util.Map.of(
+            MusicProvider.VocalAdjustment.HIGHER,"slightly higher",
+            MusicProvider.VocalAdjustment.LOWER,"slightly lower",
+            MusicProvider.VocalAdjustment.RISING_END,"rise on the last syllables",
+            MusicProvider.VocalAdjustment.FALLING_END,"fall on the last syllables",
+            MusicProvider.VocalAdjustment.SOFTER,"lighter voice and gentler delivery",
+            MusicProvider.VocalAdjustment.STRONGER,"more vocal power and clearer articulation",
+            MusicProvider.VocalAdjustment.LONGER_END,"Sustain the final syllable",
+            MusicProvider.VocalAdjustment.MORE_CONNECTED,"connecting neighboring syllables",
+            MusicProvider.VocalAdjustment.SPEECH_LIKE,"natural inflections of everyday speech");
+        for(var entry:instructions.entrySet()){
+            var edit=new MusicProvider.Replacement("task","clip",12.5,24.5,"陪伴每个清晨",entry.getKey());
+            provider.replace(request,edit,"test-key");
+            var input=new ObjectMapper().readTree(body).path("input");
+            assertEquals(request.confirmedLyrics(),input.path("full_lyrics").asText());
+            assertFalse(input.has("lyrics"));
+            assertTrue(input.path("prompt").asText().contains("陪伴每个清晨"));
+            assertTrue(input.path("prompt").asText().contains(entry.getValue()));
+        }
+    }
     @Test void invalidSectionDoesNotCallProviderAndAmbiguousResponseIsNotRetried(){
         assertThrows(MusicProvider.Rejected.class,()->provider.replace(request,new MusicProvider.Replacement("task","clip",0,9,"歌词"),"key"));assertEquals(0,calls.get());
         status=500;assertThrows(IllegalStateException.class,()->provider.replace(request,new MusicProvider.Replacement("task","clip",0,10,"歌词"),"key"));assertEquals(1,calls.get());

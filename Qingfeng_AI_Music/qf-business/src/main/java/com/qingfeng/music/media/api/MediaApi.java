@@ -2,12 +2,14 @@ package com.qingfeng.music.media.api;
 import java.io.*;
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 public interface MediaApi {
     Asset importAudio(String creator,String work,InputStream content);
     List<Asset> list(String creator,String work);
     Asset get(String creator,String work,String asset);
     Content open(String creator,String work,String asset);
     MediaRef locate(String creator,String work,String asset);
+    default Optional<String> generatedRevision(String owner,String work,String asset){return Optional.empty();}
     default boolean matchesGenerationRevision(String owner,String work,String asset,String revision){return false;}
     default Selection selection(String owner,String work){return new Selection(null,0,null);}
     default Selection select(String owner,String work,String asset,long version){throw new UnsupportedOperationException();}

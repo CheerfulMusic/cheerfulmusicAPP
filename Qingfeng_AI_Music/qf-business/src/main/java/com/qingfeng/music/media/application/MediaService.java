@@ -54,7 +54,8 @@ public class MediaService implements MediaApi, SharedMediaAccess, GeneratedAudio
         }
     }
     public Asset get(String owner,String work,String id){works.get(owner,work);return find(work,id).asset();}
-    public boolean matchesGenerationRevision(String owner,String work,String asset,String revision){works.get(owner,work);return repository.generatedRevision(work,asset).filter(revision::equals).isPresent();}
+    public Optional<String> generatedRevision(String owner,String work,String asset){works.get(owner,work);return repository.generatedRevision(work,asset);}
+    public boolean matchesGenerationRevision(String owner,String work,String asset,String revision){return generatedRevision(owner,work,asset).filter(revision::equals).isPresent();}
     public List<Asset> list(String owner,String work){works.get(owner,work);return repository.list(work);}
     public Selection selection(String owner,String work){works.get(owner,work);var value=repository.selection(work);return new Selection(value.assetId(),value.version(),value.assetId()==null?null:find(work,value.assetId()).asset());}
     public Selection select(String owner,String work,String asset,long version){works.get(owner,work);find(work,asset);if(!repository.select(work,asset,version))throw new DomainException("AUDIO_SELECTION_CONFLICT","当前歌曲版本已改变，请刷新后再选择。");return selection(owner,work);}
