@@ -70,7 +70,7 @@ public final class AgentChatPolicy {
     private static final String MUSIC="(?:生成|制作|开始做|做成).{0,10}(?:音乐|歌曲|歌|音频)|(?:生成|开始生成)(?:吧|音乐|歌曲|这首|一首|$)|(?:写|来|做|唱)(?:一|个|这)?首歌|generate.{0,12}(?:music|song|audio)|make.{0,12}(?:music|song)";
     private static final Set<String> READ_ACTIONS=Set.of("list_works","list_versions","list_audio","list_covers","discover_music","list_tasks",
             "get_credits","list_credit_entries","get_usage","get_account","get_referral","list_orders","get_order","payment_catalog","get_current_song",
-            "get_music_settings","music_settings_catalog","preview_music_settings","get_playback_lyrics","list_section_edits","section_context","search_memory");
+            "get_music_settings","music_settings_catalog","preview_music_settings","get_playback_lyrics","list_section_edits","section_context","search_memory","video_capabilities","list_music_videos","get_music_video","download_music_video");
     private static String surface(String text) {
         if(text==null)return "";
         // Quoted commands are data. A quoted song title can still follow an explicit verb.
@@ -104,7 +104,7 @@ public final class AgentChatPolicy {
         return explicitSocial(text);
     }
     public static boolean requiresConfirmation(String action) {
-        return Set.of("delete_work","erase_analytics","close_checking","generate_avatar").contains(action);
+        return Set.of("delete_work","erase_analytics","close_checking","generate_avatar","create_music_video").contains(action);
     }
     public static boolean actionRequested(String action,String text) {
         if(action==null)return false;
@@ -131,6 +131,16 @@ public final class AgentChatPolicy {
             case "rename_work" -> requested(text,"改名|重命名|(?:名字|名称|歌名|标题)(?:改|换|设)|命名|rename");
             case "update_work" -> requested(text,"(?:修改|更新|设置|保存|更改|改|换).{0,15}(?:收礼人|收件人|场景|故事|寄语|标题|歌名|送给)|(?:收礼人|收件人|场景|故事|寄语|标题|歌名).{0,10}(?:改|换|设)|(?:update|set|save).{0,15}(?:recipient|occasion|story|message|title)");
             case "delete_work" -> requested(text,"删除|删掉|移除作品|delete|remove.{0,12}(?:song|work)");
+            case "pause_playback" -> requested(text,"暂停|停止播放|pause|stop playing");
+            case "next_track" -> requested(text,"下一首|next (?:song|track)");
+            case "previous_track" -> requested(text,"上一首|previous (?:song|track)");
+            case "enable_repeat" -> requested(text,"(?:开启|打开|开始|单曲).{0,10}循环|enable repeat");
+            case "disable_repeat" -> requested(text,"(?:关闭|取消|停止).{0,10}循环|disable repeat");
+            case "enable_lyric_follow" -> requested(text,"(?:开启|打开|恢复).{0,10}歌词.{0,10}(?:滚动|跟随)|enable lyric");
+            case "disable_lyric_follow" -> requested(text,"(?:关闭|停止|取消).{0,10}歌词.{0,10}(?:滚动|跟随)|disable lyric");
+            case "retry_music_video_assembly" -> requested(text,"(?:重试|重新).{0,20}(?:合成|MV|mv|视频)|retry.{0,20}(?:video|assembly)");
+            case "create_music_video" -> requested(text,"(?:制作|生成|创建|做).{0,30}(?:MV|mv|视频)|(?:create|generate|make).{0,30}(?:video|MV)");
+            case "cancel_music_video" -> requested(text,"(?:取消|停止).{0,20}(?:MV|mv|视频)|cancel.{0,20}(?:video|MV)");
             case "edit_cover" -> requested(text,"(?:生成|画|绘制|制作|修改|换|重做|设计).{0,15}(?:封面|cover)|(?:封面|cover).{0,12}(?:改|换)|(?:generate|edit|create).{0,12}cover");
             case "generate_avatar" -> requested(text,"(?:生成|画|绘制|制作|设计|创建).{0,60}(?:头像|avatar|profile picture)|(?:头像|avatar|profile picture).{0,30}(?:生成|画|绘制|制作|设计)|(?:generate|draw|create|make).{0,60}(?:avatar|profile picture)");
             case "upload_cover" -> requested(text,"(?:上传|导入|选择文件).{0,12}(?:封面|图片)|upload.{0,12}(?:cover|image)");

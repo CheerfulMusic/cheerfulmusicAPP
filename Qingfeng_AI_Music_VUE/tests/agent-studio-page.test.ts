@@ -26,6 +26,8 @@ vi.mock('../src/modules/agent/model/audio-analysis', () => ({ analyzeAudioFile: 
 vi.mock('../src/modules/studio/api/works', () => ({ loadWork: api.loadWork }))
 vi.mock('../src/modules/agent/api/reference', () => ({ requestReferenceAnalysis: vi.fn(async () => undefined) }))
 vi.mock('../src/modules/agent/components/AgentHotSongs.vue', () => ({ default: { template: '<section class="agent-hot-songs">热歌推荐榜</section>' } }))
+vi.mock('../src/modules/works/api/works',()=>({listWorks:vi.fn(async()=>[])}))
+vi.mock('../src/modules/works/api/detail',()=>({getPlaybackLyrics:vi.fn(async()=>({status:'NOT_REQUESTED',canSync:false,lines:[]})),rewriteLyricLine:vi.fn(),syncPlaybackLyrics:vi.fn()}))
 import AgentStudioPage from '../src/modules/agent/pages/AgentStudioPage.vue'
 import { useAgentConversation } from '../src/modules/agent/composables/useAgentConversation'
 import { usePlayer } from '../src/shared/player/store'
@@ -53,6 +55,18 @@ beforeEach(() => {
 afterEach(() => { for (const wrapper of wrappers.splice(0)) wrapper.unmount(); vi.useRealTimers() })
 
 describe('真实 Agent 对话与作品', () => {
+  it('对话控制歌词跟随与循环，不额外调用生成接口',async()=>{
+    const {wrapper,player}=await page(state({songCard:song}))
+    api.send.mockResolvedValueOnce(state({songCard:song,action:'disable_lyric_follow',messages:[message('已发送关闭歌词跟随操作',80)]}))
+    await wrapper.find('textarea').setValue('关闭歌词自动滚动')
+    await wrapper.find('textarea').trigger('keydown',{key:'Enter'});await flushPromises()
+    expect(wrapper.findComponent({name:'SyncedLyrics'}).props('followEnabled')).toBe(false)
+    api.send.mockResolvedValueOnce(state({songCard:song,action:'enable_repeat',messages:[message('已发送循环操作',81)]}))
+    await wrapper.find('textarea').setValue('开启单曲循环')
+    await wrapper.find('textarea').trigger('keydown',{key:'Enter'});await flushPromises()
+    expect(player.repeatOne).toBe(true)
+  })
+
   it('任务完成后仍拉完尚未返回的增量消息，再停止轮询', async () => {
     vi.useFakeTimers()
     api.state.mockResolvedValueOnce(state({ messages: [message('开始', 1)], historyEpoch: 1, latestSeq: 1, songCard: { ...song, status: 'RUNNING' }, taskId: 't' }))
@@ -148,7 +162,7 @@ describe('真实 Agent 对话与作品', () => {
   it('刷新恢复服务端消息、作品歌词和点赞状态；播放对象就是展示的作品版本', async () => {
     const { wrapper, toggle } = await page(state({ messages: [message('歌词已写好')], songCard: song, liked: true }))
     expect(wrapper.find('.agent-preview-meta strong').text()).toBe('给妈妈的歌')
-    expect(wrapper.find('.agent-real-lyrics').text()).toContain('妈妈的灯\n照亮回家的路')
+    expect(wrapper.findAll('.agent-real-lyrics .plain-lyric-lines p').map(line=>line.text())).toEqual(['妈妈的灯','照亮回家的路'])
     expect(wrapper.find('[aria-label="取消喜欢"]').attributes('aria-pressed')).toBe('true')
     await wrapper.find('.agent-preview-play').trigger('click')
     expect(toggle).toHaveBeenCalledWith(expect.objectContaining({ id: 'work-real:revision-real:asset-real', title: '给妈妈的歌', audio: expect.stringContaining('/api/app/works/work-real/audio/asset-real'), provenance: 'GENERATED' }))

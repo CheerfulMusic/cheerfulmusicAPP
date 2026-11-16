@@ -26,12 +26,12 @@ export function assistantResult(message: Message): AssistantResult | null {
 }
 
 /** These result cards only use first-party assets; neither model URLs nor checkout URLs are navigated. */
-export function resultMediaUrl(value: unknown, type: 'audio' | 'image', origin: string): string {
+export function resultMediaUrl(value: unknown, type: 'audio' | 'image' | 'video', origin: string): string {
   if (typeof value !== 'string') return ''
   try {
     const url = new URL(value, origin)
     if (url.origin !== origin || url.username || url.password || !['http:', 'https:'].includes(url.protocol)) return ''
-    const owned = type === 'image' ? /^\/api\/app\/works\/[\w-]+\/covers\/[\w-]+$/ : /^\/api\/app\/works\/[\w-]+\/audio\/[\w-]+$/
+    const owned = type === 'video' ? /^\/api\/app\/music-videos\/[a-fA-F0-9-]{36}\/content$/ : type === 'image' ? /^\/api\/app\/works\/[\w-]+\/covers\/[\w-]+$/ : /^\/api\/app\/works\/[\w-]+\/audio\/[\w-]+$/
     const sample = type === 'audio' && /^\/media\/[\w.-]+\.(mp3|wav)$/i.test(url.pathname)
     return owned.test(url.pathname) || sample ? url.href : ''
   } catch { return '' }

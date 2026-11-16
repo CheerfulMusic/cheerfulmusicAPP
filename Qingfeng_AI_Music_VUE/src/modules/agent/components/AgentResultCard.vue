@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import AgentVideoProgress from './AgentVideoProgress.vue'
 import { locale } from '../../../shared/i18n'
 import { resultMediaUrl, resultInviteUrl, type AssistantResult, type AgentCommand, type AgentResultItem } from '../model/assistant-result'
 const props = defineProps<{ result: AssistantResult; disabled: boolean; current: boolean }>()
 defineEmits<{ command: [command: AgentCommand] }>()
 const en = computed(() => locale.value === 'en')
 const stale = computed(() => props.result.kind === 'confirmation' && !props.current)
-const media = (value: unknown, type: 'audio' | 'image') => resultMediaUrl(value, type, window.location.origin)
+const media = (value: unknown, type: 'audio' | 'image' | 'video') => resultMediaUrl(value, type, window.location.origin)
 const inviteUrl = (value: unknown) => resultInviteUrl(value, window.location.origin)
 // A works result can contain pagination and other commands. Move only the exact
 // server-provided open command for an item; never infer an action from its title.
@@ -44,6 +45,7 @@ async function copyInvite(value: unknown) {
         <div class="agent-result-detail"><strong>{{ item.title }}</strong><p v-if="!isWorksList && item.subtitle">{{ item.subtitle }}</p>
           <small v-if="item.data.current === true">{{ en ? 'Current selection' : '当前选择' }}</small>
           <blockquote v-if="typeof item.data.excerpt === 'string'" class="agent-source-excerpt"><small>{{ en ? 'Source excerpt' : '来源摘要' }}</small><p>{{ item.data.excerpt }}</p></blockquote>
+          <AgentVideoProgress v-if="result.kind==='video' && typeof item.data.projectId==='string'" :project-id="item.data.projectId"/>
           <audio v-if="media(item.data.audioUrl, 'audio')" :src="media(item.data.audioUrl, 'audio')" controls preload="none" :aria-label="item.title"/>
           <div v-if="inviteUrl(item.data.invitePath)" class="agent-result-invite"><input readonly :value="inviteUrl(item.data.invitePath)" :aria-label="en ? 'Invitation link' : '邀请链接'" @focus="($event.target as HTMLInputElement).select()"/><button type="button" @click="copyInvite(item.data.invitePath)">{{ en ? 'Copy invitation' : '复制邀请链接' }}</button></div>
         </div>

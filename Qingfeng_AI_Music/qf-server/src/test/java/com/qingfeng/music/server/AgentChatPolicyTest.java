@@ -5,6 +5,15 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class AgentChatPolicyTest {
+    @Test void videoAndPlaybackActionsRequireExplicitRequest(){
+      assertTrue(AgentChatPolicy.applicationAllowed("create_music_video","帮我制作剧情 MV"));
+      assertTrue(AgentChatPolicy.requiresConfirmation("create_music_video"));
+      assertFalse(AgentChatPolicy.applicationAllowed("create_music_video","不要制作 MV"));
+      assertTrue(AgentChatPolicy.applicationAllowed("pause_playback","暂停播放"));
+      assertFalse(AgentChatPolicy.applicationAllowed("pause_playback","不要暂停播放"));
+      assertTrue(AgentChatPolicy.applicationAllowed("disable_lyric_follow","关闭歌词自动滚动"));
+    }
+
     @Test void clearingAllSettingsRequiresAnUnquotedWholeRequestNamingTheExactCategory(){
         for(String request:java.util.List.of("请清空所有乐器。","去掉全部配器","please clear all instruments")){
             assertTrue(AgentChatPolicy.clearAllMusicOptionsRequested(request,"instruments"));

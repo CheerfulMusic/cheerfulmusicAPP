@@ -127,7 +127,7 @@ public final class AgentChatService {
                     String target=String.valueOf(args.getOrDefault("title",current==null?"当前账号":current.title()));
                     if(args.get("workId")!=null)target+="（作品 "+args.get("workId")+"，版本 "+args.getOrDefault("expectedVersion","当前")+"）";
                     ask(owner,conversation,replaceFirst(steps.subList(i,steps.size()),proposed,args),authorizedText,current,
-                         "请确认："+capability.description()+"。目标："+target+"。",null,null,resolvedWork,resolvedVersion);break;
+                         "请确认："+capability.description()+"。目标："+target+"。"+("create_music_video".equals(proposed)?"\n"+args.getOrDefault("confirmationSummary",""):""),null,null,resolvedWork,resolvedVersion);break;
                 }
                 if(SOCIAL.contains(proposed)&&needsResolvedSocialTarget(proposed,authorizedText)
                         &&(!sameTarget(resolvedTarget,current)||versionReference(authorizedText)&&!resolvedVersion
