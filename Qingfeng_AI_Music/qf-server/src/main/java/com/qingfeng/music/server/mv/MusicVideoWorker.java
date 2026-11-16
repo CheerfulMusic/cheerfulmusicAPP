@@ -14,8 +14,9 @@ import java.util.concurrent.TimeUnit;
 public final class MusicVideoWorker implements AutoCloseable {
     private final java.util.concurrent.atomic.AtomicBoolean busy=new java.util.concurrent.atomic.AtomicBoolean();
     private final java.util.concurrent.ExecutorService executor=java.util.concurrent.Executors.newSingleThreadExecutor(r->{var t=new Thread(r,"music-video-worker");t.setDaemon(true);return t;});
-    private final JdbcTemplate db;private final TransactionTemplate tx;private final VideoProvider provider;private final MediaApi media;private final Path root;private final String ffmpeg;private final ObjectMapper json=new ObjectMapper();
-    public MusicVideoWorker(JdbcTemplate db,TransactionTemplate tx,VideoProvider provider,MediaApi media,Path root,String ffmpeg){this.db=db;this.tx=tx;this.provider=provider;this.media=media;this.root=root.toAbsolutePath().normalize();this.ffmpeg=ffmpeg;}
+    private final JdbcTemplate db;private final TransactionTemplate tx;private final VideoProvider provider;private final MediaApi media;private final Path root;private final String ffmpeg;private final VideoImages images;private final ObjectMapper json=new ObjectMapper();
+    public MusicVideoWorker(JdbcTemplate db,TransactionTemplate tx,VideoProvider provider,MediaApi media,Path root,String ffmpeg){this(db,tx,provider,media,root,ffmpeg,null);}
+    public MusicVideoWorker(JdbcTemplate db,TransactionTemplate tx,VideoProvider provider,MediaApi media,Path root,String ffmpeg,VideoImages images){this.db=db;this.tx=tx;this.provider=provider;this.media=media;this.root=root.toAbsolutePath().normalize();this.ffmpeg=ffmpeg;this.images=images;}
     @Scheduled(fixedDelayString="${qingfeng.video.poll-delay-ms:10000}")
     public void schedule(){if(busy.compareAndSet(false,true)){try{executor.execute(()->{try{tick();}finally{busy.set(false);}});}catch(java.util.concurrent.RejectedExecutionException e){busy.set(false);}}}
     @Override public void close(){executor.shutdownNow();}
@@ -37,8 +38,11 @@ public final class MusicVideoWorker implements AutoCloseable {
                 if("SUBMITTING".equals(state)){shotState(shotId,"UNCERTAIN","VIDEO_SUBMIT_INTERRUPTED");projectState(id,"UNCERTAIN","VIDEO_SUBMIT_INTERRUPTED");return;}
                 if("UNCERTAIN".equals(state)||"FAILED".equals(state)){projectState(id,state,"VIDEO_SHOT_"+state);return;}
                 if("QUEUED".equals(state)){
+                    var segment=plan.shots().get(((Number)shot.get("shot_index")).intValue());
+                    int generated=segment.seconds()-segment.imageSeconds();
+                    if(generated==0){shotState(shotId,"READY",null);return;}
                     shotState(shotId,"SUBMITTING",null);
-                    try{String task=provider.submit((String)shot.get("prompt"),((Number)shot.get("seconds")).intValue(),plan.ratio(),shotId);db.update("UPDATE music_video_shot SET provider_task_id=?,state='RUNNING',updated_at=CURRENT_TIMESTAMP WHERE id=?",task,shotId);}
+                    try{String task=provider.submit((String)shot.get("prompt"),Math.max(2,generated),plan.ratio(),plan.resolution(),shotId);db.update("UPDATE music_video_shot SET provider_task_id=?,state='RUNNING',updated_at=CURRENT_TIMESTAMP WHERE id=?",task,shotId);}
                     catch(VideoProvider.Failure e){shotState(shotId,e.uncertain?"UNCERTAIN":"FAILED",e.code);projectState(id,e.uncertain?"UNCERTAIN":"FAILED",e.code);}return;
                 }
                 if("RUNNING".equals(state)){
@@ -65,18 +69,41 @@ public final class MusicVideoWorker implements AutoCloseable {
         String owner=(String)project.get("creator_id"),work=(String)project.get("work_id"),asset=(String)project.get("asset_id");
         var audio=media.open(owner,work,asset);if(audio.size()>100L*1024*1024)throw new IllegalArgumentException("Audio too large");
         Path song=folder.resolve("song.audio");try(var input=audio.source().open()){try(var output=Files.newOutputStream(song)){byte[] buffer=new byte[65536];long total=0;for(int n;(n=input.read(buffer))!=-1;){total+=n;if(total>100L*1024*1024)throw new IllegalArgumentException("Audio too large");output.write(buffer,0,n);}}}
-        var args=new ArrayList<String>(List.of(ffmpeg,"-nostdin","-y","-loglevel","error"));
-        for(var shot:shots){args.add("-i");args.add(folder.resolve(shot.get("id")+".mp4").toString());}
-        args.addAll(List.of("-i",song.toString()));
-        var plan=json.readValue((String)project.get("plan_json"),MusicVideoService.Plan.class);String size=switch(plan.ratio()){case "9:16"->"720:1280";case "1:1"->"720:720";default->"1280:720";};
-        var filters=new StringBuilder();int total=0;
-        for(int i=0;i<shots.size();i++){int seconds=((Number)shots.get(i).get("seconds")).intValue();total+=seconds;filters.append("[").append(i).append(":v]scale=").append(size).append(":force_original_aspect_ratio=decrease,pad=").append(size).append(":(ow-iw)/2:(oh-ih)/2,setsar=1,fps=25,trim=duration=").append(seconds).append(",setpts=PTS-STARTPTS[v").append(i).append("];");}
-        for(int i=0;i<shots.size();i++)filters.append("[v").append(i).append("]");
-        filters.append("concat=n=").append(shots.size()).append(":v=1:a=0[out]");
-        Path result=folder.resolve("result.tmp.mp4");args.addAll(List.of("-filter_complex",filters.toString(),"-map","[out]","-map",shots.size()+":a:0","-c:v","libx264","-preset","veryfast","-crf","22","-c:a","aac","-t",Integer.toString(total),"-shortest","-movflags","+faststart",result.toString()));
-        var process=new ProcessBuilder(args).redirectError(folder.resolve("assembly.log").toFile()).redirectOutput(ProcessBuilder.Redirect.DISCARD).start();
-        try { if(!process.waitFor(300,TimeUnit.SECONDS))throw new IllegalStateException("Video assembly timeout"); } finally { if(process.isAlive())process.destroyForcibly(); }
-        if(process.exitValue()!=0||!Files.isRegularFile(result)||Files.size(result)<100)throw new IllegalStateException("Video assembly failed");
+        var plan=json.readValue((String)project.get("plan_json"),MusicVideoService.Plan.class);
+        int height=switch(plan.resolution()){case "480P"->480;case "1080P"->1080;default->720;};
+        int width=height==480?854:height*16/9;
+        String size=switch(plan.ratio()){case "9:16"->height+":"+width;case "1:1"->height+":"+height;default->width+":"+height;};
+        var concat=new StringBuilder();var parts=new ArrayList<String>();
+        // Encode each video/still part separately to bound memory for full songs.
+        for(int i=0;i<shots.size();i++){
+            var shot=shots.get(i);var scene=plan.shots().get(i);int generated=scene.seconds()-scene.imageSeconds();
+            String common="scale="+size+":force_original_aspect_ratio=decrease,pad="+size+":(ow-iw)/2:(oh-ih)/2,setsar=1,fps=25";
+            if(generated>0){
+                String part="segment-"+i+"-video.mp4";
+                String filter=common+",tpad=stop_mode=clone:stop_duration="+generated+",trim=duration="+generated+",setpts=PTS-STARTPTS";
+                runAssembly(List.of(ffmpeg,"-nostdin","-y","-loglevel","error","-i",folder.resolve(shot.get("id")+".mp4").toString(),"-vf",filter,"-an","-c:v","libx264","-preset","veryfast","-crf","22","-pix_fmt","yuv420p",folder.resolve(part).toString()),folder,(String)project.get("id"));parts.add(part);
+            }
+            if(scene.imageSeconds()>0){
+                if(images==null)throw new IllegalStateException("Image storage unavailable");
+                String part="segment-"+i+"-image.mp4";
+                runAssembly(List.of(ffmpeg,"-nostdin","-y","-loglevel","error","-loop","1","-i",images.resolve(owner,work,scene.imageId()).toString(),"-vf",common,"-t",Integer.toString(scene.imageSeconds()),"-an","-c:v","libx264","-preset","veryfast","-crf","22","-pix_fmt","yuv420p",folder.resolve(part).toString()),folder,(String)project.get("id"));parts.add(part);
+            }
+        }
+        for(String part:parts)concat.append("file '").append(part).append("'\n");
+        Path list=folder.resolve("segments.txt");Files.writeString(list,concat.toString());
+        Path result=folder.resolve("result.tmp.mp4");
+        runAssembly(List.of(ffmpeg,"-nostdin","-y","-loglevel","error","-f","concat","-safe","1","-i",list.toString(),"-i",song.toString(),"-map","0:v:0","-map","1:a:0","-c:v","copy","-c:a","aac","-t",java.math.BigDecimal.valueOf(plan.durationMillis(),3).toPlainString(),"-shortest","-movflags","+faststart",result.toString()),folder,(String)project.get("id"));
+        if(!Files.isRegularFile(result)||Files.size(result)<1000)throw new IllegalStateException("Video assembly empty");
         Files.move(result,folder.resolve("result.mp4"),StandardCopyOption.REPLACE_EXISTING);
+        for(String part:parts)Files.deleteIfExists(folder.resolve(part));
+        Files.deleteIfExists(song);Files.deleteIfExists(list);
+
     }
+    private void runAssembly(List<String> args,Path folder,String id)throws Exception{
+        db.update("UPDATE music_video_project SET lease_until=? WHERE id=?",java.sql.Timestamp.from(Instant.now().plusSeconds(600)),id);
+        var process=new ProcessBuilder(args).redirectError(ProcessBuilder.Redirect.appendTo(folder.resolve("assembly.log").toFile())).redirectOutput(ProcessBuilder.Redirect.DISCARD).start();
+        try{if(!process.waitFor(300,TimeUnit.SECONDS)||process.exitValue()!=0)throw new IllegalStateException("Video assembly failed");}
+        finally{if(process.isAlive()){process.destroyForcibly();process.waitFor(10,TimeUnit.SECONDS);}}
+    }
+
 }

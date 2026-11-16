@@ -5,7 +5,7 @@ import java.nio.file.Path;
 /** Narrow asynchronous video contract, implemented by NewAPI's Seedance-compatible /videos API. */
 public interface VideoProvider {
     boolean available();
-    String submit(String prompt,int seconds,String ratio,String requestId);
+    String submit(String prompt,int seconds,String ratio,String resolution,String requestId);
     String status(String taskId);
     void download(String taskId,Path destination);
     final class Failure extends RuntimeException {

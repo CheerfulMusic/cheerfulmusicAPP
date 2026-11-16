@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import MusicVideoEditor from './MusicVideoEditor.vue'
 import PlaybackIcon from '../../../shared/ui/PlaybackIcon.vue'
 import AudioPreparation from '../../../shared/player/AudioPreparation.vue'
 import { computed, nextTick, ref, watch } from 'vue'
@@ -14,6 +15,7 @@ import type { EditHint } from '../model/section-edit'
 import { songVersionTitle } from '../model/song-title'
 const props=defineProps<{work:Work;asset:AudioAsset;title:string;version?:number;renameSong:(title:string)=>Promise<void>;lyrics?:string;language?:string|null;cover?:string;pending?:boolean;checking?:boolean;busy?:boolean;sectionOpen?:boolean;publicationLabel:string;canPublishToDiscover:boolean}>()
 defineEmits<{gift:[];premium:[];publish:[];discover:[];regenerate:[];cover:[];edit:[hint?:EditHint]}>()
+const mvOpen=ref(false)
 const player=usePlayer()
 const unlocked=ref(false)
 const downloadPath=computed(()=>`app/works/${encodeURIComponent(props.work.id)}/audio/${encodeURIComponent(props.asset.id)}/download`)
@@ -116,12 +118,14 @@ async function saveTitle() {
         <button class="button secondary" type="button" @click="$emit('publish')">{{ t(publicationLabel) }}</button>
         <button v-if="canPublishToDiscover" class="button secondary" type="button" @click="$emit('discover')">{{ t('发布到发现') }}</button>
         <button class="button secondary" :disabled="busy" @click="$emit('regenerate')">{{ pending?t('查看生成进度'):checking?t('核对生成进度'):asset.origin==='GENERATED'?t('调整音乐'):t('重新制作一首') }}</button>
+        <button class="button secondary" type="button" aria-haspopup="dialog" @click="mvOpen=true">制作 MV</button>
         <button class="button secondary" @click="download">{{ unlocked?t('免费下载'):t('下载（首次10积分）') }}</button>
       </div>
       <p class="save-info">{{ work.recipient?t('先听一遍，再把这份心意送给 TA。'):t('先听一遍，继续打磨你的作品。') }}</p>
     </div>
     <SyncedLyrics :work-id="work.id" :asset-id="asset.id" :lyrics="lyrics" :language="language" :editable="asset.origin==='GENERATED'" :section-open="sectionOpen" @seek="playFrom" @edit="$emit('edit',$event)"/>
   </section>
+  <MusicVideoEditor v-if="mvOpen" :key="asset.id" :work-id="work.id" :asset-id="asset.id" :title="title" @close="mvOpen=false"/>
 </template>
 
 <style scoped>

@@ -10,8 +10,8 @@ public final class AgentVideoActions implements AgentApplicationActions {
     private final MusicVideoService service;private final ConversationService conversations;private final ObjectMapper json=new ObjectMapper();
     public AgentVideoActions(MusicVideoService service,ConversationService conversations){this.service=service;this.conversations=conversations;}
     public List<Capability> capabilities(){return List.of(
-        new Capability("video_capabilities","查询 AI 剧情 MV 可用性、价格和规格","","read"),
-        new Capability("create_music_video","根据用户确认的剧情分镜制作 MV，视频模型异步生成镜头并配当前歌曲；费用 "+service.price()+" 积分，必须先展示分镜与费用再确认","workId?:作品ID,assetId?:音频ID,title:标题,ratio:16:9/9:16/1:1,shots:[{prompt:完整镜头描述含一致角色与风格,seconds:4至15}]，最多12镜头，总长最多120秒","paid"),
+        new Capability("video_capabilities","读取当前歌曲真实时长，展示完整 MV 的三档分辨率、总费用及选择按钮；制作前先调用","workId?:作品ID,assetId?:音频ID","read"),
+        new Capability("create_music_video","按用户选择的分辨率制作整首歌曲 MV；480P 每秒1积分、720P 每秒2积分、1080P 每秒3积分。必须先展示系统计算的完整歌曲费用及分镜再确认，不能替用户选择分辨率","workId?:作品ID,assetId?:音频ID,title:标题,ratio:16:9/9:16/1:1,resolution:用户选择的480P/720P/1080P,shots:[{prompt:完整镜头描述含一致角色与风格}]；系统按真实歌曲时长以每30秒一段分配镜头，不能自填歌曲时长；上传结尾图片和设置免费停留时间请使用歌曲页制作MV编辑器","paid"),
         new Capability("list_music_videos","查询作品的 MV 任务列表","workId?:作品ID","read"),
         new Capability("get_music_video","查询 MV 分镜、执行进度、视频成品","projectId:MV任务ID","read"),
         new Capability("retry_music_video_assembly","重试合成已完成镜头，不重新调用视频模型或扣费","projectId:MV任务ID","write"),
@@ -20,17 +20,51 @@ public final class AgentVideoActions implements AgentApplicationActions {
     private String value(Map<String,Object> args,String key,String fallback){Object value=args.get(key);return value instanceof String s&&!s.isBlank()?s:fallback;}
     public Map<String,Object> prepare(String owner,String conversation,String action,Map<String,Object> args,SongCard current){
         var frozen=new LinkedHashMap<>(args);
-        if(action.equals("create_music_video")){if(!service.available())throw new DomainException("VIDEO_NOT_CONFIGURED","视频服务尚未配置，暂不生成或扣费。");frozen.put("quotedCredits",service.price());String work=value(args,"workId",current==null?null:current.songId()),asset=value(args,"assetId",current==null?null:current.assetId());if(work==null||asset==null)throw new DomainException("VIDEO_AUDIO_REQUIRED","请先选择已有音频的作品，再制作 MV。");frozen.put("workId",work);frozen.put("assetId",asset);frozen.put("title",value(args,"title",current==null?"音乐 MV":current.title()));MusicVideoService.validate(plan(frozen));var storyboard=plan(frozen);StringBuilder summary=new StringBuilder("费用 "+service.price()+" 积分；画幅 "+storyboard.ratio()+"。\n");for(int i=0;i<storyboard.shots().size();i++){var shot=storyboard.shots().get(i);summary.append(i+1).append(". ").append(shot.seconds()).append(" 秒：").append(shot.prompt()).append("\n");}summary.append("仅未开始的任务可取消退款；提交不确定时需核对，不自动重提。音频从歌曲开头截取，最长不超过分镜总时长。");frozen.put("confirmationSummary",summary.toString());}
+        if(action.equals("create_music_video")){
+            if(!service.available())throw new DomainException("VIDEO_NOT_CONFIGURED","视频服务尚未配置，暂不生成或扣费。");
+            String work=value(args,"workId",current==null?null:current.songId()),asset=value(args,"assetId",current==null?null:current.assetId());
+            if(work==null||asset==null)throw new DomainException("VIDEO_AUDIO_REQUIRED","请先选择已有音频的作品，再制作 MV。");
+            frozen.put("workId",work);frozen.put("assetId",asset);frozen.put("title",value(args,"title",current==null?"音乐 MV":current.title()));
+            var storyboard=service.prepare(owner,work,asset,plan(frozen));
+            frozen.put("resolution",storyboard.resolution());frozen.put("durationMillis",storyboard.durationMillis());frozen.put("shots",storyboard.shots());
+            frozen.put("quotedCredits",MusicVideoService.price(storyboard));
+            StringBuilder summary=new StringBuilder("完整歌曲时长 "+(storyboard.durationMillis()/1000.0)+" 秒；按 "+((storyboard.durationMillis()+999)/1000)+" 秒计费（不足一秒按一秒）。\n分辨率 "+storyboard.resolution()+"，每秒 "+MusicVideoService.rate(storyboard.resolution())+" 积分，总计 "+MusicVideoService.price(storyboard)+" 积分；画幅 "+storyboard.ratio()+"。\n");
+            for(int i=0;i<storyboard.shots().size();i++){var shot=storyboard.shots().get(i);summary.append(i+1).append(". ").append(shot.seconds()).append(" 秒：").append(shot.prompt()).append("\n");}
+            summary.append("保留整首原歌曲音轨，成片时长与歌曲一致。仅未开始的任务可取消退款；提交不确定时需核对，不自动重提。");
+            frozen.put("confirmationSummary",summary.toString());
+        }
         return frozen;
     }
-    private MusicVideoService.Plan plan(Map<String,Object> args){return json.readValue(json.writeValueAsString(Map.of("title",value(args,"title","音乐 MV"),"ratio",value(args,"ratio","16:9"),"shots",args.getOrDefault("shots",List.of()))),MusicVideoService.Plan.class);}
+    private MusicVideoService.Plan plan(Map<String,Object> args){
+        var nodes=json.valueToTree(args.getOrDefault("shots",List.of()));var shots=new ArrayList<MusicVideoService.Shot>();
+        if(!nodes.isArray())throw new DomainException("INVALID_VIDEO_REQUEST","请提供分镜列表。");
+        for(var node:nodes)shots.add(new MusicVideoService.Shot(node.path("prompt").asText(""),node.path("seconds").asInt(0),node.path("imageId").asText(null),node.path("imageSeconds").asInt(0)));
+        long duration=args.get("durationMillis") instanceof Number n?n.longValue():0;
+        return new MusicVideoService.Plan(value(args,"title","音乐 MV"),value(args,"ratio","16:9"),value(args,"resolution",""),duration,shots);
+    }
     public Result execute(String owner,String conversation,String action,Map<String,Object> args,String text,String key,SongCard current){
         conversations.state(owner,conversation);
-        if(action.equals("video_capabilities"))return new Result(service.available()?"AI 剧情 MV 已启用。最多 12 个镜头、总长 120 秒；先确认分镜，再生成并配乐。费用 "+service.price()+" 积分。":"视频模型、密钥或计费尚未配置，暂不提交或扣费。可以先讨论剧情分镜。","video",List.of(),List.of(),action);
+        if(action.equals("video_capabilities")){
+            if(!service.available())return new Result("视频模型或密钥尚未配置，暂不提交或扣费。","video",List.of(),List.of(),action);
+            String w=value(args,"workId",current==null?null:current.songId()),a=value(args,"assetId",current==null?null:current.assetId());
+            if(w==null||a==null)return new Result("请先选择一首已生成音频的歌曲。480P 每秒 1 积分，720P 每秒 2 积分，1080P 每秒 3 积分；按完整歌曲时长自动计算。","video",List.of(),List.of(),action);
+            var quote=service.quote(owner,w,a,"480P");
+            var items=new ArrayList<Item>();var commands=new ArrayList<Command>();
+            for(String resolution:List.of("480P","720P","1080P")){
+                int cost=quote.seconds()*MusicVideoService.rate(resolution);
+                items.add(new Item(resolution,resolution,cost+" 积分（"+quote.seconds()+" 秒 × "+MusicVideoService.rate(resolution)+" 积分/秒）",Map.of()));
+                commands.add(new Command("选择 "+resolution+" · "+cost+" 积分","用 "+resolution+" 为作品 "+w+" 的音频 "+a+" 制作完整 MV，先展示分镜和总费用让我确认","send"));
+            }
+            return new Result("歌曲时长 "+(quote.durationMillis()/1000.0)+" 秒，按 "+quote.seconds()+" 秒计费（不足一秒按一秒）。请选择分辨率；选择后先准备分镜和费用确认，不直接扣费。","video",items,commands,action);
+        }
         String work=value(args,"workId",current==null?null:current.songId());
         if(action.equals("list_music_videos")){if(work==null)throw new DomainException("VIDEO_WORK_REQUIRED","请先打开作品。");var rows=service.list(owner,work);return new Result(rows.isEmpty()?"还没有 MV 任务。":"这些是作品的 MV 任务。","video",rows.stream().map(r->new Item((String)r.get("id"),"MV",String.valueOf(r.get("state")),Map.of())).toList(),rows.stream().map(r->new Command("查看 MV 进度","查看 MV 任务 "+r.get("id"),"send")).toList(),action);}
         String id=value(args,"projectId",null);
-        if(action.equals("create_music_video")){if(!(args.get("quotedCredits") instanceof Number quoted)||quoted.intValue()!=service.price())throw new DomainException("VIDEO_QUOTE_CHANGED","MV 费用配置已变化，请重新确认分镜和费用。");id=service.create(owner,work,value(args,"assetId",current==null?null:current.assetId()),key,plan(args));}
+        if(action.equals("create_music_video")){
+            var storyboard=plan(args);
+            if(!(args.get("quotedCredits") instanceof Number quoted)||quoted.intValue()!=MusicVideoService.price(storyboard))throw new DomainException("VIDEO_QUOTE_CHANGED","MV 费用已变化，请重新确认分镜和费用。");
+            id=service.create(owner,work,value(args,"assetId",current==null?null:current.assetId()),key,storyboard);
+        }
         if(action.equals("cancel_music_video"))service.cancel(owner,id);
         if(action.equals("retry_music_video_assembly"))service.retryAssembly(owner,id);
         var row=service.get(owner,id);var data=new LinkedHashMap<String,Object>();data.put("projectId",id);data.put("state",row.get("state"));if("READY".equals(row.get("state")))data.put("videoUrl","/api/app/music-videos/"+id+"/content");

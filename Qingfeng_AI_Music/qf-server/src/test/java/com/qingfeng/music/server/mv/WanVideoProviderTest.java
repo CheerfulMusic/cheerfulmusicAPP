@@ -20,7 +20,7 @@ class WanVideoProviderTest {
   var client=mock(HttpClient.class);
   var submitted=response("{\"output\":{\"task_id\":\"task-123\"}}");var poll=response("{\"output\":{\"task_status\":\"SUCCEEDED\"}}");
   when(client.send(any(HttpRequest.class),any(HttpResponse.BodyHandler.class))).thenReturn(submitted,poll);
-  var p=provider(client);assertEquals("task-123",p.submit("海边旅人",5,"16:9","request"));assertEquals("succeeded",p.status("task-123"));
+  var p=provider(client);assertEquals("task-123",p.submit("海边旅人",5,"16:9","720P","request"));assertEquals("succeeded",p.status("task-123"));
   var requests=org.mockito.ArgumentCaptor.forClass(HttpRequest.class);verify(client,times(2)).send(requests.capture(),any(HttpResponse.BodyHandler.class));
   var post=requests.getAllValues().get(0);assertEquals("https://video.example/api/v1/services/aigc/video-generation/video-synthesis",post.uri().toString());assertEquals("enable",post.headers().firstValue("X-DashScope-Async").orElseThrow());
   var subscriber=HttpResponse.BodySubscribers.ofString(java.nio.charset.StandardCharsets.UTF_8);
@@ -41,7 +41,7 @@ class WanVideoProviderTest {
  }
  @SuppressWarnings("unchecked") @Test void ambiguousSubmitIsNotRetried()throws Exception{
   var client=mock(HttpClient.class);when(client.send(any(HttpRequest.class),any(HttpResponse.BodyHandler.class))).thenThrow(new IOException("network"));
-  assertTrue(assertThrows(VideoProvider.Failure.class,()->provider(client).submit("x",5,"16:9","id")).uncertain);verify(client,times(1)).send(any(HttpRequest.class),any(HttpResponse.BodyHandler.class));
+  assertTrue(assertThrows(VideoProvider.Failure.class,()->provider(client).submit("x",5,"16:9","720P","id")).uncertain);verify(client,times(1)).send(any(HttpRequest.class),any(HttpResponse.BodyHandler.class));
  }
  @Test void rejectsUntrustedUrlsAndTaskPaths(){
   for(String url:java.util.List.of("http://x.oss-cn-beijing.aliyuncs.com/a","https://127.0.0.1/a","https://x.oss-cn-beijing.aliyuncs.com.evil.test/a","https://u@x.oss-cn-beijing.aliyuncs.com/a","https://x.oss-cn-beijing.aliyuncs.com:8080/a"))assertThrows(VideoProvider.Failure.class,()->WanVideoProvider.downloadUri(url));
@@ -49,6 +49,6 @@ class WanVideoProviderTest {
  }
  @SuppressWarnings("unchecked") @Test void missingTaskIdIsUncertainAndIncompleteResultCannotDownload()throws Exception{
   var client=mock(HttpClient.class);var missing=response("{}");var running=response("{\"output\":{\"task_status\":\"RUNNING\"}}");when(client.send(any(HttpRequest.class),any(HttpResponse.BodyHandler.class))).thenReturn(missing,running);
-  var p=provider(client);assertTrue(assertThrows(VideoProvider.Failure.class,()->p.submit("x",5,"16:9","id")).uncertain);assertThrows(VideoProvider.Failure.class,()->p.download("task-123",temp.resolve("shot.mp4")));assertFalse(Files.exists(temp.resolve("shot.mp4")));
+  var p=provider(client);assertTrue(assertThrows(VideoProvider.Failure.class,()->p.submit("x",5,"16:9","720P","id")).uncertain);assertThrows(VideoProvider.Failure.class,()->p.download("task-123",temp.resolve("shot.mp4")));assertFalse(Files.exists(temp.resolve("shot.mp4")));
  }
 }

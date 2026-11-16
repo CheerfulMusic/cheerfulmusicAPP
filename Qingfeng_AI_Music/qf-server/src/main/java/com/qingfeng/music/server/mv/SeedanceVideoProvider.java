@@ -21,9 +21,9 @@ public final class SeedanceVideoProvider implements VideoProvider {
     public boolean available(){return key!=null&&!key.isBlank()&&model!=null&&!model.isBlank();}
     private HttpRequest.Builder request(String path){return HttpRequest.newBuilder(base.resolve(path)).timeout(Duration.ofSeconds(120)).header("Authorization","Bearer "+key);}
     private String task(String id){if(id==null||!id.matches("[A-Za-z0-9_-]{1,200}"))throw new Failure("VIDEO_INVALID_TASK_ID",true);return "videos/"+id;}
-    public String submit(String prompt,int seconds,String ratio,String requestId){
+    public String submit(String prompt,int seconds,String ratio,String resolution,String requestId){
         if(!available())throw new Failure("VIDEO_NOT_CONFIGURED",false);
-        var body=Map.of("model",model,"prompt",prompt,"seconds",seconds,"user",requestId,"metadata",Map.of("ratio",ratio,"resolution","720p","generate_audio",false,"watermark",false));
+        var body=Map.of("model",model,"prompt",prompt,"seconds",seconds,"user",requestId,"metadata",Map.of("ratio",ratio,"resolution",resolution.toLowerCase(Locale.ROOT),"generate_audio",false,"watermark",false));
         try{
             var response=http.send(request("videos").header("Content-Type","application/json").POST(HttpRequest.BodyPublishers.ofString(json.writeValueAsString(body))).build(),HttpResponse.BodyHandlers.ofString());
             if(response.statusCode()<200||response.statusCode()>=300)throw new Failure("VIDEO_SUBMIT_HTTP_"+response.statusCode(),response.statusCode()>=500||response.statusCode()==408);

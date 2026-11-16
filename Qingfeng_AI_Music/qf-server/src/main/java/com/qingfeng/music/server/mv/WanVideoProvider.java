@@ -35,12 +35,12 @@ public final class WanVideoProvider implements VideoProvider {
         if (id == null || !id.matches("[A-Za-z0-9_-]{1,200}")) throw new Failure("VIDEO_INVALID_TASK_ID", true);
         return "tasks/" + id;
     }
-    public String submit(String prompt, int seconds, String ratio, String requestId) {
+    public String submit(String prompt, int seconds, String ratio, String resolution, String requestId) {
         if (!available()) throw new Failure("VIDEO_NOT_CONFIGURED", false);
-        if (seconds < 2 || seconds > 30 || !Set.of("21:9", "16:9", "4:3", "1:1", "3:4", "9:16").contains(ratio))
+        if (!Set.of("480P","720P","1080P").contains(resolution) || seconds < 2 || seconds > 30 || !Set.of("21:9", "16:9", "4:3", "1:1", "3:4", "9:16").contains(ratio))
             throw new Failure("VIDEO_INVALID_PARAMETERS", false);
         var body = Map.of("model", model, "input", Map.of("prompt", prompt), "parameters",
-                Map.of("resolution", "720P", "ratio", ratio, "duration", seconds, "audio", false, "prompt_extend", true, "watermark", false));
+                Map.of("resolution", resolution, "ratio", ratio, "duration", seconds, "audio", false, "prompt_extend", true, "watermark", false));
         try {
             var response = http.send(request("services/aigc/video-generation/video-synthesis")
                     .header("X-DashScope-Async", "enable").header("Content-Type", "application/json")
