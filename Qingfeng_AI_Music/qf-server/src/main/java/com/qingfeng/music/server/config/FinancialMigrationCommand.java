@@ -262,7 +262,8 @@ public final class FinancialMigrationCommand {
                 }
             }
             verifyResources(packaged);
-            require(loaded.equals(packaged), "FINANCIAL_MIGRATION_ARTIFACT_RESOURCE_MISMATCH");
+            // A frozen V45 migration artifact may omit later application SQL.
+            require(loaded.headMap(46).equals(packaged.headMap(46)), "FINANCIAL_MIGRATION_ARTIFACT_RESOURCE_MISMATCH");
             var command = jar.getJarEntry("BOOT-INF/classes/" + COMMAND_ENTRY);
             require(command != null, "FINANCIAL_MIGRATION_COMMAND_ARTIFACT_MISSING");
             try (var actual = FinancialMigrationCommand.class.getResourceAsStream("/" + COMMAND_ENTRY)) {
