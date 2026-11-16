@@ -11,6 +11,8 @@ import tools.jackson.databind.ObjectMapper;
 import static org.junit.jupiter.api.Assertions.*;
 
 class AliyunSmsOtpSenderTest {
+    private static final SmsDestinationPolicy GB=new SmsDestinationPolicy(true,true,true,false,true,"GB");
+    private static final SmsDestinationPolicy CN=new SmsDestinationPolicy(true,false,true,true,false,"");
     private static final class Wire extends IHttpClient {
         final List<HttpRequest> sent=new ArrayList<>();String result="{\"ResponseCode\":\"OK\",\"MessageId\":\"fixture\"}";int status=200;
         protected void init(HttpClientConfig config){}
@@ -31,18 +33,18 @@ class AliyunSmsOtpSenderTest {
         return result;
     }
     @Test void officialSdkSignsGlobePostWithFixedOtpTextAndOptionalNumericChannel()throws Exception{
-        var wire=new Wire();try(var sender=new AliyunSmsOtpSender(client("ap-southeast-1",wire),null,"Cheerful","3790","","")){
-            sender.send("447700900123","123456");var request=wire.sent.get(0);var data=fields(request);
+        var wire=new Wire();try(var sender=new AliyunSmsOtpSender(client("ap-southeast-1",wire),null,"Cheerful","3790","","",GB)){
+            sender.send("447400123123","123456");var request=wire.sent.get(0);var data=fields(request);
             assertEquals("https",URI.create(request.getSysUrl()).getScheme());assertEquals("dysmsapi.ap-southeast-1.aliyuncs.com",URI.create(request.getSysUrl()).getHost());assertEquals(MethodType.POST,request.getSysMethod());
             assertEquals("SendMessageToGlobe",data.get("Action"));assertEquals("2018-05-01",data.get("Version"));assertEquals("HMAC-SHA1",data.get("SignatureMethod"));assertFalse(data.get("Signature").isBlank());
-            assertEquals("447700900123",data.get("To"));assertEquals("Cheerful",data.get("From"));assertEquals("OTP",data.get("Type"));assertEquals("3790",data.get("ChannelId"));
+            assertEquals("447400123123",data.get("To"));assertEquals("Cheerful",data.get("From"));assertEquals("OTP",data.get("Type"));assertEquals("3790",data.get("ChannelId"));
             assertEquals("Cheerful Music verification code: 123456. Valid for 10 minutes. Do not share this code.",data.get("Message"));
             assertFalse(request.getSysUrl().contains("123456"));assertFalse(request.getSysUrl().contains("Message="));assertFalse(data.containsKey("SignName"));assertFalse(data.containsKey("TemplateCode"));
         }
     }
     @Test void mainlandMasReceivesExactlyLogtoCodeAndNeverGeneratesAReplacement()throws Exception{
         var wire=new Wire();wire.result="{\"Code\":\"OK\",\"Success\":true}";
-        try(var sender=new AliyunSmsOtpSender(null,client("cn-hangzhou",wire),"Cheerful","","fixture-sign","fixture-template")){
+        try(var sender=new AliyunSmsOtpSender(null,client("cn-hangzhou",wire),"","","fixture-sign","fixture-template",CN)){
             sender.send("8613800000000","654321");var request=wire.sent.get(0);var data=fields(request);
             assertEquals("dypnsapi.aliyuncs.com",URI.create(request.getSysUrl()).getHost());assertEquals("SendSmsVerifyCode",data.get("Action"));assertEquals("2017-05-25",data.get("Version"));
             assertEquals("86",data.get("CountryCode"));assertEquals("13800000000",data.get("PhoneNumber"));assertEquals("fixture-sign",data.get("SignName"));assertEquals("fixture-template",data.get("TemplateCode"));
@@ -52,21 +54,22 @@ class AliyunSmsOtpSenderTest {
     }
     @Test void providerFailuresAreNotRetriedAndNeverExposeResponseOtpOrSecret(){
         var wire=new Wire();wire.result="{\"ResponseCode\":\"REJECTED\",\"ResponseDescription\":\"private OTP 123456 fixture-secret\"}";
-        try(var sender=new AliyunSmsOtpSender(client("ap-southeast-1",wire),null,"Cheerful","","","")){
-            var error=assertThrows(IllegalStateException.class,()->sender.send("447700900124","123456"));
+        try(var sender=new AliyunSmsOtpSender(client("ap-southeast-1",wire),null,"Cheerful","","","",GB)){
+            var error=assertThrows(IllegalStateException.class,()->sender.send("447400123124","123456"));
             assertEquals("SMS delivery unavailable",error.getMessage());assertNull(error.getCause());assertEquals(1,wire.sent.size());
         }
         var failing=new Wire();failing.status=500;failing.result="{\"Code\":\"InternalError\",\"Message\":\"provider secret\"}";
-        try(var sender=new AliyunSmsOtpSender(client("ap-southeast-1",failing),null,"Cheerful","","","")){
-            assertThrows(IllegalStateException.class,()->sender.send("447700900125","123456"));assertEquals(1,failing.sent.size());
+        try(var sender=new AliyunSmsOtpSender(client("ap-southeast-1",failing),null,"Cheerful","","","",GB)){
+            assertThrows(IllegalStateException.class,()->sender.send("447400123125","123456"));assertEquals(1,failing.sent.size());
         }
     }
     @Test void disabledRouteInvalidRegionAndInvalidSenderCannotSend(){
-        var wire=new Wire();try(var sender=new AliyunSmsOtpSender(client("ap-southeast-1",wire),null,"Cheerful","","","")){
-            assertThrows(IllegalStateException.class,()->sender.send("8613800000000","123456"));
-            assertThrows(IllegalArgumentException.class,()->sender.send("+447700900123","123456"));
-            assertThrows(IllegalArgumentException.class,()->sender.send("447700900123","arbitrary text"));assertTrue(wire.sent.isEmpty());
+        var wire=new Wire();try(var sender=new AliyunSmsOtpSender(client("ap-southeast-1",wire),null,"Cheerful","","","",GB)){
+            assertThrows(IllegalArgumentException.class,()->sender.send("8613800000000","123456"));
+            assertThrows(IllegalArgumentException.class,()->sender.send("+447400123123","123456"));
+            assertThrows(IllegalArgumentException.class,()->sender.send("447400123123","arbitrary text"));assertTrue(wire.sent.isEmpty());
         }
-        assertThrows(IllegalStateException.class,()->new AliyunSmsOtpSender(null,null,"Cheerful","UK_SMS","",""));
+        assertThrows(IllegalStateException.class,()->new AliyunSmsOtpSender(null,null,"Cheerful","UK_SMS","","",GB));
+        assertThrows(IllegalStateException.class,()->new AliyunSmsOtpSender(client("ap-southeast-1",new Wire()),null,"","","","",GB));
     }
 }

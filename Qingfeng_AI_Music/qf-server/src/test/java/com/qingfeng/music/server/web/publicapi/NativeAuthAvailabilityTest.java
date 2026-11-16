@@ -18,7 +18,7 @@ class NativeAuthAvailabilityTest {
         var client=mock(LogtoNativeClient.class);
         when(clients.getIfAvailable()).thenReturn(client);
         when(client.capabilities()).thenThrow(new IllegalStateException("provider unavailable"));
-        var controller=new NativeAuthController(clients,mock(IdentityApi.class),mock(LogtoIdentityService.class),true,true,true,"issuer");
+        var controller=new NativeAuthController(clients,mock(IdentityApi.class),mock(LogtoIdentityService.class),new SmsDestinationPolicy(false,false,false,false,false,""),true,true,true,"issuer");
         MockMvcBuilders.standaloneSetup(controller).build().perform(get("/api/public/auth/native/status"))
             .andExpect(status().isServiceUnavailable()).andExpect(jsonPath("$.code").value("LOGIN_UNAVAILABLE"));
     }
@@ -31,7 +31,7 @@ class NativeAuthAvailabilityTest {
         when(client.capabilities()).thenReturn(new LogtoNativeClient.Capabilities(true,true,true,true));
         when(client.begin(anyString())).thenReturn(mock(LogtoNativeClient.Interaction.class));
         when(client.sendCode(any(),anyString(),anyString(),anyString())).thenReturn("verification");
-        var controller=new NativeAuthController(clients,identity,mock(LogtoIdentityService.class),true,true,true,"issuer");
+        var controller=new NativeAuthController(clients,identity,mock(LogtoIdentityService.class),new SmsDestinationPolicy(false,false,false,false,false,""),true,true,true,"issuer");
         var mvc=MockMvcBuilders.standaloneSetup(controller).build();
         var field=NativeAuthController.class.getDeclaredField("limits");field.setAccessible(true);
         Map<String,?> limits=(Map<String,?>)field.get(controller);

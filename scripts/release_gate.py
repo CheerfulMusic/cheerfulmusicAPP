@@ -67,6 +67,8 @@ CORE_MIGRATION_SHA256 = {
 }
 INTEGRATED_MIGRATION = 'V45__credit_entitlement_integration.sql'
 INTEGRATED_MIGRATION_SHA256 = '3dd5cebf19dee960ecefb2239668139918d363496fe87710f817c5b3a3241685'
+AGENT_ALLOWANCE_MIGRATION = 'V46__agent_chat_allowance.sql'
+AGENT_ALLOWANCE_MIGRATION_SHA256 = '8ce991cea50af971ca6d748c1a37b304a8ee11d7969f06dd455dc16629638f86'
 
 
 class GateError(ValueError):
@@ -136,14 +138,24 @@ def normalized_migration_sha(data):
 
 
 def verify_migration_set(normalized):
-    expected = {**CORE_MIGRATION_SHA256, INTEGRATED_MIGRATION: INTEGRATED_MIGRATION_SHA256}
-    if set(normalized) != set(expected):
-        raise GateError("Canonical migration chain must contain exactly core V1..V44 and integrated V45")
+    rollback_expected = {**CORE_MIGRATION_SHA256,
+                         INTEGRATED_MIGRATION: INTEGRATED_MIGRATION_SHA256}
+    release_expected = {**rollback_expected,
+                        AGENT_ALLOWANCE_MIGRATION: AGENT_ALLOWANCE_MIGRATION_SHA256}
+    if set(normalized) == set(release_expected):
+        expected = release_expected
+        extension = {"agentAllowanceVersion": "46"}
+    elif set(normalized) == set(rollback_expected):
+        expected = rollback_expected
+        extension = {}
+    else:
+        raise GateError("Canonical migration chain must contain exactly core V1..V44 and integrated V45, optionally agent allowance V46")
     for name, digest in expected.items():
         if normalized[name] != digest:
             raise GateError("Canonical migration source changed: " + name)
     return {"coreSourceCommit": CORE_MIGRATION_SOURCE, "coreVersions": "1..44",
-            "integrationVersion": "45", "normalization": "UTF-8/no BOM/LF",
+            "integrationVersion": "45", **extension,
+            "normalization": "UTF-8/no BOM/LF",
             "normalizedSha256": dict(sorted(normalized.items()))}
 
 
@@ -320,7 +332,96 @@ def check_startup(workspace, manifest_path, jar):
     return {"artifact": "VERIFIED", "schemaEvidence": "PINNED", "networkAccess": "NOT_PERFORMED",
             "businessHealth": "UNKNOWN", "productionRelease": "NOT_AUTHORIZED"}
 
-def build(workspace, baseline, java_home, cache_root):
+def load_isolated_backend_cohort(cache_root, manifest_path):
+    """Read a fresh, private test cohort; never use inherited database settings."""
+    if not manifest_path:
+        raise GateError("Explicit fresh isolated backend test cohort required")
+    cache_root = Path(cache_root).resolve()
+    supplied = Path(manifest_path)
+    if supplied.is_symlink() or supplied.resolve(strict=True).parent != cache_root / "release-gate-cohorts":
+        raise GateError("Isolated backend cohort manifest outside private cache")
+    manifest = load_json(supplied)
+    if set(manifest) != {"version", "revision", "carryForwardRevision", "compatibilityPort"} or manifest["version"] != 1:
+        raise GateError("Invalid isolated backend cohort manifest")
+    revision, carry = manifest["revision"], manifest["carryForwardRevision"]
+    if (not isinstance(revision, str) or not re.fullmatch(r"r[0-9]+", revision)
+            or not isinstance(carry, str) or not re.fullmatch(r"r[0-9]+", carry)
+            or carry == revision or manifest["compatibilityPort"] != 57346):
+        raise GateError("Invalid isolated backend cohort revision or port")
+    try:
+        import pymysql
+    except ImportError:
+        raise GateError("PyMySQL required to verify isolated backend cohort") from None
+    expected_uuid = "05c27d3c-dda3-11f1-aba0-84a938421519"
+    definitions = (
+        ("migration", "payment-main-integration-20261112", "p0_integration_migration_20261112", "P0_INTEGRATION_MIGRATION_MYSQL_", revision),
+        ("credits", "payment-main-integration-20261112", "p0_integrated_credits_20261112", "P0_INTEGRATED_CREDITS_MYSQL_", revision),
+        ("application", "payment-main-integration-20261112", "p0_integration_application_20261112", "P0_INTEGRATION_APPLICATION_MYSQL_", revision),
+        ("legacy40", "payment-main-integration-20261112", "p0_integration_legacy40_20261112", "P0_INTEGRATION_LEGACY40_MYSQL_", revision),
+        ("core40", "payment-main-integration-20261112", "p0_core40_application_20261112", "P0_CORE40_APPLICATION_MYSQL_", revision),
+        ("overlap", "payment-go-live-execution-20261113", "p0_dispute_overlap_20261113", "P0_DISPUTE_OVERLAP_MYSQL_", revision),
+        ("history", "payment-go-live-execution-20261113", "p0_historical_cutover_20261113", "P0_HISTORICAL_CUTOVER_MYSQL_", revision),
+        ("history", "payment-go-live-execution-20261113", "p0_historical_cutover_20261113", "P0_CARRY_FORWARD_MYSQL_", carry),
+    )
+    backend = {key: "57346" for key in ("QF_EXECUTION_MYSQL_TEST_PORT", "QF_QUICK_MYSQL_TEST_PORT", "QF_DOWNLOAD_MYSQL_TEST_PORT")}
+    backend["SPRING_FLYWAY_TARGET"] = "44"
+    secrets = set()
+    names = set()
+    try:
+        with pymysql.connect(host="127.0.0.1", port=57346, user="root", password="",
+                             connect_timeout=2, read_timeout=5) as connection:
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT @@server_uuid,@@datadir,@@port,@@bind_address,VERSION()")
+                identity = cursor.fetchone()
+                if identity != ("47427132-df4d-11f1-89e2-84a938421519", "R:\\v45-compatibility-r1\\", 57346, "127.0.0.1", "8.0.46"):
+                    raise GateError("Compatibility MySQL identity changed")
+                cursor.execute("SHOW DATABASES")
+                visible = {row[0] for row in cursor.fetchall()}
+                if not visible <= {"information_schema", "mysql", "performance_schema", "sys", "qf_execution_concurrency_test", "qf_quick_creation_test"} or "qingfeng_music" in visible:
+                    raise GateError("Compatibility MySQL has unexpected schema")
+        for label, directory, prefix_name, env_prefix, selected_revision in definitions:
+            path = cache_root / directory / (label + "-db-private-" + selected_revision + ".json")
+            if path.is_symlink() or not path.is_file():
+                raise GateError("Missing private isolated backend database configuration")
+            cfg = load_json(path)
+            name = prefix_name + selected_revision
+            if (set(cfg) != {"host", "port", "database", "user", "password", "uuid"}
+                    or cfg["host"] != "127.0.0.1" or cfg["port"] != 23316
+                    or cfg["uuid"] != expected_uuid or cfg["database"] != name
+                    or name in names or not isinstance(cfg["user"], str) or not cfg["user"]
+                    or cfg["user"].lower() == "root" or not isinstance(cfg["password"], str)
+                    or not cfg["password"]):
+                raise GateError("Private isolated backend database configuration invalid")
+            names.add(name)
+            with pymysql.connect(host="127.0.0.1", port=23316, user=cfg["user"], password=cfg["password"],
+                                 database=name, connect_timeout=2, read_timeout=5) as connection:
+                with connection.cursor() as cursor:
+                    cursor.execute("SELECT @@server_uuid,@@datadir,@@port,@@bind_address,VERSION(),DATABASE()")
+                    identity = cursor.fetchone()
+                    if identity != (expected_uuid, "R:\\data\\", 23316, "127.0.0.1", "8.0.46", name):
+                        raise GateError("Isolated backend database identity changed")
+                    cursor.execute("SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE()")
+                    if cursor.fetchone() != (0,):
+                        raise GateError("Isolated backend database cohort is not fresh")
+                    cursor.execute("SHOW DATABASES")
+                    if {row[0] for row in cursor.fetchall()} != {"information_schema", "performance_schema", name}:
+                        raise GateError("Isolated backend database user can see another schema")
+                    cursor.execute("SHOW GRANTS")
+                    grants = [row[0] for row in cursor.fetchall()]
+                    if len(grants) != 2 or not any("GRANT USAGE ON *.*" in grant for grant in grants) or not any("ON `" + name + "`.*" in grant for grant in grants):
+                        raise GateError("Isolated backend database grants exceed its own schema")
+            url = "jdbc:mysql://127.0.0.1:23316/" + name + "?useSSL=false&allowPublicKeyRetrieval=true&connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true"
+            backend.update({env_prefix + "URL": url, env_prefix + "DATABASE": name,
+                            env_prefix + "USER": cfg["user"], env_prefix + "PASSWORD": cfg["password"],
+                            env_prefix + "UUID": expected_uuid})
+            secrets.update((cfg["user"], cfg["password"]))
+    except GateError:
+        raise
+    except Exception:
+        raise GateError("Isolated backend database identity or connectivity check failed") from None
+    return backend, secrets
+
+def build(workspace, baseline, java_home, cache_root, isolated_mysql_cohort=None):
     """Export clean Git source and run offline commands without private files or inherited secrets."""
     workspace = Path(workspace).resolve()
     source = check_source(workspace, baseline)  # Must be first: no build/stop/install before this.
@@ -330,6 +431,7 @@ def build(workspace, baseline, java_home, cache_root):
     common = Path(git(workspace, "rev-parse", "--path-format=absolute", "--git-common-dir")).parent
     if not cache_root.is_relative_to(common):
         raise GateError("Dependency cache must remain within this repository")
+    backend_settings, backend_secrets = load_isolated_backend_cohort(cache_root, isolated_mysql_cohort)
     node, npm, node_version = check_node_toolchain(cache_root, load_json(workspace / ".node-toolchain.json"))
     # Keep exports short on Windows; worktrees may already have deep paths.
     run = cache_root / "b" / uuid.uuid4().hex[:8]
@@ -352,13 +454,17 @@ def build(workspace, baseline, java_home, cache_root):
                 "TEMP": str(run), "TMP": str(run), "NPM_CONFIG_USERCONFIG": str(npmrc),
                 "NPM_CONFIG_GLOBALCONFIG": str(global_npmrc), "NPM_CONFIG_ENGINE_STRICT": "true", "CI": "true"})
     logs = {}
-    def execute(name, command, cwd):
+    def execute(name, command, cwd, child_env=None, redactions=()):
         log = run / (name + ".log")
-        with log.open("wb") as output:
-            try:
-                p = subprocess.run(command, cwd=cwd, env=env, stdout=output, stderr=subprocess.STDOUT, timeout=1800)
-            except (OSError, subprocess.TimeoutExpired):
-                raise GateError("Build command unavailable or timed out: " + name) from None
+        try:
+            p = subprocess.run(command, cwd=cwd, env=child_env or env,
+                               stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=1800)
+        except (OSError, subprocess.TimeoutExpired):
+            raise GateError("Build command unavailable or timed out: " + name) from None
+        output = p.stdout or b""
+        for secret in sorted(redactions, key=len, reverse=True):
+            output = output.replace(secret.encode("utf-8"), b"[REDACTED]")
+        log.write_bytes(output)
         logs[name] = {"exitCode": p.returncode, "logSha256": sha(log.read_bytes())}
         if p.returncode:
             raise GateError("Build check failed: " + name + "; evidence retained in build directory")
@@ -380,9 +486,11 @@ def build(workspace, baseline, java_home, cache_root):
     metadata.mkdir(parents=True, exist_ok=True)
     (metadata / "release-commit.txt").write_text(source["sourceCommit"] + "\n", encoding="utf-8")
     epoch = git(workspace, "show", "-s", "--format=%ct", source["sourceCommit"])
+    backend_env = {**env, **backend_settings}
     execute("backendVerify", [mvn, "-o", "-B", "-ntp", "--settings", str(empty),
               "-Dmaven.repo.local=" + str(cache_root / "maven"), "-Duser.home=" + str(home),
-              "-Dproject.build.outputTimestamp=" + epoch, "clean", "verify"], export / "Qingfeng_AI_Music")
+              "-Dproject.build.outputTimestamp=" + epoch, "clean", "verify"], export / "Qingfeng_AI_Music",
+            child_env=backend_env, redactions=backend_secrets)
     artifact = export / "Qingfeng_AI_Music/qf-server/target/qf-server-0.1.0-SNAPSHOT.jar"
     package = run / "package"; package.mkdir()
     shutil.copyfile(artifact, package / "app.jar")
@@ -404,6 +512,7 @@ def main():
     p.add_argument("--baseline"); p.add_argument("--jar"); p.add_argument("--contract")
     p.add_argument("--contract-sha"); p.add_argument("--source")
     p.add_argument("--manifest"); p.add_argument("--java-home"); p.add_argument("--cache-root")
+    p.add_argument("--isolated-mysql-cohort")
     a = p.parse_args()
     try:
         if a.operation in {"source", "build"} and not a.baseline:
@@ -413,7 +522,7 @@ def main():
         elif a.operation == "startup": result = check_startup(a.workspace, a.manifest, a.jar)
         else:
             if not a.cache_root: raise GateError("Repository-local dependency cache required")
-            result = build(a.workspace, a.baseline, a.java_home, a.cache_root)
+            result = build(a.workspace, a.baseline, a.java_home, a.cache_root, a.isolated_mysql_cohort)
         print(json.dumps({"status": "PASS", "scope": a.operation, "result": result}, ensure_ascii=True))
         return 0
     except (GateError, OSError, TypeError, KeyError, zipfile.BadZipFile) as e:
