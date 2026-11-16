@@ -99,9 +99,17 @@ onBeforeUnmount(() => dialog.value?.close())
           <button class="premium-play" type="button" @click="play"><PlaybackIcon :playing="playing"/><span>{{ playing ? t('暂停') : t('试听歌曲') }}</span></button>
         </div>
         <section class="premium-about" aria-labelledby="premium-about-title">
-          <h3 id="premium-about-title">{{ t('关于青风音乐') }}</h3>
-          <p>{{ t('青风音乐由歌手、制作人蒋雪儿（Snow.J）在深圳创办。《一笑江湖》随“科目三”走红海外，2025 年登上 Spotify 日本 Viral 50 榜第 2 名。厂牌参与制作或发行的《踏山河》《小城夏天》也登顶国内主流音乐平台榜单。') }}</p>
-          <p>{{ t('从词曲创作、编曲到录音与混音，青风音乐拥有完整的歌曲制作团队，并通过国际音乐写作营与海内外音乐人共同创作。青风音乐与索尼音乐达成战略合作，涵盖新歌共创与音乐发行。') }}</p>
+          <header class="premium-about-header">
+            <h3 id="premium-about-title">{{ t('关于青风音乐') }}</h3>
+            <a class="premium-profile-download" href="/media/premium-studio/cheerful-music-company-profile-zh-260730.pdf"
+               download="青风音乐 Cheerful Music260730中文版.pdf" :aria-label="t('下载青风音乐公司介绍 PDF（中文版）')">
+              <span aria-hidden="true">↓</span>{{ t('下载 PDF') }}
+            </a>
+          </header>
+          <p>{{ t('青风音乐（Cheerful Music）由歌手兼制作人蒋雪儿（Snow.J）创办，2019 年在深圳成立，2023 年设立伦敦办公室。团队深耕国风与华语流行，参与制作或发行的《踏山河》《小城夏天》《半生雪》均登顶过国内主流音乐平台榜单。') }}</p>
+          <p>{{ t('《一笑江湖》随“科目三”舞蹈走红海外，2025 年登上 Spotify 日本 Viral 50 榜第 2 名。《相思遥》入选全球 600 多份歌单，张含韵和郭雨昂在 2025 年除夕的央视综合频道节目《金蛇起舞中国年味》中演唱了这首歌。') }}</p>
+          <p>{{ t('青风音乐的制作团队覆盖词曲创作、编曲、录音与混音。国际合作作品包括《半生雪》的 Madism 混音版，以及七叔与瑞典音乐人 Kezano 合作的双语单曲《By Your Side》。自 2025 年起，青风音乐举办国际音乐写作营，邀请中国、美国、丹麦和澳大利亚的音乐人共同创作。') }}</p>
+          <p>{{ t('青风音乐与索尼音乐达成新歌共创和音乐发行合作，携手 Believe 开展全球数字发行，并由环球音乐版权独家代理其在中国大陆以外的词曲版权。在专属音乐制作中，团队会围绕你想保留的旋律和情绪，从编曲、录音到混音打磨你的歌曲。') }}</p>
           <p class="premium-reach">{{ t('《一笑江湖》相关抖音视频观看量超 500 亿次') }} <a href="https://www.umusicpub.com/us/news/umpg-china-cheerful-music" target="_blank" rel="noopener noreferrer">{{ t('环球音乐版权 2024 年公告') }}</a></p>
         </section>
         <section class="premium-works" aria-labelledby="premium-works-title">
@@ -158,6 +166,11 @@ onBeforeUnmount(() => dialog.value?.close())
 .premium-kicker { font-size:13px; color:#ffa898; margin:0 0 7px; }
 .premium-about { border:1px solid #3b3039; background:#221b22; border-radius:17px; padding:19px 20px; margin-bottom:22px; }
 .premium-about h3,.premium-works h3 { font-size:19px; font-weight:650; color:#fff; margin:0 0 8px; }
+.premium-about-header { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:6px 12px; margin-bottom:10px; }
+.premium-about-header h3 { margin:0; }
+.premium-profile-download { display:inline-flex; align-items:center; gap:6px; min-height:36px; padding:0 12px; margin-inline-start:auto; border:1px solid #73514d; border-radius:18px; color:#ffb2a2; text-decoration:none; font-size:13px; font-weight:600; white-space:nowrap; }
+.premium-profile-download:hover { background:#382725; border-color:#aa746a; }
+.premium-profile-download:focus-visible { outline:2px solid #ffb3a6; outline-offset:4px; }
 .premium-about p { font-size:14px; line-height:1.75; color:#c7bac5; margin:0; }
 .premium-about p + p { margin-top:8px; }
 .premium-about .premium-reach { color:#ffb2a2; margin-top:8px; }
