@@ -52,3 +52,12 @@ qingfeng.providers.openai.model=gpt-6.1-sol
 - [GPT-6.1 Sol 型号与能力](https://developers.openai.com/api/docs/models/gpt-6.1-sol)
 - [Responses 严格结构化输出](https://developers.openai.com/api/docs/guides/structured-outputs)
 - [当前模型迁移指南](https://developers.openai.com/api/docs/guides/latest-model)
+
+
+## 2026-11-16 生产配置发布结果
+
+已在生产设置 `qingfeng.lyrics.provider=openai` 和 `qingfeng.providers.openai.model=gpt-6.1-sol`，使用共享部署锁完成备份、配置切换和应用重启。沿用已批准的 `35d78c0e019c868e6702f78bec353a473c16149b` JAR；未切换 current、未执行数据库迁移，未部署本地新增 MV 代码。
+
+服务器现有密钥对 Sol 模型的只读查询成功；使用虚构海边旅行素材的一次真实 Responses 请求返回 completed，歌词及六字段音乐方案通过结构校验（412 tokens）。该验证没有写入业务数据库。前端 841 项测试、构建和配置了全新本机隔离 MySQL 批次的后端 `mvn clean verify` 通过。正式发布后首页和 Agent 页面均 HTTP 200，健康检查 UP，服务 active。
+
+配置、原 JAR 和策略备份及成功收据位于服务器 `/var/backups/qingfeng-music/20261116T072355Z-lyrics-sol-config`。回滚应在共享锁内恢复该目录的原配置并重启，仍使用原 guard/policy。此记录不授权后续发布或回滚。
