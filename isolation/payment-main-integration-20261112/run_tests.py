@@ -19,6 +19,7 @@ parser.add_argument('--tests', default='')
 parser.add_argument('--migration-revision', default='r1')
 parser.add_argument('--credits-revision', default='r1')
 parser.add_argument('--application-revision', default='r1')
+parser.add_argument('--application-schema-target',type=int,choices=(45,46),default=46)
 parser.add_argument('--legacy40-revision',default='r6')
 parser.add_argument('--core40-revision',default='r9')
 parser.add_argument('--compatibility-port', type=int, default=57326)
@@ -75,7 +76,7 @@ env = {k:v for k,v in os.environ.items() if not any(x in k.upper() for x in bloc
 env.update({'QF_EXECUTION_MYSQL_TEST_PORT':str(args.compatibility_port),
             'QF_QUICK_MYSQL_TEST_PORT':str(args.compatibility_port),
             'QF_DOWNLOAD_MYSQL_TEST_PORT':str(args.compatibility_port),
-            'SPRING_FLYWAY_TARGET':'44'})
+            'SPRING_FLYWAY_TARGET':'44','P0_PAYMENT_APPLICATION_SCHEMA_TARGET':str(args.application_schema_target)})
 for label, prefix, revision in (
     ('migration','P0_INTEGRATION_MIGRATION_MYSQL_',args.migration_revision),
     ('credits','P0_INTEGRATED_CREDITS_MYSQL_',args.credits_revision),
@@ -119,7 +120,7 @@ else:
     cmd += ['verify']
 (folder/'invocation.json').write_text(json.dumps({'command':cmd,'cwd':str(WORK/'Qingfeng_AI_Music'),
     'production_credentials_inherited':False,'mysql_ports':[23316,args.compatibility_port],
-    'legacy_mysql_target':'44','new_contract_target':'45 explicit in tests'},indent=2),encoding='utf-8')
+    'legacy_mysql_target':'44','new_contract_target':'45 explicit in tests','application_schema_target':args.application_schema_target},indent=2),encoding='utf-8')
 print(json.dumps({'log':str(folder/'maven.log'),'mode':args.mode}),flush=True)
 with (folder/'maven.log').open('w',encoding='utf-8') as log:
     result=subprocess.run(cmd,cwd=WORK/'Qingfeng_AI_Music',env=env,stdout=log,stderr=subprocess.STDOUT)
@@ -130,7 +131,7 @@ for path in (WORK/'Qingfeng_AI_Music').glob('*/target/surefire-reports/TEST-*.xm
     suites.append({'name':element.get('name'),**{key:int(element.get(key,'0')) for key in ('tests','failures','errors','skipped')}})
 exit_code=result.returncode
 if inputs_before is not None and inputs_before!=production_inputs():exit_code=exit_code or 2
-summary={'exit_code':exit_code,'status':'PASS' if exit_code==0 else 'FAIL',
+summary={'exit_code':exit_code,'status':'PASS' if exit_code==0 else 'FAIL','application_schema_target':args.application_schema_target,
     'totals':{key:sum(s[key] for s in suites) for key in ('tests','failures','errors','skipped')},'suites':suites}
 if inputs_before is not None:
     summary['production_inputs_unchanged']=inputs_before==production_inputs()

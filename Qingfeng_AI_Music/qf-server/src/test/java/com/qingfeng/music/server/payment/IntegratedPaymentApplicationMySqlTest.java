@@ -50,11 +50,17 @@ import tools.jackson.databind.ObjectMapper;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
-/** Real full Boot/canonical V1..V40 plus V41/MySQL/HTTP/SDK-signature integration with synthetic supplier facts.
+/** Real full Boot/canonical V1..V44 plus active V45 and original V46/MySQL/HTTP integration with synthetic supplier facts.
  * Not Sandbox/Live, real historical migration or real AI/media execution. */
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class IntegratedPaymentApplicationMySqlTest {
     static final String PREFIX="P0_INTEGRATION_APPLICATION_MYSQL_",ACCOUNT="acct_offline12345678",PAYPAL_MERCHANT="TESTMERCHANT";
+    static final int APPLICATION_SCHEMA_TARGET=applicationSchemaTarget();
+    private static int applicationSchemaTarget(){
+        String target=System.getenv().getOrDefault("P0_PAYMENT_APPLICATION_SCHEMA_TARGET","46");
+        if(!Set.of("45","46").contains(target))throw new IllegalArgumentException("Isolated application schema target must be exactly 45 or 46");
+        return Integer.parseInt(target);
+    }
     static final String SECRET="whsec_integrated_offline_fixture_not_a_real_credential";
     static final ObjectMapper JSON=new ObjectMapper();
     static final Map<String,JsonNode> SESSIONS=new ConcurrentHashMap<>(),REFUNDS=new ConcurrentHashMap<>(),DISPUTES=new ConcurrentHashMap<>(),CHARGES=new ConcurrentHashMap<>(),BALANCES=new ConcurrentHashMap<>();
@@ -73,6 +79,9 @@ class IntegratedPaymentApplicationMySqlTest {
     static JsonNode known(Map<String,JsonNode> facts,String id){var fact=facts.get(id);if(fact==null)throw new AssertionError("Unregistered synthetic supplier resource; external API forbidden");return fact;}
 
     @BeforeAll static void proveMigrateMapActivateThenStartFullApplication() throws Exception {
+        // Current production business behavior includes durable five-turn Agent packs.
+        // V45-only compatibility remains on the original 0a31540-based recovery branch.
+        assertEquals(46,APPLICATION_SCHEMA_TARGET,"This production baseline requires V46; use the original recovery branch for the V45-only application cohort");
         database=required("DATABASE");url=required("URL");user=required("USER");password=required("PASSWORD");
         if(!database.matches("p0_integration_application_20261112r[0-9]+")||!url.matches("jdbc:mysql://127\\.0\\.0\\.1:23316/"+database+"(?:\\?.*)?")
             ||"root".equalsIgnoreCase(user)||url.toLowerCase(Locale.ROOT).matches(".*(?:password=|user=|socketfactory|dnssrv|loadbalance|address=).*"))
@@ -107,19 +116,65 @@ class IntegratedPaymentApplicationMySqlTest {
         db.update("INSERT INTO p0_legacy_debit_mapping VALUES('synthetic-legacy-debit',?,25,0,'UNKNOWN')",legacyOwner);
         assertEquals(75,number("SELECT SUM(amount) FROM credit_ledger"));assertEquals(75,number("SELECT SUM(original-consumed-adjusted) FROM p0_credit_batch"));
         assertEquals(1,db.update("UPDATE p0_credit_cutover_state SET status='ACTIVE',activated_at=CURRENT_TIMESTAMP,evidence='SYNTHETIC_APPLICATION_MAPPING_NO_PRODUCTION_DATA' WHERE id=1 AND status='PREPARING'"));
-        // Main now includes durable Agent chat packs. Preserve the V45 financial assertions
-        // above, then install the real additive V46 before starting the current application.
-        Flyway.configure().dataSource(source).locations("classpath:db/migration").cleanDisabled(true).target("46").load().migrate();
-        assertEquals(1,number("SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='agent_chat_allowance'"));
-        assertEquals(1,number("SELECT COUNT(*) FROM flyway_schema_history WHERE version='46' AND success=1"));
-        CreditSchemaReadiness.requireActive(db);settings=configuration();start();
+        CreditSchemaReadiness.requireActive(db);
+        assertEquals(45,number("SELECT COUNT(*) FROM flyway_schema_history WHERE success=1 AND version IS NOT NULL"));
+        assertEquals(17,number("SELECT COUNT(*) FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA=DATABASE()"));
+        if(APPLICATION_SCHEMA_TARGET==46){
+            var before=exactFinancialSnapshot();before.remove("flyway_schema_history");
+            var triggers=db.queryForList("SELECT TRIGGER_NAME,EVENT_MANIPULATION,EVENT_OBJECT_TABLE,ACTION_TIMING,ACTION_STATEMENT FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA=DATABASE() ORDER BY TRIGGER_NAME");
+            // Install the exact Git V46 only in this fresh isolated database, after the financial cutover contract is ACTIVE.
+            Flyway.configure().dataSource(source).locations("classpath:db/migration").cleanDisabled(true).target("46").load().migrate();
+            var after=exactFinancialSnapshot();after.remove("flyway_schema_history");
+            assertEquals(before,after,"The additive Agent schema must not change any pre-existing financial facts");
+            assertEquals(triggers,db.queryForList("SELECT TRIGGER_NAME,EVENT_MANIPULATION,EVENT_OBJECT_TABLE,ACTION_TIMING,ACTION_STATEMENT FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA=DATABASE() ORDER BY TRIGGER_NAME"));
+            assertEquals(0,number("SELECT COUNT(*) FROM agent_chat_allowance"));
+            db.update("INSERT INTO agent_chat_allowance(creator_id) VALUES(?)",legacyOwner);
+            assertEquals(0,number("SELECT remaining_turns FROM agent_chat_allowance WHERE creator_id=?",legacyOwner));
+            String absent=UUID.randomUUID().toString();assertEquals(0,number("SELECT COUNT(*) FROM creator WHERE id=?",absent));
+            try(var constraints=source.getConnection();
+                var negative=constraints.prepareStatement("UPDATE agent_chat_allowance SET remaining_turns=-1 WHERE creator_id=?");
+                var orphan=constraints.prepareStatement("INSERT INTO agent_chat_allowance(creator_id) VALUES(?)")){
+                negative.setString(1,legacyOwner);var checkFailure=assertThrows(java.sql.SQLException.class,()->negative.executeUpdate());
+                assertEquals(3819,checkFailure.getErrorCode());assertTrue(checkFailure.getMessage().contains("ck_agent_chat_allowance_nonnegative"));
+                orphan.setString(1,absent);var foreignKeyFailure=assertThrows(java.sql.SQLException.class,()->orphan.executeUpdate());
+                assertEquals(1452,foreignKeyFailure.getErrorCode());assertTrue(foreignKeyFailure.getMessage().contains("fk_agent_chat_allowance_creator"));
+            }
+            assertEquals(0,number("SELECT remaining_turns FROM agent_chat_allowance WHERE creator_id=?",legacyOwner));
+            assertEquals(1,db.update("DELETE FROM agent_chat_allowance WHERE creator_id=?",legacyOwner));
+            assertEquals(0,number("SELECT COUNT(*) FROM agent_chat_allowance"));
+        }
+        assertApplicationSchemaTarget();CreditSchemaReadiness.requireActive(db);settings=configuration();start();
+    }
+    private static void assertApplicationSchemaTarget(){
+        assertEquals(APPLICATION_SCHEMA_TARGET,number("SELECT COUNT(*) FROM flyway_schema_history WHERE success=1 AND version IS NOT NULL"));
+        assertEquals(APPLICATION_SCHEMA_TARGET,number("SELECT MAX(CAST(version AS UNSIGNED)) FROM flyway_schema_history WHERE success=1"));
+        assertEquals(0,number("SELECT COUNT(*) FROM flyway_schema_history WHERE success=0"));
+        assertEquals(3,number("SELECT protocol FROM p0_credit_writer_policy WHERE id=1"));
+        assertEquals("ACTIVE",db.queryForObject("SELECT status FROM p0_credit_cutover_state WHERE id=1",String.class));
+        assertEquals(17,number("SELECT COUNT(*) FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA=DATABASE()"));
+        if(APPLICATION_SCHEMA_TARGET==45){
+            assertEquals(0,number("SELECT COUNT(*) FROM flyway_schema_history WHERE version='46'"));
+            assertEquals(0,number("SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='agent_chat_allowance'"));
+            assertEquals(0,number("SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='agent_request_admission' AND COLUMN_NAME IN ('paid_turn','purchased_pack')"));
+            return;
+        }
+        assertEquals(1,number("SELECT COUNT(*) FROM flyway_schema_history WHERE version='46' AND script='V46__agent_chat_allowance.sql' AND checksum=-26150424 AND success=1 AND type='SQL'"));
+        assertEquals(1,number("SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='agent_chat_allowance' AND TABLE_TYPE='BASE TABLE' AND ENGINE='InnoDB'"));
+        assertEquals(2,number("SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='agent_chat_allowance'"));
+        assertEquals(2,number("SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='agent_chat_allowance' AND IS_NULLABLE='NO' AND ((COLUMN_NAME='creator_id' AND DATA_TYPE='varchar' AND CHARACTER_MAXIMUM_LENGTH=36 AND COLUMN_DEFAULT IS NULL) OR (COLUMN_NAME='remaining_turns' AND COLUMN_TYPE='bigint' AND COLUMN_DEFAULT='0'))"));
+        assertEquals(1,number("SELECT COUNT(*) FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='agent_chat_allowance' AND INDEX_NAME='PRIMARY' AND NON_UNIQUE=0 AND SEQ_IN_INDEX=1 AND COLUMN_NAME='creator_id' AND SUB_PART IS NULL"));
+        assertEquals(1,number("SELECT COUNT(*) FROM information_schema.KEY_COLUMN_USAGE WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='agent_chat_allowance' AND CONSTRAINT_NAME='fk_agent_chat_allowance_creator' AND COLUMN_NAME='creator_id' AND REFERENCED_TABLE_SCHEMA=DATABASE() AND REFERENCED_TABLE_NAME='creator' AND REFERENCED_COLUMN_NAME='id'"));
+        assertEquals(2,number("SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='agent_request_admission' AND COLUMN_NAME IN ('paid_turn','purchased_pack') AND COLUMN_TYPE='int' AND IS_NULLABLE='NO' AND COLUMN_DEFAULT='0'"));
+        assertEquals(1,number("SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='agent_chat_allowance' AND CONSTRAINT_NAME='ck_agent_chat_allowance_nonnegative' AND CONSTRAINT_TYPE='CHECK' AND ENFORCED='YES'"));
+        String check=db.queryForObject("SELECT CHECK_CLAUSE FROM information_schema.CHECK_CONSTRAINTS WHERE CONSTRAINT_SCHEMA=DATABASE() AND CONSTRAINT_NAME='ck_agent_chat_allowance_nonnegative'",String.class);
+        assertNotNull(check);assertEquals("remaining_turns>=0",check.replaceAll("[\\s`()]","").toLowerCase(Locale.ROOT));
     }
     static void assertHistory(JsonNode expected){var row=db.queryForMap("SELECT script,checksum,success FROM flyway_schema_history WHERE version=?",expected.path("version").asString());assertEquals(expected.path("script").asString(),row.get("script"));assertEquals(expected.path("checksum").asInt(),((Number)row.get("checksum")).intValue());assertTrue(Boolean.TRUE.equals(row.get("success"))||row.get("success") instanceof Number n&&n.intValue()==1);}
     static Map<String,Object> configuration(){
         Map<String,Object> values=new LinkedHashMap<>();
         values.put("spring.datasource.url",url);values.put("spring.datasource.username",user);values.put("spring.datasource.password",password);values.put("spring.datasource.driver-class-name","com.mysql.cj.jdbc.Driver");
         values.put("spring.datasource.hikari.maximum-pool-size",16);values.put("spring.datasource.hikari.connection-init-sql","SET SESSION innodb_lock_wait_timeout=5");
-        values.put("spring.flyway.target","45");values.put("spring.flyway.clean-disabled",true);values.put("spring.sql.init.mode","never");values.put("server.address","127.0.0.1");values.put("server.port",0);
+        values.put("spring.flyway.target",String.valueOf(APPLICATION_SCHEMA_TARGET));values.put("spring.flyway.clean-disabled",true);values.put("spring.sql.init.mode","never");values.put("server.address","127.0.0.1");values.put("server.port",0);
         values.put("qingfeng.credits.writer-fence.enabled",true);values.put("qingfeng.credits.writer-fence.expected-database",database);values.put("qingfeng.credits.writer-fence.expected-port",23316);values.put("qingfeng.credits.enabled",true);
         values.put("qingfeng.stripe.enabled",true);values.put("qingfeng.stripe.accepting-new-orders",true);values.put("qingfeng.stripe.environment","sandbox");values.put("qingfeng.stripe.account-id",ACCOUNT);values.put("qingfeng.stripe.api-key","sk_test_integrated_offline_fixture");values.put("qingfeng.stripe.webhook-secret",SECRET);
         values.put("qingfeng.stripe.business-country","GB");values.put("qingfeng.stripe.payment-methods.card.enabled",true);values.put("qingfeng.stripe.payment-methods.apple-pay.enabled",true);values.put("qingfeng.stripe.payment-methods.wechat-pay.enabled",true);
@@ -141,7 +196,7 @@ class IntegratedPaymentApplicationMySqlTest {
         application=new SpringApplicationBuilder(MusicApplication.class,OfflineGateways.class).environment(environment).profiles("mysql").web(WebApplicationType.SERVLET).logStartupInfo(false)
             .initializers(context->context.getBeanFactory().registerSingleton("acceptanceOnlyTestConfigurationFilter",new AcceptanceOnlyTestFilter())).run();
         db=application.getBean(JdbcTemplate.class);ledger=application.getBean(CreditsLedger.class);stripe=application.getBean(StripePaymentService.class);paypal=application.getBean(PayPalPaymentService.class);inbox=application.getBean(PaymentInbox.class);identity=application.getBean(IdentityApi.class);usage=application.getBean(JdbcUsageBudget.class);manager=application.getBean(PlatformTransactionManager.class);port=application.getEnvironment().getRequiredProperty("local.server.port",Integer.class);
-        assertInstanceOf(JdbcFencedCreditsLedger.class,ledger);assertEquals("45",application.getEnvironment().getProperty("spring.flyway.target"));assertTrue(CreditSchemaReadiness.ready(db));
+        assertInstanceOf(JdbcFencedCreditsLedger.class,ledger);assertEquals(String.valueOf(APPLICATION_SCHEMA_TARGET),application.getEnvironment().getProperty("spring.flyway.target"));assertApplicationSchemaTarget();assertTrue(CreditSchemaReadiness.ready(db));
     }
     @AfterAll static void close(){if(application!=null)application.close();}
     @AfterEach void allFinancialProjectionsRemainEqual(){for(String owner:OWNERS){long book=number("SELECT COALESCE(SUM(amount),0) FROM credit_ledger WHERE owner_id=?",owner);assertEquals(book,number("SELECT COALESCE(SUM(balance),0) FROM credit_account WHERE owner_id=?",owner));assertEquals(book,number("SELECT COALESCE(SUM(CAST(original AS DECIMAL(65,0))-consumed-adjusted),0) FROM p0_credit_batch WHERE owner_id=?",owner));assertEquals(book,ledger.balance(owner));}}
@@ -227,7 +282,7 @@ class IntegratedPaymentApplicationMySqlTest {
     }
 
     @Test @Order(1) void actualCore40AndIntegration41FullApplicationUseOnlyTheProvenIsolatedDatabase() throws Exception {
-        assertEquals(database,db.queryForObject("SELECT DATABASE()",String.class));assertEquals(46,number("SELECT COUNT(*) FROM flyway_schema_history WHERE success=1 AND version IS NOT NULL"));assertEquals(3,number("SELECT protocol FROM p0_credit_writer_policy WHERE id=1"));assertEquals(75,ledger.balance(legacyOwner));assertEquals(25,number("SELECT amount FROM p0_legacy_debit_mapping WHERE reference='synthetic-legacy-debit'"));
+        assertEquals(database,db.queryForObject("SELECT DATABASE()",String.class));assertEquals(APPLICATION_SCHEMA_TARGET,number("SELECT COUNT(*) FROM flyway_schema_history WHERE success=1 AND version IS NOT NULL"));assertEquals(3,number("SELECT protocol FROM p0_credit_writer_policy WHERE id=1"));assertEquals(75,ledger.balance(legacyOwner));assertEquals(25,number("SELECT amount FROM p0_legacy_debit_mapping WHERE reference='synthetic-legacy-debit'"));
         assertEquals("V42__shared_download_entitlement.sql",db.queryForObject("SELECT script FROM flyway_schema_history WHERE version='42'",String.class));assertEquals(-500011050,number("SELECT checksum FROM flyway_schema_history WHERE version='42'"));assertEquals(-2125061473,number("SELECT checksum FROM flyway_schema_history WHERE version='45'"));assertEquals(0,number("SELECT COUNT(*) FROM shared_download_entitlement"));
         assertInstanceOf(JdbcFencedCreditsLedger.class,ledger);assertNotNull(application.getBean(PaymentInbox.class));assertNotNull(application.getBean(JdbcUsageBudget.class));assertTrue(application.getBeansOfType(PaymentInboxRunner.class).isEmpty());assertTrue(CreditSchemaReadiness.ready(db));
         var prices=application.getBean(CreditsPricing.class);assertEquals(5,prices.cost(CreditsPricing.Kind.MUSIC));assertEquals(2,prices.cost(CreditsPricing.Kind.LYRICS));assertEquals(1,prices.cost(CreditsPricing.Kind.REWRITE));assertEquals(5,prices.freePerDay(CreditsPricing.Kind.REWRITE));
@@ -288,7 +343,7 @@ class IntegratedPaymentApplicationMySqlTest {
         assertEquals(0,number("SELECT COUNT(*) FROM p0_credit_refund_return WHERE order_id=?",p.order()));
         var before=application;application.close();start();assertNotSame(before,application);assertEquals(80,ledger.balance(p.owner().creatorId()));
         assertEquals("PAID",db.queryForObject("SELECT status FROM payment_order WHERE id=?",String.class,p.order()));
-        assertEquals(46,number("SELECT COUNT(*) FROM flyway_schema_history WHERE success=1 AND version IS NOT NULL"));
+        assertEquals(APPLICATION_SCHEMA_TARGET,number("SELECT COUNT(*) FROM flyway_schema_history WHERE success=1 AND version IS NOT NULL"));
         REFUNDS.put(refund,proven);assertEquals("pending",BALANCES.get(credit).path("status").asString());
         due(event);drain();assertEquals(100,ledger.balance(p.owner().creatorId()));
         assertEquals("DONE",db.queryForObject("SELECT status FROM payment_webhook_inbox WHERE event_id=?",String.class,event));
@@ -433,12 +488,12 @@ class IntegratedPaymentApplicationMySqlTest {
         snapshot.put("journal_sum",db.queryForObject("SELECT COALESCE(SUM(amount),0) FROM credit_ledger",BigDecimal.class).toPlainString());snapshot.put("account_sum",db.queryForObject("SELECT COALESCE(SUM(balance),0) FROM credit_account",BigDecimal.class).toPlainString());snapshot.put("batch_projection",db.queryForObject("SELECT COALESCE(SUM(CAST(original AS DECIMAL(65,0))-consumed-adjusted),0) FROM p0_credit_batch",BigDecimal.class).toPlainString());return snapshot;
     }
     @Test @Order(19) void installedActive41RejectsAFalseWriterBeforeReadyAndLeavesEveryFinancialFactUnchanged(){
-        assertTrue(application.isActive());assertInstanceOf(JdbcFencedCreditsLedger.class,ledger);assertEquals(46,number("SELECT COUNT(*) FROM flyway_schema_history WHERE success=1 AND version IS NOT NULL"));var before=exactFinancialSnapshot();
+        assertTrue(application.isActive());assertInstanceOf(JdbcFencedCreditsLedger.class,ledger);assertEquals(APPLICATION_SCHEMA_TARGET,number("SELECT COUNT(*) FROM flyway_schema_history WHERE success=1 AND version IS NOT NULL"));var before=exactFinancialSnapshot();
         var attempted=new LinkedHashMap<>(settings);attempted.put("qingfeng.credits.writer-fence.enabled",false);var environment=new StandardEnvironment();environment.getPropertySources().remove(StandardEnvironment.SYSTEM_ENVIRONMENT_PROPERTY_SOURCE_NAME);environment.getPropertySources().remove(StandardEnvironment.SYSTEM_PROPERTIES_PROPERTY_SOURCE_NAME);environment.getPropertySources().addFirst(new MapPropertySource("isolated-rejected-legacy-writer-only",attempted));
         var ready=new java.util.concurrent.atomic.AtomicBoolean();
         var rejected=new SpringApplicationBuilder(MusicApplication.class,OfflineGateways.class).environment(environment).profiles("mysql").web(WebApplicationType.SERVLET).logStartupInfo(false).listeners((org.springframework.context.ApplicationListener<org.springframework.boot.context.event.ApplicationReadyEvent>)event->ready.set(true)).initializers(context->context.getBeanFactory().registerSingleton("acceptanceOnlyTestConfigurationFilter",new AcceptanceOnlyTestFilter()));
         RuntimeException failure=assertThrows(RuntimeException.class,()->{try(var unsafe=rejected.run()){fail("Installed V41 must never start a legacy credit writer");}});boolean rejectedByWriterGate=false;for(Throwable cause=failure;cause!=null;cause=cause.getCause())if(cause.getMessage()!=null&&(cause.getMessage().contains("Entitlement schema installed: a legacy credit writer cannot start")||cause.getMessage().contains("A legacy credit writer cannot automatically apply financial V45. Financial V45 requires separately approved migration, historical mapping and activation before application startup")))rejectedByWriterGate=true;
-        assertTrue(rejectedByWriterGate,"An unrelated configuration/provider exception is not evidence of a writer gate");assertFalse(ready.get());assertTrue(application.isActive());assertSame(ledger,application.getBean(CreditsLedger.class));assertEquals(before,exactFinancialSnapshot());assertEquals(46,number("SELECT COUNT(*) FROM flyway_schema_history WHERE success=1 AND version IS NOT NULL"));
+        assertTrue(rejectedByWriterGate,"An unrelated configuration/provider exception is not evidence of a writer gate");assertFalse(ready.get());assertTrue(application.isActive());assertSame(ledger,application.getBean(CreditsLedger.class));assertEquals(before,exactFinancialSnapshot());assertEquals(APPLICATION_SCHEMA_TARGET,number("SELECT COUNT(*) FROM flyway_schema_history WHERE success=1 AND version IS NOT NULL"));
         for(String owner:OWNERS)assertEquals(number("SELECT COALESCE(SUM(amount),0) FROM credit_ledger WHERE owner_id=?",owner),ledger.balance(owner));
     }
 
@@ -836,6 +891,118 @@ class IntegratedPaymentApplicationMySqlTest {
             assertEquals(4,number("SELECT SUM(original) FROM p0_credit_batch WHERE owner_id=? AND source_type='PAYMENT'",ownerId));
             assertEquals(100,ledger.balance(ordinary.creatorId()));
         }finally{if(application!=null)application.close();settings=originalSettings;start();}
+    }
+
+
+    @Test @Order(43) void legacyModeNewPayPalHttpPaymentRetriesTransientProviderFailureAndCommitsOneRealMySqlCredit() throws Exception {
+        assertInstanceOf(JdbcFencedCreditsLedger.class,ledger);assertFalse(mockingDetails(ledger).isMock());
+        var customer=owner();var created=business(customer,"/api/app/paypal/orders","POST","{\"packageId\":\"starter-USD\"}");
+        assertEquals(200,created.statusCode(),created.body());String order=JSON.readTree(created.body()).path("orderId").asString();
+        String remote=db.queryForObject("SELECT provider_link_id FROM payment_order WHERE id=?",String.class,order),capture="C"+unique().substring(0,20);
+        var gateway=application.getBean(PayPalCheckoutGateway.class);Object previous=org.springframework.test.util.ReflectionTestUtils.getField(paypal,"legacyOrdersReadOnly");
+        try {
+            org.springframework.test.util.ReflectionTestUtils.setField(paypal,"legacyOrdersReadOnly",true);
+            PAYPAL_ORDERS.put(remote,new PayPalCheckoutGateway.Snapshot(remote,order,"COMPLETED",PAYPAL_MERCHANT,capture,"COMPLETED",new BigDecimal("9.90"),"USD"));
+            var reads=new java.util.concurrent.atomic.AtomicInteger();
+            doAnswer(call->{
+                assertFalse(org.springframework.transaction.support.TransactionSynchronizationManager.isActualTransactionActive(),"Provider GET must not run under financial locks");
+                if(reads.getAndIncrement()==0)throw new PayPalCheckoutGateway.ProviderHttpException(503);
+                return Objects.requireNonNull(PAYPAL_ORDERS.get(remote));
+            }).when(gateway).retrieve(remote);
+            String event="WH-"+unique(),body=JSON.writeValueAsString(Map.of("id",event,"event_type","PAYMENT.CAPTURE.COMPLETED","resource",Map.of("id",capture,"supplementary_data",Map.of("related_ids",Map.of("order_id",remote)))));
+            assertEquals(200,request("/api/public/paypal/webhook","POST",body,null,null).statusCode());
+            db.update("UPDATE payment_webhook_inbox SET next_attempt_at=TIMESTAMP('2000-01-01 00:00:00') WHERE provider='PAYPAL_SANDBOX' AND merchant_scope=? AND env_scope='sandbox' AND event_id=?",PAYPAL_MERCHANT,event);
+            assertTrue(paypal.processNextEvent());
+            assertEquals("PENDING",db.queryForObject("SELECT status FROM payment_webhook_inbox WHERE event_id=?",String.class,event));
+            assertEquals(1,number("SELECT COUNT(*) FROM payment_inbox_attempt WHERE event_id=? AND result='FAILED'",event));
+            assertEquals(0,number("SELECT COUNT(*) FROM payment_inbox_attempt WHERE event_id=? AND result='MANUAL'",event));
+            assertEquals(0,ledger.balance(customer.creatorId()));assertEquals("PENDING",db.queryForObject("SELECT status FROM payment_order WHERE id=?",String.class,order));
+            assertEquals(0,number("SELECT COUNT(*) FROM credit_ledger WHERE reference_id=?","payment:"+order));
+            db.update("UPDATE payment_webhook_inbox SET next_attempt_at=TIMESTAMP('2000-01-01 00:00:00') WHERE provider='PAYPAL_SANDBOX' AND merchant_scope=? AND env_scope='sandbox' AND event_id=?",PAYPAL_MERCHANT,event);
+            assertTrue(paypal.processNextEvent());assertEquals(100,ledger.balance(customer.creatorId()));
+            assertEquals("PAID",db.queryForObject("SELECT status FROM payment_order WHERE id=?",String.class,order));assertEquals("DONE",db.queryForObject("SELECT status FROM payment_webhook_inbox WHERE event_id=?",String.class,event));
+            assertEquals(1,number("SELECT COUNT(*) FROM payment_inbox_attempt WHERE event_id=? AND result='DONE'",event));
+            assertEquals(1,number("SELECT COUNT(*) FROM credit_ledger WHERE reference_id=? AND entry_type='CREDIT' AND amount=100","payment:"+order));
+            assertEquals(1,number("SELECT COUNT(*) FROM p0_credit_payment_binding WHERE order_id=? AND capture_id=? AND provider='PAYPAL' AND merchant=? AND environment='sandbox'",order,capture,PAYPAL_MERCHANT));
+            assertEquals(1,number("SELECT COUNT(*) FROM p0_credit_batch WHERE reference=? AND original=100","payment:"+order));
+            assertEquals(200,request("/api/public/paypal/webhook","POST",body,null,null).statusCode());
+            assertEquals(100,ledger.balance(customer.creatorId()));assertEquals(1,number("SELECT COUNT(*) FROM payment_webhook_inbox WHERE event_id=?",event));
+            assertEquals(1,number("SELECT COUNT(*) FROM credit_ledger WHERE reference_id=?","payment:"+order));assertEquals(2,reads.get());
+        }finally{
+            doAnswer(call->{var fact=PAYPAL_ORDERS.get(remote);if(fact==null)throw new AssertionError("Unregistered PayPal order fixture");return fact;}).when(gateway).retrieve(remote);
+            org.springframework.test.util.ReflectionTestUtils.setField(paypal,"legacyOrdersReadOnly",previous);
+        }
+    }
+
+    @Test @Order(44) void unchangedPayPalCaptureWithTwoReportedPartialRefundsMovesActualMySqlBalanceFrom100To80To70() throws Exception {
+        assertInstanceOf(JdbcFencedCreditsLedger.class,ledger);assertFalse(mockingDetails(ledger).isMock());
+        var customer=owner();var created=business(customer,"/api/app/paypal/orders","POST","{\"packageId\":\"starter-USD\"}");assertEquals(200,created.statusCode(),created.body());
+        String order=JSON.readTree(created.body()).path("orderId").asString();assertEquals(200,business(customer,"/api/app/paypal/orders/"+order+"/capture","POST","{}").statusCode());assertEquals(100,ledger.balance(customer.creatorId()));
+        var row=db.queryForMap("SELECT * FROM payment_order WHERE id=?",order);String remote=(String)row.get("provider_link_id"),capture=(String)row.get("provider_capture_id");
+        var gateway=application.getBean(PayPalCheckoutGateway.class);var risks=application.getBean(PaymentRiskService.class);var fenced=(JdbcFencedCreditsLedger)ledger;
+        // Only this synthetic order is due during the bounded scan; restore the other fixtures' due times afterwards.
+        var otherDue=db.queryForList("SELECT id,reconcile_after FROM payment_order WHERE provider='PAYPAL_SANDBOX' AND id<>?",order);
+        db.update("UPDATE payment_order SET reconcile_after=TIMESTAMPADD(HOUR,1,CURRENT_TIMESTAMP) WHERE provider='PAYPAL_SANDBOX' AND id<>?",order);
+        var facts=new PayPalFundsProofTest().new Facts();facts.noDisputes();
+        facts.capture.put("id",capture);facts.capture.put("custom_id",order);facts.capture.put("status","PARTIALLY_REFUNDED");
+        facts.capture.set("payee",JSON.valueToTree(Map.of("merchant_id",PAYPAL_MERCHANT)));facts.capture.set("supplementary_data",JSON.valueToTree(Map.of("related_ids",Map.of("order_id",remote))));
+        facts.report.put("account_number",PAYPAL_MERCHANT);facts.nativeRow(0).put("transaction_id",capture);
+        String first="R"+unique().substring(0,20),second="R"+unique().substring(0,20);facts.add(PayPalFundsProofTest.row(first,"T1107","-1.98","S",capture));
+        PAYPAL_CAPTURES.put(capture,facts.capture.deepCopy());PAYPAL_REFUNDS.put(first,JSON.valueToTree(Map.of("id",first,"status","COMPLETED","amount",Map.of("value","1.98","currency_code","USD"),"supplementary_data",Map.of("related_ids",Map.of("capture_id",capture)))));
+        var fixedCapture=facts.capture.deepCopy();
+        try {
+            doAnswer(call->{assertFalse(org.springframework.transaction.support.TransactionSynchronizationManager.isActualTransactionActive());return facts.report.deepCopy();}).when(gateway).financialReport(any(),any());
+            doAnswer(call->{assertFalse(org.springframework.transaction.support.TransactionSynchronizationManager.isActualTransactionActive());return facts.list.deepCopy();}).when(gateway).disputesForCapture(capture);
+            doAnswer(call->{assertFalse(org.springframework.transaction.support.TransactionSynchronizationManager.isActualTransactionActive());return known(PAYPAL_CAPTURES,capture);}).when(gateway).retrieveCapture(capture);
+            risks.recordVerified("PAYPAL_SANDBOX",capture,"PAYMENT.CAPTURE.STATUS_RISK",order,"synthetic-initial-review-"+unique());
+            fenced.holdPaymentForReview("PAYPAL",PAYPAL_MERCHANT,"sandbox",customer.creatorId(),order,capture,"USD","synthetic-native-report-review");
+            var risk=risks.listOpen(200).stream().filter(r->r.orderId().equals(order)).findFirst().orElseThrow();
+            db.update("UPDATE payment_order SET reconcile_after=TIMESTAMPADD(SECOND,-1,CURRENT_TIMESTAMP) WHERE id=?",order);paypal.reconcileOrders();
+            String pattern="%"+capture+"%";
+            assertEquals(1,number("SELECT COUNT(*) FROM payment_webhook_inbox WHERE provider='PAYPAL_SANDBOX' AND merchant_scope=? AND env_scope='sandbox' AND event_type='PAYMENT.CAPTURE.STATUS_RISK' AND payload LIKE ?",PAYPAL_MERCHANT,pattern));
+            db.update("UPDATE payment_webhook_inbox SET next_attempt_at=TIMESTAMP('2000-01-01 00:00:00') WHERE provider='PAYPAL_SANDBOX' AND merchant_scope=? AND env_scope='sandbox' AND event_type='PAYMENT.CAPTURE.STATUS_RISK' AND payload LIKE ? AND status='PENDING'",PAYPAL_MERCHANT,pattern);
+            assertTrue(paypal.processNextEvent());assertEquals(80,ledger.balance(customer.creatorId()));assertEquals(20,number("SELECT adjusted FROM p0_credit_batch WHERE reference=?","payment:"+order));
+            assertEquals(198,number("SELECT SUM(amount_minor) FROM p0_credit_refund WHERE order_id=?",order));assertEquals(0,number("SELECT held FROM p0_credit_batch WHERE reference=?","payment:"+order));
+            risks.resolveCase(risk.id(),risk.lastEventId(),"RELEASE","offline-reviewer","Synthetic native report and first applied partial refund independently checked");
+            var reviewed=db.queryForMap("SELECT * FROM payment_risk_case WHERE id=?",risk.id());
+            db.update("UPDATE payment_order SET reconcile_after=TIMESTAMPADD(SECOND,-1,CURRENT_TIMESTAMP) WHERE id=?",order);paypal.reconcileOrders();
+            assertEquals(1,number("SELECT COUNT(*) FROM payment_webhook_inbox WHERE provider='PAYPAL_SANDBOX' AND merchant_scope=? AND event_type='PAYMENT.CAPTURE.STATUS_RISK' AND payload LIKE ?",PAYPAL_MERCHANT,pattern));assertEquals(80,ledger.balance(customer.creatorId()));
+            assertEquals(reviewed,db.queryForMap("SELECT * FROM payment_risk_case WHERE id=?",risk.id()));
+            facts.add(PayPalFundsProofTest.row(second,"T1107","-0.99","S",capture));
+            PAYPAL_REFUNDS.put(second,JSON.valueToTree(Map.of("id",second,"status","COMPLETED","amount",Map.of("value","0.99","currency_code","USD"),"supplementary_data",Map.of("related_ids",Map.of("capture_id",capture)))));
+            assertEquals(fixedCapture,facts.capture);assertEquals(fixedCapture,PAYPAL_CAPTURES.get(capture));
+            db.update("UPDATE payment_order SET reconcile_after=TIMESTAMPADD(SECOND,-1,CURRENT_TIMESTAMP) WHERE id=?",order);paypal.reconcileOrders();
+            assertEquals(2,number("SELECT COUNT(*) FROM payment_webhook_inbox WHERE provider='PAYPAL_SANDBOX' AND merchant_scope=? AND env_scope='sandbox' AND event_type='PAYMENT.CAPTURE.STATUS_RISK' AND payload LIKE ?",PAYPAL_MERCHANT,pattern));
+            db.update("UPDATE payment_webhook_inbox SET next_attempt_at=TIMESTAMP('2000-01-01 00:00:00') WHERE provider='PAYPAL_SANDBOX' AND merchant_scope=? AND env_scope='sandbox' AND event_type='PAYMENT.CAPTURE.STATUS_RISK' AND payload LIKE ? AND status='PENDING'",PAYPAL_MERCHANT,pattern);
+            assertTrue(paypal.processNextEvent());assertEquals(70,ledger.balance(customer.creatorId()));assertEquals(30,number("SELECT adjusted FROM p0_credit_batch WHERE reference=?","payment:"+order));
+            assertEquals(2,number("SELECT COUNT(*) FROM p0_credit_refund WHERE order_id=?",order));assertEquals(297,number("SELECT SUM(amount_minor) FROM p0_credit_refund WHERE order_id=?",order));
+            assertEquals(2,number("SELECT COUNT(*) FROM credit_ledger WHERE owner_id=? AND entry_type='PAYMENT_ADJUST'",customer.creatorId()));assertEquals(-30,number("SELECT SUM(amount) FROM credit_ledger WHERE owner_id=? AND entry_type='PAYMENT_ADJUST'",customer.creatorId()));
+            assertEquals(2,number("SELECT COUNT(*) FROM payment_webhook_inbox WHERE provider='PAYPAL_SANDBOX' AND merchant_scope=? AND env_scope='sandbox' AND event_type='PAYMENT.CAPTURE.STATUS_RISK' AND payload LIKE ? AND status='DONE'",PAYPAL_MERCHANT,pattern));
+            var stable=exactFinancialSnapshot();stable.remove("payment_order");
+            var orderFacts=db.queryForList("SELECT id,creator_id,package_id,amount,currency,credits,status,created_at,provider,provider_link_id,provider_capture_id,failure_code FROM payment_order ORDER BY id");
+            var reconciled=db.queryForMap("SELECT * FROM payment_risk_case WHERE id=?",risk.id());
+            facts.report.put("last_refreshed_datetime","2026-11-13T00:01:00Z");
+            db.update("UPDATE payment_order SET reconcile_after=TIMESTAMPADD(SECOND,-1,CURRENT_TIMESTAMP) WHERE id=?",order);paypal.reconcileOrders();
+            assertEquals(70,ledger.balance(customer.creatorId()));var afterScan=exactFinancialSnapshot();afterScan.remove("payment_order");assertEquals(stable,afterScan);
+            assertEquals(orderFacts,db.queryForList("SELECT id,creator_id,package_id,amount,currency,credits,status,created_at,provider,provider_link_id,provider_capture_id,failure_code FROM payment_order ORDER BY id"),"Only the explicit reconciliation due time may change");
+            assertEquals(reconciled,db.queryForMap("SELECT * FROM payment_risk_case WHERE id=?",risk.id()));
+            assertEquals(2,number("SELECT COUNT(*) FROM payment_webhook_inbox WHERE provider='PAYPAL_SANDBOX' AND merchant_scope=? AND env_scope='sandbox' AND event_type='PAYMENT.CAPTURE.STATUS_RISK' AND payload LIKE ?",PAYPAL_MERCHANT,pattern));
+            assertEquals(fixedCapture,PAYPAL_CAPTURES.get(capture));
+            // Losing Reporting after a completed financial observation is not evidence of a new refund.
+            // The unchanged PARTIAL capture must not reopen a released case via a weaker fallback pointer.
+            doThrow(new PayPalReportingGateway.Unavailable("REPORTING_PROVIDER_UNAVAILABLE")).when(gateway).financialReport(any(),any());
+            db.update("UPDATE payment_order SET reconcile_after=TIMESTAMPADD(SECOND,-1,CURRENT_TIMESTAMP) WHERE id=?",order);paypal.reconcileOrders();
+            assertEquals(70,ledger.balance(customer.creatorId()));var afterUnavailable=exactFinancialSnapshot();afterUnavailable.remove("payment_order");assertEquals(stable,afterUnavailable);
+            assertEquals(orderFacts,db.queryForList("SELECT id,creator_id,package_id,amount,currency,credits,status,created_at,provider,provider_link_id,provider_capture_id,failure_code FROM payment_order ORDER BY id"),"Reporting outage may only defer the next reconciliation scan");
+            assertEquals(reconciled,db.queryForMap("SELECT * FROM payment_risk_case WHERE id=?",risk.id()));assertEquals("CLOSED",reconciled.get("status"));
+            assertEquals(2,number("SELECT COUNT(*) FROM payment_webhook_inbox WHERE provider='PAYPAL_SANDBOX' AND merchant_scope=? AND env_scope='sandbox' AND event_type='PAYMENT.CAPTURE.STATUS_RISK' AND payload LIKE ?",PAYPAL_MERCHANT,pattern));
+            assertEquals(2,number("SELECT COUNT(*) FROM p0_credit_refund WHERE order_id=?",order));assertEquals(297,number("SELECT SUM(amount_minor) FROM p0_credit_refund WHERE order_id=?",order));
+            assertEquals(fixedCapture,PAYPAL_CAPTURES.get(capture));
+        }finally{
+            doAnswer(call->null).when(gateway).financialReport(any(),any());doAnswer(call->null).when(gateway).disputesForCapture(capture);
+            doAnswer(call->known(PAYPAL_CAPTURES,capture)).when(gateway).retrieveCapture(capture);
+            for(var due:otherDue)db.update("UPDATE payment_order SET reconcile_after=? WHERE id=?",due.get("reconcile_after"),due.get("id"));
+        }
     }
 
     private static void assertPaidAgentDeniedWithoutFinancialOrAdmissionMutation(IdentityApi.Session user,String conversation,String key,String text){

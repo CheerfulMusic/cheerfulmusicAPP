@@ -15,6 +15,7 @@ import org.springframework.web.server.ResponseStatusException;
 /** PayPal payment flow. Remote calls are outside transactions; successful capture and credit commit together. */
 @Service @Profile({"mysql","test"})
 public class PayPalPaymentService implements VerifiedPaymentProcessor {
+    private static final org.slf4j.Logger log=org.slf4j.LoggerFactory.getLogger(PayPalPaymentService.class);
     private final JdbcTemplate db; private final TransactionTemplate tx; private final CreditsLedger ledger; private final PaymentCatalog catalog;
     @Value("${qingfeng.paypal.enabled:false}") private boolean enabled;
     @Value("${qingfeng.paypal.accepting-new-orders:true}") private boolean acceptingNewOrders = true;
@@ -150,13 +151,17 @@ public class PayPalPaymentService implements VerifiedPaymentProcessor {
         });
         return order(owner,id);
     }
-    public Map<String,Object> order(String owner,String id){
+    public Map<String,Object> order(String owner,String id){return order(owner,id,null);}
+    private Map<String,Object> order(String owner,String id,Map<String,Integer> scanWarnings){
         var r=row(owner,id);
         String remote=(String)r.get("provider_link_id");
         if(!legacyBoundary().readOnly(r) && ready() && !"PAID".equals(r.get("status")) && remote!=null){
             PayPalCheckoutGateway.Snapshot snapshot;
             try { snapshot=gateway().retrieve(remote); }
-            catch (RuntimeException ex) { return Map.of("orderId",id,"status",r.get("status"),"credits",r.get("credits")); }
+            catch (RuntimeException ex) {
+                if(scanWarnings!=null)reconciliationWarning(scanWarnings,"ORDER_LOOKUP",ex);
+                return Map.of("orderId",id,"status",r.get("status"),"credits",r.get("credits"));
+            }
             // Query only: never capture an approved order without an explicit user action.
             check(r,snapshot);
             if("COMPLETED".equals(snapshot.orderStatus()) && "COMPLETED".equals(snapshot.captureStatus())){
@@ -288,6 +293,7 @@ public class PayPalPaymentService implements VerifiedPaymentProcessor {
         boolean fencedMode=ledger instanceof com.qingfeng.music.infrastructure.persistence.credits.JdbcFencedCreditsLedger;
         var found=fencedMode?inbox.claim(provider(),merchantId,environment):inbox.claim(provider());if(found.isEmpty())return false;
         var event=found.get();
+        boolean completionCorrelationChecked=false,correlatedNewOrder=false;
         try{
             var payload=new tools.jackson.databind.ObjectMapper().readTree(event.payload());
             String resource=payload.path("resourceId").asString();
@@ -296,15 +302,26 @@ public class PayPalPaymentService implements VerifiedPaymentProcessor {
                 legacyBoundary().activation();
                 var known=db.queryForList("SELECT * FROM payment_order WHERE provider=? AND (provider_link_id=? OR provider_capture_id=?)",provider(),payload.path("orderId").asString(),resource);
                 for(var local:known)legacyBoundary().requireMutable(local);
+                if("PAYMENT.CAPTURE.COMPLETED".equals(event.type())){
+                    completionCorrelationChecked=true;correlatedNewOrder=!known.isEmpty();
+                }
             }
             if("PAYMENT.CAPTURE.COMPLETED".equals(event.type())){
                 String remote=payload.path("orderId").asString();
-                if(remote.isBlank())remote=gateway().retrieveCapture(resource).path("supplementary_data").path("related_ids").path("order_id").asString();
+                if(remote.isBlank()){
+                    remote=gateway().retrieveCapture(resource).path("supplementary_data").path("related_ids").path("order_id").asString();
+                    if(legacyOrdersReadOnly&&!correlatedNewOrder&&!remote.isBlank()){
+                        var linked=db.queryForList("SELECT * FROM payment_order WHERE provider=? AND provider_link_id=?",provider(),remote);
+                        for(var local:linked)legacyBoundary().requireMutable(local);
+                        correlatedNewOrder=!linked.isEmpty();
+                    }
+                }
                 var snapshot=gateway().retrieve(remote);
                 if(!resource.equals(snapshot.captureId()))throw new IllegalStateException("Capture correlation mismatch");
                 String order=snapshot.reference();
                 var local=db.queryForMap("SELECT * FROM payment_order WHERE id=? AND provider=?",order,provider());
                 legacyBoundary().requireMutable(local);
+                correlatedNewOrder=true;
                 var expected=new HashMap<>(local);expected.put("provider_link_id",snapshot.orderId());check(expected,snapshot);
                 if(local.get("provider_link_id")!=null&&!snapshot.orderId().equals(local.get("provider_link_id")))throw new IllegalStateException("Provider order mismatch");
                 if(fencedMode&&Set.of("REFUNDED","PARTIALLY_REFUNDED","REVERSED").contains(snapshot.captureStatus())){
@@ -448,7 +465,12 @@ public class PayPalPaymentService implements VerifiedPaymentProcessor {
             else inbox.complete(event,()->{});
         }catch(PaymentLegacyOrderBoundary.ReadOnlyOrder historical){inbox.markManual(event,"LEGACY_ORDER_READ_ONLY");}
         catch(RuntimeException failed){
-            if(legacyOrdersReadOnly)inbox.markManual(event,"LEGACY_CHANNEL_UNRESOLVED");else inbox.retry(event);
+            // A confirmed new order retains bounded retry after technical failures.
+            // An old-channel completion checked but still uncorrelated is unknown
+            // money: preserve it for manual review, never assert DONE or unpaid.
+            // Activation/DB failures before that check are not historical evidence.
+            if(completionCorrelationChecked&&!correlatedNewOrder)inbox.markManual(event,"LEGACY_CHANNEL_UNRESOLVED");
+            else inbox.retry(event);
         }
         return true;
     }
@@ -586,22 +608,30 @@ public class PayPalPaymentService implements VerifiedPaymentProcessor {
     /** Bounded, read-only provider reconciliation for existing linked orders; never captures or recreates. */
     public void reconcileOrders(){
         if(!ready())return;
-        var activation=legacyBoundary().activation();String boundary=activation==null?"":" AND created_at>?";
-        Object[] arguments=activation==null?new Object[]{provider()}:new Object[]{provider(),activation};
-        db.update("UPDATE payment_order SET status='CREATION_UNKNOWN',failure_code='CREATE_PROCESS_INTERRUPTED' WHERE provider=? AND status='CREATING' AND provider_link_id IS NULL AND created_at<TIMESTAMPADD(MINUTE,-5,CURRENT_TIMESTAMP)"+boundary,arguments);
-        var rows=db.queryForList("SELECT id,creator_id FROM payment_order WHERE provider=? AND status IN ('PENDING','CANCELLED') AND provider_link_id IS NOT NULL AND (reconcile_after IS NULL OR reconcile_after<CURRENT_TIMESTAMP)"+boundary+" ORDER BY reconcile_after,created_at,id LIMIT 10",arguments);
-        for(var row:rows){
-            if(db.update("UPDATE payment_order SET reconcile_after=TIMESTAMPADD(MINUTE,5,CURRENT_TIMESTAMP) WHERE id=? AND (reconcile_after IS NULL OR reconcile_after<CURRENT_TIMESTAMP)",row.get("id"))!=1)continue;
-            try{order((String)row.get("creator_id"),(String)row.get("id"));}catch(RuntimeException ignored){/* persisted due time permits a later retry */}
+        var warnings=new TreeMap<String,Integer>();
+        try{
+            var activation=legacyBoundary().activation();String boundary=activation==null?"":" AND created_at>?";
+            Object[] arguments=activation==null?new Object[]{provider()}:new Object[]{provider(),activation};
+            db.update("UPDATE payment_order SET status='CREATION_UNKNOWN',failure_code='CREATE_PROCESS_INTERRUPTED' WHERE provider=? AND status='CREATING' AND provider_link_id IS NULL AND created_at<TIMESTAMPADD(MINUTE,-5,CURRENT_TIMESTAMP)"+boundary,arguments);
+            var rows=db.queryForList("SELECT id,creator_id FROM payment_order WHERE provider=? AND status IN ('PENDING','CANCELLED') AND provider_link_id IS NOT NULL AND (reconcile_after IS NULL OR reconcile_after<CURRENT_TIMESTAMP)"+boundary+" ORDER BY reconcile_after,created_at,id LIMIT 10",arguments);
+            for(var row:rows){
+                if(db.update("UPDATE payment_order SET reconcile_after=TIMESTAMPADD(MINUTE,5,CURRENT_TIMESTAMP) WHERE id=? AND (reconcile_after IS NULL OR reconcile_after<CURRENT_TIMESTAMP)",row.get("id"))!=1)continue;
+                try{order((String)row.get("creator_id"),(String)row.get("id"),warnings);}
+                catch(RuntimeException failed){reconciliationWarning(warnings,"ORDER_LOOKUP",failed);}
+            }
+            reconcilePaidCaptures(warnings);
+        }finally{
+            // At most one warning per bounded scan, with no exception messages,
+            // stack traces, order/resource identities, payloads or credentials.
+            if(!warnings.isEmpty())log.warn("payment_reconciliation_incomplete provider={} failures={}",provider().matches("[A-Z_]{1,24}")?provider():"UNKNOWN",warnings);
         }
-        reconcilePaidCaptures();
     }
     /** Detect a missed refund callback for recent paid orders. Disputes still require their verified webhook. */
-    private void reconcilePaidCaptures(){
+    private void reconcilePaidCaptures(Map<String,Integer> warnings){
         if(!inboxEnabled||inbox==null)return;
         var activation=legacyBoundary().activation();String boundary=activation==null?"":" AND created_at>?";
         Object[] arguments=activation==null?new Object[]{provider()}:new Object[]{provider(),activation};
-        var rows=db.queryForList("SELECT id,provider_link_id,provider_capture_id,amount,currency FROM payment_order WHERE provider=? AND status='PAID' AND provider_capture_id IS NOT NULL AND created_at>=TIMESTAMPADD(DAY,-30,CURRENT_TIMESTAMP) AND (reconcile_after IS NULL OR reconcile_after<CURRENT_TIMESTAMP)"+boundary+" ORDER BY reconcile_after,created_at,id LIMIT 10",arguments);
+        var rows=db.queryForList("SELECT id,creator_id,provider_link_id,provider_capture_id,amount,currency FROM payment_order WHERE provider=? AND status='PAID' AND provider_capture_id IS NOT NULL AND created_at>=TIMESTAMPADD(DAY,-30,CURRENT_TIMESTAMP) AND (reconcile_after IS NULL OR reconcile_after<CURRENT_TIMESTAMP)"+boundary+" ORDER BY reconcile_after,created_at,id LIMIT 10",arguments);
         for(var row:rows){
             if(db.update("UPDATE payment_order SET reconcile_after=TIMESTAMPADD(MINUTE,5,CURRENT_TIMESTAMP) WHERE id=? AND provider=? AND status='PAID' AND (reconcile_after IS NULL OR reconcile_after<CURRENT_TIMESTAMP)",row.get("id"),provider())!=1)continue;
             try{
@@ -612,13 +642,75 @@ public class PayPalPaymentService implements VerifiedPaymentProcessor {
                 if(!Objects.equals(row.get("currency"),capture.path("amount").path("currency_code").asString())||((BigDecimal)row.get("amount")).compareTo(new BigDecimal(capture.path("amount").path("value").asString()))!=0)throw new IllegalStateException("Capture amount mismatch");
                 String status=capture.path("status").asString();
                 if(!Set.of("REFUNDED","PARTIALLY_REFUNDED","REVERSED").contains(status))continue;
-                String eventId="reconcile-"+UUID.nameUUIDFromBytes((provider()+":"+id+":"+status).getBytes(java.nio.charset.StandardCharsets.UTF_8));
-                String payload=new tools.jackson.databind.ObjectMapper().writeValueAsString(new TreeMap<>(Map.of("resourceId",id,"orderId",Objects.toString(row.get("provider_link_id"),""))));
-                // Stable provider/capture/status identity prevents a recurring scan from reopening a reviewed case.
+                var observation=reconciliationObservation(row,capture,status,warnings);
+                if(observation==null)continue;
+                String eventId="reconcile-"+UUID.nameUUIDFromBytes(observation.identity().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                String payload=reconciliationPayload(row,status,observation.fundsProof());
+                // A complete new funds fact changes identity; clocks and unchanged
+                // capture status alone must never reopen an already reviewed case.
                 if(ledger instanceof com.qingfeng.music.infrastructure.persistence.credits.JdbcFencedCreditsLedger)
                     inbox.acceptVerified(provider(),merchantId,environment,eventId,"PAYMENT.CAPTURE.STATUS_RISK",payload);
                 else inbox.acceptVerified(provider(),eventId,"PAYMENT.CAPTURE.STATUS_RISK",payload);
-            }catch(RuntimeException ignored){/* persisted due time permits a later retry; no balance adjustment */}
+            }catch(RuntimeException failed){reconciliationWarning(warnings,"CAPTURE_LOOKUP",failed);}
         }
+    }
+    private record ReconciliationObservation(String identity,boolean fundsProof) {}
+    /** Detection only: the worker independently re-reads native financial proof and
+     * refund resources before applying any idempotent ledger adjustment. */
+    private ReconciliationObservation reconciliationObservation(Map<String,Object> row,tools.jackson.databind.JsonNode capture,String status,Map<String,Integer> warnings){
+        String captureId=(String)row.get("provider_capture_id");
+        String stable=provider()+":"+captureId+":"+status;
+        if(!(ledger instanceof com.qingfeng.music.infrastructure.persistence.credits.JdbcFencedCreditsLedger)||"REVERSED".equals(status))return new ReconciliationObservation(stable,false);
+        try{
+            var original=new PayPalFundsProof.Order((String)row.get("id"),captureId,(String)row.get("provider_link_id"),(String)row.get("currency"),((BigDecimal)row.get("amount")).movePointRight(2).longValueExact());
+            var start=java.time.Instant.parse(capture.path("create_time").asString()).minusSeconds(60);
+            var report=gateway().financialReport(start,java.time.Instant.now().minusSeconds(3*3600+300));
+            var disputes=gateway().disputesForCapture(captureId);
+            var proof=PayPalFundsProof.review(new PayPalFundsProof.Scope(merchantId,environment),original,capture,disputes,report);
+            if(!capture.equals(gateway().retrieveCapture(captureId))||!disputes.equals(gateway().disputesForCapture(captureId)))
+                throw new IllegalStateException("Payment changed during reporting");
+            boolean unapplied=false;
+            for(var refund:proof.refunds()){
+                // This append-only table contains only successful refunds committed
+                // atomically with the rights adjustment. Pending/failed events are
+                // not successful facts and cannot suppress a new observation.
+                var known=db.queryForList("SELECT owner_id,order_id,capture_id,amount_minor,currency FROM p0_credit_refund WHERE provider='PAYPAL' AND merchant=? AND environment=? AND external_id=?",merchantId,environment,refund.id());
+                if(known.size()!=1){unapplied=true;continue;}
+                var prior=known.get(0);
+                if(!Objects.equals(row.get("creator_id"),prior.get("owner_id"))||!original.orderId().equals(prior.get("order_id"))
+                    ||!captureId.equals(prior.get("capture_id"))||!(prior.get("amount_minor") instanceof Number amount)||amount.longValue()!=refund.amountMinor()
+                    ||!original.currency().equals(prior.get("currency")))unapplied=true;
+            }
+            // Reporting window/watermark changes are not new money. In particular,
+            // do not reopen a manual RELEASE after the same refunds were applied.
+            return unapplied?new ReconciliationObservation(stable+":"+proof.evidenceSha256(),true):null;
+        }catch(RuntimeException unavailable){
+            reconciliationWarning(warnings,"FINANCIAL_PROOF_DEFERRED",unavailable);
+            // A provider-read failure is not a new funds fact. If this exact
+            // scope/order/capture/status already has a proof observation, its
+            // durable worker/review remains responsible; do not create a second
+            // status-only identity which could reopen a completed manual RELEASE.
+            // A new status, first observation or REVERSED still enters risk review.
+            String payload=reconciliationPayload(row,status,true);
+            var prior=db.queryForList("SELECT event_id FROM payment_webhook_inbox WHERE provider=? AND merchant_scope=? AND env_scope=? AND event_type='PAYMENT.CAPTURE.STATUS_RISK' AND payload_hash=? AND event_id LIKE 'reconcile-%' LIMIT 1",provider(),merchantId,environment,payloadHash(payload));
+            return prior.isEmpty()?new ReconciliationObservation(stable,false):null;
+        }
+    }
+    private static String reconciliationPayload(Map<String,Object> row,String status,boolean fundsProof){
+        var payload=new TreeMap<String,String>();
+        payload.put("resourceId",(String)row.get("provider_capture_id"));payload.put("orderId",Objects.toString(row.get("provider_link_id"),""));
+        // Historical status-only payloads stay byte-for-byte compatible. These
+        // markers belong only to the newly introduced proof-keyed observations.
+        if(fundsProof){payload.put("captureStatus",status);payload.put("observationKind","FUNDS_PROOF");}
+        return new tools.jackson.databind.ObjectMapper().writeValueAsString(payload);
+    }
+    private static String payloadHash(String payload){
+        try{return HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256").digest(payload.getBytes(java.nio.charset.StandardCharsets.UTF_8)));}
+        catch(java.security.NoSuchAlgorithmException impossible){throw new IllegalStateException("SHA-256 unavailable",impossible);}
+    }
+    private static void reconciliationWarning(Map<String,Integer> warnings,String stage,RuntimeException failure){
+        String type=failure.getClass().getSimpleName();
+        if(!type.matches("[A-Za-z0-9_$]{1,80}"))type="RuntimeException";
+        warnings.merge(stage+"/"+type,1,Integer::sum);
     }
 }

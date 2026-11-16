@@ -21,6 +21,9 @@ import org.springframework.transaction.support.TransactionTemplate;
  */
 public final class CreditHistoricalCutover {
     private static final String PREFIX = "legacy-opening:";
+    private static final String OPTIONAL_V46 = "V46__agent_chat_allowance.sql";
+    private static final String OPTIONAL_V46_SHA256 = "8ce991cea50af971ca6d748c1a37b304a8ee11d7969f06dd455dc16629638f86";
+    private static final int OPTIONAL_V46_CHECKSUM = -26150424;
     private static final Set<String> EMPTY_FINANCIAL_TABLES = Set.of(
         "p0_credit_allocation", "p0_credit_payment_binding", "p0_credit_refund", "p0_credit_dispute",
         "p0_credit_return", "p0_credit_financial_audit", "p0_credit_recovery", "p0_credit_recovery_audit",
@@ -437,21 +440,34 @@ public final class CreditHistoricalCutover {
 
     private static void verifyHistory(List<History> actual) {
         try {
+            verifyHistory(actual, new PathMatchingResourcePatternResolver().getResources("classpath*:db/migration/V*__*.sql"));
+        } catch (java.io.IOException invalid) { throw new IllegalStateException("HISTORY_RESOURCE_UNREADABLE", invalid); }
+    }
+
+    private static void verifyHistory(List<History> actual, org.springframework.core.io.Resource[] resources) {
+        try {
             var expected = new TreeMap<Integer, History>();
-            for (var resource : new PathMatchingResourcePatternResolver().getResources("classpath*:db/migration/V*__*.sql")) {
+            for (var resource : resources) {
                 String name = Objects.requireNonNull(resource.getFilename());
                 int version = Integer.parseInt(name.substring(1, name.indexOf("__")));
+                require(version >= 1 && version <= 46, "HISTORY_UNAPPROVED_RESOURCE_EXTENSION");
                 CRC32 crc = new CRC32();
                 String text;
                 try (var input = resource.getInputStream()) { text = new String(input.readAllBytes(), StandardCharsets.UTF_8); }
                 if (text.startsWith("\uFEFF")) text = text.substring(1);
                 text.lines().forEach(line -> crc.update(line.getBytes(StandardCharsets.UTF_8)));
+                if (version == 46) {
+                    String normalized = text.replace("\r\n", "\n").replace('\r', '\n');
+                    require(OPTIONAL_V46.equals(name) && (int) crc.getValue() == OPTIONAL_V46_CHECKSUM
+                            && OPTIONAL_V46_SHA256.equals(digest(normalized.getBytes(StandardCharsets.UTF_8))),
+                            "HISTORY_UNAPPROVED_RESOURCE_EXTENSION");
+                }
                 require(expected.put(version, new History(version, name, (int) crc.getValue())) == null, "DUPLICATE_CLASSPATH_MIGRATION");
             }
-            // Historical cutover accepts only V44/V45 as its source, while later
-            // application migrations may also be present on the classpath.
+            // A V46-compatible artifact must not widen the historical cutover source contract.
             for (int version = 1; version <= 45; version++)
                 require(expected.containsKey(version), "HISTORY_RESOURCE_CHAIN_INCOMPLETE");
+            require(expected.size() == 45 || expected.size() == 46, "HISTORY_RESOURCE_CHAIN_INCOMPLETE");
             require(actual.size() == 44 || actual.size() == 45, "HISTORY_CHAIN_LENGTH_MISMATCH");
             for (int i = 0; i < actual.size(); i++)
                 require(actual.get(i).version() == i + 1 && actual.get(i).equals(expected.get(i + 1)), "HISTORY_SCRIPT_OR_CHECKSUM_MISMATCH");

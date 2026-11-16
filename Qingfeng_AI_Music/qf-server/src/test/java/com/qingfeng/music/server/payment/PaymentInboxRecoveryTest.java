@@ -169,6 +169,68 @@ class PaymentInboxRecoveryTest {
         assertEquals("REVIEW",db.queryForObject("SELECT status FROM payment_risk_case WHERE id=?",String.class,risk.id()));
         assertEquals(100,credits.balance(owner));verify(gateway,never()).capture(anyString(),anyString());
     }
+
+    /** Isolated H2 durability contract, with a real stored-balance ledger and scoped inbox; no provider calls. */
+    private static final class ScopedRecoveryFixture implements AutoCloseable {
+        final JdbcTemplate db;
+        final CreditsLedger ledger;
+        final PaymentInbox inbox;
+        final PayPalPaymentService service;
+        final PayPalCheckoutGateway gateway=mock(PayPalCheckoutGateway.class);
+        final String owner=UUID.randomUUID().toString(),order=UUID.randomUUID().toString(),remote="REMOTE123",capture="CAPTURE123";
+        final java.sql.Timestamp activation=java.sql.Timestamp.from(java.time.Instant.now().minusSeconds(60));
+        ScopedRecoveryFixture(boolean historical){
+            var source=new org.springframework.jdbc.datasource.DriverManagerDataSource("jdbc:h2:mem:scoped_paypal_recovery_"+UUID.randomUUID()+";MODE=MySQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1","sa","");
+            db=new JdbcTemplate(source);var tx=new TransactionTemplate(new org.springframework.jdbc.datasource.DataSourceTransactionManager(source));
+            db.execute("CREATE TABLE creator(id VARCHAR(36) PRIMARY KEY,payment_risk_frozen INT DEFAULT 0)");db.update("INSERT INTO creator(id) VALUES(?)",owner);
+            db.execute("CREATE TABLE credit_ledger(entry_type VARCHAR(24),reference_id VARCHAR(160),owner_id VARCHAR(36),amount BIGINT,created_at TIMESTAMP,PRIMARY KEY(entry_type,reference_id))");
+            db.execute("CREATE TABLE credit_account(owner_id VARCHAR(36) PRIMARY KEY,balance BIGINT,updated_at TIMESTAMP)");
+            db.execute("CREATE TABLE p0_credit_writer_policy(id INT PRIMARY KEY,protocol INT)");db.update("INSERT INTO p0_credit_writer_policy VALUES(1,3)");
+            db.execute("CREATE TABLE p0_credit_cutover_state(id INT PRIMARY KEY,status VARCHAR(24),activated_at TIMESTAMP(6))");db.update("INSERT INTO p0_credit_cutover_state VALUES(1,'ACTIVE',?)",activation);
+            db.execute("CREATE TABLE payment_order(id VARCHAR(36) PRIMARY KEY,creator_id VARCHAR(36),package_id VARCHAR(80),amount DECIMAL(18,2),currency VARCHAR(3),credits BIGINT,status VARCHAR(24),created_at TIMESTAMP(6),provider VARCHAR(24),provider_link_id VARCHAR(128),provider_capture_id VARCHAR(128),failure_code VARCHAR(80),reconcile_after TIMESTAMP(6))");
+            db.update("INSERT INTO payment_order(id,creator_id,package_id,amount,currency,credits,status,created_at,provider,provider_link_id) VALUES(?,?,'starter-USD',9.90,'USD',100,'PENDING',?,'PAYPAL_SANDBOX',?)",order,owner,historical?java.sql.Timestamp.from(activation.toInstant().minusSeconds(1)):java.sql.Timestamp.from(activation.toInstant().plusSeconds(1)),remote);
+            db.execute("CREATE TABLE payment_webhook_inbox(provider VARCHAR(24),merchant_scope VARCHAR(128),env_scope VARCHAR(16),event_id VARCHAR(128),event_type VARCHAR(96),payload VARCHAR(30000),payload_hash VARCHAR(64),status VARCHAR(24),attempts INT,next_attempt_at TIMESTAMP,created_at TIMESTAMP,updated_at TIMESTAMP,lease_token VARCHAR(36),lease_until TIMESTAMP,last_error VARCHAR(128),PRIMARY KEY(provider,merchant_scope,env_scope,event_id))");
+            db.execute("CREATE TABLE payment_inbox_attempt(id VARCHAR(36) PRIMARY KEY,provider VARCHAR(24),merchant_scope VARCHAR(128),env_scope VARCHAR(16),event_id VARCHAR(128),attempt INT,result VARCHAR(24),evidence_id VARCHAR(512),created_at TIMESTAMP)");
+            db.execute("CREATE TABLE payment_inbox_review(id VARCHAR(36) PRIMARY KEY,provider VARCHAR(24),merchant_scope VARCHAR(128),env_scope VARCHAR(16),event_id VARCHAR(128),reviewer VARCHAR(128),reason VARCHAR(1000),action VARCHAR(24),created_at TIMESTAMP)");
+            ledger=new com.qingfeng.music.infrastructure.persistence.credits.JdbcCreditsLedger(db,tx);inbox=new PaymentInbox(db,tx);
+            var env=new org.springframework.mock.env.MockEnvironment();service=spy(new PayPalPaymentService(db,tx,ledger,new PaymentCatalog(env),env));
+            for(var entry:Map.<String,Object>of("enabled",true,"legacyOrdersReadOnly",true,"environment","sandbox","clientId","fixture","clientSecret","fixture","merchantId","MERCHANT","webhookId","fixture").entrySet())org.springframework.test.util.ReflectionTestUtils.setField(service,entry.getKey(),entry.getValue());
+            service.infrastructure(inbox,mock(PaymentRiskService.class));doReturn(gateway).when(service).gateway();when(gateway.verifyWebhook(any(),any())).thenReturn(true);
+        }
+        String state(String event){return db.queryForObject("SELECT status FROM payment_webhook_inbox WHERE event_id=?",String.class,event);}
+        long count(String sql,Object... args){return Objects.requireNonNull(db.queryForObject(sql,Long.class,args));}
+        @Override public void close(){db.execute("SHUTDOWN");}
+    }
+    private void transientNewOrderRecovery(RuntimeException failure){
+        try(var f=new ScopedRecoveryFixture(false)){
+            String event=uniqueId("WH-");var receipt=paid(f.order,f.remote,f.capture);when(f.gateway.retrieve(f.remote)).thenThrow(failure).thenReturn(receipt);
+            byte[] callback=body(event,"PAYMENT.CAPTURE.COMPLETED",f.capture,f.remote);f.service.webhook(headers(),callback);
+            assertTrue(f.service.processNextEvent());assertEquals("PENDING",f.state(event),"A transient error for a confirmed new order must remain automatically retryable");
+            assertEquals("PROCESSING_FAILED",f.db.queryForObject("SELECT last_error FROM payment_webhook_inbox WHERE event_id=?",String.class,event));
+            assertEquals(1,f.count("SELECT COUNT(*) FROM payment_inbox_attempt WHERE event_id=? AND result='FAILED'",event));
+            assertEquals(0,f.ledger.balance(f.owner));assertEquals(0,f.count("SELECT COUNT(*) FROM credit_ledger WHERE reference_id=?","payment:"+f.order));
+            f.db.update("UPDATE payment_webhook_inbox SET next_attempt_at=TIMESTAMPADD(SECOND,-1,CURRENT_TIMESTAMP) WHERE event_id=?",event);
+            assertTrue(f.service.processNextEvent());assertEquals("DONE",f.state(event));assertEquals(100,f.ledger.balance(f.owner));
+            assertEquals(1,f.count("SELECT COUNT(*) FROM payment_inbox_attempt WHERE event_id=? AND result='DONE'",event));
+            assertEquals(1,f.count("SELECT COUNT(*) FROM credit_ledger WHERE entry_type='CREDIT' AND reference_id=? AND amount=100","payment:"+f.order));
+            assertEquals("PAID",f.db.queryForObject("SELECT status FROM payment_order WHERE id=?",String.class,f.order));
+            f.service.webhook(headers(),callback);assertFalse(f.service.processNextEvent());assertEquals(100,f.ledger.balance(f.owner));
+            assertEquals(1,f.count("SELECT COUNT(*) FROM credit_ledger WHERE reference_id=?","payment:"+f.order));verify(f.gateway,times(2)).retrieve(f.remote);verify(f.gateway,never()).capture(anyString(),anyString());
+        }
+    }
+    @Test void legacyCompatibilityKeepsANewOrderProvider503PendingAndEventuallyCreditsOnlyOnce(){transientNewOrderRecovery(new PayPalCheckoutGateway.ProviderHttpException(503));}
+    @Test void legacyCompatibilityKeepsANewOrderNetworkFailurePendingAndEventuallyCreditsOnlyOnce(){transientNewOrderRecovery(new IllegalStateException("synthetic transport interruption"));}
+    @Test void actualHistoricalOrderStillQuarantinesWithoutProviderReadsOrJournalMutation(){
+        try(var f=new ScopedRecoveryFixture(true)){
+            String event=uniqueId("WH-");var before=f.db.queryForMap("SELECT * FROM payment_order WHERE id=?",f.order);
+            byte[] callback=body(event,"PAYMENT.CAPTURE.COMPLETED",f.capture,f.remote);f.service.webhook(headers(),callback);assertTrue(f.service.processNextEvent());
+            assertEquals("MANUAL",f.state(event));assertEquals("LEGACY_ORDER_READ_ONLY",f.db.queryForObject("SELECT last_error FROM payment_webhook_inbox WHERE event_id=?",String.class,event));
+            assertEquals(before,f.db.queryForMap("SELECT * FROM payment_order WHERE id=?",f.order));assertEquals(0,f.ledger.balance(f.owner));assertEquals(0,f.count("SELECT COUNT(*) FROM credit_ledger"));
+            f.service.webhook(headers(),callback);assertFalse(f.service.processNextEvent());assertEquals(1,f.count("SELECT COUNT(*) FROM payment_webhook_inbox WHERE event_id=?",event));
+            verify(f.gateway,never()).retrieve(anyString());verify(f.gateway,never()).retrieveCapture(anyString());
+        }
+    }
+
     @Test void financialHttpBoundaryRequiresItsOwnRoleAndCsrf() throws Exception {
         var http=java.net.http.HttpClient.newHttpClient();String base="http://127.0.0.1:"+port;
         var anonymous=http.send(java.net.http.HttpRequest.newBuilder(java.net.URI.create(base+"/api/app/payment-risk/cases")).GET().build(),java.net.http.HttpResponse.BodyHandlers.discarding());
