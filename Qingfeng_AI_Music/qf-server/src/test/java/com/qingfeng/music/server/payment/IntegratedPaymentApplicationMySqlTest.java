@@ -161,7 +161,7 @@ class IntegratedPaymentApplicationMySqlTest {
         }
         @Bean @Primary StripeCheckoutGateway offlineStripe(ObjectMapper json){
             var gateway=spy(new StripeCheckoutGateway(json));doNothing().when(gateway).verifyAccount();
-            doAnswer(call->{String method=call.getArgument(0),currency=call.getArgument(1);assertTrue("card".equals(method)&&"USD".equals(currency)||"wechat_pay".equals(method)&&"CNY".equals(currency),"Only explicit synthetic merchant purchase scopes are permitted");return null;}).when(gateway).verifyNewPurchase(anyString(),anyString());
+            doAnswer(call->{String method=call.getArgument(0),currency=call.getArgument(1);assertTrue("card".equals(method)&&"USD".equals(currency)||"wechat_pay".equals(method)&&Set.of("CNY","GBP").contains(currency),"Only explicit synthetic merchant purchase scopes are permitted");return null;}).when(gateway).verifyNewPurchase(anyString(),anyString());
             doAnswer(call->{String order=call.getArgument(0),session="cs_test_"+unique();var fact=session(session,order,false);SESSIONS.put(session,fact);return fact;}).when(gateway).createSession(anyString(),anyString(),any(),anyString());
             doAnswer(call->{
                 String order=call.getArgument(0),currency=call.getArgument(3),method=call.getArgument(4);BigDecimal amount=call.getArgument(2);
