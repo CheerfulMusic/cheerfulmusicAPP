@@ -1939,6 +1939,7 @@ export const english: Record<string, string> = {
 
   // Agent 创作助手
   'Agent 创作': 'Agent Studio',
+  '智能助手': 'AI Assistant',
   'AI 写歌': 'AI songwriting',
   '歌词改写': 'Rewrite lyrics',
   '音乐延长': 'Extend music',
