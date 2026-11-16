@@ -194,6 +194,7 @@ onBeforeUnmount(() => dialog.value?.close())
   .premium-scroll { padding:26px 20px; }
   .premium-studio-dialog h2 { font-size:25px; margin-right:34px; }
   .premium-about { padding:16px; }
+  .premium-about-header { padding-inline-end:24px; }
   .premium-track-list,.premium-plans,.premium-gallery { grid-template-columns:1fr; }
   .premium-plan { gap:10px; padding:18px; }
   .premium-price { font-size:30px; }
