@@ -20,9 +20,17 @@ final class LyricsHttpTransport {
 
     static HttpResponse<String> post(HttpClient client, URI endpoint, String key, String json)
             throws IOException, InterruptedException {
-        long deadline = System.nanoTime() + com.qingfeng.music.common.concurrent.AgentRequestScope.timeout(Duration.ofSeconds(90)).toNanos();
+        return post(client, endpoint, key, json, Duration.ofSeconds(90));
+    }
+
+    static HttpResponse<String> post(HttpClient client, URI endpoint, String key, String json, Duration maximum)
+            throws IOException, InterruptedException {
+        if (maximum.isZero() || maximum.isNegative()) throw new java.net.http.HttpTimeoutException("Lyrics transport budget exhausted");
+        long deadline = com.qingfeng.music.common.concurrent.LyricsRequestBudget.deadline(
+            com.qingfeng.music.common.concurrent.AgentRequestScope.timeout(maximum));
         for (int attempt = 0; ; attempt++) {
             com.qingfeng.music.common.concurrent.AgentRequestScope.check();
+            if (System.nanoTime() >= deadline) throw new java.net.http.HttpTimeoutException("Lyrics transport budget exhausted");
             var bodyStarted = new AtomicBoolean();
             var delegate = HttpRequest.BodyPublishers.ofString(json);
             var body = new HttpRequest.BodyPublisher() {
