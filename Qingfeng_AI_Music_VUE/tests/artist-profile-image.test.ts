@@ -6,7 +6,11 @@ import { toRaw } from 'vue'
 const mocks = vi.hoisted(() => ({ decode: vi.fn(), draw: vi.fn(), encode: vi.fn(), load: vi.fn(), save: vi.fn() }))
 vi.mock('../src/modules/artist/model/profile-image', async importOriginal => ({
   ...await importOriginal<typeof import('../src/modules/artist/model/profile-image')>(),
-  decodeProfileImage: mocks.decode, drawProfileCrop: mocks.draw, encodeProfileCrop: mocks.encode,
+  drawProfileCrop: mocks.draw,
+}))
+vi.mock('../src/shared/media/image-upload', async importOriginal => ({
+  ...await importOriginal<typeof import('../src/shared/media/image-upload')>(),
+  decodeUploadImage: mocks.decode, encodeUploadJpeg: mocks.encode,
 }))
 vi.mock('../src/platform', () => ({ platform: { kind: 'web' } }))
 vi.mock('../src/shared/i18n', () => ({ t: (message: string) => message }))

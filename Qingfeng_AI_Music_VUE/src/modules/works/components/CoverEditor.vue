@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, useId, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, useId, watch } from 'vue'
 import { formatDate, t } from '../../../shared/i18n'
+import { decodeUploadImage, encodeUploadJpeg, imageUploadAccept } from '../../../shared/media/image-upload'
 import { getUsage } from '../api/detail'
 import { coverUrl, editCover, loadCovers, selectCover, uploadCover, type CoverState } from '../api/covers'
 
@@ -10,7 +11,7 @@ const titleId = useId()
 const dialog = ref<HTMLDialogElement>()
 const fileInput = ref<HTMLInputElement>()
 const canvas = ref<HTMLCanvasElement>()
-const image = ref<HTMLImageElement>()
+const image = shallowRef<Awaited<ReturnType<typeof decodeUploadImage>>>()
 const zoom = ref(1)
 const x = ref(50)
 const y = ref(50)
@@ -29,7 +30,7 @@ const pendingSignature = ref('')
 const unknown = ref(false)
 const keyName = `qingfeng.cover-edit:${props.workId}`
 let mounted = true
-let imageTurn = 0
+let imageRequest: AbortController | undefined
 let uploadedId: string | undefined
 
 try {
@@ -43,7 +44,7 @@ try {
 
 function draw() {
   const target = canvas.value
-  const img = image.value
+  const img = image.value?.element
   const ctx = target?.getContext('2d')
   if (!target || !img || !ctx) return
   const side = Math.min(img.naturalWidth, img.naturalHeight) / zoom.value
@@ -65,34 +66,31 @@ async function choose(event: Event) {
   input.value = ''
   if (!file || busy.value) return
   error.value = ''
-  if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > 10 * 1024 * 1024) {
-    error.value = '请选择10MB以内的JPG、PNG或WebP照片'
-    return
-  }
-  const mine = ++imageTurn
-  const url = URL.createObjectURL(file)
-  const img = new Image()
+  imageRequest?.abort()
+  const request = new AbortController()
+  imageRequest = request
   decoding.value = true
   try {
-    img.src = url
-    await img.decode()
-    if (mine !== imageTurn) return
-    if (img.naturalWidth * img.naturalHeight > 16_000_000) {
-      error.value = '图片像素过大，请选择1600万像素以内的照片'
+    const next = await decodeUploadImage(file, request.signal)
+    if (imageRequest !== request) {
+      next.release()
       return
     }
     uploadedId = undefined
-    image.value = img
+    image.value?.release()
+    image.value = next
     zoom.value = 1
     x.value = 50
     y.value = 50
     await nextTick()
     draw()
-  } catch {
-    if (mine === imageTurn) error.value = '图片无法读取，请换一张重试'
+  } catch (cause) {
+    if (imageRequest === request) error.value = cause instanceof Error ? cause.message : '图片无法读取，请换一张重试'
   } finally {
-    URL.revokeObjectURL(url)
-    if (mine === imageTurn) decoding.value = false
+    if (imageRequest === request) {
+      imageRequest = undefined
+      decoding.value = false
+    }
   }
 }
 
@@ -141,11 +139,9 @@ async function upload() {
   error.value = ''
   try {
     if (!uploadedId) {
-      const blob = await new Promise<Blob>((resolve, reject) => target.toBlob(value => {
-        if (value) resolve(value)
-        else reject(new Error('图片无法读取，请换一张重试'))
-      }, 'image/jpeg', 0.9))
-      uploadedId = (await uploadCover(props.workId, blob)).id
+      const file = await encodeUploadJpeg(target, 'cover.jpg')
+      if (!mounted) return
+      uploadedId = (await uploadCover(props.workId, file)).id
     }
     const state = await selectCover(props.workId, uploadedId, version)
     if (mounted) {
@@ -202,7 +198,9 @@ onMounted(() => {
 })
 onBeforeUnmount(() => {
   mounted = false
-  imageTurn++
+  imageRequest?.abort()
+  imageRequest = undefined
+  image.value?.release()
   dialog.value?.close()
 })
 </script>
@@ -219,10 +217,11 @@ onBeforeUnmount(() => {
         <canvas v-if="image" ref="canvas" width="1024" height="1024" :aria-label="t('封面裁剪预览')"/>
         <img v-else :src="currentCover" :alt="t('当前封面')">
         <div class="cover-controls">
-          <input ref="fileInput" type="file" accept="image/jpeg,image/png,image/webp" hidden @change="choose">
+          <input ref="fileInput" type="file" :accept="imageUploadAccept" hidden @change="choose">
           <button type="button" class="button secondary" :disabled="busy || decoding" autofocus @click="fileInput?.click()">
-            {{ t('选择封面照片') }}
+            {{ t(decoding ? '正在处理图片…' : '选择封面照片') }}
           </button>
+          <small v-if="!image && !decoding" class="save-info">{{ t('JPG、PNG 或 WebP，原图最大 50 MB') }}</small>
           <template v-if="image">
             <label>{{ t('缩放') }}<input v-model.number="zoom" type="range" min="1" max="3" step="0.01" :disabled="busy"></label>
             <label>{{ t('水平位置') }}<input v-model.number="x" type="range" min="0" max="100" :disabled="busy"></label>

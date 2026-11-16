@@ -2,8 +2,9 @@
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, useId, watch } from 'vue'
 import { platform } from '../../../platform'
 import { t } from '../../../shared/i18n'
+import { decodeUploadImage, encodeUploadJpeg, imageUploadAccept } from '../../../shared/media/image-upload'
 import {
-  cropBounds, cropSize, decodeProfileImage, defaultCrop, drawProfileCrop, encodeProfileCrop, profileImageAccept,
+  cropBounds, cropSize, defaultCrop, drawProfileCrop,
   type CropPosition, type ProfileImageKind,
 } from '../model/profile-image'
 
@@ -12,7 +13,7 @@ const emit = defineEmits<{ close: []; apply: [file: File, source: File | string,
 const dialog = ref<HTMLDialogElement>()
 const fileInput = ref<HTMLInputElement>()
 const canvas = ref<HTMLCanvasElement>()
-const loaded = shallowRef<Awaited<ReturnType<typeof decodeProfileImage>>>()
+const loaded = shallowRef<Awaited<ReturnType<typeof decodeUploadImage>>>()
 const position = ref({ ...defaultCrop })
 const error = ref('')
 const loading = ref(false)
@@ -51,7 +52,7 @@ async function load(value: File | string, initial = defaultCrop) {
   error.value = ''
   try {
     const blob = typeof value === 'string' ? await storedImage(value, controller) : value
-    const image = await decodeProfileImage(blob, controller.signal)
+    const image = await decodeUploadImage(blob, controller.signal)
     if (request !== controller) {
       image.release()
       return
@@ -139,7 +140,7 @@ async function apply() {
   applying.value = true
   error.value = ''
   try {
-    const file = await encodeProfileCrop(canvas.value, props.kind)
+    const file = await encodeUploadJpeg(canvas.value, `${props.kind}.jpg`)
     if (alive) emit('apply', file, source, { ...position.value })
   } catch (cause) {
     if (alive) error.value = cause instanceof Error ? cause.message : '图片处理失败，请重新选择图片。'
@@ -186,10 +187,10 @@ onBeforeUnmount(() => {
           @pointerdown="beginPan" @pointermove="pan" @lostpointercapture="drag = undefined" @keydown="keyPan" />
         <template v-else>
           <button type="button" class="button secondary" autofocus @click="fileInput?.click()">{{ t('选择图片') }}</button>
-          <p>{{ t(isAvatar ? 'JPG、PNG 或 WebP，最多 5 MB' : '也可将图片拖到这里') }}</p>
+          <p>{{ t(isAvatar ? 'JPG、PNG 或 WebP，原图最大 50 MB' : '也可将图片拖到这里') }}</p>
         </template>
       </div>
-      <input ref="fileInput" type="file" :accept="profileImageAccept" :aria-label="t('选择图片')" hidden :disabled="applying" @change="choose">
+      <input ref="fileInput" type="file" :accept="imageUploadAccept" :aria-label="t('选择图片')" hidden :disabled="applying" @change="choose">
       <p v-if="error" class="crop-error" role="alert">{{ t(error) }}</p>
       <p v-if="loading" class="crop-hint" role="status">{{ t('正在处理图片…') }}</p>
       <template v-if="loaded">

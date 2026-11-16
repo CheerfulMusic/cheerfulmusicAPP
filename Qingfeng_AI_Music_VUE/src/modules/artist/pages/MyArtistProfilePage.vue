@@ -334,7 +334,7 @@ onBeforeUnmount(clearImageDrafts)
                   </button>
                   <div class="profile-inline-actions">
                     <button v-if="coverSrc" type="button" class="profile-pill" @click="useDefaultCover">{{ t('恢复默认封面') }}</button>
-                    <small class="profile-field-hint">{{ t('JPG、PNG 或 WebP，最多 5 MB') }}</small>
+                    <small class="profile-field-hint">{{ t('JPG、PNG 或 WebP，原图最大 50 MB') }}</small>
                   </div>
                 </div>
               </div>

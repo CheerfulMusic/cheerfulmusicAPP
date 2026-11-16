@@ -1,11 +1,12 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { decodeProfileImage, defaultCrop, drawProfileCrop, encodeProfileCrop } from '../src/modules/artist/model/profile-image'
+import { defaultCrop, drawProfileCrop } from '../src/modules/artist/model/profile-image'
+import { decodeUploadImage, encodeUploadJpeg } from '../src/shared/media/image-upload'
 
 const jpeg = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3])
 const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1])
 const webp = new Uint8Array([0x52, 0x49, 0x46, 0x46, 12, 0, 0, 0, 0x57, 0x45, 0x42, 0x50, 0x56, 0x50, 0x38, 0x20])
-const maxBytes = 5 * 1024 * 1024
+const mb = 1024 * 1024
 let width = 500, height = 375, decoding: 'success' | 'error' | 'pending'
 let encoded: Blob | null
 let loadedImage: FakeImage | undefined
@@ -29,7 +30,7 @@ class FakeImage {
 }
 
 function decode(bytes: Uint8Array<ArrayBuffer>, type = 'image/jpeg') {
-  return decodeProfileImage(new File([bytes], 'portrait.JPG', { type }), new AbortController().signal)
+  return decodeUploadImage(new File([bytes], 'portrait.JPG', { type }), new AbortController().signal)
 }
 
 beforeEach(() => {
@@ -69,9 +70,28 @@ describe('profile image crop', () => {
   it.each([
     new Uint8Array(), new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg"/>'),
     new TextEncoder().encode('RIFF0000NOTP'), webp.slice(0, 10),
-    new Uint8Array(maxBytes + 1),
-  ])('rejects unsupported, incomplete or oversized data before creating a preview', async bytes => {
-    await expect(decode(bytes)).rejects.toThrow('5 MB')
+  ])('rejects unsupported or incomplete data before creating a preview', async bytes => {
+    await expect(decode(bytes)).rejects.toThrow('请选择 JPG、PNG 或 WebP 图片')
+    expect(createUrl).not.toHaveBeenCalled()
+  })
+
+  it('accepts a large original for cropping but keeps the upload within 1 MB', async () => {
+    const largeCover = new File([png, new Uint8Array(12 * mb)], 'large.png', { type: 'image/png' })
+    width = 8000; height = 6000
+    const image = await decodeUploadImage(largeCover, new AbortController().signal)
+    expect(image.element.naturalWidth).toBe(width)
+    const canvas = document.createElement('canvas')
+    canvas.width = 1600; canvas.height = 400
+    drawProfileCrop(canvas, image.element, 'cover', defaultCrop)
+    const file = await encodeUploadJpeg(canvas, 'cover.jpg')
+    expect(file.size).toBeLessThanOrEqual(mb)
+    image.release()
+  })
+
+  it('checks the 50 MB original-file limit before reading it', async () => {
+    const file = new Blob([jpeg], { type: 'image/jpeg' })
+    Object.defineProperty(file, 'size', { value: 50 * mb + 1 })
+    await expect(decodeUploadImage(file, new AbortController().signal)).rejects.toThrow('50 MB')
     expect(createUrl).not.toHaveBeenCalled()
   })
 
@@ -88,20 +108,20 @@ describe('profile image crop', () => {
       queueMicrotask(() => controller.abort())
       return 'blob:profile-image-source'
     })
-    await expect(decodeProfileImage(new Blob([jpeg]), controller.signal)).rejects.toThrow('图片无法读取')
+    await expect(decodeUploadImage(new Blob([jpeg]), controller.signal)).rejects.toThrow('图片无法读取')
     expect(revokeUrl).toHaveBeenCalledExactlyOnceWith('blob:profile-image-source')
     expect(loadedImage?.onload).toBeNull()
     expect(loadedImage?.onerror).toBeNull()
   })
 
-  it.each([[0, 100], [100, 0], [8193, 1], [1, 8193], [5000, 4001]])('rejects unsafe dimensions %s × %s before drawing', async (w, h) => {
+  it.each([[0, 100], [100, 0], [12001, 1], [1, 12001], [10000, 5001]])('rejects unsafe dimensions %s × %s before drawing', async (w, h) => {
     width = w; height = h
     await expect(decode(webp)).rejects.toThrow('尺寸过大')
     expect(context.drawImage).not.toHaveBeenCalled()
     expect(revokeUrl).toHaveBeenCalledExactlyOnceWith('blob:profile-image-source')
   })
 
-  it.each([[8192, 1], [5000, 4000]])('accepts the permitted dimension boundary %s × %s', async (w, h) => {
+  it.each([[12000, 1], [10000, 5000]])('accepts the permitted dimension boundary %s × %s', async (w, h) => {
     width = w; height = h
     const image = await decode(webp)
     expect(image.element.naturalWidth).toBe(w)
@@ -120,7 +140,7 @@ describe('profile image crop', () => {
     expect(context.fillStyle).toBe('#fff')
     expect(context.fillRect).toHaveBeenLastCalledWith(0, 0, 1600, 400)
     image.release()
-    expect(await encodeProfileCrop(canvas, 'cover')).toMatchObject({ name: 'cover.jpg', type: 'image/jpeg', size: jpeg.length })
+    expect(await encodeUploadJpeg(canvas, 'cover.jpg')).toMatchObject({ name: 'cover.jpg', type: 'image/jpeg', size: jpeg.length })
   })
 
   it.each(['null', 'empty', 'wrong-mime', 'wrong-bytes', 'oversize'])('rejects invalid encoder output: %s', async failure => {
@@ -128,7 +148,18 @@ describe('profile image crop', () => {
     if (failure === 'empty') encoded = new Blob([], { type: 'image/jpeg' })
     if (failure === 'wrong-mime') encoded = new Blob([jpeg], { type: 'image/png' })
     if (failure === 'wrong-bytes') encoded = new Blob([png], { type: 'image/jpeg' })
-    if (failure === 'oversize') encoded = new Blob([new Uint8Array(maxBytes + 1)], { type: 'image/jpeg' })
-    await expect(encodeProfileCrop(document.createElement('canvas'), 'avatar')).rejects.toThrow()
+    if (failure === 'oversize') encoded = new Blob([jpeg, new Uint8Array(mb)], { type: 'image/jpeg' })
+    await expect(encodeUploadJpeg(document.createElement('canvas'), 'avatar.jpg')).rejects.toThrow()
+  })
+
+  it('lowers JPEG quality until the crop meets the upload budget', async () => {
+    const canvas = document.createElement('canvas')
+    const large = new Blob([jpeg, new Uint8Array(mb)], { type: 'image/jpeg' })
+    const encode = vi.mocked(canvas.toBlob)
+    encode.mockImplementationOnce(callback => { callback(large) })
+    const file = await encodeUploadJpeg(canvas, 'cover.jpg')
+    expect(encode).toHaveBeenNthCalledWith(1, expect.any(Function), 'image/jpeg', 0.92)
+    expect(encode).toHaveBeenNthCalledWith(2, expect.any(Function), 'image/jpeg', 0.8)
+    expect(file.size).toBe(jpeg.length)
   })
 })
