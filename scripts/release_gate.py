@@ -67,6 +67,8 @@ CORE_MIGRATION_SHA256 = {
 }
 INTEGRATED_MIGRATION = 'V45__credit_entitlement_integration.sql'
 INTEGRATED_MIGRATION_SHA256 = '3dd5cebf19dee960ecefb2239668139918d363496fe87710f817c5b3a3241685'
+AGENT_ALLOWANCE_MIGRATION = 'V46__agent_chat_allowance.sql'
+AGENT_ALLOWANCE_MIGRATION_SHA256 = '8ce991cea50af971ca6d748c1a37b304a8ee11d7969f06dd455dc16629638f86'
 
 
 class GateError(ValueError):
@@ -136,14 +138,17 @@ def normalized_migration_sha(data):
 
 
 def verify_migration_set(normalized):
-    expected = {**CORE_MIGRATION_SHA256, INTEGRATED_MIGRATION: INTEGRATED_MIGRATION_SHA256}
+    expected = {**CORE_MIGRATION_SHA256,
+                INTEGRATED_MIGRATION: INTEGRATED_MIGRATION_SHA256,
+                AGENT_ALLOWANCE_MIGRATION: AGENT_ALLOWANCE_MIGRATION_SHA256}
     if set(normalized) != set(expected):
-        raise GateError("Canonical migration chain must contain exactly core V1..V44 and integrated V45")
+        raise GateError("Canonical migration chain must contain exactly core V1..V44, integrated V45 and agent allowance V46")
     for name, digest in expected.items():
         if normalized[name] != digest:
             raise GateError("Canonical migration source changed: " + name)
     return {"coreSourceCommit": CORE_MIGRATION_SOURCE, "coreVersions": "1..44",
-            "integrationVersion": "45", "normalization": "UTF-8/no BOM/LF",
+            "integrationVersion": "45", "agentAllowanceVersion": "46",
+            "normalization": "UTF-8/no BOM/LF",
             "normalizedSha256": dict(sorted(normalized.items()))}
 
 

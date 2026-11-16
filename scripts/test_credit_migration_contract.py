@@ -43,12 +43,14 @@ class CreditMigrationContractTests(unittest.TestCase):
             items[name] = output.getvalue()
         return self.rewrite_jar(path, apply)
 
-    def test_core_44_originals_and_v45_are_one_exact_contract(self):
+    def test_core_44_v45_and_v46_are_one_exact_contract(self):
         actual = {p.name: gate.normalized_migration_sha(p.read_bytes()) for p in SQL.glob("V*__*.sql")}
         contract = gate.verify_migration_set(actual)
         self.assertEqual("e6c351f21ece6fb096ff425ca4b690232632de21", contract["coreSourceCommit"])
-        self.assertEqual(45, len(actual))
+        self.assertEqual(46, len(actual))
         self.assertEqual(44, len(gate.CORE_MIGRATION_SHA256))
+        self.assertEqual(gate.AGENT_ALLOWANCE_MIGRATION_SHA256,
+                         actual[gate.AGENT_ALLOWANCE_MIGRATION])
 
     def test_legacy_fixtures_keep_the_original_executed_bytes(self):
         expected = {
@@ -104,8 +106,9 @@ class CreditMigrationContractTests(unittest.TestCase):
 
     def test_complete_packaged_chain_is_verified(self):
         actual = gate.inspect_artifact(self.fixture.jar())
-        self.assertEqual(45, len(actual["migrations"]))
+        self.assertEqual(46, len(actual["migrations"]))
         self.assertEqual("45", actual["migrationContract"]["integrationVersion"])
+        self.assertEqual("46", actual["migrationContract"]["agentAllowanceVersion"])
 
     def test_old_v33_cannot_be_added_beside_canonical_v33(self):
         jar = self.nested_change(self.fixture.jar(), lambda items: items.update({
@@ -127,7 +130,18 @@ class CreditMigrationContractTests(unittest.TestCase):
 
     def test_missing_v45_does_not_pass_as_an_old_complete_chain(self):
         jar = self.nested_change(self.fixture.jar(), lambda items: items.pop("db/migration/" + gate.INTEGRATED_MIGRATION))
+        with self.assertRaisesRegex(gate.GateError, "Missing or noncontiguous migration chain"):
+            gate.inspect_artifact(jar)
+
+    def test_missing_v46_cannot_pass_as_the_previous_complete_chain(self):
+        jar = self.nested_change(self.fixture.jar(), lambda items: items.pop("db/migration/" + gate.AGENT_ALLOWANCE_MIGRATION))
         with self.assertRaisesRegex(gate.GateError, "exactly core V1..V44"):
+            gate.inspect_artifact(jar)
+
+    def test_agent_allowance_v46_edit_is_rejected(self):
+        jar = self.nested_change(self.fixture.jar(), lambda items: items.update({
+            "db/migration/" + gate.AGENT_ALLOWANCE_MIGRATION: b"SELECT 1;"}))
+        with self.assertRaisesRegex(gate.GateError, "Canonical migration source changed"):
             gate.inspect_artifact(jar)
 
     def test_core_edit_is_rejected_even_with_all_versions_present(self):
