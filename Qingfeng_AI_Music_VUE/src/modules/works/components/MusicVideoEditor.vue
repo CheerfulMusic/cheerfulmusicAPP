@@ -13,6 +13,7 @@ const projects = ref<{ id: string; asset_id: string; state: string; request_key:
 const requestKey = ref(''), cost = computed(() => videoCost(plan.value))
 const resolutions: VideoResolution[] = ['480P', '720P', '1080P']
 const terminal = new Set(['READY', 'FAILED', 'ASSEMBLY_FAILED', 'CANCELLED'])
+const taskLabels: Record<string, string> = { QUEUED: '排队中', RUNNING: '镜头生成中', ASSEMBLING: '合成中', READY: '已完成', FAILED: '生成失败', ASSEMBLY_FAILED: '合成失败', UNCERTAIN: '等待核对', CANCELLED: '已取消' }
 const selectedState = ref('')
 const hasActive = computed(() => projects.value.some(p => !terminal.has(p.state)))
 const locked = computed(() => loading.value || busy.value || unknown.value || !!projectId.value || hasActive.value)
@@ -111,7 +112,7 @@ async function submit() {
     <p v-if="error" role="alert" class="mv-error">{{ error }}</p><p v-if="notice" role="status">{{ notice }}</p>
     <button v-if="error && !loading && !projectId && !plan.shots.length" type="button" @click="initialize">重新查询 MV 任务</button>
     <section v-if="projectId" class="mv-current" aria-label="当前 MV 任务"><h3>MV 任务进度</h3><p v-if="!terminal.has(selectedState)">任务正在排队、制作或等待核对，请勿重复提交。关闭页面不会取消任务，再次进入可继续查看。</p><AgentVideoProgress :key="projectId" :project-id="projectId" @state-change="progressChanged"/></section>
-    <details v-if="projects.length && !unknown"><summary>查看这首歌已有的 MV（{{ projects.length }}）</summary><button v-for="project in projects" :key="project.id" type="button" @click="selectProject(project.id)">查看 MV · {{ project.state }}</button></details>
+    <details v-if="projects.length && !unknown"><summary>这首歌的 MV 任务（{{ projects.length }}）</summary><p>生成任务不代表成片已完成；完成后可播放和下载。</p><button v-for="project in projects" :key="project.id" type="button" @click="selectProject(project.id)">{{ project.state === 'READY' ? '播放 MV' : '查看任务进度' }} · {{ taskLabels[project.state] || project.state }}</button></details>
     <button v-if="projectId && terminal.has(selectedState) && !hasActive" type="button" :disabled="loading || busy" @click="newProject">制作新的 MV</button>
     <template v-if="plan.shots.length && !loading && !projectId">
       <fieldset :disabled="locked"><legend>画面设置</legend><label v-for="resolution in resolutions" :key="resolution" class="resolution"><input v-model="plan.resolution" type="radio" :value="resolution" @change="changed">{{ resolution }} · {{ videoRates[resolution] }} 积分/秒</label><label>画幅 <select v-model="plan.ratio" @change="changed"><option>16:9</option><option>9:16</option><option>1:1</option></select></label></fieldset>
