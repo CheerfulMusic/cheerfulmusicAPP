@@ -14,7 +14,7 @@ import java.util.*;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
-/** GPT 写词使用官方 Responses API；失败不重发付费请求，也不覆盖已有歌词。 */
+/** GPT 写词使用官方 Responses API；新作完成后独立审稿一次，审稿失败保留初稿，不自动重试已发出的付费请求。 */
 public final class OpenAiLyricsWriter implements LyricsWriter {
     public static final String DEFAULT_MODEL = "gpt-6.1-sol";
     private static final System.Logger LOG = System.getLogger(OpenAiLyricsWriter.class.getName());
@@ -130,7 +130,10 @@ public final class OpenAiLyricsWriter implements LyricsWriter {
                     throw new DomainException("LYRICS_PROVIDER_NETWORK_ERROR", "歌词服务未确认结果，请先查看原请求进度。");
                 throw unavailable("歌词生成服务暂时不可用，请稍后再试；已有内容仍会保留。");
             }
-            return parse(response.body(),photo);
+            var draft = parse(response.body(),photo);
+            // Initial text creation gets one independent editorial pass. Edits and photos retain their exact preservation contracts.
+            if (photo || !previousLyrics.isBlank()) return draft;
+            return review(draft, prompt, material, work.id());
         } catch (InterruptedException interrupted) {
             Thread.currentThread().interrupt();
             throw new DomainException("LYRICS_REQUEST_INTERRUPTED", "歌词请求已中断，结果尚未确认，请先查看原请求进度。");
@@ -141,6 +144,36 @@ public final class OpenAiLyricsWriter implements LyricsWriter {
         } catch (tools.jackson.core.JacksonException invalid) {
             throw incomplete();
         }
+    }
+
+    private Draft review(Draft draft, String prompt, Map<String, Object> material, String workId)
+            throws InterruptedException {
+        try {
+            String body = json.writeValueAsString(Map.of(
+                "model", model, "instructions", prompt + "\n" + LyricsWritingPrompt.REVIEW,
+                "input", List.of(Map.of("role", "user", "content", json.writeValueAsString(Map.of(
+                    "originalMaterial", material, "candidate", Map.of("title", draft.title(), "lyrics", draft.lyrics(), "plan", draft.plan()))))),
+                "text", Map.of("format", Map.of("type", "json_schema", "name", "song_lyrics", "strict", true, "schema", schema(false))),
+                "reasoning", Map.of("effort", "medium"), "max_output_tokens", 8000, "store", false, "stream", false));
+            var response = LyricsHttpTransport.post(client, endpoint, key, body);
+            if (response.statusCode() == 200) {
+                var edited = parse(response.body(), false);
+                // Editorial review must not mutate the user's selected title or the first pass's music plan.
+                if (!edited.title().equals(draft.title())) return draft;
+                if (!sectionLabels(edited.lyrics()).equals(sectionLabels(draft.lyrics()))) return draft;
+                return new Draft(draft.title(), edited.lyrics(), draft.plan(), draft.source());
+            }
+        } catch (IOException | DomainException | tools.jackson.core.JacksonException failure) {
+            // An unsuccessful editorial pass must not discard a valid initial draft or cause another paid retry.
+        }
+        com.qingfeng.music.common.concurrent.AgentRequestScope.check();
+        LOG.log(System.Logger.Level.WARNING, "GPT lyrics review unavailable; retaining draft: work={0}", workId);
+        return draft;
+    }
+
+    private static List<String> sectionLabels(String lyrics) {
+        return java.util.regex.Pattern.compile("(?m)^\\s*\\[([^]\\r\\n]+)]\\s*$")
+            .matcher(lyrics).results().map(match -> match.group(1).trim()).toList();
     }
 
     private Draft parse(String body,boolean photo) {
