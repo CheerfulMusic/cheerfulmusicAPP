@@ -13,7 +13,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
 /** Real conversation, with the current owned work and recent turns; credentials remain server-side. */
-public final class DeepSeekAgentChatModel implements AgentChatModel {
+public final class QwenAgentChatModel implements AgentChatModel {
     private static final int MAX_RESPONSE_BYTES=256*1024;
     private static final String SYSTEM = """
         你是 Cheerful Music 的统一对话助手，可以自然聊天，使用服务端提供的能力目录帮助用户完成站内功能。
@@ -53,17 +53,20 @@ public final class DeepSeekAgentChatModel implements AgentChatModel {
     private final URI endpoint;
     private final Duration responseTimeout;
     private final ObjectMapper json=new ObjectMapper();
-    public DeepSeekAgentChatModel(String key,String model,boolean enabled) {
-        this(key,model,enabled,URI.create("https://api.deepseek.com/chat/completions"),HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).followRedirects(HttpClient.Redirect.NEVER).build());
+    public QwenAgentChatModel(String key,String model,boolean enabled) {
+        this(key,model,enabled,URI.create(QwenInspirationRewriter.QWEN_ENDPOINT));
     }
-    public DeepSeekAgentChatModel(String key,String model,boolean enabled,URI endpoint,HttpClient http) {
+    public QwenAgentChatModel(String key,String model,boolean enabled,URI endpoint) {
+        this(key,model,enabled,endpoint,HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).followRedirects(HttpClient.Redirect.NEVER).build());
+    }
+    public QwenAgentChatModel(String key,String model,boolean enabled,URI endpoint,HttpClient http) {
         this(key,model,enabled,endpoint,http,Duration.ofSeconds(45));
     }
     /** A shorter response deadline is injectable for offline transport tests; production keeps 45 seconds. */
-    public DeepSeekAgentChatModel(String key,String model,boolean enabled,URI endpoint,HttpClient http,Duration responseTimeout) {
+    public QwenAgentChatModel(String key,String model,boolean enabled,URI endpoint,HttpClient http,Duration responseTimeout) {
         if(responseTimeout==null||responseTimeout.isNegative()||responseTimeout.isZero()||responseTimeout.compareTo(Duration.ofSeconds(45))>0)
             throw new IllegalArgumentException("Invalid agent response deadline");
-        this.key=key==null?"":key;this.model=model==null||model.isBlank()?"deepseek-flash":model;this.enabled=enabled;this.endpoint=endpoint;this.http=http;this.responseTimeout=responseTimeout;
+        this.key=key==null?"":key.trim();this.model=model==null||model.isBlank()?QwenInspirationRewriter.QWEN_MODEL:model.trim();this.enabled=enabled;this.endpoint=endpoint;this.http=http;this.responseTimeout=responseTimeout;
     }
     @Override public Plan respond(Context context) {
         if(!enabled||key.isBlank())throw new DomainException("AGENT_CHAT_UNAVAILABLE","对话模型暂未启用或尚未配置。你的消息已保留，本次没有启动创作工具。");
@@ -88,7 +91,7 @@ public final class DeepSeekAgentChatModel implements AgentChatModel {
             for(var turn:context.history()) messages.add(Map.of("role",turn.role().equals("user")?"user":"assistant","content",turn.text()));
             messages.add(Map.of("role","user","content",context.text()));
             var body=new LinkedHashMap<String,Object>();
-            body.put("model",model);body.put("messages",messages);body.put("stream",false);body.put("max_tokens",2600);
+            body.put("model",model);body.put("messages",messages);body.put("stream",false);body.put("max_tokens",2600);body.put("enable_thinking",false);
             if(definitions.isEmpty())body.put("response_format",Map.of("type","json_object"));
             else {body.put("tools",definitions);body.put("tool_choice","auto");}
             String encoded=json.writeValueAsString(body);

@@ -18,10 +18,9 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
 /**
- * DeepSeek 参考音乐语义化：只发送数值特征与文字，不发送音频字节，也不记录密钥。
- * 与 DeepSeekInspirationRewriter 共用同一套配置（qingfeng.providers.deepseek.*）与 JSON 模式。
+ * 千问参考音乐语义化：只发送数值特征与文字，不发送音频字节，也不记录密钥。
  */
-public final class DeepSeekReferenceAnalyst implements ReferenceAnalyst {
+public final class QwenReferenceAnalyst implements ReferenceAnalyst {
     static final String SYSTEM = """
         你是音乐制作助理。用户会提供一段参考音乐的客观声学测量值和自己的文字要求，你要把测量值翻译成可用于创作新歌的文字描述。
         这不是识别原曲，你也从未听过这段音频。
@@ -49,15 +48,19 @@ public final class DeepSeekReferenceAnalyst implements ReferenceAnalyst {
     private final Duration timeout;
     private final ObjectMapper json = new ObjectMapper();
 
-    public DeepSeekReferenceAnalyst(String key, String model) {
-        this(key, model, URI.create("https://api.deepseek.com/chat/completions"),
+    public QwenReferenceAnalyst(String key, String model) {
+        this(key, model, URI.create(QwenInspirationRewriter.QWEN_ENDPOINT));
+    }
+
+    public QwenReferenceAnalyst(String key, String model, URI endpoint) {
+        this(key, model, endpoint,
             HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).followRedirects(HttpClient.Redirect.NEVER).build(),
             Duration.ofSeconds(12));
     }
 
-    public DeepSeekReferenceAnalyst(String key, String model, URI endpoint, HttpClient client, Duration timeout) {
+    public QwenReferenceAnalyst(String key, String model, URI endpoint, HttpClient client, Duration timeout) {
         this.key = key == null ? "" : key.trim();
-        this.model = model;
+        this.model = model == null || model.isBlank() ? QwenInspirationRewriter.QWEN_MODEL : model.trim();
         this.endpoint = endpoint;
         this.client = client;
         this.timeout = timeout;
@@ -72,7 +75,7 @@ public final class DeepSeekReferenceAnalyst implements ReferenceAnalyst {
                 Map.of("role", "system", "content", SYSTEM),
                 Map.of("role", "user", "content", json.writeValueAsString(payload(request)))),
             "response_format", Map.of("type", "json_object"),
-            "thinking", Map.of("type", "disabled"),
+            "enable_thinking", false,
             "max_tokens", 500,
             "stream", false));
         try {
@@ -80,8 +83,8 @@ public final class DeepSeekReferenceAnalyst implements ReferenceAnalyst {
                 .header("Authorization", "Bearer " + key).header("Content-Type", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(body)).build();
             HttpResponse<String> response = client.send(http, HttpResponse.BodyHandlers.ofString());
-            if (response.statusCode() == 401 || response.statusCode() == 403) throw unavailable("AI 参考分析服务认证失败，请检查后端 DeepSeek 配置。");
-            if (response.statusCode() == 402) throw unavailable("DeepSeek 余额不足，请充值后重试。");
+            if (response.statusCode() == 401 || response.statusCode() == 403) throw unavailable("AI 参考分析服务认证失败，请检查后端千问配置。");
+            if (response.statusCode() == 402) throw unavailable("千问余额不足，请充值后重试。");
             if (response.statusCode() != 200) throw unavailable("AI 参考分析服务暂时繁忙，请稍后再试。");
             JsonNode choice = json.readTree(response.body()).path("choices").path(0);
             if (!"stop".equals(choice.path("finish_reason").asText())) throw invalid();

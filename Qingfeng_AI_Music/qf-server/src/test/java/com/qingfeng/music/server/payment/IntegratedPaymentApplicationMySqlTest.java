@@ -460,7 +460,7 @@ class IntegratedPaymentApplicationMySqlTest {
     }
     @Test @Order(18) void activeCustomComposerNeverFailsOverOrRefundsUnknownButDefiniteNonAcceptanceFailsOverWithOneCharge() throws Exception {
         assertInstanceOf(JdbcFencedCreditsLedger.class,ledger);assertEquals(2,application.getBean(CreditsPricing.class).cost(CreditsPricing.Kind.LYRICS));
-        var shared=new OfflineCustomLyrics("UNSELECTED_SHARED",null);var primary=new OfflineCustomLyrics("OPENAI","LYRICS_PROVIDER_TIMEOUT");var backup=new OfflineCustomLyrics("DEEPSEEK",null);var composer=customComposer(shared,primary,backup);
+        var shared=new OfflineCustomLyrics("UNSELECTED_SHARED",null);var primary=new OfflineCustomLyrics("OPENAI","LYRICS_PROVIDER_TIMEOUT");var backup=new OfflineCustomLyrics("QWEN",null);var composer=customComposer(shared,primary,backup);
         var uncertain=owner();String owner=uncertain.creatorId(),work=work(owner),key=UUID.randomUUID().toString();ledger.credit(owner,10,"gift:custom-unknown:"+unique());
         usage.reserve(owner,work,UUID.randomUUID().toString(),UsageBudget.Kind.LYRICS);assertEquals(10,ledger.balance(owner));
         assertEquals("LYRICS_PROVIDER_TIMEOUT",assertThrows(DomainException.class,()->composer.composeCustom(owner,work,0,key,"en","",null,null,false)).code());
@@ -472,8 +472,8 @@ class IntegratedPaymentApplicationMySqlTest {
         for(String failure:List.of("LYRICS_PROVIDER_CONNECT_FAILED","LYRICS_PROVIDER_REJECTED")){
             var known=owner();String knownOwner=known.creatorId(),knownWork=work(knownOwner),knownKey=UUID.randomUUID().toString();ledger.credit(knownOwner,10,"gift:custom-failover:"+unique());
             usage.reserve(knownOwner,knownWork,UUID.randomUUID().toString(),UsageBudget.Kind.LYRICS);assertEquals(10,ledger.balance(knownOwner));
-            var refused=new OfflineCustomLyrics("OPENAI",failure);var successful=new OfflineCustomLyrics("DEEPSEEK",null);var safe=customComposer(shared,refused,successful);
-            var revision=safe.composeCustom(knownOwner,knownWork,0,knownKey,"en","",null,null,false);assertEquals("DEEPSEEK",revision.source());assertEquals(revision.id(),safe.composeCustom(knownOwner,knownWork,0,knownKey,"en","",null,null,false).id());
+            var refused=new OfflineCustomLyrics("OPENAI",failure);var successful=new OfflineCustomLyrics("QWEN",null);var safe=customComposer(shared,refused,successful);
+            var revision=safe.composeCustom(knownOwner,knownWork,0,knownKey,"en","",null,null,false);assertEquals("QWEN",revision.source());assertEquals(revision.id(),safe.composeCustom(knownOwner,knownWork,0,knownKey,"en","",null,null,false).id());
             assertEquals(1,refused.calls.get());assertEquals(1,successful.calls.get());assertEquals(0,shared.calls.get());assertEquals(8,ledger.balance(knownOwner));
             String reference=com.qingfeng.music.credits.CreditReferences.of("LYRICS",knownWork,knownKey);assertEquals(1,number("SELECT COUNT(*) FROM credit_ledger WHERE owner_id=? AND entry_type='DEBIT' AND reference_id=? AND amount=-2",knownOwner,reference));assertEquals(0,number("SELECT COUNT(*) FROM credit_ledger WHERE owner_id=? AND entry_type='REFUND'",knownOwner));assertEquals(1,number("SELECT COUNT(*) FROM credit_consumption WHERE owner_id=? AND work_id=? AND request_key=? AND task_status='SUCCEEDED' AND refunded=0 AND amount=2",knownOwner,knownWork,knownKey));assertEquals(1,application.getBean(LyricsApi.class).list(knownOwner,knownWork).size());
         }
