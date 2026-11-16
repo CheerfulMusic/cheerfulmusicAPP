@@ -104,6 +104,21 @@ class GiftWorkflowIntegrationTest {
   assertEquals(200, primaryShare.statusCode(), text(primaryShare));
   String primaryToken = field(text(primaryShare), "token");
   assertArrayEquals(original, call(null, "GET", "/api/public/gifts/" + primaryToken + "/audio", null).body());
+
+  String workPath = "/api/app/works/" + workId;
+  var renamed = call(owner, "PUT", workPath,
+      draft.replace("故事", "新的歌曲名字").replace("}", ",\"expectedVersion\":0}"));
+  assertEquals(200, renamed.statusCode(), text(renamed));
+  assertEquals("新的歌曲名字", field(text(call(owner, "GET", workPath, null)), "title"));
+  assertEquals("给你的歌", field(text(call(owner, "GET", workPath + "/lyrics/" + revisionId, null)), "title"));
+  assertEquals("给你的歌", field(text(call(null, "GET", secondaryGift, null)), "title"));
+
+  var renamedShare = call(owner, "POST", sharePath,
+      "{\"assetId\":\"" + secondary + "\",\"workTitle\":\"新的歌曲名字\"}");
+  assertEquals(200, renamedShare.statusCode(), text(renamedShare));
+  String renamedGift = "/api/public/gifts/" + field(text(renamedShare), "token");
+  assertEquals("新的歌曲名字", field(text(call(null, "GET", renamedGift, null)), "title"));
+  assertArrayEquals(alternate, call(null, "GET", renamedGift + "/audio", null).body());
  }
  @Test void unconfirmedLyricsAndInvalidAudioCannotBecomeGift()throws Exception{
   var a=session();String w=work(a),r=lyrics(a,w,"还未确认");

@@ -7,7 +7,7 @@ import { lyricQuotes, localShareAddress, posterFilename, shareCancelled, shareSo
 import { usePlayer } from '../../../shared/player/store'
 import PlaybackIcon from '../../../shared/ui/PlaybackIcon.vue'
 
-const props = defineProps<{ open: boolean; workId: string; revision: Revision | null; asset: AudioAsset | null; coverId?: string | null }>()
+const props = defineProps<{ open: boolean; workId: string; revision: Revision | null; asset: AudioAsset | null; coverId?: string | null; workTitle?: string }>()
 const emit = defineEmits<{ created: []; close: [] }>()
 const dialog = ref<HTMLDialogElement>(), shareButton = ref<HTMLButtonElement>()
 const link = ref(''), token = ref(''), expires = ref(''), song = ref<SharedSong>()
@@ -17,7 +17,7 @@ const signature = ref(''), quote = ref(''), artworkFailed = ref(false), player =
 let generation = 0, posterGeneration = 0
 const importedRevisionId = computed(() => props.asset?.origin === 'IMPORTED' && props.revision?.confirmed ? props.revision.id : undefined)
 const canCreate = computed(() => !!props.asset && (props.asset.origin === 'GENERATED' || !!importedRevisionId.value))
-const context = () => JSON.stringify([props.workId, importedRevisionId.value, props.asset?.id, props.coverId])
+const context = () => JSON.stringify([props.workId, importedRevisionId.value, props.asset?.id, props.coverId, props.workTitle])
 const quotes = computed(() => lyricQuotes(song.value?.lyrics || ''))
 const cover = computed(() => song.value?.hasCover && !artworkFailed.value
   ? apiUrl(`public/gifts/${token.value}/cover?proxy=true`) : defaultCover())
@@ -49,7 +49,9 @@ async function create() {
   try {
     // 卡片读取失败时保留已创建的令牌，重试只读取，避免不断创建分享。
     if (!token.value || !valid()) {
-      const share = await createShare(props.workId, asset.id, importedRevisionId.value)
+      const share = props.workTitle
+        ? await createShare(props.workId, asset.id, importedRevisionId.value, props.workTitle)
+        : await createShare(props.workId, asset.id, importedRevisionId.value)
       if (turn !== generation || before !== context()) return
       if (!Number.isFinite(Date.parse(share.expiresAt))) throw new Error(t('分享链接暂时无法创建，请重试。'))
       link.value = songShareUrl(share.token, location.origin); token.value = share.token

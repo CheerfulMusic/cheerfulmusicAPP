@@ -30,6 +30,19 @@ describe('分段起播与重复试听',()=>{
  it('版本对比禁止自动换版，音乐收藏仍可设置连播',async()=>{const player=usePlayer();player.setQueue([track('one'),track('two')],false);await player.toggle(track('one'));FakeAudio.current.paused=true;FakeAudio.current.dispatchEvent(new Event('ended'));expect(player.current?.id).toBe('one');player.setQueue([track('one'),track('two')]);FakeAudio.current.dispatchEvent(new Event('ended'));await Promise.resolve();expect(player.current?.id).toBe('two')})
  it('元数据更新时长，手动跳转同步歌词并退出循环',async()=>{const player=usePlayer();await player.playSegment(track('one'),3,8);const a=FakeAudio.current;a.currentTime=8.1;a.dispatchEvent(new Event('timeupdate'));expect(a.currentTime).toBe(3);player.seek(12);expect(player.segment).toBeNull();expect(player.time).toBe(12);expect(player.seekVersion).toBeGreaterThan(0);a.duration=20;a.dispatchEvent(new Event('durationchange'));expect(player.duration).toBe(20);player.seek(99);expect(player.time).toBe(20)})
  it('不循环片段到终点暂停，更换封面不中断音频',async()=>{const player=usePlayer();await player.playSegment(track('one'),3,8,false);const a=FakeAudio.current;a.currentTime=8;a.dispatchEvent(new Event('timeupdate'));expect(a.paused).toBe(true);expect(player.segment).toBeNull();await player.toggle(track('one'));player.updateCover('one','/new.jpg');expect(player.current?.cover).toBe('/new.jpg');expect(a.currentTime).toBe(8);expect(a.paused).toBe(false);expect(a.load).not.toHaveBeenCalled()})
+ it('更新当前和排队版本的名称，不中断试听或重建音频', async () => {
+  const player = usePlayer()
+  player.setQueue([track('one'), track('two')], false)
+  await player.toggle(track('one'))
+  const current = FakeAudio.current
+  current.currentTime = 3
+  player.updateTitles(new Map([['one', '晚风 · 版本 1'], ['two', '晚风 · 版本 2']]))
+  expect(player.current?.title).toBe('晚风 · 版本 1')
+  expect(current.currentTime).toBe(3)
+  expect(current.paused).toBe(false)
+  await player.next()
+  expect(player.current?.title).toBe('晚风 · 版本 2')
+ })
  it('解码或权限失败显示错误，非CDN的code=4显式重试才reload',async()=>{const player=usePlayer();await player.toggle(track('one'));const a=FakeAudio.current;a.error={code:4};a.paused=true;a.dispatchEvent(new Event('error'));expect(player.error).toContain('无法加载');await player.toggle(track('one'));expect(a.load).toHaveBeenCalledTimes(1);expect(a.src).toBe('/api/audio/one');expect(player.error).toBe('');expect(player.playing).toBe(true)})
 })
 describe('CDN 签名过期的一次性重新授权',()=>{

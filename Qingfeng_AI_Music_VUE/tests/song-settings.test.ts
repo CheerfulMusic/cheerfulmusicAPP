@@ -13,3 +13,8 @@ it('does not invent style or voice information for imported or missing recording
   expect(songSettings({...asset,id:'unmatched'},[original])).toBeUndefined()
   expect(songSettings(null,[original])).toBeUndefined()
 })
+it('uses the same source task for both audio candidates', () => {
+  const first = { ...original, id: 'generation-1' }
+  const second = { ...asset, id: 'candidate-2', generationTaskId: first.id }
+  expect(songSettings(second, [first])).toBe(first)
+})

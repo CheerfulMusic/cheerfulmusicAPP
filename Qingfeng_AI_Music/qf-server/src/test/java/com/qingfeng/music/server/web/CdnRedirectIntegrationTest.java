@@ -83,6 +83,18 @@ class CdnRedirectIntegrationTest {
         verify(sharing,never()).coverRef(anyString());
     }
 
+    @Test void ownerDownloadUsesTheRequestedUnicodeVersionNameAndAudioFormat() {
+        MediaApi media=mock(MediaApi.class);
+        when(media.open("creator-1","w1","a1")).thenReturn(new MediaApi.Content(
+            12,"audio/wav","asset.wav",()->new ByteArrayInputStream(new byte[12])));
+        var downloads=mock(com.qingfeng.music.server.download.DownloadEntitlements.class);
+        when(downloads.verifiedOwner(OWNER)).thenReturn("creator-1");
+        when(downloads.unlocked("creator-1","w1")).thenReturn(true);
+        var controller=new MediaController(media,signer(true),downloads);
+        var download=controller.audio(OWNER,"w1","a1",true,null,"晚风/新版 · 版本 2");
+        assertEquals("晚风_新版 · 版本 2.wav",download.getHeaders().getContentDisposition().getFilename());
+    }
+
     @Test void authorizationFailureFailsClosedAndReRunsOpen(){
         MediaApi media=mock(MediaApi.class);
         DomainException denied=new DomainException("MEDIA_NOT_FOUND","音频不存在");

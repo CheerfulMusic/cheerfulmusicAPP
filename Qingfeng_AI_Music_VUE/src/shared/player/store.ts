@@ -196,6 +196,14 @@ export const usePlayer = defineStore('player', () => {
     }
   }
   function updateCover(id:string,cover:string){if(current.value?.id===id)current.value={...current.value,cover};queue.value=queue.value.map(track=>track.id===id?{...track,cover}:track)}
+  function updateTitles(titles: ReadonlyMap<string, string>) {
+    function renamed(track: PlayableTrack) {
+      const title = titles.get(track.id)
+      return title && title !== track.title ? { ...track, title } : track
+    }
+    if (current.value) current.value = renamed(current.value)
+    if (queue.value.some(track => titles.has(track.id))) queue.value = queue.value.map(renamed)
+  }
   function setQueue(tracks:PlayableTrack[],advance=true){queue.value=tracks;autoAdvance=advance}
   async function next(direction=1){if(!hasQueue.value)return;const index=queue.value.findIndex(track=>track.id===current.value?.id),track=queue.value[(index+direction+queue.value.length)%queue.value.length];if(track)await toggle(track)}
   function seek(value:number){restoreSeekGuard=false;clearTimeout(seekGuardTimer);segment.value=null;if(audio&&Number.isFinite(value)&&duration.value>0){try{audio.currentTime=Math.min(duration.value,Math.max(0,value));time.value=audio.currentTime;seekVersion.value++}catch{error.value='当前音频暂不支持跳转进度'}}}
@@ -212,5 +220,5 @@ export const usePlayer = defineStore('player', () => {
   function close(){cancelReauth();operation++;segment.value=null;repeatOne.value=false;audio?.pause();if(audio)audio.preload='metadata';current.value=null;queue.value=[];time.value=0;duration.value=0;error.value='';starting.value=false;stopWaiting();playing.value=false}
   /** 身份切换和分享失效彻底释放，与普通收起播放器分开。 */
   function reset(){close();audio=undefined;pool.clear()}
-  return {current,playing,starting,buffering,time,duration,error,hasQueue,tracks,repeatOne,toggleRepeat,seekVersion,toggle,seek,close,reset,setQueue,next,updateCover,segment,playSegment,stopSegment}
+  return {current,playing,starting,buffering,time,duration,error,hasQueue,tracks,repeatOne,toggleRepeat,seekVersion,toggle,seek,close,reset,setQueue,next,updateCover,updateTitles,segment,playSegment,stopSegment}
 })

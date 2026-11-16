@@ -10,7 +10,7 @@ vi.mock('../src/shared/http/system',()=>({getSystemInfo:api.system}))
 vi.mock('../src/modules/works/api/detail',async original=>({...await original<typeof import('../src/modules/works/api/detail')>(),listTasks:api.tasks,listAudio:api.audio,getUsage:api.usage,getRevision:api.revision,submitTask:api.paid}))
 vi.mock('../src/modules/works/api/section-edits',()=>({getAudioSelection:api.selection,selectAudio:api.paid}))
 vi.mock('../src/modules/works/api/covers',()=>({loadCovers:()=>Promise.reject(new Error('offline')),coverUrl:()=>undefined}))
-vi.mock('../src/shared/player/store',()=>({usePlayer:()=>({current:null,setQueue:vi.fn(),toggle:vi.fn()})}))
+vi.mock('../src/shared/player/store',()=>({usePlayer:()=>({current:null,tracks:[],setQueue:vi.fn(),toggle:vi.fn(),updateTitles:vi.fn()})}))
 vi.mock('../src/modules/studio/components/QuickCreationProgress.vue',async()=>{
  const {defineComponent,h,ref,onMounted}=await import('vue')
  return {default:defineComponent({emits:['busy','resolved','checked'],setup(_,ctx){const message=ref('正在核对创作进度');onMounted(async()=>{try{const result=await api.quick();message.value=result?'正在制作音乐':'';ctx.emit('busy',!!result);ctx.emit('resolved',result);ctx.emit('checked',true)}catch{message.value='进度暂时无法读取';ctx.emit('checked',false)}});return()=>h('section',{class:'quick-progress'},message.value) }})}

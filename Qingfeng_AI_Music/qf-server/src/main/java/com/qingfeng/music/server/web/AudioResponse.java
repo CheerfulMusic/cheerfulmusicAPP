@@ -4,11 +4,13 @@ import org.springframework.core.io.*;
 import org.springframework.http.*;
 import java.io.*;
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
 
 public final class AudioResponse {
  private AudioResponse(){}
  public static ResponseEntity<Resource> from(Content content,boolean download){return from(content,download,null);}
- public static ResponseEntity<Resource> from(Content content,boolean download,String range){
+ public static ResponseEntity<Resource> from(Content content,boolean download,String range){return from(content,download,range,null);}
+ public static ResponseEntity<Resource> from(Content content,boolean download,String range,String downloadFilename){
   long size=content.size(),start=0,end=size-1;boolean partial=false;
   if(range!=null&&range.startsWith("bytes=")&&size>0){
    try{
@@ -29,7 +31,8 @@ public final class AudioResponse {
    public long contentLength(){return length;}
    public String getFilename(){return content.filename();}
   };
-  var disposition=(download?ContentDisposition.attachment():ContentDisposition.inline()).filename(content.filename()).build();
+  var builder=download?ContentDisposition.attachment():ContentDisposition.inline();
+  var disposition=(download&&downloadFilename!=null?builder.filename(downloadFilename,StandardCharsets.UTF_8):builder.filename(content.filename())).build();
   var response=ResponseEntity.status(partial?HttpStatus.PARTIAL_CONTENT:HttpStatus.OK).cacheControl(CacheControl.noStore()).header(HttpHeaders.CONTENT_DISPOSITION,disposition.toString()).header(HttpHeaders.ACCEPT_RANGES,"bytes").header("X-Content-Type-Options","nosniff").contentType(MediaType.parseMediaType(content.contentType())).contentLength(length);
   if(partial)response.header(HttpHeaders.CONTENT_RANGE,"bytes "+start+"-"+end+"/"+size);
   return response.body(resource);

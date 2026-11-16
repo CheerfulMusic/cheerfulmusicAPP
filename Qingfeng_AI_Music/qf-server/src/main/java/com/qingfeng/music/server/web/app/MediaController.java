@@ -29,11 +29,18 @@ public class MediaController {
  public record SelectionRequest(@jakarta.validation.constraints.NotBlank String assetId,@jakarta.validation.constraints.PositiveOrZero long version){}
  @PutMapping("/selection") public MediaApi.Selection select(@AuthenticationPrincipal CreatorPrincipal creator,@PathVariable String work,@jakarta.validation.Valid @RequestBody SelectionRequest request){return media.select(creator.id(),work,request.assetId(),request.version());}
  @PostMapping(consumes="multipart/form-data") public MediaApi.Asset upload(@AuthenticationPrincipal CreatorPrincipal creator,@PathVariable String work,@RequestParam("file") MultipartFile file)throws IOException{try(var input=file.getInputStream()){return media.importAudio(creator.id(),work,input);}}
- @GetMapping("/{asset}") public ResponseEntity<Resource> audio(@AuthenticationPrincipal CreatorPrincipal creator,@PathVariable String work,@PathVariable String asset,@RequestParam(defaultValue="false") boolean download,@RequestHeader(value="Range",required=false) String range){
+ @GetMapping("/{asset}") public ResponseEntity<Resource> audio(@AuthenticationPrincipal CreatorPrincipal creator,@PathVariable String work,@PathVariable String asset,@RequestParam(defaultValue="false") boolean download,@RequestHeader(value="Range",required=false) String range,@RequestParam(required=false) String downloadName){
   if(download){String owner=downloads.verifiedOwner(creator);if(!downloads.unlocked(owner,work))throw new com.qingfeng.music.common.exception.DomainException("DOWNLOAD_LOCKED","请先解锁下载。");}
   // CDN 关闭时完全走改动前的路径，不额外触发 locate() 的授权与文件存在性检查。
   if(!download&&signer.enabled())try{var location=signer.audio(media.locate(creator.id(),work,asset).storageKey());if(location.isPresent())return AudioResponse.redirect(location.get());}catch(RuntimeException ignored){/* fail-closed：回退原中转，由 open() 重新执行完整授权 */}
-  return AudioResponse.from(media.open(creator.id(),work,asset),download,range);
+  var content=media.open(creator.id(),work,asset);
+  return AudioResponse.from(content,download,range,download?downloadFilename(downloadName,content.contentType()):null);
  }
+ private static String downloadFilename(String name,String contentType){
+  if(name==null||name.length()>150)return null;
+  String stem=name.replaceAll("[\\p{Cntrl}\\p{Cf}<>:\"/\\\\|?*]+","_").strip().replaceAll("^[. ]+|[. ]+$","");
+  return stem.isBlank()?null:stem+("audio/wav".equals(contentType)?".wav":".mp3");
+ }
+ public ResponseEntity<Resource> audio(CreatorPrincipal creator,String work,String asset,boolean download,String range){return audio(creator,work,asset,download,range,null);}
  public ResponseEntity<Resource> audio(CreatorPrincipal creator,String work,String asset,boolean download){return audio(creator,work,asset,download,null);}
 }

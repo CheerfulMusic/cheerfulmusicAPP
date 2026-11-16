@@ -1,15 +1,47 @@
 <script setup lang="ts">
 import { t, formatDate, defaultCover } from '../../../shared/i18n/index'
-import { onMounted, onBeforeUnmount, ref } from 'vue'
+import { computed, onMounted, onBeforeUnmount, ref, watch, watchEffect } from 'vue'
 import type { Work } from '../../studio'
-import { listAudio, audioUrl, type AudioAsset } from '../api/detail'
+import { listAudio, audioUrl, type AudioAsset, type GenerationTask } from '../api/detail'
 import { usePlayer } from '../../../shared/player/store'
 import {getAudioSelection,selectAudio} from '../api/section-edits'
-const props = defineProps<{ work: Work;cover?:string }>()
-const emit = defineEmits<{ selected: [asset: AudioAsset | null];compare:[assetId:string];'load-state':[state:'loading'|'ready'|'failed'] }>()
+import { songSettings } from '../model/song-settings'
+import { songBaseTitle, songVersionTitle } from '../model/song-title'
+const props = defineProps<{ work: Work; title: string; tasks: GenerationTask[]; cover?:string }>()
+const emit = defineEmits<{ selected: [asset: AudioAsset | null];compare:[assetId:string];'load-state':[state:'loading'|'ready'|'failed']; 'selected-version': [number | undefined] }>()
 const assets = ref<AudioAsset[]>([]), selected = ref(''), error = ref(''), player = usePlayer()
 let selectionVersion=0,epoch=0,alive=true
 const reading=ref(false)
+const listed = ref(false)
+const versionNumbers = computed(() => {
+ const byId = new Map<string, number>()
+ if (listed.value) {
+  // The server returns newest first. Assign numbers from the oldest recording.
+  for (const item of assets.value.slice().reverse()) {
+   if (item.origin === 'GENERATED') byId.set(item.id, byId.size + 1)
+  }
+ }
+ return byId
+})
+watchEffect(() => emit('selected-version', versionNumbers.value.get(selected.value)))
+function recordingTitle(item: AudioAsset) {
+ if (item.origin === 'IMPORTED') return props.title
+ const base = songBaseTitle(props.work.title, songSettings(item, props.tasks)?.title) || props.title
+ return songVersionTitle(base, versionNumbers.value.get(item.id))
+}
+watch(
+ [() => new Map(assets.value.map(item => [item.id, recordingTitle(item)])), () => props.cover || defaultCover()],
+ ([titles, cover]) => {
+  player.updateTitles(titles)
+  const stale = new Set<string>()
+  for (const track of [...player.tracks, player.current]) {
+   if (track && titles.has(track.id) && track.cover !== cover && track.audio === audioUrl(props.work.id, track.id)) {
+    stale.add(track.id)
+   }
+  }
+  for (const id of stale) player.updateCover(id, cover)
+ },
+)
 function show(asset:AudioAsset){selected.value=asset.id;emit('selected',asset)}
 async function select(asset: AudioAsset) {
  const turn=epoch
@@ -34,11 +66,11 @@ async function load(){
  }
  // 已选成曲先到就先展示；版本列表慢或失败不能挡住试听。
  await Promise.allSettled([
-  listAudio(workId).then(list=>{if(!current())return;listOk=true;assets.value=list;if(selectedAsset&&!list.some(a=>a.id===selectedAsset!.id))assets.value.push(selectedAsset);fallback()}),
+  listAudio(workId).then(list=>{if(!current())return;listOk=true;assets.value=list;if(selectedAsset&&!list.some(a=>a.id===selectedAsset!.id))assets.value.unshift(selectedAsset);listed.value=true;fallback()}),
   getAudioSelection(workId).then(value=>{
    if(!current())return
    selectionOk=true;selectionVersion=value.version;selectedAsset=value.asset
-   if(value.asset){if(!assets.value.some(a=>a.id===value.asset!.id))assets.value.push(value.asset);show(value.asset);emit('load-state','ready')}
+   if(value.asset){if(!assets.value.some(a=>a.id===value.asset!.id))assets.value.unshift(value.asset);show(value.asset);emit('load-state','ready')}
   }).finally(()=>{if(current()){selectionDone=true;fallback()}})
  ])
  if(!current())return
@@ -54,9 +86,31 @@ async function play(asset: AudioAsset) {
  const turn=epoch
  await select(asset)
  if(!alive||turn!==epoch)return
- const track=(item:AudioAsset)=>({id:item.id,title:props.work.title||t('写给{recipient}的歌',{recipient:props.work.recipient}),cover:props.cover||defaultCover(),audio:audioUrl(props.work.id,item.id),provenance:item.origin})
+ const track=(item:AudioAsset)=>({id:item.id,title:recordingTitle(item),cover:props.cover||defaultCover(),audio:audioUrl(props.work.id,item.id),provenance:item.origin})
  player.setQueue(assets.value.filter(item=>!item.sectionEdit||item.id===selected.value).map(track),false)
  void player.toggle(track(asset))
 }
 </script>
-<template><section class="audio-manager"><p v-if="error" class="notice error" role="alert">{{ t(error) }} <button class="text-button" :disabled="reading" @click="load">{{ t('重新读取歌曲') }}</button></p><div v-if="assets.length" class="song-version-list"><h3>{{ t('对比歌曲版本') }}</h3><p class="save-info">{{ t('切换试听后，再选择你想送出的版本。') }}</p><article v-for="item in assets" :key="item.id" class="audio-row-item" :class="{selected:selected===item.id}"><label><input type="radio" :checked="selected===item.id" :value="item.id" :disabled="item.sectionEdit&&item.id!==selected" @change="select(item)"><span>{{ item.sectionEdit?t('局部修改版'):item.origin==='IMPORTED'?t('导入音频 · 非AI生成'):t('AI生成音频') }}<small>{{ (item.byteSize/1024/1024).toFixed(2) }} MB · {{ formatDate(item.createdAt) }}</small></span></label><div class="audio-actions"><button class="button secondary" @click="play(item)">{{ item.sectionEdit&&item.id!==selected?t('对比修改版'):player.current?.id===item.id&&player.playing?t('暂停'):t('试听') }}</button></div></article></div></section></template>
+<template>
+  <section class="audio-manager">
+    <p v-if="error" class="notice error" role="alert">{{ t(error) }} <button class="text-button" :disabled="reading" @click="load">{{ t('重新读取歌曲') }}</button></p>
+    <div v-if="assets.length" class="song-version-list">
+      <h3>{{ t('对比歌曲版本') }}</h3>
+      <p class="save-info">{{ t('切换试听后，再选择你想送出的版本。') }}</p>
+      <article v-for="item in assets" :key="item.id" class="audio-row-item" :class="{selected:selected===item.id}">
+        <label>
+          <input type="radio" :checked="selected===item.id" :value="item.id" :disabled="item.sectionEdit&&item.id!==selected" @change="select(item)">
+          <span>
+            {{ item.origin === 'IMPORTED' ? t('导入音频 · 非AI生成') : recordingTitle(item) }}
+            <small>
+              <template v-if="item.sectionEdit">{{ t('局部修改版') }} · </template>{{ (item.byteSize/1024/1024).toFixed(2) }} MB · {{ formatDate(item.createdAt) }}
+            </small>
+          </span>
+        </label>
+        <div class="audio-actions">
+          <button class="button secondary" @click="play(item)">{{ item.sectionEdit&&item.id!==selected?t('对比修改版'):player.current?.id===item.id&&player.playing?t('暂停'):t('试听') }}</button>
+        </div>
+      </article>
+    </div>
+  </section>
+</template>
