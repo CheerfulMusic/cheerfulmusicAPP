@@ -23,6 +23,8 @@ public class LogtoIdentityService {
     private final JdbcTemplate db;
     private final IdentityApi identity;
     private final FirstLoginCredits firstLoginCredits;
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.qingfeng.music.credits.CreditsLedger credits;
     private final SecureRandom random = new SecureRandom();
 
     public LogtoIdentityService(JdbcTemplate db, IdentityApi identity, FirstLoginCredits firstLoginCredits) {
@@ -34,8 +36,8 @@ public class LogtoIdentityService {
     public record Profile(String email, String phoneMasked, String name) {}
 
     public Optional<Profile> profile(String creator) {
-        return db.query("SELECT email,phone_masked,display_name FROM creator_oidc_identity WHERE creator_id=?",
-            (rs, n) -> new Profile(rs.getString(1), rs.getString(2), rs.getString(3)), creator)
+        return db.query("SELECT email,COALESCE((SELECT phone_masked FROM creator_phone_binding WHERE creator_id=i.creator_id),phone_masked),display_name FROM creator_oidc_identity i WHERE creator_id=? UNION SELECT g.email,b.phone_masked,g.display_name FROM creator_phone_binding b JOIN creator_google_identity g ON g.creator_id=b.creator_id WHERE b.creator_id=? AND NOT EXISTS (SELECT 1 FROM creator_oidc_identity WHERE creator_id=b.creator_id)",
+            (rs, n) -> new Profile(rs.getString(1), rs.getString(2), rs.getString(3)), creator, creator)
             .stream().findFirst();
     }
 
@@ -52,6 +54,7 @@ public class LogtoIdentityService {
         String subjectHash = hash(issuer + "\0" + subject);
         var owner = db.query("SELECT creator_id FROM creator_oidc_identity WHERE subject_hash=?",
             (rs, n) -> rs.getString(1), subjectHash).stream().findFirst();
+        if(owner.isEmpty()) owner=db.query("SELECT creator_id FROM creator_phone_binding WHERE subject_hash=?",(rs,n)->rs.getString(1),subjectHash).stream().findFirst();
         String target = owner.orElse(expectedCreator);
         if (owner.isPresent() && !target.equals(expectedCreator)) {
             if (!identity.claimGuestWorks(currentToken,expectedCreator,target)) throw failure("LOGTO_ACCOUNT_CONFLICT");
@@ -67,6 +70,18 @@ public class LogtoIdentityService {
         db.update("UPDATE creator_oidc_identity SET email=?,phone_masked=?,display_name=?,updated_at=? WHERE subject_hash=?",
             trim(verifiedEmail, 320), maskedPhone(verifiedPhone), trim(name, 200), Timestamp.from(Instant.now()), subjectHash);
 
+        // Both SMS login and binding reserve the same subject key, closing concurrent claim races.
+        if (verifiedPhone != null && !verifiedPhone.isBlank()) {
+            var phoneOwner=db.query("SELECT creator_id FROM creator_phone_binding WHERE subject_hash=?",(rs,n)->rs.getString(1),subjectHash);
+            if(phoneOwner.isEmpty()) {
+                var bound=db.query("SELECT subject_hash FROM creator_phone_binding WHERE creator_id=?",(rs,n)->rs.getString(1),target);
+                if(bound.isEmpty()) {
+                    try {db.update("INSERT INTO creator_phone_binding(subject_hash,creator_id,phone_masked) VALUES(?,?,?)",subjectHash,target,maskedPhone(verifiedPhone));}
+                    catch(org.springframework.dao.DuplicateKeyException conflict){throw failure("LOGTO_ACCOUNT_CONFLICT");}
+                }
+            } else if(!phoneOwner.get(0).equals(target)) throw failure("LOGTO_ACCOUNT_CONFLICT");
+        }
+
         byte[] bytes = new byte[32];
         random.nextBytes(bytes);
         String token = Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
@@ -74,6 +89,23 @@ public class LogtoIdentityService {
             hash(token), target, Timestamp.from(Instant.now().plus(30, ChronoUnit.DAYS)));
         db.update("DELETE FROM creator_session WHERE token_hash=?", hash(currentToken));
         return new IdentityApi.Session(token, target);
+    }
+
+    public boolean canBindPhone(String creator) { return hasAnyIdentity(creator); }
+
+    @Transactional
+    public void bindPhone(String token,String creator,String issuer,String subject,String phone) {
+        db.query("SELECT id FROM creator WHERE id=? FOR UPDATE",(rs,n)->rs.getString(1),creator);
+        if(identity.resolve(token).filter(creator::equals).isEmpty()||!canBindPhone(creator))throw failure("LOGTO_SESSION_CHANGED");
+        String key=hash(issuer+"\0"+subject);
+        var owners=db.query("SELECT creator_id FROM creator_oidc_identity WHERE subject_hash=? UNION SELECT creator_id FROM creator_phone_binding WHERE subject_hash=?",(rs,n)->rs.getString(1),key,key);
+        if(owners.stream().anyMatch(owner->!owner.equals(creator)))throw failure("LOGTO_ACCOUNT_CONFLICT");
+        var existing=db.query("SELECT subject_hash FROM creator_phone_binding WHERE creator_id=?",(rs,n)->rs.getString(1),creator);
+        if(!existing.isEmpty()){if(!existing.get(0).equals(key))throw failure("LOGTO_ACCOUNT_CONFLICT");return;}
+        if(profile(creator).map(Profile::phoneMasked).isPresent())throw failure("LOGTO_ACCOUNT_CONFLICT");
+        try{db.update("INSERT INTO creator_phone_binding(subject_hash,creator_id,phone_masked) VALUES(?,?,?)",key,creator,maskedPhone(phone));}
+        catch(org.springframework.dao.DuplicateKeyException conflict){throw failure("LOGTO_ACCOUNT_CONFLICT");}
+        credits.credit(creator,50,"phone-binding:"+creator);
     }
 
     /** Call only after the provider has verified this email and completed password reset. */
