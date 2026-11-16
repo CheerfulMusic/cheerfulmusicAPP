@@ -33,12 +33,12 @@ class DeepSeekLyricsWriterTest {
    var output=writer.write(new WorkApi.Work("id","妈妈","生日",story,"想让她少操心","温暖民谣","",0,Instant.now(),Instant.now()),"mixed",requirements,previous);
    var request=received.get();String system=request.path("messages").path(0).path("content").asText();var context=json.readTree(request.path("messages").path(1).path("content").asText());
    assertEquals(story,context.path("story").asText());assertEquals(previous,context.path("previousLyrics").asText());assertEquals(requirements,context.path("revisionInstructions").asText());
-   assertTrue(system.contains("不要把故事写完整，要把最值得被记住的情绪写出来"));
+   assertTrue(system.contains("保留使情绪成立的经历与变化"));
    assertTrue(system.contains("不得擅自编造相识地点"));assertTrue(system.contains("称呼和姓名不能用于推断性别或恋爱关系"));
    assertTrue(system.contains("儿歌：简单、明亮、易懂、容易跟唱"));assertTrue(system.contains("不得为了押韵倒装或凑词"));
    assertTrue(system.contains("素材较少时，不要强行扩写故事"));assertTrue(system.contains("用户指定保留的段落必须原样保留"));
    assertTrue(system.contains("用户指定保留的中英文句子不得删除或翻译"));assertTrue(system.contains("# 八、创作审稿"));
-   assertTrue(system.contains("最终只返回一个合法 JSON 对象"));assertTrue(system.contains("默认中文歌词约180至320字"));
+   assertTrue(system.contains("最终只返回一个合法 JSON 对象"));assertTrue(system.contains("篇幅按素材和段落数量分配"));
    assertTrue(system.contains("必须遵循完整标签顺序，不得自行增删段落"));assertTrue(system.contains("全部歌词不超过2500字符"));
    assertFalse(system.contains(story));assertEquals(previous,output.lyrics());assertEquals(1,calls.get());assertEquals("disabled",request.path("thinking").path("type").asText());
   }finally{server.stop(0);}
