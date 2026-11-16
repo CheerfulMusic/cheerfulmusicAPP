@@ -20,12 +20,14 @@ public class WebSecurityConfiguration {
         return username -> { throw new UsernameNotFoundException("身份服务尚未接入"); };
     }
 
-    @Bean @org.springframework.core.annotation.Order(2) SecurityFilterChain apiSecurity(HttpSecurity http, ObjectProvider<CreatorSessionFilter> sessionFilter, ObjectProvider<GoogleOAuthFlow> googleFlow, ObjectProvider<InviteGateFilter> inviteGate,org.springframework.core.env.Environment env,ObjectProvider<org.springframework.data.redis.core.StringRedisTemplate> redis) throws Exception {
+    @Bean @org.springframework.core.annotation.Order(2) SecurityFilterChain apiSecurity(HttpSecurity http, ObjectProvider<CreatorSessionFilter> sessionFilter, ObjectProvider<GoogleOAuthFlow> googleFlow, ObjectProvider<InviteGateFilter> inviteGate,org.springframework.core.env.Environment env,ObjectProvider<org.springframework.data.redis.core.StringRedisTemplate> redis,ObjectProvider<com.qingfeng.music.server.web.RecommendationOssRedirect> recommendationOss) throws Exception {
         var google=googleFlow.getIfAvailable();if(google!=null)google.configure(http);
         var filter=sessionFilter.getIfAvailable();
         if (filter!=null) http.addFilterBefore(filter, AnonymousAuthenticationFilter.class);
         var invite=inviteGate.getIfAvailable();
         if (invite!=null) http.addFilterBefore(invite, org.springframework.security.web.csrf.CsrfFilter.class);
+        var samples = recommendationOss.getIfAvailable();
+        if (samples != null) http.addFilterAfter(new com.qingfeng.music.server.web.RecommendationOssFilter(samples), org.springframework.security.web.access.intercept.AuthorizationFilter.class);
         if (filter!=null) http.addFilterAfter(new ApiRateLimitFilter(java.time.Clock.systemUTC(),env.getProperty("qingfeng.redis.enabled",Boolean.class,false)&&env.getProperty("qingfeng.redis.api-rate-limit-enabled",Boolean.class,true)?new RedisApiRateGate(redis.getObject()):null),CreatorSessionFilter.class);
         return http.csrf(csrf -> csrf.ignoringRequestMatchers("/api/public/payments/airwallex/webhook", "/api/public/paypal/webhook", "/api/public/events", "/api/public/hot-songs/*/play", "/api/public/discover/songs/*/*/play")
             .ignoringRequestMatchers(request->"POST".equals(request.getMethod())&&java.util.Set.of("/api/public/auth/sms/deliver","/api/public/stripe/webhook").contains(request.getServletPath()))
@@ -36,6 +38,7 @@ public class WebSecurityConfiguration {
                 .requestMatchers(org.springframework.http.HttpMethod.POST,"/api/public/invite/enter").permitAll()
                 .requestMatchers(org.springframework.http.HttpMethod.GET,"/","/index.html","/assets/**","/brand/**","/media/**","/create","/create/photo","/works","/works/*","/gift/*","/account","/profile","/artist/*","/discover","/recharge","/analytics","/agent","/legal/**").permitAll()
                 .requestMatchers(org.springframework.http.HttpMethod.HEAD,"/gift/*","/discover","/brand/share-default-cover.png").permitAll()
+                .requestMatchers(request -> "HEAD".equals(request.getMethod()) && com.qingfeng.music.server.web.RecommendationOssRedirect.isSamplePath(request.getServletPath())).permitAll()
                 .requestMatchers("/api/public/system/info", "/api/public/csrf", "/api/public/session", "/api/public/session/recover", "/actuator/health").permitAll()
                 .requestMatchers(org.springframework.http.HttpMethod.POST,"/api/public/events").permitAll()
                 .requestMatchers(org.springframework.http.HttpMethod.GET,"/api/public/hot-songs").permitAll()

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onBeforeUnmount, ref } from 'vue'
 import AgentVideoProgress from './AgentVideoProgress.vue'
 import { locale } from '../../../shared/i18n'
 import { resultMediaUrl, resultInviteUrl, type AssistantResult, type AgentCommand, type AgentResultItem } from '../model/assistant-result'
@@ -9,6 +9,36 @@ const en = computed(() => locale.value === 'en')
 const stale = computed(() => props.result.kind === 'confirmation' && !props.current)
 const media = (value: unknown, type: 'audio' | 'image' | 'video') => resultMediaUrl(value, type, window.location.origin)
 const inviteUrl = (value: unknown) => resultInviteUrl(value, window.location.origin)
+const sampleTimers = new Map<HTMLAudioElement, ReturnType<typeof setTimeout>>()
+const sampleRetried = new WeakSet<HTMLAudioElement>()
+function clearSampleTimer(element: HTMLAudioElement) {
+  const timer = sampleTimers.get(element)
+  if (timer) clearTimeout(timer)
+  sampleTimers.delete(element)
+}
+function fallbackSample(event: Event, value: unknown) {
+  const element = event.target as HTMLAudioElement
+  clearSampleTimer(element)
+  const original = media(value, 'audio')
+  if (!original || sampleRetried.has(element)) return
+  const url = new URL(original)
+  if (!/^\/media\/sample-[a-z0-9-]+\.mp3$/.test(url.pathname)) return
+  sampleRetried.add(element)
+  const position = element.currentTime, resume = !element.paused
+  url.searchParams.set('reauth', String(Date.now()))
+  element.addEventListener('loadedmetadata', () => {
+    if (Number.isFinite(position)) element.currentTime = position
+    if (resume) void element.play().catch(() => {})
+  }, { once: true })
+  element.src = url.href
+}
+function waitForSample(event: Event, value: unknown) {
+  const element = event.target as HTMLAudioElement
+  clearSampleTimer(element)
+  sampleTimers.set(element, setTimeout(() => fallbackSample(event, value), 15000))
+}
+function clearSample(event: Event) { clearSampleTimer(event.target as HTMLAudioElement) }
+onBeforeUnmount(() => { for (const element of sampleTimers.keys()) clearSampleTimer(element) })
 // A works result can contain pagination and other commands. Move only the exact
 // server-provided open command for an item; never infer an action from its title.
 const openCommands = computed(() => {
@@ -46,7 +76,7 @@ async function copyInvite(value: unknown) {
           <small v-if="item.data.current === true">{{ en ? 'Current selection' : '当前选择' }}</small>
           <blockquote v-if="typeof item.data.excerpt === 'string'" class="agent-source-excerpt"><small>{{ en ? 'Source excerpt' : '来源摘要' }}</small><p>{{ item.data.excerpt }}</p></blockquote>
           <AgentVideoProgress v-if="result.kind==='video' && typeof item.data.projectId==='string'" :project-id="item.data.projectId"/>
-          <audio v-if="media(item.data.audioUrl, 'audio')" :src="media(item.data.audioUrl, 'audio')" controls preload="none" :aria-label="item.title"/>
+          <audio v-if="media(item.data.audioUrl, 'audio')" :src="media(item.data.audioUrl, 'audio')" controls preload="none" :aria-label="item.title" @error="fallbackSample($event, item.data.audioUrl)" @waiting="waitForSample($event, item.data.audioUrl)" @playing="clearSample" @pause="clearSample"/>
           <div v-if="inviteUrl(item.data.invitePath)" class="agent-result-invite"><input readonly :value="inviteUrl(item.data.invitePath)" :aria-label="en ? 'Invitation link' : '邀请链接'" @focus="($event.target as HTMLInputElement).select()"/><button type="button" @click="copyInvite(item.data.invitePath)">{{ en ? 'Copy invitation' : '复制邀请链接' }}</button></div>
         </div>
         <button v-if="openCommand(item)" type="button" class="agent-work-open" :disabled="disabled || stale" :aria-label="en ? `Open ${item.title}` : `打开《${item.title}》`" :title="en ? `Open ${item.title}` : `打开《${item.title}》`" @click="$emit('command', openCommand(item)!)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5v14l11-7z"/></svg></button>

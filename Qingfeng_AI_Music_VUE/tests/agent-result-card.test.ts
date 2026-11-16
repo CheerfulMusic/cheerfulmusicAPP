@@ -107,3 +107,22 @@ describe('conversation result cards', () => {
     expect(uploadTarget(command('upload', 'https://evil.example'))).toBeNull()
   })
 })
+
+
+it('Agent 示例音频失败后只回退一次，私人音频保持不变', async () => {
+  const result = assistantResult(message({ kind: 'works', items: [
+    { id: 's', title: '示例', data: { audioUrl: '/media/sample-red-guofeng-v1.mp3' } },
+    { id: 'p', title: '私人', data: { audioUrl: '/api/app/works/w1/audio/a1' } }
+  ] }))!
+  const wrapper = mount(AgentResultCard, { props: { result, disabled: false, current: true } })
+  const [sample, privateAudio] = wrapper.findAll('audio')
+  await sample!.trigger('error')
+  const fallback = (sample!.element as HTMLAudioElement).src
+  expect(fallback).toContain('/media/sample-red-guofeng-v1.mp3?reauth=')
+  await sample!.trigger('error')
+  expect((sample!.element as HTMLAudioElement).src).toBe(fallback)
+  const before = (privateAudio!.element as HTMLAudioElement).src
+  await privateAudio!.trigger('error')
+  expect((privateAudio!.element as HTMLAudioElement).src).toBe(before)
+  wrapper.unmount()
+})

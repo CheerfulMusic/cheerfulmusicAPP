@@ -20,15 +20,16 @@ export const usePlayer = defineStore('player', () => {
   const same=(track:PlayableTrack)=>current.value?.id===track.id&&current.value?.audio===track.audio
   function stopWaiting(){clearTimeout(waitingTimer);buffering.value=false}
   function readDuration(){duration.value=audio&&Number.isFinite(audio.duration)?audio.duration:0}
+  function isSample(){return /^\/media\/sample-[a-z0-9-]+\.mp3$/.test(current.value?.audio||'')}
   function waitForAudio(){
     stopWaiting();buffering.value=true
-    waitingTimer=setTimeout(()=>{operation++;starting.value=false;audio?.pause();stopWaiting();error.value='播放等待时间较长，请点击重试。'},15000)
+    waitingTimer=setTimeout(()=>{if(isSample()&&reauthorize(false,true))return;operation++;starting.value=false;audio?.pause();stopWaiting();error.value='播放等待时间较长，请点击重试。'},15000)
   }
   /** 302 后 currentSrc 是否含 auth_key 属方案 E-1 待实测；检测不到时 code 4 按非 CDN 终态处理。 */
-  function cdnSigned(element:HTMLAudioElement){try{return element.currentSrc.includes('auth_key=')}catch{return false}}
+  function cdnSigned(element:HTMLAudioElement){try{return element.currentSrc.includes('auth_key=')||(/^\/media\/sample-[a-z0-9-]+\.mp3$/.test(current.value?.audio||'')&&/[?&]x-oss-signature=/i.test(element.currentSrc))}catch{return false}}
   function retriable(code:number|null,element:HTMLAudioElement|undefined){
     if(code===2)return true
-    if(code===4)return !!element&&cdnSigned(element)
+    if(code===4)return !!element&&(cdnSigned(element)||isSample())
     return false
   }
   function cancelReauth(){
@@ -44,17 +45,17 @@ export const usePlayer = defineStore('player', () => {
     error.value='音频无法加载，链接可能已失效或文件已损坏。可点击重试。'
   }
   /** 一次性重新授权：重新请求原始同源 URL 拿新的 302，不调用 element.load()、不碰池。 */
-  function reauthorize(fromUser=false):boolean{
+  function reauthorize(fromUser=false,stalled=false):boolean{
     const element=audio,track=current.value
     if(!element||!track||reauthPending||pendingRestore)return false
     const code=element.error?.code??null
-    if(!fromUser&&!retriable(code,element))return false
+    if(!fromUser&&!stalled&&!retriable(code,element))return false
     const key=track.audio,used=autoRetries.get(key)??0
     if(fromUser)autoRetries.set(key,0)
     else{if(used>=1)return false;autoRetries.set(key,used+1)}
     const snapshot:RestoreState={
       time:Number.isFinite(element.currentTime)?element.currentTime:time.value,
-      paused:element.paused,
+      paused:element.paused&&(!isSample()||!starting.value),
       playbackRate:Number.isFinite(element.playbackRate)?element.playbackRate:1,
       segment:segment.value?{...segment.value}:null,
       playing:playing.value,starting:starting.value,buffering:buffering.value,
