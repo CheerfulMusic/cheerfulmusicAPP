@@ -99,6 +99,30 @@ class PaymentLegacyOrderBoundaryTest {
         paypal.webhook(null,completed("WH-UNKNOWN-123","REMOTE_UNKNOWN"));when(paypalGateway.retrieve("REMOTE_UNKNOWN")).thenThrow(new IllegalStateException("synthetic unknown provider result"));
         assertTrue(paypal.processNextEvent());assertEquals("MANUAL",state("WH-UNKNOWN-123"));assertEquals("PENDING",row(ORDER).get("status"));verifyNoInteractions(ledger);
     }
+    @Test void anUncorrelatedCompletionWithProvider503StillRequiresManualReviewRatherThanAnAssumedNewOrder(){
+        var before=row(ORDER);paypal.webhook(null,completed("WH-UNKNOWN-503","REMOTE_UNKNOWN"));
+        when(paypalGateway.retrieve("REMOTE_UNKNOWN")).thenThrow(new PayPalCheckoutGateway.ProviderHttpException(503));
+        assertTrue(paypal.processNextEvent());assertEquals("MANUAL",state("WH-UNKNOWN-503"));
+        assertEquals("LEGACY_CHANNEL_UNRESOLVED",db.queryForObject("SELECT last_error FROM payment_webhook_inbox WHERE event_id='WH-UNKNOWN-503'",String.class));
+        assertEquals(before,row(ORDER));assertFalse(paypal.processNextEvent());verifyNoInteractions(ledger);
+    }
+    @Test void captureLookupCanConfirmANewOrderBeforeATemporaryOrderGetFailureAndThenRecoverOnce(){
+        // Unlike the historical read-only fixtures, this test reaches the actual
+        // settle transaction, including its unresolved-order-risk SELECT.
+        db.execute("CREATE TABLE payment_risk_case(id VARCHAR(36) PRIMARY KEY,provider VARCHAR(24),resource_id VARCHAR(128),event_type VARCHAR(96),order_id VARCHAR(36),owner_id VARCHAR(36),status VARCHAR(24),last_event_id VARCHAR(128),decision VARCHAR(40),reviewed_by VARCHAR(128),review_reason VARCHAR(1000),created_at TIMESTAMP(6),updated_at TIMESTAMP(6),UNIQUE(provider,resource_id,order_id))");
+        String id="new-paypal",remote="REMOTE_NEW",event="WH-NEW-CAPTURE-503";
+        insert(id,"PAYPAL_SANDBOX",Timestamp.from(activation.toInstant().plusSeconds(1)),"PENDING",remote);var old=row(ORDER);
+        paypal.webhook(null,completed(event,""));
+        when(paypalGateway.retrieveCapture("CAPTURE123")).thenReturn(json.valueToTree(Map.of("id","CAPTURE123","supplementary_data",Map.of("related_ids",Map.of("order_id",remote)))));
+        when(paypalGateway.retrieve(remote)).thenThrow(new PayPalCheckoutGateway.ProviderHttpException(503))
+            .thenReturn(new PayPalCheckoutGateway.Snapshot(remote,id,"COMPLETED",MERCHANT,"CAPTURE123","COMPLETED",new BigDecimal("9.90"),"USD"));
+        assertTrue(paypal.processNextEvent());assertEquals("PENDING",state(event));assertEquals("PROCESSING_FAILED",db.queryForObject("SELECT last_error FROM payment_webhook_inbox WHERE event_id=?",String.class,event));
+        assertEquals("PENDING",row(id).get("status"));verifyNoInteractions(ledger);
+        db.update("UPDATE payment_webhook_inbox SET next_attempt_at=TIMESTAMPADD(SECOND,-1,CURRENT_TIMESTAMP) WHERE event_id=?",event);
+        assertTrue(paypal.processNextEvent());assertEquals("DONE",state(event));assertEquals("PAID",row(id).get("status"));
+        verify(ledger,times(1)).credit(OWNER,100,"payment:"+id);verify(ledger,times(1)).bindPayment("PAYPAL",MERCHANT,"sandbox",OWNER,id,"CAPTURE123","USD");
+        assertEquals(old,row(ORDER));assertFalse(paypal.processNextEvent());verify(paypalGateway,times(2)).retrieveCapture("CAPTURE123");verify(paypalGateway,times(2)).retrieve(remote);verify(paypalGateway,never()).capture(anyString(),anyString());
+    }
     @Test void airwallexOldReadAndRecoveryNeverRetrieveOrSettleTheHistoricalOrder(){
         var before=row(AIR);var owner=new CreatorPrincipal(OWNER);assertEquals("PENDING",airwallex.order(owner,AIR).get("status"));
         assertThrows(PaymentLegacyOrderBoundary.ReadOnlyOrder.class,()->airwallex.recover(owner,AIR,"LINK123"));

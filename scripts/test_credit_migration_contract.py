@@ -139,18 +139,43 @@ class CreditMigrationContractTests(unittest.TestCase):
         self.assertEqual(45, len(contract["normalizedSha256"]))
         self.assertEqual("45", contract["integrationVersion"])
         self.assertNotIn("agentAllowanceVersion", contract)
+        original = {**gate.CORE_MIGRATION_SHA256,
+                    gate.INTEGRATED_MIGRATION: gate.INTEGRATED_MIGRATION_SHA256}
+        self.assertEqual({"coreSourceCommit": gate.CORE_MIGRATION_SOURCE,
+                          "coreVersions": "1..44", "integrationVersion": "45",
+                          "normalization": "UTF-8/no BOM/LF",
+                          "normalizedSha256": dict(sorted(original.items()))}, contract)
 
     def test_unreviewed_v47_cannot_be_added_to_either_chain(self):
-        jar = self.nested_change(self.fixture.jar(), lambda items: items.update({
-            "db/migration/V47__unreviewed.sql": b"SELECT 1;"}))
-        with self.assertRaisesRegex(gate.GateError, "exactly core V1..V44"):
-            gate.inspect_artifact(jar)
+        for include_v46 in (True, False):
+            with self.subTest(include_v46=include_v46):
+                def append(items):
+                    if not include_v46:
+                        items.pop("db/migration/" + gate.AGENT_ALLOWANCE_MIGRATION)
+                    items["db/migration/V47__unreviewed.sql"] = b"SELECT 1;"
+                jar = self.nested_change(self.fixture.jar(), append)
+                reason = "exactly core V1..V44" if include_v46 else "Missing or noncontiguous migration chain"
+                with self.assertRaisesRegex(gate.GateError, reason):
+                    gate.inspect_artifact(jar)
 
     def test_agent_allowance_v46_edit_is_rejected(self):
         jar = self.nested_change(self.fixture.jar(), lambda items: items.update({
             "db/migration/" + gate.AGENT_ALLOWANCE_MIGRATION: b"SELECT 1;"}))
         with self.assertRaisesRegex(gate.GateError, "Canonical migration source changed"):
             gate.inspect_artifact(jar)
+
+    def test_duplicate_or_renamed_v46_cannot_replace_the_allowlisted_original(self):
+        for duplicate in (True, False):
+            with self.subTest(duplicate=duplicate):
+                def change(items):
+                    data = items["db/migration/" + gate.AGENT_ALLOWANCE_MIGRATION]
+                    if not duplicate:
+                        items.pop("db/migration/" + gate.AGENT_ALLOWANCE_MIGRATION)
+                    items["db/migration/V46__different_meaning.sql"] = data
+                jar = self.nested_change(self.fixture.jar(), change)
+                reason = "Duplicate migration version" if duplicate else "exactly core V1..V44"
+                with self.assertRaisesRegex(gate.GateError, reason):
+                    gate.inspect_artifact(jar)
 
     def test_core_edit_is_rejected_even_with_all_versions_present(self):
         jar = self.nested_change(self.fixture.jar(), lambda items: items.update({"db/migration/V33__site_event_geo.sql": b"SELECT 1;"}))
