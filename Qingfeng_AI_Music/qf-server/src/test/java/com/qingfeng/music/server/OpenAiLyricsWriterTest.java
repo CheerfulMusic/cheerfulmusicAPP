@@ -48,7 +48,7 @@ class OpenAiLyricsWriterTest {
             assertEquals("low", request.path("reasoning").path("effort").asText());
             assertFalse(request.has("thinking"));assertFalse(request.has("max_tokens"));
             String prompt = request.path("instructions").asText();
-            assertTrue(prompt.contains("中英混合"));assertTrue(prompt.contains("该段应原样保留"));
+            assertTrue(prompt.contains("中英混合"));assertTrue(prompt.contains("用户指定保留的段落必须原样保留"));
             var material = JSON.readTree(request.path("input").path(0).path("content").asText());
             assertEquals(WORK.story(), material.path("story").asText());
             assertEquals(WORK.title(), material.path("preferredTitle").asText());
