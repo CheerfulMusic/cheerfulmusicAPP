@@ -96,7 +96,7 @@ class StripeWalletPaymentServiceTest {
             Map.entry("currency",currency.toLowerCase(java.util.Locale.ROOT)),Map.entry("livemode",false),Map.entry("payment_method_types",List.of(method))));
     }
     private String sessionId(String order){return (String)stored(order).get("provider_link_id");}
-    private void fact(String order,String status,String paymentStatus){var row=stored(order);String id=(String)row.get("provider_link_id");sessions.put(id,session(id,order,(BigDecimal)row.get("amount"),(String)row.get("currency"),"CNY".equals(row.get("currency"))?"wechat_pay":"card",status,paymentStatus));}
+    private void fact(String order,String status,String paymentStatus){var row=stored(order);String id=(String)row.get("provider_link_id");sessions.put(id,session(id,order,(BigDecimal)row.get("amount"),(String)row.get("currency"),StripePaymentMethods.checkoutMethodForStoredOffer((String)row.get("package_id")),status,paymentStatus));}
     private PaymentInbox.Delivery due(String order,String kind){
         String event="evt_"+UUID.randomUUID().toString().replace("-","");String pointer=json.writeValueAsString(Map.of("provider","STRIPE","merchant",MERCHANT,"environment","sandbox","event",event,"resource",sessionId(order)));
         var delivery=new PaymentInbox.Delivery(PROVIDER,event,kind,pointer,"synthetic-wallet-lease",1,MERCHANT,"sandbox");
@@ -271,8 +271,9 @@ class StripeWalletPaymentServiceTest {
         verify(ledger,never()).credit(anyString(),anyLong(),anyString());assertEquals(new BigDecimal("68.80"),stored(order).get("amount"));
     }
 
-    private StripePaymentService acceptanceService(CreatorPrincipal chosen,String expiry){
-        var env=walletEnvironment("GB",true).withProperty("qingfeng.payment.acceptance.enabled","true")
+    private StripePaymentService acceptanceService(CreatorPrincipal chosen,String expiry){return acceptanceService(chosen,expiry,"CNY");}
+    private StripePaymentService acceptanceService(CreatorPrincipal chosen,String expiry,String currency){
+        var env=walletEnvironment("GB",true).withProperty("qingfeng.payment.acceptance.wechat-currency",currency).withProperty("qingfeng.payment.acceptance.enabled","true")
             .withProperty("qingfeng.payment.acceptance.owner-id",chosen.id()).withProperty("qingfeng.payment.acceptance.nonce","abcdef01")
             .withProperty("qingfeng.payment.acceptance.expires-at",expiry);
         var result=service(env);ReflectionTestUtils.setField(result,"acceptingNewOrders",false);ReflectionTestUtils.setField(result,"canaryOwnerIds",chosen.id());return result;
@@ -321,9 +322,40 @@ class StripeWalletPaymentServiceTest {
         verify(ledger).paymentRefund("STRIPE",MERCHANT,"sandbox",refund,chosen.id(),id,intent,300L,"CNY");
         assertEquals(new BigDecimal("3.00"),stored(id).get("amount"));assertEquals(1,((Number)stored(id).get("credits")).longValue());
     }
-    @Test void publicPurchasesCannotUseTemporarySkuEvenIfMisconfiguredAcceptanceRemainsEnabled(){
-        var chosen=owner();service=acceptanceService(chosen,"2100-01-01T00:00:00Z");ReflectionTestUtils.setField(service,"acceptingNewOrders",true);
-        assertFalse(service.catalog(chosen).toString().contains("accept-"));assertThrows(ResponseStatusException.class,()->service.create(chosen,acceptanceId("card"),"card"));
+    @Test void publicPurchasesKeepOrdinaryUsersUnchangedWhileOnlyTheActiveOwnerGetsTemporaryQuotes(){
+        var chosen=owner();var ordinary=owner();var normalCatalog=service.catalog(ordinary);
+        service=acceptanceService(chosen,"2100-01-01T00:00:00Z");ReflectionTestUtils.setField(service,"acceptingNewOrders",true);
+        assertEquals(normalCatalog,service.catalog(ordinary));assertFalse(service.catalog().toString().contains("accept-"));
+        assertTrue(service.catalog(chosen).toString().contains(acceptanceId("card")));assertFalse(service.catalog(chosen).toString().contains("starter-USD"));
+        assertEquals(403,assertThrows(ResponseStatusException.class,()->service.create(ordinary,acceptanceId("card"),"card")).getStatusCode().value());
+        assertThrows(ResponseStatusException.class,()->service.create(chosen,"starter-USD","card"));assertEquals(0,number("SELECT COUNT(*) FROM payment_order"));
+        var normal=stored(order(service.create(ordinary,"starter-USD","card")));assertEquals(new BigDecimal("9.90"),normal.get("amount"));assertEquals(100,((Number)normal.get("credits")).longValue());
+        var temporary=stored(order(service.create(chosen,acceptanceId("card"),"card")));assertEquals(new BigDecimal("0.50"),temporary.get("amount"));assertEquals(1,((Number)temporary.get("credits")).longValue());
+        verifyNoInteractions(ledger);
+    }
+    @Test void publicGbpOwnerHasOnlyOneMatchingCurrencyAndExpiryRestoresTheNormalCatalog(){
+        var chosen=owner();service=acceptanceService(chosen,"2100-01-01T00:00:00Z","GBP");ReflectionTestUtils.setField(service,"acceptingNewOrders",true);
+        @SuppressWarnings("unchecked") var methods=(List<Map<String,Object>>)service.catalog(chosen).get("paymentMethods");
+        var wechat=methods.stream().filter(m->"wechat_pay".equals(m.get("id"))).findFirst().orElseThrow();
+        assertEquals(List.of("GBP"),wechat.get("currencies"));assertEquals(List.of(Map.of("currency","GBP","enabled",true,"reason","")),wechat.get("currencyOptions"));
+        String offer="accept-abcdef01-wechat_pay-GBP";
+        for(String invalid:List.of(acceptanceId("wechat_pay"),"accept-abcdef02-wechat_pay-GBP","accept-abcdef01-card-GBP"))
+            assertThrows(ResponseStatusException.class,()->service.create(chosen,invalid,"wechat_pay"));
+        assertThrows(ResponseStatusException.class,()->service.create(chosen,offer,"card"));assertEquals(0,number("SELECT COUNT(*) FROM payment_order"));
+        String id=order(service.create(chosen,offer,"wechat_pay"));assertEquals(new BigDecimal("0.50"),stored(id).get("amount"));assertEquals("GBP",stored(id).get("currency"));
+        fact(id,"complete","paid");service=service(walletEnvironment("GB",false));assertEquals("PAID",service.order(chosen,id).get("status"));verify(ledger).credit(chosen.id(),1L,"payment:"+id);
+        service=acceptanceService(chosen,"2000-01-01T00:00:00Z","GBP");ReflectionTestUtils.setField(service,"acceptingNewOrders",true);
+        assertFalse(service.catalog(chosen).toString().contains("accept-"));assertTrue(service.catalog(chosen).toString().contains("starter-USD"));
+        assertThrows(ResponseStatusException.class,()->service.create(chosen,offer,"wechat_pay"));
+        var normal=stored(order(service.create(chosen,"starter-USD","card")));assertEquals(new BigDecimal("9.90"),normal.get("amount"));
+    }
+
+    @Test void gbpPrivateQuoteCannotInventSupportForAnUnsupportedMerchantCountry(){
+        var chosen=owner();var env=walletEnvironment("US",true).withProperty("qingfeng.payment.acceptance.enabled","true")
+            .withProperty("qingfeng.payment.acceptance.owner-id",chosen.id()).withProperty("qingfeng.payment.acceptance.nonce","abcdef01")
+            .withProperty("qingfeng.payment.acceptance.wechat-currency","GBP").withProperty("qingfeng.payment.acceptance.expires-at","2100-01-01T00:00:00Z");
+        service=service(env);assertFalse(service.catalog(chosen).toString().contains("accept-abcdef01-wechat_pay-GBP"));
+        assertThrows(ResponseStatusException.class,()->service.create(chosen,"accept-abcdef01-wechat_pay-GBP","wechat_pay"));
         assertEquals(0,number("SELECT COUNT(*) FROM payment_order"));assertTrue(creates.isEmpty());
     }
 
@@ -400,4 +432,24 @@ class StripeWalletPaymentServiceTest {
         db.update("INSERT INTO payment_order(id,creator_id,package_id,amount,currency,credits,status,created_at,provider) VALUES(?,?,'starter-USD',9.90,'USD',100,'CREATION_UNKNOWN',CURRENT_TIMESTAMP,'PAYPAL_SANDBOX')",UUID.randomUUID().toString(),chosen.id());
         assertEquals(409,assertThrows(ResponseStatusException.class,()->paypal.create(chosen.id(),acceptanceId("paypal"))).getStatusCode().value());verifyNoInteractions(remote);verifyNoInteractions(ledger);
     }
+    @Test void paypalPublicPurchasesRemainNormalForOthersAndOwnerQuoteExpiresIndependently(){
+        var chosen=owner();var ordinary=owner();var remote=paypalRemote();var paypal=paypalAcceptance(chosen,"2100-01-01T00:00:00Z",remote);
+        ReflectionTestUtils.setField(paypal,"acceptingNewOrders",true);
+        assertTrue(paypal.catalog(ordinary).toString().contains("starter-USD"));assertFalse(paypal.catalog(ordinary).toString().contains("accept-"));
+        assertTrue(paypal.catalog(chosen).toString().contains(acceptanceId("paypal")));assertFalse(paypal.catalog(chosen).toString().contains("starter-USD"));
+        assertThrows(ResponseStatusException.class,()->paypal.create(ordinary.id(),acceptanceId("paypal")));
+        assertThrows(ResponseStatusException.class,()->paypal.create(chosen.id(),"starter-USD"));assertEquals(0,number("SELECT COUNT(*) FROM payment_order"));
+        String normal=order(paypal.create(ordinary.id(),"starter-USD"));assertEquals(new BigDecimal("9.90"),stored(normal).get("amount"));assertEquals(100,((Number)stored(normal).get("credits")).longValue());
+        String temporary=order(paypal.create(chosen.id(),acceptanceId("paypal")));assertEquals(new BigDecimal("0.01"),stored(temporary).get("amount"));assertEquals(1,((Number)stored(temporary).get("credits")).longValue());
+        for(String status:List.of("CANCELLED","FAILED","CREATION_UNKNOWN","PAID")){
+            db.update("UPDATE payment_order SET status=? WHERE id=?",status,temporary);
+            assertThrows(ResponseStatusException.class,()->paypal.create(chosen.id(),acceptanceId("paypal")));
+        }
+        var expired=paypalAcceptance(chosen,"2000-01-01T00:00:00Z",remote);ReflectionTestUtils.setField(expired,"acceptingNewOrders",true);
+        assertFalse(expired.catalog(chosen).toString().contains("accept-"));assertTrue(expired.catalog(chosen).toString().contains("starter-USD"));
+        assertThrows(ResponseStatusException.class,()->expired.create(chosen.id(),acceptanceId("paypal")));
+        assertEquals(new BigDecimal("9.90"),stored(order(expired.create(chosen.id(),"starter-USD"))).get("amount"));
+        verifyNoInteractions(ledger);
+    }
+
 }

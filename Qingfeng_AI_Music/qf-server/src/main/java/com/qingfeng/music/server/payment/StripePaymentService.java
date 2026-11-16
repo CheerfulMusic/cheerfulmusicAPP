@@ -82,15 +82,18 @@ public final class StripePaymentService implements VerifiedPaymentProcessor {
     public Map<String,Object> catalog(CreatorPrincipal creator) {
         boolean open=schemaReady() && purchaseAllowed(creator);
         var methods=paymentMethods.catalog(open);
-        boolean privateAcceptance=!acceptingNewOrders&&creator!=null&&acceptanceOffers.configuredFor(creator.id());
+        boolean privateAcceptance=creator!=null&&acceptanceOffers.exclusiveFor(creator.id(),acceptingNewOrders);
         if(open&&privateAcceptance){
             methods=methods.stream().map(method->{
                 String channel=(String)method.get("id");
                 var result=new LinkedHashMap<String,Object>(method);
                 result.put("packages",List.of());
                 acceptanceOffers.offer(creator.id(),channel).filter(pack->Boolean.TRUE.equals(method.get("enabled"))
-                    && acceptanceOffers.unused(db,creator.id(),pack.id(),provider())).ifPresent(pack->{
-                    result.put("packages",List.of(acceptanceOffers.view(pack,channel)));
+                    && ((List<?>)method.get("currencies")).contains(pack.currency())).ifPresent(pack->{
+                    result.put("currencies",List.of(pack.currency()));
+                    result.put("currencyOptions",List.of(Map.of("currency",pack.currency(),"enabled",true,"reason","")));
+                    if(acceptanceOffers.unused(db,creator.id(),pack.id(),provider()))
+                        result.put("packages",List.of(acceptanceOffers.view(pack,channel)));
                 });return Map.copyOf(result);
             }).toList();
         }
@@ -115,9 +118,7 @@ public final class StripePaymentService implements VerifiedPaymentProcessor {
     public Map<String,Object> create(CreatorPrincipal creator, String packageId,String paymentMethod) {
         if (!schemaReady() || !purchaseAllowed(creator)) throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,"Stripe 充值暂未开放");
         if(creator==null||creator.id()==null)throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
-        if(PaymentAcceptanceOffers.isAcceptance(packageId)&&acceptingNewOrders)
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN,"PAYMENT_ACCEPTANCE_CANARY_ONLY");
-        if(!acceptingNewOrders&&acceptanceOffers.configuredFor(creator.id())&&!PaymentAcceptanceOffers.isAcceptance(packageId))
+        if(acceptanceOffers.exclusiveFor(creator.id(),acceptingNewOrders)&&!PaymentAcceptanceOffers.isAcceptance(packageId))
             throw new ResponseStatusException(HttpStatus.FORBIDDEN,"PAYMENT_ACCEPTANCE_PRIVATE_SKU_REQUIRED");
         var offer=PaymentAcceptanceOffers.isAcceptance(packageId)
             ?paymentMethods.selectAcceptance(acceptanceOffers.select(creator.id(),packageId,paymentMethod),paymentMethod)
