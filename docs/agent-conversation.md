@@ -70,7 +70,7 @@ qingfeng.agent.chat.enabled=true
 qingfeng.agent.intent.llm-enabled=true
 ```
 
-模型连接复用服务端现有 DeepSeek 配置；密钥只放私有配置或环境变量。歌词和音乐生成继续使用既有功能开关及供应商配置。两个 Agent 开关默认关闭，关闭时页面显示服务不可用，不退回虚假的创作流程。本地日常入口仍遵守 `scripts/start-main.ps1` 的线上匹配版本约束。
+模型连接复用服务端千问配置；密钥只放私有配置或环境变量。歌词和音乐生成继续使用既有功能开关及供应商配置。两个 Agent 开关默认关闭，关闭时页面显示服务不可用，不退回虚假的创作流程。本地日常入口仍遵守 `scripts/start-main.ps1` 的线上匹配版本约束。
 
 ## 验收
 

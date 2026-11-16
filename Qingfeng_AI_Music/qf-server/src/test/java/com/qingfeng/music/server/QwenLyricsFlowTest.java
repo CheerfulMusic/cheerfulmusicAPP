@@ -15,13 +15,13 @@ import org.springframework.context.annotation.*;
 import org.springframework.test.context.ActiveProfiles;
 import static org.junit.jupiter.api.Assertions.*;
 
-@SpringBootTest(properties="qingfeng.lyrics.enabled=true") @ActiveProfiles("test") @Import(DeepSeekLyricsFlowTest.Offline.class)
-class DeepSeekLyricsFlowTest {
+@SpringBootTest(properties="qingfeng.lyrics.enabled=true") @ActiveProfiles("test") @Import(QwenLyricsFlowTest.Offline.class)
+class QwenLyricsFlowTest {
  @TestConfiguration(proxyBeanMethods=false) static class Offline {
   @Bean @Primary FakeWriter fakeWriter(){return new FakeWriter();}
  }
  static class FakeWriter implements LyricsWriter {
-  public String source(){return "DEEPSEEK";}
+  public String source(){return "QWEN";}
   WorkApi.Work lastWork;String lastLanguage;String instructions;String output;
   public Draft write(WorkApi.Work work,String language,String instructions,String previous){this.instructions=instructions;return output==null?write(work,language):new Draft("结构测试",output);}
   AtomicInteger calls=new AtomicInteger();public boolean isConfigured(){return true;}
@@ -99,7 +99,7 @@ class DeepSeekLyricsFlowTest {
  @Test void savesUnconfirmedAiVersionAndReusesSuccessfulRequestWithoutCallingAgain(){
   String owner=identity.create().creatorId();var work=works.create(owner,new WorkApi.Draft("小雨","纪念","相识的故事","愿你快乐","民谣","故事"));
   var manual=lyrics.save(owner,work.id(),0,"原歌词","不要替换我的旧歌词");String key=UUID.randomUUID().toString();int before=writer.calls.get();
-  var generated=composer.compose(owner,work.id(),0,key,"zh-CN");assertFalse(generated.confirmed());assertEquals("DEEPSEEK",generated.source());
+  var generated=composer.compose(owner,work.id(),0,key,"zh-CN");assertFalse(generated.confirmed());assertEquals("QWEN",generated.source());
   var edited=lyrics.save(owner,work.id(),0,generated.title(),generated.lyrics()+"\n最后一句",generated.id());
   assertEquals("zh-CN",edited.language());assertEquals("AUTO",edited.templateId());assertEquals(Boolean.FALSE,edited.chorusFirst());
   assertNull(manual.language());assertNull(manual.templateId());

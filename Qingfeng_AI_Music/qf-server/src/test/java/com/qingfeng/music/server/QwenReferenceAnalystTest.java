@@ -2,7 +2,7 @@ package com.qingfeng.music.server;
 
 import com.qingfeng.music.agent.api.ReferenceAnalyst;
 import com.qingfeng.music.common.exception.DomainException;
-import com.qingfeng.music.infrastructure.provider.DeepSeekReferenceAnalyst;
+import com.qingfeng.music.infrastructure.provider.QwenReferenceAnalyst;
 import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.Test;
 
@@ -21,14 +21,14 @@ import tools.jackson.databind.ObjectMapper;
 import static org.junit.jupiter.api.Assertions.*;
 
 /** 用真实 HTTP 服务器验证请求协议与输出校验，不用 mock 伪造模型结论。 */
-class DeepSeekReferenceAnalystTest {
+class QwenReferenceAnalystTest {
     private static final ObjectMapper JSON = new ObjectMapper();
     private static final ReferenceAnalyst.Request REQUEST = new ReferenceAnalyst.Request(
         "想写一首给妈妈的歌，不要电音", "ref.m4a", 128, "zh-CN",
         new ReferenceAnalyst.Features(128.4, 0.82, 0.31, 0.87, 0.42, 0.52, 0.31, 0.17, 0.63, 0.21, 128, 90));
 
-    private static DeepSeekReferenceAnalyst analyst(HttpServer server, Duration timeout) {
-        return new DeepSeekReferenceAnalyst("test-key", "deepseek-flash",
+    private static QwenReferenceAnalyst analyst(HttpServer server, Duration timeout) {
+        return new QwenReferenceAnalyst("test-key", "qwen3.8-flash",
             URI.create("http://127.0.0.1:" + server.getAddress().getPort() + "/chat/completions"),
             HttpClient.newHttpClient(), timeout);
     }
@@ -69,7 +69,11 @@ class DeepSeekReferenceAnalystTest {
             assertTrue(system.contains("客观测量"), "提示词必须区分客观测量与 AI 推断");
             assertTrue(system.contains("不得声称识别出具体乐器"));
             assertTrue(system.contains("styleCandidates"));
+            assertEquals("qwen3.8-flash", sent.path("model").asText());
             assertEquals("json_object", sent.path("response_format").path("type").asText());
+            assertTrue(sent.path("enable_thinking").isBoolean());
+            assertFalse(sent.path("enable_thinking").asBoolean());
+            assertFalse(sent.has("thinking"));
             assertEquals(500, sent.path("max_tokens").asInt());
             var user = JSON.readTree(sent.path("messages").path(1).path("content").asText());
             assertEquals(128.4, user.path("features").path("bpm").asDouble());
@@ -123,7 +127,7 @@ class DeepSeekReferenceAnalystTest {
     }
 
     @Test void toleratesMissingOptionalFieldsAndReportsNotConfiguredWithoutKey() {
-        var offline = new DeepSeekReferenceAnalyst("  ", "deepseek-flash");
+        var offline = new QwenReferenceAnalyst("  ", "qwen3.8-flash");
         assertFalse(offline.isConfigured());
     }
 }

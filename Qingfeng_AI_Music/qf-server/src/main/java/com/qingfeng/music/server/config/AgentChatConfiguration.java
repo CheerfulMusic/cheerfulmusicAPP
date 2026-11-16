@@ -18,7 +18,7 @@ import com.qingfeng.music.generation.api.GenerationApi;
 import com.qingfeng.music.generation.application.SectionEditingService;
 import com.qingfeng.music.infrastructure.persistence.agent.ConversationMapper;
 import com.qingfeng.music.infrastructure.persistence.agent.JdbcConversationRepository;
-import com.qingfeng.music.infrastructure.provider.DeepSeekIntentClassifier;
+import com.qingfeng.music.infrastructure.provider.QwenIntentClassifier;
 import com.qingfeng.music.lyrics.api.LyricsApi;
 import com.qingfeng.music.lyrics.application.LyricsCompositionService;
 import com.qingfeng.music.media.api.MediaApi;
@@ -54,9 +54,9 @@ public class AgentChatConfiguration {
 
     @Bean
     IntentClassifier intentClassifier(Environment env) {
-        return new DeepSeekIntentClassifier(
-                env.getProperty("qingfeng.providers.deepseek.api-key", env.getProperty("DEEPSEEK_API_KEY", "")),
-                env.getProperty("qingfeng.providers.deepseek.model", "deepseek-flash"));
+        return new QwenIntentClassifier(
+                RewriteProviderSettings.key(env), RewriteProviderSettings.model(env),
+                java.net.URI.create(RewriteProviderSettings.endpoint(env)));
     }
 
     @Bean

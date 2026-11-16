@@ -5,7 +5,7 @@ import com.qingfeng.music.agent.api.AgentApplicationActions;
 import com.qingfeng.music.agent.api.SongCard;
 import com.qingfeng.music.common.concurrent.AgentRequestScope;
 import com.qingfeng.music.common.exception.DomainException;
-import com.qingfeng.music.infrastructure.provider.DeepSeekAgentChatModel;
+import com.qingfeng.music.infrastructure.provider.QwenAgentChatModel;
 import com.qingfeng.music.infrastructure.provider.ResilientAgentChatModel;
 import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.Test;
@@ -20,7 +20,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import static org.junit.jupiter.api.Assertions.*;
 
-class DeepSeekAgentChatModelTest {
+class QwenAgentChatModelTest {
     @Test void incompleteBodyHasAnOverallDeadlineCancelsItsSocketAndAllowsCircuitRecovery() throws Exception {
         try(var server=new StalledBodyServer(null)){
             var now=new AtomicReference<>(Instant.parse("2026-11-12T00:00:00Z"));
@@ -108,7 +108,7 @@ class DeepSeekAgentChatModelTest {
             } finally {exchange.close();}
         });server.start();
         try {
-            var model=new DeepSeekAgentChatModel("test-only-key","test-model",true,URI.create("http://127.0.0.1:"+server.getAddress().getPort()+"/chat"),HttpClient.newHttpClient());
+            var model=new QwenAgentChatModel("test-only-key","test-model",true,URI.create("http://127.0.0.1:"+server.getAddress().getPort()+"/chat"),HttpClient.newHttpClient());
             var error=assertTimeoutPreemptively(java.time.Duration.ofSeconds(5),()->assertThrows(DomainException.class,()->model.respond(new AgentChatModel.Context("你好","zh-CN",List.of(),null))));
             assertEquals("AGENT_CHAT_UNAVAILABLE",error.code());
         } finally {finishResponse.countDown();server.stop(0);}
@@ -125,11 +125,14 @@ class DeepSeekAgentChatModelTest {
             exchange.sendResponseHeaders(200,body.length);exchange.getResponseBody().write(body);exchange.close();
         });server.start();
         try {
-            var model=new DeepSeekAgentChatModel("test-only-key","test-model",true,URI.create("http://127.0.0.1:"+server.getAddress().getPort()+"/chat"),HttpClient.newHttpClient());
+            var model=new QwenAgentChatModel("test-only-key","qwen3.8-flash",true,URI.create("http://127.0.0.1:"+server.getAddress().getPort()+"/chat"),HttpClient.newHttpClient());
             var capabilities=List.of(new AgentApplicationActions.Capability("select_work","选择作品","workId,index","write"),new AgentApplicationActions.Capability("rename_work","修改名称","title","write"));
             var plan=model.respond(new AgentChatModel.Context("打开第二首并改名晴天","zh-CN",List.of(),null,null,capabilities,null));
             assertEquals(1,calls.get());assertEquals(List.of("select_work","rename_work"),plan.orderedSteps().stream().map(AgentChatModel.Step::action).toList());
             var request=json.readTree(received.get());assertEquals("auto",request.path("tool_choice").asText());assertEquals(2,request.path("tools").size());
+            assertEquals("qwen3.8-flash",request.path("model").asText());
+            assertTrue(request.path("enable_thinking").isBoolean());assertFalse(request.path("enable_thinking").asBoolean());
+            assertFalse(request.has("thinking"));assertFalse(request.has("response_format"));
             assertEquals("function",request.path("tools").get(0).path("type").asText());
             assertTrue(request.path("tools").toString().contains("additionalProperties"));assertFalse(request.path("tools").toString().contains("delete_work"));
             assertEquals(2600,request.path("max_tokens").asInt());
@@ -144,15 +147,20 @@ class DeepSeekAgentChatModelTest {
             exchange.sendResponseHeaders(200,body.length);exchange.getResponseBody().write(body);exchange.close();
         });server.start();
         try {
-            var model=new DeepSeekAgentChatModel("test-only-key","test-model",true,URI.create("http://127.0.0.1:"+server.getAddress().getPort()+"/chat"),HttpClient.newHttpClient());
+            var model=new QwenAgentChatModel("test-only-key","test-model",true,URI.create("http://127.0.0.1:"+server.getAddress().getPort()+"/chat"),HttpClient.newHttpClient());
             assertEquals("AGENT_CHAT_UNAVAILABLE",assertThrows(DomainException.class,()->model.respond(new AgentChatModel.Context("生成歌曲","zh-CN",List.of(),null))).code());
         } finally {server.stop(0);}
     }
 
     @Test void plainChatWithoutToolCallsIsAcceptedByTheSameHttpAdapter() throws Exception {
-        withResponse("你好！想聊音乐还是一起构思歌词？",(model,request)->{
-            var plan=model.respond(new AgentChatModel.Context("你好","zh-CN",List.of(),null));
+        withResponse("{\"action\":\"chat\",\"reply\":\"你好！想聊音乐还是一起构思歌词？\",\"args\":{}}",(model,request)->{
+            var legacy=List.of(new AgentApplicationActions.Capability("legacy_only","旧接口","{}","read"));
+            var plan=model.respond(new AgentChatModel.Context("你好","zh-CN",List.of(),null,null,legacy,null));
             assertEquals("chat",plan.action());assertEquals("你好！想聊音乐还是一起构思歌词？",plan.reply());
+            var payload=new ObjectMapper().readTree(request.get());
+            assertEquals("json_object",payload.path("response_format").path("type").asText());
+            assertTrue(payload.path("enable_thinking").isBoolean());assertFalse(payload.path("enable_thinking").asBoolean());
+            assertFalse(payload.has("tools"));assertFalse(payload.has("thinking"));
         });
     }
 
@@ -166,7 +174,7 @@ class DeepSeekAgentChatModelTest {
         });
     }
     @Test void oversizedPromptAndExpiredDeadlineNeverCallProvider() {
-        var model=new DeepSeekAgentChatModel("test-key","test",true,URI.create("http://127.0.0.1:1/never"),HttpClient.newHttpClient());
+        var model=new QwenAgentChatModel("test-key","test",true,URI.create("http://127.0.0.1:1/never"),HttpClient.newHttpClient());
         var scope=new com.qingfeng.music.common.concurrent.AgentRequestScope(java.time.Duration.ofSeconds(10),1024);
         try(var ignored=scope.enter()){
             assertEquals("AGENT_CONTEXT_TOO_LARGE",assertThrows(DomainException.class,()->model.respond(new AgentChatModel.Context("你好","zh-CN",List.of(),null))).code());
@@ -186,7 +194,7 @@ class DeepSeekAgentChatModelTest {
             exchange.sendResponseHeaders(200,body.length);exchange.getResponseBody().write(body);exchange.close();
         });server.start();
         try {
-            var model=new DeepSeekAgentChatModel("test-only-key","test-model",true,URI.create("http://127.0.0.1:"+server.getAddress().getPort()+"/chat"),HttpClient.newHttpClient());
+            var model=new QwenAgentChatModel("test-only-key","test-model",true,URI.create("http://127.0.0.1:"+server.getAddress().getPort()+"/chat"),HttpClient.newHttpClient());
             var song=new SongCard("work","给妈妈","温暖民谣","原副歌","","DRAFT",null,1,"revision-1",null,null);
             var plan=model.respond(new AgentChatModel.Context("副歌改得更短","zh-CN",List.of(new AgentChatModel.Turn("user","写给妈妈")),song,"{\"bpm\":90,\"language\":\"en\"}"));
             assertEquals("generate_lyrics",plan.action());assertEquals("rewrite",plan.args().get("mode"));assertEquals("副歌改得更短",plan.args().get("text"));assertEquals("revision-1",plan.args().get("revisionId"));
@@ -196,7 +204,7 @@ class DeepSeekAgentChatModelTest {
         } finally { server.stop(0); }
     }
     @Test void disabledModelCannotMakeAnExternalRequest(){
-        var model=new DeepSeekAgentChatModel("","test",false,URI.create("http://127.0.0.1:1/never"),HttpClient.newHttpClient());
+        var model=new QwenAgentChatModel("","test",false,URI.create("http://127.0.0.1:1/never"),HttpClient.newHttpClient());
         var error=assertThrows(DomainException.class,()->model.respond(new AgentChatModel.Context("你好","zh-CN",List.of(),null)));
         assertEquals("AGENT_CHAT_UNAVAILABLE",error.code());
     }
@@ -234,7 +242,7 @@ class DeepSeekAgentChatModelTest {
         var nullable=new LinkedHashMap<String,Object>();nullable.put("style",null);
         assertNull(new AgentChatModel.Step("set_style",nullable).args().get("style"));
     }
-    private static void withResponse(String plan,java.util.function.BiConsumer<DeepSeekAgentChatModel,AtomicReference<String>> assertion) throws Exception {
+    private static void withResponse(String plan,java.util.function.BiConsumer<QwenAgentChatModel,AtomicReference<String>> assertion) throws Exception {
         var request=new AtomicReference<String>();var json=new ObjectMapper();
         var server=HttpServer.create(new InetSocketAddress("127.0.0.1",0),0);
         server.createContext("/chat",exchange->{
@@ -243,7 +251,7 @@ class DeepSeekAgentChatModelTest {
             exchange.sendResponseHeaders(200,body.length);exchange.getResponseBody().write(body);exchange.close();
         });server.start();
         try {
-            assertion.accept(new DeepSeekAgentChatModel("test-only-key","test-model",true,
+            assertion.accept(new QwenAgentChatModel("test-only-key","test-model",true,
                     URI.create("http://127.0.0.1:"+server.getAddress().getPort()+"/chat"),HttpClient.newHttpClient()),request);
         } finally { server.stop(0); }
     }
@@ -275,8 +283,8 @@ class DeepSeekAgentChatModelTest {
                 finally{exchange.close();}
             });server.start();
         }
-        DeepSeekAgentChatModel model(Duration timeout){
-            return new DeepSeekAgentChatModel("test-only-key","test-model",true,URI.create("http://127.0.0.1:"+server.getAddress().getPort()+"/chat"),HttpClient.newHttpClient(),timeout);
+        QwenAgentChatModel model(Duration timeout){
+            return new QwenAgentChatModel("test-only-key","test-model",true,URI.create("http://127.0.0.1:"+server.getAddress().getPort()+"/chat"),HttpClient.newHttpClient(),timeout);
         }
         void assertClientDisconnected()throws InterruptedException{
             probeDisconnect.countDown();assertTrue(disconnected.await(3,TimeUnit.SECONDS),"Cancelling the original future must close the unfinished HTTP exchange");

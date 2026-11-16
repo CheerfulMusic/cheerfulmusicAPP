@@ -15,11 +15,11 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * LLM 意图兜底：沿用 DeepSeek 现有密钥与 response_format:json_object 模式，
+ * 千问意图兜底：使用 response_format:json_object 模式，
  * 同步调用、12 秒超时。任何异常/非法输出一律返回 null，由 IntentRouter 降级为规则澄清。
  * W1 默认 qingfeng.agent.intent.llm-enabled=false，不会产生任何真实模型请求。
  */
-public final class DeepSeekIntentClassifier implements IntentClassifier {
+public final class QwenIntentClassifier implements IntentClassifier {
 
     private static final String SYSTEM = """
             你是音乐创作助手的意图分类器。只输出 JSON 对象，不要输出解释文字。
@@ -34,15 +34,19 @@ public final class DeepSeekIntentClassifier implements IntentClassifier {
     private final HttpClient http;
     private final ObjectMapper json = new ObjectMapper();
 
-    public DeepSeekIntentClassifier(String key, String model) {
-        this(key, model, URI.create("https://api.deepseek.com/chat/completions"),
+    public QwenIntentClassifier(String key, String model) {
+        this(key, model, URI.create(QwenInspirationRewriter.QWEN_ENDPOINT));
+    }
+
+    public QwenIntentClassifier(String key, String model, URI endpoint) {
+        this(key, model, endpoint,
                 HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10))
                         .followRedirects(HttpClient.Redirect.NEVER).build());
     }
 
-    public DeepSeekIntentClassifier(String key, String model, URI endpoint, HttpClient http) {
-        this.key = key == null ? "" : key;
-        this.model = model == null || model.isBlank() ? "deepseek-flash" : model;
+    public QwenIntentClassifier(String key, String model, URI endpoint, HttpClient http) {
+        this.key = key == null ? "" : key.trim();
+        this.model = model == null || model.isBlank() ? QwenInspirationRewriter.QWEN_MODEL : model.trim();
         this.endpoint = endpoint;
         this.http = http;
     }
@@ -60,6 +64,7 @@ public final class DeepSeekIntentClassifier implements IntentClassifier {
                     Map.of("role", "system", "content", SYSTEM),
                     Map.of("role", "user", "content", "locale=" + (locale == null ? "zh-CN" : locale) + " text=" + text)));
             body.put("response_format", Map.of("type", "json_object"));
+            body.put("enable_thinking", false);
             body.put("stream", false);
             body.put("max_tokens", 500);
             HttpRequest request = HttpRequest.newBuilder(endpoint)

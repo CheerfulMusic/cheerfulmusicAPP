@@ -8,14 +8,15 @@ import java.time.Duration;
 import java.util.*;
 import tools.jackson.databind.ObjectMapper;
 
-public final class DeepSeekLyricsWriter implements LyricsWriter {
-    private static final System.Logger LOG=System.getLogger(DeepSeekLyricsWriter.class.getName());
+public final class QwenLyricsWriter implements LyricsWriter {
+    private static final System.Logger LOG=System.getLogger(QwenLyricsWriter.class.getName());
     private final String key,model;private final URI endpoint;private final HttpClient client;
     private final ObjectMapper json=new ObjectMapper();
-    public DeepSeekLyricsWriter(String key,String model){this(key,model,URI.create("https://api.deepseek.com/chat/completions"),HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).followRedirects(HttpClient.Redirect.NEVER).build());}
-    public DeepSeekLyricsWriter(String key,String model,URI endpoint,HttpClient client){this.key=key.trim();this.model=model;this.endpoint=endpoint;this.client=client;}
+    public QwenLyricsWriter(String key,String model){this(key,model,URI.create(QwenInspirationRewriter.QWEN_ENDPOINT));}
+    public QwenLyricsWriter(String key,String model,URI endpoint){this(key,model,endpoint,HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).followRedirects(HttpClient.Redirect.NEVER).build());}
+    public QwenLyricsWriter(String key,String model,URI endpoint,HttpClient client){this.key=key==null?"":key.trim();this.model=model==null||model.isBlank()?QwenInspirationRewriter.QWEN_MODEL:model.trim();this.endpoint=endpoint;this.client=client;}
     public boolean isConfigured(){return !key.isBlank();}
-    @Override public String source(){return "DEEPSEEK";}
+    @Override public String source(){return "QWEN";}
     public Draft write(WorkApi.Work work,String language){
         return write(work,language,"","");
     }
@@ -31,12 +32,12 @@ public final class DeepSeekLyricsWriter implements LyricsWriter {
         material.putAll(Map.of("recipient",work.recipient(),"occasion",work.occasion(),"story",work.story(),"message",work.message(),"style",work.style(),"preferredTitle",work.title(),"revisionInstructions",instructions,"previousLyrics",previousLyrics));
         material.put("musicDirection",direction.style());material.put("musicExclusions",direction.exclusions());material.put("vocalGender",direction.vocalGender());
         String context=json.writeValueAsString(material);
-        String body=json.writeValueAsString(Map.of("model",model,"messages",List.of(Map.of("role","system","content",system),Map.of("role","user","content",context)),"response_format",Map.of("type","json_object"),"thinking",Map.of("type","disabled"),"max_tokens",2400,"stream",false));
+        String body=json.writeValueAsString(Map.of("model",model,"messages",List.of(Map.of("role","system","content",system),Map.of("role","user","content",context)),"response_format",Map.of("type","json_object"),"enable_thinking",false,"max_tokens",2400,"stream",false));
         try{
             var response=LyricsHttpTransport.post(client,endpoint,key,body);
             if(response.statusCode()!=200)LOG.log(System.Logger.Level.WARNING,"Lyrics provider HTTP failure: work={0}, status={1}",work.id(),response.statusCode());
-            if(response.statusCode()==401||response.statusCode()==403)throw new DomainException("LYRICS_PROVIDER_UNAVAILABLE","歌词服务认证失败，请检查后端DeepSeek密钥");
-            if(response.statusCode()==402)throw new DomainException("LYRICS_PROVIDER_UNAVAILABLE","DeepSeek余额不足，请充值后重试");
+            if(response.statusCode()==401||response.statusCode()==403)throw new DomainException("LYRICS_PROVIDER_UNAVAILABLE","歌词服务认证失败，请检查后端千问密钥");
+            if(response.statusCode()==402)throw new DomainException("LYRICS_PROVIDER_UNAVAILABLE","千问余额不足，请充值后重试");
             if(response.statusCode()!=200)throw new DomainException("LYRICS_PROVIDER_UNAVAILABLE","歌词生成服务暂时繁忙，请稍后再试");
             var choice=json.readTree(response.body()).path("choices").path(0);
             if(!choice.path("finish_reason").asText().equals("stop"))throw new DomainException("LYRICS_RESPONSE_INVALID","歌词生成结果不完整，请稍后重新发起");

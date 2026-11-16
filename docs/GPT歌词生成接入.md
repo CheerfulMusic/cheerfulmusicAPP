@@ -4,11 +4,11 @@
 
 自定义创作的生成歌词和重新生成歌词使用 OpenAI。快捷创作和 Agent 的共享写词服务由 `qingfeng.lyrics.provider` 配置，2026-11-16 起默认使用 OpenAI。OpenAI 写词使用官方 `https://api.openai.com/v1/responses`，默认型号 `gpt-6.1-sol`，`reasoning.effort=low`，单次输出上限 6000 tokens，请求超时 90 秒。型号可以通过服务端配置调整，需要使用支持 Responses、严格结构化输出和 low reasoning 的模型。
 
-复用现有写词提示词、语言选择、段落模板、保留原句要求、音乐设置与 CreativePlan；不改变歌词版本保存流程。新增 GPT 版本来源记为 `OPENAI`，DeepSeek 仍记为 `DEEPSEEK`，历史数据不改写。灵感输入框的“AI 改写”、音乐生成、封面生成仍保持各自原有提供方。
+复用现有写词提示词、语言选择、段落模板、保留原句要求、音乐设置与 CreativePlan；不改变歌词版本保存流程。GPT 新版本来源记为 `OPENAI`，千问新版本记为 `QWEN`，历史 `DEEPSEEK` 记录不改写。灵感输入框的“AI 改写”、音乐生成、封面生成仍保持各自原有提供方。
 
 ## 2026-11-16 模型切换
 
-整首歌词生成的默认模型改为 `gpt-6.1-sol`，保留 Responses、low reasoning、6000 输出 token、90 秒超时及结构化输出协议。自定义创作原有 DeepSeek 兜底仍保留；共享写词服务默认不启用兜底。灵感改写、选中歌词改写和单句润色继续使用各自改写配置。
+整首歌词生成的默认模型改为 `gpt-6.1-sol`，保留 Responses、low reasoning、6000 输出 token、90 秒超时及结构化输出协议。自定义创作的备用写词通道已改用千问；共享写词服务默认不启用兜底。灵感改写、选中歌词改写和单句润色也使用千问配置。
 
 私有配置或环境变量若显式指定旧 provider/model，会覆盖代码默认值；发布时须核对并将歌词配置设置为下列值。此次代码修改不代表生产模型已切换，也未验证账户对 Sol 的真实调用权限。
 
@@ -21,11 +21,15 @@ qingfeng.lyrics.enabled=true
 qingfeng.lyrics.provider=openai
 qingfeng.providers.openai.model=gpt-6.1-sol
 # qingfeng.providers.openai.api-key=（仅在私有配置填写）
+# qingfeng.providers.qwen.api-key=（仅在私有配置填写）
+qingfeng.providers.qwen.model=qwen3.8-flash
+qingfeng.providers.qwen.base-url=https://maas.qianwenaiapi.com/compatible-mode/v1
+qingfeng.lyrics.qwen-fallback-enabled=false
 ```
 
 2026-11-09 已从用户指定的桌面记事本读取密钥，写入 Git 忽略的 `Qingfeng_AI_Music/config/local.properties`，并设置以上提供方与型号。修改前的配置备份在本机忽略目录 `.backups/gpt-lyrics/`，没有改动数据库连接、后台调度或支付配置。
 
-自定义创作优先使用 OpenAI。配置了 DeepSeek 后，OpenAI 未配置，或请求未能建立连接、收到明确拒绝且仍在兜底时间窗口内时，会使用 DeepSeek。超时等结果未知的请求保留原请求状态，避免再次提交。成功的版本记录实际提供方。共享写词服务可独立配置提供方和回退策略。
+自定义创作优先使用 OpenAI。配置了千问后，OpenAI 未配置，或请求未能建立连接、收到明确拒绝且仍在兜底时间窗口内时，会使用千问。超时等结果未知的请求保留原请求状态，避免再次提交。成功的版本记录实际提供方。共享写词服务可通过 `qingfeng.lyrics.provider=qwen` 直接选择千问，或通过 `qingfeng.lyrics.qwen-fallback-enabled=true` 启用备用通道。
 
 照片写歌入口默认关闭。在隔离的本地验证环境中，配置支持图片输入的 OpenAI 模型与私有密钥，并设置 `qingfeng.lyrics.photo.enabled=true`。照片入口接受单张 JPG/PNG（最大 10 MB），后台将缩放后的图和选填故事一起送入一次 Responses 请求。应用保存画面摘要、歌词和音乐方向，原图不进入作品存储。离线端到端验证可用 `PhotoLyricsIntegrationTest`，它使用 H2 和替代供应商。
 
@@ -41,7 +45,7 @@ qingfeng.providers.openai.model=gpt-6.1-sol
 
 ## 验证与当前限制
 
-协议测试用本机模拟 HTTP 服务，覆盖请求素材保留、JSON Schema、CreativePlan、异常响应、拒绝、截断、无效结果、不重试及提供方配置。H2 流程验证覆盖 GPT 来源、歌词版本、音乐计划、请求重放和重新编写；现有 DeepSeek 测试继续保留。
+协议测试用本机模拟 HTTP 服务，覆盖请求素材保留、JSON Schema、CreativePlan、异常响应、拒绝、截断、无效结果、不重试及提供方配置。H2 流程验证覆盖 GPT 来源、歌词版本、音乐计划、请求重放和重新编写；备用千问链路也使用离线协议测试。
 
 完整 `mvn verify` 已通过：全模块 361 项通过，27 项需要显式启用独立 MySQL 测试环境的用例跳过，无失败。构建的 JAR 已检查，不含 `local.properties` 或 `.secrets` 私有配置。
 

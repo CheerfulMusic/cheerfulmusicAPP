@@ -1,20 +1,16 @@
 package com.qingfeng.music.server.config;
 
-import com.qingfeng.music.infrastructure.provider.DeepSeekInspirationRewriter;
+import com.qingfeng.music.infrastructure.provider.QwenInspirationRewriter;
 import org.springframework.core.env.Environment;
 
 /**
- * AI 改写（灵感改写 / 歌词行改写 / 音乐要求精简）专用模型配置。
+ * 千问文本模型的共享配置：AI 改写、歌词备选、Agent 对话与参考分析共用。
  * 默认千问AI平台（qianwenaiapi.com）的千问 Flash「qwen3.8-flash」，走 OpenAI 兼容
  * chat/completions；base-url 必须与签发该 key 的平台配套，不能混用阿里云百炼官方域名。
  *
  * <p>密钥绝不写入仓库：优先服务器私有配置 {@code qingfeng.providers.qwen.api-key}，
  * 其次环境变量 {@code aliyunqingfengKEY}，最后通用 {@code DASHSCOPE_API_KEY}。
- * 三处调用方（LyricsCompositionConfiguration 两处、MusicSettingsConfiguration 一处）
- * 都通过这里构造，避免配置漂移。
- *
- * <p>注意：歌词生成主链路用的 {@code qingfeng.providers.deepseek.*} 保持不变，
- * 本类只影响 AI 改写，两者互不影响。
+ * 所有千问调用都从这里读取相同的密钥、模型和端点，避免配置漂移。
  */
 final class RewriteProviderSettings {
 
@@ -27,11 +23,11 @@ final class RewriteProviderSettings {
         return new Settings(model(env), endpoint(env), !key(env).isBlank());
     }
 
-    static DeepSeekInspirationRewriter writer(Environment env) {
-        return new DeepSeekInspirationRewriter(key(env), model(env), endpoint(env));
+    static QwenInspirationRewriter writer(Environment env) {
+        return new QwenInspirationRewriter(key(env), model(env), endpoint(env));
     }
 
-    private static String key(Environment env) {
+    static String key(Environment env) {
         String configured = env.getProperty("qingfeng.providers.qwen.api-key", "");
         if (!configured.isBlank()) return configured.trim();
         String fromEnv = System.getenv("aliyunqingfengKEY");
@@ -39,14 +35,14 @@ final class RewriteProviderSettings {
         return env.getProperty("DASHSCOPE_API_KEY", "").trim();
     }
 
-    private static String model(Environment env) {
-        String value = env.getProperty("qingfeng.providers.qwen.model", DeepSeekInspirationRewriter.QWEN_MODEL);
-        return value == null || value.isBlank() ? DeepSeekInspirationRewriter.QWEN_MODEL : value.trim();
+    static String model(Environment env) {
+        String value = env.getProperty("qingfeng.providers.qwen.model", QwenInspirationRewriter.QWEN_MODEL);
+        return value == null || value.isBlank() ? QwenInspirationRewriter.QWEN_MODEL : value.trim();
     }
 
-    private static String endpoint(Environment env) {
-        String value = env.getProperty("qingfeng.providers.qwen.base-url", DeepSeekInspirationRewriter.QWEN_ENDPOINT);
-        String url = (value == null || value.isBlank() ? DeepSeekInspirationRewriter.QWEN_ENDPOINT : value.trim())
+    static String endpoint(Environment env) {
+        String value = env.getProperty("qingfeng.providers.qwen.base-url", QwenInspirationRewriter.QWEN_ENDPOINT);
+        String url = (value == null || value.isBlank() ? QwenInspirationRewriter.QWEN_ENDPOINT : value.trim())
             .replaceAll("/+$", "");
         // 允许只配到 .../compatible-mode/v1，自动补齐 chat/completions 路径。
         return url.endsWith("/chat/completions") ? url : url + "/chat/completions";

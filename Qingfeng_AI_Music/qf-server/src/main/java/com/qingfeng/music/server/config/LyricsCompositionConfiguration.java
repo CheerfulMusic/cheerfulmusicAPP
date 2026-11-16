@@ -2,7 +2,7 @@ package com.qingfeng.music.server.config;
 import com.qingfeng.music.lyrics.application.*;
 import com.qingfeng.music.lyrics.api.LyricsApi;
 import com.qingfeng.music.work.api.WorkApi;
-import com.qingfeng.music.infrastructure.provider.DeepSeekLyricsWriter;
+import com.qingfeng.music.infrastructure.provider.QwenLyricsWriter;
 import com.qingfeng.music.infrastructure.provider.OpenAiLyricsWriter;
 import com.qingfeng.music.infrastructure.persistence.lyrics.*;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -32,16 +32,16 @@ public class LyricsCompositionConfiguration {
         return switch(env.getProperty("qingfeng.lyrics.provider","openai").trim().toLowerCase(java.util.Locale.ROOT)){
             case "openai" -> {
                 var primary = openAiWriter(env);
-                yield env.getProperty("qingfeng.lyrics.deepseek-fallback-enabled",Boolean.class,false)
-                    ? new FallbackLyricsWriter(primary,deepSeekLyricsWriter(env)) : primary;
+                yield env.getProperty("qingfeng.lyrics.qwen-fallback-enabled",Boolean.class,false)
+                    ? new FallbackLyricsWriter(primary,qwenLyricsWriter(env)) : primary;
             }
-            case "deepseek" -> deepSeekLyricsWriter(env);
-            default -> throw new IllegalArgumentException("Unsupported qingfeng.lyrics.provider; use openai or deepseek");
+            case "qwen" -> qwenLyricsWriter(env);
+            default -> throw new IllegalArgumentException("Unsupported qingfeng.lyrics.provider; use openai or qwen");
         };
     }
     @Bean(defaultCandidate=false)
     LyricsWriter customLyricsWriter(Environment env){
-        return new FallbackLyricsWriter(openAiWriter(env),deepSeekLyricsWriter(env));
+        return new FallbackLyricsWriter(openAiWriter(env),qwenLyricsWriter(env));
     }
     private static String openAiKey(Environment env){
         return env.getProperty("qingfeng.providers.openai.api-key",env.getProperty("OPENAI_API_KEY",""));
@@ -60,9 +60,9 @@ public class LyricsCompositionConfiguration {
         var writer=openAiWriter(env);
         return writer.isConfigured()?writer::writePhoto:null;
     }
-    private DeepSeekLyricsWriter deepSeekLyricsWriter(Environment env){
-        return new DeepSeekLyricsWriter(env.getProperty("qingfeng.providers.deepseek.api-key",env.getProperty("DEEPSEEK_API_KEY","")),
-            env.getProperty("qingfeng.providers.deepseek.model","deepseek-flash"));
+    private QwenLyricsWriter qwenLyricsWriter(Environment env){
+        return new QwenLyricsWriter(RewriteProviderSettings.key(env), RewriteProviderSettings.model(env),
+            java.net.URI.create(RewriteProviderSettings.endpoint(env)));
     }
     @Bean @Profile({"mysql","test"}) CompositionRequests compositionRequests(JdbcTemplate jdbc,com.qingfeng.music.usage.UsageBudget budget,org.springframework.transaction.PlatformTransactionManager manager,com.qingfeng.music.credits.CreditsLedger credits,com.qingfeng.music.credits.CreditConsumptions consumptions,com.qingfeng.music.credits.LyricFreeAllowance lyricFreeAllowance){return new JdbcCompositionRequests(jdbc,budget,new org.springframework.transaction.support.TransactionTemplate(manager),credits,consumptions,lyricFreeAllowance);}
     @Bean @Profile({"mysql","test"}) LyricsCompositionService lyricsCompositionService(WorkApi works,LyricsApi lyrics,LyricsMapper mapper,LyricsWriter writer,

@@ -61,7 +61,7 @@ export interface AgentReference {
   type: string
   /** 浏览器端实测特征，用于描述节奏、频段与明亮度。 */
   features?: AudioFeatures
-  /** DeepSeek 语义化结果；缺失时只写实测特征。 */
+  /** 千问语义化结果；缺失时只写实测特征。 */
   insight?: ReferenceInsight
 }
 
