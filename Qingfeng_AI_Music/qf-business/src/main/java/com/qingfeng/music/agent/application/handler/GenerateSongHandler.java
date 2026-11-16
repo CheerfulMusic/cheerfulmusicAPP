@@ -35,7 +35,12 @@ public class GenerateSongHandler implements AgentToolHandler {
         if(existing.isPresent()) return result(ctx,work.id(),snapshot,existing.get());
         var revision=newWork ? null : AgentCreationSupport.selected(lyrics,owner,work.id(),a.revisionId(),snapshot);
         String language=AgentCreationSupport.language(a.language(),snapshot,revision);
-        snapshot=SongCardProjector.mergeSnapshot(snapshot,a.style(),null,a.bpm(),language,a.instruments());
+        // Regeneration used to discard the user's textual music direction entirely.
+        String mood=null;
+        var direction=java.util.regex.Pattern.compile("(?:曲风|风格|情绪|编曲)(?:是|为|要|：|:)?\\s*([^，。；\\n]{1,120})")
+                .matcher(com.qingfeng.music.agent.application.AgentLyricInput.parse(a.text()).instruction());
+        if(direction.find())mood=direction.group(1).strip();
+        snapshot=SongCardProjector.mergeSnapshot(snapshot,a.style(),mood,a.bpm(),language,a.instruments());
         var applied=AgentCreationSupport.apply(settings,works,owner,work,snapshot,a.vocal());
         work=applied.work(); snapshot=applied.snapshot();
         if(revision==null) {

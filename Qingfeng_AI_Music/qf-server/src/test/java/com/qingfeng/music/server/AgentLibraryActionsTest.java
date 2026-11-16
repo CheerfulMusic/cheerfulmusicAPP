@@ -62,6 +62,16 @@ class AgentLibraryActionsTest {
         verify(conversations).applyToolResult(eq("owner"),eq("C"),isNull(),eq("{}"),eq("W2"),snapshot.capture(),isNull(),eq(5L));
         var saved=AgentJson.read(snapshot.getValue());assertFalse(saved.containsKey("style"));assertNull(saved.get("revisionId"));
     }
+    @Test void openingWorkRestoresPersistedSelectedAudioAndItsLyrics(){
+        var asset=new MediaApi.Asset("A","W2","GENERATED","audio/mpeg",10,"sha",NOW,false,"T","candidate");
+        when(media.selection("owner","W2")).thenReturn(new MediaApi.Selection("A",2,asset));
+        when(media.get("owner","W2","A")).thenReturn(asset);
+        when(media.generatedRevision("owner","W2","A")).thenReturn(Optional.of("R2"));
+        run("select_work",Map.of("workId","W2"));
+        var snapshot=org.mockito.ArgumentCaptor.forClass(String.class);
+        verify(conversations).applyToolResult(eq("owner"),eq("C"),isNull(),eq("{}"),eq("W2"),snapshot.capture(),eq("T"),eq(5L));
+        var saved=AgentJson.read(snapshot.getValue());assertEquals("A",saved.get("assetId"));assertEquals("R2",saved.get("revisionId"));
+    }
     @Test void secondWorkUsesThePersistedVisibleList(){
         when(conversations.listRecentMessages("owner","C",80)).thenReturn(List.of(message("{\"kind\":\"works\",\"items\":[{\"data\":{\"workId\":\"W\"}},{\"data\":{\"workId\":\"W2\"}}]}")));
         run("select_work",Map.of("index",2));

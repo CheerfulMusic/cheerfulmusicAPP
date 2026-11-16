@@ -107,7 +107,14 @@ public final class AgentLibraryActions implements AgentApplicationActions {
         catch (AmbiguousWork ambiguous) { return listWorks(owner,args,"找到多首同名作品，请从列表选择具体一首。"); }
         String id=work.id();
         return switch(action) {
-            case "select_work" -> { point(owner,conversation,id,null,null,null); yield ok(action,"已打开《"+displayTitle(owner,work)+"》，接下来的创作和操作将使用这首作品。"); }
+            case "select_work" -> {
+                var selection=media.selection(owner,id);
+                String asset=selection==null?null:selection.assetId();
+                var selected=asset==null?null:media.get(owner,id,asset);
+                String revision=asset==null?null:media.generatedRevision(owner,id,asset).orElse(null);
+                point(owner,conversation,id,revision,selected==null?null:selected.generationTaskId(),asset);
+                yield ok(action,"已打开《"+displayTitle(owner,work)+"》。"+(asset==null?"尚未选择音频，可查看音频列表后选择。":"已恢复这首作品选用的音频，可继续制作 MV。"));
+            }
             case "rename_work" -> {
                 String title=required(args,"title",100);
                 works.update(owner,id,work.version(),new WorkApi.Draft(work.recipient(),work.occasion(),work.story(),work.message(),work.style(),title,work.vocalGender()));

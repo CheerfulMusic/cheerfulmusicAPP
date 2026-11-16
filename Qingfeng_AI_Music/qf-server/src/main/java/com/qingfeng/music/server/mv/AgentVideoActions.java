@@ -23,6 +23,9 @@ public final class AgentVideoActions implements AgentApplicationActions {
     private String value(Map<String,Object> args,String key,String fallback){Object value=args.get(key);return value instanceof String s&&!s.isBlank()?s:fallback;}
     public Map<String,Object> prepare(String owner,String conversation,String action,Map<String,Object> args,SongCard current){
         var frozen=new LinkedHashMap<>(args);
+        if("preview_music_video".equals(action)&&value(args,"resolution","").isBlank()) {
+            frozen.put("resolution","480P");frozen.put("resolutionUnselected",true);
+        }
         if(Set.of("create_music_video","preview_music_video").contains(action)){
             if(!service.available())throw new DomainException("VIDEO_NOT_CONFIGURED","视频服务尚未配置，暂不生成或扣费。");
             String work=value(args,"workId",current==null?null:current.songId()),asset=value(args,"assetId",current==null?null:current.assetId());
@@ -32,9 +35,14 @@ public final class AgentVideoActions implements AgentApplicationActions {
             frozen.put("resolution",storyboard.resolution());frozen.put("durationMillis",storyboard.durationMillis());frozen.put("shots",storyboard.shots());
             frozen.put("quotedCredits",MusicVideoService.price(storyboard));
             StringBuilder summary=new StringBuilder("完整歌曲时长 "+(storyboard.durationMillis()/1000.0)+" 秒；生成视频 "+MusicVideoService.generatedSeconds(storyboard)+" 秒计费，图片停留免费（歌曲不足一秒按一秒）。\n分辨率 "+storyboard.resolution()+"，每秒 "+MusicVideoService.rate(storyboard.resolution())+" 积分，总计 "+MusicVideoService.price(storyboard)+" 积分；画幅 "+storyboard.ratio()+"。\n");
-            for(int i=0;i<storyboard.shots().size();i++){var shot=storyboard.shots().get(i);summary.append(i+1).append(". ").append(shot.seconds()).append(" 秒：").append(shot.prompt()).append("；生成视频 ").append(shot.seconds()-shot.imageSeconds()).append(" 秒，免费图片 ").append(shot.imageSeconds()).append(" 秒").append(shot.imageId()==null?"":"，图片 "+shot.imageId()).append("\n");}
+            int elapsed=0;
+            for(int i=0;i<storyboard.shots().size();i++){var shot=storyboard.shots().get(i);summary.append(i+1).append(". ").append(elapsed).append("–").append(elapsed+shot.seconds()).append(" 秒：").append(shot.prompt()).append("；生成视频 ").append(shot.seconds()-shot.imageSeconds()).append(" 秒，免费图片 ").append(shot.imageSeconds()).append(" 秒").append(shot.imageId()==null?"":"，图片 "+shot.imageId()).append("\n");elapsed+=shot.seconds();}
             summary.append("保留整首原歌曲音轨，成片时长与歌曲一致。仅未开始的任务可取消退款；提交不确定时需核对，不自动重提。");
             frozen.put("confirmationSummary",summary.toString());
+            if(Boolean.TRUE.equals(frozen.get("resolutionUnselected"))) {
+                int seconds=MusicVideoService.generatedSeconds(storyboard);
+                frozen.put("confirmationSummary",summary+"\n以上480P仅为报价示例，尚未选择分辨率。三档报价：480P "+seconds+" 积分；720P "+seconds*2+" 积分；1080P "+seconds*3+" 积分。请选择后再确认生成。");
+            }
         }
         return frozen;
     }
@@ -54,7 +62,7 @@ public final class AgentVideoActions implements AgentApplicationActions {
         if(action.equals("video_capabilities")){
             if(!service.available())return new Result("视频模型或密钥尚未配置，暂不提交或扣费。","video",List.of(),List.of(),action);
             String w=value(args,"workId",current==null?null:current.songId()),a=value(args,"assetId",current==null?null:current.assetId());
-            if(w==null||a==null)return new Result("请先选择一首已生成音频的歌曲。480P 每秒 1 积分，720P 每秒 2 积分，1080P 每秒 3 积分；按完整歌曲时长自动计算。","video",List.of(),List.of(),action);
+            if(w==null||a==null)return new Result(w==null?"尚未选择作品，请先从作品列表打开歌曲。":"已找到作品，但尚未选用音频。请从这首作品的音频列表选择一个版本，再继续分镜与报价。","video",List.of(),List.of(new Command(w==null?"查看作品":"查看音频",w==null?"查看我的作品":"查看作品 "+w+" 的音频列表","send")),action);
             var quote=service.quote(owner,w,a,"480P");
             var items=new ArrayList<Item>();var commands=new ArrayList<Command>();
             for(String resolution:List.of("480P","720P","1080P")){

@@ -4,6 +4,7 @@ import com.qingfeng.music.agent.api.*;
 import com.qingfeng.music.agent.api.AgentApplicationActions.*;
 import com.qingfeng.music.agent.api.AgentChatModel.Step;
 import com.qingfeng.music.agent.application.AgentChatPolicy;
+import com.qingfeng.music.agent.application.AgentLyricInput;
 import com.qingfeng.music.agent.application.AgentToolDispatcher;
 import com.qingfeng.music.common.exception.DomainException;
 import com.qingfeng.music.common.concurrent.AgentRequestScope;
@@ -69,6 +70,8 @@ public final class AgentChatService {
             boolean confirmation=AgentChatPolicy.confirmed(text)&&pending!=null&&!pending.automatic();
             boolean continuation=CONTINUE.equals(text)&&pending!=null&&pending.automatic();
             String authorizedText=text;
+            if(pending==null&&text.matches("(?:需要|好的|可以|继续)[。！!]*")&&recentStoryboardRequest(history))
+                authorizedText="查看当前作品的 MV 分镜方案和费用";
             AgentChatModel.Plan plan;
             int modelCalls=0;
             if(pending!=null&&Set.of("取消操作","取消确认","算了","不用了","停止后续操作").contains(text)) {
@@ -79,17 +82,34 @@ public final class AgentChatService {
                 authorizedText=pending.authorizedText();
                 plan=new AgentChatModel.Plan(null,Map.of(),"",pending.steps());
             } else {
-                var exact=com.qingfeng.music.agent.application.ExactLyricEdit.parse(text);
-                String fast=AgentChatPolicy.currentSocial(text);
-                if(exact!=null)plan=new AgentChatModel.Plan("replace_lyric_line",Map.of(),"");
-                else if(fast!=null)plan=new AgentChatModel.Plan(fast,Map.of(),"");
-                else if(text.matches("(?:查看|列出|显示)?(?:全部|所有|可用)(?:功能|能力)|能力清单"))plan=new AgentChatModel.Plan("list_capabilities",Map.of(),"");
-                else {
-                    var state=conversations.state(owner,conversation);
-                    progress(owner,conversation,key,"planning",null,0,"正在理解你的要求。");
-                    plan=model.respond(new AgentChatModel.Context(text,locale==null?"zh-CN":locale,history(history),current,
-                        state==null?null:state.currentSongJson(),capabilities(),results(history)).withExecution(new AgentChatModel.Execution(owner,conversation,key)));
-                    modelCalls++;
+                var supplied=AgentLyricInput.parse(text);
+                if(!supplied.lyrics().isBlank()&&supplied.instruction().isBlank()) {
+                    ask(owner,conversation,lyricSteps(supplied.lyrics(),false,""),"保存提供的歌词",current,
+                        "已收到你的完整歌词。确认后会新建作品并原样保存，不改写、不生成音乐。也可以直接告诉我曲风并说「用这些歌词生成音乐」。",null,null,false,false);
+                    var outcome=new Outcome(null,null,current==null?null:current.songId(),current==null?null:current.revisionId(),current==null?null:current.assetId());
+                    turns.complete(owner,conversation,key,json.writeValueAsString(outcome));
+                    return snapshot(owner,conversation,null,outcome);
+                }
+                String suppliedLyrics=supplied.lyrics();
+                if(suppliedLyrics.isBlank()&&AgentChatPolicy.musicRequested(text))suppliedLyrics=recentSuppliedLyrics(history);
+                if(!suppliedLyrics.isBlank()&&(AgentChatPolicy.musicRequested(text)||AgentChatPolicy.actionRequested("save_lyrics",text))) {
+                    authorizedText="保存提供的歌词，"+supplied.instruction();
+                    plan=new AgentChatModel.Plan(null,Map.of(),"",lyricSteps(suppliedLyrics,AgentChatPolicy.musicRequested(text),supplied.instruction()));
+                } else {
+                    var exact=com.qingfeng.music.agent.application.ExactLyricEdit.parse(text);
+                    String fast=AgentChatPolicy.currentSocial(text);
+                    if(exact!=null)plan=new AgentChatModel.Plan("replace_lyric_line",Map.of(),"");
+                    else if(fast!=null)plan=new AgentChatModel.Plan(fast,Map.of(),"");
+                    else if(text.matches("(?:查看|列出|显示)?(?:全部|所有|可用)(?:功能|能力)|能力清单"))plan=new AgentChatModel.Plan("list_capabilities",Map.of(),"");
+                    else if(!authorizedText.equals(text)&&executor("video_capabilities")!=null)plan=new AgentChatModel.Plan("video_capabilities",Map.of(),"");
+                    else {
+                        var state=conversations.state(owner,conversation);
+                        progress(owner,conversation,key,"planning",null,0,"正在理解你的要求。");
+                        plan=model.respond(new AgentChatModel.Context(text,locale==null?"zh-CN":locale,history(history),current,
+                            state==null?null:state.currentSongJson(),capabilities(),results(history)).withExecution(new AgentChatModel.Execution(owner,conversation,key)));
+                        modelCalls++;
+                    }
+                    plan=ensureExecutable(plan,authorizedText,current);
                 }
             }
             List<Step> steps=normalizedSteps(plan.orderedSteps(),authorizedText);validatePlan(steps);
@@ -113,7 +133,7 @@ public final class AgentChatService {
                         args.putIfAbsent("text",authorizedText);
                         ask(owner,conversation,replaceFirst(steps.subList(i,steps.size()),proposed,args),authorizedText,current,
                              "创作方向已准备好。生成音频会使用创作额度；确认后开始。",null,null,resolvedWork,resolvedVersion);
-                    } else append(owner,conversation,Map.of("text","我还没有执行这项操作。请明确告诉我需要处理的作品和动作；也可以继续讨论想法。"));
+                    } else append(owner,conversation,Map.of("text","还没有执行「"+capability.description()+"」。这一步与本条指令未能对应；请说明要对当前作品执行该操作，或先选择另一首作品。","errorCode","AGENT_INTENT_UNRESOLVED"));
                     break;
                 }
                 if(!explicitlyConfirmed&&!"replace_lyric_line".equals(proposed)&&AgentChatPolicy.chatOnly(authorizedText)&&!"read".equals(capability.effect())){
@@ -169,7 +189,12 @@ public final class AgentChatService {
                     if(ToolResult.BUSY.equals(result.status())){append(owner,conversation,Map.of("text",result.progress()==null?"已有任务正在生成，请完成后再试。":result.progress()));break;}
                     if(!ToolResult.OK.equals(result.status())){append(owner,conversation,Map.of("text","这一步没有完成，后续操作已停止。请检查当前作品后重试。"));break;}
                     progress(owner,conversation,key,"tool_finished",proposed,i+1,"本步骤已返回结果，请查看作品和任务状态。");
-                    action=proposed;append(owner,conversation,Map.of("text",completedReply(tool)));
+                    action=proposed;
+                    String reply=completedReply(tool);
+                    SongCard actual=current(owner);
+                    if((tool==AgentTool.GENERATE_LYRICS||tool==AgentTool.GET_CURRENT_SONG)&&actual!=null)
+                        reply+="\n《"+actual.title()+"》\n状态："+actual.status()+(actual.taskId()==null?"":"；任务："+actual.taskId())+"\n"+(actual.lyrics()==null?"尚无歌词。":actual.lyrics());
+                    append(owner,conversation,Map.of("text",reply));
                 } else throw new DomainException("AGENT_ACTION_UNAVAILABLE","当前环境未启用这项操作。");
                 SongCard updated=current(owner);
                 if(Set.of("select_version","select_audio").contains(proposed)) {
@@ -196,12 +221,16 @@ public final class AgentChatService {
                 }
                 // A query can resolve the IDs needed by the original instruction ('上一版').
                 // Replan once using only persisted tool results; original authorization never grows.
-                if(i+1==steps.size()&&modelCalls==1&&!confirmation&&!continuation&&"read".equals(capability.effect())) {
+                if(i+1==steps.size()&&(modelCalls==1||modelCalls==0&&"video_capabilities".equals(proposed))&&!confirmation&&!continuation&&"read".equals(capability.effect())) {
                     AgentRequestScope.check();
                     var observed=conversations.listRecentMessages(owner,conversation,80);var state=conversations.state(owner,conversation);
-                    var next=model.respond(new AgentChatModel.Context(originalIntent,locale==null?"zh-CN":locale,history(observed),updated,
-                        state==null?null:state.currentSongJson(),capabilities(),results(observed)).withExecution(new AgentChatModel.Execution(owner,conversation,key)));
-                    modelCalls++;
+                    boolean storyboard="video_capabilities".equals(proposed)&&updated!=null&&updated.assetId()!=null
+                        &&originalIntent.matches("(?is).*(?:MV|视频|分镜).*")&&executor("preview_music_video")!=null;
+                    String followIntent=storyboard?originalIntent+"\n请调用 preview_music_video 交付完整分镜：依据真实时长每30秒一段，结合当前歌词与音乐风格，描述人物、场景、动作和镜头衔接。尚未选择分辨率时省略resolution，系统将返回三档报价。不要提交视频。":originalIntent;
+                    var next=model.respond(new AgentChatModel.Context(followIntent,locale==null?"zh-CN":locale,history(observed),updated,
+                        state==null?null:state.currentSongJson(),storyboard?List.of(capability("preview_music_video")):capabilities(),results(observed)).withExecution(new AgentChatModel.Execution(owner,conversation,key)));
+                    modelCalls=2;
+                    if(!storyboard)next=ensureExecutable(next,originalIntent,updated);
                     var follow=normalizedSteps(next.orderedSteps(),originalIntent);
                     // A planner that repeats the same query has made no progress. Do not execute it twice.
                     var completedSteps=List.copyOf(steps.subList(0,i+1));
@@ -226,6 +255,64 @@ public final class AgentChatService {
     private List<Step> normalizedSteps(List<Step> steps,String intent) {
         if(!AgentChatPolicy.lyricsOnly(intent))return steps;
         return steps.stream().map(s->"generate_song".equals(s.action())?new Step("generate_lyrics",s.args()):s).toList();
+    }
+    private List<Step> lyricSteps(String lyrics,boolean music,String instruction) {
+        var steps=new ArrayList<Step>();
+        steps.add(new Step("create_work",Map.of("title","自带歌词作品")));
+        steps.add(new Step("save_lyrics",Map.of("title","自带歌词作品","lyrics",lyrics)));
+        if(music)steps.add(new Step("generate_song",Map.of("text",instruction,"mode","regenerate")));
+        return steps;
+    }
+    private String recentSuppliedLyrics(List<AgentMessage> history) {
+        // Only the immediately preceding user turn can supply a new lyric body.
+        // A completed save or intervening request must not import an old lyric again.
+        for(int i=history.size()-1;i>=0;i--) {
+            var m=history.get(i);var body=json.readTree(m.contentJson());
+            if("save_lyrics".equals(body.path("action").asText()))return "";
+            if("user".equals(m.role()))return AgentLyricInput.parse(body.path("text").asText("")).lyrics();
+        }
+        return "";
+    }
+    private boolean recentStoryboardRequest(List<AgentMessage> history) {
+        int users=0;
+        for(int i=history.size()-1;i>=0&&users<3;i--) {
+            var m=history.get(i);if(!"user".equals(m.role()))continue;users++;
+            String text=json.readTree(m.contentJson()).path("text").asText("");
+            if(text.matches("(?is).*(?:分镜|MV).*(?:方案|费用|报价|预览).*")&&!AgentChatPolicy.chatOnly(text)&&!text.matches("(?s).*(?:不要|取消|停止).*"))return true;
+            if(!text.matches("(?s)(?:打开作品.*|查看我的作品|需要|好的|可以|继续)"))return false;
+        }
+        return false;
+    }
+    private AgentChatModel.Plan ensureExecutable(AgentChatModel.Plan plan,String text,SongCard current) {
+        String instruction=AgentLyricInput.parse(text).instruction();
+        if(instruction.matches("(?:歌词呢|查看歌词|显示完整歌词|完整歌词|正在制作吗|生成好了吗)[？?。！!]*"))
+            return new AgentChatModel.Plan("get_current_song",Map.of(),"");
+        var open=java.util.regex.Pattern.compile("^(?:请|帮我)?打开作品\\s+([a-fA-F0-9-]{36})[。！!]*$").matcher(instruction);
+        if(open.matches()&&executor("select_work")!=null)return new AgentChatModel.Plan("select_work",Map.of("workId",open.group(1)),"");
+        if(instruction.matches("(?:查看|列出|显示)我的作品[。！!]*")&&executor("list_works")!=null)
+            return new AgentChatModel.Plan("list_works",Map.of(),"");
+        boolean chat=plan.orderedSteps().stream().allMatch(s->"chat".equals(s.action()));
+        // Parser rejections and genuine clarification must never be upgraded to paid work.
+        if(chat&&plan.reply()!=null&&plan.reply().matches("(?s).*(?:尚未|还没有|不能|无法|请先|请选择|需要确认|不支持|未执行).*"))return plan;
+        boolean blockedDraft=plan.orderedSteps().stream().anyMatch(s->"create_work".equals(s.action()))&&!AgentChatPolicy.actionRequested("create_work",text);
+        if(blockedDraft&&(AgentChatPolicy.musicRequested(text)||AgentChatPolicy.lyricsRequested(text))) {
+            var remaining=plan.orderedSteps().stream().filter(s->!"create_work".equals(s.action())).toList();
+            if(!remaining.isEmpty())return new AgentChatModel.Plan(null,Map.of(),plan.reply(),remaining);
+        }
+        if(chat||blockedDraft) {
+            if(AgentChatPolicy.musicRequested(text))return new AgentChatModel.Plan("generate_song",Map.of("text",instruction),"");
+            if(AgentChatPolicy.lyricsRequested(text))return new AgentChatModel.Plan("generate_lyrics",Map.of("text",instruction),"");
+            if(AgentChatPolicy.actionRequested("edit_cover",text)&&executor("edit_cover")!=null)
+                return new AgentChatModel.Plan("edit_cover",Map.of("prompt",instruction),"");
+            if(!AgentChatPolicy.chatOnly(text)&&text.matches("(?is).*(?:分镜|MV).*(?:方案|费用|报价|预览).*")&&executor("video_capabilities")!=null)
+                return new AgentChatModel.Plan("video_capabilities",Map.of(),"");
+            if(AgentChatPolicy.actionRequested("create_music_video",text)&&executor("video_capabilities")!=null)
+                return new AgentChatModel.Plan("video_capabilities",Map.of(),"");
+        }
+        // A plain model reply is never evidence that a write happened.
+        if(chat&&plan.reply()!=null&&plan.reply().matches("(?s).*(?:已打开|已保存|已生成|已经生成|已提交|已开始|已经开始|正在制作|已按.*准备生成).*"))
+            return new AgentChatModel.Plan("chat",Map.of(),"尚未取得该操作的成功结果。请查看当前作品或任务状态；我不会把口头回复当成已经执行。");
+        return plan;
     }
     private void validatePlan(List<Step> steps) {
         if(steps.isEmpty()||steps.size()>6)throw new DomainException("INVALID_AGENT_PLAN","一次最多处理六个步骤，请把任务分成几次完成。");

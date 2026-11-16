@@ -16,16 +16,18 @@ public final class AgentChatPolicy {
                 && !requested(surface,MUSIC);
     }
     public static boolean deniesAction(String text) {
+        text=AgentLyricInput.parse(text).instruction();
         return has(text, "(?:不要|别|禁止|不想|不需要|先不|暂不|不用)[^，。；,;]{0,10}(?:生成|写歌|写一首|创作|音乐|歌曲|歌词|改词|修改|改写|重写|风格|分享|公开|发布|点赞|下载|延长)|(?:don.t|do not|never)[^,;.]{0,18}(?:generat|creat|writ|edit|chang|shar|publish|like|extend)");
     }
     public static boolean chatOnly(String text) {
+        text=AgentLyricInput.parse(text).instruction();
         if(has(text,"只想聊|只是聊|先聊|今天只想|什么是|你是什么|你是谁|你能.*做什么|如何|怎么|how (?:do|can)|what (?:is|are)|who are you"))return true;
         // Polite requests to act for the user may enter the concrete confirmation flow.
         // Capability questions without a requested task remain conversation only.
         return has(text,"能不能|可以吗")&&!has(surface(text),"(?:帮我|给我|为我|替我)(?:来|先|再|把这首歌|把当前作品)?(?:写|创作|生成|改|制作|分享|下载|播放|删除|润色|保存)");
     }
     public static boolean musicRequested(String text) {
-        return !lyricsOnly(text)&&requested(text,MUSIC);
+        return !lyricsOnly(text)&&requested(text,"(?:"+MUSIC+")(?!词)");
     }
     public static boolean lyricsRequested(String text) {
         return requested(text,"(?:写|创作|生成|编|改|修改|改写|重写|优化|润色|续写).{0,12}(?:歌词|词|段|一句)|(?:写|创作)(?:一|这)?首歌|(?:主歌|副歌).{0,10}(?:改|短|长|温柔|力量)|(?:write|rewrite|change|edit|generate).{0,15}(?:lyrics|chorus|verse)|write.{0,10}song");
@@ -73,6 +75,7 @@ public final class AgentChatPolicy {
             "get_music_settings","music_settings_catalog","preview_music_settings","get_playback_lyrics","list_section_edits","section_context","search_memory","video_capabilities","list_music_videos","get_music_video","download_music_video","get_artist_profile","get_artist_release","get_quick_creation","get_creative_direction","get_lyrics_request","list_shared_downloads","preview_music_video");
     private static String surface(String text) {
         if(text==null)return "";
+        text=AgentLyricInput.parse(text).instruction();
         // Quoted commands are data. A quoted song title can still follow an explicit verb.
         return text.replaceAll("“[^”]*”|‘[^’]*’|「[^」]*」|\"[^\"]*\"|'[^']*'", " ");
     }

@@ -5,6 +5,14 @@ import java.util.*;
 import static org.mockito.Mockito.*;
 import static org.junit.jupiter.api.Assertions.*;
 class AgentVideoActionsTest {
+ @Test void previewWithoutResolutionShowsAllPricesAndDoesNotSubmit(){
+  var service=mock(MusicVideoService.class);when(service.available()).thenReturn(true);
+  when(service.prepare(anyString(),anyString(),anyString(),any())).thenAnswer(c->c.getArgument(3));
+  var actions=new AgentVideoActions(service,mock(ConversationService.class));
+  var result=actions.execute("o","c","preview_music_video",Map.of("workId","w","assetId","a","title","歌","durationMillis",30000L,"shots",List.of(Map.of("prompt","故事开场","seconds",30,"imageSeconds",10,"imageId","img"))),"先预览","k",null);
+  assertTrue(result.reply().contains("尚未选择分辨率"));assertTrue(result.reply().contains("720P 40 积分"));assertTrue(result.reply().contains("1080P 60 积分"));
+  verify(service,never()).create(anyString(),anyString(),anyString(),anyString(),any());
+ }
  @Test void confirmationFreezesStoryboardAndPriceAndRejectsChangedQuote(){
   var service=mock(MusicVideoService.class);when(service.available()).thenReturn(true);var plan=new MusicVideoService.Plan("旅行","16:9","720P",5000,List.of(new MusicVideoService.Shot("海边旅人",5)));when(service.prepare(anyString(),anyString(),anyString(),any())).thenReturn(plan);
   var actions=new AgentVideoActions(service,mock(ConversationService.class));
