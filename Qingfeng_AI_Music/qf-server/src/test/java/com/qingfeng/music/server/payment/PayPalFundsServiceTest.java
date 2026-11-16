@@ -55,6 +55,112 @@ class PayPalFundsServiceTest {
     private void refund(){facts.capture.put("status","PARTIALLY_REFUNDED");facts.add(PayPalFundsProofTest.row("REFUND1","T1107","-1.98","S","CAPTURE1"));
         when(gateway.retrieveRefund("REFUND1")).thenAnswer(c->{outsideTransaction();return PayPalFundsProofTest.node(Map.of("id","REFUND1","status","COMPLETED","amount",PayPalFundsProofTest.money("1.98"),"supplementary_data",Map.of("related_ids",Map.of("capture_id","CAPTURE1"))));});}
 
+
+    private void transientFencedNewOrderCompletionRecovery(RuntimeException failure){
+        db.execute("CREATE TABLE p0_credit_writer_policy(id INT PRIMARY KEY,protocol INT)");db.update("INSERT INTO p0_credit_writer_policy VALUES(1,3)");
+        db.execute("CREATE TABLE p0_credit_cutover_state(id INT PRIMARY KEY,status VARCHAR(24),activated_at TIMESTAMP(6))");
+        db.update("INSERT INTO p0_credit_cutover_state VALUES(1,'ACTIVE',?)",java.sql.Timestamp.from(java.time.Instant.now().minusSeconds(60)));
+        db.update("UPDATE payment_order SET status='PENDING' WHERE id=?",order);ReflectionTestUtils.setField(service,"legacyOrdersReadOnly",true);
+        var paid=new PayPalCheckoutGateway.Snapshot("REMOTE1",order,"COMPLETED","MERCHANT123","CAPTURE1","COMPLETED",new java.math.BigDecimal("9.90"),"USD");
+        when(gateway.retrieve("REMOTE1")).thenThrow(failure).thenReturn(paid);
+        var d=event("PAYMENT.CAPTURE.COMPLETED","CAPTURE1");assertTrue(service.processNextEvent());verify(inbox).retry(d);verify(inbox,never()).markManual(any(),anyString());
+        assertEquals("PENDING",db.queryForObject("SELECT status FROM payment_order WHERE id=?",String.class,order));verify(ledger,never()).credit(anyString(),anyLong(),anyString());
+        assertTrue(service.processNextEvent());verify(inbox).completeOwned(eq(d),eq(owner),any());
+        verify(ledger,times(1)).credit(owner,100,"payment:"+order);verify(ledger,times(1)).bindPayment("PAYPAL","MERCHANT123","sandbox",owner,order,"CAPTURE1","USD");
+        assertEquals("PAID",db.queryForObject("SELECT status FROM payment_order WHERE id=?",String.class,order));
+        verify(gateway,never()).capture(anyString(),anyString());
+    }
+    @Test void fencedNewOrderWithLegacyBoundaryRetriesProvider503BeforeAnyCredit(){transientFencedNewOrderCompletionRecovery(new PayPalCheckoutGateway.ProviderHttpException(503));}
+    @Test void fencedNewOrderWithLegacyBoundaryRetriesTransportFailureBeforeAnyCredit(){transientFencedNewOrderCompletionRecovery(new IllegalStateException("synthetic unavailable transport"));}
+
+
+    /** Real scoped inbox/transactions and authoritative proof routing; the ledger boundary remains a mock.
+     * This verifies detection/queueing of distinct refund facts, not a replacement for InnoDB balance acceptance. */
+    @Test void aSecondReportedPartialRefundWithUnchangedCaptureCreatesOneNewObservationAndSameProofCannotReopenReviewedCase(){
+        db.execute("ALTER TABLE payment_order ADD reconcile_after TIMESTAMP(6)");
+        assertEquals(0,db.queryForObject("SELECT COUNT(*) FROM p0_credit_refund",Long.class));
+        db.execute("DROP TABLE p0_credit_refund");
+        db.execute("CREATE TABLE p0_credit_refund(provider VARCHAR(24),merchant VARCHAR(128),environment VARCHAR(16),external_id VARCHAR(128),owner_id VARCHAR(36),order_id VARCHAR(36),capture_id VARCHAR(128),amount_minor BIGINT,currency VARCHAR(3),PRIMARY KEY(provider,merchant,environment,external_id))");
+        db.execute("CREATE TABLE payment_webhook_inbox(provider VARCHAR(24),merchant_scope VARCHAR(128),env_scope VARCHAR(16),event_id VARCHAR(128),event_type VARCHAR(96),payload VARCHAR(30000),payload_hash VARCHAR(64),status VARCHAR(24),attempts INT,next_attempt_at TIMESTAMP,created_at TIMESTAMP,updated_at TIMESTAMP,lease_token VARCHAR(36),lease_until TIMESTAMP,last_error VARCHAR(128),PRIMARY KEY(provider,merchant_scope,env_scope,event_id))");
+        db.execute("CREATE TABLE payment_inbox_attempt(id VARCHAR(36) PRIMARY KEY,provider VARCHAR(24),merchant_scope VARCHAR(128),env_scope VARCHAR(16),event_id VARCHAR(128),attempt INT,result VARCHAR(24),evidence_id VARCHAR(512),created_at TIMESTAMP)");
+        db.execute("CREATE TABLE payment_inbox_review(id VARCHAR(36) PRIMARY KEY,provider VARCHAR(24),merchant_scope VARCHAR(128),env_scope VARCHAR(16),event_id VARCHAR(128),reviewer VARCHAR(128),reason VARCHAR(1000),action VARCHAR(24),created_at TIMESTAMP)");
+        inbox=new PaymentInbox(db,tx);service.infrastructure(inbox,risks);
+        // Record only the production method's identity/amount arguments, without reimplementing credit arithmetic.
+        doAnswer(call->{
+            assertTrue(TransactionSynchronizationManager.isActualTransactionActive());
+            var expected=Map.<String,Object>of("provider",call.getArgument(0),"merchant",call.getArgument(1),"environment",call.getArgument(2),"external_id",call.getArgument(3),"owner_id",call.getArgument(4),"order_id",call.getArgument(5),"capture_id",call.getArgument(6),"amount_minor",((Number)call.getArgument(7)).longValue(),"currency",call.getArgument(8));
+            try{db.update("INSERT INTO p0_credit_refund VALUES(?,?,?,?,?,?,?,?,?)",call.getArgument(0),call.getArgument(1),call.getArgument(2),call.getArgument(3),call.getArgument(4),call.getArgument(5),call.getArgument(6),call.getArgument(7),call.getArgument(8));}
+            catch(org.springframework.dao.DuplicateKeyException duplicate){assertEquals(expected,db.queryForMap("SELECT * FROM p0_credit_refund WHERE provider=? AND merchant=? AND environment=? AND external_id=?",call.getArgument(0),call.getArgument(1),call.getArgument(2),call.getArgument(3)));}
+            return null;
+        }).when(ledger).paymentRefund(anyString(),anyString(),anyString(),anyString(),anyString(),anyString(),anyString(),anyLong(),anyString());
+        doAnswer(call->{assertTrue(TransactionSynchronizationManager.isActualTransactionActive());db.update("UPDATE p0_credit_batch SET status='ACTIVE' WHERE reference=?","payment:"+order);return null;})
+            .when(ledger).releasePaymentReview(anyString(),anyString(),anyString(),anyString(),anyString(),anyString(),anyString(),anyLong(),anyLong(),anyMap(),anyString());
+        facts.noDisputes();refund();var risk=review().entrySet().iterator().next();
+        var capture=facts.capture.deepCopy();
+        service.reconcileOrders();assertEquals(1,db.queryForObject("SELECT COUNT(*) FROM payment_webhook_inbox",Long.class));
+        assertTrue(service.processNextEvent());assertEquals(1,db.queryForObject("SELECT COUNT(*) FROM payment_webhook_inbox WHERE status='DONE'",Long.class));
+        assertEquals(198,db.queryForObject("SELECT SUM(amount_minor) FROM p0_credit_refund WHERE order_id=?",Long.class,order));
+        verify(ledger).paymentRefund("PAYPAL","MERCHANT123","sandbox","REFUND1",owner,order,"CAPTURE1",198,"USD");
+        risks.resolveCase(risk.getKey(),risk.getValue(),"RELEASE","offline-reviewer","Synthetic reporting and already applied refund were independently checked");
+        var humanReviewed=db.queryForMap("SELECT * FROM payment_risk_case WHERE id=?",risk.getKey());
+        db.update("UPDATE payment_order SET reconcile_after=TIMESTAMPADD(SECOND,-1,CURRENT_TIMESTAMP) WHERE id=?",order);
+        service.reconcileOrders();assertFalse(service.processNextEvent());
+        assertEquals(1,db.queryForObject("SELECT COUNT(*) FROM payment_webhook_inbox",Long.class));
+        assertEquals(humanReviewed,db.queryForMap("SELECT * FROM payment_risk_case WHERE id=?",risk.getKey()),"Unchanged funds must not reopen or overwrite the human decision");
+        assertEquals(1,db.queryForObject("SELECT COUNT(*) FROM p0_credit_refund",Long.class));
+        // A second successful refund can be visible in Reporting without changing capture status/update_time.
+        facts.add(PayPalFundsProofTest.row("REFUND2","T1107","-0.99","S","CAPTURE1"));
+        when(gateway.retrieveRefund("REFUND2")).thenAnswer(call->{outsideTransaction();return PayPalFundsProofTest.node(Map.of("id","REFUND2","status","COMPLETED","amount",PayPalFundsProofTest.money("0.99"),"supplementary_data",Map.of("related_ids",Map.of("capture_id","CAPTURE1"))));});
+        assertEquals(capture,facts.capture);assertEquals("PARTIALLY_REFUNDED",facts.capture.path("status").asString());
+        db.update("UPDATE payment_order SET reconcile_after=TIMESTAMPADD(SECOND,-1,CURRENT_TIMESTAMP) WHERE id=?",order);
+        service.reconcileOrders();assertEquals(2,db.queryForObject("SELECT COUNT(*) FROM payment_webhook_inbox",Long.class),"New native refund facts must create a different observation even when capture bytes are unchanged");
+        assertTrue(service.processNextEvent());assertEquals(2,db.queryForObject("SELECT COUNT(*) FROM payment_webhook_inbox WHERE status='DONE'",Long.class));
+        assertEquals(2,db.queryForObject("SELECT COUNT(*) FROM p0_credit_refund",Long.class));assertEquals(297,db.queryForObject("SELECT SUM(amount_minor) FROM p0_credit_refund WHERE order_id=?",Long.class,order));
+        verify(ledger,times(1)).paymentRefund("PAYPAL","MERCHANT123","sandbox","REFUND2",owner,order,"CAPTURE1",99,"USD");
+        var reconciled=db.queryForMap("SELECT * FROM payment_risk_case WHERE id=?",risk.getKey());assertEquals("CLOSED",reconciled.get("status"));
+        var refundRows=db.queryForList("SELECT * FROM p0_credit_refund ORDER BY external_id");
+        // Moving a report watermark is not a new money fact and must not produce another event.
+        facts.report.put("last_refreshed_datetime","2026-11-13T00:01:00Z");
+        db.update("UPDATE payment_order SET reconcile_after=TIMESTAMPADD(SECOND,-1,CURRENT_TIMESTAMP) WHERE id=?",order);
+        service.reconcileOrders();assertFalse(service.processNextEvent());assertEquals(2,db.queryForObject("SELECT COUNT(*) FROM payment_webhook_inbox",Long.class));
+        assertEquals(refundRows,db.queryForList("SELECT * FROM p0_credit_refund ORDER BY external_id"));
+        assertEquals(reconciled,db.queryForMap("SELECT * FROM payment_risk_case WHERE id=?",risk.getKey()));assertEquals(capture,facts.capture);
+        for(String payload:db.query("SELECT payload FROM payment_webhook_inbox WHERE status='DONE'",(rs,n)->rs.getString(1))){
+            var observation=PayPalFundsProofTest.JSON.readTree(payload);
+            assertEquals("PARTIALLY_REFUNDED",observation.path("captureStatus").asString());assertEquals("FUNDS_PROOF",observation.path("observationKind").asString());
+        }
+        // Losing Reporting access after successful proof processing is not a new funds fact.
+        // A fresh fallback identity must not reopen the completed, manually reviewed observation.
+        doThrow(new PayPalReportingGateway.Unavailable("REPORTING_PERMISSION_REQUIRED")).when(gateway).financialReport(any(),any());
+        db.update("UPDATE payment_order SET reconcile_after=TIMESTAMPADD(SECOND,-1,CURRENT_TIMESTAMP) WHERE id=?",order);
+        service.reconcileOrders();assertEquals(2,db.queryForObject("SELECT COUNT(*) FROM payment_webhook_inbox",Long.class),"Reporting degradation must not create a new status-only observation after an identical proof observation completed");
+        assertFalse(service.processNextEvent());assertEquals(reconciled,db.queryForMap("SELECT * FROM payment_risk_case WHERE id=?",risk.getKey()));
+        verify(ledger,never()).holdPaymentForReview(anyString(),anyString(),anyString(),anyString(),anyString(),anyString(),anyString(),anyString());
+        assertEquals(refundRows,db.queryForList("SELECT * FROM p0_credit_refund ORDER BY external_id"));
+        // The prior PARTIAL proof does not suppress a genuinely different full-refund status.
+        // Incomplete funds proof keeps the new risk pending without manufacturing an adjustment.
+        facts.capture.put("status","REFUNDED");
+        db.update("UPDATE payment_order SET reconcile_after=TIMESTAMPADD(SECOND,-1,CURRENT_TIMESTAMP) WHERE id=?",order);
+        service.reconcileOrders();assertEquals(3,db.queryForObject("SELECT COUNT(*) FROM payment_webhook_inbox",Long.class));
+        assertTrue(service.processNextEvent());assertEquals("REVIEW",db.queryForObject("SELECT status FROM payment_risk_case WHERE id=?",String.class,risk.getKey()));
+        var fullRefundRisk=db.queryForMap("SELECT * FROM payment_risk_case WHERE id=?",risk.getKey());
+        assertNotEquals(reconciled.get("last_event_id"),fullRefundRisk.get("last_event_id"));
+        assertEquals(PayPalFundsProofTest.JSON.writeValueAsString(new TreeMap<>(Map.of("resourceId","CAPTURE1","orderId","REMOTE1"))),db.queryForObject("SELECT payload FROM payment_webhook_inbox WHERE event_id=?",String.class,fullRefundRisk.get("last_event_id")),"Old status-only pointer payload bytes must remain compatible");
+        assertEquals(2,db.queryForObject("SELECT COUNT(*) FROM payment_webhook_inbox WHERE status='DONE'",Long.class));
+        verify(ledger,times(1)).holdPaymentForReview("PAYPAL","MERCHANT123","sandbox",owner,order,"CAPTURE1","USD",(String)fullRefundRisk.get("last_event_id"));
+        assertEquals(refundRows,db.queryForList("SELECT * FROM p0_credit_refund ORDER BY external_id"));
+        // REVERSED remains a separate status risk, independent of any earlier funds proof.
+        facts.capture.put("status","REVERSED");
+        db.update("UPDATE payment_order SET reconcile_after=TIMESTAMPADD(SECOND,-1,CURRENT_TIMESTAMP) WHERE id=?",order);
+        service.reconcileOrders();assertEquals(4,db.queryForObject("SELECT COUNT(*) FROM payment_webhook_inbox",Long.class));
+        assertTrue(service.processNextEvent());var reversedRisk=db.queryForMap("SELECT * FROM payment_risk_case WHERE id=?",risk.getKey());
+        assertEquals("REVIEW",reversedRisk.get("status"));assertNotEquals(fullRefundRisk.get("last_event_id"),reversedRisk.get("last_event_id"));
+        verify(ledger,times(1)).holdPaymentForReview("PAYPAL","MERCHANT123","sandbox",owner,order,"CAPTURE1","USD",(String)reversedRisk.get("last_event_id"));
+        assertEquals(refundRows,db.queryForList("SELECT * FROM p0_credit_refund ORDER BY external_id"));
+        assertEquals(2,db.queryForObject("SELECT COUNT(*) FROM payment_webhook_inbox WHERE status='DONE'",Long.class));
+        verify(gateway,never()).capture(anyString(),anyString());
+    }
+
     @Test void missingReportingPermissionLeavesLossPendingAndNeverPermanentlyDebitsOrClearsReview(){
         doThrow(new PayPalReportingGateway.Unavailable("REPORTING_PERMISSION_REQUIRED")).when(gateway).financialReport(any(),any());var d=event("CUSTOMER.DISPUTE.RESOLVED","PP-D-1");assertTrue(service.processNextEvent());
         verify(inbox).waitForProvider(eq(d),eq(owner),any(),eq("paypal-funds-reporting_permission_required"));
