@@ -24,6 +24,10 @@ public final class CreditHistoricalCutover {
     private static final String OPTIONAL_V46 = "V46__agent_chat_allowance.sql";
     private static final String OPTIONAL_V46_SHA256 = "8ce991cea50af971ca6d748c1a37b304a8ee11d7969f06dd455dc16629638f86";
     private static final int OPTIONAL_V46_CHECKSUM = -26150424;
+    // Classpath compatibility for main only; the release gate does not approve V47 deployment.
+    private static final String OPTIONAL_V47 = "V47__music_video_projects.sql";
+    private static final String OPTIONAL_V47_SHA256 = "b4a25044d77906e891d56632f037a68a1ba5dad2073a129188b11b8bcba8a08a";
+    private static final int OPTIONAL_V47_CHECKSUM = -48314744;
     private static final Set<String> EMPTY_FINANCIAL_TABLES = Set.of(
         "p0_credit_allocation", "p0_credit_payment_binding", "p0_credit_refund", "p0_credit_dispute",
         "p0_credit_return", "p0_credit_financial_audit", "p0_credit_recovery", "p0_credit_recovery_audit",
@@ -450,7 +454,7 @@ public final class CreditHistoricalCutover {
             for (var resource : resources) {
                 String name = Objects.requireNonNull(resource.getFilename());
                 int version = Integer.parseInt(name.substring(1, name.indexOf("__")));
-                require(version >= 1 && version <= 46, "HISTORY_UNAPPROVED_RESOURCE_EXTENSION");
+                require(version >= 1 && version <= 47, "HISTORY_UNAPPROVED_RESOURCE_EXTENSION");
                 CRC32 crc = new CRC32();
                 String text;
                 try (var input = resource.getInputStream()) { text = new String(input.readAllBytes(), StandardCharsets.UTF_8); }
@@ -462,12 +466,19 @@ public final class CreditHistoricalCutover {
                             && OPTIONAL_V46_SHA256.equals(digest(normalized.getBytes(StandardCharsets.UTF_8))),
                             "HISTORY_UNAPPROVED_RESOURCE_EXTENSION");
                 }
+                if (version == 47) {
+                    String normalized = text.replace("\r\n", "\n").replace('\r', '\n');
+                    require(OPTIONAL_V47.equals(name) && (int) crc.getValue() == OPTIONAL_V47_CHECKSUM
+                            && OPTIONAL_V47_SHA256.equals(digest(normalized.getBytes(StandardCharsets.UTF_8))),
+                            "HISTORY_UNAPPROVED_RESOURCE_EXTENSION");
+                }
                 require(expected.put(version, new History(version, name, (int) crc.getValue())) == null, "DUPLICATE_CLASSPATH_MIGRATION");
             }
-            // A V46-compatible artifact must not widen the historical cutover source contract.
+            // Known later resources must form an exact prefix, not widen the historical source contract.
             for (int version = 1; version <= 45; version++)
                 require(expected.containsKey(version), "HISTORY_RESOURCE_CHAIN_INCOMPLETE");
-            require(expected.size() == 45 || expected.size() == 46, "HISTORY_RESOURCE_CHAIN_INCOMPLETE");
+            require(expected.size() == 45 || expected.size() == 46 || expected.size() == 47, "HISTORY_RESOURCE_CHAIN_INCOMPLETE");
+            require(!expected.containsKey(47) || expected.containsKey(46), "HISTORY_RESOURCE_CHAIN_INCOMPLETE");
             require(actual.size() == 44 || actual.size() == 45, "HISTORY_CHAIN_LENGTH_MISMATCH");
             for (int i = 0; i < actual.size(); i++)
                 require(actual.get(i).version() == i + 1 && actual.get(i).equals(expected.get(i + 1)), "HISTORY_SCRIPT_OR_CHECKSUM_MISMATCH");
