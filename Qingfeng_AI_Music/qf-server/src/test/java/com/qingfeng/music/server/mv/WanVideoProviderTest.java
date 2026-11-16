@@ -18,7 +18,8 @@ class WanVideoProviderTest {
  private WanVideoProvider provider(HttpClient client){return new WanVideoProvider("https://video.example/api/v1/","test-not-secret","wan3.0-video",client);}
  @SuppressWarnings("unchecked") @Test void submitsNativePayloadAndPollsNestedStatus()throws Exception{
   var client=mock(HttpClient.class);
-  when(client.send(any(HttpRequest.class),any(HttpResponse.BodyHandler.class))).thenReturn(response("{\"output\":{\"task_id\":\"task-123\"}}"),response("{\"output\":{\"task_status\":\"SUCCEEDED\"}}"));
+  var submitted=response("{\"output\":{\"task_id\":\"task-123\"}}");var poll=response("{\"output\":{\"task_status\":\"SUCCEEDED\"}}");
+  when(client.send(any(HttpRequest.class),any(HttpResponse.BodyHandler.class))).thenReturn(submitted,poll);
   var p=provider(client);assertEquals("task-123",p.submit("海边旅人",5,"16:9","request"));assertEquals("succeeded",p.status("task-123"));
   var requests=org.mockito.ArgumentCaptor.forClass(HttpRequest.class);verify(client,times(2)).send(requests.capture(),any(HttpResponse.BodyHandler.class));
   var post=requests.getAllValues().get(0);assertEquals("https://video.example/api/v1/services/aigc/video-generation/video-synthesis",post.uri().toString());assertEquals("enable",post.headers().firstValue("X-DashScope-Async").orElseThrow());
@@ -33,7 +34,8 @@ class WanVideoProviderTest {
  }
  @SuppressWarnings("unchecked") @Test void downloadsSignedOssUrlWithoutCredential()throws Exception{
   var client=mock(HttpClient.class);HttpResponse<InputStream> content=mock(HttpResponse.class);when(content.statusCode()).thenReturn(200);when(content.body()).thenReturn(new ByteArrayInputStream(new byte[1024]));
-  when(client.send(any(HttpRequest.class),any(HttpResponse.BodyHandler.class))).thenReturn(response("{\"output\":{\"task_status\":\"SUCCEEDED\",\"video_url\":\"https://dashscope-result-bj.oss-cn-beijing.aliyuncs.com/video.mp4?signature=test\"}}"),content);
+  var ready=response("{\"output\":{\"task_status\":\"SUCCEEDED\",\"video_url\":\"https://dashscope-result-bj.oss-cn-beijing.aliyuncs.com/video.mp4?signature=test\"}}");
+  when(client.send(any(HttpRequest.class),any(HttpResponse.BodyHandler.class))).thenReturn(ready,content);
   Path file=temp.resolve("shot.mp4");provider(client).download("task-123",file);assertEquals(1024,Files.size(file));
   var requests=org.mockito.ArgumentCaptor.forClass(HttpRequest.class);verify(client,times(2)).send(requests.capture(),any(HttpResponse.BodyHandler.class));assertTrue(requests.getAllValues().get(1).headers().firstValue("Authorization").isEmpty());
  }
@@ -46,7 +48,7 @@ class WanVideoProviderTest {
   var client=mock(HttpClient.class);assertThrows(VideoProvider.Failure.class,()->provider(client).status("../escape"));verifyNoInteractions(client);
  }
  @SuppressWarnings("unchecked") @Test void missingTaskIdIsUncertainAndIncompleteResultCannotDownload()throws Exception{
-  var client=mock(HttpClient.class);when(client.send(any(HttpRequest.class),any(HttpResponse.BodyHandler.class))).thenReturn(response("{}"),response("{\"output\":{\"task_status\":\"RUNNING\"}}"));
+  var client=mock(HttpClient.class);var missing=response("{}");var running=response("{\"output\":{\"task_status\":\"RUNNING\"}}");when(client.send(any(HttpRequest.class),any(HttpResponse.BodyHandler.class))).thenReturn(missing,running);
   var p=provider(client);assertTrue(assertThrows(VideoProvider.Failure.class,()->p.submit("x",5,"16:9","id")).uncertain);assertThrows(VideoProvider.Failure.class,()->p.download("task-123",temp.resolve("shot.mp4")));assertFalse(Files.exists(temp.resolve("shot.mp4")));
  }
 }
