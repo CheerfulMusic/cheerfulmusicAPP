@@ -25,6 +25,7 @@ public class NativeAuthController {
     private final ObjectProvider<LogtoNativeClient> clients;
     private final IdentityApi identity;
     private final LogtoIdentityService identities;
+    private final SmsDestinationPolicy destinations;
     private final boolean emailEnabled,phoneEnabled,phoneInternationalEnabled;
     private final String issuer;
     private final Map<String,Bucket> limits=new HashMap<>();
@@ -46,20 +47,21 @@ public class NativeAuthController {
         Failure(int status,String code,String message){super(message);this.status=status;this.code=code;}
     }
 
-    public NativeAuthController(ObjectProvider<LogtoNativeClient> clients,IdentityApi identity,LogtoIdentityService identities,
+    public NativeAuthController(ObjectProvider<LogtoNativeClient> clients,IdentityApi identity,LogtoIdentityService identities,SmsDestinationPolicy destinations,
         @Value("${qingfeng.auth.logto.email-enabled:false}")boolean emailEnabled,
         @Value("${qingfeng.auth.logto.phone-enabled:false}")boolean phoneEnabled,
         @Value("${qingfeng.auth.logto.phone-international-enabled:false}")boolean phoneInternationalEnabled,
         @Value("${qingfeng.auth.logto.issuer:}")String issuer){
-        this.clients=clients;this.identity=identity;this.identities=identities;this.emailEnabled=emailEnabled;this.phoneEnabled=phoneEnabled;this.phoneInternationalEnabled=phoneInternationalEnabled;this.issuer=issuer;
+        this.clients=clients;this.identity=identity;this.identities=identities;this.destinations=destinations;this.emailEnabled=emailEnabled;this.phoneEnabled=phoneEnabled;this.phoneInternationalEnabled=phoneInternationalEnabled;this.issuer=issuer;
     }
 
     @GetMapping("/status") public ResponseEntity<Map<String,Object>> status(HttpServletRequest request){
         boolean password=false,email=false,phone=false,reset=false;
         var client=clients.getIfAvailable();
         if(client!=null)try{var c=client.capabilities();password=emailEnabled&&c.emailPassword();email=emailEnabled&&c.emailCode();phone=phoneEnabled&&c.phone();reset=emailEnabled&&c.reset();}catch(RuntimeException error){throw unavailable();}
+        List<String> allowedRegions=destinations.availableRegions(phone,phoneInternationalEnabled);
         Map<String,Object> result=new LinkedHashMap<>();
-        result.put("emailPasswordEnabled",password);result.put("emailCodeEnabled",email);result.put("phoneEnabled",phone);result.put("phoneInternationalEnabled",phoneInternationalEnabled);result.put("passwordResetEnabled",reset);
+        result.put("emailPasswordEnabled",password);result.put("emailCodeEnabled",email);result.put("phoneEnabled",!allowedRegions.isEmpty());result.put("phoneInternationalEnabled",allowedRegions.stream().anyMatch(region->!"CN".equals(region)));result.put("phoneAllowedRegions",allowedRegions);result.put("passwordResetEnabled",reset);
         var profile=identity.resolve(CreatorSessionFilter.token(request)).flatMap(identities::profile);
         result.put("authenticated",profile.isPresent());
         profile.ifPresent(p->{if(p.email()!=null)result.put("email",p.email());if(p.phoneMasked()!=null)result.put("phoneMasked",p.phoneMasked());if(p.name()!=null)result.put("name",p.name());});
@@ -85,7 +87,16 @@ public class NativeAuthController {
         if(!Set.of("email","phone").contains(Objects.toString(channel,""))||!Set.of("register","reset","sign-in").contains(Objects.toString(purpose,""))
             ||("phone".equals(channel)&&!"sign-in".equals(purpose)))throw invalid();
         String value="email".equals(channel)?email(input.identifier):phone(input.identifier);
-        if("phone".equals(channel)&&!phoneInternationalEnabled&&!value.startsWith("+86"))throw new Failure(400,"LOGIN_REGION_UNAVAILABLE","当前暂不支持向该地区发送验证码");
+        if("phone".equals(channel)){
+            String digits=value.substring(1);
+            String region=destinations.region(digits).orElse(null);
+            if(region==null){
+                if(destinations.isValidMobile(digits))throw new Failure(400,"LOGIN_REGION_UNAVAILABLE","当前暂不支持向该地区发送验证码");
+                throw invalid();
+            }
+            if(!destinations.availableRegions(phoneEnabled,phoneInternationalEnabled).contains(region))
+                throw new Failure(400,"LOGIN_REGION_UNAVAILABLE","当前暂不支持向该地区发送验证码");
+        }
         String creator=boundCreator(request);rate(request,value,true);
         var client=client();var caps=client.capabilities();
         if("email".equals(channel)?!emailEnabled||!caps.emailCode()||("reset".equals(purpose)&&!caps.reset()):!phoneEnabled||!caps.phone())throw unavailable();

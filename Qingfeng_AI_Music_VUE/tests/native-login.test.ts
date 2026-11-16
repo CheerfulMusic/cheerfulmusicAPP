@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ApiError, resetCreatorSession, retryAfterSeconds } from '../src/shared/http/api-client'
 import { readNativeLoginStatus, registerWithEmail, resetEmailPassword, sendLoginCode, signInWithEmail, signInWithEmailCode, signInWithPhone } from '../src/modules/identity/api/native-login'
 import { loginCodeKey, nativeLoginError, resendSeconds } from '../src/modules/identity/model/native-login'
-import { callingCode, countryOptions, internationalPhone, phoneCountries } from '../src/modules/identity/model/international-phone'
+import { callingCode, countryOptions, internationalPhone, internationalSmsPhone, phoneCountries, smsRegionAvailable } from '../src/modules/identity/model/international-phone'
 
 afterEach(() => { vi.unstubAllGlobals(); resetCreatorSession() })
 const reply = (body: unknown) => new Response(JSON.stringify(body), { status: 200 })
@@ -40,11 +40,16 @@ describe('same-site sign-in', () => {
     await expect(sendLoginCode('phone','+8613800123456','sign-in')).rejects.toMatchObject({code:'INVALID_RESPONSE'})
   })
   it('requires explicit capabilities, including reset and international SMS support', async () => {
-    const status = {emailPasswordEnabled:false,emailCodeEnabled:true,passwordResetEnabled:false,phoneEnabled:true,phoneInternationalEnabled:false,authenticated:false}
+    const status = {emailPasswordEnabled:false,emailCodeEnabled:true,passwordResetEnabled:false,phoneEnabled:true,phoneInternationalEnabled:true,phoneAllowedRegions:['CN','GB','JE'],authenticated:false}
     mockServer(status)
     await expect(readNativeLoginStatus()).resolves.toEqual(status)
     const {phoneInternationalEnabled:_,...missingCapability} = status
     mockServer(missingCapability)
+    await expect(readNativeLoginStatus()).rejects.toMatchObject({code:'INVALID_RESPONSE'})
+    const {phoneAllowedRegions:__,...legacyStatus} = status
+    mockServer(legacyStatus)
+    await expect(readNativeLoginStatus()).resolves.toEqual(legacyStatus)
+    mockServer({...status,phoneAllowedRegions:['CN','invalid']})
     await expect(readNativeLoginStatus()).rejects.toMatchObject({code:'INVALID_RESPONSE'})
   })
 })
@@ -60,7 +65,7 @@ describe('international phone input', () => {
   })
   it.each([
     ['CN','138 0012 3456','+8613800123456'],
-    ['GB','07911 123456','+447911123456'],
+    ['GB','07400 123456','+447400123456'],
     ['US','(213) 373-4253','+12133734253'],
     ['HK','5123 4567','+85251234567'],
     ['SG','8123 4567','+6581234567'],
@@ -73,6 +78,23 @@ describe('international phone input', () => {
   })
   it.each(['1234','call +44 7911 123456','+44 7911 123456 ext 2','+999123456789','+123456789012345678','13800123456<script>'])('rejects incomplete numbers and embedded text: %s', input => {
     expect(internationalPhone(input,'CN')).toBeUndefined()
+  })
+  it('uses the actual mobile region even when +44 is shared or an international prefix is pasted', () => {
+    expect(internationalSmsPhone('07400 123456','GB')).toEqual({number:'+447400123456',region:'GB'})
+    expect(internationalSmsPhone('07797 123456','GB')).toEqual({number:'+447797123456',region:'JE'})
+    expect(internationalSmsPhone('07911 123456','GB')).toEqual({number:'+447911123456',region:'GG'})
+    expect(internationalSmsPhone('+44 7797 123456','CN')).toEqual({number:'+447797123456',region:'JE'})
+    expect(internationalSmsPhone('(213) 373-4253','US')).toBeUndefined()
+  })
+  it('opens only server-listed regions and fails closed for international numbers on older servers', () => {
+    const allowed = ['CN','GB','JE']
+    expect(smsRegionAvailable(true,allowed,'GB')).toBe(true)
+    expect(smsRegionAvailable(true,allowed,'JE')).toBe(true)
+    expect(smsRegionAvailable(true,allowed,'GG')).toBe(false)
+    expect(smsRegionAvailable(true,allowed,'FR')).toBe(false)
+    expect(smsRegionAvailable(false,allowed,'GB')).toBe(false)
+    expect(smsRegionAvailable(true,undefined,'CN')).toBe(true)
+    expect(smsRegionAvailable(true,undefined,'GB')).toBe(false)
   })
 })
 

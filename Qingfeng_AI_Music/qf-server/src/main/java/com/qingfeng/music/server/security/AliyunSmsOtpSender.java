@@ -5,6 +5,7 @@ import com.aliyuncs.auth.SignatureVersion;
 import com.aliyuncs.http.*;
 import com.aliyuncs.profile.DefaultProfile;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import tools.jackson.databind.ObjectMapper;
 
@@ -15,11 +16,12 @@ public final class AliyunSmsOtpSender implements SmsOtpSender {
     private static final class Rejected extends RuntimeException {}
     private final DefaultAcsClient international, mainland;
     private final String senderId,channelId,signName,templateCode;
+    private final SmsDestinationPolicy destinations;
     private final ObjectMapper json=new ObjectMapper();
 
-    public AliyunSmsOtpSender(DefaultAcsClient international,DefaultAcsClient mainland,String senderId,String channelId,String signName,String templateCode){
-        this.international=international;this.mainland=mainland;this.senderId=senderId;this.channelId=channelId;this.signName=signName;this.templateCode=templateCode;
-        if(international!=null&&!(senderId.matches("[0-9]{1,15}")||senderId.matches("(?=.*[A-Za-z])[A-Za-z0-9]{1,11}")))throw new IllegalStateException("Invalid SMS sender configuration");
+    public AliyunSmsOtpSender(DefaultAcsClient international,DefaultAcsClient mainland,String senderId,String channelId,String signName,String templateCode,SmsDestinationPolicy destinations){
+        this.international=international;this.mainland=mainland;this.senderId=senderId;this.channelId=channelId;this.signName=signName;this.templateCode=templateCode;this.destinations=Objects.requireNonNull(destinations);
+        if(international!=null&&(senderId==null||!(senderId.matches("[0-9]{1,15}")||senderId.matches("(?=.*[A-Za-z])[A-Za-z0-9]{1,11}"))))throw new IllegalStateException("Invalid SMS sender configuration");
         if(!channelId.isEmpty()&&!channelId.matches("[0-9]{1,32}"))throw new IllegalStateException("Invalid SMS channel configuration");
         if(mainland!=null&&(signName.isBlank()||templateCode.isBlank()))throw new IllegalStateException("Incomplete mainland SMS configuration");
     }
@@ -32,6 +34,7 @@ public final class AliyunSmsOtpSender implements SmsOtpSender {
     }
     public void send(String digits,String code){
         if(!digits.matches("[1-9][0-9]{7,14}")||!code.matches("[0-9]{6}"))throw new IllegalArgumentException("Invalid OTP delivery");
+        if(!destinations.allows(digits))throw new IllegalArgumentException("SMS destination unavailable");
         boolean cn=digits.startsWith("86");
         DefaultAcsClient client=cn?mainland:international;
         if(client==null)throw new IllegalStateException("SMS delivery unavailable");
@@ -55,6 +58,8 @@ public final class AliyunSmsOtpSender implements SmsOtpSender {
             if(response.getHttpStatus()!=200||!"OK".equals(result.path(field).asText())||(cn&&result.has("Success")&&!result.path("Success").asBoolean())){
                 rejected(cn,result.path(field).asText());throw new Rejected();
             }
+            if(!cn)log.info("Aliyun Globe accepted OTP; delivery unconfirmed: messageId={}, requestId={}",
+                safeId(result.path("MessageId").asText()),safeId(result.path("RequestId").asText()));
         }catch(Rejected error){throw new IllegalStateException("SMS delivery unavailable");}
         catch(com.aliyuncs.exceptions.ClientException error){
             rejected(cn,error.getErrCode());throw new IllegalStateException("SMS delivery unavailable");
@@ -64,6 +69,7 @@ public final class AliyunSmsOtpSender implements SmsOtpSender {
         }
     }
     private static void rejected(boolean cn,String code){log.warn("OTP delivery rejected by {}: {}",cn?"Aliyun MAS":"Aliyun Globe",code!=null&&ERROR_CODES.contains(code)?code:"UNCLASSIFIED");}
+    private static String safeId(String value){return value!=null&&value.matches("[A-Za-z0-9_-]{1,128}")?value:"UNAVAILABLE";}
     private static void body(CommonRequest request,Map<String,String> values){values.forEach(request::putBodyParameter);}
     public void close(){if(international!=null)international.shutdown();if(mainland!=null)mainland.shutdown();}
 }
