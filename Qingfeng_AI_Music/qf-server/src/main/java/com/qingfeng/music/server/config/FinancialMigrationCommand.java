@@ -283,7 +283,7 @@ public final class FinancialMigrationCommand {
     }
 
     private static void verifyResources(SortedMap<Integer, SqlResource> resources) throws Exception {
-        require(resources.size() == 45, "FINANCIAL_MIGRATION_RESOURCE_CHAIN_INCOMPLETE");
+        // The V45 cutover seals V1–V45; later application migrations may be packaged too.
         var core = new StringBuilder();
         for (int version = 1; version <= 45; version++) {
             SqlResource sql = resources.get(version);
