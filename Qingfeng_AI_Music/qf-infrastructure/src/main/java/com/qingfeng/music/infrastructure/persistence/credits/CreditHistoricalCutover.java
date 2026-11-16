@@ -35,10 +35,18 @@ public final class CreditHistoricalCutover {
         "p0_stripe_dispute_proof", "p0_credit_native_identity");
     private final JdbcTemplate db;
     private final TransactionTemplate transactions;
+    private final String isolatedServerUuid;
+    private final String isolatedDataPath;
 
     public CreditHistoricalCutover(JdbcTemplate db, TransactionTemplate transactions) {
+        this(db, transactions, UUID.fromString("05c27d3c-dda3-11f1-aba0-84a938421519"), "r:/data/");
+    }
+
+    CreditHistoricalCutover(JdbcTemplate db, TransactionTemplate transactions, UUID isolatedServerUuid, String isolatedDataPath) {
         this.db = Objects.requireNonNull(db);
         this.transactions = Objects.requireNonNull(transactions);
+        this.isolatedServerUuid = Objects.requireNonNull(isolatedServerUuid).toString();
+        this.isolatedDataPath = Objects.requireNonNull(isolatedDataPath);
     }
 
     public record Identity(String engine, String version, String database, String serverUuid, int port) {}
@@ -431,10 +439,10 @@ public final class CreditHistoricalCutover {
         require(actual.equals(expected), "HISTORY_DATABASE_IDENTITY_CHANGED");
         if ("H2".equals(actual.engine())) return; // Explicitly labelled in Applied.engine, never MySQL acceptance.
         require("8.0.46".equals(actual.version()) && actual.port() == 23316
-                && "05c27d3c-dda3-11f1-aba0-84a938421519".equals(actual.serverUuid())
+                && isolatedServerUuid.equals(actual.serverUuid())
                 && actual.database().matches("p0_historical_cutover_20261113r[0-9]+"), "HISTORY_APPLY_NOT_ISOLATED");
         var location = db.queryForMap("SELECT @@datadir data_path,@@bind_address bind_address,CURRENT_ROLE() active_role");
-        require("r:/data/".equals(location.get("data_path").toString().replace('\\', '/').toLowerCase(Locale.ROOT))
+        require(isolatedDataPath.equals(location.get("data_path").toString().replace('\\', '/').toLowerCase(Locale.ROOT))
                 && "127.0.0.1".equals(location.get("bind_address")) && "NONE".equals(location.get("active_role")), "HISTORY_ISOLATION_NOT_PROVED");
         for (String grant : db.queryForList("SHOW GRANTS", String.class))
             require(grant.startsWith("GRANT USAGE ON *.*") || grant.contains(" ON `" + actual.database() + "`.* TO "), "HISTORY_ACCOUNT_HAS_EXTERNAL_PRIVILEGES");

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Offline build/artifact/startup gate. Never connects to production or approves releases."""
 import argparse
+import configparser
 import datetime
 import hashlib
 import io
@@ -332,6 +333,57 @@ def check_startup(workspace, manifest_path, jar):
     return {"artifact": "VERIFIED", "schemaEvidence": "PINNED", "networkAccess": "NOT_PERFORMED",
             "businessHealth": "UNKNOWN", "productionRelease": "NOT_AUTHORIZED"}
 
+LEGACY_FINANCIAL_UUID = "05c27d3c-dda3-11f1-aba0-84a938421519"
+LEGACY_COMPATIBILITY_UUID = "47427132-df4d-11f1-89e2-84a938421519"
+PRODUCTION_MYSQL_UUID = "f71f7437-d6a8-11f1-baa2-00163e1ce234"
+
+
+def local_cohort_instances(cache_root, instances):
+    """Anchor newly initialized fixture identities to the current repository cache."""
+    if not isinstance(instances, dict) or set(instances) != {"financial", "compatibility"}:
+        raise GateError("Invalid local cohort instances")
+    root = cache_root / "release-gate-cohorts" / "instances"
+    found = {}
+    for role, entry in instances.items():
+        if (not isinstance(entry, dict) or set(entry) != {"datadir", "uuid"}
+                or not all(isinstance(value, str) for value in entry.values())):
+            raise GateError("Invalid local cohort instance record")
+        identifier = entry["uuid"]
+        if (not re.fullmatch(r"[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}", identifier)
+                or identifier in {PRODUCTION_MYSQL_UUID, LEGACY_FINANCIAL_UUID, LEGACY_COMPATIBILITY_UUID}):
+            raise GateError("Invalid or reserved local cohort instance UUID")
+        data = Path(entry["datadir"])
+        try:
+            relative = data.relative_to(root)
+            if (len(relative.parts) != 2 or relative.name != role
+                    or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]*", relative.parts[0])):
+                raise GateError("Local cohort data directory outside its permitted cache")
+            identity_file = data / "auto.cnf"
+            for path in (root.parent, root, data.parent, data, identity_file):
+                if path.is_symlink() or getattr(path, "is_junction", lambda: False)():
+                    raise GateError("Local cohort cache must not contain linked instances")
+            if data.resolve(strict=True) != data or not data.is_dir() or not identity_file.is_file():
+                raise GateError("Local cohort data directory or identity file missing")
+            config = configparser.ConfigParser(interpolation=None)
+            with identity_file.open(encoding="utf-8-sig") as stream:
+                config.read_file(stream)
+            if config.get("auto", "server-uuid", fallback="") != identifier:
+                raise GateError("Local cohort UUID differs from initialized data directory")
+        except (ValueError, OSError, configparser.Error):
+            raise GateError("Could not verify local cohort data directory") from None
+        found[role] = (identifier, data)
+    financial, compatibility = found["financial"], found["compatibility"]
+    if financial[0] == compatibility[0] or financial[1].parent != compatibility[1].parent:
+        raise GateError("Local cohort requires two distinct instances in one private cohort directory")
+    return financial, compatibility
+
+
+def matches_cohort_instance(identity, expected, port):
+    identifier, datadir = expected
+    actual_datadir = Path(identity[1]) if isinstance(datadir, Path) else identity[1]
+    return (identity[0], actual_datadir, *identity[2:]) == (identifier, datadir, port, "127.0.0.1", "8.0.46")
+
+
 def load_isolated_backend_cohort(cache_root, manifest_path):
     """Read a fresh, private test cohort; never use inherited database settings."""
     if not manifest_path:
@@ -341,7 +393,13 @@ def load_isolated_backend_cohort(cache_root, manifest_path):
     if supplied.is_symlink() or supplied.resolve(strict=True).parent != cache_root / "release-gate-cohorts":
         raise GateError("Isolated backend cohort manifest outside private cache")
     manifest = load_json(supplied)
-    if set(manifest) != {"version", "revision", "carryForwardRevision", "compatibilityPort"} or manifest["version"] != 1:
+    fields = {"version", "revision", "carryForwardRevision", "compatibilityPort"}
+    if manifest.get("version") == 1 and set(manifest) == fields:
+        financial = (LEGACY_FINANCIAL_UUID, "R:\\data\\")
+        compatibility = (LEGACY_COMPATIBILITY_UUID, "R:\\v45-compatibility-r1\\")
+    elif manifest.get("version") == 2 and set(manifest) == fields | {"instances"}:
+        financial, compatibility = local_cohort_instances(cache_root, manifest["instances"])
+    else:
         raise GateError("Invalid isolated backend cohort manifest")
     revision, carry = manifest["revision"], manifest["carryForwardRevision"]
     if (not isinstance(revision, str) or not re.fullmatch(r"r[0-9]+", revision)
@@ -352,7 +410,7 @@ def load_isolated_backend_cohort(cache_root, manifest_path):
         import pymysql
     except ImportError:
         raise GateError("PyMySQL required to verify isolated backend cohort") from None
-    expected_uuid = "05c27d3c-dda3-11f1-aba0-84a938421519"
+    expected_uuid = financial[0]
     definitions = (
         ("migration", "payment-main-integration-20261112", "p0_integration_migration_20261112", "P0_INTEGRATION_MIGRATION_MYSQL_", revision),
         ("credits", "payment-main-integration-20261112", "p0_integrated_credits_20261112", "P0_INTEGRATED_CREDITS_MYSQL_", revision),
@@ -365,6 +423,8 @@ def load_isolated_backend_cohort(cache_root, manifest_path):
     )
     backend = {key: "57346" for key in ("QF_EXECUTION_MYSQL_TEST_PORT", "QF_QUICK_MYSQL_TEST_PORT", "QF_DOWNLOAD_MYSQL_TEST_PORT")}
     backend["SPRING_FLYWAY_TARGET"] = "44"
+    if manifest["version"] == 2:
+        backend["QF_ISOLATED_COHORT_DATADIR"] = str(financial[1])
     secrets = set()
     names = set()
     try:
@@ -373,7 +433,7 @@ def load_isolated_backend_cohort(cache_root, manifest_path):
             with connection.cursor() as cursor:
                 cursor.execute("SELECT @@server_uuid,@@datadir,@@port,@@bind_address,VERSION()")
                 identity = cursor.fetchone()
-                if identity != ("47427132-df4d-11f1-89e2-84a938421519", "R:\\v45-compatibility-r1\\", 57346, "127.0.0.1", "8.0.46"):
+                if not matches_cohort_instance(identity, compatibility, 57346):
                     raise GateError("Compatibility MySQL identity changed")
                 cursor.execute("SHOW DATABASES")
                 visible = {row[0] for row in cursor.fetchall()}
@@ -381,7 +441,7 @@ def load_isolated_backend_cohort(cache_root, manifest_path):
                     raise GateError("Compatibility MySQL has unexpected schema")
         for label, directory, prefix_name, env_prefix, selected_revision in definitions:
             path = cache_root / directory / (label + "-db-private-" + selected_revision + ".json")
-            if path.is_symlink() or not path.is_file():
+            if path.is_symlink() or not path.is_file() or path.resolve().parent != cache_root / directory:
                 raise GateError("Missing private isolated backend database configuration")
             cfg = load_json(path)
             name = prefix_name + selected_revision
@@ -398,7 +458,7 @@ def load_isolated_backend_cohort(cache_root, manifest_path):
                 with connection.cursor() as cursor:
                     cursor.execute("SELECT @@server_uuid,@@datadir,@@port,@@bind_address,VERSION(),DATABASE()")
                     identity = cursor.fetchone()
-                    if identity != (expected_uuid, "R:\\data\\", 23316, "127.0.0.1", "8.0.46", name):
+                    if not matches_cohort_instance(identity[:-1], financial, 23316) or identity[-1] != name:
                         raise GateError("Isolated backend database identity changed")
                     cursor.execute("SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE()")
                     if cursor.fetchone() != (0,):
@@ -408,8 +468,14 @@ def load_isolated_backend_cohort(cache_root, manifest_path):
                         raise GateError("Isolated backend database user can see another schema")
                     cursor.execute("SHOW GRANTS")
                     grants = [row[0] for row in cursor.fetchall()]
-                    if len(grants) != 2 or not any("GRANT USAGE ON *.*" in grant for grant in grants) or not any("ON `" + name + "`.*" in grant for grant in grants):
+                    if (len(grants) != 2 or not any(grant.startswith("GRANT USAGE ON *.* TO ") for grant in grants)
+                            or not any(grant.startswith("GRANT ALL PRIVILEGES ON `" + name + "`.* TO ") for grant in grants)
+                            or any("WITH GRANT OPTION" in grant for grant in grants)):
                         raise GateError("Isolated backend database grants exceed its own schema")
+                    if manifest["version"] == 2:
+                        cursor.execute("SELECT CURRENT_ROLE()")
+                        if cursor.fetchone() != ("NONE",):
+                            raise GateError("Isolated backend database user has an active role")
             url = "jdbc:mysql://127.0.0.1:23316/" + name + "?useSSL=false&allowPublicKeyRetrieval=true&connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true"
             backend.update({env_prefix + "URL": url, env_prefix + "DATABASE": name,
                             env_prefix + "USER": cfg["user"], env_prefix + "PASSWORD": cfg["password"],

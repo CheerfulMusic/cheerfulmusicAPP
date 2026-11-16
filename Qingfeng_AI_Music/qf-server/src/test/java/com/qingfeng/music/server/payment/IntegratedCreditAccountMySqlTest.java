@@ -1,5 +1,6 @@
 package com.qingfeng.music.server.payment;
 
+import com.qingfeng.music.infrastructure.persistence.credits.LocalFinancialCohort;
 import com.qingfeng.music.infrastructure.persistence.credits.JdbcCreditsLedger;
 import com.qingfeng.music.infrastructure.persistence.credits.JdbcFencedCreditsLedger;
 import com.qingfeng.music.credits.CreditsLedger;
@@ -62,9 +63,7 @@ class IntegratedCreditAccountMySqlTest {
         try(var connection=source.getConnection();var statement=connection.createStatement()){
             try(var identity=statement.executeQuery("SELECT VERSION(),@@server_uuid,@@datadir,@@port,@@bind_address,DATABASE(),CURRENT_ROLE(),@@transaction_isolation")){
                 assertTrue(identity.next());assertEquals("8.0.46",identity.getString(1));
-                assertEquals("05c27d3c-dda3-11f1-aba0-84a938421519",identity.getString(2));
-                assertEquals(required("P0_INTEGRATED_CREDITS_MYSQL_UUID"),identity.getString(2));
-                assertEquals("r:/data/",identity.getString(3).replace('\\','/').toLowerCase(Locale.ROOT));
+                LocalFinancialCohort.assertServer(required("P0_INTEGRATED_CREDITS_MYSQL_UUID"),identity.getString(2),identity.getString(3));
                 assertEquals(23316,identity.getInt(4));assertEquals("127.0.0.1",identity.getString(5));assertEquals(database,identity.getString(6));
                 assertEquals("NONE",identity.getString(7));assertEquals("REPEATABLE-READ",identity.getString(8));
             }

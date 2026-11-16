@@ -87,7 +87,7 @@ class GateTests(unittest.TestCase):
                 path=directory/(label+"-db-private-"+revision+".json");path.write_text(json.dumps(cfg));configs.append(path)
         return cache,manifest,configs
 
-    def fake_mysql(self, table_count=0, server_uuid="05c27d3c-dda3-11f1-aba0-84a938421519"):
+    def fake_mysql(self, table_count=0, server_uuid="05c27d3c-dda3-11f1-aba0-84a938421519", instances=None):
         class Connection:
             def __init__(self,parameters): self.parameters=parameters
             def __enter__(self): return self
@@ -100,8 +100,15 @@ class GateTests(unittest.TestCase):
             def execute(self,query): self.query=query
             def fetchone(self):
                 if self.query.startswith("SELECT COUNT(*)"):return (table_count,)
+                if self.query=="SELECT CURRENT_ROLE()":return ("NONE",)
                 if self.parameters["port"]==57346:
+                    if instances:
+                        instance=instances["compatibility"]
+                        return (instance["uuid"],instance["datadir"],57346,"127.0.0.1","8.0.46")
                     return ("47427132-df4d-11f1-89e2-84a938421519","R:\\v45-compatibility-r1\\",57346,"127.0.0.1","8.0.46")
+                if instances:
+                    instance=instances["financial"]
+                    return (instance["uuid"],instance["datadir"],23316,"127.0.0.1","8.0.46",self.parameters["database"])
                 return (server_uuid,"R:\\data\\",23316,"127.0.0.1","8.0.46",self.parameters["database"])
             def fetchall(self):
                 if self.query=="SHOW GRANTS":
@@ -120,6 +127,50 @@ class GateTests(unittest.TestCase):
         self.assertIn("P0_CARRY_FORWARD_MYSQL_PASSWORD",env)
         self.assertEqual(8,len([key for key in env if key.endswith("_PASSWORD")]))
         self.assertEqual(16,len(secrets))
+
+    def local_isolated_cohort(self):
+        cache,manifest,configs=self.isolated_cohort()
+        instances={}
+        uuids={"financial":"01f1aea6-3e9e-433f-9acb-173ac8cf1a55", "compatibility":"b46b13cc-3222-48ef-871b-d8f5561558cf"}
+        for role, identifier in uuids.items():
+            datadir=cache/"release-gate-cohorts"/"instances"/"fixture-123"/role
+            datadir.mkdir(parents=True)
+            (datadir/"auto.cnf").write_text("[auto]\nserver-uuid="+identifier+"\n",encoding="utf-8")
+            instances[role]={"uuid":identifier,"datadir":str(datadir)}
+        value=json.loads(manifest.read_text());value.update(version=2,instances=instances)
+        manifest.write_text(json.dumps(value),encoding="utf-8")
+        for path in configs:
+            cfg=json.loads(path.read_text());cfg["uuid"]=uuids["financial"]
+            path.write_text(json.dumps(cfg),encoding="utf-8")
+        return cache,manifest,instances
+
+    def test_local_mysql_cohort_uses_initialized_instance_identity(self):
+        cache,manifest,instances=self.local_isolated_cohort()
+        with patch.dict(sys.modules,{"pymysql":self.fake_mysql(instances=instances)}):
+            env,secrets=gate.load_isolated_backend_cohort(cache,manifest)
+        self.assertEqual(instances["financial"]["uuid"],env["P0_CARRY_FORWARD_MYSQL_UUID"])
+        self.assertEqual(instances["financial"]["datadir"],env["QF_ISOLATED_COHORT_DATADIR"])
+        self.assertEqual(16,len(secrets))
+
+    def test_local_mysql_cohort_rejects_reserved_uuid_and_external_datadir(self):
+        cache,manifest,instances=self.local_isolated_cohort()
+        value=json.loads(manifest.read_text())
+        value["instances"]["financial"]["uuid"]=gate.PRODUCTION_MYSQL_UUID
+        manifest.write_text(json.dumps(value),encoding="utf-8")
+        with self.assertRaisesRegex(gate.GateError,"reserved local cohort instance UUID"):
+            gate.load_isolated_backend_cohort(cache,manifest)
+        value["instances"]=instances
+        value["instances"]["financial"]["datadir"]=str(self.root/"outside"/"financial")
+        manifest.write_text(json.dumps(value),encoding="utf-8")
+        with self.assertRaisesRegex(gate.GateError,"data directory"):
+            gate.load_isolated_backend_cohort(cache,manifest)
+
+    def test_local_mysql_cohort_rejects_running_instance_with_other_datadir(self):
+        cache,manifest,instances=self.local_isolated_cohort()
+        instances["financial"]["datadir"]=str(self.root/"outside"/"financial")
+        with patch.dict(sys.modules,{"pymysql":self.fake_mysql(instances=instances)}):
+            with self.assertRaisesRegex(gate.GateError,"identity changed"):
+                gate.load_isolated_backend_cohort(cache,manifest)
 
     def test_production_address_and_reused_mysql_cohort_are_rejected(self):
         cache,manifest,configs=self.isolated_cohort()

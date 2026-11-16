@@ -1,5 +1,6 @@
 package com.qingfeng.music.server.payment;
 
+import com.qingfeng.music.infrastructure.persistence.credits.LocalFinancialCohort;
 import com.qingfeng.music.infrastructure.persistence.credits.*;
 import com.qingfeng.music.infrastructure.persistence.credits.CreditHistoricalCutover.*;
 import java.sql.Timestamp;
@@ -35,10 +36,8 @@ class CreditCarryForwardCutoverMySqlTest {
         assertTrue(url.matches("jdbc:mysql://127\\.0\\.0\\.1:23316/"+name+"(?:\\?.*)?"));
         source=new DriverManagerDataSource(url,required("USER"),required("PASSWORD"));
         var properties=new Properties();properties.setProperty("connectionTimeZone","UTC");properties.setProperty("forceConnectionTimeZoneToSession","true");source.setConnectionProperties(properties);
-        db=new JdbcTemplate(source);tx=new TransactionTemplate(new JdbcTransactionManager(source));tool=new CreditHistoricalCutover(db,tx);
-        assertEquals("8.0.46",db.queryForObject("SELECT VERSION()",String.class));
-        assertEquals("05c27d3c-dda3-11f1-aba0-84a938421519",db.queryForObject("SELECT @@server_uuid",String.class));
-        assertEquals(required("UUID"),db.queryForObject("SELECT @@server_uuid",String.class));
+        db=new JdbcTemplate(source);tx=new TransactionTemplate(new JdbcTransactionManager(source));
+        tool=LocalFinancialCohort.historicalCutover(db,tx,name,required("UUID"));
         assertEquals(0,count("SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE()"),"Never clear/reuse a previous cohort");
         Flyway.configure().dataSource(source).locations("classpath:db/migration").cleanDisabled(true).target("44").load().migrate();
         db.update("INSERT INTO creator(id,created_at) VALUES(?,?),(?,?)",A,OLD,B,OLD);

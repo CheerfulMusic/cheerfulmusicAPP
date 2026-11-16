@@ -4,6 +4,8 @@
 
 发布前 fetch 所有分支，合并 main/dev/yth 和服务器最新完整源码提交；运行根目录 `scripts/check-release-ancestry.ps1 -DeployedCommit <当前线上完整commit>`，未知或不包含线上提交均停止。工作区干净后取 HEAD，依次执行前端 npm test、npm run build、后端 `mvn clean verify -Drelease.commit=<HEAD>`。JAR 内包含源码标识，必须与此次部署清单一致；前端构建必须逐文件与 JAR 中 static 核对。
 
+正式构建需要通过 `-IsolatedMysqlCohort` 提供隔离验收清单。新建本机环境使用版本 2 清单，放在仓库的 `.cache/release-gate-cohorts`。在其 `instances/<批次>/financial` 和 `instances/<批次>/compatibility` 初始化两套 MySQL 8.0.46，分别只监听 `127.0.0.1:23316` 和 `127.0.0.1:57346`。清单中的 `instances` 用 `financial` 和 `compatibility` 记录两套实例各自的 `uuid` 与绝对 `datadir`。UUID 以初始化后生成的 `auto.cnf` 为准。每次构建须提供八个全新空库，其私有配置和账号权限仅覆盖各自的测试库。验收清单、数据目录和账号配置均保存在本机缓存中。
+
 部署使用共享锁 `/run/lock/qingfeng-release.lock`，在停服前及切换前检查 current 仍等于预期旧版本；发生并发发布则停止。先备份旧版本、配置、数据和数据库，并在隔离环境验证恢复及迁移兼容性，再切换。`verify-release.py` 明确拒绝 `legacyRollback` 绕过；回滚制品也必须通过完整源码、制品和当前数据库兼容校验。正式策略只批准经过验收的精确 JAR；不能将任意 JAR 自动加入许可列表。
 
 回滚前必须核对当前数据库和金融写入协议，使用已验收的兼容回滚制品。V44 权益账本开始写入后，不得切回不理解订单冻结和新协议的旧 JAR，也不得还原旧数据库快照覆盖新增资金事实；保留新订单及 Webhook 水位，优先兼容前滚或关闭新购后恢复。恢复旧 release-policy.json 本身不构成兼容性证明。首次安装保护的失败处理应恢复旧 systemd 配置。对 root 手动删除保护或伪造审批文件无法提供防护；日常发布应遵循此流程。
