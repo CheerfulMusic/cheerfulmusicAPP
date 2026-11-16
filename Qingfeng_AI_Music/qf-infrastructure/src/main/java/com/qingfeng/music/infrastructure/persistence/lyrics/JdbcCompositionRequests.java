@@ -16,8 +16,13 @@ public final class JdbcCompositionRequests implements CompositionRequests {
     private final TransactionTemplate transactions;
     private final CreditsLedger credits;
     private final CreditConsumptions consumptions;
+    private final com.qingfeng.music.credits.LyricFreeAllowance lyricFreeAllowance;
     public JdbcCompositionRequests(JdbcTemplate jdbc,UsageBudget budget,TransactionTemplate transactions,CreditsLedger credits,CreditConsumptions consumptions){
-        this.jdbc=jdbc;this.budget=budget;this.transactions=transactions;this.credits=credits;this.consumptions=consumptions;}
+        this(jdbc,budget,transactions,credits,consumptions,null);
+    }
+    public JdbcCompositionRequests(JdbcTemplate jdbc,UsageBudget budget,TransactionTemplate transactions,CreditsLedger credits,CreditConsumptions consumptions,
+                                   com.qingfeng.music.credits.LyricFreeAllowance lyricFreeAllowance){
+        this.jdbc=jdbc;this.budget=budget;this.transactions=transactions;this.credits=credits;this.consumptions=consumptions;this.lyricFreeAllowance=lyricFreeAllowance;}
     public Optional<Entry> find(String work,String key){
         expireStale();
         return jdbc.query("SELECT status,revision_id,request_hash,error_code FROM lyrics_composition_request WHERE work_id=? AND request_key=?",(row,n)->new Entry(row.getString(1),row.getString(2),row.getString(3),row.getString(4)),work,key).stream().findFirst();
@@ -87,6 +92,7 @@ public final class JdbcCompositionRequests implements CompositionRequests {
     private void settle(String work,String key,String status,boolean refunded){settle(work,key,chargedOwner(work,key),status,refunded);}
     private void settle(String work,String key,String owner,String status,boolean refunded){
         if(credits!=null&&refunded)credits.refund(owner,CreditReferences.of(KIND,work,key));
+        if(lyricFreeAllowance!=null&&refunded)lyricFreeAllowance.release(work,key);
         if(consumptions!=null)consumptions.settled(owner,work,key,CreditConsumptions.TYPE_LYRICS,status,refunded);
     }
     /** 扣费时的归属来自额度预留行，作品归属变更不会把退款退给错误的人。 */

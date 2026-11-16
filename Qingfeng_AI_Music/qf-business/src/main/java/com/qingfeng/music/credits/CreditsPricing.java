@@ -15,7 +15,7 @@ public interface CreditsPricing {
 
     /**
      * 每日免费次数；0 表示该类型没有免费额度。
-     * 目前只有 AI 改写使用免费额度，歌词与歌曲生成按次计费，返回 0。
+     * 目前只有 AI 描述/选段改写使用每日免费额度；整首歌词的每作品免费机会单独持久化。
      */
     long freePerDay(Kind kind);
 }

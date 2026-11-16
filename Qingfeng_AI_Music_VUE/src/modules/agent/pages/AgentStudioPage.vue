@@ -301,7 +301,7 @@ onBeforeUnmount(() => { avatarDisposed = true; window.removeEventListener('qingf
         <p v-if="notice" class="agent-voice-hint" role="status">{{ notice }}</p>
         <p v-if="avatarGeneration.message.value" class="agent-section-hint" role="status">{{ avatarGeneration.message.value }}</p>
         <p class="agent-section-hint">{{ tr('免费额度用完后，1 积分可聊 5 次；发送即按此规则计费，剩余次数跨会话保留。创作工具另计费，精确替换首句、末句免费。', 'After the free allowance, 1 credit covers 5 turns. Sending accepts this rate; unused turns carry over. Creative tools are billed separately; exact first/last line edits are free.') }}</p>
-        <p v-if="credits" class="agent-section-hint">{{ tr('当前', 'Balance') }} {{ credits.balance }} {{ tr('积分 · 生成歌词', 'credits · Lyrics') }} {{ credits.lyricsCost }} · {{ tr('生成音乐', 'Music') }} {{ credits.musicCost }}</p>
+        <p v-if="credits" class="agent-section-hint">{{ tr('当前', 'Balance') }} {{ credits.balance }} {{ tr('积分 · 整首歌词重写', 'credits · Full lyric rewrite') }} {{ credits.lyricsCost }} · {{ tr('生成音乐', 'Music') }} {{ credits.musicCost }}</p>
       </div>
     </section>
     <Teleport to="body"><UserAvatarDialog v-if="avatarDialog" :busy="avatar.busy.value" :error="avatar.error.value" :disabled="blocked" :generation-available="avatarGeneration.available.value" @close="avatarDialog = false" @upload="uploadAvatar" @generate="generateAvatar"/></Teleport>

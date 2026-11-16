@@ -9,6 +9,7 @@ import { t } from '../i18n'
  */
 const props = defineProps<{
   cost: number
+  paidCost?: number
   balance?: number | null
   busy?: boolean
   variant?: 'generate' | 'regenerate' | 'rewrite'
@@ -22,6 +23,7 @@ const rule = ref<HTMLElement | null>(null)
 const shift = ref(0)
 
 const insufficient = computed(() => props.balance !== null && props.balance !== undefined && props.balance < props.cost)
+const fullRewriteCost = computed(() => props.paidCost ?? props.cost)
 /** 改写在每日免费额度内不扣积分，此时不显示余额不足。rewriteFreeRemaining 为 -1 表示永久免费。 */
 const freeRewrite = computed(() => props.variant === 'rewrite' && props.freeRemaining !== null && props.freeRemaining !== undefined && props.freeRemaining !== 0)
 const label = computed(() => {
@@ -36,8 +38,9 @@ const label = computed(() => {
     return t('本次改写消耗 {cost} 积分', { cost: props.cost })
   }
   if (insufficient.value) return t('积分不足，当前余额 {balance} 积分，生成需要 {cost} 积分。', { balance: props.balance as number, cost: props.cost })
+  if (props.cost === 0) return props.variant === 'regenerate' ? t('本次重写歌词免费') : t('本次生成歌词免费')
   return props.variant === 'regenerate'
-    ? t('重新生成歌词同样消耗 {cost} 积分', { cost: props.cost })
+    ? t('本次重写歌词消耗 {cost} 积分', { cost: props.cost })
     : t('本次生成消耗 {cost} 积分', { cost: props.cost })
 })
 const visible = computed(() => open.value || hover.value)
@@ -71,15 +74,16 @@ onBeforeUnmount(() => document.removeEventListener('click', onDocumentClick))
     <span v-if="visible" ref="rule" class="credit-rule" role="tooltip" :style="{ '--credit-rule-shift': shift + 'px' }">
       <template v-if="variant === 'rewrite'">
         <span class="credit-rule-title">{{ t('积分规则') }}</span>
-        <span class="credit-rule-line">{{ (freeRemaining ?? 0) > 0 ? t('今日免费改写还剩 {remaining} 次，用完后每次消耗 {cost} 积分。', { remaining: freeRemaining ?? 0, cost }) : t('AI 改写当前不消耗积分。') }}</span>
+        <span class="credit-rule-line">{{ freeRemaining === -1 ? t('AI 改写当前不消耗积分。') : (freeRemaining ?? 0) > 0 ? t('今日免费改写还剩 {remaining} 次，用完后每次消耗 {cost} 积分。', { remaining: freeRemaining ?? 0, cost }) : t('今日免费改写次数已用完，本次消耗 {cost} 积分。', { cost }) }}</span>
         <span class="credit-rule-line">{{ t('改写失败会退还已扣积分；免费次数按调用计算，失败同样占用一次。') }}</span>
         <RouterLink v-if="insufficient && !freeRewrite" class="credit-rule-link" to="/recharge">{{ t('去充值') }}</RouterLink>
       </template>
       <template v-else>
         <span class="credit-rule-title">{{ t('积分规则') }}</span>
-        <span class="credit-rule-line">{{ t('歌词生成成功后保留积分扣费。') }}</span>
-        <span class="credit-rule-line">{{ t('生成失败、超时或取消将自动退还积分。') }}</span>
-        <span v-if="balance !== null && balance !== undefined" class="credit-rule-line">{{ t('当前余额 {balance} 积分，单次生成消耗 {cost} 积分。', { balance, cost }) }}</span>
+        <span class="credit-rule-line">{{ t('每首歌首次生成歌词免费；每成功生成一次音乐，可再免费生成一次歌词。') }}</span>
+        <span v-if="fullRewriteCost > 0" class="credit-rule-line">{{ t('免费次数用完后，整首重写歌词每次消耗 {cost} 积分。', { cost: fullRewriteCost }) }}</span>
+        <span v-if="cost > 0" class="credit-rule-line">{{ t('确认生成失败会退还已扣积分；结果待核对时暂不退款，避免重复扣费。') }}</span>
+        <span v-if="cost > 0 && balance !== null && balance !== undefined" class="credit-rule-line">{{ t('当前余额 {balance} 积分，本次生成消耗 {cost} 积分。', { balance, cost }) }}</span>
         <RouterLink v-if="insufficient" class="credit-rule-link" to="/recharge">{{ t('去充值') }}</RouterLink>
       </template>
     </span>

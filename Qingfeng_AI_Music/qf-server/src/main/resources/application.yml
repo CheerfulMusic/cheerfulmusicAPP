@@ -46,7 +46,7 @@ qingfeng:
       expected-database: ${CREDIT_WRITER_EXPECTED_DATABASE:}
       expected-port: ${CREDIT_WRITER_EXPECTED_PORT:0}
     music-cost: 5
-    lyrics-cost: 1
+    lyrics-cost: 2
     rewrite-cost: 1
     rewrite-free-per-day: 5
   stripe:

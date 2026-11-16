@@ -11,6 +11,7 @@ public final class MyBatisExecutionRepository implements ExecutionRepository {
     private org.springframework.transaction.support.TransactionTemplate transactions;
     private org.springframework.transaction.support.TransactionTemplate claimTransactions;
     private com.qingfeng.music.credits.CreditsLedger credits;
+    private com.qingfeng.music.credits.LyricFreeAllowance lyricFreeAllowance;
     public MyBatisExecutionRepository withCredits(org.springframework.jdbc.core.JdbcTemplate jdbc, org.springframework.transaction.support.TransactionTemplate transactions, com.qingfeng.music.credits.CreditsLedger credits){
         this.jdbc=jdbc;this.transactions=transactions;this.credits=credits;
         this.claimTransactions=new org.springframework.transaction.support.TransactionTemplate(transactions.getTransactionManager());
@@ -18,6 +19,9 @@ public final class MyBatisExecutionRepository implements ExecutionRepository {
         this.claimTransactions.setIsolationLevel(org.springframework.transaction.TransactionDefinition.ISOLATION_READ_COMMITTED);
         this.claimTransactions.setTimeout(10);
         return this;
+    }
+    public MyBatisExecutionRepository withLyricFreeAllowance(com.qingfeng.music.credits.LyricFreeAllowance allowance){
+        this.lyricFreeAllowance=allowance;return this;
     }
     public boolean lockProvider(String provider,String token,Instant now,Instant until) { mapper.ensureProvider(provider);return mapper.lock(provider,token,now,until)==1; }
     public void unlockProvider(String provider,String token) { mapper.unlock(provider,token); }
@@ -45,7 +49,18 @@ public final class MyBatisExecutionRepository implements ExecutionRepository {
     public void saving(String task,String token,String url,Instant now) { mapper.saving(task,token,url,now); }
     public void refreshAudioUrl(String task,String token,String url){mapper.refreshUrl(task,token,url);}
     public void archiveFailed(String task,String token,int attempts,boolean terminal,Instant now,Instant next) { mapper.archiveFailed(task,token,attempts,terminal?"FAILED":"SAVING",now,next); }
-    public void succeeded(String task,String token,String asset,Instant now) { mapper.succeeded(task,token,asset,now); }
+    public void succeeded(String task,String token,String asset,Instant now) {
+        if(transactions==null||lyricFreeAllowance==null){mapper.succeeded(task,token,asset,now);return;}
+        transactions.executeWithoutResult(tx->{
+            var owners=jdbc.query("SELECT w.owner_id,t.work_id FROM generation_task t JOIN music_work w ON w.id=t.work_id WHERE t.id=?",
+                (rs,n)->new String[]{rs.getString(1),rs.getString(2)},task);
+            if(owners.size()!=1)throw new IllegalStateException("Music task owner missing");
+            var row=owners.get(0);
+            lockCreator(row[0]);
+            jdbc.queryForObject("SELECT kind FROM model_usage_lock WHERE kind='LYRICS' FOR UPDATE",String.class);
+            if(mapper.succeeded(task,token,asset,now)==1)lyricFreeAllowance.grantMusic(row[0],row[1],task);
+        });
+    }
     public void failed(String task,String token,String code,Instant now) {
         if(transactions==null){mapper.failed(task,token,code,now);return;}
         transactions.executeWithoutResult(tx->{

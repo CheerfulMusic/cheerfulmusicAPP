@@ -48,7 +48,7 @@ import static org.junit.jupiter.api.Assertions.*;
  * 成本封顶边界验收：幂等并发、不同请求隔离、失败重放、超时/取消退款、每日额度跨日重置。
  *
  * 全程 H2 内存库，不触碰生产主库。仅放开与「每日成本上限」正交的并发/全局准入上限，
- * 保留生产积分单价（lyrics=1、music=5、rewrite=1）与每日上限（cover=20）。
+ * 保留生产积分单价（整首歌词重写=2、music=5、描述改写=1）与每日上限（cover=20）。
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = {
     "spring.datasource.url=jdbc:h2:mem:cost_control_edges;MODE=MySQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1",
@@ -68,7 +68,7 @@ import static org.junit.jupiter.api.Assertions.*;
 @Import(CostControlEdgeCasesTest.Offline.class)
 class CostControlEdgeCasesTest {
 
-    static final long LYRICS_COST = 1L;
+    static final long LYRICS_COST = 2L;
     static final long MUSIC_COST = 5L;
 
     @Autowired IdentityApi identity;
@@ -94,13 +94,15 @@ class CostControlEdgeCasesTest {
         lyricsWriter.failure = null;
     }
 
-    /** 并发重放同一个幂等 Key：模型只调用一次、只扣一次积分、只产生一条流水。 */
+    /** 首次免费后并发重放同一个付费重写 Key：模型只调用一次、只扣一次积分、只产生一条流水。 */
     @Test
     void concurrentSameIdempotencyKeyChargesOnlyOnce() throws Exception {
         String owner = identity.create().creatorId();
         long fund = 100;
         credits.credit(owner, fund, "fund-" + owner);
         String work = works.create(owner, draft()).id();
+        useInitialFree(owner, work);
+        assertEquals(fund, credits.balance(owner), "首次歌词生成免费");
         String key = UUID.randomUUID().toString();
         int tasks = 10;
         var results = runConcurrently(10, tasks, () -> {
@@ -117,7 +119,7 @@ class CostControlEdgeCasesTest {
         assertTrue(ok >= 1, "至少一次请求成功");
         assertEquals(1, lyricsWriter.calls.get(), "模型只被调用一次");
         assertEquals(1, consumptions(owner).size(), "只产生一条扣费流水");
-        assertEquals(fund - LYRICS_COST, credits.balance(owner), "同一幂等 Key 只扣 1 积分");
+        assertEquals(fund - LYRICS_COST, credits.balance(owner), "同一付费重写 Key 只扣 2 积分");
     }
 
     /** 不同请求 Key 不会错误共用幂等结果：各自产生独立版本、各自精确扣费。 */
@@ -128,12 +130,14 @@ class CostControlEdgeCasesTest {
         credits.credit(owner, fund, "fund-" + owner);
         String work = works.create(owner, draft()).id();
         var first = composer.compose(owner, work, 0, UUID.randomUUID().toString(), "zh-CN");
+        assertEquals(fund, credits.balance(owner), "首次歌词生成免费");
+        assertTrue(consumptions(owner).isEmpty(), "免费请求不写扣费流水");
         var second = composer.compose(owner, work, 0, UUID.randomUUID().toString(), "zh-CN");
         assertNotEquals(first.id(), second.id(), "不同请求产生不同歌词版本");
         assertEquals(2, lyricsWriter.calls.get(), "模型被调用两次");
-        assertEquals(fund - 2 * LYRICS_COST, credits.balance(owner));
+        assertEquals(fund - LYRICS_COST, credits.balance(owner));
         var rows = consumptions(owner);
-        assertEquals(2, rows.size());
+        assertEquals(1, rows.size());
         for (var row : rows) {
             assertEquals("SUCCEEDED", row.status());
             assertEquals(0, row.refunded());
@@ -148,6 +152,8 @@ class CostControlEdgeCasesTest {
         long fund = 100;
         credits.credit(owner, fund, "fund-" + owner);
         String work = works.create(owner, draft()).id();
+        useInitialFree(owner, work);
+        assertEquals(fund, credits.balance(owner), "首次歌词生成免费");
         String key = UUID.randomUUID().toString();
         lyricsWriter.failure = new DomainException("LYRICS_INTERNAL_ERROR", "模型异常");
         assertThrows(DomainException.class, () -> composer.compose(owner, work, 0, key, "zh-CN"));
@@ -170,6 +176,8 @@ class CostControlEdgeCasesTest {
         long fund = 100;
         credits.credit(owner, fund, "fund-" + owner);
         String work = works.create(owner, draft()).id();
+        useInitialFree(owner, work);
+        assertEquals(fund, credits.balance(owner), "首次歌词生成免费");
         String key = UUID.randomUUID().toString();
         lyricsWriter.failure = new DomainException("LYRICS_PROVIDER_TIMEOUT", "上游超时");
         assertThrows(DomainException.class, () -> composer.compose(owner, work, 0, key, "zh-CN"));
@@ -264,6 +272,12 @@ class CostControlEdgeCasesTest {
 
     private static Draft draft() {
         return new Draft("妈妈", "生日", "一起做饭", "愿你快乐", "民谣", "故事");
+    }
+
+    private void useInitialFree(String owner, String work) {
+        composer.compose(owner, work, 0, UUID.randomUUID().toString(), "zh-CN");
+        assertTrue(consumptions(owner).isEmpty(), "首次生成不写扣费流水");
+        lyricsWriter.calls.set(0);
     }
 
     private <T> List<T> runConcurrently(int threads, int tasks, Callable<T> task) throws Exception {

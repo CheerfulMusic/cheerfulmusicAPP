@@ -42,6 +42,10 @@ public class UsageConfiguration {
     @Bean com.qingfeng.music.credits.CreditConsumptions creditConsumptions(JdbcTemplate jdbc, PlatformTransactionManager manager) {
         return new com.qingfeng.music.infrastructure.persistence.credits.JdbcCreditConsumptions(jdbc,new TransactionTemplate(manager));
     }
+    @Bean com.qingfeng.music.credits.LyricFreeAllowance lyricFreeAllowance(JdbcTemplate jdbc, Environment env) {
+        return new com.qingfeng.music.infrastructure.persistence.credits.JdbcLyricFreeAllowance(jdbc,
+            java.time.Clock.systemUTC(),ZoneId.of(env.getRequiredProperty("qingfeng.usage.zone")));
+    }
     @Bean com.qingfeng.music.credits.DailyQuota dailyQuota(JdbcTemplate jdbc, Environment env) {
         return new com.qingfeng.music.infrastructure.persistence.credits.JdbcDailyQuota(jdbc,java.time.Clock.systemUTC(),ZoneId.of(env.getRequiredProperty("qingfeng.usage.zone")));
     }
@@ -50,11 +54,11 @@ public class UsageConfiguration {
             env.getProperty("qingfeng.inspiration.rewrite.concurrent-global",Integer.class,4),
             env.getProperty("qingfeng.inspiration.rewrite.concurrent-per-creator",Integer.class,1));
     }
-    @Bean JdbcUsageBudget usageBudget(JdbcTemplate jdbc, PlatformTransactionManager manager, Environment env, com.qingfeng.music.credits.CreditsLedger credits, com.qingfeng.music.credits.CreditConsumptions consumptions, com.qingfeng.music.credits.CreditsPricing pricing) {
+    @Bean JdbcUsageBudget usageBudget(JdbcTemplate jdbc, PlatformTransactionManager manager, Environment env, com.qingfeng.music.credits.CreditsLedger credits, com.qingfeng.music.credits.CreditConsumptions consumptions, com.qingfeng.music.credits.CreditsPricing pricing,com.qingfeng.music.credits.LyricFreeAllowance lyricFreeAllowance) {
         return new JdbcUsageBudget(jdbc,new TransactionTemplate(manager),Map.of(
             Kind.MUSIC,limits(env,"music"),
             Kind.LYRICS,limits(env,"lyrics"),
-            Kind.TIMING,limits(env,"timing"),Kind.COVER,limits(env,"cover")),Clock.systemUTC(),ZoneId.of(env.getRequiredProperty("qingfeng.usage.zone"))).withCredits(credits,consumptions,pricing);
+            Kind.TIMING,limits(env,"timing"),Kind.COVER,limits(env,"cover")),Clock.systemUTC(),ZoneId.of(env.getRequiredProperty("qingfeng.usage.zone"))).withCredits(credits,consumptions,pricing).withLyricFreeAllowance(lyricFreeAllowance);
     }
     private Limits limits(Environment env,String kind) {
         String prefix="qingfeng.usage."+kind+".";

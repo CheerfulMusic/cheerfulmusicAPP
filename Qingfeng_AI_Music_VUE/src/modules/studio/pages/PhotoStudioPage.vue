@@ -319,8 +319,8 @@ onBeforeUnmount(() => {
             <NavIcon name="music"/>
             {{ t(busy ? '正在准备照片并编写歌词…' : '生成歌词') }}
           </button>
-          <small v-if="props.embedded && credits && credits.lyricsCost > 0 && !needsCheck">{{ t('本次生成消耗 {cost} 积分', { cost: credits.lyricsCost }) }}</small>
-          <CreditCostHint v-else-if="credits && credits.lyricsCost > 0 && !needsCheck" :cost="credits.lyricsCost" :balance="credits.balance" :busy="busy"/>
+          <small v-if="props.embedded && credits && credits.lyricsNextCost !== null && !needsCheck">{{ credits.lyricsNextCost===0?t('本次生成歌词免费'):t('本次生成消耗 {cost} 积分', { cost: credits.lyricsNextCost }) }}</small>
+          <CreditCostHint v-else-if="credits && credits.lyricsNextCost !== null && !needsCheck" :cost="credits.lyricsNextCost" :paid-cost="credits.lyricsCost" :balance="credits.balance" :busy="busy"/>
           <small class="photo-privacy">{{ t('照片会发送给 AI 用于本次创作。分享作品时不会公开原图。') }}</small>
         </div>
         <button v-if="locked && !busy && !needsCheck" type="button" class="text-button" @click="reset">{{ t('修改创作素材') }}</button>

@@ -49,9 +49,10 @@ describe('歌词生成的积分消耗提示', () => {
     await wrapper.find('.credit-cost-trigger').trigger('click')
     expect(wrapper.find('.credit-rule').exists()).toBe(true)
     expect(wrapper.text()).toContain('积分规则')
-    expect(wrapper.text()).toContain('歌词生成成功后保留积分扣费。')
-    expect(wrapper.text()).toContain('生成失败、超时或取消将自动退还积分。')
-    expect(wrapper.text()).toContain('当前余额 20 积分，单次生成消耗 5 积分。')
+    expect(wrapper.text()).toContain('每首歌首次生成歌词免费；每成功生成一次音乐，可再免费生成一次歌词。')
+    expect(wrapper.text()).toContain('免费次数用完后，整首重写歌词每次消耗 5 积分。')
+    expect(wrapper.text()).toContain('确认生成失败会退还已扣积分；结果待核对时暂不退款，避免重复扣费。')
+    expect(wrapper.text()).toContain('当前余额 20 积分，本次生成消耗 5 积分。')
     await wrapper.find('.credit-cost-trigger').trigger('click')
     expect(wrapper.find('.credit-rule').exists()).toBe(false)
   })
@@ -77,7 +78,7 @@ describe('歌词生成的积分消耗提示', () => {
 
   it('重新生成时用同一套积分表达说明价格', () => {
     const wrapper = hint({ variant: 'regenerate' })
-    expect(wrapper.text()).toContain('重新生成歌词同样消耗 5 积分')
+    expect(wrapper.text()).toContain('本次重写歌词消耗 5 积分')
     expect(wrapper.text()).not.toContain('本次生成消耗')
   })
 
@@ -89,8 +90,18 @@ describe('歌词生成的积分消耗提示', () => {
   it('积分规则说明与实际扣费口径一致', async () => {
     const wrapper = hint({})
     await wrapper.find('.credit-cost-trigger').trigger('click')
-    expect(wrapper.text()).toContain('歌词生成成功后保留积分扣费。')
-    expect(wrapper.text()).toContain('生成失败、超时或取消将自动退还积分。')
+    expect(wrapper.text()).toContain('每首歌首次生成歌词免费；每成功生成一次音乐，可再免费生成一次歌词。')
+    expect(wrapper.text()).toContain('确认生成失败会退还已扣积分；结果待核对时暂不退款，避免重复扣费。')
+  })
+
+  it('作品有免费次数时明确显示本次免费，余额为零也不提示不足', async () => {
+    const wrapper = hint({ cost: 0, paidCost: 2, balance: 0, variant: 'regenerate' })
+    expect(wrapper.text()).toContain('本次重写歌词免费')
+    expect(wrapper.text()).not.toContain('积分不足')
+    await wrapper.find('.credit-cost-trigger').trigger('click')
+    expect(wrapper.text()).toContain('每首歌首次生成歌词免费；每成功生成一次音乐，可再免费生成一次歌词。')
+    expect(wrapper.text()).toContain('免费次数用完后，整首重写歌词每次消耗 2 积分。')
+    expect(wrapper.text()).not.toContain('当前余额 0 积分，本次生成消耗')
   })
 
   it('不再出现与收费机制冲突的次数额度文案', () => {
@@ -109,6 +120,13 @@ describe('歌词生成的积分消耗提示', () => {
   it('改写用完免费额度后显示单次消耗', () => {
     const wrapper = hint({ variant: 'rewrite', cost: 1, balance: 20, freeRemaining: 0 })
     expect(wrapper.text()).toContain('本次改写消耗 1 积分')
+  })
+
+  it('今日改写免费次数用完后，规则不再误称当前免费', async () => {
+    const wrapper = hint({ variant: 'rewrite', cost: 1, balance: 20, freeRemaining: 0 })
+    await wrapper.find('.credit-cost-trigger').trigger('click')
+    expect(wrapper.text()).toContain('今日免费改写次数已用完，本次消耗 1 积分。')
+    expect(wrapper.text()).not.toContain('AI 改写当前不消耗积分。')
   })
 
   it('改写积分不足时给出余额与所需积分', () => {
@@ -138,10 +156,13 @@ describe('积分文案的中英文一致性', () => {
   it('界面使用的中文文案都有对应英文，且占位符完全一致', () => {
     const required = [
       '本次生成消耗 {cost} 积分',
-      '重新生成歌词同样消耗 {cost} 积分',
+      '本次生成歌词免费',
+      '本次重写歌词免费',
+      '本次重写歌词消耗 {cost} 积分',
       '积分不足，当前余额 {balance} 积分，生成需要 {cost} 积分。',
-      '歌词生成成功后保留积分扣费。',
-      '生成失败、超时或取消将自动退还积分。',
+      '每首歌首次生成歌词免费；每成功生成一次音乐，可再免费生成一次歌词。',
+      '免费次数用完后，整首重写歌词每次消耗 {cost} 积分。',
+      '确认生成失败会退还已扣积分；结果待核对时暂不退款，避免重复扣费。',
       '积分规则',
     ]
     for (const key of required) {

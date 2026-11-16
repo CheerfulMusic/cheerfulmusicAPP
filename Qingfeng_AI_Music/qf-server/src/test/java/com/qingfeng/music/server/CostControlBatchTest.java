@@ -49,8 +49,8 @@ import static org.junit.jupiter.api.Assertions.*;
 @Import(CostControlBatchTest.Offline.class)
 class CostControlBatchTest {
 
-    /** 歌词生成单次积分（商用契约值，与 application.yml 的 qingfeng.credits.lyrics-cost 一致）。 */
-    static final long LYRICS_COST = 1L;
+    /** 免费机会用完后的整首歌词重写单价。 */
+    static final long LYRICS_COST = 2L;
     /** AI 改写单次超额积分。 */
     static final long REWRITE_COST = 1L;
 
@@ -84,7 +84,7 @@ class CostControlBatchTest {
 
     @Test
     void commercialConfiguredValuesMatchContract() {
-        assertEquals(1L, env.getProperty("qingfeng.credits.lyrics-cost", Long.class));
+        assertEquals(LYRICS_COST, env.getProperty("qingfeng.credits.lyrics-cost", Long.class));
         assertEquals(1L, env.getProperty("qingfeng.credits.rewrite-cost", Long.class));
         assertEquals(5L, env.getProperty("qingfeng.credits.rewrite-free-per-day", Long.class));
         assertEquals(20, env.getProperty("qingfeng.usage.cover.daily-per-creator", Integer.class));
@@ -93,22 +93,25 @@ class CostControlBatchTest {
         assertEquals(20L, env.getProperty("qingfeng.reference.analysis.daily-per-creator", Long.class));
     }
 
-    // ===== 1. 歌词生成积分：1 积分/次，批量循环不超额、失败退还、幂等 =====
+    // ===== 1. 每首作品首词免费，后续整首重写 2 积分/次；验证批量扣费、失败退还、幂等 =====
 
     @Test
-    void lyricsGenerationChargesExactlyOneCreditPerCallInBatch() {
+    void lyricsGenerationUsesFirstFreeThenChargesTwoPerRewriteInBatch() {
         String owner = identity.create().creatorId();
-        credits.credit(owner, LYRICS_COST * 20, "fund-" + owner);
+        credits.credit(owner, LYRICS_COST * 19, "fund-" + owner);
         String work = works.create(owner, new Draft("妈妈", "生日", "一起做饭", "愿你快乐", "民谣", "故事")).id();
 
-        for (int i = 0; i < 20; i++) {
+        assertNotNull(composer.compose(owner, work, 0, UUID.randomUUID().toString(), "zh-CN").id());
+        assertEquals(LYRICS_COST * 19, credits.balance(owner), "首次歌词生成免费");
+        assertTrue(consumptions(owner).isEmpty(), "免费生成不写扣费流水");
+        for (int i = 1; i < 20; i++) {
             var revision = composer.compose(owner, work, 0, UUID.randomUUID().toString(), "zh-CN");
             assertNotNull(revision.id());
         }
         assertEquals(20, lyricsWriter.calls.get());
-        assertEquals(0, credits.balance(owner)); // 20 次扣完
+        assertEquals(0, credits.balance(owner)); // 19 次付费重写扣完
         var rows = consumptions(owner);
-        assertEquals(20, rows.size());
+        assertEquals(19, rows.size());
         for (var row : rows) {
             assertEquals("LYRICS_GENERATION", row.type());
             assertEquals(LYRICS_COST, row.amount());
@@ -127,6 +130,9 @@ class CostControlBatchTest {
         String owner = identity.create().creatorId();
         credits.credit(owner, LYRICS_COST * 5, "fund-" + owner);
         String work = works.create(owner, new Draft("妈妈", "生日", "一起做饭", "愿你快乐", "民谣", "故事")).id();
+        composer.compose(owner, work, 0, UUID.randomUUID().toString(), "zh-CN");
+        assertEquals(LYRICS_COST * 5, credits.balance(owner), "首次歌词生成免费");
+        lyricsWriter.calls.set(0);
         // 已确认未受理才退款；超时的未知结果由独立边界用例验证保留扣费。
         lyricsWriter.failure = new DomainException("LYRICS_PROVIDER_UNAVAILABLE", "供应商明确拒绝受理");
         String failedKey = UUID.randomUUID().toString();
@@ -145,7 +151,10 @@ class CostControlBatchTest {
         String owner = identity.create().creatorId();
         credits.credit(owner, LYRICS_COST * 5, "fund-" + owner);
         String work = works.create(owner, new Draft("妈妈", "生日", "一起做饭", "愿你快乐", "民谣", "故事")).id();
-        // 幂等：同一 requestKey 重放只扣一次。
+        composer.compose(owner, work, 0, UUID.randomUUID().toString(), "zh-CN");
+        assertEquals(LYRICS_COST * 5, credits.balance(owner), "首次歌词生成免费");
+        lyricsWriter.calls.set(0);
+        // 付费重写幂等：同一 requestKey 重放只扣一次。
         String key = UUID.randomUUID().toString();
         var first = composer.compose(owner, work, 0, key, "zh-CN");
         var second = composer.compose(owner, work, 0, key, "zh-CN");

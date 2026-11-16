@@ -72,7 +72,7 @@ import static org.junit.jupiter.api.Assertions.*;
 @Import(CostControlMySqlConcurrencyTest.Offline.class)
 class CostControlMySqlConcurrencyTest {
 
-    static final long LYRICS_COST = 1L;
+    static final long LYRICS_COST = 2L;
     static final long REWRITE_COST = 1L;
 
     @Autowired IdentityApi identity;
@@ -239,7 +239,9 @@ class CostControlMySqlConcurrencyTest {
             String o = identity.create().creatorId();
             credits.credit(o, fund, "fund-" + o);
             ownerIds.add(o);
-            workIds.add(works.create(o, new Draft("妈妈", "生日", "一起做饭", "愿你快乐", "民谣", "故事")).id());
+            String work=works.create(o, new Draft("妈妈", "生日", "一起做饭", "愿你快乐", "民谣", "故事")).id();
+            useInitialLyricGrant(o,work);
+            workIds.add(work);
         }
         lyricsWriter.failure = new DomainException("LYRICS_PROVIDER_UNAVAILABLE", "供应商明确拒绝受理");
         var idx = new AtomicInteger();
@@ -309,6 +311,12 @@ class CostControlMySqlConcurrencyTest {
     }
     int reservations(Kind kind, String owner) {
         return jdbc.queryForObject("SELECT COUNT(*) FROM model_usage_reservation WHERE kind=? AND owner_id=?", Integer.class, kind.name(), owner);
+    }
+
+    /** These tests exercise paid debit/refund, so consume each new work's first free lyric grant first. */
+    void useInitialLyricGrant(String owner,String work){
+        jdbc.update("INSERT INTO model_usage_reservation(kind,work_id,request_key,owner_id,usage_day,created_at) VALUES('LYRIC_GRANT',?,'00000000-0000-0000-0000-000000000000',?,CURRENT_DATE,CURRENT_TIMESTAMP)",work,owner);
+        jdbc.update("INSERT INTO model_usage_reservation(kind,work_id,request_key,owner_id,usage_day,created_at) VALUES('LYRIC_REDEEM',?,?,?,CURRENT_DATE,CURRENT_TIMESTAMP)",work,UUID.randomUUID().toString(),owner);
     }
 
     // ===== 离线桩 =====

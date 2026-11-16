@@ -129,7 +129,7 @@ class AgentAdmissionTest {
         var ledger=billing();var gate=paidGate(ledger);useFree(gate);
         var t=gate.acquire("o0","c0",key(),"继续",null,true);gate.start(t);gate.finish(t,true);
         ledger.debit("o0",2,"spend-rest");
-        jdbc.update("UPDATE agent_request_admission SET usage_day=?",java.sql.Date.valueOf(LocalDate.now().minusDays(1)));
+        jdbc.update("UPDATE agent_request_admission SET usage_day=?",java.sql.Date.valueOf(LocalDate.now(ZoneOffset.UTC).minusDays(1)));
         var restarted=paidGate(ledger);useFree(restarted);
         var next=restarted.acquire("o0","c0",key(),"继续",null,true);
         assertEquals(0,ledger.balance("o0"));assertEquals(3,jdbc.queryForObject("SELECT remaining_turns FROM agent_chat_allowance WHERE creator_id='o0'",Integer.class));

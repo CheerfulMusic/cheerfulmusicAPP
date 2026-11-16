@@ -111,8 +111,8 @@ public class AgentAccountActions implements AgentApplicationActions {
     private Result credits(String owner) {
         List<Item> items=List.of(new Item("balance","可用积分",credits.balance(owner)+" 积分",Map.of()),
             new Item("music","生成音乐",pricing.cost(CreditsPricing.Kind.MUSIC)+" 积分 / 次",Map.of()),
-            new Item("lyrics","生成歌词",pricing.cost(CreditsPricing.Kind.LYRICS)+" 积分 / 次",Map.of()),
-            new Item("rewrite","改写歌词",pricing.cost(CreditsPricing.Kind.REWRITE)+" 积分 / 次；免费改写剩余 "+rewrites.freeRemaining(owner)+" 次",Map.of()));
+            new Item("lyrics","整首歌词", "每首首次生成免费；每次成功生成音乐后增加一次免费机会；之后整首重写 "+pricing.cost(CreditsPricing.Kind.LYRICS)+" 积分 / 次",Map.of()),
+            new Item("rewrite","AI 改写描述/选段", "每天免费剩余 "+rewrites.freeRemaining(owner)+" 次；用完后 "+pricing.cost(CreditsPricing.Kind.REWRITE)+" 积分 / 次",Map.of()));
         return result("这是当前账号的积分与价格。", "credits",items,List.of(new Command("积分明细","查看我的积分明细","send"),new Command("充值","","recharge")),"get_credits");
     }
     private Result entries(String owner) {

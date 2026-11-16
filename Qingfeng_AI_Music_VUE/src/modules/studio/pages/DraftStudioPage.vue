@@ -56,7 +56,7 @@ const defaultStructure = {templateId:'AAB',chorusFirst:false} as const satisfies
 const structure=ref<LyricsStructure>({...defaultStructure})
 let legacyStructure:LyricsStructure|undefined
 let lastSubmittedStructure:LyricsStructure|undefined
-const { credits, refreshCredits } = useCredits()
+const { credits, refreshCredits } = useCredits(() => existing.value?.id)
 const quickCost = computed(() => quickCreationCost(credits.value))
 const compiledParams=computed(()=>splitStyle(draft.style).tail)
 const omittedParams=ref<string[]>([])
@@ -431,6 +431,7 @@ async function continueMaking() {
     if(previous.status==='SUCCEEDED'&&previous.revisionId){if(alive&&turn===initSequence)await router.push({path:`/works/${work.id}`,query:{revision:previous.revisionId,language:language.value,...lyricsStructureQuery(chosenStructure)}});return}
     if(previous.status==='PENDING'||previous.status==='UNKNOWN')throw new Error('歌词仍在编写中，可以稍后刷新编写状态。')
     if(previous.status==='FAILED'){retireContinuationRequestKey(prepared.id,prepared.version,language.value,structureKey);key=continuationRequestKey(prepared.id,prepared.version,language.value,structureKey)}
+    await refreshCredits()
     if(!alive||turn!==initSequence||await blockedByCredits()||!alive||turn!==initSequence)return
     lastSubmittedStructure=chosenStructure
     remember(true)
@@ -551,7 +552,7 @@ onBeforeUnmount(()=>{
           <CreationMusicChoices v-if="mode==='custom'&&musicCatalog&&preferences" v-model="preferences" :catalog="musicCatalog" :disabled="composing||rewriting||resetting"><template #structure><LyricsTemplatePicker v-model="structure" :disabled="composing||rewriting||resetting||!initialized||quickLocked"/></template></CreationMusicChoices>
           <p v-if="mode==='custom'&&musicIssue" class="notice error" role="alert">{{ t(musicIssue) }}</p>
           <details v-if="draft.recipient||draft.occasion||draft.message" class="legacy-inspiration-context"><summary>{{ t('已保留的旧版作品信息') }}</summary><p v-if="draft.recipient">{{ t('收件人：') }}{{ draft.recipient }}</p><p v-if="draft.occasion">{{ draft.occasion }}</p><p v-if="draft.message" class="legacy-message">{{ draft.message }}</p></details>
-          <div class="creation-action-bar story-action-bar"><button class="button creation-primary" type="submit" :disabled="!initialized||composing||rewriting||resetting||quickLocked||!ready||conflict||(mode==='quick'?!quickReady:!customLyricsReady||!musicCatalog)">{{ composing?t(mode==='quick'?'正在开始创作…':'正在编写歌词…'):t(mode==='quick'?'一键生成音乐':'生成歌词') }}<span v-if="!composing" aria-hidden="true">→</span></button><span v-if="mode==='quick'&&credits&&quickCost!==null" class="save-info">{{ t('一键创作预计消耗 {cost} 积分（歌词 {lyrics}，音乐 {music}）',{cost:quickCost,lyrics:credits.lyricsCost,music:credits.musicCost}) }}</span><CreditCostHint v-else-if="mode!=='quick'&&credits&&credits.enabled&&credits.lyricsCost>0" :cost="credits.lyricsCost" :balance="credits.balance" :busy="composing"/></div>
+          <div class="creation-action-bar story-action-bar"><button class="button creation-primary" type="submit" :disabled="!initialized||composing||rewriting||resetting||quickLocked||!ready||conflict||(mode==='quick'?!quickReady:!customLyricsReady||!musicCatalog)">{{ composing?t(mode==='quick'?'正在开始创作…':'正在编写歌词…'):t(mode==='quick'?'一键生成音乐':'生成歌词') }}<span v-if="!composing" aria-hidden="true">→</span></button><span v-if="mode==='quick'&&credits&&quickCost!==null" class="save-info">{{ t('一键创作预计消耗 {cost} 积分（歌词 {lyrics}，音乐 {music}）',{cost:quickCost,lyrics:credits.lyricsNextCost??0,music:credits.musicCost}) }}</span><CreditCostHint v-else-if="mode!=='quick'&&credits&&credits.enabled&&credits.lyricsNextCost!==null" :cost="credits.lyricsNextCost" :paid-cost="credits.lyricsCost" :balance="credits.balance" :busy="composing" :variant="credits.lyricsNextCost===0?'generate':'regenerate'"/></div>
           <p class="inspiration-next-note">{{ t(mode==='quick'?'AI 自动完成歌词与谱曲 生成后即可试听':'下一步可编辑歌词 确认后再生成音乐') }}</p>
           <p v-if="mode==='quick'&&!quickReady&&initialized" class="save-info">{{ t('一键创作暂不可用 可以切换自定义创作') }}</p>
           <div v-if="route.query.returnRevision" class="story-secondary-actions"><button type="button" class="text-button return-to-lyrics" @click="returnToLyrics">{{ t('返回歌词编辑') }}</button></div>

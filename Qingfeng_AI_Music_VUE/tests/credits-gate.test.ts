@@ -3,19 +3,21 @@ import { checkQuickCreationCredits, guardCredits, quickCreationCost } from '../s
 import type { CreditsView } from '../src/shared/identity/credit-balance'
 
 function view(balance: number | null, lyricsCost = 5): CreditsView {
-  return { enabled: true, balance, musicCost: 15, lyricsCost, rewriteCost: 1, rewriteFreeRemaining: 0 }
+  return { enabled: true, balance, musicCost: 15, lyricsCost, lyricsNextCost: lyricsCost, rewriteCost: 1, rewriteFreeRemaining: 0 }
 }
 
 describe('一键创作的积分准入', () => {
-  const priced = (balance: number | null): CreditsView => ({ ...view(balance, 1), musicCost: 5 })
-  it('合计歌词和音乐的实时价格，余额不足时拦截', async () => {
-    expect(quickCreationCost(priced(5))).toBe(6)
-    expect(await checkQuickCreationCredits(async () => priced(5))).toEqual({ status: 'insufficient', cost: 6, balance: 5 })
-    expect(await checkQuickCreationCredits(async () => priced(6))).toEqual({ status: 'ok' })
+  const priced = (balance: number | null): CreditsView => ({ ...view(balance, 2), musicCost: 5, lyricsNextCost: 0 })
+  it('新作品首次歌词免费，一键创作仅预估音乐的实时价格', async () => {
+    expect(quickCreationCost(priced(5))).toBe(5)
+    expect(await checkQuickCreationCredits(async () => priced(4))).toEqual({ status: 'insufficient', cost: 5, balance: 4 })
+    expect(await checkQuickCreationCredits(async () => priced(5))).toEqual({ status: 'ok' })
+    expect(quickCreationCost({ ...priced(10), lyricsNextCost: 2 })).toBe(7)
   })
   it('价格或余额未知时拒绝启动，不猜测价格', async () => {
     expect(await checkQuickCreationCredits(async () => null)).toEqual({ status: 'unavailable' })
     expect(await checkQuickCreationCredits(async () => ({ ...priced(20), musicCost: 0 }))).toEqual({ status: 'unavailable' })
+    expect(await checkQuickCreationCredits(async () => ({ ...priced(20), lyricsNextCost: null }))).toEqual({ status: 'unavailable' })
     expect(await checkQuickCreationCredits(async () => priced(null))).toEqual({ status: 'unavailable' })
   })
   it('积分功能关闭时无需余额', async () => {
@@ -24,6 +26,10 @@ describe('一键创作的积分准入', () => {
 })
 
 describe('歌词生成的积分准入', () => {
+  it('服务端报出免费时，余额为零也可生成', async () => {
+    const gate = await guardCredits(() => ({ ...view(0, 2), lyricsNextCost: 0 }), vi.fn())
+    expect(gate).toEqual({ blocked: false, balance: 0, cost: 0 })
+  })
   it('余额充足时放行，且不额外请求余额', async () => {
     const refresh = vi.fn()
     const gate = await guardCredits(() => view(20), refresh)

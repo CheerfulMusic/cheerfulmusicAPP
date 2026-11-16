@@ -72,7 +72,7 @@ qingfeng.media.creator-capacity-bytes=1073741824
 # 使用独立测试数据库和沙箱账号，在本机私有 local.properties 中按需填写，勿提交真实凭证。
 qingfeng.credits.enabled=false
 qingfeng.credits.music-cost=5
-qingfeng.credits.lyrics-cost=1
+qingfeng.credits.lyrics-cost=2
 qingfeng.payments.enabled=false
 # qingfeng.payments.client-id=
 # qingfeng.payments.api-key=

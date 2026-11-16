@@ -76,6 +76,14 @@ class LyricsCreditsIntegrationTest {
         var work=works.create(owner,new WorkApi.Draft("妈妈","生日","一起做饭","愿你快乐","民谣","故事"));
         return new Fixture(owner,work.id());
     }
+    Fixture chargedFixture(){return chargedFixture(identity.create().creatorId());}
+    Fixture chargedFixture(String owner){
+        var f=fixture(owner);
+        // Existing charged-path tests start after the initial free grant has been used.
+        jdbc.update("INSERT INTO model_usage_reservation(kind,work_id,request_key,owner_id,usage_day,created_at) VALUES('LYRIC_GRANT',?, '00000000-0000-0000-0000-000000000000',?,CURRENT_DATE,CURRENT_TIMESTAMP)",f.work,f.owner);
+        jdbc.update("INSERT INTO model_usage_reservation(kind,work_id,request_key,owner_id,usage_day,created_at) VALUES('LYRIC_REDEEM',?,?,?,CURRENT_DATE,CURRENT_TIMESTAMP)",f.work,UUID.randomUUID().toString(),f.owner);
+        return f;
+    }
     void fund(Fixture f,long amount){credits.credit(f.owner,amount,"fund-"+f.owner);}
     record Consumption(String owner,String type,String work,String requestKey,long amount,String status,int refunded,String createdAt){}
     List<Consumption> consumptions(String owner){
@@ -83,8 +91,40 @@ class LyricsCreditsIntegrationTest {
             (rs,n)->new Consumption(rs.getString(1),rs.getString(2),rs.getString(3),rs.getString(4),rs.getLong(5),rs.getString(6),rs.getInt(7),rs.getString(8)),owner);
     }
 
+    @Test void firstLyricForAWorkIsFreeWithoutAStoredBalance(){
+        var f=fixture();String key=UUID.randomUUID().toString();
+        var revision=composer.compose(f.owner,f.work,0,key,"zh-CN");
+        assertNotNull(revision.id());
+        assertEquals(0,credits.balance(f.owner));
+        assertTrue(consumptions(f.owner).isEmpty());
+        assertEquals(1,jdbc.queryForObject("SELECT COUNT(*) FROM model_usage_reservation WHERE kind='LYRIC_GRANT' AND work_id=?",Integer.class,f.work));
+        assertEquals(1,jdbc.queryForObject("SELECT COUNT(*) FROM model_usage_reservation WHERE kind='LYRIC_REDEEM' AND work_id=? AND request_key=?",Integer.class,f.work,key));
+    }
+
+    @Test void definiteFailureRestoresTheFirstFreeLyricUse(){
+        var f=fixture();String failedKey=UUID.randomUUID().toString();
+        writer.failure=new DomainException("LYRICS_RESPONSE_INVALID","模型返回无效结果");
+        assertThrows(DomainException.class,()->composer.compose(f.owner,f.work,0,failedKey,"zh-CN"));
+        assertEquals(0,jdbc.queryForObject("SELECT COUNT(*) FROM model_usage_reservation WHERE kind='LYRIC_REDEEM' AND work_id=?",Integer.class,f.work));
+        writer.failure=null;
+        composer.compose(f.owner,f.work,0,UUID.randomUUID().toString(),"zh-CN");
+        assertEquals(0,credits.balance(f.owner));
+        assertTrue(consumptions(f.owner).isEmpty());
+    }
+
+    @Test void unknownFirstLyricOutcomeKeepsTheFreeUseReserved(){
+        var f=fixture();String key=UUID.randomUUID().toString();
+        writer.failure=new DomainException("LYRICS_PROVIDER_TIMEOUT","供应商结果尚未确认");
+        assertThrows(DomainException.class,()->composer.compose(f.owner,f.work,0,key,"zh-CN"));
+        assertEquals("UNKNOWN",composer.requestState(f.owner,f.work,key).status());
+        assertEquals(1,jdbc.queryForObject("SELECT COUNT(*) FROM model_usage_reservation WHERE kind='LYRIC_REDEEM' AND work_id=?",Integer.class,f.work));
+        assertEquals(0,credits.balance(f.owner));
+        assertEquals("LYRICS_REQUEST_PENDING",assertThrows(DomainException.class,
+            ()->composer.compose(f.owner,f.work,0,UUID.randomUUID().toString(),"zh-CN")).code());
+    }
+
     @Test void sufficientCreditsChargeExactlyOnceOnSuccess(){
-        var f=fixture();fund(f,20);
+        var f=chargedFixture();fund(f,20);
         var revision=composer.compose(f.owner,f.work,0,UUID.randomUUID().toString(),"zh-CN");
         assertNotNull(revision.id());
         assertEquals(1,writer.calls.get());
@@ -103,7 +143,7 @@ class LyricsCreditsIntegrationTest {
     }
 
     @Test void insufficientCreditsRejectBeforeCallingTheModel(){
-        var f=fixture();fund(f,LYRICS_COST-2);
+        var f=chargedFixture();fund(f,LYRICS_COST-2);
         var error=assertThrows(DomainException.class,()->composer.compose(f.owner,f.work,0,UUID.randomUUID().toString(),"zh-CN"));
         assertEquals("INSUFFICIENT_CREDITS",error.code());
         assertEquals(LYRICS_COST-2,credits.balance(f.owner));
@@ -113,7 +153,7 @@ class LyricsCreditsIntegrationTest {
     }
 
     @Test void failedGenerationRefundsTheReservedCredits(){
-        var f=fixture();fund(f,20);
+        var f=chargedFixture();fund(f,20);
         writer.failure=new DomainException("LYRICS_RESPONSE_INVALID","模型已返回无效结果，本次生成失败。");
         String key=UUID.randomUUID().toString();
         assertThrows(DomainException.class,()->composer.compose(f.owner,f.work,0,key,"zh-CN"));
@@ -127,7 +167,7 @@ class LyricsCreditsIntegrationTest {
     }
 
     @Test void providerTimeoutRetainsChargeAndRejectsSameOrDifferentKeyUntilReconciled(){
-        var f=fixture();fund(f,20);String key=UUID.randomUUID().toString();
+        var f=chargedFixture();fund(f,20);String key=UUID.randomUUID().toString();
         writer.failure=new DomainException("LYRICS_PROVIDER_TIMEOUT","供应商结果尚未确认");
         assertThrows(DomainException.class,()->composer.compose(f.owner,f.work,0,key,"zh-CN"));
         assertEquals(20-LYRICS_COST,credits.balance(f.owner));
@@ -148,7 +188,7 @@ class LyricsCreditsIntegrationTest {
     }
 
     @Test void emptyLyricsResultDoesNotCharge(){
-        var f=fixture();fund(f,20);
+        var f=chargedFixture();fund(f,20);
         writer.emptyResult=true;
         String key=UUID.randomUUID().toString();
         var error=assertThrows(DomainException.class,()->composer.compose(f.owner,f.work,0,key,"zh-CN"));
@@ -158,7 +198,7 @@ class LyricsCreditsIntegrationTest {
     }
 
     @Test void repeatedSubmissionWithSameKeyChargesOnlyOnce(){
-        var f=fixture();fund(f,20);
+        var f=chargedFixture();fund(f,20);
         String key=UUID.randomUUID().toString();
         var first=composer.compose(f.owner,f.work,0,key,"zh-CN");
         var second=composer.compose(f.owner,f.work,0,key,"zh-CN");
@@ -169,7 +209,7 @@ class LyricsCreditsIntegrationTest {
     }
 
     @Test void refreshingAndResubmittingTheSameKeyDoesNotChargeAgain(){
-        var f=fixture();fund(f,20);
+        var f=chargedFixture();fund(f,20);
         String key=UUID.randomUUID().toString();
         var first=composer.compose(f.owner,f.work,0,key,"zh-CN");
         var state=composer.requestState(f.owner,f.work,key);
@@ -182,15 +222,15 @@ class LyricsCreditsIntegrationTest {
     }
 
     @Test void exactBalanceStillGenerates(){
-        var f=fixture();fund(f,LYRICS_COST);
+        var f=chargedFixture();fund(f,LYRICS_COST);
         composer.compose(f.owner,f.work,0,UUID.randomUUID().toString(),"zh-CN");
         assertEquals(0,credits.balance(f.owner));
         assertEquals(1,consumptions(f.owner).size());
     }
 
     @Test void concurrentRequestsNeverOverspend() throws Exception{
-        var f=fixture();fund(f,LYRICS_COST);
-        var otherWork=fixture(f.owner);
+        var f=chargedFixture();fund(f,LYRICS_COST);
+        var otherWork=chargedFixture(f.owner);
         var pool=Executors.newFixedThreadPool(2);var start=new CountDownLatch(1);
         try{
             var a=pool.submit(()->attempt(f,UUID.randomUUID().toString(),start));
@@ -205,7 +245,7 @@ class LyricsCreditsIntegrationTest {
     }
 
     @Test void staleRequestIsUnknownWithoutAProviderFailureProof(){
-        var f=fixture();fund(f,20);
+        var f=chargedFixture();fund(f,20);
         String key=UUID.randomUUID().toString();
         requests.claim(f.owner,f.work,key,"hash");
         assertEquals(20-LYRICS_COST,credits.balance(f.owner));
@@ -248,25 +288,23 @@ class LyricsCreditsIntegrationTest {
         }
     }
 
-    /** 重新生成是另一次创作，用新的请求键必须再扣一次积分。 */
+    /** 首次免费，后续在音乐生成刷新权益前按配置价格扣费。 */
     @Test void regenerationWithANewKeyChargesAgain(){
         var f=fixture();fund(f,20);
         composer.compose(f.owner,f.work,0,UUID.randomUUID().toString(),"zh-CN");
-        assertEquals(20-LYRICS_COST,credits.balance(f.owner));
+        assertEquals(20,credits.balance(f.owner));
         composer.compose(f.owner,f.work,0,UUID.randomUUID().toString(),"zh-CN");
-        assertEquals(20-2*LYRICS_COST,credits.balance(f.owner));
+        assertEquals(20-LYRICS_COST,credits.balance(f.owner));
         assertEquals(2,writer.calls.get());
         var rows=consumptions(f.owner);
-        assertEquals(2,rows.size());
+        assertEquals(1,rows.size());
         assertEquals("SUCCEEDED",rows.get(0).status());
-        assertEquals("SUCCEEDED",rows.get(1).status());
-        assertEquals(0,rows.get(1).refunded());
-        assertNotEquals(rows.get(0).requestKey(),rows.get(1).requestKey());
+        assertEquals(0,rows.get(0).refunded());
     }
 
     /** 退款幂等且可追溯到原始消费：同一请求键只会有一条扣费与一条退款。 */
     @Test void refundIsIdempotentAndTraceableToTheOriginalConsumption(){
-        var f=fixture();fund(f,20);
+        var f=chargedFixture();fund(f,20);
         String key=UUID.randomUUID().toString();
         writer.failure=new DomainException("LYRICS_RESPONSE_INVALID","模型已返回无效结果，本次生成失败。");
         assertThrows(DomainException.class,()->composer.compose(f.owner,f.work,0,key,"zh-CN"));
@@ -285,7 +323,7 @@ class LyricsCreditsIntegrationTest {
 
     /** 重复超时清扫不能将未知结果伪装为确定失败。 */
     @Test void staleSweepNeverRefundsAnUnconfirmedSubmission(){
-        var f=fixture();fund(f,20);
+        var f=chargedFixture();fund(f,20);
         String key=UUID.randomUUID().toString();
         requests.claim(f.owner,f.work,key,"hash");
         assertEquals(20-LYRICS_COST,credits.balance(f.owner));
@@ -313,7 +351,7 @@ class LyricsCreditsIntegrationTest {
     /** 退款到账后余额接口立刻反映恢复后的余额。 */
     @Test void refundedBalanceIsVisibleThroughTheCreditsEndpoint() throws Exception {
         var session=sessionOwner();
-        var f=fixture(session.owner());
+        var f=chargedFixture(session.owner());
         fund(f,20);
         writer.failure=new DomainException("LYRICS_RESPONSE_INVALID","模型已返回无效结果，本次生成失败。");
         assertThrows(DomainException.class,()->composer.compose(f.owner,f.work,0,UUID.randomUUID().toString(),"zh-CN"));

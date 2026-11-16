@@ -42,7 +42,7 @@ import static org.junit.jupiter.api.Assertions.*;
  *
  * 设计要点：
  * - 全程 H2 内存库，不触碰生产主库。
- * - 商用「每日成本上限」值（cover=20、rewrite 免费 5 次、lyrics 5 积分/次、rewrite 超额 1 积分/次等）保持生产配置；
+ * - 商用「每日成本上限」值（cover=20、描述改写免费 5 次、整首歌词重写 2 积分/次等）保持生产配置；
  *   仅把与之正交的「并发准入上限」(concurrent-*) 与「全局每日上限」(daily-global) 在测试内放宽为 -1，
  *   使并发压力只落在「每日成本上限」这一被验收的对象上，避免正交的准入限流污染断言。
  * - 并发串行化依赖数据库行锁（model_usage_lock / credit_lock 的 SELECT ... FOR UPDATE），
@@ -66,7 +66,7 @@ import static org.junit.jupiter.api.Assertions.*;
 @Import(CostControlConcurrencyTest.Offline.class)
 class CostControlConcurrencyTest {
 
-    static final long LYRICS_COST = 1L;
+    static final long LYRICS_COST = 2L;
     static final long REWRITE_COST = 1L;
 
     @Autowired IdentityApi identity;
@@ -233,6 +233,11 @@ class CostControlConcurrencyTest {
         credits.credit(owner, fund, "fund-" + owner);
         int tasks = 10;
         var distinctWorks=new ArrayList<String>();for(int i=0;i<tasks;i++)distinctWorks.add(works.create(owner,new Draft("妈妈","生日","一起做饭","愿你快乐","民谣","故事")).id());
+        // 每首作品先用掉首次免费机会；并发的十笔才是应当预扣并精确退款的整首重写。
+        for (String work : distinctWorks) composer.compose(owner, work, 0, UUID.randomUUID().toString(), "zh-CN");
+        assertEquals(fund, credits.balance(owner), "十首作品的首次歌词生成均免费");
+        assertTrue(consumptions(owner).isEmpty(), "首次生成不写扣费流水");
+        lyricsWriter.calls.set(0);
         // 十个独立作品的明确拒绝；同作品未决请求防重和超时未知不属于已确认失败退款。
         lyricsWriter.failure = new DomainException("LYRICS_PROVIDER_UNAVAILABLE", "供应商明确拒绝受理");
         var workIndex=new AtomicInteger();
@@ -248,7 +253,7 @@ class CostControlConcurrencyTest {
         assertEquals(tasks,lyricsWriter.calls.get());
         assertEquals(fund, credits.balance(owner), "并发失败下账本净零（每笔扣费均被精确退还）");
         var rows = consumptions(owner);
-        assertEquals(tasks, rows.size(), "每次生成均留下一条流水");
+        assertEquals(tasks, rows.size(), "每次付费重写均留下一条流水");
         for (var row : rows) {
             assertEquals("FAILED", row.status());
             assertEquals(1, row.refunded(), "每笔失败仅退款一次");

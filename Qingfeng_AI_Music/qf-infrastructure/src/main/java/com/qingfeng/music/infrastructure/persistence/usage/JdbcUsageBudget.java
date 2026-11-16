@@ -28,8 +28,12 @@ public final class JdbcUsageBudget implements UsageBudget {
     private com.qingfeng.music.credits.CreditsLedger credits;
     private com.qingfeng.music.credits.CreditConsumptions consumptions;
     private com.qingfeng.music.credits.CreditsPricing pricing;
+    private com.qingfeng.music.credits.LyricFreeAllowance lyricFreeAllowance;
     public JdbcUsageBudget withCredits(com.qingfeng.music.credits.CreditsLedger credits, com.qingfeng.music.credits.CreditConsumptions consumptions, com.qingfeng.music.credits.CreditsPricing pricing) {
         this.credits=credits;this.consumptions=consumptions;this.pricing=pricing;return this;
+    }
+    public JdbcUsageBudget withLyricFreeAllowance(com.qingfeng.music.credits.LyricFreeAllowance allowance) {
+        this.lyricFreeAllowance=allowance;return this;
     }
     private String reference(Kind kind,String work,String key){return com.qingfeng.music.credits.CreditReferences.of(kind.name(),work,key);}
     /** 只有音乐和歌词是计费创作；价格来自统一定价服务，扣费与额度预留在同一事务内提交。 */
@@ -37,6 +41,7 @@ public final class JdbcUsageBudget implements UsageBudget {
         if(credits==null||pricing==null||!pricing.enabled())return;
         var priced=kind==Kind.MUSIC?com.qingfeng.music.credits.CreditsPricing.Kind.MUSIC:kind==Kind.LYRICS?com.qingfeng.music.credits.CreditsPricing.Kind.LYRICS:null;
         if(priced==null)return;
+        if(kind==Kind.LYRICS&&lyricFreeAllowance!=null&&lyricFreeAllowance.reserve(owner,work,key))return;
         long cost=pricing.cost(priced);
         credits.debit(owner,cost,reference(kind,work,key));
         // 消费流水目前只覆盖歌词生成；歌曲生成沿用原有记账口径，不在本次改动范围内。

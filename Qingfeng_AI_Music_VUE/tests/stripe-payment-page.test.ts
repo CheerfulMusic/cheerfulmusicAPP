@@ -5,6 +5,7 @@ import RechargePage from '../src/modules/identity/pages/RechargePage.vue'
 import CreditsPanel from '../src/modules/identity/components/CreditsPanel.vue'
 import { ensureCreator, resetCreatorSession } from '../src/shared/http/api-client'
 import { readPendingOrders } from '../src/modules/identity/model/payment-orders'
+import { setLocale } from '../src/shared/i18n'
 
 vi.mock('../src/shared/identity/account-state', async () => ({
   accountState: (await import('vue')).ref({ authenticated: true }), refreshAccountState: vi.fn(async () => {}),
@@ -33,6 +34,7 @@ const drain = async () => { for (let i = 0; i < 8; i++) { await new Promise(reso
 
 beforeEach(() => {
   resetCreatorSession(); localStorage.clear(); sessionStorage.clear()
+  setLocale('zh-CN')
   calls = []; stripeStatus = 'PAID'; stripeCurrent = 'PAID'; historyUnavailable = ''; failCreate = false; switchOwnerOnCreate = false; paypalEnabled = false; creator = 'owner'
   musicCost = 15; creditsUnavailable = false
   vi.stubGlobal('fetch', vi.fn(async (input: string, init: RequestInit = {}) => {
@@ -42,7 +44,7 @@ beforeEach(() => {
     if (path === 'public/session') return reply({ creatorId: creator })
     if (path === 'app/credits') {
       if (creditsUnavailable) throw new TypeError('isolated price service unavailable')
-      return reply({ enabled: true, balance: stripeCurrent === 'PAID' ? 300 : 0, musicCost })
+      return reply({ enabled: true, balance: stripeCurrent === 'PAID' ? 300 : 0, musicCost, lyricsCost: 2, rewriteCost: 1, downloadCost: 10 })
     }
     if (path === 'app/stripe/catalog') return reply({ enabled: true, packages: [pack] })
     if (path === 'app/paypal/catalog') return reply({ enabled: paypalEnabled, packages: paypalEnabled ? [pack] : [] })
@@ -72,6 +74,33 @@ async function mount(component: typeof RechargePage | typeof CreditsPanel) {
 }
 
 describe('Stripe recharge and account with the real HTTP decoder', () => {
+  it('shows the full Chinese credit rules beside the packs using server prices', async () => {
+    musicCost = 5
+    const root = await mount(RechargePage)
+    const rules = root.querySelector('[data-testid="credit-usage-rules"]')?.textContent ?? ''
+    expect(rules).toContain('每首歌首次生成歌词免费')
+    expect(rules).toContain('每成功生成一次音乐，该歌曲可再免费生成一次歌词')
+    expect(rules).toContain('整首歌词重写：2 积分 / 次')
+    expect(rules).toContain('生成音乐：5 积分 / 次')
+    expect(rules).toContain('每首作品首次下载：10 积分；同一作品后续下载免费')
+    expect(rules).toContain('AI 改写描述：每天前 5 次免费，之后每次 1 积分')
+    expect(rules).toContain('歌词选段改写共用这 5 次免费额度')
+  })
+
+  it('shows the same pricing policy in English', async () => {
+    setLocale('en')
+    musicCost = 5
+    const root = await mount(RechargePage)
+    const rules = root.querySelector('[data-testid="credit-usage-rules"]')?.textContent ?? ''
+    expect(rules).toContain('The first lyric generation for each song is free')
+    expect(rules).toContain('Each successful music generation gives that song one more free lyric generation')
+    expect(rules).toContain('Rewrite the whole song’s lyrics: 2 credits each')
+    expect(rules).toContain('Generate music: 5 credits each')
+    expect(rules).toContain('First download of each work: 10 credits; later downloads of the same work are free')
+    expect(rules).toContain('AI description rewrites: the first 5 each day are free, then 1 credit each')
+    expect(rules).toContain('Selected lyric rewrites share this daily free allowance')
+  })
+
   it('shows the server song price of five and derives all generation estimates without changing USD package snapshots', async () => {
     musicCost = 5
     const root = await mount(RechargePage)
@@ -99,6 +128,7 @@ describe('Stripe recharge and account with the real HTTP decoder', () => {
     expect(root.querySelector('.balance small')).toBeNull()
     expect(root.querySelectorAll('.plan-info')).toHaveLength(0)
     expect(root.textContent).not.toContain('15 积分')
+    expect(root.querySelector('[data-testid="credit-usage-rules"]')?.textContent).toContain('价格暂不可用')
     expect(calls).not.toContain('POST app/stripe/orders')
   })
 
