@@ -65,7 +65,7 @@ public class PayPalPaymentService implements VerifiedPaymentProcessor {
     public Map<String,Object> catalog(com.qingfeng.music.server.security.CreatorPrincipal principal){
         boolean open=ready()&&purchaseAllowed(principal==null?null:principal.id());
         var packages=new ArrayList<Map<String,Object>>(ready()?catalog.packages().stream().map(PaymentCatalog.Package::asMap).toList():List.of());
-        boolean privateAcceptance=!acceptingNewOrders&&principal!=null&&acceptanceOffers.configuredFor(principal.id());
+        boolean privateAcceptance=principal!=null&&acceptanceOffers.exclusiveFor(principal.id(),acceptingNewOrders);
         if(privateAcceptance)packages.clear();
         if(open&&privateAcceptance)acceptanceOffers.offer(principal.id(),"paypal").filter(pack->acceptanceOffers.unused(db,principal.id(),pack.id(),provider()))
             .ifPresent(pack->packages.add(acceptanceOffers.view(pack,"paypal")));
@@ -90,9 +90,7 @@ public class PayPalPaymentService implements VerifiedPaymentProcessor {
     public Map<String,Object> create(String owner,String packageId){
         if(!ready()) throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,"PayPal 尚未开放");
         if(!purchaseAllowed(owner)) throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,"新购买暂时暂停，已有订单仍可核对");
-        if(PaymentAcceptanceOffers.isAcceptance(packageId)&&acceptingNewOrders)
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN,"PAYMENT_ACCEPTANCE_CANARY_ONLY");
-        if(!acceptingNewOrders&&acceptanceOffers.configuredFor(owner)&&!PaymentAcceptanceOffers.isAcceptance(packageId))
+        if(acceptanceOffers.exclusiveFor(owner,acceptingNewOrders)&&!PaymentAcceptanceOffers.isAcceptance(packageId))
             throw new ResponseStatusException(HttpStatus.FORBIDDEN,"PAYMENT_ACCEPTANCE_PRIVATE_SKU_REQUIRED");
         var p=PaymentAcceptanceOffers.isAcceptance(packageId)?acceptanceOffers.select(owner,packageId,"paypal")
             :catalog.find(packageId).orElseThrow(()->new ResponseStatusException(HttpStatus.BAD_REQUEST,"套餐不存在"));
