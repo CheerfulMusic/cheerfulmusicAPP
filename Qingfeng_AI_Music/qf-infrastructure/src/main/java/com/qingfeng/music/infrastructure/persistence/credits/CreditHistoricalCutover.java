@@ -448,7 +448,10 @@ public final class CreditHistoricalCutover {
                 text.lines().forEach(line -> crc.update(line.getBytes(StandardCharsets.UTF_8)));
                 require(expected.put(version, new History(version, name, (int) crc.getValue())) == null, "DUPLICATE_CLASSPATH_MIGRATION");
             }
-            require(expected.size() == 45, "HISTORY_RESOURCE_CHAIN_INCOMPLETE");
+            // Historical cutover accepts only V44/V45 as its source, while later
+            // application migrations may also be present on the classpath.
+            for (int version = 1; version <= 45; version++)
+                require(expected.containsKey(version), "HISTORY_RESOURCE_CHAIN_INCOMPLETE");
             require(actual.size() == 44 || actual.size() == 45, "HISTORY_CHAIN_LENGTH_MISMATCH");
             for (int i = 0; i < actual.size(); i++)
                 require(actual.get(i).version() == i + 1 && actual.get(i).equals(expected.get(i + 1)), "HISTORY_SCRIPT_OR_CHECKSUM_MISMATCH");
