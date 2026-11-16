@@ -44,8 +44,8 @@ class OpenAiLyricsWriterTest {
             assertEquals("/v1/responses", fixture.path.get());
             assertFalse(request.path("store").asBoolean());
             assertFalse(request.path("stream").asBoolean());
-            assertEquals(6000, request.path("max_output_tokens").asInt());
-            assertEquals("low", request.path("reasoning").path("effort").asText());
+            assertEquals(8000, request.path("max_output_tokens").asInt());
+            assertEquals("medium", request.path("reasoning").path("effort").asText());
             assertFalse(request.has("thinking"));assertFalse(request.has("max_tokens"));
             String prompt = request.path("instructions").asText();
             assertTrue(prompt.contains("中英混合"));assertTrue(prompt.contains("用户指定保留的段落必须原样保留"));
@@ -64,6 +64,24 @@ class OpenAiLyricsWriterTest {
             assertEquals(6, format.path("schema").path("properties").path("plan").path("required").size());
             assertEquals(result().get("lyrics"), draft.lyrics());
             assertEquals("Acoustic guitar", draft.plan().suggestedArrangement());
+            assertEquals(1, fixture.calls.get());
+        }
+    }
+
+    @Test void preservesLongNarrativeAndSelectedStructureWithoutCompressingMaterial() throws Exception {
+        String story = "五年级开始看比赛，现在二十五岁。昨天总决赛结束了，遗憾，但我还想继续看。";
+        var work = new WorkApi.Work("narrative", "自己", "比赛之后", story, "不编造比赛结果", "抒情摇滚", "", 0, Instant.now(), Instant.now());
+        String structure = new com.qingfeng.music.lyrics.application.LyricsStructure("ABCD", false).instruction();
+        var output = result();
+        String lyrics = "[Verse 1]\n" + "屏幕亮着，我还记得那年夏天\n".repeat(45) + "[Chorus]\n下一波，我还在";
+        output.put("lyrics", lyrics);
+        try (var fixture = new Fixture(200, JSON.writeValueAsString(completed(output)))) {
+            var draft = fixture.writer().write(work, "zh-CN", structure, "");
+            var request = fixture.received.get();
+            var material = JSON.readTree(request.path("input").path(0).path("content").asText());
+            assertEquals(story, material.path("story").asText());
+            assertEquals(structure, material.path("revisionInstructions").asText());
+            assertEquals(lyrics, draft.lyrics());
             assertEquals(1, fixture.calls.get());
         }
     }

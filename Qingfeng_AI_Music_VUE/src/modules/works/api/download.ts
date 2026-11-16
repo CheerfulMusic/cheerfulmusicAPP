@@ -20,6 +20,7 @@ export async function downloadSong(path: string, url: string, filename: string):
     document.body.appendChild(link); link.click(); link.remove()
     return true
   } catch (error) {
+    if (error instanceof ApiError && error.code === 'INVITE_REQUIRED') return false
     if (error instanceof ApiError && error.code === 'DOWNLOAD_LOGIN_REQUIRED') showLoginDialog()
     else window.alert(error instanceof Error ? error.message : t('下载失败，请稍后重试。'))
     return false

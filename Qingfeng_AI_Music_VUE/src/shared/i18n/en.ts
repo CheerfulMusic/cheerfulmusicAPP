@@ -1939,6 +1939,7 @@ export const english: Record<string, string> = {
 
   // Agent 创作助手
   'Agent 创作': 'Agent Studio',
+  '智能助手': 'AI Assistant',
   'AI 写歌': 'AI songwriting',
   '歌词改写': 'Rewrite lyrics',
   '音乐延长': 'Extend music',
@@ -2232,4 +2233,11 @@ export const english: Record<string, string> = {
   "请重新选择封面后保存。": "Choose the cover again and save.",
   "封面尺寸过大，请缩小图片后重试。": "Resize the cover image and try again.",
   "无法读取封面，请选择有效的 JPG 或 PNG 图片。": "Choose a valid JPG or PNG image for the cover.",
+  "绑定手机号，赠送50积分": "Bind phone \u00b7 Get 50 credits",
+  "请输入含国家区号的手机号，例如 +8613800000000": "Enter your phone number with country code, e.g. +8613800000000",
+  "请等待60秒后重新发送": "Please wait 60 seconds before resending",
+  "验证码已发送": "Verification code sent",
+  "该手机号或当前账号已绑定，请使用原有登录方式。": "This phone or account is already linked. Use your existing login method.",
+  "首次绑定手机号成功赠送50积分，每个账号仅限一次。": "Get 50 credits for your first phone binding. Once per account.",
+  "确认绑定并领取50积分": "Bind phone and claim 50 credits",
 }

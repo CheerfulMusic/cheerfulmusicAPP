@@ -1,0 +1,1 @@
+CREATE TABLE creator_phone_binding (subject_hash CHAR(64) NOT NULL PRIMARY KEY, creator_id VARCHAR(36) NOT NULL UNIQUE, phone_masked VARCHAR(40) NOT NULL, created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (creator_id) REFERENCES creator(id));

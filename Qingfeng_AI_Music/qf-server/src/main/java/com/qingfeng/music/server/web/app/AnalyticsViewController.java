@@ -172,13 +172,25 @@ public class AnalyticsViewController {
         return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(body);
     }
 
+    /** Existing in-process callers keep the default activity ordering. */
+    public ResponseEntity<Map<String, Object>> summary(int days) {
+        return summary(days, "active");
+    }
+
     @GetMapping("/summary")
-    public ResponseEntity<Map<String, Object>> summary(@RequestParam(defaultValue = "30") int days) {
+    public ResponseEntity<Map<String, Object>> summary(@RequestParam(defaultValue = "30") int days,
+                                                       @RequestParam(defaultValue = "active") String userSort) {
         var body = new LinkedHashMap<String, Object>();
         body.put("allowed", false);
         if (!allowed(currentCreatorId())) {
             return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(body);
         }
+        // Only fixed SQL fragments are selected; request input is never inserted into SQL.
+        // Order before LIMIT so a recent low-traffic user is not hidden by the active top 50.
+        final String userOrder;
+        if ("active".equals(userSort)) userOrder = "pageviews DESC, last_seen DESC, t.creator_id ASC";
+        else if ("latest".equals(userSort)) userOrder = "last_seen DESC, pageviews DESC, t.creator_id ASC";
+        else return ResponseEntity.badRequest().cacheControl(CacheControl.noStore()).build();
         var template = jdbc.getIfAvailable();
         if (template == null) {
             return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(body);
@@ -248,7 +260,7 @@ public class AnalyticsViewController {
                             + "WHERE s.creator_id IS NOT NULL AND s.creator_id <> '' AND s.created_at >= ?"
                             + ") t LEFT JOIN (SELECT owner_id, COUNT(*) works FROM music_work GROUP BY owner_id) w ON w.owner_id = t.creator_id "
                             + "GROUP BY t.creator_id, t.account_type, t.name, t.email, t.phone_masked "
-                            + "ORDER BY pv DESC LIMIT 50",
+                            + "ORDER BY " + userOrder + " LIMIT 50",
                     (rs, n) -> {
                         var row = new LinkedHashMap<String, Object>();
                         row.put("creatorId", rs.getString("creator_id"));

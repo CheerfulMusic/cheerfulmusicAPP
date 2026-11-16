@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
-import type { AnalyticsUserPageRow, AnalyticsUserRow } from '../api/analytics'
+import { computed } from 'vue'
+import type { AnalyticsUserPageRow, AnalyticsUserRow, AnalyticsUserSort } from '../api/analytics'
 import { accountDetail, accountName, accountTypeLabel, avatarText, dwellLabel, filterUsers, isGuest, pageName, type UserFilter } from '../model/dwell'
 
 const props = defineProps<{
@@ -12,7 +12,8 @@ const props = defineProps<{
 }>()
 defineEmits<{ toggle: [creatorId: string] }>()
 
-const filter = ref<UserFilter>('all')
+const filter = defineModel<UserFilter>('filter', { default: 'all' })
+const sort = defineModel<AnalyticsUserSort>('sort', { default: 'active' })
 const visible = computed(() => filterUsers(props.rows, filter.value))
 const guests = computed(() => props.rows.filter(row => isGuest(row.accountType)).length)
 const signed = computed(() => props.rows.length - guests.value)
@@ -30,10 +31,16 @@ function time(value: string): string {
   <div class="users">
     <div class="users-toolbar">
       <p class="users-summary">{{ signed }} 位登录用户 · {{ guests }} 位游客</p>
-      <div class="users-filter" role="group" aria-label="按身份筛选用户">
-        <button v-for="option in [{ id: 'all', label: '全部' }, { id: 'signed', label: '仅登录' }, { id: 'guest', label: '仅游客' }]" :key="option.id" type="button" :class="{ active: filter === option.id }" :aria-pressed="filter === option.id" @click="filter = option.id as UserFilter">{{ option.label }}</button>
+      <div class="users-controls">
+        <div class="users-sort users-filter" role="group" aria-label="用户排序">
+          <button v-for="option in [{ id: 'active', label: '活跃' }, { id: 'latest', label: '最新' }]" :key="option.id" type="button" :class="{ active: sort === option.id }" :aria-pressed="sort === option.id" @click="sort = option.id as AnalyticsUserSort">{{ option.label }}</button>
+        </div>
+        <div class="users-filter" role="group" aria-label="按身份筛选用户">
+          <button v-for="option in [{ id: 'all', label: '全部' }, { id: 'signed', label: '仅登录' }, { id: 'guest', label: '仅游客' }]" :key="option.id" type="button" :class="{ active: filter === option.id }" :aria-pressed="filter === option.id" @click="filter = option.id as UserFilter">{{ option.label }}</button>
+        </div>
       </div>
     </div>
+    <p class="users-sort-hint">{{ sort === 'latest' ? '按最近访问时间从新到旧排序' : '按所选周期内的访问量从高到低排序' }}，展示前 50 位用户。</p>
 
     <div v-if="!rows.length" class="users-empty">所选时间范围内暂无用户数据。</div>
     <div v-else-if="!visible.length" class="users-empty">当前筛选下没有用户。</div>
@@ -73,6 +80,8 @@ function time(value: string): string {
 <style scoped>
 .users-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 14px; }
 .users-summary { margin: 0; color: #8a7c76; font-size: 12px; }
+.users-controls { display: flex; flex-wrap: wrap; gap: 8px; }
+.users-sort-hint { margin: -4px 0 12px; color: #9a8b84; font-size: 11.5px; line-height: 1.7; }
 .users-filter { display: inline-flex; gap: 4px; padding: 3px; border: 1px solid #f0e1dc; border-radius: 999px; background: #fffaf8; }
 .users-filter button { min-width: 54px; padding: 6px 12px; border: 0; border-radius: 999px; background: transparent; color: #8a7c76; font-size: 12px; cursor: pointer; }
 .users-filter button.active { background: #d4483b; color: #fff; }

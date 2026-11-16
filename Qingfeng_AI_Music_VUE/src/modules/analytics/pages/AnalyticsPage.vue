@@ -3,14 +3,14 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { ApiError } from '../../../shared/http/api-client'
 import {
   analyticsAccess, analyticsPageUsers, analyticsSummary, analyticsUserPages,
-  type AnalyticsPageUserRow, type AnalyticsSummary, type AnalyticsUserPageRow,
+  type AnalyticsPageUserRow, type AnalyticsSummary, type AnalyticsUserPageRow, type AnalyticsUserSort,
 } from '../api/analytics'
 import AnalyticsKpiCard from '../components/AnalyticsKpiCard.vue'
 import AnalyticsTrendChart from '../components/AnalyticsTrendChart.vue'
 import AnalyticsPagePerformance from '../components/AnalyticsPagePerformance.vue'
 import AnalyticsUserList from '../components/AnalyticsUserList.vue'
 import AnalyticsRechargeTable from '../components/AnalyticsRechargeTable.vue'
-import { buildTrend, formatDuration, pageUsersKey } from '../model/dwell'
+import { buildTrend, formatDuration, pageUsersKey, type UserFilter } from '../model/dwell'
 
 const loading = ref(true)
 /** 只有服务端明确返回 allowed=false 才会置为 true；网络错误/500 一律走 error。 */
@@ -22,6 +22,8 @@ const stale = ref(false)
 const unavailable = ref(false)
 const viewer = ref('')
 const days = ref(30)
+const userSort = ref<AnalyticsUserSort>('active')
+const userFilter = ref<UserFilter>('all')
 const summary = ref<AnalyticsSummary | null>(null)
 const updatedAt = ref<Date | null>(null)
 
@@ -55,7 +57,7 @@ async function load(keepData = false) {
     const access = await analyticsAccess()
     if (turn !== loadTurn) return
     if (access.allowed !== true) { accessDenied.value = true; summary.value = null; return }
-    const data = await analyticsSummary(days.value)
+    const data = await analyticsSummary(days.value, userSort.value)
     if (turn !== loadTurn) return
     if (data.allowed !== true) { accessDenied.value = true; summary.value = null; return }
     if (data.error) { unavailable.value = true; summary.value = null; stale.value = false; return }
@@ -78,8 +80,8 @@ async function load(keepData = false) {
 }
 onMounted(() => { void load(false) })
 
-/** 周期变化：立即清空旧数据，避免旧数字配新周期标签；下钻缓存同时作废。 */
-watch(days, () => {
+/** 周期或排序变化：清空旧数据及下钻缓存；身份筛选保留在父级，不受列表重建影响。 */
+watch([days, userSort], () => {
   openPage.value = ''; pageUsers.value = {}; pageUsersError.value = ''
   openUser.value = ''; userPages.value = {}; userPagesError.value = ''
   void load(false)
@@ -255,6 +257,8 @@ const detailRowsForUser = computed(() => userPages.value[pageUsersKey(days.value
         </div>
         <AnalyticsUserList
           v-else
+          v-model:sort="userSort"
+          v-model:filter="userFilter"
           :rows="users"
           :open-user="openUser"
           :detail-rows="detailRowsForUser"
