@@ -19,6 +19,28 @@ class MusicVideoTest {
  MusicVideoService.Plan plan(){return new MusicVideoService.Plan("旅行","16:9","720P",5000,List.of(new MusicVideoService.Shot("同一位旅人沿着海岸走向日落，电影风格",5)));}
  String create(){return service.create("owner","work","asset","request",plan());}
  @Test void duplicateRequestIsOneDebitAndNoProviderCalls(){String id=create();assertEquals(id,create());verify(credits,times(1)).debit("owner",10,"music-video:"+id);verify(provider,never()).submit(anyString(),anyInt(),anyString(),anyString(),anyString());assertThrows(RuntimeException.class,()->service.get("other",id));}
+ @Test void differentRequestKeyCannotChargeAgainWhileSameAudioIsActive(){
+  String id=create();
+  for(String state:List.of("QUEUED","RUNNING","ASSEMBLING","UNCERTAIN")){
+   db.update("UPDATE music_video_project SET state=? WHERE id=?",state,id);
+   var error=assertThrows(com.qingfeng.music.common.exception.DomainException.class,()->service.create("owner","work","asset","another-request",plan()));
+   assertEquals("VIDEO_ALREADY_ACTIVE",error.code());assertEquals(id,create());
+  }
+  assertEquals(1,db.queryForObject("SELECT COUNT(*) FROM music_video_project",Integer.class));
+  verify(credits,times(1)).debit(anyString(),anyLong(),anyString());
+ }
+ @Test void completedTaskAllowsNewRequestAndOtherAudioCanRunIndependently(){
+  String first=create();
+  String other=service.create("owner","work","another-asset","other-version",plan());assertNotEquals(first,other);
+  db.update("UPDATE music_video_project SET state='READY' WHERE id=?",first);
+  String next=service.create("owner","work","asset","new-request",plan());assertNotEquals(first,next);
+  verify(credits,times(3)).debit(anyString(),anyLong(),anyString());
+ }
+ @Test void activeTasksStayVisibleBeyondHistoryLimit(){
+  String active=create();
+  for(int i=0;i<25;i++)db.update("INSERT INTO music_video_project(id,creator_id,work_id,asset_id,request_key,fingerprint,state,plan_json,created_at) VALUES(?,?,?,?,?,?,'READY','{}',?)",UUID.randomUUID().toString(),"owner","work","asset","past-"+i,"hash",java.sql.Timestamp.from(java.time.Instant.now().plusSeconds(i+1)));
+  assertEquals(active,service.list("owner","work").get(0).get("id"));
+ }
  @Test void cancelQueuedRefundsOnceAndNeverStarts(){String id=create();service.cancel("owner",id);assertThrows(RuntimeException.class,()->service.cancel("owner",id));verify(credits,times(1)).refund("owner","music-video:"+id);assertEquals("CANCELLED",service.get("owner",id).get("state"));}
  @Test void uncertainSubmissionNeverResubmits(@org.junit.jupiter.api.io.TempDir Path root){String id=create();when(provider.submit(anyString(),anyInt(),anyString(),anyString(),anyString())).thenThrow(new VideoProvider.Failure("VIDEO_SUBMIT_UNCERTAIN",true));var worker=new MusicVideoWorker(db,tx,provider,media,root,"ffmpeg");worker.tick();worker.tick();assertEquals("UNCERTAIN",service.get("owner",id).get("state"));verify(provider,times(1)).submit(anyString(),anyInt(),anyString(),anyString(),anyString());verify(credits,never()).refund(anyString(),anyString());}
  @Test void processRestartDoesNotResubmitInterruptedPost(@org.junit.jupiter.api.io.TempDir Path root){String id=create();db.update("UPDATE music_video_shot SET state='SUBMITTING' WHERE project_id=?",id);new MusicVideoWorker(db,tx,provider,media,root,"ffmpeg").tick();assertEquals("UNCERTAIN",service.get("owner",id).get("state"));verify(provider,never()).submit(anyString(),anyInt(),anyString(),anyString(),anyString());}

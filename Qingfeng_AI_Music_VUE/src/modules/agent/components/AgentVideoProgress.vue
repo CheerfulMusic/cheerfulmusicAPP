@@ -3,11 +3,12 @@ import { ref, computed, watch, onBeforeUnmount } from 'vue'
 import { getJson } from '../../../shared/http/api-client'
 import { locale } from '../../../shared/i18n'
 const props=defineProps<{projectId:string}>()
+const emit=defineEmits<{ 'state-change': [state: string] }>()
 interface Status {id:string;state:string;shots:{state:string}[]}
 const status=ref<Status>(),error=ref(false)
 const en=computed(()=>locale.value==='en')
 const labels:Record<string,string>={QUEUED:'排队中',RUNNING:'镜头生成中',ASSEMBLING:'配乐合成中',READY:'MV 已完成',FAILED:'镜头生成失败',ASSEMBLY_FAILED:'合成失败，可请求重新合成',UNCERTAIN:'等待核对上游任务，请勿重复生成',CANCELLED:'已取消'}
-const active=new Set(['QUEUED','RUNNING','ASSEMBLING'])
+const active=new Set(['QUEUED','RUNNING','ASSEMBLING','UNCERTAIN'])
 let timer:ReturnType<typeof setTimeout>|undefined,sequence=0,disposed=false,failures=0
 const url=computed(()=>status.value?.state==='READY'?`/api/app/music-videos/${encodeURIComponent(props.projectId)}/content`:'')
 async function refresh(){
@@ -17,7 +18,7 @@ async function refresh(){
     const result=await getJson<Status>(`app/music-videos/${id}`)
     if(disposed||version!==sequence)return
     if(result.id!==id||typeof result.state!=='string'||!Array.isArray(result.shots))throw Error('Invalid status')
-    status.value=result;error.value=false;failures=0
+    status.value=result;error.value=false;failures=0;emit('state-change',result.state)
     if(active.has(result.state))timer=setTimeout(()=>void refresh(),10000)
   }catch{
     if(disposed||version!==sequence)return
