@@ -117,7 +117,7 @@ public final class OpenAiLyricsWriter implements LyricsWriter {
             "model", model, "instructions", prompt,
             "input", List.of(Map.of("role", "user", "content", content)),
             "text", Map.of("format", Map.of("type", "json_schema", "name", "song_lyrics", "strict", true, "schema", schema(photo))),
-            "reasoning", Map.of("effort", "low"), "max_output_tokens", 6000, "store", false, "stream", false));
+            "reasoning", Map.of("effort", "medium"), "max_output_tokens", 8000, "store", false, "stream", false));
         try {
             var response = LyricsHttpTransport.post(client, endpoint, key, body);
             int status = response.statusCode();
