@@ -109,6 +109,58 @@ class OpenAiLyricsFlowTest {
         assertEquals(backupCalls,CUSTOM_DEEPSEEK.calls.get());
     }
 
+    @Test void fullRewriteUsesEditorTextAndRejectsOnlyCosmeticResultsAndTheSavedOriginal(){
+        String owner=identity.create().creatorId();
+        var work=works.create(owner,new WorkApi.Draft("","","","","民谣","回家的灯"));
+        var principal=new CreatorPrincipal(owner);
+        var original=lyrics.save(owner,work.id(),0,"回家的灯","[Verse]\n窗台留着一盏灯");
+        String editor="[Verse]\n归家的人推开旧木门\n等风把路吹亮";
+        int before=CUSTOM_GPT.calls.get();
+        try {
+            for (String unchanged : List.of("[Chorus]\r\n归家的人，推开旧木门。\r\n等 风 把 路 吹 亮！", original.lyrics())) {
+                CUSTOM_GPT.output=unchanged;
+                var request=new ComposeRequest(0L,UUID.randomUUID().toString(),"zh-CN","保持朴素",original.id(),null,false,null,true,editor);
+                assertEquals("LYRICS_REWRITE_UNCHANGED",assertThrows(DomainException.class,
+                    ()->controller.compose(principal,work.id(),request)).code());
+                assertEquals("FAILED",composer.requestState(owner,work.id(),request.requestKey()).status());
+                assertEquals("LYRICS_REWRITE_UNCHANGED",composer.requestState(owner,work.id(),request.requestKey()).errorCode());
+                assertEquals(List.of(original.id()),lyrics.list(owner,work.id()).stream().map(LyricsApi.Revision::id).toList());
+            }
+            assertEquals(editor,CUSTOM_GPT.previousLyrics);
+            assertTrue(CUSTOM_GPT.instructions.contains("【整首重写模式】"));
+            assertTrue(CUSTOM_GPT.instructions.contains("保持朴素"));
+
+            CUSTOM_GPT.output="[Verse]\n街尾的脚步踏过青石板\n屋里传来一声轻轻的呼唤";
+            var request=new ComposeRequest(0L,UUID.randomUUID().toString(),"zh-CN","",original.id(),null,false,null,true,editor);
+            var rewritten=controller.compose(principal,work.id(),request);
+            assertEquals(CUSTOM_GPT.output,rewritten.lyrics());
+            assertEquals(rewritten.id(),controller.compose(principal,work.id(),request).id());
+            assertEquals(original.lyrics(),lyrics.get(owner,work.id(),original.id()).lyrics());
+            assertEquals(2,lyrics.list(owner,work.id()).size());
+
+            var changedSource=new ComposeRequest(0L,request.requestKey(),"zh-CN","",original.id(),null,false,null,true,editor+"\n再添一行");
+            var differentMode=new ComposeRequest(0L,request.requestKey(),"zh-CN","",original.id(),null,false);
+            for (var changed : List.of(changedSource,differentMode)) {
+                assertEquals("REQUEST_KEY_CONFLICT",assertThrows(DomainException.class,
+                    ()->controller.compose(principal,work.id(),changed)).code());
+            }
+            assertEquals(before+3,CUSTOM_GPT.calls.get());
+        } finally {
+            CUSTOM_GPT.output=null;
+        }
+    }
+
+    @Test void fullRewriteRejectsAnEmptyEditorBeforeSubmitting(){
+        String owner=identity.create().creatorId();
+        var work=works.create(owner,new WorkApi.Draft("","","一段旧回忆","","民谣",""));
+        var request=new ComposeRequest(0L,UUID.randomUUID().toString(),"zh-CN","",null,null,false,null,true,"[Verse]\n 。\t");
+        int before=CUSTOM_GPT.calls.get();
+        assertEquals("INVALID_LYRICS_REQUEST",assertThrows(DomainException.class,
+            ()->controller.compose(new CreatorPrincipal(owner),work.id(),request)).code());
+        assertEquals("NOT_FOUND",composer.requestState(owner,work.id(),request.requestKey()).status());
+        assertEquals(before,CUSTOM_GPT.calls.get());
+    }
+
     @Test void customCreationFallsBackOnceForAnExplicitProviderRejection(){
         String owner=identity.create().creatorId();
         var work=works.create(owner,new WorkApi.Draft("","","夜里回家","","民谣",""));

@@ -57,16 +57,22 @@ public class LyricsController {
      @NotBlank @Pattern(regexp="zh-CN|en|mixed") String language,
      @Size(max=1000) String instructions, @Pattern(regexp="[0-9a-fA-F-]{36}") String baseRevisionId,
      @Pattern(regexp="AUTO|AAB|ABB|ABC|ABCD|CUSTOM") String templateId, boolean chorusFirst,
-     @Size(max=LyricsStructure.MAX_CUSTOM_SECTIONS) List<String> customSections){
+     @Size(max=LyricsStructure.MAX_CUSTOM_SECTIONS) List<String> customSections,
+     Boolean rewriteAll, @Size(max=LyricsCompositionService.MAX_REWRITE_SOURCE_LENGTH) String sourceLyrics){
      public ComposeRequest(Long workVersion,String requestKey,String language,String instructions,String baseRevisionId,
                            String templateId,boolean chorusFirst){
          this(workVersion,requestKey,language,instructions,baseRevisionId,templateId,chorusFirst,null);
+     }
+     public ComposeRequest(Long workVersion,String requestKey,String language,String instructions,String baseRevisionId,
+                           String templateId,boolean chorusFirst,List<String> customSections){
+         this(workVersion,requestKey,language,instructions,baseRevisionId,templateId,chorusFirst,customSections,false,null);
      }
  }
  @PostMapping("/generate")
  public LyricsApi.Revision compose(@AuthenticationPrincipal CreatorPrincipal creator,@PathVariable String work,@Valid @RequestBody ComposeRequest request){
      return composer.composeCustom(creator.id(),work,request.workVersion(),request.requestKey(),request.language(),
-         request.instructions(),request.baseRevisionId(),request.templateId(),request.chorusFirst(),request.customSections());
+         request.instructions(),request.baseRevisionId(),request.templateId(),request.chorusFirst(),request.customSections(),
+         Boolean.TRUE.equals(request.rewriteAll()),request.sourceLyrics());
  }
  @PostMapping(value="/generate-photo", consumes="multipart/form-data")
  public LyricsApi.Revision composePhoto(@AuthenticationPrincipal CreatorPrincipal creator, @PathVariable String work,

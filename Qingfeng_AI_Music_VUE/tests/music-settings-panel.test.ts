@@ -9,7 +9,10 @@ import type { MusicCatalog, MusicPreferences } from '../src/modules/works/api/mu
 import LyricsPanel from '../src/modules/works/components/LyricsPanel.vue'
 import MusicSettingsPanel from '../src/modules/works/components/MusicSettingsPanel.vue'
 
-const api = vi.hoisted(() => ({ snapshot: vi.fn(), load: vi.fn(), preview: vi.fn(), rewrite: vi.fn(), rhyme: vi.fn(), rewriteSelection: vi.fn() }))
+const api = vi.hoisted(() => ({
+  snapshot: vi.fn(), load: vi.fn(), preview: vi.fn(), rewrite: vi.fn(), rhyme: vi.fn(), rewriteSelection: vi.fn(),
+  compose: vi.fn(), requestState: vi.fn(), revisionById: vi.fn(), system: vi.fn(), replaceRoute: vi.fn(),
+}))
 const catalog = JSON.parse(readFileSync('../Qingfeng_AI_Music/qf-infrastructure/src/main/resources/music/catalog-v1.json', 'utf8')) as MusicCatalog
 vi.mock('../src/modules/works/api/music-settings', () => ({
   loadMusicCatalog: async () => catalog,
@@ -28,13 +31,16 @@ vi.mock('../src/modules/works/api/detail', () => ({
   rhymeLyricLine: api.rhyme,
   rewriteLyricSelection: api.rewriteSelection,
   listRevisions: async () => [revision],
+  generateLyrics: api.compose,
+  getLyricsRequest: api.requestState,
+  getRevision: api.revisionById,
 }))
-vi.mock('../src/shared/http/system', () => ({ getSystemInfo: async () => ({ capabilities: { lyricsGeneration: true } }) }))
-vi.mock('vue-router', () => ({ useRoute: () => ({ query: {} }), useRouter: () => ({}) }))
+vi.mock('../src/shared/http/system', () => ({ getSystemInfo: api.system }))
+vi.mock('vue-router', () => ({ useRoute: () => ({ query: {} }), useRouter: () => ({ replace: api.replaceRoute }) }))
 
 const work = { id: 'work', version: 2, style: '摇滚', vocalGender: 'MALE' } as Work
 const task = { id: 'original', style: '温暖民谣', vocalGender: 'FEMALE' } as GenerationTask
-const revision = { title: '回家的灯', lyrics: '[Verse]\n灯在等你\n夜风吹过山城', language: 'zh-CN' } as Revision
+const revision = { id: 'base-revision', workVersion: work.version, title: '回家的灯', lyrics: '[Verse]\n灯在等你\n夜风吹过山城', language: 'zh-CN' } as Revision
 const preferences: MusicPreferences = {
   version: 1,
   recipeId: catalog.recipes[0]!.id,
@@ -52,6 +58,7 @@ enableAutoUnmount(afterEach)
 beforeEach(() => {
   vi.clearAllMocks()
   localStorage.clear()
+  api.system.mockResolvedValue({ capabilities: { lyricsGeneration: true } })
   api.load.mockResolvedValue({ work, direction: { preferences: { ...preferences, vocalGender: 'MALE', choices: { genre: ['rock'] } } } })
   api.preview.mockImplementation(async (_work: string, selected: MusicPreferences) => ({ preferences: selected }))
 })
@@ -298,8 +305,11 @@ it('keeps individually selected lines and entire sections, applying a preview on
   expect(panel.find('dialog.lyric-selection-dialog').exists()).toBe(false)
 })
 
-it('retries a lost preview response with the original request ID', async () => {
-  api.rewriteSelection.mockRejectedValueOnce(new ApiError('等待预览超时', 408))
+it.each([
+  new ApiError('等待预览超时', 408),
+  new ApiError('模型响应超时，结果待核对', 409, 'REWRITE_PROVIDER_RESULT_UNKNOWN'),
+])('reopens and checks a lost preview using the original request ID', async failure => {
+  api.rewriteSelection.mockRejectedValueOnce(failure)
     .mockResolvedValueOnce({ lyrics: revision.lyrics.replace('夜风吹过山城', '风里还有灯火') })
   const panel = mount(LyricsPanel, { props: { work: { ...work, id: 'retry-work' } } })
   await flushPromises()
@@ -309,12 +319,70 @@ it('retries a lost preview response with the original request ID', async () => {
   const generate = () => dialog.findAll('button').find(button => button.text() === '生成预览')!
   await generate().trigger('click')
   await flushPromises()
-  expect(dialog.get('[role="alert"]').text()).toBe('等待预览超时')
-  await generate().trigger('click')
+  expect(dialog.get('[role="alert"]').text()).toBe(failure.message)
+  await dialog.get('.selection-close').trigger('click')
+  await panel.get('.lyric-rewrite-all').trigger('click')
+  const reopened = panel.get('dialog.lyric-selection-dialog')
+  expect(reopened.get<HTMLInputElement>('.selection-row input').element.checked).toBe(true)
+  await reopened.findAll('button').find(button => button.text() === '核对预览结果')!.trigger('click')
   await flushPromises()
   expect(api.rewriteSelection).toHaveBeenCalledTimes(2)
   expect(api.rewriteSelection.mock.calls[1]).toEqual(api.rewriteSelection.mock.calls[0])
-  expect(dialog.text()).toContain('新版歌词预览')
+  expect(reopened.text()).toContain('新版歌词预览')
+})
+
+it('sends the live draft for a full rewrite and keeps it when a response only changes punctuation', async () => {
+  vi.stubGlobal('confirm', vi.fn(() => true))
+  const panel = mount(LyricsPanel, { props: { work } })
+  try {
+    await flushPromises()
+    const editor = panel.get<HTMLTextAreaElement>('textarea')
+    const source = '[Verse]\n我在门前等你\n今天风吹得很轻'
+    await editor.setValue(source)
+    api.compose.mockResolvedValueOnce({ ...revision, id: 'duplicate', lyrics: '[Verse 2]\n我在门前等你！\n今天风吹得很轻。' })
+    await panel.get('.lyric-rewrite-all').trigger('click')
+    await panel.get('.lyric-selection-dialog').findAll('button').find(button => button.text() === '全部重写')!.trigger('click')
+    await flushPromises()
+    expect(api.compose).toHaveBeenCalledWith(work.id, work.version, expect.any(String), 'zh-CN', '', revision.id, expect.any(Object), source)
+    expect(editor.element.value).toBe(source)
+    expect(panel.get('.notice.error').text()).toContain('这次重写没有生成新的歌词，请重试。')
+    expect(api.replaceRoute).not.toHaveBeenCalled()
+
+    const changed = { ...revision, id: 'rewritten', lyrics: '[Verse]\n门前的灯照着你的路\n晚风捎回你的脚步' }
+    api.compose.mockResolvedValueOnce(changed)
+    await panel.get('.notice.error button').trigger('click')
+    await flushPromises()
+    expect(api.compose.mock.calls[0]?.[2]).not.toBe(api.compose.mock.calls[1]?.[2])
+    expect(api.compose.mock.calls[1]?.[7]).toBe(source)
+    expect(editor.element.value).toBe(changed.lyrics)
+    expect(api.replaceRoute).toHaveBeenCalledWith(expect.objectContaining({ query: expect.objectContaining({ revision: changed.id }) }))
+  } finally { vi.unstubAllGlobals() }
+})
+
+it('recovers a full rewrite after timeout without resubmitting or discarding the submitted draft', async () => {
+  vi.stubGlobal('confirm', vi.fn(() => true))
+  const panel = mount(LyricsPanel, { props: { work } })
+  try {
+    await flushPromises()
+    const editor = panel.get<HTMLTextAreaElement>('textarea')
+    const source = revision.lyrics.replace('灯在等你', '灯还在窗边')
+    await editor.setValue(source)
+    const changed = { ...revision, id: 'recovered', lyrics: '[Verse]\n窗台亮了一夜\n风把你的消息送到' }
+    api.compose.mockRejectedValueOnce(new ApiError('等待重写超时', 408))
+    api.requestState.mockResolvedValueOnce({ status: 'UNKNOWN' })
+      .mockResolvedValueOnce({ status: 'SUCCEEDED', revisionId: changed.id })
+    api.revisionById.mockResolvedValueOnce(changed)
+    await panel.get('.lyric-rewrite-all').trigger('click')
+    await panel.get('.lyric-selection-dialog').findAll('button').find(button => button.text() === '全部重写')!.trigger('click')
+    await flushPromises()
+    expect(editor.element.value).toBe(source)
+    await panel.get('.notice.error button').trigger('click')
+    await flushPromises()
+    expect(api.compose).toHaveBeenCalledTimes(1)
+    expect(api.requestState.mock.calls[0]).toEqual([work.id, api.compose.mock.calls[0]?.[2]])
+    expect(api.requestState.mock.calls[1]).toEqual(api.requestState.mock.calls[0])
+    expect(editor.element.value).toBe(changed.lyrics)
+  } finally { vi.unstubAllGlobals() }
 })
 
 it('ignores a late suggestion when the lyric draft changes during rewriting', async () => {

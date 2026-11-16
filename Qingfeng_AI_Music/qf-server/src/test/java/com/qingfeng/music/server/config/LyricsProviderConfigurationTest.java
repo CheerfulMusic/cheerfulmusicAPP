@@ -1,8 +1,10 @@
 package com.qingfeng.music.server.config;
 
+import com.qingfeng.music.generation.application.port.MusicProvider;
 import com.qingfeng.music.infrastructure.provider.DeepSeekLyricsWriter;
 import com.qingfeng.music.infrastructure.provider.OpenAiLyricsWriter;
 import com.qingfeng.music.lyrics.application.FallbackLyricsWriter;
+import com.qingfeng.music.server.web.publicapi.SystemInfoController;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.env.MockEnvironment;
 import static org.junit.jupiter.api.Assertions.*;
@@ -18,6 +20,19 @@ class LyricsProviderConfigurationTest {
         assertTrue(assertInstanceOf(OpenAiLyricsWriter.class, config.lyricsWriter(env)).isConfigured());
         assertTrue(config.inspirationRewriter(env).isConfigured());
         assertEquals("offline-qwen-model", RewriteProviderSettings.settings(env).model());
+    }
+
+    @Test void reportsPartialRewriteCapabilityIndependentlyOfFullLyricsGeneration() {
+        var env = new MockEnvironment().withProperty("qingfeng.lyrics.enabled", "true")
+            .withProperty("qingfeng.providers.qwen.api-key", "offline-qwen-key");
+        env.setActiveProfiles("test");
+        var system = new SystemInfoController(org.mockito.Mockito.mock(MusicProvider.class), env,
+            config.lyricsWriter(env), config.customLyricsWriter(env));
+        assertFalse(system.info().capabilities().lyricsGeneration());
+        assertFalse(system.info().capabilities().customLyricsGeneration());
+        assertTrue(system.info().capabilities().lyricSelectionRewrite());
+        env.setProperty("qingfeng.lyrics.enabled", "false");
+        assertFalse(system.info().capabilities().lyricSelectionRewrite());
     }
     @Test void supportsEnvironmentKeyWithoutFallingBackToDeepSeek() {
         var env = new MockEnvironment().withProperty("qingfeng.lyrics.provider", "openai").withProperty("OPENAI_API_KEY", "offline-key");

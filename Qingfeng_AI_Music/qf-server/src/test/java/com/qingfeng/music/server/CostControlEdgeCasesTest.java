@@ -4,7 +4,10 @@ import com.qingfeng.music.common.exception.DomainException;
 import com.qingfeng.music.credits.CreditsLedger;
 import com.qingfeng.music.identity.api.IdentityApi;
 import com.qingfeng.music.infrastructure.persistence.credits.JdbcDailyQuota;
+import com.qingfeng.music.infrastructure.persistence.lyrics.LyricsMapper;
+import com.qingfeng.music.infrastructure.persistence.lyrics.MyBatisLyricsRepository;
 import com.qingfeng.music.infrastructure.persistence.usage.JdbcUsageBudget;
+import com.qingfeng.music.lyrics.api.LyricsApi;
 import com.qingfeng.music.lyrics.application.InspirationRewriter;
 import com.qingfeng.music.lyrics.application.LyricsCompositionService;
 import com.qingfeng.music.lyrics.application.LyricsWriter;
@@ -73,6 +76,8 @@ class CostControlEdgeCasesTest {
 
     @Autowired IdentityApi identity;
     @Autowired WorkApi works;
+    @Autowired LyricsApi lyrics;
+    @Autowired LyricsMapper lyricsMapper;
     @Autowired LyricsCompositionService composer;
     @Autowired CreditsLedger credits;
     @Autowired JdbcUsageBudget usageBudget;
@@ -165,6 +170,30 @@ class CostControlEdgeCasesTest {
         assertEquals(1, lyricsWriter.calls.get(), "重放不再调用模型");
         var rows = consumptions(owner);
         assertEquals(1, rows.size(), "仍只有一条流水");
+        assertEquals("FAILED", rows.get(0).status());
+        assertEquals(1, rows.get(0).refunded());
+    }
+
+    @Test
+    void unchangedFullRewriteRefundsTheReservationWithoutCreatingAVersion() {
+        String owner = identity.create().creatorId();
+        credits.credit(owner, 100, "fund-" + owner);
+        String work = works.create(owner, draft()).id();
+        var base = composer.compose(owner, work, 0, UUID.randomUUID().toString(), "zh-CN");
+        var service = new LyricsCompositionService(
+            works, lyrics, new MyBatisLyricsRepository(lyricsMapper), lyricsWriter, requests, true);
+        String key = UUID.randomUUID().toString();
+        int before = lyricsWriter.calls.get();
+
+        assertEquals("LYRICS_REWRITE_UNCHANGED", assertThrows(DomainException.class, () ->
+            service.composeCustom(owner, work, 0, key, "zh-CN", "", base.id(), null, false, null, true, base.lyrics())).code());
+        assertEquals("LYRICS_REQUEST_FAILED", assertThrows(DomainException.class, () ->
+            service.composeCustom(owner, work, 0, key, "zh-CN", "", base.id(), null, false, null, true, base.lyrics())).code());
+        assertEquals(before + 1, lyricsWriter.calls.get());
+        assertEquals(100, credits.balance(owner));
+        assertEquals(List.of(base.id()), lyrics.list(owner, work).stream().map(LyricsApi.Revision::id).toList());
+        var rows = consumptions(owner);
+        assertEquals(1, rows.size());
         assertEquals("FAILED", rows.get(0).status());
         assertEquals(1, rows.get(0).refunded());
     }

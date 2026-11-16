@@ -8,9 +8,10 @@ export interface GenerationTask { id: string; revisionId: string; requestKey?:st
 export const closeTaskChecking=(work:string,task:string)=>call<GenerationTask>(`app/works/${work}/generations/${task}/close-checking`,'POST',{acknowledge:true})
 async function call<T>(path: string, method = 'GET', body?: unknown) { await ensureCreator(); return requestJson<T>(path, method, body) }
 export const listRevisions = (work: string) => call<Revision[]>(`app/works/${work}/lyrics`)
-export async function generateLyrics(work: string, workVersion: number, requestKey: string, language: string, instructions = '', baseRevisionId?: string, structure?: LyricsStructure) {
+export async function generateLyrics(work: string, workVersion: number, requestKey: string, language: string, instructions = '', baseRevisionId?: string, structure?: LyricsStructure, rewriteSource?: string) {
   await ensureCreator()
-  return requestJson<Revision>(`app/works/${work}/lyrics/generate`, 'POST', {workVersion, requestKey, language, instructions, baseRevisionId, ...structure}, 120000)
+  const rewrite = rewriteSource === undefined ? {} : { rewriteAll: true, sourceLyrics: rewriteSource }
+  return requestJson<Revision>(`app/works/${work}/lyrics/generate`, 'POST', {workVersion, requestKey, language, instructions, baseRevisionId, ...structure, ...rewrite}, 120000)
 }
 export function generatePhotoLyrics(work: string, version: number, key: string, language: string, photos: readonly File[]) {
   const form = new FormData()
@@ -63,7 +64,8 @@ export async function rhymeLyricLine(work: string, input: LyricRhymeRequest) {
   await ensureCreator()
   return requestJson<LyricRhymeResult>(`app/works/${encodeURIComponent(work)}/lyrics/rhyme-line`, 'POST', input, 60000)
 }
-export async function rewriteLyricSelection(work: string, input: {requestId: string; workVersion: number; lyrics: string; keptLines: number[]; language: string}) {
+export interface LyricSelectionInput {requestId: string; workVersion: number; lyrics: string; keptLines: number[]; language: string}
+export async function rewriteLyricSelection(work: string, input: LyricSelectionInput) {
   await ensureCreator()
   return requestJson<{lyrics: string}>(`app/works/${encodeURIComponent(work)}/lyrics/rewrite-selection`, 'POST', input, 110000)
 }

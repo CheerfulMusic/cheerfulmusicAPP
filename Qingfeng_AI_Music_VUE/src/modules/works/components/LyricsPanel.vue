@@ -13,13 +13,14 @@ import RecoveryCopies from '../../../shared/drafts/RecoveryCopies.vue'
 import LyricSelectionRewriteDialog from './LyricSelectionRewriteDialog.vue'
 import LyricRhymeEditor from './LyricRhymeEditor.vue'
 import type { Work } from '../../studio'
-import { listRevisions, getRevision, getLyricsRequest, saveRevision, confirmRevision, generateLyrics, type Revision, type LyricRewriteAction } from '../api/detail'
+import { listRevisions, getRevision, getLyricsRequest, saveRevision, confirmRevision, generateLyrics, type Revision, type LyricRewriteAction, type LyricSelectionInput } from '../api/detail'
 import { lyricRewriteError, lyricsMaxLength, selectLyricLine, suggestLyricLine, type LyricLineSelection } from '../model/lyric-line-edit'
 import { lyricSectionPrefix, rhymeSectionAt } from '../model/lyric-rhyme'
 const props=defineProps<{work:Work;showInlineSave?:boolean}>(), emit=defineEmits<{selected:[revision:Revision|null];dirty:[value:boolean];ready:[value:boolean];recoverable:[value:boolean];base:[revision:Revision|null]}>()
 const route=useRoute(),router=useRouter()
-const versions=ref<Revision[]>([]),active=ref<Revision|null>(null),title=ref(props.work.title||(props.work.recipient?t('写给{recipient}的歌',{recipient:props.work.recipient}):t('我的原创歌曲'))),text=ref(''),baseline=ref(''),loading=ref(true),saving=ref(false),composing=ref(false),preparing=ref(false),error=ref(''),notice=ref(''),aiReady=ref(false),localSaved=ref(false),creditShort=ref(false)
+const versions=ref<Revision[]>([]),active=ref<Revision|null>(null),title=ref(props.work.title||(props.work.recipient?t('写给{recipient}的歌',{recipient:props.work.recipient}):t('我的原创歌曲'))),text=ref(''),baseline=ref(''),loading=ref(true),saving=ref(false),composing=ref(false),preparing=ref(false),error=ref(''),notice=ref(''),localSaved=ref(false),creditShort=ref(false)
 const customLyricsReady=ref(false)
+const selectionRewriteReady=ref(false)
 const { credits, refreshCredits } = useCredits(() => props.work.id)
 const language=ref<string>(['zh-CN','en','mixed'].includes(String(route.query.language))?String(route.query.language):locale.value),instructions=ref(''),requestKey=ref('')
 const routeStructure=lyricsStructureFromQuery(route.query)
@@ -40,6 +41,10 @@ const linePreview=ref<{selection:LyricLineSelection;text:string}>()
 const lineBusy=ref(false),lineError=ref('')
 const editorText=computed(()=>text.value.replace(/\r\n?/g,'\n'))
 const rewriteDraft=ref<{source:string;workVersion:number;language:string}>()
+interface FullRewriteAttempt { source: string; title: string; baseId?: string }
+const pendingFullRewrite=ref<FullRewriteAttempt>()
+const pendingPreviews=ref<LyricSelectionInput[]>([])
+let retryFullRewrite=false
 const selectedLine=computed(()=>selection.value?.source===editorText.value?selection.value:undefined)
 const rhymeOpen=ref(false)
 const rhymeSection=computed(()=>{
@@ -105,20 +110,38 @@ function applyLine(chosen:LyricLineSelection,replacement:string){
  })
 }
 let alive=true,inflight:Promise<Revision>|undefined,cacheKey=''
-interface Recovery {structure?:LyricsStructure;title:string;lyrics:string;workVersion:number;baseId:string|null;language:string;instructions:string;requestKey:string;dirty:boolean}
+interface Recovery {structure?:LyricsStructure;title:string;lyrics:string;workVersion:number;baseId:string|null;language:string;instructions:string;requestKey:string;dirty:boolean;fullRewrite?:FullRewriteAttempt;previews?:LyricSelectionInput[]}
 function validRecovery(v:unknown):v is Recovery {const r=v as Recovery;return !!r&&typeof r.title==='string'&&typeof r.lyrics==='string'&&r.title.length<=100&&r.lyrics.length<=12000&&['zh-CN','en','mixed'].includes(r.language)&&typeof r.instructions==='string'&&typeof r.requestKey==='string'}
-function remember(){if(loading.value||!cacheKey)return;localSaved.value=writeRecovery(cacheKey,{...draftValue(),workVersion:props.work.version,baseId:active.value?.id||null,language:language.value,structure:{...structure.value},instructions:instructions.value,requestKey:requestKey.value,dirty:dirty.value} satisfies Recovery)}
+function recoveryValue():Recovery {
+ return {...draftValue(),workVersion:props.work.version,baseId:active.value?.id||null,language:language.value,structure:{...structure.value},instructions:instructions.value,requestKey:requestKey.value,dirty:dirty.value,fullRewrite:pendingFullRewrite.value,previews:pendingPreviews.value.length?pendingPreviews.value:undefined}
+}
+function remember(){if(loading.value||!cacheKey)return;localSaved.value=writeRecovery(cacheKey,recoveryValue())}
+function restorePending(value:Recovery, key:string){
+ const full=value.fullRewrite
+ pendingFullRewrite.value=key&&typeof full?.source==='string'&&full.source.length<=lyricsMaxLength&&typeof full.title==='string'?full:undefined
+ requestKey.value=key
+ if(Array.isArray(value.previews)){
+   const known=new Map(pendingPreviews.value.map(preview=>[preview.requestId,preview]))
+   for(const preview of value.previews){
+     if(preview?.workVersion===props.work.version&&typeof preview.requestId==='string'&&typeof preview.lyrics==='string'
+        &&preview.lyrics.length<=lyricsMaxLength&&['zh-CN','en','mixed'].includes(preview.language)
+        &&Array.isArray(preview.keptLines)&&preview.keptLines.length<=lyricsMaxLength
+        &&preview.keptLines.every(index=>Number.isSafeInteger(index)&&index>=0)) known.set(preview.requestId,preview)
+   }
+   pendingPreviews.value=[...known.values()]
+ }
+}
 function restoreCopy(value:Recovery){
  if(blocked.value||saving.value)return
- if(!checkpointRecovery(cacheKey,{...draftValue(),workVersion:props.work.version,baseId:active.value?.id||null,language:language.value,structure:{...structure.value},instructions:instructions.value,requestKey:requestKey.value,dirty:dirty.value} satisfies Recovery)){errorKind.value='save';error.value='无法保留当前编辑，已停止恢复。请先复制内容，或清理浏览器存储后重试。';return}
+ if(!checkpointRecovery(cacheKey,recoveryValue())){errorKind.value='save';error.value='无法保留当前编辑，已停止恢复。请先复制内容，或清理浏览器存储后重试。';return}
  active.value=versions.value.find(v=>v.id===value.baseId)||null
  baseline.value=JSON.stringify({title:active.value?.title||'',lyrics:active.value?.lyrics||''})
  title.value=value.title;text.value=value.lyrics;language.value=value.language;structure.value=normalizeLyricsStructure(value.structure);instructions.value=value.instructions
- requestKey.value=value.workVersion===props.work.version?value.requestKey:''
+ restorePending(value,value.workVersion===props.work.version?value.requestKey:'')
  error.value='';notice.value='已恢复本机副本，替换前的编辑也已另存。';remember()
 }
 // 输入只保留本机恢复副本；仅用户明确保存时写入版本历史。
-watch([title,text,language,structure,instructions,requestKey],remember,{flush:'sync'})
+watch([title,text,language,structure,instructions,requestKey,pendingFullRewrite,pendingPreviews],remember,{flush:'sync'})
 watch([dirty,active,composing,canGenerate],()=>{emit('dirty',dirty.value);emit('selected',dirty.value||composing.value?null:active.value);emit('ready',canGenerate.value);emit('base',active.value)},{immediate:true})
 watch(editorText,source=>{
  if(selection.value?.source===source)return
@@ -160,6 +183,21 @@ async function blockedByCredits(){
   error.value=t('积分不足，当前余额 {balance} 积分，生成需要 {cost} 积分。',{balance:gate.balance as number,cost:gate.cost})
   return true
 }
+const unchangedRewrite='这次重写没有生成新的歌词，请重试。'
+function comparableLyrics(value:string){
+ return value.normalize('NFKC').split(/\r\n?|\n/).map(line=>line.replace(/^\s*\[[^\]\r\n]+\]\s*$/, ''))
+   .join('\n').toLowerCase().replace(/[^\p{L}\p{M}\p{N}]+/gu,'')
+}
+function noNewLyrics(lyrics:string, attempt:FullRewriteAttempt){
+ const body=comparableLyrics(lyrics)
+ return !body||body===comparableLyrics(attempt.source)
+}
+function clearComposeRequest(){
+ requestKey.value='';pendingFullRewrite.value=undefined;requestWaiting.value=false
+}
+function reportUnchangedRewrite(){
+ clearComposeRequest();retryFullRewrite=true;errorKind.value='compose';notice.value='';error.value=unchangedRewrite
+}
 async function recoverRequest(){
   const key=requestKey.value;if(!key)return
   requestChecking.value=true
@@ -167,29 +205,39 @@ async function recoverRequest(){
     const state=await getLyricsRequest(props.work.id,key)
     if(!alive||key!==requestKey.value)return
     requestWaiting.value=state.status==='PENDING'||state.status==='UNKNOWN'
-    if(state.status==='FAILED'){
-      requestKey.value='';notice.value='上次歌词编写未完成，现已恢复。点击重新编写即可再试，已有内容会保留。'
+    if(state.status==='NOT_FOUND'){
+      notice.value=''
+      if(!error.value){errorKind.value='compose';error.value='暂未查到上次编写结果，可以使用原请求重试。'}
+    }else if(state.status==='FAILED'){
+      retryFullRewrite=!!pendingFullRewrite.value
+      if(state.errorCode==='LYRICS_REWRITE_UNCHANGED'){reportUnchangedRewrite();return}
+      clearComposeRequest();notice.value='上次歌词编写未完成，现已恢复。点击重新编写即可再试，已有内容会保留。'
     }else if(state.status==='SUCCEEDED'&&state.revisionId){
       const found=await getRevision(props.work.id,state.revisionId)
       if(!alive||key!==requestKey.value)return
+      const attempt=pendingFullRewrite.value
+      if(attempt&&noNewLyrics(found.lyrics,attempt)){reportUnchangedRewrite();return}
       versions.value=[found,...versions.value.filter(v=>v.id!==found.id)]
-      // 结果恢复不覆盖用户尚未保存的编辑。
-      if(JSON.stringify(draftValue())===baseline.value){
+      // 对照提交时的编辑内容。恢复结果时保护提交之后的修改。
+      const sameDraft=attempt?attempt.source===editorText.value&&attempt.title===draftValue().title:JSON.stringify(draftValue())===baseline.value
+      if(sameDraft){
         select(found)
         if(found.templateId)structure.value=normalizeLyricsStructure(found)
         await syncRoute(found.id)
       }
-      requestKey.value='';error.value='';notice.value='上次编写的歌词已找回，可在历史版本中查看。'
-    }else if(requestWaiting.value)notice.value='歌词仍在编写中，可以稍后刷新编写状态。'
+      clearComposeRequest();retryFullRewrite=false;error.value='';notice.value=sameDraft?'新歌词已生成，旧版本已保留。你可以继续修改。':'上次编写的歌词已找回，可在历史版本中查看。'
+    }else if(state.status==='UNKNOWN')notice.value='歌词编写结果待确认，请刷新编写状态。'
+    else if(requestWaiting.value)notice.value='歌词仍在编写中，可以稍后刷新编写状态。'
     remember();void updateCredits()
   }finally{requestChecking.value=false}
 }
 async function refreshRequest(){try{await recoverRequest()}catch(e){errorKind.value='compose';error.value=e instanceof Error?e.message:'暂时无法确认编写状态，请稍后刷新。'}}
-async function retryError(){if(errorKind.value==='load'){window.location.reload();return}if(errorKind.value==='save')await save();else if(requestWaiting.value)await refreshRequest();else await compose()}
+async function retryError(){if(errorKind.value==='load'){window.location.reload();return}if(errorKind.value==='save')await save();else if(requestWaiting.value)await refreshRequest();else await compose(retryFullRewrite)}
 onMounted(async()=>{
   try{
-    const [history,system]=await Promise.all([listRevisions(props.work.id),getSystemInfo()]);versions.value=history;aiReady.value=system.capabilities.lyricsGeneration
+    const [history,system]=await Promise.all([listRevisions(props.work.id),getSystemInfo()]);versions.value=history
     customLyricsReady.value=system.capabilities.customLyricsGeneration??system.capabilities.lyricsGeneration
+    selectionRewriteReady.value=system.capabilities.lyricSelectionRewrite??system.capabilities.lyricsGeneration
     select(history.find(v=>v.id===route.query.revision)||history[0]||null)
     cacheKey=recoveryKey(currentCreatorId(),'lyrics',props.work.id)
     const local=readRecovery(cacheKey,validRecovery)
@@ -199,10 +247,10 @@ onMounted(async()=>{
       language.value=local.language;instructions.value=local.instructions
       const sameRevision=local.baseId===(active.value?.id??null)
       if(!hasRouteStructure&&(local.dirty||sameRevision||!active.value?.templateId))structure.value=normalizeLyricsStructure(local.structure??structure.value)
-      requestKey.value=local.workVersion===props.work.version&&(local.dirty||sameRevision||!route.query.revision)?local.requestKey:''
+      restorePending(local,local.workVersion===props.work.version&&(local.dirty||sameRevision||!route.query.revision)?local.requestKey:'')
       if(local.dirty){select(versions.value.find(v=>v.id===local.baseId)||active.value);title.value=local.title;text.value=local.lyrics;notice.value=local.workVersion===props.work.version?'已恢复本机尚未保存的歌词。':'故事已更新，本机歌词已恢复，保存后将成为当前故事的新版本。'}
     }
-    if(requestKey.value)await recoverRequest()
+    if(requestKey.value){requestWaiting.value=true;await refreshRequest()}
     void updateCredits()
   }catch(e){errorKind.value='load';error.value=e instanceof Error?e.message:'歌词读取失败'}
   finally{loading.value=false;remember()}
@@ -233,10 +281,10 @@ async function prepareForGeneration(saveChanges=false):Promise<Revision>{
   }catch(e){error.value=e instanceof Error?e.message:'保存失败，请重试';throw e}
   finally{preparing.value=false}
 }
-watch([language,instructions,structure],()=>{if(!composing.value&&!requestWaiting.value&&!requestChecking.value)requestKey.value=''},{flush:'sync'})
+watch([language,instructions,structure],()=>{if(!composing.value&&!requestWaiting.value&&!requestChecking.value)clearComposeRequest()},{flush:'sync'})
 function startAiLyrics(){
   if(blocked.value||saving.value||lineBusy.value)return
-  if(!editorText.value.trim()||!aiReady.value){void compose();return}
+  if(!editorText.value.trim()){void compose();return}
   rewriteDraft.value={source:editorText.value,workVersion:props.work.version,language:active.value?.language||language.value}
 }
 function applyRewrittenLyrics(lyrics:string){
@@ -252,11 +300,14 @@ function applyRewrittenLyrics(lyrics:string){
 async function rewriteAll(){
   rewriteDraft.value=undefined
   await nextTick()
-  if(alive)void compose()
+  if(alive)void compose(true)
 }
-async function compose(){
+async function compose(rewrite=false){
   if(blocked.value||saving.value||lineBusy.value||!customLyricsReady.value)return
+  const attempt=requestKey.value?pendingFullRewrite.value:rewrite&&editorText.value.trim()?{source:editorText.value,title:draftValue().title,baseId:active.value?.id}:undefined
+  if(rewrite&&!attempt)return
   if(dirty.value&&!window.confirm(t('生成新歌词后将显示新版本，当前未保存的修改会被替换，是否继续？')))return
+  retryFullRewrite=!!attempt
   composing.value=true;error.value='';notice.value='';errorKind.value='compose';creditShort.value=false
   try{
     if(!requestKey.value){
@@ -264,11 +315,23 @@ async function compose(){
       if(await blockedByCredits()||!alive)return
     }
     if(inflight)await inflight
+    pendingFullRewrite.value=attempt
     requestKey.value ||= crypto.randomUUID();remember()
-    const created=await generateLyrics(props.work.id,props.work.version,requestKey.value,language.value,instructions.value,active.value?.id,{...structure.value})
+    const created=await generateLyrics(props.work.id,props.work.version,requestKey.value,language.value,instructions.value,attempt?attempt.baseId:active.value?.id,{...structure.value},attempt?.source)
     if(!alive)return
-    versions.value=[created,...versions.value.filter(v=>v.id!==created.id)];select(created);requestKey.value='';remember();await syncRoute(created.id);notice.value='新歌词已生成，旧版本已保留。你可以继续修改。'
-  }catch(e){if(!alive)return;errorKind.value='compose';creditShort.value=false;error.value=e instanceof Error?e.message:'歌词生成失败，请稍后再试';try{await recoverRequest()}catch{/* 无法确认时保留原请求键，避免重复付费。 */}}
+    if(attempt&&noNewLyrics(created.lyrics,attempt)){reportUnchangedRewrite();return}
+    versions.value=[created,...versions.value.filter(v=>v.id!==created.id)]
+    clearComposeRequest();retryFullRewrite=false
+    if(!attempt||attempt.source===editorText.value&&attempt.title===draftValue().title){
+      select(created);await syncRoute(created.id);notice.value='新歌词已生成，旧版本已保留。你可以继续修改。'
+    }else notice.value='上次编写的歌词已找回，可在历史版本中查看。'
+  }catch(e){
+    if(!alive)return
+    if(e instanceof ApiError&&e.code==='LYRICS_REWRITE_UNCHANGED'){reportUnchangedRewrite();return}
+    errorKind.value='compose';creditShort.value=false;error.value=e instanceof Error?e.message:'歌词生成失败，请稍后再试'
+    requestWaiting.value=!!requestKey.value
+    try{await recoverRequest()}catch{/* 无法确认时通过原编号继续核对。 */}
+  }
   finally{composing.value=false;remember();void updateCredits()}
 }
 onBeforeUnmount(()=>{remember();alive=false})
@@ -289,7 +352,7 @@ defineExpose({prepareForGeneration,preserveDraftForNavigation,needsSave,canSave,
     <div class="lyric-editor-label">
       <span id="lyric-editor-help">{{ t('歌词可直接修改，保存后再生成歌曲') }}</span>
       <div class="lyric-editor-actions">
-        <button v-if="customLyricsReady||(aiReady&&editorText.trim())" type="button" class="lyric-rewrite-all" :disabled="blocked||saving||lineBusy" @click="startAiLyrics">
+        <button v-if="customLyricsReady||(selectionRewriteReady&&editorText.trim())" type="button" class="lyric-rewrite-all" :disabled="blocked||saving||lineBusy" @click="startAiLyrics">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12l5-2 2-5 2 5 5 2-5 2-2 5-2-5-5-2Zm13-7h5m-2.5-2.5v5"/></svg>
           {{ composing?t('正在编写歌词…'):editorText.trim()?t('AI 重写歌词'):t('根据故事生成歌词') }}
         </button>
@@ -308,7 +371,8 @@ defineExpose({prepareForGeneration,preserveDraftForNavigation,needsSave,canSave,
     <LyricRhymeEditor v-if="rhymeOpen&&rhymeSection" :work-id="work.id" :section="rhymeSection" :language="active?.language||language"
       :disabled="blocked||saving" :max-replacement-length="rhymeLimit" @apply="applyRhyme" @close="rhymeOpen=false" />
   </div>
-  <LyricSelectionRewriteDialog v-if="rewriteDraft" :work-id="work.id" :can-rewrite-all="customLyricsReady" v-bind="rewriteDraft"
+  <LyricSelectionRewriteDialog v-if="rewriteDraft" v-model:pending="pendingPreviews" :work-id="work.id"
+    :can-rewrite-all="customLyricsReady" :can-preview="selectionRewriteReady" v-bind="rewriteDraft"
     @close="rewriteDraft=undefined" @apply="applyRewrittenLyrics" @rewrite-all="rewriteAll" />
   <p v-if="lineError" class="notice error" role="alert">{{ t(lineError) }}</p>
   <div v-if="linePreview" class="lyric-line-preview" role="region" :aria-label="t('改写建议')">

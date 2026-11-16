@@ -4,14 +4,16 @@ import { ApiError } from '../../../shared/http/api-client'
 import { t } from '../../../shared/i18n'
 import { guardCredits } from '../../../shared/credits/credit-gate'
 import { useCredits } from '../../../shared/credits/useCredits'
-import { rewriteLyricSelection } from '../api/detail'
+import { rewriteLyricSelection, type LyricSelectionInput } from '../api/detail'
 
-const props = defineProps<{workId: string; workVersion: number; source: string; language: string; canRewriteAll?: boolean}>()
-const emit = defineEmits<{close: []; apply: [lyrics: string]; rewriteAll: []}>()
+const props = defineProps<{workId: string; workVersion: number; source: string; language: string; canRewriteAll?: boolean; canPreview?: boolean; pending: LyricSelectionInput[]}>()
+const emit = defineEmits<{close: []; apply: [lyrics: string]; rewriteAll: []; 'update:pending': [requests: LyricSelectionInput[]]}>()
 const dialog = ref<HTMLDialogElement>()
 const previewHeading = ref<HTMLElement>()
 const body = ref<HTMLElement>()
-const kept = ref(new Set<number>())
+const pendingForDraft = computed(() => props.pending.filter(request =>
+  request.workVersion === props.workVersion && request.lyrics === props.source && request.language === props.language))
+const kept = ref(new Set<number>(pendingForDraft.value[0]?.keptLines))
 const preview = ref<string>()
 const previewing = ref(false)
 const busy = ref(false)
@@ -24,7 +26,6 @@ const previewCost = computed(() => {
     ? t('本次改写不消耗积分')
     : t('本次改写消耗 {cost} 积分', { cost: current.rewriteCost })
 })
-let requestId: string | undefined
 let alive = true
 
 type LyricRow = {index: number; text: string}
@@ -54,7 +55,9 @@ const groups = computed(() => {
   return result
 })
 const total = computed(() => groups.value.reduce((sum, group) => sum + group.lines.length, 0))
-const canGenerate = computed(() => !busy.value && kept.value.size > 0 && kept.value.size < total.value)
+const originalRequest = computed(() => pendingForDraft.value.find(request =>
+  request.keptLines.length === kept.value.size && request.keptLines.every(index => kept.value.has(index))))
+const canGenerate = computed(() => !busy.value && props.canPreview !== false && kept.value.size > 0 && kept.value.size < total.value)
 const previewLines = computed(() => preview.value?.split('\n') ?? [])
 
 function groupSelected(group: LyricGroup) {
@@ -68,9 +71,12 @@ function changeSelection(lines: LyricRow[], checked: boolean) {
     else next.delete(line.index)
   }
   kept.value = next
-  requestId = undefined
   preview.value = undefined
   error.value = ''
+}
+
+function clearPreviewRequest(requestId: string) {
+  emit('update:pending', props.pending.filter(request => request.requestId !== requestId))
 }
 
 async function showPreview() {
@@ -88,19 +94,22 @@ async function generate() {
   }
   busy.value = true
   error.value = ''
+  let request = originalRequest.value
   try {
-    if (!requestId) {
+    if (!request) {
       const gate = await guardCredits(() => credits.value, refreshCredits, view => view.rewriteFreeRemaining === 0 ? view.rewriteCost : 0)
       if (!alive) return
       if (gate.blocked) {
         error.value = t('积分不足，当前余额 {balance} 积分，改写需要 {cost} 积分。', { balance: gate.balance ?? 0, cost: gate.cost })
         return
       }
-      requestId = crypto.randomUUID()
+      request = {
+        requestId: crypto.randomUUID(), workVersion: props.workVersion, lyrics: props.source,
+        keptLines: [...kept.value].sort((a, b) => a - b), language: props.language,
+      }
+      emit('update:pending', [request, ...props.pending])
     }
-    const { lyrics } = await rewriteLyricSelection(props.workId, {
-      requestId, workVersion: props.workVersion, lyrics: props.source, keptLines: [...kept.value], language: props.language,
-    })
+    const { lyrics } = await rewriteLyricSelection(props.workId, request)
     if (!alive) return
     const candidate = lyrics.split('\n')
     const expected = sourceLines.value
@@ -108,14 +117,15 @@ async function generate() {
       const next = candidate[index]!
       return kept.value.has(index) || !isLyric(line) ? next !== line : !isLyric(next) || next.trim() === line.trim()
     })) throw new Error('重写结果不完整，当前歌词已保留，请重试。')
+    clearPreviewRequest(request.requestId)
     preview.value = lyrics
     await showPreview()
   } catch (cause) {
     if (!alive) return
     // If a response was lost, retry the same preview instead of charging a second request.
     const retrySameRequest = cause instanceof ApiError && (cause.status === 0 || cause.status === 408
-      || (!cause.code && cause.status >= 500) || cause.code === 'REWRITE_REQUEST_PENDING' || cause.code === 'REWRITE_GENERATION_BUSY')
-    if (!retrySameRequest) requestId = undefined
+      || (!cause.code && cause.status >= 500) || cause.code === 'REWRITE_REQUEST_PENDING' || cause.code === 'REWRITE_PROVIDER_RESULT_UNKNOWN')
+    if (request && !retrySameRequest) clearPreviewRequest(request.requestId)
     error.value = cause instanceof Error ? cause.message : '重写结果不完整，当前歌词已保留，请重试。'
   } finally {
     if (alive) {
@@ -147,7 +157,7 @@ onBeforeUnmount(() => {
         <h3 ref="previewHeading" tabindex="-1">{{ t('新版歌词预览') }}</h3>
         <p class="selection-help">{{ t('采用后将填回歌词编辑框，保存时才创建新版本。') }}</p>
       </template>
-      <p v-else class="selection-help">{{ t('勾选要原样保留的歌词，也可以保留整段。') }}</p>
+      <p v-else class="selection-help">{{ t(canPreview === false ? '局部歌词重写暂不可用。' : '勾选要原样保留的歌词，也可以保留整段。') }}</p>
       <section v-for="(group, index) in groups" :key="group.lines[0]!.index" class="selection-section">
         <div class="selection-heading">
           <h4>{{ group.title || t('第 {count} 段', { count: index + 1 }) }}</h4>
@@ -195,7 +205,9 @@ onBeforeUnmount(() => {
             <button v-if="props.canRewriteAll !== false" type="button" class="button secondary" :disabled="busy" @click="emit('rewriteAll')">
               {{ credits && credits.lyricsCost > 0 ? t('全部重写（{count} 积分）', { count: credits.lyricsCost }) : t('全部重写') }}
             </button>
-            <button type="button" class="button" :disabled="!canGenerate" @click="generate">{{ busy ? t('正在重写歌词…') : t('生成预览') }}</button>
+            <button type="button" class="button" :disabled="!canGenerate" @click="generate">
+              {{ t(busy ? '正在重写歌词…' : originalRequest ? '核对预览结果' : '生成预览') }}
+            </button>
           </template>
         </div>
       </div>

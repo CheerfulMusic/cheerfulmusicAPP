@@ -2,14 +2,25 @@ package com.qingfeng.music.lyrics.application;
 import com.qingfeng.music.work.api.WorkApi;
 import com.qingfeng.music.lyrics.api.LyricsApi;
 import com.qingfeng.music.common.exception.DomainException;
+import java.text.Normalizer;
 import java.time.Instant;
 import java.util.List;
+import java.util.Locale;
 import java.util.UUID;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /** 外部请求不占用数据库事务；失败请求保留幂等键和额度，只有用户明确新建请求才再次调用模型。 */
 public final class LyricsCompositionService {
     private static final System.Logger LOG=System.getLogger(LyricsCompositionService.class.getName());
+    public static final int MAX_REWRITE_SOURCE_LENGTH = 12_000;
+    private static final String REWRITE_ALL_INSTRUCTION = """
+        【整首重写模式】
+        previousLyrics 是编辑区当前歌词。保持其中的人物、事实、视角和主题，用新的切入点和表达重新写整首歌词。
+        逐段改写实际歌词，不能照抄原稿，也不能只改标题、段落标签、标点或换行。遵守下文的补充要求和结构约束。
+        """;
+    private static final Pattern SECTION_LINE = Pattern.compile("(?m)^\\h*\\[[^]\\r\\n]+]\\h*$");
+    private static final Pattern LYRIC_FORMATTING = Pattern.compile("[^\\p{L}\\p{N}\\p{M}]+");
     private final WorkApi works;private final LyricsApi lyrics;private final LyricsRepository revisions;
     private final LyricsWriter writer;private final LyricsWriter customWriter;private final CompositionRequests requests;private final boolean enabled;
     private com.qingfeng.music.settings.MusicSettings settings;
@@ -37,7 +48,7 @@ public final class LyricsCompositionService {
         return compose(owner,work,expectedVersion,key,language,instructions,baseRevisionId,null,false);
     }
     public LyricsApi.Revision compose(String owner,String work,long expectedVersion,String key,String language,String instructions,String baseRevisionId,String templateId,boolean chorusFirst){
-        return compose(owner,work,expectedVersion,key,language,instructions,baseRevisionId,new LyricsStructure(templateId,chorusFirst),writer,List.of());
+        return compose(owner,work,expectedVersion,key,language,instructions,baseRevisionId,new LyricsStructure(templateId,chorusFirst),writer,List.of(),null);
     }
     public LyricsApi.Revision composeCustom(String owner,String work,long expectedVersion,String key,String language,
                                              String instructions,String baseRevisionId,String templateId,boolean chorusFirst){
@@ -45,15 +56,24 @@ public final class LyricsCompositionService {
     }
     public LyricsApi.Revision composeCustom(String owner,String work,long expectedVersion,String key,String language,
                                              String instructions,String baseRevisionId,String templateId,boolean chorusFirst,List<String> customSections){
+        return composeCustom(owner,work,expectedVersion,key,language,instructions,baseRevisionId,templateId,chorusFirst,customSections,false,null);
+    }
+    public LyricsApi.Revision composeCustom(String owner,String work,long expectedVersion,String key,String language,
+                                             String instructions,String baseRevisionId,String templateId,boolean chorusFirst,
+                                             List<String> customSections,boolean rewriteAll,String sourceLyrics){
+        if (rewriteAll && (sourceLyrics == null || sourceLyrics.length() > MAX_REWRITE_SOURCE_LENGTH || comparableLyrics(sourceLyrics).isEmpty())) {
+            throw new DomainException("INVALID_LYRICS_REQUEST","请填写要重写的歌词，最多12000字。");
+        }
         var structure=new LyricsStructure(templateId,chorusFirst,customSections);
-        return compose(owner,work,expectedVersion,key,language,instructions,baseRevisionId,structure,customWriter,List.of());
+        return compose(owner,work,expectedVersion,key,language,instructions,baseRevisionId,structure,customWriter,List.of(),rewriteAll?sourceLyrics:null);
     }
     public LyricsApi.Revision composePhoto(String owner,String work,long expectedVersion,String key,String language,List<byte[]> photos){
         if(photos.isEmpty())throw new DomainException("INVALID_LYRICS_REQUEST","请选择 1–5 张照片。");
-        return compose(owner,work,expectedVersion,key,language,"",null,new LyricsStructure(null,false),writer,List.copyOf(photos));
+        return compose(owner,work,expectedVersion,key,language,"",null,new LyricsStructure(null,false),writer,List.copyOf(photos),null);
     }
     private LyricsApi.Revision compose(String owner,String work,long expectedVersion,String key,String language,String instructions,
-                                       String baseRevisionId,LyricsStructure structure,LyricsWriter selectedWriter,List<byte[]> photos){
+                                       String baseRevisionId,LyricsStructure structure,LyricsWriter selectedWriter,List<byte[]> photos,
+                                       String rewriteSource){
         var snapshot=works.get(owner,work);
         if(key==null||!key.matches("[0-9a-fA-F-]{36}")||language==null||!java.util.Set.of("zh-CN","en","mixed").contains(language))throw new DomainException("INVALID_LYRICS_REQUEST","歌词生成参数无效，请刷新后重试");
         String requirements=instructions==null?"":instructions.trim();
@@ -61,6 +81,7 @@ public final class LyricsCompositionService {
         String structureInstruction=structure.instruction();
         String material=expectedVersion+"\n"+language+"\n"+requirements+"\n"+(baseRevisionId==null?"":baseRevisionId)+structureInstruction;
         if(structure.customSections()!=null)material+="\n"+structure.templateId();
+        if(rewriteSource!=null)material+="\nrewrite-all:"+fingerprint(rewriteSource);
         boolean photoRequest=!photos.isEmpty();
         if(photos.size()==1) {
             // Preserve the fingerprint used by existing single-photo requests.
@@ -81,18 +102,25 @@ public final class LyricsCompositionService {
         if(!photoRequest&&(!enabled||!selectedWriter.isConfigured()))throw new DomainException("LYRICS_PROVIDER_UNAVAILABLE","歌词生成暂不可用，请稍后再试或手动填写");
         var photoPlan=!photoRequest&&plans!=null?plans.find(work,com.qingfeng.music.settings.CreativePlan.sourceHash(snapshot))
             .filter(plan->!plan.photoSummary().isBlank()).orElse(null):null;
-        if(!photoRequest&&photoPlan==null&&snapshot.story().isBlank()&&snapshot.message().isBlank())throw new DomainException("INVALID_LYRICS_REQUEST","请先在故事中填写一段回忆或祝福，再生成歌词");
-        String previous=baseRevisionId==null?"":lyrics.get(owner,work,baseRevisionId).lyrics();
+        if(!photoRequest&&rewriteSource==null&&photoPlan==null&&snapshot.story().isBlank()&&snapshot.message().isBlank())throw new DomainException("INVALID_LYRICS_REQUEST","请先在故事中填写一段回忆或祝福，再生成歌词");
+        String baseLyrics=baseRevisionId==null?"":lyrics.get(owner,work,baseRevisionId).lyrics();
+        String previous=rewriteSource==null?baseLyrics:rewriteSource;
         if(structure.customSections()!=null)revisions.requireCustomSectionsStorage();
         if(!requests.claim(owner,work,key,hash))throw new DomainException("LYRICS_REQUEST_PENDING","这次歌词请求已处理或仍在确认中，请先刷新歌词版本，避免重复提交");
         try{
             var direction=settings==null?null:settings.resolve(owner,snapshot);
             var writingDirection=new LyricsWriter.Direction(direction==null?snapshot.style():direction.style(),direction==null?"":direction.negativeTags(),snapshot.vocalGender());
             String context=photoPlan==null?"":"\n【照片画面素材，仅用于创作】\n"+photoPlan.photoSummary();
+            String writingRequirements=(rewriteSource==null?"":REWRITE_ALL_INSTRUCTION)+requirements+context+structureInstruction;
             var draft=photoRequest?photoWriter.write(snapshot,language,photos,writingDirection)
-                :selectedWriter.write(snapshot,language,requirements+context+structureInstruction,previous,writingDirection);
+                :selectedWriter.write(snapshot,language,writingRequirements,previous,writingDirection);
             if(works.get(owner,work).version()!=expectedVersion)throw new DomainException("WORK_VERSION_CONFLICT","作品已修改，请重新载入后保存歌词");
             if(draft.title()==null||draft.title().isBlank()||draft.title().length()>80||draft.lyrics()==null||draft.lyrics().isBlank()||draft.lyrics().length()>5000)throw new DomainException("LYRICS_RESPONSE_INVALID","歌词生成结果不完整，请稍后重新发起");
+            if(rewriteSource!=null){
+                String rewritten=comparableLyrics(draft.lyrics());
+                if(rewritten.isEmpty()||rewritten.equals(comparableLyrics(rewriteSource))||rewritten.equals(comparableLyrics(baseLyrics)))
+                    throw new DomainException("LYRICS_REWRITE_UNCHANGED","这次重写没有生成新的歌词，请重试。");
+            }
             structure.validate(draft.lyrics());
             var revision=new LyricsApi.Revision(UUID.randomUUID().toString(),work,expectedVersion,draft.title().trim(),draft.lyrics(),
                 draft.source()==null?selectedWriter.source():draft.source(),false,Instant.now(),language,structure.templateId(),structure.chorusFirst(),structure.customSections());
@@ -108,6 +136,11 @@ public final class LyricsCompositionService {
             LOG.log(System.Logger.Level.WARNING,"Lyrics request failed: work={0}, request={1}, code={2}, type={3}",work,key,code,error.getClass().getSimpleName());
             throw error;
         }
+    }
+    private static String comparableLyrics(String value) {
+        String normalized = Normalizer.normalize(value, Normalizer.Form.NFKC);
+        String body = SECTION_LINE.matcher(normalized).replaceAll("");
+        return LYRIC_FORMATTING.matcher(body.toLowerCase(Locale.ROOT)).replaceAll("");
     }
     public static boolean outcomeUnknown(String code){
         return switch(code){

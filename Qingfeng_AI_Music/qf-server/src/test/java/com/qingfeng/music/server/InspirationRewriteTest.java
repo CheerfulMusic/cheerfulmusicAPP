@@ -181,6 +181,51 @@ class InspirationRewriteTest {
         org.mockito.Mockito.verify(client, org.mockito.Mockito.times(3)).send(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
     }
 
+    @Test void selectionRewriteReadsStructuredRowsAndSendsExactTargetIndices() throws Exception {
+        var client = org.mockito.Mockito.mock(HttpClient.class);
+        @SuppressWarnings("unchecked") HttpResponse<String> response = org.mockito.Mockito.mock(HttpResponse.class);
+        var requests = new ArrayList<HttpRequest>();
+        var json = new ObjectMapper();
+        org.mockito.Mockito.when(response.statusCode()).thenReturn(200);
+        org.mockito.Mockito.when(client.<String>send(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any()))
+            .thenAnswer(call -> { requests.add(call.getArgument(0)); return response; });
+        var writer = new DeepSeekInspirationRewriter("offline-key", DeepSeekInspirationRewriter.QWEN_MODEL,
+            URI.create(DeepSeekInspirationRewriter.QWEN_ENDPOINT), client);
+        var replacementRows = List.of(Map.of("index", 6, "text", "Lights along the shore"), Map.of("index", 2, "text", "潮声落在手里"));
+        org.mockito.Mockito.when(response.body()).thenReturn(selectionResponse(json, replacementRows));
+
+        assertEquals(List.of(new InspirationRewriter.Replacement(6, "Lights along the shore"),
+            new InspirationRewriter.Replacement(2, "潮声落在手里")),
+            writer.rewriteSelection("沿用原有场景", "mixed", List.of(2, 6)));
+        var request = requests.get(0);
+        assertEquals(java.time.Duration.ofSeconds(85), request.timeout().orElseThrow());
+        var payload = json.readTree(requestBody(request));
+        assertTrue(payload.path("enable_thinking").isBoolean());
+        assertFalse(payload.path("enable_thinking").asBoolean());
+        assertEquals("json_object", payload.path("response_format").path("type").asText());
+        assertTrue(payload.path("messages").path(0).path("content").asText().contains("replacements"));
+        var context = json.readTree(payload.path("messages").path(1).path("content").asText());
+        assertEquals(json.readTree("[2,6]"), context.path("targetIndices"));
+        assertEquals("mixed", context.path("lyricLanguage").asText());
+
+        for (var invalidRows : List.of(
+            List.of(Map.of("index", 2, "text", "新句")),
+            List.of(Map.of("index", "2", "text", "新句"), replacementRows.get(0)),
+            List.of(Map.of("index", 2.5, "text", "新句"), replacementRows.get(0)),
+            List.of(Map.of("index", 2, "text", 123), replacementRows.get(0)))) {
+            org.mockito.Mockito.when(response.body()).thenReturn(selectionResponse(json, invalidRows));
+            assertEquals("INVALID_REWRITE_RESPONSE", assertThrows(DomainException.class,
+                () -> writer.rewriteSelection("沿用原有场景", "mixed", List.of(2, 6))).code());
+        }
+        assertEquals(5, requests.size());
+    }
+
+    private static String selectionResponse(ObjectMapper json, List<?> rows) {
+        String content = json.writeValueAsString(Map.of("replacements", rows));
+        return json.writeValueAsString(Map.of("choices", List.of(Map.of("finish_reason", "stop",
+            "message", Map.of("content", content)))));
+    }
+
     private static String requestBody(HttpRequest request) throws Exception {
         var data = new ByteArrayOutputStream();
         var body = new CompletableFuture<String>();

@@ -97,6 +97,7 @@ final class LyricsWritingPrompt {
 
         如果提供 previousLyrics 和 revisionInstructions：
 
+        - revisionInstructions 含【整首重写模式】时，逐段重新创作歌词正文，避免重复原句。原稿仅用于延续人物、事实、视角和主题，并以新表达展开。
         - 用户指定保留的段落必须原样保留。
         - 用户指定保留的中英文句子不得删除或翻译。
         - 只修改用户允许修改的部分。
