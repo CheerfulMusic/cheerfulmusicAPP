@@ -100,7 +100,8 @@ onBeforeUnmount(() => dialog.value?.close())
         </div>
         <section class="premium-about" aria-labelledby="premium-about-title">
           <h3 id="premium-about-title">{{ t('关于青风音乐') }}</h3>
-          <p>{{ t('青风音乐是由蒋雪儿（Snow.J）创办的深圳原创音乐厂牌，业务涵盖歌曲制作、艺人合作、短视频推广、数字发行和词曲版权运营。从《一笑江湖》到《小城夏天》，青风音乐参与制作或发行了多首国风和流行热歌。') }}</p>
+          <p>{{ t('青风音乐由歌手、制作人蒋雪儿（Snow.J）在深圳创办。《一笑江湖》随“科目三”走红海外，2025 年登上 Spotify 日本 Viral 50 榜第 2 名。厂牌参与制作或发行的《踏山河》《小城夏天》也登顶国内主流音乐平台榜单。') }}</p>
+          <p>{{ t('从词曲创作、编曲到录音与混音，青风音乐拥有完整的歌曲制作团队，并通过国际音乐写作营与海内外音乐人共同创作。青风音乐与索尼音乐达成战略合作，涵盖新歌共创与音乐发行。') }}</p>
           <p class="premium-reach">{{ t('《一笑江湖》相关抖音视频观看量超 500 亿次') }} <a href="https://www.umusicpub.com/us/news/umpg-china-cheerful-music" target="_blank" rel="noopener noreferrer">{{ t('环球音乐版权 2024 年公告') }}</a></p>
         </section>
         <section class="premium-works" aria-labelledby="premium-works-title">
@@ -158,6 +159,7 @@ onBeforeUnmount(() => dialog.value?.close())
 .premium-about { border:1px solid #3b3039; background:#221b22; border-radius:17px; padding:19px 20px; margin-bottom:22px; }
 .premium-about h3,.premium-works h3 { font-size:19px; font-weight:650; color:#fff; margin:0 0 8px; }
 .premium-about p { font-size:14px; line-height:1.75; color:#c7bac5; margin:0; }
+.premium-about p + p { margin-top:8px; }
 .premium-about .premium-reach { color:#ffb2a2; margin-top:8px; }
 .premium-reach a { color:#c6b7c3; font-size:12px; margin-inline-start:6px; text-underline-offset:3px; }
 .premium-works { margin-bottom:24px; }
