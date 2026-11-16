@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import '../playful.css'
+import '../producer.css'
 import ChatAppearance from '../components/ChatAppearance.vue'
 import AgentHotSongs from '../components/AgentHotSongs.vue'
 import { useChatAppearance } from '../composables/useChatAppearance'
@@ -242,7 +243,7 @@ onBeforeUnmount(() => { avatarDisposed = true; window.removeEventListener('qingf
 </script>
 
 <template>
-  <div class="agent-studio agent-playful" :style="appearanceStyle" @click.capture="burst">
+  <div class="agent-studio agent-playful agent-producer" :style="appearanceStyle" @click.capture="burst">
     <Teleport to="body"><div class="agent-click-sparks" aria-hidden="true"><span v-for="spark in sparks" :key="spark.id" :style="{ left: `${spark.x}px`, top: `${spark.y}px` }"><i/><b/></span></div></Teleport>
     <div class="agent-scenery" aria-hidden="true"><span/><span/><span/></div>
     <section class="agent-conversation" :aria-label="tr('音乐创作对话', 'Music conversation')">
@@ -259,12 +260,9 @@ onBeforeUnmount(() => { avatarDisposed = true; window.removeEventListener('qingf
       <div ref="chat" class="agent-chat" role="log" aria-live="polite">
         <button v-if="hasOlderMessages" class="agent-history-more" type="button" :disabled="loadingOlder || loading" @click="loadOlder">{{ loadingOlder ? tr('正在加载…', 'Loading…') : tr('查看更早的对话', 'Load earlier messages') }}</button>
         <p v-if="historyError" class="agent-upload-error" role="status">{{ historyError }}</p>
-        <div v-if="!messages.length" class="agent-hero">
-          <div class="agent-hero-orbit" aria-hidden="true"><span/><i>♫</i></div><span class="agent-hero-eyebrow">YOUR PERSONAL MUSIC STUDIO</span>
-          <h1>{{ tr('把你的故事，变成一首歌。', 'Turn your story into a song.') }}</h1>
-          <p class="agent-hero-tagline">{{ tr('每个人，都可以是歌手。', 'Everyone can be a singer.') }}</p>
-          <p>{{ tr('一个故事、一种心情，甚至一张照片。', 'A story, a feeling, or even a photo.') }}</p>
-          <p>{{ tr('告诉我你的灵感，剩下的交给 AI。', 'Share your inspiration. Let AI take it from here.') }}</p>
+        <div class="producer-welcome">
+          <div class="producer-mascot" aria-hidden="true"><span class="mascot-antenna"/><div class="mascot-head"><div class="mascot-face"><i/><i/></div></div><div class="mascot-body">♫</div><span class="mascot-note">♪</span></div>
+          <div><small>YOUR PERSONAL MUSIC PRODUCER</small><h1>{{ tr('你的 AI 专属音乐制作人', 'Your personal AI music producer') }}</h1><p>{{ tr('一句灵感 · 一首好歌 · 一场音乐之旅', 'One idea. One song. A musical journey.') }} <span>♡</span></p></div>
         </div>
         <p v-if="loading" class="agent-typing" role="status">{{ tr('正在恢复对话…', 'Loading conversation…') }}</p>
         <div v-if="!messages.length && !loading && !error" class="agent-message assistant">
@@ -305,6 +303,12 @@ onBeforeUnmount(() => { avatarDisposed = true; window.removeEventListener('qingf
       </div>
     </section>
     <Teleport to="body"><UserAvatarDialog v-if="avatarDialog" :busy="avatar.busy.value" :error="avatar.error.value" :disabled="blocked" :generation-available="avatarGeneration.available.value" @close="avatarDialog = false" @upload="uploadAvatar" @generate="generateAvatar"/></Teleport>
+    <nav class="producer-tools" :aria-label="tr('创作助手','Creation assistant')">
+      <h2>✦ {{ tr('创作助手','Creation assistant') }}</h2>
+      <button v-for="tool in [{icon:'✧',title:'灵感策划',en:'Inspiration',detail:'发现创作灵感',detailEn:'Find your inspiration',prompt:'帮我构思一首歌，先聊聊创作灵感'}, {icon:'✎',title:'歌词创作',en:'Write lyrics',detail:'写出打动人心的歌词',detailEn:'Words that move you',prompt:'帮我写一首歌词，主题是'}, {icon:'♫',title:'音乐制作',en:'Make music',detail:'定制专属曲风',detailEn:'Find your sound',prompt:'帮我生成音乐，我想要的曲风是'}, {icon:'✣',title:'歌曲精修',en:'Refine your song',detail:'让作品更动人',detailEn:'Make every line yours',prompt:'帮我修改当前作品的歌词，我想改的是'}, {icon:'▧',title:'封面创作',en:'Cover artwork',detail:'为音乐描绘画面',detailEn:'Give your song a face',prompt:'帮我为当前作品设计封面，画面是'}]" :key="tool.title" type="button" :disabled="blocked" @click="input = tr(tool.prompt, tool.en + ': ')"><i>{{ tool.icon }}</i><span><strong>{{ tr(tool.title,tool.en) }}</strong><small>{{ tr(tool.detail,tool.detailEn) }}</small></span></button>
+      <button class="producer-library" type="button" :disabled="blocked" @click="send('查看我的作品')"><i>▥</i><span><strong>{{ tr('我的作品','My songs') }}</strong><small>{{ tr('继续你的音乐故事','Continue your musical story') }}</small></span><b>›</b></button>
+      <p>{{ tr('让音乐，连接更美好的你。','Let music bring out the best in you.') }}</p>
+    </nav>
     <aside class="agent-preview" :aria-label="songCard?.songId ? tr('当前作品', 'Current song') : tr('热歌推荐', 'Song recommendations')">
       <template v-if="songCard?.songId">
         <div class="agent-album">
