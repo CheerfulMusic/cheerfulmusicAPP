@@ -10,6 +10,7 @@ export interface AnalyticsUserRow {
   creatorId: string; accountType: string; name: string | null; email: string | null; phoneMasked: string | null
   pv: number; pageviews: number; avgDurationMs: number; samples: number; firstSeen: string; lastSeen: string; works?: number
 }
+export type AnalyticsUserSort = 'active' | 'latest'
 export interface AnalyticsRechargeRow {
   creatorId: string; accountType: string; name: string | null; email: string | null; phoneMasked: string | null
   packageId: string; amount: number; currency: string; credits: number; status: string; createdAt: string
@@ -31,7 +32,8 @@ export interface AnalyticsPageUsers {
 }
 
 export const analyticsAccess = () => getJson<{ allowed: boolean; viewer?: string }>('app/analytics/access')
-export const analyticsSummary = (days: number) => getJson<AnalyticsSummary>(`app/analytics/summary?days=${days}`)
+export const analyticsSummary = (days: number, userSort: AnalyticsUserSort = 'active') =>
+  getJson<AnalyticsSummary>(`app/analytics/summary?days=${days}&userSort=${userSort}`)
 export const analyticsPageUsers = (pagePath: string, days: number) =>
   getJson<AnalyticsPageUsers>(`app/analytics/page-users?days=${days}&pagePath=${encodeURIComponent(pagePath)}`)
 
