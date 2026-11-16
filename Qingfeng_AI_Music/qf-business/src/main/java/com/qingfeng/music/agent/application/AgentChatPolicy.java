@@ -70,7 +70,7 @@ public final class AgentChatPolicy {
     private static final String MUSIC="(?:生成|制作|开始做|做成).{0,10}(?:音乐|歌曲|歌|音频)|(?:生成|开始生成)(?:吧|音乐|歌曲|这首|一首|$)|(?:写|来|做|唱)(?:一|个|这)?首歌|generate.{0,12}(?:music|song|audio)|make.{0,12}(?:music|song)";
     private static final Set<String> READ_ACTIONS=Set.of("list_works","list_versions","list_audio","list_covers","discover_music","list_tasks",
             "get_credits","list_credit_entries","get_usage","get_account","get_referral","list_orders","get_order","payment_catalog","get_current_song",
-            "get_music_settings","music_settings_catalog","preview_music_settings","get_playback_lyrics","list_section_edits","section_context","search_memory","video_capabilities","list_music_videos","get_music_video","download_music_video");
+            "get_music_settings","music_settings_catalog","preview_music_settings","get_playback_lyrics","list_section_edits","section_context","search_memory","video_capabilities","list_music_videos","get_music_video","download_music_video","get_artist_profile","get_artist_release","get_quick_creation","get_creative_direction","get_lyrics_request","list_shared_downloads","preview_music_video");
     private static String surface(String text) {
         if(text==null)return "";
         // Quoted commands are data. A quoted song title can still follow an explicit verb.
@@ -104,7 +104,7 @@ public final class AgentChatPolicy {
         return explicitSocial(text);
     }
     public static boolean requiresConfirmation(String action) {
-        return Set.of("delete_work","erase_analytics","close_checking","generate_avatar","create_music_video").contains(action);
+        return Set.of("delete_work","erase_analytics","close_checking","generate_avatar","create_music_video","update_artist_profile","set_artist_visibility","publish_artist_song","publish_to_discover","start_quick_creation","retry_quick_creation").contains(action);
     }
     public static boolean actionRequested(String action,String text) {
         if(action==null)return false;
@@ -124,6 +124,20 @@ public final class AgentChatPolicy {
         if(action==null)return false;
         if(READ_ACTIONS.contains(action))return true;
         return switch(action) {
+            case "open_feature" -> requested(text,"(?:打开|进入|查看|编辑|设置|上传|导入|分析|发布|管理).{0,30}(?:主页|艺人|发现|统计|分析|作品|头像|参考|音频|歌词|封面|资金审核|风控|精选管理|礼物|分享链接)|(?:open|edit|upload|view).{0,30}(?:profile|artist|discover|analytics|work|avatar|reference)");
+            case "upload_video_image" -> requested(text,"(?:上传|选择|添加|放|插入|用).{0,30}(?:图片|照片)|(?:upload|add).{0,20}(?:image|photo)");
+            case "open_music_video_editor" -> requested(text,"(?:打开|编辑|设置|制作|查看|修改).{0,30}(?:MV|mv|视频|分镜)|(?:open|edit|make).{0,20}(?:video|MV)");
+            case "update_artist_profile" -> requested(text,"(?:修改|设置|更新|改|保存).{0,20}(?:艺名|艺人|主页|简介|主打)|(?:update|set|edit).{0,20}(?:artist|profile|tagline|featured)");
+            case "set_artist_visibility" -> requested(text,"(?:公开|隐藏|关闭|发布).{0,20}(?:主页|艺人)|(?:publish|hide).{0,20}profile");
+            case "publish_artist_song" -> requested(text,"(?:发布|上架|上传).{0,30}(?:作品|歌曲|主页)|(?:publish|release).{0,20}(?:song|work|profile)");
+            case "remove_artist_song" -> requested(text,"(?:移除|撤下|下架|删除).{0,30}(?:主页|作品|歌曲)|(?:remove|withdraw).{0,20}(?:song|profile)");
+            case "publish_to_discover" -> requested(text,"(?:发布|上架|加入).{0,30}(?:发现|社区)|publish.{0,20}discover");
+            case "withdraw_from_discover" -> requested(text,"(?:撤下|下架|移除|取消).{0,30}(?:发现|社区)|withdraw.{0,20}discover");
+            case "start_quick_creation" -> requested(text,"(?:一键|快速).{0,12}(?:创作|写歌|生成)|quick.{0,10}(?:creat|song)");
+            case "retry_quick_creation" -> requested(text,"(?:重试|恢复|继续).{0,20}(?:一键|快速).{0,12}(?:创作|生成)|retry.{0,20}quick");
+            case "confirm_lyrics" -> requested(text,"(?:确认|使用|采用).{0,12}(?:歌词|版本)|confirm.{0,12}lyrics");
+            case "rewrite_lyric_selection" -> requested(text,"(?:保留|重写|改写|润色).{0,30}(?:歌词|这几句|这些|其余|其他|行|句)|rewrite.{0,20}(?:lyrics|selection)");
+            case "rhyme_lyric_line" -> requested(text,"押韵|韵脚|rhyme");
             case "index_work_memory" -> requested(text,"(?:将|把|给|为).{0,50}(?:这首|当前|指定|作品|歌曲).{0,20}(?:加入语义检索|建立语义索引|加入记忆)|(?:记住|索引).{0,15}(?:这首|当前|作品|歌曲)|(?:index|remember).{0,30}(?:this|current|work|song)");
             case "create_work" -> requested(text,"(?:新建|创建|建立|开).{0,12}(?:草稿|作品|空白歌曲|空白项目)|(?:create|new).{0,12}(?:draft|work|blank song)")
                     ||applicationAllowed("save_lyrics",text)||applicationAllowed("upload_audio",text);

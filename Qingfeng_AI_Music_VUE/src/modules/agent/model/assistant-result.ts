@@ -1,11 +1,11 @@
 import type { Message } from './conversation'
 
-export type AgentCommandKind = 'send' | 'login' | 'recharge' | 'account' | 'privacy' | 'photo' | 'upload' | 'upload_cover' | 'upload_audio'
+export type AgentCommandKind = 'send' | 'login' | 'recharge' | 'account' | 'privacy' | 'photo' | 'upload' | 'upload_cover' | 'upload_audio' | 'feature'
 export interface AgentCommand { label: string; text: string; kind: AgentCommandKind }
 export interface AgentResultItem { id: string; title: string; subtitle: string; data: Record<string, unknown> }
 export interface AssistantResult { kind: string; items: AgentResultItem[]; commands: AgentCommand[] }
 const object = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v)
-const kinds: AgentCommandKind[] = ['send', 'login', 'recharge', 'account', 'privacy', 'photo', 'upload', 'upload_cover', 'upload_audio']
+const kinds: AgentCommandKind[] = ['send', 'login', 'recharge', 'account', 'privacy', 'photo', 'upload', 'upload_cover', 'upload_audio', 'feature']
 
 /** Render only typed server results. User text and unknown commands never become executable UI. */
 export function assistantResult(message: Message): AssistantResult | null {
@@ -50,4 +50,21 @@ export function uploadTarget(command: AgentCommand): { kind: 'upload_cover' | 'u
 export function resultInviteUrl(value: unknown, origin: string): string {
   return typeof value === 'string' && /^\/account\?invite=[A-Za-z0-9_-]{6,128}$/.test(value)
     ? new URL(value, origin).href : ''
+}
+
+export interface AgentFeatureTarget { feature: 'artist' | 'discover' | 'analytics' | 'work' | 'avatar' | 'reference' | 'mv' | 'mv_image' | 'payment_risk' | 'editorial' | 'gift'; giftToken?: string; workId?: string; assetId?: string; title?: string }
+export function featureTarget(command: AgentCommand): AgentFeatureTarget | null {
+  if (command.kind !== 'feature') return null
+  try {
+    const v: unknown = JSON.parse(command.text)
+    if (!object(v) || !['artist', 'discover', 'analytics', 'work', 'avatar', 'reference', 'mv', 'mv_image', 'payment_risk', 'editorial', 'gift'].includes(String(v.feature))) return null
+    const id = (x: unknown) => typeof x === 'string' && /^[a-zA-Z0-9_-]{1,100}$/.test(x)
+    if (['work', 'mv', 'mv_image'].includes(String(v.feature)) && !id(v.workId)) return null
+    if (['mv', 'mv_image'].includes(String(v.feature)) && !id(v.assetId)) return null
+    if (v.feature === 'gift' && (typeof v.giftToken !== 'string' || !/^[A-Za-z0-9_-]{43}$/.test(v.giftToken))) return null
+    return { giftToken: v.feature === 'gift' ? v.giftToken as string : undefined, feature: v.feature as AgentFeatureTarget['feature'], workId: id(v.workId) ? v.workId as string : undefined, assetId: id(v.assetId) ? v.assetId as string : undefined, title: typeof v.title === 'string' ? v.title.slice(0, 100) : undefined }
+  } catch { return null }
+}
+export function sharedDownloadUrl(value: unknown): string {
+  return typeof value === 'string' && /^\/api\/app\/shared-downloads\/[a-fA-F0-9-]{36}$/.test(value) ? value : ''
 }

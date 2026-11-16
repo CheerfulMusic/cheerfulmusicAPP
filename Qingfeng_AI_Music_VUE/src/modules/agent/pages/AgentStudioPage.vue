@@ -20,7 +20,7 @@ import { BPM_CONFIDENCE_THRESHOLD } from '../model/audio-features'
 import { requestReferenceAnalysis } from '../api/reference'
 import { showLoginDialog } from '../../../shared/identity/login-dialog'
 import { loadWork } from '../../studio/api/works'
-import { assistantResult, uploadTarget, type AgentCommand } from '../model/assistant-result'
+import { assistantResult, uploadTarget, featureTarget, type AgentFeatureTarget, type AgentCommand } from '../model/assistant-result'
 import AgentResultCard from '../components/AgentResultCard.vue'
 import AgentProgressCard from '../components/AgentProgressCard.vue'
 import AgentMessageText from '../components/AgentMessageText.vue'
@@ -31,6 +31,8 @@ import { useMusicClicks } from '../composables/useMusicClicks'
 import { useUserAvatar } from '../composables/useUserAvatar'
 import { downloadSong, downloadStatus } from '../../works/api/download'
 import { useAvatarGeneration } from '../composables/useAvatarGeneration'
+const AgentFeatureDialog = defineAsyncComponent(() => import('../components/AgentFeatureDialog.vue'))
+const featurePanel = ref<AgentFeatureTarget | null>(null)
 const AgentNativeDialog = defineAsyncComponent(() => import('../components/AgentNativeDialog.vue'))
 
 const conversation = useAgentConversation(result => { void handleResult(result) })
@@ -157,6 +159,8 @@ function runCommand(command: AgentCommand) {
   if (command.kind === 'send') { void send(command.text); return }
   if (command.kind === 'login') { showLoginDialog(); return }
   if (command.kind === 'recharge' || command.kind === 'account' || command.kind === 'privacy' || command.kind === 'photo') { nativePanel.value = { kind: command.kind }; return }
+  const feature = featureTarget(command)
+  if (feature) { if (feature.feature === 'avatar') avatarDialog.value = true; else if (feature.feature === 'reference') fileInput.value?.click(); else featurePanel.value = feature; return }
   const target = uploadTarget(command)
   if (target) { nativePanel.value = target; return }
   if (command.kind === 'upload' && !command.text) fileInput.value?.click()
@@ -251,7 +255,7 @@ function avatarIdentityChanged() {
 watch(() => JSON.stringify([accountState.value.authenticated, accountState.value.email, accountState.value.name, logtoState.value.authenticated, logtoState.value.email, logtoState.value.phoneMasked, logtoState.value.name]), () => {
   avatarIdentityChanged()
   storyVersion++; story.value = ''; storyError.value = false; storyLoading.value = false; previewTab.value = 'lyrics'; showQueue.value = false
-  input.value = ''; notice.value = ''; confirmingReset.value = false; nativePanel.value = null
+  input.value = ''; notice.value = ''; confirmingReset.value = false; nativePanel.value = null; featurePanel.value = null
   clearReference(); void conversation.changeIdentity()
 })
 onMounted(() => { window.addEventListener('qingfeng:identity-changed', avatarIdentityChanged); void avatar.refresh(); void profileAvatar.refresh(); avatarGeneration.start(); void conversation.refresh(); void refreshCredits().catch(() => undefined) })
@@ -363,6 +367,7 @@ onBeforeUnmount(() => { avatarDisposed = true; window.removeEventListener('qingf
       <AgentHotSongs v-else @inspire="input = tr(`帮我创作一首${$event}风格的歌，主题是`, `Help me create a ${$event} song about `)"/>
     </aside>
     <AgentWorkShelf :refresh-key="`${songCard?.songId}:${songCard?.revision}:${messages.length}`" :disabled="blocked" @select="send(`打开作品 ${$event}`)" @more="send('查看我的作品')"/>
+    <AgentFeatureDialog v-if="featurePanel" :key="JSON.stringify(featurePanel)" :target="featurePanel" @close="featurePanel = null" @refresh="conversation.refresh()" @send="send"/>
     <AgentNativeDialog v-if="nativePanel" :key="`${nativePanel.kind}:${nativePanel.workId || ''}`" :kind="nativePanel.kind" :work-id="nativePanel.workId" @close="nativePanel = null" @refresh="conversation.refresh()" @send="send"/>
   </div>
 </template>

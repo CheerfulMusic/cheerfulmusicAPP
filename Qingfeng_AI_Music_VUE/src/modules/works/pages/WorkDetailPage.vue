@@ -37,6 +37,7 @@ import GenerationRecovery from '../components/GenerationRecovery.vue'
 import {closeTaskChecking} from '../api/detail'
 import {needsGenerationRefresh,rememberGeneration,recoverGeneration,forgetGeneration,uncertainSubmission,generationProblem,type PendingGeneration} from '../model/generation-recovery'
 import {creditGap,isCreditShortfall,type Credits} from '../model/credit-shortfall'
+const props = defineProps<{ embeddedWorkId?: string }>()
 const route = useRoute(), work = ref<Work>(), revision = ref<Revision | null>(null), asset = ref<AudioAsset | null>(null), tasks = ref<GenerationTask[]>([]), error = ref(''), loading = ref(false), lyricDirty = ref(false), modelReady = ref(false), submitting = ref(false), requestKey = ref('')
 const lyricsPanel=ref<InstanceType<typeof LyricsPanel>>(), lyricsReady=ref(false), allowance=ref<Allowance>(), giftRevision=ref<Revision|null>(null), lyricBase=ref<Revision|null>(null)
 const saveGenerationDialog=ref<HTMLDialogElement>()
@@ -286,7 +287,7 @@ async function load() {
  const turn=++sequence;polling=false;premiumOpen.value=false;giftStage.value=false;shared.value=false;coverOpen.value=false;covers.value=undefined;publication.value=undefined
  generationOpen.value=false;trackedTaskId.value='';submissionIssue.value='';submissionUnknown.value=false;progressIssue.value=false;submitting.value=false;loading.value=true;error.value='';revision.value=null;asset.value=null;tasks.value=[];giftRevision.value=null;work.value=undefined;lyricDirty.value=false;requestKey.value='';pendingIntent.value=undefined;generationNotice.value='';inputIssue.value=false;creditIssue.value=false;credits.value=undefined
  try{
-  const id=String(route.params.id),found=await loadWork(id);if(turn!==sequence)return
+  const id=String(props.embeddedWorkId || route.params.id),found=await loadWork(id);if(turn!==sequence)return
   work.value=found
   // 先挂载歌曲读取；进度、服务状态和封面均不能阻塞已有音频。
   void refreshTasks();void updateAllowance()
@@ -295,9 +296,10 @@ async function load() {
     .finally(()=>{if(turn===sequence)publicationCoverReady.value=true})
  }catch(e){if(turn===sequence)error.value=e instanceof ApiError&&[401,404].includes(e.status)?'这是私人作品编辑页。如果你是收到分享的朋友，请向作者索取“分享歌曲”中复制的收听链接。':e instanceof Error?e.message:'作品读取失败'}finally{if(turn===sequence)loading.value=false}
 }
-watch(() => route.params.id, load, { immediate: true })
+watch(() => props.embeddedWorkId || route.params.id, load, { immediate: true })
 watch(() => revision.value?.id, () => { if (!submitting.value && !submissionUnknown.value) requestKey.value = '' })
 const permitLeave = () => submissionUnknown.value&&!requestRecoverable.value?window.confirm(t('浏览器无法保留本次请求标识，请先核对生成进度，确定离开吗？')):!lyricDirty.value || lyricRecoverable.value || window.confirm(t('歌词还有未保存修改，确定离开吗？'))
+defineExpose({ canClose: permitLeave })
 onBeforeRouteLeave(permitLeave); onBeforeRouteUpdate(to=>to.params.id===route.params.id||permitLeave())
 const beforeUnload = (event: BeforeUnloadEvent) => { if (lyricDirty.value&&!lyricRecoverable.value||pendingIntent.value&&!requestRecoverable.value) { event.preventDefault(); event.returnValue = '' } }
 window.addEventListener('beforeunload', beforeUnload); onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))

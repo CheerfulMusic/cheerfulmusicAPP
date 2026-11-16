@@ -2,7 +2,7 @@
 import { computed, onBeforeUnmount, ref } from 'vue'
 import AgentVideoProgress from './AgentVideoProgress.vue'
 import { locale } from '../../../shared/i18n'
-import { resultMediaUrl, resultInviteUrl, type AssistantResult, type AgentCommand, type AgentResultItem } from '../model/assistant-result'
+import { resultMediaUrl, resultInviteUrl, sharedDownloadUrl, type AssistantResult, type AgentCommand, type AgentResultItem } from '../model/assistant-result'
 const props = defineProps<{ result: AssistantResult; disabled: boolean; current: boolean }>()
 defineEmits<{ command: [command: AgentCommand] }>()
 const en = computed(() => locale.value === 'en')
@@ -73,6 +73,7 @@ async function copyInvite(value: unknown) {
         <span class="agent-result-index" aria-hidden="true">{{ index + 1 }}</span>
         <img v-if="media(item.data.imageUrl, 'image')" :src="media(item.data.imageUrl, 'image')" :alt="item.title" loading="lazy"/>
         <div class="agent-result-detail"><strong>{{ item.title }}</strong><p v-if="!isWorksList && item.subtitle">{{ item.subtitle }}</p>
+          <a v-if="sharedDownloadUrl(item.data.downloadUrl)" :href="sharedDownloadUrl(item.data.downloadUrl)" download>下载已解锁歌曲</a>
           <small v-if="item.data.current === true">{{ en ? 'Current selection' : '当前选择' }}</small>
           <blockquote v-if="typeof item.data.excerpt === 'string'" class="agent-source-excerpt"><small>{{ en ? 'Source excerpt' : '来源摘要' }}</small><p>{{ item.data.excerpt }}</p></blockquote>
           <AgentVideoProgress v-if="result.kind==='video' && typeof item.data.projectId==='string'" :project-id="item.data.projectId"/>

@@ -139,7 +139,7 @@ public final class AgentChatService {
                 if("list_capabilities".equals(proposed)){
                     var items=capabilities().stream().map(c->new Item(c.id(),c.description(),c.effect().equals("native")?"在对话内打开专用操作窗口":"可通过对话执行",Map.of())).toList();
                     progress(owner,conversation,key,"tool_finished",proposed,i+1,"已取得功能列表。");
-                    appendResult(owner,conversation,new Result("以下是已接入的功能。社区公开发布、平台发行和无缝音频延长尚未提供。","capabilities",items,List.of(),proposed));action=proposed;
+                    appendResult(owner,conversation,new Result("以下是当前可用功能，可直接对话操作或在对话内打开专用面板。外部商业发行和无缝音频延长尚未提供。","capabilities",items,List.of(),proposed));action=proposed;
                 } else if(SOCIAL.contains(proposed)&&social!=null) {
                     AgentRequestScope.check();
                     var result=social.execute(owner,conversation,proposed,authorizedText,stepKey,current);

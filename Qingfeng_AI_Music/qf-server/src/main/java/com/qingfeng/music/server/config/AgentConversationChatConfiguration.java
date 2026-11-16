@@ -50,6 +50,13 @@ public class AgentConversationChatConfiguration {
             PlaybackLyricsService playback,SectionEditingService sections,ConversationService conversations){
         return new AgentStudioActions(works,settings,briefs,lines,playback,sections,conversations);
     }
+    @Bean com.qingfeng.music.server.agent.AgentFeatureActions agentFeatureActions(WorkApi works,LyricsApi lyrics,ConversationService conversations,
+            com.qingfeng.music.server.artist.ArtistProfileService profiles,ObjectProvider<com.qingfeng.music.creation.QuickCreationService> quick,
+            com.qingfeng.music.lyrics.application.LyricSelectionRewriteService selection,LyricLineRewriteService lines,
+            com.qingfeng.music.lyrics.application.LyricsCompositionService composer,MusicSettings settings,
+            com.qingfeng.music.server.download.SharedDownloadGrants downloads,com.qingfeng.music.credits.CreditsPricing pricing){
+        return new com.qingfeng.music.server.agent.AgentFeatureActions(works,lyrics,conversations,profiles,quick,selection,lines,composer,settings,downloads,pricing);
+    }
     @Bean AgentChatService agentChatService(ConversationService conversations,AgentToolDispatcher tools,AgentChatModel model,AgentTurnStore turns,
             ObjectProvider<AgentSocialActions> social,ObjectProvider<AgentApplicationActions> applications,Environment env){
         return new AgentChatService(conversations,tools,model,turns,social.getIfAvailable(),applications.orderedStream().toList())
