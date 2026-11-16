@@ -1,6 +1,4 @@
 spring:
-  flyway:
-    target: 48
   datasource:
     url: jdbc:h2:mem:qingfeng_test;MODE=MySQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1
     username: sa

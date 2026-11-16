@@ -32,6 +32,8 @@ public class H2InboxCompatibilityAutoConfiguration {
             }
             Flyway.configure().configuration(flyway.getConfiguration()).target("44").load().migrate();
             var db = new JdbcTemplate(source);
+            if (db.queryForObject("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=CURRENT_SCHEMA AND table_name='creator_phone_binding'", Integer.class) == 0)
+                new ResourceDatabasePopulator(new ClassPathResource("db/migration/V48__phone_binding.sql")).execute(source);
             Integer scoped = db.queryForObject("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=CURRENT_SCHEMA AND table_name='payment_webhook_inbox' AND column_name IN ('merchant_scope','env_scope')", Integer.class);
             if (Integer.valueOf(0).equals(scoped)) {
                 new ResourceDatabasePopulator(new ClassPathResource("h2-inbox-compatibility.sql")).execute(source);
