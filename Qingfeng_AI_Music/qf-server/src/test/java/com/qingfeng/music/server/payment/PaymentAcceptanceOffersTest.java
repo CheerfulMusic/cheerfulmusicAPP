@@ -49,4 +49,26 @@ class PaymentAcceptanceOffersTest {
         assertThrows(IllegalArgumentException.class,()->StripePaymentMethods.checkoutMethodForStoredOffer("accept-abcdef01-paypal-USD"));
         assertThrows(IllegalArgumentException.class,()->StripePaymentMethods.checkoutMethodForStoredOffer("accept-abcdef01-wechat_pay-USD"));
     }
+    @Test void publicOwnerQuotesExpireBackToNormalWhileClosedCanaryNeverGainsNormalRights(){
+        var active=offers(settings());assertTrue(active.exclusiveFor(OWNER,true));assertTrue(active.exclusiveFor(OWNER,false));
+        assertFalse(active.exclusiveFor("00000000-0000-0000-0000-000000000002",true));
+        var expired=offers(settings().withProperty("qingfeng.payment.acceptance.expires-at",NOW.toString()));
+        assertFalse(expired.exclusiveFor(OWNER,true));assertTrue(expired.exclusiveFor(OWNER,false));
+        assertFalse(offers(new MockEnvironment()).exclusiveFor(OWNER,true));
+    }
+    @Test void gbpWechatQuoteIsFixedAndOldCnyOrdersRemainRoutableWithoutConfiguration(){
+        var gbp=offers(settings().withProperty("qingfeng.payment.acceptance.wechat-currency","GBP"));
+        var pack=gbp.offer(OWNER,"wechat_pay").orElseThrow();
+        assertEquals("accept-abcdef01-wechat_pay-GBP",pack.id());assertEquals("GBP",pack.currency());
+        assertEquals(new BigDecimal("0.50"),pack.amount());assertEquals(1L,pack.credits());
+        assertEquals("wechat_pay",StripePaymentMethods.checkoutMethodForStoredOffer(pack.id()));
+        assertEquals("wechat_pay",StripePaymentMethods.checkoutMethodForStoredOffer("accept-abcdef01-wechat_pay-CNY"));
+        for(String id:new String[]{"accept-abcdef01-wechat_pay-CNY","accept-abcdef02-wechat_pay-GBP","accept-abcdef01-card-GBP"})
+            assertThrows(ResponseStatusException.class,()->gbp.select(OWNER,id,"wechat_pay"));
+        for(String currency:new String[]{"USD","EUR","","GBP,CNY"})
+            assertThrows(IllegalArgumentException.class,()->offers(settings().withProperty("qingfeng.payment.acceptance.wechat-currency",currency)));
+        for(String id:new String[]{"accept-abcdef01-card-GBP","accept-abcdef01-apple_pay-GBP","accept-abcdef01-paypal-GBP"})
+            assertThrows(IllegalArgumentException.class,()->PaymentAcceptanceOffers.storedMethod(id));
+    }
+
 }

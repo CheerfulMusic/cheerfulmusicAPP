@@ -717,6 +717,116 @@ class IntegratedPaymentApplicationMySqlTest {
             }
         }finally{if(application!=null)application.close();settings=originalSettings;start();}
     }
+
+    private static JsonNode acceptanceHttpCatalog(IdentityApi.Session customer,String provider) throws Exception {
+        var response=business(customer,"/api/app/"+provider+"/catalog","GET",null);
+        assertEquals(200,response.statusCode(),response.body());return JSON.readTree(response.body());
+    }
+    private static JsonNode acceptanceHttpMethod(JsonNode catalog,String channel) {
+        for(var method:catalog.path("paymentMethods"))if(channel.equals(method.path("id").asString()))return method;
+        throw new AssertionError("Missing payment channel: "+channel);
+    }
+    private static String acceptanceSku(String nonce,String channel) {
+        return "accept-"+nonce+"-"+channel+(channel.equals("wechat_pay")?"-GBP":"-USD");
+    }
+    @Test @Order(42) void publicPurchasesAndOwnerGbpAcceptanceUseIndependentHttpScopesAndLateImmutableSettlement() throws Exception {
+        var customer=owner();var ordinary=owner();String ownerId=customer.creatorId(),nonce="bc23de45";
+        var ordinaryStripe=acceptanceHttpCatalog(ordinary,"stripe");var ordinaryPayPal=acceptanceHttpCatalog(ordinary,"paypal");
+        assertTrue(ordinaryStripe.path("enabled").asBoolean());assertTrue(ordinaryPayPal.path("enabled").asBoolean());
+        assertEquals(3,ordinaryStripe.path("packages").size());assertEquals(3,ordinaryPayPal.path("packages").size());
+        var originalSettings=new LinkedHashMap<>(settings);var paymentOrders=new LinkedHashMap<String,Paid>();
+        try {
+            application.close();settings=new LinkedHashMap<>(originalSettings);
+            settings.put("qingfeng.payment.acceptance.enabled",true);settings.put("qingfeng.payment.acceptance.owner-id",ownerId);
+            settings.put("qingfeng.payment.acceptance.nonce",nonce);settings.put("qingfeng.payment.acceptance.expires-at",Instant.now().plusSeconds(3600).toString());
+            settings.put("qingfeng.payment.acceptance.wechat-currency","GBP");
+            settings.put("qingfeng.stripe.accepting-new-orders",true);settings.put("qingfeng.paypal.accepting-new-orders",true);
+            settings.put("qingfeng.stripe.canary-owner-ids","");settings.put("qingfeng.paypal.canary-owner-ids","");start();
+            assertEquals(ordinaryStripe,acceptanceHttpCatalog(ordinary,"stripe"),"A private offer must not change any regular user's catalog");
+            assertEquals(ordinaryPayPal,acceptanceHttpCatalog(ordinary,"paypal"));
+            var mine=acceptanceHttpCatalog(customer,"stripe");assertTrue(mine.path("enabled").asBoolean());assertEquals(0,mine.path("packages").size());
+            for(String channel:List.of("card","apple_pay","wechat_pay")) {
+                var method=acceptanceHttpMethod(mine,channel);assertTrue(method.path("enabled").asBoolean());assertEquals(1,method.path("packages").size());
+                var quote=method.path("packages").get(0);assertEquals(acceptanceSku(nonce,channel),quote.path("id").asString());
+                assertTrue(quote.path("acceptance").asBoolean());assertEquals(1,quote.path("credits").asLong());assertEquals(1,quote.path("maxPurchases").asInt());
+                assertEquals(new BigDecimal("0.50"),quote.path("amount").decimalValue().setScale(2));
+                String currency=channel.equals("wechat_pay")?"GBP":"USD";assertEquals(currency,quote.path("currency").asString());
+                assertEquals(1,method.path("currencies").size());assertEquals(currency,method.path("currencies").get(0).asString());
+                assertEquals(1,method.path("currencyOptions").size());assertEquals(currency,method.path("currencyOptions").get(0).path("currency").asString());
+                assertTrue(method.path("currencyOptions").get(0).path("enabled").asBoolean());
+            }
+            var pp=acceptanceHttpCatalog(customer,"paypal");assertTrue(pp.path("enabled").asBoolean());assertEquals(1,pp.path("packages").size());
+            var ppQuote=pp.path("packages").get(0);assertEquals(acceptanceSku(nonce,"paypal"),ppQuote.path("id").asString());
+            assertTrue(ppQuote.path("acceptance").asBoolean());assertEquals(1,ppQuote.path("credits").asLong());assertEquals("USD",ppQuote.path("currency").asString());
+            assertEquals(new BigDecimal("0.01"),ppQuote.path("amount").decimalValue().setScale(2));
+            assertEquals(403,business(customer,"/api/app/stripe/orders","POST","{\"packageId\":\"starter-USD\",\"paymentMethod\":\"card\"}").statusCode());
+            assertEquals(403,business(customer,"/api/app/paypal/orders","POST","{\"packageId\":\"starter-USD\"}").statusCode());
+            long before=number("SELECT COUNT(*) FROM payment_order");
+            for(String channel:List.of("card","apple_pay","wechat_pay","paypal")) {
+                String route="/api/app/"+(channel.equals("paypal")?"paypal":"stripe")+"/orders";
+                var forged=JSON.writeValueAsString(Map.of("packageId",acceptanceSku(nonce,channel),"paymentMethod",channel,"ownerId",ownerId,"amount",0.01,"credits",999999));
+                assertEquals(403,business(ordinary,route,"POST",forged).statusCode(),"An owner ID in JSON cannot authorize another user's acceptance SKU");
+                var badNonce=JSON.writeValueAsString(Map.of("packageId",acceptanceSku("ef45ab67",channel),"paymentMethod",channel));
+                assertEquals(403,business(customer,route,"POST",badNonce).statusCode());
+            }
+            assertEquals(403,business(customer,"/api/app/stripe/orders","POST",JSON.writeValueAsString(Map.of("packageId",acceptanceSku(nonce,"card"),"paymentMethod","apple_pay"))).statusCode());
+            assertEquals(403,business(customer,"/api/app/stripe/orders","POST",JSON.writeValueAsString(Map.of("packageId","accept-"+nonce+"-wechat_pay-CNY","paymentMethod","wechat_pay"))).statusCode());
+            assertEquals(before,number("SELECT COUNT(*) FROM payment_order"),"Rejected cross-user, nonce, channel and currency forgeries must reserve no order");
+            assertEquals(0,ledger.balance(ownerId));assertEquals(0,ledger.balance(ordinary.creatorId()));
+            var regular=paid(ordinary);assertEquals(100,ledger.balance(ordinary.creatorId()));
+            assertEquals(new BigDecimal("9.90"),db.queryForObject("SELECT amount FROM payment_order WHERE id=? AND currency='USD' AND package_id='starter-USD'",BigDecimal.class,regular.order()));
+            int credited=0;
+            for(String channel:List.of("card","apple_pay","wechat_pay","paypal")) {
+                String sku=acceptanceSku(nonce,channel),route="/api/app/"+(channel.equals("paypal")?"paypal":"stripe")+"/orders";
+                String body=JSON.writeValueAsString(Map.of("packageId",sku,"paymentMethod",channel,"amount",999.99,"currency","EUR","credits",999999));
+                var responses=new ConcurrentLinkedQueue<HttpResponse<String>>();var pool=Executors.newFixedThreadPool(4);var barrier=new CyclicBarrier(4);
+                try {
+                    var futures=new ArrayList<Future<?>>();for(int i=0;i<4;i++)futures.add(pool.submit(()->{barrier.await(10,TimeUnit.SECONDS);responses.add(business(customer,route,"POST",body));return null;}));
+                    for(var future:futures)future.get(35,TimeUnit.SECONDS);
+                }finally{pool.shutdownNow();assertTrue(pool.awaitTermination(10,TimeUnit.SECONDS));}
+                assertEquals(1,responses.stream().filter(r->r.statusCode()==200).count(),"Concurrent authenticated HTTP submissions create exactly one order");
+                assertEquals(3,responses.stream().filter(r->r.statusCode()==409).count(),responses.toString());
+                var success=responses.stream().filter(r->r.statusCode()==200).findFirst().orElseThrow();String order=JSON.readTree(success.body()).path("orderId").asString();
+                assertEquals(1,number("SELECT COUNT(*) FROM payment_order WHERE creator_id=? AND package_id=?",ownerId,sku));
+                var row=db.queryForMap("SELECT * FROM payment_order WHERE id=?",order);assertEquals(1,((Number)row.get("credits")).longValue());assertEquals(sku,row.get("package_id"));
+                String currency=channel.equals("wechat_pay")?"GBP":"USD";BigDecimal amount=new BigDecimal(channel.equals("paypal")?"0.01":"0.50");
+                assertEquals(currency,row.get("currency"));assertEquals(amount,row.get("amount"));assertEquals("PENDING",row.get("status"));
+                String session=(String)row.get("provider_link_id");
+                if(channel.equals("paypal")){paymentOrders.put(channel,new Paid(customer,order,session,""));continue;}
+                var snapshot=new LinkedHashMap<String,Object>();snapshot.put("id",session);snapshot.put("url","https://checkout.stripe.com/c/pay/"+session+"#offline-public-acceptance");snapshot.put("status","complete");snapshot.put("payment_status","paid");snapshot.put("payment_intent","pi_"+session.substring(8));snapshot.put("metadata",Map.of("order_id",order));snapshot.put("client_reference_id",order);snapshot.put("mode","payment");snapshot.put("amount_total",amount.movePointRight(2).longValueExact());snapshot.put("currency",currency.toLowerCase(Locale.ROOT));snapshot.put("livemode",false);snapshot.put("payment_method_types",List.of(channel.equals("wechat_pay")?"wechat_pay":"card"));SESSIONS.put(session,JSON.valueToTree(snapshot));
+                paymentOrders.put(channel,new Paid(customer,order,session,SESSIONS.get(session).path("payment_intent").asString()));
+                String event="evt_"+unique();accepted("checkout.session.completed",session,event);accepted("checkout.session.completed",session,event);drain();
+                assertEquals(++credited,ledger.balance(ownerId));assertEquals(1,number("SELECT COUNT(*) FROM credit_ledger WHERE reference_id=? AND entry_type='CREDIT'","payment:"+order));
+                assertEquals(1,number("SELECT COUNT(*) FROM p0_credit_batch WHERE reference=? AND original=1","payment:"+order));
+                assertEquals(409,business(customer,route,"POST",body).statusCode(),"Paid acceptance SKUs remain permanently reserved");
+            }
+            assertEquals(3,ledger.balance(ownerId));
+            // Expiration restores public quotes, and does not discard an already-created unpaid PayPal order.
+            application.close();settings.put("qingfeng.payment.acceptance.expires-at",Instant.now().minusSeconds(5).toString());start();
+            assertEquals(ordinaryStripe,acceptanceHttpCatalog(customer,"stripe"));assertEquals(ordinaryPayPal,acceptanceHttpCatalog(customer,"paypal"));
+            for(String channel:List.of("card","apple_pay","wechat_pay","paypal")) {
+                String route="/api/app/"+(channel.equals("paypal")?"paypal":"stripe")+"/orders";
+                assertEquals(403,business(customer,route,"POST",JSON.writeValueAsString(Map.of("packageId",acceptanceSku(nonce,channel),"paymentMethod",channel))).statusCode());
+            }
+            // Fully disabling the exception and changing today's USD quote must not change historical 1-credit snapshots.
+            application.close();settings.put("qingfeng.payment.acceptance.enabled",false);settings.put("qingfeng.payment.acceptance.owner-id","");settings.put("qingfeng.payment.acceptance.nonce","");settings.put("qingfeng.payment.acceptance.expires-at","");settings.put("qingfeng.payments.prices.usd.starter","99.99");start();
+            var normalAgain=acceptanceHttpCatalog(customer,"paypal");assertEquals(3,normalAgain.path("packages").size());
+            assertEquals(new BigDecimal("99.99"),normalAgain.path("packages").get(0).path("amount").decimalValue().setScale(2));
+            for(var pack:normalAgain.path("packages"))assertFalse(pack.path("acceptance").asBoolean());
+            var late=paymentOrders.get("paypal");String capture="C"+unique().substring(0,20);
+            PAYPAL_ORDERS.put(late.session(),new PayPalCheckoutGateway.Snapshot(late.session(),late.order(),"COMPLETED",PAYPAL_MERCHANT,capture,"COMPLETED",new BigDecimal("0.01"),"USD"));
+            String event="WH-"+unique(),body=JSON.writeValueAsString(Map.of("id",event,"event_type","PAYMENT.CAPTURE.COMPLETED","resource",Map.of("id",capture,"supplementary_data",Map.of("related_ids",Map.of("order_id",late.session())))));
+            assertEquals(200,request("/api/public/paypal/webhook","POST",body,null,null).statusCode());assertEquals(200,request("/api/public/paypal/webhook","POST",body,null,null).statusCode());drain();
+            assertEquals(4,ledger.balance(ownerId));assertEquals("PAID",db.queryForObject("SELECT status FROM payment_order WHERE id=?",String.class,late.order()));
+            assertEquals(new BigDecimal("0.01"),db.queryForObject("SELECT amount FROM payment_order WHERE id=? AND currency='USD' AND credits=1",BigDecimal.class,late.order()));
+            for(String channel:List.of("card","apple_pay","wechat_pay")){var payment=paymentOrders.get(channel);accepted("checkout.session.completed",payment.session(),"evt_"+unique());}drain();
+            assertEquals(4,ledger.balance(ownerId));assertEquals(4,number("SELECT COUNT(*) FROM payment_order WHERE creator_id=? AND package_id LIKE ? AND status='PAID'",ownerId,"accept-"+nonce+"-%"));
+            assertEquals(4,number("SELECT COUNT(*) FROM credit_ledger WHERE owner_id=? AND entry_type='CREDIT' AND reference_id LIKE 'payment:%'",ownerId));
+            assertEquals(4,number("SELECT SUM(original) FROM p0_credit_batch WHERE owner_id=? AND source_type='PAYMENT'",ownerId));
+            assertEquals(100,ledger.balance(ordinary.creatorId()));
+        }finally{if(application!=null)application.close();settings=originalSettings;start();}
+    }
+
     private static void assertPaidAgentDeniedWithoutFinancialOrAdmissionMutation(IdentityApi.Session user,String conversation,String key,String text){
         var before=exactFinancialSnapshot();
         var admissions=db.queryForList("SELECT * FROM agent_request_admission WHERE creator_id=? ORDER BY id",user.creatorId());
