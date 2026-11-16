@@ -9,7 +9,7 @@ import org.springframework.stereotype.Component;
 /** 作品列表的只读投影，一次批量读取当前页状态，不逐个作品查询三个子模块。 */
 @Component @Profile({"mysql","test"})
 public final class WorkLibraryQuery {
-    public record Item(WorkApi.Work work,String status,String audioId,String audioOrigin,String songTitle,String coverId) {}
+    public record Item(WorkApi.Work work,String status,String audioId,String audioOrigin,String songTitle,String coverId,String videoId,String videoState) {}
     private final WorkApi works;
     private final JdbcTemplate jdbc;
     public WorkLibraryQuery(WorkApi works,JdbcTemplate jdbc){this.works=works;this.jdbc=jdbc;}
@@ -39,6 +39,9 @@ public final class WorkLibraryQuery {
         String placeholders=String.join(",",Collections.nCopies(owned.size(),"?"));
         String sql="""
             SELECT w.id,
+              (SELECT v.id FROM music_video_project v WHERE v.work_id=w.id AND v.creator_id=w.owner_id AND v.state IN ('READY','QUEUED','RUNNING','ASSEMBLING','UNCERTAIN') ORDER BY CASE WHEN v.state='READY' THEN 0 ELSE 1 END,v.created_at DESC,v.id DESC LIMIT 1) AS video_id,
+              (SELECT v.state FROM music_video_project v WHERE v.work_id=w.id AND v.creator_id=w.owner_id AND v.state IN ('READY','QUEUED','RUNNING','ASSEMBLING','UNCERTAIN') ORDER BY CASE WHEN v.state='READY' THEN 0 ELSE 1 END,v.created_at DESC,v.id DESC LIMIT 1) AS video_state,
+
               (SELECT q.status FROM quick_creation q WHERE q.work_id=w.id ORDER BY q.created_at DESC,q.id DESC LIMIT 1) AS quick_status,
               (SELECT t.status FROM generation_task t WHERE t.work_id=w.id ORDER BY t.created_at DESC,t.id DESC LIMIT 1) AS task_status,
               (SELECT COUNT(*) FROM generation_task t WHERE t.work_id=w.id AND t.status IN ('QUEUED','SUBMITTING','RUNNING','SAVING')) AS active_tasks,
@@ -57,9 +60,9 @@ public final class WorkLibraryQuery {
         jdbc.query(sql, row->{
             String quick=row.getString("quick_status");
             String status=row.getInt("active_tasks")>0||List.of("QUEUED","WRITING","LYRICS_READY","SUBMITTING_MUSIC").contains(quick==null?"":quick)?"GENERATING":row.getInt("unknown_tasks")>0||"SUBMISSION_UNKNOWN".equals(quick)?"CHECKING":row.getString("audio_id")!=null?"COMPLETED":"FAILED".equals(row.getString("task_status"))||"FAILED".equals(quick)?"GENERATION_FAILED":row.getInt("lyric_count")>0?"READY_TO_GENERATE":"LYRICS_DRAFT";
-            byId.put(row.getString("id"),new State(status,row.getString("audio_id"),row.getString("audio_origin"),row.getString("song_title"),row.getString("cover_id")));
+            byId.put(row.getString("id"),new State(status,row.getString("audio_id"),row.getString("audio_origin"),row.getString("song_title"),row.getString("cover_id"),row.getString("video_id"),row.getString("video_state")));
         },args.toArray());
-        return owned.stream().filter(work->byId.containsKey(work.id())).map(work->{var s=byId.get(work.id());return new Item(work,s.status,s.audioId,s.origin,s.title,s.coverId);}).toList();
+        return owned.stream().filter(work->byId.containsKey(work.id())).map(work->{var s=byId.get(work.id());return new Item(work,s.status,s.audioId,s.origin,s.title,s.coverId,s.videoId,s.videoState);}).toList();
     }
-    private record State(String status,String audioId,String origin,String title,String coverId){}
+    private record State(String status,String audioId,String origin,String title,String coverId,String videoId,String videoState){}
 }

@@ -16,10 +16,20 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
 
+@org.springframework.test.context.jdbc.Sql(scripts="classpath:db/migration/V47__music_video_projects.sql", executionPhase=org.springframework.test.context.jdbc.Sql.ExecutionPhase.BEFORE_TEST_CLASS)
 @SpringBootTest(properties={"spring.datasource.url=jdbc:h2:mem:work_library;MODE=MySQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1","qingfeng.generation.enabled=true"})
 @ActiveProfiles("test") @Import(GenerationSubmissionIntegrationTest.Providers.class)
 class WorkLibraryIntegrationTest {
     @Autowired IdentityApi identity;@Autowired WorkApi works;@Autowired LyricsApi lyrics;@Autowired GenerationApi tasks;@Autowired MediaService media;@Autowired WorkLibraryQuery library;@Autowired JdbcTemplate jdbc;
+    @Test void exposesCompletedVideoBeforeNewQueuedTaskAndIsolatesOwners(){
+        String owner=identity.create().creatorId(),other=identity.create().creatorId();
+        var w=works.create(owner,new WorkApi.Draft("","","story","","民谣","song"));
+        for(String[] v:new String[][]{{"ready",owner,"READY"},{"pending",owner,"RUNNING"},{"foreign",other,"READY"}})
+            jdbc.update("INSERT INTO music_video_project(id,creator_id,work_id,asset_id,request_key,fingerprint,state,plan_json) VALUES(?,?,?,?,?,?,?,?)",v[0],v[1],w.id(),"audio",UUID.randomUUID().toString(),"fingerprint",v[2],"{}");
+        var row=library.list(owner,0).get(0);assertEquals("ready",row.videoId());assertEquals("READY",row.videoState());
+        jdbc.update("UPDATE music_video_project SET state='FAILED' WHERE id='ready'");
+        row=library.list(owner,0).get(0);assertEquals("pending",row.videoId());assertEquals("RUNNING",row.videoState());
+    }
     @Test void followsRealStateAndDoesNotExposeOtherCreatorsAudio(){
         String owner=identity.create().creatorId(),other=identity.create().creatorId();var work=works.create(owner,new WorkApi.Draft("妈妈","生日","回忆","祝福","民谣","故事"));
         assertEquals("LYRICS_DRAFT",library.list(owner,0).get(0).status());

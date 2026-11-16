@@ -21,6 +21,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import static org.junit.jupiter.api.Assertions.*;
 
+@org.springframework.test.context.jdbc.Sql(scripts="classpath:db/migration/V47__music_video_projects.sql", executionPhase=org.springframework.test.context.jdbc.Sql.ExecutionPhase.BEFORE_TEST_CLASS)
 @SpringBootTest(properties={"qingfeng.lyrics.enabled=true","qingfeng.generation.scheduler-enabled=false","qingfeng.credits.enabled=false"})
 @ActiveProfiles("test") @Import(QuickCreationIntegrationTest.Offline.class)
 class QuickCreationIntegrationTest {
