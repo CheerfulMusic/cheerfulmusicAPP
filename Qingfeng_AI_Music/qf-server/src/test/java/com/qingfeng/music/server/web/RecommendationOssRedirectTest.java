@@ -44,6 +44,17 @@ class RecommendationOssRedirectTest {
         assertTrue(subject.destination(FILE, "GET", true).isEmpty());
     }
 
+    @Test void previewAndOriginalAreBothAllowlistedAndMissingPreviewFallsBack() {
+        String preview = "/media/sample-red-guofeng-v1-preview-128.mp3";
+        assertTrue(RecommendationOssRedirect.isSamplePath(FILE));
+        assertTrue(RecommendationOssRedirect.isSamplePath(preview));
+        assertFalse(RecommendationOssRedirect.isSamplePath("/media/sample-red-guofeng-v1-preview-129.mp3"));
+        OSS client = mock(OSS.class);
+        var subject = new RecommendationOssRedirect(client, "private-bucket", true, CLOCK);
+        assertTrue(subject.destination(preview, "GET", false).isEmpty());
+        verify(client).doesObjectExist("private-bucket", RecommendationOssRedirect.PREVIEW_PREFIX + "sample-red-guofeng-v1-preview-128.mp3");
+    }
+
     @Test void internalEndpointCannotBeGivenToBrowsers() throws Exception {
         OSS client = mock(OSS.class);
         when(client.doesObjectExist("private-bucket", KEY)).thenReturn(true);

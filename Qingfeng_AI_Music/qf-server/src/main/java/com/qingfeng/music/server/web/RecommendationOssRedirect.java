@@ -18,10 +18,12 @@ import java.util.concurrent.TimeoutException;
 /** Only the built-in public samples may leave the application via this route. */
 public final class RecommendationOssRedirect {
     public static final String PREFIX = "qingfeng/recommendation-samples/v1/";
+    public static final String PREVIEW_PREFIX = "qingfeng/recommendation-samples/preview-128-v1/";
     private static final Set<String> SAMPLES = Set.of(
         "sample-love-v2.mp3", "sample-family-v2.mp3", "sample-ocean-travel-v2.mp3",
         "sample-red-guofeng-v1.mp3", "sample-rain-disco-v1.mp3", "sample-tomorrow-rock-v1.mp3",
-        "sample-scenery-folk-v1.mp3", "sample-hometown-electronic-v1.mp3", "sample-river-instrumental-v1.mp3");
+        "sample-scenery-folk-v1.mp3", "sample-hometown-electronic-v1.mp3", "sample-river-instrumental-v1.mp3",
+        "sample-love-v2-preview-128.mp3", "sample-family-v2-preview-128.mp3", "sample-ocean-travel-v2-preview-128.mp3", "sample-red-guofeng-v1-preview-128.mp3", "sample-rain-disco-v1-preview-128.mp3", "sample-tomorrow-rock-v1-preview-128.mp3", "sample-scenery-folk-v1-preview-128.mp3", "sample-hometown-electronic-v1-preview-128.mp3", "sample-river-instrumental-v1-preview-128.mp3");
     // Bounded and daemonized: a slow OSS endpoint must not exhaust request threads.
     private static final ThreadPoolExecutor CHECKS = new ThreadPoolExecutor(2, 2, 30, TimeUnit.SECONDS,
         new ArrayBlockingQueue<>(8), task -> { var thread = new Thread(task, "recommendation-oss-check"); thread.setDaemon(true); return thread; });
@@ -64,7 +66,7 @@ public final class RecommendationOssRedirect {
         if (!enabled || client == null || bucket == null || bucket.isBlank() || reauth
                 || !("GET".equals(method) || "HEAD".equals(method)) || !isSamplePath(path)) return Optional.empty();
         String name = path.substring("/media/".length());
-        String key = PREFIX + name;
+        String key = (name.endsWith("-preview-128.mp3") ? PREVIEW_PREFIX : PREFIX) + name;
         try {
             if (!exists(key)) return Optional.empty();
             var expires = Date.from(clock.instant().plusSeconds(3600));
