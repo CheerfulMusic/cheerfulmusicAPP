@@ -138,16 +138,23 @@ def normalized_migration_sha(data):
 
 
 def verify_migration_set(normalized):
-    expected = {**CORE_MIGRATION_SHA256,
-                INTEGRATED_MIGRATION: INTEGRATED_MIGRATION_SHA256,
-                AGENT_ALLOWANCE_MIGRATION: AGENT_ALLOWANCE_MIGRATION_SHA256}
-    if set(normalized) != set(expected):
-        raise GateError("Canonical migration chain must contain exactly core V1..V44, integrated V45 and agent allowance V46")
+    rollback_expected = {**CORE_MIGRATION_SHA256,
+                         INTEGRATED_MIGRATION: INTEGRATED_MIGRATION_SHA256}
+    release_expected = {**rollback_expected,
+                        AGENT_ALLOWANCE_MIGRATION: AGENT_ALLOWANCE_MIGRATION_SHA256}
+    if set(normalized) == set(release_expected):
+        expected = release_expected
+        extension = {"agentAllowanceVersion": "46"}
+    elif set(normalized) == set(rollback_expected):
+        expected = rollback_expected
+        extension = {}
+    else:
+        raise GateError("Canonical migration chain must contain exactly core V1..V44 and integrated V45, optionally agent allowance V46")
     for name, digest in expected.items():
         if normalized[name] != digest:
             raise GateError("Canonical migration source changed: " + name)
     return {"coreSourceCommit": CORE_MIGRATION_SOURCE, "coreVersions": "1..44",
-            "integrationVersion": "45", "agentAllowanceVersion": "46",
+            "integrationVersion": "45", **extension,
             "normalization": "UTF-8/no BOM/LF",
             "normalizedSha256": dict(sorted(normalized.items()))}
 

@@ -133,8 +133,16 @@ class CreditMigrationContractTests(unittest.TestCase):
         with self.assertRaisesRegex(gate.GateError, "Missing or noncontiguous migration chain"):
             gate.inspect_artifact(jar)
 
-    def test_missing_v46_cannot_pass_as_the_previous_complete_chain(self):
+    def test_v45_rollback_chain_retains_its_original_contract(self):
         jar = self.nested_change(self.fixture.jar(), lambda items: items.pop("db/migration/" + gate.AGENT_ALLOWANCE_MIGRATION))
+        contract = gate.inspect_artifact(jar)["migrationContract"]
+        self.assertEqual(45, len(contract["normalizedSha256"]))
+        self.assertEqual("45", contract["integrationVersion"])
+        self.assertNotIn("agentAllowanceVersion", contract)
+
+    def test_unreviewed_v47_cannot_be_added_to_either_chain(self):
+        jar = self.nested_change(self.fixture.jar(), lambda items: items.update({
+            "db/migration/V47__unreviewed.sql": b"SELECT 1;"}))
         with self.assertRaisesRegex(gate.GateError, "exactly core V1..V44"):
             gate.inspect_artifact(jar)
 
