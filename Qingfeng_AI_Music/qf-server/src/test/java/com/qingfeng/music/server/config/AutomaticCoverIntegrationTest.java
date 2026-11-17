@@ -302,6 +302,16 @@ class AutomaticCoverIntegrationTest {
             var saved = ImageIO.read(stream);
             assertEquals(1024, saved.getWidth());
             assertEquals(1024, saved.getHeight());
+            boolean titleVisible = false;
+            for (int y = 500; y < 830 && !titleVisible; y++) {
+                for (int x = 50; x < 980; x++) {
+                    if ((saved.getRGB(x, y) & 0xffffff) > 0xeeeeee) {
+                        titleVisible = true;
+                        break;
+                    }
+                }
+            }
+            assertTrue(titleVisible, "The stored cover must include the song title pixels");
         }
         assertEquals(1, calls.get());
         assertEquals(2, downloads.get());
