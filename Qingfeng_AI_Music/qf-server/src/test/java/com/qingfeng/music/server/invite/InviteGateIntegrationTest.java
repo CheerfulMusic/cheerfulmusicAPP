@@ -209,7 +209,7 @@ class InviteGateIntegrationTest {
         var locked = send(recipient.http(), "GET", unlock, null, null);
         assertEquals(200, locked.statusCode(), locked.body());
         assertTrue(locked.body().contains("\"unlocked\":false"));
-        assertTrue(locked.body().contains("\"price\":10"));
+        assertTrue(locked.body().contains("\"price\":15"));
         assertEquals(404, readBytes(recipient.http(), attachment).statusCode());
         assertEquals(403, send(recipient.http(), "POST", unlock, "{}", null).statusCode());
         assertEquals(before, credits.balance(creator));
@@ -218,7 +218,7 @@ class InviteGateIntegrationTest {
             var unlocked = send(recipient.http(), "POST", unlock, "{}", csrf);
             assertEquals(200, unlocked.statusCode(), unlocked.body());
             assertTrue(unlocked.body().contains("\"unlocked\":true"));
-            assertEquals(before - 10, credits.balance(creator));
+            assertEquals(before - 15, credits.balance(creator));
         }
         var downloaded = readBytes(recipient.http(), attachment);
         assertEquals(200, downloaded.statusCode());
