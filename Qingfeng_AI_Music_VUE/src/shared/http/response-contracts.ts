@@ -21,7 +21,7 @@ const work=(v:unknown)=>obj(v)&&text(v.id)&&num(v.version)&&['recipient','occasi
 const revision=(v:unknown)=>obj(v)&&text(v.id)&&text(v.workId)&&num(v.workVersion)&&str(v.title)&&str(v.lyrics)&&typeof v.confirmed==='boolean'
 const asset=(v:unknown)=>obj(v)&&text(v.id)&&text(v.workId)&&['IMPORTED','GENERATED'].includes(String(v.origin))&&num(v.byteSize)&&text(v.contentType)
 const task=(v:unknown)=>obj(v)&&text(v.id)&&text(v.revisionId)&&['QUEUED','SUBMITTING','RUNNING','SAVING','SUCCEEDED','FAILED','CANCELLED','SUBMISSION_UNKNOWN'].includes(String(v.status))&&str(v.title)
-const coverAsset=(v:unknown)=>obj(v)&&text(v.id)&&['UPLOADED','AI'].includes(String(v.origin))
+const coverAsset=(v:unknown)=>obj(v)&&text(v.id)&&['UPLOADED','AI','AUTO'].includes(String(v.origin))
 const coverEdit=(v:unknown)=>obj(v)&&text(v.id)&&text(v.sourceId)&&text(v.status)
 const cover=(v:unknown)=>obj(v)&&num(v.version)&&(v.currentCoverId===null||text(v.currentCoverId))&&list(v.assets,coverAsset)&&list(v.edits,coverEdit)&&typeof v.aiAvailable==='boolean'
 const choices=(v:unknown)=>obj(v)&&Object.values(v).every(values=>list(values,text))
@@ -30,7 +30,7 @@ const direction=(v:unknown)=>obj(v)&&preferences(v.preferences)&&num(v.catalogVe
 const hotStat=(v:unknown)=>obj(v)&&text(v.trackId)&&['plays','likes','favorites','comments'].every(k=>num(v[k])&&Number(v[k])>=0)
 const nullableText=(v:unknown)=>v===null||str(v)
 const artistSong=(v:unknown):v is Row=>obj(v)&&text(v.id)&&Number.isSafeInteger(v.version)&&Number(v.version)>0&&text(v.title)
-const publicArtistSong=(v:unknown)=>artistSong(v)&&typeof v.hasCover==='boolean'
+const publicArtistSong=(v:unknown)=>artistSong(v)&&typeof v.hasCover==='boolean'&&(v.coverId===undefined||nullableText(v.coverId))
 const artistRelease=(v:unknown)=>artistSong(v)&&text(v.workId)&&text(v.assetId)&&nullableText(v.coverId)
   &&(v.onDiscover===undefined||typeof v.onDiscover==='boolean')
 const nonnegativeCount=(v:unknown)=>Number.isSafeInteger(v)&&Number(v)>=0

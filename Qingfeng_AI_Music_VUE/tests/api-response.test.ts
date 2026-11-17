@@ -3,6 +3,28 @@ import {requestJson,uploadForm,resetCreatorSession} from '../src/shared/http/api
 afterEach(()=>{vi.unstubAllGlobals();resetCreatorSession()})
 const reply=(value:unknown,status=200)=>new Response(JSON.stringify(value),{status})
 describe('R1 响应读取与业务结果校验',()=>{
+ it('公开歌曲接受可选封面标识，并校验新字段类型', async () => {
+  const profile = { stageName: '歌手', tagline: '', avatarKey: null, coverKey: null, featuredReleaseId: null }
+  const song = { id: 'song', version: 1, title: '歌名', hasCover: true }
+  for (const coverId of [undefined, null, 'cover']) {
+   const body = { ...profile, songs: [{ ...song, ...(coverId === undefined ? {} : { coverId }) }] }
+   vi.stubGlobal('fetch', vi.fn(async () => reply(body)))
+   await expect(requestJson('public/artists/artist')).resolves.toEqual(body)
+  }
+  vi.stubGlobal('fetch', vi.fn(async () => reply({ ...profile, songs: [{ ...song, coverId: {} }] })))
+  await expect(requestJson('public/artists/artist')).rejects.toMatchObject({ code: 'INVALID_RESPONSE' })
+ })
+ it('封面读取和保存接受自动生成图片，并继续拒绝未知来源', async () => {
+  const path = 'app/works/work/covers'
+  for (const origin of ['UPLOADED', 'AI', 'AUTO']) {
+   const state = { currentCoverId: 'cover', version: 1, assets: [{ id: 'cover', origin }], edits: [], aiAvailable: false }
+   vi.stubGlobal('fetch', vi.fn(async () => reply(state)))
+   await expect(requestJson(path)).resolves.toEqual(state)
+   await expect(requestJson(`${path}/selection`, 'PUT', { coverId: 'cover', expectedVersion: 0 })).resolves.toEqual(state)
+  }
+  vi.stubGlobal('fetch', vi.fn(async () => reply({ currentCoverId: 'cover', version: 1, assets: [{ id: 'cover', origin: 'UNKNOWN' }], edits: [], aiAvailable: false })))
+  await expect(requestJson(path)).rejects.toMatchObject({ code: 'INVALID_RESPONSE' })
+ })
  it('删除作品必须收到明确确认，空响应不能伪装成删除成功',async()=>{
   vi.stubGlobal('fetch',vi.fn(async()=>reply({deleted:true})))
   await expect(requestJson('app/works/work?acknowledgeCompleted=true','DELETE')).resolves.toEqual({deleted:true})
