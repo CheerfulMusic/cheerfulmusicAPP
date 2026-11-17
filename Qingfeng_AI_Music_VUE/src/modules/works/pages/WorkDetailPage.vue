@@ -125,10 +125,15 @@ watch(generated,value=>{if(value)lyricDirty.value=false})
 function sectionAdopted(){giftStage.value=false;shared.value=false;mediaRefresh.value++;void refreshTasks()}
 const artwork=computed(()=>coverUrl(work.value?.id||'',covers.value?.currentCoverId))
 const publicationCoverReady = ref(false)
+const coverNotice = ref('')
 function updateCover(value: CoverState) {
   if (!covers.value || value.version >= covers.value.version) covers.value = value
 }
-function openCover(){coverOpen.value=true}
+function openCover(){coverNotice.value='';coverOpen.value=true}
+function coverSaved() {
+  coverNotice.value = visibleRelease.value ? '封面已更新并同步。' : '封面已保存。'
+}
+watch(() => work.value?.id, () => { coverNotice.value = '' })
 watch(asset,value=>{if(value&&listenAfterLoad.value){listenAfterLoad.value=false;void viewGeneratedMusic()}})
 const currentStep=computed(()=>shared.value?4:giftStage.value?3:asset.value||pendingTask.value||quickJourney.value?2:1)
 const playingSettings = computed(() => songSettings(asset.value, tasks.value))
@@ -221,7 +226,7 @@ async function confirmPublication() {
 }
 
 watch([() => work.value?.id, () => asset.value?.id, () => accountState.value.authenticated,
-  () => logtoState.value.authenticated, () => covers.value?.currentCoverId], ([id, audio, google, logto], _, onCleanup) => {
+  () => logtoState.value.authenticated, () => covers.value?.version], ([id, audio, google, logto], _, onCleanup) => {
   publicationState.value=undefined
   const request=++publicationStateRequest
   if (!id || !audio || (!google && !logto)) return
@@ -525,6 +530,7 @@ async function backToStory(){
     <section v-if="latestFailure&&!pendingTask" class="notice" role="status"><p>{{ t(generationProblem(latestFailure.errorCode)||'音乐服务未完成这次创作，歌词和设置已保留。') }}</p><button v-if="latestFailure.errorCode==='AUDIO_ARCHIVE_FAILED'" class="button secondary" :disabled="submitting" @click="retryArchive(latestFailure)">{{ t('仅重试保存音频') }}</button></section>
     <GenerationRecovery v-if="pendingTask?.status==='SUBMISSION_UNKNOWN'" :task="pendingTask" :busy="submitting" @refresh="refreshTasks" @close="closeChecking(pendingTask)"/>
     <SongResult v-if="asset" :work="work" :asset="asset" :title="songTitle" :version="songVersion" :rename-song="renameSong" :cover="artwork" :pending="!!pendingTask" :checking="submissionUnknown" :busy="submitting||quickBusy||!tasksReady||taskReadIssue||!quickChecked||quickReadIssue||(!pendingTask&&!submissionUnknown&&(!modelReady||!generationLyricsReady))" :lyrics="giftRevision?.lyrics||''" :language="giftRevision?.language" :section-open="sectionOpen" :publication-label="publicationLabel" :publication-action="publicationAction" :publication-busy="publicationBusy || !publicationCoverReady" :can-replace-publication="canReplacePublication" @gift="sendGift" @premium="premiumOpen=true" @publish="openSongPublication(publicationAction === '设为私密' ? 'private' : 'publish')" @replace-publication="openSongPublication('publish')" @regenerate="openMusicAdjustment" @cover="openCover" @edit="openSection"/>
+    <p v-if="coverNotice" class="save-info" role="status">{{ t(coverNotice) }}</p>
     <MusicSettingsSnapshot v-if="playingSettings" :work-id="work.id" :task-id="playingSettings.id"/>
     <SectionEditor v-if="asset" ref="sectionEditor" :key="work.id" :work="work" :asset="asset" :title="playbackTitle" :cover="artwork" :tasks="tasks" :open="sectionOpen" :hint="sectionHint" @close="sectionOpen=false" @refresh="refreshTasks" @adopted="sectionAdopted"/>
     <MusicSettingsPanel v-if="remake" :work="work" :remake="remake" :busy="submitting" :submit-error="remakeError" @apply="generate(false,$event)" @close="remake=undefined"/>
@@ -544,9 +550,6 @@ async function backToStory(){
             <button type="button" class="text-button" @click="creditIssue=false">{{ t('稍后再说') }}</button>
           </div>
         </section>
-        <div v-if="asset" class="creation-action-bar work-primary-bar">
-          <button class="button creation-primary" @click="sendGift">{{ t('分享歌曲') }}</button>
-        </div>
         <p v-if="!modelReady&&!asset" class="notice">{{ t('音乐生成暂不可用，可以先编辑并保存歌词，稍后再试。') }}</p>
         <AudioPanel id="work-audio" tabindex="-1" :key="work.id+'-'+mediaRefresh" :work="work" :title="songTitle" :tasks="tasks" :cover="artwork" @selected="asset=$event" @selected-version="songVersion=$event" @load-state="mediaState=$event" @compare="sectionEditor?.compare($event)"/>
         <SharePanel v-if="asset" :open="giftStage" :cover-id="covers?.currentCoverId" @close="giftStage=false" @created="shared=true" :work-id="work.id" :revision="giftRevision" :asset="asset" :work-title="generated ? sharedWorkTitle : undefined"/>
@@ -586,7 +589,7 @@ async function backToStory(){
       </dialog>
     </div>
   </template>
-  <CoverEditor v-if="work&&coverOpen" :key="work.id" :work-id="work.id" :state="covers" @updated="updateCover" @close="coverOpen=false"/>
+  <CoverEditor v-if="work&&coverOpen" :key="work.id" :work-id="work.id" :state="covers" :published="!!visibleRelease" @saved="coverSaved" @updated="updateCover" @close="coverOpen=false"/>
   <PremiumStudioDialog v-if="work&&asset&&premiumOpen" :open="premiumOpen" :work-id="work.id" :asset="asset" :title="songTitle" :cover="artwork" @close="premiumOpen=false"/>
   <dialog v-if="publication" ref="publicationDialog" class="save-generation-dialog" aria-labelledby="publish-song-heading" @close="publication=undefined">
     <h2 id="publish-song-heading">{{ t('发布到广场') }}</h2>

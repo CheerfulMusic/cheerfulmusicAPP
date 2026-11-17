@@ -133,7 +133,7 @@ class AutomaticCoverIntegrationTest {
         runner.run();
         runner.run();
         assertEquals(manual, covers.current(song.work));
-        assertNull(db.queryForObject("SELECT cover_id FROM artist_song_release WHERE id=?", String.class, release));
+        assertEquals(manual, db.queryForObject("SELECT cover_id FROM artist_song_release WHERE id=?", String.class, release));
     }
 
     @Test void dailyLimitLeavesTheDefaultCoverAndDoesNotSubmit() throws Exception {

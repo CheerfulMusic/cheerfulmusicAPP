@@ -2,10 +2,8 @@
 import MusicVideoEditor from './MusicVideoEditor.vue'
 import PlaybackIcon from '../../../shared/ui/PlaybackIcon.vue'
 import AudioPreparation from '../../../shared/player/AudioPreparation.vue'
-import { computed, nextTick, ref, watch } from 'vue'
-import { downloadSong, downloadStatus } from '../api/download'
-import { accountState } from '../../../shared/identity/account-state'
-import { logtoState } from '../../../shared/identity/logto-state'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { downloadSong } from '../api/download'
 import { t, defaultCover } from '../../../shared/i18n'
 import { usePlayer } from '../../../shared/player/store'
 import { audioUrl, type AudioAsset } from '../api/detail'
@@ -17,16 +15,27 @@ const props=defineProps<{work:Work;asset:AudioAsset;title:string;version?:number
 defineEmits<{gift:[];premium:[];publish:[];replacePublication:[];regenerate:[];cover:[];edit:[hint?:EditHint]}>()
 const mvOpen=ref(false)
 const player=usePlayer()
-const unlocked=ref(false)
 const downloadPath=computed(()=>`app/works/${encodeURIComponent(props.work.id)}/audio/${encodeURIComponent(props.asset.id)}/download`)
-watch([downloadPath,accountState,logtoState],([path],_,onCleanup)=>{let stale=false;onCleanup(()=>{stale=true});unlocked.value=false;void downloadStatus(path).then(s=>{if(!stale)unlocked.value=s.unlocked}).catch(()=>undefined)},{immediate:true})
+const moreActions = ref<HTMLDetailsElement>()
+function closeMore(restoreFocus = false) {
+  if (!moreActions.value?.open) return
+  moreActions.value.open = false
+  if (restoreFocus) moreActions.value.querySelector('summary')?.focus()
+}
+function outsideActions(event: PointerEvent) {
+  if (event.target instanceof Node && !moreActions.value?.contains(event.target)) closeMore()
+}
+function leaveActions(event: FocusEvent) {
+  if (event.relatedTarget instanceof Node && !moreActions.value?.contains(event.relatedTarget)) closeMore()
+}
+onMounted(() => document.addEventListener('pointerdown', outsideActions))
+onBeforeUnmount(() => document.removeEventListener('pointerdown', outsideActions))
+watch(() => props.asset.id, () => closeMore())
 const versionTitle = computed(() => songVersionTitle(props.title, props.version))
 async function download() {
   const extension = props.asset.contentType === 'audio/wav' ? '.wav' : '.mp3'
   const title = versionTitle.value
-  if (await downloadSong(downloadPath.value, audioUrl(props.work.id, props.asset.id, true, title), title + extension)) {
-    unlocked.value = true
-  }
+  await downloadSong(downloadPath.value, audioUrl(props.work.id, props.asset.id, true, title), title + extension)
 }
 const track=computed(()=>({id:props.asset.id,title:versionTitle.value,cover:props.cover||defaultCover(),audio:audioUrl(props.work.id,props.asset.id),provenance:props.asset.origin}))
 function play(){player.setQueue([track.value],false);void player.toggle(track.value)}
@@ -109,17 +118,26 @@ async function saveTitle() {
       <p>{{ work.recipient?t('送给 {recipient}',{recipient:work.recipient}):t('我的创作') }}</p>
       <blockquote v-if="work.message">{{ work.message }}</blockquote>
       <AudioPreparation :track="track"/>
-      <div class="actions">
-        <button class="button" @click="$emit('gift')">{{ t('分享歌曲') }}</button>
-        <button class="button secondary premium-studio-entry" type="button" aria-haspopup="dialog" @click="$emit('premium')">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3v7m0 4v7M12 3v12m0 4v2M19 3v2m0 4v12M2 10h6v4H2zm7 5h6v4H9zm7-10h6v4h-6z"/></svg>
-          <span>{{ t('定制化音乐制作') }}</span>
-        </button>
-        <button class="button secondary" type="button" :disabled="publicationBusy" @click="$emit('publish')">{{ t(publicationAction) }}</button>
-        <button v-if="canReplacePublication" class="button secondary" type="button" :disabled="publicationBusy" @click="$emit('replacePublication')">{{ t('发布当前版本') }}</button>
-        <button class="button secondary" :disabled="busy" @click="$emit('regenerate')">{{ pending?t('查看生成进度'):checking?t('核对生成进度'):asset.origin==='GENERATED'?t('调整音乐'):t('重新制作一首') }}</button>
-        <button class="button secondary" type="button" aria-haspopup="dialog" @click="mvOpen=true">制作 MV</button>
-        <button class="button secondary" @click="download">{{ unlocked?t('免费下载'):t('下载（首次15积分）') }}</button>
+      <div class="song-actions">
+        <div class="song-primary-actions">
+          <button class="button" type="button" @click="$emit('gift')">{{ t('分享歌曲') }}</button>
+          <button class="button secondary premium-studio-entry" type="button" aria-haspopup="dialog" @click="$emit('premium')">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3v7m0 4v7M12 3v12m0 4v2M19 3v2m0 4v12M2 10h6v4H2zm7 5h6v4H9zm7-10h6v4h-6z"/></svg>
+            <span>{{ t('定制化音乐制作') }}</span>
+          </button>
+        </div>
+        <div class="song-secondary-actions">
+          <button class="button secondary" type="button" :disabled="busy" @click="$emit('regenerate')">{{ pending?t('查看生成进度'):checking?t('核对生成进度'):asset.origin==='GENERATED'?t('调整音乐'):t('重新制作一首') }}</button>
+          <button class="button secondary" type="button" @click="download">{{ t('下载') }}</button>
+          <details ref="moreActions" class="song-more-actions" @focusout="leaveActions" @keydown.esc.stop.prevent="closeMore(true)">
+            <summary class="button secondary">{{ t('更多') }} <span aria-hidden="true">⌄</span></summary>
+            <div class="song-more-panel" @click="closeMore(true)">
+              <button type="button" aria-haspopup="dialog" @click="mvOpen=true">{{ t('制作 MV') }}</button>
+              <button type="button" :disabled="publicationBusy" @click="$emit('publish')">{{ t(publicationAction) }}</button>
+              <button v-if="canReplacePublication" type="button" :disabled="publicationBusy" @click="$emit('replacePublication')">{{ t('发布当前版本') }}</button>
+            </div>
+          </details>
+        </div>
         <p v-if="publicationLabel" class="publication-status" role="status">{{ t(publicationLabel) }}</p>
       </div>
       <p class="save-info">{{ work.recipient?t('先听一遍，再把这份心意送给 TA。'):t('先听一遍，继续打磨你的作品。') }}</p>
@@ -130,6 +148,39 @@ async function saveTitle() {
 </template>
 
 <style scoped>
+.song-actions { display: grid; gap: 10px; margin: 22px 0 10px; }
+.song-primary-actions, .song-secondary-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.song-more-actions { position: relative; }
+.song-more-actions summary { gap: 6px; list-style: none; cursor: pointer; }
+.song-more-actions summary::-webkit-details-marker { display: none; }
+.song-more-actions summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.song-more-panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 5;
+  width: max-content;
+  min-width: 144px;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: 0 8px 24px #71444f18;
+}
+.song-more-panel button {
+  display: block;
+  width: 100%;
+  min-height: 40px;
+  padding: 9px 12px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+}
+.song-more-panel button:hover, .song-more-panel button:focus-visible { background: var(--field-background); }
 .publication-status {
   flex-basis: 100%;
   margin: 0;
@@ -171,6 +222,7 @@ async function saveTitle() {
 .song-title-error { margin: 0; color: var(--danger); font-size: 13px; }
 .song-result-copy .song-title-saved { color: var(--success); }
 @media (max-width: 600px) {
+  .song-primary-actions, .song-secondary-actions { justify-content: center; }
   .song-title-row, .song-title-form-actions { justify-content: center; }
 }
 .song-result-copy .button.premium-studio-entry {

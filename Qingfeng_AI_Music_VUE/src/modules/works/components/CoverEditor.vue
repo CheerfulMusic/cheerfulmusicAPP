@@ -5,8 +5,8 @@ import { decodeUploadImage, encodeUploadJpeg, imageUploadAccept } from '../../..
 import { getUsage } from '../api/detail'
 import { coverUrl, editCover, loadCovers, selectCover, uploadCover, type CoverState } from '../api/covers'
 
-const props = defineProps<{ workId: string; state?: CoverState }>()
-const emit = defineEmits<{ updated: [state: CoverState]; close: [] }>()
+const props = defineProps<{ workId: string; state?: CoverState; published?: boolean }>()
+const emit = defineEmits<{ updated: [state: CoverState]; saved: []; close: [] }>()
 const titleId = useId()
 const dialog = ref<HTMLDialogElement>()
 const fileInput = ref<HTMLInputElement>()
@@ -119,12 +119,16 @@ function close() {
 }
 
 async function apply(id: string | null) {
-  if (!props.state || busy.value || id === props.state.currentCoverId) return
+  if (!props.state || busy.value) return
   busy.value = true
   error.value = ''
   try {
     const state = await selectCover(props.workId, id, props.state.version)
-    if (mounted) emit('updated', state)
+    if (mounted) {
+      emit('saved')
+      emit('updated', state)
+      finish()
+    }
   } catch (cause) {
     error.value = cause instanceof Error ? cause.message : '封面应用失败'
     await refreshCovers().catch(() => undefined)
@@ -145,6 +149,7 @@ async function upload() {
     }
     const state = await selectCover(props.workId, uploadedId, version)
     if (mounted) {
+      emit('saved')
       emit('updated', state)
       finish()
     }
@@ -227,14 +232,16 @@ onBeforeUnmount(() => {
             <label>{{ t('水平位置') }}<input v-model.number="x" type="range" min="0" max="100" :disabled="busy"></label>
             <label>{{ t('垂直位置') }}<input v-model.number="y" type="range" min="0" max="100" :disabled="busy"></label>
             <button type="button" class="button" :disabled="busy || decoding || !state" @click="upload">
-              {{ t(busy ? '正在保存…' : '裁剪并使用') }}
+              {{ t(busy ? '正在保存…' : '保存封面') }}
             </button>
           </template>
-          <button v-else-if="state?.currentCoverId" type="button" class="text-button" :disabled="busy || decoding" @click="apply(null)">
-            {{ t('恢复默认封面') }}
-          </button>
+          <template v-else-if="state">
+            <button type="button" class="button" :disabled="busy || decoding" @click="apply(state.currentCoverId)">{{ t(busy ? '正在保存…' : '保存封面') }}</button>
+            <button v-if="state.currentCoverId" type="button" class="text-button" :disabled="busy || decoding" @click="apply(null)">{{ t('恢复默认封面') }}</button>
+          </template>
         </div>
       </div>
+      <p v-if="published" class="save-info">{{ t('保存后将同步更新广场和歌手主页的歌曲封面。') }}</p>
       <p v-if="!state && loading" role="status">{{ t('正在读取封面…') }}</p>
       <p v-if="error" class="notice error" role="alert">{{ t(error) }}</p>
       <button v-if="!state && !loading" type="button" class="button secondary" @click="load">{{ t('重试') }}</button>

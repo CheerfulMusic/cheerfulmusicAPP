@@ -35,7 +35,7 @@ public class ArtistProfileService {
                           boolean onDiscover) {}
     public record PublicProfile(String stageName, String tagline, String avatarKey, String coverKey,
                                 String featuredReleaseId, List<PublicSong> songs) {}
-    public record PublicSong(String id, long version, String title, boolean hasCover) {}
+    public record PublicSong(String id, long version, String title, boolean hasCover, String coverId) {}
     public record ReleaseSelection(boolean profileReady, boolean published, String publicId, String stageName, Release song,
                                    boolean publicationPending, boolean reopensSongs) {}
     record PublicationJob(String id, String owner, String work, String asset, String title) {}
@@ -377,7 +377,7 @@ public class ArtistProfileService {
                 """ + DISCOVER_GENRE + "=?)" + order + " LIMIT ? OFFSET ?",
                 (rs, row) -> new DiscoverSong(rs.getString("public_id"), rs.getString("stage_name"),
                         new PublicSong(rs.getString("id"), rs.getLong("version"), rs.getString("title"),
-                                rs.getString("cover_id") != null), rs.getTimestamp("discover_published_at").toInstant(),
+                                rs.getString("cover_id") != null, rs.getString("cover_id")), rs.getTimestamp("discover_published_at").toInstant(),
                         rs.getString("genre"), rs.getLong("plays")), keyword, keyword, genre, genre, pageSize + 1, offset);
         var artists = offset == 0 ? db.query("""
                 SELECT p.public_id,p.stage_name,p.avatar_key,COUNT(*) AS songs,COALESCE(SUM(m.plays),0) AS plays
@@ -408,7 +408,7 @@ public class ArtistProfileService {
                 PROFILE_ROW, publicId).stream().findFirst().orElseThrow(ArtistProfileService::missing);
         var visible = releases(profile.creatorId());
         var songs = visible.stream()
-                .map(song -> new PublicSong(song.id(), song.version(), song.title(), song.coverId() != null)).toList();
+                .map(song -> new PublicSong(song.id(), song.version(), song.title(), song.coverId() != null, song.coverId())).toList();
         return new PublicProfile(profile.stageName(), profile.tagline(), profile.avatarKey(), profile.coverKey(),
                 visibleFeature(profile, visible), songs);
     }

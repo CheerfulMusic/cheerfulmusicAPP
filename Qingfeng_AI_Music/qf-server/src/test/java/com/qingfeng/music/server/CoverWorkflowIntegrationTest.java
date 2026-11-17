@@ -7,11 +7,15 @@ import com.qingfeng.music.lyrics.api.LyricsApi;
 import com.qingfeng.music.media.api.MediaApi;
 import com.qingfeng.music.sharing.api.SharingApi;
 import com.qingfeng.music.common.exception.DomainException;
+import com.qingfeng.music.server.artist.ArtistProfileService;
+import com.qingfeng.music.infrastructure.persistence.cover.JdbcCoverRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.*;
 import org.springframework.context.annotation.*;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.junit.jupiter.api.*;
 import java.io.*;
 import java.awt.image.BufferedImage;
@@ -28,12 +32,73 @@ class CoverWorkflowIntegrationTest {
  static class FakeImages implements ImageEditProvider{int submits,queries;boolean unknown;public boolean configured(){return true;}public String model(){return "google/nano-banana-edit";}public String submit(byte[] photo,String prompt,String model){submits++;assertTrue(photo.length>0);if(unknown)throw new IllegalStateException("offline response lost");return "offline-image-"+UUID.randomUUID();}public Result query(String task,String model){queries++;return new Result("SAVING","https://cdn.example/cover.png");}}
  @Autowired CoverService covers;@Autowired IdentityApi identity;@Autowired WorkApi works;@Autowired FakeImages provider;@Autowired JdbcTemplate jdbc;
  @Autowired LyricsApi lyrics;@Autowired MediaApi media;@Autowired SharingApi sharing;
+ @Autowired ArtistProfileService profiles;
+ @Autowired PlatformTransactionManager transactionManager;
  static byte[] image(){try{var b=new ByteArrayOutputStream();ImageIO.write(new BufferedImage(80,60,BufferedImage.TYPE_INT_RGB),"png",b);return b.toByteArray();}catch(IOException e){throw new IllegalStateException(e);}}
  record F(String owner,String work){}
  F fixture(){String owner=identity.create().creatorId();return new F(owner,works.create(owner,new WorkApi.Draft("妈妈","生日","故事","祝福","民谣","封面测试")).id());}
  @BeforeEach void reset(){jdbc.update("UPDATE cover_edit_task SET status='FAILED'");provider.submits=0;provider.queries=0;provider.unknown=false;}
  String upload(F f){return covers.upload(f.owner(),f.work(),new ByteArrayInputStream(image())).id();}
  void run(){jdbc.update("UPDATE cover_edit_task SET next_attempt_at=TIMESTAMP '2020-01-01 00:00:00'");covers.runOnce();}
+ ArtistProfileService.Release publish(F f, String cover) {
+  var wave=java.nio.ByteBuffer.allocate(48).order(java.nio.ByteOrder.LITTLE_ENDIAN);
+  wave.put("RIFF".getBytes()).putInt(40).put("WAVEfmt ".getBytes()).putInt(16).putShort((short)1).putShort((short)1).putInt(8000).putInt(16000).putShort((short)2).putShort((short)16).put("data".getBytes()).putInt(4).putInt(0);
+  var audio=media.importAudio(f.owner(),f.work(),new ByteArrayInputStream(wave.array()));
+  profiles.save(f.owner(),"封面测试歌手","",null,false,null,false,null);
+  var release=profiles.publishSong(f.owner(),f.work(),audio.id(),cover,"同步封面测试");
+  profiles.setPublished(f.owner(),true);
+  return profiles.publishToDiscover(f.owner(),f.work(),release.version());
+ }
+ @Test void applyingCoverUpdatesPublicPagesWhileKeepingPublicationAndPlayback() {
+  var f=fixture();String first=upload(f);covers.select(f.owner(),f.work(),first,0);
+  var release=publish(f,first);
+  profiles.setDiscoverFeatured(release.id(),true);
+  profiles.recordDiscoverPlay(release.id(),release.version());
+  var before=jdbc.queryForMap("SELECT * FROM artist_song_release WHERE id=?",release.id());
+  String second=upload(f);
+  assertEquals(first,profiles.selection(f.owner(),f.work()).song().coverId());
+  covers.select(f.owner(),f.work(),second,1);
+  var after=jdbc.queryForMap("SELECT * FROM artist_song_release WHERE id=?",release.id());
+  assertEquals(second,after.remove("cover_id"));before.remove("cover_id");assertEquals(before,after);
+  String publicId=profiles.mine(f.owner()).publicId();
+  assertEquals(second,profiles.publishedProfile(publicId).songs().get(0).coverId());
+  var discover=profiles.discover(true,false,"","",0).songs().stream().filter(row->row.song().id().equals(release.id())).findFirst().orElseThrow();
+  assertEquals(second,discover.song().coverId());assertTrue(discover.song().hasCover());assertEquals(1,discover.plays());
+  assertEquals(covers.ref(f.work(),second),profiles.publicCoverRef(publicId,release.id(),release.version()));
+  assertTrue(profiles.publicAudio(publicId,release.id(),release.version()).size()>0);
+  covers.select(f.owner(),f.work(),null,2);
+  assertFalse(profiles.publishedProfile(publicId).songs().get(0).hasCover());
+  assertNull(profiles.selection(f.owner(),f.work()).song().coverId());
+  assertTrue(profiles.selection(f.owner(),f.work()).song().onDiscover());
+ }
+ @Test void savingCurrentCoverRepairsAnOldPublicationAndRejectsStaleSaves() {
+  var f=fixture();String first=upload(f);covers.select(f.owner(),f.work(),first,0);var release=publish(f,first);
+  String second=upload(f);covers.select(f.owner(),f.work(),second,1);
+  jdbc.update("UPDATE artist_song_release SET cover_id=? WHERE id=?",first,release.id());
+  covers.select(f.owner(),f.work(),second,2);
+  assertEquals(second,profiles.selection(f.owner(),f.work()).song().coverId());
+  assertEquals("COVER_VERSION_CONFLICT",assertThrows(DomainException.class,()->covers.select(f.owner(),f.work(),first,2)).code());
+  assertEquals(second,covers.current(f.work()));assertEquals(second,profiles.selection(f.owner(),f.work()).song().coverId());
+ }
+ @Test void savingCoverDoesNotPublishPrivateOrWithdrawnSongs() {
+  var f=fixture();String first=upload(f);covers.select(f.owner(),f.work(),first,0);
+  assertNull(profiles.selection(f.owner(),f.work()).song());
+  var release=publish(f,first);profiles.makePrivate(f.owner(),f.work());
+  String second=upload(f);covers.select(f.owner(),f.work(),second,1);
+  assertNull(profiles.selection(f.owner(),f.work()).song());
+  assertFalse(jdbc.queryForObject("SELECT show_on_profile FROM artist_song_release WHERE id=?",Boolean.class,release.id()));
+  assertEquals(first,jdbc.queryForObject("SELECT cover_id FROM artist_song_release WHERE id=?",String.class,release.id()));
+ }
+ @Test void publicCoverFailureRollsBackTheWorkCoverSelection() {
+  var f=fixture();String first=upload(f);covers.select(f.owner(),f.work(),first,0);publish(f,first);String second=upload(f);
+  var failingJdbc=org.mockito.Mockito.spy(jdbc);
+  org.mockito.Mockito.doThrow(new org.springframework.dao.DataIntegrityViolationException("封面同步失败"))
+    .when(failingJdbc).update("UPDATE artist_song_release SET cover_id=? WHERE work_id=? AND show_on_profile=TRUE",second,f.work());
+  var repository=new JdbcCoverRepository(failingJdbc,new TransactionTemplate(transactionManager));
+  assertThrows(org.springframework.dao.DataIntegrityViolationException.class,()->repository.select(f.work(),second,1));
+  assertEquals(first,covers.current(f.work()));assertEquals(1,covers.state(f.owner(),f.work()).version());
+  assertEquals(first,profiles.selection(f.owner(),f.work()).song().coverId());
+ }
  @Test void uploadsAreDecodedReencodedOwnedAndSelectedWithOptimisticConcurrency()throws Exception{
   var f=fixture();String id=upload(f);assertNull(covers.state(f.owner(),f.work()).currentCoverId());
   var state=covers.select(f.owner(),f.work(),id,0);assertEquals(id,state.currentCoverId());assertEquals(1,state.version());

@@ -19,7 +19,15 @@ public final class JdbcCoverRepository implements CoverRepository {
  public boolean automaticPending(String work){return JdbcAutomaticCoverJobs.pending(jdbc,work);}
  public Stored insert(String work,CoverFileStore.Stored file,String origin,String edit){String id=UUID.randomUUID().toString();jdbc.update("INSERT INTO cover_asset(id,work_id,storage_key,byte_size,origin,edit_task_id,created_at) VALUES(?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE edit_task_id=edit_task_id",id,work,file.key(),file.size(),origin,edit,Timestamp.from(Instant.now()));return edit==null?find(work,id).orElseThrow():jdbc.query("SELECT * FROM cover_asset WHERE edit_task_id=?",this::stored,edit).get(0);}
  public Selection selection(String work){return jdbc.query("SELECT cover_id,version FROM work_cover WHERE work_id=?",(r,n)->new Selection(r.getString(1),r.getLong(2)),work).stream().findFirst().orElse(new Selection(null,0));}
- public boolean select(String work,String id,long version){return Boolean.TRUE.equals(tx.execute(t->{jdbc.update("INSERT INTO work_cover(work_id,version) VALUES(?,0) ON DUPLICATE KEY UPDATE work_id=work_id",work);return jdbc.update("UPDATE work_cover SET cover_id=?,version=version+1 WHERE work_id=? AND version=?",id,work,version)==1;}));}
+ public boolean select(String work, String id, long version) {
+  return Boolean.TRUE.equals(tx.execute(status -> {
+   jdbc.update("INSERT INTO work_cover(work_id,version) VALUES(?,0) ON DUPLICATE KEY UPDATE work_id=work_id", work);
+   int selected = jdbc.update("UPDATE work_cover SET cover_id=?,version=version+1 WHERE work_id=? AND version=?", id, work, version);
+   if (selected != 1) return false;
+   jdbc.update("UPDATE artist_song_release SET cover_id=? WHERE work_id=? AND show_on_profile=TRUE", id, work);
+   return true;
+  }));
+ }
  public List<Edit> edits(String work){return jdbc.query("SELECT * FROM cover_edit_task WHERE work_id=? ORDER BY created_at DESC,id DESC LIMIT 20",this::job,work).stream().map(Job::edit).toList();}
  public Optional<Job> request(String work,String key){return jdbc.query("SELECT * FROM cover_edit_task WHERE work_id=? AND request_key=?",this::job,work,key).stream().findFirst();}
  public Job insertJob(String work,String source,String prompt,String key,String model){String id=UUID.randomUUID().toString();var now=Timestamp.from(Instant.now());jdbc.update("INSERT INTO cover_edit_task(id,work_id,source_id,prompt,request_key,model,status,created_at,updated_at,next_attempt_at) VALUES(?,?,?,?,?,?,'QUEUED',?,?,?) ON DUPLICATE KEY UPDATE request_key=request_key",id,work,source,prompt,key,model,now,now,now);return request(work,key).orElseThrow();}
