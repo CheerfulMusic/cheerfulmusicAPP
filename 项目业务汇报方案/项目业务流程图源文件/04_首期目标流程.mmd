@@ -1,0 +1,30 @@
+flowchart TD
+ N0_0["开始：海外用户浏览与试听"]:::existing
+ N1_0["登录 → 平台账号 → 首次100积分"]:::existing
+ N0_0 --> N1_0
+ N2_0["快速生成：一次确认后成歌"]:::planned
+ N1_0 --> N2_0
+ N2_1["编辑制作：先修改歌词再谱曲"]:::existing
+ N1_0 --> N2_1
+ N3_0["用户确认费用 → 余额足够？不足先充值"]:::unconfirmed
+ N2_0 --> N3_0
+ N2_1 --> N3_0
+ N4_0["正常交付：试听采用"]:::existing
+ N3_0 --> N4_0
+ N4_1["未能交付：解释与补救"]:::planned
+ N3_0 --> N4_1
+ N4_2["结果不明：查询原制作"]:::existing
+ N3_0 --> N4_2
+ N5_0["私人保存与分享"]:::existing
+ N4_0 --> N5_0
+ N5_1["公开发布与主页"]:::planned
+ N4_0 --> N5_1
+ N5_2["人工发行申请"]:::planned
+ N4_0 --> N5_2
+ N6_0["结束：获得作品或服务结果；可再次创作"]:::planned
+ N5_0 --> N6_0
+ N5_1 --> N6_0
+ N5_2 --> N6_0
+ classDef existing fill:#EAF0F6,stroke:#18334F,color:#18334F
+ classDef planned fill:#F4F0FA,stroke:#756AA4,stroke-dasharray:6 4,color:#18334F
+ classDef unconfirmed fill:#FFF4DF,stroke:#AA6B16,color:#18334F

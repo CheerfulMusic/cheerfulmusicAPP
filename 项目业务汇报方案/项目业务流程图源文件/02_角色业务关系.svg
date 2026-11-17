@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="480" viewBox="0 0 1000 480">
+<rect width="100%" height="100%" fill="white"/>
+<style>text{font-family:SimSun,serif;font-size:16px;fill:#18334F} .existing{fill:#EAF0F6;stroke:#18334F}.planned{fill:#F4F0FA;stroke:#756AA4;stroke-dasharray:6 4}.unconfirmed{fill:#FFF4DF;stroke:#AA6B16}</style>
+<rect class="existing" x="20.0" y="20" width="960.0" height="60" rx="6"/>
+<text text-anchor="middle" x="500.0" y="50.0">开始：创作者提出制作或发表需求</text>
+<rect class="existing" x="20.0" y="110" width="960.0" height="60" rx="6"/>
+<text text-anchor="middle" x="500.0" y="140.0">创作者：输入、修改、付款、选成品</text>
+<rect class="existing" x="20.0" y="200" width="472.0" height="60" rx="6"/>
+<text text-anchor="middle" x="256.0" y="230.0">平台创作服务：提供歌曲、作品与分享</text>
+<rect class="planned" x="508.0" y="200" width="472.0" height="60" rx="6"/>
+<text text-anchor="middle" x="744.0" y="230.0">运营人员：审核、补件、异常受理</text>
+<rect class="existing" x="20.0" y="290" width="472.0" height="60" rx="6"/>
+<text text-anchor="middle" x="256.0" y="320.0">听众与收礼人：试听、分享、反馈</text>
+<rect class="planned" x="508.0" y="290" width="472.0" height="60" rx="6"/>
+<text text-anchor="middle" x="744.0" y="320.0">发行经办：人工投递并跟进合作方</text>
+<rect class="planned" x="20.0" y="380" width="960.0" height="60" rx="6"/>
+<text text-anchor="middle" x="500.0" y="410.0">用户：查看结果；完成、补充资料或提出申诉</text>
+<path d="M500.0,80 V95 H500.0 V110" fill="none" stroke="#77899C"/><path d="M496.0,105 L500.0,110 L504.0,105" fill="none" stroke="#77899C"/>
+<path d="M500.0,170 V185 H256.0 V200" fill="none" stroke="#77899C"/><path d="M252.0,195 L256.0,200 L260.0,195" fill="none" stroke="#77899C"/>
+<path d="M500.0,170 V185 H744.0 V200" fill="none" stroke="#77899C"/><path d="M740.0,195 L744.0,200 L748.0,195" fill="none" stroke="#77899C"/>
+<path d="M256.0,260 V275 H256.0 V290" fill="none" stroke="#77899C"/><path d="M252.0,285 L256.0,290 L260.0,285" fill="none" stroke="#77899C"/>
+<path d="M256.0,260 V275 H744.0 V290" fill="none" stroke="#77899C"/><path d="M740.0,285 L744.0,290 L748.0,285" fill="none" stroke="#77899C"/>
+<path d="M744.0,260 V275 H256.0 V290" fill="none" stroke="#77899C"/><path d="M252.0,285 L256.0,290 L260.0,285" fill="none" stroke="#77899C"/>
+<path d="M744.0,260 V275 H744.0 V290" fill="none" stroke="#77899C"/><path d="M740.0,285 L744.0,290 L748.0,285" fill="none" stroke="#77899C"/>
+<path d="M256.0,350 V365 H500.0 V380" fill="none" stroke="#77899C"/><path d="M496.0,375 L500.0,380 L504.0,375" fill="none" stroke="#77899C"/>
+<path d="M744.0,350 V365 H500.0 V380" fill="none" stroke="#77899C"/><path d="M496.0,375 L500.0,380 L504.0,375" fill="none" stroke="#77899C"/>
+</svg>

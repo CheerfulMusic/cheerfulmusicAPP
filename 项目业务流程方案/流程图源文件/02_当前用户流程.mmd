@@ -1,0 +1,13 @@
+flowchart TD
+ U[用户] --> L[create登录门禁]
+ L --> W[POST works保存]
+ W --> Y[lyrics/generate]
+ Y --> E[详情编辑并保存确认]
+ E --> P[generations/preflight]
+ P --> T[提交任务与扣积分]
+ T --> Q[Worker提交查询归档]
+ Q --> OK{结果}
+ OK -->|成功| A[试听选择分享]
+ OK -->|失败| R[按失败规则退回]
+ OK -->|未知| C[查询原任务]
+ C --> Q

@@ -1,0 +1,11 @@
+flowchart TD
+ U[用户Web或H5] --> F[Vue3 TS Pinia Router]
+ F --> S[Spring Boot server]
+ S --> B[business领域服务]
+ S --> I[infrastructure适配]
+ I --> B
+ I --> DB[(MySQL Flyway)]
+ I --> AI[DeepSeek KIE]
+ S --> AUTH[Google Logto 短信]
+ S --> PAY[PayPal]
+ I --> STORE[本地文件或OSS]

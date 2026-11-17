@@ -1,0 +1,11 @@
+flowchart TD
+ F[前端输入] --> W[(music_work)]
+ W --> L[LyricsCompositionService]
+ L --> DS[DeepSeek]
+ DS --> R[(lyric_revision)]
+ R --> T[(generation_task)]
+ T --> C[(credit_ledger及usage)]
+ T --> K[KIE提交查询]
+ K --> A[(candidate及media_asset)]
+ A --> S[(share_link快照)]
+ S --> G[公开token读取]

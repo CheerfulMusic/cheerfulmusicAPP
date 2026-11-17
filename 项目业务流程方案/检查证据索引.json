@@ -1,0 +1,2481 @@
+{
+  "date": "2026-11-08",
+  "branch": "main",
+  "commit": "18ab6b9342a87d07fbb392cdd9d67b93c2af50f4",
+  "counts": {
+    ".vue": 50,
+    ".ts": 54,
+    ".java": 272,
+    ".yml": 5,
+    ".sql": 23
+  },
+  "indexed_files": 404,
+  "files": [
+    {
+      "path": "Qingfeng_AI_Music_VUE/src/app/App.vue",
+      "lines": 14
+    },
+    {
+      "path": "Qingfeng_AI_Music_VUE/src/app/layouts/AppLayout.vue",
+      "lines": 10
+    },
+    {
+      "path": "Qingfeng_AI_Music_VUE/src/app/layouts/PremiumWebLayout.vue",
+      "lines": 113
+    },
+    {
+      "path": "Qingfeng_AI_Music_VUE/src/app/pages/NotFoundPage.vue",
+      "lines": 4
+    },
+    {
+      "path": "Qingfeng_AI_Music_VUE/src/app/router/index.ts",
+      "lines": 22
+    },
+    {
+      "path": "Qingfeng_AI_Music_VUE/src/app/router/scroll.ts",
+      "lines": 13
+    },
+    {
+      "path": "Qingfeng_AI_Music_VUE/src/main.ts",
+      "lines": 26
+    },
+    {
+      "path": "Qingfeng_AI_Music_VUE/src/modules/beta-access/api.ts",
+      "lines": 32
+    },
+    {
+      "path": "Qingfeng_AI_Music_VUE/src/modules/beta-access/BetaAccessGate.vue",
+      "lines": 105
+    },
+    {
+      "path": "Qingfeng_AI_Music_VUE/src/modules/gift/pages/PublicGiftPage.vue",
+      "lines": 18
+    },
+    {
+      "path": "Qingfeng_AI_Music_VUE/src/modules/home/components/ExploreMusic.vue",
+      "lines": 25
+    },
+    {
+      "path": "Qingfeng_AI_Music_VUE/src/modules/home/components/HomeBrandScene.vue",
+      "lines": 11
+    },
+    {
+      "path": "Qingfeng_AI_Music_VUE/src/modules/home/components/HomeCreationGuide.vue",
+      "lines": 32
+    },
+    {
+      "path": "Qingfeng_AI_Music_VUE/src/modules/home/components/HomeHero.vue",
+      "lines": 35
+    },
+    {
+      "path": "Qingfeng_AI_Music_VUE/src/modules/home/components/PlaylistCard.vue",
+      "lines": 18
+    },
+    {
+      "path": "Qingfeng_AI_Music_VUE/src/modules/home/components/PlaylistDetails.vue",
+      "lines": 28
+    },
+    {
+      "path": "Qingfeng_AI_Music_VUE/src/modules/home/components/PreviewTrackRow.vue",
+      "lines": 21
+    },
+    {
+      "path": "Qingfeng_AI_Music_VUE/src/modules/home/components/SongCard.vue",
+      "lines": 35
+    },
+    {
+      "path": "Qingfeng_AI_Music_VUE/src/modules/home/model/playlists.ts",
+      "lines": 23
+    },
+    {
+      "path": "Qingfeng_AI_Music_VUE/src/modules/home/model/tracks.ts",
+      "lines": 29
+    },
+    {
+      "path": "Qingfeng_AI_Music_VUE/src/modules/home/pages/PremiumHomePage.vue",
+      "lines": 13
+    },
+    {
+      "path": "Qingfeng_AI_Music_VUE/src/modules/identity/api/google-login.ts",
+      "lines": 19
+    },
+    {
+      "path": "Qingfeng_AI_Music_VUE/src/modules/identity/api/invite-gate.ts",
+      "lines": 67
+    },
+    {
+      "path": "Qingfeng_AI_Music_VUE/src/modules/identity/api/logto-login.ts",
+      "lines": 23
+    },
+    {
+      "path": "Qingfeng_AI_Music_VUE/src/modules/identity/api/native-login.ts",
+      "lines": 33
+    },
+    {
+      "path": "Qingfeng_AI_Music_VUE/src/modules/identity/api/paypal-sdk.ts",
+      "lines": 47
+    },
+    {
+      "path": "Qingfeng_AI_Music_VUE/src/modules/identity/components/BetaAccessGate.vue",
+      "lines": 142
+    },
+    {
+      "path": "Qingfeng_AI_Music_VUE/src/modules/identity/components/CreditsPanel.vue",
+      "lines": 213
+    },
+    {
+      "path": "Qingfeng_AI_Music_VUE/src/modules/identity/components/GoogleMark.vue",
+      "lines": 8
+    },
+    {
+      "path": "Qingfeng_AI_Music_VUE/src/modules/identity/components/LoginModal.vue",
+      "lines": 262
+    },
+    {
+      "path": "Qingfeng_AI_Music_VUE/src/modules/identity/components/WelcomeModal.vue",
+      "lines": 55
+    },
+    {
+      "path": "Qingfeng_AI_Music_VUE/src/modules/identity/model/google-login.ts",
+      "lines": 16
+    },
+    {
+      "path": "Qingfeng_AI_Music_VUE/src/modules/identity/model/international-phone.ts",
+      "lines": 21
+    },
+    {
+      "path": "Qingfeng_AI_Music_VUE/src/modules/identity/model/login-identifier.ts",
+      "lines": 19
+    },
+    {
+      "path": "Qingfeng_AI_Music_VUE/src/modules/identity/model/native-login.ts",
+      "lines": 24
+    },
+    {
+      "path": "Qingfeng_AI_Music_VUE/src/modules/identity/model/order-history.ts",
+      "lines": 20
+    },
+    {
+      "path": "Qingfeng_AI_Music_VUE/src/modules/identity/model/payment-orders.ts",
+      "lines": 15
+    },
+    {
+      "path": "Qingfeng_AI_Music_VUE/src/modules/identity/model/paypal-return.ts",
+      "lines": 15
+    },
+    {
+      "path": "Qingfeng_AI_Music_VUE/src/modules/identity/pages/IdentityPage.vue",
+      "lines": 343
+    },
+    {
+      "path": "Qingfeng_AI_Music_VUE/src/modules/identity/pages/PaymentPreviewPage.vue",
+      "lines": 20
+    },
+    {
+      "path": "Qingfeng_AI_Music_VUE/src/modules/identity/pages/RechargePage.vue",
+      "lines": 89
+    },
+    {
+      "path": "Qingfeng_AI_Music_VUE/src/modules/studio/api/works.ts",
+      "lines": 15
+    },
+    {
+      "path": "Qingfeng_AI_Music_VUE/src/modules/studio/components/StudioAtmosphere.vue",
+      "lines": 13
+    },
+    {
+      "path": "Qingfeng_AI_Music_VUE/src/modules/studio/index.ts",
+      "lines": 2
+    },
+    {
+      "path": "Qingfeng_AI_Music_VUE/src/modules/studio/model/inspiration-presets.ts",
+      "lines": 16
+    },
+    {
+      "path": "Qingfeng_AI_Music_VUE/src/modules/studio/model/lyrics-continuation.ts",
+      "lines": 20
+    },
+    {
+      "path": "Qingfeng_AI_Music_VUE/src/modules/studio/model/story-flow.ts",
+      "lines": 16
+    },
+    {
+      "path": "Qingfeng_AI_Music_VUE/src/modules/studio/model/suggestions.ts",
+      "lines": 10
+    },
+    {
+      "path": "Qingfeng_AI_Music_VUE/src/modules/studio/model/vocals.ts",
+      "lines": 5
+    },
+    {
+      "path": "Qingfeng_AI_Music_VUE/src/modules/studio/pages/DraftStudioPage.vue",
+      "lines": 313
+    },
+    {
+      "path": "Qingfeng_AI_Music_VUE/src/modules/works/api/covers.ts",
+      "lines": 10
+    },
+    {
+      "path": "Qingfeng_AI_Music_VUE/src/modules/works/api/detail.ts",
+      "lines": 34
+    },
+    {
+      "path": "Qingfeng_AI_Music_VUE/src/modules/works/api/music-settings.ts",
+      "lines": 18
+    },
+    {
+      "path": "Qingfeng_AI_Music_VUE/src/modules/works/api/section-edits.ts",
+      "lines": 12
+    },
+    {
+      "path": "Qingfeng_AI_Music_VUE/src/modules/works/api/works.ts",
+      "lines": 4
+    },
+    {
+      "path": "Qingfeng_AI_Music_VUE/src/modules/works/components/AudioPanel.vue",
+      "lines": 17
+    },
+    {
+      "path": "Qingfeng_AI_Music_VUE/src/modules/works/components/CoverEditor.vue",
+      "lines": 24
+    },
+    {
+      "path": "Qingfeng_AI_Music_VUE/src/modules/works/components/GenerationRecovery.vue",
+      "lines": 14
+    },
+    {
+      "path": "Qingfeng_AI_Music_VUE/src/modules/works/components/LyricsPanel.vue",
+      "lines": 153
+    },
+    {
+      "path": "Qingfeng_AI_Music_VUE/src/modules/works/components/LyricsTemplatePicker.vue",
+      "lines": 74
+    },
+    {
+      "path": "Qingfeng_AI_Music_VUE/src/modules/works/components/MusicGenerationDialog.vue",
+      "lines": 57
+    },
+    {
+      "path": "Qingfeng_AI_Music_VUE/src/modules/works/components/MusicSettingsPanel.vue",
+      "lines": 65
+    },
+    {
+      "path": "Qingfeng_AI_Music_VUE/src/modules/works/components/MusicSettingsSnapshot.vue",
+      "lines": 9
+    },
+    {
+      "path": "Qingfeng_AI_Music_VUE/src/modules/works/components/PremiumStudioDialog.vue",
+      "lines": 125
+    },
+    {
+      "path": "Qingfeng_AI_Music_VUE/src/modules/works/components/SectionEditor.vue",
+      "lines": 150
+    },
+    {
+      "path": "Qingfeng_AI_Music_VUE/src/modules/works/components/SharePanel.vue",
+      "lines": 95
+    },
+    {
+      "path": "Qingfeng_AI_Music_VUE/src/modules/works/components/SongResult.vue",
+      "lines": 18
+    },
+    {
+      "path": "Qingfeng_AI_Music_VUE/src/modules/works/components/SoundDirectionEntry.vue",
+      "lines": 45
+    },
+    {
+      "path": "Qingfeng_AI_Music_VUE/src/modules/works/components/SyncedLyrics.vue",
+      "lines": 73
+    },
+    {
+      "path": "Qingfeng_AI_Music_VUE/src/modules/works/model/generation-recovery.ts",
+      "lines": 31
+    },
+    {
+      "path": "Qingfeng_AI_Music_VUE/src/modules/works/model/lyrics-structure.ts",
+      "lines": 18
+    },
+    {
+      "path": "Qingfeng_AI_Music_VUE/src/modules/works/model/music-preferences.ts",
+      "lines": 23
+    },
+    {
+      "path": "Qingfeng_AI_Music_VUE/src/modules/works/model/section-edit.ts",
+      "lines": 52
+    },
+    {
+      "path": "Qingfeng_AI_Music_VUE/src/modules/works/model/song-settings.ts",
+      "lines": 7
+    },
+    {
+      "path": "Qingfeng_AI_Music_VUE/src/modules/works/pages/WorkDetailPage.vue",
+      "lines": 264
+    },
+    {
+      "path": "Qingfeng_AI_Music_VUE/src/modules/works/pages/WorkLibraryPage.vue",
+      "lines": 21
+    },
+    {
+      "path": "Qingfeng_AI_Music_VUE/src/platform/contracts/index.ts",
+      "lines": 14
+    },
+    {
+      "path": "Qingfeng_AI_Music_VUE/src/platform/index.ts",
+      "lines": 6
+    },
+    {
+      "path": "Qingfeng_AI_Music_VUE/src/platform/native/index.ts",
+      "lines": 9
+    },
+    {
+      "path": "Qingfeng_AI_Music_VUE/src/platform/web/index.ts",
+      "lines": 11
+    },
+    {
+      "path": "Qingfeng_AI_Music_VUE/src/shared/drafts/recovery.ts",
+      "lines": 64
+    },
+    {
+      "path": "Qingfeng_AI_Music_VUE/src/shared/drafts/RecoveryCopies.vue",
+      "lines": 14
+    },
+    {
+      "path": "Qingfeng_AI_Music_VUE/src/shared/http/api-client.ts",
+      "lines": 69
+    },
+    {
+      "path": "Qingfeng_AI_Music_VUE/src/shared/http/response-contracts.ts",
+      "lines": 79
+    },
+    {
+      "path": "Qingfeng_AI_Music_VUE/src/shared/http/system.ts",
+      "lines": 8
+    },
+    {
+      "path": "Qingfeng_AI_Music_VUE/src/shared/i18n/en.ts",
+      "lines": 1464
+    },
+    {
+      "path": "Qingfeng_AI_Music_VUE/src/shared/i18n/index.ts",
+      "lines": 43
+    },
+    {
+      "path": "Qingfeng_AI_Music_VUE/src/shared/i18n/LanguageSwitcher.vue",
+      "lines": 10
+    },
+    {
+      "path": "Qingfeng_AI_Music_VUE/src/shared/identity/account-state.ts",
+      "lines": 62
+    },
+    {
+      "path": "Qingfeng_AI_Music_VUE/src/shared/identity/creation-login-gate.ts",
+      "lines": 57
+    },
+    {
+      "path": "Qingfeng_AI_Music_VUE/src/shared/identity/login-dialog.ts",
+      "lines": 6
+    },
+    {
+      "path": "Qingfeng_AI_Music_VUE/src/shared/identity/logto-state.ts",
+      "lines": 34
+    },
+    {
+      "path": "Qingfeng_AI_Music_VUE/src/shared/identity/phone-label.ts",
+      "lines": 7
+    },
+    {
+      "path": "Qingfeng_AI_Music_VUE/src/shared/player/audio-cache.ts",
+      "lines": 14
+    },
+    {
+      "path": "Qingfeng_AI_Music_VUE/src/shared/player/AudioPreparation.vue",
+      "lines": 10
+    },
+    {
+      "path": "Qingfeng_AI_Music_VUE/src/shared/player/engine.ts",
+      "lines": 17
+    },
+    {
+      "path": "Qingfeng_AI_Music_VUE/src/shared/player/GlobalPlayer.vue",
+      "lines": 23
+    },
+    {
+      "path": "Qingfeng_AI_Music_VUE/src/shared/player/lyric-timeline.ts",
+      "lines": 12
+    },
+    {
+      "path": "Qingfeng_AI_Music_VUE/src/shared/player/store.ts",
+      "lines": 199
+    },
+    {
+      "path": "Qingfeng_AI_Music_VUE/src/shared/ui/BrandLogo.vue",
+      "lines": 17
+    },
+    {
+      "path": "Qingfeng_AI_Music_VUE/src/shared/ui/CreationSteps.vue",
+      "lines": 22
+    },
+    {
+      "path": "Qingfeng_AI_Music_VUE/src/shared/ui/NavIcon.vue",
+      "lines": 17
+    },
+    {
+      "path": "Qingfeng_AI_Music_VUE/src/shared/ui/PlaybackIcon.vue",
+      "lines": 4
+    },
+    {
+      "path": "Qingfeng_AI_Music_VUE/src/shared/ui/UserAccountMenu.vue",
+      "lines": 106
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/config/BusinessConfiguration.java",
+      "lines": 23
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/config/CdnConfiguration.java",
+      "lines": 34
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/config/CoverConfiguration.java",
+      "lines": 29
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/config/CreatorSecurityConfiguration.java",
+      "lines": 16
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/config/ExecutionConfiguration.java",
+      "lines": 37
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/config/GiftConfiguration.java",
+      "lines": 24
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/config/GoogleOAuthConfiguration.java",
+      "lines": 19
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/config/LogtoConfiguration.java",
+      "lines": 34
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/config/LyricsCompositionConfiguration.java",
+      "lines": 17
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/config/MusicSettingsConfiguration.java",
+      "lines": 18
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/config/PlaybackLyricsConfiguration.java",
+      "lines": 18
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/config/ProviderConfiguration.java",
+      "lines": 43
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/config/SectionEditingConfiguration.java",
+      "lines": 23
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/config/SmsBridgeConfiguration.java",
+      "lines": 25
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/config/StorageConfiguration.java",
+      "lines": 39
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/config/UsageConfiguration.java",
+      "lines": 29
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/exception/GlobalExceptionHandler.java",
+      "lines": 21
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/invite/InviteGateConfiguration.java",
+      "lines": 46
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/invite/InviteGateController.java",
+      "lines": 67
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/invite/InviteGateFilter.java",
+      "lines": 48
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/invite/InviteGateService.java",
+      "lines": 115
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/invite/InviteGateSettings.java",
+      "lines": 33
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/MusicApplication.java",
+      "lines": 11
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/payment/AirwallexSandboxGateway.java",
+      "lines": 79
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/payment/PaymentCatalog.java",
+      "lines": 35
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/payment/PaymentController.java",
+      "lines": 31
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/payment/PaymentGateway.java",
+      "lines": 19
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/payment/PaymentService.java",
+      "lines": 95
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/payment/PayPalCheckoutGateway.java",
+      "lines": 131
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/payment/PayPalPaymentController.java",
+      "lines": 22
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/payment/PayPalPaymentService.java",
+      "lines": 146
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/payment/risk/PaymentRiskJournal.java",
+      "lines": 43
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/query/WorkLibraryQuery.java",
+      "lines": 42
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/security/AliyunSmsOtpSender.java",
+      "lines": 69
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/security/ApiRateLimitFilter.java",
+      "lines": 36
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/security/CreatorPrincipal.java",
+      "lines": 2
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/security/CreatorSessionFilter.java",
+      "lines": 25
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/security/GoogleOAuthFlow.java",
+      "lines": 132
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/security/GuestDraftAssociation.java",
+      "lines": 25
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/security/LogtoCallbackSecurityConfiguration.java",
+      "lines": 22
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/security/LogtoIdentityService.java",
+      "lines": 121
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/security/LogtoNativeClient.java",
+      "lines": 200
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/security/LogtoOAuthFlow.java",
+      "lines": 197
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/security/SmsBridgeService.java",
+      "lines": 77
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/security/SmsOtpSender.java",
+      "lines": 7
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/security/WebSecurityConfiguration.java",
+      "lines": 59
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/app/CoverController.java",
+      "lines": 22
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/app/CreditsController.java",
+      "lines": 16
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/app/GenerationController.java",
+      "lines": 23
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/app/IdentityController.java",
+      "lines": 15
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/app/InspirationController.java",
+      "lines": 22
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/app/LyricsController.java",
+      "lines": 26
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/app/MediaController.java",
+      "lines": 31
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/app/MusicBriefController.java",
+      "lines": 20
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/app/MusicSettingsController.java",
+      "lines": 19
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/app/PlaybackLyricsController.java",
+      "lines": 18
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/app/ReferralController.java",
+      "lines": 61
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/app/SectionEditingController.java",
+      "lines": 21
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/app/ShareController.java",
+      "lines": 18
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/app/UsageController.java",
+      "lines": 18
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/app/WelcomeController.java",
+      "lines": 30
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/app/WorkController.java",
+      "lines": 34
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/AudioResponse.java",
+      "lines": 24
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/MediaCdnSigner.java",
+      "lines": 120
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/publicapi/GiftController.java",
+      "lines": 25
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/publicapi/GoogleAuthController.java",
+      "lines": 32
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/publicapi/LogtoAuthController.java",
+      "lines": 47
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/publicapi/NativeAuthController.java",
+      "lines": 211
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/publicapi/SessionController.java",
+      "lines": 42
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/publicapi/SmsDeliveryController.java",
+      "lines": 24
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/publicapi/SystemInfoController.java",
+      "lines": 27
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/WebPageController.java",
+      "lines": 9
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/main/resources/application-local.yml",
+      "lines": 13
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/main/resources/application-mysql.yml",
+      "lines": 25
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/main/resources/application-paypal-live.yml",
+      "lines": 6
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/main/resources/application.yml",
+      "lines": 69
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/test/java/com/qingfeng/music/infrastructure/provider/KieRequestLimiterMySqlTest.java",
+      "lines": 14
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/test/java/com/qingfeng/music/infrastructure/provider/KieRequestLimiterTest.java",
+      "lines": 83
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/test/java/com/qingfeng/music/server/BootstrapIntegrationTest.java",
+      "lines": 40
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/test/java/com/qingfeng/music/server/config/GenerationDispatcherStartupTest.java",
+      "lines": 44
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/test/java/com/qingfeng/music/server/CoverWorkflowIntegrationTest.java",
+      "lines": 66
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/test/java/com/qingfeng/music/server/CreditsIntegrationTest.java",
+      "lines": 87
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/test/java/com/qingfeng/music/server/DeepSeekLyricsFlowTest.java",
+      "lines": 68
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/test/java/com/qingfeng/music/server/DeepSeekLyricsWriterTest.java",
+      "lines": 55
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/test/java/com/qingfeng/music/server/FirstLoginCreditsIntegrationTest.java",
+      "lines": 178
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/test/java/com/qingfeng/music/server/GenerationSubmissionIntegrationTest.java",
+      "lines": 92
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/test/java/com/qingfeng/music/server/GenerationWorkerIntegrationTest.java",
+      "lines": 178
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/test/java/com/qingfeng/music/server/GenerationWorkerMySqlIntegrationTest.java",
+      "lines": 19
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/test/java/com/qingfeng/music/server/GiftWorkflowIntegrationTest.java",
+      "lines": 80
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/test/java/com/qingfeng/music/server/GoogleIdentityIntegrationTest.java",
+      "lines": 66
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/test/java/com/qingfeng/music/server/GuestAssociationConcurrencyTest.java",
+      "lines": 73
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/test/java/com/qingfeng/music/server/GuestHistoryAssociationTest.java",
+      "lines": 82
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/test/java/com/qingfeng/music/server/IdentityRecoveryIntegrationTest.java",
+      "lines": 18
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/test/java/com/qingfeng/music/server/InspirationMusicPresetsIntegrationTest.java",
+      "lines": 94
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/test/java/com/qingfeng/music/server/InspirationRewriteHttpTest.java",
+      "lines": 53
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/test/java/com/qingfeng/music/server/InspirationRewriteTest.java",
+      "lines": 95
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/test/java/com/qingfeng/music/server/invite/InviteGateCompatibilityTest.java",
+      "lines": 54
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/test/java/com/qingfeng/music/server/invite/InviteGateDisabledIntegrationTest.java",
+      "lines": 22
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/test/java/com/qingfeng/music/server/invite/InviteGateIntegrationTest.java",
+      "lines": 138
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/test/java/com/qingfeng/music/server/invite/InviteGateServiceTest.java",
+      "lines": 86
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/test/java/com/qingfeng/music/server/KieImageEditProviderTest.java",
+      "lines": 31
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/test/java/com/qingfeng/music/server/KieLyricsTimingProviderTest.java",
+      "lines": 60
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/test/java/com/qingfeng/music/server/KieMusicCapacityIntegrationTest.java",
+      "lines": 72
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/test/java/com/qingfeng/music/server/KieSunoProviderTest.java",
+      "lines": 164
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/test/java/com/qingfeng/music/server/LogtoIdentityIntegrationTest.java",
+      "lines": 73
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/test/java/com/qingfeng/music/server/LyricsRecoveryMigrationTest.java",
+      "lines": 22
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/test/java/com/qingfeng/music/server/MediaCapacityIntegrationTest.java",
+      "lines": 22
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/test/java/com/qingfeng/music/server/MediaRegistrationSafetyTest.java",
+      "lines": 38
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/test/java/com/qingfeng/music/server/MigrationChainTest.java",
+      "lines": 20
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/test/java/com/qingfeng/music/server/MusicSettingsIntegrationTest.java",
+      "lines": 59
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/test/java/com/qingfeng/music/server/payment/AirwallexSandboxGatewayTest.java",
+      "lines": 15
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/test/java/com/qingfeng/music/server/payment/LogtoPaymentEligibilityIntegrationTest.java",
+      "lines": 34
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/test/java/com/qingfeng/music/server/payment/PaymentCatalogTest.java",
+      "lines": 28
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/test/java/com/qingfeng/music/server/payment/PaymentIntegrationTest.java",
+      "lines": 88
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/test/java/com/qingfeng/music/server/payment/PaymentRiskJournalTest.java",
+      "lines": 32
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/test/java/com/qingfeng/music/server/payment/PayPalCheckoutGatewayTest.java",
+      "lines": 43
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/test/java/com/qingfeng/music/server/payment/PayPalFlowTest.java",
+      "lines": 74
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/test/java/com/qingfeng/music/server/payment/PayPalPaymentServiceTest.java",
+      "lines": 38
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/test/java/com/qingfeng/music/server/payment/PayPalPublicLiveTest.java",
+      "lines": 104
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/test/java/com/qingfeng/music/server/PlaybackLyricsIntegrationTest.java",
+      "lines": 56
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/test/java/com/qingfeng/music/server/RateLimitTest.java",
+      "lines": 8
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/test/java/com/qingfeng/music/server/SectionEditingIntegrationTest.java",
+      "lines": 119
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/test/java/com/qingfeng/music/server/security/AliyunSmsOtpSenderTest.java",
+      "lines": 72
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/test/java/com/qingfeng/music/server/security/GoogleOAuthSecurityIntegrationTest.java",
+      "lines": 154
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/test/java/com/qingfeng/music/server/security/GuestDraftAssociationTest.java",
+      "lines": 23
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/test/java/com/qingfeng/music/server/security/LogtoAuthorizationRequestTest.java",
+      "lines": 130
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/test/java/com/qingfeng/music/server/security/LogtoCallbackSecurityIntegrationTest.java",
+      "lines": 312
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/test/java/com/qingfeng/music/server/security/NativeAuthenticationIntegrationTest.java",
+      "lines": 271
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/test/java/com/qingfeng/music/server/security/SmsBridgeServiceTest.java",
+      "lines": 54
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/test/java/com/qingfeng/music/server/security/SmsDeliverySecurityIntegrationTest.java",
+      "lines": 61
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/test/java/com/qingfeng/music/server/StorageBoundaryTest.java",
+      "lines": 45
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/test/java/com/qingfeng/music/server/UsageBudgetIntegrationTest.java",
+      "lines": 156
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/test/java/com/qingfeng/music/server/web/CdnRedirectIntegrationTest.java",
+      "lines": 131
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/test/java/com/qingfeng/music/server/web/MediaCdnSignerTest.java",
+      "lines": 103
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/test/java/com/qingfeng/music/server/web/publicapi/NativeAuthAvailabilityTest.java",
+      "lines": 48
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/test/java/com/qingfeng/music/server/web/publicapi/NativePhoneRegionTest.java",
+      "lines": 22
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/test/java/com/qingfeng/music/server/WelcomeDialogIntegrationTest.java",
+      "lines": 37
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/test/java/com/qingfeng/music/server/WorkLibraryIntegrationTest.java",
+      "lines": 32
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/test/java/com/qingfeng/music/server/WorkPersistenceIntegrationTest.java",
+      "lines": 78
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-server/src/test/resources/application-test.yml",
+      "lines": 27
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-business/src/main/java/com/qingfeng/music/catalog/api/package-info.java",
+      "lines": 2
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-business/src/main/java/com/qingfeng/music/catalog/application/package-info.java",
+      "lines": 2
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-business/src/main/java/com/qingfeng/music/catalog/domain/package-info.java",
+      "lines": 2
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-business/src/main/java/com/qingfeng/music/cover/api/CoverApi.java",
+      "lines": 15
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-business/src/main/java/com/qingfeng/music/cover/api/SharedCoverAccess.java",
+      "lines": 8
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-business/src/main/java/com/qingfeng/music/cover/application/CoverFileStore.java",
+      "lines": 8
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-business/src/main/java/com/qingfeng/music/cover/application/CoverRepository.java",
+      "lines": 21
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-business/src/main/java/com/qingfeng/music/cover/application/CoverService.java",
+      "lines": 56
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-business/src/main/java/com/qingfeng/music/cover/application/ImageEditProvider.java",
+      "lines": 9
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-business/src/main/java/com/qingfeng/music/cover/application/ImageResultDownloader.java",
+      "lines": 3
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-business/src/main/java/com/qingfeng/music/credits/CreditsLedger.java",
+      "lines": 9
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-business/src/main/java/com/qingfeng/music/credits/FirstLoginCredits.java",
+      "lines": 19
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-business/src/main/java/com/qingfeng/music/credits/ReferralRewards.java",
+      "lines": 5
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-business/src/main/java/com/qingfeng/music/generation/api/GenerationApi.java",
+      "lines": 19
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-business/src/main/java/com/qingfeng/music/generation/api/package-info.java",
+      "lines": 2
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-business/src/main/java/com/qingfeng/music/generation/application/AudioCandidates.java",
+      "lines": 10
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-business/src/main/java/com/qingfeng/music/generation/application/ExecutionRepository.java",
+      "lines": 37
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-business/src/main/java/com/qingfeng/music/generation/application/GenerationDispatcher.java",
+      "lines": 92
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-business/src/main/java/com/qingfeng/music/generation/application/GenerationService.java",
+      "lines": 75
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-business/src/main/java/com/qingfeng/music/generation/application/GenerationWorker.java",
+      "lines": 169
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-business/src/main/java/com/qingfeng/music/generation/application/package-info.java",
+      "lines": 2
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-business/src/main/java/com/qingfeng/music/generation/application/port/AudioDownloader.java",
+      "lines": 5
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-business/src/main/java/com/qingfeng/music/generation/application/port/GeneratedAudioArchive.java",
+      "lines": 11
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-business/src/main/java/com/qingfeng/music/generation/application/port/MusicProvider.java",
+      "lines": 49
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-business/src/main/java/com/qingfeng/music/generation/application/ResilientMusicProvider.java",
+      "lines": 44
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-business/src/main/java/com/qingfeng/music/generation/application/SectionEditingService.java",
+      "lines": 93
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-business/src/main/java/com/qingfeng/music/generation/application/SectionEditRepository.java",
+      "lines": 22
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-business/src/main/java/com/qingfeng/music/generation/application/TaskRepository.java",
+      "lines": 9
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-business/src/main/java/com/qingfeng/music/generation/domain/GenerationStatus.java",
+      "lines": 21
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-business/src/main/java/com/qingfeng/music/generation/domain/package-info.java",
+      "lines": 2
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-business/src/main/java/com/qingfeng/music/identity/api/IdentityApi.java",
+      "lines": 19
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-business/src/main/java/com/qingfeng/music/identity/api/package-info.java",
+      "lines": 2
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-business/src/main/java/com/qingfeng/music/identity/application/IdentityRepository.java",
+      "lines": 24
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-business/src/main/java/com/qingfeng/music/identity/application/IdentityService.java",
+      "lines": 96
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-business/src/main/java/com/qingfeng/music/identity/application/package-info.java",
+      "lines": 2
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-business/src/main/java/com/qingfeng/music/identity/domain/package-info.java",
+      "lines": 2
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-business/src/main/java/com/qingfeng/music/lyrics/api/LyricsApi.java",
+      "lines": 10
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-business/src/main/java/com/qingfeng/music/lyrics/api/package-info.java",
+      "lines": 2
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-business/src/main/java/com/qingfeng/music/lyrics/application/CompositionRequests.java",
+      "lines": 15
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-business/src/main/java/com/qingfeng/music/lyrics/application/InspirationRewriter.java",
+      "lines": 7
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-business/src/main/java/com/qingfeng/music/lyrics/application/InspirationRewriteService.java",
+      "lines": 41
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-business/src/main/java/com/qingfeng/music/lyrics/application/LyricsCompositionService.java",
+      "lines": 70
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-business/src/main/java/com/qingfeng/music/lyrics/application/LyricsRepository.java",
+      "lines": 9
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-business/src/main/java/com/qingfeng/music/lyrics/application/LyricsService.java",
+      "lines": 28
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-business/src/main/java/com/qingfeng/music/lyrics/application/LyricsStructure.java",
+      "lines": 48
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-business/src/main/java/com/qingfeng/music/lyrics/application/LyricsWriter.java",
+      "lines": 11
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-business/src/main/java/com/qingfeng/music/lyrics/application/package-info.java",
+      "lines": 2
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-business/src/main/java/com/qingfeng/music/lyrics/domain/package-info.java",
+      "lines": 2
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-business/src/main/java/com/qingfeng/music/lyrics/playback/LyricsTimingProvider.java",
+      "lines": 9
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-business/src/main/java/com/qingfeng/music/lyrics/playback/PlaybackLyrics.java",
+      "lines": 36
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-business/src/main/java/com/qingfeng/music/lyrics/playback/PlaybackLyricsRepository.java",
+      "lines": 13
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-business/src/main/java/com/qingfeng/music/lyrics/playback/PlaybackLyricsService.java",
+      "lines": 39
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-business/src/main/java/com/qingfeng/music/media/api/MediaApi.java",
+      "lines": 24
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-business/src/main/java/com/qingfeng/music/media/api/MediaCapacity.java",
+      "lines": 6
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-business/src/main/java/com/qingfeng/music/media/api/package-info.java",
+      "lines": 2
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-business/src/main/java/com/qingfeng/music/media/api/SharedMediaAccess.java",
+      "lines": 6
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-business/src/main/java/com/qingfeng/music/media/application/MediaFileStore.java",
+      "lines": 9
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-business/src/main/java/com/qingfeng/music/media/application/MediaRepository.java",
+      "lines": 34
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-business/src/main/java/com/qingfeng/music/media/application/MediaService.java",
+      "lines": 76
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-business/src/main/java/com/qingfeng/music/media/application/package-info.java",
+      "lines": 2
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-business/src/main/java/com/qingfeng/music/media/domain/package-info.java",
+      "lines": 2
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-business/src/main/java/com/qingfeng/music/settings/CreativeDirection.java",
+      "lines": 73
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-business/src/main/java/com/qingfeng/music/settings/CreativePlan.java",
+      "lines": 32
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-business/src/main/java/com/qingfeng/music/settings/InspirationMusicPresets.java",
+      "lines": 49
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-business/src/main/java/com/qingfeng/music/settings/MusicBriefService.java",
+      "lines": 24
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-business/src/main/java/com/qingfeng/music/settings/MusicPromptLimits.java",
+      "lines": 10
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-business/src/main/java/com/qingfeng/music/settings/MusicSettings.java",
+      "lines": 38
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-business/src/main/java/com/qingfeng/music/settings/MusicSettingsService.java",
+      "lines": 91
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-business/src/main/java/com/qingfeng/music/sharing/api/package-info.java",
+      "lines": 2
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-business/src/main/java/com/qingfeng/music/sharing/api/SharingApi.java",
+      "lines": 15
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-business/src/main/java/com/qingfeng/music/sharing/application/package-info.java",
+      "lines": 2
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-business/src/main/java/com/qingfeng/music/sharing/application/ShareRepository.java",
+      "lines": 9
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-business/src/main/java/com/qingfeng/music/sharing/application/SharingService.java",
+      "lines": 42
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-business/src/main/java/com/qingfeng/music/sharing/domain/package-info.java",
+      "lines": 2
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-business/src/main/java/com/qingfeng/music/studio/api/package-info.java",
+      "lines": 2
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-business/src/main/java/com/qingfeng/music/studio/application/package-info.java",
+      "lines": 2
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-business/src/main/java/com/qingfeng/music/studio/domain/package-info.java",
+      "lines": 2
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-business/src/main/java/com/qingfeng/music/usage/UsageBudget.java",
+      "lines": 9
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-business/src/main/java/com/qingfeng/music/work/api/package-info.java",
+      "lines": 2
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-business/src/main/java/com/qingfeng/music/work/api/VocalGender.java",
+      "lines": 12
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-business/src/main/java/com/qingfeng/music/work/api/WorkApi.java",
+      "lines": 21
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-business/src/main/java/com/qingfeng/music/work/application/package-info.java",
+      "lines": 2
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-business/src/main/java/com/qingfeng/music/work/application/WorkRepository.java",
+      "lines": 12
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-business/src/main/java/com/qingfeng/music/work/application/WorkService.java",
+      "lines": 39
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-business/src/main/java/com/qingfeng/music/work/domain/package-info.java",
+      "lines": 2
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-business/src/test/java/com/qingfeng/music/generation/application/GenerationDispatcherTest.java",
+      "lines": 59
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-business/src/test/java/com/qingfeng/music/generation/application/ResilientMusicProviderTest.java",
+      "lines": 36
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-business/src/test/java/com/qingfeng/music/generation/domain/GenerationStatusTest.java",
+      "lines": 20
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-business/src/test/java/com/qingfeng/music/lyrics/application/LyricsStructureTest.java",
+      "lines": 40
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-business/src/test/java/com/qingfeng/music/lyrics/playback/PlaybackLyricsTest.java",
+      "lines": 20
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-business/src/test/java/com/qingfeng/music/settings/CreativeDirectionTest.java",
+      "lines": 53
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-business/src/test/java/com/qingfeng/music/settings/MusicBriefServiceTest.java",
+      "lines": 21
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-common/src/main/java/com/qingfeng/music/common/exception/DomainException.java",
+      "lines": 8
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-infrastructure/src/main/java/com/qingfeng/music/infrastructure/persistence/cover/JdbcCoverRepository.java",
+      "lines": 33
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-infrastructure/src/main/java/com/qingfeng/music/infrastructure/persistence/credits/JdbcCreditsLedger.java",
+      "lines": 43
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-infrastructure/src/main/java/com/qingfeng/music/infrastructure/persistence/generation/ExecutionMapper.java",
+      "lines": 71
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-infrastructure/src/main/java/com/qingfeng/music/infrastructure/persistence/generation/JdbcAudioCandidates.java",
+      "lines": 26
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-infrastructure/src/main/java/com/qingfeng/music/infrastructure/persistence/generation/JdbcCreativePlanRepository.java",
+      "lines": 16
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-infrastructure/src/main/java/com/qingfeng/music/infrastructure/persistence/generation/JdbcMusicSettingsRepository.java",
+      "lines": 15
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-infrastructure/src/main/java/com/qingfeng/music/infrastructure/persistence/generation/JdbcSectionEditRepository.java",
+      "lines": 24
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-infrastructure/src/main/java/com/qingfeng/music/infrastructure/persistence/generation/MyBatisExecutionRepository.java",
+      "lines": 63
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-infrastructure/src/main/java/com/qingfeng/music/infrastructure/persistence/generation/MyBatisTaskRepository.java",
+      "lines": 14
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-infrastructure/src/main/java/com/qingfeng/music/infrastructure/persistence/generation/TaskMapper.java",
+      "lines": 11
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-infrastructure/src/main/java/com/qingfeng/music/infrastructure/persistence/generation/TaskRow.java",
+      "lines": 10
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-infrastructure/src/main/java/com/qingfeng/music/infrastructure/persistence/identity/IdentityMapper.java",
+      "lines": 32
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-infrastructure/src/main/java/com/qingfeng/music/infrastructure/persistence/identity/MyBatisIdentityRepository.java",
+      "lines": 32
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-infrastructure/src/main/java/com/qingfeng/music/infrastructure/persistence/lyrics/JdbcCompositionRequests.java",
+      "lines": 40
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-infrastructure/src/main/java/com/qingfeng/music/infrastructure/persistence/lyrics/JdbcPlaybackLyricsRepository.java",
+      "lines": 34
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-infrastructure/src/main/java/com/qingfeng/music/infrastructure/persistence/lyrics/LyricsMapper.java",
+      "lines": 11
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-infrastructure/src/main/java/com/qingfeng/music/infrastructure/persistence/lyrics/LyricsRow.java",
+      "lines": 12
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-infrastructure/src/main/java/com/qingfeng/music/infrastructure/persistence/lyrics/MyBatisLyricsRepository.java",
+      "lines": 13
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-infrastructure/src/main/java/com/qingfeng/music/infrastructure/persistence/media/MediaMapper.java",
+      "lines": 24
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-infrastructure/src/main/java/com/qingfeng/music/infrastructure/persistence/media/MediaRow.java",
+      "lines": 15
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-infrastructure/src/main/java/com/qingfeng/music/infrastructure/persistence/media/MyBatisMediaRepository.java",
+      "lines": 36
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-infrastructure/src/main/java/com/qingfeng/music/infrastructure/persistence/sharing/MyBatisShareRepository.java",
+      "lines": 12
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-infrastructure/src/main/java/com/qingfeng/music/infrastructure/persistence/sharing/ShareMapper.java",
+      "lines": 10
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-infrastructure/src/main/java/com/qingfeng/music/infrastructure/persistence/sharing/ShareRow.java",
+      "lines": 17
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-infrastructure/src/main/java/com/qingfeng/music/infrastructure/persistence/usage/JdbcUsageBudget.java",
+      "lines": 84
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-infrastructure/src/main/java/com/qingfeng/music/infrastructure/persistence/work/MyBatisWorkRepository.java",
+      "lines": 17
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-infrastructure/src/main/java/com/qingfeng/music/infrastructure/persistence/work/WorkMapper.java",
+      "lines": 14
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-infrastructure/src/main/java/com/qingfeng/music/infrastructure/persistence/work/WorkRow.java",
+      "lines": 9
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-infrastructure/src/main/java/com/qingfeng/music/infrastructure/provider/DeepSeekInspirationRewriter.java",
+      "lines": 69
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-infrastructure/src/main/java/com/qingfeng/music/infrastructure/provider/DeepSeekLyricsWriter.java",
+      "lines": 49
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-infrastructure/src/main/java/com/qingfeng/music/infrastructure/provider/KieAudioResults.java",
+      "lines": 27
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-infrastructure/src/main/java/com/qingfeng/music/infrastructure/provider/KieImageEditProvider.java",
+      "lines": 43
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-infrastructure/src/main/java/com/qingfeng/music/infrastructure/provider/KieLyricsTimingProvider.java",
+      "lines": 65
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-infrastructure/src/main/java/com/qingfeng/music/infrastructure/provider/KieRequestLimiter.java",
+      "lines": 87
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-infrastructure/src/main/java/com/qingfeng/music/infrastructure/provider/KieSunoMusicProvider.java",
+      "lines": 186
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-infrastructure/src/main/java/com/qingfeng/music/infrastructure/provider/LyricsWritingPrompt.java",
+      "lines": 82
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-infrastructure/src/main/java/com/qingfeng/music/infrastructure/provider/MusicStylePrompt.java",
+      "lines": 47
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-infrastructure/src/main/java/com/qingfeng/music/infrastructure/provider/UnavailableMusicProvider.java",
+      "lines": 13
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-infrastructure/src/main/java/com/qingfeng/music/infrastructure/storage/AllowlistedAudioDownloader.java",
+      "lines": 44
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-infrastructure/src/main/java/com/qingfeng/music/infrastructure/storage/CoverImageStore.java",
+      "lines": 31
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-infrastructure/src/main/java/com/qingfeng/music/infrastructure/storage/LocalMediaFileStore.java",
+      "lines": 40
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-infrastructure/src/main/java/com/qingfeng/music/infrastructure/storage/OssMediaFileStore.java",
+      "lines": 36
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-infrastructure/src/main/java/com/qingfeng/music/infrastructure/storage/ProviderAudioUrls.java",
+      "lines": 20
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-infrastructure/src/main/java/com/qingfeng/music/infrastructure/storage/RoutingMediaFileStore.java",
+      "lines": 15
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-infrastructure/src/main/resources/db/migration/V10__cover_assets.sql",
+      "lines": 25
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-infrastructure/src/main/resources/db/migration/V11__lyrics_request_recovery.sql",
+      "lines": 8
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-infrastructure/src/main/resources/db/migration/V12__section_edits_and_audio_selection.sql",
+      "lines": 29
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-infrastructure/src/main/resources/db/migration/V13__music_preferences.sql",
+      "lines": 10
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-infrastructure/src/main/resources/db/migration/V14__google_identity.sql",
+      "lines": 10
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-infrastructure/src/main/resources/db/migration/V15__credits_ledger.sql",
+      "lines": 12
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-infrastructure/src/main/resources/db/migration/V16__payment_orders.sql",
+      "lines": 13
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-infrastructure/src/main/resources/db/migration/V17__authing_identity.sql",
+      "lines": 10
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-infrastructure/src/main/resources/db/migration/V18__payment_risk_events.sql",
+      "lines": 10
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-infrastructure/src/main/resources/db/migration/V19__payment_provider.sql",
+      "lines": 3
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-infrastructure/src/main/resources/db/migration/V1__creator_and_work.sql",
+      "lines": 26
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-infrastructure/src/main/resources/db/migration/V20__oidc_identity.sql",
+      "lines": 11
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-infrastructure/src/main/resources/db/migration/V21__referral_pending.sql",
+      "lines": 8
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-infrastructure/src/main/resources/db/migration/V22__welcome_dialog_receipt.sql",
+      "lines": 5
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-infrastructure/src/main/resources/db/migration/V23__creative_plans_and_audio_candidates.sql",
+      "lines": 30
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-infrastructure/src/main/resources/db/migration/V2__lyrics_media_and_sharing.sql",
+      "lines": 25
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-infrastructure/src/main/resources/db/migration/V3__generation_snapshot.sql",
+      "lines": 11
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-infrastructure/src/main/resources/db/migration/V4__durable_execution_and_recovery.sql",
+      "lines": 30
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-infrastructure/src/main/resources/db/migration/V5__media_capacity.sql",
+      "lines": 2
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-infrastructure/src/main/resources/db/migration/V6__lyrics_composition_request.sql",
+      "lines": 9
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-infrastructure/src/main/resources/db/migration/V7__model_usage_budget.sql",
+      "lines": 17
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-infrastructure/src/main/resources/db/migration/V8__playback_lyrics.sql",
+      "lines": 13
+    },
+    {
+      "path": "Qingfeng_AI_Music/qf-infrastructure/src/main/resources/db/migration/V9__vocal_gender.sql",
+      "lines": 2
+    }
+  ],
+  "routes": [
+    [
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/invite/InviteGateController.java",
+      20,
+      "@RequestMapping(\"/api/public/invite\")"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/invite/InviteGateController.java",
+      29,
+      "@GetMapping(\"/status\")"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/invite/InviteGateController.java",
+      40,
+      "@PostMapping(\"/enter\")"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/payment/PaymentController.java",
+      16,
+      "@GetMapping(\"/api/app/payments/catalog\")"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/payment/PaymentController.java",
+      18,
+      "@PostMapping(\"/api/app/payments/orders\")"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/payment/PaymentController.java",
+      22,
+      "@GetMapping(\"/api/app/payments/orders/{id}\")"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/payment/PaymentController.java",
+      24,
+      "@GetMapping(\"/api/app/payments/orders\")"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/payment/PaymentController.java",
+      26,
+      "@PostMapping(\"/api/public/payments/airwallex/webhook\")"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/payment/PayPalPaymentController.java",
+      14,
+      "@GetMapping(\"/api/app/paypal/catalog\") public Map<String,Object> catalog(){return service.catalog();}"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/payment/PayPalPaymentController.java",
+      15,
+      "@GetMapping(\"/api/app/paypal/sdk-config\") public Map<String,Object> sdkConfig(){return service.sdkConfig();}"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/payment/PayPalPaymentController.java",
+      16,
+      "@PostMapping(\"/api/app/paypal/orders\") public Map<String,Object> create(@AuthenticationPrincipal CreatorPrincipal principal,@RequestBody OrderRequest req){return service.create(principal.id(),req.packageId());}"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/payment/PayPalPaymentController.java",
+      17,
+      "@GetMapping(\"/api/app/paypal/orders\") public Map<String,Object> orders(@AuthenticationPrincipal CreatorPrincipal principal){return service.orders(principal.id());}"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/payment/PayPalPaymentController.java",
+      18,
+      "@GetMapping(\"/api/app/paypal/orders/{id}\") public Map<String,Object> order(@AuthenticationPrincipal CreatorPrincipal principal,@PathVariable String id){return service.order(principal.id(),id);}"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/payment/PayPalPaymentController.java",
+      19,
+      "@PostMapping(\"/api/app/paypal/orders/{id}/resume\") public Map<String,Object> resume(@AuthenticationPrincipal CreatorPrincipal principal,@PathVariable String id){return service.resume(principal.id(),id);}"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/payment/PayPalPaymentController.java",
+      20,
+      "@PostMapping(\"/api/app/paypal/orders/{id}/capture\") public Map<String,Object> capture(@AuthenticationPrincipal CreatorPrincipal principal,@PathVariable String id){return service.capture(principal.id(),id);}"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/payment/PayPalPaymentController.java",
+      21,
+      "@PostMapping(\"/api/public/paypal/webhook\") public void webhook(@RequestHeader(value=\"PAYPAL-AUTH-ALGO\",required=false) String algo,@RequestHeader(value=\"PAYPAL-CERT-URL\",required=false) String cert,@RequestHeader(value=\"PAYPAL-TRANSMISSION-ID\",required=false) String transmission,@RequestHeader(value=\"PAYPAL-TRANSMISSION-SIG\",required=false) String signature,@RequestHeader(value=\"PAYPAL-TRANSMISSION-TIME\",required=false) String time,@RequestBody byte[] body){service.webhook(new PayPalCheckoutGateway.WebhookHeaders(algo,cert,transmission,signature,time),body);}"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/app/CoverController.java",
+      12,
+      "@RestController @Profile({\"mysql\",\"test\"}) @RequestMapping(\"/api/app/works/{work}/covers\")"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/app/CoverController.java",
+      15,
+      "@GetMapping public CoverApi.State state(@AuthenticationPrincipal CreatorPrincipal creator,@PathVariable String work){return covers.state(creator.id(),work);}"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/app/CoverController.java",
+      16,
+      "@PostMapping(consumes=\"multipart/form-data\") public CoverApi.Asset upload(@AuthenticationPrincipal CreatorPrincipal creator,@PathVariable String work,@RequestParam(\"file\")MultipartFile file)throws IOException{try(var in=file.getInputStream()){return covers.upload(creator.id(),work,in);}}"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/app/CoverController.java",
+      18,
+      "@PutMapping(\"/selection\") public CoverApi.State select(@AuthenticationPrincipal CreatorPrincipal creator,@PathVariable String work,@Valid @RequestBody Selection selection){return covers.select(creator.id(),work,selection.coverId(),selection.expectedVersion());}"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/app/CoverController.java",
+      19,
+      "@GetMapping(\"/{cover}\") public org.springframework.http.ResponseEntity<org.springframework.core.io.Resource> image(@AuthenticationPrincipal CreatorPrincipal creator,@PathVariable String work,@PathVariable String cover){return AudioResponse.from(covers.open(creator.id(),work,cover),false);}"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/app/CoverController.java",
+      21,
+      "@PostMapping(\"/edits\") public CoverApi.Edit edit(@AuthenticationPrincipal CreatorPrincipal creator,@PathVariable String work,@Valid @RequestBody Edit edit){return covers.edit(creator.id(),work,edit.sourceId(),edit.prompt(),edit.requestKey());}"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/app/CreditsController.java",
+      10,
+      "@RequestMapping(\"/api/app/credits\")"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/app/CreditsController.java",
+      15,
+      "@GetMapping public View get(@AuthenticationPrincipal CreatorPrincipal creator){return new View(credits.balance(creator.id()),env.getProperty(\"qingfeng.credits.enabled\",Boolean.class,true),env.getProperty(\"qingfeng.credits.music-cost\",Long.class,15L));}"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/app/GenerationController.java",
+      10,
+      "@RestController @Profile({\"mysql\",\"test\"}) @RequestMapping(\"/api/app/works/{work}/generations\")"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/app/GenerationController.java",
+      16,
+      "@PostMapping(\"/preflight\") public GenerationApi.Preflight preflight(@AuthenticationPrincipal CreatorPrincipal creator,@PathVariable String work,@Valid @RequestBody PreviewRequest request){return generation.preflight(creator.id(),work,request.revisionId());}"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/app/GenerationController.java",
+      17,
+      "@PostMapping public GenerationApi.Task submit(@AuthenticationPrincipal CreatorPrincipal creator,@PathVariable String work,@Valid @RequestBody Request request){return generation.submit(creator.id(),work,request.revisionId(),request.requestKey());}"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/app/GenerationController.java",
+      18,
+      "@GetMapping public List<GenerationApi.Task> list(@AuthenticationPrincipal CreatorPrincipal creator,@PathVariable String work){return generation.list(creator.id(),work);}"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/app/GenerationController.java",
+      19,
+      "@PostMapping(\"/{task}/cancel\") public GenerationApi.Task cancel(@AuthenticationPrincipal CreatorPrincipal creator,@PathVariable String work,@PathVariable String task){return generation.cancel(creator.id(),work,task);}"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/app/GenerationController.java",
+      21,
+      "@PostMapping(\"/{task}/close-checking\") public GenerationApi.Task closeChecking(@AuthenticationPrincipal CreatorPrincipal creator,@PathVariable String work,@PathVariable String task,@Valid @RequestBody CloseCheckingRequest request){return generation.closeChecking(creator.id(),work,task,request.acknowledge());}"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/app/GenerationController.java",
+      22,
+      "@PostMapping(\"/{task}/retry-archive\") public void retryArchive(@AuthenticationPrincipal CreatorPrincipal creator,@PathVariable String work,@PathVariable String task){generation.retryArchive(creator.id(),work,task);}"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/app/IdentityController.java",
+      9,
+      "@RestController @Profile({\"mysql\",\"test\"}) @RequestMapping(\"/api/app/identity/recovery\")"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/app/IdentityController.java",
+      13,
+      "@GetMapping public ResponseEntity<Map<String,Boolean>> status(@AuthenticationPrincipal CreatorPrincipal principal){return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(Map.of(\"configured\",identity.hasRecoveryCode(principal.id())));}"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/app/IdentityController.java",
+      14,
+      "@PostMapping public ResponseEntity<Map<String,String>> issue(@AuthenticationPrincipal CreatorPrincipal principal){return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(Map.of(\"code\",identity.issueRecoveryCode(principal.id())));}"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/app/InspirationController.java",
+      12,
+      "@RequestMapping(\"/api/app/inspiration\")"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/app/InspirationController.java",
+      18,
+      "@PostMapping(\"/rewrite\")"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/app/LyricsController.java",
+      13,
+      "@RequestMapping(\"/api/app/works/{work}/lyrics\")"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/app/LyricsController.java",
+      19,
+      "@PostMapping(\"/generate\") public LyricsApi.Revision compose(@AuthenticationPrincipal CreatorPrincipal creator,@PathVariable String work,@Valid @RequestBody ComposeRequest request){return composer.compose(creator.id(),work,request.workVersion(),request.requestKey(),request.language(),request.instructions(),request.baseRevisionId(),request.templateId(),request.chorusFirst());}"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/app/LyricsController.java",
+      20,
+      "@GetMapping(\"/requests/{key}\") public LyricsCompositionService.RequestState requestState(@AuthenticationPrincipal CreatorPrincipal creator,@PathVariable String work,@PathVariable String key){return composer.requestState(creator.id(),work,key);}"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/app/LyricsController.java",
+      22,
+      "@GetMapping public List<LyricsApi.Revision> list(@AuthenticationPrincipal CreatorPrincipal creator,@PathVariable String work){return lyrics.list(creator.id(),work);}"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/app/LyricsController.java",
+      23,
+      "@GetMapping(\"/{revision}\") public LyricsApi.Revision get(@AuthenticationPrincipal CreatorPrincipal creator,@PathVariable String work,@PathVariable String revision){return lyrics.get(creator.id(),work,revision);}"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/app/LyricsController.java",
+      24,
+      "@PostMapping public LyricsApi.Revision save(@AuthenticationPrincipal CreatorPrincipal creator,@PathVariable String work,@Valid @RequestBody Request request){return lyrics.save(creator.id(),work,request.workVersion(),request.title(),request.lyrics());}"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/app/LyricsController.java",
+      25,
+      "@PostMapping(\"/{revision}/confirm\") public LyricsApi.Revision confirm(@AuthenticationPrincipal CreatorPrincipal creator,@PathVariable String work,@PathVariable String revision){return lyrics.confirm(creator.id(),work,revision);}"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/app/MediaController.java",
+      16,
+      "@RequestMapping(\"/api/app/works/{work}/audio\")"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/app/MediaController.java",
+      21,
+      "@GetMapping public List<MediaApi.Asset> list(@AuthenticationPrincipal CreatorPrincipal creator,@PathVariable String work){return media.list(creator.id(),work);}"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/app/MediaController.java",
+      22,
+      "@GetMapping(\"/selection\") public MediaApi.Selection selection(@AuthenticationPrincipal CreatorPrincipal creator,@PathVariable String work){return media.selection(creator.id(),work);}"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/app/MediaController.java",
+      24,
+      "@PutMapping(\"/selection\") public MediaApi.Selection select(@AuthenticationPrincipal CreatorPrincipal creator,@PathVariable String work,@jakarta.validation.Valid @RequestBody SelectionRequest request){return media.select(creator.id(),work,request.assetId(),request.version());}"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/app/MediaController.java",
+      25,
+      "@PostMapping(consumes=\"multipart/form-data\") public MediaApi.Asset upload(@AuthenticationPrincipal CreatorPrincipal creator,@PathVariable String work,@RequestParam(\"file\") MultipartFile file)throws IOException{try(var input=file.getInputStream()){return media.importAudio(creator.id(),work,input);}}"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/app/MediaController.java",
+      26,
+      "@GetMapping(\"/{asset}\") public ResponseEntity<Resource> audio(@AuthenticationPrincipal CreatorPrincipal creator,@PathVariable String work,@PathVariable String asset,@RequestParam(defaultValue=\"false\") boolean download){"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/app/MusicBriefController.java",
+      11,
+      "@RestController @Profile({\"mysql\",\"test\"}) @RequestMapping(\"/api/app/music-settings/simplify\")"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/app/MusicBriefController.java",
+      18,
+      "@GetMapping public Status status(){return new Status(service.available());}"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/app/MusicBriefController.java",
+      19,
+      "@PostMapping public Suggestion suggest(@AuthenticationPrincipal CreatorPrincipal creator,@Valid @RequestBody Input input){return new Suggestion(input.text(),service.suggest(creator.id(),input.text()));}"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/app/MusicSettingsController.java",
+      8,
+      "@RestController @Profile({\"mysql\",\"test\"}) @RequestMapping(\"/api/app\")"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/app/MusicSettingsController.java",
+      12,
+      "@GetMapping(\"/music-settings/catalog\") public MusicSettings.Catalog catalog(){return settings.catalog();}"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/app/MusicSettingsController.java",
+      13,
+      "@PostMapping(\"/music-settings/preview\") public MusicSettings.Direction preview(@RequestBody MusicSettings.Preferences preferences){return settings.preview(preferences);}"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/app/MusicSettingsController.java",
+      14,
+      "@PostMapping(\"/works/{work}/music-settings/preview\") public MusicSettings.Direction previewForWork(@AuthenticationPrincipal CreatorPrincipal user,@PathVariable String work,@RequestBody MusicSettings.Preferences preferences){return settings.previewForWork(user.id(),work,preferences);}"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/app/MusicSettingsController.java",
+      15,
+      "@GetMapping(\"/works/{work}/music-settings\") public MusicSettings.View get(@AuthenticationPrincipal CreatorPrincipal user,@PathVariable String work){return settings.get(user.id(),work);}"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/app/MusicSettingsController.java",
+      16,
+      "@GetMapping(\"/works/{work}/creative-direction\") public MusicSettings.Direction direction(@AuthenticationPrincipal CreatorPrincipal user,@PathVariable String work){var view=settings.get(user.id(),work);return settings.forGeneration(user.id(),view.work());}"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/app/MusicSettingsController.java",
+      17,
+      "@PutMapping(\"/works/{work}/music-settings\") public MusicSettings.View save(@AuthenticationPrincipal CreatorPrincipal user,@PathVariable String work,@RequestBody Save input){return settings.save(user.id(),work,input.expectedVersion(),input.preferences());}"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/app/MusicSettingsController.java",
+      18,
+      "@GetMapping(\"/works/{work}/generations/{task}/music-settings\") public MusicSettings.Direction task(@AuthenticationPrincipal CreatorPrincipal user,@PathVariable String work,@PathVariable String task){return settings.task(user.id(),work,task).orElse(null);}"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/app/PlaybackLyricsController.java",
+      11,
+      "@RequestMapping(\"/api/app/works/{work}/audio/{asset}/lyrics\")"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/app/PlaybackLyricsController.java",
+      15,
+      "@GetMapping public PlaybackLyrics.Snapshot get(@AuthenticationPrincipal CreatorPrincipal creator,@PathVariable String work,@PathVariable String asset){return service.get(creator.id(),work,asset);}"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/app/PlaybackLyricsController.java",
+      17,
+      "@PostMapping(\"/sync\") public PlaybackLyrics.Snapshot sync(@AuthenticationPrincipal CreatorPrincipal creator,@PathVariable String work,@PathVariable String asset,@Valid @RequestBody Request request){return service.sync(creator.id(),work,asset,request.requestKey());}"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/app/ReferralController.java",
+      16,
+      "@RestController @Profile({\"mysql\",\"test\"}) @RequestMapping(\"/api/app/referrals\")"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/app/ReferralController.java",
+      21,
+      "@GetMapping public Map<String,String> code(@AuthenticationPrincipal CreatorPrincipal creator) {"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/app/ReferralController.java",
+      24,
+      "@PostMapping(\"/accept\") public Map<String,Boolean> accept(@AuthenticationPrincipal CreatorPrincipal creator, @RequestBody Invite invite) {"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/app/SectionEditingController.java",
+      13,
+      "@RestController @Profile({\"mysql\",\"test\"}) @RequestMapping(\"/api/app/works/{work}\")"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/app/SectionEditingController.java",
+      18,
+      "@GetMapping(\"/audio/{asset}/section-context\") public SectionEditingService.Context context(@AuthenticationPrincipal CreatorPrincipal creator,@PathVariable String work,@PathVariable String asset){return editing.context(creator.id(),work,asset);}"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/app/SectionEditingController.java",
+      19,
+      "@GetMapping(\"/section-edits\") public List<SectionEditRepository.Item> list(@AuthenticationPrincipal CreatorPrincipal creator,@PathVariable String work){return editing.list(creator.id(),work);}"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/app/SectionEditingController.java",
+      20,
+      "@PostMapping(\"/section-edits\") public GenerationApi.Task submit(@AuthenticationPrincipal CreatorPrincipal creator,@PathVariable String work,@Valid @RequestBody Request request){return editing.submit(creator.id(),work,new SectionEditingService.Request(request.sourceAssetId(),request.workVersion(),request.requestKey(),request.start(),request.end(),request.textStart(),request.textEnd(),request.replacementLyrics()));}"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/app/ShareController.java",
+      11,
+      "@RequestMapping(\"/api/app/works/{work}/shares\")"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/app/ShareController.java",
+      16,
+      "@PostMapping public SharingApi.Created create(@AuthenticationPrincipal CreatorPrincipal creator,@PathVariable String work,@Valid @RequestBody Request request){return sharing.create(creator.id(),work,request.revisionId(),request.assetId());}"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/app/ShareController.java",
+      17,
+      "@DeleteMapping public void revoke(@AuthenticationPrincipal CreatorPrincipal creator,@PathVariable String work){sharing.revokeAll(creator.id(),work);}"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/app/UsageController.java",
+      11,
+      "@RequestMapping(\"/api/app/usage\")"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/app/UsageController.java",
+      15,
+      "@GetMapping public Map<String,JdbcUsageBudget.Allowance> get(@AuthenticationPrincipal CreatorPrincipal creator) {"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/app/WelcomeController.java",
+      15,
+      "@RestController @Profile({\"mysql\",\"test\"}) @RequestMapping(\"/api/app/welcome\")"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/app/WelcomeController.java",
+      20,
+      "@PostMapping public ResponseEntity<View> claim(@AuthenticationPrincipal CreatorPrincipal creator) {"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/app/WorkController.java",
+      16,
+      "@RequestMapping(\"/api/app/works\")"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/app/WorkController.java",
+      26,
+      "@PostMapping public WorkApi.Work create(@AuthenticationPrincipal CreatorPrincipal creator,@RequestBody @Valid DraftRequest request) { return request.draftKey()==null?works.create(creator.id(),request.draft()):works.create(creator.id(),request.draft(),request.draftKey()); }"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/app/WorkController.java",
+      27,
+      "@GetMapping public List<WorkApi.Work> list(@AuthenticationPrincipal CreatorPrincipal creator,@RequestParam(defaultValue=\"0\") @Min(0) @Max(10000) int page) { return works.list(creator.id(),page); }"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/app/WorkController.java",
+      28,
+      "@GetMapping(\"/library\") public List<com.qingfeng.music.server.query.WorkLibraryQuery.Item> library(@AuthenticationPrincipal CreatorPrincipal creator,@RequestParam(defaultValue=\"0\") @Min(0) @Max(10000) int page) { return library.list(creator.id(),page); }"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/app/WorkController.java",
+      29,
+      "@GetMapping(\"/{id}\") public WorkApi.Work get(@AuthenticationPrincipal CreatorPrincipal creator,@PathVariable String id) { return works.get(creator.id(),id); }"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/app/WorkController.java",
+      30,
+      "@PutMapping(\"/{id}\") public WorkApi.Work update(@AuthenticationPrincipal CreatorPrincipal creator,@PathVariable String id,@RequestBody @Valid DraftRequest request) {"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/publicapi/GiftController.java",
+      11,
+      "@RequestMapping(\"/api/public/gifts/{token}\")"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/publicapi/GiftController.java",
+      16,
+      "@GetMapping public ResponseEntity<SharingApi.Gift> gift(@PathVariable String token){return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(sharing.get(token));}"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/publicapi/GiftController.java",
+      17,
+      "@GetMapping(\"/audio\") public ResponseEntity<Resource> audio(@PathVariable String token,@RequestParam(defaultValue=\"false\") boolean download){"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/publicapi/GiftController.java",
+      21,
+      "@GetMapping(\"/cover\") public ResponseEntity<Resource> cover(@PathVariable String token){"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/publicapi/GoogleAuthController.java",
+      14,
+      "@RequestMapping(\"/api/public/auth/google\")"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/publicapi/GoogleAuthController.java",
+      19,
+      "@GetMapping(\"/status\")public ResponseEntity<Map<String,Object>> status(HttpServletRequest request){"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/publicapi/GoogleAuthController.java",
+      27,
+      "@PostMapping(\"/start\")public ResponseEntity<Map<String,String>> start(HttpServletRequest request,HttpServletResponse response){"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/publicapi/LogtoAuthController.java",
+      16,
+      "@RequestMapping(\"/api/public/auth/logto\")"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/publicapi/LogtoAuthController.java",
+      29,
+      "@GetMapping(\"/status\")public ResponseEntity<Map<String,Object>> status(HttpServletRequest request){"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/publicapi/LogtoAuthController.java",
+      39,
+      "@PostMapping(\"/start\")public ResponseEntity<Map<String,String>> start(@RequestBody(required=false)StartRequest target,HttpServletRequest request,HttpServletResponse response){"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/publicapi/NativeAuthController.java",
+      20,
+      "@RequestMapping(\"/api/public/auth/native\")"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/publicapi/NativeAuthController.java",
+      57,
+      "@GetMapping(\"/status\") public ResponseEntity<Map<String,Object>> status(HttpServletRequest request){"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/publicapi/NativeAuthController.java",
+      69,
+      "@PostMapping(\"/password/sign-in\") public ResponseEntity<Map<String,Object>> password(@RequestBody Credentials input,HttpServletRequest request,HttpServletResponse response){"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/publicapi/NativeAuthController.java",
+      83,
+      "@PostMapping(\"/code\") public ResponseEntity<Map<String,Object>> sendCode(@RequestBody CodeRequest input,HttpServletRequest request){"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/publicapi/NativeAuthController.java",
+      104,
+      "@PostMapping(\"/register\") public ResponseEntity<Map<String,Object>> register(@RequestBody Credentials input,HttpServletRequest request,HttpServletResponse response){"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/publicapi/NativeAuthController.java",
+      118,
+      "@PostMapping(\"/password/reset\") public ResponseEntity<Map<String,Object>> reset(@RequestBody Credentials input,HttpServletRequest request){"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/publicapi/NativeAuthController.java",
+      134,
+      "@PostMapping(\"/phone/sign-in\") public ResponseEntity<Map<String,Object>> phoneSignIn(@RequestBody Credentials input,HttpServletRequest request,HttpServletResponse response){"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/publicapi/NativeAuthController.java",
+      137,
+      "@PostMapping(\"/email/sign-in\") public ResponseEntity<Map<String,Object>> emailSignIn(@RequestBody Credentials input,HttpServletRequest request,HttpServletResponse response){"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/publicapi/SessionController.java",
+      15,
+      "@RequestMapping(\"/api/public\")"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/publicapi/SessionController.java",
+      19,
+      "@GetMapping(\"/csrf\") public Map<String,String> csrf(CsrfToken token) { return Map.of(\"token\",token.getToken()); }"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/publicapi/SessionController.java",
+      20,
+      "@PostMapping(\"/session\") public ResponseEntity<Map<String,String>> session(HttpServletRequest request) {"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/publicapi/SessionController.java",
+      31,
+      "@PostMapping(\"/session/recover\") public ResponseEntity<Map<String,String>> recover(HttpServletRequest request,@jakarta.validation.Valid @RequestBody RecoveryRequest body){return sessionResponse(identity.recover(body.code()),request);}"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/publicapi/SessionController.java",
+      32,
+      "@PostMapping(\"/session/logout\")public ResponseEntity<Map<String,Boolean>> logout(HttpServletRequest request){"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/publicapi/SmsDeliveryController.java",
+      16,
+      "@PostMapping(PATH) public ResponseEntity<Map<String,Object>> deliver(HttpServletRequest request)throws IOException{"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/publicapi/SystemInfoController.java",
+      12,
+      "@RequestMapping(\"/api/public/system\")"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/publicapi/SystemInfoController.java",
+      19,
+      "@GetMapping(\"/info\")"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/WebPageController.java",
+      7,
+      "@GetMapping({\"/\",\"/create\",\"/works\",\"/works/{id}\",\"/gift/{token}\",\"/account\",\"/recharge\"})"
+    ]
+  ],
+  "tables": [
+    [
+      "Qingfeng_AI_Music/qf-infrastructure/src/main/resources/db/migration/V10__cover_assets.sql",
+      "cover_asset"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-infrastructure/src/main/resources/db/migration/V10__cover_assets.sql",
+      "work_cover"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-infrastructure/src/main/resources/db/migration/V10__cover_assets.sql",
+      "cover_edit_task"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-infrastructure/src/main/resources/db/migration/V12__section_edits_and_audio_selection.sql",
+      "generation_audio_source"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-infrastructure/src/main/resources/db/migration/V12__section_edits_and_audio_selection.sql",
+      "section_edit"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-infrastructure/src/main/resources/db/migration/V12__section_edits_and_audio_selection.sql",
+      "work_audio_selection"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-infrastructure/src/main/resources/db/migration/V13__music_preferences.sql",
+      "work_music_preferences"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-infrastructure/src/main/resources/db/migration/V13__music_preferences.sql",
+      "generation_music_preferences"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-infrastructure/src/main/resources/db/migration/V14__google_identity.sql",
+      "creator_google_identity"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-infrastructure/src/main/resources/db/migration/V15__credits_ledger.sql",
+      "credit_lock"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-infrastructure/src/main/resources/db/migration/V15__credits_ledger.sql",
+      "credit_ledger"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-infrastructure/src/main/resources/db/migration/V16__payment_orders.sql",
+      "payment_order"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-infrastructure/src/main/resources/db/migration/V17__authing_identity.sql",
+      "creator_authing_identity"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-infrastructure/src/main/resources/db/migration/V18__payment_risk_events.sql",
+      "payment_risk_event"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-infrastructure/src/main/resources/db/migration/V1__creator_and_work.sql",
+      "creator"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-infrastructure/src/main/resources/db/migration/V1__creator_and_work.sql",
+      "creator_session"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-infrastructure/src/main/resources/db/migration/V1__creator_and_work.sql",
+      "music_work"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-infrastructure/src/main/resources/db/migration/V20__oidc_identity.sql",
+      "creator_oidc_identity"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-infrastructure/src/main/resources/db/migration/V21__referral_pending.sql",
+      "referral_pending"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-infrastructure/src/main/resources/db/migration/V22__welcome_dialog_receipt.sql",
+      "welcome_dialog_receipt"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-infrastructure/src/main/resources/db/migration/V23__creative_plans_and_audio_candidates.sql",
+      "lyric_creative_plan"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-infrastructure/src/main/resources/db/migration/V23__creative_plans_and_audio_candidates.sql",
+      "generation_audio_candidates"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-infrastructure/src/main/resources/db/migration/V23__creative_plans_and_audio_candidates.sql",
+      "music_listening_feedback"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-infrastructure/src/main/resources/db/migration/V2__lyrics_media_and_sharing.sql",
+      "lyric_revision"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-infrastructure/src/main/resources/db/migration/V2__lyrics_media_and_sharing.sql",
+      "media_asset"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-infrastructure/src/main/resources/db/migration/V2__lyrics_media_and_sharing.sql",
+      "share_link"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-infrastructure/src/main/resources/db/migration/V3__generation_snapshot.sql",
+      "generation_task"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-infrastructure/src/main/resources/db/migration/V4__durable_execution_and_recovery.sql",
+      "generation_worker_lock"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-infrastructure/src/main/resources/db/migration/V4__durable_execution_and_recovery.sql",
+      "generation_attempt"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-infrastructure/src/main/resources/db/migration/V6__lyrics_composition_request.sql",
+      "lyrics_composition_request"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-infrastructure/src/main/resources/db/migration/V7__model_usage_budget.sql",
+      "model_usage_lock"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-infrastructure/src/main/resources/db/migration/V7__model_usage_budget.sql",
+      "model_usage_reservation"
+    ],
+    [
+      "Qingfeng_AI_Music/qf-infrastructure/src/main/resources/db/migration/V8__playback_lyrics.sql",
+      "media_lyrics_timeline"
+    ]
+  ],
+  "source_refs": [
+    [
+      "E01",
+      "Qingfeng_AI_Music_VUE/src/app/router/index.ts",
+      9,
+      "前端入口与业务路由"
+    ],
+    [
+      "E02",
+      "Qingfeng_AI_Music_VUE/src/shared/identity/creation-login-gate.ts",
+      24,
+      "创作页登录前置"
+    ],
+    [
+      "E03",
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/publicapi/NativeAuthController.java",
+      20,
+      "邮箱与手机登录接口"
+    ],
+    [
+      "E04",
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/security/LogtoIdentityService.java",
+      59,
+      "账号冲突处理与身份绑定边界"
+    ],
+    [
+      "E05",
+      "Qingfeng_AI_Music/qf-business/src/main/java/com/qingfeng/music/credits/FirstLoginCredits.java",
+      5,
+      "首次100积分"
+    ],
+    [
+      "E06",
+      "Qingfeng_AI_Music_VUE/src/modules/studio/model/suggestions.ts",
+      9,
+      "新草稿默认风格"
+    ],
+    [
+      "E07",
+      "Qingfeng_AI_Music_VUE/src/modules/works/model/music-preferences.ts",
+      9,
+      "旧风格转换成默认标签"
+    ],
+    [
+      "E08",
+      "Qingfeng_AI_Music_VUE/src/modules/studio/pages/DraftStudioPage.vue",
+      244,
+      "当前先写词后跳转"
+    ],
+    [
+      "E09",
+      "Qingfeng_AI_Music_VUE/src/modules/works/components/LyricsPanel.vue",
+      109,
+      "显式保存与生成前确认"
+    ],
+    [
+      "E10",
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/app/GenerationController.java",
+      16,
+      "生成前检查接口"
+    ],
+    [
+      "E11",
+      "Qingfeng_AI_Music/qf-business/src/main/java/com/qingfeng/music/generation/application/GenerationService.java",
+      40,
+      "确认歌词后创建歌曲任务"
+    ],
+    [
+      "E12",
+      "Qingfeng_AI_Music/qf-business/src/main/java/com/qingfeng/music/generation/application/GenerationWorker.java",
+      140,
+      "多候选归档与异常"
+    ],
+    [
+      "E13",
+      "Qingfeng_AI_Music/qf-infrastructure/src/main/java/com/qingfeng/music/infrastructure/persistence/usage/JdbcUsageBudget.java",
+      56,
+      "提交时直接扣积分"
+    ],
+    [
+      "E14",
+      "Qingfeng_AI_Music/qf-infrastructure/src/main/java/com/qingfeng/music/infrastructure/persistence/credits/JdbcCreditsLedger.java",
+      41,
+      "全局积分锁"
+    ],
+    [
+      "E15",
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/payment/PayPalPaymentService.java",
+      62,
+      "未完成订单阻止再次创建"
+    ],
+    [
+      "E16",
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/payment/PayPalPaymentService.java",
+      135,
+      "非完成回调尚不支持"
+    ],
+    [
+      "E17",
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/payment/PaymentCatalog.java",
+      23,
+      "服务端美元套餐"
+    ],
+    [
+      "E18",
+      "Qingfeng_AI_Music/qf-business/src/main/java/com/qingfeng/music/sharing/application/SharingService.java",
+      26,
+      "分享快照与7天有效期"
+    ],
+    [
+      "E19",
+      "Qingfeng_AI_Music/qf-infrastructure/src/main/resources/db/migration/V23__creative_plans_and_audio_candidates.sql",
+      1,
+      "V23计划、多候选与反馈结构"
+    ],
+    [
+      "E20",
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/web/app/MediaController.java",
+      25,
+      "仍保留音频上传接口"
+    ],
+    [
+      "E21",
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/config/ExecutionConfiguration.java",
+      26,
+      "分阶段调度线程与任务准入"
+    ],
+    [
+      "E22",
+      "Qingfeng_AI_Music/qf-server/src/main/java/com/qingfeng/music/server/security/WebSecurityConfiguration.java",
+      32,
+      "CSRF和路由访问控制"
+    ],
+    [
+      "E23",
+      "scripts/start-main.ps1",
+      15,
+      "日常运行入口与缺失私钥路径"
+    ],
+    [
+      "E24",
+      "Qingfeng_AI_Music_VUE/src/modules/identity/components/LoginModal.vue",
+      21,
+      "手机国家默认中国"
+    ],
+    [
+      "E25",
+      "Qingfeng_AI_Music/qf-infrastructure/src/main/resources/db/migration/V15__credits_ledger.sql",
+      3,
+      "积分流水与无冻结字段"
+    ],
+    [
+      "E26",
+      "Qingfeng_AI_Music/qf-infrastructure/src/main/resources/db/migration/V16__payment_orders.sql",
+      1,
+      "支付订单快照与关系"
+    ]
+  ],
+  "verification": {
+    "frontend": "npm test: 32 files / 227 tests passed",
+    "public_get": "system/info and auth/native/status return HTTP403 INVITE_REQUIRED",
+    "ssh": "deployment private key referenced by script missing locally; no SSH or production SQL access",
+    "backend": "not rerun; no production DB write or runtime startup"
+  }
+}

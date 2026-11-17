@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="480" viewBox="0 0 1000 480">
+<rect width="100%" height="100%" fill="white"/>
+<style>text{font-family:SimSun,serif;font-size:16px;fill:#18334F} .existing{fill:#EAF0F6;stroke:#18334F}.planned{fill:#F4F0FA;stroke:#756AA4;stroke-dasharray:6 4}.unconfirmed{fill:#FFF4DF;stroke:#AA6B16}</style>
+<rect class="existing" x="20.0" y="20" width="960.0" height="60" rx="6"/>
+<text text-anchor="middle" x="500.0" y="50.0">起点：现有创作、作品、分享与积分服务</text>
+<rect class="planned" x="20.0" y="110" width="960.0" height="60" rx="6"/>
+<text text-anchor="middle" x="500.0" y="140.0">短期：关注收藏、主题活动、通知与代表作</text>
+<rect class="planned" x="20.0" y="200" width="309.3333333333333" height="60" rx="6"/>
+<text text-anchor="middle" x="174.66666666666666" y="230.0">中期：自己的声音演唱</text>
+<rect class="planned" x="345.3333333333333" y="200" width="309.3333333333333" height="60" rx="6"/>
+<text text-anchor="middle" x="500.0" y="230.0">中期：录唱与声音加工</text>
+<rect class="planned" x="670.6666666666666" y="200" width="309.3333333333333" height="60" rx="6"/>
+<text text-anchor="middle" x="825.3333333333333" y="230.0">中期：持续创作权益</text>
+<rect class="planned" x="20.0" y="290" width="960.0" height="60" rx="6"/>
+<text text-anchor="middle" x="500.0" y="320.0">长期：发行服务深化、创作协作与收益服务</text>
+<rect class="planned" x="20.0" y="380" width="960.0" height="60" rx="6"/>
+<text text-anchor="middle" x="500.0" y="410.0">结束：按用户需求、实际成本与合作条件逐项开展</text>
+<path d="M500.0,80 V95 H500.0 V110" fill="none" stroke="#77899C"/><path d="M496.0,105 L500.0,110 L504.0,105" fill="none" stroke="#77899C"/>
+<path d="M500.0,170 V185 H174.66666666666666 V200" fill="none" stroke="#77899C"/><path d="M170.66666666666666,195 L174.66666666666666,200 L178.66666666666666,195" fill="none" stroke="#77899C"/>
+<path d="M500.0,170 V185 H500.0 V200" fill="none" stroke="#77899C"/><path d="M496.0,195 L500.0,200 L504.0,195" fill="none" stroke="#77899C"/>
+<path d="M500.0,170 V185 H825.3333333333333 V200" fill="none" stroke="#77899C"/><path d="M821.3333333333333,195 L825.3333333333333,200 L829.3333333333333,195" fill="none" stroke="#77899C"/>
+<path d="M174.66666666666666,260 V275 H500.0 V290" fill="none" stroke="#77899C"/><path d="M496.0,285 L500.0,290 L504.0,285" fill="none" stroke="#77899C"/>
+<path d="M500.0,260 V275 H500.0 V290" fill="none" stroke="#77899C"/><path d="M496.0,285 L500.0,290 L504.0,285" fill="none" stroke="#77899C"/>
+<path d="M825.3333333333333,260 V275 H500.0 V290" fill="none" stroke="#77899C"/><path d="M496.0,285 L500.0,290 L504.0,285" fill="none" stroke="#77899C"/>
+<path d="M500.0,350 V365 H500.0 V380" fill="none" stroke="#77899C"/><path d="M496.0,375 L500.0,380 L504.0,375" fill="none" stroke="#77899C"/>
+</svg>

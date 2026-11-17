@@ -1,0 +1,39 @@
+flowchart TD
+ N0_0["开始：普通用户的表达与创作需求"]:::existing
+ N1_0["账号与体验权益"]:::existing
+ N0_0 --> N1_0
+ N1_1["想法与歌词创作"]:::existing
+ N0_0 --> N1_1
+ N1_2["歌曲制作与试听"]:::existing
+ N0_0 --> N1_2
+ N2_0["我的作品与下载"]:::existing
+ N1_0 --> N2_0
+ N1_1 --> N2_0
+ N1_2 --> N2_0
+ N2_1["分享与音乐礼物"]:::existing
+ N1_0 --> N2_1
+ N1_1 --> N2_1
+ N1_2 --> N2_1
+ N2_2["积分充值服务"]:::unconfirmed
+ N1_0 --> N2_2
+ N1_1 --> N2_2
+ N1_2 --> N2_2
+ N3_0["公开发布与歌手主页"]:::planned
+ N2_0 --> N3_0
+ N2_1 --> N3_0
+ N2_2 --> N3_0
+ N3_1["社区发现与反馈"]:::planned
+ N2_0 --> N3_1
+ N2_1 --> N3_1
+ N2_2 --> N3_1
+ N3_2["人工发行申请与跟进"]:::planned
+ N2_0 --> N3_2
+ N2_1 --> N3_2
+ N2_2 --> N3_2
+ N4_0["结束：完成自己的作品，获得传播、反馈或发行服务"]:::planned
+ N3_0 --> N4_0
+ N3_1 --> N4_0
+ N3_2 --> N4_0
+ classDef existing fill:#EAF0F6,stroke:#18334F,color:#18334F
+ classDef planned fill:#F4F0FA,stroke:#756AA4,stroke-dasharray:6 4,color:#18334F
+ classDef unconfirmed fill:#FFF4DF,stroke:#AA6B16,color:#18334F

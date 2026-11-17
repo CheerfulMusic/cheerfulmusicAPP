@@ -1,0 +1,19 @@
+flowchart TD
+ N0_0["开始：用户进入创作并登录"]:::existing
+ N1_0["用户：填写想法 → 获得歌词 → 修改并保存"]:::existing
+ N0_0 --> N1_0
+ N2_0["用户：确认歌词与音乐方向 → 提交制作"]:::existing
+ N1_0 --> N2_0
+ N3_0["歌曲可用：试听、采用"]:::existing
+ N2_0 --> N3_0
+ N3_1["制作失败：查看原因与处理"]:::existing
+ N2_0 --> N3_1
+ N3_2["仍待确认：继续查询或联系支持"]:::existing
+ N2_0 --> N3_2
+ N4_0["我的作品 → 下载 / 分享 / 制作音乐礼物"]:::existing
+ N3_0 --> N4_0
+ N5_0["结束：用户获得作品，接收者可访问有效分享"]:::existing
+ N4_0 --> N5_0
+ classDef existing fill:#EAF0F6,stroke:#18334F,color:#18334F
+ classDef planned fill:#F4F0FA,stroke:#756AA4,stroke-dasharray:6 4,color:#18334F
+ classDef unconfirmed fill:#FFF4DF,stroke:#AA6B16,color:#18334F

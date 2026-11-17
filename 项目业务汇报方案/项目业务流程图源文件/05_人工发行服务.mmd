@@ -1,0 +1,19 @@
+flowchart TD
+ N0_0["开始：用户选定成品，填写发行资料"]:::planned
+ N1_0["发行经办受理 → 资料完整、符合条件？"]:::planned
+ N0_0 --> N1_0
+ N2_0["不足：用户补件"]:::planned
+ N1_0 --> N2_0
+ N2_1["不符合：说明原因"]:::planned
+ N1_0 --> N2_1
+ N2_2["通过：确认服务与费用"]:::planned
+ N1_0 --> N2_2
+ N3_0["用户确认 → 经办人工邮件投递合作渠道"]:::planned
+ N2_2 --> N3_0
+ N4_0["等待渠道反馈 → 分别记录进度、拒绝或上线"]:::planned
+ N3_0 --> N4_0
+ N5_0["结束：用户查看结果或上线链接，必要时申诉"]:::planned
+ N4_0 --> N5_0
+ classDef existing fill:#EAF0F6,stroke:#18334F,color:#18334F
+ classDef planned fill:#F4F0FA,stroke:#756AA4,stroke-dasharray:6 4,color:#18334F
+ classDef unconfirmed fill:#FFF4DF,stroke:#AA6B16,color:#18334F

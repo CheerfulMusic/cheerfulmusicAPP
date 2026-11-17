@@ -1,0 +1,19 @@
+flowchart TD
+ N0_0["起点：现有创作、作品、分享与积分服务"]:::existing
+ N1_0["短期：关注收藏、主题活动、通知与代表作"]:::planned
+ N0_0 --> N1_0
+ N2_0["中期：自己的声音演唱"]:::planned
+ N1_0 --> N2_0
+ N2_1["中期：录唱与声音加工"]:::planned
+ N1_0 --> N2_1
+ N2_2["中期：持续创作权益"]:::planned
+ N1_0 --> N2_2
+ N3_0["长期：发行服务深化、创作协作与收益服务"]:::planned
+ N2_0 --> N3_0
+ N2_1 --> N3_0
+ N2_2 --> N3_0
+ N4_0["结束：按用户需求、实际成本与合作条件逐项开展"]:::planned
+ N3_0 --> N4_0
+ classDef existing fill:#EAF0F6,stroke:#18334F,color:#18334F
+ classDef planned fill:#F4F0FA,stroke:#756AA4,stroke-dasharray:6 4,color:#18334F
+ classDef unconfirmed fill:#FFF4DF,stroke:#AA6B16,color:#18334F

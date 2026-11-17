@@ -1,0 +1,20 @@
+flowchart TD
+ N0_0["开始：创作者提出制作或发表需求"]:::existing
+ N1_0["创作者：输入、修改、付款、选成品"]:::existing
+ N0_0 --> N1_0
+ N2_0["平台创作服务：提供歌曲、作品与分享"]:::existing
+ N1_0 --> N2_0
+ N2_1["运营人员：审核、补件、异常受理"]:::planned
+ N1_0 --> N2_1
+ N3_0["听众与收礼人：试听、分享、反馈"]:::existing
+ N2_0 --> N3_0
+ N2_1 --> N3_0
+ N3_1["发行经办：人工投递并跟进合作方"]:::planned
+ N2_0 --> N3_1
+ N2_1 --> N3_1
+ N4_0["用户：查看结果；完成、补充资料或提出申诉"]:::planned
+ N3_0 --> N4_0
+ N3_1 --> N4_0
+ classDef existing fill:#EAF0F6,stroke:#18334F,color:#18334F
+ classDef planned fill:#F4F0FA,stroke:#756AA4,stroke-dasharray:6 4,color:#18334F
+ classDef unconfirmed fill:#FFF4DF,stroke:#AA6B16,color:#18334F
