@@ -23,10 +23,13 @@ public class LyricsCompositionConfiguration {
     }
     @Bean @Profile({"mysql","test"})
     LyricSelectionRewriteService lyricSelectionRewriteService(WorkApi works, Environment env, com.qingfeng.music.credits.RewriteCharges charges) {
-        var writer = RewriteProviderSettings.writer(env).lyricSelectionMode();
+        var writer = RewriteProviderSettings.writer(env);
         var rewriter = new InspirationRewriteService(writer, env.getProperty("qingfeng.lyrics.enabled", Boolean.class, false),
             env.getProperty("qingfeng.inspiration.rewrite.concurrent-global", Integer.class, 4), charges);
         return new LyricSelectionRewriteService(works, rewriter);
+    }
+    public static boolean lyricSelectionRewriteConfigured(Environment env) {
+        return RewriteProviderSettings.settings(env).keyConfigured();
     }
     @Bean LyricsWriter lyricsWriter(Environment env){
         return switch(env.getProperty("qingfeng.lyrics.provider","openai").trim().toLowerCase(java.util.Locale.ROOT)){

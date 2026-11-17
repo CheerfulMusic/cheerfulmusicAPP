@@ -1,9 +1,11 @@
 package com.qingfeng.music.lyrics.application;
 import com.qingfeng.music.credits.RewriteCharges;
 import com.qingfeng.music.common.exception.DomainException;
+import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Semaphore;
+import java.util.function.Function;
 import java.util.function.UnaryOperator;
 
 /**
@@ -43,6 +45,21 @@ public final class InspirationRewriteService {
 
     String rewrite(String owner, String text, String language, String requestKey, int inputLimit, int outputLimit,
                    UnaryOperator<String> validateAndAssemble) {
+        return rewriteValidated(owner, text, language, requestKey, inputLimit, input -> writer.rewrite(input, language), result -> {
+            if (result == null || result.isBlank() || result.length() > outputLimit)
+                throw new DomainException("INVALID_REWRITE_RESPONSE", "改写结果不完整，请稍后重试；原文仍会保留。");
+            return validateAndAssemble.apply(result.trim());
+        });
+    }
+
+    String rewriteSelection(String owner, String text, String language, String requestKey, int inputLimit,
+                            List<Integer> targetIndices, Function<List<InspirationRewriter.Replacement>, String> assemble) {
+        return rewriteValidated(owner, text, language, requestKey, inputLimit,
+            input -> writer.rewriteSelection(input, language, targetIndices), assemble);
+    }
+
+    private <T> String rewriteValidated(String owner, String text, String language, String requestKey, int inputLimit,
+                                        Function<String, T> generate, Function<T, String> validateAndAssemble) {
         if (owner == null || owner.isBlank()) throw new DomainException("INVALID_REWRITE_REQUEST", "请刷新页面后重试改写。");
         if (text == null || text.isBlank() || text.length() > inputLimit || !Set.of("zh-CN", "en", "mixed").contains(language == null ? "" : language))
             throw new DomainException("INVALID_REWRITE_REQUEST", inputLimit==4000 ? "请填写1至4000字的创作灵感后再改写。" : "歌词内容无效，请检查歌词后再重写。");
@@ -59,11 +76,9 @@ public final class InspirationRewriteService {
             boolean received=false;
             charges.submitted(owner,requestKey);
             try {
-                String result = writer.rewrite(text.trim(), language);
+                T result = generate.apply(text.trim());
                 received=true;
-                if (result == null || result.isBlank() || result.length() > outputLimit)
-                    throw new DomainException("INVALID_REWRITE_RESPONSE", "改写结果不完整，请稍后重试；原文仍会保留。");
-                validated = validateAndAssemble.apply(result.trim());
+                validated = validateAndAssemble.apply(result);
             } catch (RuntimeException error) {
                 // Only an explicit rejection or a received invalid result proves a final failure.
                 if(received || error instanceof DomainException domain && Set.of("REWRITE_PROVIDER_UNAVAILABLE","REWRITE_PROVIDER_REJECTED","INVALID_REWRITE_RESPONSE").contains(domain.code()))
@@ -80,10 +95,11 @@ public final class InspirationRewriteService {
         }
     }
 
-    /** 同一请求键重复提交：已成功直接返回上次结果，已失败或仍在处理中则明确拒绝，不重复调用模型。 */
+    /** 同一请求键只返回历史结果或当前状态。 */
     private String replay(RewriteCharges.Reservation reservation) {
         if ("SUCCEEDED".equals(reservation.status())) return reservation.result() == null ? "" : reservation.result();
         if ("FAILED".equals(reservation.status())) throw new DomainException("REWRITE_REQUEST_FAILED", "上次改写未完成，可以重新发起一次改写。");
+        if ("UNKNOWN".equals(reservation.status())) throw new DomainException("REWRITE_PROVIDER_RESULT_UNKNOWN", "上次改写未取得结果，原文仍会保留。");
         throw new DomainException("REWRITE_REQUEST_PENDING", "这次改写正在处理中，请稍后再试。");
     }
     private DomainException busy() { return new DomainException("REWRITE_GENERATION_BUSY", "AI改写正在处理中，请稍后再试。"); }

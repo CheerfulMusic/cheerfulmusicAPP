@@ -194,7 +194,7 @@ async function save() {
 }
 async function changeVisibility(published: boolean) {
   if (busy.value || (published && (dirty.value || !profile.value?.stageName))) return
-  if (!published && !window.confirm(t('隐藏主页后，访客将无法访问主页和其中的歌曲，已发布到「发现」的歌曲也会撤回。确定隐藏吗？'))) return
+  if (!published && !window.confirm(t('隐藏主页后，访客将无法访问主页和其中的歌曲，已发布到「广场」的歌曲也会撤回。确定隐藏吗？'))) return
   notice.value = ''
   error.value = ''
   saving.value = true
@@ -208,7 +208,7 @@ async function changeVisibility(published: boolean) {
 }
 async function remove(song: ArtistRelease) {
   const prompt = song.onDiscover
-    ? '《{title}》将从歌手主页和「发现」移除，原作品仍保存在「我的音乐」。确定移出吗？'
+    ? '《{title}》将从歌手主页和「广场」移除，原作品仍保存在「我的音乐」。确定移出吗？'
     : '从主页移出《{title}》？'
   if (busy.value || !window.confirm(t(prompt, { title: song.title }))) return
   notice.value = ''
@@ -221,13 +221,13 @@ async function remove(song: ArtistRelease) {
   finally { saving.value = false }
 }
 async function withdraw(song: ArtistRelease) {
-  if (busy.value || !window.confirm(t('从「发现」撤回《{title}》？访客仍可在你的歌手主页试听。', { title: song.title }))) return
+  if (busy.value || !window.confirm(t('从「广场」撤回《{title}》？访客仍可在你的歌手主页试听。', { title: song.title }))) return
   notice.value = ''
   error.value = ''
   saving.value = true
   try {
     updateProfile(await withdrawSongFromDiscover(song.workId))
-    notice.value = '歌曲已从发现撤回。'
+    notice.value = '歌曲已从广场撤回。'
   } catch (cause) { report(cause, '暂时无法撤回歌曲，请重试。') }
   finally { saving.value = false }
 }

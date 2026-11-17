@@ -14,7 +14,7 @@ import java.util.regex.Pattern;
 /** Produces a preview from the current editor draft. Saving the draft is a separate action. */
 public final class LyricSelectionRewriteService {
     private static final int MAX_LYRICS_LENGTH = 12000;
-    private static final int MAX_PROVIDER_TEXT = 50000;
+    private static final int MAX_PROMPT_LENGTH = 100000;
     private static final Pattern SECTION = Pattern.compile("^\\s*\\[.*\\]\\s*$", Pattern.UNICODE_CHARACTER_CLASS);
     private static final Pattern BLANK = Pattern.compile("^\\s*$", Pattern.UNICODE_CHARACTER_CLASS);
     private static final Pattern LINE_BREAK = Pattern.compile("\\R");
@@ -43,30 +43,28 @@ public final class LyricSelectionRewriteService {
         }
         if (targets.isEmpty()) throw invalidSelection();
 
-        // Stable across retries and bound to this draft, work version, and kept positions.
+        // Keep the existing key derivation for retries across server updates.
         var material = "lyric-selection\n" + work + '\n' + version + '\n' + requestId + '\n' + language + '\n' + prompt;
         var requestKey = UUID.nameUUIDFromBytes(material.getBytes(StandardCharsets.UTF_8)).toString();
-        return rewriter.rewrite(owner, prompt.toString(), language, requestKey, 100000, MAX_PROVIDER_TEXT, candidate -> {
-            var result = assemble(lines, targets, candidate);
-            requireVersion(owner, work, version);
-            return result;
-        });
+        return rewriter.rewriteSelection(owner, prompt.toString(), language, requestKey, MAX_PROMPT_LENGTH,
+            targets.stream().sorted().toList(), candidate -> {
+                var result = assemble(lines, targets, candidate);
+                requireVersion(owner, work, version);
+                return result;
+            });
     }
 
-    private static String assemble(String[] source, Set<Integer> targets, String candidate) {
+    private static String assemble(String[] source, Set<Integer> targets, List<InspirationRewriter.Replacement> candidate) {
+        if (candidate == null || candidate.size() != targets.size()) throw invalidPreview();
         Map<Integer, String> replacements = new HashMap<>();
-        for (String row : candidate.split("\n", -1)) {
-            int separator = row.indexOf('\t');
-            if (separator <= 0) throw invalidPreview();
-            int index;
-            try { index = Integer.parseInt(row.substring(0, separator)); }
-            catch (NumberFormatException invalid) { throw invalidPreview(); }
-            String replacement = row.substring(separator + 1).strip();
+        for (var row : candidate) {
+            if (row == null || row.text() == null) throw invalidPreview();
+            int index = row.index();
+            String replacement = row.text().strip();
             if (!targets.contains(index) || !isLyric(replacement) || replacement.indexOf('\t') >= 0
                     || replacement.equals(source[index].strip())
                     || replacements.putIfAbsent(index, replacement) != null) throw invalidPreview();
         }
-        if (replacements.size() != targets.size()) throw invalidPreview();
         var result = source.clone();
         replacements.forEach((index, replacement) -> result[index] = replacement);
         String lyrics = String.join("\n", result);

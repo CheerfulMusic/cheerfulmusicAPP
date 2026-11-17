@@ -468,7 +468,7 @@ class IntegratedPaymentApplicationMySqlTest {
         assertEquals("LYRICS_PROVIDER_TIMEOUT",assertThrows(DomainException.class,()->composer.composeCustom(owner,work,0,key,"en","",null,null,false)).code());
         assertEquals("UNKNOWN",composer.requestState(owner,work,key).status());assertEquals(8,ledger.balance(owner));assertEquals(1,primary.calls.get());assertEquals(0,backup.calls.get());assertEquals(0,shared.calls.get());
         assertEquals("LYRICS_REQUEST_PENDING",assertThrows(DomainException.class,()->composer.composeCustom(owner,work,0,key,"en","",null,null,false)).code());
-        assertEquals("LYRICS_REQUEST_PENDING",assertThrows(DomainException.class,()->composer.composeCustom(owner,work,0,UUID.randomUUID().toString(),"en","",null,null,false)).code());
+        assertEquals(0,application.getBean(JdbcUsageBudget.class).allowance(owner,UsageBudget.Kind.LYRICS).active());
         assertEquals(1,primary.calls.get());assertEquals(0,backup.calls.get());assertEquals(8,ledger.balance(owner));assertEquals(0,number("SELECT COUNT(*) FROM credit_ledger WHERE owner_id=? AND entry_type='REFUND'",owner));assertEquals(1,number("SELECT COUNT(*) FROM credit_consumption WHERE owner_id=? AND work_id=? AND request_key=? AND task_status='UNKNOWN' AND refunded=0 AND amount=2",owner,work,key));
         assertTrue(application.getBean(LyricsApi.class).list(owner,work).isEmpty());
         for(String failure:List.of("LYRICS_PROVIDER_CONNECT_FAILED","LYRICS_PROVIDER_REJECTED")){

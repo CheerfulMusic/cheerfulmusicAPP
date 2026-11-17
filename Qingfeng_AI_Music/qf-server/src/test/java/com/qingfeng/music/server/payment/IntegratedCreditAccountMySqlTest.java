@@ -148,6 +148,25 @@ class IntegratedCreditAccountMySqlTest {
         assertEquals(before,ledger.balance(legacy.owner()));
         assertThrows(DataAccessException.class,()->db.update("UPDATE p0_credit_writer_policy SET protocol=1 WHERE id=1"));
     }
+    @Test void chargesAndRefundsWhenConnectionAndWriterEpochUseDifferentCollations(){
+        String owner=newOwner(),reference="music:"+unique();
+        tx.executeWithoutResult(status->{
+            String epochCollation=db.queryForObject("SELECT COLLATION(epoch) FROM p0_credit_writer_policy WHERE id=1",String.class);
+            String connectionCollation="utf8mb4_0900_ai_ci".equals(epochCollation)?"utf8mb4_unicode_ci":"utf8mb4_0900_ai_ci";
+            db.execute("SET NAMES utf8mb4 COLLATE "+connectionCollation);
+            assertEquals(connectionCollation,db.queryForObject("SELECT @@collation_connection",String.class));
+
+            ledger.credit(owner,100,"admin:"+unique());
+            ledger.debit(owner,20,reference);
+            ledger.debit(owner,20,reference);
+            assertEquals(80,ledger.balance(owner));
+            assertEquals(1,number("SELECT COUNT(*) FROM credit_ledger WHERE entry_type='DEBIT' AND reference_id=?",reference));
+
+            ledger.refund(owner,reference);
+            assertEquals(100,ledger.balance(owner));
+            assertNull(db.queryForObject("SELECT @qf_credit_writer_epoch",String.class));
+        });
+    }
     @Test void successfulThenFailedRefundRestoresOnceAndRejectsStaleSuccess(){
         var p=paid();String refund="re_"+unique(),movement="txn_"+unique();success(p,refund,198);assertEquals(80,ledger.balance(p.owner()));
         assertThrows(IllegalStateException.class,()->failed(p,refund,198,"failed"));assertEquals(80,ledger.balance(p.owner()));
@@ -426,24 +445,28 @@ class IntegratedCreditAccountMySqlTest {
         var p=paid();var old=new JdbcCreditsLedger(db,tx);assertThrows(DataAccessException.class,()->old.credit(p.owner(),30,"raw-old:"+unique()));assertEquals(100,ledger.balance(p.owner()));
     }
 
-    @Test void lyricsUnknownRetainsOriginalDebitAndCapacityAndLateSuccessCompletesWithoutRecharging(){
+    @Test void lyricsUnknownReleasesCapacityButRetainsTheOriginalDebitAndLateResult(){
         String owner=newOwner(),work=work(owner),key=unique();ledger.credit(owner,20,"lyrics-fund:"+owner);var budget=budget();var requests=new JdbcCompositionRequests(db,budget,tx,ledger,new JdbcCreditConsumptions(db,tx));
         assertTrue(requests.claim(owner,work,key,"synthetic-request"));assertEquals(15,ledger.balance(owner));requests.unknown(work,key,"LYRICS_PROVIDER_TIMEOUT");
-        assertEquals("UNKNOWN",requests.find(work,key).orElseThrow().status());assertEquals(15,ledger.balance(owner));assertEquals(1,budget.allowance(owner,UsageBudget.Kind.LYRICS).active());
-        db.update("UPDATE lyrics_composition_request SET created_at=TIMESTAMPADD(SECOND,-600,CURRENT_TIMESTAMP) WHERE work_id=? AND request_key=?",work,key);
-        assertEquals(1,budget.allowance(owner,UsageBudget.Kind.LYRICS).active());assertFalse(requests.claim(owner,work,unique(),"different-request"));requests.complete(work,key,unique());
+        assertEquals("UNKNOWN",requests.find(work,key).orElseThrow().status());assertEquals(15,ledger.balance(owner));
+        assertEquals(0,budget.allowance(owner,UsageBudget.Kind.LYRICS).active());
+        assertFalse(requests.claim(owner,work,key,"synthetic-request"));
+        requests.complete(work,key,unique());
         assertEquals("SUCCEEDED",requests.find(work,key).orElseThrow().status());assertEquals(15,ledger.balance(owner));assertEquals(0,budget.allowance(owner,UsageBudget.Kind.LYRICS).active());assertEquals(0,number("SELECT COUNT(*) FROM credit_ledger WHERE owner_id=? AND entry_type='REFUND'",owner));
     }
     private static String work(String owner){String id=unique();db.update("INSERT INTO creator_session(token_hash,creator_id,expires_at) VALUES(?,?,TIMESTAMPADD(HOUR,1,CURRENT_TIMESTAMP))",unique(),owner);db.update("INSERT INTO music_work(id,owner_id,recipient,occasion,story,message,style,title,version,created_at,updated_at) VALUES(?,?,'offline','birthday','fiction','message','pop','synthetic',0,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)",id,owner);return id;}
     private static JdbcUsageBudget budget(){var limits=new EnumMap<UsageBudget.Kind,JdbcUsageBudget.Limits>(UsageBudget.Kind.class);for(var kind:UsageBudget.Kind.values())limits.put(kind,new JdbcUsageBudget.Limits(-1,-1,10,100));CreditsPricing pricing=new CreditsPricing(){public boolean enabled(){return true;}public long cost(Kind kind){return 5;}public long freePerDay(Kind kind){return 0;}};return new JdbcUsageBudget(db,tx,limits,Clock.systemUTC(),ZoneOffset.UTC).withCredits(ledger,new JdbcCreditConsumptions(db,tx),pricing);}
 
-    @Test void rewriteUnknownPreservesChargeBlocksResubmissionAndAcceptsOneLateSuccess(){
+    @Test void rewriteUnknownPreservesChargeAndReleasesCapacityForANewKey(){
         String owner=newOwner(),key=unique();ledger.credit(owner,10,"rewrite-fund:"+owner);var charges=rewriteCharges();var calls=new java.util.concurrent.atomic.AtomicInteger();
         InspirationRewriter writer=new InspirationRewriter(){public boolean isConfigured(){return true;}public String rewrite(String text,String language){calls.incrementAndGet();throw new DomainException("REWRITE_PROVIDER_RESULT_UNKNOWN","offline timeout");}};
         var service=new InspirationRewriteService(writer,true,3,charges);assertEquals("REWRITE_PROVIDER_RESULT_UNKNOWN",assertThrows(DomainException.class,()->service.rewrite(owner,"fiction","en",key)).code());
         assertEquals(9,ledger.balance(owner));assertEquals("UNKNOWN",db.queryForObject("SELECT status FROM rewrite_consumption WHERE creator_id=? AND request_key=?",String.class,owner,key));
-        assertEquals("REWRITE_REQUEST_PENDING",assertThrows(DomainException.class,()->service.rewrite(owner,"fiction","en",key)).code());assertEquals("REWRITE_GENERATION_BUSY",assertThrows(DomainException.class,()->service.rewrite(owner,"fiction","en",unique())).code());assertEquals(1,calls.get());
-        charges.fail(owner,key);assertEquals(9,ledger.balance(owner));charges.succeed(owner,key,"late valid result");charges.succeed(owner,key,"late valid result");assertEquals("late valid result",service.rewrite(owner,"fiction","en",key));assertEquals(1,calls.get());assertEquals(9,ledger.balance(owner));assertEquals(0,number("SELECT COUNT(*) FROM credit_ledger WHERE owner_id=? AND entry_type='REFUND'",owner));
+        assertEquals("REWRITE_PROVIDER_RESULT_UNKNOWN",assertThrows(DomainException.class,()->service.rewrite(owner,"fiction","en",key)).code());assertEquals(1,calls.get());
+        String next=unique();assertTrue(charges.reserve(owner,next).fresh());assertEquals(8,ledger.balance(owner));
+        assertEquals("REWRITE_GENERATION_BUSY",assertThrows(DomainException.class,()->charges.reserve(owner,unique())).code());
+        charges.submitted(owner,next);charges.succeed(owner,next,"new result");assertEquals(8,ledger.balance(owner));
+        charges.fail(owner,key);assertEquals(8,ledger.balance(owner));charges.succeed(owner,key,"late valid result");charges.succeed(owner,key,"late valid result");assertEquals("late valid result",service.rewrite(owner,"fiction","en",key));assertEquals(1,calls.get());assertEquals(8,ledger.balance(owner));assertEquals(0,number("SELECT COUNT(*) FROM credit_ledger WHERE owner_id=? AND entry_type='REFUND'",owner));
         assertThrows(DomainException.class,()->charges.succeed(owner,key,"conflicting result"));
     }
 
@@ -453,11 +476,12 @@ class IntegratedCreditAccountMySqlTest {
         assertEquals(9,ledger.balance(owner));assertEquals("FAILED",db.queryForObject("SELECT status FROM rewrite_consumption WHERE creator_id=? AND request_key=?",String.class,owner,key));assertEquals(1,number("SELECT restored FROM p0_credit_allocation WHERE debit_reference=?","rewrite:"+owner+":"+key));
     }
 
-    @Test void rewriteStaleSubmittedReservationNeverRefundsAndNewKeyCannotRun(){
+    @Test void rewriteStaleSubmittedReservationReleasesCapacityWithoutRefund(){
         String owner=newOwner(),key=unique();ledger.credit(owner,10,"rewrite-submitted:"+owner);var charges=rewriteCharges();charges.reserve(owner,key);charges.submitted(owner,key);
         db.update("UPDATE rewrite_consumption SET created_at=TIMESTAMPADD(SECOND,-600,CURRENT_TIMESTAMP) WHERE creator_id=? AND request_key=?",owner,key);
-        assertEquals("REWRITE_GENERATION_BUSY",assertThrows(DomainException.class,()->charges.reserve(owner,unique())).code());assertEquals("UNKNOWN",db.queryForObject("SELECT status FROM rewrite_consumption WHERE creator_id=? AND request_key=?",String.class,owner,key));assertEquals(9,ledger.balance(owner));assertEquals(0,number("SELECT COUNT(*) FROM credit_ledger WHERE owner_id=? AND entry_type='REFUND'",owner));
-        charges.succeed(owner,key,"recovered result");assertEquals(9,ledger.balance(owner));
+        String next=unique();assertTrue(charges.reserve(owner,next).fresh());assertEquals("UNKNOWN",db.queryForObject("SELECT status FROM rewrite_consumption WHERE creator_id=? AND request_key=?",String.class,owner,key));assertEquals(8,ledger.balance(owner));assertEquals(0,number("SELECT COUNT(*) FROM credit_ledger WHERE owner_id=? AND entry_type='REFUND'",owner));
+        charges.succeed(owner,key,"recovered result");assertEquals(8,ledger.balance(owner));
+        charges.fail(owner,next);
     }
 
     @Test void rewriteExplicitProviderRejectionRestoresCreditsOnceAndCannotLaterMintAResult(){

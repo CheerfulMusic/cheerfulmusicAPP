@@ -1,6 +1,7 @@
 package com.qingfeng.music.lyrics.application;
 import java.util.Optional;
 public interface CompositionRequests {
+    int PENDING_TIMEOUT_SECONDS = 180;
     record Entry(String status,String revisionId,String requestHash,String errorCode) {
         public Entry(String status,String revisionId,String requestHash){this(status,revisionId,requestHash,null);}
         public Entry(String status,String revisionId){this(status,revisionId,null);}

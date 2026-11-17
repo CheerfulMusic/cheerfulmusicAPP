@@ -1,3 +1,4 @@
+import type { GenerationPublication } from '../model/generation-recovery'
 import type {LyricsStructure, LyricsTemplateId} from '../model/lyrics-structure'
 import { ensureCreator, requestJson, apiUrl, uploadForm } from '../../../shared/http/api-client'
 export interface Revision { id: string; workId: string; workVersion: number; title: string; lyrics: string; source: string; confirmed: boolean; createdAt: string; language?: string|null; templateId?: LyricsTemplateId|null; chorusFirst?: boolean|null; customSections?: string[]|null }
@@ -8,9 +9,10 @@ export interface GenerationTask { id: string; revisionId: string; requestKey?:st
 export const closeTaskChecking=(work:string,task:string)=>call<GenerationTask>(`app/works/${work}/generations/${task}/close-checking`,'POST',{acknowledge:true})
 async function call<T>(path: string, method = 'GET', body?: unknown) { await ensureCreator(); return requestJson<T>(path, method, body) }
 export const listRevisions = (work: string) => call<Revision[]>(`app/works/${work}/lyrics`)
-export async function generateLyrics(work: string, workVersion: number, requestKey: string, language: string, instructions = '', baseRevisionId?: string, structure?: LyricsStructure) {
+export async function generateLyrics(work: string, workVersion: number, requestKey: string, language: string, instructions = '', baseRevisionId?: string, structure?: LyricsStructure, rewriteSource?: string) {
   await ensureCreator()
-  return requestJson<Revision>(`app/works/${work}/lyrics/generate`, 'POST', {workVersion, requestKey, language, instructions, baseRevisionId, ...structure}, 120000)
+  const rewrite = rewriteSource === undefined ? {} : { rewriteAll: true, sourceLyrics: rewriteSource }
+  return requestJson<Revision>(`app/works/${work}/lyrics/generate`, 'POST', {workVersion, requestKey, language, instructions, baseRevisionId, ...structure, ...rewrite}, 120000)
 }
 export function generatePhotoLyrics(work: string, version: number, key: string, language: string, photos: readonly File[]) {
   const form = new FormData()
@@ -63,14 +65,15 @@ export async function rhymeLyricLine(work: string, input: LyricRhymeRequest) {
   await ensureCreator()
   return requestJson<LyricRhymeResult>(`app/works/${encodeURIComponent(work)}/lyrics/rhyme-line`, 'POST', input, 60000)
 }
-export async function rewriteLyricSelection(work: string, input: {requestId: string; workVersion: number; lyrics: string; keptLines: number[]; language: string}) {
+export interface LyricSelectionInput {requestId: string; workVersion: number; lyrics: string; keptLines: number[]; language: string}
+export async function rewriteLyricSelection(work: string, input: LyricSelectionInput) {
   await ensureCreator()
   return requestJson<{lyrics: string}>(`app/works/${encodeURIComponent(work)}/lyrics/rewrite-selection`, 'POST', input, 110000)
 }
 export const confirmRevision = (work: string, revision: string) => call<Revision>(`app/works/${work}/lyrics/${revision}/confirm`, 'POST', {})
 export const listAudio = (work: string) => call<AudioAsset[]>(`app/works/${work}/audio`)
 export const listTasks = (work: string) => call<GenerationTask[]>(`app/works/${work}/generations`)
-export const submitTask = (work: string, revisionId: string, requestKey: string) => call<GenerationTask>(`app/works/${work}/generations`, 'POST', { revisionId, requestKey })
+export const submitTask = (work: string, revisionId: string, requestKey: string, publication?: GenerationPublication) => call<GenerationTask>(`app/works/${work}/generations`, 'POST', { revisionId, requestKey, ...(publication?.scope === 'public' ? { publishToDiscover: true, stageName: publication.stageName } : {}) })
 export interface GenerationPreflight {workVersion:number;revisionId:string;styleCharacters:number;styleLimit:number;negativeCharacters:number;negativeLimit:number;notice:string}
 export const preflightGeneration=(work:string,revisionId:string)=>call<GenerationPreflight>(`app/works/${work}/generations/preflight`,'POST',{revisionId})
 export const retryTaskArchive = (work: string, task: string) => call<void>(`app/works/${work}/generations/${task}/retry-archive`, 'POST', {})

@@ -36,11 +36,13 @@ class QwenLyricsFlowTest {
   var calls=new AtomicInteger();
   var previewWriter=new InspirationRewriter(){
    public boolean isConfigured(){return true;}
-   public String rewrite(String prompt,String language){
+   public String rewrite(String prompt,String language){throw new AssertionError("Selection needs structured replacements");}
+   public List<Replacement> rewriteSelection(String prompt,String language,List<Integer> targetIndices){
     calls.incrementAndGet();
     assertTrue(prompt.contains("原样保留的行号：[2, 5]"));
     assertTrue(prompt.contains("2\t  这一晚没有特别的事。  \n3\t\n4\t[Chorus]"));
-    return "6\t让灯亮着，听一会儿风\n1\t洗碗池里的水渐渐凉了";
+    assertEquals(List.of(1,6), targetIndices);
+    return List.of(new Replacement(6,"让灯亮着，听一会儿风"),new Replacement(1,"洗碗池里的水渐渐凉了"));
    }
   };
   var service=new LyricSelectionRewriteService(works,new InspirationRewriteService(previewWriter,true,2,rewriteCharges));
@@ -58,10 +60,18 @@ class QwenLyricsFlowTest {
   String owner=identity.create().creatorId();
   var work=works.create(owner,new WorkApi.Draft("","","晚饭后的故事","","民谣",""));
   String source="[Verse]\n第一句\n要保留的句子\n最后一句";
-  for(String answer:List.of("1\t新句", "1\t新句\n1\t另一个新句", "1\t新句\n2\t改掉原句\n3\t新末句", "1\t第一句\n3\t新末句")){
+  var first = new InspirationRewriter.Replacement(1,"新句");
+  var last = new InspirationRewriter.Replacement(3,"新末句");
+  for(var answer:List.of(
+      List.of(first),
+      List.of(first,new InspirationRewriter.Replacement(1,"另一个新句")),
+      List.of(first,new InspirationRewriter.Replacement(2,"改掉原句")),
+      List.of(new InspirationRewriter.Replacement(1,"第一句"),last),
+      List.of(new InspirationRewriter.Replacement(1,"新句\n多一行"),last))){
    var previewWriter=new InspirationRewriter(){
     public boolean isConfigured(){return true;}
-    public String rewrite(String prompt,String language){return answer;}
+    public String rewrite(String prompt,String language){throw new AssertionError("Selection needs structured replacements");}
+    public List<Replacement> rewriteSelection(String prompt,String language,List<Integer> targetIndices){return answer;}
    };
    var service=new LyricSelectionRewriteService(works,new InspirationRewriteService(previewWriter,true,2,rewriteCharges));
    UUID key=UUID.randomUUID();
@@ -70,6 +80,31 @@ class QwenLyricsFlowTest {
    assertEquals("REWRITE_REQUEST_FAILED",assertThrows(DomainException.class,
        ()->service.preview(owner,work.id(),0,key,source,List.of(2),"zh-CN")).code());
   }
+  assertTrue(lyrics.list(owner,work.id()).isEmpty());
+ }
+ @Test void selectionPreviewTimeoutReleasesCapacityWithoutRerunningTheSameKey(){
+  String owner=identity.create().creatorId();
+  var work=works.create(owner,new WorkApi.Draft("","","晚饭后的故事","","民谣",""));
+  String source="[Verse]\n第一句\n要保留的句子";
+  var calls=new AtomicInteger();
+  var previewWriter=new InspirationRewriter(){
+   public boolean isConfigured(){return true;}
+   public String rewrite(String prompt,String language){throw new AssertionError("Selection needs structured replacements");}
+   public List<Replacement> rewriteSelection(String prompt,String language,List<Integer> targetIndices){
+    if(calls.incrementAndGet()==1)throw new DomainException("REWRITE_PROVIDER_RESULT_UNKNOWN","AI改写等待模型响应超时");
+    return List.of(new Replacement(1,"新的第一句"));
+   }
+  };
+  var service=new LyricSelectionRewriteService(works,new InspirationRewriteService(previewWriter,true,2,rewriteCharges));
+  UUID key=UUID.randomUUID();
+  assertEquals("REWRITE_PROVIDER_RESULT_UNKNOWN",assertThrows(DomainException.class,
+      ()->service.preview(owner,work.id(),0,key,source,List.of(2),"zh-CN")).code());
+  assertEquals("REWRITE_PROVIDER_RESULT_UNKNOWN",assertThrows(DomainException.class,
+      ()->service.preview(owner,work.id(),0,key,source,List.of(2),"zh-CN")).code());
+  assertEquals(1,calls.get());
+  assertEquals("[Verse]\n新的第一句\n要保留的句子",
+      service.preview(owner,work.id(),0,UUID.randomUUID(),source,List.of(2),"zh-CN"));
+  assertEquals(2,calls.get());
   assertTrue(lyrics.list(owner,work.id()).isEmpty());
  }
  @Test void templateReachesWriterAndMismatchNeverCreatesRevisionOrRetries(){

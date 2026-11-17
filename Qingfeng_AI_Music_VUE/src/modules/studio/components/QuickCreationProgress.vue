@@ -1,7 +1,10 @@
 <script setup lang="ts">
+import { lyricTimeoutMessage } from '../../works/model/lyric-recovery'
 import {ref,onMounted,onBeforeUnmount,computed,watch} from 'vue'
 import {t} from '../../../shared/i18n'
 import {latestQuickCreation,retryQuickCreation,quickInProgress,type QuickCreation} from '../api/quick-creation'
+import {useCredits} from '../../../shared/credits/useCredits'
+import {quickCreationCost} from '../../../shared/credits/credit-gate'
 import MusicGenerationDialog from '../../works/components/MusicGenerationDialog.vue'
 const props=withDefaults(defineProps<{
  workId:string;title?:string;autoOpen?:boolean;resultReady?:boolean;initialFlow?:QuickCreation|null
@@ -10,6 +13,8 @@ const props=withDefaults(defineProps<{
 }>(),{title:'',autoOpen:true,resultReady:false,completionMode:'reveal',dialogOpen:undefined})
 const emit=defineEmits<{checked:[ok:boolean];busy:[value:boolean];updated:[value:QuickCreation];resolved:[value:QuickCreation|null];view:[];visibility:[value:boolean]}>()
 const flow=ref<QuickCreation|null>(null),issue=ref(''),retrying=ref(false),loaded=ref(false)
+const {credits,refreshCredits}=useCredits(()=>props.workId)
+const retryCost=computed(()=>flow.value?.revisionId?credits.value?.musicCost??null:quickCreationCost(credits.value))
 const localOpen=ref(false)
 const open=computed(()=>props.dialogOpen??localOpen.value)
 function setOpen(value:boolean){
@@ -20,12 +25,13 @@ let openedFlow='',presentedResult=''
 let alive=true,polling=false,workSequence=0
 const labels:Record<string,string>={QUEUED:'创作已排队',WRITING:'正在编写歌词',LYRICS_READY:'歌词已完成 正在准备音乐',SUBMITTING_MUSIC:'正在准备音乐',MUSIC_QUEUED:'音乐已排队',SUBMITTING:'正在提交音乐',RUNNING:'正在制作音乐',SAVING:'正在保存音频',SUBMISSION_UNKNOWN:'提交结果待核对',SUCCEEDED:'你的歌曲已完成',FAILED:'这次创作暂未完成',CANCELLED:'已撤销'}
 const active=computed(()=>!!flow.value&&quickInProgress(flow.value.status))
-const uncertainLyrics=computed(()=>flow.value?.errorCode==='LYRICS_SUBMISSION_UNKNOWN')
+const uncertainLyrics=computed(()=>flow.value?.status==='SUBMISSION_UNKNOWN'&&flow.value.errorCode==='LYRICS_SUBMISSION_UNKNOWN')
 const dialogStatus=computed(()=>flow.value?.status==='QUEUED'&&flow.value.taskId?'MUSIC_QUEUED':flow.value?.status||props.submissionStatus||'QUEUED')
 const failureCopy=computed(()=>{
  const code=flow.value?.errorCode
  if(code==='INSUFFICIENT_CREDITS')return '积分不足 已有歌词已保留 充值后可继续生成音乐'
  if(code==='WORK_VERSION_CONFLICT')return '内容已经修改 请使用自定义创作继续完善当前作品'
+ if(code==='LYRICS_SUBMISSION_UNKNOWN')return lyricTimeoutMessage
  if(code==='LYRICS_PROVIDER_CONNECT_FAILED')return '暂时连不上歌词服务，创作描述已保留，可以稍后重试。'
  if(code?.startsWith('LYRICS_'))return '歌词暂未生成，故事已保留。可以重试歌词生成，或切换到自定义创作。'
  if(code?.includes('QUOTA'))return '本次创作额度暂不可用 已有内容已保留'
@@ -33,6 +39,7 @@ const failureCopy=computed(()=>{
 })
 function receive(result:QuickCreation|null){
  const previous=flow.value;flow.value=result;issue.value='';emit('resolved',result);emit('busy',!!result&&quickInProgress(result.status))
+ if(result?.canRetry&&(!previous?.canRetry||previous.id!==result.id))void refreshCredits().catch(()=>{})
  if(result&&(previous?.id!==result.id||previous.status!==result.status||previous.revisionId!==result.revisionId||previous.taskId!==result.taskId))emit('updated',result)
  if(result&&props.dialogOpen===undefined&&props.autoOpen&&quickInProgress(result.status)&&openedFlow!==result.id){openedFlow=result.id;setOpen(true)}
 }
@@ -94,6 +101,7 @@ onBeforeUnmount(()=>{alive=false;window.clearInterval(timer);document.removeEven
    <strong>{{ t(uncertainLyrics?'歌词结果待核对':flow?labels[flow.status]||'正在核对创作进度':'正在核对创作进度') }}</strong>
    <p v-if="flow">{{ t(uncertainLyrics?'歌词服务连接中断，创作描述已保留。可以刷新查看，请勿重复提交。':active?'可以离开页面 在我的音乐中继续查看进度':flow.status==='SUCCEEDED'?(resultReady?'歌曲已保存 可以试听与分享':'正在读取歌曲，请稍候…'):failureCopy) }}</p>
    <p v-if="issue" role="alert">{{ t(issue) }}</p>
+   <p v-if="flow?.canRetry&&retryCost!==null">{{ t('重试预计消耗 {cost} 积分',{cost:retryCost}) }}</p>
    <div class="actions">
     <button v-if="flow&&active" class="button" @click="setOpen(true)">{{ t('查看生成进度') }}</button>
     <button v-if="flow?.status==='SUCCEEDED'&&resultReady&&completionMode==='navigate'" class="button" @click="emit('view')">{{ t('试听歌曲') }}</button>

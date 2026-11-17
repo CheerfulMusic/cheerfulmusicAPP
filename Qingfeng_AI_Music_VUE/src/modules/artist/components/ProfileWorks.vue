@@ -62,7 +62,7 @@ const rows = computed(() => tab.value === 'library' ? libraryRows.value : publis
 function publicationLabel(song?: ArtistRelease) {
   if (!song) return '仅自己可见'
   if (!props.published) return '主页未公开'
-  return song.onDiscover ? '已发布到发现' : '已在主页展示'
+  return song.onDiscover ? '已发布到广场' : '已在主页展示'
 }
 
 async function load() {
@@ -126,7 +126,7 @@ onBeforeUnmount(() => {
       <button type="button" class="text-button" @click="load">{{ t('重试') }}</button>
     </div>
     <div v-else-if="!rows.length" class="profile-works-message">
-      <p>{{ t(tab === 'published' ? '打开一首已完成的歌曲，选择「公开到主页」。' : '第一首歌，从你的故事开始。') }}</p>
+      <p>{{ t(tab === 'published' ? '打开一首已完成的歌曲，选择「发布到广场」。' : '第一首歌，从你的故事开始。') }}</p>
       <button v-if="tab === 'published'" type="button" class="text-button" @click="tab = 'library'">{{ t('我的作品') }}</button>
       <RouterLink v-else to="/create" class="text-button">{{ t('开始创作') }}</RouterLink>
     </div>
@@ -149,10 +149,10 @@ onBeforeUnmount(() => {
         </RouterLink>
         <div v-if="row.release" class="profile-work-actions">
           <button v-if="row.release.onDiscover" type="button" class="profile-work-remove text-button" :disabled="busy" @click="emit('withdraw', row.release)">
-            {{ t('从发现撤回') }}
+            {{ t('从广场撤回') }}
           </button>
           <button v-else-if="published" type="button" class="text-button" :disabled="busy" @click="emit('publish', row.release)">
-            {{ t('发布到发现') }}
+            {{ t('发布到广场') }}
           </button>
           <button type="button" class="profile-work-remove text-button" :disabled="busy" @click="emit('remove', row.release)">
             {{ t('移出主页') }}

@@ -6,6 +6,9 @@ public interface GenerationApi {
  record Preflight(long workVersion,String revisionId,int styleCharacters,int styleLimit,int negativeCharacters,int negativeLimit,String notice){}
  default Preflight preflight(String owner,String work,String revision){throw new UnsupportedOperationException();}
  Task submit(String owner,String work,String revision,String requestKey);
+ default Task submit(String owner,String work,String revision,String requestKey,java.util.function.Consumer<Task> onCreated){
+  throw new UnsupportedOperationException();
+ }
  List<Task> list(String owner,String work);
  void retryArchive(String owner,String work,String task);
  Task cancel(String owner,String work,String task);

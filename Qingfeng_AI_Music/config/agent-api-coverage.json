@@ -226,6 +226,9 @@
         "@GetMapping(\"/cover/{key}\")",
         "@GetMapping(\"/releases/{work}\")",
         "@PutMapping(\"/releases/{work}\")",
+        "@PutMapping(\"/releases/{work}/publication\")",
+        "@PostMapping(\"/releases/{work}/publication\")",
+        "@DeleteMapping(\"/releases/{work}/publication\")",
         "@DeleteMapping(\"/releases/{work}\")",
         "@PutMapping(\"/releases/{work}/discover\")",
         "@DeleteMapping(\"/releases/{work}/discover\")"
@@ -240,6 +243,7 @@
         "remove_artist_song",
         "publish_to_discover",
         "withdraw_from_discover",
+        "open_feature:work",
         "open_feature:artist"
       ]
     },

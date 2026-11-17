@@ -2,14 +2,29 @@ export function needsGenerationRefresh(tasks: readonly {status:string}[], awaiti
   return awaitingResponse || tasks.some(task=>['QUEUED','SUBMITTING','RUNNING','SAVING','SUBMISSION_UNKNOWN'].includes(task.status))
 }
 
-/** 仅保存请求标识与歌词版本，不保存歌词、故事或凭据。 */
-export interface PendingGeneration {workId:string;revisionId:string;requestKey:string;createdAt:number}
+export type PublicationScope = 'public' | 'private'
+export interface GenerationPublication { scope: PublicationScope; stageName?: string }
+/** 恢复原提交时沿用同一个公开范围与艺名。 */
+export interface PendingGeneration {workId:string;revisionId:string;requestKey:string;createdAt:number;publication?:GenerationPublication}
+
+const scopeKey = (owner: string) => 'qingfeng.generation-scope:' + owner
+export function previousPublicationScope(owner: string): PublicationScope {
+  try { return owner && localStorage.getItem(scopeKey(owner)) === 'public' ? 'public' : 'private' }
+  catch { return 'private' }
+}
+export function rememberPublicationScope(owner: string, publication?: GenerationPublication) {
+  if (!owner || !publication) return
+  try { localStorage.setItem(scopeKey(owner), publication.scope) } catch { /* Storage is optional. */ }
+}
 const key=(owner:string,work:string)=>`qingfeng.pending-music:${owner}:${work}`
 export function rememberGeneration(owner:string,pending:PendingGeneration,storage?:Pick<Storage,'setItem'>){
   try{(storage??localStorage).setItem(key(owner,pending.workId),JSON.stringify(pending));return true}catch{return false}
 }
 export function recoverGeneration(owner:string,work:string,storage?:Pick<Storage,'getItem'>):PendingGeneration|undefined{
-  try{const value=JSON.parse((storage??localStorage).getItem(key(owner,work))||'null');if(value&&value.workId===work&&typeof value.revisionId==='string'&&value.revisionId&&typeof value.requestKey==='string'&&/^[0-9a-f-]{36}$/i.test(value.requestKey)&&Number.isFinite(value.createdAt))return value}catch{}
+  try{const value=JSON.parse((storage??localStorage).getItem(key(owner,work))||'null');if(value&&value.workId===work&&typeof value.revisionId==='string'&&value.revisionId&&typeof value.requestKey==='string'&&/^[0-9a-f-]{36}$/i.test(value.requestKey)&&Number.isFinite(value.createdAt)){
+    if(value.publication?.scope!=='public'&&value.publication?.scope!=='private')delete value.publication
+    return value
+  }}catch{}
 }
 export function forgetGeneration(owner:string,work:string,storage?:Pick<Storage,'removeItem'>){try{(storage??localStorage).removeItem(key(owner,work))}catch{}}
 export function uncertainSubmission(error:{status?:number;code?:string}){

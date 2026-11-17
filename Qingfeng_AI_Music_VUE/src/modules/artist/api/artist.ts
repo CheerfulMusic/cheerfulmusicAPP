@@ -50,6 +50,8 @@ interface ReleaseSelection {
   publicId?: string | null
   stageName?: string
   song: ArtistRelease | null
+  publicationPending?: boolean
+  reopensSongs?: boolean
 }
 
 export interface DiscoverSong {
@@ -117,6 +119,21 @@ export async function setArtistVisibility(published: boolean) {
 export async function getSongPublication(work: string) {
   await ensureCreator()
   return requestJson<ReleaseSelection>(release(work))
+}
+
+export async function publishSongEverywhere({ workId, ...song }: SongPublication & { stageName?: string }) {
+  await ensureCreator()
+  return requestJson<ReleaseSelection>(`${release(workId)}/publication`, 'PUT', song)
+}
+
+export async function completeSongPublication(workId: string) {
+  await ensureCreator()
+  return requestJson<ReleaseSelection>(`${release(workId)}/publication`, 'POST')
+}
+
+export async function makeSongPrivate(workId: string) {
+  await ensureCreator()
+  return requestJson<ReleaseSelection>(`${release(workId)}/publication`, 'DELETE')
 }
 
 export async function publishSong({ workId, ...song }: SongPublication) {

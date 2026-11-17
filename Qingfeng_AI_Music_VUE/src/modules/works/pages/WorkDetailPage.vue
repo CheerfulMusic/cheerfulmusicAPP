@@ -23,8 +23,7 @@ import QuickCreationProgress from '../../studio/components/QuickCreationProgress
 import type {QuickCreation} from '../../studio/api/quick-creation'
 import AudioPanel from '../components/AudioPanel.vue'
 import SharePanel from '../components/SharePanel.vue'
-import PublishSongDialog from '../../artist/components/PublishSongDialog.vue'
-import { getSongPublication, type SongPublication } from '../../artist/api/artist'
+import { completeSongPublication, getSongPublication, makeSongPrivate, publishSongEverywhere, type SongPublication } from '../../artist/api/artist'
 import { accountState, refreshAccountState } from '../../../shared/identity/account-state'
 import { logtoState, refreshLogtoState } from '../../../shared/identity/logto-state'
 import { showLoginDialog } from '../../../shared/identity/login-dialog'
@@ -35,12 +34,45 @@ import {restoreRemakeSettings} from '../model/remake-settings'
 import { ApiError,currentCreatorId,requestJson } from '../../../shared/http/api-client'
 import GenerationRecovery from '../components/GenerationRecovery.vue'
 import {closeTaskChecking} from '../api/detail'
-import {needsGenerationRefresh,rememberGeneration,recoverGeneration,forgetGeneration,uncertainSubmission,generationProblem,type PendingGeneration} from '../model/generation-recovery'
+import {needsGenerationRefresh,rememberGeneration,recoverGeneration,forgetGeneration,uncertainSubmission,generationProblem,previousPublicationScope,rememberPublicationScope,type GenerationPublication,type PendingGeneration,type PublicationScope} from '../model/generation-recovery'
 import {creditGap,isCreditShortfall,type Credits} from '../model/credit-shortfall'
 const props = defineProps<{ embeddedWorkId?: string }>()
 const route = useRoute(), work = ref<Work>(), revision = ref<Revision | null>(null), asset = ref<AudioAsset | null>(null), tasks = ref<GenerationTask[]>([]), error = ref(''), loading = ref(false), lyricDirty = ref(false), modelReady = ref(false), submitting = ref(false), requestKey = ref('')
 const lyricsPanel=ref<InstanceType<typeof LyricsPanel>>(), lyricsReady=ref(false), allowance=ref<Allowance>(), giftRevision=ref<Revision|null>(null), lyricBase=ref<Revision|null>(null)
 const saveGenerationDialog=ref<HTMLDialogElement>()
+const scopeChoice=ref<PublicationScope>('private')
+const scopeProfile=ref<Awaited<ReturnType<typeof getSongPublication>>>()
+const scopeLoading=ref(false)
+const scopeStageName=ref('')
+const canChoosePublic=computed(()=>typeof scopeProfile.value?.publicationPending==='boolean' && !scopeProfile.value.song)
+const saveLyricsOnConfirmation=computed(()=>!!lyricsPanel.value?.needsSave)
+
+async function openGenerationConfirmation() {
+  const id=work.value?.id
+  if (!id || scopeLoading.value || saveGenerationDialog.value?.open) return
+  const turn=sequence
+  const owner=currentCreatorId()
+  scopeChoice.value='private'
+  scopeStageName.value=''
+  scopeProfile.value=undefined
+  scopeLoading.value=true
+  saveGenerationDialog.value?.showModal()
+  try {
+    const state=await getSongPublication(id)
+    if (turn!==sequence) return
+    scopeProfile.value=state
+    if (canChoosePublic.value) scopeChoice.value=previousPublicationScope(owner)
+  } catch { /* Private generation remains available without a public profile. */ }
+  finally { if (turn===sequence) scopeLoading.value=false }
+}
+function confirmGeneration() {
+  if (scopeLoading.value || scopeChoice.value==='public' && (!canChoosePublic.value || !scopeProfile.value?.profileReady && !scopeStageName.value.trim())) return
+  const publication:GenerationPublication = scopeChoice.value==='public'
+    ? { scope:'public', stageName:scopeStageName.value.trim() || undefined }
+    : { scope:'private' }
+  saveGenerationDialog.value?.close()
+  void generate(true,undefined,publication)
+}
 const quickBusy=ref(false),quickRevision=ref('')
 const mediaState = ref<'loading'|'ready'|'failed'>('loading')
 const tasksReady = ref(false), taskReadIssue = ref(false)
@@ -116,59 +148,110 @@ async function renameSong(title: string) {
   if (turn === sequence) work.value = saved
 }
 const publication = ref<SongPublication>()
+const publicationDialog = ref<HTMLDialogElement>()
 const publicationState = ref<Awaited<ReturnType<typeof getSongPublication>>>()
-const publicationDiscover = ref(false)
+const publicationBusy = ref(false)
+const stageName = ref('')
 let publicationStateRequest = 0
 const resumePublication = computed(() => route.query.show === 'publication' || route.query.show === 'discover')
+const visibleRelease = computed(() => publicationState.value?.published ? publicationState.value.song : null)
 const publicationMatches = computed(() => {
-  const song = publicationState.value?.song
+  const song = visibleRelease.value
   return song && song.assetId === asset.value?.id && song.title === songTitle.value.trim()
     && song.coverId === (covers.value?.currentCoverId || null)
 })
 const publicationLabel = computed(() => {
-  const state = publicationState.value
-  if (!state?.published || !state.song) return '公开到主页'
-  if (!publicationMatches.value) return '更新主页版本'
-  return state.song.onDiscover ? '已发布到发现' : '已在主页展示'
+  if (publicationState.value?.publicationPending) return '正在自动发布到广场'
+  if (!visibleRelease.value) return publicationState.value ? '私密' : undefined
+  if (!publicationMatches.value) return '旧版本已公开'
+  return visibleRelease.value.onDiscover ? '已公开 · 广场和歌手主页' : '已在主页展示'
 })
-let checkingPublicationLogin = false
-async function openSongPublication(discover = false) {
+const publicationAction = computed(() => visibleRelease.value || publicationState.value?.publicationPending
+  ? '设为私密' : '发布到广场')
+const canReplacePublication = computed(() => !!visibleRelease.value && (!visibleRelease.value.onDiscover || !publicationMatches.value))
+
+async function openSongPublication(intent: 'private' | 'publish' | 'prepare') {
   const currentWork = work.value?.id
   const currentAsset = asset.value?.id
-  if (!currentWork || !currentAsset || checkingPublicationLogin) return
-  if (!accountState.value.authenticated && !logtoState.value.authenticated) {
-    checkingPublicationLogin = true
-    try { await Promise.allSettled([refreshAccountState(), refreshLogtoState()]) }
-    finally { checkingPublicationLogin = false }
-    if (work.value?.id !== currentWork || asset.value?.id !== currentAsset) return
-    if (!accountState.value.authenticated && !logtoState.value.authenticated) {
-      showLoginDialog()
-      return
-    }
-  }
-  publicationDiscover.value = discover
-  publication.value = { workId: currentWork, assetId: currentAsset, coverId: covers.value?.currentCoverId || null, title: songTitle.value }
-}
-watch([() => work.value?.id, () => !!asset.value, () => accountState.value.authenticated,
-  () => logtoState.value.authenticated], async ([id, ready, google, logto], _, onCleanup) => {
-  publicationState.value = undefined
-  const request = ++publicationStateRequest
-  if (!id || !ready || (!google && !logto)) return
-  let active = true
-  onCleanup(() => { active = false })
+  if (!currentWork || !currentAsset || publicationBusy.value) return
+  const current=()=>work.value?.id===currentWork && asset.value?.id===currentAsset
+  publicationBusy.value=true
   try {
-    const state = await getSongPublication(id)
-    if (active && request === publicationStateRequest) publicationState.value = state
-  } catch { /* The dialog can retry when the author opens it. */ }
+    if (!accountState.value.authenticated && !logtoState.value.authenticated) {
+      await Promise.allSettled([refreshAccountState(), refreshLogtoState()])
+      if (!current()) return
+      if (!accountState.value.authenticated && !logtoState.value.authenticated) {
+        showLoginDialog()
+        return
+      }
+    }
+    const state=await getSongPublication(currentWork)
+    if (!current()) return
+    const source={workId:currentWork,assetId:currentAsset,coverId:covers.value?.currentCoverId || null,title:songTitle.value}
+    if (intent==='private') {
+      const updated=await makeSongPrivate(currentWork)
+      if (current()) updatePublicationState(updated)
+    } else if (intent==='prepare' || !state.profileReady || state.reopensSongs) {
+      updatePublicationState(state)
+      publication.value=source
+      stageName.value=''
+      await nextTick()
+      if (current()) publicationDialog.value?.showModal()
+    } else {
+      const updated=await publishSongEverywhere(source)
+      if (current()) updatePublicationState(updated)
+    }
+  } catch (cause) {
+    if (current()) error.value=cause instanceof Error?cause.message:'暂时无法更新歌曲发布状态，请重试。'
+  } finally { publicationBusy.value=false }
+}
+
+async function confirmPublication() {
+  const source=publication.value
+  if (!source || publicationBusy.value || !publicationState.value?.profileReady && !stageName.value.trim()) return
+  publicationBusy.value=true
+  try {
+    const updated=await publishSongEverywhere({...source,stageName:stageName.value.trim() || undefined})
+    if (work.value?.id!==source.workId) return
+    updatePublicationState(updated)
+    publicationDialog.value?.close()
+  } catch (cause) {
+    if (work.value?.id===source.workId) error.value=cause instanceof Error?cause.message:'暂时无法更新歌曲发布状态，请重试。'
+  } finally { publicationBusy.value=false }
+}
+
+watch([() => work.value?.id, () => asset.value?.id, () => accountState.value.authenticated,
+  () => logtoState.value.authenticated], ([id, audio, google, logto], _, onCleanup) => {
+  publicationState.value=undefined
+  const request=++publicationStateRequest
+  if (!id || !audio || (!google && !logto)) return
+  let active=true
+  let timer:ReturnType<typeof setTimeout>|undefined
+  onCleanup(()=>{active=false;clearTimeout(timer)})
+  async function refresh() {
+    if (!active || request!==publicationStateRequest || !id) return
+    try {
+      const state=await getSongPublication(id)
+      if (!active || request!==publicationStateRequest) return
+      publicationState.value=state
+      if (state.publicationPending && !publicationBusy.value) {
+        const updated=await completeSongPublication(id)
+        if (active && request===publicationStateRequest) publicationState.value=updated
+      }
+    } catch { /* Poll pending publication again; the scheduled worker can also finish it. */ }
+    if (active && request===publicationStateRequest && publicationState.value?.publicationPending)
+      timer=setTimeout(refresh,2500)
+  }
+  void refresh()
 }, { immediate: true })
 function updatePublicationState(state: Awaited<ReturnType<typeof getSongPublication>>) {
   ++publicationStateRequest
-  publicationState.value = state
+  publicationState.value=state
 }
 watch([resumePublication, () => asset.value?.id, publicationCoverReady, tasksReady], ([resume, ready]) => {
   if (!resume || !ready || !tasksReady.value || !publicationCoverReady.value) return
   const { show, ...query } = route.query
-  if (!publication.value) void openSongPublication(show === 'discover')
+  if (!publication.value) void openSongPublication('prepare')
   void router.replace({ query, hash: route.hash })
 })
 const displayedStyle=computed(()=>!asset.value?t(work.value?.style||''):asset.value.origin==='IMPORTED'?t('导入音频'):t(playingSettings.value?.style||'风格记录暂不可用'))
@@ -210,7 +293,7 @@ function restoreIntent(workId:string,history:GenerationTask[]){
   intentOwner.value=currentCreatorId();pendingIntent.value=recoverGeneration(intentOwner.value,workId)
   if(!pendingIntent.value)return
   const accepted=history.find(task=>task.requestKey===pendingIntent.value?.requestKey)
-  if(accepted){trackedTaskId.value=accepted.id;clearIntent(workId);return}
+  if(accepted){rememberPublicationScope(intentOwner.value,pendingIntent.value.publication);trackedTaskId.value=accepted.id;clearIntent(workId);return}
   requestKey.value=pendingIntent.value.requestKey;submissionUnknown.value=true;submissionIssue.value='正在核对上次提交，暂不发起新的音乐创作。'
 }
 const inProgress = (task: GenerationTask) => ['QUEUED','SUBMITTING','RUNNING','SAVING'].includes(task.status)
@@ -254,6 +337,7 @@ async function refreshTasks() {
     }
     const recovered = submissionUnknown.value && requestKey.value && latest.find(task => task.requestKey === requestKey.value)
     if (recovered) {
+      rememberPublicationScope(intentOwner.value,pendingIntent.value?.publication)
       trackedTaskId.value = recovered.id
       submissionUnknown.value = false
       submissionIssue.value = ''
@@ -282,7 +366,7 @@ async function closeChecking(task:GenerationTask){
   finally{submitting.value=false}
 }
 async function load() {
- publicationCoverReady.value=false
+ publicationCoverReady.value=false;scopeLoading.value=false;saveGenerationDialog.value?.close();publicationDialog.value?.close()
  quickBusy.value=false;quickRevision.value='';mediaState.value='loading';tasksReady.value=false;taskReadIssue.value=false;quickChecked.value=false;quickReadIssue.value=false;modelReady.value=false;draftOpened.value=false;listenAfterLoad.value=false;quickFlow.value=null;dismissedDirection.value=false;lyricBase.value=null;lyricsReady.value=false
  const turn=++sequence;polling=false;premiumOpen.value=false;giftStage.value=false;shared.value=false;coverOpen.value=false;covers.value=undefined;publication.value=undefined
  generationOpen.value=false;trackedTaskId.value='';submissionIssue.value='';submissionUnknown.value=false;progressIssue.value=false;submitting.value=false;loading.value=true;error.value='';revision.value=null;asset.value=null;tasks.value=[];giftRevision.value=null;work.value=undefined;lyricDirty.value=false;requestKey.value='';pendingIntent.value=undefined;generationNotice.value='';inputIssue.value=false;creditIssue.value=false;credits.value=undefined
@@ -303,7 +387,7 @@ defineExpose({ canClose: permitLeave })
 onBeforeRouteLeave(permitLeave); onBeforeRouteUpdate(to=>to.params.id===route.params.id||permitLeave())
 const beforeUnload = (event: BeforeUnloadEvent) => { if (lyricDirty.value&&!lyricRecoverable.value||pendingIntent.value&&!requestRecoverable.value) { event.preventDefault(); event.returnValue = '' } }
 window.addEventListener('beforeunload', beforeUnload); onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
-async function generate(saveConfirmed=false, adjustment?:RemakeInput) {
+async function generate(saveConfirmed=false, adjustment?:RemakeInput, publication?:GenerationPublication) {
   if(quickBusy.value||!tasksReady.value||taskReadIssue.value||!quickChecked.value||quickReadIssue.value||mediaState.value!=='ready')return
   if (pendingTask.value) { showProgress(); return }
   if(submissionUnknown.value){await refreshTasks();generationOpen.value=true;return}
@@ -313,7 +397,7 @@ async function generate(saveConfirmed=false, adjustment?:RemakeInput) {
     return
   }
   const saveChanges=!generated.value&&!!lyricsPanel.value?.needsSave
-  if(saveChanges&&!saveConfirmed){saveGenerationDialog.value?.showModal();return}
+  if((!asset.value||saveChanges)&&!saveConfirmed){void openGenerationConfirmation();return}
   const workId = work.value.id, turn = sequence, sourceAssetId=generated.value?asset.value!.id:undefined
   const current=()=>turn===sequence&&(!sourceAssetId||asset.value?.id===sourceAssetId)
   submitting.value = true; error.value = ''; remakeError.value=''; submissionIssue.value = ''; submissionUnknown.value = false;inputIssue.value=false;generationNotice.value='';creditIssue.value=false
@@ -352,9 +436,11 @@ async function generate(saveConfirmed=false, adjustment?:RemakeInput) {
     generationNotice.value=check.notice;giftStage.value=false;shared.value=false
     if(adjustment&&pendingIntent.value?.revisionId!==confirmed.id)requestKey.value=''
     requestKey.value ||= crypto.randomUUID()
-    intentOwner.value=currentCreatorId();pendingIntent.value={workId,revisionId:confirmed.id,requestKey:requestKey.value,createdAt:Date.now()}
+    const owner=currentCreatorId()
+    intentOwner.value=owner;pendingIntent.value={workId,revisionId:confirmed.id,requestKey:requestKey.value,createdAt:Date.now(),publication}
     requestRecoverable.value=rememberGeneration(intentOwner.value,pendingIntent.value);posted=true
-    const accepted = await submitTask(workId, confirmed.id, requestKey.value)
+    const accepted = await submitTask(workId, confirmed.id, requestKey.value, publication)
+    rememberPublicationScope(owner,publication)
     if (turn !== sequence) return
     tasks.value = [accepted, ...tasks.value.filter(task => task.id !== accepted.id)]
     trackedTaskId.value = accepted.id;clearIntent(workId);remake.value=undefined;generationOpen.value=true
@@ -378,7 +464,10 @@ async function resumeOriginalRequest(){
  const turn=sequence;submitting.value=true;error.value=''
  try{
   // 重放本站相同幂等请求；不产生新的请求键，不调用新的歌词版本。
-  const accepted=await submitTask(saved.workId,saved.revisionId,saved.requestKey);if(turn!==sequence)return
+  const owner=intentOwner.value
+  const accepted=await submitTask(saved.workId,saved.revisionId,saved.requestKey,saved.publication)
+  rememberPublicationScope(owner,saved.publication)
+  if(turn!==sequence)return
   tasks.value=[accepted,...tasks.value.filter(task=>task.id!==accepted.id)];trackedTaskId.value=accepted.id;submissionUnknown.value=false;submissionIssue.value='';clearIntent(saved.workId);generationOpen.value=true
  }catch(e){if(turn!==sequence)return;if(isCreditShortfall(e)){error.value='';submissionUnknown.value=false;submissionIssue.value='';clearIntent(saved.workId);showCreditIssue();return}error.value=e instanceof Error?e.message:'暂时无法核对原请求';if(!uncertainSubmission(e instanceof ApiError?e:{})){submissionUnknown.value=false;submissionIssue.value='';clearIntent(saved.workId)}}
  finally{if(turn===sequence){submitting.value=false;void updateAllowance()}}
@@ -423,7 +512,7 @@ async function backToStory(){
     <p v-if="pendingTask&&!generationOpen&&!quickBusy&&(!quickJourney||asset)" class="notice" role="status">{{ t(generationProblem(pendingTask.errorCode)||'音乐正在后台制作，可以继续浏览，稍后回来查看。') }} <button class="text-button" @click="showProgress">{{ t('查看生成进度') }}</button></p>
     <section v-if="latestFailure&&!pendingTask" class="notice" role="status"><p>{{ t(generationProblem(latestFailure.errorCode)||'音乐服务未完成这次创作，歌词和设置已保留。') }}</p><button v-if="latestFailure.errorCode==='AUDIO_ARCHIVE_FAILED'" class="button secondary" :disabled="submitting" @click="retryArchive(latestFailure)">{{ t('仅重试保存音频') }}</button></section>
     <GenerationRecovery v-if="pendingTask?.status==='SUBMISSION_UNKNOWN'" :task="pendingTask" :busy="submitting" @refresh="refreshTasks" @close="closeChecking(pendingTask)"/>
-    <SongResult v-if="asset" :work="work" :asset="asset" :title="songTitle" :version="songVersion" :rename-song="renameSong" :cover="artwork" :pending="!!pendingTask" :checking="submissionUnknown" :busy="submitting||quickBusy||!tasksReady||taskReadIssue||!quickChecked||quickReadIssue||(!pendingTask&&!submissionUnknown&&(!modelReady||!generationLyricsReady))" :lyrics="giftRevision?.lyrics||''" :language="giftRevision?.language" :section-open="sectionOpen" :publication-label="publicationLabel" :can-publish-to-discover="!!(publicationMatches && publicationState?.published && publicationState.publicId && !publicationState.song?.onDiscover)" @gift="sendGift" @premium="premiumOpen=true" @publish="openSongPublication()" @discover="openSongPublication(true)" @regenerate="openMusicAdjustment" @cover="openCover" @edit="openSection"/>
+    <SongResult v-if="asset" :work="work" :asset="asset" :title="songTitle" :version="songVersion" :rename-song="renameSong" :cover="artwork" :pending="!!pendingTask" :checking="submissionUnknown" :busy="submitting||quickBusy||!tasksReady||taskReadIssue||!quickChecked||quickReadIssue||(!pendingTask&&!submissionUnknown&&(!modelReady||!generationLyricsReady))" :lyrics="giftRevision?.lyrics||''" :language="giftRevision?.language" :section-open="sectionOpen" :publication-label="publicationLabel" :publication-action="publicationAction" :publication-busy="publicationBusy || !publicationCoverReady" :can-replace-publication="canReplacePublication" @gift="sendGift" @premium="premiumOpen=true" @publish="openSongPublication(publicationAction === '设为私密' ? 'private' : 'publish')" @replace-publication="openSongPublication('publish')" @regenerate="openMusicAdjustment" @cover="openCover" @edit="openSection"/>
     <MusicSettingsSnapshot v-if="playingSettings" :work-id="work.id" :task-id="playingSettings.id"/>
     <SectionEditor v-if="asset" ref="sectionEditor" :key="work.id" :work="work" :asset="asset" :title="playbackTitle" :cover="artwork" :tasks="tasks" :open="sectionOpen" :hint="sectionHint" @close="sectionOpen=false" @refresh="refreshTasks" @adopted="sectionAdopted"/>
     <MusicSettingsPanel v-if="remake" :work="work" :remake="remake" :busy="submitting" :submit-error="remakeError" @apply="generate(false,$event)" @close="remake=undefined"/>
@@ -463,15 +552,43 @@ async function backToStory(){
       <button class="button secondary lyric-studio-save" type="button" :disabled="submitting||!lyricsPanel?.canSave" @click="lyricsPanel?.save()"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4h12v16l-6-4-6 4V4Z"/></svg>{{ lyricsPanel?.saving?t('正在保存…'):t('保存歌词') }}</button>
       <button class="button creation-primary" type="button" :disabled="submitting||(!submissionUnknown&&(!modelReady||!lyricsReady))" @click="generate()">{{ submitting?t('正在准备歌曲…'):submissionUnknown?t('核对生成进度'):modelReady?t('生成歌曲'):t('歌曲生成暂未开放') }} <span aria-hidden="true">→</span></button>
       <dialog ref="saveGenerationDialog" class="save-generation-dialog" aria-labelledby="save-generation-heading">
-        <h2 id="save-generation-heading">{{ t('保存当前歌词并生成歌曲？') }}</h2>
-        <p>{{ t('将当前歌词保存为一个版本，并用这一版生成歌曲。') }}</p>
-        <div class="actions"><button type="button" class="button secondary" autofocus @click="saveGenerationDialog?.close()">{{ t('取消') }}</button><button type="button" class="button primary" @click="saveGenerationDialog?.close();generate(true)">{{ t('保存并生成') }}</button></div>
+        <h2 id="save-generation-heading">{{ t(saveLyricsOnConfirmation ? '保存当前歌词并生成歌曲？' : '生成歌曲') }}</h2>
+        <form @submit.prevent="confirmGeneration">
+          <fieldset :disabled="scopeLoading">
+            <legend>{{ t('发布范围') }}</legend>
+            <label><input v-model="scopeChoice" type="radio" name="generation-scope" value="public" :disabled="!canChoosePublic"> {{ t('发布到广场') }}</label>
+            <label><input v-model="scopeChoice" type="radio" name="generation-scope" value="private"> {{ t('私密') }}</label>
+          </fieldset>
+          <p v-if="scopeLoading" role="status">{{ t('正在读取发布状态…') }}</p>
+          <p v-else-if="scopeChoice === 'public'">{{ t('成歌后，访客可在广场和歌手主页试听。') }}</p>
+          <p v-else-if="!canChoosePublic">{{ t('成歌后，可以在试听页发布到广场。') }}</p>
+          <p v-if="scopeChoice === 'public' && scopeProfile?.reopensSongs">{{ t('公开主页后，此前展示在主页上的歌曲也会恢复可见。') }}</p>
+          <label v-if="scopeChoice === 'public' && !scopeProfile?.profileReady" class="publication-name">
+            {{ t('艺名') }} <input v-model="scopeStageName" required maxlength="30">
+          </label>
+          <div class="actions">
+            <button type="button" class="button secondary" autofocus @click="saveGenerationDialog?.close()">{{ t('取消') }}</button>
+            <button type="submit" class="button primary" :disabled="scopeLoading || scopeChoice === 'public' && !scopeProfile?.profileReady && !scopeStageName.trim()">{{ t(scopeChoice === 'public' ? '生成并发布到广场' : '私密生成') }}</button>
+          </div>
+        </form>
       </dialog>
     </div>
   </template>
   <CoverEditor v-if="work&&coverOpen" :key="work.id" :work-id="work.id" :state="covers" @updated="updateCover" @close="coverOpen=false"/>
   <PremiumStudioDialog v-if="work&&asset&&premiumOpen" :open="premiumOpen" :work-id="work.id" :asset="asset" :title="songTitle" :cover="artwork" @close="premiumOpen=false"/>
-  <PublishSongDialog v-if="publication" :source="publication" :discover="publicationDiscover" :cover="coverUrl(publication.workId, publication.coverId)" @change="updatePublicationState" @close="publication=undefined"/>
+  <dialog v-if="publication" ref="publicationDialog" class="save-generation-dialog" aria-labelledby="publish-song-heading" @close="publication=undefined">
+    <h2 id="publish-song-heading">{{ t('发布到广场') }}</h2>
+    <p>{{ t('发布后，访客可在广场和歌手主页试听。') }}</p>
+    <p v-if="publicationState?.reopensSongs">{{ t('公开主页后，此前展示在主页上的歌曲也会恢复可见。') }}</p>
+    <form @submit.prevent="confirmPublication">
+      <label v-if="!publicationState?.profileReady" class="publication-name">{{ t('艺名') }} <input v-model="stageName" required maxlength="30"></label>
+      <p v-if="error" role="alert">{{ t(error) }}</p>
+      <div class="actions">
+        <button type="button" class="button secondary" :disabled="publicationBusy" @click="publicationDialog?.close()">{{ t('取消') }}</button>
+        <button type="submit" class="button primary" :disabled="publicationBusy || !publicationState?.profileReady && !stageName.trim()">{{ t('发布到广场') }}</button>
+      </div>
+    </form>
+  </dialog>
   <MusicGenerationDialog :open="generationOpen" :status="generationStatus" :title="trackedTask?.title||work?.title||''" :error="submissionIssue" :error-code="trackedTask?.errorCode" :sync-issue="progressIssue||trackedTask?.errorCode==='QUERY_RETRY'" :created-at="trackedTask?.createdAt" :submit-after="trackedTask?.nextAttemptAt" :cancelling="cancelling||submitting" :cover="artwork" @cancel="cancelGeneration" @archive="trackedTask&&retryArchive(trackedTask)" @close="generationOpen=false" @view="viewGeneratedMusic"/>
 </template>
 <style scoped>
@@ -498,6 +615,11 @@ async function backToStory(){
 .save-generation-dialog p { margin:0 0 16px; color:var(--muted); }
 .save-generation-dialog .actions { justify-content:flex-end; gap:10px; margin:0; }
 .save-generation-dialog .actions button { min-width:0; width:auto; }
+.save-generation-dialog fieldset { border:0; padding:0; margin:0 0 12px; display:flex; gap:16px; flex-wrap:wrap; }
+.save-generation-dialog legend { font-weight:700; margin-bottom:8px; }
+.save-generation-dialog fieldset label { display:flex; align-items:center; gap:5px; }
+.publication-name { display:grid; gap:6px; margin-bottom:14px; }
+.publication-name input { width:100%; padding:10px; border:1px solid var(--line); border-radius:8px; font:inherit; }
 @media(max-width:760px) {
  .lyric-studio-header { margin-bottom:20px; }
  .lyric-studio-back { position:static; }

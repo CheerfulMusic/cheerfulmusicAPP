@@ -125,8 +125,9 @@ class LyricsCreditsIntegrationTest {
         assertEquals("UNKNOWN",composer.requestState(f.owner,f.work,key).status());
         assertEquals(1,jdbc.queryForObject("SELECT COUNT(*) FROM model_usage_reservation WHERE kind='LYRIC_REDEEM' AND work_id=?",Integer.class,f.work));
         assertEquals(0,credits.balance(f.owner));
-        assertEquals("LYRICS_REQUEST_PENDING",assertThrows(DomainException.class,
+        assertEquals("INSUFFICIENT_CREDITS",assertThrows(DomainException.class,
             ()->composer.compose(f.owner,f.work,0,UUID.randomUUID().toString(),"zh-CN")).code());
+        assertEquals(1,writer.calls.get());
     }
 
     @Test void sufficientCreditsChargeExactlyOnceOnSuccess(){
@@ -265,7 +266,7 @@ class LyricsCreditsIntegrationTest {
         org.mockito.Mockito.when(response.statusCode()).thenReturn(200);org.mockito.Mockito.when(response.body()).thenReturn(body);return response;
     }
 
-    @Test void providerTimeoutRetainsChargeAndRejectsSameOrDifferentKeyUntilReconciled(){
+    @Test void providerTimeoutRetainsChargeAndCanRecoverTheSameKey(){
         var f=chargedFixture();fund(f,20);String key=UUID.randomUUID().toString();
         writer.failure=new DomainException("LYRICS_PROVIDER_TIMEOUT","供应商结果尚未确认");
         assertThrows(DomainException.class,()->composer.compose(f.owner,f.work,0,key,"zh-CN"));
@@ -274,7 +275,6 @@ class LyricsCreditsIntegrationTest {
         assertEquals("UNKNOWN",consumptions(f.owner).get(0).status());
         assertEquals(0,consumptions(f.owner).get(0).refunded());
         assertEquals("LYRICS_REQUEST_PENDING",assertThrows(DomainException.class,()->composer.compose(f.owner,f.work,0,key,"zh-CN")).code());
-        assertEquals("LYRICS_REQUEST_PENDING",assertThrows(DomainException.class,()->composer.compose(f.owner,f.work,0,UUID.randomUUID().toString(),"zh-CN")).code());
         requests.failed(f.work,key,"LYRICS_PROVIDER_TIMEOUT");
         assertEquals(1,writer.calls.get());assertEquals(1,consumptions(f.owner).size());
         assertEquals(0,jdbc.queryForObject("SELECT COUNT(*) FROM credit_ledger WHERE entry_type='REFUND' AND reference_id=?",Integer.class,"lyrics:"+f.work+":"+key));
@@ -284,6 +284,26 @@ class LyricsCreditsIntegrationTest {
         assertEquals("SUCCEEDED",composer.requestState(f.owner,f.work,key).status());
         assertEquals(revision.id(),composer.compose(f.owner,f.work,0,key,"zh-CN").id());
         assertEquals(20-LYRICS_COST,credits.balance(f.owner));assertEquals(0,consumptions(f.owner).get(0).refunded());
+    }
+
+    @Test void paidRetryAfterTimeoutChargesOnlyItsNewRequestAndPreservesTheOldCharge(){
+        var f=chargedFixture();
+        fund(f,30);
+        String oldKey=UUID.randomUUID().toString(), retryKey=UUID.randomUUID().toString();
+        writer.failure=new DomainException("LYRICS_PROVIDER_TIMEOUT","offline timeout");
+        assertThrows(DomainException.class,()->composer.compose(f.owner,f.work,0,oldKey,"zh-CN"));
+        assertEquals(30-LYRICS_COST,credits.balance(f.owner));
+
+        writer.failure=null;
+        var revision=composer.compose(f.owner,f.work,0,retryKey,"zh-CN");
+        assertEquals(revision.id(),composer.compose(f.owner,f.work,0,retryKey,"zh-CN").id());
+        assertEquals(2,writer.calls.get());
+        assertEquals(30-2*LYRICS_COST,credits.balance(f.owner));
+        assertEquals("UNKNOWN",composer.requestState(f.owner,f.work,oldKey).status());
+        assertEquals("LYRICS_REQUEST_SUPERSEDED",composer.requestState(f.owner,f.work,oldKey).errorCode());
+        var entries=consumptions(f.owner);
+        assertEquals(2,entries.size());
+        assertTrue(entries.stream().allMatch(entry->entry.refunded()==0));
     }
 
     @Test void emptyLyricsResultDoesNotCharge(){

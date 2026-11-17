@@ -172,3 +172,30 @@ it('finds the saved result after a refresh without re-uploading the photo', asyn
     expect(sessionStorage.getItem('qingfeng.photo-draft:photo-test-owner')).toBeNull()
   } finally { page.unmount() }
 })
+
+it('rechecks a timed-out photo request and uses a new key on the same draft only on retry', async () => {
+  const id = '43d0686c-f81d-4db4-a2a4-f5aa7d77fe70'
+  const key = '79e7841f-b61a-4a33-a353-f4d97584ed84'
+  sessionStorage.setItem('qingfeng.photo-draft:photo-test-owner', JSON.stringify({ id, key, note: '第一次看海', language: 'en', submitted: true }))
+  vi.mocked(getLyricsRequest).mockResolvedValue({ status: 'UNKNOWN', revisionId: null, errorCode: 'LYRICS_PROVIDER_TIMEOUT' })
+  vi.mocked(saveWork).mockImplementation(async (draft, _, key) => ({ ...draft, id: key!, version: 0, createdAt: '', updatedAt: '' }))
+  vi.mocked(generatePhotoLyrics).mockResolvedValue({
+    id: 'retry-result', workId: id, workVersion: 0, title: '海边', lyrics: '风吹过海面',
+    source: 'OPENAI', confirmed: false, createdAt: '',
+  })
+  const { page, router } = await setup()
+  try {
+    expect(page.get('[role=alert]').text()).toContain('本次歌词生成超时，可以重试。')
+    expect(generatePhotoLyrics).not.toHaveBeenCalled()
+    const file = new File(['picture'], 'sea.png', { type: 'image/png' })
+    const input = page.get('input[type=file]')
+    Object.defineProperty(input.element, 'files', { configurable: true, value: [file] })
+    await input.trigger('change')
+    await flushPromises()
+    await page.get('form').trigger('submit')
+    await flushPromises()
+    expect(vi.mocked(getLyricsRequest).mock.calls).toEqual([[id, key], [id, key]])
+    expect(generatePhotoLyrics).toHaveBeenCalledExactlyOnceWith(id, 0, expect.not.stringMatching(key), 'en', [file])
+    expect(router.currentRoute.value.query.revision).toBe('retry-result')
+  } finally { page.unmount() }
+})

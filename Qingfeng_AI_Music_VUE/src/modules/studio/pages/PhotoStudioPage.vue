@@ -1,7 +1,8 @@
 <script setup lang="ts">
+import { lyricTimeoutMessage } from '../../works/model/lyric-recovery'
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { currentCreatorId, ensureCreator } from '../../../shared/http/api-client'
+import { ApiError, currentCreatorId, ensureCreator } from '../../../shared/http/api-client'
 import { getPhotoLyricsAvailable } from '../../../shared/http/system'
 import { locale, t } from '../../../shared/i18n'
 import { useCredits } from '../../../shared/credits/useCredits'
@@ -44,7 +45,8 @@ const inspiration = [
   { label: '日常生活碎片', icon: 'cup', story: '下班回家，猫趴在窗边，夕阳照在桌上。那一刻，忙了一天的我终于慢了下来。' },
 ]
 const canEditPhotos = computed(() => ready.value && !busy.value && !preparing.value && !checking.value && !needsCheck.value)
-const { credits, refreshCredits } = useCredits()
+const draftWorkId = ref<string>()
+const { credits, refreshCredits } = useCredits(() => draftWorkId.value)
 let owner = ''
 let draft: PhotoDraft | undefined
 let alive = true
@@ -78,6 +80,7 @@ function restore() {
       || typeof saved.note !== 'string' || saved.note.length > storyLimit || !['zh-CN','en','mixed'].includes(saved.language)
       || typeof saved.submitted !== 'boolean') return
     draft = saved
+    draftWorkId.value = saved.id
     locked.value = true
     note.value = saved.note
     language.value = saved.language
@@ -148,8 +151,11 @@ async function checkOriginal() {
       await openLyrics(state.revisionId, draft.id, draft.language)
     } else if (state.status === 'PENDING' || state.status === 'UNKNOWN') {
       outcomeUnknown.value = state.status === 'UNKNOWN'
-      error.value = '歌词结果还在确认中，请稍后核对进度。'
+      needsCheck.value = !outcomeUnknown.value
+      error.value = outcomeUnknown.value ? lyricTimeoutMessage : '歌词结果还在确认中，请稍后核对进度。'
+      if (outcomeUnknown.value) void refreshCredits().catch(() => {})
     } else {
+      outcomeUnknown.value = false
       needsCheck.value = false
       draft.submitted = false
       if (state.status === 'FAILED') {
@@ -159,7 +165,12 @@ async function checkOriginal() {
       remember()
     }
   } catch (cause) {
-    if (alive) error.value = cause instanceof Error ? cause.message : '暂时无法核对歌词进度。'
+    if (!alive) return
+    if (cause instanceof ApiError && cause.code === 'WORK_NOT_FOUND') reset()
+    else {
+      needsCheck.value = true
+      error.value = cause instanceof Error ? cause.message : '暂时无法核对歌词进度。'
+    }
   } finally {
     checking.value = false
   }
@@ -174,6 +185,11 @@ async function submit() {
   try {
     await ensureCreator()
     if (!alive || currentCreatorId() !== owner) throw new Error('账号已切换，请刷新后继续。')
+    if (outcomeUnknown.value) {
+      await checkOriginal()
+      if (!alive || needsCheck.value || !draft || !outcomeUnknown.value) return
+    }
+    if (draftWorkId.value) await refreshCredits()
     const gate = await guardCredits(() => credits.value, refreshCredits)
     if (!alive || currentCreatorId() !== owner) return
     if (gate.blocked) {
@@ -181,12 +197,18 @@ async function submit() {
       error.value = t('积分不足，当前余额 {balance} 积分，生成需要 {cost} 积分。', {balance:gate.balance as number,cost:gate.cost})
       return
     }
+    if (draft && outcomeUnknown.value) {
+      draft.key = crypto.randomUUID()
+      draft.submitted = false
+      outcomeUnknown.value = false
+    }
     draft ??= { id: crypto.randomUUID(), key: crypto.randomUUID(), note: note.value.trim(), language: language.value, submitted: false }
     locked.value = true
     remember()
     const work = await saveWork({ recipient: '', occasion: '', story: draft.note, message: '',
       style: '自动推荐', title: '照片创作', vocalGender: 'AUTO' }, undefined, draft.id)
     if (!alive || currentCreatorId() !== owner) return
+    draftWorkId.value = work.id
     draft.submitted = true
     remember()
     const revision = await generatePhotoLyrics(work.id, work.version, draft.key, draft.language, files)
@@ -196,6 +218,7 @@ async function submit() {
     if (!alive) return
     needsCheck.value = draft?.submitted === true
     error.value = cause instanceof Error ? cause.message : '照片歌词生成失败，请稍后再试。'
+    if (needsCheck.value) await checkOriginal()
   } finally {
     busy.value = false
     if (alive) void refreshCredits().catch(() => {})
@@ -204,6 +227,7 @@ async function submit() {
 
 function reset() {
   draft = undefined
+  draftWorkId.value = undefined
   locked.value = false
   needsCheck.value = false
   outcomeUnknown.value = false
@@ -317,14 +341,14 @@ onBeforeUnmount(() => {
           </button>
           <button v-else class="photo-cta photo-submit" type="submit" :disabled="!canEditPhotos || !photos.length">
             <NavIcon name="music"/>
-            {{ t(busy ? '正在准备照片并编写歌词…' : '生成歌词') }}
+            {{ t(busy ? '正在准备照片并编写歌词…' : outcomeUnknown ? '重试歌词生成' : '生成歌词') }}
           </button>
           <small v-if="props.embedded && credits && credits.lyricsNextCost !== null && !needsCheck">{{ credits.lyricsNextCost===0?t('本次生成歌词免费'):t('本次生成消耗 {cost} 积分', { cost: credits.lyricsNextCost }) }}</small>
           <CreditCostHint v-else-if="credits && credits.lyricsNextCost !== null && !needsCheck" :cost="credits.lyricsNextCost" :paid-cost="credits.lyricsCost" :balance="credits.balance" :busy="busy"/>
           <small class="photo-privacy">{{ t('照片会发送给 AI 用于本次创作。分享作品时不会公开原图。') }}</small>
         </div>
         <button v-if="locked && !busy && !needsCheck" type="button" class="text-button" @click="reset">{{ t('修改创作素材') }}</button>
-        <button v-if="outcomeUnknown && !checking" type="button" class="text-button" @click="reset">{{ t('开始新的照片创作') }}</button>
+        <button v-if="outcomeUnknown && !checking" type="button" class="text-button" :disabled="busy" @click="checkOriginal">{{ t('核对歌词进度') }}</button>
       </div>
     </form>
   </section>
