@@ -19,6 +19,7 @@
       "source": "com/qingfeng/music/server/mv/MusicVideoController.java",
       "mappingDeclarations": [
         "@RequestMapping(\"/api/app/music-videos\")",
+        "@PostMapping(\"/{id}/retry-shot\")",
         "@GetMapping(\"/options\")",
         "@GetMapping",
         "@PostMapping(\"/prepare\")",

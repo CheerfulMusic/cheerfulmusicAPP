@@ -31,11 +31,11 @@ it('bounds network retries without generating a new task',async()=>{
 })
 
 it('shows rejection and retries only the edited failed shot on the original project',async()=>{
- vi.mocked(getJson).mockResolvedValueOnce({id,state:'FAILED',shots:[{shot_index:0,state:'READY'},{shot_index:1,state:'FAILED',prompt:'旧场景',error_code:'VIDEO_FACE_REJECTED'}]}).mockResolvedValueOnce({id,state:'QUEUED',shots:[{state:'READY'},{state:'QUEUED'}]})
+ vi.mocked(getJson).mockResolvedValueOnce({id,state:'FAILED',shots:[{shot_index:0,state:'READY'},{shot_index:1,state:'FAILED',prompt:'旧场景',error_code:'VIDEO_FACE_REJECTED'}]}).mockResolvedValueOnce({id,state:'RUNNING',shots:[{state:'READY'},{state:'QUEUED'}]})
  vi.mocked(requestJson).mockResolvedValue({projectId:id})
  const wrapper=mount(AgentVideoProgress,{props:{projectId:id}});await flushPromises()
  expect(wrapper.text()).toContain('疑似包含真人面孔');expect(wrapper.find('button').attributes('disabled')).toBeDefined()
  await wrapper.find('textarea').setValue('水彩灯塔与海浪');await wrapper.find('button').trigger('click');await flushPromises()
  expect(requestJson).toHaveBeenCalledWith(`app/music-videos/${id}/retry-shot`,'POST',{shotIndex:1,prompt:'水彩灯塔与海浪'})
- expect(wrapper.text()).toContain('排队中');wrapper.unmount()
+ expect(wrapper.text()).toContain('镜头生成中');wrapper.unmount()
 })

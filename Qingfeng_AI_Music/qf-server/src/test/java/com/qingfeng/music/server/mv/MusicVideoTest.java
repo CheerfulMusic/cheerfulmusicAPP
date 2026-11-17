@@ -46,16 +46,91 @@ class MusicVideoTest {
  @Test void processRestartDoesNotResubmitInterruptedPost(@org.junit.jupiter.api.io.TempDir Path root){String id=create();db.update("UPDATE music_video_shot SET state='SUBMITTING' WHERE project_id=?",id);new MusicVideoWorker(db,tx,provider,media,root,"ffmpeg").tick();assertEquals("UNCERTAIN",service.get("owner",id).get("state"));verify(provider,never()).submit(anyString(),anyInt(),anyString(),anyString(),anyString());}
  @Test void retryFailedShotPreservesCompletedShotsAndDoesNotDebitAgain(){
   String id=create();db.update("UPDATE music_video_project SET state='FAILED' WHERE id=?",id);db.update("UPDATE music_video_shot SET state='FAILED',provider_task_id='old-task' WHERE project_id=?",id);
-  assertThrows(RuntimeException.class,()->service.retryShot("other",id,0,"新的画面"));
+  var denied=assertThrows(com.qingfeng.music.common.exception.DomainException.class,()->service.retryShot("other",id,0,"新的画面"));
+  assertEquals("VIDEO_NOT_FOUND",denied.code());assertEquals("FAILED",service.get("owner",id).get("state"));
+  assertEquals("old-task",db.queryForObject("SELECT provider_task_id FROM music_video_shot WHERE project_id=?",String.class,id));
   assertThrows(RuntimeException.class,()->service.retryShot("owner",id,0,plan().shots().get(0).prompt()));
   db.update("INSERT INTO music_video_shot(id,project_id,shot_index,prompt,seconds,state,provider_task_id) VALUES(?,?,1,'completed',5,'READY','retained-task')",UUID.randomUUID().toString(),id);
+  assertThrows(com.qingfeng.music.common.exception.DomainException.class,()->service.retryShot("owner",id,1,"不得覆盖成功镜头"));
   service.retryShot("owner",id,0,"海浪与远方灯塔的水彩插画，无人物");
   assertEquals("retained-task",db.queryForObject("SELECT provider_task_id FROM music_video_shot WHERE project_id=? AND state='READY'",String.class,id));
-  assertEquals("QUEUED",service.get("owner",id).get("state"));
+  assertEquals("RUNNING",service.get("owner",id).get("state"));
   assertNull(db.queryForObject("SELECT provider_task_id FROM music_video_shot WHERE project_id=? AND shot_index=0",String.class,id));
   assertThrows(RuntimeException.class,()->service.retryShot("owner",id,0,"其他场景"));
   verify(credits,times(1)).debit(anyString(),anyLong(),anyString());
  }
+  @Test void retryWithCompletedSiblingCannotCancelOrRefundTheOriginalCharge(){
+   when(duration.millis(anyString(),anyString(),anyString())).thenReturn(60000L);
+   var plan=new MusicVideoService.Plan("x","16:9","720P",60000,List.of(new MusicVideoService.Shot("开场",30),new MusicVideoService.Shot("结尾",30)));
+   String id=service.create("owner","work","asset","retained",plan);
+   db.update("UPDATE music_video_project SET state='FAILED' WHERE id=?",id);
+   db.update("UPDATE music_video_shot SET state='READY',provider_task_id='completed-task' WHERE project_id=? AND shot_index=0",id);
+   db.update("UPDATE music_video_shot SET state='FAILED',provider_task_id='failed-task' WHERE project_id=? AND shot_index=1",id);
+   service.retryShot("owner",id,1,"海岸灯塔的新结尾");
+   assertEquals("RUNNING",service.get("owner",id).get("state"));
+   for(int attempt=0;attempt<2;attempt++)assertThrows(com.qingfeng.music.common.exception.DomainException.class,()->service.cancel("owner",id));
+   assertEquals("RUNNING",service.get("owner",id).get("state"));
+   assertEquals("completed-task",db.queryForObject("SELECT provider_task_id FROM music_video_shot WHERE project_id=? AND shot_index=0",String.class,id));
+   assertEquals("READY",db.queryForObject("SELECT state FROM music_video_shot WHERE project_id=? AND shot_index=0",String.class,id));
+   verify(credits,times(1)).debit("owner",120,"music-video:"+id);verify(credits,never()).refund(anyString(),anyString());
+  }
+  @Test void allFailedRetryWithoutTaskIdNeverBecomesARefundableFreshQueue(){
+   String id=create();
+   db.update("UPDATE music_video_project SET state='FAILED' WHERE id=?",id);
+   db.update("UPDATE music_video_shot SET state='FAILED',provider_task_id=NULL WHERE project_id=?",id);
+   service.retryShot("owner",id,0,"新的海岸场景");
+   assertEquals("RUNNING",service.get("owner",id).get("state"));
+   assertThrows(com.qingfeng.music.common.exception.DomainException.class,()->service.cancel("owner",id));
+   // A second explicit retry may restore the original prompt, but not fresh-charge cancellation eligibility.
+   db.update("UPDATE music_video_project SET state='FAILED' WHERE id=?",id);
+   db.update("UPDATE music_video_shot SET state='FAILED',provider_task_id=NULL WHERE project_id=?",id);
+   service.retryShot("owner",id,0,plan().shots().get(0).prompt());
+   assertEquals("RUNNING",service.get("owner",id).get("state"));
+   assertNull(db.queryForObject("SELECT provider_task_id FROM music_video_shot WHERE project_id=?",String.class,id));
+   assertThrows(com.qingfeng.music.common.exception.DomainException.class,()->service.cancel("owner",id));
+   verify(credits,times(1)).debit(anyString(),anyLong(),anyString());verify(credits,never()).refund(anyString(),anyString());
+  }
+  @org.junit.jupiter.params.ParameterizedTest
+  @org.junit.jupiter.params.provider.ValueSource(strings={"READY","FAILED","SUBMITTING","RUNNING","UNCERTAIN","CANCELLED"})
+  void legacyRequeuedProjectsWithAttemptedShotsCannotReceiveFullRefund(String state){
+   String id=create();db.update("UPDATE music_video_shot SET state=? WHERE project_id=?",state,id);
+   assertThrows(com.qingfeng.music.common.exception.DomainException.class,()->service.cancel("owner",id));
+   assertEquals("QUEUED",service.get("owner",id).get("state"));
+   assertEquals(state,db.queryForObject("SELECT state FROM music_video_shot WHERE project_id=?",String.class,id));
+   verify(credits,never()).refund(anyString(),anyString());
+  }
+  @Test void legacyQueuedShotWithProviderIdentityCannotReceiveFullRefund(){
+   String id=create();db.update("UPDATE music_video_shot SET provider_task_id='prior-task' WHERE project_id=?",id);
+   assertThrows(com.qingfeng.music.common.exception.DomainException.class,()->service.cancel("owner",id));
+   assertEquals("QUEUED",service.get("owner",id).get("state"));verify(credits,never()).refund(anyString(),anyString());
+  }
+  @Test void concurrentFailedShotRetriesAdmitOnlyOneAndCannotDoubleCharge()throws Exception{
+   String id=create();db.update("UPDATE music_video_project SET state='FAILED' WHERE id=?",id);db.update("UPDATE music_video_shot SET state='FAILED' WHERE project_id=?",id);
+   var pool=java.util.concurrent.Executors.newFixedThreadPool(2);var ready=new java.util.concurrent.CyclicBarrier(2);
+   try{
+    var results=new ArrayList<java.util.concurrent.Future<Boolean>>();
+    for(String prompt:List.of("新的海岸一","新的海岸二"))results.add(pool.submit(()->{
+     ready.await(5,java.util.concurrent.TimeUnit.SECONDS);
+     try{service.retryShot("owner",id,0,prompt);return true;}
+     catch(com.qingfeng.music.common.exception.DomainException rejected){assertEquals("INVALID_VIDEO_REQUEST",rejected.code());return false;}
+    }));
+    int accepted=0;for(var result:results)if(result.get(10,java.util.concurrent.TimeUnit.SECONDS))accepted++;
+    assertEquals(1,accepted);assertEquals("RUNNING",service.get("owner",id).get("state"));
+    assertTrue(Set.of("新的海岸一","新的海岸二").contains(db.queryForObject("SELECT prompt FROM music_video_shot WHERE project_id=?",String.class,id)));
+    assertEquals("QUEUED",db.queryForObject("SELECT state FROM music_video_shot WHERE project_id=?",String.class,id));
+    verify(credits,times(1)).debit(anyString(),anyLong(),anyString());verify(credits,never()).refund(anyString(),anyString());
+   }finally{pool.shutdownNow();}
+  }
+  @Test void workerContinuesQueuedShotInsideRetriedRunningProject(@org.junit.jupiter.api.io.TempDir Path root){
+   String id=create();db.update("UPDATE music_video_project SET state='FAILED' WHERE id=?",id);db.update("UPDATE music_video_shot SET state='FAILED' WHERE project_id=?",id);
+   service.retryShot("owner",id,0,"新的海浪画面");when(provider.submit(anyString(),anyInt(),anyString(),anyString(),anyString())).thenReturn("retry-task");
+   new MusicVideoWorker(db,tx,provider,media,root,"ffmpeg").tick();
+   assertEquals("RUNNING",service.get("owner",id).get("state"));
+   assertEquals("retry-task",db.queryForObject("SELECT provider_task_id FROM music_video_shot WHERE project_id=?",String.class,id));
+   assertEquals("RUNNING",db.queryForObject("SELECT state FROM music_video_shot WHERE project_id=?",String.class,id));
+   verify(provider,times(1)).submit(eq("新的海浪画面"),eq(5),eq("16:9"),eq("720P"),anyString());
+   verify(credits,times(1)).debit(anyString(),anyLong(),anyString());verify(credits,never()).refund(anyString(),anyString());
+  }
  @Test void faceRejectionIsRecordedWithoutRetrying(){
   String id=create();db.update("UPDATE music_video_shot SET state='RUNNING',provider_task_id='task' WHERE project_id=?",id);when(provider.status("task")).thenReturn("face_rejected");
   var worker=new MusicVideoWorker(db,tx,provider,media,Path.of("target/test-video-failure"),"ffmpeg");worker.tick();
