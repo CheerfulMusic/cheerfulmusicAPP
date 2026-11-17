@@ -1,0 +1,105 @@
+{
+  "version": 1,
+  "scope": "Fictional fixed lyric quality cases; neither model verdicts nor this fixture guarantee artistic quality",
+  "cases": [
+    {
+      "id": "gaming",
+      "material": {
+        "recipient": "自己",
+        "occasion": "总决赛后",
+        "story": "虚构的隔离评测素材，不代表真实用户。五年级开始看英雄联盟比赛，现在二十五岁。昨晚总决赛结束，有遗憾，但还想继续看比赛。记得夜里亮着的屏幕、峡谷和高地。",
+        "message": "写青春变化、遗憾和仍然热爱的复杂心情；不能编造战队、比分、夺冠或朋友经历。",
+        "style": "抒情摇滚",
+        "musicDirection": "中文抒情摇滚，副歌有力量，但不强行把遗憾改成胜利。",
+        "musicExclusions": "",
+        "preferredTitle": "",
+        "vocalGender": "AUTO"
+      },
+      "facts": [
+        "五年级开始看英雄联盟比赛，当前二十五岁",
+        "昨晚总决赛结束，有遗憾仍想继续看",
+        "不编造战队、比分、夺冠或朋友经历"
+      ],
+      "editorialTargets": [
+        "核心表达能独立成立",
+        "遗憾与热爱并存，不能强行励志释怀",
+        "后续主歌须超过前段的换词解释",
+        "文字节奏适合抒情摇滚，不能仅靠抽象荣光词"
+      ]
+    },
+    {
+      "id": "mother",
+      "material": {
+        "recipient": "母亲",
+        "occasion": "一次普通的回家吃饭",
+        "story": "这是一份虚构的功能测试素材，不代表真实用户经历。我已经成年，在外地生活。每次回家，母亲总把晚饭留在锅里，不催我，只说回来自己盛。小时候我嫌这句话啰嗦，长大后每次晚到，都会放轻开门的声音。这次回家吃完饭，我把她的碗也拿去洗，她站在厨房门口说放着吧。素材中没有疾病、死亡或重大变故，不要增加这些情节。",
+        "message": "想表达对母亲的心疼和靠近，不写宏大赞美，不写成催泪或励志歌曲。希望那些平常的话和动作能够承载情感。",
+        "style": "温暖民谣",
+        "preferredTitle": "",
+        "musicDirection": "中文温暖民谣，木吉他为主，轻柔钢琴点缀，节奏舒缓，人声贴近。请给出适合这首歌的编曲建议，不指定歌手、调性或BPM。",
+        "musicExclusions": "大合唱、激烈鼓点、过度煽情的编曲",
+        "vocalGender": "AUTO",
+        "previousLyrics": "",
+        "revisionInstructions": ""
+      },
+      "facts": [
+        "成年后在外地生活",
+        "回家留饭、轻声开门、洗两只碗",
+        "不能新增疾病、死亡等催泪经历"
+      ],
+      "editorialTargets": [
+        "日常动作体现关系的变化",
+        "副歌不能只是一般性的感谢或正确劝慰",
+        "避免把每个生活动作顺序复述",
+        "语序、动作姿态和时空逻辑自然"
+      ]
+    },
+    {
+      "id": "sparse",
+      "material": {
+        "recipient": "自己",
+        "occasion": "普通的一天",
+        "story": "虚构的隔离评测素材，不代表真实用户。今天下班，一个人坐在公交车靠窗的位置，看着车窗里的倒影。",
+        "message": "有点累。不需要励志，也不编造爱情或人生反转。写一首约200字的短歌，允许留白。",
+        "style": "舒缓流行",
+        "musicDirection": "舒缓流行，平静、克制，不要励志高潮。",
+        "musicExclusions": "",
+        "preferredTitle": "",
+        "vocalGender": "AUTO"
+      },
+      "facts": [
+        "下班坐公交靠窗看倒影",
+        "疲惫但不求励志",
+        "不增加爱情或人生反转"
+      ],
+      "editorialTargets": [
+        "约200字短歌可以留白",
+        "不因没有桥段或宏大结论而判失败",
+        "允许平静情绪，减少同义复述"
+      ]
+    },
+    {
+      "id": "children",
+      "material": {
+        "recipient": "六岁的孩子",
+        "occasion": "雨后玩耍",
+        "story": "虚构的隔离评测素材，不代表真实用户。孩子在雨后的路边跳过三个小水坑，鞋子溅湿了，回头笑着说还想再跳一次。",
+        "message": "轻快、快乐、适合儿童跟唱，不写成人哲理，不增加挫折和危险情节。",
+        "style": "轻快儿歌",
+        "musicDirection": "轻快儿歌，简单好记，允许有趣重复。",
+        "musicExclusions": "",
+        "preferredTitle": "",
+        "vocalGender": "AUTO"
+      },
+      "facts": [
+        "六岁孩子雨后跳三个小水坑、鞋湿、还想再跳",
+        "不加入危险、挫折或成人情感"
+      ],
+      "editorialTargets": [
+        "快乐、简单、可跟唱",
+        "合理重复不是机械填充",
+        "不奖励抽象深意或宏大青春措辞"
+      ]
+    }
+  ]
+}

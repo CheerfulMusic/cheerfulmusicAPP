@@ -21,6 +21,13 @@ public final class AgentStudioActions implements AgentApplicationActions {
         this.works=works;this.settings=settings;this.briefs=briefs;this.lines=lines;this.playback=playback;this.sections=sections;this.conversations=conversations;
     }
     public List<Capability> capabilities() { return List.of(
+        cap("pause_playback","暂停浏览器播放器","","write"),
+        cap("next_track","播放队列下一首","","write"),
+        cap("previous_track","播放队列上一首","","write"),
+        cap("enable_repeat","开启单曲循环","","write"),
+        cap("disable_repeat","关闭单曲循环","","write"),
+        cap("enable_lyric_follow","开启歌词随播放滚动","","write"),
+        cap("disable_lyric_follow","关闭歌词自动滚动","","write"),
         cap("music_settings_catalog","查看音乐设置可用分类、选项和风格配方","","read"),
         cap("get_music_settings","查看作品当前音乐设置或某次生成实际使用的设置","workId?:作品ID,taskId?:生成任务ID","read"),
         cap("preview_music_settings","预览音乐设置，不保存、不生成","workId?:作品ID,freeText?,negativeText?,vocalGender?:AUTO/MALE/FEMALE,recipeId?,choices?:分类ID到选项ID数组","read"),
@@ -35,6 +42,8 @@ public final class AgentStudioActions implements AgentApplicationActions {
     private static Capability cap(String id,String description,String parameters,String effect) { return new Capability(id,description,parameters,effect); }
     @Override public Result execute(String owner,String conversation,String action,Map<String,Object> args,String text,String key,SongCard current) {
         conversations.state(owner,conversation);
+        if(Set.of("pause_playback","next_track","previous_track","enable_repeat","disable_repeat","enable_lyric_follow","disable_lyric_follow").contains(action))
+            return result(action,"player","已向当前播放器发送操作；播放结果请以播放器状态为准。",List.of());
         if("music_settings_catalog".equals(action)) {
             var catalog=settings.catalog();var items=new ArrayList<Item>();
             for(var group:catalog.groups()) items.add(new Item(group.id(),group.zh(),"最多选择 "+group.max()+" 项："+String.join("、",group.options().stream().map(o->o.zh()+" ("+o.id()+")").toList()),Map.of("groupId",group.id())));

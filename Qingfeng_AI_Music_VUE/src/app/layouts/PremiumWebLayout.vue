@@ -27,7 +27,7 @@ const authenticated = computed(() => accountState.value.authenticated || logtoSt
 const navigation = [
   { to: '/', label: '首页', icon: 'home', agent: false },
   { to: '/create', label: '开始创作', icon: 'home', agent: false },
-  { to: '/agent', label: 'Agent 创作', icon: 'agent', agent: true },
+  { to: '/agent', label: '智能助手', icon: 'agent', agent: true },
   { to: '/#inspiration', label: '推荐', icon: 'music', agent: false },
   { to: '/discover', label: '广场', icon: 'music', agent: false },
   { to: '/#how', label: '如何制作', icon: 'guide', agent: false },

@@ -9,12 +9,12 @@ import { comparableLyric, hintedLine, lyricSlices, type EditHint } from '../mode
 import { rhymeSectionAt, type LyricRhymeSection } from '../model/lyric-rhyme'
 import { isLyricLine } from '../model/lyric-line-edit'
 import LyricRhymeEditor from './LyricRhymeEditor.vue'
-const props=defineProps<{workId:string;assetId:string;lyrics?:string;language?:string|null;editable?:boolean;sectionOpen?:boolean}>()
+const props=withDefaults(defineProps<{workId:string;assetId:string;lyrics?:string;language?:string|null;editable?:boolean;sectionOpen?:boolean;playerTrackId?:string;autoSyncEnabled?:boolean;followEnabled?:boolean;refreshKey?:number}>(),{autoSyncEnabled:true,followEnabled:true})
 const emit=defineEmits<{seek:[time:number];edit:[hint?:EditHint]}>()
 const player=usePlayer(),data=ref<PlaybackLyrics>(),loading=ref(false),syncing=ref(false),error=ref(''),following=ref(true),viewport=ref<HTMLElement>()
 const rows=computed(()=>data.value?.lines||[])
 const plain=computed(()=>plainLyricLines(data.value?.text||props.lyrics||''))
-const isCurrent=computed(()=>player.current?.id===props.assetId)
+const isCurrent=computed(()=>player.current?.id===(props.playerTrackId||props.assetId))
 const position=computed(()=>lyricPosition(rows.value,isCurrent.value?player.time:0))
 const active=computed(()=>isCurrent.value?position.value.active:-1)
 const timed=computed(()=>data.value?.status==='READY'&&rows.value.length>0)
@@ -104,7 +104,7 @@ function storageName(){return `qingfeng.lyrics.timing:${props.assetId}`}
 function rememberKey(){try{sessionStorage.setItem(storageName(),pendingKey)}catch{/* 本次挂载仍复用同一个请求键。 */}}
 function autoSync(){
   // 仅实际播放本曲、首次尚未请求的时间轴才自动同步。失败和未知结果不自动重发。
-  if(disposed||loading.value||syncing.value||automaticAttempted||!isCurrent.value||!player.playing||data.value?.status!=='NOT_REQUESTED'||!canSync.value)return
+  if(props.autoSyncEnabled===false||disposed||loading.value||syncing.value||automaticAttempted||!isCurrent.value||!player.playing||data.value?.status!=='NOT_REQUESTED'||!canSync.value)return
   automaticAttempted=true;void sync()
 }
 async function load(){
@@ -144,7 +144,7 @@ async function sync(){
 }
 async function center(smooth=true){
   const turn=sequence;await nextTick()
-  if(turn!==sequence||disposed||lyricFrozen.value||!following.value||!timed.value||!isCurrent.value||!viewport.value)return
+  if(turn!==sequence||disposed||lyricFrozen.value||props.followEnabled===false||!following.value||!timed.value||!isCurrent.value||!viewport.value)return
   const row=viewport.value.querySelector<HTMLElement>(`[data-line="${position.value.anchor}"]`)
   if(!row)return
   // 只滚动歌词容器，不改变整个页面的位置。
@@ -152,10 +152,11 @@ async function center(smooth=true){
   viewport.value.scrollTo({top:Math.max(0,top),behavior:smooth&&!window.matchMedia('(prefers-reduced-motion: reduce)').matches?'smooth':'instant'})
 }
 function manualScroll(){if(!timed.value)return;following.value=false;clearTimeout(followTimer);followTimer=setTimeout(()=>resume(),6000)}
-function resume(smooth=true){clearTimeout(followTimer);following.value=true;void center(smooth)}
+function resume(smooth=true){clearTimeout(followTimer);following.value=props.followEnabled!==false;if(following.value)void center(smooth)}
 function jump(time:number){resume(false);emit('seek',time)}
 function visible(){if(document.visibilityState==='visible'&&isCurrent.value){resume(false);if(data.value?.status==='FETCHING'||data.value?.status==='UNKNOWN'||!data.value){pollUntil=Date.now()+180000;pollFailures=0;pollIfNeeded()}autoSync()}}
-watch(()=>[props.workId,props.assetId],()=>{void load()},{immediate:true})
+watch(()=>props.followEnabled,()=>resume(false))
+watch(()=>[props.workId,props.assetId,props.refreshKey],()=>{void load()},{immediate:true})
 watch(()=>[player.playing,isCurrent.value,loading.value,data.value?.status],()=>{autoSync();if(isCurrent.value&&player.playing)resume(false)})
 watch(()=>[position.value.anchor,isCurrent.value,timed.value],()=>{if(following.value)void center()})
 watch(()=>player.seekVersion,()=>{if(isCurrent.value)resume(false)})

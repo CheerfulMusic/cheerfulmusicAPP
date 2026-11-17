@@ -22,7 +22,7 @@ $base = 'https://maas.qianwenaiapi.com/compatible-mode/v1'
 if ($env:QWEN_BASE_URL) { $base = $env:QWEN_BASE_URL }
 $uri = $base.TrimEnd('/') + '/chat/completions'
 
-# Matches DeepSeekInspirationRewriter request body: NO DeepSeek-only "thinking" field.
+# Matches QwenInspirationRewriter JSON request: disable thinking explicitly.
 $payload = @{
     model           = $model
     messages        = @(
@@ -30,6 +30,7 @@ $payload = @{
         @{ role = 'user'; content = '{"text":"a song about summer","lyricLanguage":"zh-CN"}' }
     )
     response_format = @{ type = 'json_object' }
+    enable_thinking = $false
     max_tokens      = 200
     stream          = $false
 } | ConvertTo-Json -Depth 10

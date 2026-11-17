@@ -22,10 +22,15 @@ class CreditHistoricalCutoverTest {
     }
     private static Set<String> codes(Plan plan) { var result = new HashSet<String>(); plan.issues().forEach(i -> result.add(i.code())); return result; }
     private static final String V46 = "V46__agent_chat_allowance.sql";
+    private static final String V47 = "V47__music_video_projects.sql";
+    private static List<Resource> classpathMigrations() throws Exception {
+        return new ArrayList<>(Arrays.asList(new PathMatchingResourcePatternResolver().getResources("classpath*:db/migration/V*__*.sql")));
+    }
     private static List<Resource> migrations(boolean includeV46) throws Exception {
-        var resources = new ArrayList<>(Arrays.asList(new PathMatchingResourcePatternResolver().getResources("classpath*:db/migration/V*__*.sql")));
+        var resources = classpathMigrations();
         assertTrue(resources.stream().anyMatch(resource -> V46.equals(resource.getFilename())), "Test the real approved V46 resource, not a synthetic guard mock");
-        if (!includeV46) resources.removeIf(resource -> V46.equals(resource.getFilename()));
+        // Explicit V45/V46 artifact-prefix fixtures; the separate main test checks the unfiltered classpath.
+        resources.removeIf(resource -> version(resource) > (includeV46 ? 46 : 45));
         return resources;
     }
     private static int version(Resource resource) {
@@ -135,6 +140,54 @@ class CreditHistoricalCutoverTest {
         var reordered = history(resources, 45); Collections.swap(reordered, 20, 21);
         assertEquals("HISTORY_SCRIPT_OR_CHECKSUM_MISMATCH", assertThrows(IllegalStateException.class, () -> verifyHistory(reordered, resources)).getMessage());
     }
+    @Test void approvedExtensionsMayCoexistWithoutChangingHistoricalSourceVersions() throws Exception {
+        var resources = classpathMigrations(); assertEquals(48, resources.size());
+        var optional = resources.stream().filter(item -> V47.equals(item.getFilename())).findFirst().orElseThrow();
+        try (var stream = optional.getInputStream()) { assertEquals(-48314744, checksum(stream.readAllBytes())); }
+        for (int limit : List.of(44, 45)) {
+            var actual = history(resources, limit); assertEquals(limit, actual.size());
+            assertDoesNotThrow(() -> verifyHistory(actual, resources));
+        }
+    }
+    @Test void mainV47MustKeepItsOriginalNameAndBothContentPins() throws Exception {
+        var original = classpathMigrations(); var actual = history(original, 44);
+        byte[] bytes;
+        try (var stream = original.stream().filter(item -> V47.equals(item.getFilename())).findFirst().orElseThrow().getInputStream()) { bytes = stream.readAllBytes(); }
+        for (String change : List.of("name", "sql", "same-crc")) {
+            var changed = migrations(true);
+            byte[] content = switch (change) {
+                case "sql" -> "SELECT 1;".getBytes(StandardCharsets.UTF_8);
+                case "same-crc" -> (new String(bytes, StandardCharsets.UTF_8) + "\n\n").getBytes(StandardCharsets.UTF_8);
+                default -> bytes;
+            };
+            if (change.equals("same-crc")) assertEquals(checksum(bytes), checksum(content));
+            changed.add(resource(change.equals("name") ? "V47__different_meaning.sql" : V47, content));
+            var failure = assertThrows(IllegalStateException.class, () -> verifyHistory(actual, changed));
+            assertEquals("HISTORY_UNAPPROVED_RESOURCE_EXTENSION", failure.getMessage());
+        }
+    }
+    @Test void mainV47CannotSkipV46DuplicateItsVersionPermitV48OrBecomeHistoricalInput() throws Exception {
+        var resources = classpathMigrations(); var actual = history(resources, 44);
+        var missing46 = new ArrayList<>(resources); missing46.removeIf(resource -> version(resource) == 46);
+        assertEquals("HISTORY_RESOURCE_CHAIN_INCOMPLETE", assertThrows(IllegalStateException.class, () -> verifyHistory(actual, missing46)).getMessage());
+        var duplicate = new ArrayList<>(resources); duplicate.add(resources.stream().filter(resource -> V47.equals(resource.getFilename())).findFirst().orElseThrow());
+        assertEquals("DUPLICATE_CLASSPATH_MIGRATION", assertThrows(IllegalStateException.class, () -> verifyHistory(actual, duplicate)).getMessage());
+        var future = new ArrayList<>(resources); future.add(resource("V48__unreviewed.sql", "SELECT 1;".getBytes(StandardCharsets.UTF_8)));
+        assertEquals("HISTORY_UNAPPROVED_RESOURCE_EXTENSION", assertThrows(IllegalStateException.class, () -> verifyHistory(actual, future)).getMessage());
+        var actual47 = history(resources, 47); assertEquals(47, actual47.size());
+        assertEquals("HISTORY_CHAIN_LENGTH_MISMATCH", assertThrows(IllegalStateException.class, () -> verifyHistory(actual47, resources)).getMessage());
+    }
+    @Test void phoneBindingResourceIsPinnedAndCannotSkipVideoMigration() throws Exception {
+        var resources = classpathMigrations(); var actual = history(resources, 44);
+        var missing = new ArrayList<>(resources); missing.removeIf(r -> version(r) == 47);
+        assertEquals("HISTORY_RESOURCE_CHAIN_INCOMPLETE", assertThrows(IllegalStateException.class, () -> verifyHistory(actual, missing)).getMessage());
+        for (String name : List.of("V48__phone_binding.sql", "V48__different.sql")) {
+            var modified = new ArrayList<>(resources); modified.removeIf(r -> version(r) == 48);
+            modified.add(resource(name, "SELECT 1;".getBytes(StandardCharsets.UTF_8)));
+            assertEquals("HISTORY_UNAPPROVED_RESOURCE_EXTENSION", assertThrows(IllegalStateException.class, () -> verifyHistory(actual, modified)).getMessage());
+        }
+    }
+
     @Test void remainingOpeningNeverInventsHistoricalFifoAndRefundsRetainExactReferences() {
         Snapshot source = snapshot(List.of(new Owner("a", 0, 80L)), row("CREDIT", "first-login:a", "a", 100),
                 row("DEBIT", "old-1", "a", -30), row("REFUND", "old-1", "a", 30), row("DEBIT", "old-2", "a", -20));

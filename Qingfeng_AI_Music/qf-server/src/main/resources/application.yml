@@ -103,11 +103,13 @@ qingfeng:
       enabled: true
       scheduler-enabled: true
   providers:
-    # AI 改写（灵感改写 / 歌词行改写 / 音乐要求精简）默认走千问AI平台千问 Flash 快速版。
+    # AI 改写、Agent 对话与参考分析、千问写词及 GPT 写词备用通道共用千问 Flash 配置。
     # base-url 必须与签发 key 的平台配套，不能混用阿里云百炼官方域名 dashscope.aliyuncs.com。
     # 密钥严禁写入仓库：由服务器私有配置 qingfeng.providers.qwen.api-key，
     # 或环境变量 aliyunqingfengKEY / DASHSCOPE_API_KEY 注入。
-    # 歌词生成主链路仍用 qingfeng.providers.deepseek.*，此处不影响。
+    # 整首歌词默认仍使用 OpenAI GPT-6.1 Sol；可单独选择 qwen 或启用千问备用通道。
+    openai:
+      model: gpt-6.1-sol
     qwen:
       model: qwen3.8-flash
       # 只配到 /v1 即可，代码会自动补齐 /chat/completions。
@@ -119,6 +121,8 @@ qingfeng:
       variety: 0
       section-audio-weight: 0.85
   lyrics:
+    provider: openai
+    qwen-fallback-enabled: false
     timing:
       enabled: true
   generation:

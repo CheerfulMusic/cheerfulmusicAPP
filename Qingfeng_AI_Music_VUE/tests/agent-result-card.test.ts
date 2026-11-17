@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { assistantResult, resultMediaUrl, resultInviteUrl, uploadTarget, type AgentCommand } from '../src/modules/agent/model/assistant-result'
 import AgentResultCard from '../src/modules/agent/components/AgentResultCard.vue'
@@ -106,4 +106,38 @@ describe('conversation result cards', () => {
     expect(uploadTarget(command('upload_audio', '../account'))).toBeNull()
     expect(uploadTarget(command('upload', 'https://evil.example'))).toBeNull()
   })
+})
+
+
+it('Agent 示例音频失败后只回退一次，私人音频保持不变', async () => {
+  const result = assistantResult(message({ kind: 'works', items: [
+    { id: 's', title: '示例', data: { audioUrl: '/media/sample-red-guofeng-v1.mp3' } },
+    { id: 'p', title: '私人', data: { audioUrl: '/api/app/works/w1/audio/a1' } }
+  ] }))!
+  const wrapper = mount(AgentResultCard, { props: { result, disabled: false, current: true } })
+  const [sample, privateAudio] = wrapper.findAll('audio')
+  await sample!.trigger('error')
+  const fallback = (sample!.element as HTMLAudioElement).src
+  expect(fallback).toContain('/media/sample-red-guofeng-v1.mp3?reauth=')
+  await sample!.trigger('error')
+  expect((sample!.element as HTMLAudioElement).src).toBe(fallback)
+  const before = (privateAudio!.element as HTMLAudioElement).src
+  await privateAudio!.trigger('error')
+  expect((privateAudio!.element as HTMLAudioElement).src).toBe(before)
+  wrapper.unmount()
+})
+
+it('keeps the complete capability catalogue beyond one hundred actions',()=>{
+ const items=Array.from({length:120},(_,i)=>({id:'action'+i,title:'功能'+i,data:{}}))
+ expect(assistantResult(message({kind:'capabilities',items}))?.items).toHaveLength(120)
+ expect(assistantResult(message({kind:'works',items}))?.items).toHaveLength(100)
+})
+it('exports actual lyrics as a TXT blob without another generation request',async()=>{
+ const create=vi.spyOn(URL,'createObjectURL').mockReturnValue('blob:lyrics'), revoke=vi.spyOn(URL,'revokeObjectURL').mockImplementation(()=>{})
+ const click=vi.spyOn(HTMLAnchorElement.prototype,'click').mockImplementation(()=>{})
+ const result=assistantResult(message({kind:'lyrics_download',items:[{id:'r',title:'歌名',data:{lyrics:'第一句\n第二句'}}]}))!
+ const wrapper=mount(AgentResultCard,{props:{result,disabled:false,current:true}})
+ await wrapper.find('button').trigger('click');expect(click).toHaveBeenCalledOnce()
+ const blob=create.mock.calls[0]![0] as Blob;expect(await blob.text()).toContain('第一句\n第二句')
+ wrapper.unmount();create.mockRestore();click.mockRestore();revoke.mockRestore()
 })

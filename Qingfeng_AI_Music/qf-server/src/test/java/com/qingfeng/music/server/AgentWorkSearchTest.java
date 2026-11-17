@@ -22,6 +22,7 @@ class AgentWorkSearchTest {
         jdbc.execute("CREATE TABLE media_asset(id VARCHAR(36),work_id VARCHAR(36),origin VARCHAR(30),generation_task_id VARCHAR(36),created_at TIMESTAMP)");
         jdbc.execute("CREATE TABLE work_audio_selection(work_id VARCHAR(36),asset_id VARCHAR(36))");
         jdbc.execute("CREATE TABLE section_edit(task_id VARCHAR(36))");
+        jdbc.execute("CREATE TABLE music_video_project(id VARCHAR(36),work_id VARCHAR(36),creator_id VARCHAR(36),state VARCHAR(30),created_at TIMESTAMP)");
         WorkApi works=mock(WorkApi.class);Instant now=Instant.now();var rows=new ArrayList<Object[]>();
         for(int i=0;i<2025;i++) {
             String id="w"+i,title=i<25?"回家"+i:"其他作品";

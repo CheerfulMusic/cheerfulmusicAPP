@@ -113,9 +113,31 @@ public final class AgentToolSchemaCatalog {
         all.put("rewrite_lyric_line",object(withWork(fields("line",text(160),"context",text(360),"mode",enumeration("REWRITE","RHYME","COLLOQUIAL","SHORTEN"),"language",enumeration("zh-CN","en","mixed"))),"line"));
         for(String action:List.of("get_playback_lyrics","sync_playback_lyrics","section_context"))all.put(action,object(withWork(fields("assetId",id()))));
         all.put("accept_referral",object(fields("code",text(128)),"code"));
-        all.put("get_order",object(fields("orderId",id(),"provider",enumeration("paypal","airwallex")),"orderId"));
+        all.put("get_order",object(fields("orderId",id(),"provider",enumeration("paypal","airwallex","stripe")),"orderId"));
         all.put("close_order",object(fields("orderId",id()),"orderId"));
         all.put("search_memory",object(fields("query",text(1000),"limit",integer(1,10)),"query"));
+        for(String action:List.of("pause_playback","next_track","previous_track","enable_repeat","disable_repeat","enable_lyric_follow","disable_lyric_follow"))all.put(action,object(fields()));
+        all.put("retry_music_video_shot",object(fields("projectId",id(),"shotNumber",integer(1,120),"prompt",text(2000)),"projectId","shotNumber","prompt"));
+        for(String action:List.of("download_lyrics","generation_preflight"))all.put(action,object(withWork(fields("revisionId",id()))));
+        all.put("list_music_videos",object(withWork(Map.of())));
+        for(String action:List.of("get_music_video","download_music_video","cancel_music_video","retry_music_video_assembly"))all.put(action,object(fields("projectId",id()),"projectId"));
+        all.put("video_capabilities",object(withWork(fields("assetId",id()))));
+        all.put("create_music_video",object(withWork(fields("assetId",id(),"title",text(100),"ratio",enumeration("16:9","9:16","1:1"),"resolution",enumeration("480P","720P","1080P"),"shots",array(object(fields("prompt",text(2000),"seconds",integer(0,30),"imageId",id(),"imageSeconds",integer(0,30)),"prompt"),120))),"title","ratio","resolution","shots"));
+        all.put("preview_music_video",object(withWork(fields("assetId",id(),"title",text(100),"ratio",enumeration("16:9","9:16","1:1"),"resolution",enumeration("480P","720P","1080P"),"shots",array(object(fields("prompt",text(2000),"seconds",integer(0,30),"imageId",id(),"imageSeconds",integer(0,30)),"prompt"),120))),"title","ratio","shots"));
+        all.put("generate_avatar",object(fields("prompt",text(1000)),"prompt"));
+        for(String action:List.of("upload_video_image","open_music_video_editor"))all.put(action,object(withWork(fields("assetId",id()))));
+        all.put("open_feature",object(withWork(fields("feature",enumeration("artist","discover","analytics","work","avatar","reference","payment_risk","editorial","gift"),"giftToken",text(43))),"feature"));
+        for(String action:List.of("get_artist_profile","list_shared_downloads"))all.put(action,object(Map.of()));
+        all.put("update_artist_profile",object(fields("stageName",text(80),"tagline",text(300),"featuredReleaseId",id())));
+        all.put("set_artist_visibility",object(fields("published",Map.of("type","boolean")),"published"));
+        all.put("publish_artist_song",object(withWork(fields("assetId",id(),"coverId",id(),"title",text(100))),"assetId","title"));
+        for(String action:List.of("get_artist_release","remove_artist_song","publish_to_discover","withdraw_from_discover","get_quick_creation","get_creative_direction"))all.put(action,object(withWork(Map.of())));
+        all.put("start_quick_creation",object(withWork(fields("language",enumeration("zh-CN","en","mixed")))));
+        all.put("retry_quick_creation",object(withWork(fields("creationId",id())),"creationId"));
+        all.put("confirm_lyrics",object(withWork(fields("revisionId",id())),"revisionId"));
+        all.put("get_lyrics_request",object(withWork(fields("requestKey",id())),"requestKey"));
+        all.put("rewrite_lyric_selection",object(withWork(fields("revisionId",id(),"keptLines",array(integer(0,1000),1000),"language",enumeration("zh-CN","en","mixed"))),"revisionId","keptLines"));
+        all.put("rhyme_lyric_line",object(withWork(fields("line",text(160),"lines",array(text(160),40),"lineIndex",integer(0,39),"referenceIndex",integer(0,39),"language",enumeration("zh-CN","en","mixed"),"allowNear",Map.of("type","boolean"),"allowCrossLanguage",Map.of("type","boolean"),"rewriteIfAlreadyRhymes",Map.of("type","boolean"))),"line","lines","lineIndex","language"));
         return Collections.unmodifiableMap(all);
     }
 

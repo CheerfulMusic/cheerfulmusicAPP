@@ -2,9 +2,66 @@
 
 ## 本次范围
 
-自定义创作的生成歌词和重新生成歌词使用 OpenAI。快捷创作和 Agent 的共享写词服务由 `qingfeng.lyrics.provider` 配置，默认使用 DeepSeek。OpenAI 写词使用官方 `https://api.openai.com/v1/responses`，默认型号 `gpt-6.1-terra`，`reasoning.effort=low`，单次输出上限 6000 tokens，请求超时 90 秒。型号可以通过服务端配置调整，需要使用支持 Responses、严格结构化输出和 low reasoning 的模型。
+自定义创作的生成歌词和重新生成歌词使用 OpenAI。快捷创作和 Agent 的共享写词服务由 `qingfeng.lyrics.provider` 配置，2026-11-16 起默认使用 OpenAI。当前本地代码使用官方 `https://api.openai.com/v1/responses`，默认型号 `gpt-6.1-sol`；初稿使用 medium reasoning，编辑及盲选使用 low reasoning；初稿和编辑输出上限 8000 tokens，盲选上限 4000 tokens。型号可以通过服务端配置调整，需要支持 Responses、严格结构化输出及对应推理级别。历史部署参数见下文，不代表本地候选已经上线。
 
-复用现有写词提示词、语言选择、段落模板、保留原句要求、音乐设置与 CreativePlan；不改变歌词版本保存流程。新增 GPT 版本来源记为 `OPENAI`，DeepSeek 仍记为 `DEEPSEEK`，历史数据不改写。灵感输入框的“AI 改写”、音乐生成、封面生成仍保持各自原有提供方。
+复用现有写词提示词、语言选择、段落模板、保留原句要求、音乐设置与 CreativePlan；不改变歌词版本保存流程。GPT 新版本来源记为 `OPENAI`，千问新版本记为 `QWEN`，历史 `DEEPSEEK` 记录不改写。灵感输入框的“AI 改写”、音乐生成、封面生成仍保持各自原有提供方。
+
+## 本地候选：完整新作的质量审查
+
+此变更覆盖 OpenAI 和千问提供方的完整文本新作，以及通过它们生成全文的自定义、快捷和 Agent 入口。照片写歌、基于已有版本的受保护修改、单句润色及选中行改写保留原有请求和保护契约，不宣称已通过同一套终稿审查。前端和数据库结构不变，不修改生产提示词或配置。
+
+完整新作采用“初稿 → 独立终稿编辑”。编辑明确保留初稿时为两阶段；编辑提出有效改稿时，再以独立请求盲选 A/B，正常情况下每个提供方最多三个业务阶段。编辑阶段最多形成一份改稿，不追加无限重写。OpenAI 编辑及盲选使用 low reasoning；千问仍关闭 thinking，初稿上限 2400、编辑上限 4000 tokens。
+
+审查的六个维度为事实与约束、独立核心表达、段落推进、自然语言、韵律潜力及题材情绪。学习参考作品的表达提炼、节奏组织和情绪发展，不复制电竞歌词，不把亲情、短歌或儿歌一律写成宏大叙事。
+
+编辑响应在原 `title/lyrics/plan` 之外增加仅供内部使用的 `quality`，包含决定、原稿问题引文、选中稿的核心句／推进／节奏引文和简短理由。程序核对枚举、字段、引用是否逐字存在、标题及标签顺序等；最终公开业务对象仍保持原契约，不把审稿解释写入歌词。
+
+| 编辑决定 | 程序行为 |
+| --- | --- |
+| KEEP | 原稿本身得到明确认可，问题列表为空，原稿逐字返回。 |
+| REWRITE | 至少有一条原稿问题的真实引文，改稿确实有文字变化且引用有效；进入不标明新旧版本的 A/B 比较，不能凭编辑自评直接交付。 |
+| REJECT | 确认仍未满足创作要求，不交付新版本，返回 `LYRICS_QUALITY_NOT_MET`。 |
+| UNSURE／响应不可核实 | 不静默退回初稿，不称为通过，返回 `LYRICS_QUALITY_UNVERIFIED`。 |
+
+两种质量错误是确定的未交付状态，沿既有失败事务释放额度或幂等退回站内积分，不覆盖已有版本。它们不会触发千问备用生成。某阶段请求已经发出后的网络超时、断线、中断及 Agent deadline，继续使用原有 UNKNOWN 错误语义；不能因等待结束自动退款或重发。若前一阶段已完整收到、下一阶段尚未发送就发现预算不足或已取消，则返回 QUALITY_UNVERIFIED，明确没有交付，不额外发送请求。
+
+盲选只收到原始素材和 A/B 歌词，不收到先前的修改决定、理由或版本标签，候选顺序会交换。两边分别给出是否可交付、对应原句及简短理由；允许选择初稿、改稿、两版均不足或无法确定。选中稿也必须有可核对的核心句、推进及节奏引用；两稿均不足不能以“相对好一点”交付。最终始终保留初稿音乐计划、原标题和来源，不因比较改动制作设置。
+
+初稿 HTTP 阶段最多 75 秒，整个模型链共享 110 秒预算；编辑为可能的比较预留 20 秒，并服从更短的 Agent 剩余时间。跨提供方切换不重置预算，也不覆盖 Agent 取消范围。原有明确初次拒绝且处于 25 秒内的备用策略保留，因此切换时可能有一次被拒请求加后备的二至三个阶段；编辑或比较失败不会再次启动整首生成。仅连接失败且请求体尚未被取用时保留既有一次安全连接重试。不能把业务阶段上限误写成所有网络连接尝试的绝对上限。
+
+模型调用成本由平台承担：不交付的质量失败仍可能产生供应商费用，不能把退回站内积分理解为外部 API 免费。调用次数有上限且不循环重试；上线前仍须观察失败率、平均耗时、供应商费用与既有节流策略。照片和受保护修改的后续质量设计需要单独验证，不能自动套用自由重写。
+
+固定的虚构回归素材位于 `isolation/lyrics-quality-control/cases.json`，包括电竞摇滚、母亲民谣、稀疏短歌和儿歌。硬事实与审美观察点分开记录，不因某轮结果不好而换素材或降低断言。
+
+质量报告是模型的审美判断。引文核对只能证明报告可定位，不能证明判断一定正确，也不能保证每首都达到某一首参考作品的艺术水准。离线测试验证控制流、契约、时间预算、幂等和积分，不替代跨题材真实生成、人类评审或配曲演唱验收。此候选须另行获得上线授权，不能将本地合并描述为线上已生效。
+
+## 2026-11-16 本地候选验收
+
+相关后端回归最终执行 218 项，0 失败、0 错误、0 跳过；执行前后源码 SHA-256 清单一致。包括 OpenAI／千问协议、质量决定、伪引用、独立盲选、预算、备用路由、请求重放、已有歌词保护、积分退回以及当前 main 的 Agent 相关测试。积分流程使用隔离 H2 和模拟 HTTP，不连接生产库，不构成生产 MySQL 或真实积分扣费验收。第一轮有一处 Mockito 夹具嵌套构造错误；调整构造顺序后重跑通过，未删除用例或降低断言。
+
+真实生成使用上述固定虚构素材、最终编译的 OpenAI adapter 及官方 Responses 接口，未启动应用、未写业务数据库、未扣站内积分。9 次外部模型请求，无自动重试至通过；供应商输入 37,204 tokens、输出 6,912 tokens。千问本轮仅通过离线协议测试，没有宣称真实千问质量验收。
+
+| 素材 | 业务阶段数 | 总耗时 | 程序执行结果 | 审美结论边界 |
+| --- | --- | --- | --- | --- |
+| 电竞摇滚 | 2（KEEP） | 52.038 秒 | 审查后交付 | 核心句成立，仍有主题解释和段落重复，未达到“每次参考品质”的证据标准。 |
+| 母亲民谣 | 3（REWRITE＋盲选） | 91.570 秒 | 修正一处未提供的童年行为描述，盲选改稿 | 有自然对话回应，仍较多复述素材；不是艺术质量 PASS。 |
+| 稀疏短歌 | 2（KEEP） | 33.947 秒 | 审查后交付 | “暂时不用坐得很有精神”具体且贴题；单样本亮点不能代表稳定性。 |
+| 儿歌 | 2（KEEP） | 40.819 秒 | 审查后交付 | 保留简单重复和儿童语气，不套宏大叙事；未进行儿童试唱或配曲验收。 |
+
+这些是助手的文本观察，不是真人盲评。完整新作的质量控制与失败保护已经实测，但仍不能把机器通过率称为“每次都达到参考作品”。固定素材也不覆盖全部曲风、语言、复杂约束和长上下文。上线前仍需按固定样本持续观察，并由用户或专业作者确认审美接受标准；本轮不自动上线。
+
+本机证据保存在 Git 忽略目录：
+
+- `.cache/lyrics-quality-gate-20261116/offline-20261116T134814Z/`：命令、Maven 日志、218 项结果与源码清单。
+- `.cache/lyrics-quality-gate-20261116/live-20261116T134933Z/`：四份原始素材、9 次请求及供应商响应收据、最终歌词、耗时及汇总；未保存 API 密钥。
+- 实测 JAR SHA-256：`1496e524344efabf2a8cbf57cec8f19f8f2bed335d7438a745bf0a100b556c5e`。
+- 固定素材 SHA-256：`56b7e5df87be2439eac194d527951b95356e249e815e74ad4ff558e5e318215d`。
+
+## 2026-11-16 模型切换
+
+整首歌词生成的默认模型改为 `gpt-6.1-sol`，保留 Responses、low reasoning、6000 输出 token、90 秒超时及结构化输出协议。自定义创作的备用写词通道已改用千问；共享写词服务默认不启用兜底。灵感改写、选中歌词改写和单句润色也使用千问配置。
+
+私有配置或环境变量若显式指定旧 provider/model，会覆盖代码默认值；发布时须核对并将歌词配置设置为下列值。此次代码修改不代表生产模型已切换，也未验证账户对 Sol 的真实调用权限。
 
 ## 配置
 
@@ -12,13 +69,18 @@
 
 ```properties
 qingfeng.lyrics.enabled=true
-qingfeng.providers.openai.model=gpt-6.1-terra
+qingfeng.lyrics.provider=openai
+qingfeng.providers.openai.model=gpt-6.1-sol
 # qingfeng.providers.openai.api-key=（仅在私有配置填写）
+# qingfeng.providers.qwen.api-key=（仅在私有配置填写）
+qingfeng.providers.qwen.model=qwen3.8-flash
+qingfeng.providers.qwen.base-url=https://maas.qianwenaiapi.com/compatible-mode/v1
+qingfeng.lyrics.qwen-fallback-enabled=false
 ```
 
 2026-11-09 已从用户指定的桌面记事本读取密钥，写入 Git 忽略的 `Qingfeng_AI_Music/config/local.properties`，并设置以上提供方与型号。修改前的配置备份在本机忽略目录 `.backups/gpt-lyrics/`，没有改动数据库连接、后台调度或支付配置。
 
-自定义创作优先使用 OpenAI。配置了 DeepSeek 后，OpenAI 未配置，或请求未能建立连接、收到明确拒绝且仍在兜底时间窗口内时，会使用 DeepSeek。超时等结果未知的请求保留原请求状态，避免再次提交。成功的版本记录实际提供方。共享写词服务可独立配置提供方和回退策略。
+自定义创作优先使用 OpenAI。配置了千问后，OpenAI 未配置，或请求未能建立连接、收到明确拒绝且仍在兜底时间窗口内时，会使用千问。超时等结果未知的请求保留原请求状态，避免再次提交。成功的版本记录实际提供方。共享写词服务可通过 `qingfeng.lyrics.provider=qwen` 直接选择千问，或通过 `qingfeng.lyrics.qwen-fallback-enabled=true` 启用备用通道。
 
 照片写歌入口默认关闭。在隔离的本地验证环境中，配置支持图片输入的 OpenAI 模型与私有密钥，并设置 `qingfeng.lyrics.photo.enabled=true`。照片入口接受单张 JPG/PNG（最大 10 MB），后台将缩放后的图和选填故事一起送入一次 Responses 请求。应用保存画面摘要、歌词和音乐方向，原图不进入作品存储。离线端到端验证可用 `PhotoLyricsIntegrationTest`，它使用 H2 和替代供应商。
 
@@ -32,9 +94,9 @@ qingfeng.providers.openai.model=gpt-6.1-terra
 - `store=false`，不创建 OpenAI 服务端可检索的响应记录；这不等于供应商零数据保留承诺。
 - 本次不修改生产数据库，不调用音乐生成服务，不自动上线。
 
-## 验证与当前限制
+## 历史验证与限制（非本次候选验收）
 
-协议测试用本机模拟 HTTP 服务，覆盖请求素材保留、JSON Schema、CreativePlan、异常响应、拒绝、截断、无效结果、不重试及提供方配置。H2 流程验证覆盖 GPT 来源、歌词版本、音乐计划、请求重放和重新编写；现有 DeepSeek 测试继续保留。
+协议测试用本机模拟 HTTP 服务，覆盖请求素材保留、JSON Schema、CreativePlan、异常响应、拒绝、截断、无效结果、不重试及提供方配置。H2 流程验证覆盖 GPT 来源、歌词版本、音乐计划、请求重放和重新编写；备用千问链路也使用离线协议测试。
 
 完整 `mvn verify` 已通过：全模块 361 项通过，27 项需要显式启用独立 MySQL 测试环境的用例跳过，无失败。构建的 JAR 已检查，不含 `local.properties` 或 `.secrets` 私有配置。
 
@@ -42,6 +104,15 @@ qingfeng.providers.openai.model=gpt-6.1-terra
 
 参考：
 
-- [GPT-6.1 Terra 型号与能力](https://developers.openai.com/api/docs/models/gpt-6.1-terra)
+- [GPT-6.1 Sol 型号与能力](https://developers.openai.com/api/docs/models/gpt-6.1-sol)
 - [Responses 严格结构化输出](https://developers.openai.com/api/docs/guides/structured-outputs)
 - [当前模型迁移指南](https://developers.openai.com/api/docs/guides/latest-model)
+
+
+## 2026-11-16 生产配置发布结果
+
+已在生产设置 `qingfeng.lyrics.provider=openai` 和 `qingfeng.providers.openai.model=gpt-6.1-sol`，使用共享部署锁完成备份、配置切换和应用重启。沿用已批准的 `35d78c0e019c868e6702f78bec353a473c16149b` JAR；未切换 current、未执行数据库迁移，未部署本地新增 MV 代码。
+
+服务器现有密钥对 Sol 模型的只读查询成功；使用虚构海边旅行素材的一次真实 Responses 请求返回 completed，歌词及六字段音乐方案通过结构校验（412 tokens）。该验证没有写入业务数据库。前端 841 项测试、构建和配置了全新本机隔离 MySQL 批次的后端 `mvn clean verify` 通过。正式发布后首页和 Agent 页面均 HTTP 200，健康检查 UP，服务 active。
+
+配置、原 JAR 和策略备份及成功收据位于服务器 `/var/backups/qingfeng-music/20261116T072355Z-lyrics-sol-config`。回滚应在共享锁内恢复该目录的原配置并重启，仍使用原 guard/policy。此记录不授权后续发布或回滚。

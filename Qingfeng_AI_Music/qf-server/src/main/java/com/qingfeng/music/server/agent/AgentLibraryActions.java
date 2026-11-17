@@ -42,6 +42,8 @@ public final class AgentLibraryActions implements AgentApplicationActions {
         cap("rename_work","修改作品名称，保留其他创作设定","workId?:作品ID,title:新名称","write"),
         cap("update_work","修改创作故事、收礼人、场景、寄语或作品标题，只更新明确提供的字段","workId?:作品ID,recipient?:80字内收礼人,occasion?:32字内场景,story?:4000字内故事,message?:500字内寄语,title?:100字内标题","write"),
         cap("delete_work","删除指定作品，必须展示具体作品并确认","workId?:作品ID,expectedVersion:确认时的作品版本","destructive"),
+        cap("download_lyrics","导出指定或当前歌词版本为TXT文件，不生成或改写歌词","workId?:作品ID,revisionId?:歌词版本ID","read"),
+        cap("generation_preflight","检查当前或指定歌词版本能否生成歌曲，返回真实限制和费用，不提交任务","workId?:作品ID,revisionId?:歌词版本ID","read"),
         cap("list_versions","查看当前或指定作品的歌词历史版本","workId?:作品ID","read"),
         cap("select_version","切换当前作品歌词版本","workId?:作品ID,revisionId?:版本ID,index?:上次版本列表序号","write"),
         cap("replace_lyric_line","按用户明确给定的文字精确替换当前歌词第一句或最后一句，保留其他文本，不调用写词模型","","write"),
@@ -107,7 +109,14 @@ public final class AgentLibraryActions implements AgentApplicationActions {
         catch (AmbiguousWork ambiguous) { return listWorks(owner,args,"找到多首同名作品，请从列表选择具体一首。"); }
         String id=work.id();
         return switch(action) {
-            case "select_work" -> { point(owner,conversation,id,null,null,null); yield ok(action,"已打开《"+displayTitle(owner,work)+"》，接下来的创作和操作将使用这首作品。"); }
+            case "select_work" -> {
+                var selection=media.selection(owner,id);
+                String asset=selection==null?null:selection.assetId();
+                var selected=asset==null?null:media.get(owner,id,asset);
+                String revision=asset==null?null:media.generatedRevision(owner,id,asset).orElse(null);
+                point(owner,conversation,id,revision,selected==null?null:selected.generationTaskId(),asset);
+                yield ok(action,"已打开《"+displayTitle(owner,work)+"》。"+(asset==null?"尚未选择音频，可查看音频列表后选择。":"已恢复这首作品选用的音频，可继续制作 MV。"));
+            }
             case "rename_work" -> {
                 String title=required(args,"title",100);
                 works.update(owner,id,work.version(),new WorkApi.Draft(work.recipient(),work.occasion(),work.story(),work.message(),work.style(),title,work.vocalGender()));
@@ -139,6 +148,13 @@ public final class AgentLibraryActions implements AgentApplicationActions {
                 works.delete(owner,id,true,work.version());
                 if (id.equals(conversations.current(owner).currentWorkId())) point(owner,conversation,null,null,null,null);
                 yield ok(action,"已删除《"+deletedTitle+"》。");
+            }
+            case "download_lyrics","generation_preflight" -> {
+                String revision=value(args,"revisionId",current!=null&&id.equals(current.songId())?current.revisionId():null);
+                if(revision==null){var revisions=lyrics.list(owner,id);if(revisions.isEmpty())throw invalid("作品还没有歌词，请先保存或生成歌词。");revision=revisions.get(0).id();}
+                var selected=lyrics.get(owner,id,revision);
+                if(action.equals("generation_preflight"))yield new Result("生成前检查结果："+json.writeValueAsString(generation.preflight(owner,id,revision)),"preflight",List.of(),List.of(),action);
+                yield new Result("已准备歌词文件，点击下载即可保存。","lyrics_download",List.of(new Item(selected.id(),selected.title(),"TXT 歌词",Map.of("lyrics",selected.lyrics(),"workId",id,"revisionId",selected.id()))),List.of(),action);
             }
             case "list_versions" -> listVersions(owner,work);
             case "select_version" -> {
@@ -321,15 +337,15 @@ public final class AgentLibraryActions implements AgentApplicationActions {
     }
     private record Sample(String id,String title,String style,String audio) {}
     private static final List<Sample> SAMPLES=List.of(
-        new Sample("love","把平凡唱给你","爱情 温柔陪伴","/media/sample-love-v2.mp3"),
-        new Sample("family","走了那么远","家庭 抒情流行","/media/sample-family-v2.mp3"),
-        new Sample("travel","去有海风的地方","自由旅行","/media/sample-ocean-travel-v2.mp3"),
-        new Sample("red-guofeng","红","古风 国风","/media/sample-red-guofeng-v1.mp3"),
-        new Sample("rain-disco","忽然下起雨","Disco 复古","/media/sample-rain-disco-v1.mp3"),
-        new Sample("tomorrow-rock","明天再说","摇滚","/media/sample-tomorrow-rock-v1.mp3"),
-        new Sample("scenery-folk","最美的风景","民谣","/media/sample-scenery-folk-v1.mp3"),
-        new Sample("hometown-electronic","hometown lover","电子","/media/sample-hometown-electronic-v1.mp3"),
-        new Sample("river-instrumental","When the River Breathes","纯音乐","/media/sample-river-instrumental-v1.mp3"));
+        new Sample("love","把平凡唱给你","爱情 温柔陪伴","/media/sample-love-v2-preview-128.mp3"),
+        new Sample("family","走了那么远","家庭 抒情流行","/media/sample-family-v2-preview-128.mp3"),
+        new Sample("travel","去有海风的地方","自由旅行","/media/sample-ocean-travel-v2-preview-128.mp3"),
+        new Sample("red-guofeng","红","古风 国风","/media/sample-red-guofeng-v1-preview-128.mp3"),
+        new Sample("rain-disco","忽然下起雨","Disco 复古","/media/sample-rain-disco-v1-preview-128.mp3"),
+        new Sample("tomorrow-rock","明天再说","摇滚","/media/sample-tomorrow-rock-v1-preview-128.mp3"),
+        new Sample("scenery-folk","最美的风景","民谣","/media/sample-scenery-folk-v1-preview-128.mp3"),
+        new Sample("hometown-electronic","hometown lover","电子","/media/sample-hometown-electronic-v1-preview-128.mp3"),
+        new Sample("river-instrumental","When the River Breathes","纯音乐","/media/sample-river-instrumental-v1-preview-128.mp3"));
     private static String title(WorkApi.Work w) { return w.title()==null||w.title().isBlank()?"未命名作品":w.title(); }
     private String displayTitle(String owner,WorkApi.Work work) {
         if(work.title()!=null&&!work.title().isBlank()&&!"智能创作".equals(work.title()))return work.title();

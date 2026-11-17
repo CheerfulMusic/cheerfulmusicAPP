@@ -4,7 +4,7 @@ import com.qingfeng.music.agent.api.*;
 import com.qingfeng.music.agent.application.AgentToolDispatcher;
 import com.qingfeng.music.conversation.application.ConversationService;
 import com.qingfeng.music.infrastructure.persistence.agent.JdbcAgentTurnStore;
-import com.qingfeng.music.infrastructure.provider.DeepSeekAgentChatModel;
+import com.qingfeng.music.infrastructure.provider.QwenAgentChatModel;
 import com.qingfeng.music.infrastructure.provider.ResilientAgentChatModel;
 import com.qingfeng.music.server.agent.AgentChatService;
 import com.qingfeng.music.server.agent.AgentLibraryActions;
@@ -34,8 +34,9 @@ import org.springframework.transaction.support.TransactionTemplate;
 @ConditionalOnProperty(name="qingfeng.agent.chat.enabled",havingValue="true")
 public class AgentConversationChatConfiguration {
     @Bean AgentChatModel agentChatModel(Environment env){
-        var delegate=new DeepSeekAgentChatModel(env.getProperty("qingfeng.providers.deepseek.api-key",env.getProperty("DEEPSEEK_API_KEY","")),
-                env.getProperty("qingfeng.providers.deepseek.model","deepseek-flash"),env.getProperty("qingfeng.agent.intent.llm-enabled",Boolean.class,false));
+        var delegate=new QwenAgentChatModel(RewriteProviderSettings.key(env), RewriteProviderSettings.model(env),
+                env.getProperty("qingfeng.agent.intent.llm-enabled",Boolean.class,false),
+                java.net.URI.create(RewriteProviderSettings.endpoint(env)));
         return new ResilientAgentChatModel(delegate,
                 env.getProperty("qingfeng.agent.intent.circuit.failure-threshold",Integer.class,3),
                 java.time.Duration.ofSeconds(env.getProperty("qingfeng.agent.intent.circuit.cooldown-seconds",Long.class,30L)));
@@ -48,6 +49,13 @@ public class AgentConversationChatConfiguration {
     @Bean AgentStudioActions agentStudioActions(WorkApi works,MusicSettings settings,MusicBriefService briefs,LyricLineRewriteService lines,
             PlaybackLyricsService playback,SectionEditingService sections,ConversationService conversations){
         return new AgentStudioActions(works,settings,briefs,lines,playback,sections,conversations);
+    }
+    @Bean com.qingfeng.music.server.agent.AgentFeatureActions agentFeatureActions(WorkApi works,LyricsApi lyrics,ConversationService conversations,
+            com.qingfeng.music.server.artist.ArtistProfileService profiles,ObjectProvider<com.qingfeng.music.creation.QuickCreationService> quick,
+            com.qingfeng.music.lyrics.application.LyricSelectionRewriteService selection,LyricLineRewriteService lines,
+            com.qingfeng.music.lyrics.application.LyricsCompositionService composer,MusicSettings settings,
+            com.qingfeng.music.server.download.SharedDownloadGrants downloads,com.qingfeng.music.credits.CreditsPricing pricing){
+        return new com.qingfeng.music.server.agent.AgentFeatureActions(works,lyrics,conversations,profiles,quick,selection,lines,composer,settings,downloads,pricing);
     }
     @Bean AgentChatService agentChatService(ConversationService conversations,AgentToolDispatcher tools,AgentChatModel model,AgentTurnStore turns,
             ObjectProvider<AgentSocialActions> social,ObjectProvider<AgentApplicationActions> applications,Environment env){

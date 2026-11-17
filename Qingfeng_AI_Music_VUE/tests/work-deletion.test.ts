@@ -4,7 +4,7 @@ import {createApp,h,nextTick,type App} from 'vue'
 import WorkLibraryPage from '../src/modules/works/pages/WorkLibraryPage.vue'
 import {deleteWork} from '../src/modules/works/api/works'
 import {requestJson,resetCreatorSession} from '../src/shared/http/api-client'
-const player=vi.hoisted(()=>({current:null as null|{audio:string},reset:vi.fn(),setQueue:vi.fn(),toggle:vi.fn(),playing:false}))
+const player=vi.hoisted(()=>({current:null as null|{audio:string},stopSegment:vi.fn(),reset:vi.fn(),setQueue:vi.fn(),toggle:vi.fn(),playing:false}))
 vi.mock('../src/shared/player/store',()=>({usePlayer:()=>player}))
 const work={id:'11111111-1111-4111-8111-111111111111',version:0,recipient:'',occasion:'',story:'晚风里的故事',message:'',style:'民谣',title:'我的歌',vocalGender:'AUTO',createdAt:'2026-11-10T00:00:00Z',updatedAt:'2026-11-10T00:00:00Z'}
 const row={work,status:'LYRICS_DRAFT',audioId:null,audioOrigin:null,songTitle:null,coverId:null}
@@ -47,19 +47,19 @@ it('never turns an unrelated 404 into deletion success in the API client',async(
 })
 it('closes the dialog after legacy 200 instead of showing an error and deleting twice',async()=>{
  deleteResult=async()=>{list=[];return reply(work)};mount();await flush();await ask();button('确认删除').click();await flush()
- expect(deleted).toBe(1);expect(document.querySelector<HTMLDialogElement>('dialog')?.open).toBe(false);expect(document.querySelector('.library-song')).toBeNull();expect(document.body.textContent).toContain('作品已删除')
+ expect(deleted).toBe(1);expect(document.querySelector<HTMLDialogElement>('dialog[aria-labelledby="work-delete-title"]')?.open).toBe(false);expect(document.querySelector('.library-song')).toBeNull();expect(document.body.textContent).toContain('作品已删除')
 })
 it('refreshes and removes an expired card after 404 without claiming a new deletion',async()=>{
  deleteResult=async()=>{list=[];return reply({code:'WORK_NOT_FOUND',message:'作品不存在或你无权访问'},404)};mount();await flush();await ask();button('确认删除').click();await flush()
- expect(document.querySelector('.library-song')).toBeNull();expect(document.querySelector<HTMLDialogElement>('dialog')?.open).toBe(false);expect(document.body.textContent).toContain('作品已不在当前列表中');expect(listReads).toBe(2)
+ expect(document.querySelector('.library-song')).toBeNull();expect(document.querySelector<HTMLDialogElement>('dialog[aria-labelledby="work-delete-title"]')?.open).toBe(false);expect(document.body.textContent).toContain('作品已不在当前列表中');expect(listReads).toBe(2)
 })
 it('retains the error if a 404 work is still returned by the list',async()=>{
  deleteResult=async()=>reply({code:'WORK_NOT_FOUND',message:'作品不存在或你无权访问'},404);mount();await flush();await ask();button('确认删除').click();await flush()
- expect(document.querySelector('.library-song')).not.toBeNull();expect(document.querySelector<HTMLDialogElement>('dialog')?.open).toBe(true);expect(document.querySelector('.work-delete-dialog .notice')?.textContent).toContain('作品不存在或你无权访问')
+ expect(document.querySelector('.library-song')).not.toBeNull();expect(document.querySelector<HTMLDialogElement>('dialog[aria-labelledby="work-delete-title"]')?.open).toBe(true);expect(document.querySelector('.work-delete-dialog .notice')?.textContent).toContain('作品不存在或你无权访问')
 })
 it('preserves the card and confirmation dialog when deletion fails with 500',async()=>{
  deleteResult=async()=>reply({message:'server error'},500);mount();await flush();await ask();button('确认删除').click();await flush()
- expect(document.querySelector('.library-song')).not.toBeNull();expect(document.querySelector<HTMLDialogElement>('dialog')?.open).toBe(true);expect(deleted).toBe(1)
+ expect(document.querySelector('.library-song')).not.toBeNull();expect(document.querySelector<HTMLDialogElement>('dialog[aria-labelledby="work-delete-title"]')?.open).toBe(true);expect(deleted).toBe(1)
 })
 it('shows the completed-song warning before sending explicit acknowledgment',async()=>{
  list=[{...row,status:'COMPLETED',audioId:'audio-a',audioOrigin:'GENERATED'}];mount();await flush();await ask()
@@ -70,4 +70,19 @@ it('does not remove the new account data when identity changes during deletion',
  let finish!:(value:Response)=>void;deleteResult=()=>new Promise(r=>finish=r);mount();await flush();await ask();button('确认删除').click();await flush()
  list=[{...row,work:{...work,id:'new-account-work',title:'另一个账号的歌'}}];window.dispatchEvent(new Event('qingfeng:identity-changed'));await flush();finish(reply(work));await flush()
  expect(document.body.textContent).toContain('另一个账号的歌');expect(document.body.textContent).not.toContain('作品已删除')
+})
+
+it('offers completed MV playback directly and clears the player on close',async()=>{
+ list=[{...row,videoId:'12345678-1234-1234-1234-123456789012',videoState:'READY'}]
+ const original=vi.mocked(fetch).getMockImplementation()!
+ vi.mocked(fetch).mockImplementation(async(input,options)=>String(input).includes('/music-videos/')?reply({id:'12345678-1234-1234-1234-123456789012',state:'READY',shots:[]}):original(input,options))
+ mount();await flush();button('播放 MV').click();await flush()
+ expect(player.stopSegment).toHaveBeenCalledWith(true)
+ expect(document.querySelector('video')?.getAttribute('src')).toContain('/music-videos/12345678-1234-1234-1234-123456789012/content')
+ button('关闭').click();await flush();expect(document.querySelector('video')).toBeNull()
+})
+it('offers progress rather than playback for unfinished MV tasks',async()=>{
+ list=[{...row,videoId:'12345678-1234-1234-1234-123456789012',videoState:'RUNNING'}]
+ mount();await flush();expect(button('查看 MV 进度')).toBeTruthy()
+ expect([...document.querySelectorAll('button')].some(b=>b.textContent==='播放 MV')).toBe(false)
 })

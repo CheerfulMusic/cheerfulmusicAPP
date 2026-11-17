@@ -1,0 +1,804 @@
+{
+  "scope": "All current controller routes. Tool = conversational domain action; native = real UI in/alongside chat, retaining original permissions; protocol = transport, authentication or verified callback, not model-invocable. No arbitrary HTTP executor.",
+  "controllers": [
+    {
+      "controller": "InviteGateController",
+      "source": "com/qingfeng/music/server/invite/InviteGateController.java",
+      "mappingDeclarations": [
+        "@RequestMapping(\"/api/public/invite\")",
+        "@GetMapping(\"/status\")",
+        "@PostMapping(\"/enter\")"
+      ],
+      "mode": "native",
+      "flows": [
+        "invite dialog"
+      ]
+    },
+    {
+      "controller": "MusicVideoController",
+      "source": "com/qingfeng/music/server/mv/MusicVideoController.java",
+      "mappingDeclarations": [
+        "@RequestMapping(\"/api/app/music-videos\")",
+        "@PostMapping(\"/{id}/retry-shot\")",
+        "@GetMapping(\"/options\")",
+        "@GetMapping",
+        "@PostMapping(\"/prepare\")",
+        "@PostMapping(\"/storyboard\")",
+        "@PostMapping",
+        "@PostMapping(value=\"/images\",consumes=\"multipart/form-data\")",
+        "@GetMapping(\"/images/{imageId}\")",
+        "@GetMapping(\"/{id}\")",
+        "@GetMapping(\"/{id}/content\")"
+      ],
+      "mode": "tool+native",
+      "flows": [
+        "video_capabilities",
+        "preview_music_video",
+        "create_music_video",
+        "list_music_videos",
+        "get_music_video",
+        "download_music_video",
+        "upload_video_image",
+        "open_music_video_editor"
+      ]
+    },
+    {
+      "controller": "PaymentController",
+      "source": "com/qingfeng/music/server/payment/PaymentController.java",
+      "mappingDeclarations": [
+        "@GetMapping(\"/api/app/payments/catalog\")",
+        "@PostMapping(\"/api/app/payments/orders\")",
+        "@PostMapping(\"/api/app/payments/orders/{id}/recover\")",
+        "@GetMapping(\"/api/app/payments/orders/{id}\")",
+        "@GetMapping(\"/api/app/payments/orders\")",
+        "@PostMapping(\"/api/public/payments/airwallex/webhook\")"
+      ],
+      "mode": "tool+native+protocol",
+      "flows": [
+        "payment_catalog",
+        "get_order",
+        "list_orders",
+        "recharge",
+        "verified provider callback"
+      ]
+    },
+    {
+      "controller": "PaymentRiskAdminController",
+      "source": "com/qingfeng/music/server/payment/PaymentRiskAdminController.java",
+      "mappingDeclarations": [
+        "@RequestMapping(\"/api/app/payment-risk\")",
+        "@GetMapping(\"/cases\")",
+        "@PostMapping(\"/cases/{id}/review\")"
+      ],
+      "mode": "native",
+      "flows": [
+        "open_feature:payment_risk"
+      ]
+    },
+    {
+      "controller": "PayPalPaymentController",
+      "source": "com/qingfeng/music/server/payment/PayPalPaymentController.java",
+      "mappingDeclarations": [
+        "@GetMapping(\"/api/app/paypal/catalog\")",
+        "@GetMapping(\"/api/app/paypal/sdk-config\")",
+        "@PostMapping(\"/api/app/paypal/orders\")",
+        "@GetMapping(\"/api/app/paypal/orders\")",
+        "@GetMapping(\"/api/app/paypal/orders/{id}\")",
+        "@PostMapping(\"/api/app/paypal/orders/{id}/close\")",
+        "@PostMapping(\"/api/app/paypal/orders/{id}/resume\")",
+        "@PostMapping(\"/api/app/paypal/orders/{id}/recover\")",
+        "@PostMapping(\"/api/app/paypal/orders/{id}/capture\")",
+        "@PostMapping(\"/api/public/paypal/webhook\")"
+      ],
+      "mode": "tool+native+protocol",
+      "flows": [
+        "payment_catalog",
+        "get_order",
+        "list_orders",
+        "close_order",
+        "recharge",
+        "verified provider callback"
+      ]
+    },
+    {
+      "controller": "StripePaymentController",
+      "source": "com/qingfeng/music/server/payment/StripePaymentController.java",
+      "mappingDeclarations": [
+        "@GetMapping(\"/api/app/stripe/catalog\")",
+        "@PostMapping(\"/api/app/stripe/orders\")",
+        "@GetMapping(\"/api/app/stripe/orders\")",
+        "@GetMapping(\"/api/app/stripe/orders/{id}\")",
+        "@PostMapping(\"/api/app/stripe/orders/{id}/resume\")",
+        "@PostMapping(\"/api/app/stripe/orders/{id}/cancel\")",
+        "@PostMapping(\"/api/public/stripe/webhook\")"
+      ],
+      "mode": "tool+native+protocol",
+      "flows": [
+        "payment_catalog",
+        "get_order",
+        "list_orders",
+        "recharge",
+        "verified provider callback"
+      ]
+    },
+    {
+      "controller": "AgentChatController",
+      "source": "com/qingfeng/music/server/web/app/AgentChatController.java",
+      "mappingDeclarations": [
+        "@RequestMapping(\"/api/app/agent/conversations/{id}\")",
+        "@PostMapping(\"/messages\")",
+        "@GetMapping(\"/state\")"
+      ],
+      "mode": "protocol",
+      "flows": [
+        "agent chat / confirmation"
+      ]
+    },
+    {
+      "controller": "AgentConversationController",
+      "source": "com/qingfeng/music/server/web/app/AgentConversationController.java",
+      "mappingDeclarations": [
+        "@RequestMapping(\"/api/app/agent/conversations\")",
+        "@GetMapping(\"/current\")",
+        "@GetMapping(\"/{id}/messages\")",
+        "@GetMapping(\"/{id}/history\")",
+        "@PostMapping(\"/{id}/reset\")",
+        "@DeleteMapping(\"/{id}\")"
+      ],
+      "mode": "native",
+      "flows": [
+        "conversation history / clear / reset"
+      ]
+    },
+    {
+      "controller": "AgentEventsController",
+      "source": "com/qingfeng/music/server/web/app/AgentEventsController.java",
+      "mappingDeclarations": [
+        "@RequestMapping(\"/api/app/agent/conversations/{id}\")",
+        "@GetMapping(value=\"/events\",produces=MediaType.TEXT_EVENT_STREAM_VALUE)"
+      ],
+      "mode": "protocol",
+      "flows": [
+        "SSE status"
+      ]
+    },
+    {
+      "controller": "AgentReferenceController",
+      "source": "com/qingfeng/music/server/web/app/AgentReferenceController.java",
+      "mappingDeclarations": [
+        "@RequestMapping(\"/api/app/agent\")",
+        "@PostMapping(\"/reference\")"
+      ],
+      "mode": "native",
+      "flows": [
+        "open_feature:reference"
+      ]
+    },
+    {
+      "controller": "AgentToolController",
+      "source": "com/qingfeng/music/server/web/app/AgentToolController.java",
+      "mappingDeclarations": [
+        "@RequestMapping(\"/api/app/agent/tools\")",
+        "@GetMapping(\"/current\")",
+        "@PostMapping(\"/{tool}\")"
+      ],
+      "mode": "protocol",
+      "flows": [
+        "typed agent dispatcher"
+      ]
+    },
+    {
+      "controller": "AnalyticsDataController",
+      "source": "com/qingfeng/music/server/web/app/AnalyticsDataController.java",
+      "mappingDeclarations": [
+        "@RequestMapping(\"/api/app/analytics\")",
+        "@DeleteMapping(\"/data\")"
+      ],
+      "mode": "tool",
+      "flows": [
+        "erase_analytics"
+      ]
+    },
+    {
+      "controller": "AnalyticsViewController",
+      "source": "com/qingfeng/music/server/web/app/AnalyticsViewController.java",
+      "mappingDeclarations": [
+        "@RequestMapping(\"/api/app/analytics\")",
+        "@GetMapping(\"/access\")",
+        "@GetMapping(\"/summary\")",
+        "@GetMapping(\"/page-users\")",
+        "@GetMapping(\"/user-pages\")"
+      ],
+      "mode": "native",
+      "flows": [
+        "open_feature:analytics"
+      ]
+    },
+    {
+      "controller": "ArtistProfileController",
+      "source": "com/qingfeng/music/server/web/app/ArtistProfileController.java",
+      "mappingDeclarations": [
+        "@RequestMapping(\"/api/app/artist-profile\")",
+        "@GetMapping",
+        "@PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)",
+        "@PutMapping(\"/visibility\")",
+        "@GetMapping(\"/avatar/{key}\")",
+        "@GetMapping(\"/cover/{key}\")",
+        "@GetMapping(\"/releases/{work}\")",
+        "@PutMapping(\"/releases/{work}\")",
+        "@PutMapping(\"/releases/{work}/publication\")",
+        "@PostMapping(\"/releases/{work}/publication\")",
+        "@DeleteMapping(\"/releases/{work}/publication\")",
+        "@DeleteMapping(\"/releases/{work}\")",
+        "@PutMapping(\"/releases/{work}/discover\")",
+        "@DeleteMapping(\"/releases/{work}/discover\")"
+      ],
+      "mode": "tool+native",
+      "flows": [
+        "get_artist_profile",
+        "update_artist_profile",
+        "set_artist_visibility",
+        "get_artist_release",
+        "publish_artist_song",
+        "remove_artist_song",
+        "publish_to_discover",
+        "withdraw_from_discover",
+        "open_feature:work",
+        "open_feature:artist"
+      ]
+    },
+    {
+      "controller": "AvatarController",
+      "source": "com/qingfeng/music/server/web/app/AvatarController.java",
+      "mappingDeclarations": [
+        "@RequestMapping(\"/api/app/avatar\")",
+        "@GetMapping",
+        "@PostMapping(consumes=MediaType.MULTIPART_FORM_DATA_VALUE)",
+        "@GetMapping(\"/image\")"
+      ],
+      "mode": "native",
+      "flows": [
+        "open_feature:avatar"
+      ]
+    },
+    {
+      "controller": "AvatarGenerationController",
+      "source": "com/qingfeng/music/server/web/app/AvatarGenerationController.java",
+      "mappingDeclarations": [
+        "@RequestMapping(\"/api/app/avatar/generation\")",
+        "@GetMapping(\"/latest\")"
+      ],
+      "mode": "tool+native",
+      "flows": [
+        "generate_avatar",
+        "avatar progress"
+      ]
+    },
+    {
+      "controller": "CoverController",
+      "source": "com/qingfeng/music/server/web/app/CoverController.java",
+      "mappingDeclarations": [
+        "@RequestMapping(\"/api/app/works/{work}/covers\")",
+        "@GetMapping",
+        "@PostMapping(consumes=\"multipart/form-data\")",
+        "@PutMapping(\"/selection\")",
+        "@GetMapping(\"/{cover}\")",
+        "@PostMapping(\"/edits\")"
+      ],
+      "mode": "tool+native",
+      "flows": [
+        "list_covers",
+        "select_cover",
+        "edit_cover",
+        "upload_cover"
+      ]
+    },
+    {
+      "controller": "CreditsController",
+      "source": "com/qingfeng/music/server/web/app/CreditsController.java",
+      "mappingDeclarations": [
+        "@RequestMapping(\"/api/app/credits\")",
+        "@GetMapping"
+      ],
+      "mode": "tool",
+      "flows": [
+        "get_credits"
+      ]
+    },
+    {
+      "controller": "DiscoverEditorialController",
+      "source": "com/qingfeng/music/server/web/app/DiscoverEditorialController.java",
+      "mappingDeclarations": [
+        "@RequestMapping(\"/api/app/discover/editor\")",
+        "@PutMapping(\"/songs/{song}\")"
+      ],
+      "mode": "native",
+      "flows": [
+        "open_feature:editorial"
+      ]
+    },
+    {
+      "controller": "GenerationController",
+      "source": "com/qingfeng/music/server/web/app/GenerationController.java",
+      "mappingDeclarations": [
+        "@RequestMapping(\"/api/app/works/{work}/generations\")",
+        "@PostMapping(\"/preflight\")",
+        "@PostMapping",
+        "@GetMapping",
+        "@PostMapping(\"/{task}/cancel\")",
+        "@PostMapping(\"/{task}/close-checking\")",
+        "@PostMapping(\"/{task}/retry-archive\")"
+      ],
+      "mode": "tool+native",
+      "flows": [
+        "generate_song",
+        "list_tasks",
+        "cancel",
+        "close_checking",
+        "retry_archive",
+        "open_feature:work"
+      ]
+    },
+    {
+      "controller": "HotSongReactionController",
+      "source": "com/qingfeng/music/server/web/app/HotSongReactionController.java",
+      "mappingDeclarations": [
+        "@RequestMapping(\"/api/app/hot-songs\")",
+        "@GetMapping(\"/reactions\")",
+        "@PostMapping(\"/{trackId}/{kind}\")",
+        "@DeleteMapping(\"/{trackId}/{kind}\")"
+      ],
+      "mode": "tool",
+      "flows": [
+        "discover_music",
+        "favorite_music",
+        "unfavorite_music",
+        "like_sample",
+        "unlike_sample"
+      ]
+    },
+    {
+      "controller": "IdentityController",
+      "source": "com/qingfeng/music/server/web/app/IdentityController.java",
+      "mappingDeclarations": [
+        "@RequestMapping(\"/api/app/identity/recovery\")",
+        "@GetMapping",
+        "@PostMapping"
+      ],
+      "mode": "native",
+      "flows": [
+        "account_settings"
+      ]
+    },
+    {
+      "controller": "InspirationController",
+      "source": "com/qingfeng/music/server/web/app/InspirationController.java",
+      "mappingDeclarations": [
+        "@RequestMapping(\"/api/app/inspiration\")",
+        "@PostMapping(\"/rewrite\")"
+      ],
+      "mode": "tool",
+      "flows": [
+        "rewrite_inspiration"
+      ]
+    },
+    {
+      "controller": "LyricsController",
+      "source": "com/qingfeng/music/server/web/app/LyricsController.java",
+      "mappingDeclarations": [
+        "@RequestMapping(\"/api/app/works/{work}/lyrics\")",
+        "@PostMapping(\"/rewrite-line\")",
+        "@PostMapping(\"/rhyme-line\")",
+        "@PostMapping(\"/rewrite-selection\")",
+        "@PostMapping(\"/generate\")",
+        "@PostMapping(value=\"/generate-photo\", consumes=\"multipart/form-data\")",
+        "@GetMapping(\"/requests/{key}\")",
+        "@GetMapping",
+        "@GetMapping(\"/{revision}\")",
+        "@PostMapping",
+        "@PostMapping(\"/{revision}/confirm\")"
+      ],
+      "mode": "tool+native",
+      "flows": [
+        "generate_lyrics",
+        "photo_song",
+        "list_versions",
+        "save_lyrics",
+        "confirm_lyrics",
+        "get_lyrics_request",
+        "rewrite_lyric_line",
+        "rhyme_lyric_line",
+        "rewrite_lyric_selection",
+        "open_feature:work"
+      ]
+    },
+    {
+      "controller": "MediaController",
+      "source": "com/qingfeng/music/server/web/app/MediaController.java",
+      "mappingDeclarations": [
+        "@RequestMapping(\"/api/app/works/{work}/audio\")",
+        "@GetMapping(\"/{asset}/download\")",
+        "@PostMapping(\"/{asset}/download\")",
+        "@GetMapping",
+        "@GetMapping(\"/selection\")",
+        "@PutMapping(\"/selection\")",
+        "@PostMapping(consumes=\"multipart/form-data\")",
+        "@GetMapping(\"/{asset}\")"
+      ],
+      "mode": "tool+native",
+      "flows": [
+        "list_audio",
+        "select_audio",
+        "upload_audio",
+        "play",
+        "download",
+        "open_feature:work"
+      ]
+    },
+    {
+      "controller": "MusicBriefController",
+      "source": "com/qingfeng/music/server/web/app/MusicBriefController.java",
+      "mappingDeclarations": [
+        "@RequestMapping(\"/api/app/music-settings/simplify\")",
+        "@GetMapping",
+        "@PostMapping"
+      ],
+      "mode": "tool+native",
+      "flows": [
+        "simplify_music_brief",
+        "open_feature:work"
+      ]
+    },
+    {
+      "controller": "MusicSettingsController",
+      "source": "com/qingfeng/music/server/web/app/MusicSettingsController.java",
+      "mappingDeclarations": [
+        "@RequestMapping(\"/api/app\")",
+        "@GetMapping(\"/music-settings/catalog\")",
+        "@PostMapping(\"/music-settings/preview\")",
+        "@PostMapping(\"/works/{work}/music-settings/preview\")",
+        "@GetMapping(\"/works/{work}/music-settings\")",
+        "@GetMapping(\"/works/{work}/creative-direction\")",
+        "@PutMapping(\"/works/{work}/music-settings\")",
+        "@GetMapping(\"/works/{work}/generations/{task}/music-settings\")"
+      ],
+      "mode": "tool",
+      "flows": [
+        "music_settings_catalog",
+        "get_music_settings",
+        "get_creative_direction",
+        "preview_music_settings",
+        "update_music_settings"
+      ]
+    },
+    {
+      "controller": "PlaybackLyricsController",
+      "source": "com/qingfeng/music/server/web/app/PlaybackLyricsController.java",
+      "mappingDeclarations": [
+        "@RequestMapping(\"/api/app/works/{work}/audio/{asset}/lyrics\")",
+        "@GetMapping",
+        "@PostMapping(\"/sync\")"
+      ],
+      "mode": "tool",
+      "flows": [
+        "get_playback_lyrics",
+        "sync_playback_lyrics"
+      ]
+    },
+    {
+      "controller": "QuickCreationController",
+      "source": "com/qingfeng/music/server/web/app/QuickCreationController.java",
+      "mappingDeclarations": [
+        "@RequestMapping(\"/api/app/works/{work}/quick-creations\")",
+        "@PostMapping",
+        "@GetMapping(\"/latest\")",
+        "@GetMapping(\"/{id}\")",
+        "@PostMapping(\"/{id}/retry\")"
+      ],
+      "mode": "tool",
+      "flows": [
+        "start_quick_creation",
+        "get_quick_creation",
+        "retry_quick_creation"
+      ]
+    },
+    {
+      "controller": "ReferralController",
+      "source": "com/qingfeng/music/server/web/app/ReferralController.java",
+      "mappingDeclarations": [
+        "@RequestMapping(\"/api/app/referrals\")",
+        "@GetMapping",
+        "@PostMapping(\"/accept\")"
+      ],
+      "mode": "tool",
+      "flows": [
+        "get_referral",
+        "accept_referral"
+      ]
+    },
+    {
+      "controller": "SectionEditingController",
+      "source": "com/qingfeng/music/server/web/app/SectionEditingController.java",
+      "mappingDeclarations": [
+        "@RequestMapping(\"/api/app/works/{work}\")",
+        "@GetMapping(\"/audio/{asset}/section-context\")",
+        "@GetMapping(\"/section-edits\")",
+        "@PostMapping(\"/section-edits\")"
+      ],
+      "mode": "tool+native",
+      "flows": [
+        "section_context",
+        "list_section_edits",
+        "modify_section",
+        "open_feature:work"
+      ]
+    },
+    {
+      "controller": "ShareController",
+      "source": "com/qingfeng/music/server/web/app/ShareController.java",
+      "mappingDeclarations": [
+        "@RequestMapping(\"/api/app/works/{work}/shares\")",
+        "@PostMapping",
+        "@DeleteMapping"
+      ],
+      "mode": "tool",
+      "flows": [
+        "share",
+        "revoke_share"
+      ]
+    },
+    {
+      "controller": "SharedDownloadsController",
+      "source": "com/qingfeng/music/server/web/app/SharedDownloadsController.java",
+      "mappingDeclarations": [
+        "@RequestMapping(\"/api/app/shared-downloads\")",
+        "@GetMapping",
+        "@GetMapping(\"/{id}\")"
+      ],
+      "mode": "tool",
+      "flows": [
+        "list_shared_downloads"
+      ]
+    },
+    {
+      "controller": "UsageController",
+      "source": "com/qingfeng/music/server/web/app/UsageController.java",
+      "mappingDeclarations": [
+        "@RequestMapping(\"/api/app/usage\")",
+        "@GetMapping"
+      ],
+      "mode": "tool",
+      "flows": [
+        "get_usage"
+      ]
+    },
+    {
+      "controller": "WelcomeController",
+      "source": "com/qingfeng/music/server/web/app/WelcomeController.java",
+      "mappingDeclarations": [
+        "@RequestMapping(\"/api/app/welcome\")",
+        "@PostMapping"
+      ],
+      "mode": "native",
+      "flows": [
+        "welcome notification"
+      ]
+    },
+    {
+      "controller": "WorkController",
+      "source": "com/qingfeng/music/server/web/app/WorkController.java",
+      "mappingDeclarations": [
+        "@RequestMapping(\"/api/app/works\")",
+        "@PostMapping",
+        "@GetMapping",
+        "@GetMapping(\"/library\")",
+        "@GetMapping(\"/{id}\")",
+        "@DeleteMapping(\"/{id}\")",
+        "@PutMapping(\"/{id}\")"
+      ],
+      "mode": "tool+native",
+      "flows": [
+        "create_work",
+        "update_work",
+        "list_works",
+        "select_work",
+        "delete_work",
+        "open_feature:work"
+      ]
+    },
+    {
+      "controller": "ArtistPageApiController",
+      "source": "com/qingfeng/music/server/web/publicapi/ArtistPageApiController.java",
+      "mappingDeclarations": [
+        "@RequestMapping(\"/api/public/artists/{artist}\")",
+        "@GetMapping",
+        "@GetMapping(\"/avatar/{key}\")",
+        "@GetMapping(\"/cover/{key}\")",
+        "@GetMapping(\"/songs/{song}/{version}/audio\")",
+        "@GetMapping(\"/songs/{song}/{version}/cover\")"
+      ],
+      "mode": "native",
+      "flows": [
+        "open_feature:discover",
+        "open_feature:artist"
+      ]
+    },
+    {
+      "controller": "DiscoverController",
+      "source": "com/qingfeng/music/server/web/publicapi/DiscoverController.java",
+      "mappingDeclarations": [
+        "@RequestMapping(\"/api/public/discover\")",
+        "@GetMapping",
+        "@PostMapping(\"/songs/{song}/{version}/play\")"
+      ],
+      "mode": "native",
+      "flows": [
+        "open_feature:discover"
+      ]
+    },
+    {
+      "controller": "GiftController",
+      "source": "com/qingfeng/music/server/web/publicapi/GiftController.java",
+      "mappingDeclarations": [
+        "@RequestMapping(\"/api/public/gifts/{token}\")",
+        "@GetMapping(\"/download\")",
+        "@PostMapping(\"/download\")",
+        "@GetMapping",
+        "@GetMapping(\"/audio\")",
+        "@GetMapping(\"/cover\")"
+      ],
+      "mode": "native",
+      "flows": [
+        "open_feature:gift"
+      ]
+    },
+    {
+      "controller": "GiftPageController",
+      "source": "com/qingfeng/music/server/web/publicapi/GiftPageController.java",
+      "mappingDeclarations": [
+        "@GetMapping(value = \"/gift/{token}\", produces = \"text/html;charset=UTF-8\")"
+      ],
+      "mode": "native",
+      "flows": [
+        "open_feature:gift"
+      ]
+    },
+    {
+      "controller": "GoogleAuthController",
+      "source": "com/qingfeng/music/server/web/publicapi/GoogleAuthController.java",
+      "mappingDeclarations": [
+        "@RequestMapping(\"/api/public/auth/google\")",
+        "@GetMapping(\"/status\")",
+        "@PostMapping(\"/start\")"
+      ],
+      "mode": "native+protocol",
+      "flows": [
+        "login",
+        "oauth callback"
+      ]
+    },
+    {
+      "controller": "HotSongController",
+      "source": "com/qingfeng/music/server/web/publicapi/HotSongController.java",
+      "mappingDeclarations": [
+        "@RequestMapping(\"/api/public/hot-songs\")",
+        "@GetMapping",
+        "@PostMapping(\"/{trackId}/play\")"
+      ],
+      "mode": "tool+native",
+      "flows": [
+        "discover_music"
+      ]
+    },
+    {
+      "controller": "LogtoAuthController",
+      "source": "com/qingfeng/music/server/web/publicapi/LogtoAuthController.java",
+      "mappingDeclarations": [
+        "@RequestMapping(\"/api/public/auth/logto\")",
+        "@GetMapping(\"/status\")",
+        "@PostMapping(\"/start\")"
+      ],
+      "mode": "native+protocol",
+      "flows": [
+        "login",
+        "oauth callback"
+      ]
+    },
+    {
+      "controller": "NativeAuthController",
+      "source": "com/qingfeng/music/server/web/publicapi/NativeAuthController.java",
+      "mappingDeclarations": [
+        "@RequestMapping(\"/api/public/auth/native\")",
+        "@GetMapping(\"/status\")",
+        "@PostMapping(\"/password/sign-in\")",
+        "@PostMapping(\"/code\")",
+        "@PostMapping(\"/register\")",
+        "@PostMapping(\"/password/reset\")",
+        "@PostMapping(\"/phone/sign-in\")",
+        "@PostMapping(\"/phone/bind\")",
+        "@PostMapping(\"/email/sign-in\")"
+      ],
+      "mode": "native",
+      "flows": [
+        "login",
+        "account_settings"
+      ]
+    },
+    {
+      "controller": "SessionController",
+      "source": "com/qingfeng/music/server/web/publicapi/SessionController.java",
+      "mappingDeclarations": [
+        "@RequestMapping(\"/api/public\")",
+        "@GetMapping(\"/csrf\")",
+        "@PostMapping(\"/session\")",
+        "@PostMapping(\"/session/recover\")",
+        "@PostMapping(\"/session/logout\")"
+      ],
+      "mode": "native",
+      "flows": [
+        "login",
+        "logout",
+        "account_settings"
+      ]
+    },
+    {
+      "controller": "SiteEventController",
+      "source": "com/qingfeng/music/server/web/publicapi/SiteEventController.java",
+      "mappingDeclarations": [
+        "@RequestMapping(\"/api/public\")",
+        "@PostMapping(\"/events\")"
+      ],
+      "mode": "protocol",
+      "flows": [
+        "consent-aware analytics"
+      ]
+    },
+    {
+      "controller": "SmsDeliveryController",
+      "source": "com/qingfeng/music/server/web/publicapi/SmsDeliveryController.java",
+      "mappingDeclarations": [
+        "@PostMapping(PATH)"
+      ],
+      "mode": "protocol",
+      "flows": [
+        "verified delivery callback"
+      ]
+    },
+    {
+      "controller": "SystemInfoController",
+      "source": "com/qingfeng/music/server/web/publicapi/SystemInfoController.java",
+      "mappingDeclarations": [
+        "@RequestMapping(\"/api/public/system\")",
+        "@GetMapping(\"/info\")"
+      ],
+      "mode": "protocol",
+      "flows": [
+        "runtime capability flags"
+      ]
+    },
+    {
+      "controller": "WebErrorController",
+      "source": "com/qingfeng/music/server/web/WebErrorController.java",
+      "mappingDeclarations": [
+        "@RequestMapping(\"/error\")"
+      ],
+      "mode": "protocol",
+      "flows": [
+        "web error rendering"
+      ]
+    },
+    {
+      "controller": "WebPageController",
+      "source": "com/qingfeng/music/server/web/WebPageController.java",
+      "mappingDeclarations": [
+        "@GetMapping({\"/\",\"/create\",\"/create/photo\",\"/works\",\"/works/{id}\",\"/account\",\"/profile\",\"/artist/{id}\",\"/discover\",\"/recharge\",\"/analytics\",\"/agent\"})",
+        "@GetMapping(\"/legal/terms\")",
+        "@GetMapping(\"/legal/privacy\")"
+      ],
+      "mode": "protocol",
+      "flows": [
+        "SPA document"
+      ]
+    }
+  ]
+}

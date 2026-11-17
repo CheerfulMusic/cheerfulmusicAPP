@@ -72,6 +72,8 @@ AGENT_ALLOWANCE_MIGRATION = 'V46__agent_chat_allowance.sql'
 AGENT_ALLOWANCE_MIGRATION_SHA256 = '8ce991cea50af971ca6d748c1a37b304a8ee11d7969f06dd455dc16629638f86'
 
 
+FEATURE_MIGRATION_SHA256 = {'V47__music_video_projects.sql': 'b4a25044d77906e891d56632f037a68a1ba5dad2073a129188b11b8bcba8a08a', 'V48__phone_binding.sql': '09aeadab869727486bac96ac9200ad47310132763ad49020c0abe7844b359ca3'}
+
 class GateError(ValueError):
     pass
 
@@ -143,14 +145,22 @@ def verify_migration_set(normalized):
                          INTEGRATED_MIGRATION: INTEGRATED_MIGRATION_SHA256}
     release_expected = {**rollback_expected,
                         AGENT_ALLOWANCE_MIGRATION: AGENT_ALLOWANCE_MIGRATION_SHA256}
-    if set(normalized) == set(release_expected):
+    mv_expected = {**release_expected, "V47__music_video_projects.sql": FEATURE_MIGRATION_SHA256["V47__music_video_projects.sql"]}
+    phone_expected = {**mv_expected, "V48__phone_binding.sql": FEATURE_MIGRATION_SHA256["V48__phone_binding.sql"]}
+    if set(normalized) == set(phone_expected):
+        expected = phone_expected
+        extension = {"agentAllowanceVersion": "46", "musicVideoVersion": "47", "phoneBindingVersion": "48"}
+    elif set(normalized) == set(mv_expected):
+        expected = mv_expected
+        extension = {"agentAllowanceVersion": "46", "musicVideoVersion": "47"}
+    elif set(normalized) == set(release_expected):
         expected = release_expected
         extension = {"agentAllowanceVersion": "46"}
     elif set(normalized) == set(rollback_expected):
         expected = rollback_expected
         extension = {}
     else:
-        raise GateError("Canonical migration chain must contain exactly core V1..V44 and integrated V45, optionally agent allowance V46")
+        raise GateError("Canonical migration chain must contain core V1..V45 followed by consecutive approved extensions through V48")
     for name, digest in expected.items():
         if normalized[name] != digest:
             raise GateError("Canonical migration source changed: " + name)

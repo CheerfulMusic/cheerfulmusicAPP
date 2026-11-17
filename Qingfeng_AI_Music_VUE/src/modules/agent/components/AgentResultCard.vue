@@ -1,13 +1,49 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onBeforeUnmount, ref } from 'vue'
+import AgentVideoProgress from './AgentVideoProgress.vue'
 import { locale } from '../../../shared/i18n'
-import { resultMediaUrl, resultInviteUrl, type AssistantResult, type AgentCommand, type AgentResultItem } from '../model/assistant-result'
+import { resultMediaUrl, resultInviteUrl, sharedDownloadUrl, type AssistantResult, type AgentCommand, type AgentResultItem } from '../model/assistant-result'
 const props = defineProps<{ result: AssistantResult; disabled: boolean; current: boolean }>()
 defineEmits<{ command: [command: AgentCommand] }>()
+function downloadLyrics(item:AgentResultItem){
+ if(typeof item.data.lyrics!=='string'||props.disabled)return
+ const url=URL.createObjectURL(new Blob(['\ufeff'+item.title+'\n\n'+item.data.lyrics],{type:'text/plain;charset=utf-8'}))
+ const link=document.createElement('a');link.href=url;link.download=(item.title.replace(/[\\/:*?"<>|]/g,'_').slice(0,80)||'歌词')+'.txt';document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),1000)
+}
 const en = computed(() => locale.value === 'en')
 const stale = computed(() => props.result.kind === 'confirmation' && !props.current)
-const media = (value: unknown, type: 'audio' | 'image') => resultMediaUrl(value, type, window.location.origin)
+const media = (value: unknown, type: 'audio' | 'image' | 'video') => resultMediaUrl(value, type, window.location.origin)
 const inviteUrl = (value: unknown) => resultInviteUrl(value, window.location.origin)
+const sampleTimers = new Map<HTMLAudioElement, ReturnType<typeof setTimeout>>()
+const sampleRetried = new WeakSet<HTMLAudioElement>()
+function clearSampleTimer(element: HTMLAudioElement) {
+  const timer = sampleTimers.get(element)
+  if (timer) clearTimeout(timer)
+  sampleTimers.delete(element)
+}
+function fallbackSample(event: Event, value: unknown) {
+  const element = event.target as HTMLAudioElement
+  clearSampleTimer(element)
+  const original = media(value, 'audio')
+  if (!original || sampleRetried.has(element)) return
+  const url = new URL(original)
+  if (!/^\/media\/sample-[a-z0-9-]+\.mp3$/.test(url.pathname)) return
+  sampleRetried.add(element)
+  const position = element.currentTime, resume = !element.paused
+  url.searchParams.set('reauth', String(Date.now()))
+  element.addEventListener('loadedmetadata', () => {
+    if (Number.isFinite(position)) element.currentTime = position
+    if (resume) void element.play().catch(() => {})
+  }, { once: true })
+  element.src = url.href
+}
+function waitForSample(event: Event, value: unknown) {
+  const element = event.target as HTMLAudioElement
+  clearSampleTimer(element)
+  sampleTimers.set(element, setTimeout(() => fallbackSample(event, value), 15000))
+}
+function clearSample(event: Event) { clearSampleTimer(event.target as HTMLAudioElement) }
+onBeforeUnmount(() => { for (const element of sampleTimers.keys()) clearSampleTimer(element) })
 // A works result can contain pagination and other commands. Move only the exact
 // server-provided open command for an item; never infer an action from its title.
 const openCommands = computed(() => {
@@ -42,9 +78,12 @@ async function copyInvite(value: unknown) {
         <span class="agent-result-index" aria-hidden="true">{{ index + 1 }}</span>
         <img v-if="media(item.data.imageUrl, 'image')" :src="media(item.data.imageUrl, 'image')" :alt="item.title" loading="lazy"/>
         <div class="agent-result-detail"><strong>{{ item.title }}</strong><p v-if="!isWorksList && item.subtitle">{{ item.subtitle }}</p>
+          <button v-if="result.kind==='lyrics_download' && typeof item.data.lyrics==='string'" type="button" :disabled="disabled" @click="downloadLyrics(item)">{{ en?'Download lyrics (TXT)':'下载歌词（TXT）' }}</button>
+          <a v-if="sharedDownloadUrl(item.data.downloadUrl)" :href="sharedDownloadUrl(item.data.downloadUrl)" download>下载已解锁歌曲</a>
           <small v-if="item.data.current === true">{{ en ? 'Current selection' : '当前选择' }}</small>
           <blockquote v-if="typeof item.data.excerpt === 'string'" class="agent-source-excerpt"><small>{{ en ? 'Source excerpt' : '来源摘要' }}</small><p>{{ item.data.excerpt }}</p></blockquote>
-          <audio v-if="media(item.data.audioUrl, 'audio')" :src="media(item.data.audioUrl, 'audio')" controls preload="none" :aria-label="item.title"/>
+          <AgentVideoProgress v-if="result.kind==='video' && typeof item.data.projectId==='string'" :project-id="item.data.projectId"/>
+          <audio v-if="media(item.data.audioUrl, 'audio')" :src="media(item.data.audioUrl, 'audio')" controls preload="none" :aria-label="item.title" @error="fallbackSample($event, item.data.audioUrl)" @waiting="waitForSample($event, item.data.audioUrl)" @playing="clearSample" @pause="clearSample"/>
           <div v-if="inviteUrl(item.data.invitePath)" class="agent-result-invite"><input readonly :value="inviteUrl(item.data.invitePath)" :aria-label="en ? 'Invitation link' : '邀请链接'" @focus="($event.target as HTMLInputElement).select()"/><button type="button" @click="copyInvite(item.data.invitePath)">{{ en ? 'Copy invitation' : '复制邀请链接' }}</button></div>
         </div>
         <button v-if="openCommand(item)" type="button" class="agent-work-open" :disabled="disabled || stale" :aria-label="en ? `Open ${item.title}` : `打开《${item.title}》`" :title="en ? `Open ${item.title}` : `打开《${item.title}》`" @click="$emit('command', openCommand(item)!)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5v14l11-7z"/></svg></button>

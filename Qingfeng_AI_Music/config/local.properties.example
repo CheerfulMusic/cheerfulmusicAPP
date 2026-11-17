@@ -34,16 +34,18 @@ qingfeng.providers.kie.weirdness-constraint=0.25
 qingfeng.providers.kie.variety=0
 # 局部改词参考原曲的权重0~1；不保证修改片段旋律、音色完全一致。
 qingfeng.providers.kie.section-audio-weight=0.85
-qingfeng.providers.deepseek.api-key=
-qingfeng.providers.deepseek.model=deepseek-flash
-# 写词提供方：openai 使用 GPT；deepseek 保留原模型。AI灵感改写独立配置。
+# 千问AI平台密钥与地址必须配套。也可通过环境变量 aliyunqingfengKEY 注入密钥。
+qingfeng.providers.qwen.api-key=
+qingfeng.providers.qwen.model=qwen3.8-flash
+qingfeng.providers.qwen.base-url=https://maas.qianwenaiapi.com/compatible-mode/v1
+# 写词提供方：openai 使用 GPT；qwen 使用千问。AI 改写也使用上述千问配置。
 qingfeng.lyrics.provider=openai
 qingfeng.providers.openai.api-key=
 qingfeng.providers.openai.model=gpt-6.1-terra
 # 可选 HTTP 代理，只用于本机 GPT 歌词客户端。例如 http://127.0.0.1:7890
 qingfeng.providers.openai.proxy-url=
-# GPT 确认未提交或被供应商明确拒绝时，允许使用已配置的 DeepSeek 写词。
-qingfeng.lyrics.deepseek-fallback-enabled=false
+# GPT 确认未提交或被供应商明确拒绝时，允许使用已配置的千问写词。
+qingfeng.lyrics.qwen-fallback-enabled=false
 # 可用环境变量 OPENAI_API_KEY 提供密钥；禁止提交真实值。
 qingfeng.lyrics.enabled=false
 qingfeng.generation.provider=unconfigured

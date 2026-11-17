@@ -53,11 +53,12 @@ class AgentCreationHandlersTest {
         when(lyrics.save("owner","W",2,"歌词题",chosen.lyrics(),"chosen")).thenReturn(rebased);
         when(generation.submit("owner","W","rebased",KEY)).thenReturn(task("T","rebased",KEY,GenerationStatus.QUEUED,null));
         var result=new GenerateSongHandler(works,lyrics,composer,generation,media,settings).execute(context("W",null),
-                new AgentTool.GenerateSongArgs("按这版唱","独立摇滚","yue",98,"female",List.of("piano","strings"),"regenerate","chosen"));
+                new AgentTool.GenerateSongArgs("按这版唱，我想要的曲风是热血","独立摇滚","yue",98,"female",List.of("piano","strings"),"regenerate","chosen"));
         var prefs=org.mockito.ArgumentCaptor.forClass(MusicSettings.Preferences.class);
         verify(settings).save(eq("owner"),eq("W"),eq(1L),prefs.capture());
         assertEquals("FEMALE",prefs.getValue().vocalGender());
         assertTrue(prefs.getValue().freeText().contains("BPM: 98"));
+        assertTrue(prefs.getValue().freeText().contains("Mood: 热血"));
         assertTrue(prefs.getValue().freeText().contains("Cantonese"));
         assertTrue(prefs.getValue().freeText().contains("piano,strings"));
         assertEquals("rebased",result.card().revisionId());assertEquals("T",result.card().taskId());

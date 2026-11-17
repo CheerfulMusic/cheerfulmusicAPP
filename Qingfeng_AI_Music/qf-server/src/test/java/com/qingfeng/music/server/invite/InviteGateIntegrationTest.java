@@ -36,6 +36,7 @@ import static org.junit.jupiter.api.Assertions.*;
 @ActiveProfiles("test")
 class InviteGateIntegrationTest {
     @Value("${local.server.port}") int port;
+    @Autowired org.springframework.security.web.FilterChainProxy securityFilters;
     private static final String ARTIST_PROFILE = "/api/app/artist-profile";
     record Browser(HttpClient http, CookieManager cookies, String csrf) {}
     private record ArtistSession(HttpClient http, String csrf, String creator) {}
@@ -72,6 +73,16 @@ class InviteGateIntegrationTest {
             var response = send(browser.http(), "POST", path, "{}", browser.csrf());
             assertEquals(403, response.statusCode(), path); assertTrue(response.body().contains("INVITE_REQUIRED"));
         }
+        assertEquals(403, send(browser.http(), "HEAD", "/media/sample-love-v2.mp3", null, null).statusCode());
+        var filters = securityFilters.getFilters("/media/sample-love-v2.mp3");
+        int gate = -1, authorization = -1, redirect = -1;
+        for (int i = 0; i < filters.size(); i++) {
+            if (filters.get(i) instanceof InviteGateFilter) gate = i;
+            if (filters.get(i) instanceof org.springframework.security.web.access.intercept.AuthorizationFilter) authorization = i;
+            if (filters.get(i) instanceof com.qingfeng.music.server.web.RecommendationOssFilter) redirect = i;
+        }
+        assertTrue(gate >= 0 && gate < redirect, "invite gate must run before redirect");
+        assertTrue(authorization >= 0 && authorization < redirect, "security authorization must run before redirect");
         assertEquals(200, send(browser.http(), "GET", "/actuator/health", null, null).statusCode());
         var callback = send(browser.http(), "GET", "/api/public/auth/google/callback?code=not-real&state=not-real", null, null);
         assertEquals(302, callback.statusCode()); assertEquals("/account", callback.headers().firstValue("location").orElseThrow());
@@ -198,7 +209,7 @@ class InviteGateIntegrationTest {
         var locked = send(recipient.http(), "GET", unlock, null, null);
         assertEquals(200, locked.statusCode(), locked.body());
         assertTrue(locked.body().contains("\"unlocked\":false"));
-        assertTrue(locked.body().contains("\"price\":10"));
+        assertTrue(locked.body().contains("\"price\":15"));
         assertEquals(404, readBytes(recipient.http(), attachment).statusCode());
         assertEquals(403, send(recipient.http(), "POST", unlock, "{}", null).statusCode());
         assertEquals(before, credits.balance(creator));
@@ -207,7 +218,7 @@ class InviteGateIntegrationTest {
             var unlocked = send(recipient.http(), "POST", unlock, "{}", csrf);
             assertEquals(200, unlocked.statusCode(), unlocked.body());
             assertTrue(unlocked.body().contains("\"unlocked\":true"));
-            assertEquals(before - 10, credits.balance(creator));
+            assertEquals(before - 15, credits.balance(creator));
         }
         var downloaded = readBytes(recipient.http(), attachment);
         assertEquals(200, downloaded.statusCode());
@@ -314,6 +325,12 @@ class InviteGateIntegrationTest {
         var owner = artistSession("Custom artist");
         var older = releaseArtistSong(owner, "Older song", 7);
         var latest = releaseArtistSong(owner, "Latest song", 8);
+        // Give the ordering fixture distinct times; rapid requests can share the
+        // Windows clock tick, in which case the documented ID tie-breaker applies.
+        jdbc.update("UPDATE artist_song_release SET published_at=? WHERE id=?",
+                java.sql.Timestamp.from(java.time.Instant.parse("2026-01-01T00:00:00Z")), older.id());
+        jdbc.update("UPDATE artist_song_release SET published_at=? WHERE id=?",
+                java.sql.Timestamp.from(java.time.Instant.parse("2026-01-02T00:00:00Z")), latest.id());
         var other = artistSession("Other artist");
         var foreign = releaseArtistSong(other, "Foreign song", 9);
         byte[] cover = bannerImage(Color.PINK);

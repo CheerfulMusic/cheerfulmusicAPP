@@ -59,3 +59,9 @@ describe('CDN 签名过期的一次性重新授权',()=>{
  it('片段循环跨 TTL 重授权后回到片段起点',async()=>{const player=usePlayer();await player.playSegment(track('one'),3,8);const a=FakeAudio.current;a.currentTime=8.5;a.paused=false;a.error={code:2};a.dispatchEvent(new Event('error'));a.error=null;a.dispatchEvent(new Event('loadedmetadata'));expect(a.currentTime).toBe(3);expect(player.segment?.loop).toBe(true)})
  it('不循环片段越过终点后清除片段并保持暂停',async()=>{const player=usePlayer();await player.playSegment(track('one'),3,8,false);const a=FakeAudio.current;a.currentTime=9;a.paused=true;a.error={code:2};a.dispatchEvent(new Event('error'));a.error=null;a.dispatchEvent(new Event('loadedmetadata'));expect(player.segment).toBeNull();expect(a.paused).toBe(true)})
 })
+
+
+describe('推荐音频 OSS 失败时回退',()=>{
+ it('签名过期返回不支持时回退本地并恢复进度',async()=>{const player=usePlayer();const sample={...track('sample'),audio:'/media/sample-red.mp3'};await player.toggle(sample);const a=FakeAudio.current;a.currentTime=7;a.paused=false;a.error={code:4};a.dispatchEvent(new Event('error'));expect(a.src).toContain('/media/sample-red.mp3?reauth=');a.error=null;a.dispatchEvent(new Event('loadedmetadata'));expect(a.currentTime).toBe(7);expect(player.playing).toBe(true)})
+ it('等待超时自动回退一次，再次超时提示重试',async()=>{const player=usePlayer();const sample={...track('sample'),audio:'/media/sample-red.mp3'};await player.toggle(sample);const a=FakeAudio.current;vi.useFakeTimers();a.dispatchEvent(new Event('waiting'));await vi.advanceTimersByTimeAsync(15000);expect(a.src).toContain('/media/sample-red.mp3?reauth=');a.dispatchEvent(new Event('loadedmetadata'));a.dispatchEvent(new Event('waiting'));await vi.advanceTimersByTimeAsync(15000);expect(player.error).toContain('等待时间较长');expect(player.playing).toBe(false)})
+})

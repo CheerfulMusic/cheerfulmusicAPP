@@ -16,16 +16,18 @@ public final class AgentChatPolicy {
                 && !requested(surface,MUSIC);
     }
     public static boolean deniesAction(String text) {
+        text=AgentLyricInput.parse(text).instruction();
         return has(text, "(?:不要|别|禁止|不想|不需要|先不|暂不|不用)[^，。；,;]{0,10}(?:生成|写歌|写一首|创作|音乐|歌曲|歌词|改词|修改|改写|重写|风格|分享|公开|发布|点赞|下载|延长)|(?:don.t|do not|never)[^,;.]{0,18}(?:generat|creat|writ|edit|chang|shar|publish|like|extend)");
     }
     public static boolean chatOnly(String text) {
+        text=AgentLyricInput.parse(text).instruction();
         if(has(text,"只想聊|只是聊|先聊|今天只想|什么是|你是什么|你是谁|你能.*做什么|如何|怎么|how (?:do|can)|what (?:is|are)|who are you"))return true;
         // Polite requests to act for the user may enter the concrete confirmation flow.
         // Capability questions without a requested task remain conversation only.
         return has(text,"能不能|可以吗")&&!has(surface(text),"(?:帮我|给我|为我|替我)(?:来|先|再|把这首歌|把当前作品)?(?:写|创作|生成|改|制作|分享|下载|播放|删除|润色|保存)");
     }
     public static boolean musicRequested(String text) {
-        return !lyricsOnly(text)&&requested(text,MUSIC);
+        return !lyricsOnly(text)&&requested(text,"(?:"+MUSIC+")(?!词)");
     }
     public static boolean lyricsRequested(String text) {
         return requested(text,"(?:写|创作|生成|编|改|修改|改写|重写|优化|润色|续写).{0,12}(?:歌词|词|段|一句)|(?:写|创作)(?:一|这)?首歌|(?:主歌|副歌).{0,10}(?:改|短|长|温柔|力量)|(?:write|rewrite|change|edit|generate).{0,15}(?:lyrics|chorus|verse)|write.{0,10}song");
@@ -70,9 +72,10 @@ public final class AgentChatPolicy {
     private static final String MUSIC="(?:生成|制作|开始做|做成).{0,10}(?:音乐|歌曲|歌|音频)|(?:生成|开始生成)(?:吧|音乐|歌曲|这首|一首|$)|(?:写|来|做|唱)(?:一|个|这)?首歌|generate.{0,12}(?:music|song|audio)|make.{0,12}(?:music|song)";
     private static final Set<String> READ_ACTIONS=Set.of("list_works","list_versions","list_audio","list_covers","discover_music","list_tasks",
             "get_credits","list_credit_entries","get_usage","get_account","get_referral","list_orders","get_order","payment_catalog","get_current_song",
-            "get_music_settings","music_settings_catalog","preview_music_settings","get_playback_lyrics","list_section_edits","section_context","search_memory");
+            "download_lyrics","generation_preflight","get_music_settings","music_settings_catalog","preview_music_settings","get_playback_lyrics","list_section_edits","section_context","search_memory","video_capabilities","list_music_videos","get_music_video","download_music_video","get_artist_profile","get_artist_release","get_quick_creation","get_creative_direction","get_lyrics_request","list_shared_downloads","preview_music_video");
     private static String surface(String text) {
         if(text==null)return "";
+        text=AgentLyricInput.parse(text).instruction();
         // Quoted commands are data. A quoted song title can still follow an explicit verb.
         return text.replaceAll("“[^”]*”|‘[^’]*’|「[^」]*」|\"[^\"]*\"|'[^']*'", " ");
     }
@@ -104,7 +107,7 @@ public final class AgentChatPolicy {
         return explicitSocial(text);
     }
     public static boolean requiresConfirmation(String action) {
-        return Set.of("delete_work","erase_analytics","close_checking","generate_avatar").contains(action);
+        return Set.of("retry_music_video_shot","delete_work","erase_analytics","close_checking","generate_avatar","create_music_video","update_artist_profile","set_artist_visibility","publish_artist_song","publish_to_discover","start_quick_creation","retry_quick_creation").contains(action);
     }
     public static boolean actionRequested(String action,String text) {
         if(action==null)return false;
@@ -124,6 +127,20 @@ public final class AgentChatPolicy {
         if(action==null)return false;
         if(READ_ACTIONS.contains(action))return true;
         return switch(action) {
+            case "open_feature" -> requested(text,"(?:打开|进入|查看|编辑|设置|上传|导入|分析|发布|管理).{0,30}(?:主页|艺人|发现|统计|分析|作品|头像|参考|音频|歌词|封面|资金审核|风控|精选管理|礼物|分享链接)|(?:open|edit|upload|view).{0,30}(?:profile|artist|discover|analytics|work|avatar|reference)");
+            case "upload_video_image" -> requested(text,"(?:上传|选择|添加|放|插入|用).{0,30}(?:图片|照片)|(?:upload|add).{0,20}(?:image|photo)");
+            case "open_music_video_editor" -> requested(text,"(?:打开|编辑|设置|制作|查看|修改).{0,30}(?:MV|mv|视频|分镜)|(?:open|edit|make).{0,20}(?:video|MV)");
+            case "update_artist_profile" -> requested(text,"(?:修改|设置|更新|改|保存).{0,20}(?:艺名|艺人|主页|简介|主打)|(?:update|set|edit).{0,20}(?:artist|profile|tagline|featured)");
+            case "set_artist_visibility" -> requested(text,"(?:公开|隐藏|关闭|发布).{0,20}(?:主页|艺人)|(?:publish|hide).{0,20}profile");
+            case "publish_artist_song" -> requested(text,"(?:发布|上架|上传).{0,30}(?:作品|歌曲|主页)|(?:publish|release).{0,20}(?:song|work|profile)");
+            case "remove_artist_song" -> requested(text,"(?:移除|撤下|下架|删除).{0,30}(?:主页|作品|歌曲)|(?:remove|withdraw).{0,20}(?:song|profile)");
+            case "publish_to_discover" -> requested(text,"(?:发布|上架|加入).{0,30}(?:发现|社区)|publish.{0,20}discover");
+            case "withdraw_from_discover" -> requested(text,"(?:撤下|下架|移除|取消).{0,30}(?:发现|社区)|withdraw.{0,20}discover");
+            case "start_quick_creation" -> requested(text,"(?:一键|快速).{0,12}(?:创作|写歌|生成)|quick.{0,10}(?:creat|song)");
+            case "retry_quick_creation" -> requested(text,"(?:重试|恢复|继续).{0,20}(?:一键|快速).{0,12}(?:创作|生成)|retry.{0,20}quick");
+            case "confirm_lyrics" -> requested(text,"(?:确认|使用|采用).{0,12}(?:歌词|版本)|confirm.{0,12}lyrics");
+            case "rewrite_lyric_selection" -> requested(text,"(?:保留|重写|改写|润色).{0,30}(?:歌词|这几句|这些|其余|其他|行|句)|rewrite.{0,20}(?:lyrics|selection)");
+            case "rhyme_lyric_line" -> requested(text,"押韵|韵脚|rhyme");
             case "index_work_memory" -> requested(text,"(?:将|把|给|为).{0,50}(?:这首|当前|指定|作品|歌曲).{0,20}(?:加入语义检索|建立语义索引|加入记忆)|(?:记住|索引).{0,15}(?:这首|当前|作品|歌曲)|(?:index|remember).{0,30}(?:this|current|work|song)");
             case "create_work" -> requested(text,"(?:新建|创建|建立|开).{0,12}(?:草稿|作品|空白歌曲|空白项目)|(?:create|new).{0,12}(?:draft|work|blank song)")
                     ||applicationAllowed("save_lyrics",text)||applicationAllowed("upload_audio",text);
@@ -131,6 +148,17 @@ public final class AgentChatPolicy {
             case "rename_work" -> requested(text,"改名|重命名|(?:名字|名称|歌名|标题)(?:改|换|设)|命名|rename");
             case "update_work" -> requested(text,"(?:修改|更新|设置|保存|更改|改|换).{0,15}(?:收礼人|收件人|场景|故事|寄语|标题|歌名|送给)|(?:收礼人|收件人|场景|故事|寄语|标题|歌名).{0,10}(?:改|换|设)|(?:update|set|save).{0,15}(?:recipient|occasion|story|message|title)");
             case "delete_work" -> requested(text,"删除|删掉|移除作品|delete|remove.{0,12}(?:song|work)");
+            case "pause_playback" -> requested(text,"暂停|停止播放|pause|stop playing");
+            case "next_track" -> requested(text,"下一首|next (?:song|track)");
+            case "previous_track" -> requested(text,"上一首|previous (?:song|track)");
+            case "enable_repeat" -> requested(text,"(?:开启|打开|开始|单曲).{0,10}循环|enable repeat");
+            case "disable_repeat" -> requested(text,"(?:关闭|取消|停止).{0,10}循环|disable repeat");
+            case "enable_lyric_follow" -> requested(text,"(?:开启|打开|恢复).{0,10}歌词.{0,10}(?:滚动|跟随)|enable lyric");
+            case "disable_lyric_follow" -> requested(text,"(?:关闭|停止|取消).{0,10}歌词.{0,10}(?:滚动|跟随)|disable lyric");
+            case "retry_music_video_shot" -> requested(text,"(?:重试|补齐|补生成|重新生成|修复|继续生成).{0,30}(?:镜头|MV|mv|视频)|(?:retry|repair|resume).{0,30}(?:shot|video|MV)|(?:镜头|MV|mv|视频).{0,20}(?:补齐|重试|修复)");
+            case "retry_music_video_assembly" -> requested(text,"(?:重试|重新).{0,20}(?:合成|MV|mv|视频)|retry.{0,20}(?:video|assembly)");
+            case "create_music_video" -> requested(text,"(?:制作|生成|创建|做).{0,30}(?:MV|mv|视频)|(?:create|generate|make).{0,30}(?:video|MV)");
+            case "cancel_music_video" -> requested(text,"(?:取消|停止).{0,20}(?:MV|mv|视频)|cancel.{0,20}(?:video|MV)");
             case "edit_cover" -> requested(text,"(?:生成|画|绘制|制作|修改|换|重做|设计).{0,15}(?:封面|cover)|(?:封面|cover).{0,12}(?:改|换)|(?:generate|edit|create).{0,12}cover");
             case "generate_avatar" -> requested(text,"(?:生成|画|绘制|制作|设计|创建).{0,60}(?:头像|avatar|profile picture)|(?:头像|avatar|profile picture).{0,30}(?:生成|画|绘制|制作|设计)|(?:generate|draw|create|make).{0,60}(?:avatar|profile picture)");
             case "upload_cover" -> requested(text,"(?:上传|导入|选择文件).{0,12}(?:封面|图片)|upload.{0,12}(?:cover|image)");

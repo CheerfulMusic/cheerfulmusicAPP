@@ -1,6 +1,8 @@
 package com.qingfeng.music.server;
 
 import com.qingfeng.music.common.exception.DomainException;
+import com.qingfeng.music.common.concurrent.AgentRequestScope;
+import com.qingfeng.music.infrastructure.provider.OpenAiLyricsWriter;
 import com.qingfeng.music.credits.CreditsLedger;
 import com.qingfeng.music.identity.api.IdentityApi;
 import com.qingfeng.music.lyrics.api.LyricsApi;
@@ -16,6 +18,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.TestConfiguration;
@@ -50,10 +54,12 @@ class LyricsCreditsIntegrationTest {
         final AtomicInteger calls=new AtomicInteger();
         volatile RuntimeException failure;
         volatile boolean emptyResult;
+        volatile LyricsWriter delegate;
         public boolean isConfigured(){return true;}
         public Draft write(WorkApi.Work work,String language){throw new AssertionError("应携带修改上下文");}
         public Draft write(WorkApi.Work work,String language,String instructions,String previousLyrics){
             calls.incrementAndGet();
+            if(delegate!=null)return delegate.write(work,language,instructions,previousLyrics);
             if(failure!=null)throw failure;
             if(emptyResult)return new Draft("新的歌","   ");
             return new Draft("新的歌","[Chorus]\n愿你的每一天都有光");
@@ -68,7 +74,7 @@ class LyricsCreditsIntegrationTest {
     @BeforeEach void reset(){
         jdbc.update("DELETE FROM model_usage_reservation");
         jdbc.update("UPDATE lyrics_composition_request SET status='SUCCEEDED'");
-        writer.calls.set(0); writer.failure=null; writer.emptyResult=false;
+        writer.calls.set(0); writer.failure=null; writer.emptyResult=false;writer.delegate=null;
     }
     record Fixture(String owner,String work){}
     Fixture fixture(){return fixture(identity.create().creatorId());}
@@ -165,6 +171,99 @@ class LyricsCreditsIntegrationTest {
         assertEquals(1,rows.get(0).refunded());
         assertEquals("FAILED",composer.requestState(f.owner,f.work,key).status());
         assertEquals("LYRICS_RESPONSE_INVALID",composer.requestState(f.owner,f.work,key).errorCode());
+    }
+
+    @ParameterizedTest @ValueSource(strings={"LYRICS_QUALITY_NOT_MET","LYRICS_QUALITY_UNVERIFIED"})
+    void undeliveredQualityFailureRefundsOnceAndNeverSavesOrReplaysAnUnapprovedDraft(String code){
+        var f=chargedFixture();fund(f,20);
+        var previous=lyrics.save(f.owner,f.work,0,"已有手写版","[Chorus]\n保留我自己写的这一句");
+        String key=UUID.randomUUID().toString();
+        writer.failure=new DomainException(code,"本次歌词未通过交付检查");
+        assertEquals(code,assertThrows(DomainException.class,()->composer.compose(f.owner,f.work,0,key,"zh-CN")).code());
+        assertEquals("FAILED",composer.requestState(f.owner,f.work,key).status());
+        assertEquals(code,composer.requestState(f.owner,f.work,key).errorCode());
+        assertEquals(20,credits.balance(f.owner));
+        assertEquals(1,writer.calls.get());
+        assertEquals(List.of(previous.id()),lyrics.list(f.owner,f.work).stream().map(LyricsApi.Revision::id).toList());
+        assertEquals(previous.lyrics(),lyrics.get(f.owner,f.work,previous.id()).lyrics());
+        assertEquals(1,consumptions(f.owner).size());
+        assertEquals("FAILED",consumptions(f.owner).get(0).status());
+        assertEquals(1,consumptions(f.owner).get(0).refunded());
+        // Replayed settlement and the original key may neither refund again nor call another model.
+        requests.failed(f.work,key,code);requests.failed(f.work,key,code);
+        assertEquals("LYRICS_REQUEST_FAILED",assertThrows(DomainException.class,
+            ()->composer.compose(f.owner,f.work,0,key,"zh-CN")).code());
+        assertEquals(1,writer.calls.get());
+        assertEquals(20,credits.balance(f.owner));
+        String reference="lyrics:"+f.work+":"+key;
+        assertEquals(1,jdbc.queryForObject("SELECT COUNT(*) FROM credit_ledger WHERE entry_type='DEBIT' AND reference_id=?",Integer.class,reference));
+        assertEquals(1,jdbc.queryForObject("SELECT COUNT(*) FROM credit_ledger WHERE entry_type='REFUND' AND reference_id=?",Integer.class,reference));
+    }
+
+    @ParameterizedTest @ValueSource(strings={"LYRICS_QUALITY_NOT_MET","LYRICS_QUALITY_UNVERIFIED"})
+    void undeliveredQualityFailureRestoresTheFreeUseWithoutCreatingPaidCredits(String code){
+        var f=fixture();String failedKey=UUID.randomUUID().toString();
+        writer.failure=new DomainException(code,"本次歌词未通过交付检查");
+        assertThrows(DomainException.class,()->composer.compose(f.owner,f.work,0,failedKey,"zh-CN"));
+        assertEquals("FAILED",composer.requestState(f.owner,f.work,failedKey).status());
+        assertEquals(0,jdbc.queryForObject("SELECT COUNT(*) FROM model_usage_reservation WHERE kind='LYRIC_REDEEM' AND work_id=?",Integer.class,f.work));
+        assertEquals(0,credits.balance(f.owner));
+        assertTrue(consumptions(f.owner).isEmpty());
+        assertTrue(lyrics.list(f.owner,f.work).isEmpty());
+        writer.failure=null;
+        var accepted=composer.compose(f.owner,f.work,0,UUID.randomUUID().toString(),"zh-CN");
+        assertNotNull(accepted.id());
+        assertEquals(0,credits.balance(f.owner));
+        assertTrue(consumptions(f.owner).isEmpty());
+    }
+
+    @Test void invalidRefinementRefundsOnceWithoutPublishingEitherDraft()throws Exception{
+        var f=chargedFixture();fund(f,20);String key=UUID.randomUUID().toString();
+        var client=org.mockito.Mockito.mock(java.net.http.HttpClient.class);var sends=new AtomicInteger();
+        try(var scope=new AgentRequestScope(java.time.Duration.ofSeconds(60),65536).enter()){
+            org.mockito.Mockito.when(client.<String>send(org.mockito.ArgumentMatchers.any(),org.mockito.ArgumentMatchers.any())).thenAnswer(call->{
+                int stage=sends.incrementAndGet();assertTrue(stage<=2,"Invalid refinement must stop without another generation");
+                if(stage==2)scope.cancel();return qualityStageResponse(stage);
+            });
+            writer.delegate=new OpenAiLyricsWriter("offline-key","gpt-6.1-sol",java.net.URI.create("https://example.invalid"),client);
+            assertEquals("LYRICS_QUALITY_UNVERIFIED",assertThrows(DomainException.class,()->composer.compose(f.owner,f.work,0,key,"zh-CN")).code());
+        }
+        assertEquals(2,sends.get());assertEquals("FAILED",composer.requestState(f.owner,f.work,key).status());
+        assertEquals(20,credits.balance(f.owner));assertEquals(1,consumptions(f.owner).get(0).refunded());assertTrue(lyrics.list(f.owner,f.work).isEmpty());
+        requests.failed(f.work,key,"LYRICS_QUALITY_UNVERIFIED");requests.failed(f.work,key,"LYRICS_QUALITY_UNVERIFIED");
+        assertEquals(1,jdbc.queryForObject("SELECT COUNT(*) FROM credit_ledger WHERE entry_type='REFUND' AND reference_id=?",Integer.class,"lyrics:"+f.work+":"+key));
+        assertEquals("LYRICS_REQUEST_FAILED",assertThrows(DomainException.class,()->composer.compose(f.owner,f.work,0,key,"zh-CN")).code());
+        assertEquals(2,sends.get());assertEquals(1,writer.calls.get());
+    }
+
+    @Test void dispatchedRefinementTimeoutKeepsChargeUnknownAndNeverRetriesWithANewDraft()throws Exception{
+        var f=chargedFixture();fund(f,20);String key=UUID.randomUUID().toString();
+        var client=org.mockito.Mockito.mock(java.net.http.HttpClient.class);var sends=new AtomicInteger();
+        org.mockito.Mockito.when(client.<String>send(org.mockito.ArgumentMatchers.any(),org.mockito.ArgumentMatchers.any())).thenAnswer(call->{
+            int stage=sends.incrementAndGet();assertTrue(stage<=2,"A dispatched refinement timeout must not cause another model request");
+            if(stage==2)throw new java.net.http.HttpTimeoutException("offline dispatched refinement timeout");return qualityStageResponse(stage);
+        });
+        writer.delegate=new OpenAiLyricsWriter("offline-key","gpt-6.1-sol",java.net.URI.create("https://example.invalid"),client);
+        assertEquals("LYRICS_PROVIDER_TIMEOUT",assertThrows(DomainException.class,()->composer.compose(f.owner,f.work,0,key,"zh-CN")).code());
+        assertEquals(2,sends.get());assertEquals("UNKNOWN",composer.requestState(f.owner,f.work,key).status());
+        assertEquals(20-LYRICS_COST,credits.balance(f.owner));assertEquals("UNKNOWN",consumptions(f.owner).get(0).status());
+        assertEquals(0,consumptions(f.owner).get(0).refunded());assertTrue(lyrics.list(f.owner,f.work).isEmpty());
+        assertEquals(0,jdbc.queryForObject("SELECT COUNT(*) FROM credit_ledger WHERE entry_type='REFUND' AND reference_id=?",Integer.class,"lyrics:"+f.work+":"+key));
+        assertEquals("LYRICS_REQUEST_PENDING",assertThrows(DomainException.class,()->composer.compose(f.owner,f.work,0,key,"zh-CN")).code());
+        assertEquals(2,sends.get());assertEquals(1,writer.calls.get());
+    }
+
+    private static java.net.http.HttpResponse<String> qualityStageResponse(int stage){
+        var json=new tools.jackson.databind.ObjectMapper();
+        String oldLyrics="[Verse 1]\n一起做饭的晚上\n[Chorus]\n愿你的每一天都有光";
+        String newLyrics="[Verse 1]\n两双筷子碰着锅沿\n[Chorus]\n留一口热的等你回来";
+        var candidate=new java.util.LinkedHashMap<String,Object>(java.util.Map.of("title","故事","lyrics",stage==1?oldLyrics:newLyrics,
+            "plan",java.util.Map.of("requirements","","suggestedArrangement","","negativeTags","","summaryZh","","summaryEn","","vocalGender","AUTO")));
+        if(stage==2)candidate.put("quality",java.util.Map.of("decision","REWRITE","issues",List.of(java.util.Map.of("code","HOOK","quote","愿你的每一天都有光","reason","原副歌没有具体表达")),
+            "hookQuote","留一口热的等你回来","progressionQuote","两双筷子碰着锅沿","rhythmQuote","留一口热的等你回来","reason","根据做饭素材具体化表达"));
+        String body=json.writeValueAsString(java.util.Map.of("status","completed","output",List.of(java.util.Map.of("type","message","role","assistant","status","completed","content",List.of(java.util.Map.of("type","output_text","text",json.writeValueAsString(candidate)))))));
+        @SuppressWarnings("unchecked") java.net.http.HttpResponse<String> response=org.mockito.Mockito.mock(java.net.http.HttpResponse.class);
+        org.mockito.Mockito.when(response.statusCode()).thenReturn(200);org.mockito.Mockito.when(response.body()).thenReturn(body);return response;
     }
 
     @Test void providerTimeoutRetainsChargeAndCanRecoverTheSameKey(){

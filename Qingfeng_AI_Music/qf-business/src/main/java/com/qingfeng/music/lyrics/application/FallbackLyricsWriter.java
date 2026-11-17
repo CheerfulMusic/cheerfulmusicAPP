@@ -1,6 +1,7 @@
 package com.qingfeng.music.lyrics.application;
 
 import com.qingfeng.music.common.exception.DomainException;
+import com.qingfeng.music.common.concurrent.LyricsRequestBudget;
 import com.qingfeng.music.work.api.WorkApi;
 import java.time.Duration;
 import java.util.Set;
@@ -39,16 +40,18 @@ public final class FallbackLyricsWriter implements LyricsWriter {
     }
 
     private Draft attempt(Function<LyricsWriter, Draft> write) {
-        if (backup.isConfigured() && !primary.isConfigured()) return writeWithSource(backup, write);
-        long started = System.nanoTime();
-        try {
-            return writeWithSource(primary, write);
-        } catch (DomainException error) {
-            if (!SAFE_FAILURES.contains(error.code()) || !backup.isConfigured()
-                    || System.nanoTime() - started > FAILOVER_WINDOW) throw error;
-            LOG.log(System.Logger.Level.WARNING, "Switching lyric provider from {0} to {1}: {2}",
-                primary.source(), backup.source(), error.code());
-            return writeWithSource(backup, write);
+        try (var ignored = LyricsRequestBudget.enter(Duration.ofSeconds(110))) {
+            if (backup.isConfigured() && !primary.isConfigured()) return writeWithSource(backup, write);
+            long started = System.nanoTime();
+            try {
+                return writeWithSource(primary, write);
+            } catch (DomainException error) {
+                if (!SAFE_FAILURES.contains(error.code()) || !backup.isConfigured()
+                        || System.nanoTime() - started > FAILOVER_WINDOW) throw error;
+                LOG.log(System.Logger.Level.WARNING, "Switching lyric provider from {0} to {1}: {2}",
+                    primary.source(), backup.source(), error.code());
+                return writeWithSource(backup, write);
+            }
         }
     }
 

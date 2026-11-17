@@ -1,11 +1,36 @@
 [CmdletBinding()]
 param([switch]$CheckOnly, [switch]$AllowProductionConnection)
 $ErrorActionPreference = 'Stop'
+function Get-VerifiedFeatureWithdrawal($configuration) {
+    $setting = $configuration.featureWithdrawal
+    if ($null -eq $setting) { return $null }
+    if ($setting.enabled -isnot [bool]) { throw 'featureWithdrawal.enabled 必须为布尔值。' }
+    if (-not $setting.enabled) { return $null }
+    $assets = [ordered]@{ enabled = $true }
+    foreach ($item in @(@{ field = 'script'; extension = '.js' }, @{ field = 'stylesheet'; extension = '.css' })) {
+        $entry = $setting.($item.field)
+        if ($null -eq $entry -or $entry.assetPath -isnot [string] -or $entry.sha256 -isnot [string] -or
+            -not [IO.Path]::IsPathFullyQualified($entry.assetPath) -or $entry.sha256 -notmatch '^[a-fA-F0-9]{64}$') {
+            throw '功能下线资源必须提供绝对 assetPath 与 SHA-256。'
+        }
+        if (-not (Test-Path -LiteralPath $entry.assetPath -PathType Leaf)) { throw '已核验的功能下线资源缺失，未启动。' }
+        $file = Get-Item -LiteralPath $entry.assetPath -Force
+        if (($file.Attributes -band [IO.FileAttributes]::ReparsePoint) -or $file.Extension -ine $item.extension -or
+            (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash -ine $entry.sha256) {
+            throw '功能下线资源类型或哈希不匹配，未启动。'
+        }
+        $assets[$item.field] = @{ assetPath = $file.FullName; sha256 = $entry.sha256.ToLowerInvariant() }
+    }
+    return $assets
+}
 $gateRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $gatePython = (Get-Command python -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source
 # Gate runs before lock/state creation, secret configuration loading, gateway, SSH or Start-Process.
 & $gatePython (Join-Path $PSScriptRoot 'release_gate.py') startup --workspace $gateRoot --manifest (Join-Path $gateRoot '.secrets/production-main.manifest.json') --jar (Join-Path $gateRoot '.cache/runtime/production-main/app.jar')
 if ($LASTEXITCODE -ne 0) { throw '启动门禁未通过：没有建立生产连接或启动进程。' }
+$featureWithdrawal = Get-VerifiedFeatureWithdrawal (Get-Content -LiteralPath (Join-Path $gateRoot '.secrets/production-main.manifest.json') -Raw | ConvertFrom-Json)
+$developmentFeatures = (Get-Content -LiteralPath (Join-Path $gateRoot '.secrets/production-main.manifest.json') -Raw | ConvertFrom-Json).localDevelopmentFeatures -eq $true
+if ($developmentFeatures) { $featureWithdrawal = $null }
 if ($CheckOnly) { return }
 if (-not $AllowProductionConnection) { throw '此入口会连接生产主库和线上API；实际启动须显式指定 -AllowProductionConnection。' }
 if ($PSVersionTable.PSVersion.Major -lt 7) { throw '请使用 PowerShell 7 运行此脚本。' }
@@ -106,6 +131,9 @@ try {
         }
     }
     $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
+    $featureWithdrawal = Get-VerifiedFeatureWithdrawal $manifest
+    $developmentFeatures = $manifest.localDevelopmentFeatures -eq $true
+    if ($developmentFeatures) { $featureWithdrawal = $null }
     if ($manifest.jarSha256 -notmatch '^[a-fA-F0-9]{64}$' -or $manifest.sourceCommit -notmatch '^[a-fA-F0-9]{40}$') { throw '主库清单缺少有效的 JAR 哈希或源码提交。' }
     $db = $manifest.database
     if ($db.sshHost -ne '47.84.5.172' -or $db.remoteHost -ne '127.0.0.1' -or [int]$db.remotePort -ne 3306 -or [int]$db.localPort -ne 13306 -or $db.name -ne 'qingfeng_music') { throw '清单中的主库目标与已确认的生产主库不一致。' }
@@ -115,16 +143,14 @@ try {
     $vite = Join-Path $frontendRoot 'node_modules\vite\bin\vite.js'
     if (-not (Test-Path -LiteralPath $vite -PathType Leaf)) { throw '已核对前端的 Vite 依赖缺失，请先在该干净工作树安装依赖。' }
     $git = (Get-Command git -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source
-    $branch = (& $git -C $frontendRoot branch --show-current 2>$null).Trim()
-    if ($LASTEXITCODE -ne 0 -or $branch -ne 'main') { throw '清单中的前端必须位于 main 工作树。' }
     $prefix = (& $git -C $frontendRoot rev-parse --show-prefix 2>$null).Trim().TrimEnd('/')
     $gitRoot = (& $git -C $frontendRoot rev-parse --show-toplevel 2>$null).Trim()
     $changes = @(& $git -C $gitRoot status --porcelain --untracked-files=all -- $prefix 2>$null)
-    if ($LASTEXITCODE -ne 0 -or $changes.Count -gt 0) { throw 'main 前端存在未提交改动，未启动；请先核对清单对应的干净前端。' }
+    if ($LASTEXITCODE -ne 0 -or $changes.Count -gt 0) { throw '已固定的前端存在未提交改动，未启动；请先核对清单对应的干净前端。' }
     $productionTree = (& $git -C $gitRoot rev-parse ($manifest.sourceCommit + ':' + $prefix) 2>$null).Trim()
     if ($LASTEXITCODE -ne 0) { throw '无法核对线上提交的前端目录。' }
     $localTree = (& $git -C $gitRoot rev-parse ('HEAD:' + $prefix) 2>$null).Trim()
-    if ($LASTEXITCODE -ne 0 -or $productionTree -ne $localTree) { throw 'main 前端目录与线上源码提交不一致，未启动。' }
+    if ($LASTEXITCODE -ne 0 -or $productionTree -ne $localTree) { throw '前端目录与线上源码提交不一致，未启动。' }
 
     # Validate only the JDBC address; never print the properties file or credentials.
     $jdbcValues = @()
@@ -159,7 +185,7 @@ try {
     $tunnel = Start-Tracked $ssh @('-N', '-T', '-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=yes', '-o', "UserKnownHostsFile=$knownHosts", '-o', 'ExitOnForwardFailure=yes', '-o', 'ConnectTimeout=10', '-o', 'ServerAliveInterval=30', '-o', 'ServerAliveCountMax=3', '-L', '127.0.0.1:13306:127.0.0.1:3306', '-i', $sshKey, 'root@47.84.5.172') $runtimeRoot 'ssh'
     Wait-Ready $tunnel { Test-TunnelPort } 20 '主库 SSH 隧道启动失败，请查看 .cache/runtime/production-main/ssh.err.log。'
     $privateUri = ([Uri]$privatePath).AbsoluteUri
-    $serverArguments = @('-Xms64m', '-Xmx512m', '-jar', $runtimeJar, '--spring.profiles.active=mysql', '--spring.profiles.include=', '--spring.config.location=classpath:/', "--spring.config.additional-location=$privateUri", '--server.address=127.0.0.1', '--server.port=8080', '--spring.flyway.enabled=false', '--spring.sql.init.mode=never', '--qingfeng.quick.scheduler-enabled=false', '--qingfeng.quick.accept-enabled=false', '--qingfeng.generation.scheduler-enabled=false', '--qingfeng.cover.ai.scheduler-enabled=false', '--qingfeng.events.dispatcher-enabled=false', '--qingfeng.events.rabbit.consumer-enabled=false', '--qingfeng.payment.inbox.scheduler-enabled=false', '--qingfeng.agent.retrieval.scheduler-enabled=false', '--qingfeng.agent.legacy-pending.enabled=false', '--qingfeng.payment-demo.enabled=false', '--qingfeng.payments.enabled=false', '--qingfeng.paypal.enabled=false', '--qingfeng.paypal.live-enabled=false', '--qingfeng.paypal.reconciliation.enabled=false', '--qingfeng.auth.sms-bridge.enabled=false')
+    $serverArguments = @('-Xms64m', '-Xmx512m', '-jar', $runtimeJar, '--spring.profiles.active=mysql', '--spring.profiles.include=', '--spring.config.location=classpath:/', "--spring.config.additional-location=$privateUri", '--server.address=127.0.0.1', '--server.port=8080', '--spring.flyway.enabled=false', '--spring.sql.init.mode=never', '--qingfeng.quick.scheduler-enabled=false', '--qingfeng.quick.accept-enabled=false', '--qingfeng.generation.scheduler-enabled=false', '--qingfeng.generation.vocal-adjustment-worker-enabled=false', '--qingfeng.cover.ai.scheduler-enabled=false', '--qingfeng.avatar.ai.scheduler-enabled=false', '--qingfeng.video.enabled=false', '--qingfeng.events.dispatcher-enabled=false', '--qingfeng.events.rabbit.enabled=false', '--qingfeng.events.rabbit.consumer-enabled=false', '--qingfeng.payment.inbox.scheduler-enabled=false', '--qingfeng.analytics.retention.enabled=false', '--qingfeng.analytics.retention.scheduler-enabled=false', '--qingfeng.agent.retrieval.enabled=false', '--qingfeng.agent.retrieval.scheduler-enabled=false', '--qingfeng.agent.legacy-pending.enabled=false', '--qingfeng.payment-demo.enabled=false', '--qingfeng.payments.enabled=false', '--qingfeng.paypal.enabled=false', '--qingfeng.paypal.live-enabled=false', '--qingfeng.paypal.reconciliation.enabled=false', '--qingfeng.auth.sms-bridge.enabled=false')
     $removedEnvironment = @{}
     try {
         foreach ($item in Get-ChildItem Env: | Where-Object { $_.Name -match '^(SPRING[_.]|MYSQL_|QINGFENG[_.])|^(JAVA_TOOL_OPTIONS|JDK_JAVA_OPTIONS|_JAVA_OPTIONS)$' }) {
@@ -172,12 +198,55 @@ try {
     # Load only the installed Vue plugin. Ignore all old Vite dotenv files and force the loopback proxy.
     $frontendJson = ConvertTo-Json -InputObject $frontendRoot -Compress
     $gatewayJson = ConvertTo-Json -InputObject $gatewayPath -Compress
+    $developmentFeaturesJson = ConvertTo-Json -InputObject $developmentFeatures -Compress
+    $withdrawalJson = ConvertTo-Json -InputObject $featureWithdrawal -Depth 4 -Compress
     $safeViteConfig = @"
 import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
 import { readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 const frontendRoot = $frontendJson;
 const gateway = JSON.parse(readFileSync($gatewayJson, 'utf8'));
+const withdrawal = $withdrawalJson;
+const developmentFeatures = $developmentFeaturesJson;
+const withdrawalAssets = new Map();
+if (withdrawal) {
+  for (const [kind, path, type] of [
+    ['script', '/feature-withdrawal.js', 'application/javascript; charset=utf-8'],
+    ['stylesheet', '/feature-withdrawal.css', 'text/css; charset=utf-8']
+  ]) {
+    const body = readFileSync(withdrawal[kind].assetPath);
+    if (createHash('sha256').update(body).digest('hex') !== withdrawal[kind].sha256) throw new Error('Feature withdrawal asset changed');
+    withdrawalAssets.set(path, { body, type });
+  }
+}
+const withdrawalPlugins = withdrawal ? [{
+  name: 'production-feature-withdrawal', apply: 'serve',
+  transformIndexHtml: { order: 'pre', handler() {
+    return [
+      { tag: 'link', attrs: { rel: 'stylesheet', href: '/feature-withdrawal.css' }, injectTo: 'head-prepend' },
+      { tag: 'script', attrs: { src: '/feature-withdrawal.js' }, injectTo: 'head-prepend' }
+    ];
+  } },
+  configureServer(server) {
+    server.middlewares.use((request, response, next) => {
+      const path = new URL(request.url || '/', 'http://127.0.0.1').pathname;
+      if (/^\/agent(?:\/|$)/.test(path)) {
+        response.statusCode = 302; response.setHeader('Location', '/create');
+        response.setHeader('Cache-Control', 'no-store'); response.end(); return;
+      }
+      const asset = withdrawalAssets.get(path);
+      if (!asset) { next(); return; }
+      if (request.method !== 'GET' && request.method !== 'HEAD') {
+        response.statusCode = 405; response.setHeader('Allow', 'GET, HEAD'); response.end(); return;
+      }
+      response.statusCode = 200; response.setHeader('Content-Type', asset.type);
+      response.setHeader('Content-Length', String(asset.body.length));
+      response.setHeader('Cache-Control', 'no-store'); response.setHeader('X-Content-Type-Options', 'nosniff');
+      response.end(request.method === 'HEAD' ? undefined : asset.body);
+    });
+  }
+}] : [];
 if (gateway.upstream !== 'https://cheerfulmusic.com') throw new Error('Invalid main backend');
 const require = createRequire(pathToFileURL(frontendRoot + '/package.json'));
 const vue = (await import(pathToFileURL(require.resolve('@vitejs/plugin-vue')).href)).default;
@@ -195,10 +264,12 @@ const production = {
   }
 };
 export default {
-  root: frontendRoot, base: '/', envDir: false, plugins: [vue()],
+  root: frontendRoot, base: '/', envDir: false, plugins: [vue(), ...withdrawalPlugins],
   server: { host: '127.0.0.1', port: 5173, strictPort: true, cors: false,
     allowedHosts: ['127.0.0.1', 'localhost'], fs: { strict: true, allow: [frontendRoot] },
     proxy: {
+      ...(developmentFeatures ? { '^/api/app/(?:agent|music-videos)(?:/|[?]|$)': { target, changeOrigin: true } } : {}),
+      '^/api/public/auth/native(?:/|[?]|$)': production,
       '^/api/app(?:/|[?]|$)': production,
       '^/api/public/(?!(?:auth|session|csrf|invite)(?:/|[?]|$))': production,
       '/media': production,
