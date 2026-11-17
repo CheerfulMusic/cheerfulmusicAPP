@@ -114,7 +114,7 @@ async function saveTitle() {
           <span>{{ t('定制化音乐制作') }}</span>
         </button>
         <button class="button secondary" type="button" @click="$emit('publish')">{{ t(publicationLabel) }}</button>
-        <button v-if="canPublishToDiscover" class="button secondary" type="button" @click="$emit('discover')">{{ t('发布到发现') }}</button>
+        <button v-if="canPublishToDiscover" class="button secondary" type="button" @click="$emit('discover')">{{ t('发布到广场') }}</button>
         <button class="button secondary" :disabled="busy" @click="$emit('regenerate')">{{ pending?t('查看生成进度'):checking?t('核对生成进度'):asset.origin==='GENERATED'?t('调整音乐'):t('重新制作一首') }}</button>
         <button class="button secondary" @click="download">{{ unlocked?t('免费下载'):t('下载（首次10积分）') }}</button>
       </div>

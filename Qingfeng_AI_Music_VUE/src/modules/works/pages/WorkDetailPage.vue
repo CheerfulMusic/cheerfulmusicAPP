@@ -128,7 +128,7 @@ const publicationLabel = computed(() => {
   const state = publicationState.value
   if (!state?.published || !state.song) return '公开到主页'
   if (!publicationMatches.value) return '更新主页版本'
-  return state.song.onDiscover ? '已发布到发现' : '已在主页展示'
+  return state.song.onDiscover ? '已发布到广场' : '已在主页展示'
 })
 let checkingPublicationLogin = false
 async function openSongPublication(discover = false) {

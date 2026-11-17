@@ -56,7 +56,7 @@ async function submit() {
     const song = discover.value && current.song
       ? await publishSongToDiscover(props.source.workId, current.song.version)
       : await publishSong(props.source)
-    notice.value = song.onDiscover ? '歌曲已发布到发现。' : '歌曲已公开到歌手主页。'
+    notice.value = song.onDiscover ? '歌曲已发布到广场。' : '歌曲已公开到歌手主页。'
     selection.value = { ...current, song }
     emit('change', selection.value)
     if (song.onDiscover) emit('published-to-discover', song)
@@ -84,7 +84,7 @@ onBeforeUnmount(() => dialog.value?.close())
   <Teleport to="body">
     <dialog ref="dialog" class="artist-publish-dialog" aria-labelledby="publish-song-title" @cancel.prevent="cancel">
       <div class="artist-dialog-inner">
-        <h2 id="publish-song-title">{{ t(discover ? '发布到发现' : identical ? '歌曲展示' : '公开到主页') }}</h2>
+        <h2 id="publish-song-title">{{ t(discover ? '发布到广场' : identical ? '歌曲展示' : '公开到主页') }}</h2>
         <div class="artist-song-snapshot">
           <img :src="discoverSong?.cover || cover" alt="">
           <div><strong>{{ discoverSong?.title || source.title }}</strong><p>{{ discover ? selection?.stageName : t('当前试听版本') }}</p></div>
@@ -93,14 +93,14 @@ onBeforeUnmount(() => dialog.value?.close())
         <p v-if="error" class="notice error" role="alert">{{ t(error) }}</p>
         <p v-if="notice" role="status">{{ t(notice) }}</p>
         <template v-if="selection && !loading">
-          <p v-if="discoverUnavailable" role="status">{{ t('当前服务版本暂不支持发布到「发现」。请在功能上线后再试。') }}</p>
+          <p v-if="discoverUnavailable" role="status">{{ t('当前服务版本暂不支持发布到「广场」。请在功能上线后再试。') }}</p>
           <p v-else-if="needsProfile">{{ t(selection.profileReady ? '请先在「我的资料」公开歌手主页，再回来公开这首歌。' : '请先在「我的资料」保存艺名并公开歌手主页。') }}</p>
-          <p v-else-if="needsRelease">{{ t('这首歌需要先公开到歌手主页，才能发布到「发现」。') }}</p>
-          <p v-else-if="confirmDiscover">{{ t('发布后，所有访客都能在「发现」看到并试听这首歌。') }}</p>
-          <p v-else-if="discover && !notice">{{ t('这首歌已发布到发现。') }}</p>
-          <p v-else-if="!identical && selection.song?.onDiscover">{{ t('更新主页版本会同时撤回「发现」中的旧版本。更新后，你可以发布新版本。') }}</p>
+          <p v-else-if="needsRelease">{{ t('这首歌需要先公开到歌手主页，才能发布到「广场」。') }}</p>
+          <p v-else-if="confirmDiscover">{{ t('发布后，所有访客都能在「广场」看到并试听这首歌。') }}</p>
+          <p v-else-if="discover && !notice">{{ t('这首歌已发布到广场。') }}</p>
+          <p v-else-if="!identical && selection.song?.onDiscover">{{ t('更新主页版本会同时撤回「广场」中的旧版本。更新后，你可以发布新版本。') }}</p>
           <p v-else-if="!identical">{{ t(selection.song ? '确认后，主页会改用当前试听的版本。' : '确认后，访客可以在你的主页看到这首歌并试听。') }}</p>
-          <p v-else-if="!notice">{{ t(selection.song?.onDiscover ? '这首歌已发布到发现。' : '这首歌已在主页展示。') }}</p>
+          <p v-else-if="!notice">{{ t(selection.song?.onDiscover ? '这首歌已发布到广场。' : '这首歌已在主页展示。') }}</p>
         </template>
         <div class="actions">
           <button type="button" class="button secondary" :disabled="saving" autofocus @click="cancel">
@@ -110,12 +110,12 @@ onBeforeUnmount(() => dialog.value?.close())
             <RouterLink v-if="needsProfile && !discover" :to="profileRoute" class="button" @click="close">{{ t('前往我的资料') }}</RouterLink>
             <button v-else-if="!selection" class="button" type="button" @click="load">{{ t('重试') }}</button>
             <button v-else-if="!needsProfile && (confirmDiscover || !discover && !identical)" class="button" type="button" :disabled="saving" @click="submit">
-              {{ t(saving ? '正在保存…' : confirmDiscover ? '确认发布到发现' : selection.song ? '更新主页版本' : '确认公开到主页') }}
+              {{ t(saving ? '正在保存…' : confirmDiscover ? '确认发布到广场' : selection.song ? '更新主页版本' : '确认公开到主页') }}
             </button>
             <template v-else-if="complete && !needsProfile">
               <RouterLink v-if="artist && !discover" :to="{ name: 'artist-home', params: { id: artist } }" class="button secondary" @click="close">{{ t('查看主页') }}</RouterLink>
-              <RouterLink v-if="selection.song?.onDiscover" to="/discover" class="button" @click="close">{{ t('查看发现') }}</RouterLink>
-              <button v-else class="button" type="button" @click="discover = true; notice = ''">{{ t('发布到发现') }}</button>
+              <RouterLink v-if="selection.song?.onDiscover" to="/discover" class="button" @click="close">{{ t('查看广场') }}</RouterLink>
+              <button v-else class="button" type="button" @click="discover = true; notice = ''">{{ t('发布到广场') }}</button>
             </template>
           </template>
         </div>

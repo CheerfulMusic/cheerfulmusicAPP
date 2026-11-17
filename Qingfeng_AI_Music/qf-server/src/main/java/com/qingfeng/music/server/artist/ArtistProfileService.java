@@ -199,7 +199,7 @@ public class ArtistProfileService {
     public Release publishToDiscover(String creator, String work, long version) {
         var profile = requireOwnerProfile(creator);
         if (!profile.published()) {
-            throw new DomainException("ARTIST_HOME_REQUIRED", "请先公开歌手主页，再发布到发现。");
+            throw new DomainException("ARTIST_HOME_REQUIRED", "请先公开歌手主页，再发布到广场。");
         }
         var song = ownerRelease(creator, work).orElseThrow(ArtistProfileService::missing);
         if (song.version() != version) {

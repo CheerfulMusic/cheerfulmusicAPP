@@ -148,7 +148,7 @@ onBeforeUnmount(() => { ++request })
         <RouterLink class="discover-brand" to="/" :aria-label="t('Cheerful Music 青风音乐首页')"><BrandLogo standalone /></RouterLink>
         <nav class="discover-nav" :aria-label="t('主导航')">
           <RouterLink to="/">{{ t('首页') }}</RouterLink>
-          <RouterLink to="/discover" aria-current="page">{{ t('发现') }}</RouterLink>
+          <RouterLink to="/discover" aria-current="page">{{ t('广场') }}</RouterLink>
           <a href="#discover-artists">{{ t('歌手') }}</a>
           <a href="#discover-playlists">{{ t('歌单') }}</a>
         </nav>
@@ -163,15 +163,15 @@ onBeforeUnmount(() => { ++request })
 
     <section class="discover-hero" aria-labelledby="discover-title">
       <div class="discover-width discover-hero-content">
-        <h1 id="discover-title">{{ t('发现音乐') }}</h1>
+        <h1 id="discover-title">{{ t('音乐广场') }}</h1>
         <p>{{ t('聆听每一份创作的灵感') }} <span aria-hidden="true">✦</span></p>
       </div>
     </section>
 
     <div class="discover-width discover-content">
-      <section class="discover-main" :aria-label="t('发现音乐')">
+      <section class="discover-main" :aria-label="t('音乐广场')">
         <div class="discover-toolbar">
-          <div class="discover-tabs" role="group" :aria-label="t('筛选发现歌曲')">
+          <div class="discover-tabs" role="group" :aria-label="t('筛选广场歌曲')">
             <button v-for="item in tabs" :key="item.id" type="button" :aria-pressed="tab === item.id"
               @click="select(item.id)">{{ t(item.label) }}</button>
           </div>
@@ -210,11 +210,11 @@ onBeforeUnmount(() => { ++request })
         </ul>
         <p v-if="loading" class="discover-message" role="status">{{ t('正在加载歌曲…') }}</p>
         <div v-else-if="failed" class="discover-message" role="alert">
-          <p>{{ t('暂时无法加载发现歌曲，请重试。') }}</p>
+          <p>{{ t('暂时无法加载广场歌曲，请重试。') }}</p>
           <button type="button" class="button secondary" @click="load()">{{ t('重试') }}</button>
         </div>
         <div v-else-if="!rows.length" class="discover-message">
-          <p>{{ t(query || genre ? '没有找到符合条件的歌曲。' : tab === 'featured' ? '还没有精选歌曲。' : '还没有歌曲发布到发现。') }}</p>
+          <p>{{ t(query || genre ? '没有找到符合条件的歌曲。' : tab === 'featured' ? '还没有精选歌曲。' : '还没有歌曲发布到广场。') }}</p>
           <button v-if="tab === 'featured' && !query && !genre" type="button" class="button secondary" @click="select('latest')">
             {{ t('查看最新发布') }}
           </button>
