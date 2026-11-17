@@ -17,8 +17,8 @@ import org.springframework.transaction.support.TransactionTemplate;
  * 预扣、免费额度占用与积分扣减在同一事务内完成；失败时退款与状态流转同事务，
  * 不会出现「退款失败却显示已退」的中间态。唯一键 (creator_id, request_key) 保证幂等。
  *
- * 并发上限统计 RESERVED/SUBMITTED/UNKNOWN，因此跨实例有效。
- * 只有未提交到供应商的 RESERVED 能安全回收；已提交的未知结果必须核对。
+ * 并发上限统计 RESERVED 和 SUBMITTED，因此跨实例有效。
+ * UNKNOWN 仍保留扣费和原请求编号，可接收迟到的结果。
  */
 public final class JdbcRewriteCharges implements RewriteCharges {
     /** Age can expire a never-submitted reservation, never establish a provider rejection. */
@@ -108,9 +108,9 @@ public final class JdbcRewriteCharges implements RewriteCharges {
      * 统计落在数据库上，因此多副本部署时上限不会随实例数放大。
      */
     private void admit(String owner) {
-        int inflight=jdbc.queryForList("SELECT id FROM rewrite_consumption WHERE status IN ('RESERVED','SUBMITTED','UNKNOWN') FOR UPDATE").size();
+        int inflight=jdbc.queryForList("SELECT id FROM rewrite_consumption WHERE status IN ('RESERVED','SUBMITTED') FOR UPDATE").size();
         if (inflight >= globalConcurrency) throw busy();
-        int mine=jdbc.queryForList("SELECT id FROM rewrite_consumption WHERE status IN ('RESERVED','SUBMITTED','UNKNOWN') AND creator_id=? FOR UPDATE",owner).size();
+        int mine=jdbc.queryForList("SELECT id FROM rewrite_consumption WHERE status IN ('RESERVED','SUBMITTED') AND creator_id=? FOR UPDATE",owner).size();
         if (mine >= perCreatorConcurrency) throw busy();
     }
 

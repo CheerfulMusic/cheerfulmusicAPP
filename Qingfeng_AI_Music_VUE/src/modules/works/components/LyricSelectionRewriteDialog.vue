@@ -18,6 +18,7 @@ const preview = ref<string>()
 const previewing = ref(false)
 const busy = ref(false)
 const error = ref('')
+const unknownRequestId = ref('')
 const { credits, refreshCredits } = useCredits()
 const previewCost = computed(() => {
   const current = credits.value
@@ -57,6 +58,7 @@ const groups = computed(() => {
 const total = computed(() => groups.value.reduce((sum, group) => sum + group.lines.length, 0))
 const originalRequest = computed(() => pendingForDraft.value.find(request =>
   request.keptLines.length === kept.value.size && request.keptLines.every(index => kept.value.has(index))))
+const canRetryUnknown = computed(() => !!unknownRequestId.value && originalRequest.value?.requestId === unknownRequestId.value)
 const canGenerate = computed(() => !busy.value && props.canPreview !== false && kept.value.size > 0 && kept.value.size < total.value)
 const previewLines = computed(() => preview.value?.split('\n') ?? [])
 
@@ -86,7 +88,13 @@ async function showPreview() {
   previewHeading.value?.focus({ preventScroll: true })
 }
 
-async function generate() {
+async function retryUnknown() {
+  if (!canGenerate.value || !canRetryUnknown.value) return
+  await generate()
+  if (alive && canRetryUnknown.value) await generate(true)
+}
+
+async function generate(newRequest = false) {
   if (!canGenerate.value) return
   if (preview.value) {
     await showPreview()
@@ -94,9 +102,12 @@ async function generate() {
   }
   busy.value = true
   error.value = ''
-  let request = originalRequest.value
+  const previous = originalRequest.value
+  let request = newRequest ? undefined : previous
+  if (!newRequest) unknownRequestId.value = ''
   try {
     if (!request) {
+      if (newRequest) await refreshCredits()
       const gate = await guardCredits(() => credits.value, refreshCredits, view => view.rewriteFreeRemaining === 0 ? view.rewriteCost : 0)
       if (!alive) return
       if (gate.blocked) {
@@ -107,7 +118,8 @@ async function generate() {
         requestId: crypto.randomUUID(), workVersion: props.workVersion, lyrics: props.source,
         keptLines: [...kept.value].sort((a, b) => a - b), language: props.language,
       }
-      emit('update:pending', [request, ...props.pending])
+      unknownRequestId.value = ''
+      emit('update:pending', [request, ...props.pending.filter(item => item.requestId !== previous?.requestId)])
     }
     const { lyrics } = await rewriteLyricSelection(props.workId, request)
     if (!alive) return
@@ -123,9 +135,11 @@ async function generate() {
   } catch (cause) {
     if (!alive) return
     // If a response was lost, retry the same preview instead of charging a second request.
+    const unknown = cause instanceof ApiError && cause.code === 'REWRITE_PROVIDER_RESULT_UNKNOWN'
     const retrySameRequest = cause instanceof ApiError && (cause.status === 0 || cause.status === 408
-      || (!cause.code && cause.status >= 500) || cause.code === 'REWRITE_REQUEST_PENDING' || cause.code === 'REWRITE_PROVIDER_RESULT_UNKNOWN')
+      || (!cause.code && cause.status >= 500) || cause.code === 'REWRITE_REQUEST_PENDING' || cause.code === 'REWRITE_GENERATION_BUSY' || unknown)
     if (request && !retrySameRequest) clearPreviewRequest(request.requestId)
+    if (unknown && request) unknownRequestId.value = request.requestId
     error.value = cause instanceof Error ? cause.message : '重写结果不完整，当前歌词已保留，请重试。'
   } finally {
     if (alive) {
@@ -194,7 +208,8 @@ onBeforeUnmount(() => {
       <div class="selection-footer-row">
         <div>
           <p aria-live="polite">{{ t('保留 {kept} 句 · 重写 {rewritten} 句', { kept: kept.size, rewritten: total - kept.size }) }}</p>
-          <p v-if="!previewing && !preview && previewCost">{{ previewCost }}</p>
+          <p v-if="canRetryUnknown">{{ t('新改写按当前额度计费') }}<template v-if="previewCost"> · {{ previewCost }}</template></p>
+          <p v-else-if="!previewing && !preview && !originalRequest && previewCost">{{ previewCost }}</p>
         </div>
         <div class="selection-actions">
           <template v-if="previewing">
@@ -205,7 +220,10 @@ onBeforeUnmount(() => {
             <button v-if="props.canRewriteAll !== false" type="button" class="button secondary" :disabled="busy" @click="emit('rewriteAll')">
               {{ credits && credits.lyricsCost > 0 ? t('全部重写（{count} 积分）', { count: credits.lyricsCost }) : t('全部重写') }}
             </button>
-            <button type="button" class="button" :disabled="!canGenerate" @click="generate">
+            <button v-if="canRetryUnknown" type="button" class="button secondary" :disabled="!canGenerate" @click="retryUnknown">
+              {{ t('发起新的改写') }}
+            </button>
+            <button type="button" class="button" :disabled="!canGenerate" @click="generate()">
               {{ t(busy ? '正在重写歌词…' : originalRequest ? '核对预览结果' : '生成预览') }}
             </button>
           </template>

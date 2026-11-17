@@ -95,10 +95,11 @@ public final class InspirationRewriteService {
         }
     }
 
-    /** 同一请求键重复提交：已成功直接返回上次结果，已失败或仍在处理中则明确拒绝，不重复调用模型。 */
+    /** 同一请求键只返回历史结果或当前状态。 */
     private String replay(RewriteCharges.Reservation reservation) {
         if ("SUCCEEDED".equals(reservation.status())) return reservation.result() == null ? "" : reservation.result();
         if ("FAILED".equals(reservation.status())) throw new DomainException("REWRITE_REQUEST_FAILED", "上次改写未完成，可以重新发起一次改写。");
+        if ("UNKNOWN".equals(reservation.status())) throw new DomainException("REWRITE_PROVIDER_RESULT_UNKNOWN", "上次改写未取得结果，原文仍会保留。");
         throw new DomainException("REWRITE_REQUEST_PENDING", "这次改写正在处理中，请稍后再试。");
     }
     private DomainException busy() { return new DomainException("REWRITE_GENERATION_BUSY", "AI改写正在处理中，请稍后再试。"); }

@@ -331,6 +331,46 @@ it.each([
   expect(reopened.text()).toContain('新版歌词预览')
 })
 
+it.each(['unknown', 'pending', 'late result'])('checks an uncertain partial rewrite before an explicit retry (%s)', async outcome => {
+  const unknown = new ApiError('上次改写未取得结果，原文仍会保留。', 409, 'REWRITE_PROVIDER_RESULT_UNKNOWN')
+  const rewritten = revision.lyrics.replace('夜风吹过山城', '风里还有灯火')
+  api.rewriteSelection.mockRejectedValueOnce(unknown)
+  if (outcome === 'unknown') api.rewriteSelection.mockRejectedValueOnce(unknown).mockResolvedValueOnce({ lyrics: rewritten })
+  else if (outcome === 'pending') api.rewriteSelection.mockRejectedValueOnce(new ApiError('AI改写正在处理中，请稍后再试。', 429, 'REWRITE_GENERATION_BUSY'))
+  else api.rewriteSelection.mockResolvedValueOnce({ lyrics: rewritten })
+
+  const panel = mount(LyricsPanel, { props: { work } })
+  await flushPromises()
+  await panel.get('.lyric-rewrite-all').trigger('click')
+  const dialog = panel.get('dialog.lyric-selection-dialog')
+  const button = (text: string) => dialog.findAll('button').find(candidate => candidate.text() === text)!
+  await dialog.get('.selection-row input').setValue(true)
+  await button('生成预览').trigger('click')
+  await flushPromises()
+  expect(dialog.text()).toContain('新改写按当前额度计费')
+  expect(api.rewriteSelection).toHaveBeenCalledTimes(1)
+
+  await button('发起新的改写').trigger('click')
+  await flushPromises()
+  const request = api.rewriteSelection.mock.calls[0]![1]
+  expect(api.rewriteSelection.mock.calls[1]![1]).toEqual(request)
+  expect(api.rewriteSelection).toHaveBeenCalledTimes(outcome === 'unknown' ? 3 : 2)
+  expect(panel.get<HTMLTextAreaElement>('textarea').element.value).toBe(revision.lyrics)
+  if (outcome === 'unknown') {
+    const next = api.rewriteSelection.mock.calls[2]![1]
+    expect(next.requestId).not.toBe(request.requestId)
+    expect(next).toEqual({ ...request, requestId: next.requestId })
+  }
+  if (outcome === 'pending') {
+    expect(button('核对预览结果')).toBeDefined()
+    expect(button('发起新的改写')).toBeUndefined()
+  } else {
+    expect(dialog.text()).toContain('新版歌词预览')
+    await button('采用新版').trigger('click')
+    expect(panel.get<HTMLTextAreaElement>('textarea').element.value).toBe(rewritten)
+  }
+})
+
 it('sends the live draft for a full rewrite and keeps it when a response only changes punctuation', async () => {
   vi.stubGlobal('confirm', vi.fn(() => true))
   const panel = mount(LyricsPanel, { props: { work } })

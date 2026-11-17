@@ -82,7 +82,7 @@ class DeepSeekLyricsFlowTest {
   }
   assertTrue(lyrics.list(owner,work.id()).isEmpty());
  }
- @Test void selectionPreviewTimeoutKeepsTheSamePendingRequest(){
+ @Test void selectionPreviewTimeoutReleasesCapacityWithoutRerunningTheSameKey(){
   String owner=identity.create().creatorId();
   var work=works.create(owner,new WorkApi.Draft("","","晚饭后的故事","","民谣",""));
   String source="[Verse]\n第一句\n要保留的句子";
@@ -91,17 +91,20 @@ class DeepSeekLyricsFlowTest {
    public boolean isConfigured(){return true;}
    public String rewrite(String prompt,String language){throw new AssertionError("Selection needs structured replacements");}
    public List<Replacement> rewriteSelection(String prompt,String language,List<Integer> targetIndices){
-    calls.incrementAndGet();
-    throw new DomainException("REWRITE_PROVIDER_RESULT_UNKNOWN","AI改写等待模型响应超时");
+    if(calls.incrementAndGet()==1)throw new DomainException("REWRITE_PROVIDER_RESULT_UNKNOWN","AI改写等待模型响应超时");
+    return List.of(new Replacement(1,"新的第一句"));
    }
   };
   var service=new LyricSelectionRewriteService(works,new InspirationRewriteService(previewWriter,true,2,rewriteCharges));
   UUID key=UUID.randomUUID();
   assertEquals("REWRITE_PROVIDER_RESULT_UNKNOWN",assertThrows(DomainException.class,
       ()->service.preview(owner,work.id(),0,key,source,List.of(2),"zh-CN")).code());
-  assertEquals("REWRITE_REQUEST_PENDING",assertThrows(DomainException.class,
+  assertEquals("REWRITE_PROVIDER_RESULT_UNKNOWN",assertThrows(DomainException.class,
       ()->service.preview(owner,work.id(),0,key,source,List.of(2),"zh-CN")).code());
   assertEquals(1,calls.get());
+  assertEquals("[Verse]\n新的第一句\n要保留的句子",
+      service.preview(owner,work.id(),0,UUID.randomUUID(),source,List.of(2),"zh-CN"));
+  assertEquals(2,calls.get());
   assertTrue(lyrics.list(owner,work.id()).isEmpty());
  }
  @Test void templateReachesWriterAndMismatchNeverCreatesRevisionOrRetries(){
