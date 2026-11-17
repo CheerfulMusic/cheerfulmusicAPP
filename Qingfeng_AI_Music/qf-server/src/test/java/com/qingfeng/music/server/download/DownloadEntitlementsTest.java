@@ -23,21 +23,21 @@ class DownloadEntitlementsTest {
     }
 
     @Test void availableAudioIsChargedWithIdempotentReference() {
-        when(db.queryForObject(anyString(), eq(Integer.class), any(), any(), any())).thenReturn(0);
+        when(db.queryForObject(anyString(), eq(Integer.class), any(), any(), any(), any())).thenReturn(0);
         var content = new MediaApi.Content(1, "audio/mpeg", "a.mp3", () -> new ByteArrayInputStream(new byte[]{1}));
         service.unlock("user", "work", content);
         verify(ledger).debit("user", 10, DownloadEntitlements.reference("user", "work"));
     }
 
     @Test void inaccessibleAudioDoesNotCharge() {
-        when(db.queryForObject(anyString(), eq(Integer.class), any(), any(), any())).thenReturn(0);
+        when(db.queryForObject(anyString(), eq(Integer.class), any(), any(), any(), any())).thenReturn(0);
         var content = new MediaApi.Content(1, "audio/mpeg", "a.mp3", () -> { throw new IOException(); });
         assertThrows(DomainException.class, () -> service.unlock("user", "work", content));
         verifyNoInteractions(ledger);
     }
 
     @Test void unlockedWorkDoesNotChargeOrOpenAudioAgain() {
-        when(db.queryForObject(anyString(), eq(Integer.class), any(), any(), any())).thenReturn(1);
+        when(db.queryForObject(anyString(), eq(Integer.class), any(), any(), any(), any())).thenReturn(1);
         service.unlock("user", "work", null);
         verifyNoInteractions(ledger);
     }
