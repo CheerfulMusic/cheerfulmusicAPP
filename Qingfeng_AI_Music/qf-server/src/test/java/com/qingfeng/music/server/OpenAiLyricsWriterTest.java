@@ -35,27 +35,7 @@ class OpenAiLyricsWriterTest {
         return Map.of("status", "completed", "output", List.of(
             Map.of("type", "reasoning", "summary", List.of()),
             Map.of("type", "message", "role", "assistant", "status", "completed", "content",
-                List.of(Map.of("type", "output_text", "text", JSON.writeValueAsString(result))))));
-    }
-
-    private static Map<String, Object> reviewed(Map<String, Object> candidate, String decision,
-                                                List<Map<String, Object>> issues) {
-        var review = new LinkedHashMap<>(candidate);
-        var lines = ((String) candidate.get("lyrics")).lines()
-            .filter(line -> !line.isBlank() && !line.startsWith("[")).toList();
-        String first = lines.get(0), last = lines.get(lines.size() - 1);
-        review.put("quality", new LinkedHashMap<>(Map.of("decision", decision, "issues", issues,
-            "hookQuote", last, "progressionQuote", first, "rhythmQuote", last,
-            "reason", "已根据原始素材检查核心表达、段落推进及自然韵律。")));
-        return review;
-    }
-
-    private static Map<String, Object> issue(String code, String quote) {
-        return Map.of("code", code, "quote", quote, "reason", "副歌仍为通用表达，需要围绕原素材中的小碗和橘子修改。");
-    }
-
-    private static Map<String, Object> keep(Map<String, Object> candidate) {
-        return reviewed(candidate, "KEEP", List.of());
+                List.of(Map.of("type", "output_text", "text", (result instanceof String ? (String) result : JSON.writeValueAsString(result)))))));
     }
 
     @Test void preservesWritingContextAndUsesOfficialStructuredOutputContract() throws Exception {
@@ -72,7 +52,7 @@ class OpenAiLyricsWriterTest {
             assertEquals("medium", request.path("reasoning").path("effort").asText());
             assertFalse(request.has("thinking"));assertFalse(request.has("max_tokens"));
             String prompt = request.path("instructions").asText();
-            assertTrue(prompt.contains("中英混合"));assertTrue(prompt.contains("用户指定保留的段落必须原样保留"));
+            assertTrue(prompt.contains("中英混合"));assertTrue(prompt.contains("明确保留的原句优先遵守"));
             var material = JSON.readTree(request.path("input").path(0).path("content").asText());
             assertEquals(WORK.story(), material.path("story").asText());
             assertEquals(WORK.title(), material.path("preferredTitle").asText());
@@ -120,7 +100,7 @@ class OpenAiLyricsWriterTest {
         assertInvalid(JSON.writeValueAsString(response));
     }
 
-    @Test void photoLyricsUseOneMultimodalRequestAndRequireBothCreativeOutputs() throws Exception {
+    @Test void photoLyricsUseMultimodalDraftThenRefinementAndPreservePhotoSummary() throws Exception {
         var output=result();
         output.put("photoSummary","夕阳下，两个人坐在海边。");
         try(var fixture=new Fixture(200,JSON.writeValueAsString(completed(output)))){
@@ -143,7 +123,7 @@ class OpenAiLyricsWriterTest {
             assertEquals(output.get("photoSummary"),draft.plan().photoSummary());
             assertEquals("Acoustic guitar",draft.plan().suggestedArrangement());
             assertEquals("OPENAI",draft.source());
-            assertEquals(1,fixture.calls.get());
+            assertEquals(2,fixture.calls.get());
         }
         try(var fixture=new Fixture(200,JSON.writeValueAsString(completed(result())))){
             var direction=new com.qingfeng.music.lyrics.application.LyricsWriter.Direction("","","AUTO");
@@ -227,7 +207,7 @@ class OpenAiLyricsWriterTest {
         when(response.body()).thenReturn(JSON.writeValueAsString(completed(result())));
         @SuppressWarnings("unchecked") HttpResponse<String> editorial = mock(HttpResponse.class);
         when(editorial.statusCode()).thenReturn(200);
-        when(editorial.body()).thenReturn(JSON.writeValueAsString(completed(keep(result()))));
+        when(editorial.body()).thenReturn(JSON.writeValueAsString(completed(result().get("lyrics"))));
         when(client.<String>send(any(), any())).thenThrow(new ConnectException()).thenReturn(response, editorial);
         var writer = new OpenAiLyricsWriter("offline-key", "custom-model", URI.create("https://example.invalid"), client);
 
@@ -267,196 +247,16 @@ class OpenAiLyricsWriterTest {
         } finally { Thread.interrupted(); }
     }
 
-    @Test void reviewUsesEditedLyricsButPreservesMusicPlan() throws Exception {
-        var edited = result(); edited.put("lyrics", "[Verse 1]\n门口的小碗还在\n[Chorus]\n妈，也留一瓣给自己");
-        edited.put("plan", Map.of("requirements", "changed", "suggestedArrangement", "changed", "negativeTags", "",
-            "summaryZh", "", "summaryEn", "", "vocalGender", "FEMALE"));
-        var draft = writeWithComparison(edited, input -> comparison(input, (String) edited.get("lyrics")));
-        assertEquals(edited.get("lyrics"), draft.lyrics());
-        assertEquals("Acoustic guitar", draft.plan().suggestedArrangement());
-        assertEquals("AUTO", draft.plan().vocalGender());
+    @Test void refinementPreservesTitleAndPlan() throws Exception {
+        String lyrics="[Verse]\n门口的小碗还在\n[Chorus]\n妈，也留一瓣给自己";
+        var draft=writeWithReview(200,JSON.writeValueAsString(completed(lyrics)));
+        assertEquals(lyrics,draft.lyrics());assertEquals("门口的小碗",draft.title());
+        assertEquals("Acoustic guitar",draft.plan().suggestedArrangement());assertEquals("AUTO",draft.plan().vocalGender());
     }
-
-    @Test void invalidOrUnavailableReviewNeverClaimsThatTheInitialDraftPassedQuality() throws Exception {
-        assertReviewUnverified(503, "private-details");
-        assertReviewUnverified(200, "not-json");
-        // A legacy complete-song response is not evidence that an editorial review happened.
-        assertReviewUnverified(200, JSON.writeValueAsString(completed(result())));
-        var changed = keep(result()); changed.put("title", "different");
-        assertReviewUnverified(200, JSON.writeValueAsString(completed(changed)));
-        changed = keep(result()); changed.put("lyrics", "[Verse 1]\n删掉了副歌");
-        assertReviewUnverified(200, JSON.writeValueAsString(completed(changed)));
-    }
-
-    @Test void keepDecisionDeliversExactOriginalLyricsAndStopsAfterTheEditorialRequest() throws Exception {
-        var draft = writeWithReview(200, JSON.writeValueAsString(completed(keep(result()))));
-        assertEquals(result().get("title"), draft.title());
-        assertEquals(result().get("lyrics"), draft.lyrics());
-    }
-
-    @Test void blindComparisonMayKeepTheOriginalInsteadOfAcceptingAnInferiorRewrite() throws Exception {
-        var edited = rewrittenSong();
-        var selected = writeWithComparison(edited, input -> comparison(input, (String) result().get("lyrics")));
-        assertEquals(result().get("title"), selected.title());
-        assertEquals(result().get("lyrics"), selected.lyrics());
-        assertEquals("Acoustic guitar", selected.plan().suggestedArrangement());
-        assertEquals("OPENAI", selected.source());
-    }
-
-    @Test void independentRejectionOfBothCandidatesDoesNotPublishEitherDraft() throws Exception {
-        var error = assertThrows(DomainException.class, () -> writeWithComparison(rewrittenSong(),
-            input -> comparisonWithoutWinner(input, "NEITHER")));
-        assertEquals("LYRICS_QUALITY_NOT_MET", error.code());
-        assertFalse(error.getMessage().contains("You are my home"));
-    }
-
-    @Test void blindComparisonRequiresLiteralEvidenceAndConsistentJudgment() throws Exception {
-        for (String field : List.of("hookQuote", "progressionQuote", "rhythmQuote")) {
-            var error = assertThrows(DomainException.class, () -> writeWithComparison(rewrittenSong(), input -> {
-                var verdict = comparison(input, (String) rewrittenSong().get("lyrics"));
-                verdict.put(field, "这句在两稿中都不存在");
-                return verdict;
-            }));
-            assertEquals("LYRICS_QUALITY_UNVERIFIED", error.code());
-        }
-        for (String side : List.of("a", "b")) {
-            var error = assertThrows(DomainException.class, () -> writeWithComparison(rewrittenSong(), input -> {
-                var verdict = comparison(input, (String) rewrittenSong().get("lyrics"));
-                @SuppressWarnings("unchecked") var judgment = (Map<String, Object>) verdict.get(side);
-                judgment.put("quote", "伪造的候选引文");
-                return verdict;
-            }));
-            assertEquals("LYRICS_QUALITY_UNVERIFIED", error.code());
-        }
-        var selectedUnacceptable = assertThrows(DomainException.class, () -> writeWithComparison(rewrittenSong(), input -> {
-            var verdict = comparison(input, (String) rewrittenSong().get("lyrics"));
-            @SuppressWarnings("unchecked") var winner = (Map<String, Object>) verdict.get(((String) verdict.get("choice")).toLowerCase(Locale.ROOT));
-            winner.put("acceptable", false);
-            return verdict;
-        }));
-        assertEquals("LYRICS_QUALITY_UNVERIFIED", selectedUnacceptable.code());
-        var uncertain = assertThrows(DomainException.class, () -> writeWithComparison(rewrittenSong(),
-            input -> comparisonWithoutWinner(input, "UNSURE")));
-        assertEquals("LYRICS_QUALITY_UNVERIFIED", uncertain.code());
-        var contradictoryNeither = assertThrows(DomainException.class, () -> writeWithComparison(rewrittenSong(), input -> {
-            var verdict = comparisonWithoutWinner(input, "NEITHER");
-            @SuppressWarnings("unchecked") var first = (Map<String, Object>) verdict.get("a");
-            first.put("acceptable", true);
-            return verdict;
-        }));
-        assertEquals("LYRICS_QUALITY_UNVERIFIED", contradictoryNeither.code());
-    }
-
-    @Test void unavailableOrMalformedComparisonNeverFallsBackToUnreviewedLyrics() throws Exception {
-        assertEquals("LYRICS_QUALITY_UNVERIFIED", assertThrows(DomainException.class,
-            () -> writeWithComparison(rewrittenSong(), 503, input -> "private details", null)).code());
-        assertEquals("LYRICS_QUALITY_UNVERIFIED", assertThrows(DomainException.class,
-            () -> writeWithComparison(rewrittenSong(), 200, input -> "not-json", null)).code());
-        assertEquals("LYRICS_QUALITY_UNVERIFIED", assertThrows(DomainException.class,
-            () -> writeWithComparison(rewrittenSong(), input -> {
-                var verdict = comparison(input, (String) rewrittenSong().get("lyrics"));
-                verdict.remove("b");
-                return verdict;
-            })).code());
-    }
-
-    @Test void comparisonTransportFailuresRemainUnknownWithoutAFourthCallOrQwenFallback() throws Exception {
-        for (Exception failure : List.of(new HttpTimeoutException("private timeout"),
-                new java.io.IOException("private network detail"), new InterruptedException("private interrupt"))) {
-            try {
-                var error = assertThrows(DomainException.class, () -> writeWithComparison(rewrittenSong(), 200,
-                    input -> comparison(input, (String) rewrittenSong().get("lyrics")), failure));
-                assertEquals(failure instanceof HttpTimeoutException ? "LYRICS_PROVIDER_TIMEOUT"
-                    : failure instanceof InterruptedException ? "LYRICS_REQUEST_INTERRUPTED" : "LYRICS_PROVIDER_NETWORK_ERROR", error.code());
-                assertFalse(error.getMessage().contains("private"));
-                assertEquals(failure instanceof InterruptedException, Thread.currentThread().isInterrupted());
-            } finally { Thread.interrupted(); }
-        }
-        assertEquals("LYRICS_PROVIDER_TIMEOUT", assertThrows(DomainException.class,
-            () -> writeWithComparison(rewrittenSong(), 200, input -> comparison(input, (String) rewrittenSong().get("lyrics")),
-                new DomainException("AGENT_DEADLINE_EXCEEDED", "private deadline"))).code());
-    }
-
-    @Test void insufficientBudgetNeverDispatchesAnEditorialOrComparisonRequest() throws Exception {
-        var client = mock(HttpClient.class);
-        try (var scope = new AgentRequestScope(Duration.ofSeconds(10), 65536).enter()) {
-            var generated = response(200, completed(result()));
-            when(client.<String>send(any(), any())).thenReturn(generated);
-            var writer = new OpenAiLyricsWriter("offline-key", "gpt-6.1-sol", URI.create("https://example.invalid"), client);
-            assertEquals("LYRICS_QUALITY_UNVERIFIED", assertThrows(DomainException.class, () -> writer.write(WORK, "zh-CN")).code());
-            verify(client, times(1)).send(any(), any());
-        }
-        var afterReviewClient = mock(HttpClient.class);
-        var calls = new AtomicInteger();
-        try (var scope = new AgentRequestScope(Duration.ofSeconds(60), 65536).enter()) {
-            when(afterReviewClient.<String>send(any(), any())).thenAnswer(call -> {
-                if (calls.incrementAndGet() == 1) return response(200, completed(result()));
-                scope.cancel();
-                return response(200, completed(reviewed(rewrittenSong(), "REWRITE", List.of(issue("HOOK", "You are my home")))));
-            });
-            var writer = new OpenAiLyricsWriter("offline-key", "gpt-6.1-sol", URI.create("https://example.invalid"), afterReviewClient);
-            assertEquals("LYRICS_QUALITY_UNVERIFIED", assertThrows(DomainException.class, () -> writer.write(WORK, "zh-CN")).code());
-            verify(afterReviewClient, times(2)).send(any(), any());
-        }
-    }
-
-    @Test void keepCannotHideAnUnrequestedRewriteOrContradictoryIssues() throws Exception {
-        var changed = keep(result()); changed.put("lyrics", "[Verse 1]\n换掉了原稿\n[Chorus]\nYou are my home");
-        assertReviewUnverified(200, JSON.writeValueAsString(completed(changed)));
-        assertReviewUnverified(200, JSON.writeValueAsString(completed(reviewed(result(), "KEEP",
-            List.of(issue("HOOK", "You are my home"))))));
-    }
-
-    @Test void clearRejectionRequiresRealEvidenceAndDoesNotStartAThirdGeneration() throws Exception {
-        var rejected = reviewed(result(), "REJECT", List.of(issue("HOOK", "You are my home")));
-        var error = assertThrows(DomainException.class,
-            () -> writeWithReview(200, JSON.writeValueAsString(completed(rejected))));
-        assertEquals("LYRICS_QUALITY_NOT_MET", error.code());
-        assertFalse(error.getMessage().contains("You are my home"));
-    }
-
-    @Test void uncertainOrUnsupportedDecisionNeverBecomesSuccessfulLyrics() throws Exception {
-        for (String decision : List.of("UNSURE", "EXCELLENT", "rewrite"))
-            assertReviewUnverified(200, JSON.writeValueAsString(completed(reviewed(result(), decision, List.of()))));
-        assertReviewUnverified(200, JSON.writeValueAsString(completed(reviewed(result(), "REJECT", List.of()))));
-    }
-
-    @Test void inventedProblemQuotesCannotTriggerARewriteOrRejectTheUserRequest() throws Exception {
-        for (String decision : List.of("REWRITE", "REJECT"))
-            assertReviewUnverified(200, JSON.writeValueAsString(completed(reviewed(result(), decision,
-                List.of(issue("HOOK", "原稿里根本不存在的句子"))))));
-        assertReviewUnverified(200, JSON.writeValueAsString(completed(reviewed(result(), "REJECT",
-            List.of(issue("MADE_UP_SCORE", "You are my home"))))));
-        for (String decision : List.of("REWRITE", "REJECT"))
-            assertReviewUnverified(200, JSON.writeValueAsString(completed(reviewed(result(), decision,
-                List.of(issue("HOOK", ""))))));
-    }
-
-    @Test void rewrittenLyricsNeedActualChangeAndAnchoredPositiveEvidence() throws Exception {
-        assertReviewUnverified(200, JSON.writeValueAsString(completed(reviewed(result(), "REWRITE",
-            List.of(issue("HOOK", "You are my home"))))));
-        var edited = result(); edited.put("lyrics", "[Verse 1]\n门口的小碗还在\n[Chorus]\n妈，也留一瓣给自己");
-        var withoutIssues = reviewed(edited, "REWRITE", List.of());
-        assertReviewUnverified(200, JSON.writeValueAsString(completed(withoutIssues)));
-        for (String field : List.of("hookQuote", "progressionQuote", "rhythmQuote")) {
-            var reviewed = reviewed(edited, "REWRITE", List.of(issue("HOOK", "You are my home")));
-            @SuppressWarnings("unchecked") var quality = (Map<String, Object>) reviewed.get("quality");
-            quality.put(field, "这句在改稿中不存在");
-            assertReviewUnverified(200, JSON.writeValueAsString(completed(reviewed)));
-            quality.put(field, "");
-            assertReviewUnverified(200, JSON.writeValueAsString(completed(reviewed)));
-            quality.put(field, "[Chorus]");
-            assertReviewUnverified(200, JSON.writeValueAsString(completed(reviewed)));
-        }
-    }
-
-    @Test void missingEditorialFieldsCannotBeInterpretedAsApproval() throws Exception {
-        for (String field : List.of("decision", "issues", "hookQuote", "progressionQuote", "rhythmQuote", "reason")) {
-            var reviewed = keep(result());
-            @SuppressWarnings("unchecked") var quality = (Map<String, Object>) reviewed.get("quality");
-            quality.remove(field);
-            assertReviewUnverified(200, JSON.writeValueAsString(completed(reviewed)));
-        }
+    @Test void invalidRefinementNeverReturnsInitialDraft() throws Exception {
+        for(String text:List.of(" ","字".repeat(5001),"{}","```lyrics\n正文\n```"))
+            assertReviewUnverified(200,JSON.writeValueAsString(completed(text)));
+        for(int status:List.of(401,429,500,503))assertReviewUnverified(status,"private-provider-detail");
     }
 
     @Test void eachEditorialNetworkFailurePreservesUnknownOutcomeWithoutAnotherCall() throws Exception {
@@ -499,7 +299,7 @@ class OpenAiLyricsWriterTest {
             sent.add(call.getArgument(0));
             @SuppressWarnings("unchecked") HttpResponse<String> response = mock(HttpResponse.class);
             when(response.statusCode()).thenReturn(200);
-            when(response.body()).thenReturn(JSON.writeValueAsString(completed(sent.size() == 1 ? result() : keep(result()))));
+            when(response.body()).thenReturn(JSON.writeValueAsString(completed(sent.size() == 1 ? result() : result().get("lyrics"))));
             return response;
         });
         var writer = new OpenAiLyricsWriter("offline-key", "gpt-6.1-sol", URI.create("https://example.invalid"), client);
@@ -510,14 +310,14 @@ class OpenAiLyricsWriterTest {
         assertTrue(sent.stream().allMatch(request -> !request.timeout().orElseThrow().isZero() && !request.timeout().orElseThrow().isNegative()));
     }
 
-    @Test void editorialUsesLowReasoningWithinSharedDeadlineAndReceivesOriginalFacts() throws Exception {
+    @Test void refinementUsesMediumReasoningWithinSharedDeadlineAndReceivesOriginalFacts() throws Exception {
         var client = mock(HttpClient.class);
         var sent = new ArrayList<HttpRequest>();
         when(client.<String>send(any(), any())).thenAnswer(call -> {
             HttpRequest request = call.getArgument(0); sent.add(request);
             @SuppressWarnings("unchecked") HttpResponse<String> response = mock(HttpResponse.class);
             when(response.statusCode()).thenReturn(200);
-            when(response.body()).thenReturn(JSON.writeValueAsString(completed(sent.size() == 1 ? result() : keep(result()))));
+            when(response.body()).thenReturn(JSON.writeValueAsString(completed(sent.size() == 1 ? result() : result().get("lyrics"))));
             return response;
         });
         var writer = new OpenAiLyricsWriter("offline-key", "gpt-6.1-sol", URI.create("https://example.invalid"), client);
@@ -531,11 +331,12 @@ class OpenAiLyricsWriterTest {
         var first = JSON.readTree(readRequestBody(sent.get(0)));
         var second = JSON.readTree(readRequestBody(sent.get(1)));
         assertEquals("medium", first.path("reasoning").path("effort").asText());
-        assertEquals("low", second.path("reasoning").path("effort").asText());
+        assertEquals("medium", second.path("reasoning").path("effort").asText());
         var input = JSON.readTree(second.path("input").path(0).path("content").asText());
         assertEquals(WORK.story(), input.path("originalMaterial").path("story").asText());
         assertEquals(result().get("lyrics"), input.path("candidate").path("lyrics").asText());
-        assertTrue(second.path("text").path("format").path("schema").path("properties").has("quality"));
+        assertEquals("text",second.path("text").path("format").path("type").asText());
+        assertTrue(second.path("instructions").asText().contains("深度二次创作"));
     }
 
     @Test void agentCancellationBeforeEditorialDispatchIsDeterministicallyUndelivered() throws Exception {
@@ -569,90 +370,6 @@ class OpenAiLyricsWriterTest {
         assertEquals("LYRICS_QUALITY_UNVERIFIED", error.code());
         assertFalse(error.getMessage().contains("private"));
         assertFalse(error.getMessage().contains("offline-key"));
-    }
-
-    private static Map<String, Object> rewrittenSong() {
-        var edited = result();
-        edited.put("lyrics", "[Verse 1]\n门口的小碗还在\n[Chorus]\n妈，也留一瓣给自己");
-        return edited;
-    }
-
-    private static Map<String, Object> comparison(JsonNode input, String selectedLyrics) {
-        var candidates = input.path("candidates");
-        String a = candidates.path("A").path("lyrics").asText(), b = candidates.path("B").path("lyrics").asText();
-        var positive = selectedLyrics.lines().filter(line -> !line.isBlank() && !line.startsWith("[")).toList();
-        return new LinkedHashMap<>(Map.of("choice", a.equals(selectedLyrics) ? "A" : "B",
-            "a", side(a, true), "b", side(b, true),
-            "hookQuote", positive.get(positive.size() - 1), "progressionQuote", positive.get(0),
-            "rhythmQuote", positive.get(positive.size() - 1), "reason", "根据原素材独立比较两稿，选择具体表达更成立的一稿。"));
-    }
-
-    private static Map<String, Object> comparisonWithoutWinner(JsonNode input, String choice) {
-        return new LinkedHashMap<>(Map.of("choice", choice,
-            "a", side(input.path("candidates").path("A").path("lyrics").asText(), false),
-            "b", side(input.path("candidates").path("B").path("lyrics").asText(), false),
-            "hookQuote", "", "progressionQuote", "", "rhythmQuote", "", "reason", "两稿尚未形成足够有辨识度的表达。"));
-    }
-
-    private static Map<String, Object> side(String lyrics, boolean acceptable) {
-        String quote = lyrics.lines().filter(line -> !line.isBlank() && !line.startsWith("[")).findFirst().orElseThrow();
-        return new LinkedHashMap<>(Map.of("acceptable", acceptable, "quote", quote, "reason", "结合素材核对该句的观察与表达价值。"));
-    }
-
-    private static HttpResponse<String> response(int status, Object body) {
-        @SuppressWarnings("unchecked") HttpResponse<String> response = mock(HttpResponse.class);
-        when(response.statusCode()).thenReturn(status);
-        when(response.body()).thenReturn(body instanceof String ? (String) body : JSON.writeValueAsString(body));
-        return response;
-    }
-
-    private LyricsWriter.Draft writeWithComparison(Map<String, Object> edited,
-            java.util.function.Function<JsonNode, Object> verdict) throws Exception {
-        return writeWithComparison(edited, 200, verdict, null);
-    }
-
-    private LyricsWriter.Draft writeWithComparison(Map<String, Object> edited, int status,
-            java.util.function.Function<JsonNode, Object> verdict, Exception failure) throws Exception {
-        var client = mock(HttpClient.class);
-        var sent = new ArrayList<HttpRequest>();
-        when(client.<String>send(any(), any())).thenAnswer(call -> {
-            HttpRequest request = call.getArgument(0); sent.add(request);
-            if (sent.size() == 1) return response(200, completed(result()));
-            if (sent.size() == 2) return response(200, completed(reviewed(edited, "REWRITE", List.of(issue("HOOK", "You are my home")))));
-            assertEquals(3, sent.size(), "No fourth quality generation or retry is allowed after a dispatched comparison");
-            if (failure != null) throw failure;
-            var input = JSON.readTree(JSON.readTree(readRequestBody(request)).path("input").path(0).path("content").asText());
-            Object selected = verdict.apply(input);
-            return response(status, selected instanceof String ? selected : completed(selected));
-        });
-        var primary = new OpenAiLyricsWriter("offline-key", "gpt-6.1-sol", URI.create("https://example.invalid"), client);
-        var backup = mock(LyricsWriter.class); when(backup.isConfigured()).thenReturn(true);
-        try { return new FallbackLyricsWriter(primary, backup).write(WORK, "zh-CN"); }
-        finally {
-            verify(client, times(3)).send(any(), any());
-            verify(backup, never()).write(any(), anyString());
-            var request = JSON.readTree(readRequestBody(sent.get(2)));
-            var input = JSON.readTree(request.path("input").path(0).path("content").asText());
-            assertEquals(Set.of("originalMaterial", "candidates"), keys(input));
-            assertEquals(Set.of("A", "B"), keys(input.path("candidates")));
-            for (String label : List.of("A", "B")) {
-                var candidate = input.path("candidates").path(label);
-                assertEquals(Set.of("title", "lyrics"), keys(candidate), "Blind comparison must not leak quality, plan, or original/edited attribution");
-                assertEquals(result().get("title"), candidate.path("title").asText());
-            }
-            assertEquals(WORK.story(), input.path("originalMaterial").path("story").asText());
-            assertEquals("low", request.path("reasoning").path("effort").asText());
-            assertEquals(4000, request.path("max_output_tokens").asInt());
-            assertTrue(request.path("text").path("format").path("schema").path("properties").has("choice"));
-            assertTrue(sent.get(0).timeout().orElseThrow().compareTo(Duration.ofSeconds(75)) <= 0);
-            assertTrue(sent.get(1).timeout().orElseThrow().compareTo(Duration.ofSeconds(90)) < 0,
-                "Editor must reserve comparison time from the same total deadline");
-            assertTrue(sent.get(2).timeout().orElseThrow().compareTo(Duration.ofSeconds(110)) <= 0);
-        }
-    }
-
-    private static Set<String> keys(JsonNode node) {
-        var names = new HashSet<String>(); node.propertyNames().forEach(names::add); return names;
     }
 
     private com.qingfeng.music.lyrics.application.LyricsWriter.Draft writeWithReview(int status, String body) throws Exception {
@@ -695,7 +412,7 @@ class OpenAiLyricsWriterTest {
                         for (var part : item.path("content")) {
                             if (!"output_text".equals(part.path("type").asText())) continue;
                             @SuppressWarnings("unchecked") var candidate = (Map<String, Object>) JSON.readValue(part.path("text").asText(), Map.class);
-                            response = JSON.writeValueAsString(completed(keep(candidate)));
+                            response = JSON.writeValueAsString(completed(candidate.get("lyrics")));
                         }
                     }
                 }
