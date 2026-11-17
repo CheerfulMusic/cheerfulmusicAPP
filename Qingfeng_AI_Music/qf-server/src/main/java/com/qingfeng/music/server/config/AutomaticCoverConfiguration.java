@@ -109,7 +109,7 @@ public class AutomaticCoverConfiguration {
                 var stored = covers.generated(job.work(), job.id());
                 if (stored.isPresent()) cover = stored.get().id();
                 else try (var image = downloader.open(job.url())) {
-                    cover = covers.saveGenerated(job.owner(), job.work(), job.id(), image).id();
+                    cover = covers.saveGenerated(job.owner(), job.work(), job.id(), job.title(), image).id();
                 }
             } catch (DomainException failure) {
                 jobs.archiveFailed(job, !"COVER_STORAGE_UNAVAILABLE".equals(failure.code()));

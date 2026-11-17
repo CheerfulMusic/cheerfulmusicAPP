@@ -15,7 +15,7 @@ public final class JdbcAutomaticCoverJobs {
     private final JdbcTemplate db;
     private final TransactionTemplate tx;
 
-    public record Job(String id, String task, String work, String owner, String lyrics, String style,
+    public record Job(String id, String task, String work, String owner, String title, String lyrics, String style,
                       String state, String url, int attempts, String token) {}
 
     public JdbcAutomaticCoverJobs(JdbcTemplate db, TransactionTemplate transactions) {
@@ -74,7 +74,7 @@ public final class JdbcAutomaticCoverJobs {
                     WHERE topic=? AND state='COVER_SUBMIT' AND lease_until<=CURRENT_TIMESTAMP
                     """, TOPIC);
             var jobs = db.query("""
-                    SELECT e.id,t.id,t.work_id,w.owner_id,t.lyrics,t.style,e.state,e.payload,e.attempts
+                    SELECT e.id,t.id,t.work_id,w.owner_id,t.title,t.lyrics,t.style,e.state,e.payload,e.attempts
                     FROM task_event_outbox e JOIN generation_task t ON t.id=e.event_key
                     JOIN music_work w ON w.id=t.work_id
                     WHERE e.topic=? AND e.state IN ('COVER_QUEUED','COVER_SAVING')
@@ -83,7 +83,7 @@ public final class JdbcAutomaticCoverJobs {
                     ORDER BY e.next_attempt_at,e.id LIMIT 1
                     """, (row, index) -> new Job(row.getString(1), row.getString(2), row.getString(3),
                     row.getString(4), row.getString(5), row.getString(6), row.getString(7),
-                    row.getString(8), row.getInt(9), UUID.randomUUID().toString()),
+                    row.getString(8), row.getString(9), row.getInt(10), UUID.randomUUID().toString()),
                     TOPIC);
             if (jobs.isEmpty()) return Optional.empty();
             var job = jobs.get(0);

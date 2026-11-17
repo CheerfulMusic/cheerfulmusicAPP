@@ -17,13 +17,16 @@ public class CoverService implements CoverApi,SharedCoverAccess {
  public State state(String owner,String work){works.get(owner,work);var selected=repo.selection(work);return new State(selected.id(),selected.version(),repo.list(work),repo.edits(work),provider.configured(),selected.version()==0&&repo.automaticPending(work));}
  public Asset upload(String owner,String work,InputStream input){works.get(owner,work);return save(work,input,"UPLOADED",null).asset();}
  public java.util.Optional<Asset> generated(String work,String job){return repo.findGenerated(work,job).map(CoverRepository.Stored::asset);}
- public Asset saveGenerated(String owner,String work,String job,InputStream input){
-  works.get(owner,work);return save(work,input,"AUTO",job).asset();
+ public Asset saveGenerated(String owner,String work,String job,String title,InputStream input){
+  works.get(owner,work);return save(work,input,"AUTO",job,title).asset();
  }
  private CoverRepository.Stored save(String work,InputStream input,String origin,String edit){
+  return save(work,input,origin,edit,null);
+ }
+ private CoverRepository.Stored save(String work,InputStream input,String origin,String edit,String title){
   long reserved=5L*1024*1024;if(!capacity.reserve(work,reserved,limit))throw new DomainException("STORAGE_QUOTA_EXCEEDED","作品存储容量不足");
   CoverFileStore.Stored saved=null;long committed=0;
-  try{saved=files.save(input);var result=repo.insert(work,saved,origin,edit);if(result.key().equals(saved.key()))committed=saved.size();return result;}
+  try{saved=title==null?files.save(input):files.saveTitled(input,title);var result=repo.insert(work,saved,origin,edit);if(result.key().equals(saved.key()))committed=saved.size();return result;}
   catch(IOException e){throw new DomainException("COVER_STORAGE_UNAVAILABLE","封面保存失败，请稍后重试");}
   finally{try{if(saved!=null&&committed==0)files.discard(saved.key());}catch(IOException ignored){}finally{capacity.release(work,reserved-committed);}}
  }
