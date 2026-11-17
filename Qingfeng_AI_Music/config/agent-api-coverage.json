@@ -420,6 +420,8 @@
         "@GetMapping(\"/{asset}/download\")",
         "@PostMapping(\"/{asset}/download\")",
         "@GetMapping",
+        "@PutMapping(\"/{asset}/note\")",
+        "@DeleteMapping(\"/{asset}\")",
         "@GetMapping(\"/selection\")",
         "@PutMapping(\"/selection\")",
         "@PostMapping(consumes=\"multipart/form-data\")",

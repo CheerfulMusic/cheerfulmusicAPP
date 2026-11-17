@@ -12,4 +12,8 @@ public class MediaRow {
     public boolean sectionEdit;
     public String generationTaskId,candidateKey,providerAudioId,sourceAudioUrl;
     public Double durationS;
+    public String note;
+    public long noteVersion;
+    public Integer versionNumber;
+    public Instant deletedAt;
 }

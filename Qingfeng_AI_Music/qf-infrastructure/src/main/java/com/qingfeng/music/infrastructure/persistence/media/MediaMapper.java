@@ -4,10 +4,20 @@ import java.time.Instant;
 import org.apache.ibatis.annotations.*;
 @Mapper
 public interface MediaMapper {
+    String ANNOTATION="COALESCE(v.note,'') AS note,COALESCE(v.note_version,0) AS note_version,v.deleted_at";
+    String VERSION_NUMBER="CASE WHEN m.origin='GENERATED' THEN (SELECT COUNT(*) FROM media_asset older WHERE older.work_id=m.work_id AND older.origin='GENERATED' AND (older.created_at<m.created_at OR (older.created_at=m.created_at AND older.id<=m.id))) ELSE NULL END AS version_number";
+    @Select("SELECT m.*,"+ANNOTATION+" FROM media_asset m LEFT JOIN media_asset_annotation v ON v.asset_id=m.id WHERE m.work_id=#{work} AND m.id=#{asset} FOR UPDATE") MediaRow lockAsset(@Param("work")String work,@Param("asset")String asset);
+    @Select("SELECT COUNT(*) FROM artist_song_release WHERE work_id=#{work} AND asset_id=#{asset} AND show_on_profile=TRUE") int published(@Param("work")String work,@Param("asset")String asset);
+    @Select("SELECT COUNT(*) FROM media_asset m LEFT JOIN media_asset_annotation v ON v.asset_id=m.id WHERE m.work_id=#{work} AND v.deleted_at IS NULL") int visibleCount(String work);
+    @Select("SELECT asset_id,version FROM work_audio_selection WHERE work_id=#{work} FOR UPDATE") java.util.Map<String,Object> lockSelection(String work);
+    @Insert("INSERT INTO media_asset_annotation(asset_id) VALUES(#{asset}) ON DUPLICATE KEY UPDATE asset_id=asset_id") void ensureAnnotation(String asset);
+    @Update("UPDATE media_asset_annotation SET note=#{note},note_version=note_version+1 WHERE asset_id=#{asset} AND note_version=#{version} AND deleted_at IS NULL") int saveNote(@Param("work")String work,@Param("asset")String asset,@Param("note")String note,@Param("version")long version);
+    @Update("UPDATE media_asset_annotation SET deleted_at=CURRENT_TIMESTAMP WHERE asset_id=#{asset} AND deleted_at IS NULL") int deleteVersion(@Param("work")String work,@Param("asset")String asset);
+
     @Select("SELECT g.revision_id FROM media_asset m JOIN generation_task g ON g.id=m.generation_task_id WHERE m.work_id=#{work} AND m.id=#{asset}")String revision(@Param("work")String work,@Param("asset")String asset);
     @Insert("INSERT INTO media_asset(id,work_id,storage_key,origin,content_type,byte_size,sha256,created_at) VALUES(#{id},#{workId},#{storageKey},#{origin},#{contentType},#{byteSize},#{sha256},#{createdAt})") void insert(MediaRow row);
-    @Select("SELECT m.*,EXISTS(SELECT 1 FROM section_edit e WHERE e.task_id=m.generation_task_id) AS section_edit FROM media_asset m WHERE m.work_id=#{work} AND m.id=#{id}") MediaRow find(@Param("work") String work,@Param("id") String id);
-    @Select("SELECT m.*,EXISTS(SELECT 1 FROM section_edit e WHERE e.task_id=m.generation_task_id) AS section_edit FROM media_asset m WHERE m.work_id=#{work} ORDER BY m.created_at DESC,m.id DESC LIMIT 100") List<MediaRow> list(@Param("work") String work);
+    @Select("SELECT m.*,"+ANNOTATION+","+VERSION_NUMBER+",EXISTS(SELECT 1 FROM section_edit e WHERE e.task_id=m.generation_task_id) AS section_edit FROM media_asset m LEFT JOIN media_asset_annotation v ON v.asset_id=m.id WHERE m.work_id=#{work} AND m.id=#{id}") MediaRow find(@Param("work") String work,@Param("id") String id);
+    @Select("SELECT m.*,"+ANNOTATION+","+VERSION_NUMBER+",EXISTS(SELECT 1 FROM section_edit e WHERE e.task_id=m.generation_task_id) AS section_edit FROM media_asset m LEFT JOIN media_asset_annotation v ON v.asset_id=m.id WHERE m.work_id=#{work} AND v.deleted_at IS NULL ORDER BY m.created_at DESC,m.id DESC LIMIT 100") List<MediaRow> list(@Param("work") String work);
     @Select("SELECT asset_id,version FROM work_audio_selection WHERE work_id=#{work}") java.util.Map<String,Object> selection(String work);
     @Insert("INSERT INTO work_audio_selection(work_id,asset_id,version) VALUES(#{work},#{asset},#{version}) ON DUPLICATE KEY UPDATE work_id=work_id") void ensureSelection(@Param("work")String work,@Param("asset")String asset,@Param("version")long version);
     @Update("UPDATE work_audio_selection SET asset_id=#{asset},version=version+1 WHERE work_id=#{work} AND version=#{version} AND NOT EXISTS(SELECT 1 FROM media_asset a JOIN section_edit e ON e.task_id=a.generation_task_id JOIN generation_task g ON g.id=e.task_id WHERE a.id=#{asset} AND g.status<>'SUCCEEDED')") int select(@Param("work")String work,@Param("asset")String asset,@Param("version")long version);

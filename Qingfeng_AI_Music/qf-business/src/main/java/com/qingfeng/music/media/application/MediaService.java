@@ -57,6 +57,13 @@ public class MediaService implements MediaApi, SharedMediaAccess, GeneratedAudio
     public Optional<String> generatedRevision(String owner,String work,String asset){works.get(owner,work);return repository.generatedRevision(work,asset);}
     public boolean matchesGenerationRevision(String owner,String work,String asset,String revision){return generatedRevision(owner,work,asset).filter(revision::equals).isPresent();}
     public List<Asset> list(String owner,String work){works.get(owner,work);return repository.list(work);}
+    public Asset saveNote(String owner,String work,String asset,String note,long version){
+        works.get(owner,work);
+        if(note==null||note.length()>500||version<0)throw new DomainException("INVALID_AUDIO_NOTE","备注最多 500 个字符。");
+        if(!repository.saveNote(work,asset,note.strip(),version))throw new DomainException("AUDIO_NOTE_CONFLICT","备注已修改或版本已删除，请刷新后重试。");
+        return find(work,asset).asset();
+    }
+    public void deleteVersion(String owner,String work,String asset){works.get(owner,work);find(work,asset);repository.deleteVersion(work,asset);}
     public Selection selection(String owner,String work){works.get(owner,work);var value=repository.selection(work);return new Selection(value.assetId(),value.version(),value.assetId()==null?null:find(work,value.assetId()).asset());}
     public Selection select(String owner,String work,String asset,long version){works.get(owner,work);find(work,asset);if(!repository.select(work,asset,version))throw new DomainException("AUDIO_SELECTION_CONFLICT","当前歌曲版本已改变，请刷新后再选择。");return selection(owner,work);}
     public void keepOriginal(String owner,String work,String asset){works.get(owner,work);find(work,asset);repository.keepOriginal(work,asset);}

@@ -37,6 +37,20 @@
 .audio-row-item small { display: block; font-size: 10px; color: var(--muted); }
 .audio-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 12px; }
 .audio-actions .button { font-size: 11px; padding: 9px 16px; min-height: 36px; }
+.audio-version-footer { display:flex; align-items:flex-end; gap:20px; margin:12px 0 0 27px; }
+.audio-version-footer .audio-actions { margin:0; flex-shrink:0; align-items:center; }
+.audio-version-note { flex:1; min-width:0; }
+.audio-version-note label { color:var(--muted); }
+.audio-version-note textarea { display:block; width:100%; box-sizing:border-box; margin-top:6px; padding:10px 12px; border:1px solid var(--line); border-radius:8px; background:var(--surface); color:var(--ink); font:inherit; font-size:13px; line-height:1.6; resize:vertical; }
+.audio-note-text { margin:0 0 4px; font-size:13px; line-height:1.7; color:var(--muted); white-space:pre-wrap; overflow-wrap:anywhere; }
+.audio-note-edit,.audio-delete { min-height:36px; font-size:12px; }
+.audio-note-controls { display:flex; align-items:center; gap:14px; margin-top:6px; }
+.audio-note-controls small { margin-right:auto; }
+.audio-note-controls .button { min-height:36px; padding:6px 12px; font-size:12px; }
+@media(max-width:600px) {
+ .audio-version-footer { margin-left:0; flex-direction:column; align-items:stretch; gap:10px; }
+ .audio-version-footer .audio-actions { justify-content:flex-end; }
+}
 .share-link-box { border-top: 1px solid var(--line); margin-top: 20px; }
 .share-link-box input { font-size: 12px; min-width: 0; }
 .live-gift { text-align: center; padding-top: 9px; max-width: 1000px; margin-inline: auto; }

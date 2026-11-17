@@ -20,6 +20,8 @@ const list=(v:unknown,check:(v:unknown)=>boolean)=>Array.isArray(v)&&v.every(che
 const work=(v:unknown)=>obj(v)&&text(v.id)&&num(v.version)&&['recipient','occasion','story','message','style','title','vocalGender'].every(k=>str(v[k]))
 const revision=(v:unknown)=>obj(v)&&text(v.id)&&text(v.workId)&&num(v.workVersion)&&str(v.title)&&str(v.lyrics)&&typeof v.confirmed==='boolean'
 const asset=(v:unknown)=>obj(v)&&text(v.id)&&text(v.workId)&&['IMPORTED','GENERATED'].includes(String(v.origin))&&num(v.byteSize)&&text(v.contentType)
+ &&(v.note===undefined||str(v.note)&&v.note.length<=500)&&(v.noteVersion===undefined||Number.isInteger(v.noteVersion)&&Number(v.noteVersion)>=0)
+ &&(v.versionNumber===undefined||v.versionNumber===null||Number.isInteger(v.versionNumber)&&Number(v.versionNumber)>0)
 const task=(v:unknown)=>obj(v)&&text(v.id)&&text(v.revisionId)&&['QUEUED','SUBMITTING','RUNNING','SAVING','SUCCEEDED','FAILED','CANCELLED','SUBMISSION_UNKNOWN'].includes(String(v.status))&&str(v.title)
 const coverAsset=(v:unknown)=>obj(v)&&text(v.id)&&['UPLOADED','AI','AUTO'].includes(String(v.origin))
 const coverEdit=(v:unknown)=>obj(v)&&text(v.id)&&text(v.sourceId)&&text(v.status)
@@ -167,6 +169,8 @@ export function validResponse(path:string,method:string,value:unknown):boolean{
  if(/\/lyrics\/rewrite-selection$/.test(path))return method==='POST'&&obj(value)&&text(value.lyrics)&&String(value.lyrics).length<=12000
  if(/\/audio\/[^/]+\/lyrics(?:\/sync)?$/.test(path))return obj(value)&&text(value.status)&&str(value.text)&&list(value.lines,v=>obj(v)&&str(v.text)&&num(v.start)&&num(v.end))&&typeof value.canSync==='boolean'
  if(/\/lyrics(?:\/[^/]+(?:\/confirm)?)?$/.test(path)||/\/lyrics\/generate$/.test(path))return method==='GET'&&path.endsWith('/lyrics')?list(value,revision):revision(value)
+ if(/\/audio\/[^/]+\/note$/.test(path))return method==='PUT'&&asset(value)&&obj(value)&&str(value.note)&&num(value.noteVersion)&&value.id===path.split('/').at(-2)
+ if(/^app\/works\/[^/]+\/audio\/[^/]+$/.test(path)&&method==='DELETE')return obj(value)&&value.deleted===true&&value.assetId===path.split('/').at(-1)
  if(/\/audio\/selection$/.test(path))return obj(value)&&num(value.version)&&(value.assetId===null?value.asset===null:asset(value.asset)&&obj(value.asset)&&value.asset.id===value.assetId)
  if(/\/audio$/.test(path))return method==='GET'?list(value,asset):asset(value)
  if(/\/generations(?:\/[^/]+\/(?:cancel|close-checking))?$/.test(path))return method==='GET'?list(value,task):task(value)

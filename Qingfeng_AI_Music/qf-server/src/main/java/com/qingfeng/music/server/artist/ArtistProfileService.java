@@ -289,6 +289,9 @@ public class ArtistProfileService {
         var profile = requireOwnerProfile(creator);
         requireStageName(profile.stageName());
         var source = media.locate(creator, work, assetId);
+        // Serialize publishing with version removal, after media.locate has verified ownership.
+        if (db.queryForList("SELECT m.id FROM media_asset m LEFT JOIN media_asset_annotation v ON v.asset_id=m.id WHERE m.work_id=? AND m.id=? AND v.deleted_at IS NULL FOR UPDATE", work, assetId).isEmpty())
+            throw new DomainException("MEDIA_NOT_FOUND", "歌曲版本已删除，请选择其他版本。");
         if (source.size() <= 0) throw new DomainException("INVALID_ARTIST_AUDIO", "这首歌暂时无法试听。");
         if (coverId != null) covers.ref(work, coverId);
         String publicTitle = text(title, 100, "INVALID_ARTIST_SONG_TITLE", "歌名最多 100 个字符。", false);

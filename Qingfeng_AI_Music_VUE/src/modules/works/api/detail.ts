@@ -4,7 +4,7 @@ import { ensureCreator, requestJson, apiUrl, uploadForm } from '../../../shared/
 export interface Revision { id: string; workId: string; workVersion: number; title: string; lyrics: string; source: string; confirmed: boolean; createdAt: string; language?: string|null; templateId?: LyricsTemplateId|null; chorusFirst?: boolean|null; customSections?: string[]|null }
 export interface LyricsRequestState {status:'NOT_FOUND'|'PENDING'|'FAILED'|'SUCCEEDED'|'UNKNOWN';revisionId:string|null;errorCode:string|null}
 export const getLyricsRequest = (work:string,key:string) => call<LyricsRequestState>(`app/works/${work}/lyrics/requests/${encodeURIComponent(key)}`)
-export interface AudioAsset { id: string; workId: string; origin: 'IMPORTED' | 'GENERATED'; contentType: string; byteSize: number; createdAt: string; sectionEdit?: boolean; generationTaskId?: string | null }
+export interface AudioAsset { id: string; workId: string; origin: 'IMPORTED' | 'GENERATED'; contentType: string; byteSize: number; createdAt: string; sectionEdit?: boolean; generationTaskId?: string | null; note?: string; noteVersion?: number; versionNumber?: number | null }
 export interface GenerationTask { id: string; revisionId: string; requestKey?:string; status: string; title: string; style?:string; vocalGender?:string; createdAt: string; assetId: string | null; errorCode: string | null; updatedAt: string; nextAttemptAt: string }
 export const closeTaskChecking=(work:string,task:string)=>call<GenerationTask>(`app/works/${work}/generations/${task}/close-checking`,'POST',{acknowledge:true})
 async function call<T>(path: string, method = 'GET', body?: unknown) { await ensureCreator(); return requestJson<T>(path, method, body) }
@@ -71,6 +71,8 @@ export async function rewriteLyricSelection(work: string, input: LyricSelectionI
   return requestJson<{lyrics: string}>(`app/works/${encodeURIComponent(work)}/lyrics/rewrite-selection`, 'POST', input, 110000)
 }
 export const confirmRevision = (work: string, revision: string) => call<Revision>(`app/works/${work}/lyrics/${revision}/confirm`, 'POST', {})
+export const saveAudioNote = (work:string,asset:string,note:string,version:number) => call<AudioAsset>(`app/works/${encodeURIComponent(work)}/audio/${encodeURIComponent(asset)}/note`,'PUT',{note,version})
+export const deleteAudioVersion = (work:string,asset:string) => call<{deleted:true;assetId:string}>(`app/works/${encodeURIComponent(work)}/audio/${encodeURIComponent(asset)}`,'DELETE')
 export const listAudio = (work: string) => call<AudioAsset[]>(`app/works/${work}/audio`)
 export const listTasks = (work: string) => call<GenerationTask[]>(`app/works/${work}/generations`)
 export const submitTask = (work: string, revisionId: string, requestKey: string, publication?: GenerationPublication) => call<GenerationTask>(`app/works/${work}/generations`, 'POST', { revisionId, requestKey, ...(publication?.scope === 'public' ? { publishToDiscover: true, stageName: publication.stageName } : {}) })

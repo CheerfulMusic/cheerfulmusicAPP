@@ -2,6 +2,8 @@ package com.qingfeng.music.media.application;
 import com.qingfeng.music.media.api.MediaApi.Asset;
 import java.util.*;
 public interface MediaRepository extends com.qingfeng.music.media.api.MediaCapacity {
+    default boolean saveNote(String work,String asset,String note,long version){throw new UnsupportedOperationException();}
+    default void deleteVersion(String work,String asset){throw new UnsupportedOperationException();}
     default com.qingfeng.music.media.api.MediaApi.Selection selection(String work){return new com.qingfeng.music.media.api.MediaApi.Selection(null,0,null);}
     default boolean select(String work,String asset,long version){return false;}
     default void keepOriginal(String work,String asset){}

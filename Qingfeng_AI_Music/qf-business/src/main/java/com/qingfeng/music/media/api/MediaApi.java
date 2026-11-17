@@ -6,6 +6,8 @@ import java.util.Optional;
 public interface MediaApi {
     Asset importAudio(String creator,String work,InputStream content);
     List<Asset> list(String creator,String work);
+    default Asset saveNote(String creator,String work,String asset,String note,long version){throw new UnsupportedOperationException();}
+    default void deleteVersion(String creator,String work,String asset){throw new UnsupportedOperationException();}
     Asset get(String creator,String work,String asset);
     Content open(String creator,String work,String asset);
     MediaRef locate(String creator,String work,String asset);
@@ -15,7 +17,8 @@ public interface MediaApi {
     default Selection select(String owner,String work,String asset,long version){throw new UnsupportedOperationException();}
     default void keepOriginal(String owner,String work,String asset){}
     record Selection(String assetId,long version,Asset asset){}
-    record Asset(String id,String workId,String origin,String contentType,long byteSize,String sha256,Instant createdAt,boolean sectionEdit,String generationTaskId,String candidateKey) {
+    record Asset(String id,String workId,String origin,String contentType,long byteSize,String sha256,Instant createdAt,boolean sectionEdit,String generationTaskId,String candidateKey,String note,long noteVersion,Integer versionNumber) {
+        public Asset(String id,String work,String origin,String type,long bytes,String sha,Instant at,boolean sectionEdit,String task,String candidate){this(id,work,origin,type,bytes,sha,at,sectionEdit,task,candidate,"",0,null);}
         public Asset(String id,String work,String origin,String type,long bytes,String sha,Instant at,boolean sectionEdit){this(id,work,origin,type,bytes,sha,at,sectionEdit,null,null);}
         public Asset(String id,String work,String origin,String type,long bytes,String sha,Instant at){this(id,work,origin,type,bytes,sha,at,false);}
     }

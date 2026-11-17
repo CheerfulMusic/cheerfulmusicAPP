@@ -135,3 +135,16 @@ describe('R1 响应读取与业务结果校验',()=>{
   expect(fetch).toHaveBeenCalledTimes(3)
  })
 })
+
+it('版本备注保存和删除必须收到匹配的版本确认',async()=>{
+ const asset={id:'audio',workId:'work',origin:'GENERATED',byteSize:4,contentType:'audio/mpeg',note:'婚礼',noteVersion:1,versionNumber:2}
+ vi.stubGlobal('fetch',vi.fn(async()=>reply(asset)))
+ await expect(requestJson('app/works/work/audio/audio/note','PUT',{})).resolves.toEqual(asset)
+ for(const bad of [{...asset,id:'other'},{...asset,note:500},{...asset,noteVersion:-1}]){
+  vi.stubGlobal('fetch',vi.fn(async()=>reply(bad)));await expect(requestJson('app/works/work/audio/audio/note','PUT',{})).rejects.toMatchObject({code:'INVALID_RESPONSE'})
+ }
+ vi.stubGlobal('fetch',vi.fn(async()=>reply({deleted:true,assetId:'audio'})))
+ await expect(requestJson('app/works/work/audio/audio','DELETE')).resolves.toEqual({deleted:true,assetId:'audio'})
+ vi.stubGlobal('fetch',vi.fn(async()=>reply({deleted:true,assetId:'other'})))
+ await expect(requestJson('app/works/work/audio/audio','DELETE')).rejects.toMatchObject({code:'INVALID_RESPONSE'})
+})
