@@ -21,10 +21,26 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import static org.junit.jupiter.api.Assertions.*;
 
-@org.springframework.test.context.jdbc.Sql(scripts="classpath:db/migration/V47__music_video_projects.sql", executionPhase=org.springframework.test.context.jdbc.Sql.ExecutionPhase.BEFORE_TEST_CLASS)
 @SpringBootTest(properties={"qingfeng.lyrics.enabled=true","qingfeng.generation.scheduler-enabled=false","qingfeng.credits.enabled=false"})
 @ActiveProfiles("test") @Import(QuickCreationIntegrationTest.Offline.class)
 class QuickCreationIntegrationTest {
+    @BeforeAll static void ensureVideoProjectionFixture(@Autowired JdbcTemplate jdbc)throws Exception {
+        // The MySQL subclass deliberately retains its isolated database between runs.
+        // Install the canonical fixture only when both tables are absent; never
+        // drop existing data, ignore DDL failures, or accept a partial schema.
+        var tables=new HashSet<String>();
+        try(var connection=jdbc.getDataSource().getConnection();
+            var rows=connection.getMetaData().getTables(connection.getCatalog(),connection.getSchema(),"%",new String[]{"TABLE"})) {
+            while(rows.next())tables.add(rows.getString("TABLE_NAME").toLowerCase(Locale.ROOT));
+        }
+        boolean projects=tables.contains("music_video_project"),shots=tables.contains("music_video_shot");
+        assertEquals(projects,shots,"MV projection fixture is only partially installed");
+        if(!projects)new org.springframework.jdbc.datasource.init.ResourceDatabasePopulator(
+            new org.springframework.core.io.ClassPathResource("db/migration/V47__music_video_projects.sql"))
+            .execute(jdbc.getDataSource());
+        jdbc.queryForList("SELECT id,creator_id,work_id,asset_id,state,created_at FROM music_video_project WHERE 1=0");
+        jdbc.queryForList("SELECT id,project_id,shot_index,state,provider_task_id FROM music_video_shot WHERE 1=0");
+    }
     @TestConfiguration(proxyBeanMethods=false) static class Offline {
         @Bean @Primary FakeWriter quickWriter(){return new FakeWriter();}
         @Bean @Primary FakeGeneration quickMusic(){return new FakeGeneration();}
