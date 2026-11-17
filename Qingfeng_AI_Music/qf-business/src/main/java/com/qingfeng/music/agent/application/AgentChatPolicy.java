@@ -72,7 +72,7 @@ public final class AgentChatPolicy {
     private static final String MUSIC="(?:生成|制作|开始做|做成).{0,10}(?:音乐|歌曲|歌|音频)|(?:生成|开始生成)(?:吧|音乐|歌曲|这首|一首|$)|(?:写|来|做|唱)(?:一|个|这)?首歌|generate.{0,12}(?:music|song|audio)|make.{0,12}(?:music|song)";
     private static final Set<String> READ_ACTIONS=Set.of("list_works","list_versions","list_audio","list_covers","discover_music","list_tasks",
             "get_credits","list_credit_entries","get_usage","get_account","get_referral","list_orders","get_order","payment_catalog","get_current_song",
-            "get_music_settings","music_settings_catalog","preview_music_settings","get_playback_lyrics","list_section_edits","section_context","search_memory","video_capabilities","list_music_videos","get_music_video","download_music_video","get_artist_profile","get_artist_release","get_quick_creation","get_creative_direction","get_lyrics_request","list_shared_downloads","preview_music_video");
+            "download_lyrics","generation_preflight","get_music_settings","music_settings_catalog","preview_music_settings","get_playback_lyrics","list_section_edits","section_context","search_memory","video_capabilities","list_music_videos","get_music_video","download_music_video","get_artist_profile","get_artist_release","get_quick_creation","get_creative_direction","get_lyrics_request","list_shared_downloads","preview_music_video");
     private static String surface(String text) {
         if(text==null)return "";
         text=AgentLyricInput.parse(text).instruction();
@@ -107,7 +107,7 @@ public final class AgentChatPolicy {
         return explicitSocial(text);
     }
     public static boolean requiresConfirmation(String action) {
-        return Set.of("delete_work","erase_analytics","close_checking","generate_avatar","create_music_video","update_artist_profile","set_artist_visibility","publish_artist_song","publish_to_discover","start_quick_creation","retry_quick_creation").contains(action);
+        return Set.of("retry_music_video_shot","delete_work","erase_analytics","close_checking","generate_avatar","create_music_video","update_artist_profile","set_artist_visibility","publish_artist_song","publish_to_discover","start_quick_creation","retry_quick_creation").contains(action);
     }
     public static boolean actionRequested(String action,String text) {
         if(action==null)return false;
@@ -155,6 +155,7 @@ public final class AgentChatPolicy {
             case "disable_repeat" -> requested(text,"(?:关闭|取消|停止).{0,10}循环|disable repeat");
             case "enable_lyric_follow" -> requested(text,"(?:开启|打开|恢复).{0,10}歌词.{0,10}(?:滚动|跟随)|enable lyric");
             case "disable_lyric_follow" -> requested(text,"(?:关闭|停止|取消).{0,10}歌词.{0,10}(?:滚动|跟随)|disable lyric");
+            case "retry_music_video_shot" -> requested(text,"(?:重试|补齐|补生成|重新生成|修复|继续生成).{0,30}(?:镜头|MV|mv|视频)|(?:retry|repair|resume).{0,30}(?:shot|video|MV)|(?:镜头|MV|mv|视频).{0,20}(?:补齐|重试|修复)");
             case "retry_music_video_assembly" -> requested(text,"(?:重试|重新).{0,20}(?:合成|MV|mv|视频)|retry.{0,20}(?:video|assembly)");
             case "create_music_video" -> requested(text,"(?:制作|生成|创建|做).{0,30}(?:MV|mv|视频)|(?:create|generate|make).{0,30}(?:video|MV)");
             case "cancel_music_video" -> requested(text,"(?:取消|停止).{0,20}(?:MV|mv|视频)|cancel.{0,20}(?:video|MV)");

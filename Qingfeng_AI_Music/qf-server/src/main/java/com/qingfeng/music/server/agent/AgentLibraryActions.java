@@ -42,6 +42,8 @@ public final class AgentLibraryActions implements AgentApplicationActions {
         cap("rename_work","修改作品名称，保留其他创作设定","workId?:作品ID,title:新名称","write"),
         cap("update_work","修改创作故事、收礼人、场景、寄语或作品标题，只更新明确提供的字段","workId?:作品ID,recipient?:80字内收礼人,occasion?:32字内场景,story?:4000字内故事,message?:500字内寄语,title?:100字内标题","write"),
         cap("delete_work","删除指定作品，必须展示具体作品并确认","workId?:作品ID,expectedVersion:确认时的作品版本","destructive"),
+        cap("download_lyrics","导出指定或当前歌词版本为TXT文件，不生成或改写歌词","workId?:作品ID,revisionId?:歌词版本ID","read"),
+        cap("generation_preflight","检查当前或指定歌词版本能否生成歌曲，返回真实限制和费用，不提交任务","workId?:作品ID,revisionId?:歌词版本ID","read"),
         cap("list_versions","查看当前或指定作品的歌词历史版本","workId?:作品ID","read"),
         cap("select_version","切换当前作品歌词版本","workId?:作品ID,revisionId?:版本ID,index?:上次版本列表序号","write"),
         cap("replace_lyric_line","按用户明确给定的文字精确替换当前歌词第一句或最后一句，保留其他文本，不调用写词模型","","write"),
@@ -146,6 +148,13 @@ public final class AgentLibraryActions implements AgentApplicationActions {
                 works.delete(owner,id,true,work.version());
                 if (id.equals(conversations.current(owner).currentWorkId())) point(owner,conversation,null,null,null,null);
                 yield ok(action,"已删除《"+deletedTitle+"》。");
+            }
+            case "download_lyrics","generation_preflight" -> {
+                String revision=value(args,"revisionId",current!=null&&id.equals(current.songId())?current.revisionId():null);
+                if(revision==null){var revisions=lyrics.list(owner,id);if(revisions.isEmpty())throw invalid("作品还没有歌词，请先保存或生成歌词。");revision=revisions.get(0).id();}
+                var selected=lyrics.get(owner,id,revision);
+                if(action.equals("generation_preflight"))yield new Result("生成前检查结果："+json.writeValueAsString(generation.preflight(owner,id,revision)),"preflight",List.of(),List.of(),action);
+                yield new Result("已准备歌词文件，点击下载即可保存。","lyrics_download",List.of(new Item(selected.id(),selected.title(),"TXT 歌词",Map.of("lyrics",selected.lyrics(),"workId",id,"revisionId",selected.id()))),List.of(),action);
             }
             case "list_versions" -> listVersions(owner,work);
             case "select_version" -> {

@@ -117,6 +117,8 @@ public final class AgentToolSchemaCatalog {
         all.put("close_order",object(fields("orderId",id()),"orderId"));
         all.put("search_memory",object(fields("query",text(1000),"limit",integer(1,10)),"query"));
         for(String action:List.of("pause_playback","next_track","previous_track","enable_repeat","disable_repeat","enable_lyric_follow","disable_lyric_follow"))all.put(action,object(fields()));
+        all.put("retry_music_video_shot",object(fields("projectId",id(),"shotNumber",integer(1,120),"prompt",text(2000)),"projectId","shotNumber","prompt"));
+        for(String action:List.of("download_lyrics","generation_preflight"))all.put(action,object(withWork(fields("revisionId",id()))));
         all.put("list_music_videos",object(withWork(Map.of())));
         for(String action:List.of("get_music_video","download_music_video","cancel_music_video","retry_music_video_assembly"))all.put(action,object(fields("projectId",id()),"projectId"));
         all.put("video_capabilities",object(withWork(fields("assetId",id()))));

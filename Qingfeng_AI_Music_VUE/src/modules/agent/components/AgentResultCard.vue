@@ -5,6 +5,11 @@ import { locale } from '../../../shared/i18n'
 import { resultMediaUrl, resultInviteUrl, sharedDownloadUrl, type AssistantResult, type AgentCommand, type AgentResultItem } from '../model/assistant-result'
 const props = defineProps<{ result: AssistantResult; disabled: boolean; current: boolean }>()
 defineEmits<{ command: [command: AgentCommand] }>()
+function downloadLyrics(item:AgentResultItem){
+ if(typeof item.data.lyrics!=='string'||props.disabled)return
+ const url=URL.createObjectURL(new Blob(['\ufeff'+item.title+'\n\n'+item.data.lyrics],{type:'text/plain;charset=utf-8'}))
+ const link=document.createElement('a');link.href=url;link.download=(item.title.replace(/[\\/:*?"<>|]/g,'_').slice(0,80)||'歌词')+'.txt';document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),1000)
+}
 const en = computed(() => locale.value === 'en')
 const stale = computed(() => props.result.kind === 'confirmation' && !props.current)
 const media = (value: unknown, type: 'audio' | 'image' | 'video') => resultMediaUrl(value, type, window.location.origin)
@@ -73,6 +78,7 @@ async function copyInvite(value: unknown) {
         <span class="agent-result-index" aria-hidden="true">{{ index + 1 }}</span>
         <img v-if="media(item.data.imageUrl, 'image')" :src="media(item.data.imageUrl, 'image')" :alt="item.title" loading="lazy"/>
         <div class="agent-result-detail"><strong>{{ item.title }}</strong><p v-if="!isWorksList && item.subtitle">{{ item.subtitle }}</p>
+          <button v-if="result.kind==='lyrics_download' && typeof item.data.lyrics==='string'" type="button" :disabled="disabled" @click="downloadLyrics(item)">{{ en?'Download lyrics (TXT)':'下载歌词（TXT）' }}</button>
           <a v-if="sharedDownloadUrl(item.data.downloadUrl)" :href="sharedDownloadUrl(item.data.downloadUrl)" download>下载已解锁歌曲</a>
           <small v-if="item.data.current === true">{{ en ? 'Current selection' : '当前选择' }}</small>
           <blockquote v-if="typeof item.data.excerpt === 'string'" class="agent-source-excerpt"><small>{{ en ? 'Source excerpt' : '来源摘要' }}</small><p>{{ item.data.excerpt }}</p></blockquote>
