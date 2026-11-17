@@ -9,10 +9,11 @@ import { ApiError } from '../src/shared/http/api-client'
 describe('download unlock',()=>{
  beforeEach(()=>{vi.restoreAllMocks();vi.resetAllMocks();api.ensure.mockResolvedValue(undefined);Object.defineProperty(window,'confirm',{value:vi.fn(),configurable:true});Object.defineProperty(window,'alert',{value:vi.fn(),configurable:true})})
  it('confirms first charge and starts download after unlock',async()=>{
-  api.request.mockResolvedValueOnce({unlocked:false,price:10}).mockResolvedValueOnce({unlocked:true,price:10})
+  api.request.mockResolvedValueOnce({unlocked:false,price:15}).mockResolvedValueOnce({unlocked:true,price:15})
   vi.spyOn(window,'confirm').mockReturnValue(true);const click=vi.spyOn(HTMLAnchorElement.prototype,'click').mockImplementation(()=>{})
   expect(await downloadSong('app/works/w/audio/a/download','/song?download=true','song.mp3')).toBe(true)
   expect(api.request).toHaveBeenNthCalledWith(2,'app/works/w/audio/a/download','POST',{})
+  expect(window.confirm).toHaveBeenCalledWith(expect.stringContaining('15'))
   expect(click).toHaveBeenCalledOnce()
  })
  it('downloads an unlocked work without charging again',async()=>{

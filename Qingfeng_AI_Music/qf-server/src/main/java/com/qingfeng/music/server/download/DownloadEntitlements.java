@@ -16,7 +16,8 @@ import org.springframework.stereotype.Service;
 @Service
 @Profile({"mysql", "test"})
 public class DownloadEntitlements {
-    public static final long PRICE = 10;
+    public static final long PRICE = 15;
+    private static final long LEGACY_PRICE = 10;
     private final JdbcTemplate jdbc;
     private final CreditsLedger ledger;
 
@@ -26,7 +27,8 @@ public class DownloadEntitlements {
     }
 
     public boolean unlocked(String owner, String work) {
-        Integer count = jdbc.queryForObject("SELECT COUNT(*) FROM credit_ledger WHERE entry_type='DEBIT' AND reference_id=? AND owner_id=? AND amount=?", Integer.class, reference(owner, work), owner, -PRICE);
+        // Preserve download rights purchased before the price change.
+        Integer count = jdbc.queryForObject("SELECT COUNT(*) FROM credit_ledger WHERE entry_type='DEBIT' AND reference_id=? AND owner_id=? AND amount IN (?, ?)", Integer.class, reference(owner, work), owner, -LEGACY_PRICE, -PRICE);
         return count != null && count > 0;
     }
 

@@ -404,23 +404,23 @@ class IntegratedPaymentApplicationMySqlTest {
     private static String shareHash(String token){try{return HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256").digest(token.getBytes(java.nio.charset.StandardCharsets.UTF_8)));}catch(java.security.NoSuchAlgorithmException e){throw new IllegalStateException(e);}}
     private static SharedDownloadGrants sharedDownloads(SharedFixture... fixtures){
         var offlineMedia=mock(SharedMediaAccess.class);for(var fixture:fixtures)when(offlineMedia.content(fixture.work(),fixture.asset())).thenReturn(new MediaApi.Content(1,"audio/mpeg","synthetic.mp3",()->new ByteArrayInputStream(new byte[]{1})));
-        assertInstanceOf(JdbcFencedCreditsLedger.class,ledger);assertEquals(10,DownloadEntitlements.PRICE);
+        assertInstanceOf(JdbcFencedCreditsLedger.class,ledger);assertEquals(15,DownloadEntitlements.PRICE);
         return new SharedDownloadGrants(db,new TransactionTemplate(manager),offlineMedia,application.getBean(DownloadEntitlements.class));
     }
     private static long downloadDebits(String owner){return number("SELECT COUNT(*) FROM credit_ledger WHERE owner_id=? AND entry_type='DEBIT' AND reference_id LIKE 'download-v1:%'",owner);}
     private static void awaitDownload(CountDownLatch latch){try{if(!latch.await(15,TimeUnit.SECONDS))throw new IllegalStateException("download test coordination timeout");}catch(InterruptedException e){Thread.currentThread().interrupt();throw new IllegalStateException(e);}}
 
-    @Test @Order(14) void activeSharedDownloadsChargeTenOnceForAllSharedVersionsOfOneWorkUnderConcurrentRetries() throws Exception {
+    @Test @Order(14) void activeSharedDownloadsChargeFifteenOnceForAllSharedVersionsOfOneWorkUnderConcurrentRetries() throws Exception {
         var first=sharedFixture();var second=sharedFixture(first.author(),first.work());var shared=sharedDownloads(first,second);var buyer=owner();ledger.credit(buyer.creatorId(),20,"gift:download-once:"+unique());
         var pool=Executors.newFixedThreadPool(8);var start=new CountDownLatch(1);try{var calls=new ArrayList<Future<?>>();for(int i=0;i<16;i++)calls.add(pool.submit(()->{awaitDownload(start);shared.unlock(buyer.creatorId(),first.token());}));start.countDown();for(var call:calls)call.get(30,TimeUnit.SECONDS);}finally{start.countDown();pool.shutdownNow();assertTrue(pool.awaitTermination(15,TimeUnit.SECONDS));}
-        assertEquals(10,ledger.balance(buyer.creatorId()));assertEquals(1,downloadDebits(buyer.creatorId()));assertEquals(1,shared.list(buyer.creatorId()).size());assertEquals(0,shared.price(buyer.creatorId(),second.token()));
-        shared.unlock(buyer.creatorId(),second.token());shared.unlock(buyer.creatorId(),second.token());assertEquals(10,ledger.balance(buyer.creatorId()));assertEquals(1,downloadDebits(buyer.creatorId()));assertEquals(2,shared.list(buyer.creatorId()).size());assertTrue(shared.assetUnlocked(buyer.creatorId(),first.token()));assertTrue(shared.assetUnlocked(buyer.creatorId(),second.token()));
-        assertEquals(10,number("SELECT SUM(a.amount) FROM p0_credit_allocation a JOIN credit_ledger l ON l.entry_type='DEBIT' AND l.reference_id=a.debit_reference WHERE a.owner_id=? AND l.reference_id LIKE 'download-v1:%' AND a.restored=0",buyer.creatorId()));
+        assertEquals(5,ledger.balance(buyer.creatorId()));assertEquals(1,downloadDebits(buyer.creatorId()));assertEquals(1,shared.list(buyer.creatorId()).size());assertEquals(0,shared.price(buyer.creatorId(),second.token()));
+        shared.unlock(buyer.creatorId(),second.token());shared.unlock(buyer.creatorId(),second.token());assertEquals(5,ledger.balance(buyer.creatorId()));assertEquals(1,downloadDebits(buyer.creatorId()));assertEquals(2,shared.list(buyer.creatorId()).size());assertTrue(shared.assetUnlocked(buyer.creatorId(),first.token()));assertTrue(shared.assetUnlocked(buyer.creatorId(),second.token()));
+        assertEquals(15,number("SELECT SUM(a.amount) FROM p0_credit_allocation a JOIN credit_ledger l ON l.entry_type='DEBIT' AND l.reference_id=a.debit_reference WHERE a.owner_id=? AND l.reference_id LIKE 'download-v1:%' AND a.restored=0",buyer.creatorId()));
     }
 
     @Test @Order(15) void activeDownloadsSkipTheFrozenPaymentBatchAndRejectANegativeAccountWithoutGrantingRights() throws Exception {
         var fixture=sharedFixture();var shared=sharedDownloads(fixture);var buyer=owner();var a=paid(buyer);var b=paid(buyer);dispute(a,"dp_"+unique(),"under_review",List.of());shared.unlock(buyer.creatorId(),fixture.token());
-        assertEquals(190,ledger.balance(buyer.creatorId()));assertEquals(100,held(a));assertEquals(0,number("SELECT consumed FROM p0_credit_batch WHERE reference=?","payment:"+a.order()));assertEquals(10,number("SELECT consumed FROM p0_credit_batch WHERE reference=?","payment:"+b.order()));assertEquals(1,shared.list(buyer.creatorId()).size());
+        assertEquals(185,ledger.balance(buyer.creatorId()));assertEquals(100,held(a));assertEquals(0,number("SELECT consumed FROM p0_credit_batch WHERE reference=?","payment:"+a.order()));assertEquals(15,number("SELECT consumed FROM p0_credit_batch WHERE reference=?","payment:"+b.order()));assertEquals(1,shared.list(buyer.creatorId()).size());
         var indebted=paid();ledger.debit(indebted.owner().creatorId(),80,"download-debt-consumed:"+unique());refund(indebted,990);assertEquals(-80,ledger.balance(indebted.owner().creatorId()));
         assertEquals("INSUFFICIENT_CREDITS",assertThrows(DomainException.class,()->shared.unlock(indebted.owner().creatorId(),fixture.token())).code());assertEquals(-80,ledger.balance(indebted.owner().creatorId()));assertEquals(0,downloadDebits(indebted.owner().creatorId()));assertTrue(shared.list(indebted.owner().creatorId()).isEmpty());
     }
@@ -429,7 +429,7 @@ class IntegratedPaymentApplicationMySqlTest {
         var fixture=sharedFixture();var shared=sharedDownloads(fixture);var buyer=owner();ledger.credit(buyer.creatorId(),20,"gift:download-rollback:"+unique());
         assertThrows(IllegalStateException.class,()->new TransactionTemplate(manager).executeWithoutResult(s->{shared.unlock(buyer.creatorId(),fixture.token());throw new IllegalStateException("synthetic after-grant rollback");}));
         assertEquals(20,ledger.balance(buyer.creatorId()));assertEquals(0,downloadDebits(buyer.creatorId()));assertTrue(shared.list(buyer.creatorId()).isEmpty());
-        shared.unlock(buyer.creatorId(),fixture.token());shared.unlock(buyer.creatorId(),fixture.token());assertEquals(10,ledger.balance(buyer.creatorId()));assertEquals(1,downloadDebits(buyer.creatorId()));assertEquals(1,shared.list(buyer.creatorId()).size());
+        shared.unlock(buyer.creatorId(),fixture.token());shared.unlock(buyer.creatorId(),fixture.token());assertEquals(5,ledger.balance(buyer.creatorId()));assertEquals(1,downloadDebits(buyer.creatorId()));assertEquals(1,shared.list(buyer.creatorId()).size());
         var invalid=sharedFixture();var foreign=sharedFixture();db.update("UPDATE share_link SET asset_id=? WHERE token_hash=?",foreign.asset(),shareHash(invalid.token()));var another=owner();ledger.credit(another.creatorId(),20,"gift:invalid-download:"+unique());
         assertEquals("SHARE_NOT_FOUND",assertThrows(DomainException.class,()->sharedDownloads(invalid).unlock(another.creatorId(),invalid.token())).code());assertEquals(20,ledger.balance(another.creatorId()));assertEquals(0,downloadDebits(another.creatorId()));assertEquals(0,number("SELECT COUNT(*) FROM shared_download_entitlement WHERE owner_id=?",another.creatorId()));
     }
@@ -440,7 +440,7 @@ class IntegratedPaymentApplicationMySqlTest {
         try{
             var purchase=pool.submit(()->new TransactionTemplate(manager).executeWithoutResult(s->{shared.unlock(buyer.creatorId(),bought.token());purchased.countDown();awaitDownload(releasePurchase);}));assertTrue(purchased.await(15,TimeUnit.SECONDS));
             var deletion=pool.submit(()->{deleteStarted.countDown();works.delete(bought.author().creatorId(),bought.work(),true);});assertTrue(deleteStarted.await(10,TimeUnit.SECONDS));assertThrows(TimeoutException.class,()->deletion.get(200,TimeUnit.MILLISECONDS));releasePurchase.countDown();purchase.get(30,TimeUnit.SECONDS);deletion.get(30,TimeUnit.SECONDS);
-            assertEquals(10,ledger.balance(buyer.creatorId()));assertEquals(1,downloadDebits(buyer.creatorId()));assertEquals(1,shared.list(buyer.creatorId()).size());assertEquals(1,shared.contentForToken(buyer.creatorId(),bought.token()).size());assertEquals(1,number("SELECT COUNT(*) FROM music_work WHERE id=? AND deleted_at IS NOT NULL",bought.work()));
+            assertEquals(5,ledger.balance(buyer.creatorId()));assertEquals(1,downloadDebits(buyer.creatorId()));assertEquals(1,shared.list(buyer.creatorId()).size());assertEquals(1,shared.contentForToken(buyer.creatorId(),bought.token()).size());assertEquals(1,number("SELECT COUNT(*) FROM music_work WHERE id=? AND deleted_at IS NOT NULL",bought.work()));
         }finally{releasePurchase.countDown();pool.shutdownNow();assertTrue(pool.awaitTermination(15,TimeUnit.SECONDS));}
         var removed=sharedFixture();var removedShared=sharedDownloads(removed);var later=owner();ledger.credit(later.creatorId(),20,"gift:deletion-wins:"+unique());var workLocked=new CountDownLatch(1);var continueDeletion=new CountDownLatch(1);var purchaseStarted=new CountDownLatch(1);var secondPool=Executors.newFixedThreadPool(2);
         try{

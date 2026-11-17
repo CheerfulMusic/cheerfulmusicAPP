@@ -1208,7 +1208,7 @@ export const english: Record<string, string> = {
   '读取已购音频失败': 'Could not load unlocked audio',
   '此作品的全部分享已撤销，已购买者仍可下载已购音频。': 'All shares for this work were revoked. Buyers can still download unlocked audio.',
   '撤销后未购买者无法继续访问；已付费解锁者仍可下载已购买音频。': 'Revoking stops access for others. Buyers can still download audio they unlocked.',
-  '下载（首次10积分）': 'Download (10 credits first time)',
+  '下载（首次15积分）': 'Download (15 credits first time)',
   '首次下载此作品需 {price} 积分，解锁后可免费下载此作品的其他版本。确认解锁？': 'Unlock downloads for this work for {price} credits? Other versions will be free to download.',
   '首次下载此作品需 {price} 积分，同一作品已分享给你的其他版本可免费下载。确认解锁？': 'Unlock this work for {price} credits? Other versions shared with you will be free to download.',
   '下载失败，请稍后重试。': 'Download failed. Please try again.',
