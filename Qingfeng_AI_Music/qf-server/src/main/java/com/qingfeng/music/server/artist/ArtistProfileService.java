@@ -297,6 +297,11 @@ public class ArtistProfileService {
         return image(COVER, "creator_id=?", creator, key);
     }
 
+    public MediaApi.MediaRef publicAudioRef(String publicId, String song, long version) {
+        var release = publicRelease(publicId, song, version);
+        return audio.ref(release.workId(), release.assetId());
+    }
+
     public MediaApi.Content publicAudio(String publicId, String song, long version) {
         var release = publicRelease(publicId, song, version);
         var content = audio.content(release.workId(), release.assetId());

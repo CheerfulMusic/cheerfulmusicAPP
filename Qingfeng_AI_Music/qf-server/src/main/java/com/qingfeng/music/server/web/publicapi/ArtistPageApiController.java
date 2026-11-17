@@ -3,6 +3,7 @@ package com.qingfeng.music.server.web.publicapi;
 import com.qingfeng.music.server.artist.ArtistProfileService;
 import com.qingfeng.music.server.artist.ArtistProfileService.PublicProfile;
 import com.qingfeng.music.server.web.AudioResponse;
+import com.qingfeng.music.server.web.MediaCdnSigner;
 import org.springframework.context.annotation.Profile;
 import org.springframework.core.io.Resource;
 import org.springframework.http.CacheControl;
@@ -16,9 +17,11 @@ import org.springframework.web.bind.annotation.*;
 @RequestMapping("/api/public/artists/{artist}")
 public class ArtistPageApiController {
     private final ArtistProfileService profiles;
+    private final MediaCdnSigner signer;
 
-    public ArtistPageApiController(ArtistProfileService profiles) {
+    public ArtistPageApiController(ArtistProfileService profiles, MediaCdnSigner signer) {
         this.profiles = profiles;
+        this.signer = signer;
     }
 
     @GetMapping
@@ -39,6 +42,14 @@ public class ArtistPageApiController {
     @GetMapping("/songs/{song}/{version}/audio")
     public ResponseEntity<Resource> audio(@PathVariable String artist, @PathVariable String song,
             @PathVariable long version, @RequestHeader(value = HttpHeaders.RANGE, required = false) String range) {
+        if (signer.enabled()) {
+            try {
+                var location = signer.audio(profiles.publicAudioRef(artist, song, version).storageKey());
+                if (location.isPresent()) return AudioResponse.redirect(location.get());
+            } catch (RuntimeException ignored) {
+                // 回退时重新校验歌曲公开状态及版本。
+            }
+        }
         return AudioResponse.from(profiles.publicAudio(artist, song, version), false, range);
     }
 

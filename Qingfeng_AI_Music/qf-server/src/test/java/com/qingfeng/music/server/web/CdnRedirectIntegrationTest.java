@@ -2,8 +2,10 @@ package com.qingfeng.music.server.web;
 
 import com.qingfeng.music.common.exception.DomainException;
 import com.qingfeng.music.media.api.MediaApi;
+import com.qingfeng.music.server.artist.ArtistProfileService;
 import com.qingfeng.music.server.security.CreatorPrincipal;
 import com.qingfeng.music.server.web.app.MediaController;
+import com.qingfeng.music.server.web.publicapi.ArtistPageApiController;
 import com.qingfeng.music.server.web.publicapi.GiftController;
 import com.qingfeng.music.sharing.api.SharingApi;
 import java.io.ByteArrayInputStream;
@@ -81,6 +83,48 @@ class CdnRedirectIntegrationTest {
         assertEquals(HttpStatus.OK,controller.cover("token").getStatusCode());
         verify(sharing,never()).audioRef(anyString());
         verify(sharing,never()).coverRef(anyString());
+    }
+
+    @Test void publishedOssAudioRedirectsWithASignedUrlWithoutOpeningTheStream() {
+        var profiles = mock(ArtistProfileService.class);
+        when(profiles.publicAudioRef("artist", "song", 3)).thenReturn(audioRef("oss:" + ID + ".mp3"));
+        var response = new ArtistPageApiController(profiles, signer(true)).audio("artist", "song", 3, "bytes=0-7");
+
+        assertEquals(HttpStatus.FOUND, response.getStatusCode());
+        assertEquals("no-store", response.getHeaders().getCacheControl());
+        assertEquals("no-referrer", response.getHeaders().getFirst("Referrer-Policy"));
+        assertEquals("cdn.example.com", response.getHeaders().getLocation().getHost());
+        assertEquals("/qingfeng/audio/" + ID + ".mp3", response.getHeaders().getLocation().getPath());
+        assertTrue(response.getHeaders().getLocation().getQuery().startsWith("auth_key="));
+        verify(profiles, never()).publicAudio("artist", "song", 3);
+    }
+
+    @Test void publishedLocalAudioAndDisabledCdnKeepTheOriginalRangeResponse() {
+        var profiles = mock(ArtistProfileService.class);
+        when(profiles.publicAudio("artist", "song", 3)).thenAnswer(call -> content());
+        var disabled = new ArtistPageApiController(profiles, signer(false)).audio("artist", "song", 3, "bytes=2-5");
+        verify(profiles, never()).publicAudioRef("artist", "song", 3);
+
+        when(profiles.publicAudioRef("artist", "song", 3)).thenReturn(audioRef("local:" + ID + ".mp3"));
+        var local = new ArtistPageApiController(profiles, signer(true)).audio("artist", "song", 3, "bytes=2-5");
+        for (var response : java.util.List.of(disabled, local)) {
+            assertEquals(HttpStatus.PARTIAL_CONTENT, response.getStatusCode());
+            assertEquals("bytes 2-5/12", response.getHeaders().getFirst("Content-Range"));
+            assertNull(response.getHeaders().getLocation());
+        }
+    }
+
+    @Test void unpublishOrVersionChangeCannotIssueANewSignedUrl() {
+        var profiles = mock(ArtistProfileService.class);
+        var unavailable = new DomainException("ARTIST_NOT_FOUND", "Song is no longer public at this version");
+        when(profiles.publicAudioRef("artist", "song", 2)).thenThrow(unavailable);
+        when(profiles.publicAudio("artist", "song", 2)).thenThrow(unavailable);
+        var signer = spy(signer(true));
+        var controller = new ArtistPageApiController(profiles, signer);
+
+        assertSame(unavailable, assertThrows(DomainException.class,
+            () -> controller.audio("artist", "song", 2, null)));
+        verify(signer, never()).audio(anyString());
     }
 
     @Test void ownerDownloadUsesTheRequestedUnicodeVersionNameAndAudioFormat() {
