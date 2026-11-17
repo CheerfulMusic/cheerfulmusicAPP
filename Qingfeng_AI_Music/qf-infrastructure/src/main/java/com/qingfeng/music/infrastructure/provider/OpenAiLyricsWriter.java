@@ -14,7 +14,7 @@ import java.util.*;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
-/** Full text creation uses a cited editor and, only for a rewrite, one blind comparison within a shared deadline. */
+/** Full-song creation returns structured metadata, then refines only lyrics within one shared deadline. */
 public final class OpenAiLyricsWriter implements LyricsWriter {
     public static final String DEFAULT_MODEL = "gpt-6.1-sol";
     private static final System.Logger LOG = System.getLogger(OpenAiLyricsWriter.class.getName());
@@ -87,7 +87,7 @@ public final class OpenAiLyricsWriter implements LyricsWriter {
     private Draft write(WorkApi.Work work,String language,String instructions,String previousLyrics,Direction direction,List<byte[]> jpegs) {
         if (!isConfigured()) throw unavailable("歌词生成暂不可用，请稍后再试或手动填写");
         boolean photo = !jpegs.isEmpty();
-        boolean fullNew = !photo && previousLyrics.isBlank();
+        boolean fullNew = previousLyrics.isBlank();
         long deadline = LyricsQualityReview.deadline();
         var material = new LinkedHashMap<String, Object>();
         material.putAll(Map.of("recipient", work.recipient(), "occasion", work.occasion(),
@@ -135,9 +135,9 @@ public final class OpenAiLyricsWriter implements LyricsWriter {
                 throw unavailable("歌词生成服务暂时不可用，请稍后再试；已有内容仍会保留。");
             }
             var draft = parse(response.body(),photo);
-            // Protected edits and photos retain their existing single-call preservation contracts.
+            // Targeted revisions keep their explicit preservation contract.
             if (!fullNew) return draft;
-            return review(draft, prompt, material, work.id(), deadline);
+            return review(draft, language, material, work.id(), deadline);
         } catch (InterruptedException interrupted) {
             Thread.currentThread().interrupt();
             throw new DomainException("LYRICS_REQUEST_INTERRUPTED", "歌词请求已中断，结果尚未确认，请先查看原请求进度。");
@@ -155,66 +155,19 @@ public final class OpenAiLyricsWriter implements LyricsWriter {
         }
     }
 
-    private Draft review(Draft draft, String prompt, Map<String, Object> material, String workId, long deadline)
-            throws IOException, InterruptedException {
-        String body = json.writeValueAsString(Map.of(
-            "model", model, "instructions", prompt + "\n" + LyricsWritingPrompt.REVIEW,
-            "input", List.of(Map.of("role", "user", "content", json.writeValueAsString(Map.of(
-                "originalMaterial", material, "candidate", LyricsQualityReview.candidate(draft))))),
-            "text", Map.of("format", Map.of("type", "json_schema", "name", "song_lyrics_review", "strict", true,
-                "schema", LyricsQualityReview.schema(schema(false)))),
-            "reasoning", Map.of("effort", "low"), "max_output_tokens", 8000, "store", false, "stream", false));
-        final HttpResponse<String> response;
+    private Draft review(Draft draft,String language,Map<String,Object> material,String workId,long deadline)
+            throws IOException,InterruptedException {
+        String body=json.writeValueAsString(Map.of("model",model,"instructions",LyricsWritingPrompt.refinement(language),
+            "input",List.of(Map.of("role","user","content",json.writeValueAsString(Map.of("originalMaterial",material,"candidate",LyricsQualityReview.candidate(draft))))),
+            "text",Map.of("format",Map.of("type","text")),"reasoning",Map.of("effort","medium"),"max_output_tokens",8000,"store",false,"stream",false));
         try {
-            response = LyricsHttpTransport.post(client, endpoint, key, body, LyricsQualityReview.editorialBudget(deadline));
-        } catch (DomainException unavailable) {
-            if ("AGENT_DEADLINE_EXCEEDED".equals(unavailable.code())) throw unavailable;
-            throw LyricsQualityReview.unverified();
-        }
-        if (response.statusCode() != 200) {
-            LOG.log(System.Logger.Level.WARNING, "GPT lyric review incomplete: work={0}, status={1}", workId, response.statusCode());
-            // A later review failure must not masquerade as a rejected first generation or trigger a provider fallback.
-            throw LyricsQualityReview.unverified();
-        }
-        final JsonNode reviewed;
-        try {
-            reviewed = json.readTree(outputText(response.body()));
+            var response=LyricsHttpTransport.post(client,endpoint,key,body,LyricsQualityReview.remaining(deadline));
+            if(response.statusCode()!=200){LOG.log(System.Logger.Level.WARNING,"Lyrics refinement incomplete: work={0}, status={1}",workId,response.statusCode());throw LyricsQualityReview.unverified();}
+            return LyricsWritingPrompt.refined(draft,outputText(response.body()));
         } catch (DomainException | tools.jackson.core.JacksonException invalid) {
+            // A failed refinement must never trigger a second provider generation or return the initial draft.
             throw LyricsQualityReview.unverified();
         }
-        Draft edited = LyricsQualityReview.validate(reviewed, draft);
-        if (!"REWRITE".equals(reviewed.path("quality").path("decision").asText())) return edited;
-        return compare(draft, edited, material, workId, deadline);
-    }
-
-    private Draft compare(Draft original, Draft edited, Map<String, Object> material, String workId, long deadline)
-            throws IOException, InterruptedException {
-        boolean originalIsA = LyricsQualityReview.originalIsA(workId);
-        String body = json.writeValueAsString(Map.of(
-            "model", model, "instructions", LyricsWritingPrompt.SELECT,
-            "input", List.of(Map.of("role", "user", "content", json.writeValueAsString(
-                LyricsQualityReview.comparisonInput(material, original, edited, originalIsA)))),
-            "text", Map.of("format", Map.of("type", "json_schema", "name", "song_lyrics_selection", "strict", true,
-                "schema", LyricsQualityReview.comparisonSchema())),
-            "reasoning", Map.of("effort", "low"), "max_output_tokens", 4000, "store", false, "stream", false));
-        final HttpResponse<String> response;
-        try {
-            response = LyricsHttpTransport.post(client, endpoint, key, body, LyricsQualityReview.comparisonBudget(deadline));
-        } catch (DomainException unavailable) {
-            if ("AGENT_DEADLINE_EXCEEDED".equals(unavailable.code())) throw unavailable;
-            throw LyricsQualityReview.unverified();
-        }
-        if (response.statusCode() != 200) {
-            LOG.log(System.Logger.Level.WARNING, "GPT lyric selection incomplete: work={0}, status={1}", workId, response.statusCode());
-            throw LyricsQualityReview.unverified();
-        }
-        final JsonNode verdict;
-        try {
-            verdict = json.readTree(outputText(response.body()));
-        } catch (DomainException | tools.jackson.core.JacksonException invalid) {
-            throw LyricsQualityReview.unverified();
-        }
-        return LyricsQualityReview.selectComparison(verdict, original, edited, originalIsA);
     }
 
     private Draft parse(String body,boolean photo) {

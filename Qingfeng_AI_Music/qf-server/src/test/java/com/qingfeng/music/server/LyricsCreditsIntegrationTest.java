@@ -216,12 +216,12 @@ class LyricsCreditsIntegrationTest {
         assertTrue(consumptions(f.owner).isEmpty());
     }
 
-    @Test void completedEditorialResultWithoutComparisonBudgetRefundsOnceWithoutPublishingEitherDraft()throws Exception{
+    @Test void invalidRefinementRefundsOnceWithoutPublishingEitherDraft()throws Exception{
         var f=chargedFixture();fund(f,20);String key=UUID.randomUUID().toString();
         var client=org.mockito.Mockito.mock(java.net.http.HttpClient.class);var sends=new AtomicInteger();
         try(var scope=new AgentRequestScope(java.time.Duration.ofSeconds(60),65536).enter()){
             org.mockito.Mockito.when(client.<String>send(org.mockito.ArgumentMatchers.any(),org.mockito.ArgumentMatchers.any())).thenAnswer(call->{
-                int stage=sends.incrementAndGet();assertTrue(stage<=2,"No comparison may be dispatched after the scope is cancelled");
+                int stage=sends.incrementAndGet();assertTrue(stage<=2,"Invalid refinement must stop without another generation");
                 if(stage==2)scope.cancel();return qualityStageResponse(stage);
             });
             writer.delegate=new OpenAiLyricsWriter("offline-key","gpt-6.1-sol",java.net.URI.create("https://example.invalid"),client);
@@ -235,21 +235,21 @@ class LyricsCreditsIntegrationTest {
         assertEquals(2,sends.get());assertEquals(1,writer.calls.get());
     }
 
-    @Test void dispatchedBlindComparisonTimeoutKeepsChargeUnknownAndNeverRetriesWithANewDraft()throws Exception{
+    @Test void dispatchedRefinementTimeoutKeepsChargeUnknownAndNeverRetriesWithANewDraft()throws Exception{
         var f=chargedFixture();fund(f,20);String key=UUID.randomUUID().toString();
         var client=org.mockito.Mockito.mock(java.net.http.HttpClient.class);var sends=new AtomicInteger();
         org.mockito.Mockito.when(client.<String>send(org.mockito.ArgumentMatchers.any(),org.mockito.ArgumentMatchers.any())).thenAnswer(call->{
-            int stage=sends.incrementAndGet();assertTrue(stage<=3,"A dispatched comparison timeout must not cause another model request");
-            if(stage==3)throw new java.net.http.HttpTimeoutException("offline dispatched comparison timeout");return qualityStageResponse(stage);
+            int stage=sends.incrementAndGet();assertTrue(stage<=2,"A dispatched refinement timeout must not cause another model request");
+            if(stage==2)throw new java.net.http.HttpTimeoutException("offline dispatched refinement timeout");return qualityStageResponse(stage);
         });
         writer.delegate=new OpenAiLyricsWriter("offline-key","gpt-6.1-sol",java.net.URI.create("https://example.invalid"),client);
         assertEquals("LYRICS_PROVIDER_TIMEOUT",assertThrows(DomainException.class,()->composer.compose(f.owner,f.work,0,key,"zh-CN")).code());
-        assertEquals(3,sends.get());assertEquals("UNKNOWN",composer.requestState(f.owner,f.work,key).status());
+        assertEquals(2,sends.get());assertEquals("UNKNOWN",composer.requestState(f.owner,f.work,key).status());
         assertEquals(20-LYRICS_COST,credits.balance(f.owner));assertEquals("UNKNOWN",consumptions(f.owner).get(0).status());
         assertEquals(0,consumptions(f.owner).get(0).refunded());assertTrue(lyrics.list(f.owner,f.work).isEmpty());
         assertEquals(0,jdbc.queryForObject("SELECT COUNT(*) FROM credit_ledger WHERE entry_type='REFUND' AND reference_id=?",Integer.class,"lyrics:"+f.work+":"+key));
         assertEquals("LYRICS_REQUEST_PENDING",assertThrows(DomainException.class,()->composer.compose(f.owner,f.work,0,key,"zh-CN")).code());
-        assertEquals(3,sends.get());assertEquals(1,writer.calls.get());
+        assertEquals(2,sends.get());assertEquals(1,writer.calls.get());
     }
 
     private static java.net.http.HttpResponse<String> qualityStageResponse(int stage){

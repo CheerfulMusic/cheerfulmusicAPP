@@ -50,7 +50,7 @@ public final class QwenLyricsWriter implements LyricsWriter {
             if(!fullNew)return new Draft(result.path("title").asText(""),result.path("lyrics").asText(""),
                 plan.isObject()?json.treeToValue(plan,com.qingfeng.music.settings.CreativePlan.class):null);
             var draft=OpenAiLyricsWriter.parseSong(result,false,null);
-            return review(draft,system,material,work.id(),deadline);
+            return review(draft,language,material,work.id(),deadline);
         }catch(InterruptedException interrupted){Thread.currentThread().interrupt();throw new DomainException("LYRICS_REQUEST_INTERRUPTED","歌词请求已中断，结果尚未确认，请先查看原请求进度。");}
         catch(java.net.http.HttpTimeoutException timeout){throw new DomainException("LYRICS_PROVIDER_TIMEOUT","等待歌词结果超时，请先查看原请求进度。");}
         catch(java.io.IOException network){throw new DomainException("LYRICS_PROVIDER_NETWORK_ERROR","歌词服务连接中断，结果尚未确认，请先查看原请求进度。");}
@@ -61,66 +61,21 @@ public final class QwenLyricsWriter implements LyricsWriter {
         }
     }
 
-    private Draft review(Draft draft,String system,Map<String,Object> material,String workId,long deadline)
+    private Draft review(Draft draft,String language,Map<String,Object> material,String workId,long deadline)
             throws java.io.IOException,InterruptedException {
-        String content=json.writeValueAsString(Map.of("originalMaterial",material,"candidate",LyricsQualityReview.candidate(draft)));
         String body=json.writeValueAsString(Map.of("model",model,"messages",List.of(
-            Map.of("role","system","content",system+"\n"+LyricsWritingPrompt.REVIEW),Map.of("role","user","content",content)),
-            "response_format",Map.of("type","json_object"),"enable_thinking",false,"max_tokens",4000,"stream",false));
-        final HttpResponse<String> response;
+            Map.of("role","system","content",LyricsWritingPrompt.refinement(language)),
+            Map.of("role","user","content",json.writeValueAsString(Map.of("originalMaterial",material,"candidate",LyricsQualityReview.candidate(draft))))),
+            "enable_thinking",false,"max_tokens",4000,"stream",false));
         try {
-            response=LyricsHttpTransport.post(client,endpoint,key,body,LyricsQualityReview.editorialBudget(deadline));
-        } catch(DomainException unavailable) {
-            if("AGENT_DEADLINE_EXCEEDED".equals(unavailable.code()))throw unavailable;
-            throw LyricsQualityReview.unverified();
-        }
-        if(response.statusCode()!=200){
-            LOG.log(System.Logger.Level.WARNING,"Lyrics editorial review incomplete: work={0}, status={1}",workId,response.statusCode());
-            throw LyricsQualityReview.unverified();
-        }
-        final tools.jackson.databind.JsonNode reviewed;
-        try {
+            var response=LyricsHttpTransport.post(client,endpoint,key,body,LyricsQualityReview.remaining(deadline));
+            if(response.statusCode()!=200)throw LyricsQualityReview.unverified();
             var choice=json.readTree(response.body()).path("choices").path(0);
-            if(!"stop".equals(choice.path("finish_reason").asText()))throw LyricsQualityReview.unverified();
-            var output=choice.path("message").path("content");
-            if(!output.isString())throw LyricsQualityReview.unverified();
-            reviewed=json.readTree(output.asText());
-        } catch(tools.jackson.core.JacksonException invalid) {
+            if(!"stop".equals(choice.path("finish_reason").asText())||!choice.path("message").path("content").isString())throw LyricsQualityReview.unverified();
+            return LyricsWritingPrompt.refined(draft,choice.path("message").path("content").asText());
+        } catch (DomainException | tools.jackson.core.JacksonException invalid) {
+            // A failed refinement must never trigger a second provider generation or return the initial draft.
             throw LyricsQualityReview.unverified();
         }
-        Draft edited=LyricsQualityReview.validate(reviewed,draft);
-        if(!"REWRITE".equals(reviewed.path("quality").path("decision").asText()))return edited;
-        return compare(draft,edited,material,workId,deadline);
-    }
-
-    private Draft compare(Draft original,Draft edited,Map<String,Object> material,String workId,long deadline)
-            throws java.io.IOException,InterruptedException {
-        boolean originalIsA=LyricsQualityReview.originalIsA(workId);
-        String content=json.writeValueAsString(LyricsQualityReview.comparisonInput(material,original,edited,originalIsA));
-        String body=json.writeValueAsString(Map.of("model",model,"messages",List.of(
-            Map.of("role","system","content",LyricsWritingPrompt.SELECT),Map.of("role","user","content",content)),
-            "response_format",Map.of("type","json_object"),"enable_thinking",false,"max_tokens",2400,"stream",false));
-        final HttpResponse<String> response;
-        try {
-            response=LyricsHttpTransport.post(client,endpoint,key,body,LyricsQualityReview.comparisonBudget(deadline));
-        } catch(DomainException unavailable) {
-            if("AGENT_DEADLINE_EXCEEDED".equals(unavailable.code()))throw unavailable;
-            throw LyricsQualityReview.unverified();
-        }
-        if(response.statusCode()!=200){
-            LOG.log(System.Logger.Level.WARNING,"Lyrics blind selection incomplete: work={0}, status={1}",workId,response.statusCode());
-            throw LyricsQualityReview.unverified();
-        }
-        final tools.jackson.databind.JsonNode verdict;
-        try {
-            var choice=json.readTree(response.body()).path("choices").path(0);
-            if(!"stop".equals(choice.path("finish_reason").asText()))throw LyricsQualityReview.unverified();
-            var output=choice.path("message").path("content");
-            if(!output.isString())throw LyricsQualityReview.unverified();
-            verdict=json.readTree(output.asText());
-        } catch(tools.jackson.core.JacksonException invalid) {
-            throw LyricsQualityReview.unverified();
-        }
-        return LyricsQualityReview.selectComparison(verdict,original,edited,originalIsA);
     }
 }
