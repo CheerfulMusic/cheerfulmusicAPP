@@ -44,7 +44,7 @@ $privatePath = Join-Path $workspaceRoot '.secrets\production-main.local.properti
 $manifestPath = Join-Path $workspaceRoot '.secrets\production-main.manifest.json'
 $gatewayPath = Join-Path $workspaceRoot '.secrets\production-main.gateway.json'
 $runtimeJar = Join-Path $runtimeRoot 'app.jar'
-$sshKey = if ($env:QF_SSH_KEY_PATH) { $env:QF_SSH_KEY_PATH } else { Join-Path $workspaceRoot '.cache\deploy-ssh\id_ed25519' }
+$sshKey = if ($env:QF_SSH_KEY_PATH) { $env:QF_SSH_KEY_PATH } else { Join-Path $workspaceRoot '.cache\deploy-ssh\id_shenzhen_db' }
 $knownHosts = Join-Path $workspaceRoot '.cache\deploy-ssh\known_hosts'
 $runId = [Guid]::NewGuid().ToString('N')
 $processes = @()
@@ -136,7 +136,7 @@ try {
     if ($developmentFeatures) { $featureWithdrawal = $null }
     if ($manifest.jarSha256 -notmatch '^[a-fA-F0-9]{64}$' -or $manifest.sourceCommit -notmatch '^[a-fA-F0-9]{40}$') { throw '主库清单缺少有效的 JAR 哈希或源码提交。' }
     $db = $manifest.database
-    if ($db.sshHost -ne '47.84.5.172' -or $db.remoteHost -ne '127.0.0.1' -or [int]$db.remotePort -ne 3306 -or [int]$db.localPort -ne 13306 -or $db.name -ne 'qingfeng_music') { throw '清单中的主库目标与已确认的生产主库不一致。' }
+    if ($db.sshHost -ne '120.77.19.199' -or $db.remoteHost -ne '127.0.0.1' -or [int]$db.remotePort -ne 3306 -or [int]$db.localPort -ne 13306 -or $db.name -ne 'qingfeng_music') { throw '清单中的主库目标与已确认的深圳生产主库不一致。' }
     if ((Get-FileHash -LiteralPath $runtimeJar -Algorithm SHA256).Hash -ine $manifest.jarSha256) { throw 'JAR 与清单中的线上版本哈希不一致，未启动。' }
     if (-not [IO.Path]::IsPathFullyQualified([string]$manifest.frontendRoot)) { throw '清单中的前端路径必须为绝对路径。' }
     $frontendRoot = (Resolve-Path -LiteralPath $manifest.frontendRoot).Path
@@ -182,7 +182,7 @@ try {
     if(Test-Path -LiteralPath $gatewayPath){$gateway=Get-Content -LiteralPath $gatewayPath -Raw|ConvertFrom-Json;$gatewayReady=$gateway.upstream -eq 'https://cheerfulmusic.com' -and [long]$gateway.expiresAt -gt [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()+300}
     if(-not $gatewayReady){$python=(Get-Command python -CommandType Application -ErrorAction Stop|Select-Object -First 1).Source;& $python (Join-Path $workspaceRoot 'scripts/prepare-main-gateway.py');if($LASTEXITCODE -ne 0){throw '线上业务接口通行配置未准备完成。'}}
 
-    $tunnel = Start-Tracked $ssh @('-N', '-T', '-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=yes', '-o', "UserKnownHostsFile=$knownHosts", '-o', 'ExitOnForwardFailure=yes', '-o', 'ConnectTimeout=10', '-o', 'ServerAliveInterval=30', '-o', 'ServerAliveCountMax=3', '-L', '127.0.0.1:13306:127.0.0.1:3306', '-i', $sshKey, 'root@47.84.5.172') $runtimeRoot 'ssh'
+    $tunnel = Start-Tracked $ssh @('-N', '-T', '-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=yes', '-o', "UserKnownHostsFile=$knownHosts", '-o', 'ExitOnForwardFailure=yes', '-o', 'ConnectTimeout=10', '-o', 'ServerAliveInterval=30', '-o', 'ServerAliveCountMax=3', '-L', '127.0.0.1:13306:127.0.0.1:3306', '-i', $sshKey, 'qf-local-db@120.77.19.199') $runtimeRoot 'ssh'
     Wait-Ready $tunnel { Test-TunnelPort } 20 '主库 SSH 隧道启动失败，请查看 .cache/runtime/production-main/ssh.err.log。'
     $privateUri = ([Uri]$privatePath).AbsoluteUri
     $serverArguments = @('-Xms64m', '-Xmx512m', '-jar', $runtimeJar, '--spring.profiles.active=mysql', '--spring.profiles.include=', '--spring.config.location=classpath:/', "--spring.config.additional-location=$privateUri", '--server.address=127.0.0.1', '--server.port=8080', '--spring.flyway.enabled=false', '--spring.sql.init.mode=never', '--qingfeng.quick.scheduler-enabled=false', '--qingfeng.quick.accept-enabled=false', '--qingfeng.generation.scheduler-enabled=false', '--qingfeng.generation.vocal-adjustment-worker-enabled=false', '--qingfeng.cover.ai.scheduler-enabled=false', '--qingfeng.avatar.ai.scheduler-enabled=false', '--qingfeng.video.enabled=false', '--qingfeng.events.dispatcher-enabled=false', '--qingfeng.events.rabbit.enabled=false', '--qingfeng.events.rabbit.consumer-enabled=false', '--qingfeng.payment.inbox.scheduler-enabled=false', '--qingfeng.analytics.retention.enabled=false', '--qingfeng.analytics.retention.scheduler-enabled=false', '--qingfeng.agent.retrieval.enabled=false', '--qingfeng.agent.retrieval.scheduler-enabled=false', '--qingfeng.agent.legacy-pending.enabled=false', '--qingfeng.payment-demo.enabled=false', '--qingfeng.payments.enabled=false', '--qingfeng.paypal.enabled=false', '--qingfeng.paypal.live-enabled=false', '--qingfeng.paypal.reconciliation.enabled=false', '--qingfeng.auth.sms-bridge.enabled=false')

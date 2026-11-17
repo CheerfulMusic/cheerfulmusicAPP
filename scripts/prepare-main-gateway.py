@@ -3,7 +3,7 @@ from pathlib import Path
 import csv,http.cookiejar,json,os,re,subprocess,time,urllib.request
 ROOT=Path(__file__).resolve().parent.parent
 DEST=ROOT/'.secrets/production-main.gateway.json'
-SSH=['ssh','-i',os.environ.get('QF_SSH_KEY_PATH',str(ROOT/'.cache/deploy-ssh/id_ed25519')),'-o','BatchMode=yes','-o','StrictHostKeyChecking=yes','-o','UserKnownHostsFile='+str(ROOT/'.cache/deploy-ssh/known_hosts'),'-o','ConnectTimeout=15','root@47.84.5.172','python3','-']
+SSH=['ssh','-i',str(ROOT/'.cache/deploy-ssh/id_shenzhen_gateway'),'-o','BatchMode=yes','-o','StrictHostKeyChecking=yes','-o','UserKnownHostsFile='+str(ROOT/'.cache/deploy-ssh/known_hosts'),'-o','ConnectTimeout=15','qf-main-gateway@120.77.19.199']
 cookies=http.cookiejar.CookieJar()
 client=urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cookies))
 def data(path,body=None,csrf=None):
@@ -15,16 +15,7 @@ def data(path,body=None,csrf=None):
 status=data('/api/public/invite/status')
 admission='';expires=int(time.time())+86400
 if status['enabled']:
-    source=r'''
-from pathlib import Path
-import json
-props={}
-for line in Path('/etc/qingfeng-music/invite-gate.properties').read_text().splitlines():
-    if '=' in line and not line.lstrip().startswith(('#','!')):
-        key,value=line.split('=',1);props[key.strip()]=value.strip()
-print(json.dumps({'code':props['qingfeng.invite-gate.codes'].split(',')[0].strip()}))
-'''
-    result=subprocess.run(SSH,input=source.encode(),stdout=subprocess.PIPE,stderr=subprocess.PIPE,timeout=30)
+    result=subprocess.run(SSH,stdout=subprocess.PIPE,stderr=subprocess.PIPE,timeout=30)
     if result.returncode:raise RuntimeError('Could not read owned project admission configuration')
     code=json.loads(result.stdout)['code']
     assert data('/api/public/invite/enter',{'code':code},status['csrfToken'])['admitted']
