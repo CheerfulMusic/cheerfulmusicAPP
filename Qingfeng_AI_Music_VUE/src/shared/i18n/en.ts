@@ -1796,6 +1796,7 @@ export const english: Record<string, string> = {
   '产品': 'Products',
   'AI 音乐创作': 'AI music creation',
   '全球发行': 'Worldwide distribution',
+  '全球发行（待开放）': 'Worldwide distribution (coming soon)',
   '高端定制服务': 'Premium custom production',
   '帮助与支持': 'Help & support',
   '使用指南': 'User guide',
