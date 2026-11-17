@@ -77,7 +77,12 @@ class QwenAgentChatModelTest {
                 new com.qingfeng.music.server.agent.AgentAccountActions(null,null,null,null,null,null,null,null,null,null),
                 new com.qingfeng.music.server.agent.retrieval.SemanticRetrievalActions(null,null,null));
         var service=new com.qingfeng.music.server.agent.AgentChatService(null,null,null,null,null,applications);
-        var capabilities=service.capabilities();assertEquals(75,capabilities.size());
+        var capabilities=service.capabilities();assertEquals(77,capabilities.size());
+        for(String action:List.of("download_lyrics","generation_preflight")) {
+            var matches=capabilities.stream().filter(c -> c.id().equals(action)).toList();
+            assertEquals(1,matches.size(),action);
+            assertEquals("read",matches.get(0).effect(),action);
+        }
         assertTrue(capabilities.stream().anyMatch(c -> c.id().equals("pause_playback")));
         assertTrue(capabilities.stream().anyMatch(c -> c.id().equals("disable_lyric_follow")));
         for(int lyricCharacters:List.of(4000,8000)) {
@@ -85,7 +90,15 @@ class QwenAgentChatModelTest {
             withResponse("可以，我们先聊这首歌。",(model,request)->{
                 try(var scope=new com.qingfeng.music.common.concurrent.AgentRequestScope(java.time.Duration.ofSeconds(10),65536).enter()){
                     assertEquals("chat",model.respond(new AgentChatModel.Context("先聊这首歌","zh-CN",List.of(),song,null,capabilities,null)).action());
-                    assertEquals(capabilities.size(),new ObjectMapper().readTree(request.get()).path("tools").size());
+                    var tools=new ObjectMapper().readTree(request.get()).path("tools");
+                    assertEquals(capabilities.size(),tools.size());
+                    for(String action:List.of("download_lyrics","generation_preflight")) {
+                        var matches=java.util.stream.StreamSupport.stream(tools.spliterator(),false)
+                            .map(tool -> tool.path("function")).filter(function -> function.path("name").asText().equals(action)).toList();
+                        assertEquals(1,matches.size(),action);
+                        assertTrue(matches.get(0).path("description").asText().startsWith("[read]"),action);
+                        assertEquals(Set.of("workId","revisionId"),Set.copyOf(matches.get(0).path("parameters").path("properties").propertyNames()),action);
+                    }
                     assertTrue(request.get().getBytes(StandardCharsets.UTF_8).length<=65536);
                 }
             });
