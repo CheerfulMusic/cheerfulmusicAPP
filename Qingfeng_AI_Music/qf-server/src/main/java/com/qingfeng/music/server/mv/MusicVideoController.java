@@ -17,6 +17,8 @@ import java.util.Map;
 public class MusicVideoController {
  private final MusicVideoService service;private final MusicVideoWorker worker;private final VideoImages images;private final MusicVideoStoryboard storyboard;private final com.qingfeng.music.work.api.WorkApi works;
  public MusicVideoController(MusicVideoService service,MusicVideoWorker worker,VideoImages images,MusicVideoStoryboard storyboard,com.qingfeng.music.work.api.WorkApi works){this.service=service;this.worker=worker;this.images=images;this.storyboard=storyboard;this.works=works;}
+ public record RetryShot(int shotIndex,String prompt){}
+ @PostMapping("/{id}/retry-shot") public Map<String,String> retryShot(@AuthenticationPrincipal CreatorPrincipal creator,@PathVariable String id,@RequestBody RetryShot body){service.retryShot(creator.id(),id,body.shotIndex(),body.prompt());return Map.of("projectId",id);}
  public record Draft(String workId,String assetId,MusicVideoService.Plan plan,String requestKey,Integer quotedCredits){}
  @GetMapping("/options") public MusicVideoService.Quote options(@AuthenticationPrincipal CreatorPrincipal creator,@RequestParam String workId,@RequestParam String assetId){return service.quote(creator.id(),workId,assetId,"480P");}
  @GetMapping public java.util.List<Map<String,Object>> list(@AuthenticationPrincipal CreatorPrincipal creator,@RequestParam String workId){return service.list(creator.id(),workId);}

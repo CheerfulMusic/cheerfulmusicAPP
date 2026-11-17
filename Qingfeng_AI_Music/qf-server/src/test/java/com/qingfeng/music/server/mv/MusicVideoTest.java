@@ -44,6 +44,23 @@ class MusicVideoTest {
  @Test void cancelQueuedRefundsOnceAndNeverStarts(){String id=create();service.cancel("owner",id);assertThrows(RuntimeException.class,()->service.cancel("owner",id));verify(credits,times(1)).refund("owner","music-video:"+id);assertEquals("CANCELLED",service.get("owner",id).get("state"));}
  @Test void uncertainSubmissionNeverResubmits(@org.junit.jupiter.api.io.TempDir Path root){String id=create();when(provider.submit(anyString(),anyInt(),anyString(),anyString(),anyString())).thenThrow(new VideoProvider.Failure("VIDEO_SUBMIT_UNCERTAIN",true));var worker=new MusicVideoWorker(db,tx,provider,media,root,"ffmpeg");worker.tick();worker.tick();assertEquals("UNCERTAIN",service.get("owner",id).get("state"));verify(provider,times(1)).submit(anyString(),anyInt(),anyString(),anyString(),anyString());verify(credits,never()).refund(anyString(),anyString());}
  @Test void processRestartDoesNotResubmitInterruptedPost(@org.junit.jupiter.api.io.TempDir Path root){String id=create();db.update("UPDATE music_video_shot SET state='SUBMITTING' WHERE project_id=?",id);new MusicVideoWorker(db,tx,provider,media,root,"ffmpeg").tick();assertEquals("UNCERTAIN",service.get("owner",id).get("state"));verify(provider,never()).submit(anyString(),anyInt(),anyString(),anyString(),anyString());}
+ @Test void retryFailedShotPreservesCompletedShotsAndDoesNotDebitAgain(){
+  String id=create();db.update("UPDATE music_video_project SET state='FAILED' WHERE id=?",id);db.update("UPDATE music_video_shot SET state='FAILED',provider_task_id='old-task' WHERE project_id=?",id);
+  assertThrows(RuntimeException.class,()->service.retryShot("other",id,0,"新的画面"));
+  assertThrows(RuntimeException.class,()->service.retryShot("owner",id,0,plan().shots().get(0).prompt()));
+  db.update("INSERT INTO music_video_shot(id,project_id,shot_index,prompt,seconds,state,provider_task_id) VALUES(?,?,1,'completed',5,'READY','retained-task')",UUID.randomUUID().toString(),id);
+  service.retryShot("owner",id,0,"海浪与远方灯塔的水彩插画，无人物");
+  assertEquals("retained-task",db.queryForObject("SELECT provider_task_id FROM music_video_shot WHERE project_id=? AND state='READY'",String.class,id));
+  assertEquals("QUEUED",service.get("owner",id).get("state"));
+  assertNull(db.queryForObject("SELECT provider_task_id FROM music_video_shot WHERE project_id=? AND shot_index=0",String.class,id));
+  assertThrows(RuntimeException.class,()->service.retryShot("owner",id,0,"其他场景"));
+  verify(credits,times(1)).debit(anyString(),anyLong(),anyString());
+ }
+ @Test void faceRejectionIsRecordedWithoutRetrying(){
+  String id=create();db.update("UPDATE music_video_shot SET state='RUNNING',provider_task_id='task' WHERE project_id=?",id);when(provider.status("task")).thenReturn("face_rejected");
+  var worker=new MusicVideoWorker(db,tx,provider,media,Path.of("target/test-video-failure"),"ffmpeg");worker.tick();
+  assertEquals("VIDEO_FACE_REJECTED",service.get("owner",id).get("error_code"));verify(provider,never()).submit(anyString(),anyInt(),anyString(),anyString(),anyString());
+ }
  @Test void disabledProviderDoesNotCharge(){when(provider.available()).thenReturn(false);assertThrows(RuntimeException.class,this::create);verifyNoInteractions(credits);}
  @Test void invalidStoryboardRejected(){assertThrows(RuntimeException.class,()->MusicVideoService.validate(new MusicVideoService.Plan("x","16:9","invalid",5000,List.of(new MusicVideoService.Shot("x",99)))));}
  @Test void pollDeadlineParksOriginalTaskWithoutResubmitting(@org.junit.jupiter.api.io.TempDir Path root){String id=create();db.update("UPDATE music_video_shot SET state='RUNNING',provider_task_id='upstream',updated_at=? WHERE project_id=?",java.sql.Timestamp.from(java.time.Instant.now().minusSeconds(7300)),id);new MusicVideoWorker(db,tx,provider,media,root,"ffmpeg").tick();assertEquals("UNCERTAIN",service.get("owner",id).get("state"));verify(provider,never()).submit(anyString(),anyInt(),anyString(),anyString(),anyString());}

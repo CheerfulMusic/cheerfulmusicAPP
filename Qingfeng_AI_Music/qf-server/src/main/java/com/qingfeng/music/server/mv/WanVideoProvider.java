@@ -60,7 +60,11 @@ public final class WanVideoProvider implements VideoProvider {
         } catch (Failure e) { throw e; }
         catch (Exception e) { if (e instanceof InterruptedException) Thread.currentThread().interrupt(); throw new Failure("VIDEO_POLL_UNAVAILABLE", false); }
     }
-    public String status(String id) { return output(id).path("task_status").asText("unknown").toLowerCase(Locale.ROOT); }
+    public String status(String id) {
+        var result=output(id);
+        if ("FAILED".equalsIgnoreCase(result.path("task_status").asText()) && "FaceDetectionSuspect".equals(result.path("code").asText())) return "face_rejected";
+        return result.path("task_status").asText("unknown").toLowerCase(Locale.ROOT);
+    }
     static URI downloadUri(String url) {
         try {
             URI uri = URI.create(url);

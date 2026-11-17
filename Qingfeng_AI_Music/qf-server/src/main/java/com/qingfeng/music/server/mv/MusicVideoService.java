@@ -71,9 +71,25 @@ public final class MusicVideoService {
             return id;
         });
     }
-    public Map<String,Object> get(String owner,String id){var rows=db.queryForList("SELECT id,work_id,asset_id,state,plan_json,error_code,created_at,updated_at FROM music_video_project WHERE id=? AND creator_id=?",id,owner);if(rows.isEmpty())throw new DomainException("VIDEO_NOT_FOUND","找不到该 MV。");works.get(owner,(String)rows.get(0).get("work_id"));var result=new LinkedHashMap<>(rows.get(0));result.put("shots",db.queryForList("SELECT shot_index,seconds,state,error_code FROM music_video_shot WHERE project_id=? ORDER BY shot_index",id));return result;}
+    public Map<String,Object> get(String owner,String id){var rows=db.queryForList("SELECT id,work_id,asset_id,state,plan_json,error_code,created_at,updated_at FROM music_video_project WHERE id=? AND creator_id=?",id,owner);if(rows.isEmpty())throw new DomainException("VIDEO_NOT_FOUND","找不到该 MV。");works.get(owner,(String)rows.get(0).get("work_id"));var result=new LinkedHashMap<>(rows.get(0));result.put("shots",db.queryForList("SELECT shot_index,prompt,seconds,state,error_code FROM music_video_shot WHERE project_id=? ORDER BY shot_index",id));return result;}
     public List<Map<String,Object>> list(String owner,String work){works.get(owner,work);return db.queryForList("SELECT id,asset_id,request_key,state,created_at,error_code FROM music_video_project WHERE creator_id=? AND work_id=? ORDER BY CASE WHEN state IN ('QUEUED','RUNNING','ASSEMBLING','UNCERTAIN') THEN 0 ELSE 1 END,created_at DESC LIMIT 20",owner,work);}
     public void cancel(String owner,String id){get(owner,id);tx.executeWithoutResult(status->{db.queryForObject("SELECT id FROM agent_admission_lock WHERE id=1 FOR UPDATE",Integer.class);int changed=db.update("UPDATE music_video_project SET state='CANCELLED',updated_at=CURRENT_TIMESTAMP WHERE id=? AND creator_id=? AND state='QUEUED'",id,owner);if(changed==1){String planJson=db.queryForObject("SELECT plan_json FROM music_video_project WHERE id=?",String.class,id);if(price(json.readValue(planJson,Plan.class))>0)credits.refund(owner,"music-video:"+id);db.update("UPDATE music_video_shot SET state='CANCELLED' WHERE project_id=?",id);}else throw invalid("任务已提交，不能承诺取消或退款。请查询原任务状态，不要重复提交。");});}
+    public void retryShot(String owner,String id,int index,String prompt){
+        get(owner,id);
+        if(prompt==null||prompt.isBlank()||prompt.length()>2000)throw invalid("请填写 1–2000 字的新画面描述。");
+        tx.executeWithoutResult(status->{
+            db.queryForObject("SELECT id FROM agent_admission_lock WHERE id=1 FOR UPDATE",Integer.class);
+            var row=get(owner,id);
+            if(!"FAILED".equals(row.get("state")))throw invalid("仅明确失败的镜头可以重试，请先刷新任务状态。");
+            if(db.queryForObject("SELECT COUNT(*) FROM music_video_project WHERE creator_id=? AND work_id=? AND asset_id=? AND state IN ('QUEUED','RUNNING','ASSEMBLING','UNCERTAIN')",Long.class,owner,row.get("work_id"),row.get("asset_id"))>0)throw invalid("同一歌曲版本已有任务运行，请先查看进度。");
+            if(db.queryForObject("SELECT COUNT(*) FROM music_video_project WHERE creator_id=? AND state IN ('QUEUED','RUNNING','ASSEMBLING','UNCERTAIN')",Long.class,owner)>=2)throw invalid("已有 MV 正在制作，请稍后重试。");
+            if(!available())throw invalid("视频服务暂不可用。");
+            var failed=db.queryForList("SELECT prompt FROM music_video_shot WHERE project_id=? AND shot_index=? AND state='FAILED'",id,index);
+            if(failed.isEmpty()||prompt.trim().equals(failed.get(0).get("prompt")))throw invalid("请修改失败镜头的画面描述后重试。");
+            db.update("UPDATE music_video_shot SET prompt=?,state='QUEUED',provider_task_id=NULL,error_code=NULL,updated_at=CURRENT_TIMESTAMP WHERE project_id=? AND shot_index=? AND state='FAILED'",prompt.trim(),id,index);
+            db.update("UPDATE music_video_project SET state='QUEUED',error_code=NULL,lease_until=NULL,updated_at=CURRENT_TIMESTAMP WHERE id=?",id);
+        });
+    }
     public void retryAssembly(String owner,String id){get(owner,id);tx.executeWithoutResult(status->{db.queryForObject("SELECT id FROM agent_admission_lock WHERE id=1 FOR UPDATE",Integer.class);if(db.queryForObject("SELECT COUNT(*) FROM music_video_shot WHERE project_id=? AND state<>'READY'",Long.class,id)!=0)throw invalid("镜头尚未全部完成，不能重新合成。");if(db.update("UPDATE music_video_project SET state='ASSEMBLING',error_code=NULL,updated_at=CURRENT_TIMESTAMP WHERE id=? AND creator_id=? AND state='ASSEMBLY_FAILED'",id,owner)!=1)throw invalid("仅合成失败的任务可以重新合成。");});}
     private static DomainException invalid(String message){return new DomainException("INVALID_VIDEO_REQUEST",message);}
     private static String hash(String value){try{return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8)));}catch(Exception e){throw new IllegalStateException(e);}}

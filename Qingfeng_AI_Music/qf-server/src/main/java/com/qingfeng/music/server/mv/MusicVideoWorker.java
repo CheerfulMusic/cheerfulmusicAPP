@@ -50,6 +50,7 @@ public final class MusicVideoWorker implements AutoCloseable {
                         shotState(shotId,"UNCERTAIN","VIDEO_POLL_DEADLINE");projectState(id,"UNCERTAIN","VIDEO_POLL_DEADLINE");return;
                     }
                     String task=(String)shot.get("provider_task_id");String upstream=provider.status(task);
+                    if("face_rejected".equals(upstream)){shotState(shotId,"FAILED","VIDEO_FACE_REJECTED");projectState(id,"FAILED","VIDEO_FACE_REJECTED");return;}
                     if(Set.of("failed","error","cancelled","canceled").contains(upstream)){shotState(shotId,"FAILED","VIDEO_PROVIDER_FAILED");projectState(id,"FAILED","VIDEO_PROVIDER_FAILED");return;}
                     if(Set.of("succeeded","success","completed").contains(upstream)){
                         Path temporary=folder.resolve(shotId+"-"+UUID.randomUUID()+".part"),saved=folder.resolve(shotId+".mp4");
