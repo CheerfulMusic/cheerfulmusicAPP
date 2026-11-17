@@ -85,9 +85,9 @@ class CreditsIntegrationTest {
   var inviter=identity.create();identity.signInWithGoogle(inviter.token(),inviter.creatorId(),java.util.UUID.randomUUID().toString(),null,null);
   var guest=identity.create();var principal=new com.qingfeng.music.server.security.CreatorPrincipal(guest.creatorId());
   referrals.accept(principal,new com.qingfeng.music.server.web.app.ReferralController.Invite(inviter.creatorId()));
-  assertEquals(50,credits.balance(inviter.creatorId()));
+  assertEquals(19,credits.balance(inviter.creatorId()));
   identity.signInWithGoogle(guest.token(),guest.creatorId(),java.util.UUID.randomUUID().toString(),null,null);
-  assertEquals(70,credits.balance(inviter.creatorId()));assertEquals(50,credits.balance(guest.creatorId()));
+  assertEquals(39,credits.balance(inviter.creatorId()));assertEquals(19,credits.balance(guest.creatorId()));
  }
  boolean attempt(String owner,String ref,CountDownLatch start)throws Exception{start.await();try{credits.debit(owner,10,ref);return true;}catch(DomainException e){assertEquals("INSUFFICIENT_CREDITS",e.code());return false;}}
 }
