@@ -42,7 +42,8 @@ public final class JdbcAutomaticCoverJobs {
     static boolean pending(JdbcTemplate db, String work) {
         return !db.queryForList("""
                 SELECT 1 FROM task_event_outbox e JOIN generation_task t ON t.id=e.event_key
-                WHERE t.work_id=? AND e.topic=? AND e.state IN ('COVER_WAIT','COVER_QUEUED','COVER_SUBMIT','COVER_SAVING')
+                WHERE t.work_id=? AND e.topic=? AND e.state IN ('COVER_WAIT','COVER_QUEUED','COVER_SUBMIT','COVER_SAVING',
+                    'COVER_REPAIR','COVER_FIXING','COVER_RESAVE')
                   AND t.status IN ('QUEUED','SUBMITTING','RUNNING','SUBMISSION_UNKNOWN','SAVING','SUCCEEDED')
                 LIMIT 1
                 """, Integer.class, work, TOPIC).isEmpty();
@@ -71,13 +72,13 @@ public final class JdbcAutomaticCoverJobs {
             db.update("""
                     UPDATE task_event_outbox SET state='COVER_UNKNOWN',last_error='SUBMISSION_UNKNOWN',
                         lease_token=NULL,lease_until=NULL
-                    WHERE topic=? AND state='COVER_SUBMIT' AND lease_until<=CURRENT_TIMESTAMP
+                    WHERE topic=? AND state IN ('COVER_SUBMIT','COVER_FIXING') AND lease_until<=CURRENT_TIMESTAMP
                     """, TOPIC);
             var jobs = db.query("""
                     SELECT e.id,t.id,t.work_id,w.owner_id,t.title,t.lyrics,t.style,e.state,e.payload,e.attempts
                     FROM task_event_outbox e JOIN generation_task t ON t.id=e.event_key
                     JOIN music_work w ON w.id=t.work_id
-                    WHERE e.topic=? AND e.state IN ('COVER_QUEUED','COVER_SAVING')
+                    WHERE e.topic=? AND e.state IN ('COVER_QUEUED','COVER_SAVING','COVER_REPAIR','COVER_RESAVE')
                       AND e.next_attempt_at<=CURRENT_TIMESTAMP
                       AND (e.lease_until IS NULL OR e.lease_until<=CURRENT_TIMESTAMP)
                     ORDER BY e.next_attempt_at,e.id LIMIT 1
@@ -91,10 +92,11 @@ public final class JdbcAutomaticCoverJobs {
                 skip(job, "COVER_NO_LONGER_NEEDED");
                 return Optional.empty();
             }
-            boolean submission = "COVER_QUEUED".equals(job.state());
+            boolean repair = "COVER_REPAIR".equals(job.state());
+            boolean submission = "COVER_QUEUED".equals(job.state()) || repair;
             if (submission && db.queryForObject("""
-                    SELECT COUNT(*) FROM task_event_outbox WHERE topic=? AND published_at>=FROM_UNIXTIME(?)
-                    """, Long.class, TOPIC, now.truncatedTo(ChronoUnit.DAYS).getEpochSecond()) >= dailyLimit) {
+                    SELECT COUNT(*) FROM task_event_outbox WHERE topic IN (?,?) AND published_at>=FROM_UNIXTIME(?)
+                    """, Long.class, TOPIC, "music.cover.repair", now.truncatedTo(ChronoUnit.DAYS).getEpochSecond()) >= dailyLimit) {
                 skip(job, "DAILY_LIMIT");
                 return Optional.empty();
             }
@@ -103,7 +105,12 @@ public final class JdbcAutomaticCoverJobs {
                         lease_until=TIMESTAMPADD(SECOND,180,CURRENT_TIMESTAMP),
                         published_at=COALESCE(published_at,CURRENT_TIMESTAMP)
                     WHERE id=? AND state=? AND (lease_until IS NULL OR lease_until<=CURRENT_TIMESTAMP)
-                    """, submission ? "COVER_SUBMIT" : job.state(), job.token(), job.id(), job.state());
+                    """, repair ? "COVER_FIXING" : submission ? "COVER_SUBMIT" : job.state(),
+                    job.token(), job.id(), job.state());
+            if (claimed == 1 && repair) db.update("""
+                    INSERT INTO task_event_outbox(id,topic,event_key,payload,state,published_at,next_attempt_at,created_at)
+                    VALUES(?,'music.cover.repair',?,'','SENT',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)
+                    """, UUID.randomUUID().toString(), job.task());
             return claimed == 1 ? Optional.of(job) : Optional.empty();
         });
     }
@@ -140,13 +147,30 @@ public final class JdbcAutomaticCoverJobs {
     }
 
     public void unknown(Job job) {
-        update(job, "COVER_SUBMIT", "COVER_UNKNOWN", "SUBMISSION_UNKNOWN", "", 0, 0);
+        update(job, "COVER_REPAIR".equals(job.state()) ? "COVER_FIXING" : "COVER_SUBMIT",
+                "COVER_UNKNOWN", "SUBMISSION_UNKNOWN", "", 0, 0);
+    }
+
+    public void repair(Job job) {
+        update(job, "COVER_SAVING", "COVER_REPAIR", "TITLE_MISMATCH", job.url(), 0, 0);
+    }
+
+    public void repaired(Job job, String url) {
+        update(job, "COVER_FIXING", "COVER_RESAVE", null, url, 0, 0);
+    }
+
+    public void titleFailed(Job job) {
+        update(job, job.state(), "COVER_FAILED", "TITLE_MISMATCH", "", job.attempts(), 0);
+    }
+
+    public void repairRejected(Job job) {
+        update(job, "COVER_FIXING", "COVER_FAILED", "REPAIR_REJECTED", "", 0, 0);
     }
 
     public void archiveFailed(Job job, boolean permanent) {
         int attempts = job.attempts() + 1;
         boolean terminal = permanent || attempts >= MAX_ARCHIVE_ATTEMPTS;
-        update(job, "COVER_SAVING", terminal ? "COVER_FAILED" : "COVER_SAVING",
+        update(job, job.state(), terminal ? "COVER_FAILED" : job.state(),
                 permanent ? "INVALID_IMAGE" : "ARCHIVE_FAILED", terminal ? "" : job.url(),
                 attempts, 15 * attempts);
     }
@@ -165,7 +189,7 @@ public final class JdbcAutomaticCoverJobs {
             db.queryForList("SELECT id FROM music_work WHERE id=? FOR UPDATE", job.work());
             if (db.queryForList("""
                     SELECT id FROM task_event_outbox
-                    WHERE id=? AND state='COVER_SAVING' AND lease_token=? FOR UPDATE
+                    WHERE id=? AND state IN ('COVER_SAVING','COVER_RESAVE') AND lease_token=? FOR UPDATE
                     """, job.id(), job.token()).isEmpty()) return;
             if (eligible(job)) {
                 db.update("""
@@ -182,7 +206,7 @@ public final class JdbcAutomaticCoverJobs {
                           AND asset_id IN (SELECT id FROM media_asset WHERE work_id=? AND generation_task_id=?)
                         """, cover, job.owner(), job.work(), job.work(), job.task());
             }
-            update(job, "COVER_SAVING", "COVER_DONE", null, "", job.attempts(), 0);
+            update(job, job.state(), "COVER_DONE", null, "", job.attempts(), 0);
         });
     }
 }

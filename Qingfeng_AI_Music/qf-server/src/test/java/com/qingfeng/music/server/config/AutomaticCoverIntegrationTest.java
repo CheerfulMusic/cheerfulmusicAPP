@@ -70,6 +70,76 @@ class AutomaticCoverIntegrationTest {
 
     record Fixture(String owner, String work, String task, String token, String asset) {}
 
+    @Test void nativeTitleGetsOneDurableCorrectionAndNoSecondOverlay() throws Exception {
+        var song=fixture();complete(song);
+        var generations=new AtomicInteger();var corrections=new AtomicInteger();var checks=new AtomicInteger();
+        byte[] image=image();
+        var provider=new com.qingfeng.music.cover.application.CoverImageProvider(){
+            public String generate(String prompt){
+                assertTrue(prompt.contains("\"歌名\""));
+                assertTrue(prompt.contains("上方主要视觉元素"));
+                generations.incrementAndGet();return "https://example.test/first.jpg";
+            }
+            public String edit(byte[] input,String prompt){
+                corrections.incrementAndGet();assertTrue(prompt.contains("歌名"));
+                return "https://example.test/corrected.jpg";
+            }
+        };
+        var runner=new AutomaticCoverConfiguration.Runner(jobs,provider,covers,
+                url->new ByteArrayInputStream(image),10000,(picture,title)->checks.getAndIncrement()>0);
+        runner.run();runner.run();
+        assertEquals("COVER_REPAIR",state(song));assertNull(covers.current(song.work));
+        runner.run();
+        assertEquals("COVER_RESAVE",state(song));
+        runner.run();runner.run();
+        assertEquals("COVER_DONE",state(song));assertNotNull(covers.current(song.work));
+        assertEquals(1,generations.get());assertEquals(1,corrections.get());assertEquals(2,checks.get());
+        assertEquals(1,db.queryForObject("SELECT COUNT(*) FROM task_event_outbox WHERE topic='music.cover.repair' AND event_key=?",Integer.class,song.task));
+    }
+
+    @Test void aFailedCorrectedTitleStopsAndAnUncertainCorrectionIsNotReplayed() throws Exception {
+        var song=fixture();complete(song);
+        byte[] image=image();var calls=new AtomicInteger();
+        var provider=new com.qingfeng.music.cover.application.CoverImageProvider(){
+            public String generate(String prompt){return "https://example.test/first.jpg";}
+            public String edit(byte[] input,String prompt){
+                calls.incrementAndGet();return "https://example.test/corrected.jpg";
+            }
+        };
+        var runner=new AutomaticCoverConfiguration.Runner(jobs,provider,covers,
+                url->new ByteArrayInputStream(image),10000,(picture,title)->false);
+        runner.run();runner.run();runner.run();runner.run();runner.run();
+        assertEquals("COVER_FAILED",state(song));assertNull(covers.current(song.work));assertEquals(1,calls.get());
+
+        var second=fixture();complete(second);var uncertainCalls=new AtomicInteger();
+        var uncertain=new com.qingfeng.music.cover.application.CoverImageProvider(){
+            public String generate(String prompt){return "https://example.test/first.jpg";}
+            public String edit(byte[] input,String prompt) throws IOException {
+                uncertainCalls.incrementAndGet();throw new java.net.http.HttpTimeoutException("response lost");
+            }
+        };
+        var recovering=new AutomaticCoverConfiguration.Runner(jobs,uncertain,covers,
+                url->new ByteArrayInputStream(image),10000,(picture,title)->false);
+        recovering.run();recovering.run();recovering.run();recovering.run();
+        assertEquals("COVER_UNKNOWN",state(second));assertEquals(1,uncertainCalls.get());
+    }
+
+    @Test void verifierOutageRetriesVerificationWithoutGeneratingAnotherImage() throws Exception {
+        var song=fixture();complete(song);byte[] image=image();
+        var generations=new AtomicInteger();var checks=new AtomicInteger();
+        var runner=new AutomaticCoverConfiguration.Runner(jobs,prompt->{
+            generations.incrementAndGet();return "https://example.test/first.jpg";
+        },covers,url->new ByteArrayInputStream(image),10000,(picture,title)->{
+            if(checks.getAndIncrement()==0)throw new IOException("verification unavailable");
+            return true;
+        });
+        runner.run();runner.run();
+        assertEquals("COVER_SAVING",state(song));
+        db.update("UPDATE task_event_outbox SET next_attempt_at=CURRENT_TIMESTAMP WHERE topic='music.cover' AND event_key=?",song.task);
+        runner.run();
+        assertEquals("COVER_DONE",state(song));assertEquals(1,generations.get());assertEquals(2,checks.get());
+    }
+
     @org.junit.jupiter.api.BeforeEach void isolateCoverJobs() {
         db.update("""
                 UPDATE task_event_outbox SET state='COVER_SKIPPED',last_error='TEST_CLEANUP',
@@ -108,7 +178,7 @@ class AutomaticCoverIntegrationTest {
         var runner = new AutomaticCoverConfiguration.Runner(jobs, prompt -> {
             calls.incrementAndGet();
             return "https://example.test/result.jpg";
-        }, covers, url -> new ByteArrayInputStream(image), 10000);
+        }, covers, url -> new ByteArrayInputStream(image), 10000, (picture, title) -> true);
         runner.run();
         runner.run();
         String cover = covers.current(song.work);
@@ -132,7 +202,7 @@ class AutomaticCoverIntegrationTest {
             started.countDown();
             if (!finishImage.await(10, TimeUnit.SECONDS)) throw new AssertionError("Music did not complete concurrently");
             return "https://example.test/result.jpg";
-        }, covers, url -> new ByteArrayInputStream(image), 10000);
+        }, covers, url -> new ByteArrayInputStream(image), 10000, (picture, title) -> true);
         var pool = Executors.newSingleThreadExecutor();
         try {
             var drawing = pool.submit(runner::run);
@@ -162,7 +232,7 @@ class AutomaticCoverIntegrationTest {
         var runner = new AutomaticCoverConfiguration.Runner(jobs, prompt -> {
             covers.select(song.owner, song.work, manual, 0);
             return "https://example.test/result.jpg";
-        }, covers, url -> { throw new AssertionError("Manual cover must take precedence"); }, 10000);
+        }, covers, url -> { throw new AssertionError("Manual cover must take precedence"); }, 10000, (picture, title) -> true);
         runner.run();
         runner.run();
         complete(song);
@@ -191,7 +261,7 @@ class AutomaticCoverIntegrationTest {
         var runner = new AutomaticCoverConfiguration.Runner(jobs, prompt -> {
             db.update("UPDATE generation_task SET status=? WHERE id=?", status, song.task);
             return "https://example.test/result.jpg";
-        }, covers, url -> { throw new AssertionError("Stopped music must not apply a late cover"); }, 10000);
+        }, covers, url -> { throw new AssertionError("Stopped music must not apply a late cover"); }, 10000, (picture, title) -> true);
         runner.run();
         runner.run();
         assertNull(covers.current(song.work));
@@ -223,7 +293,7 @@ class AutomaticCoverIntegrationTest {
                     FROM generation_task WHERE id=?
                     """, newer, uuid(), song.task);
             return "https://example.test/old-result.jpg";
-        }, covers, url -> { throw new AssertionError("The older cover was superseded"); }, 10000);
+        }, covers, url -> { throw new AssertionError("The older cover was superseded"); }, 10000, (picture, title) -> true);
         runner.run();
         runner.run();
         assertNull(covers.current(song.work));
@@ -287,7 +357,7 @@ class AutomaticCoverIntegrationTest {
         }, covers, url -> {
             if (downloads.getAndIncrement() == 0) throw new IOException("Temporary archive error");
             return new ByteArrayInputStream(image);
-        }, 10000);
+        }, 10000, (picture, title) -> true);
         runner.run();
         runner.run();
         assertEquals("COVER_SAVING", state(song));
@@ -302,16 +372,7 @@ class AutomaticCoverIntegrationTest {
             var saved = ImageIO.read(stream);
             assertEquals(1024, saved.getWidth());
             assertEquals(1024, saved.getHeight());
-            boolean titleVisible = false;
-            for (int y = 500; y < 830 && !titleVisible; y++) {
-                for (int x = 50; x < 980; x++) {
-                    if ((saved.getRGB(x, y) & 0xffffff) > 0xeeeeee) {
-                        titleVisible = true;
-                        break;
-                    }
-                }
-            }
-            assertTrue(titleVisible, "The stored cover must include the song title pixels");
+            assertEquals(0, saved.getRGB(100, 750) & 0xffffff, "AI lettering must not receive another title overlay");
         }
         assertEquals(1, calls.get());
         assertEquals(2, downloads.get());
@@ -326,7 +387,7 @@ class AutomaticCoverIntegrationTest {
         var runner = new AutomaticCoverConfiguration.Runner(jobs, prompt -> {
             calls.incrementAndGet();
             throw new java.net.http.HttpTimeoutException("Simulated response lost");
-        }, covers, url -> { throw new AssertionError("Unexpected download"); }, 10000);
+        }, covers, url -> { throw new AssertionError("Unexpected download"); }, 10000, (picture, title) -> true);
         runner.run();
         runner.run();
         assertEquals(1, calls.get());
@@ -361,7 +422,7 @@ class AutomaticCoverIntegrationTest {
                 covers, url -> {
                     covers.select(song.owner, song.work, manual, 0);
                     return new ByteArrayInputStream(image);
-                }, 10000);
+                }, 10000, (picture, title) -> true);
         runner.run();
         runner.run();
         assertEquals(manual, covers.current(song.work));
@@ -373,7 +434,7 @@ class AutomaticCoverIntegrationTest {
         complete(first);
         var runner = new AutomaticCoverConfiguration.Runner(jobs, prompt -> {
             throw new com.qingfeng.music.cover.application.CoverImageProvider.Rejected(429);
-        }, covers, url -> { throw new AssertionError("Unexpected download"); }, 10000);
+        }, covers, url -> { throw new AssertionError("Unexpected download"); }, 10000, (picture, title) -> true);
         runner.run();
         assertEquals("COVER_FAILED", state(first));
         var song = fixture();

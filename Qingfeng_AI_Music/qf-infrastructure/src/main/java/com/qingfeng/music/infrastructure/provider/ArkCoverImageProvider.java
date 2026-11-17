@@ -8,6 +8,8 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.Map;
+import java.util.LinkedHashMap;
+import java.util.Base64;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.ObjectMapper;
 
@@ -34,8 +36,18 @@ public final class ArkCoverImageProvider implements CoverImageProvider {
 
     @Override
     public String generate(String prompt) throws IOException, InterruptedException {
-        var body = Map.of("model", model, "prompt", prompt, "size", "1024x1024", "output_format", "jpeg",
-                "response_format", "url", "watermark", true);
+        return submit(prompt, null);
+    }
+
+    @Override
+    public String edit(byte[] image, String prompt) throws IOException, InterruptedException {
+        return submit(prompt, "data:image/jpeg;base64," + Base64.getEncoder().encodeToString(image));
+    }
+
+    private String submit(String prompt, String image) throws IOException, InterruptedException {
+        var body = new LinkedHashMap<String,Object>(Map.of("model", model, "prompt", prompt, "size", "1024x1024",
+                "output_format", "jpeg", "response_format", "url", "watermark", true));
+        if (image != null) body.put("image", image);
         var request = HttpRequest.newBuilder(endpoint).timeout(Duration.ofSeconds(90))
                 .header("Authorization", "Bearer " + key).header("Content-Type", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(json.writeValueAsString(body))).build();

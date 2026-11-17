@@ -31,7 +31,7 @@ public final class OpenAiLyricsWriter implements LyricsWriter {
         this(key, model, URI.create("https://api.openai.com/v1/responses"), newClient(proxyUrl));
     }
 
-    private static HttpClient newClient(String proxyUrl) {
+    static HttpClient newClient(String proxyUrl) {
         var builder = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10))
             .followRedirects(HttpClient.Redirect.NEVER);
         if (!proxyUrl.isBlank()) {

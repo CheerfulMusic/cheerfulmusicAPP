@@ -106,7 +106,7 @@ qingfeng:
       enabled: false
       scheduler-enabled: true
       model: doubao-seedream-5-5-261028
-      # 全局每日方舟提交次数，按 UTC 日期计算，包含提交结果未知的请求。
+      # 全局每日方舟提交次数，按 UTC 日期计算，包含一次定向修字及提交结果未知的请求。
       daily-limit: 100
   providers:
     # AI 改写、Agent 对话与参考分析、千问写词及 GPT 写词备用通道共用千问 Flash 配置。

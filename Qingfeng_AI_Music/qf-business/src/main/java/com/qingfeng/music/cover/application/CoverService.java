@@ -20,6 +20,9 @@ public class CoverService implements CoverApi,SharedCoverAccess {
  public Asset saveGenerated(String owner,String work,String job,String title,InputStream input){
   works.get(owner,work);return save(work,input,"AUTO",job,title).asset();
  }
+ public Asset saveGenerated(String owner,String work,String job,InputStream input){
+  works.get(owner,work);return save(work,input,"AUTO",job).asset();
+ }
  private CoverRepository.Stored save(String work,InputStream input,String origin,String edit){
   return save(work,input,origin,edit,null);
  }
