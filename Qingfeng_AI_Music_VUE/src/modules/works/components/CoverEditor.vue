@@ -22,7 +22,7 @@ const error = ref('')
 const prompt = ref('')
 const remaining = ref<number>()
 const currentCover = computed(() => coverUrl(props.workId, props.state?.currentCoverId))
-const aiCovers = computed(() => props.state?.assets.filter(item => item.origin === 'AI') ?? [])
+const aiCovers = computed(() => props.state?.assets.filter(item => item.origin === 'AI' || item.origin === 'AUTO') ?? [])
 const active = computed(() => props.state?.edits.some(edit =>
   ['QUEUED', 'SUBMITTING', 'RUNNING', 'SAVING', 'SUBMISSION_UNKNOWN'].includes(edit.status)))
 const pendingKey = ref('')

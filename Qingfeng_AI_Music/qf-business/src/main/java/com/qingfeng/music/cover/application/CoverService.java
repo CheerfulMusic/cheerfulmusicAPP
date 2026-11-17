@@ -9,13 +9,17 @@ import com.qingfeng.music.common.exception.DomainException;
 import java.io.*;
 import org.springframework.transaction.annotation.Transactional;
 
-/** 封面和音乐独立版本；外部图片请求仅由显式编辑任务触发。 */
+/** 封面和音乐独立版本，复用同一图片校验和存储流程。 */
 public class CoverService implements CoverApi,SharedCoverAccess {
  private final WorkApi works;private final CoverRepository repo;private final CoverFileStore files;private final MediaCapacity capacity;
  private final ImageEditProvider provider;private final UsageBudget budget;private final ImageResultDownloader downloader;private final long limit;
  public CoverService(WorkApi works,CoverRepository repo,CoverFileStore files,MediaCapacity capacity,ImageEditProvider provider,UsageBudget budget,ImageResultDownloader downloader,long limit){this.works=works;this.repo=repo;this.files=files;this.capacity=capacity;this.provider=provider;this.budget=budget;this.downloader=downloader;this.limit=limit;}
- public State state(String owner,String work){works.get(owner,work);var selected=repo.selection(work);return new State(selected.id(),selected.version(),repo.list(work),repo.edits(work),provider.configured());}
+ public State state(String owner,String work){works.get(owner,work);var selected=repo.selection(work);return new State(selected.id(),selected.version(),repo.list(work),repo.edits(work),provider.configured(),selected.version()==0&&repo.automaticPending(work));}
  public Asset upload(String owner,String work,InputStream input){works.get(owner,work);return save(work,input,"UPLOADED",null).asset();}
+ public java.util.Optional<Asset> generated(String work,String job){return repo.findGenerated(work,job).map(CoverRepository.Stored::asset);}
+ public Asset saveGenerated(String owner,String work,String job,InputStream input){
+  works.get(owner,work);return save(work,input,"AUTO",job).asset();
+ }
  private CoverRepository.Stored save(String work,InputStream input,String origin,String edit){
   long reserved=5L*1024*1024;if(!capacity.reserve(work,reserved,limit))throw new DomainException("STORAGE_QUOTA_EXCEEDED","作品存储容量不足");
   CoverFileStore.Stored saved=null;long committed=0;

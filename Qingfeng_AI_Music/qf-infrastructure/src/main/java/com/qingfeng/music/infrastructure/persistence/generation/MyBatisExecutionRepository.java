@@ -12,6 +12,7 @@ public final class MyBatisExecutionRepository implements ExecutionRepository {
     private org.springframework.transaction.support.TransactionTemplate claimTransactions;
     private com.qingfeng.music.credits.CreditsLedger credits;
     private com.qingfeng.music.credits.LyricFreeAllowance lyricFreeAllowance;
+    private java.util.function.Consumer<String> automaticCover = task -> {};
     public MyBatisExecutionRepository withCredits(org.springframework.jdbc.core.JdbcTemplate jdbc, org.springframework.transaction.support.TransactionTemplate transactions, com.qingfeng.music.credits.CreditsLedger credits){
         this.jdbc=jdbc;this.transactions=transactions;this.credits=credits;
         this.claimTransactions=new org.springframework.transaction.support.TransactionTemplate(transactions.getTransactionManager());
@@ -22,6 +23,9 @@ public final class MyBatisExecutionRepository implements ExecutionRepository {
     }
     public MyBatisExecutionRepository withLyricFreeAllowance(com.qingfeng.music.credits.LyricFreeAllowance allowance){
         this.lyricFreeAllowance=allowance;return this;
+    }
+    public MyBatisExecutionRepository withAutomaticCover(java.util.function.Consumer<String> enqueue){
+        this.automaticCover=enqueue;return this;
     }
     public boolean lockProvider(String provider,String token,Instant now,Instant until) { mapper.ensureProvider(provider);return mapper.lock(provider,token,now,until)==1; }
     public void unlockProvider(String provider,String token) { mapper.unlock(provider,token); }
@@ -58,7 +62,10 @@ public final class MyBatisExecutionRepository implements ExecutionRepository {
             var row=owners.get(0);
             lockCreator(row[0]);
             jdbc.queryForObject("SELECT kind FROM model_usage_lock WHERE kind='LYRICS' FOR UPDATE",String.class);
-            if(mapper.succeeded(task,token,asset,now)==1)lyricFreeAllowance.grantMusic(row[0],row[1],task);
+            if(mapper.succeeded(task,token,asset,now)==1){
+                lyricFreeAllowance.grantMusic(row[0],row[1],task);
+                automaticCover.accept(task);
+            }
         });
     }
     public void failed(String task,String token,String code,Instant now) {

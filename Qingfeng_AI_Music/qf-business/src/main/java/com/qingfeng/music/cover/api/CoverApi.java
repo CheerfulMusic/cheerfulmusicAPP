@@ -10,6 +10,10 @@ public interface CoverApi {
  Content open(String owner,String work,String cover);
  Edit edit(String owner,String work,String source,String prompt,String requestKey);
  record Asset(String id,String origin,Instant createdAt){}
- record State(String currentCoverId,long version,List<Asset> assets,List<Edit> edits,boolean aiAvailable){}
+ record State(String currentCoverId,long version,List<Asset> assets,List<Edit> edits,boolean aiAvailable,boolean automaticPending){
+  public State(String currentCoverId,long version,List<Asset> assets,List<Edit> edits,boolean aiAvailable){
+   this(currentCoverId,version,assets,edits,aiAvailable,false);
+  }
+ }
  record Edit(String id,String sourceId,String prompt,String status,String coverId,String errorCode,Instant createdAt){}
 }

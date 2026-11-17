@@ -15,7 +15,16 @@ import org.springframework.scheduling.annotation.*;
 
 @Configuration(proxyBeanMethods=false) @Profile({"mysql","test"}) @EnableScheduling
 public class ExecutionConfiguration {
-    @Bean ExecutionRepository executionRepository(ExecutionMapper mapper, org.springframework.jdbc.core.JdbcTemplate jdbc, org.springframework.transaction.PlatformTransactionManager manager, com.qingfeng.music.credits.CreditsLedger credits,com.qingfeng.music.credits.LyricFreeAllowance lyricFreeAllowance){return new MyBatisExecutionRepository(mapper).withCredits(jdbc,new org.springframework.transaction.support.TransactionTemplate(manager),credits).withLyricFreeAllowance(lyricFreeAllowance);}
+    @Bean ExecutionRepository executionRepository(ExecutionMapper mapper, org.springframework.jdbc.core.JdbcTemplate jdbc,
+            org.springframework.transaction.PlatformTransactionManager manager, com.qingfeng.music.credits.CreditsLedger credits,
+            com.qingfeng.music.credits.LyricFreeAllowance lyricFreeAllowance,
+            org.springframework.beans.factory.ObjectProvider<com.qingfeng.music.infrastructure.persistence.cover.JdbcAutomaticCoverJobs> coverJobs){
+        var repository = new MyBatisExecutionRepository(mapper)
+                .withCredits(jdbc,new org.springframework.transaction.support.TransactionTemplate(manager),credits)
+                .withLyricFreeAllowance(lyricFreeAllowance);
+        coverJobs.ifAvailable(jobs -> repository.withAutomaticCover(jobs::enqueue));
+        return repository;
+    }
     @Bean AudioDownloader audioDownloader(@Value("${qingfeng.generation.audio-hosts:}")String hosts,ProviderAudioUrls audioUrls){return new AllowlistedAudioDownloader(Arrays.stream(hosts.split(",")).map(String::trim).map(String::toLowerCase).filter(s->!s.isEmpty()).collect(Collectors.toSet()),audioUrls);}
     @Bean AudioCandidates audioCandidates(org.springframework.jdbc.core.JdbcTemplate jdbc){return new JdbcAudioCandidates(jdbc);}
     @Bean GenerationWorker generationWorker(ExecutionRepository repository,MusicProvider provider,AudioDownloader downloader,GeneratedAudioArchive archive,com.qingfeng.music.generation.application.SectionEditRepository edits,com.qingfeng.music.settings.MusicSettings settings,AudioCandidates candidates,@Value("${qingfeng.generation.review-after-minutes:30}")long reviewMinutes,@Value("${qingfeng.generation.max-query-failures:6}")int queryFailures,@Value("${qingfeng.generation.max-in-flight:100}")int maxInFlight){return new GenerationWorker(repository,provider,downloader,archive,Clock.systemUTC(),Duration.ofMinutes(2),5).withSectionEdits(edits).withSettings(settings).withCandidates(candidates).withRecoveryPolicy(Duration.ofMinutes(reviewMinutes),queryFailures).withConcurrencyLimit(maxInFlight);}

@@ -221,7 +221,7 @@ async function confirmPublication() {
 }
 
 watch([() => work.value?.id, () => asset.value?.id, () => accountState.value.authenticated,
-  () => logtoState.value.authenticated], ([id, audio, google, logto], _, onCleanup) => {
+  () => logtoState.value.authenticated, () => covers.value?.currentCoverId], ([id, audio, google, logto], _, onCleanup) => {
   publicationState.value=undefined
   const request=++publicationStateRequest
   if (!id || !audio || (!google && !logto)) return
@@ -323,6 +323,7 @@ async function refreshTasks() {
     const firstRead = !tasksReady.value
     const completedNewVersion = latest.some(next => next.status === 'SUCCEEDED' &&
       !tasks.value.some(old => old.id === next.id && old.status === 'SUCCEEDED'))
+    if (completedNewVersion) void refreshCover(workId, turn)
     if (completedNewVersion && (!firstRead || mediaState.value === 'ready' && !asset.value)) {
       mediaRefresh.value++
       void updateAllowance()
@@ -353,7 +354,18 @@ async function refreshTasks() {
     if (turn === sequence) polling = false
   }
 }
-const coverTimer=window.setInterval(()=>{const id=work.value?.id;if(id&&document.visibilityState==='visible'&&covers.value?.edits.some(e=>['QUEUED','SUBMITTING','RUNNING','SAVING'].includes(e.status)))void loadCovers(id).then(v=>{if(work.value?.id===id)updateCover(v)}).catch(()=>{})},5000)
+async function refreshCover(id: string, turn: number) {
+  try {
+    const value = await loadCovers(id)
+    if (turn === sequence && work.value?.id === id) updateCover(value)
+  } catch { /* 封面服务暂不可用时保留现有封面。 */ }
+}
+const coverTimer = window.setInterval(() => {
+  const id = work.value?.id
+  if (id && document.visibilityState === 'visible' && (covers.value?.automaticPending ||
+      covers.value?.edits.some(edit => ['QUEUED','SUBMITTING','RUNNING','SAVING'].includes(edit.status))))
+    void refreshCover(id, sequence)
+}, 5000)
 const pollTimer = window.setInterval(() => { if (work.value&&(!tasksReady.value||taskReadIssue.value||needsGenerationRefresh(tasks.value,submissionUnknown.value))) void refreshTasks() }, 8000)
 document.addEventListener('visibilitychange', refreshTasks)
 onBeforeUnmount(() => { window.clearInterval(pollTimer);window.clearInterval(coverTimer); document.removeEventListener('visibilitychange', refreshTasks); sequence++ })

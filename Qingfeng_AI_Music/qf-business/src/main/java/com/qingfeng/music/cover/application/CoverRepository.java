@@ -8,6 +8,8 @@ public interface CoverRepository {
  record Job(Edit edit,String work,String requestKey,String model,String externalId,String resultUrl,String token){}
  List<Asset> list(String work);
  Optional<Stored> find(String work,String id);
+ Optional<Stored> findGenerated(String work,String job);
+ boolean automaticPending(String work);
  Stored insert(String work,CoverFileStore.Stored file,String origin,String edit);
  Selection selection(String work);
  boolean select(String work,String id,long version);

@@ -99,6 +99,18 @@ class CdnRedirectIntegrationTest {
         verify(profiles, never()).publicAudio("artist", "song", 3);
     }
 
+    @Test void publishedCoverRedirectsOnlyAfterTheReleaseIsValidated() {
+        var profiles = mock(ArtistProfileService.class);
+        when(profiles.publicCoverRef("artist", "song", 3)).thenReturn(coverRef("oss:qingfeng/covers/" + ID + ".jpg"));
+        when(profiles.publicCoverRef("artist", "song", 2)).thenThrow(new DomainException("NOT_FOUND", "missing"));
+        var controller = new ArtistPageApiController(profiles, signer(true));
+        var response = controller.cover("artist", "song", 3);
+        assertEquals(HttpStatus.FOUND, response.getStatusCode());
+        assertEquals("/qingfeng/covers/" + ID + ".jpg", response.getHeaders().getLocation().getPath());
+        assertThrows(DomainException.class, () -> controller.cover("artist", "song", 2));
+        verify(profiles, never()).publicCover(anyString(), anyString(), anyLong());
+    }
+
     @Test void publishedLocalAudioAndDisabledCdnKeepTheOriginalRangeResponse() {
         var profiles = mock(ArtistProfileService.class);
         when(profiles.publicAudio("artist", "song", 3)).thenAnswer(call -> content());

@@ -38,7 +38,7 @@ public class ArtistProfileService {
     public record PublicSong(String id, long version, String title, boolean hasCover) {}
     public record ReleaseSelection(boolean profileReady, boolean published, String publicId, String stageName, Release song,
                                    boolean publicationPending, boolean reopensSongs) {}
-    record PublicationJob(String id, String owner, String work, String asset, String title, String cover) {}
+    record PublicationJob(String id, String owner, String work, String asset, String title) {}
     private static final String PUBLICATION_TOPIC = "music.publish";
     // The worker or the owner's result page can finish this event once audio is archived.
     private static final String WAITING_FOR_AUDIO = "WAITING_AUDIO";
@@ -59,11 +59,11 @@ public class ArtistProfileService {
             rs.getString("id"), rs.getLong("version"), rs.getString("title"), rs.getString("work_id"),
             rs.getString("asset_id"), rs.getString("cover_id"), rs.getBoolean("on_discover"));
     private static final RowMapper<PublicationJob> PUBLICATION_ROW = (rs, row) -> new PublicationJob(
-            rs.getString(1), rs.getString(2), rs.getString(3), rs.getString(4), rs.getString(5), rs.getString(6));
+            rs.getString(1), rs.getString(2), rs.getString(3), rs.getString(4), rs.getString(5));
     private static final String READY_PUBLICATIONS = """
-            SELECT e.id,w.owner_id,w.id,t.asset_id,t.title,c.cover_id
+            SELECT e.id,w.owner_id,w.id,t.asset_id,t.title
             FROM task_event_outbox e JOIN generation_task t ON t.id=e.event_key
-            JOIN music_work w ON w.id=t.work_id LEFT JOIN work_cover c ON c.work_id=w.id
+            JOIN music_work w ON w.id=t.work_id
             WHERE e.topic=? AND e.state=? AND e.next_attempt_at<=CURRENT_TIMESTAMP
               AND t.status='SUCCEEDED' AND t.asset_id IS NOT NULL AND w.deleted_at IS NULL
             """;
@@ -237,7 +237,7 @@ public class ArtistProfileService {
         if (db.queryForList("SELECT id FROM task_event_outbox WHERE id=? AND state=? FOR UPDATE",
                 job.id(), WAITING_FOR_AUDIO).isEmpty()) return;
         if (hasAccount(job.owner()) && ownerRelease(job.owner(), job.work()).isEmpty()) {
-            publishEverywhere(job.owner(), job.work(), job.asset(), job.cover(), job.title());
+            publishEverywhere(job.owner(), job.work(), job.asset(), covers.current(job.work()), job.title());
         }
         db.update("UPDATE task_event_outbox SET state='SENT',published_at=CURRENT_TIMESTAMP WHERE id=?", job.id());
     }
@@ -445,6 +445,12 @@ public class ArtistProfileService {
         var release = publicRelease(publicId, song, version);
         if (release.coverId() == null) throw missing();
         return covers.content(release.workId(), release.coverId());
+    }
+
+    public MediaApi.MediaRef publicCoverRef(String publicId, String song, long version) {
+        var release = publicRelease(publicId, song, version);
+        if (release.coverId() == null) throw missing();
+        return covers.ref(release.workId(), release.coverId());
     }
 
     private void updateImage(String creator, ArtistImage.Kind kind, byte[] data) {

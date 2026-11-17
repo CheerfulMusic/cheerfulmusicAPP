@@ -56,6 +56,10 @@ public class ArtistPageApiController {
     @GetMapping("/songs/{song}/{version}/cover")
     public ResponseEntity<Resource> cover(@PathVariable String artist, @PathVariable String song,
             @PathVariable long version) {
+        if (signer.enabled()) {
+            var location = signer.cover(profiles.publicCoverRef(artist, song, version).storageKey());
+            if (location.isPresent()) return AudioResponse.redirect(location.get());
+        }
         return AudioResponse.from(profiles.publicCover(artist, song, version), false);
     }
 

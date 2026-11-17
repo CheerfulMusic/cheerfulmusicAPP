@@ -102,6 +102,12 @@ qingfeng:
     ai:
       enabled: true
       scheduler-enabled: true
+    automatic:
+      enabled: false
+      scheduler-enabled: true
+      model: doubao-seedream-5-5-261028
+      # 全局每日方舟提交次数，按 UTC 日期计算，包含提交结果未知的请求。
+      daily-limit: 100
   providers:
     # AI 改写、Agent 对话与参考分析、千问写词及 GPT 写词备用通道共用千问 Flash 配置。
     # base-url 必须与签发 key 的平台配套，不能混用阿里云百炼官方域名 dashscope.aliyuncs.com。
