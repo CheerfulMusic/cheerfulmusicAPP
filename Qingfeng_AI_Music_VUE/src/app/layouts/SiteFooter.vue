@@ -1,12 +1,16 @@
 <script setup lang="ts">
+import { defineAsyncComponent, ref } from 'vue'
 import { t } from '../../shared/i18n'
+
+const PremiumStudioDialog = defineAsyncComponent(() => import('../../modules/works/components/PremiumStudioDialog.vue'))
+const premiumOpen = ref(false)
 
 /** Links without a shipped destination stay as plain text; no dead links or unbacked claims. */
 const products = [
   { label: 'AI 音乐创作', to: '/create' },
   { label: '我的作品', to: '/works' },
-  { label: '全球发行', to: '' },
-  { label: '高端定制服务', to: '' },
+  { label: '全球发行（待开放）', to: '' },
+  { label: '高端定制服务', to: '', premium: true },
 ]
 const support = [
   { label: '使用指南', to: '' },
@@ -64,6 +68,7 @@ const legal = [
             <h2>{{ t('产品') }}</h2>
             <template v-for="item in products" :key="item.label">
               <RouterLink v-if="item.to" class="footer-link" :to="item.to">{{ t(item.label) }}</RouterLink>
+              <button v-else-if="item.premium" class="footer-link footer-link-button" type="button" aria-haspopup="dialog" @click="premiumOpen = true">{{ t(item.label) }}</button>
               <span v-else class="footer-link footer-link-static">{{ t(item.label) }}</span>
             </template>
           </nav>
@@ -97,6 +102,7 @@ const legal = [
       </div>
     </div>
   </footer>
+  <PremiumStudioDialog v-if="premiumOpen" :open="premiumOpen" @close="premiumOpen = false" />
 </template>
 
 <style scoped>
@@ -119,7 +125,8 @@ const legal = [
 .footer-column { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
 .footer-column h2 { margin: 2px 0 3px; font-size: 14px; font-weight: 700; color: var(--ink); }
 .footer-link { font-size: 13px; line-height: 1.4; color: var(--muted); }
-a.footer-link:hover { color: var(--accent-text); text-decoration: underline; text-underline-offset: 3px; }
+a.footer-link:hover, button.footer-link:hover { color: var(--accent-text); text-decoration: underline; text-underline-offset: 3px; }
+.footer-link-button { border: 0; padding: 0; background: transparent; font-family: inherit; text-align: left; cursor: pointer; }
 .footer-link-static { cursor: default; }
 
 .footer-cta { border-left: 1px solid var(--line); padding-left: 26px; }

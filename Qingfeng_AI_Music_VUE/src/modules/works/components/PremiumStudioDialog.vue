@@ -5,7 +5,7 @@ import { usePlayer } from '../../../shared/player/store'
 import PlaybackIcon from '../../../shared/ui/PlaybackIcon.vue'
 import { audioUrl, type AudioAsset } from '../api/detail'
 
-const props = defineProps<{ open: boolean; workId: string; asset: AudioAsset; title: string; cover?: string }>()
+const props = defineProps<{ open: boolean; workId?: string; asset?: AudioAsset; title?: string; cover?: string }>()
 const emit = defineEmits<{ close: [] }>()
 const dialog = ref<HTMLDialogElement>(), content = ref<HTMLElement>()
 const selected = ref(''), notice = ref(''), copied = ref(false)
@@ -32,13 +32,14 @@ const preview = ref<(typeof images)[number]>()
 const previewBack = ref<HTMLButtonElement>()
 const gallery = ref<HTMLElement>()
 let galleryScroll = 0
-const playing = computed(() => player.current?.id === props.asset.id && (player.playing || player.starting))
+const playing = computed(() => !!props.asset && player.current?.id === props.asset.id && (player.playing || player.starting))
 const duration = computed(() => {
-  if (player.current?.id !== props.asset.id || !player.duration) return ''
+  if (!props.asset || player.current?.id !== props.asset.id || !player.duration) return ''
   return `${Math.floor(player.duration / 60).toString().padStart(2, '0')}:${Math.floor(player.duration % 60).toString().padStart(2, '0')}`
 })
 function play() {
-  void player.toggle({ id: props.asset.id, title: props.title, cover: props.cover || defaultCover(), audio: audioUrl(props.workId, props.asset.id), provenance: props.asset.origin })
+  if (!props.asset || !props.workId) return
+  void player.toggle({ id: props.asset.id, title: props.title || t('专属音乐制作'), cover: props.cover || defaultCover(), audio: audioUrl(props.workId, props.asset.id), provenance: props.asset.origin })
 }
 async function showImage(item: (typeof images)[number]) {
   galleryScroll = content.value?.scrollTop ?? 0
@@ -63,9 +64,9 @@ const consultationEmail = 'labelmanager@cheerfulmusic.co.uk'
 const brief = computed(() => {
   const plan = chosen.value
   if (!plan) return ''
-  return [t('专属音乐制作咨询'), `${t('歌曲名称')} ${props.title}`, `${t('制作方案')} ${t(plan.title)}`, `${t('参考预算')} ${plan.price}${t(plan.suffix)}`, `${t('制作内容')} ${plan.features.map(feature => t(feature)).join(' / ')}`, '', t('希望进一步沟通演唱录音 编曲 混音及制作安排')].join('\n')
+  return [t('专属音乐制作咨询'), ...(props.title ? [`${t('歌曲名称')} ${props.title}`] : []), `${t('制作方案')} ${t(plan.title)}`, `${t('参考预算')} ${plan.price}${t(plan.suffix)}`, `${t('制作内容')} ${plan.features.map(feature => t(feature)).join(' / ')}`, '', t('希望进一步沟通演唱录音 编曲 混音及制作安排')].join('\n')
 })
-const mailto = computed(() => `mailto:${consultationEmail}?subject=${encodeURIComponent(t('专属音乐制作咨询') + ' - ' + props.title)}&body=${encodeURIComponent(brief.value)}`)
+const mailto = computed(() => `mailto:${consultationEmail}?subject=${encodeURIComponent(t('专属音乐制作咨询') + (props.title ? ' - ' + props.title : ''))}&body=${encodeURIComponent(brief.value)}`)
 async function copyBrief() {
   if (!chosen.value) return
   try { await navigator.clipboard.writeText(brief.value); copied.value = true; notice.value = '定制需求已复制 可发送邮件与制作团队沟通' }
@@ -93,7 +94,7 @@ onBeforeUnmount(() => dialog.value?.close())
         <p class="premium-kicker">Premium Music Experience</p>
         <h2 id="premium-studio-title">{{ t('专属音乐制作') }}</h2>
         <p class="premium-description">{{ t('让青风音乐制作团队为你的歌完成编曲、录音与混音。') }}</p>
-        <div class="premium-song">
+        <div v-if="asset && workId" class="premium-song">
           <img :src="cover || defaultCover()" :alt="t('歌曲封面')">
           <div><h3>{{ title }}</h3><p>{{ t('当前试听版本') }}<span v-if="duration"> · {{ duration }}</span></p></div>
           <button class="premium-play" type="button" @click="play"><PlaybackIcon :playing="playing"/><span>{{ playing ? t('暂停') : t('试听歌曲') }}</span></button>
