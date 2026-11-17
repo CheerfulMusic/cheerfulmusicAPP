@@ -52,6 +52,7 @@ class CoverWorkflowIntegrationTest {
  @Test void applyingCoverUpdatesPublicPagesWhileKeepingPublicationAndPlayback() {
   var f=fixture();String first=upload(f);covers.select(f.owner(),f.work(),first,0);
   var release=publish(f,first);
+  var initialCoverVersion=profiles.publishedProfile(profiles.mine(f.owner()).publicId()).songs().get(0).coverVersion();
   profiles.setDiscoverFeatured(release.id(),true);
   profiles.recordDiscoverPlay(release.id(),release.version());
   var before=jdbc.queryForMap("SELECT * FROM artist_song_release WHERE id=?",release.id());
@@ -61,9 +62,10 @@ class CoverWorkflowIntegrationTest {
   var after=jdbc.queryForMap("SELECT * FROM artist_song_release WHERE id=?",release.id());
   assertEquals(second,after.remove("cover_id"));before.remove("cover_id");assertEquals(before,after);
   String publicId=profiles.mine(f.owner()).publicId();
-  assertEquals(second,profiles.publishedProfile(publicId).songs().get(0).coverId());
+  var coverVersion=profiles.publishedProfile(publicId).songs().get(0).coverVersion();
+  assertNotNull(coverVersion);assertNotEquals(second,coverVersion);assertNotEquals(initialCoverVersion,coverVersion);
   var discover=profiles.discover(true,false,"","",0).songs().stream().filter(row->row.song().id().equals(release.id())).findFirst().orElseThrow();
-  assertEquals(second,discover.song().coverId());assertTrue(discover.song().hasCover());assertEquals(1,discover.plays());
+  assertEquals(coverVersion,discover.song().coverVersion());assertTrue(discover.song().hasCover());assertEquals(1,discover.plays());
   assertEquals(covers.ref(f.work(),second),profiles.publicCoverRef(publicId,release.id(),release.version()));
   assertTrue(profiles.publicAudio(publicId,release.id(),release.version()).size()>0);
   covers.select(f.owner(),f.work(),null,2);

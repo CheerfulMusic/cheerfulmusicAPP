@@ -35,13 +35,20 @@ public class ArtistProfileService {
                           boolean onDiscover) {}
     public record PublicProfile(String stageName, String tagline, String avatarKey, String coverKey,
                                 String featuredReleaseId, List<PublicSong> songs) {}
-    public record PublicSong(String id, long version, String title, boolean hasCover, String coverId) {}
+    public record PublicSong(String id, long version, String title, boolean hasCover, String coverVersion) {}
     public record ReleaseSelection(boolean profileReady, boolean published, String publicId, String stageName, Release song,
                                    boolean publicationPending, boolean reopensSongs) {}
     record PublicationJob(String id, String owner, String work, String asset, String title) {}
     private static final String PUBLICATION_TOPIC = "music.publish";
     // The worker or the owner's result page can finish this event once audio is archived.
     private static final String WAITING_FOR_AUDIO = "WAITING_AUDIO";
+    private static String publicCoverVersion(String id) {
+        if (id == null) return null;
+        try {
+            return java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256")
+                    .digest(id.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+        } catch (java.security.NoSuchAlgorithmException impossible) { throw new IllegalStateException(impossible); }
+    }
     public record DiscoverSong(String artistId, String stageName, PublicSong song, Instant publishedAt,
                                String genre, long plays) {}
     public record DiscoverArtist(String artistId, String stageName, String avatarKey, long songs, long plays) {}
@@ -380,7 +387,7 @@ public class ArtistProfileService {
                 """ + DISCOVER_GENRE + "=?)" + order + " LIMIT ? OFFSET ?",
                 (rs, row) -> new DiscoverSong(rs.getString("public_id"), rs.getString("stage_name"),
                         new PublicSong(rs.getString("id"), rs.getLong("version"), rs.getString("title"),
-                                rs.getString("cover_id") != null, rs.getString("cover_id")), rs.getTimestamp("discover_published_at").toInstant(),
+                                rs.getString("cover_id") != null, publicCoverVersion(rs.getString("cover_id"))), rs.getTimestamp("discover_published_at").toInstant(),
                         rs.getString("genre"), rs.getLong("plays")), keyword, keyword, genre, genre, pageSize + 1, offset);
         var artists = offset == 0 ? db.query("""
                 SELECT p.public_id,p.stage_name,p.avatar_key,COUNT(*) AS songs,COALESCE(SUM(m.plays),0) AS plays
@@ -411,7 +418,7 @@ public class ArtistProfileService {
                 PROFILE_ROW, publicId).stream().findFirst().orElseThrow(ArtistProfileService::missing);
         var visible = releases(profile.creatorId());
         var songs = visible.stream()
-                .map(song -> new PublicSong(song.id(), song.version(), song.title(), song.coverId() != null, song.coverId())).toList();
+                .map(song -> new PublicSong(song.id(), song.version(), song.title(), song.coverId() != null, publicCoverVersion(song.coverId()))).toList();
         return new PublicProfile(profile.stageName(), profile.tagline(), profile.avatarKey(), profile.coverKey(),
                 visibleFeature(profile, visible), songs);
     }

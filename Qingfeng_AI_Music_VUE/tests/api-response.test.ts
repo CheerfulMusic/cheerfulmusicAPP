@@ -6,12 +6,12 @@ describe('R1 响应读取与业务结果校验',()=>{
  it('公开歌曲接受可选封面标识，并校验新字段类型', async () => {
   const profile = { stageName: '歌手', tagline: '', avatarKey: null, coverKey: null, featuredReleaseId: null }
   const song = { id: 'song', version: 1, title: '歌名', hasCover: true }
-  for (const coverId of [undefined, null, 'cover']) {
-   const body = { ...profile, songs: [{ ...song, ...(coverId === undefined ? {} : { coverId }) }] }
+  for (const coverVersion of [undefined, null, 'cover']) {
+   const body = { ...profile, songs: [{ ...song, ...(coverVersion === undefined ? {} : { coverVersion }) }] }
    vi.stubGlobal('fetch', vi.fn(async () => reply(body)))
    await expect(requestJson('public/artists/artist')).resolves.toEqual(body)
   }
-  vi.stubGlobal('fetch', vi.fn(async () => reply({ ...profile, songs: [{ ...song, coverId: {} }] })))
+  vi.stubGlobal('fetch', vi.fn(async () => reply({ ...profile, songs: [{ ...song, coverVersion: {} }] })))
   await expect(requestJson('public/artists/artist')).rejects.toMatchObject({ code: 'INVALID_RESPONSE' })
  })
  it('封面读取和保存接受自动生成图片，并继续拒绝未知来源', async () => {

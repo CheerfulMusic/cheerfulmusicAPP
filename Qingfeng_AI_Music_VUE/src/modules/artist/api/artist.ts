@@ -8,7 +8,7 @@ export interface PublishedSong {
   version: number
   title: string
   hasCover: boolean
-  coverId?: string | null
+  coverVersion?: string | null
 }
 
 export interface ArtistRelease extends Omit<PublishedSong, 'hasCover'> {
@@ -177,7 +177,7 @@ export const publicArtistCoverUrl = (id: string, key: string) => apiUrl(`${publi
 
 export function publicTrack(id: string, song: PublishedSong) {
   const path = `${publicArtist(id)}/songs/${encodeURIComponent(song.id)}/${song.version}`
-  const coverQuery = song.coverId ? `?cover=${encodeURIComponent(song.coverId)}` : ''
+  const coverQuery = song.coverVersion ? `?cover=${encodeURIComponent(song.coverVersion)}` : ''
   return { id: song.id, title: song.title, cover: song.hasCover ? apiUrl(`${path}/cover${coverQuery}`) : '/brand/share-default-cover.png',
     audio: apiUrl(`${path}/audio`) }
 }

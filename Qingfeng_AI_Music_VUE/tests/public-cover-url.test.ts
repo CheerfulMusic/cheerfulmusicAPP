@@ -6,14 +6,14 @@ vi.mock('../src/shared/http/api-client', () => ({
 import { publicTrack } from '../src/modules/artist/api/artist'
 
 it('refreshes the public cover URL while keeping the song and audio version stable', () => {
-  const song = { id: 'song', title: '歌名', version: 3, hasCover: true, coverId: 'first' }
+  const song = { id: 'song', title: '歌名', version: 3, hasCover: true, coverVersion: 'first' }
   const before = publicTrack('artist', song)
-  const after = publicTrack('artist', { ...song, coverId: 'second' })
+  const after = publicTrack('artist', { ...song, coverVersion: 'second' })
   expect(after.cover).toBe('/api/public/artists/artist/songs/song/3/cover?cover=second')
   expect(after.cover).not.toBe(before.cover)
   expect(after.audio).toBe(before.audio)
   expect(after.id).toBe(before.id)
-  expect(publicTrack('artist', { ...song, hasCover: false, coverId: null }).cover).toBe('/brand/share-default-cover.png')
+  expect(publicTrack('artist', { ...song, hasCover: false, coverVersion: null }).cover).toBe('/brand/share-default-cover.png')
 })
 
 it('accepts public song data returned before cover identifiers were included', () => {

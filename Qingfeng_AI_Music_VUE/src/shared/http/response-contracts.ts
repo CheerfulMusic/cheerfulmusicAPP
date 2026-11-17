@@ -32,7 +32,7 @@ const direction=(v:unknown)=>obj(v)&&preferences(v.preferences)&&num(v.catalogVe
 const hotStat=(v:unknown)=>obj(v)&&text(v.trackId)&&['plays','likes','favorites','comments'].every(k=>num(v[k])&&Number(v[k])>=0)
 const nullableText=(v:unknown)=>v===null||str(v)
 const artistSong=(v:unknown):v is Row=>obj(v)&&text(v.id)&&Number.isSafeInteger(v.version)&&Number(v.version)>0&&text(v.title)
-const publicArtistSong=(v:unknown)=>artistSong(v)&&typeof v.hasCover==='boolean'&&(v.coverId===undefined||nullableText(v.coverId))
+const publicArtistSong=(v:unknown)=>artistSong(v)&&typeof v.hasCover==='boolean'&&(v.coverVersion===undefined||nullableText(v.coverVersion))&&(v.coverId===undefined||nullableText(v.coverId))
 const artistRelease=(v:unknown)=>artistSong(v)&&text(v.workId)&&text(v.assetId)&&nullableText(v.coverId)
   &&(v.onDiscover===undefined||typeof v.onDiscover==='boolean')
 const nonnegativeCount=(v:unknown)=>Number.isSafeInteger(v)&&Number(v)>=0
