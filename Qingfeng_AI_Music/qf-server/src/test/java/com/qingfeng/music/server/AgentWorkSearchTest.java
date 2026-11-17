@@ -16,7 +16,7 @@ class AgentWorkSearchTest {
         var ds=new JdbcDataSource();ds.setURL("jdbc:h2:mem:work-search-"+UUID.randomUUID()+";MODE=MySQL;DB_CLOSE_DELAY=-1");var jdbc=new JdbcTemplate(ds);
         jdbc.execute("CREATE TABLE music_work(id VARCHAR(36) PRIMARY KEY,owner_id VARCHAR(36),title VARCHAR(100),story TEXT,message TEXT,version BIGINT,deleted_at TIMESTAMP,updated_at TIMESTAMP)");
         jdbc.execute("CREATE TABLE lyric_revision(id VARCHAR(36),work_id VARCHAR(36),work_version BIGINT,title VARCHAR(100),lyrics TEXT,created_at TIMESTAMP)");
-        jdbc.execute("CREATE TABLE quick_creation(work_id VARCHAR(36),status VARCHAR(30),created_at TIMESTAMP,id VARCHAR(36))");
+        jdbc.execute("CREATE TABLE quick_creation(work_id VARCHAR(36),status VARCHAR(30),error_code VARCHAR(80),created_at TIMESTAMP,id VARCHAR(36))");
         jdbc.execute("CREATE TABLE generation_task(id VARCHAR(36),work_id VARCHAR(36),status VARCHAR(30),created_at TIMESTAMP,title VARCHAR(100))");
         jdbc.execute("CREATE TABLE work_cover(work_id VARCHAR(36),cover_id VARCHAR(36))");
         jdbc.execute("CREATE TABLE media_asset(id VARCHAR(36),work_id VARCHAR(36),origin VARCHAR(30),generation_task_id VARCHAR(36),created_at TIMESTAMP)");

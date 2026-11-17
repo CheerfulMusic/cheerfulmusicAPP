@@ -886,6 +886,8 @@ export const english: Record<string, string> = {
   '刷新编写状态': 'Check lyric status',
   '重新编写歌词': 'Write lyrics again',
   '暂时无法确认编写状态，请稍后刷新。': 'Unable to check lyric status. Please check again shortly.',
+  '重试预计消耗 {cost} 积分': 'Estimated retry cost: {cost} credits',
+  '本次歌词生成超时，可以重试。': 'Lyric generation timed out. You can try again.',
   '歌词仍在编写中，可以稍后刷新编写状态。': 'Your lyrics are still being written. Check their status shortly.',
   '上次歌词编写未完成，现已恢复。点击重新编写即可再试，已有内容会保留。': 'The previous lyric request did not finish. You can try writing again. Your existing work is kept.',
   '上次编写的歌词已找回，可在历史版本中查看。': 'Your previous lyrics have been recovered and are available in version history.',

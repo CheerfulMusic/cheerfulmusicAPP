@@ -39,7 +39,7 @@ public final class WorkLibraryQuery {
         String placeholders=String.join(",",Collections.nCopies(owned.size(),"?"));
         String sql="""
             SELECT w.id,
-              (SELECT q.status FROM quick_creation q WHERE q.work_id=w.id ORDER BY q.created_at DESC,q.id DESC LIMIT 1) AS quick_status,
+              (SELECT CASE WHEN q.error_code='LYRICS_SUBMISSION_UNKNOWN' THEN 'FAILED' ELSE q.status END FROM quick_creation q WHERE q.work_id=w.id ORDER BY q.created_at DESC,q.id DESC LIMIT 1) AS quick_status,
               (SELECT t.status FROM generation_task t WHERE t.work_id=w.id ORDER BY t.created_at DESC,t.id DESC LIMIT 1) AS task_status,
               (SELECT COUNT(*) FROM generation_task t WHERE t.work_id=w.id AND t.status IN ('QUEUED','SUBMITTING','RUNNING','SAVING')) AS active_tasks,
               (SELECT COUNT(*) FROM generation_task t WHERE t.work_id=w.id AND t.status='SUBMISSION_UNKNOWN') AS unknown_tasks,

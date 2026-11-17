@@ -82,30 +82,75 @@ class UsageBudgetIntegrationTest {
         writer.failure=null;composer.compose(f.owner,f.work,0,UUID.randomUUID().toString(),"zh-CN");
         assertEquals(2,writer.calls.get());assertEquals(2,reservations());assertEquals(2,lyrics.list(f.owner,f.work).size());assertEquals(0,budget.allowance(f.owner,Kind.LYRICS).dailyRemaining());
     }
-    @Test void stalePendingRequestsKeepUnknownCapacityAndAcceptOneLateResultWithoutResubmission(){
-        var f=fixture();String key=UUID.randomUUID().toString();requests.claim(f.owner,f.work,key,"hash");
+    @Test void stalePendingReleasesCapacityAndCanRecoverOneLateResultBeforeRetry(){
+        var f=fixture();String key=UUID.randomUUID().toString();
+        assertTrue(requests.claim(f.owner,f.work,key,"hash"));
         jdbc.update("UPDATE lyrics_composition_request SET created_at=TIMESTAMPADD(SECOND,-181,CURRENT_TIMESTAMP) WHERE work_id=? AND request_key=?",f.work,key);
-        assertEquals("UNKNOWN",composer.requestState(f.owner,f.work,key).status());assertEquals("LYRICS_REQUEST_TIMEOUT",composer.requestState(f.owner,f.work,key).errorCode());assertEquals(0,writer.calls.get());
-        assertEquals(1,budget.allowance(f.owner,Kind.LYRICS).active());assertEquals(1,budget.allowance(f.owner,Kind.LYRICS).dailyRemaining());
+        assertEquals(0,budget.allowance(f.owner,Kind.LYRICS).active());
+        var state=composer.requestState(f.owner,f.work,key);
+        assertEquals("UNKNOWN",state.status());
+        assertEquals("LYRICS_REQUEST_TIMEOUT",state.errorCode());
+        assertEquals(1,budget.allowance(f.owner,Kind.LYRICS).dailyRemaining());
         assertFalse(requests.claim(f.owner,f.work,key,"hash"));
-        assertEquals("LYRICS_REQUEST_PENDING",assertThrows(DomainException.class,()->composer.compose(f.owner,f.work,0,UUID.randomUUID().toString(),"en")).code());
-        assertEquals(1,reservations());assertEquals(0,writer.calls.get());
-        var saves=new AtomicInteger();requests.completeWithRevision(f.work,key,f.revision,saves::incrementAndGet);
-        assertEquals("SUCCEEDED",composer.requestState(f.owner,f.work,key).status());assertEquals(f.revision,composer.requestState(f.owner,f.work,key).revisionId());
-        assertEquals(0,budget.allowance(f.owner,Kind.LYRICS).active());assertEquals(1,budget.allowance(f.owner,Kind.LYRICS).dailyRemaining());
-        assertThrows(DomainException.class,()->requests.completeWithRevision(f.work,key,f.revision,saves::incrementAndGet));assertEquals(1,saves.get());assertEquals(0,writer.calls.get());
-        composer.compose(f.owner,f.work,0,UUID.randomUUID().toString(),"en");assertEquals(1,writer.calls.get());assertEquals(2,reservations());
+        var saves=new AtomicInteger();
+        requests.completeWithRevision(f.work,key,f.revision,saves::incrementAndGet);
+        assertEquals("SUCCEEDED",composer.requestState(f.owner,f.work,key).status());
+        assertThrows(DomainException.class,()->requests.completeWithRevision(f.work,key,f.revision,saves::incrementAndGet));
+        assertEquals(1,saves.get());
+        assertEquals(0,writer.calls.get());
     }
-    @Test void anUnknownOldWorkKeepsOwnerCapacityUntilItsLateCompletion(){
-        var f=fixture();String key=UUID.randomUUID().toString();requests.claim(f.owner,f.work,key,"hash");
+
+    @Test void stalePendingOnAnotherWorkDoesNotBlockNewWorkWithoutPolling(){
+        var f=fixture();String oldKey=UUID.randomUUID().toString();
+        assertTrue(requests.claim(f.owner,f.work,oldKey,"hash"));
         jdbc.update("UPDATE lyrics_composition_request SET created_at=TIMESTAMPADD(SECOND,-181,CURRENT_TIMESTAMP) WHERE work_id=?",f.work);
-        var other=fixture(f.owner);String rejectedKey=UUID.randomUUID().toString();
-        assertEquals("PERSONAL_GENERATION_BUSY",assertThrows(DomainException.class,()->composer.compose(other.owner,other.work,0,rejectedKey,"en")).code());
-        assertEquals("UNKNOWN",requests.find(f.work,key).orElseThrow().status());assertEquals(1,budget.allowance(f.owner,Kind.LYRICS).active());
-        assertTrue(requests.find(other.work,rejectedKey).isEmpty());assertEquals(1,reservations());assertEquals(0,writer.calls.get());
-        requests.completeWithRevision(f.work,key,f.revision,()->{});assertEquals(0,budget.allowance(f.owner,Kind.LYRICS).active());
-        composer.compose(other.owner,other.work,0,rejectedKey,"en");
-        assertEquals("SUCCEEDED",requests.find(f.work,key).orElseThrow().status());assertEquals(1,writer.calls.get());assertEquals(2,reservations());
+        var other=fixture(f.owner);
+        composer.compose(other.owner,other.work,0,UUID.randomUUID().toString(),"en");
+        assertEquals("UNKNOWN",composer.requestState(f.owner,f.work,oldKey).status());
+        assertEquals(0,budget.allowance(f.owner,Kind.LYRICS).active());
+        assertEquals(2,reservations());
+        assertEquals(1,writer.calls.get());
+    }
+
+    @Test void explicitRetryOnTheSameWorkFencesLateResultsAndDeduplicatesConcurrentClicks()throws Exception{
+        var f=fixture();
+        String oldKey=UUID.randomUUID().toString(), newKey=UUID.randomUUID().toString();
+        assertTrue(requests.claim(f.owner,f.work,oldKey,"hash"));
+        jdbc.update("UPDATE lyrics_composition_request SET created_at=TIMESTAMPADD(SECOND,-181,CURRENT_TIMESTAMP) WHERE work_id=?",f.work);
+        var pool=Executors.newFixedThreadPool(2);
+        var start=new CountDownLatch(1);
+        Callable<Boolean> retry=()->{start.await();return requests.claim(f.owner,f.work,newKey,"next");};
+        try{
+            var first=pool.submit(retry);var second=pool.submit(retry);start.countDown();
+            assertNotEquals(first.get(10,TimeUnit.SECONDS),second.get(10,TimeUnit.SECONDS));
+        }finally{pool.shutdownNow();}
+        assertEquals(2,reservations());
+        assertEquals(1,budget.allowance(f.owner,Kind.LYRICS).active());
+        var saves=new AtomicInteger();
+        assertThrows(DomainException.class,()->requests.completeWithRevision(f.work,oldKey,f.revision,saves::incrementAndGet));
+        assertEquals(0,saves.get());
+        requests.completeWithRevision(f.work,newKey,f.revision,saves::incrementAndGet);
+        assertEquals(1,saves.get());
+        assertEquals("UNKNOWN",composer.requestState(f.owner,f.work,oldKey).status());
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(booleans={false,true})
+    void deletedWorkReleasesPendingSlotAndFencesAnAlreadyRunningWriter(boolean legacyDelete){
+        String owner=identity.create().creatorId();
+        var draft=works.create(owner,new WorkApi.Draft("","","Draft","","",""));
+        String key=UUID.randomUUID().toString();
+        assertTrue(requests.claim(owner,draft.id(),key,"hash"));
+        assertEquals(1,budget.allowance(owner,Kind.LYRICS).active());
+        if (legacyDelete) jdbc.update("UPDATE music_work SET deleted_at=CURRENT_TIMESTAMP WHERE id=?",draft.id());
+        else works.delete(owner,draft.id(),false);
+        assertEquals(0,budget.allowance(owner,Kind.LYRICS).active());
+        var saves=new AtomicInteger();
+        assertThrows(DomainException.class,()->requests.completeWithRevision(draft.id(),key,UUID.randomUUID().toString(),saves::incrementAndGet));
+        assertEquals(0,saves.get());
+        var next=fixture(owner);
+        assertNotNull(composer.compose(owner,next.work,0,UUID.randomUUID().toString(),"en").id());
+        assertEquals(2,reservations());
     }
     @Test void revisionSaveFailureRollsBackCompletionAndRequestStatusIsOwnerScoped(){
         var f=fixture();String key=UUID.randomUUID().toString();requests.claim(f.owner,f.work,key,"hash");

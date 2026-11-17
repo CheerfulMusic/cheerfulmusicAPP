@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { lyricTimeoutMessage } from '../model/lyric-recovery'
 import CreditCostHint from '../../../shared/credits/CreditCostHint.vue'
 import { useCredits } from '../../../shared/credits/useCredits'
 import { guardCredits } from '../../../shared/credits/credit-gate'
@@ -26,7 +27,7 @@ const language=ref<string>(['zh-CN','en','mixed'].includes(String(route.query.la
 const routeStructure=lyricsStructureFromQuery(route.query)
 const hasRouteStructure=route.query.templateId===routeStructure.templateId
 const structure=ref<LyricsStructure>(routeStructure)
-const errorKind=ref<'load'|'save'|'compose'>('save'),requestWaiting=ref(false),requestChecking=ref(false)
+const errorKind=ref<'load'|'save'|'compose'>('save'),requestWaiting=ref(false),requestChecking=ref(false),retryReleased=ref(false)
 const blocked=computed(()=>loading.value||composing.value||preparing.value||requestWaiting.value||requestChecking.value)
 const draftValue=()=>({title:title.value.trim(),lyrics:text.value})
 const dirty=computed(()=>!loading.value&&JSON.stringify(draftValue())!==baseline.value)
@@ -193,7 +194,7 @@ function noNewLyrics(lyrics:string, attempt:FullRewriteAttempt){
  return !body||body===comparableLyrics(attempt.source)
 }
 function clearComposeRequest(){
- requestKey.value='';pendingFullRewrite.value=undefined;requestWaiting.value=false
+ requestKey.value='';pendingFullRewrite.value=undefined;requestWaiting.value=false;retryReleased.value=false
 }
 function reportUnchangedRewrite(){
  clearComposeRequest();retryFullRewrite=true;errorKind.value='compose';notice.value='';error.value=unchangedRewrite
@@ -204,7 +205,8 @@ async function recoverRequest(){
   try{
     const state=await getLyricsRequest(props.work.id,key)
     if(!alive||key!==requestKey.value)return
-    requestWaiting.value=state.status==='PENDING'||state.status==='UNKNOWN'
+    requestWaiting.value=state.status==='PENDING'
+    retryReleased.value=state.status==='UNKNOWN'
     if(state.status==='NOT_FOUND'){
       notice.value=''
       if(!error.value){errorKind.value='compose';error.value='暂未查到上次编写结果，可以使用原请求重试。'}
@@ -226,7 +228,7 @@ async function recoverRequest(){
         await syncRoute(found.id)
       }
       clearComposeRequest();retryFullRewrite=false;error.value='';notice.value=sameDraft?'新歌词已生成，旧版本已保留。你可以继续修改。':'上次编写的歌词已找回，可在历史版本中查看。'
-    }else if(state.status==='UNKNOWN')notice.value='歌词编写结果待确认，请刷新编写状态。'
+    }else if(retryReleased.value){errorKind.value='compose';error.value=lyricTimeoutMessage;notice.value=''}
     else if(requestWaiting.value)notice.value='歌词仍在编写中，可以稍后刷新编写状态。'
     remember();void updateCredits()
   }finally{requestChecking.value=false}
@@ -310,7 +312,15 @@ async function compose(rewrite=false){
   retryFullRewrite=!!attempt
   composing.value=true;error.value='';notice.value='';errorKind.value='compose';creditShort.value=false
   try{
-    if(!requestKey.value){
+    if(retryReleased.value){
+      await recoverRequest()
+      if(!alive||!retryReleased.value)return
+      // Keep the old key until the new request has passed the price check.
+      error.value='';notice.value=''
+      await refreshCredits()
+      if(await blockedByCredits()||!alive)return
+      clearComposeRequest()
+    }else if(!requestKey.value){
       await refreshCredits()
       if(await blockedByCredits()||!alive)return
     }

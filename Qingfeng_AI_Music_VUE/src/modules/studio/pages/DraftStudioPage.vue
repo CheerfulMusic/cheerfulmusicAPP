@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { lyricTimeoutMessage } from '../../works/model/lyric-recovery'
 import CreationMusicChoices from '../components/CreationMusicChoices.vue'
 import InspirationPanel from '../components/InspirationPanel.vue'
 import {chooseInspiration,creationMode,chooseCreationStyle,inspirationLimit,type CreationMode} from '../model/creation-mode'
@@ -423,21 +424,21 @@ async function continueMaking() {
           await router.push({path:`/works/${work.id}`,query:{revision:legacy.revisionId,language:language.value,...lyricsStructureQuery(previousStructure)}})
           return
         }
-        if(legacy.status==='PENDING'||legacy.status==='UNKNOWN')throw new Error('歌词仍在编写中，可以稍后刷新编写状态。')
+        if(legacy.status==='PENDING')throw new Error('歌词仍在编写中，可以稍后刷新编写状态。')
       }
     }
     let key=continuationRequestKey(prepared.id,prepared.version,language.value,structureKey)
     const previous=await getLyricsRequest(prepared.id,key)
     if(previous.status==='SUCCEEDED'&&previous.revisionId){if(alive&&turn===initSequence)await router.push({path:`/works/${work.id}`,query:{revision:previous.revisionId,language:language.value,...lyricsStructureQuery(chosenStructure)}});return}
-    if(previous.status==='PENDING'||previous.status==='UNKNOWN')throw new Error('歌词仍在编写中，可以稍后刷新编写状态。')
-    if(previous.status==='FAILED'){retireContinuationRequestKey(prepared.id,prepared.version,language.value,structureKey);key=continuationRequestKey(prepared.id,prepared.version,language.value,structureKey)}
+    if(previous.status==='PENDING')throw new Error('歌词仍在编写中，可以稍后刷新编写状态。')
+    if(previous.status==='FAILED'||previous.status==='UNKNOWN'){retireContinuationRequestKey(prepared.id,prepared.version,language.value,structureKey);key=continuationRequestKey(prepared.id,prepared.version,language.value,structureKey)}
     await refreshCredits()
     if(!alive||turn!==initSequence||await blockedByCredits()||!alive||turn!==initSequence)return
     lastSubmittedStructure=chosenStructure
     remember(true)
     const revision=await generateLyrics(prepared.id,prepared.version,key,language.value,'',undefined,chosenStructure)
     if(alive&&turn===initSequence)await router.push({path:`/works/${work.id}`,query:{revision:revision.id,language:language.value,...lyricsStructureQuery(chosenStructure)}})
-  } catch(e){if(alive&&turn===initSequence){quickSession.abortPreparation();continuationFailed.value=writing;error.value=e instanceof Error?e.message:'歌词生成失败，请稍后再试'}}
+  } catch(e){if(alive&&turn===initSequence){quickSession.abortPreparation();continuationFailed.value=writing;error.value=e instanceof ApiError&&['LYRICS_PROVIDER_TIMEOUT','LYRICS_PROVIDER_NETWORK_ERROR','LYRICS_REQUEST_INTERRUPTED'].includes(e.code||'')?lyricTimeoutMessage:e instanceof Error?e.message:'歌词生成失败，请稍后再试'}}
   finally{if(turn===initSequence){composing.value=false;void refreshCredits().catch(()=>{})}}
 }
 async function returnToLyrics(){

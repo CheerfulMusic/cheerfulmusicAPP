@@ -402,3 +402,37 @@ it('ignores a late suggestion when the lyric draft changes during rewriting', as
   expect(editor.element.value).toBe('我已经手动改了歌词')
   expect(panel.find('.remake-lyrics-preview').exists()).toBe(false)
 })
+
+it.each([false, true])('checks the timed-out rewrite before retry (late revision: %s)', async late => {
+  vi.stubGlobal('confirm', vi.fn(() => true))
+  const panel = mount(LyricsPanel, { props: { work } })
+  try {
+    await flushPromises()
+    const editor = panel.get<HTMLTextAreaElement>('textarea')
+    const source = '[Verse]\n门外的风依旧温柔'
+    await editor.setValue(source)
+    const changed = { ...revision, id: 'retry-result', lyrics: '[Verse]\n窗前仍有晚风相伴' }
+    const unknown = { status: 'UNKNOWN', revisionId: null, errorCode: 'LYRICS_PROVIDER_TIMEOUT' }
+    api.compose.mockRejectedValueOnce(new ApiError('timeout', 409, 'LYRICS_PROVIDER_TIMEOUT')).mockResolvedValueOnce(changed)
+    api.requestState.mockResolvedValueOnce(unknown).mockResolvedValueOnce(late
+      ? { status: 'SUCCEEDED', revisionId: changed.id, errorCode: null } : unknown)
+    api.revisionById.mockResolvedValueOnce(changed)
+    await panel.get('.lyric-rewrite-all').trigger('click')
+    await panel.get('.lyric-selection-dialog').findAll('button').find(button => button.text() === '全部重写')!.trigger('click')
+    await flushPromises()
+    expect(panel.get('.notice.error').text()).toContain('本次歌词生成超时，可以重试。')
+    expect(editor.element.value).toBe(source)
+    const key = api.compose.mock.calls[0]?.[2]
+    expect(api.compose).toHaveBeenCalledTimes(1)
+    await panel.get('.notice.error button').trigger('click')
+    await flushPromises()
+    expect(api.requestState.mock.calls).toEqual([[work.id, key], [work.id, key]])
+    expect(api.compose).toHaveBeenCalledTimes(late ? 1 : 2)
+    if (!late) {
+      expect(api.compose.mock.calls[1]?.[2]).not.toBe(key)
+      expect(api.compose.mock.calls[1]?.[7]).toBe(source)
+      api.revisionById.mockReset()
+    }
+    expect(editor.element.value).toBe(changed.lyrics)
+  } finally { vi.unstubAllGlobals() }
+})

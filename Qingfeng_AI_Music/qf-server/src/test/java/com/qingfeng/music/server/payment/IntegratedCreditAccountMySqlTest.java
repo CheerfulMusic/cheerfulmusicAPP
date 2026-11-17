@@ -426,12 +426,13 @@ class IntegratedCreditAccountMySqlTest {
         var p=paid();var old=new JdbcCreditsLedger(db,tx);assertThrows(DataAccessException.class,()->old.credit(p.owner(),30,"raw-old:"+unique()));assertEquals(100,ledger.balance(p.owner()));
     }
 
-    @Test void lyricsUnknownRetainsOriginalDebitAndCapacityAndLateSuccessCompletesWithoutRecharging(){
+    @Test void lyricsUnknownReleasesCapacityButRetainsTheOriginalDebitAndLateResult(){
         String owner=newOwner(),work=work(owner),key=unique();ledger.credit(owner,20,"lyrics-fund:"+owner);var budget=budget();var requests=new JdbcCompositionRequests(db,budget,tx,ledger,new JdbcCreditConsumptions(db,tx));
         assertTrue(requests.claim(owner,work,key,"synthetic-request"));assertEquals(15,ledger.balance(owner));requests.unknown(work,key,"LYRICS_PROVIDER_TIMEOUT");
-        assertEquals("UNKNOWN",requests.find(work,key).orElseThrow().status());assertEquals(15,ledger.balance(owner));assertEquals(1,budget.allowance(owner,UsageBudget.Kind.LYRICS).active());
-        db.update("UPDATE lyrics_composition_request SET created_at=TIMESTAMPADD(SECOND,-600,CURRENT_TIMESTAMP) WHERE work_id=? AND request_key=?",work,key);
-        assertEquals(1,budget.allowance(owner,UsageBudget.Kind.LYRICS).active());assertFalse(requests.claim(owner,work,unique(),"different-request"));requests.complete(work,key,unique());
+        assertEquals("UNKNOWN",requests.find(work,key).orElseThrow().status());assertEquals(15,ledger.balance(owner));
+        assertEquals(0,budget.allowance(owner,UsageBudget.Kind.LYRICS).active());
+        assertFalse(requests.claim(owner,work,key,"synthetic-request"));
+        requests.complete(work,key,unique());
         assertEquals("SUCCEEDED",requests.find(work,key).orElseThrow().status());assertEquals(15,ledger.balance(owner));assertEquals(0,budget.allowance(owner,UsageBudget.Kind.LYRICS).active());assertEquals(0,number("SELECT COUNT(*) FROM credit_ledger WHERE owner_id=? AND entry_type='REFUND'",owner));
     }
     private static String work(String owner){String id=unique();db.update("INSERT INTO creator_session(token_hash,creator_id,expires_at) VALUES(?,?,TIMESTAMPADD(HOUR,1,CURRENT_TIMESTAMP))",unique(),owner);db.update("INSERT INTO music_work(id,owner_id,recipient,occasion,story,message,style,title,version,created_at,updated_at) VALUES(?,?,'offline','birthday','fiction','message','pop','synthetic',0,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)",id,owner);return id;}

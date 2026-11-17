@@ -6,6 +6,10 @@ import type {QuickCreation} from '../src/modules/studio/api/quick-creation'
 
 const mocks=vi.hoisted(()=>({latest:vi.fn(),retry:vi.fn()}))
 vi.mock('../src/modules/studio/api/quick-creation',()=>({latestQuickCreation:mocks.latest,retryQuickCreation:mocks.retry,quickInProgress:(s:string)=>['QUEUED','WRITING','LYRICS_READY','SUBMITTING_MUSIC','MUSIC_QUEUED','SUBMITTING','RUNNING','SAVING','SUBMISSION_UNKNOWN'].includes(s)}))
+vi.mock('../src/shared/credits/useCredits', async () => {
+ const {ref}=await import('vue')
+ return {useCredits:()=>({credits:ref({enabled:true,balance:100,lyricsNextCost:5,musicCost:10}),refreshCredits:async()=>{}})}
+})
 let app:App|undefined
 const flow=(status:string,extra:Partial<QuickCreation>={}):QuickCreation=>({id:'flow-a',workId:'work-a',status,revisionId:null,taskId:null,errorCode:null,canRetry:false,createdAt:new Date().toISOString(),...extra})
 async function flush(){for(let i=0;i<8;i++)await nextTick()}
@@ -142,4 +146,14 @@ it('queries an uncertain submission without reopening a dialog dismissed during 
  expect(mocks.latest).toHaveBeenCalledOnce();expect(mocks.retry).not.toHaveBeenCalled()
  expect(document.querySelector<HTMLDialogElement>('dialog')?.open).toBe(false);expect(view).not.toHaveBeenCalled()
  click('查看生成进度');await flush();expect(document.querySelector<HTMLDialogElement>('dialog')?.open).toBe(true)
+})
+
+it('shows the price before retrying timed-out lyrics and ignores a double click',async()=>{
+ mocks.latest.mockResolvedValue(flow('FAILED',{errorCode:'LYRICS_SUBMISSION_UNKNOWN',canRetry:true}))
+ mount(false,'navigate');await flush()
+ expect(document.body.textContent).toContain('本次歌词生成超时，可以重试。')
+ expect(document.body.textContent).toContain('重试预计消耗 15 积分')
+ expect(mocks.retry).not.toHaveBeenCalled()
+ click('重试歌词生成');click('重试歌词生成');await flush()
+ expect(mocks.retry).toHaveBeenCalledExactlyOnceWith('work-a','flow-a')
 })

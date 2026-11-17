@@ -80,28 +80,36 @@ class QuickCreationIntegrationTest {
         assertFalse(service.runOnce());assertEquals(calls+1,writer.calls.get());
         writer.failureCode=null;service.retry(owner,work.id(),flow.id());service.runOnce();assertNotNull(service.get(owner,work.id(),flow.id()).taskId());
     }
-    @Test void unknownLyricsSubmissionIsNotRepeatedAndAppearsInTheWorkLibrary(){
+    @Test void timedOutLyricsStopUntilAnExplicitRetry(){
         writer.failureCode="LYRICS_PROVIDER_NETWORK_ERROR";
         var flow=start();
         int calls=writer.calls.get(),songs=music.purchases.get();
         assertTrue(service.runOnce());
 
         var stopped=service.get(owner,work.id(),flow.id());
-        assertEquals("SUBMISSION_UNKNOWN",stopped.status());
+        assertEquals("FAILED",stopped.status());
         assertEquals("LYRICS_SUBMISSION_UNKNOWN",stopped.errorCode());
         assertNull(stopped.revisionId());
         assertNull(stopped.taskId());
-        assertFalse(stopped.canRetry());
-        assertEquals("CHECKING",library.list(owner,0).get(0).status());
+        assertTrue(stopped.canRetry());
+        assertEquals("GENERATION_FAILED",library.list(owner,0).get(0).status());
 
         var entry=repository.find(work.id(),flow.id()).orElseThrow();
         assertEquals("UNKNOWN",composer.requestState(owner,work.id(),entry.lyricsKey()).status());
-        assertEquals("LYRICS_REQUEST_PENDING",assertThrows(DomainException.class,()->service.retry(owner,work.id(),flow.id())).code());
-        assertEquals("QUICK_CREATION_PENDING",assertThrows(DomainException.class,this::start).code());
         assertEquals(flow.id(),service.start(owner,work.id(),work.version(),entry.requestKey(),"zh-CN").id());
         assertFalse(service.runOnce());
         assertEquals(calls+1,writer.calls.get());
         assertEquals(songs,music.purchases.get());
+
+        // Older application versions left this same timeout in SUBMISSION_UNKNOWN.
+        jdbc.update("UPDATE quick_creation SET status='SUBMISSION_UNKNOWN' WHERE id=?",flow.id());
+        assertTrue(service.get(owner,work.id(),flow.id()).canRetry());
+        writer.failureCode=null;
+        service.retry(owner,work.id(),flow.id());
+        assertThrows(DomainException.class,()->service.retry(owner,work.id(),flow.id()));
+        assertTrue(service.runOnce());
+        assertEquals(calls+2,writer.calls.get());
+        assertEquals(songs+1,music.purchases.get());
     }
     @Test void musicFailureKeepsSuccessfulLyricsAndRetryDoesNotWriteAnotherVersion(){
         music.reject=true;var flow=start();int calls=writer.calls.get();service.runOnce();
@@ -140,9 +148,8 @@ class QuickCreationIntegrationTest {
         service.runOnce();assertEquals("WRITING",service.get(owner,work.id(),flow.id()).status());assertEquals(before,writer.calls.get());
         jdbc.update("UPDATE lyrics_composition_request SET created_at=TIMESTAMPADD(SECOND,-181,CURRENT_TIMESTAMP) WHERE work_id=? AND request_key=?",work.id(),entry.lyricsKey());
         due(flow.id());assertTrue(service.runOnce());var unknown=service.get(owner,work.id(),flow.id());
-        assertEquals("SUBMISSION_UNKNOWN",unknown.status());assertEquals("LYRICS_SUBMISSION_UNKNOWN",unknown.errorCode());assertFalse(unknown.canRetry());assertNull(unknown.taskId());
+        assertEquals("FAILED",unknown.status());assertEquals("LYRICS_SUBMISSION_UNKNOWN",unknown.errorCode());assertTrue(unknown.canRetry());assertNull(unknown.taskId());
         assertEquals("UNKNOWN",composer.requestState(owner,work.id(),entry.lyricsKey()).status());
-        assertEquals("LYRICS_REQUEST_PENDING",assertThrows(DomainException.class,()->service.retry(owner,work.id(),flow.id())).code());
         assertFalse(service.runOnce());assertEquals(before,writer.calls.get());assertEquals(purchases,music.purchases.get());
     }
     @Test void aCompletedLyricWhoseCheckpointWasLostIsReusedAfterRestart(){
@@ -150,6 +157,33 @@ class QuickCreationIntegrationTest {
         var revision=composer.compose(owner,work.id(),work.version(),entry.lyricsKey(),"zh-CN");int before=writer.calls.get();
         service.runOnce();assertEquals(revision.id(),service.get(owner,work.id(),flow.id()).revisionId());assertEquals(before,writer.calls.get());
     }
+    @Test void deletingDraftStopsLeasedQuickWorkAndAllowsANewDraft(){
+        var flow=start();
+        assertTrue(repository.claim("offline-lease").isPresent());
+        works.delete(owner,work.id(),false);
+        assertFalse(repository.checkpoint(flow.id(),"offline-lease","QUEUED",null,null,null,0));
+        assertEquals("FAILED",jdbc.queryForObject("SELECT status FROM quick_creation WHERE id=?",String.class,flow.id()));
+        assertFalse(service.runOnce());
+        var next=works.create(owner,new WorkApi.Draft("","","Next draft","","",""));
+        assertEquals("QUEUED",service.start(owner,next.id(),next.version(),UUID.randomUUID().toString(),"en").status());
+        works.delete(owner,next.id(),false);
+    }
+
+    @Test void quickRetryReusesLyricsThatArrivedAfterTimeout(){
+        var flow=start();
+        var entry=repository.find(work.id(),flow.id()).orElseThrow();
+        assertTrue(requests.claim(owner,work.id(),entry.lyricsKey(),"offline-original"));
+        requests.unknown(work.id(),entry.lyricsKey(),"LYRICS_PROVIDER_TIMEOUT");
+        assertTrue(service.runOnce());
+        var revision=lyrics.save(owner,work.id(),work.version(),"Late", "[Chorus]\nLate lyrics");
+        requests.complete(work.id(),entry.lyricsKey(),revision.id());
+        int before=writer.calls.get();
+        service.retry(owner,work.id(),flow.id());
+        assertTrue(service.runOnce());
+        assertEquals(revision.id(),service.get(owner,work.id(),flow.id()).revisionId());
+        assertEquals(before,writer.calls.get());
+    }
+
     @Test void changingOrDeletingWorkStopsQueuedCreationAndOtherOwnersCannotReadIt(){
         var flow=start();String stranger=identity.create().creatorId();
         assertThrows(DomainException.class,()->service.get(stranger,work.id(),flow.id()));

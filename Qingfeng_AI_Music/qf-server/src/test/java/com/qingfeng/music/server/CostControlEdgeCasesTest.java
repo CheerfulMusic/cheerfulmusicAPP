@@ -220,10 +220,8 @@ class CostControlEdgeCasesTest {
         assertEquals(0, rows.get(0).refunded());
         assertEquals(LYRICS_COST, rows.get(0).amount());
         assertEquals("LYRICS_REQUEST_PENDING",assertThrows(DomainException.class,()->composer.compose(owner,work,0,key,"zh-CN")).code());
-        assertEquals("LYRICS_REQUEST_PENDING",assertThrows(DomainException.class,()->composer.compose(owner,work,0,UUID.randomUUID().toString(),"zh-CN")).code());
         assertEquals(1,lyricsWriter.calls.get());assertEquals(fund-LYRICS_COST,credits.balance(owner));
-        jdbc.update("UPDATE lyrics_composition_request SET created_at=TIMESTAMPADD(SECOND,-600,CURRENT_TIMESTAMP) WHERE work_id=? AND request_key=?",work,key);
-        assertEquals(1,usageBudget.allowance(owner,Kind.LYRICS).active(),"时间经过不能释放未知供应商任务的额度");
+        assertEquals(0,usageBudget.allowance(owner,Kind.LYRICS).active());
         requests.complete(work,key,UUID.randomUUID().toString());
         assertEquals("SUCCEEDED",requests.find(work,key).orElseThrow().status());assertEquals(fund-LYRICS_COST,credits.balance(owner));
         var completed=consumptions(owner);assertEquals(1,completed.size());assertEquals("SUCCEEDED",completed.get(0).status());assertEquals(0,completed.get(0).refunded());
