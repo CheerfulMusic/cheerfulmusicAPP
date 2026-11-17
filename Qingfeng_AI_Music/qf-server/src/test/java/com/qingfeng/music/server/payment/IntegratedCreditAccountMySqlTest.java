@@ -148,6 +148,25 @@ class IntegratedCreditAccountMySqlTest {
         assertEquals(before,ledger.balance(legacy.owner()));
         assertThrows(DataAccessException.class,()->db.update("UPDATE p0_credit_writer_policy SET protocol=1 WHERE id=1"));
     }
+    @Test void chargesAndRefundsWhenConnectionAndWriterEpochUseDifferentCollations(){
+        String owner=newOwner(),reference="music:"+unique();
+        tx.executeWithoutResult(status->{
+            String epochCollation=db.queryForObject("SELECT COLLATION(epoch) FROM p0_credit_writer_policy WHERE id=1",String.class);
+            String connectionCollation="utf8mb4_0900_ai_ci".equals(epochCollation)?"utf8mb4_unicode_ci":"utf8mb4_0900_ai_ci";
+            db.execute("SET NAMES utf8mb4 COLLATE "+connectionCollation);
+            assertEquals(connectionCollation,db.queryForObject("SELECT @@collation_connection",String.class));
+
+            ledger.credit(owner,100,"admin:"+unique());
+            ledger.debit(owner,20,reference);
+            ledger.debit(owner,20,reference);
+            assertEquals(80,ledger.balance(owner));
+            assertEquals(1,number("SELECT COUNT(*) FROM credit_ledger WHERE entry_type='DEBIT' AND reference_id=?",reference));
+
+            ledger.refund(owner,reference);
+            assertEquals(100,ledger.balance(owner));
+            assertNull(db.queryForObject("SELECT @qf_credit_writer_epoch",String.class));
+        });
+    }
     @Test void successfulThenFailedRefundRestoresOnceAndRejectsStaleSuccess(){
         var p=paid();String refund="re_"+unique(),movement="txn_"+unique();success(p,refund,198);assertEquals(80,ledger.balance(p.owner()));
         assertThrows(IllegalStateException.class,()->failed(p,refund,198,"failed"));assertEquals(80,ledger.balance(p.owner()));

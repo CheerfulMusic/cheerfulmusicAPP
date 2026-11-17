@@ -30,12 +30,13 @@ public final class JdbcFencedCreditsLedger implements CreditsLedger {
             if(owner==null||owner.isBlank()||db.queryForList("SELECT id FROM creator WHERE id=? FOR UPDATE",owner).isEmpty())
                 throw new DomainException("CREDIT_OWNER_MISSING","账号不存在。");
             // Shared policy locks permit independent owners to progress. No global credit_lock is taken.
-            var policy=db.queryForMap("SELECT epoch,protocol FROM p0_credit_writer_policy WHERE id=1"+(mysql?" FOR SHARE":""));
-            if(((Number)policy.get("protocol")).intValue()!=3)throw new IllegalStateException("Unsupported credit writer protocol");
+            Integer protocol=db.queryForObject("SELECT protocol FROM p0_credit_writer_policy WHERE id=1"+(mysql?" FOR SHARE":""),Integer.class);
+            if(!Integer.valueOf(3).equals(protocol))throw new IllegalStateException("Unsupported credit writer protocol");
             if(!"ACTIVE".equals(db.queryForObject("SELECT status FROM p0_credit_cutover_state WHERE id=1",String.class)))
                 throw new IllegalStateException("LEGACY_CUTOVER_NOT_ACTIVE");
             Object previous=mysql?db.queryForObject("SELECT @qf_credit_writer_epoch",String.class):null;
-            if(mysql)db.update("SET @qf_credit_writer_epoch=?",policy.get("epoch"));
+            // Read the locked epoch in MySQL so the variable keeps the column's collation.
+            if(mysql)db.execute("SET @qf_credit_writer_epoch=(SELECT epoch FROM p0_credit_writer_policy WHERE id=1 FOR SHARE)");
             try{delegate.lockedBalance(owner);action.run();}finally{if(mysql)db.update("SET @qf_credit_writer_epoch=?",previous);}
         });
     }
