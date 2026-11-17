@@ -88,8 +88,8 @@
 .discover-genre { max-width: 100%; min-height: 48px; padding: 8px 12px; border: 1px solid var(--discover-line); border-radius: 32px; background: var(--discover-card); color: var(--discover-ink); font: inherit; font-size: .93rem; }
 .discover-query { display: flex; align-items: center; gap: 12px; margin: 0 0 16px; color: var(--discover-muted); overflow-wrap: anywhere; }
 .discover-songs, .discover-side-list { list-style: none; margin: 0; padding: 0; }
-.discover-songs { display: grid; grid-template-columns: repeat(5,minmax(0,1fr)); gap: 14px; }
-.discover-song { min-width: 0; padding: clamp(8px, .8vw, 12px); border-radius: 23px; background: var(--discover-card); box-shadow: inset 0 0 0 1px var(--discover-line), 0 10px 27px #25253c08; }
+.discover-songs { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 18px; }
+.discover-song { min-width: 0; padding: clamp(8px, .9vw, 14px); border-radius: 23px; background: var(--discover-card); box-shadow: inset 0 0 0 1px var(--discover-line), 0 10px 27px #25253c08; }
 .discover-art { position: relative; overflow: hidden; aspect-ratio: 1 / 1; border-radius: 15px; background: var(--discover-tint); }
 .discover-art > img { display: block; width: 100%; height: 100%; object-fit: cover; }
 .discover-play { position: absolute; inset: auto auto 10px 12px; display: grid; place-items: center; width: 41px; height: 41px; border: 0; border-radius: 50%; background: #fffdfb; color: #35252e; box-shadow: 0 2px 12px #39192c26; }
@@ -125,13 +125,10 @@
 .discover-message { padding: 30px 20px; border-radius: 20px; background: var(--discover-card); color: var(--discover-muted); }
 .discover-message p { margin: 0 0 10px; color: inherit; }
 .discover-more { margin-top: 20px; text-align: center; }
-@media (max-width: 1200px) {
-  .discover-songs { grid-template-columns: repeat(4,minmax(0,1fr)); }
-}
 @media (max-width: 1050px) {
   .discover-header-inner { gap: 22px; }
   .discover-content { grid-template-columns: minmax(0,1.85fr) minmax(232px,1fr); }
-  .discover-songs { grid-template-columns: repeat(3,minmax(0,1fr)); }
+  .discover-songs { grid-template-columns: repeat(2,minmax(0,1fr)); }
 }
 @media (max-width: 760px) {
   .discover-header-inner { grid-template-columns: auto 1fr auto; gap: 5px 16px; padding-block: 10px; }
@@ -160,7 +157,7 @@
   .discover-toolbar { gap: 6px; }
   .discover-tabs button { min-width: 0; min-height: 42px; padding-inline: 11px; }
   .discover-genre { min-height: 40px; padding-inline: 6px; font-size: .82rem; }
-  .discover-songs { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px; }
+  .discover-songs { gap: 10px; }
   .discover-song { border-radius: 16px; }
   .discover-art { border-radius: 10px; }
   .discover-play { width: 35px; height: 35px; inset: auto auto 6px 6px; }
