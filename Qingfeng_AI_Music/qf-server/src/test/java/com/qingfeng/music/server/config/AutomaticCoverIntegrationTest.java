@@ -500,7 +500,7 @@ class AutomaticCoverIntegrationTest {
 
 @EnabledIfEnvironmentVariable(named="QF_EXECUTION_MYSQL_TEST_PORT", matches="57[0-9]{3}")
 @TestPropertySource(properties = {
-    "spring.datasource.url=jdbc:mysql://127.0.0.1:${QF_EXECUTION_MYSQL_TEST_PORT}/qf_automatic_cover_test?allowPublicKeyRetrieval=true&useSSL=false&connectionCollation=utf8mb4_0900_ai_ci&serverTimezone=UTC",
+    "spring.datasource.url=jdbc:mysql://127.0.0.1:${QF_EXECUTION_MYSQL_TEST_PORT}/qf_execution_concurrency_test?allowPublicKeyRetrieval=true&useSSL=false&connectionCollation=utf8mb4_0900_ai_ci&serverTimezone=UTC",
     "spring.datasource.username=root", "spring.datasource.password=",
     "spring.datasource.driver-class-name=com.mysql.cj.jdbc.Driver"
 })
