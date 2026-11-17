@@ -35,6 +35,7 @@ import static org.junit.jupiter.api.Assertions.*;
         "qingfeng.agent.admission.user-rpm=60", "qingfeng.agent.admission.user-daily-tokens=10000000"})
 @ActiveProfiles("test")
 @Import(AgentChatFlowIntegrationTest.Offline.class)
+@org.springframework.test.context.jdbc.Sql(scripts="classpath:db/migration/V47__music_video_projects.sql", executionPhase=org.springframework.test.context.jdbc.Sql.ExecutionPhase.BEFORE_TEST_CLASS)
 class AgentChatFlowIntegrationTest {
     @TestConfiguration(proxyBeanMethods=false)
     static class Offline {
