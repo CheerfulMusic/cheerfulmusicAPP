@@ -30,8 +30,9 @@ class QuickCreationIntegrationTest {
         // drop existing data, ignore DDL failures, or accept a partial schema.
         var tables=new HashSet<String>();
         try(var connection=jdbc.getDataSource().getConnection();
-            var rows=connection.getMetaData().getTables(connection.getCatalog(),connection.getSchema(),"%",new String[]{"TABLE"})) {
-            while(rows.next())tables.add(rows.getString("TABLE_NAME").toLowerCase(Locale.ROOT));
+            var rows=connection.getMetaData().getTables(connection.getCatalog(),connection.getSchema(),"%",null)) {
+            while(rows.next())if(Set.of("TABLE","BASE TABLE").contains(rows.getString("TABLE_TYPE")))
+                tables.add(rows.getString("TABLE_NAME").toLowerCase(Locale.ROOT));
         }
         boolean projects=tables.contains("music_video_project"),shots=tables.contains("music_video_shot");
         assertEquals(projects,shots,"MV projection fixture is only partially installed");
