@@ -368,6 +368,7 @@ async function refreshCover(id: string, turn: number) {
 const coverTimer = window.setInterval(() => {
   const id = work.value?.id
   if (id && document.visibilityState === 'visible' && (covers.value?.automaticPending ||
+      (!covers.value?.version && pendingTask.value) ||
       covers.value?.edits.some(edit => ['QUEUED','SUBMITTING','RUNNING','SAVING'].includes(edit.status))))
     void refreshCover(id, sequence)
 }, 5000)

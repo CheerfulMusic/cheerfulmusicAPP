@@ -17,10 +17,15 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.time.Instant;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import javax.imageio.ImageIO;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.TestConfiguration;
@@ -72,7 +77,7 @@ class AutomaticCoverIntegrationTest {
                 """);
     }
 
-    @Test void submissionWaitsForAudioSavedByAnotherDeployment() {
+    @Test void submissionStartsCoverBeforeAudioSavedByAnotherDeployment() {
         String owner = identity.create().creatorId();
         var work = works.create(owner, new WorkApi.Draft("朋友", "生日", "故事", "祝福", "民谣", "歌曲"));
         var revision = lyrics.save(owner, work.id(), 0, "歌名", "雨夜的末班车");
@@ -80,17 +85,149 @@ class AutomaticCoverIntegrationTest {
         String key = uuid();
         var task = generation.submit(owner, work.id(), revision.id(), key);
         assertEquals(task.id(), generation.submit(owner, work.id(), revision.id(), key).id());
-        assertEquals("COVER_WAIT", eventState(task.id()));
-        assertTrue(jobs.claim(10000, Instant.now()).isEmpty());
-        String asset = media.store(task.id(), work.id(), new ByteArrayInputStream(wav()));
-        // Simulate an older remote worker which only archives audio and completes the music task.
-        db.update("UPDATE generation_task SET status='SUCCEEDED',asset_id=? WHERE id=?", asset, task.id());
+        assertEquals("COVER_QUEUED", eventState(task.id()));
         assertTrue(covers.state(owner, work.id()).automaticPending());
         var claim = jobs.claim(10000, Instant.now()).orElseThrow();
         assertEquals(task.id(), claim.task());
         assertEquals("COVER_QUEUED", claim.state());
+        assertNull(db.queryForObject("SELECT asset_id FROM generation_task WHERE id=?", String.class, task.id()));
+        String asset = media.store(task.id(), work.id(), new ByteArrayInputStream(wav()));
+        // Simulate an older remote worker which only archives audio and completes the music task.
+        db.update("UPDATE generation_task SET status='SUCCEEDED',asset_id=? WHERE id=?", asset, task.id());
+        assertTrue(covers.state(owner, work.id()).automaticPending());
+        assertTrue(jobs.claim(10000, Instant.now()).isEmpty());
         assertEquals(1, db.queryForObject("SELECT COUNT(*) FROM task_event_outbox WHERE topic='music.cover' AND event_key=?", Integer.class, task.id()));
         jobs.rejected(claim, "TEST_COMPLETE");
+    }
+
+    @Test void coverCanFinishBeforeMusicAndCompletionDoesNotGenerateItAgain() throws Exception {
+        var song = fixture();
+        jobs.enqueue(song.task);
+        var calls = new AtomicInteger();
+        byte[] image = image();
+        var runner = new AutomaticCoverConfiguration.Runner(jobs, prompt -> {
+            calls.incrementAndGet();
+            return "https://example.test/result.jpg";
+        }, covers, url -> new ByteArrayInputStream(image), 10000);
+        runner.run();
+        runner.run();
+        String cover = covers.current(song.work);
+        assertNotNull(cover);
+        assertEquals("SAVING", db.queryForObject("SELECT status FROM generation_task WHERE id=?", String.class, song.task));
+        assertEquals("COVER_DONE", state(song));
+        complete(song);
+        runner.run();
+        assertEquals(cover, covers.current(song.work));
+        assertEquals(1, calls.get());
+        assertEquals(1, db.queryForObject("SELECT COUNT(*) FROM task_event_outbox WHERE topic='music.cover' AND event_key=?", Integer.class, song.task));
+    }
+
+    @Test void musicCanCompleteWhileTheImageProviderIsStillRunning() throws Exception {
+        var song = fixture();
+        jobs.enqueue(song.task);
+        var started = new CountDownLatch(1);
+        var finishImage = new CountDownLatch(1);
+        byte[] image = image();
+        var runner = new AutomaticCoverConfiguration.Runner(jobs, prompt -> {
+            started.countDown();
+            if (!finishImage.await(10, TimeUnit.SECONDS)) throw new AssertionError("Music did not complete concurrently");
+            return "https://example.test/result.jpg";
+        }, covers, url -> new ByteArrayInputStream(image), 10000);
+        var pool = Executors.newSingleThreadExecutor();
+        try {
+            var drawing = pool.submit(runner::run);
+            assertTrue(started.await(5, TimeUnit.SECONDS));
+            complete(song);
+            assertEquals("SUCCEEDED", db.queryForObject("SELECT status FROM generation_task WHERE id=?", String.class, song.task));
+            try (var stream = media.open(song.owner, song.work, song.asset).source().open()) {
+                assertArrayEquals(wav(), stream.readAllBytes());
+            }
+            assertNull(covers.current(song.work));
+            finishImage.countDown();
+            drawing.get(5, TimeUnit.SECONDS);
+            runner.run();
+            assertNotNull(covers.current(song.work));
+        } finally {
+            finishImage.countDown();
+            pool.shutdownNow();
+        }
+    }
+
+    @ParameterizedTest @ValueSource(booleans = {false, true})
+    void manualCoverOrDefaultSelectedDuringImageGenerationIsKept(boolean restoreDefault) throws Exception {
+        var song = fixture();
+        jobs.enqueue(song.task);
+        String manual = restoreDefault ? null : covers.upload(song.owner, song.work, new ByteArrayInputStream(image())).id();
+        String release = release(song, song.asset);
+        var runner = new AutomaticCoverConfiguration.Runner(jobs, prompt -> {
+            covers.select(song.owner, song.work, manual, 0);
+            return "https://example.test/result.jpg";
+        }, covers, url -> { throw new AssertionError("Manual cover must take precedence"); }, 10000);
+        runner.run();
+        runner.run();
+        complete(song);
+        runner.run();
+        assertEquals(manual, covers.current(song.work));
+        assertEquals(1, covers.state(song.owner, song.work).version());
+        assertFalse(covers.state(song.owner, song.work).automaticPending());
+        assertEquals(manual, db.queryForObject("SELECT cover_id FROM artist_song_release WHERE id=?", String.class, release));
+        assertEquals("COVER_SKIPPED", state(song));
+    }
+
+    @Test void existingManualCoverDoesNotStartAutomaticDrawing() throws Exception {
+        var song = fixture();
+        String manual = covers.upload(song.owner, song.work, new ByteArrayInputStream(image())).id();
+        covers.select(song.owner, song.work, manual, 0);
+        jobs.enqueue(song.task);
+        assertTrue(jobs.claim(10000, Instant.now()).isEmpty());
+        assertEquals(0, db.queryForObject("SELECT COUNT(*) FROM task_event_outbox WHERE topic='music.cover' AND event_key=?", Integer.class, song.task));
+        assertEquals(manual, covers.current(song.work));
+    }
+
+    @ParameterizedTest @ValueSource(strings = {"FAILED", "CANCELLED"})
+    void musicFailureDuringImageGenerationDoesNotApplyTheLateImage(String status) {
+        var song = fixture();
+        jobs.enqueue(song.task);
+        var runner = new AutomaticCoverConfiguration.Runner(jobs, prompt -> {
+            db.update("UPDATE generation_task SET status=? WHERE id=?", status, song.task);
+            return "https://example.test/result.jpg";
+        }, covers, url -> { throw new AssertionError("Stopped music must not apply a late cover"); }, 10000);
+        runner.run();
+        runner.run();
+        assertNull(covers.current(song.work));
+        assertEquals("COVER_SKIPPED", state(song));
+        assertFalse(covers.state(song.owner, song.work).automaticPending());
+    }
+
+    @Test void legacyWaitingCoverStartsWhileMusicIsStillRunning() {
+        var song = fixture();
+        jobs.enqueue(song.task);
+        db.update("UPDATE task_event_outbox SET state='COVER_WAIT' WHERE topic='music.cover' AND event_key=?", song.task);
+        assertTrue(covers.state(song.owner, song.work).automaticPending());
+        var claim = jobs.claim(10000, Instant.now()).orElseThrow();
+        assertEquals(song.task, claim.task());
+        assertEquals("COVER_QUEUED", claim.state());
+        jobs.rejected(claim, "TEST_COMPLETE");
+    }
+
+    @Test void aNewerMusicTaskPreventsAnOlderCoverFromBeingApplied() {
+        var song = fixture();
+        jobs.enqueue(song.task);
+        var runner = new AutomaticCoverConfiguration.Runner(jobs, prompt -> {
+            String newer = uuid();
+            db.update("""
+                    INSERT INTO generation_task(id,work_id,revision_id,work_version,request_key,title,lyrics,style,
+                        provider,status,created_at,updated_at,next_attempt_at)
+                    SELECT ?,work_id,revision_id,work_version,?,title,lyrics,style,provider,'QUEUED',
+                        TIMESTAMPADD(SECOND,1,created_at),CURRENT_TIMESTAMP,CURRENT_TIMESTAMP
+                    FROM generation_task WHERE id=?
+                    """, newer, uuid(), song.task);
+            return "https://example.test/old-result.jpg";
+        }, covers, url -> { throw new AssertionError("The older cover was superseded"); }, 10000);
+        runner.run();
+        runner.run();
+        assertNull(covers.current(song.work));
+        assertEquals("COVER_SKIPPED", state(song));
     }
 
     @Test void cancelledMusicDoesNotTriggerAnImageCall() {

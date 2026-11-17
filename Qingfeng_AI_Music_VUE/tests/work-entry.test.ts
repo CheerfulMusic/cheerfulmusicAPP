@@ -3,7 +3,7 @@ import {afterEach,beforeEach,expect,it,vi} from 'vitest'
 import {createApp,nextTick,reactive,type App} from 'vue'
 import WorkDetailPage from '../src/modules/works/pages/WorkDetailPage.vue'
 import type {AudioAsset} from '../src/modules/works/api/detail'
-const api=vi.hoisted(()=>({work:vi.fn(),tasks:vi.fn(),system:vi.fn(),quick:vi.fn(),audio:vi.fn(),selection:vi.fn(),usage:vi.fn(),revision:vi.fn(),push:vi.fn(),paid:vi.fn(),publication:vi.fn(),lyricsReady:false,route:{params:{id:'work-a'},query:{}}}))
+const api=vi.hoisted(()=>({work:vi.fn(),tasks:vi.fn(),system:vi.fn(),quick:vi.fn(),audio:vi.fn(),selection:vi.fn(),usage:vi.fn(),revision:vi.fn(),push:vi.fn(),paid:vi.fn(),publication:vi.fn(),covers:vi.fn(),lyricsReady:false,route:{params:{id:'work-a'},query:{}}}))
 vi.mock('vue-router',()=>({useRoute:()=>reactive(api.route),useRouter:()=>({push:api.push}),onBeforeRouteLeave:vi.fn(),onBeforeRouteUpdate:vi.fn()}))
 vi.mock('../src/modules/studio',()=>({loadWork:api.work}))
 vi.mock('../src/shared/http/system',()=>({getSystemInfo:api.system}))
@@ -11,13 +11,13 @@ vi.mock('../src/modules/artist/api/artist',async original=>({...await original<t
 vi.mock('../src/shared/http/api-client',async original=>({...await original<typeof import('../src/shared/http/api-client')>(),currentCreatorId:()=> 'fixture-owner'}))
 vi.mock('../src/modules/works/api/detail',async original=>({...await original<typeof import('../src/modules/works/api/detail')>(),listTasks:api.tasks,listAudio:api.audio,getUsage:api.usage,getRevision:api.revision,submitTask:api.paid}))
 vi.mock('../src/modules/works/api/section-edits',()=>({getAudioSelection:api.selection,selectAudio:api.paid}))
-vi.mock('../src/modules/works/api/covers',()=>({loadCovers:()=>Promise.reject(new Error('offline')),coverUrl:()=>undefined}))
+vi.mock('../src/modules/works/api/covers',()=>({loadCovers:api.covers,coverUrl:(_work:string,id?:string)=>id?`/covers/${id}`:undefined}))
 vi.mock('../src/shared/player/store',()=>({usePlayer:()=>({current:null,tracks:[],setQueue:vi.fn(),toggle:vi.fn(),updateTitles:vi.fn()})}))
 vi.mock('../src/modules/studio/components/QuickCreationProgress.vue',async()=>{
  const {defineComponent,h,ref,onMounted}=await import('vue')
  return {default:defineComponent({emits:['busy','resolved','checked'],setup(_,ctx){const message=ref('正在核对创作进度');onMounted(async()=>{try{const result=await api.quick();message.value=result?'正在制作音乐':'';ctx.emit('busy',!!result);ctx.emit('resolved',result);ctx.emit('checked',true)}catch{message.value='进度暂时无法读取';ctx.emit('checked',false)}});return()=>h('section',{class:'quick-progress'},message.value) }})}
 })
-vi.mock('../src/modules/works/components/SongResult.vue',()=>({default:{props:['title','asset'],template:'<section id="song-result"><h2>{{title}}</h2><button>试听歌曲</button></section>'}}))
+vi.mock('../src/modules/works/components/SongResult.vue',()=>({default:{props:['title','asset','cover'],template:'<section id="song-result"><img v-if="cover" :src="cover" alt="歌曲封面"><h2>{{title}}</h2><button>试听歌曲</button></section>'}}))
 vi.mock('../src/modules/works/components/LyricsPanel.vue',async()=>{
  const {defineComponent}=await import('vue')
  return {default:defineComponent({
@@ -36,9 +36,32 @@ function mount(){app=createApp(WorkDetailPage);app.component('RouterLink',{props
 function visible(selector:string){const el=document.querySelector<HTMLElement>(selector);if(!el)return false;for(let p:HTMLElement|null=el;p;p=p.parentElement){if(p.style.display==='none')return false}return true}
 beforeEach(()=>{
  vi.clearAllMocks();localStorage.clear();sessionStorage.clear();api.route.params.id='work-a';api.route.query={};api.lyricsReady=false
+ api.covers.mockRejectedValue(new Error('offline'))
  api.work.mockImplementation(async(id:string)=>({id,version:1,title:'晚风把今天吹成一首歌',style:'流行',story:'我的故事',recipient:'',vocalGender:'AUTO',message:''}));api.tasks.mockResolvedValue([]);api.system.mockResolvedValue({capabilities:{musicGeneration:true}});api.quick.mockResolvedValue(null);api.audio.mockResolvedValue([audio]);api.selection.mockResolvedValue({asset:audio,version:1});api.usage.mockResolvedValue({music:{dailyUnlimited:true}});api.revision.mockResolvedValue(null)
 })
-afterEach(()=>{app?.unmount();app=undefined;document.body.innerHTML='';vi.restoreAllMocks()})
+afterEach(()=>{app?.unmount();app=undefined;document.body.innerHTML='';vi.restoreAllMocks();vi.useRealTimers()})
+it('refreshes a cover that finishes before an active music task, even when the initial cover read preceded submission',async()=>{
+ vi.useFakeTimers()
+ api.tasks.mockResolvedValue([{id:'task-a',status:'RUNNING'}])
+ api.covers.mockResolvedValueOnce({currentCoverId:null,version:0,assets:[],edits:[],aiAvailable:false,automaticPending:false})
+  .mockResolvedValue({currentCoverId:'automatic-cover',version:1,assets:[],edits:[],aiAvailable:false,automaticPending:false})
+ mount();await flush()
+ expect(document.querySelector('#song-result img')).toBeNull()
+ await vi.advanceTimersByTimeAsync(5000);await flush()
+ expect(document.querySelector('#song-result img')?.getAttribute('src')).toBe('/covers/automatic-cover')
+ const calls=api.covers.mock.calls.length
+ await vi.advanceTimersByTimeAsync(5000);await flush()
+ expect(api.covers).toHaveBeenCalledTimes(calls)
+})
+it('keeps an existing manual cover without polling for an automatic replacement during music generation',async()=>{
+ vi.useFakeTimers()
+ api.tasks.mockResolvedValue([{id:'task-a',status:'RUNNING'}])
+ api.covers.mockResolvedValue({currentCoverId:'manual-cover',version:1,assets:[],edits:[],aiAvailable:false,automaticPending:false})
+ mount();await flush()
+ await vi.advanceTimersByTimeAsync(10000);await flush()
+ expect(api.covers).toHaveBeenCalledOnce()
+ expect(document.querySelector('#song-result img')?.getAttribute('src')).toBe('/covers/manual-cover')
+})
 it('shows only a player-shaped skeleton until audio is classified, never the creation heading',async()=>{
  const pending=deferred<{asset:AudioAsset;version:number}>();api.selection.mockReturnValue(pending.promise);mount();await flush();expect(visible('.song-loading')).toBe(true);expect(visible('.quick-progress')).toBe(false);expect(visible('.work-detail-top')).toBe(false);expect(visible('.test-lyrics')).toBe(false);pending.resolve({asset:audio,version:1});await flush();expect(visible('#song-result')).toBe(true);expect(visible('.song-loading')).toBe(false);expect(visible('.creation-steps')).toBe(false)
 })
