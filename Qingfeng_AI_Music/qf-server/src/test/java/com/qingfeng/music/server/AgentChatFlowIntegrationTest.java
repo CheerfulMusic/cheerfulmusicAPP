@@ -28,6 +28,7 @@ import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 /** Real HTTP, persistence and business services; only external model providers are offline doubles. */
+@org.springframework.test.context.jdbc.Sql(scripts="classpath:db/migration/V47__music_video_projects.sql", executionPhase=org.springframework.test.context.jdbc.Sql.ExecutionPhase.BEFORE_TEST_CLASS)
 @SpringBootTest(webEnvironment=SpringBootTest.WebEnvironment.RANDOM_PORT, properties={
         "spring.datasource.url=jdbc:h2:mem:agent_chat_flow;MODE=MySQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1",
         "qingfeng.agent.chat.enabled=true", "qingfeng.lyrics.enabled=true", "qingfeng.generation.enabled=true",
@@ -35,7 +36,6 @@ import static org.junit.jupiter.api.Assertions.*;
         "qingfeng.agent.admission.user-rpm=60", "qingfeng.agent.admission.user-daily-tokens=10000000"})
 @ActiveProfiles("test")
 @Import(AgentChatFlowIntegrationTest.Offline.class)
-@org.springframework.test.context.jdbc.Sql(scripts="classpath:db/migration/V47__music_video_projects.sql", executionPhase=org.springframework.test.context.jdbc.Sql.ExecutionPhase.BEFORE_TEST_CLASS)
 class AgentChatFlowIntegrationTest {
     @TestConfiguration(proxyBeanMethods=false)
     static class Offline {

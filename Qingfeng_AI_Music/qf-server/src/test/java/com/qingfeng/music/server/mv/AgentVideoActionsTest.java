@@ -39,5 +39,16 @@ class AgentVideoActionsTest {
   verify(service).quote("owner","w","a","480P");assertEquals("feature",result.commands().get(0).kind());assertTrue(result.commands().get(0).text().contains("mv_image"));
   verify(service,never()).create(anyString(),anyString(),anyString(),anyString(),any());
  }
+ @Test void failedShotIsConfirmedAndRetriedWithOwnedTaskAndOriginalPrompt(){
+  var service=mock(MusicVideoService.class);var actions=new AgentVideoActions(service,mock(ConversationService.class));
+  when(service.get("o","p")).thenReturn(Map.of("state","FAILED","plan_json","{}","shots",List.of(Map.of("shot_index",6,"state","FAILED","prompt","原画面"))));
+  var prepared=actions.prepare("o","c","retry_music_video_shot",Map.of("projectId","p","shotNumber",7,"prompt","新画面"),null);
+  assertTrue(prepared.get("confirmationSummary").toString().contains("不额外扣积分"));
+  actions.execute("o","c","retry_music_video_shot",prepared,"补齐失败镜头","k",null);verify(service).retryShot("o","p",6,"新画面");
+  var changed=new HashMap<>(prepared);changed.put("expectedPrompt","过期画面");assertThrows(RuntimeException.class,()->actions.execute("o","c","retry_music_video_shot",changed,"重试","k2",null));
+  for(var cap:actions.capabilities())assertTrue(com.qingfeng.music.infrastructure.provider.AgentToolSchemaCatalog.supports(cap.id()),cap.id());
+  assertTrue(com.qingfeng.music.agent.application.AgentChatPolicy.requiresConfirmation("retry_music_video_shot"));
+  assertTrue(com.qingfeng.music.agent.application.AgentChatPolicy.actionRequested("retry_music_video_shot","把剩下的失败镜头补齐"));
+ }
  @Test void unavailableProviderDoesNotAskUserToPay(){var service=mock(MusicVideoService.class);var actions=new AgentVideoActions(service,mock(ConversationService.class));assertThrows(RuntimeException.class,()->actions.prepare("o","c","create_music_video",Map.of(),null));verify(service,never()).create(anyString(),anyString(),anyString(),anyString(),any());}
 }

@@ -18,7 +18,7 @@ export function assistantResult(message: Message): AssistantResult | null {
       && typeof c.label === 'string' && c.label.trim().length > 0 && c.label.length <= 200
       && typeof c.text === 'string' && c.text.length <= 4000 && (c.kind !== 'send' || !!c.text.trim())).slice(0, 50)
     const items = (Array.isArray(body.items) ? body.items : []).filter(object).filter(i =>
-      typeof i.id === 'string' && typeof i.title === 'string').slice(0, 100).map(i => ({
+      typeof i.id === 'string' && typeof i.title === 'string').slice(0, body.kind === 'capabilities' ? 200 : 100).map(i => ({
         id: i.id as string, title: i.title as string, subtitle: typeof i.subtitle === 'string' ? i.subtitle : '', data: object(i.data) ? i.data : {},
       }))
     return commands.length || items.length ? { kind: typeof body.kind === 'string' ? body.kind : 'result', items, commands } : null

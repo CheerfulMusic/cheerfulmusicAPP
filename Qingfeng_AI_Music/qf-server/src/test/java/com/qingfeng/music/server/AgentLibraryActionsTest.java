@@ -41,6 +41,12 @@ class AgentLibraryActionsTest {
     static WorkApi.Work work(String id,String title,long version){return new WorkApi.Work(id,"妈妈","生日","原故事","祝福","民谣",title,version,NOW,NOW,"FEMALE");}
     static SongCard card(){return new SongCard("W","海风","民谣","歌词","","LYRICS_READY",null,2,"R",null,null);}
     AgentApplicationActions.Result run(String action,Map<String,Object> args){return actions.execute("owner","C",action,args,"测试指令",KEY,card());}
+    @Test void downloadsSelectedLyricsWithoutRewritingOrGenerating(){
+        when(lyrics.get("owner","W","R")).thenReturn(new LyricsApi.Revision("R","W",2,"歌名","原歌词","MANUAL",true,NOW));
+        var result=run("download_lyrics",Map.of());assertEquals("lyrics_download",result.kind());assertEquals("原歌词",result.items().get(0).data().get("lyrics"));verifyNoInteractions(generation);
+        run("generation_preflight",Map.of());verify(generation).preflight("owner","W","R");
+        for(var cap:actions.capabilities())assertTrue(com.qingfeng.music.infrastructure.provider.AgentToolSchemaCatalog.supports(cap.id()),cap.id());
+    }
     @Test void anEmptyConversationCanCreateADraftWithItsRequestKeyWithoutGeneration(){
         var created=new WorkApi.Work(KEY,"","","","","","智能创作",0,NOW,NOW,"AUTO");
         when(works.create(eq("owner"),any(),eq(KEY))).thenReturn(created);when(works.get("owner",KEY)).thenReturn(created);

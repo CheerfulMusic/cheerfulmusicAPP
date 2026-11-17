@@ -17,6 +17,7 @@ public final class AgentVideoActions implements AgentApplicationActions {
         new Capability("open_music_video_editor","在对话内打开完整MV分镜编辑器，支持AI分镜、图片、停留时间、费用确认及已有任务恢复","workId?:作品ID,assetId?:音频ID","native"),
         new Capability("list_music_videos","查询作品的 MV 任务列表","workId?:作品ID","read"),
         new Capability("get_music_video","查询 MV 分镜、执行进度、视频成品","projectId:MV任务ID","read"),
+        new Capability("retry_music_video_shot","修改并重试明确失败的MV镜头，保留成功片段、不额外扣积分；先查询任务获取失败镜头与原提示词，必须展示修改内容并确认","projectId:MV任务ID,shotNumber:从1开始的失败镜头序号,prompt:修改后的完整提示词","write"),
         new Capability("retry_music_video_assembly","重试合成已完成镜头，不重新调用视频模型或扣费","projectId:MV任务ID","write"),
         new Capability("download_music_video","获取已完成 MV 的播放和下载卡片","projectId:MV任务ID","read"),
         new Capability("cancel_music_video","取消尚未开始的 MV 并退回积分；已提交任务不能承诺退款","projectId:MV任务ID","write"));}
@@ -44,8 +45,18 @@ public final class AgentVideoActions implements AgentApplicationActions {
                 frozen.put("confirmationSummary",summary+"\n以上480P仅为报价示例，尚未选择分辨率。三档报价：480P "+seconds+" 积分；720P "+seconds*2+" 积分；1080P "+seconds*3+" 积分。请选择后再确认生成。");
             }
         }
+        if("retry_music_video_shot".equals(action)){
+            var row=service.get(owner,value(args,"projectId",null));
+            int index=shotIndex(args);String prompt=value(args,"prompt","");
+            if(!"FAILED".equals(row.get("state"))||prompt.isBlank()||prompt.length()>2000)throw new DomainException("INVALID_VIDEO_REQUEST","请先查询明确失败的任务，并填写新的镜头描述。");
+            var shots=json.valueToTree(row.get("shots"));
+            var shot=java.util.stream.StreamSupport.stream(shots.spliterator(),false).filter(n->n.path("shot_index").asInt(-1)==index&&"FAILED".equals(n.path("state").asText())).findFirst().orElseThrow(()->new DomainException("INVALID_VIDEO_REQUEST","所选镜头不是失败状态。"));
+            frozen.put("expectedPrompt",shot.path("prompt").asText());
+            frozen.put("confirmationSummary","仅重试第 "+(index+1)+" 个镜头，保留成功片段并继续剩余镜头，不额外扣积分。新画面："+prompt+"。生成仍需通过视频服务审核。");
+        }
         return frozen;
     }
+    private int shotIndex(Map<String,Object> args){Object n=args.get("shotNumber");if(!(n instanceof Number number)||number.doubleValue()!=number.intValue()||number.intValue()<1||number.intValue()>120)throw new DomainException("INVALID_VIDEO_REQUEST","请指定1至120之间的镜头序号。");return number.intValue()-1;}
     private MusicVideoService.Plan plan(Map<String,Object> args){
         var nodes=json.valueToTree(args.getOrDefault("shots",List.of()));var shots=new ArrayList<MusicVideoService.Shot>();
         if(!nodes.isArray())throw new DomainException("INVALID_VIDEO_REQUEST","请提供分镜列表。");
@@ -87,9 +98,16 @@ public final class AgentVideoActions implements AgentApplicationActions {
             if(!(args.get("quotedCredits") instanceof Number quoted)||quoted.intValue()!=MusicVideoService.price(storyboard))throw new DomainException("VIDEO_QUOTE_CHANGED","MV 费用已变化，请重新确认分镜和费用。");
             id=service.create(owner,work,value(args,"assetId",current==null?null:current.assetId()),key,storyboard);
         }
+        if(action.equals("retry_music_video_shot")){
+            var before=service.get(owner,id);int index=shotIndex(args);
+            var shots=json.valueToTree(before.get("shots"));
+            var shot=java.util.stream.StreamSupport.stream(shots.spliterator(),false).filter(n->n.path("shot_index").asInt(-1)==index).findFirst().orElseThrow(()->new DomainException("INVALID_VIDEO_REQUEST","找不到该镜头。"));
+            if(!Objects.equals(args.get("expectedPrompt"),shot.path("prompt").asText()))throw new DomainException("INVALID_VIDEO_REQUEST","镜头内容已变化，请重新确认。");
+            service.retryShot(owner,id,index,value(args,"prompt",""));
+        }
         if(action.equals("cancel_music_video"))service.cancel(owner,id);
         if(action.equals("retry_music_video_assembly"))service.retryAssembly(owner,id);
-        var row=service.get(owner,id);var data=new LinkedHashMap<String,Object>();data.put("projectId",id);data.put("state",row.get("state"));if("READY".equals(row.get("state")))data.put("videoUrl","/api/app/music-videos/"+id+"/content");
+        var row=service.get(owner,id);var data=new LinkedHashMap<String,Object>();data.put("projectId",id);data.put("state",row.get("state"));data.put("shots",row.get("shots"));data.put("plan",json.readTree(String.valueOf(row.get("plan_json"))));if(row.get("error_code")!=null)data.put("errorCode",row.get("error_code"));if("READY".equals(row.get("state")))data.put("videoUrl","/api/app/music-videos/"+id+"/content");
         return new Result("MV 状态："+row.get("state")+"。"+(row.get("error_code")==null?"":("任务需处理："+row.get("error_code"))),"video",List.of(new Item(id,"剧情 MV",String.valueOf(row.get("state")),data)),List.of(new Command("查看进度","查看 MV 任务 "+id,"send")),action);
     }
 }
