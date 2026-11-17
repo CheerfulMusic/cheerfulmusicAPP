@@ -89,6 +89,12 @@ public class ArtistProfileController {
                 song.title(), song.stageName()));
     }
 
+    @PostMapping("/releases/{work}/publication")
+    public ResponseEntity<ReleaseSelection> completePublication(@AuthenticationPrincipal CreatorPrincipal principal,
+            @PathVariable String work) {
+        return noStore(profiles.completePublication(account(principal), work));
+    }
+
     @DeleteMapping("/releases/{work}/publication")
     public ResponseEntity<ReleaseSelection> makePrivate(@AuthenticationPrincipal CreatorPrincipal principal,
             @PathVariable String work) {

@@ -22,6 +22,7 @@ import org.springframework.context.annotation.Profile;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -39,7 +40,7 @@ public class ArtistProfileService {
                                    boolean publicationPending, boolean reopensSongs) {}
     record PublicationJob(String id, String owner, String work, String asset, String title, String cover) {}
     private static final String PUBLICATION_TOPIC = "music.publish";
-    // This event waits for archived audio and is handled by the publication worker.
+    // The worker or the owner's result page can finish this event once audio is archived.
     private static final String WAITING_FOR_AUDIO = "WAITING_AUDIO";
     public record DiscoverSong(String artistId, String stageName, PublicSong song, Instant publishedAt,
                                String genre, long plays) {}
@@ -57,6 +58,15 @@ public class ArtistProfileService {
     private static final RowMapper<Release> RELEASE_ROW = (rs, row) -> new Release(
             rs.getString("id"), rs.getLong("version"), rs.getString("title"), rs.getString("work_id"),
             rs.getString("asset_id"), rs.getString("cover_id"), rs.getBoolean("on_discover"));
+    private static final RowMapper<PublicationJob> PUBLICATION_ROW = (rs, row) -> new PublicationJob(
+            rs.getString(1), rs.getString(2), rs.getString(3), rs.getString(4), rs.getString(5), rs.getString(6));
+    private static final String READY_PUBLICATIONS = """
+            SELECT e.id,w.owner_id,w.id,t.asset_id,t.title,c.cover_id
+            FROM task_event_outbox e JOIN generation_task t ON t.id=e.event_key
+            JOIN music_work w ON w.id=t.work_id LEFT JOIN work_cover c ON c.work_id=w.id
+            WHERE e.topic=? AND e.state=? AND e.next_attempt_at<=CURRENT_TIMESTAMP
+              AND t.status='SUCCEEDED' AND t.asset_id IS NOT NULL AND w.deleted_at IS NULL
+            """;
     private static final String PROFILE_RELEASES = """
             SELECT r.id,r.version,r.title,r.work_id,r.asset_id,r.cover_id,
                 (r.discover_published_at IS NOT NULL) AS on_discover FROM artist_song_release r
@@ -205,19 +215,24 @@ public class ArtistProfileService {
     }
 
     List<PublicationJob> readyPublications() {
-        return db.query("""
-                SELECT e.id,w.owner_id,w.id,t.asset_id,t.title,c.cover_id
-                FROM task_event_outbox e JOIN generation_task t ON t.id=e.event_key
-                JOIN music_work w ON w.id=t.work_id LEFT JOIN work_cover c ON c.work_id=w.id
-                WHERE e.topic=? AND e.state=? AND e.next_attempt_at<=CURRENT_TIMESTAMP
-                  AND t.status='SUCCEEDED' AND t.asset_id IS NOT NULL AND w.deleted_at IS NULL
-                ORDER BY e.next_attempt_at,e.id LIMIT 16
-                """, (rs, n) -> new PublicationJob(rs.getString(1),rs.getString(2),rs.getString(3),
-                        rs.getString(4),rs.getString(5),rs.getString(6)), PUBLICATION_TOPIC, WAITING_FOR_AUDIO);
+        return db.query(READY_PUBLICATIONS + " ORDER BY e.next_attempt_at,e.id LIMIT 16",
+                PUBLICATION_ROW, PUBLICATION_TOPIC, WAITING_FOR_AUDIO);
     }
 
-    @Transactional(isolation = org.springframework.transaction.annotation.Isolation.READ_COMMITTED)
+    @Transactional(isolation = Isolation.READ_COMMITTED)
+    public ReleaseSelection completePublication(String creator, String work) {
+        db.query(READY_PUBLICATIONS + " AND w.owner_id=? AND w.id=? ORDER BY e.next_attempt_at,e.id LIMIT 1",
+                PUBLICATION_ROW, PUBLICATION_TOPIC, WAITING_FOR_AUDIO, creator, work)
+                .stream().findFirst().ifPresent(this::publishQueuedSong);
+        return selection(creator, work);
+    }
+
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public void finishPublication(PublicationJob job) {
+        publishQueuedSong(job);
+    }
+
+    private void publishQueuedSong(PublicationJob job) {
         lockCreator(job.owner());
         if (db.queryForList("SELECT id FROM task_event_outbox WHERE id=? AND state=? FOR UPDATE",
                 job.id(), WAITING_FOR_AUDIO).isEmpty()) return;

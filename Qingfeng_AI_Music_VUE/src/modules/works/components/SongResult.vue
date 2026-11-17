@@ -117,15 +117,22 @@ async function saveTitle() {
         <button v-if="canReplacePublication" class="button secondary" type="button" :disabled="publicationBusy" @click="$emit('replacePublication')">{{ t('发布当前版本') }}</button>
         <button class="button secondary" :disabled="busy" @click="$emit('regenerate')">{{ pending?t('查看生成进度'):checking?t('核对生成进度'):asset.origin==='GENERATED'?t('调整音乐'):t('重新制作一首') }}</button>
         <button class="button secondary" @click="download">{{ unlocked?t('免费下载'):t('下载（首次10积分）') }}</button>
+        <p v-if="publicationLabel" class="publication-status" role="status">{{ t(publicationLabel) }}</p>
       </div>
       <p class="save-info">{{ work.recipient?t('先听一遍，再把这份心意送给 TA。'):t('先听一遍，继续打磨你的作品。') }}</p>
     </div>
-    <p v-if="publicationLabel" class="notice" role="status">{{ t(publicationLabel) }}</p>
     <SyncedLyrics :work-id="work.id" :asset-id="asset.id" :lyrics="lyrics" :language="language" :editable="asset.origin==='GENERATED'" :section-open="sectionOpen" @seek="playFrom" @edit="$emit('edit',$event)"/>
   </section>
 </template>
 
 <style scoped>
+.publication-status {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
 .song-title-row {
   display: flex;
   align-items: baseline;

@@ -126,6 +126,11 @@ export async function publishSongEverywhere({ workId, ...song }: SongPublication
   return requestJson<ReleaseSelection>(`${release(workId)}/publication`, 'PUT', song)
 }
 
+export async function completeSongPublication(workId: string) {
+  await ensureCreator()
+  return requestJson<ReleaseSelection>(`${release(workId)}/publication`, 'POST')
+}
+
 export async function makeSongPrivate(workId: string) {
   await ensureCreator()
   return requestJson<ReleaseSelection>(`${release(workId)}/publication`, 'DELETE')

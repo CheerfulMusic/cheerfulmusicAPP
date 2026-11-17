@@ -23,7 +23,7 @@ import QuickCreationProgress from '../../studio/components/QuickCreationProgress
 import type {QuickCreation} from '../../studio/api/quick-creation'
 import AudioPanel from '../components/AudioPanel.vue'
 import SharePanel from '../components/SharePanel.vue'
-import { getSongPublication, makeSongPrivate, publishSongEverywhere, type SongPublication } from '../../artist/api/artist'
+import { completeSongPublication, getSongPublication, makeSongPrivate, publishSongEverywhere, type SongPublication } from '../../artist/api/artist'
 import { accountState, refreshAccountState } from '../../../shared/identity/account-state'
 import { logtoState, refreshLogtoState } from '../../../shared/identity/logto-state'
 import { showLoginDialog } from '../../../shared/identity/login-dialog'
@@ -231,8 +231,13 @@ watch([() => work.value?.id, () => asset.value?.id, () => accountState.value.aut
     if (!active || request!==publicationStateRequest || !id) return
     try {
       const state=await getSongPublication(id)
-      if (active && request===publicationStateRequest) publicationState.value=state
-    } catch { /* The owner can retry through the publication button. */ }
+      if (!active || request!==publicationStateRequest) return
+      publicationState.value=state
+      if (state.publicationPending && !publicationBusy.value) {
+        const updated=await completeSongPublication(id)
+        if (active && request===publicationStateRequest) publicationState.value=updated
+      }
+    } catch { /* Poll pending publication again; the scheduled worker can also finish it. */ }
     if (active && request===publicationStateRequest && publicationState.value?.publicationPending)
       timer=setTimeout(refresh,2500)
   }

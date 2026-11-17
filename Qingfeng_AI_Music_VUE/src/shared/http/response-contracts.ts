@@ -116,7 +116,7 @@ export function validResponse(path:string,method:string,value:unknown):boolean{
   const unified=path.endsWith('/publication')
   if(!unified&&method==='DELETE')return myArtist(value)
   if(!unified&&method==='PUT')return artistRelease(value)
-  return (unified?method==='PUT'||method==='DELETE':method==='GET')
+  return (unified?['PUT','POST','DELETE'].includes(method):method==='GET')
     &&obj(value)&&typeof value.profileReady==='boolean'&&typeof value.published==='boolean'
     &&(value.publicId===undefined||nullableText(value.publicId))&&(value.stageName===undefined||str(value.stageName))
     &&(value.song===null||artistRelease(value.song))

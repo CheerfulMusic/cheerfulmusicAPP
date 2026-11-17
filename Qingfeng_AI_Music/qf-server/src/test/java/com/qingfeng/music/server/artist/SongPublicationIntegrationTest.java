@@ -11,11 +11,16 @@ import com.qingfeng.music.lyrics.api.LyricsApi;
 import com.qingfeng.music.media.application.MediaService;
 import com.qingfeng.music.work.api.WorkApi;
 import java.io.ByteArrayInputStream;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
@@ -25,7 +30,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
-@SpringBootTest
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @ActiveProfiles("test")
 class SongPublicationIntegrationTest {
     @Autowired ArtistProfileService profiles;
@@ -37,6 +42,7 @@ class SongPublicationIntegrationTest {
     @Autowired JdbcTemplate jdbc;
     @Autowired PlatformTransactionManager transactionManager;
     @Autowired MediaService media;
+    @Value("${local.server.port}") int port;
 
     @Test void publicGenerationPublishesOneArchivedVersionAndCanBeMadePrivate() throws Exception {
         var song = generate(true);
@@ -82,6 +88,7 @@ class SongPublicationIntegrationTest {
         archive(song);
         var job = profiles.readyPublications().get(0);
         profiles.makePrivate(song.owner(), song.work());
+        assertNull(profiles.completePublication(song.owner(), song.work()).song());
         profiles.finishPublication(job);
         var current = profiles.selection(song.owner(), song.work());
         assertFalse(current.publicationPending());
@@ -89,10 +96,50 @@ class SongPublicationIntegrationTest {
         assertNull(current.song());
     }
 
-    private record Song(String owner, String work, GenerationApi.Task task) {}
+    @Test void resultPageCompletesOnlyItsOwnersQueuedArchivedSong() throws Exception {
+        var song = generate(true);
+        var privateSong = generate(false);
+        assertTrue(profiles.completePublication(song.owner(), song.work()).publicationPending());
+        String asset = archive(song);
+        archive(privateSong);
+        var queued = profiles.readyPublications().get(0);
+
+        var http = HttpClient.newHttpClient();
+        assertEquals(403, complete(http, song, song, false).statusCode());
+        assertEquals(200, complete(http, privateSong, song, true).statusCode());
+        assertNull(profiles.completePublication(privateSong.owner(), privateSong.work()).song());
+        assertNull(profiles.selection(song.owner(), song.work()).song());
+
+        var response = complete(http, song, song, true);
+        assertEquals(200, response.statusCode(), response.body());
+        var published = profiles.selection(song.owner(), song.work());
+        assertFalse(published.publicationPending());
+        assertEquals(asset, published.song().assetId());
+        assertTrue(profiles.discover(false, false, "", song.task().title(), 0).songs().stream()
+                .anyMatch(entry -> entry.song().id().equals(published.song().id())));
+        profiles.finishPublication(queued);
+        assertEquals(published, profiles.completePublication(song.owner(), song.work()));
+
+        profiles.makePrivate(song.owner(), song.work());
+        assertNull(profiles.completePublication(song.owner(), song.work()).song());
+        assertFalse(profiles.discover(false, false, "", song.task().title(), 0).songs().stream()
+                .anyMatch(entry -> entry.song().id().equals(published.song().id())));
+    }
+
+    private HttpResponse<String> complete(HttpClient http, Song viewer, Song target, boolean csrf) throws Exception {
+        var request = HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port
+                + "/api/app/artist-profile/releases/" + target.work() + "/publication"))
+                .header("Cookie", "QF_SESSION=" + viewer.session() + "; XSRF-TOKEN=publication-fixture")
+                .POST(HttpRequest.BodyPublishers.noBody());
+        if (csrf) request.header("X-XSRF-TOKEN", "publication-fixture");
+        return http.send(request.build(), HttpResponse.BodyHandlers.ofString());
+    }
+
+    private record Song(String owner, String work, GenerationApi.Task task, String session) {}
 
     private Song generate(boolean publicly) {
-        String owner = identity.create().creatorId();
+        var session = identity.create();
+        String owner = session.creatorId();
         jdbc.update("""
                 INSERT INTO creator_oidc_identity(subject_hash,creator_id,display_name,created_at,updated_at)
                 VALUES(?,?,?,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)
@@ -114,7 +161,7 @@ class SongPublicationIntegrationTest {
         var replay = transaction.execute(status -> generation.submit(owner, work.id(), revision.id(), key,
                 created -> fail("A replay must not change publication intent")));
         assertEquals(task.id(), replay.id());
-        return new Song(owner, work.id(), task);
+        return new Song(owner, work.id(), task, session.token());
     }
 
     private String archive(Song song) throws Exception {
