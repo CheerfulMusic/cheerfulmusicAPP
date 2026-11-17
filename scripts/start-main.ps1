@@ -29,6 +29,8 @@ $gatePython = (Get-Command python -CommandType Application -ErrorAction Stop | S
 & $gatePython (Join-Path $PSScriptRoot 'release_gate.py') startup --workspace $gateRoot --manifest (Join-Path $gateRoot '.secrets/production-main.manifest.json') --jar (Join-Path $gateRoot '.cache/runtime/production-main/app.jar')
 if ($LASTEXITCODE -ne 0) { throw '启动门禁未通过：没有建立生产连接或启动进程。' }
 $featureWithdrawal = Get-VerifiedFeatureWithdrawal (Get-Content -LiteralPath (Join-Path $gateRoot '.secrets/production-main.manifest.json') -Raw | ConvertFrom-Json)
+$developmentFeatures = (Get-Content -LiteralPath (Join-Path $gateRoot '.secrets/production-main.manifest.json') -Raw | ConvertFrom-Json).localDevelopmentFeatures -eq $true
+if ($developmentFeatures) { $featureWithdrawal = $null }
 if ($CheckOnly) { return }
 if (-not $AllowProductionConnection) { throw '此入口会连接生产主库和线上API；实际启动须显式指定 -AllowProductionConnection。' }
 if ($PSVersionTable.PSVersion.Major -lt 7) { throw '请使用 PowerShell 7 运行此脚本。' }
@@ -130,6 +132,8 @@ try {
     }
     $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
     $featureWithdrawal = Get-VerifiedFeatureWithdrawal $manifest
+    $developmentFeatures = $manifest.localDevelopmentFeatures -eq $true
+    if ($developmentFeatures) { $featureWithdrawal = $null }
     if ($manifest.jarSha256 -notmatch '^[a-fA-F0-9]{64}$' -or $manifest.sourceCommit -notmatch '^[a-fA-F0-9]{40}$') { throw '主库清单缺少有效的 JAR 哈希或源码提交。' }
     $db = $manifest.database
     if ($db.sshHost -ne '47.84.5.172' -or $db.remoteHost -ne '127.0.0.1' -or [int]$db.remotePort -ne 3306 -or [int]$db.localPort -ne 13306 -or $db.name -ne 'qingfeng_music') { throw '清单中的主库目标与已确认的生产主库不一致。' }
@@ -194,6 +198,7 @@ try {
     # Load only the installed Vue plugin. Ignore all old Vite dotenv files and force the loopback proxy.
     $frontendJson = ConvertTo-Json -InputObject $frontendRoot -Compress
     $gatewayJson = ConvertTo-Json -InputObject $gatewayPath -Compress
+    $developmentFeaturesJson = ConvertTo-Json -InputObject $developmentFeatures -Compress
     $withdrawalJson = ConvertTo-Json -InputObject $featureWithdrawal -Depth 4 -Compress
     $safeViteConfig = @"
 import { createRequire } from 'node:module';
@@ -203,6 +208,7 @@ import { createHash } from 'node:crypto';
 const frontendRoot = $frontendJson;
 const gateway = JSON.parse(readFileSync($gatewayJson, 'utf8'));
 const withdrawal = $withdrawalJson;
+const developmentFeatures = $developmentFeaturesJson;
 const withdrawalAssets = new Map();
 if (withdrawal) {
   for (const [kind, path, type] of [
@@ -262,6 +268,8 @@ export default {
   server: { host: '127.0.0.1', port: 5173, strictPort: true, cors: false,
     allowedHosts: ['127.0.0.1', 'localhost'], fs: { strict: true, allow: [frontendRoot] },
     proxy: {
+      ...(developmentFeatures ? { '^/api/app/(?:agent|music-videos)(?:/|[?]|$)': { target, changeOrigin: true } } : {}),
+      '^/api/public/auth/native(?:/|[?]|$)': production,
       '^/api/app(?:/|[?]|$)': production,
       '^/api/public/(?!(?:auth|session|csrf|invite)(?:/|[?]|$))': production,
       '/media': production,
