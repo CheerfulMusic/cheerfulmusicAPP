@@ -33,31 +33,57 @@ public final class MusicVideoWorker implements AutoCloseable {
             var folder=folder(id);Files.createDirectories(folder);
             var plan=json.readValue((String)project.get("plan_json"),MusicVideoService.Plan.class);
             var shots=db.queryForList("SELECT * FROM music_video_shot WHERE project_id=? ORDER BY shot_index",id);
+            // Poll every submitted shot before admitting more. A failed sibling must not
+            // strand other already-paid upstream jobs or discard their completed files.
+            boolean pollUnavailable=false;
             for(var shot:shots){
                 String shotId=(String)shot.get("id"),state=(String)shot.get("state");
-                if("SUBMITTING".equals(state)){shotState(shotId,"UNCERTAIN","VIDEO_SUBMIT_INTERRUPTED");projectState(id,"UNCERTAIN","VIDEO_SUBMIT_INTERRUPTED");return;}
-                if("UNCERTAIN".equals(state)||"FAILED".equals(state)){projectState(id,state,"VIDEO_SHOT_"+state);return;}
-                if("QUEUED".equals(state)){
-                    var segment=plan.shots().get(((Number)shot.get("shot_index")).intValue());
-                    int generated=segment.seconds()-segment.imageSeconds();
-                    if(generated==0){shotState(shotId,"READY",null);return;}
-                    shotState(shotId,"SUBMITTING",null);
-                    try{String task=provider.submit((String)shot.get("prompt"),Math.max(2,generated),plan.ratio(),plan.resolution(),shotId);db.update("UPDATE music_video_shot SET provider_task_id=?,state='RUNNING',updated_at=CURRENT_TIMESTAMP WHERE id=?",task,shotId);}
-                    catch(VideoProvider.Failure e){shotState(shotId,e.uncertain?"UNCERTAIN":"FAILED",e.code);projectState(id,e.uncertain?"UNCERTAIN":"FAILED",e.code);}return;
-                }
-                if("RUNNING".equals(state)){
-                    if (((java.sql.Timestamp)shot.get("updated_at")).toInstant().isBefore(Instant.now().minusSeconds(7200))) {
-                        shotState(shotId,"UNCERTAIN","VIDEO_POLL_DEADLINE");projectState(id,"UNCERTAIN","VIDEO_POLL_DEADLINE");return;
-                    }
-                    String task=(String)shot.get("provider_task_id");String upstream=provider.status(task);
-                    if("face_rejected".equals(upstream)){shotState(shotId,"FAILED","VIDEO_FACE_REJECTED");projectState(id,"FAILED","VIDEO_FACE_REJECTED");return;}
-                    if(Set.of("failed","error","cancelled","canceled").contains(upstream)){shotState(shotId,"FAILED","VIDEO_PROVIDER_FAILED");projectState(id,"FAILED","VIDEO_PROVIDER_FAILED");return;}
+                if("SUBMITTING".equals(state)){shotState(shotId,"UNCERTAIN","VIDEO_SUBMIT_INTERRUPTED");continue;}
+                if(!"RUNNING".equals(state))continue;
+                if(((java.sql.Timestamp)shot.get("updated_at")).toInstant().isBefore(Instant.now().minusSeconds(7200))){shotState(shotId,"UNCERTAIN","VIDEO_POLL_DEADLINE");continue;}
+                db.update("UPDATE music_video_project SET lease_until=? WHERE id=?",java.sql.Timestamp.from(Instant.now().plusSeconds(600)),id);
+                try{
+                    String task=(String)shot.get("provider_task_id"),upstream=provider.status(task);
+                    if("face_rejected".equals(upstream)){shotState(shotId,"FAILED","VIDEO_FACE_REJECTED");continue;}
+                    if(Set.of("failed","error","cancelled","canceled").contains(upstream)){shotState(shotId,"FAILED","VIDEO_PROVIDER_FAILED");continue;}
                     if(Set.of("succeeded","success","completed").contains(upstream)){
                         Path temporary=folder.resolve(shotId+"-"+UUID.randomUUID()+".part"),saved=folder.resolve(shotId+".mp4");
-                        try { provider.download(task,temporary);Files.move(temporary,saved,StandardCopyOption.REPLACE_EXISTING);shotState(shotId,"READY",null); } finally { Files.deleteIfExists(temporary); }
-                    }return;
-                }
+                        try{provider.download(task,temporary);Files.move(temporary,saved,StandardCopyOption.REPLACE_EXISTING);shotState(shotId,"READY",null);}finally{Files.deleteIfExists(temporary);}
+                    }
+                }catch(VideoProvider.Failure error){pollUnavailable=true;db.update("UPDATE music_video_project SET error_code=? WHERE id=?",error.code,id);}
             }
+            shots=db.queryForList("SELECT * FROM music_video_shot WHERE project_id=? ORDER BY shot_index",id);
+            var blocked=shots.stream().filter(s->Set.of("FAILED","UNCERTAIN").contains(s.get("state"))).toList();
+            if(!blocked.isEmpty()){
+                boolean running=shots.stream().anyMatch(s->"RUNNING".equals(s.get("state")));
+                var failure=blocked.stream().filter(s->"UNCERTAIN".equals(s.get("state"))).findFirst().orElse(blocked.get(0));
+                projectState(id,running?"RUNNING":(String)failure.get("state"),(String)failure.get("error_code"));return;
+            }
+            if(pollUnavailable)return;
+            boolean pending=false;
+            for(var shot:shots){
+                String shotId=(String)shot.get("id"),state=(String)shot.get("state");
+                if("READY".equals(state))continue;
+                pending=true;
+                if(!"QUEUED".equals(state))continue;
+                var segment=plan.shots().get(((Number)shot.get("shot_index")).intValue());
+                int generated=segment.seconds()-segment.imageSeconds();
+                if(generated==0){shotState(shotId,"READY",null);continue;}
+                // Reserve under the shared DB lock, including uncertain submissions in
+                // the global limit. Multiple workers cannot admit a sixth upstream job.
+                boolean reserved=Boolean.TRUE.equals(tx.execute(status->{
+                    db.queryForObject("SELECT id FROM agent_admission_lock WHERE id=1 FOR UPDATE",Integer.class);
+                    if(db.queryForObject("SELECT COUNT(*) FROM music_video_shot WHERE state IN ('SUBMITTING','RUNNING','UNCERTAIN')",Long.class)>=5)return false;
+                    db.update("UPDATE music_video_project SET lease_until=? WHERE id=?",java.sql.Timestamp.from(Instant.now().plusSeconds(600)),id);
+                    return db.update("UPDATE music_video_shot SET state='SUBMITTING',updated_at=CURRENT_TIMESTAMP WHERE id=? AND state='QUEUED'",shotId)==1;
+                }));
+                if(!reserved)continue;
+                try{String task=provider.submit((String)shot.get("prompt"),Math.max(2,generated),plan.ratio(),plan.resolution(),shotId);db.update("UPDATE music_video_shot SET provider_task_id=?,state='RUNNING',updated_at=CURRENT_TIMESTAMP WHERE id=?",task,shotId);}
+                catch(VideoProvider.Failure e){shotState(shotId,e.uncertain?"UNCERTAIN":"FAILED",e.code);
+                    boolean running=db.queryForObject("SELECT COUNT(*) FROM music_video_shot WHERE project_id=? AND state='RUNNING'",Long.class,id)>0;
+                    projectState(id,running?"RUNNING":e.uncertain?"UNCERTAIN":"FAILED",e.code);return;}
+            }
+            if(pending)return;
             projectState(id,"ASSEMBLING",null);assemble(project,shots,folder);projectState(id,"READY",null);
         }catch(VideoProvider.Failure error){db.update("UPDATE music_video_project SET error_code=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",error.code,id);}
         catch(Exception error){projectState(id,"ASSEMBLY_FAILED","VIDEO_ASSEMBLY_FAILED");}
