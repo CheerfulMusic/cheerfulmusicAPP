@@ -32,6 +32,14 @@ class DownloadEntitlementsMySqlTest {
     @Autowired PlatformTransactionManager manager;
     private MediaApi.Content audio(){return new MediaApi.Content(1,"audio/mpeg","song.mp3",()->new ByteArrayInputStream(new byte[]{1}));}
     private String owner(long initial){String id=identity.create().creatorId();if(initial>0)credits.credit(id,initial,UUID.randomUUID().toString());return id;}
+    @Test void fifteenCreditPurchaseRemainsUnlockedAfterRollbackWithoutChargingAgain(){
+        String a=owner(30),work=UUID.randomUUID().toString();
+        credits.debit(a,15,DownloadEntitlements.reference(a,work));
+        assertTrue(downloads.unlocked(a,work));
+        downloads.unlock(a,work,null);
+        assertEquals(15,credits.balance(a));
+        assertEquals(1,db.queryForObject("SELECT COUNT(*) FROM credit_ledger WHERE entry_type='DEBIT' AND reference_id=?",Integer.class,DownloadEntitlements.reference(a,work)));
+    }
     @Test void concurrentRetriesAcrossDevicesChargeOnceAndAccountsAreIndependent() throws Exception {
         String a=owner(30),b=owner(30),work=UUID.randomUUID().toString();
         var start=new CountDownLatch(1);var pool=Executors.newFixedThreadPool(8);var tasks=new ArrayList<Future<?>>();
