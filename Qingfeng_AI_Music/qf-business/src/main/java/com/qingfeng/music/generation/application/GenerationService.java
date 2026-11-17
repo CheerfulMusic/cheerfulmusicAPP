@@ -40,6 +40,10 @@ public class GenerationService implements GenerationApi {
  // 并发重复插入后重新读取已提交任务，避免MySQL可重复读快照看不到竞争方的新记录。
  @Transactional(isolation = org.springframework.transaction.annotation.Isolation.READ_COMMITTED)
  public Task submit(String owner,String work,String revisionId,String key){
+  return submit(owner,work,revisionId,key,task->{});
+ }
+ @Transactional(isolation = org.springframework.transaction.annotation.Isolation.READ_COMMITTED)
+ public Task submit(String owner,String work,String revisionId,String key,java.util.function.Consumer<Task> onCreated){
   var w=works.get(owner,work);
   if(key==null||!key.matches("[0-9a-fA-F-]{36}"))throw new DomainException("INVALID_REQUEST_KEY","请提供有效的请求标识");
   var existing=repository.findRequest(work,key);if(existing.isPresent())return checked(existing.get(),revisionId);
@@ -56,6 +60,7 @@ public class GenerationService implements GenerationApi {
   String id=UUID.randomUUID().toString();var task=checked(repository.insertOrRead(new Task(id,work,revisionId,w.version(),key,revision.title(),revision.lyrics(),w.style(),provider.name(),GenerationStatus.QUEUED,now,null,null,now,now.plusSeconds(5),voice)),revisionId);
   if(task.id().equals(id)){
    if(settings!=null)settings.snapshot(id,direction);
+   onCreated.accept(task);
    events.publish("music.ready",id,id);
   }
   return task;

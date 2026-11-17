@@ -112,12 +112,16 @@ export function validResponse(path:string,method:string,value:unknown):boolean{
  if(path==='public/discover')return method==='GET'&&obj(value)&&typeof value.hasMore==='boolean'&&list(value.songs,discoverSong)
   &&(value.artists===undefined||list(value.artists,discoverArtist))
  if(path==='app/artist-profile'||path==='app/artist-profile/visibility')return myArtist(value)
- if(/^app\/artist-profile\/releases\/[^/]+$/.test(path)){
-  if(method==='DELETE')return myArtist(value)
-  if(method==='PUT')return artistRelease(value)
-  return method==='GET'&&obj(value)&&typeof value.profileReady==='boolean'&&typeof value.published==='boolean'
+ if(/^app\/artist-profile\/releases\/[^/]+(?:\/publication)?$/.test(path)){
+  const unified=path.endsWith('/publication')
+  if(!unified&&method==='DELETE')return myArtist(value)
+  if(!unified&&method==='PUT')return artistRelease(value)
+  return (unified?method==='PUT'||method==='DELETE':method==='GET')
+    &&obj(value)&&typeof value.profileReady==='boolean'&&typeof value.published==='boolean'
     &&(value.publicId===undefined||nullableText(value.publicId))&&(value.stageName===undefined||str(value.stageName))
     &&(value.song===null||artistRelease(value.song))
+    &&(!unified||typeof value.publicationPending==='boolean')
+    &&(value.reopensSongs===undefined||typeof value.reopensSongs==='boolean')
  }
  if(/^app\/artist-profile\/releases\/[^/]+\/discover$/.test(path))
   return method==='DELETE'?myArtist(value):method==='PUT'&&artistRelease(value)&&obj(value)&&value.onDiscover===true

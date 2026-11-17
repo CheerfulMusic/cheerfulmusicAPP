@@ -33,6 +33,8 @@ public class ArtistProfileController {
     public record Visibility(@NotNull Boolean published) {}
     public record SongRequest(@NotBlank @Size(max = 36) String assetId, @Size(max = 36) String coverId,
                               @NotBlank @Size(max = 100) String title) {}
+    public record PublicationRequest(@NotBlank @Size(max = 36) String assetId, @Size(max = 36) String coverId,
+                                     @NotBlank @Size(max = 100) String title, @Size(max = 30) String stageName) {}
     public record DiscoverRequest(@NotNull @Positive Long version) {}
 
     @GetMapping
@@ -78,6 +80,19 @@ public class ArtistProfileController {
     public ResponseEntity<Release> publish(@AuthenticationPrincipal CreatorPrincipal principal, @PathVariable String work,
             @Valid @RequestBody SongRequest song) {
         return noStore(profiles.publishSong(account(principal), work, song.assetId(), song.coverId(), song.title()));
+    }
+
+    @PutMapping("/releases/{work}/publication")
+    public ResponseEntity<ReleaseSelection> publishEverywhere(@AuthenticationPrincipal CreatorPrincipal principal,
+            @PathVariable String work, @Valid @RequestBody PublicationRequest song) {
+        return noStore(profiles.publishEverywhere(account(principal), work, song.assetId(), song.coverId(),
+                song.title(), song.stageName()));
+    }
+
+    @DeleteMapping("/releases/{work}/publication")
+    public ResponseEntity<ReleaseSelection> makePrivate(@AuthenticationPrincipal CreatorPrincipal principal,
+            @PathVariable String work) {
+        return noStore(profiles.makePrivate(account(principal), work));
     }
 
     @DeleteMapping("/releases/{work}")

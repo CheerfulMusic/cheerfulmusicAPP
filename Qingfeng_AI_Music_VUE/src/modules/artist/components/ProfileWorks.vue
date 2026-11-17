@@ -126,7 +126,7 @@ onBeforeUnmount(() => {
       <button type="button" class="text-button" @click="load">{{ t('重试') }}</button>
     </div>
     <div v-else-if="!rows.length" class="profile-works-message">
-      <p>{{ t(tab === 'published' ? '打开一首已完成的歌曲，选择「公开到主页」。' : '第一首歌，从你的故事开始。') }}</p>
+      <p>{{ t(tab === 'published' ? '打开一首已完成的歌曲，选择「发布到广场」。' : '第一首歌，从你的故事开始。') }}</p>
       <button v-if="tab === 'published'" type="button" class="text-button" @click="tab = 'library'">{{ t('我的作品') }}</button>
       <RouterLink v-else to="/create" class="text-button">{{ t('开始创作') }}</RouterLink>
     </div>

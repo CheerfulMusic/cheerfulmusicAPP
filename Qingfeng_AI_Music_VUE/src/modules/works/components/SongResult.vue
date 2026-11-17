@@ -12,8 +12,8 @@ import type { Work } from '../../studio'
 import SyncedLyrics from './SyncedLyrics.vue'
 import type { EditHint } from '../model/section-edit'
 import { songVersionTitle } from '../model/song-title'
-const props=defineProps<{work:Work;asset:AudioAsset;title:string;version?:number;renameSong:(title:string)=>Promise<void>;lyrics?:string;language?:string|null;cover?:string;pending?:boolean;checking?:boolean;busy?:boolean;sectionOpen?:boolean;publicationLabel:string;canPublishToDiscover:boolean}>()
-defineEmits<{gift:[];premium:[];publish:[];discover:[];regenerate:[];cover:[];edit:[hint?:EditHint]}>()
+const props=defineProps<{work:Work;asset:AudioAsset;title:string;version?:number;renameSong:(title:string)=>Promise<void>;lyrics?:string;language?:string|null;cover?:string;pending?:boolean;checking?:boolean;busy?:boolean;sectionOpen?:boolean;publicationLabel?:string;publicationAction:string;publicationBusy?:boolean;canReplacePublication?:boolean}>()
+defineEmits<{gift:[];premium:[];publish:[];replacePublication:[];regenerate:[];cover:[];edit:[hint?:EditHint]}>()
 const player=usePlayer()
 const unlocked=ref(false)
 const downloadPath=computed(()=>`app/works/${encodeURIComponent(props.work.id)}/audio/${encodeURIComponent(props.asset.id)}/download`)
@@ -113,13 +113,14 @@ async function saveTitle() {
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3v7m0 4v7M12 3v12m0 4v2M19 3v2m0 4v12M2 10h6v4H2zm7 5h6v4H9zm7-10h6v4h-6z"/></svg>
           <span>{{ t('定制化音乐制作') }}</span>
         </button>
-        <button class="button secondary" type="button" @click="$emit('publish')">{{ t(publicationLabel) }}</button>
-        <button v-if="canPublishToDiscover" class="button secondary" type="button" @click="$emit('discover')">{{ t('发布到广场') }}</button>
+        <button class="button secondary" type="button" :disabled="publicationBusy" @click="$emit('publish')">{{ t(publicationAction) }}</button>
+        <button v-if="canReplacePublication" class="button secondary" type="button" :disabled="publicationBusy" @click="$emit('replacePublication')">{{ t('发布当前版本') }}</button>
         <button class="button secondary" :disabled="busy" @click="$emit('regenerate')">{{ pending?t('查看生成进度'):checking?t('核对生成进度'):asset.origin==='GENERATED'?t('调整音乐'):t('重新制作一首') }}</button>
         <button class="button secondary" @click="download">{{ unlocked?t('免费下载'):t('下载（首次10积分）') }}</button>
       </div>
       <p class="save-info">{{ work.recipient?t('先听一遍，再把这份心意送给 TA。'):t('先听一遍，继续打磨你的作品。') }}</p>
     </div>
+    <p v-if="publicationLabel" class="notice" role="status">{{ t(publicationLabel) }}</p>
     <SyncedLyrics :work-id="work.id" :asset-id="asset.id" :lyrics="lyrics" :language="language" :editable="asset.origin==='GENERATED'" :section-open="sectionOpen" @seek="playFrom" @edit="$emit('edit',$event)"/>
   </section>
 </template>

@@ -6,6 +6,9 @@ import static com.qingfeng.music.server.artist.ArtistImage.Kind.COVER;
 import com.qingfeng.music.common.exception.DomainException;
 import com.qingfeng.music.cover.api.SharedCoverAccess;
 import com.qingfeng.music.identity.api.IdentityApi;
+import com.qingfeng.music.generation.api.GenerationApi;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
 import com.qingfeng.music.media.api.MediaApi;
 import com.qingfeng.music.media.api.SharedMediaAccess;
 import com.qingfeng.music.server.security.LogtoIdentityService;
@@ -32,7 +35,12 @@ public class ArtistProfileService {
     public record PublicProfile(String stageName, String tagline, String avatarKey, String coverKey,
                                 String featuredReleaseId, List<PublicSong> songs) {}
     public record PublicSong(String id, long version, String title, boolean hasCover) {}
-    public record ReleaseSelection(boolean profileReady, boolean published, String publicId, String stageName, Release song) {}
+    public record ReleaseSelection(boolean profileReady, boolean published, String publicId, String stageName, Release song,
+                                   boolean publicationPending, boolean reopensSongs) {}
+    record PublicationJob(String id, String owner, String work, String asset, String title, String cover) {}
+    private static final String PUBLICATION_TOPIC = "music.publish";
+    // This event waits for archived audio and is handled by the publication worker.
+    private static final String WAITING_FOR_AUDIO = "WAITING_AUDIO";
     public record DiscoverSong(String artistId, String stageName, PublicSong song, Instant publishedAt,
                                String genre, long plays) {}
     public record DiscoverArtist(String artistId, String stageName, String avatarKey, long songs, long plays) {}
@@ -111,7 +119,7 @@ public class ArtistProfileService {
         if (coverFile != null && removeCover) throw COVER.invalid("请重新选择封面后保存。");
         byte[] avatar = avatarFile == null ? null : ArtistImage.jpeg(avatarFile, AVATAR);
         byte[] cover = coverFile == null ? null : ArtistImage.jpeg(coverFile, COVER);
-        db.queryForObject("SELECT id FROM creator WHERE id=? FOR UPDATE", String.class, creator);
+        lockCreator(creator);
         var existing = findOwner(creator, true);
         String featured = requestedFeature(creator, featuredReleaseId, existing.map(ProfileRow::featuredReleaseId).orElse(null));
         if (existing.isEmpty()) {
@@ -131,10 +139,12 @@ public class ArtistProfileService {
 
     @Transactional
     public MyProfile setPublished(String creator, boolean publish) {
+        lockCreator(creator);
         var profile = requireOwnerProfile(creator);
         if (publish) requireStageName(profile.stageName());
         db.update("UPDATE artist_profile SET published=? WHERE creator_id=?", publish, creator);
         if (!publish) {
+            cancelPendingPublications(creator, null);
             db.update("""
                     UPDATE artist_song_release SET discover_published_at=NULL,discover_featured=FALSE
                     WHERE creator_id=? AND discover_published_at IS NOT NULL
@@ -146,10 +156,117 @@ public class ArtistProfileService {
     @Transactional(readOnly = true)
     public ReleaseSelection selection(String creator, String work) {
         var profile = findOwner(creator, false);
-        return new ReleaseSelection(profile.filter(row -> !row.stageName().isBlank()).isPresent(),
-                profile.map(ProfileRow::published).orElse(false),
+        boolean published = profile.map(ProfileRow::published).orElse(false);
+        boolean pending = db.queryForObject("""
+                SELECT COUNT(*) FROM task_event_outbox e JOIN generation_task t ON t.id=e.event_key
+                JOIN music_work w ON w.id=t.work_id
+                WHERE e.topic=? AND e.state=? AND w.owner_id=? AND w.id=? AND w.deleted_at IS NULL
+                  AND t.status IN ('QUEUED','SUBMITTING','RUNNING','SAVING','SUBMISSION_UNKNOWN','SUCCEEDED')
+                """, Long.class, PUBLICATION_TOPIC, WAITING_FOR_AUDIO, creator, work) > 0;
+        boolean reopensSongs = !published && profile.isPresent()
+                && db.queryForObject("SELECT COUNT(*) FROM (" + PROFILE_RELEASES + ") releases",
+                        Long.class, creator) > 0;
+        return new ReleaseSelection(profile.filter(row -> !row.stageName().isBlank()).isPresent(), published,
                 profile.map(ProfileRow::publicId).orElse(null), profile.map(ProfileRow::stageName).orElse(""),
-                ownerRelease(creator, work).orElse(null));
+                ownerRelease(creator, work).orElse(null), pending, reopensSongs);
+    }
+
+    /** Called only for a newly accepted generation and in that same database transaction. */
+    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.MANDATORY)
+    public void queuePublication(String creator, GenerationApi.Task task, String name) {
+        if (!hasAccount(creator)) throw new ResponseStatusException(HttpStatus.FORBIDDEN, "请先登录音乐账号。");
+        lockCreator(creator);
+        if (ownerRelease(creator, task.workId()).isPresent())
+            throw new DomainException("SONG_ALREADY_PUBLISHED", "请试听后手动发布新版本。");
+        prepareStageName(creator, name);
+        cancelPendingPublications(creator, task.workId());
+        db.update("""
+                INSERT INTO task_event_outbox(id,topic,event_key,payload,state,next_attempt_at,created_at)
+                VALUES(?,?,?,?,?,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)
+                """, uuid(), PUBLICATION_TOPIC, task.id(), task.id(), WAITING_FOR_AUDIO);
+    }
+
+    @Transactional
+    public ReleaseSelection publishEverywhere(String creator, String work, String asset, String cover, String title,
+                                              String stageName) {
+        lockCreator(creator);
+        prepareStageName(creator, stageName);
+        publishEverywhere(creator, work, asset, cover, title);
+        cancelPendingPublications(creator, work);
+        return selection(creator, work);
+    }
+
+    @Transactional
+    public ReleaseSelection makePrivate(String creator, String work) {
+        lockCreator(creator);
+        cancelPendingPublications(creator, work);
+        if (ownerRelease(creator, work).isPresent()) removeSong(creator, work);
+        return selection(creator, work);
+    }
+
+    List<PublicationJob> readyPublications() {
+        return db.query("""
+                SELECT e.id,w.owner_id,w.id,t.asset_id,t.title,c.cover_id
+                FROM task_event_outbox e JOIN generation_task t ON t.id=e.event_key
+                JOIN music_work w ON w.id=t.work_id LEFT JOIN work_cover c ON c.work_id=w.id
+                WHERE e.topic=? AND e.state=? AND e.next_attempt_at<=CURRENT_TIMESTAMP
+                  AND t.status='SUCCEEDED' AND t.asset_id IS NOT NULL AND w.deleted_at IS NULL
+                ORDER BY e.next_attempt_at,e.id LIMIT 16
+                """, (rs, n) -> new PublicationJob(rs.getString(1),rs.getString(2),rs.getString(3),
+                        rs.getString(4),rs.getString(5),rs.getString(6)), PUBLICATION_TOPIC, WAITING_FOR_AUDIO);
+    }
+
+    @Transactional(isolation = org.springframework.transaction.annotation.Isolation.READ_COMMITTED)
+    public void finishPublication(PublicationJob job) {
+        lockCreator(job.owner());
+        if (db.queryForList("SELECT id FROM task_event_outbox WHERE id=? AND state=? FOR UPDATE",
+                job.id(), WAITING_FOR_AUDIO).isEmpty()) return;
+        if (hasAccount(job.owner()) && ownerRelease(job.owner(), job.work()).isEmpty()) {
+            publishEverywhere(job.owner(), job.work(), job.asset(), job.cover(), job.title());
+        }
+        db.update("UPDATE task_event_outbox SET state='SENT',published_at=CURRENT_TIMESTAMP WHERE id=?", job.id());
+    }
+
+    void publicationFailed(PublicationJob job, boolean permanent) {
+        db.update("""
+                UPDATE task_event_outbox SET state=?,attempts=attempts+1,
+                    next_attempt_at=TIMESTAMPADD(SECOND,30,CURRENT_TIMESTAMP),last_error='PUBLICATION_FAILED'
+                WHERE id=? AND state=?
+                """, permanent ? "DEAD" : WAITING_FOR_AUDIO, job.id(), WAITING_FOR_AUDIO);
+    }
+
+    private void publishEverywhere(String creator, String work, String asset, String cover, String title) {
+        var profile = requireOwnerProfile(creator);
+        var release = publishSong(creator, work, asset, cover, title);
+        if (!profile.published())
+            db.update("UPDATE artist_profile SET published=TRUE WHERE creator_id=?", creator);
+        publishToDiscover(creator, work, release.version());
+    }
+
+    private void prepareStageName(String creator, String name) {
+        var profile = findOwner(creator, true);
+        if (profile.filter(row -> !row.stageName().isBlank()).isPresent()) return;
+        String stageName = text(name, 30, "INVALID_ARTIST_NAME", "艺名最多 30 个字符。", false);
+        requireStageName(stageName);
+        if (profile.isEmpty()) {
+            db.update("INSERT INTO artist_profile(creator_id,public_id,stage_name,tagline,published) VALUES(?,?,?,'',FALSE)",
+                    creator, uuid(), stageName);
+        } else {
+            db.update("UPDATE artist_profile SET stage_name=? WHERE creator_id=?", stageName, creator);
+        }
+    }
+
+    private void lockCreator(String creator) {
+        db.queryForObject("SELECT id FROM creator WHERE id=? FOR UPDATE", String.class, creator);
+    }
+
+    private void cancelPendingPublications(String creator, String work) {
+        String jobs = """
+                SELECT t.id FROM generation_task t JOIN music_work w ON w.id=t.work_id WHERE w.owner_id=?
+                """ + (work == null ? "" : " AND w.id=?");
+        db.update("UPDATE task_event_outbox SET state='CANCELLED' WHERE topic=? AND state=? AND event_key IN (" + jobs + ")",
+                work == null ? new Object[]{PUBLICATION_TOPIC, WAITING_FOR_AUDIO, creator}
+                             : new Object[]{PUBLICATION_TOPIC, WAITING_FOR_AUDIO, creator, work});
     }
 
     @Transactional

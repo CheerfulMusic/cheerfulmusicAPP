@@ -3,10 +3,12 @@ import {afterEach,beforeEach,expect,it,vi} from 'vitest'
 import {createApp,nextTick,reactive,type App} from 'vue'
 import WorkDetailPage from '../src/modules/works/pages/WorkDetailPage.vue'
 import type {AudioAsset} from '../src/modules/works/api/detail'
-const api=vi.hoisted(()=>({work:vi.fn(),tasks:vi.fn(),system:vi.fn(),quick:vi.fn(),audio:vi.fn(),selection:vi.fn(),usage:vi.fn(),revision:vi.fn(),push:vi.fn(),paid:vi.fn(),route:{params:{id:'work-a'},query:{}}}))
+const api=vi.hoisted(()=>({work:vi.fn(),tasks:vi.fn(),system:vi.fn(),quick:vi.fn(),audio:vi.fn(),selection:vi.fn(),usage:vi.fn(),revision:vi.fn(),push:vi.fn(),paid:vi.fn(),publication:vi.fn(),lyricsReady:false,route:{params:{id:'work-a'},query:{}}}))
 vi.mock('vue-router',()=>({useRoute:()=>reactive(api.route),useRouter:()=>({push:api.push}),onBeforeRouteLeave:vi.fn(),onBeforeRouteUpdate:vi.fn()}))
 vi.mock('../src/modules/studio',()=>({loadWork:api.work}))
 vi.mock('../src/shared/http/system',()=>({getSystemInfo:api.system}))
+vi.mock('../src/modules/artist/api/artist',async original=>({...await original<typeof import('../src/modules/artist/api/artist')>(),getSongPublication:api.publication}))
+vi.mock('../src/shared/http/api-client',async original=>({...await original<typeof import('../src/shared/http/api-client')>(),currentCreatorId:()=> 'fixture-owner'}))
 vi.mock('../src/modules/works/api/detail',async original=>({...await original<typeof import('../src/modules/works/api/detail')>(),listTasks:api.tasks,listAudio:api.audio,getUsage:api.usage,getRevision:api.revision,submitTask:api.paid}))
 vi.mock('../src/modules/works/api/section-edits',()=>({getAudioSelection:api.selection,selectAudio:api.paid}))
 vi.mock('../src/modules/works/api/covers',()=>({loadCovers:()=>Promise.reject(new Error('offline')),coverUrl:()=>undefined}))
@@ -16,7 +18,12 @@ vi.mock('../src/modules/studio/components/QuickCreationProgress.vue',async()=>{
  return {default:defineComponent({emits:['busy','resolved','checked'],setup(_,ctx){const message=ref('正在核对创作进度');onMounted(async()=>{try{const result=await api.quick();message.value=result?'正在制作音乐':'';ctx.emit('busy',!!result);ctx.emit('resolved',result);ctx.emit('checked',true)}catch{message.value='进度暂时无法读取';ctx.emit('checked',false)}});return()=>h('section',{class:'quick-progress'},message.value) }})}
 })
 vi.mock('../src/modules/works/components/SongResult.vue',()=>({default:{props:['title','asset'],template:'<section id="song-result"><h2>{{title}}</h2><button>试听歌曲</button></section>'}}))
-vi.mock('../src/modules/works/components/LyricsPanel.vue',()=>({default:{template:'<div class="test-lyrics">歌词草稿</div>'}}))
+vi.mock('../src/modules/works/components/LyricsPanel.vue',async()=>{
+ const {defineComponent}=await import('vue')
+ return {default:defineComponent({
+  emits:['ready'],mounted(){this.$emit('ready',api.lyricsReady)},template:'<div class="test-lyrics">歌词草稿</div>',
+ })}
+})
 vi.mock('../src/modules/works/components/SectionEditor.vue',()=>({default:{template:'<div/>'}}))
 vi.mock('../src/modules/works/components/SharePanel.vue',()=>({default:{template:'<div/>'}}))
 vi.mock('../src/modules/works/components/MusicSettingsSnapshot.vue',()=>({default:{template:'<div/>'}}))
@@ -28,7 +35,7 @@ let app:App|undefined
 function mount(){app=createApp(WorkDetailPage);app.component('RouterLink',{props:['to'],template:'<a :href="to"><slot/></a>'});app.mount(document.body.appendChild(document.createElement('div')))}
 function visible(selector:string){const el=document.querySelector<HTMLElement>(selector);if(!el)return false;for(let p:HTMLElement|null=el;p;p=p.parentElement){if(p.style.display==='none')return false}return true}
 beforeEach(()=>{
- vi.clearAllMocks();localStorage.clear();sessionStorage.clear();api.route.params.id='work-a';api.route.query={}
+ vi.clearAllMocks();localStorage.clear();sessionStorage.clear();api.route.params.id='work-a';api.route.query={};api.lyricsReady=false
  api.work.mockImplementation(async(id:string)=>({id,version:1,title:'晚风把今天吹成一首歌',style:'流行',story:'我的故事',recipient:'',vocalGender:'AUTO',message:''}));api.tasks.mockResolvedValue([]);api.system.mockResolvedValue({capabilities:{musicGeneration:true}});api.quick.mockResolvedValue(null);api.audio.mockResolvedValue([audio]);api.selection.mockResolvedValue({asset:audio,version:1});api.usage.mockResolvedValue({music:{dailyUnlimited:true}});api.revision.mockResolvedValue(null)
 })
 afterEach(()=>{app?.unmount();app=undefined;document.body.innerHTML='';vi.restoreAllMocks()})
@@ -61,4 +68,25 @@ it('reports audio-read failure with a safe retry instead of opening draft contro
 })
 it('ignores a late old-work response after navigating to another song',async()=>{
  const old=deferred<never>();api.work.mockReturnValueOnce(old.promise);mount();await flush();reactive(api.route).params.id='work-b';await flush();expect(visible('#song-result')).toBe(true);old.reject(new Error('old work offline'));await flush();expect(document.body.textContent).not.toContain('old work offline')
+})
+
+it('asks for a visible publication choice before generation and lets the saved scope be changed',async()=>{
+ api.lyricsReady=true
+ api.audio.mockResolvedValue([])
+ api.selection.mockResolvedValue({asset:null,version:0})
+ api.publication.mockResolvedValue({profileReady:true,published:true,publicationPending:false,song:null})
+ localStorage.setItem('qingfeng.generation-scope:fixture-owner','public')
+ mount()
+ await flush()
+ const dialog=document.querySelector<HTMLDialogElement>('.save-generation-dialog')!
+ dialog.showModal=()=>{dialog.open=true}
+ document.querySelector<HTMLButtonElement>('.creation-primary')!.click()
+ await flush()
+ expect(dialog.open).toBe(true)
+ expect(dialog.querySelector<HTMLInputElement>('input[value="public"]')!.checked).toBe(true)
+ expect(dialog.querySelector('button[type="submit"]')!.textContent).toBe('生成并发布到广场')
+ dialog.querySelector<HTMLInputElement>('input[value="private"]')!.click()
+ await flush()
+ expect(dialog.querySelector('button[type="submit"]')!.textContent).toBe('私密生成')
+ expect(api.paid).not.toHaveBeenCalled()
 })

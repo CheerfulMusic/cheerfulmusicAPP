@@ -1,3 +1,4 @@
+import type { GenerationPublication } from '../model/generation-recovery'
 import type {LyricsStructure, LyricsTemplateId} from '../model/lyrics-structure'
 import { ensureCreator, requestJson, apiUrl, uploadForm } from '../../../shared/http/api-client'
 export interface Revision { id: string; workId: string; workVersion: number; title: string; lyrics: string; source: string; confirmed: boolean; createdAt: string; language?: string|null; templateId?: LyricsTemplateId|null; chorusFirst?: boolean|null; customSections?: string[]|null }
@@ -72,7 +73,7 @@ export async function rewriteLyricSelection(work: string, input: LyricSelectionI
 export const confirmRevision = (work: string, revision: string) => call<Revision>(`app/works/${work}/lyrics/${revision}/confirm`, 'POST', {})
 export const listAudio = (work: string) => call<AudioAsset[]>(`app/works/${work}/audio`)
 export const listTasks = (work: string) => call<GenerationTask[]>(`app/works/${work}/generations`)
-export const submitTask = (work: string, revisionId: string, requestKey: string) => call<GenerationTask>(`app/works/${work}/generations`, 'POST', { revisionId, requestKey })
+export const submitTask = (work: string, revisionId: string, requestKey: string, publication?: GenerationPublication) => call<GenerationTask>(`app/works/${work}/generations`, 'POST', { revisionId, requestKey, ...(publication?.scope === 'public' ? { publishToDiscover: true, stageName: publication.stageName } : {}) })
 export interface GenerationPreflight {workVersion:number;revisionId:string;styleCharacters:number;styleLimit:number;negativeCharacters:number;negativeLimit:number;notice:string}
 export const preflightGeneration=(work:string,revisionId:string)=>call<GenerationPreflight>(`app/works/${work}/generations/preflight`,'POST',{revisionId})
 export const retryTaskArchive = (work: string, task: string) => call<void>(`app/works/${work}/generations/${task}/retry-archive`, 'POST', {})
