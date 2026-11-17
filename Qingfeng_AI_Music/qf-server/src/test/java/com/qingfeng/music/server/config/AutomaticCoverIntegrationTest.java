@@ -2,6 +2,8 @@ package com.qingfeng.music.server.config;
 
 import com.qingfeng.music.cover.application.CoverService;
 import com.qingfeng.music.generation.application.ExecutionRepository;
+import com.qingfeng.music.generation.api.GenerationApi;
+import com.qingfeng.music.generation.application.port.MusicProvider;
 import com.qingfeng.music.identity.api.IdentityApi;
 import com.qingfeng.music.infrastructure.persistence.cover.JdbcAutomaticCoverJobs;
 import com.qingfeng.music.lyrics.api.LyricsApi;
@@ -21,6 +23,10 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Import;
+import org.springframework.context.annotation.Primary;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.TestPropertySource;
@@ -29,11 +35,24 @@ import static org.junit.jupiter.api.Assertions.*;
 @SpringBootTest(properties = {
     "qingfeng.cover.automatic.enabled=true", "qingfeng.cover.automatic.scheduler-enabled=false",
     "qingfeng.providers.ark.api-key=unused-test-key", "qingfeng.media.storage=local",
+    "qingfeng.generation.enabled=true",
     "qingfeng.cover.directory=./target/automatic-cover-test",
     "spring.datasource.url=jdbc:h2:mem:auto-cover;MODE=MySQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1"
 })
 @ActiveProfiles("test")
+@Import(AutomaticCoverIntegrationTest.Offline.class)
 class AutomaticCoverIntegrationTest {
+    @TestConfiguration(proxyBeanMethods=false)
+    static class Offline {
+        @Bean @Primary MusicProvider offlineMusic() {
+            return new MusicProvider() {
+                public String name() { return "offline-cover-test"; }
+                public boolean isConfigured() { return true; }
+                public Submission submit(Request request,String key) { throw new AssertionError("Unexpected music request"); }
+                public Result query(String id) { throw new AssertionError("Unexpected music query"); }
+            };
+        }
+    }
     @Autowired JdbcTemplate db;
     @Autowired JdbcAutomaticCoverJobs jobs;
     @Autowired ExecutionRepository executions;
@@ -42,8 +61,74 @@ class AutomaticCoverIntegrationTest {
     @Autowired LyricsApi lyrics;
     @Autowired CoverService covers;
     @Autowired MediaService media;
+    @Autowired GenerationApi generation;
 
     record Fixture(String owner, String work, String task, String token, String asset) {}
+
+    @org.junit.jupiter.api.BeforeEach void isolateCoverJobs() {
+        db.update("""
+                UPDATE task_event_outbox SET state='COVER_SKIPPED',last_error='TEST_CLEANUP',
+                    lease_token=NULL,lease_until=NULL WHERE topic='music.cover'
+                """);
+    }
+
+    @Test void submissionWaitsForAudioSavedByAnotherDeployment() {
+        String owner = identity.create().creatorId();
+        var work = works.create(owner, new WorkApi.Draft("朋友", "生日", "故事", "祝福", "民谣", "歌曲"));
+        var revision = lyrics.save(owner, work.id(), 0, "歌名", "雨夜的末班车");
+        lyrics.confirm(owner, work.id(), revision.id());
+        String key = uuid();
+        var task = generation.submit(owner, work.id(), revision.id(), key);
+        assertEquals(task.id(), generation.submit(owner, work.id(), revision.id(), key).id());
+        assertEquals("COVER_WAIT", eventState(task.id()));
+        assertTrue(jobs.claim(10000, Instant.now()).isEmpty());
+        String asset = media.store(task.id(), work.id(), new ByteArrayInputStream(wav()));
+        // Simulate an older remote worker which only archives audio and completes the music task.
+        db.update("UPDATE generation_task SET status='SUCCEEDED',asset_id=? WHERE id=?", asset, task.id());
+        assertTrue(covers.state(owner, work.id()).automaticPending());
+        var claim = jobs.claim(10000, Instant.now()).orElseThrow();
+        assertEquals(task.id(), claim.task());
+        assertEquals("COVER_QUEUED", claim.state());
+        assertEquals(1, db.queryForObject("SELECT COUNT(*) FROM task_event_outbox WHERE topic='music.cover' AND event_key=?", Integer.class, task.id()));
+        jobs.rejected(claim, "TEST_COMPLETE");
+    }
+
+    @Test void cancelledMusicDoesNotTriggerAnImageCall() {
+        var song = fixture();
+        jobs.enqueue(song.task);
+        db.update("UPDATE generation_task SET status='CANCELLED' WHERE id=?", song.task);
+        assertTrue(jobs.claim(10000, Instant.now()).isEmpty());
+        assertEquals("COVER_SKIPPED", state(song));
+    }
+
+    @Test void rolledBackMusicSubmissionCannotLeaveAWaitingCover() {
+        String owner = identity.create().creatorId();
+        var work = works.create(owner, new WorkApi.Draft("朋友", "生日", "故事", "祝福", "民谣", "歌曲"));
+        var revision = lyrics.save(owner, work.id(), 0, "歌名", "雨夜的末班车");
+        lyrics.confirm(owner, work.id(), revision.id());
+        assertThrows(IllegalStateException.class, () ->
+                generation.submit(owner, work.id(), revision.id(), uuid(), task -> {
+                    throw new IllegalStateException("Simulated publication failure");
+                }));
+        assertTrue(generation.list(owner, work.id()).isEmpty());
+        assertFalse(covers.state(owner, work.id()).automaticPending());
+        assertEquals(0, db.queryForObject("""
+                SELECT COUNT(*) FROM model_usage_reservation WHERE work_id=? AND kind='MUSIC'
+                """, Integer.class, work.id()));
+        assertTrue(jobs.claim(10000, Instant.now()).isEmpty());
+    }
+
+    @Test void recoveredAudioArchiveReactivatesItsWaitingCover() {
+        var song = fixture();
+        jobs.enqueue(song.task);
+        db.update("UPDATE generation_task SET status='FAILED',asset_id=NULL WHERE id=?", song.task);
+        assertTrue(jobs.claim(10000, Instant.now()).isEmpty());
+        assertEquals("COVER_SKIPPED", state(song));
+        db.update("UPDATE generation_task SET status='SUCCEEDED',asset_id=? WHERE id=?", song.asset, song.task);
+        var claim = jobs.claim(10000, Instant.now()).orElseThrow();
+        assertEquals(song.task, claim.task());
+        jobs.rejected(claim, "TEST_COMPLETE");
+    }
 
     @Test void completionQueuesOnceAndLaterFillsTheMatchingPublishedVersion() throws Exception {
         var song = fixture();
@@ -170,7 +255,11 @@ class AutomaticCoverIntegrationTest {
     }
 
     private String state(Fixture song) {
-        return db.queryForObject("SELECT state FROM task_event_outbox WHERE topic='music.cover' AND event_key=?", String.class, song.task);
+        return eventState(song.task);
+    }
+
+    private String eventState(String task) {
+        return db.queryForObject("SELECT state FROM task_event_outbox WHERE topic='music.cover' AND event_key=?", String.class, task);
     }
 
     private String release(Fixture song, String asset) {

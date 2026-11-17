@@ -24,14 +24,16 @@ public final class JdbcAutomaticCoverJobs {
         this.tx.setIsolationLevel(TransactionDefinition.ISOLATION_READ_COMMITTED);
     }
 
-    // Runs in the same transaction as the audio's successful archive.
+    // Both submission and successful archive may enqueue. The unique event key keeps one job.
     public void enqueue(String task) {
         db.update("""
                 INSERT INTO task_event_outbox(id,topic,event_key,payload,state,next_attempt_at,created_at)
-                SELECT ?,?,t.id,'','COVER_QUEUED',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP
+                SELECT ?,?,t.id,'',
+                    CASE WHEN t.status='SUCCEEDED' THEN 'COVER_QUEUED' ELSE 'COVER_WAIT' END,
+                    CURRENT_TIMESTAMP,CURRENT_TIMESTAMP
                 FROM generation_task t JOIN music_work w ON w.id=t.work_id
                 LEFT JOIN work_cover c ON c.work_id=w.id
-                WHERE t.id=? AND t.status='SUCCEEDED' AND t.asset_id IS NOT NULL
+                WHERE t.id=? AND t.status IN ('QUEUED','SUBMITTING','RUNNING','SUBMISSION_UNKNOWN','SAVING','SUCCEEDED')
                   AND w.deleted_at IS NULL AND c.cover_id IS NULL AND COALESCE(c.version,0)=0 AND TRIM(t.lyrics)<>''
                   AND NOT EXISTS (SELECT 1 FROM section_edit s WHERE s.task_id=t.id)
                 ON DUPLICATE KEY UPDATE id=task_event_outbox.id
@@ -41,7 +43,8 @@ public final class JdbcAutomaticCoverJobs {
     static boolean pending(JdbcTemplate db, String work) {
         return !db.queryForList("""
                 SELECT 1 FROM task_event_outbox e JOIN generation_task t ON t.id=e.event_key
-                WHERE t.work_id=? AND e.topic=? AND e.state IN ('COVER_QUEUED','COVER_SUBMIT','COVER_SAVING')
+                WHERE t.work_id=? AND e.topic=? AND (e.state IN ('COVER_QUEUED','COVER_SUBMIT','COVER_SAVING')
+                    OR (e.state='COVER_WAIT' AND t.status='SUCCEEDED' AND t.asset_id IS NOT NULL))
                 LIMIT 1
                 """, Integer.class, work, TOPIC).isEmpty();
     }
@@ -50,6 +53,21 @@ public final class JdbcAutomaticCoverJobs {
         return tx.execute(status -> {
             // Serialize the daily provider-call budget across local workers and instances.
             db.queryForObject("SELECT kind FROM model_usage_lock WHERE kind='COVER' FOR UPDATE", String.class);
+            // The audio can be archived by a different deployment that does not yet know about covers.
+            db.update("""
+                    UPDATE task_event_outbox SET state='COVER_QUEUED'
+                    WHERE topic=? AND (state='COVER_WAIT'
+                        OR (state='COVER_SKIPPED' AND last_error='MUSIC_NOT_COMPLETED')) AND event_key IN (
+                        SELECT id FROM generation_task WHERE status='SUCCEEDED' AND asset_id IS NOT NULL
+                    )
+                    """, TOPIC);
+            db.update("""
+                    UPDATE task_event_outbox SET state='COVER_SKIPPED',last_error='MUSIC_NOT_COMPLETED'
+                    WHERE topic=? AND state='COVER_WAIT' AND event_key IN (
+                        SELECT t.id FROM generation_task t JOIN music_work w ON w.id=t.work_id
+                        WHERE t.status IN ('FAILED','CANCELLED') OR w.deleted_at IS NOT NULL
+                    )
+                    """, TOPIC);
             db.update("""
                     UPDATE task_event_outbox SET state='COVER_UNKNOWN',last_error='SUBMISSION_UNKNOWN',
                         lease_token=NULL,lease_until=NULL

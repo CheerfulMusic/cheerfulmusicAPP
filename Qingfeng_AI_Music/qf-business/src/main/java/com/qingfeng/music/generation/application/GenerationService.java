@@ -19,6 +19,8 @@ public class GenerationService implements GenerationApi {
  public GenerationService withSettings(com.qingfeng.music.settings.MusicSettings value){settings=value;return this;}
  private com.qingfeng.music.events.DurableEvents events=(topic,key,payload)->{};
  public GenerationService withEvents(com.qingfeng.music.events.DurableEvents value){events=Objects.requireNonNull(value);return this;}
+ private java.util.function.Consumer<String> automaticCover=task->{};
+ public GenerationService withAutomaticCover(java.util.function.Consumer<String> enqueue){automaticCover=Objects.requireNonNull(enqueue);return this;}
  /** 不占额、不落库、不调用供应商；正式提交仍在事务内重新校验并冻结快照。 */
  public Preflight preflight(String owner,String work,String revisionId){
   var w=works.get(owner,work);var revision=lyrics.get(owner,work,revisionId);
@@ -60,6 +62,7 @@ public class GenerationService implements GenerationApi {
   String id=UUID.randomUUID().toString();var task=checked(repository.insertOrRead(new Task(id,work,revisionId,w.version(),key,revision.title(),revision.lyrics(),w.style(),provider.name(),GenerationStatus.QUEUED,now,null,null,now,now.plusSeconds(5),voice)),revisionId);
   if(task.id().equals(id)){
    if(settings!=null)settings.snapshot(id,direction);
+   automaticCover.accept(id);
    onCreated.accept(task);
    events.publish("music.ready",id,id);
   }
