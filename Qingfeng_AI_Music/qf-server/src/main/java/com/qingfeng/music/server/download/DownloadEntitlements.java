@@ -26,7 +26,7 @@ public class DownloadEntitlements {
     }
 
     public boolean unlocked(String owner, String work) {
-        Integer count = jdbc.queryForObject("SELECT COUNT(*) FROM credit_ledger WHERE entry_type='DEBIT' AND reference_id=? AND owner_id=? AND amount=?", Integer.class, reference(owner, work), owner, -PRICE);
+        Integer count = jdbc.queryForObject("SELECT COUNT(*) FROM credit_ledger WHERE entry_type='DEBIT' AND reference_id=? AND owner_id=? AND amount IN (?, ?)", Integer.class, reference(owner, work), owner, -PRICE, -15);
         return count != null && count > 0;
     }
 
