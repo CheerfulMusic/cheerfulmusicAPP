@@ -68,7 +68,7 @@
 .discover-songs, .discover-side-list { list-style: none; margin: 0; padding: 0; }
 .discover-songs { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 18px; }
 .discover-song { min-width: 0; padding: clamp(8px, .9vw, 14px); border-radius: 23px; background: var(--discover-card); box-shadow: 0 11px 32px #7732520a; }
-.discover-art { position: relative; overflow: hidden; aspect-ratio: 1.73; border-radius: 15px; background: #f1dced; }
+.discover-art { position: relative; overflow: hidden; aspect-ratio: 1 / 1; border-radius: 15px; background: #f1dced; }
 .discover-art > img { display: block; width: 100%; height: 100%; object-fit: cover; }
 .discover-play { position: absolute; inset: auto auto 10px 12px; display: grid; place-items: center; width: 41px; height: 41px; border: 0; border-radius: 50%; background: #fffdfb; color: #35252e; box-shadow: 0 2px 12px #39192c26; }
 .discover-play:hover, .discover-play[aria-pressed="true"] { background: #ec3d2b; color: white; }
