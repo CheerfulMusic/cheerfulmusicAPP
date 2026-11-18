@@ -38,7 +38,8 @@ class GiftPageControllerTest {
         assertEquals(token, data.get("token").asText());
         assertEquals("私人祝福", data.get("message").asText());
         assertEquals("第一句歌词", data.get("lyrics").asText());
-        assertEquals("gift_data;desc=\"inline\"", result.getHeaders().getFirst("Server-Timing"));
+        assertTrue(result.getHeaders().getFirst("Server-Timing")
+                .matches("gift_data;desc=\"inline\", gift_lookup;dur=\\d+, gift_render;dur=\\d+"));
         verify(sharing, times(1)).get(token);
         assertEquals("no-store", result.getHeaders().getCacheControl());
         assertEquals("no-referrer", result.getHeaders().getFirst("Referrer-Policy"));
