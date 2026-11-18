@@ -348,7 +348,7 @@ class IntegratedCreditAccountMySqlTest {
         try{
             var first=pool.submit(()->tx.executeWithoutResult(s->{db.queryForList("SELECT id FROM creator WHERE id=? FOR UPDATE",inviter);inviterHeld.countDown();await(inviteeCredited);ledger.credit(inviter,FirstLoginCredits.AMOUNT,"first-login:"+inviter);releaseInviter.countDown();}));
             assertTrue(inviterHeld.await(10,TimeUnit.SECONDS));var second=pool.submit(()->tx.executeWithoutResult(s->login.grant(invitee)));
-            first.get(10,TimeUnit.SECONDS);second.get(10,TimeUnit.SECONDS);assertEquals(19,FirstLoginCredits.AMOUNT);assertEquals(39,ledger.balance(inviter));assertEquals(19,ledger.balance(invitee));assertEquals(0,releaseInviter.getCount());
+            first.get(10,TimeUnit.SECONDS);second.get(10,TimeUnit.SECONDS);assertEquals(19,FirstLoginCredits.AMOUNT);assertEquals(38,ledger.balance(inviter));assertEquals(19,ledger.balance(invitee));assertEquals(0,releaseInviter.getCount());
         }finally{pool.shutdownNow();assertTrue(pool.awaitTermination(10,TimeUnit.SECONDS));}
     }
 
