@@ -130,7 +130,7 @@
   .discover-content { grid-template-columns: minmax(0,1.85fr) minmax(232px,1fr); }
   .discover-songs { grid-template-columns: repeat(2,minmax(0,1fr)); }
 }
-@media (max-width: 760px) {
+@media (max-width: 900px) {
   .discover-header-inner { grid-template-columns: auto 1fr auto; gap: 5px 16px; padding-block: 10px; }
   .discover-nav { order: 4; grid-column: 1 / -1; justify-content: space-between; min-height: 40px; }
   .discover-nav a { padding: 9px 0; font-size: .95rem; }
@@ -139,6 +139,8 @@
   .discover-search { min-height: 38px; }
   .discover-search-submit { width: 36px; height: 36px; }
   .discover-search input { font-size: .8rem; }
+}
+@media (max-width: 760px) {
   .discover-hero { min-height: 153px; }
   .discover-hero::before { width: 56%; }
   .discover-hero::after { width: 72%; opacity: .72; }

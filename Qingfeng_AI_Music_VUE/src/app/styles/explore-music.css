@@ -141,3 +141,17 @@ html:has(.playlist-dialog[open]) { overflow:hidden; }
 .hot-notice.error { background:var(--warning-soft); color:var(--warning); }
 @media(max-width:1100px) and (min-width:701px) { .hot-song-meta { margin-left:53px; gap:1px 6px; } }
 @media(max-width:700px) { .hot-song-meta { margin-left:62px; gap:1px 9px; } .hot-metric { font-size:11px; } }
+
+@media (max-width: 700px) {
+  .playlist-explore .explore-gallery {
+    position: relative;
+    margin-inline-end: 0;
+    padding-inline-end: 0;
+    overscroll-behavior-x: contain;
+  }
+  .playlist-dialog {
+    max-height: calc(100dvh - 24px);
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+  }
+}
