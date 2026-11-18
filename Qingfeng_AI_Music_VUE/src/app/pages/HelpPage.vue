@@ -3,6 +3,12 @@ import { computed, nextTick, ref } from 'vue'
 import { locale, t } from '../../shared/i18n'
 const en = computed(() => locale.value === 'en')
 const email = 'labelmanager@cheerfulmusic.co.uk'
+const webmail = computed(() => [
+  { name: en.value ? 'QQ Mail' : 'QQ 邮箱', url: 'https://mail.qq.com/' },
+  { name: en.value ? '163 Mail' : '163 邮箱', url: 'https://mail.163.com/' },
+  { name: 'Outlook', url: 'https://outlook.live.com/mail/' },
+  { name: 'Gmail', url: 'https://mail.google.com/' }
+])
 const mail = (feedback = false) => `mailto:${email}?subject=${encodeURIComponent(feedback ? 'Cheerful Music — Feedback' : 'Cheerful Music — Support')}&body=${encodeURIComponent(en.value ? 'Account identifier:\nWork link or order ID (if relevant):\nWhat happened / suggestion:\nTime and timezone:\nBrowser and device:\nSteps to reproduce:\n' : '账号标识：\n作品链接或订单号（如相关）：\n问题描述／建议：\n发生时间与时区：\n浏览器与设备：\n复现步骤：\n')}`
 const draftOpen = ref(false)
 const draft = ref('')
@@ -67,14 +73,19 @@ const questions = computed(() => en.value ? [
     <nav class="help-nav" :aria-label="t('帮助与支持')"><a href="#guide">{{ t('使用指南') }}</a><a href="#faq">{{ t('常见问题 (FAQ)') }}</a><a href="#contact">{{ t('联系客服') }}</a><a href="#feedback">{{ t('反馈建议') }}</a></nav>
     <section id="guide"><h2>{{ t('使用指南') }}</h2><ol><li v-for="[title, text] in steps" :key="title"><h3>{{ title }}</h3><p>{{ text }}</p></li></ol><div class="help-links"><RouterLink to="/create">{{ t('开始创作') }} →</RouterLink><RouterLink to="/works">{{ t('我的音乐') }} →</RouterLink></div></section>
     <section id="faq"><h2>{{ t('常见问题 (FAQ)') }}</h2><details v-for="[question, answer] in questions" :key="question"><summary>{{ question }}</summary><p>{{ answer }}</p></details><div class="help-links"><RouterLink to="/recharge">{{ en ? 'Credit rates' : '查看积分规则' }}</RouterLink><RouterLink to="/account">{{ en ? 'Account and orders' : '查看账号与订单' }}</RouterLink></div></section>
-    <section id="contact"><h2>{{ t('联系客服') }}</h2><p>{{ en ? 'For account, creation or payment issues, email us with your account identifier, relevant work link or order ID, the time, and a description. Screenshots can help; redact sensitive details.' : '账号、创作或支付问题，请邮件提供账号标识、相关作品链接或订单号、发生时间和问题描述。可附上截图，并遮盖敏感信息。' }}</p><a class="help-email" :href="mail()">{{ email }}</a><p>{{ en ? 'This opens your email app; no support request is submitted on this page. If no mail app opens, copy the address into your email service.' : '点击邮箱将打开邮件应用，本页面不会直接提交工单。如未打开邮件应用，请复制邮箱地址自行发送。' }}</p><p class="privacy-note">{{ en ? 'Never send passwords, verification codes, recovery codes or full payment card details.' : '请勿发送密码、验证码、作品找回码或完整银行卡信息。' }}</p></section>
+    <section id="contact"><h2>{{ t('联系客服') }}</h2><p>{{ en ? 'For account, creation or payment issues, email us with your account identifier, relevant work link or order ID, the time, and a description. Screenshots can help; redact sensitive details.' : '账号、创作或支付问题，请邮件提供账号标识、相关作品链接或订单号、发生时间和问题描述。可附上截图，并遮盖敏感信息。' }}</p><a class="help-email" :href="mail()">{{ email }}</a><p>{{ en ? 'This address only opens a configured email app. You can also open your webmail below and compose a message to this address.' : '点击地址仅能唤起已配置的邮件应用。也可以直接打开下方网页版邮箱，登录后新建邮件并填写此收件人。' }}</p><div class="help-links webmail-links"><a v-for="provider in webmail" :key="provider.url" :href="provider.url" target="_blank" rel="noopener noreferrer">{{ provider.name }} ↗</a></div><p class="privacy-note">{{ en ? 'Never send passwords, verification codes, recovery codes or full payment card details.' : '请勿发送密码、验证码、作品找回码或完整银行卡信息。' }}</p></section>
     <section id="feedback"><h2>{{ t('反馈建议') }}</h2><p>{{ en ? 'Tell us which feature you were using, what you expected, and what happened. For a bug, include your browser, device and steps to reproduce. For an idea, describe the problem you want to solve.' : '请说明使用的功能、期望的效果和实际情况。反馈故障时可补充浏览器、设备及复现步骤；提出建议时，请描述希望解决的问题。' }}</p><button class="button" type="button" :aria-expanded="draftOpen" aria-controls="feedback-draft" @click="openDraft">{{ en ? 'Write a feedback email' : '撰写反馈邮件' }}</button><p>{{ en ? 'Edit a draft here, then copy it into your email service or open your email app. Feedback is only sent when you send the email.' : '先在本页填写草稿，再复制到你的邮箱或打开邮件应用发送。填写草稿不代表反馈已提交。' }}</p>
       <div v-if="draftOpen" id="feedback-draft" class="feedback-draft">
         <p>{{ en ? 'To' : '收件人' }}：<span>{{ email }}</span><br>{{ en ? 'Subject' : '主题' }}：Cheerful Music — Feedback</p>
         <label for="feedback-body">{{ en ? 'Email body' : '邮件正文' }}</label>
         <textarea id="feedback-body" ref="draftField" v-model="draft" rows="9" aria-describedby="feedback-privacy" />
         <p id="feedback-privacy">{{ en ? 'Do not include passwords, verification codes or full card details.' : '请勿填写密码、验证码或完整银行卡信息。' }}</p>
-        <div class="help-links"><button type="button" class="button" @click="copyDraft">{{ en ? 'Copy email content' : '复制邮件内容' }}</button><a :href="draftMail" @click="attemptedMail">{{ en ? 'Open email app' : '打开邮件应用' }}</a></div>
+        <div class="help-links"><button type="button" class="button" @click="copyDraft">{{ en ? 'Copy email content' : '复制邮件内容' }}</button><a :href="draftMail" @click="attemptedMail">{{ en ? 'Use an installed email app' : '使用已配置的邮件应用' }}</a></div>
+        <div class="webmail-options">
+          <h3>{{ en ? 'Send using webmail' : '使用网页版邮箱发送' }}</h3>
+          <p>{{ en ? 'First copy the email content, then choose your email service. Sign in, compose a new message, fill in the recipient and subject shown above, and paste the body. These links open your mailbox; they do not send or automatically fill in the draft.' : '先点击“复制邮件内容”，再选择你使用的邮箱。登录后点击“写信”，填写上方收件人和主题，粘贴正文后发送。以下入口会打开网页版邮箱，不会自动填入草稿或发送邮件。' }}</p>
+          <div class="help-links webmail-links"><a v-for="provider in webmail" :key="provider.url" :href="provider.url" target="_blank" rel="noopener noreferrer">{{ provider.name }} ↗</a></div>
+        </div>
         <p role="status" aria-live="polite">{{ draftStatus }}</p>
       </div></section>
     <aside class="help-links"><a href="/legal/terms.html">{{ t('用户服务条款（含积分与退款规则）') }}</a><a href="/legal/privacy.html">{{ t('隐私政策') }}</a><a href="/legal/community.html">{{ t('音乐作品发布与社区规则') }}</a></aside>

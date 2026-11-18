@@ -20,10 +20,17 @@ describe('help and support', () => {
     expect(page.find('#feedback-draft').exists()).toBe(false)
     await page.get('#feedback > button').trigger('click')
     expect(page.get('#feedback > button').attributes('aria-expanded')).toBe('true')
+    const webmail = page.findAll('#feedback-draft .webmail-links a')
+    expect(webmail).toHaveLength(4)
+    for (const link of webmail) {
+      expect(new URL(link.attributes('href')!).protocol).toBe('https:')
+      expect(link.attributes('target')).toBe('_blank')
+      expect(link.attributes('rel')).toContain('noopener')
+    }
     expect((page.get('#feedback-body').element as HTMLTextAreaElement).value).toContain('复现步骤')
     await page.get('#feedback-body').setValue('点击没有反应 & 请帮忙')
     await page.get('#feedback > button').trigger('click')
-    const link = page.get('#feedback-draft a')
+    const link = page.get('#feedback-draft a[href^="mailto:"]')
     const url = new URL(link.attributes('href') ?? '')
     expect(url.protocol).toBe('mailto:')
     expect(url.pathname).toBe('labelmanager@cheerfulmusic.co.uk')
