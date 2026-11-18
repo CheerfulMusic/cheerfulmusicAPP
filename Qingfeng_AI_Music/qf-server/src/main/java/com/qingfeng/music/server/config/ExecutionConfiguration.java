@@ -11,9 +11,8 @@ import java.util.stream.Collectors;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.*;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.scheduling.annotation.*;
 
-@Configuration(proxyBeanMethods=false) @Profile({"mysql","test"}) @EnableScheduling
+@Configuration(proxyBeanMethods=false) @Profile({"mysql","test"}) @Import(PrimarySchedulingConfiguration.class)
 public class ExecutionConfiguration {
     @Bean ExecutionRepository executionRepository(ExecutionMapper mapper, org.springframework.jdbc.core.JdbcTemplate jdbc,
             org.springframework.transaction.PlatformTransactionManager manager, com.qingfeng.music.credits.CreditsLedger credits,
