@@ -101,6 +101,15 @@ class NativeAuthenticationIntegrationTest {
     }
 
     @org.springframework.test.annotation.DirtiesContext(methodMode=org.springframework.test.annotation.DirtiesContext.MethodMode.BEFORE_METHOD)
+    @Test void rejectedPasswordCanRetryWithVerifiedCode()throws Exception{
+        var browser=browser();String email=email();
+        assertEquals(200,code(browser,"email",email,"register").statusCode());
+        var rejected=post(browser,"/register",Map.of("email",email,"password","Rejected123","code","123456"));
+        assertEquals("LOGIN_PASSWORD_REJECTED",JSON.readTree(rejected.body()).path("code").asText());
+        var retried=post(browser,"/register",Map.of("email",email,"password","BetterPassword892","code","123456"));
+        assertEquals(200,retried.statusCode(),retried.body());
+    }
+
     @Test void passwordResetRevokesOldBusinessSession()throws Exception{
         var loggedIn=browser();String email=email();USERS.add(email);
         assertEquals(200,post(loggedIn,"/password/sign-in",Map.of("email",email,"password","correct-password")).statusCode());
@@ -243,11 +252,12 @@ class NativeAuthenticationIntegrationTest {
             if(f.channel.equals("phone"))assertTrue(f.value.matches("[0-9]+"));reply(x,200,Map.of("verificationId",f.verification));return;
         }
         if(path.equals("/api/experience/verification/verification-code/verify")){
+            if(f.verified){reply(x,400,Map.of("code","verification_code.expired"));return;}
             if(!"123456".equals(body.path("code").asText())||!Objects.equals(f.verification,body.path("verificationId").asText())||!Objects.equals(f.value,body.path("identifier").path("value").asText())){reply(x,400,Map.of("code","verification_code.code_mismatch"));return;}
             f.verified=true;reply(x,200,Map.of("verificationId",f.verification));return;
         }
         if(path.equals("/api/experience/interaction-event")){assertTrue(f.verified);f.event="Register";reply(x,204,null);return;}
-        if(path.equals("/api/experience/profile")){assertTrue(f.verified);assertEquals("Register",f.event);assertEquals("password",body.path("type").asText());reply(x,204,null);return;}
+        if(path.equals("/api/experience/profile")){if("Rejected123".equals(body.path("value").asText())){reply(x,422,Map.of("code","password.rejected"));return;}assertTrue(f.verified);assertEquals("Register",f.event);assertEquals("password",body.path("type").asText());reply(x,204,null);return;}
         if(path.equals("/api/experience/identification")){
             if(!f.verified||!Objects.equals(f.verification,body.path("verificationId").asText())){reply(x,400,Map.of("code","session.verification_failed"));return;}
             if(f.event.equals("Register")){

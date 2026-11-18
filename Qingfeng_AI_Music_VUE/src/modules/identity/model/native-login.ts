@@ -14,7 +14,7 @@ export function nativeLoginError(code?: string, status?: number): string {
   if (code === 'LOGIN_ACCOUNT_EXISTS') return '该账号已注册，请返回登录；忘记密码可选择找回密码。'
   if (code === 'LOGIN_CODE_INVALID') return '验证码不正确或已过期，请检查后重试。'
   if (code === 'LOGIN_FLOW_EXPIRED') return '验证已过期，请重新发送验证码。'
-  if (code === 'LOGIN_PASSWORD_REJECTED') return '密码不符合要求，请使用至少8位字符并包含字母和数字。'
+  if (code === 'LOGIN_PASSWORD_REJECTED') return '认证服务未接受此密码，请换一个更强的密码，避免常见密码或包含邮箱信息；无需重新获取验证码。'
   if (code === 'LOGIN_ACCOUNT_CONFLICT') return '该账号已有登录记录，请使用原有方式登录。'
   if (code === 'LOGIN_REGION_UNAVAILABLE') return '该地区短信暂未开通，请使用邮箱登录。'
   if (code === 'LOGIN_RATE_LIMITED' || status === 429) return '操作过于频繁，请稍后重试。'

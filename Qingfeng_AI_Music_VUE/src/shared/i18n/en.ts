@@ -1803,6 +1803,7 @@ export const english: Record<string, string> = {
   '该账号已注册，请返回登录；忘记密码可选择找回密码。': 'This account is already registered. Sign in or reset your password.',
   '验证码不正确或已过期，请检查后重试。': 'The code is incorrect or has expired. Check it and try again.',
   '验证已过期，请重新发送验证码。': 'Verification expired. Please request a new code.',
+  '认证服务未接受此密码，请换一个更强的密码，避免常见密码或包含邮箱信息；无需重新获取验证码。': 'The authentication service rejected this password. Try a stronger password without common phrases or your email information. You can reuse the verification code.',
   '密码不符合要求，请使用至少8位字符并包含字母和数字。': 'Use at least 8 characters, including letters and numbers.',
   '该账号已有登录记录，请使用原有方式登录。': 'This account already exists. Please use your original sign-in method.',
   '操作过于频繁，请稍后重试。': 'Too many attempts. Please try again later.',

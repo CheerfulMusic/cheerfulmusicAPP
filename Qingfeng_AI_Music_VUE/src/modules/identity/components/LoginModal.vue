@@ -88,7 +88,7 @@ function onClosed() {
   if (returnFocus?.isConnected) returnFocus.focus()
   returnFocus = null
 }
-function onBackdropClick(event: MouseEvent) { if (event.target === dialog.value) close() }
+function onBackdropClick(event: MouseEvent) { event.stopPropagation() }
 function changeMethod(next: 'email' | 'phone') {
   if (locked.value) return
   method.value = next; emailMode.value = 'sign-in'; clearSensitive()
