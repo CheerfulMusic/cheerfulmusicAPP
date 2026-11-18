@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, useId, watch } from 'vue'
 import type { AnalyticsUserPageRow, AnalyticsUserRow, AnalyticsUserSort } from '../api/analytics'
 import { accountDetail, accountName, accountTypeLabel, avatarText, dwellLabel, filterUsers, isGuest, pageName, type UserFilter } from '../model/dwell'
 
@@ -16,7 +16,7 @@ defineEmits<{ toggle: [creatorId: string]; retrySort: [] }>()
 
 const filter = defineModel<UserFilter>('filter', { default: 'all' })
 const sort = defineModel<AnalyticsUserSort>('sort', { default: 'active' })
-const visible = computed(() => filterUsers(props.rows, filter.value))
+const identityRows = computed(() => filterUsers(props.rows, filter.value))
 const guests = computed(() => props.rows.filter(row => isGuest(row.accountType)).length)
 const signed = computed(() => props.rows.length - guests.value)
 
@@ -27,6 +27,26 @@ function time(value: string): string {
   const date = new Date(value)
   return Number.isNaN(date.getTime()) ? '—' : date.toLocaleString('zh-CN', { hour12: false, month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })
 }
+
+const columns = [
+  { label: '用户', value: (row: AnalyticsUserRow) => [accountName(row), accountDetail(row), row.creatorId].filter(Boolean) },
+  { label: '登录方式', value: (row: AnalyticsUserRow) => [accountTypeLabel(row.accountType)] },
+  { label: '创作', value: (row: AnalyticsUserRow) => [works(row)] },
+  { label: '访问', value: (row: AnalyticsUserRow) => [visits(row)] },
+  { label: '停留', value: (row: AnalyticsUserRow) => [dwellLabel(row.avgDurationMs, row.samples), row.samples ? `${row.samples} 次停留` : '无有效样本'] },
+  { label: '最近访问', value: (row: AnalyticsUserRow) => [time(row.lastSeen)] },
+]
+const filterId = useId()
+const queries = ref(columns.map(() => ''))
+const expanded = ref(false)
+const suggestions = computed(() => columns.map(column => [...new Set(identityRows.value.flatMap(column.value))]))
+const normalize = (value: string) => value.trim().toLowerCase().replaceAll(',', '')
+const visible = computed(() => identityRows.value.filter(row => columns.every((column, index) => {
+  const query = normalize(queries.value[index] ?? '')
+  return !query || column.value(row).some(value => normalize(value).includes(query))
+})))
+const displayed = computed(() => expanded.value ? visible.value : visible.value.slice(0, 10))
+watch([visible, sort], () => { expanded.value = false })
 </script>
 
 <template>
@@ -45,6 +65,15 @@ function time(value: string): string {
     <p v-if="sorting" class="users-sort-hint" role="status">正在加载用户列表…</p>
     <p v-else-if="!sortError" class="users-sort-hint">{{ sort === 'latest' ? '按最近访问时间从新到旧排序' : '按所选周期内的访问量从高到低排序' }}，展示前 50 位用户。</p>
 
+    <div v-if="rows.length && !sortError" class="column-filters">
+      <label v-for="(column, index) in columns" :key="column.label">
+        {{ column.label }}
+        <input v-model="queries[index]" type="search" :list="`${filterId}-${index}`" placeholder="输入或选择">
+        <datalist :id="`${filterId}-${index}`">
+          <option v-for="value in suggestions[index]" :key="value" :value="value" />
+        </datalist>
+      </label>
+    </div>
     <div v-if="sortError" class="users-empty" role="alert">
       加载失败。{{ sortError }}
       <button type="button" class="analytics-retry" @click="$emit('retrySort')">重试</button>
@@ -52,7 +81,7 @@ function time(value: string): string {
     <div v-else-if="!rows.length" class="users-empty">所选时间范围内暂无用户数据。</div>
     <div v-else-if="!visible.length" class="users-empty">当前筛选下没有用户。</div>
     <ul v-else class="users-list">
-      <li v-for="row in visible" :key="row.creatorId" :class="{ open: openUser === row.creatorId }">
+      <li v-for="row in displayed" :key="row.creatorId" :class="{ open: openUser === row.creatorId }">
         <button type="button" class="users-row" :aria-expanded="openUser === row.creatorId" :aria-controls="`user-pages-${row.creatorId}`" @click="$emit('toggle', row.creatorId)">
           <span class="avatar" :class="{ guest: isGuest(row.accountType) }" aria-hidden="true">{{ avatarText(row) }}</span>
           <span class="user-main">
@@ -81,10 +110,17 @@ function time(value: string): string {
         </div>
       </li>
     </ul>
+    <button v-if="!sortError && visible.length > 10" type="button" class="users-expand" :aria-expanded="expanded" @click="expanded = !expanded">
+      {{ expanded ? '收起其余用户' : `展开其余 ${visible.length - 10} 条` }}
+    </button>
   </div>
 </template>
 
 <style scoped>
+.column-filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(125px, 1fr)); gap: 10px; margin: 12px 0; }
+.column-filters label { display: grid; gap: 5px; color: #665650; font-size: 12px; }
+.column-filters input, .users-expand { min-width: 0; min-height: 36px; padding: 6px 10px; border: 1px solid #f0e1dc; border-radius: 8px; background: #fffaf8; color: #493a35; font: inherit; }
+.users-expand { display: block; margin: 12px auto 0; cursor: pointer; }
 .users-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 14px; }
 .users-summary { margin: 0; color: #8a7c76; font-size: 12px; }
 .users-controls { display: flex; flex-wrap: wrap; gap: 8px; }
