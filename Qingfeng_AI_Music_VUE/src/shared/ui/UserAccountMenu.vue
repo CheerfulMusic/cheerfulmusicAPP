@@ -14,6 +14,8 @@ const emit = defineEmits<{ opened: [] }>()
 const route = useRoute()
 const root = ref<HTMLElement>(), trigger = ref<HTMLButtonElement>(), panel = ref<HTMLElement>()
 const open = ref(false), error = ref(''), analyticsAllowed = ref(false)
+const contactText = ref<HTMLElement>()
+const copyStatus = ref('')
 async function refreshAnalyticsAccess() {
   try { analyticsAllowed.value = (await analyticsAccess()).allowed === true }
   catch { analyticsAllowed.value = false }
@@ -25,13 +27,30 @@ const contact = computed(() => logtoState.value.authenticated
 const displayName = computed(() => (logtoState.value.authenticated ? logtoState.value.name?.trim() : accountState.value.name?.trim()) || contact.value?.split('@')[0] || t('我的账号'))
 const initials = computed(() => displayName.value.split(/\s+/).slice(0, 2).map(part => Array.from(part)[0]).join('').toLocaleUpperCase())
 
+async function copyContact() {
+  if (!contact.value) return
+  try {
+    await navigator.clipboard.writeText(contact.value)
+    copyStatus.value = '已复制账号信息'
+  } catch {
+    const selection = window.getSelection()
+    if (contactText.value && selection) {
+      const range = document.createRange()
+      range.selectNodeContents(contactText.value)
+      selection.removeAllRanges()
+      selection.addRange(range)
+    }
+    copyStatus.value = '自动复制失败，请选中账号文字手动复制。'
+  }
+}
+watch(contact, () => { copyStatus.value = '' })
 async function close(returnFocus = false) {
   open.value = false
   if (returnFocus) { await nextTick(); trigger.value?.focus() }
 }
 async function toggle() {
   if (open.value) { await close(); return }
-  error.value = ''; open.value = true; emit('opened')
+  error.value = ''; copyStatus.value = ''; open.value = true; emit('opened')
   await nextTick(); panel.value?.querySelector<HTMLElement>('a')?.focus()
 }
 function outside(event: PointerEvent) { if (!root.value?.contains(event.target as Node)) void close() }
@@ -68,7 +87,7 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', outside))
         <span class="account-trigger-avatar" aria-hidden="true">{{ initials }}</span><span class="account-trigger-name">{{ displayName }}</span><svg class="account-chevron" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m4 6 4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </button>
       <div v-if="open" id="user-account-panel" ref="panel" class="account-popover">
-        <div class="account-popover-identity"><strong>{{ displayName }}</strong><span v-if="contact">{{ contact }}</span><small>{{ t(logtoState.authenticated ? '音乐账号' : 'Google 账号') }}</small></div>
+        <div class="account-popover-identity"><strong>{{ displayName }}</strong><div v-if="contact" class="account-contact"><span ref="contactText">{{ contact }}</span><button type="button" class="account-copy" :aria-label="t('复制账号信息')" @click.stop="copyContact">{{ t('复制') }}</button></div><small v-if="copyStatus" role="status" aria-live="polite">{{ t(copyStatus) }}</small><small>{{ t(logtoState.authenticated ? '音乐账号' : 'Google 账号') }}</small></div>
         <nav :aria-label="t('账号菜单')">
           <RouterLink to="/profile"><NavIcon name="account" />{{ t('我的资料') }}</RouterLink>
           <RouterLink to="/account"><NavIcon name="account" />{{ t('账号与登录') }}</RouterLink>
@@ -96,6 +115,11 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', outside))
 .account-popover-identity { display: grid; gap: 4px; padding: 10px 12px 13px; margin-bottom: 6px; border-bottom: 1px solid var(--line); min-width: 0; }
 .account-popover-identity strong { color: var(--ink); font-size: 13px; overflow-wrap: anywhere; }
 .account-popover-identity span { color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }
+.account-contact { display: flex; align-items: flex-start; gap: 8px; min-width: 0; }
+.account-contact span { flex: 1; min-width: 0; user-select: text; cursor: text; }
+.account-copy { flex: 0 0 auto; padding: 3px 7px; border: 1px solid var(--line); border-radius: 6px; color: var(--accent-text); background: var(--surface); font-size: 11px; cursor: pointer; }
+.account-copy:hover { background: var(--accent-soft); }
+.account-copy:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2px; }
 .account-popover-identity small { color: var(--muted); font-size: 10px; }
 .account-popover nav { display: grid; gap: 3px; }
 .account-popover nav a, .account-popover nav button { display: flex; align-items: center; gap: 11px; width: 100%; min-height: 42px; padding: 10px 12px; border-radius: 8px; color: var(--ink); font-size: 12px; text-align: left; }

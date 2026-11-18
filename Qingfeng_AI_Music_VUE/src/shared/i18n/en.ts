@@ -1,5 +1,9 @@
 /** Chinese source copy is the stable message key; business option values stay unchanged. */
 export const english: Record<string, string> = {
+  '复制账号信息': 'Copy account information',
+  '已复制账号信息': 'Account information copied',
+  '自动复制失败，请选中账号文字手动复制。': 'Could not copy automatically. Select the account text and copy it manually.',
+
   '积分好礼': 'Credit rewards',
   '邀请有礼': 'Invite friends',
   '邀请新用户首次登录，送19积分': 'Earn 19 credits when a new friend signs in for the first time',
