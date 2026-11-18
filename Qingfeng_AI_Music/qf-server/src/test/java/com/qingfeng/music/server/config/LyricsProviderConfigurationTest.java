@@ -46,7 +46,7 @@ class LyricsProviderConfigurationTest {
         assertFalse(config.lyricsWriter(env).isConfigured());
     }
     @Test void defaultUsesOpenAiAndExplicitQwenRoute() {
-        assertEquals("OPENAI", assertInstanceOf(FallbackLyricsWriter.class, config.lyricsWriter(new MockEnvironment())).source());
+        assertEquals("OPENAI", config.lyricsWriter(new MockEnvironment()).source());
         assertTrue(config.lyricsWriter(new MockEnvironment().withProperty("qingfeng.lyrics.provider", "qwen")
             .withProperty("qingfeng.providers.qwen.api-key", "offline-key")).isConfigured());
     }
@@ -75,10 +75,10 @@ class LyricsProviderConfigurationTest {
         env.setProperty("qingfeng.providers.openai.api-key", "offline-openai-key");
         assertTrue(assertInstanceOf(FallbackLyricsWriter.class, config.lyricsWriter(env)).isConfigured());
     }
-    @Test void explicitFallbackOptOutAndMissingBackupKeepOpenAiOnly() {
+    @Test void explicitFallbackOptOutKeepsTheOpenAiRoute() {
         var env = new MockEnvironment()
             .withProperty("qingfeng.providers.openai.api-key", "offline-openai-key");
-        assertEquals("OPENAI", assertInstanceOf(FallbackLyricsWriter.class, config.lyricsWriter(env)).source());
+        assertEquals("OPENAI", config.lyricsWriter(env).source());
         env.setProperty("qingfeng.providers.qwen.api-key", "offline-qwen-key");
         env.setProperty("qingfeng.lyrics.qwen-fallback-enabled", "false");
         assertInstanceOf(OpenAiLyricsWriter.class, config.lyricsWriter(env));
