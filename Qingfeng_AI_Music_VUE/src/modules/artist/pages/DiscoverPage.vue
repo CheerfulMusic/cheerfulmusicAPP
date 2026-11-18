@@ -9,6 +9,7 @@ import ArtistAvatar from '../components/ArtistAvatar.vue'
 import DiscoverSongCard from '../components/DiscoverSongCard.vue'
 import PlaylistDetails from '../../home/components/PlaylistDetails.vue'
 import { usePreviewPlaylists } from '../../home/model/playlists'
+import { usePreviewTracks } from '../../home/model/tracks'
 import { accountState } from '../../../shared/identity/account-state'
 import { logtoState } from '../../../shared/identity/logto-state'
 import {
@@ -34,7 +35,8 @@ const genres = [
 ]
 const covers = [sunset, moon, mountains, lavender, city, lake]
 const player = usePlayer()
-const playlists = usePreviewPlaylists()
+const previewPlaylists = usePreviewPlaylists()
+const previewTracks = usePreviewTracks()
 const tab = ref<(typeof tabs)[number]['id']>('latest')
 const genre = ref('')
 const search = ref('')
@@ -78,7 +80,7 @@ function withTracks(items: DiscoverSong[]) {
   })
 }
 const rows = computed(() => withTracks(songs.value))
-const featuredRows = computed(() => withTracks(featuredSongs.value).slice(0, 6))
+const featuredRows = computed(() => withTracks(featuredSongs.value).slice(0, 7))
 const popularRows = computed(() => withTracks(popularSongs.value).slice(0, 3))
 // The public popular endpoint orders by plays DESC, then publication time and ID.
 const heroRows = computed(() => withTracks(popularSongs.value).slice(0, 5))
@@ -90,11 +92,18 @@ const visibleArtists = computed(() => {
   }])).values())
   return showAllArtists.value ? found : found.slice(0, 3)
 })
-const visiblePlaylists = computed(() => playlists.value.flatMap(playlist => {
+const playlists = computed(() => {
+  const discoTracks = previewTracks.value.filter(track => track.filters.includes('disco'))
+  const [firstDiscoTrack] = discoTracks
+  if (!firstDiscoTrack) return previewPlaylists.value
+  return [...previewPlaylists.value, {
+    id: 'disco', title: t('Disco'), subtitle: 'DISCO', cover: firstDiscoTrack.cover, tracks: discoTracks,
+  }]
+})
+const visiblePlaylists = computed(() => {
   const keyword = query.value.toLocaleLowerCase()
-  if (!playlist.tracks.length || keyword && !playlist.title.toLocaleLowerCase().includes(keyword)) return []
-  return [playlist]
-}).slice(0, 3))
+  return playlists.value.filter(playlist => playlist.tracks.length && playlist.title.toLocaleLowerCase().includes(keyword)).slice(0, 4)
+})
 const playlistDetails = computed(() => playlists.value.find(playlist => playlist.id === selectedPlaylist.value))
 
 async function loadEditorial() {

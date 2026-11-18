@@ -17,7 +17,7 @@ vi.mock('../src/shared/player/store', () => ({
 }))
 vi.mock('../src/shared/ui/BrandLogo.vue', () => ({ default: { template: '<span>CHEERFUL MUSIC</span>' } }))
 vi.mock('../src/modules/home/components/PlaylistDetails.vue', () => ({
-  default: { props: ['playlist'], emits: ['close'], template: '<div class="test-playlist">{{ playlist.title }}<button @click="$emit(\'close\')">close</button></div>' },
+  default: { props: ['playlist'], emits: ['close'], template: '<div class="test-playlist">{{ playlist.title }}<span v-for="track in playlist.tracks" :key="track.id">{{ track.title }}</span><button @click="$emit(\'close\')">close</button></div>' },
 }))
 
 import DiscoverPage from '../src/modules/artist/pages/DiscoverPage.vue'
@@ -54,6 +54,17 @@ afterEach(() => {
 })
 
 describe('Discover editorial layout with real content', () => {
+  it('shows four populated playlists and up to seven featured songs', async () => {
+    const featured = Array.from({ length: 8 }, (_, i) => song(`精选${i + 1}`))
+    mocks.list.mockImplementation(async (tab: string) => page(tab === 'featured' ? featured : [song(tab)]))
+    const wrapper = await open()
+    expect(wrapper.findAll('.discover-featured .discover-song')).toHaveLength(7)
+    const tiles = wrapper.findAll('.discover-playlist-tiles button')
+    expect(tiles.map(tile => tile.get('strong').text())).toEqual(['华语流行', '电子', '欧美流行', 'Disco'])
+    await tiles[3]!.trigger('click')
+    expect(wrapper.get('.test-playlist').text()).toContain('忽然下起雨')
+  })
+
   it('keeps the introduction first and cycles through the top five songs from the global popular feed', async () => {
     const popular = Array.from({ length: 6 }, (_, i) => song(`热门${i + 1}`, 600 - i * 100))
     mocks.list.mockImplementation(async (tab: string) => page(tab === 'featured' ? [song('精选一')] : tab === 'popular' ? popular : [song(tab)]))

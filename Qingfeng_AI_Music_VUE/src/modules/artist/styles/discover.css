@@ -62,7 +62,7 @@
 .discover-section-heading > a, .discover-section-heading > button, .discover-side-heading > a, .discover-side-heading > button { flex: none; padding: 0; border: 0; background: transparent; color: var(--discover-muted); font-size: .78rem; white-space: nowrap; }
 .discover-section-heading > a:hover, .discover-section-heading > button:hover, .discover-side-heading > button:hover { color: var(--discover-accent); }
 .discover-playlist-tiles, .discover-songs, .discover-side-list, .discover-ranking { margin: 0; padding: 0; list-style: none; }
-.discover-playlist-tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.discover-playlist-tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
 .discover-playlist-tiles button { position: relative; isolation: isolate; display: flex; align-items: flex-end; overflow: hidden; width: 100%; height: clamp(110px, 9vw, 150px); padding: 18px; border: 0; border-radius: 8px; background: #2a3b50; color: #fff; text-align: start; }
 .discover-playlist-tiles button::after { content: ''; position: absolute; z-index: -1; inset: 0; background: linear-gradient(0deg, #101c3ac9, #0000000a); }
 .discover-playlist-tiles img { position: absolute; z-index: -2; inset: 0; width: 100%; height: 100%; object-fit: cover; }
@@ -117,7 +117,7 @@
 .discover-message p { margin: 0 0 12px; color: inherit; }
 .discover-more { margin-top: 24px; text-align: center; }
 @media (min-width: 1201px) {
-  .discover-songs { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+  .discover-songs { grid-template-columns: repeat(7, minmax(0, 1fr)); }
 }
 @media (max-width: 1200px) {
   .discover-header-inner { gap: 26px; }
@@ -156,6 +156,7 @@
   .discover-hero-previous { left: 4px; }
   .discover-hero-next { right: 4px; }
   .discover-content { grid-template-columns: minmax(0, 1fr); gap: 32px; padding-top: 24px; }
+  .discover-playlist-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .discover-sidebar { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; padding: 24px 0 0; border: 0; border-top: 1px solid var(--discover-line); }
   .discover-side-panel + .discover-side-panel { padding: 0; border: 0; }
   .discover-publish { grid-column: 1 / -1; margin: 0; }
