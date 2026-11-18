@@ -1,6 +1,11 @@
 /** Chinese source copy is the stable message key; business option values stay unchanged. */
 export const english: Record<string, string> = {
   '广场推荐': 'Discover highlights',
+  '热门作品': 'Popular songs',
+  '查看音乐广场介绍': 'View the Discover introduction',
+  '轮播': 'Carousel',
+  '暂停轮播': 'Pause carousel',
+  '继续轮播': 'Resume carousel',
   '精选作品': 'Featured songs',
   '让好音乐，被更多人听见': 'Good music deserves to be heard',
   '从一段故事，到一首属于你的歌。': 'From a story to a song of your own.',

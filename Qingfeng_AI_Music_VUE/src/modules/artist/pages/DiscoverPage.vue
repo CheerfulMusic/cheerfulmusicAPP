@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { locale, t } from '../../../shared/i18n'
 import { usePlayer, type PlayableTrack } from '../../../shared/player/store'
 import BrandLogo from '../../../shared/ui/BrandLogo.vue'
@@ -45,6 +45,11 @@ const popularSongs = ref<DiscoverSong[]>([])
 const editorialLoading = ref(true)
 const popularFailed = ref(false)
 const heroIndex = ref(0)
+const heroPaused = ref(false)
+const heroHovered = ref(false)
+const heroFocused = ref(false)
+const pageVisible = ref(true)
+const reducedMotion = ref(false)
 const artists = ref<DiscoverArtist[]>()
 const hasMore = ref(false)
 const loading = ref(true)
@@ -57,6 +62,8 @@ let request = 0
 let offset = 0
 let disposed = false
 let editorialRequest = 0
+let heroTimer: ReturnType<typeof setInterval> | undefined
+let motionQuery: MediaQueryList | undefined
 
 const count = computed(() => new Intl.NumberFormat(locale.value))
 const signedIn = computed(() => accountState.value.authenticated || logtoState.value.authenticated)
@@ -73,8 +80,10 @@ function withTracks(items: DiscoverSong[]) {
 const rows = computed(() => withTracks(songs.value))
 const featuredRows = computed(() => withTracks(featuredSongs.value).slice(0, 4))
 const popularRows = computed(() => withTracks(popularSongs.value).slice(0, 3))
-const heroRows = computed(() => featuredRows.value.slice(0, 3))
-const hero = computed(() => heroRows.value[heroIndex.value % (heroRows.value.length || 1)])
+// The public popular endpoint orders by plays DESC, then publication time and ID.
+const heroRows = computed(() => withTracks(popularSongs.value).slice(0, 5))
+const heroSlideCount = computed(() => heroRows.value.length + 1)
+const hero = computed(() => heroIndex.value === 0 ? undefined : heroRows.value[heroIndex.value - 1])
 const visibleArtists = computed(() => {
   const found = artists.value ?? Array.from(new Map(songs.value.map(song => [song.artistId, {
     artistId: song.artistId, stageName: song.stageName, avatarKey: null,
@@ -91,21 +100,49 @@ const playlistDetails = computed(() => playlists.value.find(playlist => playlist
 async function loadEditorial() {
   const attempt = ++editorialRequest
   editorialLoading.value = true
-  const results = await Promise.allSettled([
-    listDiscoverSongs('featured', 0, '', ''),
-    listDiscoverSongs('popular', 0, '', ''),
+  const active = () => !disposed && attempt === editorialRequest
+  await Promise.all([
+    listDiscoverSongs('featured', 0, '', '').then(page => {
+      if (active()) featuredSongs.value = page.songs
+    }).catch(() => { /* Keep the last featured response; it does not block popular songs. */ }),
+    listDiscoverSongs('popular', 0, '', '').then(page => {
+      if (!active()) return
+      popularSongs.value = page.songs
+      heroIndex.value = 0
+      popularFailed.value = false
+    }).catch(() => {
+      if (active()) popularFailed.value = true
+    }).finally(() => {
+      if (active()) editorialLoading.value = false
+    }),
   ])
-  if (disposed || attempt !== editorialRequest) return
-  const [featured, popular] = results
-  if (featured.status === 'fulfilled') { featuredSongs.value = featured.value.songs; heroIndex.value = 0 }
-  if (popular.status === 'fulfilled') popularSongs.value = popular.value.songs
-  popularFailed.value = popular.status === 'rejected'
-  editorialLoading.value = false
 }
 
 function changeHero(direction: number) {
-  const size = heroRows.value.length
-  if (size) heroIndex.value = (heroIndex.value + direction + size) % size
+  heroIndex.value = (heroIndex.value + direction + heroSlideCount.value) % heroSlideCount.value
+}
+function restartHeroRotation() {
+  clearInterval(heroTimer)
+  heroTimer = undefined
+  if (disposed || heroSlideCount.value < 2 || heroPaused.value || heroHovered.value || heroFocused.value
+    || !pageVisible.value || reducedMotion.value || player.playing || player.starting) return
+  heroTimer = setInterval(() => changeHero(1), 6000)
+}
+function heroFocusOut(event: FocusEvent) {
+  heroFocused.value = event.relatedTarget instanceof Node && (event.currentTarget as HTMLElement).contains(event.relatedTarget)
+}
+function visibilityChanged() { pageVisible.value = document.visibilityState !== 'hidden' }
+function motionChanged() { reducedMotion.value = motionQuery?.matches ?? false }
+watch([heroSlideCount, heroIndex, heroPaused, heroHovered, heroFocused, pageVisible, reducedMotion,
+  () => player.playing, () => player.starting], restartHeroRotation)
+
+function initializeHeroRotation() {
+  motionQuery = window.matchMedia('(prefers-reduced-motion: reduce)')
+  motionChanged()
+  visibilityChanged()
+  motionQuery.addEventListener('change', motionChanged)
+  document.addEventListener('visibilitychange', visibilityChanged)
+  restartHeroRotation()
 }
 function genreLabel(genre?: string) {
   return genre && genre !== 'other' ? t(genres.find(item => item.id === genre)?.label ?? '') : ''
@@ -177,8 +214,13 @@ async function play(row: (typeof rows.value)[number], queue = rows.value) {
   }
 }
 
-onMounted(() => { void load(true); void loadEditorial() })
-onBeforeUnmount(() => { disposed = true; ++request; ++editorialRequest })
+onMounted(() => { initializeHeroRotation(); void load(true); void loadEditorial() })
+onBeforeUnmount(() => {
+  disposed = true; ++request; ++editorialRequest
+  clearInterval(heroTimer)
+  motionQuery?.removeEventListener('change', motionChanged)
+  document.removeEventListener('visibilitychange', visibilityChanged)
+})
 </script>
 
 <template>
@@ -206,10 +248,11 @@ onBeforeUnmount(() => { disposed = true; ++request; ++editorialRequest })
 
     <div class="discover-width">
       <div class="discover-page-heading"><h1>{{ t('音乐广场') }}</h1><p>{{ t('聆听每一份创作的灵感') }}</p></div>
-      <section class="discover-hero" :class="{ 'has-featured': hero }" :aria-label="t('广场推荐')">
+      <section class="discover-hero" :class="{ 'has-featured': hero }" :aria-label="t('广场推荐')" :aria-roledescription="t('轮播')"
+        @mouseenter="heroHovered = true" @mouseleave="heroHovered = false" @focusin="heroFocused = true" @focusout="heroFocusOut">
         <img class="discover-hero-background" :src="coast" alt="" width="2172" height="724" fetchpriority="high">
         <div class="discover-hero-content">
-          <span class="discover-hero-label">{{ t(hero ? '精选作品' : '音乐广场') }}</span>
+          <span class="discover-hero-label">{{ t(hero ? '热门作品' : '音乐广场') }}</span>
           <h2>{{ hero?.song.title || t('让好音乐，被更多人听见') }}</h2>
           <RouterLink v-if="hero" class="discover-hero-artist" :to="{ name: 'artist-home', params: { id: hero.artistId } }">{{ hero.stageName }}</RouterLink>
           <p v-else>{{ t('从一段故事，到一首属于你的歌。') }}</p>
@@ -217,11 +260,15 @@ onBeforeUnmount(() => { disposed = true; ++request; ++editorialRequest })
           <a v-else class="discover-hero-listen" href="#discover-tracks"><PlaybackIcon :playing="false" />{{ t('立即聆听') }}</a>
         </div>
         <img v-if="hero" class="discover-hero-cover" :src="hero.track.cover" :alt="t('歌曲封面')" width="260" height="260">
-        <template v-if="heroRows.length > 1">
+        <template v-if="heroSlideCount > 1">
           <button class="discover-hero-previous" type="button" :aria-label="t('上一张推荐')" @click="changeHero(-1)">‹</button>
           <button class="discover-hero-next" type="button" :aria-label="t('下一张推荐')" @click="changeHero(1)">›</button>
-          <div class="discover-hero-dots" role="group" :aria-label="t('切换推荐')">
-            <button v-for="(row, index) in heroRows" :key="row.song.id" type="button" :aria-label="t('查看推荐：{title}', { title: row.song.title })" :aria-pressed="heroIndex === index" @click="heroIndex = index"></button>
+          <div class="discover-hero-controls">
+            <div class="discover-hero-dots" role="group" :aria-label="t('切换推荐')">
+              <button type="button" :aria-label="t('查看音乐广场介绍')" :aria-pressed="heroIndex === 0" @click="heroIndex = 0"></button>
+              <button v-for="(row, index) in heroRows" :key="row.song.id" type="button" :aria-label="t('查看推荐：{title}', { title: row.song.title })" :aria-pressed="heroIndex === index + 1" @click="heroIndex = index + 1"></button>
+            </div>
+            <button class="discover-hero-rotation" type="button" :aria-label="t(heroPaused ? '继续轮播' : '暂停轮播')" :aria-pressed="heroPaused" @click="heroPaused = !heroPaused"><PlaybackIcon :playing="!heroPaused" /></button>
           </div>
         </template>
       </section>
