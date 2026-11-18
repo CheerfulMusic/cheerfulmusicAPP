@@ -60,7 +60,15 @@ public final class QuickCreationService {
     }
     public boolean runOnce(){
         String token=UUID.randomUUID().toString();var found=repository.claim(token);if(found.isEmpty())return false;
-        var entry=found.get();String revision=entry.revisionId();
+        return advance(found.get(),token,true);
+    }
+    public boolean runClaimed(String work,String id,String token){
+        var entry=repository.find(work,id);
+        if(entry.isEmpty()||!token.equals(entry.get().leaseToken())||!repository.renew(id,token))return false;
+        return advance(entry.get(),token,false);
+    }
+    private boolean advance(QuickCreationRepository.Entry entry,String token,boolean release){
+        String revision=entry.revisionId();
         try{
             var submitted=music(entry);
             if(submitted.isPresent()){checkpoint(entry,token,"MUSIC_QUEUED",submitted.get().revisionId(),submitted.get().id(),null,0);return true;}
@@ -93,7 +101,7 @@ public final class QuickCreationService {
                 repository.checkpoint(entry.id(),token,revision==null?"QUEUED":"LYRICS_READY",revision,null,null,5);
             else repository.checkpoint(entry.id(),token,"FAILED",revision,null,code,0);
             LOG.log(System.Logger.Level.WARNING,"Quick creation stopped: id={0}, code={1}",entry.id(),code);
-        }finally{repository.release(entry.id(),token);}
+        }finally{if(release)repository.release(entry.id(),token);}
         return true;
     }
     private void checkpoint(QuickCreationRepository.Entry entry,String token,String status,String revision,String task,String error,int delay){

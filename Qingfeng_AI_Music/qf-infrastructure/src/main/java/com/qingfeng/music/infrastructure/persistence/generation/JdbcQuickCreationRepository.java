@@ -45,6 +45,18 @@ public final class JdbcQuickCreationRepository implements QuickCreationRepositor
         for(var entry:due)if(jdbc.update("UPDATE quick_creation SET lease_token=?,lease_until=TIMESTAMPADD(SECOND,180,CURRENT_TIMESTAMP) WHERE id=? AND status IN ('QUEUED','WRITING','LYRICS_READY','SUBMITTING_MUSIC') AND (lease_until IS NULL OR lease_until<CURRENT_TIMESTAMP) AND EXISTS(SELECT 1 FROM music_work w WHERE w.id=quick_creation.work_id AND w.deleted_at IS NULL)",token,entry.id())==1)return find(entry.workId(),entry.id());
         return Optional.empty();
     }
+    public Optional<Entry> claim(String work,String id,String token){
+        int changed=jdbc.update("""
+            UPDATE quick_creation SET lease_token=?,lease_until=TIMESTAMPADD(SECOND,180,CURRENT_TIMESTAMP)
+            WHERE work_id=? AND id=? AND status IN ('QUEUED','WRITING','LYRICS_READY','SUBMITTING_MUSIC')
+              AND next_attempt_at<=CURRENT_TIMESTAMP AND (lease_until IS NULL OR lease_until<CURRENT_TIMESTAMP)
+              AND EXISTS(SELECT 1 FROM music_work w WHERE w.id=quick_creation.work_id AND w.deleted_at IS NULL)
+            """,token,work,id);
+        return changed==1?find(work,id):Optional.empty();
+    }
+    public boolean renew(String id,String token){
+        return jdbc.update("UPDATE quick_creation SET lease_until=TIMESTAMPADD(SECOND,180,CURRENT_TIMESTAMP) WHERE id=? AND lease_token=?",id,token)==1;
+    }
     public boolean checkpoint(String id,String token,String status,String revision,String task,String error,int delay){
         return jdbc.update("UPDATE quick_creation SET status=?,revision_id=?,task_id=?,error_code=?,next_attempt_at=TIMESTAMPADD(SECOND,?,CURRENT_TIMESTAMP),updated_at=CURRENT_TIMESTAMP WHERE id=? AND lease_token=? AND EXISTS(SELECT 1 FROM music_work w WHERE w.id=quick_creation.work_id AND w.deleted_at IS NULL)",status,revision,task,error,delay,id,token)==1;
     }
