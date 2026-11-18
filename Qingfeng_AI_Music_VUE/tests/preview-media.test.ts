@@ -4,7 +4,16 @@ import {tmpdir} from 'node:os'
 import {resolve} from 'node:path'
 import {fileURLToPath} from 'node:url'
 import {previewMediaManifest} from '../build/preview-media'
+import viteConfig from '../vite.config'
 const directories:string[]=[]
+it('routes recommendation audio and covers through the normal development entry',async()=>{
+ const config=await viteConfig({command:'serve',mode:'test'})
+ const rules=Object.keys(config.server!.proxy!).filter(rule=>rule.startsWith('^')).map(rule=>new RegExp(rule))
+ for(const path of ['/media/sample-feng-ye-xing-v1-preview-128.mp3','/media/sample-feng-ye-xing-v1-cover.jpg','/media/sample-feng-ye-xing-v1-preview-128.mp3?reauth=1']){
+  expect(rules.some(rule=>rule.test(path)),path).toBe(true)
+ }
+ expect(rules.some(rule=>rule.test('/media/trending-genres-v1.png'))).toBe(false)
+})
 afterEach(()=>{for(const d of directories.splice(0))rmSync(d,{recursive:true,force:true})})
 function fixture(audio:Buffer|null){
  const root=mkdtempSync(resolve(tmpdir(),'preview-media-'));directories.push(root)
