@@ -9,10 +9,11 @@ defineEmits<{more:[]}>()
 <template>
   <article class="explore-card playlist-card">
     <header class="explore-category-heading">
-      <img class="explore-category-cover" :src="playlist.cover" :alt="t('{title}歌单封面',{title:playlist.title})" width="100" height="100" loading="lazy">
-      <div><h3>{{ playlist.title }}</h3><p>{{ playlist.subtitle }}</p></div>
+      <span class="playlist-genre-banner" role="img" :aria-label="t('{title}歌单封面',{title:playlist.title})" :style="{backgroundPosition: `${playlist.bannerPosition || '0%'} 25%`}"/>
+      <div><p lang="en">{{ playlist.subtitle }}</p><h3>{{ playlist.title }}</h3></div>
     </header>
-    <ul class="explore-track-list"><li v-for="track in playlist.tracks.slice(0,3)" :key="track.id"><PreviewTrackRow :track="track" :queue="playlist.tracks"/></li></ul>
-    <button class="playlist-more" type="button" :aria-label="t('查看{title}歌单',{title:playlist.title})" @click="$emit('more')">{{ t('查看更多') }}</button>
+    <ul v-if="playlist.tracks.length" class="explore-track-list"><li v-for="track in playlist.tracks.slice(0,3)" :key="track.id"><PreviewTrackRow :track="track" :queue="playlist.tracks"/></li></ul>
+    <p v-if="!playlist.tracks.length" class="playlist-empty">{{ t('歌曲即将上新') }}</p>
+    <button class="playlist-more" type="button" :disabled="!playlist.tracks.length" :aria-label="t('查看{title}歌单',{title:playlist.title})" @click="$emit('more')">{{ t('查看全部') }} <span aria-hidden="true">→</span></button>
   </article>
 </template>
