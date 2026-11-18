@@ -1811,6 +1811,8 @@ export const english: Record<string, string> = {
   '验证码不正确或已过期，请检查后重试。': 'The code is incorrect or has expired. Check it and try again.',
   '验证已过期，请重新发送验证码。': 'Verification expired. Please request a new code.',
   '认证服务未接受此密码，请换一个更强的密码，避免常见密码或包含邮箱信息；无需重新获取验证码。': 'The authentication service rejected this password. Try a stronger password without common phrases or your email information. You can reuse the verification code.',
+  '发布': 'Publish',
+  '歌曲生成完成后即可发布到广场。': 'Publish to Discover once the song is ready.',
   '密码长度须为8至128位。': 'Password must be 8–128 characters long.',
   '8至128位，可使用纯数字或英文': '8–128 characters; numbers or letters are allowed',
   '使用8至128位字符，可使用纯数字、纯英文或混合字符。': 'Use 8–128 characters: numbers only, letters only, or a mixture.',
