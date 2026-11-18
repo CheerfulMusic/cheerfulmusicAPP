@@ -1,7 +1,8 @@
 import type { PlayableTrack } from '../../../shared/player/store'
+import type { PublishedSong } from '../../artist/api/artist'
 import { computed } from 'vue'
 import { t } from '../../../shared/i18n'
-export interface PreviewTrack extends PlayableTrack { recipient: string; subtitle: string; style: string; occasion: string; description: string; quote: string; category: string; durationSeconds: number; filters: string[]; tags: string[]; authoredTitle?: boolean; genre?: string; delivery?: 'CDN'; lyrics?: string }
+export interface PreviewTrack extends PlayableTrack { recipient: string; subtitle: string; style: string; occasion: string; description: string; quote: string; category: string; durationSeconds: number; filters: string[]; tags: string[]; authoredTitle?: boolean; genre?: string; delivery?: 'CDN'; lyrics?: string; publication?: { artistId: string; stageName: string; song: PublishedSong } }
 export const previewFilters = [
   {id:'pop',label:'流行'},{id:'electronic',label:'电子'},{id:'rnb',label:'R&B / Soul'},
   {id:'indie',label:'独立'},{id:'rock',label:'摇滚'},{id:'hiphop',label:'嘻哈'},

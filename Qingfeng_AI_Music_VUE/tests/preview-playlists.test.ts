@@ -4,7 +4,7 @@ import {tracks} from '../src/modules/home/model/tracks'
 
 const playlists:PreviewPlaylist[]=playlistDefinitions.map(playlist=>({...playlist,tracks:playlist.trackIds.map(id=>tracks.find(track=>track.id===id)!)}))
 describe('compact preview playlists',()=>{
- it('uses the supplied folder categories with twelve new songs and an empty House column',()=>{
+ it('keeps the twelve supplied samples in their folder categories separately from published House releases',()=>{
   expect(playlists.map(playlist=>playlist.title)).toEqual(['华语流行','电子','欧美流行','House'])
   expect(playlists.map(playlist=>playlist.tracks.length)).toEqual([8,1,3,0])
   for(const playlist of playlists){expect(playlist.tracks.every(Boolean)).toBe(true)}

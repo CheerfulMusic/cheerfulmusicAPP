@@ -4,7 +4,8 @@ import {t} from '../../../shared/i18n'
 import {usePlayer} from '../../../shared/player/store'
 import PlaybackIcon from '../../../shared/ui/PlaybackIcon.vue'
 import type {PreviewTrack} from '../model/tracks'
-import {formatHotCount,hotStat,isFavorited,isLiked,isPending,recordPlay,toggleReaction} from '../model/hot-songs'
+import {formatHotCount,hotStat,isFavorited,isLiked,isPending,toggleReaction} from '../model/hot-songs'
+import {recordPreviewPlay} from '../model/published-recommendations'
 
 const props=defineProps<{track:PreviewTrack;queue:PreviewTrack[]}>()
 const player=usePlayer()
@@ -12,7 +13,7 @@ const playing=computed(()=>player.current?.id===props.track.id&&(player.playing|
 const stat=computed(()=>hotStat(props.track.id))
 const liked=computed(()=>isLiked(props.track.id)),favorited=computed(()=>isFavorited(props.track.id))
 const duration=computed(()=>{const seconds=Math.floor(props.track.durationSeconds);return `${Math.floor(seconds/60).toString().padStart(2,'0')}:${(seconds%60).toString().padStart(2,'0')}`})
-function play(){player.setQueue(props.queue);if(!playing.value)recordPlay(props.track.id);void player.toggle(props.track)}
+async function play(){const wasPlaying=playing.value;player.setQueue(props.queue);await player.toggle(props.track);if(!wasPlaying&&player.current?.audio===props.track.audio&&player.playing)void recordPreviewPlay(props.track)}
 </script>
 
 <template>
@@ -22,7 +23,8 @@ function play(){player.setQueue(props.queue);if(!playing.value)recordPlay(props.
       <span class="explore-track-copy"><strong :title="track.title">{{ track.title }}</strong><span>{{ track.genre||track.category }} <span aria-hidden="true">·</span> {{ duration }}</span></span>
       <span class="explore-track-play"><PlaybackIcon :playing="playing"/></span>
     </button>
-    <div class="hot-song-meta">
+    <div v-if="track.publication" class="hot-song-meta"><RouterLink :to="{name:'artist-home',params:{id:track.publication.artistId}}">{{ track.publication.stageName }}</RouterLink></div>
+    <div v-else class="hot-song-meta">
       <span class="hot-metric"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2.5 12.5 8 4 13.5Z"/></svg>{{ formatHotCount(stat.plays) }}<span class="sr-only">{{ t('播放量') }}</span></span>
       <button type="button" class="hot-metric hot-action" :class="{active:liked}" :aria-pressed="liked" :disabled="isPending(track.id,'like')" @click="toggleReaction(track.id,'like')">
         <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 13.2 3 8.4a2.9 2.9 0 1 1 5-3.4 2.9 2.9 0 1 1 5 3.4Z"/></svg>{{ formatHotCount(stat.likes) }}<span class="sr-only">{{ liked?t('已点赞'):t('点赞') }}</span>

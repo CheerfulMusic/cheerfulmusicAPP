@@ -1,6 +1,7 @@
 import {computed} from 'vue'
 import {t} from '../../../shared/i18n'
 import {usePreviewTracks,type PreviewTrack} from './tracks'
+import {useHouseRecommendations} from './published-recommendations'
 
 export interface PreviewPlaylist {id:string;title:string;subtitle:string;cover:string;bannerPosition?:string;tracks:PreviewTrack[]}
 export const playlistDefinitions=[
@@ -15,10 +16,11 @@ export function filterPlaylists(playlists:readonly PreviewPlaylist[],filter:stri
   return playlists.map(playlist=>({...playlist,tracks:playlist.tracks.filter(track=>track.filters.includes(filter))})).filter(playlist=>playlist.tracks.length>0)
 }
 
-export function usePreviewPlaylists(){
+export function usePreviewPlaylists({includeHouseReleases=false}:{includeHouseReleases?:boolean}={}){
   const tracks=usePreviewTracks()
+  const house=includeHouseReleases?useHouseRecommendations():undefined
   return computed<PreviewPlaylist[]>(()=>playlistDefinitions.map(playlist=>({
     id:playlist.id,title:t(playlist.title),subtitle:playlist.subtitle,cover:playlist.cover,bannerPosition:playlist.bannerPosition,
-    tracks:playlist.trackIds.flatMap(id=>{const track=tracks.value.find(item=>item.id===id);return track?[track]:[]}),
+    tracks:playlist.id==='house'&&house?house.value.map(track=>({...track,filters:[...track.filters],tags:[...track.tags]})):playlist.trackIds.flatMap(id=>{const track=tracks.value.find(item=>item.id===id);return track?[track]:[]}),
   })))
 }

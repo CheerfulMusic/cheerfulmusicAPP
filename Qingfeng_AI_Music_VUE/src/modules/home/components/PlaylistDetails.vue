@@ -3,14 +3,14 @@ import {ref,onMounted,onBeforeUnmount} from 'vue'
 import {t} from '../../../shared/i18n'
 import {usePlayer} from '../../../shared/player/store'
 import type {PreviewPlaylist} from '../model/playlists'
-import {recordPlay} from '../model/hot-songs'
+import {recordPreviewPlay} from '../model/published-recommendations'
 import PreviewTrackRow from './PreviewTrackRow.vue'
 
 const props=defineProps<{playlist:PreviewPlaylist}>(),emit=defineEmits<{close:[]}>()
 const dialog=ref<HTMLDialogElement>(),player=usePlayer()
 onMounted(()=>dialog.value?.showModal())
 onBeforeUnmount(()=>dialog.value?.close())
-function playAll(){const first=props.playlist.tracks[0];if(first){player.setQueue(props.playlist.tracks);if(player.current?.id!==first.id||!player.playing&&!player.starting){recordPlay(first.id);void player.toggle(first)}}}
+async function playAll(){const first=props.playlist.tracks[0];if(first){player.setQueue(props.playlist.tracks);if(player.current?.id!==first.id||!player.playing&&!player.starting){await player.toggle(first);if(player.current?.audio===first.audio&&player.playing)void recordPreviewPlay(first)}}}
 function backdrop(event:MouseEvent){if(event.target!==dialog.value)return;const box=dialog.value.getBoundingClientRect();if(event.clientX<box.left||event.clientX>box.right||event.clientY<box.top||event.clientY>box.bottom)emit('close')}
 </script>
 
