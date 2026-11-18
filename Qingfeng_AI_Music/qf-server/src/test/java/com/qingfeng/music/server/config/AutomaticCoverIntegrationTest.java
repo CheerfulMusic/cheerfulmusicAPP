@@ -141,11 +141,129 @@ class AutomaticCoverIntegrationTest {
     }
 
     @org.junit.jupiter.api.BeforeEach void isolateCoverJobs() {
+        if ("true".equals(System.getenv("QF_LIVE_ARK_COVER"))) {
+            assertEquals("qf_execution_concurrency_test",db.queryForObject("SELECT DATABASE()",String.class));
+            assertEquals(System.getenv("QF_EXECUTION_MYSQL_TEST_UUID"),db.queryForObject("SELECT @@server_uuid",String.class));
+            assertEquals(57618,db.queryForObject("SELECT @@port",Integer.class));
+        }
         db.update("""
                 UPDATE task_event_outbox SET state='COVER_SKIPPED',last_error='TEST_CLEANUP',
                     lease_token=NULL,lease_until=NULL WHERE topic='music.cover'
                 """);
     }
+
+    @Test @EnabledIfEnvironmentVariable(named="QF_LIVE_ARK_COVER",matches="true")
+    void realArkArtisticCoverSurvivesVerificationOutagesAndFinishesLocally() throws Exception {
+        var song=fixture();
+        db.update("UPDATE generation_task SET title='晚风写给你',lyrics='[Verse]\\n晚风经过安静的街头\\n灯光陪着脚步慢慢走\\n[Chorus]\\n把心里的期待唱给自由' WHERE id=?",song.task);
+        jobs.enqueue(song.task); // Music is still SAVING when the image request begins.
+        String key=System.getenv("ARK_API_KEY");assertNotNull(key);assertFalse(key.isBlank());
+        var actual=new com.qingfeng.music.infrastructure.provider.ArkCoverImageProvider(key,com.qingfeng.music.infrastructure.provider.ArkCoverImageProvider.MODEL);
+        var verifier=new com.qingfeng.music.infrastructure.provider.ArkCoverTitleVerifier(key,com.qingfeng.music.infrastructure.provider.ArkCoverTitleVerifier.DEFAULT_MODEL);
+        var creates=new AtomicInteger();var repairs=new AtomicInteger();var reads=new AtomicInteger();var checks=new AtomicInteger();
+        var approved=new com.qingfeng.music.infrastructure.storage.ProviderAudioUrls();
+        var downloader=new com.qingfeng.music.infrastructure.storage.AllowlistedAudioDownloader(java.util.Set.of(),approved);
+        var provider=new com.qingfeng.music.cover.application.CoverImageProvider(){
+            public String generate(String prompt)throws IOException,InterruptedException{creates.incrementAndGet();return actual.generate(prompt);}
+            public String edit(byte[] input,String prompt)throws IOException,InterruptedException{repairs.incrementAndGet();return actual.edit(input,prompt);}
+        };
+        var runner=new AutomaticCoverConfiguration.Runner(jobs,provider,covers,url->{reads.incrementAndGet();approved.approve(url);return downloader.open(url);},10000,(picture,title)->{
+            int number=checks.getAndIncrement();
+            if(number==0)throw new com.qingfeng.music.common.exception.DomainException("LYRICS_PROVIDER_CONNECT_FAILED","simulated connection failure");
+            if(number==1)throw new IOException("simulated temporary outage");
+            return verifier.matches(picture,title);
+        });
+        long begin=System.nanoTime();runner.run();runner.run();
+        assertEquals("COVER_SAVING",state(song));assertNull(covers.current(song.work));
+        assertEquals(1,covers.state(song.owner,song.work).assets().size());
+        due(song);runner.run();assertEquals("COVER_SAVING",state(song));assertEquals(1,reads.get());
+        for(int i=0;i<8&&!java.util.Set.of("COVER_DONE","COVER_FAILED","COVER_UNKNOWN").contains(state(song));i++){due(song);runner.run();}
+        assertEquals("COVER_DONE",state(song));assertEquals(1,creates.get());assertTrue(repairs.get()<=1);
+        assertEquals("SAVING",db.queryForObject("SELECT status FROM generation_task WHERE id=?",String.class,song.task));
+        complete(song);assertNotNull(covers.current(song.work));
+        var folder=java.nio.file.Path.of("target/live-ark-cover");java.nio.file.Files.createDirectories(folder);
+        try(var in=covers.open(song.owner,song.work,covers.current(song.work)).source().open()){
+            byte[] image=in.readAllBytes();java.nio.file.Files.write(folder.resolve("verified-cover.jpg"),image);
+            assertEquals(1024,ImageIO.read(new ByteArrayInputStream(image)).getWidth());
+        }
+        java.nio.file.Files.writeString(folder.resolve("verification.json"),new tools.jackson.databind.ObjectMapper().writeValueAsString(java.util.Map.of(
+                "state",state(song),"generationCalls",creates.get(),"repairCalls",repairs.get(),"verificationAttempts",checks.get(),"downloads",reads.get(),
+                "elapsedMillis",(System.nanoTime()-begin)/1000000,"isolatedDatabase",db.queryForObject("SELECT DATABASE()",String.class),
+                "databaseUuid",db.queryForObject("SELECT @@server_uuid",String.class),"visionModel",com.qingfeng.music.infrastructure.provider.ArkCoverTitleVerifier.DEFAULT_MODEL)));
+    }
+
+    @Test void candidateSurvivesDomainNetworkFailuresAndOnlyVerificationRetries() throws Exception {
+        var song=fixture();complete(song);byte[] image=image();
+        var creates=new AtomicInteger();var reads=new AtomicInteger();var checks=new AtomicInteger();
+        var runner=new AutomaticCoverConfiguration.Runner(jobs,prompt->{creates.incrementAndGet();return "https://example.test/candidate.jpg";},
+                covers,url->{reads.incrementAndGet();return new ByteArrayInputStream(image);},10000,(picture,title)->{
+            assertNotNull(covers.generated(song.work,db.queryForObject("SELECT id FROM task_event_outbox WHERE topic='music.cover' AND event_key=?",String.class,song.task)).orElse(null));
+            assertNull(covers.current(song.work));
+            if(checks.getAndIncrement()<2)throw new com.qingfeng.music.common.exception.DomainException("LYRICS_PROVIDER_CONNECT_FAILED","network");
+            return true;
+        });
+        runner.run();runner.run();
+        assertEquals("VERIFICATION_UNAVAILABLE",db.queryForObject("SELECT last_error FROM task_event_outbox WHERE topic='music.cover' AND event_key=?",String.class,song.task));
+        for(int i=0;i<2;i++){due(song);runner.run();}
+        assertEquals("COVER_DONE",state(song));assertNotNull(covers.current(song.work));
+        assertEquals(1,creates.get());assertEquals(1,reads.get());assertEquals(3,checks.get());
+    }
+
+    @Test void wiringUsesArkWithoutAnOpenAiKey() {
+        var environment=new org.springframework.mock.env.MockEnvironment().withProperty("qingfeng.providers.ark.api-key","test-ark-key");
+        assertInstanceOf(com.qingfeng.music.infrastructure.provider.ArkCoverTitleVerifier.class,
+                new AutomaticCoverConfiguration().automaticCoverTitleVerifier(environment));
+    }
+
+    @Test void manualCoverSelectedDuringVerificationIsNotOverwritten() throws Exception {
+        var song=fixture();complete(song);byte[] image=image();
+        String manual=covers.upload(song.owner,song.work,new ByteArrayInputStream(image)).id();
+        var runner=new AutomaticCoverConfiguration.Runner(jobs,prompt->"https://example.test/candidate.jpg",covers,
+                url->new ByteArrayInputStream(image),10000,(picture,title)->{covers.select(song.owner,song.work,manual,0);return true;});
+        runner.run();runner.run();assertEquals(manual,covers.current(song.work));
+        assertEquals(1,covers.state(song.owner,song.work).version());
+    }
+
+    @Test void aRestartedWorkerReusesThePersistedCandidateEvenIfTheResultUrlExpires() throws Exception {
+        var song=fixture();complete(song);byte[] image=image();
+        var first=new AutomaticCoverConfiguration.Runner(jobs,prompt->"https://example.test/expiring.jpg",covers,
+                url->new ByteArrayInputStream(image),10000,(picture,title)->{throw new IOException("temporary outage");});
+        first.run();first.run();assertNull(covers.current(song.work));due(song);
+        var restarted=new AutomaticCoverConfiguration.Runner(jobs,prompt->{throw new AssertionError("Do not regenerate");},covers,
+                url->{throw new AssertionError("Do not download an expired URL");},10000,(picture,title)->true);
+        restarted.run();assertEquals("COVER_DONE",state(song));assertNotNull(covers.current(song.work));
+    }
+
+    @Test void verificationStopsAfterFourAttemptsAndRetainsUnselectedCandidate() throws Exception {
+        var song=fixture();complete(song);var checks=new AtomicInteger();byte[] image=image();
+        var runner=new AutomaticCoverConfiguration.Runner(jobs,prompt->"https://example.test/result.jpg",covers,
+                url->new ByteArrayInputStream(image),10000,(picture,title)->{checks.incrementAndGet();throw new IOException("outage");});
+        runner.run();for(int i=0;i<8;i++){due(song);runner.run();}
+        assertEquals(4,checks.get());assertEquals("COVER_FAILED",state(song));assertNull(covers.current(song.work));
+        String id=db.queryForObject("SELECT id FROM task_event_outbox WHERE topic='music.cover' AND event_key=?",String.class,song.task);
+        assertTrue(covers.generated(song.work,id).isPresent());
+        assertEquals("https://example.test/result.jpg",db.queryForObject("SELECT payload FROM task_event_outbox WHERE id=?",String.class,id));
+    }
+
+    @Test void correctedCandidateIsDistinctAndOriginalRemainsCached() throws Exception {
+        var song=fixture();complete(song);var checks=new AtomicInteger();var downloads=new AtomicInteger();
+        var original=new BufferedImage(60,80,BufferedImage.TYPE_INT_RGB);var repaired=new BufferedImage(60,80,BufferedImage.TYPE_INT_RGB);
+        var graphics=repaired.createGraphics();graphics.setColor(java.awt.Color.RED);graphics.fillRect(0,0,60,80);graphics.dispose();
+        var provider=new com.qingfeng.music.cover.application.CoverImageProvider(){
+            public String generate(String prompt){return "https://example.test/first.jpg";}
+            public String edit(byte[] input,String prompt){assertEquals(0,readPixel(input));return "https://example.test/fixed.jpg";}
+            private int readPixel(byte[] bytes){try{return ImageIO.read(new ByteArrayInputStream(bytes)).getRGB(0,0)&0xffffff;}catch(IOException e){throw new RuntimeException(e);}}
+        };
+        var runner=new AutomaticCoverConfiguration.Runner(jobs,provider,covers,url->{
+            downloads.incrementAndGet();var out=new ByteArrayOutputStream();ImageIO.write(url.contains("fixed")?repaired:original,"png",out);return new ByteArrayInputStream(out.toByteArray());
+        },10000,(picture,title)->{int pixel=ImageIO.read(new ByteArrayInputStream(picture)).getRGB(0,0)&0xffffff;return checks.getAndIncrement()==0?false:pixel>0;});
+        for(int i=0;i<5;i++)runner.run();
+        assertEquals("COVER_DONE",state(song));assertEquals(2,downloads.get());assertEquals(2,checks.get());
+        assertEquals(2,covers.state(song.owner,song.work).assets().size());
+        try(var in=covers.open(song.owner,song.work,covers.current(song.work)).source().open()){assertTrue((ImageIO.read(in).getRGB(0,0)&0xffffff)>0);}
+    }
+
+    private void due(Fixture song){db.update("UPDATE task_event_outbox SET next_attempt_at=CURRENT_TIMESTAMP WHERE topic='music.cover' AND event_key=?",song.task);}
 
     @Test void submissionStartsCoverBeforeAudioSavedByAnotherDeployment() {
         String owner = identity.create().creatorId();

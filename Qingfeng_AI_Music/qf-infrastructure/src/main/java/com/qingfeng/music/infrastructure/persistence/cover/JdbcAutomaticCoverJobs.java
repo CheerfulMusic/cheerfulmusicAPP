@@ -160,7 +160,7 @@ public final class JdbcAutomaticCoverJobs {
     }
 
     public void titleFailed(Job job) {
-        update(job, job.state(), "COVER_FAILED", "TITLE_MISMATCH", "", job.attempts(), 0);
+        update(job, job.state(), "COVER_FAILED", "TITLE_MISMATCH", job.url(), job.attempts(), 0);
     }
 
     public void repairRejected(Job job) {
@@ -171,8 +171,14 @@ public final class JdbcAutomaticCoverJobs {
         int attempts = job.attempts() + 1;
         boolean terminal = permanent || attempts >= MAX_ARCHIVE_ATTEMPTS;
         update(job, job.state(), terminal ? "COVER_FAILED" : job.state(),
-                permanent ? "INVALID_IMAGE" : "ARCHIVE_FAILED", terminal ? "" : job.url(),
+                permanent ? "INVALID_IMAGE" : "ARCHIVE_FAILED", job.url(),
                 attempts, 15 * attempts);
+    }
+
+    public void verificationFailed(Job job) {
+        int attempts=job.attempts()+1;
+        update(job,job.state(),attempts>=MAX_ARCHIVE_ATTEMPTS?"COVER_FAILED":job.state(),
+                "VERIFICATION_UNAVAILABLE",job.url(),attempts,15*attempts);
     }
 
     private void update(Job job, String expected, String state, String error, String payload, int attempts, int delay) {
