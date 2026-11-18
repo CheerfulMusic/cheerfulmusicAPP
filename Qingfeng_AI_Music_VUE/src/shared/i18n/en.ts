@@ -368,7 +368,7 @@ export const english: Record<string, string> = {
   "制作场景展示": "Production studio showcase",
   "返回制作方案": "Back to production plans",
   "返回歌曲": "Back to song",
-  "价格为人民币参考预算 最终按制作人 录音棚 制作团队及发行需求单独报价 选择方案不会扣款": "Prices are indicative budgets in CNY. Final quotes depend on the producer, studio, team and distribution requirements. Choosing a plan does not charge you.",
+  "价格为美元参考预算 最终按制作人 录音棚 制作团队及发行需求单独报价 选择方案不会扣款": "Prices are indicative budgets in USD. Final quotes depend on the producer, studio, team and distribution requirements. Choosing a plan does not charge you.",
   "让专业细节 被听见": "Hear the professional difference",
   "点击图片查看大图": "Select an image to enlarge",
   "已选制作方案": "Selected production plan",
