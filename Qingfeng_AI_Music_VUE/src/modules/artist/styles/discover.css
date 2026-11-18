@@ -117,8 +117,7 @@
 .discover-message p { margin: 0 0 12px; color: inherit; }
 .discover-more { margin-top: 24px; text-align: center; }
 @media (min-width: 1201px) {
-  .discover-songs { justify-items: center; }
-  .discover-songs > .discover-song { width: 80%; }
+  .discover-songs { grid-template-columns: repeat(6, minmax(0, 1fr)); }
 }
 @media (max-width: 1200px) {
   .discover-header-inner { gap: 26px; }

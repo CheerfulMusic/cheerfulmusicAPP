@@ -78,7 +78,7 @@ function withTracks(items: DiscoverSong[]) {
   })
 }
 const rows = computed(() => withTracks(songs.value))
-const featuredRows = computed(() => withTracks(featuredSongs.value).slice(0, 4))
+const featuredRows = computed(() => withTracks(featuredSongs.value).slice(0, 6))
 const popularRows = computed(() => withTracks(popularSongs.value).slice(0, 3))
 // The public popular endpoint orders by plays DESC, then publication time and ID.
 const heroRows = computed(() => withTracks(popularSongs.value).slice(0, 5))
