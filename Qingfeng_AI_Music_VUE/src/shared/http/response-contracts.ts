@@ -167,7 +167,7 @@ export function validResponse(path:string,method:string,value:unknown):boolean{
  if(/\/lyrics\/rewrite-line$/.test(path))return method==='POST'&&obj(value)&&text(value.text)&&String(value.text).length<=160&&!/[\r\n\u2028\u2029]/.test(String(value.text))
  if(/^app\/works\/[^/]+\/lyrics\/rhyme-line$/.test(path))return method==='POST'&&lyricRhyme(value)
  if(/\/lyrics\/rewrite-selection$/.test(path))return method==='POST'&&obj(value)&&text(value.lyrics)&&String(value.lyrics).length<=12000
- if(/\/audio\/[^/]+\/lyrics(?:\/sync)?$/.test(path))return obj(value)&&text(value.status)&&str(value.text)&&list(value.lines,v=>obj(v)&&str(v.text)&&num(v.start)&&num(v.end))&&typeof value.canSync==='boolean'
+ if(/\/audio\/[^/]+\/lyrics(?:\/sync)?$/.test(path)||/^public\/artists\/[^/]+\/songs\/[^/]+\/\d+\/lyrics$/.test(path))return obj(value)&&text(value.status)&&str(value.text)&&list(value.lines,v=>obj(v)&&str(v.text)&&num(v.start)&&num(v.end))&&typeof value.canSync==='boolean'
  if(/\/lyrics(?:\/[^/]+(?:\/confirm)?)?$/.test(path)||/\/lyrics\/generate$/.test(path))return method==='GET'&&path.endsWith('/lyrics')?list(value,revision):revision(value)
  if(/\/audio\/[^/]+\/note$/.test(path))return method==='PUT'&&asset(value)&&obj(value)&&str(value.note)&&num(value.noteVersion)&&value.id===path.split('/').at(-2)
  if(/^app\/works\/[^/]+\/audio\/[^/]+$/.test(path)&&method==='DELETE')return obj(value)&&value.deleted===true&&value.assetId===path.split('/').at(-1)

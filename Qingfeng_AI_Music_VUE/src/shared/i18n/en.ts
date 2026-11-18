@@ -1,5 +1,15 @@
 /** Chinese source copy is the stable message key; business option values stay unchanged. */
 export const english: Record<string, string> = {
+  '取消静音': 'Unmute',
+  '静音': 'Mute',
+  '音量': 'Volume',
+  '暂无歌词': 'No lyrics available',
+  '前奏…': 'Intro…',
+  '间奏…': 'Interlude…',
+  '尾奏…': 'Outro…',
+  '歌词加载中…': 'Loading lyrics…',
+  '暂无同步歌词': 'Synced lyrics unavailable',
+
   '广场推荐': 'Discover highlights',
   '精选作品': 'Featured songs',
   '让好音乐，被更多人听见': 'Good music deserves to be heard',

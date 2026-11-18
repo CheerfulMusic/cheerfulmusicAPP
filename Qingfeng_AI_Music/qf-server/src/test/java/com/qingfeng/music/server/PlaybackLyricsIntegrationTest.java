@@ -53,4 +53,27 @@ class PlaybackLyricsIntegrationTest {
         var f=fixture();String second=asset(f.owner,f.work,f.revision);timing.entered=new CountDownLatch(1);timing.release=new CountDownLatch(1);var pool=Executors.newSingleThreadExecutor();
         try{var first=pool.submit(()->service.sync(f.owner,f.work,f.asset,UUID.randomUUID().toString()));assertTrue(timing.entered.await(3,TimeUnit.SECONDS));assertEquals("PERSONAL_GENERATION_BUSY",assertThrows(DomainException.class,()->service.sync(f.owner,f.work,second,UUID.randomUUID().toString())).code());assertEquals(1,timing.calls.get());timing.release.countDown();first.get(5,TimeUnit.SECONDS);}finally{timing.release.countDown();pool.shutdownNow();}
     }
+
+    @Autowired com.qingfeng.music.server.artist.ArtistProfileService profiles;
+    String[] publish(Fixture f){
+        String artist=UUID.randomUUID().toString(),release=UUID.randomUUID().toString();
+        jdbc.update("INSERT INTO artist_profile(creator_id,public_id,stage_name,tagline,published) VALUES(?,?,'歌手','',TRUE)",f.owner,artist);
+        jdbc.update("INSERT INTO artist_song_release(id,creator_id,work_id,asset_id,title,version,show_on_profile,published_at) VALUES(?,?,?,?,'公开歌曲',1,TRUE,CURRENT_TIMESTAMP)",release,f.owner,f.work,f.asset);
+        return new String[]{artist,release};
+    }
+    @Test void publicTimelineUsesOnlyArchivedAudioAndNeverStartsOrChargesAJob(){
+        var f=fixture();var pub=publish(f);
+        var empty=profiles.publicPlaybackLyrics(pub[0],pub[1],1);assertEquals("EMPTY",empty.status());assertFalse(empty.canSync());assertEquals("",empty.text());assertEquals(0,timing.calls.get());
+        service.sync(f.owner,f.work,f.asset,UUID.randomUUID().toString());
+        lyrics.save(f.owner,f.work,0,"私人草稿标题","这句私人草稿不能公开");
+        var value=profiles.publicPlaybackLyrics(pub[0],pub[1],1);assertEquals("READY",value.status());assertEquals("实际唱出的歌词",value.text());assertEquals(8,value.lines().get(0).start());assertFalse(value.canSync());assertEquals(1,timing.calls.get());
+        assertThrows(DomainException.class,()->profiles.publicPlaybackLyrics(pub[0],pub[1],2));
+        assertThrows(DomainException.class,()->profiles.publicPlaybackLyrics(UUID.randomUUID().toString(),pub[1],1));
+        jdbc.update("UPDATE artist_song_release SET show_on_profile=FALSE WHERE id=?",pub[1]);assertThrows(DomainException.class,()->profiles.publicPlaybackLyrics(pub[0],pub[1],1));
+    }
+    @Test void publicationPrivacyAndDeletedWorksImmediatelyRevokePublicLyrics(){
+        var f=fixture();var pub=publish(f);jdbc.update("UPDATE artist_profile SET published=FALSE WHERE creator_id=?",f.owner);
+        assertThrows(DomainException.class,()->profiles.publicPlaybackLyrics(pub[0],pub[1],1));jdbc.update("UPDATE artist_profile SET published=TRUE WHERE creator_id=?",f.owner);
+        jdbc.update("UPDATE music_work SET deleted_at=CURRENT_TIMESTAMP WHERE id=?",f.work);assertThrows(DomainException.class,()->profiles.publicPlaybackLyrics(pub[0],pub[1],1));assertEquals(0,timing.calls.get());
+    }
 }

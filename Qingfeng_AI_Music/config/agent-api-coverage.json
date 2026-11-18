@@ -616,6 +616,7 @@
         "@GetMapping",
         "@GetMapping(\"/avatar/{key}\")",
         "@GetMapping(\"/cover/{key}\")",
+        "@GetMapping(\"/songs/{song}/{version}/lyrics\")",
         "@GetMapping(\"/songs/{song}/{version}/audio\")",
         "@GetMapping(\"/songs/{song}/{version}/cover\")"
       ],

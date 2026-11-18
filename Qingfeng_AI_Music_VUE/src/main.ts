@@ -22,6 +22,7 @@ import './app/styles/home-creation-guide.css'
 import './app/styles/home-light.css'
 import './app/styles/brand-theme.css'
 import './app/styles/agent.css'
+import './app/styles/global-player.css'
 import { initializeLocale } from './shared/i18n'
 import { installPageLeaveTracking, trackPageView } from './shared/analytics/track'
 

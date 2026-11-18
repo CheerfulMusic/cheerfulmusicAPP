@@ -65,3 +65,11 @@ describe('推荐音频 OSS 失败时回退',()=>{
  it('签名过期返回不支持时回退本地并恢复进度',async()=>{const player=usePlayer();const sample={...track('sample'),audio:'/media/sample-red.mp3'};await player.toggle(sample);const a=FakeAudio.current;a.currentTime=7;a.paused=false;a.error={code:4};a.dispatchEvent(new Event('error'));expect(a.src).toContain('/media/sample-red.mp3?reauth=');a.error=null;a.dispatchEvent(new Event('loadedmetadata'));expect(a.currentTime).toBe(7);expect(player.playing).toBe(true)})
  it('等待超时自动回退一次，再次超时提示重试',async()=>{const player=usePlayer();const sample={...track('sample'),audio:'/media/sample-red.mp3'};await player.toggle(sample);const a=FakeAudio.current;vi.useFakeTimers();a.dispatchEvent(new Event('waiting'));await vi.advanceTimersByTimeAsync(15000);expect(a.src).toContain('/media/sample-red.mp3?reauth=');a.dispatchEvent(new Event('loadedmetadata'));a.dispatchEvent(new Event('waiting'));await vi.advanceTimersByTimeAsync(15000);expect(player.error).toContain('等待时间较长');expect(player.playing).toBe(false)})
 })
+
+
+describe('全局音量',()=>{
+ beforeEach(()=>{const values=new Map<string,string>();vi.stubGlobal('localStorage',{getItem:(k:string)=>values.get(k)??null,setItem:(k:string,v:string)=>values.set(k,v)})})
+ it('滑块写入真实音频，换歌与回到缓冲实例保留音量',async()=>{const p=usePlayer();await p.toggle(track('one'));p.setVolume(0.25);const a=FakeAudio.current as FakeAudio & {volume:number;muted:boolean};expect(a.volume).toBe(0.25);await p.toggle(track('two'));expect((FakeAudio.current as any).volume).toBe(0.25);p.setVolume(0.7);await p.toggle(track('one'));expect(a.volume).toBe(0.7)})
+ it('静音保留原音量，滑到零后取消静音恢复可听音量',async()=>{const p=usePlayer();await p.toggle(track('one'));p.setVolume(0.3);p.toggleMute();expect((FakeAudio.current as any).muted).toBe(true);p.toggleMute();expect((FakeAudio.current as any).muted).toBe(false);expect(p.volume).toBe(0.3);p.setVolume(0);p.toggleMute();expect(p.volume).toBe(0.5)})
+ it('持久化设置，忽略非法值并限制范围',()=>{const p=usePlayer();p.setVolume(9);expect(p.volume).toBe(1);p.setVolume(-2);expect(p.volume).toBe(0);p.setVolume(NaN);expect(p.volume).toBe(0);p.setVolume(0.45);setActivePinia(createPinia());expect(usePlayer().volume).toBe(0.45)})
+})

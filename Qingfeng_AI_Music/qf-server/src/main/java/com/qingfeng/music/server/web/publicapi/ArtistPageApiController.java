@@ -39,6 +39,13 @@ public class ArtistPageApiController {
         return jpeg(profiles.publicProfileCover(artist, key));
     }
 
+    @GetMapping("/songs/{song}/{version}/lyrics")
+    public ResponseEntity<com.qingfeng.music.lyrics.playback.PlaybackLyrics.Snapshot> lyrics(
+            @PathVariable String artist, @PathVariable String song, @PathVariable long version) {
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore())
+                .body(profiles.publicPlaybackLyrics(artist, song, version));
+    }
+
     @GetMapping("/songs/{song}/{version}/audio")
     public ResponseEntity<Resource> audio(@PathVariable String artist, @PathVariable String song,
             @PathVariable long version, @RequestHeader(value = HttpHeaders.RANGE, required = false) String range) {
