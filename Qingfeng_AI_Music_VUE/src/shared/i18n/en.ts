@@ -1,5 +1,17 @@
 /** Chinese source copy is the stable message key; business option values stay unchanged. */
 export const english: Record<string, string> = {
+  '广场推荐': 'Discover highlights',
+  '精选作品': 'Featured songs',
+  '让好音乐，被更多人听见': 'Good music deserves to be heard',
+  '从一段故事，到一首属于你的歌。': 'From a story to a song of your own.',
+  '立即聆听': 'Listen now',
+  '上一张推荐': 'Previous highlight',
+  '下一张推荐': 'Next highlight',
+  '切换推荐': 'Choose a highlight',
+  '查看推荐：{title}': 'View highlight: {title}',
+  '正在流行': 'Trending now',
+  '暂时无法加载热门歌曲。': 'Trending songs are unavailable. Please try again.',
+  '发布我的作品': 'Publish my music',
   '继续核对 Stripe 订单': 'Continue checking the Stripe order',
   '用照片写一首歌': 'Write a song from photos',
   '← 返回开始创作': '← Back to Create',

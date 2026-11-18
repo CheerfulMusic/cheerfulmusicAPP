@@ -78,7 +78,7 @@ onBeforeUnmount(() => {
 })
 </script>
 <template>
-  <div class="music-shell consumer-shell" :class="{'gift-shell':publicListening, 'home-light-shell':isHome, 'agent-shell':isAgent}">
+  <div class="music-shell consumer-shell" :class="{'gift-shell':publicListening, 'home-light-shell':isHome, 'agent-shell':isAgent, 'discover-shell':isDiscover}">
     <a class="skip-link" href="#main-content">{{ t('跳到主要内容') }}</a>
     <header v-if="!isDiscover" class="consumer-header">
       <div class="consumer-header-inner">
@@ -128,6 +128,15 @@ onBeforeUnmount(() => {
 <style scoped>
 .consumer-discover-link { color: var(--accent-text); font-size: .85rem; white-space: nowrap; }
 .consumer-shell .workspace.photo-workspace { max-width:none; padding:0; }
+.discover-shell :deep(.q-player) { left:0; right:0; bottom:0; transform:none; width:100%; border:0; border-top:1px solid #e8e8ed; border-radius:0; padding:12px max(24px, calc((100vw - 1600px) / 2)); gap:16px; background:#fffffff7; color:#252529; box-shadow:0 -4px 20px #00000005; }
+.discover-shell :deep(.q-player-info) { flex:initial; width:210px; max-width:210px; }
+.discover-shell :deep(.q-player-info > strong) { font-weight:600; }
+.discover-shell :deep(.q-player-info > span) { color:#767680; }
+.discover-shell :deep(.q-player-toggle) { border:0; background:#ff4438; color:#fff; }
+@media (max-width:700px) {
+  .discover-shell :deep(.q-player) { gap:10px; padding:10px 16px; }
+  .discover-shell :deep(.q-player-info) { flex:1; width:auto; max-width:none; }
+}
 </style>
 
 <style scoped>
