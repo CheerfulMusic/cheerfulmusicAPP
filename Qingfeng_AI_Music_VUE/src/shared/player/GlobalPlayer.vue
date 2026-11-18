@@ -26,7 +26,8 @@ function status(){
 <template>
   <aside ref="element" v-if="player.current" class="q-player" :aria-label="t('试听播放器')">
     <img :src="localizedCover(player.current.cover)" :alt="t('歌曲封面')">
-    <div class="q-player-info"><strong>{{ player.current.titleKey ? t(player.current.titleKey) : player.current.title }}</strong><span class="q-player-lyric" :title="status()">{{ status() }}</span></div>
+    <div class="q-player-info"><strong>{{ player.current.titleKey ? t(player.current.titleKey) : player.current.title }}</strong></div>
+    <span class="q-player-lyric" :title="status()">{{ status() }}</span>
     <button class="q-player-toggle" :aria-label="(player.playing || player.starting) ? t('暂停') : t('播放')" @click="player.toggle(player.current)"><PlaybackIcon :playing="player.playing||player.starting"/></button>
     <button v-if="player.hasQueue" class="q-player-step" :aria-label="t('上一首')" @click="player.next(-1)">‹</button>
     <button v-if="player.hasQueue" class="q-player-step" :aria-label="t('下一首')" @click="player.next()">›</button>
