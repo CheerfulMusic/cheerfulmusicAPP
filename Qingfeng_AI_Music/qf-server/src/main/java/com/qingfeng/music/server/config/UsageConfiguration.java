@@ -19,6 +19,9 @@ public class UsageConfiguration {
     @org.springframework.beans.factory.annotation.Value("${qingfeng.credits.writer-fence.expected-database:}") private String expectedDatabase;
     @org.springframework.beans.factory.annotation.Value("${qingfeng.credits.writer-fence.expected-port:0}") private int expectedPort;
     @Bean com.qingfeng.music.credits.CreditsLedger creditsLedger(JdbcTemplate jdbc, PlatformTransactionManager manager,Environment environment) {
+        if (environment.acceptsProfiles(Profiles.of("mysql & sg-reader"))) {
+            return RegionalReadConfiguration.disabledLedger(jdbc);
+        }
         var transactions=new TransactionTemplate(manager);
         var base=new com.qingfeng.music.infrastructure.persistence.credits.JdbcCreditsLedger(jdbc,transactions);
         if(!fenced){
