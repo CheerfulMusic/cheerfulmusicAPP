@@ -12,6 +12,8 @@ public interface QuickCreationRepository {
     Optional<Entry> find(String work,String id);
     Optional<Entry> latest(String work);
     Optional<Entry> claim(String token);
+    Optional<Entry> claim(String work, String id, String token);
+    boolean renew(String id, String token);
     boolean checkpoint(String id,String token,String status,String revision,String task,String error,int delaySeconds);
     void release(String id,String token);
     boolean retry(String work,String id,String lyricsKey);

@@ -8,8 +8,7 @@ import com.qingfeng.music.cover.application.CoverTitleVerifier;
 import com.qingfeng.music.infrastructure.persistence.cover.JdbcAutomaticCoverJobs;
 import com.qingfeng.music.infrastructure.persistence.cover.JdbcAutomaticCoverJobs.Job;
 import com.qingfeng.music.infrastructure.provider.ArkCoverImageProvider;
-import com.qingfeng.music.infrastructure.provider.OpenAiCoverTitleVerifier;
-import com.qingfeng.music.infrastructure.provider.OpenAiLyricsWriter;
+import com.qingfeng.music.infrastructure.provider.ArkCoverTitleVerifier;
 import com.qingfeng.music.infrastructure.storage.AllowlistedAudioDownloader;
 import com.qingfeng.music.infrastructure.storage.ProviderAudioUrls;
 import java.io.IOException;
@@ -50,11 +49,9 @@ public class AutomaticCoverConfiguration {
     @Bean
     @ConditionalOnProperty(name = "qingfeng.cover.automatic.scheduler-enabled", havingValue = "true", matchIfMissing = true)
     CoverTitleVerifier automaticCoverTitleVerifier(Environment env) {
-        String key=env.getProperty("qingfeng.providers.openai.api-key",env.getProperty("OPENAI_API_KEY","")).trim();
+        String key=env.getProperty("qingfeng.providers.ark.api-key",env.getProperty("ARK_API_KEY","")).trim();
         if(key.isBlank()) throw new IllegalStateException("AI艺术字封面需要配置视觉文字核对服务");
-        return new OpenAiCoverTitleVerifier(key,env.getProperty("qingfeng.cover.automatic.verifier-model",
-                env.getProperty("qingfeng.providers.openai.model",OpenAiLyricsWriter.DEFAULT_MODEL)),
-                env.getProperty("qingfeng.providers.openai.proxy-url",""));
+        return new ArkCoverTitleVerifier(key,env.getProperty("qingfeng.cover.automatic.verifier-model",ArkCoverTitleVerifier.DEFAULT_MODEL));
     }
 
     @Bean
@@ -123,34 +120,48 @@ public class AutomaticCoverConfiguration {
 
         private void archive(Job job) {
             String cover;
+            byte[] image;
             try {
-                var stored = covers.generated(job.work(), job.id());
-                byte[] image;
+                String candidate = candidateKey(job);
+                var stored = covers.generated(job.work(), candidate);
+                // Persist the actual JPEG before the external check; network retries never redownload it.
+                if (stored.isEmpty()) {
+                    image=download(job.url());
+                    covers.saveGenerated(job.owner(),job.work(),candidate,new ByteArrayInputStream(image));
+                    stored=covers.generated(job.work(),candidate);
+                }
                 if (stored.isPresent()) {
                     try (var input=covers.open(job.owner(),job.work(),stored.get().id()).source().open()) {
                         image=input.readNBytes(5*1024*1024+1);
                     }
-                } else image=download(job.url());
+                } else throw new IOException("Candidate cover not stored");
                 if (image.length>5*1024*1024) throw new DomainException("INVALID_COVER_IMAGE","封面图片超过大小限制");
-                if (!verifier.matches(image,job.title())) {
-                    if ("COVER_SAVING".equals(job.state())) jobs.repair(job);
-                    else jobs.titleFailed(job);
-                    return;
-                }
-                cover=stored.isPresent()?stored.get().id():covers.saveGenerated(job.owner(),job.work(),job.id(),
-                        new ByteArrayInputStream(image)).id();
-            } catch (InterruptedException interrupted) {
-                Thread.currentThread().interrupt();
-                jobs.archiveFailed(job,false);
-                return;
+                cover=stored.get().id();
             } catch (DomainException failure) {
-                jobs.archiveFailed(job, !"COVER_STORAGE_UNAVAILABLE".equals(failure.code()));
+                jobs.archiveFailed(job, Set.of("INVALID_COVER_IMAGE","INVALID_COVER_TITLE","COVER_FONT_UNAVAILABLE").contains(failure.code()));
                 return;
             } catch (IOException | RuntimeException failure) {
                 jobs.archiveFailed(job, false);
                 return;
             }
+            try {
+                if (!verifier.matches(image,job.title())) {
+                    if ("COVER_SAVING".equals(job.state())) jobs.repair(job);
+                    else jobs.titleFailed(job);
+                    return;
+                }
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();jobs.verificationFailed(job);return;
+            } catch (IOException | RuntimeException failure) {
+                jobs.verificationFailed(job);return;
+            }
             jobs.finish(job, cover);
+        }
+
+        private String candidateKey(Job job) {
+            return "COVER_RESAVE".equals(job.state())
+                    ? java.util.UUID.nameUUIDFromBytes((job.id()+":repair").getBytes(java.nio.charset.StandardCharsets.UTF_8)).toString()
+                    : job.id();
         }
 
         private byte[] download(String url) throws IOException {
@@ -164,7 +175,13 @@ public class AutomaticCoverConfiguration {
         private void repair(Job job) {
             String url;
             try {
-                byte[] image=download(job.url());
+                byte[] image;
+                var original=covers.generated(job.work(),job.id());
+                if(original.isPresent()) {
+                    try(var input=covers.open(job.owner(),job.work(),original.get().id()).source().open()) {
+                        image=input.readNBytes(5*1024*1024+1);
+                    }
+                } else image=download(job.url()); // Compatibility with jobs created before candidates were persisted.
                 String title=new tools.jackson.databind.ObjectMapper().writeValueAsString(job.title());
                 url=provider.edit(image,"精确修正这张唱片封面的主标题，歌名完整准确为"+title+"。"
                         +"保留原有艺术字风格、颜色与清晰的阅读顺序，删除主标题中多余的文字、符号和分隔斜线。"

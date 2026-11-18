@@ -75,12 +75,28 @@ qingfeng.providers.openai.model=gpt-6.1-sol
 # qingfeng.providers.qwen.api-key=（仅在私有配置填写）
 qingfeng.providers.qwen.model=qwen3.8-flash
 qingfeng.providers.qwen.base-url=https://maas.qianwenaiapi.com/compatible-mode/v1
-qingfeng.lyrics.qwen-fallback-enabled=false
+qingfeng.lyrics.qwen-fallback-enabled=true
 ```
 
 2026-11-09 已从用户指定的桌面记事本读取密钥，写入 Git 忽略的 `Qingfeng_AI_Music/config/local.properties`，并设置以上提供方与型号。修改前的配置备份在本机忽略目录 `.backups/gpt-lyrics/`，没有改动数据库连接、后台调度或支付配置。
 
-自定义创作优先使用 OpenAI。配置了千问后，OpenAI 未配置，或请求未能建立连接、收到明确拒绝且仍在兜底时间窗口内时，会使用千问。超时等结果未知的请求保留原请求状态，避免再次提交。成功的版本记录实际提供方。共享写词服务可通过 `qingfeng.lyrics.provider=qwen` 直接选择千问，或通过 `qingfeng.lyrics.qwen-fallback-enabled=true` 启用备用通道。
+自定义创作优先使用 OpenAI。一键生成和 Agent 共用的写词服务也默认启用千问备用通道，需配置千问密钥；无备用密钥时仍仅调用 OpenAI。OpenAI 未配置，或请求未能建立连接、收到明确拒绝且仍在 25 秒兜底时间窗口内时，切换一次千问。超时、请求体已被传输后断线等结果未知的请求保留原请求状态，避免再次提交；终稿质量未通过也不会切换提供方绕过审查。成功的版本记录实际提供方。
+
+`qingfeng.lyrics.provider=qwen` 可直接选择千问；`qingfeng.lyrics.qwen-fallback-enabled=false` 可显式关闭共享写词的备用通道，不改变自定义创作既有策略。服务器私有配置中的显式值优先于 JAR 默认值，部署前须核对。此次本地修改不代表线上网络、配置或运行版本已经恢复。
+
+### 网络排查
+
+OpenAI 代理通过 `qingfeng.providers.openai.proxy-url=http://host:port` 显式配置，仅作用于 OpenAI 请求，不共用给千问。启用备用通道不等于千问已经可用，仍须分别验证两条通路的 DNS、TLS、认证和真实响应。
+
+传输失败会记录服务端目标域名、尝试次数、请求体是否已被传输层取用、异常类型及根因类型；不记录异常消息、堆栈、认证头、完整 URL 或用户素材。`bodyStarted=false` 仅用于已识别的连接失败安全重试，不能据此认定所有 `IOException` 都未提交。
+
+### 2026-11-18 本地兜底验证
+
+配置、HTTP 传输、OpenAI／千问协议、一键生成和歌词积分相关回归共 112 项通过，使用隔离 H2 与回环模拟 HTTP；未连接生产数据库，也未调用真实模型生成。覆盖连接失败和明确拒绝后切换千问、双通道失败、显式重试、歌词来源保存、重复请求复用、音乐只提交一次，以及结果未知时不自动切换。离线执行前清除真实模型密钥、Spring 数据源及 MySQL 测试环境变量。
+
+同步本地 main 的版本备注排序规则修复后，原测试配置直接执行 MySQL 专用动态 DDL，H2 无法解析 `PREPARE ... FROM`。测试 profile 改用独立、可移植的版本备注表夹具；生产可选脚本及其隔离 MySQL 校验保持原样。
+
+本机 Java 17 的无密钥 GET 探测显示：OpenAI 直连超时，使用本机 `127.0.0.1:7890` 代理以及千问直连均收到 401，表明相应网络和 TLS 通路可达，不代表密钥、模型权限或真实生成已经验收。探测不发送生成请求。线上千问网络故障的具体根因尚未在本地复现；新增诊断日志需要部署后才能提供服务器侧证据。本次不更新线上配置、运行 JAR 或服务。
 
 照片写歌入口默认关闭。在隔离的本地验证环境中，配置支持图片输入的 OpenAI 模型与私有密钥，并设置 `qingfeng.lyrics.photo.enabled=true`。照片入口接受单张 JPG/PNG（最大 10 MB），后台将缩放后的图和选填故事一起送入一次 Responses 请求。应用保存画面摘要、歌词和音乐方向，原图不进入作品存储。离线端到端验证可用 `PhotoLyricsIntegrationTest`，它使用 H2 和替代供应商。
 
