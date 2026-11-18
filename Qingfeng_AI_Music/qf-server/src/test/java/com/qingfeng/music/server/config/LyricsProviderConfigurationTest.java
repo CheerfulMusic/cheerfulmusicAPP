@@ -17,13 +17,14 @@ class LyricsProviderConfigurationTest {
             .withProperty("qingfeng.providers.openai.api-key", "offline-openai-key")
             .withProperty("qingfeng.providers.qwen.api-key", "offline-qwen-key")
             .withProperty("qingfeng.providers.qwen.model", "offline-qwen-model");
-        assertTrue(assertInstanceOf(OpenAiLyricsWriter.class, config.lyricsWriter(env)).isConfigured());
+        assertTrue(assertInstanceOf(FallbackLyricsWriter.class, config.lyricsWriter(env)).isConfigured());
         assertTrue(config.inspirationRewriter(env).isConfigured());
         assertEquals("offline-qwen-model", RewriteProviderSettings.settings(env).model());
     }
 
     @Test void reportsPartialRewriteCapabilityFromTheQwenConfiguration() {
         var env = new MockEnvironment().withProperty("qingfeng.lyrics.enabled", "true")
+            .withProperty("qingfeng.lyrics.qwen-fallback-enabled", "false")
             .withProperty("qingfeng.providers.qwen.api-key", "offline-qwen-key");
         env.setActiveProfiles("test");
         var system = new SystemInfoController(org.mockito.Mockito.mock(MusicProvider.class), env,
@@ -39,6 +40,7 @@ class LyricsProviderConfigurationTest {
         var env = new MockEnvironment().withProperty("qingfeng.lyrics.provider", "openai").withProperty("OPENAI_API_KEY", "offline-key");
         assertTrue(config.lyricsWriter(env).isConfigured());
         env = new MockEnvironment().withProperty("qingfeng.lyrics.provider", "openai")
+            .withProperty("qingfeng.lyrics.qwen-fallback-enabled", "false")
             .withProperty("qingfeng.providers.qwen.api-key", "offline-key");
         assertInstanceOf(OpenAiLyricsWriter.class, config.lyricsWriter(env));
         assertFalse(config.lyricsWriter(env).isConfigured());
@@ -65,6 +67,32 @@ class LyricsProviderConfigurationTest {
             .withProperty("qingfeng.providers.openai.proxy-url", "http://127.0.0.1:7890")
             .withProperty("qingfeng.providers.qwen.api-key", "offline-key");
         assertTrue(assertInstanceOf(FallbackLyricsWriter.class, config.lyricsWriter(env)).isConfigured());
+    }
+    @Test void quickAndAgentLyricsUseConfiguredQwenBackupByDefault() {
+        var env = new MockEnvironment()
+            .withProperty("qingfeng.providers.qwen.api-key", "offline-qwen-key");
+        assertTrue(assertInstanceOf(FallbackLyricsWriter.class, config.lyricsWriter(env)).isConfigured());
+        env.setProperty("qingfeng.providers.openai.api-key", "offline-openai-key");
+        assertTrue(assertInstanceOf(FallbackLyricsWriter.class, config.lyricsWriter(env)).isConfigured());
+    }
+    @Test void explicitFallbackOptOutAndMissingBackupKeepOpenAiOnly() {
+        var env = new MockEnvironment()
+            .withProperty("qingfeng.providers.openai.api-key", "offline-openai-key");
+        assertInstanceOf(OpenAiLyricsWriter.class, config.lyricsWriter(env));
+        env.setProperty("qingfeng.providers.qwen.api-key", "offline-qwen-key");
+        env.setProperty("qingfeng.lyrics.qwen-fallback-enabled", "false");
+        assertInstanceOf(OpenAiLyricsWriter.class, config.lyricsWriter(env));
+    }
+    @Test void packagedDefaultsAlsoEnableFallback() throws Exception {
+        var loader = new org.springframework.boot.env.YamlPropertySourceLoader();
+        var sources = loader.load("application", new org.springframework.core.io.ClassPathResource("application.yml"));
+        var env = new MockEnvironment();
+        sources.forEach(source -> env.getPropertySources().addLast(source));
+        env.setProperty("qingfeng.providers.qwen.api-key", "offline-qwen-key");
+        assertTrue(env.getProperty("qingfeng.lyrics.qwen-fallback-enabled", Boolean.class));
+        assertInstanceOf(FallbackLyricsWriter.class, config.lyricsWriter(env));
+        env.setProperty("qingfeng.lyrics.qwen-fallback-enabled", "false");
+        assertInstanceOf(OpenAiLyricsWriter.class, config.lyricsWriter(env));
     }
     @Test void legacyProviderNameCannotRouteToOldEndpoint() {
         var env = new MockEnvironment().withProperty("qingfeng.lyrics.provider", "deepseek")

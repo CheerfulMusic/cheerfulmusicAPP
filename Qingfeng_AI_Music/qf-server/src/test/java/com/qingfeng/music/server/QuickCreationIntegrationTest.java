@@ -69,6 +69,7 @@ class QuickCreationIntegrationTest {
     @Autowired LyricsCompositionService composer;@Autowired CompositionRequests requests;
     @Autowired QuickCreationRepository repository;@Autowired FakeWriter writer;@Autowired FakeGeneration music;
     @Autowired MusicSettings settings;@Autowired WorkLibraryQuery library;@Autowired JdbcTemplate jdbc;
+    @Autowired com.qingfeng.music.infrastructure.persistence.lyrics.LyricsMapper lyricsMapper;
     QuickCreationService service;String owner;WorkApi.Work work;
     @BeforeEach void setup(){
         writer.failureCode=null;music.reject=false;music.loseAcknowledgement=false;music.busy=false;
@@ -97,6 +98,83 @@ class QuickCreationIntegrationTest {
         assertEquals("LYRICS_PROVIDER_CONNECT_FAILED",stopped.errorCode());assertEquals(work.story(),works.get(owner,work.id()).story());
         assertFalse(service.runOnce());assertEquals(calls+1,writer.calls.get());
         writer.failureCode=null;service.retry(owner,work.id(),flow.id());service.runOnce();assertNotNull(service.get(owner,work.id(),flow.id()).taskId());
+    }
+    private QuickCreationService withFallback(FakeWriter primary, FakeWriter backup) {
+        var fallbackComposer = new LyricsCompositionService(works, lyrics,
+            new com.qingfeng.music.infrastructure.persistence.lyrics.MyBatisLyricsRepository(lyricsMapper),
+            new FallbackLyricsWriter(primary, backup), requests, true);
+        return new QuickCreationService(repository, works, lyrics, fallbackComposer, music, true);
+    }
+    private FakeWriter backupWriter() {
+        return new FakeWriter() { @Override public String source() { return "QWEN"; } };
+    }
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings={"LYRICS_PROVIDER_CONNECT_FAILED","LYRICS_PROVIDER_REJECTED"})
+    void fallbackCompletesOneQuickCreationWithoutDuplicatingLyricsOrMusic(String code) {
+        var backup = backupWriter(); writer.failureCode = code;
+        service = withFallback(writer, backup);
+        int calls = writer.calls.get(), songs = music.purchases.get();
+        String key = UUID.randomUUID().toString();
+        var flow = service.start(owner, work.id(), work.version(), key, "zh-CN");
+        assertTrue(service.runOnce());
+        var result = service.get(owner, work.id(), flow.id());
+        assertEquals("QUEUED", result.status());
+        assertEquals("QWEN", lyrics.get(owner, work.id(), result.revisionId()).source());
+        assertTrue(lyrics.get(owner, work.id(), result.revisionId()).confirmed());
+        assertEquals(1, lyrics.list(owner, work.id()).size());
+        assertEquals(calls + 1, writer.calls.get()); assertEquals(1, backup.calls.get());
+        assertEquals(songs + 1, music.purchases.get());
+        assertEquals(flow.id(), service.start(owner, work.id(), work.version(), key, "zh-CN").id());
+        assertFalse(service.runOnce());
+        assertEquals(1, backup.calls.get()); assertEquals(songs + 1, music.purchases.get());
+    }
+    @Test void bothConnectionsFailAndExplicitRetryRecoversWithoutLostStoryOrDuplicateMusic() {
+        var backup = backupWriter();
+        writer.failureCode = backup.failureCode = "LYRICS_PROVIDER_CONNECT_FAILED";
+        service = withFallback(writer, backup);
+        int songs = music.purchases.get();
+        var flow = start(); assertTrue(service.runOnce());
+        var failed = service.get(owner, work.id(), flow.id());
+        assertEquals("FAILED", failed.status()); assertTrue(failed.canRetry());
+        assertEquals("LYRICS_PROVIDER_CONNECT_FAILED", failed.errorCode());
+        assertEquals(work.story(), works.get(owner, work.id()).story());
+        assertTrue(lyrics.list(owner, work.id()).isEmpty());
+        assertEquals(songs, music.purchases.get());
+        var firstKey = repository.find(work.id(), flow.id()).orElseThrow().lyricsKey();
+        assertEquals("FAILED", composer.requestState(owner, work.id(), firstKey).status());
+        assertFalse(service.runOnce()); assertEquals(1, backup.calls.get());
+        backup.failureCode = null;
+        service.retry(owner, work.id(), flow.id());
+        assertNotEquals(firstKey, repository.find(work.id(), flow.id()).orElseThrow().lyricsKey());
+        assertTrue(service.runOnce());
+        assertNotNull(service.get(owner, work.id(), flow.id()).taskId());
+        assertEquals(2, backup.calls.get()); assertEquals(songs + 1, music.purchases.get());
+        assertEquals(1, lyrics.list(owner, work.id()).size());
+    }
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings={"LYRICS_PROVIDER_TIMEOUT","LYRICS_PROVIDER_NETWORK_ERROR"})
+    void uncertainPrimaryRequestNeverAutomaticallyStartsBackup(String code) {
+        var backup = backupWriter(); writer.failureCode = code;
+        service = withFallback(writer, backup);
+        int songs = music.purchases.get();
+        var flow = start(); assertTrue(service.runOnce());
+        assertEquals("LYRICS_SUBMISSION_UNKNOWN", service.get(owner, work.id(), flow.id()).errorCode());
+        assertEquals(0, backup.calls.get()); assertEquals(songs, music.purchases.get());
+        assertFalse(service.runOnce()); assertEquals(0, backup.calls.get());
+    }
+    @Test void backupNetworkFailureRemainsUnknownAndDoesNotStartAnotherProvider() {
+        var backup = backupWriter();
+        writer.failureCode = "LYRICS_PROVIDER_CONNECT_FAILED";
+        backup.failureCode = "LYRICS_PROVIDER_NETWORK_ERROR";
+        service = withFallback(writer, backup);
+        int calls = writer.calls.get(), songs = music.purchases.get();
+        var flow = start(); assertTrue(service.runOnce());
+        assertEquals("LYRICS_SUBMISSION_UNKNOWN", service.get(owner, work.id(), flow.id()).errorCode());
+        var key = repository.find(work.id(), flow.id()).orElseThrow().lyricsKey();
+        assertEquals("UNKNOWN", composer.requestState(owner, work.id(), key).status());
+        assertFalse(service.runOnce());
+        assertEquals(calls + 1, writer.calls.get()); assertEquals(1, backup.calls.get());
+        assertEquals(songs, music.purchases.get());
     }
     @Test void timedOutLyricsStopUntilAnExplicitRetry(){
         writer.failureCode="LYRICS_PROVIDER_NETWORK_ERROR";

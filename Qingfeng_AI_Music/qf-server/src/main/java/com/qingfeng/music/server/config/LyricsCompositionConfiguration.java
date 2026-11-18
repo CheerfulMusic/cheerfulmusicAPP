@@ -35,8 +35,9 @@ public class LyricsCompositionConfiguration {
         return switch(env.getProperty("qingfeng.lyrics.provider","openai").trim().toLowerCase(java.util.Locale.ROOT)){
             case "openai" -> {
                 var primary = openAiWriter(env);
-                yield env.getProperty("qingfeng.lyrics.qwen-fallback-enabled",Boolean.class,false)
-                    ? new FallbackLyricsWriter(primary,qwenLyricsWriter(env)) : primary;
+                var backup = qwenLyricsWriter(env);
+                yield env.getProperty("qingfeng.lyrics.qwen-fallback-enabled",Boolean.class,true) && backup.isConfigured()
+                    ? new FallbackLyricsWriter(primary,backup) : primary;
             }
             case "qwen" -> qwenLyricsWriter(env);
             default -> throw new IllegalArgumentException("Unsupported qingfeng.lyrics.provider; use openai or qwen");

@@ -113,7 +113,7 @@ qingfeng:
     # base-url 必须与签发 key 的平台配套，不能混用阿里云百炼官方域名 dashscope.aliyuncs.com。
     # 密钥严禁写入仓库：由服务器私有配置 qingfeng.providers.qwen.api-key，
     # 或环境变量 aliyunqingfengKEY / DASHSCOPE_API_KEY 注入。
-    # 整首歌词默认仍使用 OpenAI GPT-6.1 Sol；可单独选择 qwen 或启用千问备用通道。
+    # 整首歌词优先使用 OpenAI GPT-6.1 Sol；配置千问密钥后默认启用安全兜底。
     openai:
       model: gpt-6.1-sol
     qwen:
@@ -128,7 +128,7 @@ qingfeng:
       section-audio-weight: 0.85
   lyrics:
     provider: openai
-    qwen-fallback-enabled: false
+    qwen-fallback-enabled: true
     timing:
       enabled: true
   generation:
