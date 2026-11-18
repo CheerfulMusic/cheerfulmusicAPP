@@ -52,7 +52,9 @@ class Database:
             result['batches'] = query(f'SELECT reference,owner_id,original,consumed,adjusted,held FROM p0_credit_batch WHERE reference IN ({marks(refs)})', refs)
             result['inbox'] = query(f'SELECT event_id,status,attempts,last_error FROM payment_webhook_inbox WHERE provider=%s AND merchant_scope=%s AND env_scope=%s AND event_id IN ({marks(events)})', [scope['provider'], scope['merchant'], scope['environment'], *events])
             result['status'] = {r['Variable_name']: int(r['Value']) for r in query("SHOW GLOBAL STATUS WHERE Variable_name IN ('Innodb_row_lock_time','Innodb_row_lock_waits','Innodb_deadlocks','Uptime')")}
-            require('Innodb_deadlocks' in result['status'], 'MySQL deadlock counter unavailable; cannot assert zero deadlocks')
+            deadlocks = query("SELECT COUNT,STATUS FROM information_schema.INNODB_METRICS WHERE NAME='lock_deadlocks'")
+            require(len(deadlocks) == 1 and deadlocks[0]['STATUS'] == 'enabled', 'Deadlock metric must be enabled')
+            result['status']['Innodb_deadlocks'] = int(deadlocks[0]['COUNT'])
             return result
 
 

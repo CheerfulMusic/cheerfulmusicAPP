@@ -28,6 +28,23 @@ class PaymentInboxRunnerTest {
         logger.setLevel(Level.WARN);warnings=new ListAppender<>();warnings.start();logger.addAppender(warnings);
     }
     @AfterEach void releaseLogCapture(){logger.detachAppender(warnings);warnings.stop();logger.setLevel(previousLevel);}
+    @Test void multiplePollingLanesProgressWhileOneDeliveryBlocksWithoutUnboundedQueueing() throws Exception {
+        var entered=new java.util.concurrent.CountDownLatch(2);var release=new java.util.concurrent.CountDownLatch(1);
+        var calls=new java.util.concurrent.atomic.AtomicInteger();
+        var provider=mock(VerifiedPaymentProcessor.class);when(provider.provider()).thenReturn("STRIPE_SANDBOX");
+        when(provider.processNextEvent()).thenAnswer(invocation->{calls.incrementAndGet();entered.countDown();release.await(5,TimeUnit.SECONDS);return false;});
+        var workers=(java.util.concurrent.ThreadPoolExecutor)Executors.newFixedThreadPool(3);
+        var runner=new PaymentInboxRunner(mock(PayPalPaymentService.class),List.of(provider),workers,System::nanoTime,2);
+        try{
+            runner.runOnce();assertTrue(entered.await(5,TimeUnit.SECONDS),"Two deliveries should run independently");
+            for(int n=0;n<100;n++)runner.runOnce();
+            assertEquals(2,calls.get());assertTrue(workers.getQueue().isEmpty(),"Scans must not queue duplicate lane tasks");
+        }finally{release.countDown();runner.stop();}
+    }
+    @Test void concurrencyConfigurationRejectsUnboundedWorkerCounts(){
+        assertThrows(IllegalArgumentException.class,()->new PaymentInboxRunner(mock(PayPalPaymentService.class),List.of(),0));
+        assertThrows(IllegalArgumentException.class,()->new PaymentInboxRunner(mock(PayPalPaymentService.class),List.of(),33));
+    }
     @Test void pollingIsBoundedAndRotatesAcrossIndependentProviders(){
         var calls=new ArrayList<String>();
         var first=processor("FIRST",calls,true);var second=processor("SECOND",calls,true);

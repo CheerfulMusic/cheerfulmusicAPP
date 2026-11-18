@@ -12,6 +12,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 /** Verified provider pointers survive crashes; provider HTTP never holds a financial transaction. */
 @Service @Profile({"mysql","test"})
 public class PaymentInbox {
+    private static final org.slf4j.Logger log=org.slf4j.LoggerFactory.getLogger(PaymentInbox.class);
     public static final String LEGACY_SCOPE="LEGACY_UNKNOWN";
     public record Delivery(String provider,String eventId,String type,String payload,String token,int attempt,String merchant,String environment) {
         public Delivery(String provider,String eventId,String type,String payload,String token,int attempt){this(provider,eventId,type,payload,token,attempt,LEGACY_SCOPE,LEGACY_SCOPE);}
@@ -54,7 +55,12 @@ public class PaymentInbox {
         for(String id:ids){
             String token=UUID.randomUUID().toString();
             int changed=db.update("UPDATE payment_webhook_inbox SET status='PROCESSING',lease_token=?,lease_until=TIMESTAMPADD(SECOND,180,CURRENT_TIMESTAMP),attempts=attempts+1,updated_at=CURRENT_TIMESTAMP WHERE provider=? AND merchant_scope=? AND env_scope=? AND event_id=? AND status IN ('PENDING','PROCESSING') AND next_attempt_at<=CURRENT_TIMESTAMP AND (lease_until IS NULL OR lease_until<=CURRENT_TIMESTAMP)",token,provider,merchant,environment,id);
-            if(changed==1)return Optional.of(db.queryForObject("SELECT event_type,payload,attempts FROM payment_webhook_inbox WHERE provider=? AND merchant_scope=? AND env_scope=? AND event_id=? AND lease_token=?",(rs,n)->new Delivery(provider,id,rs.getString(1),rs.getString(2),token,rs.getInt(3),merchant,environment),provider,merchant,environment,id,token));
+            if(changed==1){
+                var delivery=db.queryForObject("SELECT event_type,payload,attempts FROM payment_webhook_inbox WHERE provider=? AND merchant_scope=? AND env_scope=? AND event_id=? AND lease_token=?",(rs,n)->new Delivery(provider,id,rs.getString(1),rs.getString(2),token,rs.getInt(3),merchant,environment),provider,merchant,environment,id,token);
+                // A process dying before retry() must not create an unlimited poison-message loop.
+                if(delivery.attempt()>8){markManual(delivery,"LEASE_RECOVERY_EXHAUSTED");continue;}
+                return Optional.of(delivery);
+            }
         }
         return Optional.empty();
     }
@@ -153,7 +159,15 @@ public class PaymentInbox {
             db.update("UPDATE payment_webhook_inbox SET status='PENDING',attempts=0,lease_token=NULL,lease_until=NULL,next_attempt_at=CURRENT_TIMESTAMP,last_error=NULL,updated_at=CURRENT_TIMESTAMP WHERE provider=? AND merchant_scope=? AND env_scope=? AND event_id=? AND status='MANUAL'",provider,merchant,environment,eventId);
         });
     }
-    private void audit(Delivery d,String result,String evidence){db.update("INSERT INTO payment_inbox_attempt(id,provider,merchant_scope,env_scope,event_id,attempt,result,evidence_id,created_at) VALUES(?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)",UUID.randomUUID().toString(),d.provider(),d.merchant(),d.environment(),d.eventId(),Math.max(0,d.attempt()),result,evidence);}
+    private void audit(Delivery d,String result,String evidence){
+        db.update("INSERT INTO payment_inbox_attempt(id,provider,merchant_scope,env_scope,event_id,attempt,result,evidence_id,created_at) VALUES(?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)",UUID.randomUUID().toString(),d.provider(),d.merchant(),d.environment(),d.eventId(),Math.max(0,d.attempt()),result,evidence);
+        if("MANUAL".equals(result)){
+            // Emit only after durable quarantine commits. No payload, secret or raw exception message.
+            org.springframework.transaction.support.TransactionSynchronizationManager.registerSynchronization(new org.springframework.transaction.support.TransactionSynchronization(){
+                @Override public void afterCommit(){log.error("payment_manual_review provider={} environment={} event={} attempt={}",d.provider(),d.environment(),d.eventId(),d.attempt());}
+            });
+        }
+    }
     private void acceptLegacy(String provider,String eventId,String type,String payload){
         identity(provider,LEGACY_SCOPE,LEGACY_SCOPE,eventId);
         if(type==null||!type.matches("[A-Za-z0-9_.]{1,96}")||payload==null||payload.length()>30000)throw new IllegalArgumentException("Invalid payment event");
