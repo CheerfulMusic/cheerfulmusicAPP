@@ -51,7 +51,7 @@ class JdbcReferralRewards implements ReferralRewards {
     }
     public void rewardForFirstLogin(String invitee) {
         var inviters = db.query("SELECT inviter_id FROM referral_pending WHERE invitee_id=?", (rs,n)->rs.getString(1), invitee);
-        if (!inviters.isEmpty()) credits.credit(inviters.get(0), 20, "invite:" + invitee);
+        if (!inviters.isEmpty()) credits.credit(inviters.get(0), 19, "invite:" + invitee);
     }
     private boolean verified(String creator) {
         Integer count = db.queryForObject("SELECT (SELECT COUNT(*) FROM creator_google_identity WHERE creator_id=?) + (SELECT COUNT(*) FROM creator_oidc_identity WHERE creator_id=?)", Integer.class, creator, creator);
