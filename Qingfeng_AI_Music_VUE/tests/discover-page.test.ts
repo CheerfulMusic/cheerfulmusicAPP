@@ -2,15 +2,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import type { DiscoverSong } from '../src/modules/artist/api/artist'
+import { houseSelections } from '../src/modules/home/model/published-recommendations'
 import type { PlayableTrack } from '../src/shared/player/store'
 
 const mocks = vi.hoisted(() => ({
-  list: vi.fn(), record: vi.fn(), queue: vi.fn(), toggle: vi.fn(),
+  list: vi.fn(), profile: vi.fn(), record: vi.fn(), queue: vi.fn(), toggle: vi.fn(),
   player: { current: null as PlayableTrack | null, playing: false, starting: false, duration: 0 },
 }))
 vi.mock('../src/modules/artist/api/artist', async original => ({
   ...await original<typeof import('../src/modules/artist/api/artist')>(),
-  listDiscoverSongs: mocks.list, recordDiscoverPlay: mocks.record,
+  listDiscoverSongs: mocks.list, getPublicArtist: mocks.profile, recordDiscoverPlay: mocks.record,
 }))
 vi.mock('../src/shared/player/store', () => ({
   usePlayer: () => Object.assign(mocks.player, { setQueue: mocks.queue, toggle: mocks.toggle }),
@@ -41,6 +42,12 @@ beforeEach(() => {
   vi.resetAllMocks()
   Object.assign(mocks.player, { current: null, playing: false, starting: false, duration: 0 })
   mocks.record.mockResolvedValue(undefined)
+  mocks.profile.mockResolvedValue({
+    stageName: 'SergioBeats',
+    songs: houseSelections.map(({ songId }, index) => ({
+      id: songId, version: 1, title: index === 0 ? 'Gravity' : 'Static Bloom', hasCover: true,
+    })),
+  })
   mocks.toggle.mockImplementation(async (track: PlayableTrack) => {
     mocks.player.playing = !(mocks.player.current?.audio === track.audio && mocks.player.playing)
     mocks.player.current = track
@@ -54,15 +61,26 @@ afterEach(() => {
 })
 
 describe('Discover editorial layout with real content', () => {
-  it('shows four populated playlists and up to seven featured songs', async () => {
+  it('shows five populated playlists and up to seven featured songs', async () => {
     const featured = Array.from({ length: 8 }, (_, i) => song(`精选${i + 1}`))
     mocks.list.mockImplementation(async (tab: string) => page(tab === 'featured' ? featured : [song(tab)]))
     const wrapper = await open()
     expect(wrapper.findAll('.discover-featured .discover-song')).toHaveLength(7)
     const tiles = wrapper.findAll('.discover-playlist-tiles button')
-    expect(tiles.map(tile => tile.get('strong').text())).toEqual(['华语流行', '电子', '欧美流行', 'Disco'])
-    await tiles[3]!.trigger('click')
-    expect(wrapper.get('.test-playlist').text()).toContain('忽然下起雨')
+    expect(tiles.map(tile => tile.get('strong').text())).toEqual(['华语流行', '电子', '欧美流行', 'Disco', 'House'])
+    await tiles[4]!.trigger('click')
+    expect(wrapper.get('.test-playlist').text()).toContain('Gravity')
+    expect(wrapper.get('.test-playlist').text()).toContain('Static Bloom')
+  })
+
+  it('fills the fifth slot with a playable folk playlist when House is unavailable', async () => {
+    mocks.profile.mockRejectedValue(new Error('unavailable'))
+    const wrapper = await open()
+    const tiles = wrapper.findAll('.discover-playlist-tiles button')
+    expect(tiles).toHaveLength(5)
+    expect(tiles[4]!.get('strong').text()).toBe('民谣')
+    await tiles[4]!.trigger('click')
+    expect(wrapper.get('.test-playlist').text()).toContain('最美的风景')
   })
 
   it('keeps the introduction first and cycles through the top five songs from the global popular feed', async () => {

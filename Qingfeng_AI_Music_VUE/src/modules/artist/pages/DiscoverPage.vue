@@ -40,7 +40,7 @@ const genres = [
 ]
 const covers = [sunset, moon, mountains, lavender, city, lake]
 const player = usePlayer()
-const previewPlaylists = usePreviewPlaylists()
+const previewPlaylists = usePreviewPlaylists({ includeHouseReleases: true })
 const previewTracks = usePreviewTracks()
 const tab = ref<(typeof tabs)[number]['id']>('latest')
 const genre = ref('')
@@ -100,17 +100,24 @@ const visibleArtists = computed(() => {
   }])).values())
   return showAllArtists.value ? found : found.slice(0, 3)
 })
+function samplePlaylist(id: string, title: string, subtitle: string) {
+  const tracks = previewTracks.value.filter(track => track.filters.includes(id))
+  const [firstTrack] = tracks
+  return firstTrack && { id, title: t(title), subtitle, cover: firstTrack.cover, tracks }
+}
 const playlists = computed(() => {
-  const discoTracks = previewTracks.value.filter(track => track.filters.includes('disco'))
-  const [firstDiscoTrack] = discoTracks
-  if (!firstDiscoTrack) return previewPlaylists.value
-  return [...previewPlaylists.value, {
-    id: 'disco', title: t('Disco'), subtitle: 'DISCO', cover: firstDiscoTrack.cover, tracks: discoTracks,
-  }]
+  const house = previewPlaylists.value.find(playlist => playlist.id === 'house')
+  const houseCover = house?.tracks[0]?.cover
+  return [
+    ...previewPlaylists.value.filter(playlist => playlist.id !== 'house'),
+    samplePlaylist('disco', 'Disco', 'DISCO'),
+    house && houseCover ? { ...house, cover: houseCover } : house,
+    samplePlaylist('folk', '民谣', 'FOLK'),
+  ].filter(playlist => playlist !== undefined)
 })
 const visiblePlaylists = computed(() => {
   const keyword = query.value.toLocaleLowerCase()
-  return playlists.value.filter(playlist => playlist.tracks.length && playlist.title.toLocaleLowerCase().includes(keyword)).slice(0, 4)
+  return playlists.value.filter(playlist => playlist.tracks.length && playlist.title.toLocaleLowerCase().includes(keyword)).slice(0, 5)
 })
 const playlistDetails = computed(() => playlists.value.find(playlist => playlist.id === selectedPlaylist.value))
 
