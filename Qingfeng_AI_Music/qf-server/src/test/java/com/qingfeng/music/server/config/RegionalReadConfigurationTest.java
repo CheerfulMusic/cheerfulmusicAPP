@@ -2,11 +2,56 @@ package com.qingfeng.music.server.config;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.attribute.FileTime;
+import java.time.Instant;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
+import org.springframework.mock.web.MockFilterChain;
+import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.scheduling.annotation.ScheduledAnnotationBeanPostProcessor;
 
 class RegionalReadConfigurationTest {
+    @TempDir Path directory;
+
+    @Test
+    void proofExpiresAndRejectsFutureTimestamps() throws Exception {
+        Instant now = Instant.parse("2026-11-18T12:00:00Z");
+        Path proof = directory.resolve("ready");
+        assertFalse(RegionalReadConfiguration.freshProof(proof, now));
+        Files.createFile(proof);
+        Files.setLastModifiedTime(proof, FileTime.from(now.minusSeconds(2)));
+        assertTrue(RegionalReadConfiguration.freshProof(proof, now));
+        assertFalse(RegionalReadConfiguration.freshProof(proof, now.plusSeconds(9)));
+        assertFalse(RegionalReadConfiguration.freshProof(proof, now.minusSeconds(3)));
+    }
+
+    @Test
+    void sharingRequiresRegionalOptInPrimaryApprovalAndFreshReplica() throws Exception {
+        Path proof = directory.resolve("ready");
+        String path = "/gift/" + "A".repeat(43);
+        assertEquals(404, response(true, proof, path, false));
+        assertEquals(503, response(true, proof, path, true));
+        assertEquals(503, response(false, proof, "/api/public/discover", false));
+        Files.createFile(proof);
+        Files.setLastModifiedTime(proof, FileTime.from(Instant.now().minusSeconds(1)));
+        assertEquals(404, response(false, proof, path, true));
+        assertEquals(200, response(true, proof, path, true));
+        assertEquals(204, response(true, proof, "/internal/regional/ready", false));
+    }
+
+    private static int response(boolean gift, Path proof, String path, boolean approved) throws Exception {
+        var filter = new RegionalReadConfiguration().regionalReadRoutes(proof.toString(), gift).getFilter();
+        var request = new MockHttpServletRequest("GET", path);
+        if (approved) request.addHeader("X-QF-Primary-Share-Authorized", "active");
+        var response = new MockHttpServletResponse();
+        filter.doFilter(request, response, new MockFilterChain());
+        return response.getStatus();
+    }
+
     @Test
     void acceptsOnlyExplicitReadRoutes() {
         assertTrue(RegionalReadConfiguration.allows("GET", "/api/public/discover"));

@@ -37,6 +37,7 @@ public class GiftPageController {
 
     @GetMapping(value = "/gift/{token}", produces = "text/html;charset=UTF-8")
     public ResponseEntity<String> page(@PathVariable String token) throws IOException {
+        long start = System.nanoTime();
         SharingApi.Gift gift;
         try { gift = sharing.get(token); }
         catch (DomainException error) {
@@ -45,6 +46,7 @@ public class GiftPageController {
                     + "<title>分享已失效 | Cheerful Music</title><h1>这首歌的分享已失效</h1>"
                     + "<p>This song link is unavailable. 请向作者索取新的收听链接</p><a href=\"/\">Cheerful Music</a></html>");
         }
+        long loaded = System.nanoTime();
         if (!index.exists()) return html(HttpStatus.SERVICE_UNAVAILABLE,
                 "<!doctype html><meta charset=\"UTF-8\"><title>Cheerful Music</title><p>收听页面暂时不可用，请稍后重试</p>");
         String title = escape(gift.title());
@@ -78,19 +80,31 @@ public class GiftPageController {
                 gift.lyrics(), gift.audioOrigin(), gift.createdAt().toString(), gift.expiresAt().toString(), gift.hasCover()))
                 .replace("<", "\\u003c").replace(">", "\\u003e").replace("&", "\\u0026");
         String bootstrap = "<script type=\"application/json\" id=\"qf-initial-gift\">" + data + "</script>";
-        return html(HttpStatus.OK, shell.substring(0, head) + metadata + shell.substring(head, bodyEnd)
-                + bootstrap + shell.substring(bodyEnd));
+        String body = shell.substring(0, head) + metadata + shell.substring(head, bodyEnd)
+                + bootstrap + shell.substring(bodyEnd);
+        long prepared = System.nanoTime();
+        String timing = "gift_data;desc=\"inline\", gift_lookup;dur=" + elapsedMillis(start, loaded)
+                + ", gift_render;dur=" + elapsedMillis(loaded, prepared);
+        return html(HttpStatus.OK, body, timing);
     }
 
     private record InitialGift(String token, String title, String recipient, String message, String lyrics,
                                String audioOrigin, String createdAt, String expiresAt, boolean hasCover) {}
 
     private String escape(String value) { return HtmlUtils.htmlEscape(value, "UTF-8"); }
+    private static long elapsedMillis(long start, long end) {
+        return java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(end - start);
+    }
+
     private ResponseEntity<String> html(HttpStatus status, String body) {
+        return html(status, body, null);
+    }
+
+    private ResponseEntity<String> html(HttpStatus status, String body, String timing) {
         var response = ResponseEntity.status(status).contentType(new MediaType("text", "html", StandardCharsets.UTF_8))
                 .cacheControl(CacheControl.noStore()).header("Referrer-Policy", "no-referrer")
                 .header("X-Robots-Tag", "noindex, nofollow, noarchive");
-        if (status == HttpStatus.OK) response.header("Server-Timing", "gift_data;desc=\"inline\"");
+        if (timing != null) response.header("Server-Timing", timing);
         return response.body(body);
     }
 }

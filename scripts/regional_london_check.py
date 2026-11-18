@@ -204,6 +204,40 @@ def measure(browser, url, metadata_url, payload, timeout, playback, cookie, mode
             document_ttfb_ms: performance.getEntriesByType('navigation')[0].responseStart
         })""")
         start_times = {key: round(value, 1) for key, value in start_times.items()}
+        navigation = page.evaluate("""() => {
+            const nav = performance.getEntriesByType('navigation')[0];
+            const round = (value) => Math.round(value * 10) / 10;
+            const groups = {};
+            for (const item of performance.getEntriesByType('resource')) {
+                const url = new URL(item.name);
+                const bucket = url.origin === location.origin
+                    ? (url.pathname.startsWith('/assets/') ? 'bundled_assets'
+                        : url.pathname.startsWith('/api/') ? 'same_origin_api' : 'same_origin_other')
+                    : (url.hostname === 'media.cheerfulmusic.com' ? 'media_cdn' : 'other_origins');
+                const group = groups[bucket] ??= { count: 0, max_duration_ms: 0, last_response_end_ms: 0,
+                    max_ttfb_ms: 0, max_download_ms: 0, transfer_bytes: 0, protocols: [] };
+                group.count += 1;
+                group.max_duration_ms = Math.max(group.max_duration_ms, round(item.duration));
+                group.last_response_end_ms = Math.max(group.last_response_end_ms, round(item.responseEnd));
+                if (item.requestStart && item.responseStart) {
+                    group.max_ttfb_ms = Math.max(group.max_ttfb_ms, round(item.responseStart - item.requestStart));
+                    group.max_download_ms = Math.max(group.max_download_ms, round(item.responseEnd - item.responseStart));
+                }
+                group.transfer_bytes += item.transferSize;
+                if (item.nextHopProtocol && !group.protocols.includes(item.nextHopProtocol)) {
+                    group.protocols.push(item.nextHopProtocol);
+                }
+            }
+            const timings = Object.fromEntries(nav.serverTiming
+                .filter(item => ['gift_lookup', 'gift_render', 'region_upstream'].includes(item.name))
+                .map(item => [item.name, round(item.duration)]));
+            return { dns_ms: round(nav.domainLookupEnd - nav.domainLookupStart),
+                connect_ms: round(nav.connectEnd - nav.connectStart),
+                tls_ms: nav.secureConnectionStart ? round(nav.connectEnd - nav.secureConnectionStart) : null,
+                request_to_first_byte_ms: round(nav.responseStart - nav.requestStart),
+                html_transfer_ms: round(nav.responseEnd - nav.responseStart),
+                server_timing_ms: timings, resources: groups };
+        }""")
         inline = mode in ("live_inline", "simulated_inline")
         require((INLINE_TIMING in doc.headers.get("server-timing", "")) == inline,
                 "unexpected share HTML version for this benchmark mode")
@@ -212,7 +246,7 @@ def measure(browser, url, metadata_url, payload, timeout, playback, cookie, mode
                 and (inline or metadata_timing.get("status") == 200), "unexpected live/replayed metadata path")
         server = doc.server_addr() or {}
         result = dict(mode=mode, document_ip=server.get("ipAddress"),
-                      ingress=doc.headers.get("x-qf-origin"), **observations, **start_times,
+                      ingress=doc.headers.get("x-qf-origin"), **observations, **start_times, navigation=navigation,
                       **{"metadata_" + key: value for key, value in metadata_timing.items()})
         if playback:
             if page.locator(".beta-access-dialog").is_visible():
