@@ -65,3 +65,18 @@ describe('推荐音频 OSS 失败时回退',()=>{
  it('签名过期返回不支持时回退本地并恢复进度',async()=>{const player=usePlayer();const sample={...track('sample'),audio:'/media/sample-red.mp3'};await player.toggle(sample);const a=FakeAudio.current;a.currentTime=7;a.paused=false;a.error={code:4};a.dispatchEvent(new Event('error'));expect(a.src).toContain('/media/sample-red.mp3?reauth=');a.error=null;a.dispatchEvent(new Event('loadedmetadata'));expect(a.currentTime).toBe(7);expect(player.playing).toBe(true)})
  it('等待超时自动回退一次，再次超时提示重试',async()=>{const player=usePlayer();const sample={...track('sample'),audio:'/media/sample-red.mp3'};await player.toggle(sample);const a=FakeAudio.current;vi.useFakeTimers();a.dispatchEvent(new Event('waiting'));await vi.advanceTimersByTimeAsync(15000);expect(a.src).toContain('/media/sample-red.mp3?reauth=');a.dispatchEvent(new Event('loadedmetadata'));a.dispatchEvent(new Event('waiting'));await vi.advanceTimersByTimeAsync(15000);expect(player.error).toContain('等待时间较长');expect(player.playing).toBe(false)})
 })
+
+it('keeps the native gift preview playing at its original position across mount', async () => {
+  const player = usePlayer(), song = track('gift'), preview = new FakeAudio()
+  preview.src = song.audio
+  preview.paused = false
+  preview.currentTime = 4
+  expect(player.adoptGiftPreview(song, preview as unknown as HTMLAudioElement)).toBe(true)
+  expect(player.time).toBe(4)
+  expect(player.playing).toBe(true)
+  expect(preview.play).not.toHaveBeenCalled()
+  expect(preview.load).not.toHaveBeenCalled()
+  await player.toggle(song)
+  expect(preview.paused).toBe(true)
+  expect(FakeAudio.instances).toHaveLength(1)
+})

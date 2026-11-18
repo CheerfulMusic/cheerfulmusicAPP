@@ -80,12 +80,39 @@ public class GiftPageController {
                 gift.lyrics(), gift.audioOrigin(), gift.createdAt().toString(), gift.expiresAt().toString(), gift.hasCover()))
                 .replace("<", "\\u003c").replace(">", "\\u003e").replace("&", "\\u0026");
         String bootstrap = "<script type=\"application/json\" id=\"qf-initial-gift\">" + data + "</script>";
-        String body = shell.substring(0, head) + metadata + shell.substring(head, bodyEnd)
+        String headHtml = shell.substring(0, head).replace("<link rel=\"stylesheet\"",
+                "<link data-gift-styles media=\"print\" rel=\"stylesheet\"");
+        String preview = """
+                <section id="qf-gift-preview" aria-labelledby="qf-gift-heading"
+                    style="box-sizing:border-box;max-width:36rem;margin:8vh auto;padding:1.5rem;color:#302525;background:#fffafb;font:1rem system-ui,sans-serif">
+                  <img src="%s" width="112" height="112" alt="" style="object-fit:cover;border-radius:12px">
+                  <h1 id="qf-gift-heading" style="overflow-wrap:anywhere">%s</h1>
+                  <audio controls preload="none" controlslist="nodownload" style="width:100%%" aria-labelledby="qf-gift-heading" src="%s"></audio>
+                </section>
+                """.formatted(gift.hasCover() ? "/api/public/gifts/" + escape(token) + "/cover" : "/brand/share-default-cover.png",
+                        title, "/api/public/gifts/" + escape(token) + "/audio");
+        String content = shell.substring(head, bodyEnd).replace("<body>", "<body>" + preview);
+        String body = headHtml + metadata + mediaPreconnect() + content
                 + bootstrap + shell.substring(bodyEnd);
         long prepared = System.nanoTime();
         String timing = "gift_data;desc=\"inline\", gift_lookup;dur=" + elapsedMillis(start, loaded)
                 + ", gift_render;dur=" + elapsedMillis(loaded, prepared);
         return html(HttpStatus.OK, body, timing);
+    }
+
+    @Value("${qingfeng.cdn.domain:}")
+    private String mediaDomain;
+
+    private String mediaPreconnect() {
+        if (mediaDomain == null || mediaDomain.isBlank()) return "";
+        try {
+            URI cdn = URI.create(mediaDomain);
+            if ("https".equals(cdn.getScheme()) && cdn.getHost() != null && cdn.getUserInfo() == null)
+                return "<link rel=\"preconnect\" href=\"" + escape("https://" + cdn.getRawAuthority()) + "\">";
+        } catch (IllegalArgumentException ignored) {
+            // An optional hint must never prevent the gift from opening.
+        }
+        return "";
     }
 
     private record InitialGift(String token, String title, String recipient, String message, String lyrics,

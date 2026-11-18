@@ -47,10 +47,20 @@ watch(token, async id => {
     loading.value = false
     await nextTick()
     if (turn === sequence && publicPage.value) {
+      const preview = document.getElementById('qf-gift-preview')
+      const earlyAudio = preview?.querySelector('audio')
+      if (preview && earlyAudio && track.value && player.adoptGiftPreview(track.value, earlyAudio)) {
+        preview.hidden = true
+        earlyAudio.controls = false
+      } else {
+        if (earlyAudio && !earlyAudio.paused) earlyAudio.pause()
+        preview?.remove()
+      }
       trackEvent('gift_card_ready', { mode: initial ? 'inline' : 'fetch', durationMs: Math.round(performance.now() - started) }, '/gift/:token')
     }
   } catch (cause) {
     if (turn !== sequence) return
+    if (publicPage.value) document.getElementById('qf-gift-preview')?.remove()
     error.value = cause instanceof Error ? cause.message : '礼物暂时无法打开'
     if (player.current?.id === `gift:${id}`) player.reset()
   } finally {

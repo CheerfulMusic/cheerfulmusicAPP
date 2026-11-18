@@ -31,6 +31,9 @@ class GiftPageControllerTest {
         assertTrue(html.contains("https://cheerfulmusic.com/gift/" + token));
         assertTrue(html.contains("/cover?proxy=true"));
         assertTrue(html.contains("/assets/test.js")); assertTrue(html.contains("id=\"app\""));
+        assertTrue(html.contains("<audio controls preload=\"none\""));
+        assertTrue(html.contains("src=\"/api/public/gifts/" + token + "/audio\""));
+        assertTrue(html.indexOf("id=\"qf-gift-preview\"") < html.indexOf("id=\"app\""));
         var head = html.substring(0, html.indexOf("</head>"));
         for (String secret : new String[]{"旧标题", "旧简介", "私人称呼", "私人祝福", "第一句歌词"}) assertFalse(head.contains(secret));
         assertFalse(html.contains("/works/"));
@@ -60,6 +63,7 @@ class GiftPageControllerTest {
         assertEquals(HttpStatus.NOT_FOUND, result.getStatusCode()); assertFalse(result.getBody().contains("曾经公开的标题"));
         assertFalse(result.getBody().contains("og:image")); assertEquals("no-store", result.getHeaders().getCacheControl());
         assertFalse(result.getBody().contains("qf-initial-gift"));
+        assertFalse(result.getBody().contains("<audio"));
         assertNull(result.getHeaders().getFirst("Server-Timing"));
     }
     @Test void backendFailureIsNotDisguisedAsAnExpiredShare() {
