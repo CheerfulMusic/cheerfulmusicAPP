@@ -1829,7 +1829,6 @@ export const english: Record<string, string> = {
   '用户服务条款（含积分与退款规则）': 'Terms of service (credits & refunds)',
   '隐私政策': 'Privacy policy',
   '音乐作品发布与社区规则': 'Publishing & community rules',
-  '版权与授权说明': 'Copyright & licensing',
   '立即创作你的第一首歌': 'Create your first song today',
   '免费体验': 'Start for free',
 
