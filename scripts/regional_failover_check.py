@@ -50,9 +50,12 @@ class Handler(BaseHTTPRequestHandler):
                 time.sleep((0.12, 0.25, 0.4)[sequence % 3])
             if mode == "stalled":
                 time.sleep(1.6)
-            code = 503 if mode == "unavailable" or (
-                mode == "database_down" and self.path == "/shadow/db-read"
-            ) else 200
+            if mode == "forbidden":
+                code = 403
+            else:
+                code = 503 if mode == "unavailable" or (
+                    mode == "database_down" and self.path == "/shadow/db-read"
+                ) else 200
             self.send_response(code)
             self.send_header("X-Fixture-Upstream", fixture.label)
             self.send_header("Content-Length", "0")
@@ -82,17 +85,18 @@ def free_port():
         return sock.getsockname()[1]
 
 
-def config(gateway, reader, primary, bounded):
-    gate = "limit_conn primary_slots 4;" if bounded else ""
-    budget = "1s" if bounded else "180s"
+def config(gateway, reader, primary, policy):
+    http_policy, fallback_policy = policy if policy else (
+        "", "proxy_connect_timeout 2s; proxy_read_timeout 180s; proxy_next_upstream off;"
+    )
+    errors = "404 500 502 503 504" if policy else "403 404 500 502 503 504"
     return f"""
 pid nginx.pid;
 error_log stderr crit;
 events {{ worker_connections 256; }}
 http {{
     access_log off;
-    limit_conn_zone $server_name zone=primary_slots:1m;
-    limit_conn_status 503;
+    {http_policy}
     server {{
         listen 127.0.0.1:{gateway};
         server_name fixture;
@@ -101,7 +105,7 @@ http {{
             proxy_connect_timeout 2s;
             proxy_read_timeout 8s;
             proxy_intercept_errors on;
-            error_page 403 404 500 502 503 504 = @primary;
+            error_page {errors} = @primary;
         }}
         # Shadow route tests the prospective DB-read policy. Production sends this class to Shenzhen.
         location = /shadow/db-read {{
@@ -109,15 +113,12 @@ http {{
             proxy_connect_timeout 2s;
             proxy_read_timeout 8s;
             proxy_intercept_errors on;
-            error_page 403 404 500 502 503 504 = @primary;
+            error_page {errors} = @primary;
         }}
         location = /api/public/discover {{ proxy_pass http://127.0.0.1:{primary}; }}
         location @primary {{
-            {gate}
+            {fallback_policy}
             proxy_pass http://127.0.0.1:{primary};
-            proxy_connect_timeout 2s;
-            proxy_read_timeout {budget};
-            proxy_next_upstream off;
         }}
     }}
 }}
@@ -125,10 +126,10 @@ http {{
 
 
 @contextmanager
-def nginx(executable, gateway, reader, primary, bounded):
+def nginx(executable, gateway, reader, primary, policy):
     with tempfile.TemporaryDirectory(prefix="qf-nginx-fixture-") as workspace:
         path = Path(workspace)
-        (path / "nginx.conf").write_text(config(gateway, reader, primary, bounded), encoding="ascii")
+        (path / "nginx.conf").write_text(config(gateway, reader, primary, policy), encoding="ascii")
         command = [executable, "-p", workspace + "/", "-c", "nginx.conf"]
         subprocess.run([*command, "-t"], capture_output=True, check=True, timeout=5)
         process = subprocess.Popen([*command, "-g", "daemon off; master_process off;"],
@@ -161,7 +162,8 @@ def request(port, path):
         connection.request("GET", path)
         response = connection.getresponse()
         response.read()
-        return response.status, response.getheader("X-Fixture-Upstream"), time.monotonic() - start
+        return (response.status, response.getheader("X-Fixture-Upstream"), time.monotonic() - start,
+                response.getheader("Retry-After"))
     finally:
         connection.close()
 
@@ -174,12 +176,13 @@ def drain(server):
         raise RuntimeError("fixture requests did not drain")
 
 
-def run(executable, bounded):
+def run(executable, policy):
+    bounded = bool(policy)
     reader, primary = Fixture("singapore"), Fixture("shenzhen")
     gateway = free_port()
     reports = []
 
-    def scenario(case, path, origin, count=12, overloaded=False):
+    def scenario(case, path, origin, count=12, overloaded=False, status=200):
         with ThreadPoolExecutor(max_workers=count) as pool:
             rows = list(pool.map(lambda _: request(gateway, path), range(count)))
         drain(primary)
@@ -189,9 +192,9 @@ def run(executable, bounded):
         max_ms = round(max(row[2] for row in rows) * 1000)
         if overloaded and bounded:
             if (peak > 4 or calls > 4 or not counts.get("503")
-                    or set(counts) - {"503", "504"} or max_ms > 2500):
+                    or set(counts) - {"503", "504"} or max_ms > 2500 or any(row[3] != "1" for row in rows)):
                 raise RuntimeError(f"bounded policy failed: peak={peak} calls={calls} status={counts} max_ms={max_ms}")
-        elif any(code != 200 or actual != origin for code, actual, _ in rows):
+        elif any(code != status or actual != origin for code, actual, _, _ in rows):
             raise RuntimeError(f"unexpected route or response during {case}")
         if calls > count:
             raise RuntimeError("gateway amplified requests to Shenzhen")
@@ -199,9 +202,14 @@ def run(executable, bounded):
                             primary_calls=calls, primary_peak_in_flight=peak))
 
     with serving(primary):
-        with nginx(executable, gateway, reader.server_port, primary.server_port, bounded):
+        with nginx(executable, gateway, reader.server_port, primary.server_port, policy):
             with serving(reader):
                 scenario("healthy_local", "/assets/probe", "singapore", count=4)
+                if bounded:
+                    reader.reset("forbidden")
+                    scenario("forbidden_does_not_fallback", "/assets/probe", "singapore", count=3, status=403)
+                    if primary.requests:
+                        raise RuntimeError("a denied regional request reached Shenzhen")
                 reader.reset("database_down")
                 scenario("db_down_static_unaffected", "/assets/probe", "singapore", count=4)
                 scenario("shadow_db_down_fallback", "/shadow/db-read", "shenzhen", count=3)
@@ -225,10 +233,14 @@ def run(executable, bounded):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--nginx", default=shutil.which("nginx"), help="Linux Nginx executable")
+    parser.add_argument("--policy-dir", type=Path,
+                        default=Path(__file__).resolve().parent.parent / "Qingfeng_AI_Music/deploy/nginx")
     args = parser.parse_args()
     if not args.nginx:
         parser.error("Nginx required; run on a Linux test host or in an isolated Linux container")
-    print(json.dumps([run(args.nginx, False), run(args.nginx, True)], indent=2))
+    policy = tuple((args.policy_dir / name).read_text(encoding="utf-8") for name in
+                   ("sg-fallback-http.conf", "sg-fallback-budget.conf"))
+    print(json.dumps([run(args.nginx, None), run(args.nginx, policy)], indent=2))
 
 
 if __name__ == "__main__":

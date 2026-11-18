@@ -103,13 +103,12 @@ def seed(browser, url, metadata_url, timeout, cookie):
         return body
 
 
-def measure(browser, url, metadata_url, payload, timeout, playback, cookie):
+def measure(browser, url, metadata_url, payload, timeout, playback, cookie, mode):
     from playwright.sync_api import TimeoutError
 
     with browser.new_context(service_workers="block") as context:
         if cookie:
             context.add_cookies([cookie])
-        mode = "combined_replay" if payload else "current_split"
         observations = {"metadata_origin_requests": 0, "metadata_replays": 0}
         metadata_timing = {}
         audio = []
@@ -152,9 +151,12 @@ def measure(browser, url, metadata_url, payload, timeout, playback, cookie):
             document_ttfb_ms: performance.getEntriesByType('navigation')[0].responseStart
         })""")
         start_times = {key: round(value, 1) for key, value in start_times.items()}
-        require(observations["metadata_origin_requests"] == (0 if payload else 1)
+        inline = mode == "live_inline"
+        require(('gift_data;desc="inline"' in doc.headers.get("server-timing", "")) == inline,
+                "unexpected share HTML version for this benchmark mode")
+        require(observations["metadata_origin_requests"] == (0 if payload or inline else 1)
                 and observations["metadata_replays"] == (1 if payload else 0)
-                and metadata_timing.get("status") == 200, "unexpected live/replayed metadata path")
+                and (inline or metadata_timing.get("status") == 200), "unexpected live/replayed metadata path")
         server = doc.server_addr() or {}
         result = dict(mode=mode, document_ip=server.get("ipAddress"),
                       ingress=doc.headers.get("x-qf-origin"), **observations, **start_times,
@@ -200,17 +202,24 @@ def run(args):
         browser = playwright.chromium.launch(args=options, **kwargs)
         try:
             location = egress(browser, args.allow_non_london)
-            try:
-                payload = seed(browser, url, metadata_url, args.timeout_ms, cookie)
-            except Error as error:
-                raise RuntimeError(f"share metadata seed failed: {type(error).__name__}") from None
+            payload = None
+            if args.mode == "compare-replay":
+                try:
+                    payload = seed(browser, url, metadata_url, args.timeout_ms, cookie)
+                except Error as error:
+                    raise RuntimeError(f"share metadata seed failed: {type(error).__name__}") from None
+            modes = {
+                "compare-replay": ("current_split", "combined_replay"),
+                "live-split": ("current_split",), "live-inline": ("live_inline",),
+            }[args.mode]
             for index in range(args.pairs):
-                modes = (None, payload) if index % 2 == 0 else (payload, None)
-                for data in modes:
+                order = modes if index % 2 == 0 else modes[::-1]
+                for mode in order:
+                    data = payload if mode == "combined_replay" else None
                     # Playback is a separate current-route metric. Replay warmup must not bias it.
                     try:
                         sample = measure(browser, url, metadata_url, data, args.timeout_ms,
-                                         playback=not args.skip_playback and data is None, cookie=cookie)
+                                         playback=not args.skip_playback and data is None, cookie=cookie, mode=mode)
                     except Error as error:
                         phase = "combined replay" if data else "current split or playback"
                         raise RuntimeError(f"{phase} failed: {type(error).__name__}") from None
@@ -219,7 +228,7 @@ def run(args):
             browser.close()
     medians = {
         mode: round(statistics.median(s["card_ms"] for s in samples if s["mode"] == mode), 1)
-        for mode in ("current_split", "combined_replay")
+        for mode in {s["mode"] for s in samples}
     }
     print(json.dumps({
         "sampled_at_utc": datetime.now(timezone.utc).isoformat(),
@@ -227,11 +236,12 @@ def run(args):
         "playback_enabled": not args.skip_playback,
         "existing_invite_cookie": bool(cookie),
         "location": location, "dns_override": str(args.target_ip) if args.target_ip else None,
-        "replay_limit": "Local metadata replay estimates removing a network round trip; "
+        "mode": args.mode,
+        "replay_limit": ("Local metadata replay estimates removing a network round trip; "
                         "the production HTML and backend still use the existing implementation. "
-                        "Inline payload transfer and rendering changes are not timed.",
-        "replayed_metadata_bytes": len(payload), "median_card_ms": medians,
-        "estimated_card_delta_ms": round(medians["current_split"] - medians["combined_replay"], 1),
+                        "Inline payload transfer and rendering changes are not timed.") if payload else None,
+        "replayed_metadata_bytes": len(payload) if payload else None, "median_card_ms": medians,
+        "estimated_card_delta_ms": round(medians["current_split"] - medians["combined_replay"], 1) if payload else None,
         "samples": samples,
     }, indent=2))
     require(not any("playback_failure" in sample for sample in samples),
@@ -242,6 +252,7 @@ def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--share-file", type=Path, help="private text file with URL; defaults to QF_SHARE_URL")
     p.add_argument("--target-ip", type=ipaddress.IPv4Address, help="browser-only DNS override, retains HTTPS hostname")
+    p.add_argument("--mode", choices=("compare-replay", "live-split", "live-inline"), default="compare-replay")
     p.add_argument("--pairs", type=int, default=5, choices=range(1, 16), metavar="1..15")
     p.add_argument("--timeout-ms", type=int, default=30000)
     p.add_argument("--channel", help="optional Playwright channel, for example msedge")

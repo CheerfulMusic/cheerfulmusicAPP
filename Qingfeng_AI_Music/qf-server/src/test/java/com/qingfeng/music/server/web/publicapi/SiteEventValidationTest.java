@@ -90,6 +90,22 @@ class SiteEventValidationTest {
         assertEquals("ok_id-1", clean.sessionId());
     }
 
+    @Test void giftPerformancePayloadCannotCarryShareContent() {
+        var clean = SiteEventController.sanitize(new SiteEventController.EventRequest(
+                "gift_card_ready", "/gift/" + "A".repeat(43), "https://example.test/private", "v", "s",
+                Map.of("mode", "inline", "durationMs", 120, "result", "private text", "route", "private text")));
+        assertNotNull(clean);
+        assertEquals("/gift/:token", clean.pagePath());
+        assertEquals("", clean.referrer());
+        assertEquals("", clean.visitorId());
+        assertEquals("", clean.sessionId());
+        assertEquals(Map.of("mode", "inline", "durationMs", 120L), clean.payload());
+        assertNull(SiteEventController.sanitize(new SiteEventController.EventRequest(
+                "gift_play_result", "/", "", "v", "s", Map.of("result", "unexpected", "durationMs", 1))));
+        assertNull(SiteEventController.sanitize(new SiteEventController.EventRequest(
+                "gift_play_result", "/", "", "v", "s", Map.of("result", "playing", "durationMs", 60_001))));
+    }
+
     @Test void durationIsClampedAndRejectsGarbage() {
         assertEquals(1500L, SiteEventController.durationMs(Map.of("durationMs", 1500)));
         assertEquals(1500L, SiteEventController.durationMs(Map.of("durationMs", "1500")));

@@ -13,7 +13,7 @@ import { apiUrl } from '../http/api-client'
 
 export const ANALYTICS_EVENTS = [
   'pageview', 'page_leave', 'gift_view', 'creation_start', 'lyrics_generated', 'song_generated',
-  'checkout_start', 'purchase', 'audio_play', 'gift_download',
+  'checkout_start', 'purchase', 'audio_play', 'gift_download', 'gift_card_ready', 'gift_play_result',
 ] as const
 export type AnalyticsEvent = typeof ANALYTICS_EVENTS[number]
 export type AnalyticsPayload = Record<string, string | number | boolean>
@@ -87,7 +87,7 @@ export function sanitizeReferrer(referrer: string): string {
   try {
     const url = new URL(referrer)
     if (url.protocol !== 'http:' && url.protocol !== 'https:') return ''
-    return (url.origin + url.pathname).slice(0, 512)
+    return (url.origin + sanitizePagePath(url.pathname)).slice(0, 512)
   } catch { return '' }
 }
 
@@ -123,12 +123,13 @@ export function setAnalyticsEnabled(value: boolean): void {
 export function track(event: AnalyticsEvent | string, payload?: AnalyticsPayload, pagePath?: string): void {
   try {
     if (!analyticsEnabled() || !ALLOWED.has(event)) return
+    const giftTiming = event === 'gift_card_ready' || event === 'gift_play_result'
     const body = JSON.stringify({
       event,
       pagePath: pagePath ?? sanitizePagePath(location.pathname),
-      referrer: sanitizeReferrer(document.referrer || ''),
-      visitorId: visitorId(),
-      sessionId: sessionId(),
+      referrer: giftTiming ? '' : sanitizeReferrer(document.referrer || ''),
+      visitorId: giftTiming ? '' : visitorId(),
+      sessionId: giftTiming ? '' : sessionId(),
       ...(payload ? { payload } : {}),
     })
     const url = apiUrl('public/events')
