@@ -95,8 +95,12 @@ describe('数据看板用户排序', () => {
       : json(summary()))
     await flushPromises()
     defer = true
+    const kpis = wrapper.get('.analytics-kpis').element
     await wrapper.get('[aria-label="用户排序"]').findAll('button')[1]!.trigger('click')
     await flushPromises()
+    expect(wrapper.get('.analytics-kpis').element).toBe(kpis)
+    expect(wrapper.text()).toContain('正在加载用户列表')
+    expect(names(wrapper)).toContain('Old Active')
     await wrapper.get('.analytics-range').findAll('button')[0]!.trigger('click')
     await flushPromises()
     expect(pending).toHaveLength(2)

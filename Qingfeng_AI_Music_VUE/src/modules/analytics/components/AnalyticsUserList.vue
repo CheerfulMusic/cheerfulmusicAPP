@@ -5,12 +5,14 @@ import { accountDetail, accountName, accountTypeLabel, avatarText, dwellLabel, f
 
 const props = defineProps<{
   rows: AnalyticsUserRow[]
+  sorting?: boolean
+  sortError?: string
   openUser?: string
   detailRows?: AnalyticsUserPageRow[]
   detailLoading?: boolean
   detailError?: string
 }>()
-defineEmits<{ toggle: [creatorId: string] }>()
+defineEmits<{ toggle: [creatorId: string]; retrySort: [] }>()
 
 const filter = defineModel<UserFilter>('filter', { default: 'all' })
 const sort = defineModel<AnalyticsUserSort>('sort', { default: 'active' })
@@ -40,9 +42,14 @@ function time(value: string): string {
         </div>
       </div>
     </div>
-    <p class="users-sort-hint">{{ sort === 'latest' ? '按最近访问时间从新到旧排序' : '按所选周期内的访问量从高到低排序' }}，展示前 50 位用户。</p>
+    <p v-if="sorting" class="users-sort-hint" role="status">正在加载用户列表…</p>
+    <p v-else-if="!sortError" class="users-sort-hint">{{ sort === 'latest' ? '按最近访问时间从新到旧排序' : '按所选周期内的访问量从高到低排序' }}，展示前 50 位用户。</p>
 
-    <div v-if="!rows.length" class="users-empty">所选时间范围内暂无用户数据。</div>
+    <div v-if="sortError" class="users-empty" role="alert">
+      加载失败。{{ sortError }}
+      <button type="button" class="analytics-retry" @click="$emit('retrySort')">重试</button>
+    </div>
+    <div v-else-if="!rows.length" class="users-empty">所选时间范围内暂无用户数据。</div>
     <div v-else-if="!visible.length" class="users-empty">当前筛选下没有用户。</div>
     <ul v-else class="users-list">
       <li v-for="row in visible" :key="row.creatorId" :class="{ open: openUser === row.creatorId }">

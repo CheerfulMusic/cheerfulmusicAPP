@@ -23,6 +23,8 @@ const unavailable = ref(false)
 const viewer = ref('')
 const days = ref(30)
 const userSort = ref<AnalyticsUserSort>('active')
+const usersLoading = ref(false)
+const usersError = ref('')
 const userFilter = ref<UserFilter>('all')
 const summary = ref<AnalyticsSummary | null>(null)
 const updatedAt = ref<Date | null>(null)
@@ -49,6 +51,9 @@ function describe(error: unknown): string {
 async function load(keepData = false) {
   const turn = ++loadTurn
   const hadData = summary.value !== null
+  const sortingUnresolved = usersLoading.value || !!usersError.value
+  usersLoading.value = false
+  usersError.value = ''
   loading.value = true
   error.value = ''
   accessDenied.value = false
@@ -70,7 +75,11 @@ async function load(keepData = false) {
     if (turn !== loadTurn) return
     error.value = describe(e)
     accessDenied.value = false
-    if (hadData && keepData) { stale.value = true; return }
+    if (hadData && keepData) {
+      stale.value = true
+      if (sortingUnresolved) usersError.value = error.value
+      return
+    }
     summary.value = null
     unavailable.value = false
     stale.value = false
@@ -80,11 +89,32 @@ async function load(keepData = false) {
 }
 onMounted(() => { void load(false) })
 
-/** 周期或排序变化：清空旧数据及下钻缓存；身份筛选保留在父级，不受列表重建影响。 */
-watch([days, userSort], () => {
+watch(days, () => {
   openPage.value = ''; pageUsers.value = {}; pageUsersError.value = ''
   openUser.value = ''; userPages.value = {}; userPagesError.value = ''
   void load(false)
+})
+
+async function loadUserSort() {
+  const turn = ++loadTurn
+  usersLoading.value = true
+  usersError.value = ''
+  try {
+    const data = await analyticsSummary(days.value, userSort.value)
+    if (turn !== loadTurn) return
+    if (!data.allowed) { accessDenied.value = true; summary.value = null; return }
+    if (data.error) throw new Error('用户数据暂时不可用。')
+    if (summary.value) summary.value = { ...summary.value, users: data.users }
+  } catch (e) {
+    if (turn === loadTurn) usersError.value = describe(e)
+  } finally {
+    if (turn === loadTurn) usersLoading.value = false
+  }
+}
+
+watch(userSort, () => {
+  if (loading.value || !summary.value) { void load(true); return }
+  void loadUserSort()
 })
 
 const totals = computed(() => summary.value?.totals)
@@ -260,11 +290,14 @@ const detailRowsForUser = computed(() => userPages.value[pageUsersKey(days.value
           v-model:sort="userSort"
           v-model:filter="userFilter"
           :rows="users"
+          :sorting="usersLoading"
+          :sort-error="usersError"
           :open-user="openUser"
           :detail-rows="detailRowsForUser"
           :detail-loading="userPagesLoading === pageUsersKey(days, openUser)"
           :detail-error="userPagesError"
-          @toggle="toggleUser" />
+          @toggle="toggleUser"
+          @retry-sort="loadUserSort" />
       </section>
 
       <section class="block" aria-labelledby="sec-recharge">
