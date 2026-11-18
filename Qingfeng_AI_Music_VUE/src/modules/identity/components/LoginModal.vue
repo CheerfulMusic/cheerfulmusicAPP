@@ -9,7 +9,7 @@ import { refreshLogtoState, resetLogtoState } from '../../../shared/identity/log
 import { beginGoogleLogin } from '../api/google-login'
 import { readNativeLoginStatus, registerWithEmail, resetEmailPassword, sendLoginCode, signInWithEmail, signInWithEmailCode, signInWithPhone, type CodePurpose, type NativeLoginStatus } from '../api/native-login'
 import { callingCode, countryOptions, internationalSmsPhone, smsRegionAvailable, type PhoneCountry } from '../model/international-phone'
-import { loginCodeKey, nativeLoginError, resendSeconds } from '../model/native-login'
+import { validNewPassword, loginCodeKey, nativeLoginError, resendSeconds } from '../model/native-login'
 import { validateLoginIdentifier } from '../model/login-identifier'
 import GoogleMark from './GoogleMark.vue'
 
@@ -148,8 +148,8 @@ async function submit() {
   }
   if (needsPassword.value) {
     if (!password.value || password.value.length > 128) { invalid('请输入密码。', 'password'); return }
-    if (emailMode.value !== 'sign-in' && (password.value.length < 8 || !/[A-Za-z]/.test(password.value) || !/\d/.test(password.value))) {
-      invalid('密码不符合要求，请使用至少8位字符并包含字母和数字。', 'password'); return
+    if (emailMode.value !== 'sign-in' && !validNewPassword(password.value)) {
+      invalid('密码长度须为8至128位。', 'password'); return
     }
   }
   const version = epoch, identifier = normalizedIdentifier.value
@@ -221,8 +221,8 @@ async function continueWithGoogle() {
 
           <template v-if="needsPassword">
             <div class="field-heading password-heading"><label for="login-password">{{ t(emailMode === 'sign-in' ? '密码' : '设置密码') }}</label><button v-if="emailMode === 'sign-in' && nativeStatus?.passwordResetEnabled" type="button" :disabled="locked" @click="changeMode('reset')">{{ t('忘记密码？') }}</button></div>
-            <div class="pill-input"><input id="login-password" v-model="password" :type="showPassword ? 'text' : 'password'" :autocomplete="emailMode === 'sign-in' ? 'current-password' : 'new-password'" maxlength="128" :disabled="locked" :aria-invalid="fieldError === 'password'" :aria-describedby="emailMode === 'sign-in' ? 'login-feedback' : 'password-hint login-feedback'" :placeholder="t(emailMode === 'sign-in' ? '请输入密码' : '至少8位，包含字母和数字')" @input="clearError"><button class="password-visibility" type="button" :aria-label="t(showPassword ? '隐藏密码' : '显示密码')" :aria-pressed="showPassword" @click="showPassword = !showPassword"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z" stroke="currentColor" stroke-width="1.6"/><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.6"/><path v-if="!showPassword" d="m4 3 16 18" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></button></div>
-            <p v-if="emailMode !== 'sign-in'" id="password-hint" class="password-hint">{{ t('使用8至128位字符，包含字母和数字。') }}</p>
+            <div class="pill-input"><input id="login-password" v-model="password" :type="showPassword ? 'text' : 'password'" :autocomplete="emailMode === 'sign-in' ? 'current-password' : 'new-password'" maxlength="128" :disabled="locked" :aria-invalid="fieldError === 'password'" :aria-describedby="emailMode === 'sign-in' ? 'login-feedback' : 'password-hint login-feedback'" :placeholder="t(emailMode === 'sign-in' ? '请输入密码' : '8至128位，可使用纯数字或英文')" @input="clearError"><button class="password-visibility" type="button" :aria-label="t(showPassword ? '隐藏密码' : '显示密码')" :aria-pressed="showPassword" @click="showPassword = !showPassword"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z" stroke="currentColor" stroke-width="1.6"/><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.6"/><path v-if="!showPassword" d="m4 3 16 18" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></button></div>
+            <p v-if="emailMode !== 'sign-in'" id="password-hint" class="password-hint">{{ t('使用8至128位字符，可使用纯数字、纯英文或混合字符。') }}</p>
           </template>
           <div id="login-feedback" class="form-feedback" :class="{'has-error':error}" :role="error ? 'alert' : 'status'" aria-live="polite"><p v-if="error">{{ t(error) }}</p><p v-else-if="statusLoading">{{ t('正在检查登录服务…') }}</p><p v-else-if="phoneRegionUnavailable">{{ t('该地区短信暂未开通，请使用邮箱登录。') }}</p><p v-else-if="!channelReady">{{ t('当前登录方式暂不可用，请稍后重试。') }}</p><p v-else-if="notice">{{ t(notice) }}</p><p v-else-if="method === 'phone' || emailUsesCode">{{ t('未注册的账号验证后将自动创建。') }}</p></div>
           <button class="continue-button" type="submit" :disabled="locked || statusLoading || !channelReady">{{ t(busy ? '正在处理…' : submitLabel) }}</button>

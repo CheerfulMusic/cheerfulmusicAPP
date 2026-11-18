@@ -14,11 +14,15 @@ export function nativeLoginError(code?: string, status?: number): string {
   if (code === 'LOGIN_ACCOUNT_EXISTS') return '该账号已注册，请返回登录；忘记密码可选择找回密码。'
   if (code === 'LOGIN_CODE_INVALID') return '验证码不正确或已过期，请检查后重试。'
   if (code === 'LOGIN_FLOW_EXPIRED') return '验证已过期，请重新发送验证码。'
-  if (code === 'LOGIN_PASSWORD_REJECTED') return '认证服务未接受此密码，请换一个更强的密码，避免常见密码或包含邮箱信息；无需重新获取验证码。'
+  if (code === 'LOGIN_PASSWORD_REJECTED') return '认证服务未接受此密码，请确认长度为8至128位后重试。'
   if (code === 'LOGIN_ACCOUNT_CONFLICT') return '该账号已有登录记录，请使用原有方式登录。'
   if (code === 'LOGIN_REGION_UNAVAILABLE') return '该地区短信暂未开通，请使用邮箱登录。'
   if (code === 'LOGIN_RATE_LIMITED' || status === 429) return '操作过于频繁，请稍后重试。'
   if (code === 'INVALID_LOGIN_INPUT') return '请检查邮箱、手机号及填写的信息。'
   if (code === 'LOGIN_UNAVAILABLE' || status === 503) return '当前登录方式暂不可用，请稍后重试。'
   return '暂时无法完成操作，请检查网络后重试。'
+}
+
+export function validNewPassword(value: string): boolean {
+  return value.length >= 8 && value.length <= 128
 }
