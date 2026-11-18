@@ -239,7 +239,7 @@ watch(signedIn, (current, previous) => { if (current !== previous) void load() }
       <p v-if="orderNotice" class="subtle" role="status">{{ t(orderNotice) }}</p>
       <p class="wallet-entry"><RouterLink to="/recharge">{{ locale==='en'?'View card, Apple Pay and WeChat Pay options':'查看银行卡、Apple Pay 和微信支付方式' }}</RouterLink></p>
       <p v-if="catalogError" class="subtle" role="status">{{ t('部分积分或支付信息暂时无法读取，请稍后刷新。') }}</p>
-      <details v-if="signedIn" class="history" open>
+      <details v-if="signedIn" class="history">
         <summary>{{ t('我的订单') }}</summary>
         <p class="history-help">{{ t('待付款订单可继续支付或申请取消；是否可取消由服务端核对付款状态。') }}</p>
         <label v-if="recentOrders.length" class="order-period">
