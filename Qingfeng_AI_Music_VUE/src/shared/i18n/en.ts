@@ -1,5 +1,12 @@
 /** Chinese source copy is the stable message key; business option values stay unchanged. */
 export const english: Record<string, string> = {
+  '积分好礼': 'Credit rewards',
+  '邀请有礼': 'Invite friends',
+  '邀请新用户首次登录，送19积分': 'Earn 19 credits when a new friend signs in for the first time',
+  '发布到广场送2积分': 'Earn 2 credits for publishing to the Square',
+  '改善建议': 'Improvement suggestions',
+  '改善建议送10-100积分': 'Earn 10–100 credits for improvement suggestions',
+
   '继续核对 Stripe 订单': 'Continue checking the Stripe order',
   '用照片写一首歌': 'Write a song from photos',
   '← 返回开始创作': '← Back to Create',
