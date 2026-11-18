@@ -13,6 +13,7 @@ import java.util.regex.Pattern;
 
 /** Produces a preview from the current editor draft. Saving the draft is a separate action. */
 public final class LyricSelectionRewriteService {
+    private static final System.Logger LOG = System.getLogger(LyricSelectionRewriteService.class.getName());
     private static final int MAX_LYRICS_LENGTH = 12000;
     private static final int MAX_PROMPT_LENGTH = 100000;
     private static final Pattern SECTION = Pattern.compile("^\\s*\\[.*\\]\\s*$", Pattern.UNICODE_CHARACTER_CLASS);
@@ -46,25 +47,66 @@ public final class LyricSelectionRewriteService {
         // Keep the existing key derivation for retries across server updates.
         var material = "lyric-selection\n" + work + '\n' + version + '\n' + requestId + '\n' + language + '\n' + prompt;
         var requestKey = UUID.nameUUIDFromBytes(material.getBytes(StandardCharsets.UTF_8)).toString();
-        return rewriter.rewriteSelection(owner, prompt.toString(), language, requestKey, MAX_PROMPT_LENGTH,
-            targets.stream().sorted().toList(), candidate -> {
-                var result = assemble(lines, targets, candidate);
+        return rewriter.rewriteSelection(owner, prompt.toString(), language, requestKey, MAX_PROMPT_LENGTH, writer -> {
+                var accepted = new HashMap<Integer, String>();
+                collect(writer, prompt.toString(), language, lines, targets, accepted, "initial");
+                var pending = new HashSet<>(targets);
+                pending.removeAll(accepted.keySet());
+                if (!pending.isEmpty()) {
+                    requireVersion(owner, work, version);
+                    var context = lines.clone();
+                    accepted.forEach((index, replacement) -> context[index] = replacement);
+                    var repairPrompt = new StringBuilder("这是唯一一次补写。只重写 targetIndices 指定的问题句；其他行包含已合格的新句，只作上下文，不得改动。\n当前歌词：");
+                    for (int index = 0; index < context.length; index++)
+                        repairPrompt.append('\n').append(index).append('\t').append(context[index]);
+                    if (repairPrompt.length() > MAX_PROMPT_LENGTH) throw invalidPreview();
+                    collect(writer, repairPrompt.toString(), language, lines, pending, accepted, "repair");
+                }
+                if (accepted.size() != targets.size()) throw invalidPreview();
+                var result = assemble(lines, accepted);
                 requireVersion(owner, work, version);
                 return result;
             });
     }
 
-    private static String assemble(String[] source, Set<Integer> targets, List<InspirationRewriter.Replacement> candidate) {
-        if (candidate == null || candidate.size() != targets.size()) throw invalidPreview();
-        Map<Integer, String> replacements = new HashMap<>();
-        for (var row : candidate) {
-            if (row == null || row.text() == null) throw invalidPreview();
-            int index = row.index();
-            String replacement = row.text().strip();
-            if (!targets.contains(index) || !isLyric(replacement) || replacement.indexOf('\t') >= 0
-                    || replacement.equals(source[index].strip())
-                    || replacements.putIfAbsent(index, replacement) != null) throw invalidPreview();
+    private static void collect(InspirationRewriter writer, String prompt, String language, String[] source,
+                                Set<Integer> targets, Map<Integer, String> accepted, String phase) {
+        List<InspirationRewriter.Replacement> candidate;
+        try {
+            candidate = writer.rewriteSelection(prompt, language, targets.stream().sorted().toList());
+        } catch (DomainException error) {
+            if (!"INVALID_REWRITE_RESPONSE".equals(error.code())) throw error;
+            // A received unusable response permits one repair; transport/unknown errors never do.
+            LOG.log(System.Logger.Level.WARNING, "Lyric selection validation: phase={0}, reason=invalid_response, pending={1}", phase, targets.size());
+            return;
         }
+        var reasons = new HashMap<String, Integer>();
+        var rows = new HashMap<Integer, InspirationRewriter.Replacement>();
+        var duplicates = new HashSet<Integer>();
+        if (candidate != null) for (var row : candidate) {
+            if (row == null) { reasons.merge("malformed_row", 1, Integer::sum); continue; }
+            int index = row.index();
+            if (!targets.contains(index)) { reasons.merge("unexpected_index", 1, Integer::sum); continue; }
+            if (rows.putIfAbsent(index, row) != null) duplicates.add(index);
+        }
+        int length = assemble(source, accepted).length();
+        for (int index : targets.stream().sorted().toList()) {
+            var row = rows.get(index);
+            String reason = row == null ? "missing" : duplicates.contains(index) ? "duplicate" : row.text() == null ? "invalid_line" : null;
+            if (reason != null) { reasons.merge(reason, 1, Integer::sum); continue; }
+            String replacement = row.text().strip();
+            if (!isLyric(replacement) || replacement.indexOf('\t') >= 0) reason = "invalid_line";
+            else if (replacement.equals(source[index].strip())) reason = "unchanged";
+            else if ((long) length + replacement.length() - source[index].length() > MAX_LYRICS_LENGTH) reason = "over_length";
+            if (reason != null) { reasons.merge(reason, 1, Integer::sum); continue; }
+            length += replacement.length() - source[index].length();
+            accepted.put(index, replacement);
+        }
+        if (!reasons.isEmpty()) LOG.log(System.Logger.Level.WARNING,
+            "Lyric selection validation: phase={0}, reasons={1}, accepted={2}", phase, reasons, accepted.size());
+    }
+
+    private static String assemble(String[] source, Map<Integer, String> replacements) {
         var result = source.clone();
         replacements.forEach((index, replacement) -> result[index] = replacement);
         String lyrics = String.join("\n", result);

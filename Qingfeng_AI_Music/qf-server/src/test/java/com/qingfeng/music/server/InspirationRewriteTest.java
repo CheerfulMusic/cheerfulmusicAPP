@@ -214,16 +214,22 @@ class InspirationRewriteTest {
         assertEquals(json.readTree("[2,6]"), context.path("targetIndices"));
         assertEquals("mixed", context.path("lyricLanguage").asText());
 
-        for (var invalidRows : List.of(
-            List.of(Map.of("index", 2, "text", "新句")),
-            List.of(Map.of("index", "2", "text", "新句"), replacementRows.get(0)),
-            List.of(Map.of("index", 2.5, "text", "新句"), replacementRows.get(0)),
-            List.of(Map.of("index", 2, "text", 123), replacementRows.get(0)))) {
-            org.mockito.Mockito.when(response.body()).thenReturn(selectionResponse(json, invalidRows));
-            assertEquals("INVALID_REWRITE_RESPONSE", assertThrows(DomainException.class,
-                () -> writer.rewriteSelection("沿用原有场景", "mixed", List.of(2, 6))).code());
+        org.mockito.Mockito.when(response.body()).thenReturn(selectionResponse(json, List.of(Map.of("index", 2, "text", "新句"))));
+        assertEquals(List.of(new InspirationRewriter.Replacement(2, "新句")), writer.rewriteSelection("场景", "mixed", List.of(2, 6)));
+        for (Object invalidIndex : List.of("2", 2.5, Long.MAX_VALUE)) {
+            org.mockito.Mockito.when(response.body()).thenReturn(selectionResponse(json,
+                List.of(Map.of("index", invalidIndex, "text", "新句"), replacementRows.get(0))));
+            var partial = writer.rewriteSelection("沿用原有场景", "mixed", List.of(2, 6));
+            assertNull(partial.get(0), "Do not coerce malformed indices into a valid target");
+            assertEquals(new InspirationRewriter.Replacement(6, "Lights along the shore"), partial.get(1));
         }
-        assertEquals(5, requests.size());
+        org.mockito.Mockito.when(response.body()).thenReturn(selectionResponse(json,
+            List.of(Map.of("index", 2, "text", 123), replacementRows.get(0))));
+        assertEquals(new InspirationRewriter.Replacement(2, null), writer.rewriteSelection("场景", "mixed", List.of(2, 6)).get(0));
+        org.mockito.Mockito.when(response.body()).thenReturn(json.writeValueAsString(Map.of("choices", List.of(
+            Map.of("finish_reason", "stop", "message", Map.of("content", "{\"replacements\":{}}"))))));
+        assertEquals("INVALID_REWRITE_RESPONSE", assertThrows(DomainException.class,
+            () -> writer.rewriteSelection("场景", "mixed", List.of(2, 6))).code());
     }
 
     private static String selectionResponse(ObjectMapper json, List<?> rows) {

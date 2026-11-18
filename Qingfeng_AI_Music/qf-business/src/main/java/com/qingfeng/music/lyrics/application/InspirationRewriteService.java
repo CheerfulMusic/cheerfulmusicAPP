@@ -1,7 +1,6 @@
 package com.qingfeng.music.lyrics.application;
 import com.qingfeng.music.credits.RewriteCharges;
 import com.qingfeng.music.common.exception.DomainException;
-import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Semaphore;
@@ -9,7 +8,7 @@ import java.util.function.Function;
 import java.util.function.UnaryOperator;
 
 /**
- * AI 改写：每次调用都会产生真实模型请求，因此纳入积分体系。
+ * AI 改写按用户请求计费；同一次选句改写内的有限补写不另扣积分或免费次数。
  *
  * 计费规则：每日免费额度内的改写不扣积分；超出后每次扣一次积分，失败全额退还。
  * 免费额度按调用计、失败不退还 —— 模型调用已经发生，退还免费次数会被用来刷免费调用。
@@ -52,10 +51,12 @@ public final class InspirationRewriteService {
         });
     }
 
+    // Both the initial result and its one permitted repair share this reservation and replay key.
+    // Run the whole operation in generate: an unknown repair response must remain UNKNOWN, not refunded.
     String rewriteSelection(String owner, String text, String language, String requestKey, int inputLimit,
-                            List<Integer> targetIndices, Function<List<InspirationRewriter.Replacement>, String> assemble) {
+                            Function<InspirationRewriter, String> generateAndAssemble) {
         return rewriteValidated(owner, text, language, requestKey, inputLimit,
-            input -> writer.rewriteSelection(input, language, targetIndices), assemble);
+            input -> generateAndAssemble.apply(writer), UnaryOperator.identity());
     }
 
     private <T> String rewriteValidated(String owner, String text, String language, String requestKey, int inputLimit,
@@ -81,7 +82,7 @@ public final class InspirationRewriteService {
                 validated = validateAndAssemble.apply(result);
             } catch (RuntimeException error) {
                 // Only an explicit rejection or a received invalid result proves a final failure.
-                if(received || error instanceof DomainException domain && Set.of("REWRITE_PROVIDER_UNAVAILABLE","REWRITE_PROVIDER_REJECTED","INVALID_REWRITE_RESPONSE").contains(domain.code()))
+                if(received || error instanceof DomainException domain && Set.of("REWRITE_PROVIDER_UNAVAILABLE","REWRITE_PROVIDER_REJECTED","INVALID_REWRITE_RESPONSE","WORK_VERSION_CONFLICT","WORK_NOT_FOUND").contains(domain.code()))
                     charges.fail(owner, requestKey);
                 else charges.unknown(owner,requestKey);
                 throw error;

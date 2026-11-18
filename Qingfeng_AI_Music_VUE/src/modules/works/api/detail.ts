@@ -68,7 +68,8 @@ export async function rhymeLyricLine(work: string, input: LyricRhymeRequest) {
 export interface LyricSelectionInput {requestId: string; workVersion: number; lyrics: string; keptLines: number[]; language: string}
 export async function rewriteLyricSelection(work: string, input: LyricSelectionInput) {
   await ensureCreator()
-  return requestJson<{lyrics: string}>(`app/works/${encodeURIComponent(work)}/lyrics/rewrite-selection`, 'POST', input, 110000)
+  // One preview can include an initial 85s model call and one bounded repair.
+  return requestJson<{lyrics: string}>(`app/works/${encodeURIComponent(work)}/lyrics/rewrite-selection`, 'POST', input, 190000)
 }
 export const confirmRevision = (work: string, revision: string) => call<Revision>(`app/works/${work}/lyrics/${revision}/confirm`, 'POST', {})
 export const saveAudioNote = (work:string,asset:string,note:string,version:number) => call<AudioAsset>(`app/works/${encodeURIComponent(work)}/audio/${encodeURIComponent(asset)}/note`,'PUT',{note,version})
