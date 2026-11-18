@@ -22,6 +22,11 @@ import lavender from '../../../assets/discover/cover-4.webp'
 import city from '../../../assets/discover/cover-5.webp'
 import lake from '../../../assets/discover/cover-6.webp'
 import coast from '../../../assets/discover/editorial-coast.webp'
+import neon from '../../../assets/discover/carousel-neon.webp'
+import meadow from '../../../assets/discover/carousel-meadow.webp'
+import inkMountains from '../../../assets/discover/carousel-mountains.webp'
+import moonClouds from '../../../assets/discover/carousel-moon.webp'
+import goldenStage from '../../../assets/discover/carousel-stage.webp'
 
 const tabs = [
   { id: 'latest', label: '最新发布' },
@@ -86,6 +91,9 @@ const popularRows = computed(() => withTracks(popularSongs.value).slice(0, 3))
 const heroRows = computed(() => withTracks(popularSongs.value).slice(0, 5))
 const heroSlideCount = computed(() => heroRows.value.length + 1)
 const hero = computed(() => heroIndex.value === 0 ? undefined : heroRows.value[heroIndex.value - 1])
+const heroBackgrounds = [neon, meadow, inkMountains, moonClouds, goldenStage]
+const heroBackground = computed(() => hero.value ? heroBackgrounds[heroIndex.value - 1]! : coast)
+const heroTitleLength = computed(() => Array.from(hero.value?.song.title ?? '').length)
 const visibleArtists = computed(() => {
   const found = artists.value ?? Array.from(new Map(songs.value.map(song => [song.artistId, {
     artistId: song.artistId, stageName: song.stageName, avatarKey: null,
@@ -153,6 +161,13 @@ function initializeHeroRotation() {
   document.addEventListener('visibilitychange', visibilityChanged)
   restartHeroRotation()
 }
+// Warm only the next slide; the introduction remains the first, eagerly loaded image.
+watch([heroIndex, heroSlideCount], () => {
+  if (disposed || heroSlideCount.value < 2 || typeof Image === 'undefined') return
+  const nextIndex = (heroIndex.value + 1) % heroSlideCount.value
+  const nextImage = new Image()
+  nextImage.src = nextIndex === 0 ? coast : heroBackgrounds[nextIndex - 1]!
+})
 function genreLabel(genre?: string) {
   return genre && genre !== 'other' ? t(genres.find(item => item.id === genre)?.label ?? '') : ''
 }
@@ -257,12 +272,12 @@ onBeforeUnmount(() => {
 
     <div class="discover-width">
       <div class="discover-page-heading"><h1>{{ t('音乐广场') }}</h1><p>{{ t('聆听每一份创作的灵感') }}</p></div>
-      <section class="discover-hero" :aria-label="t('广场推荐')" :aria-roledescription="t('轮播')"
+      <section class="discover-hero" :class="{ 'is-song-slide': hero }" :aria-label="t('广场推荐')" :aria-roledescription="t('轮播')"
         @mouseenter="heroHovered = true" @mouseleave="heroHovered = false" @focusin="heroFocused = true" @focusout="heroFocusOut">
-        <img class="discover-hero-background" :src="coast" alt="" width="2172" height="724" fetchpriority="high">
+        <img class="discover-hero-background" :src="heroBackground" alt="" width="2172" height="724" fetchpriority="high">
         <div class="discover-hero-content">
           <span class="discover-hero-label">{{ t(hero ? '热门作品' : '音乐广场') }}</span>
-          <h2>{{ hero?.song.title || t('让好音乐，被更多人听见') }}</h2>
+          <h2 :class="{ 'discover-hero-song-title': hero, 'is-long-title': heroTitleLength > 10, 'is-very-long-title': heroTitleLength > 32 }" :title="hero?.song.title">{{ hero?.song.title || t('让好音乐，被更多人听见') }}</h2>
           <RouterLink v-if="hero" class="discover-hero-artist" :to="{ name: 'artist-home', params: { id: hero.artistId } }">{{ hero.stageName }}</RouterLink>
           <p v-else>{{ t('从一段故事，到一首属于你的歌。') }}</p>
           <button v-if="hero" type="button" class="discover-hero-listen" :aria-label="t(playing(hero.track) ? '暂停 {title}' : '试听 {title}', { title: hero.song.title })" @click="play(hero, heroRows)"><PlaybackIcon :playing="playing(hero.track)" />{{ t(playing(hero.track) ? '暂停' : '立即聆听') }}</button>
