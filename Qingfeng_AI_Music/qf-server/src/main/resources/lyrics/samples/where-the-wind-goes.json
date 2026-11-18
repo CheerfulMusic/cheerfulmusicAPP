@@ -1,0 +1,149 @@
+{
+  "sourceKey": "sample:where-the-wind-goes:2303cca9-ddac-3c11-a36f-b65fcc72392a",
+  "audioSha256": "0c02a67bf3670a5ffed95e5bd2074cbbd2f7a50c3b8e91cbbecba9e6e07060cc",
+  "recognition": "KIE Nemotron 3.5 word timestamps aligned to authored lyrics",
+  "duration": 137.92,
+  "warnings": [],
+  "words": [
+    {
+      "text": "Your silhouette against the blue\n",
+      "start": 14.4,
+      "end": 16.93
+    },
+    {
+      "text": "A thousand miles between us two\n",
+      "start": 17.84,
+      "end": 20.38
+    },
+    {
+      "text": "I hear your voice inside the breeze\n",
+      "start": 21.24,
+      "end": 24.05
+    },
+    {
+      "text": "Like summer dancing through the trees\n",
+      "start": 24.64,
+      "end": 27.38
+    },
+    {
+      "text": "And I don't know where we're going\n",
+      "start": 28.48,
+      "end": 31.49
+    },
+    {
+      "text": "I just know we can't stay\n",
+      "start": 31.78,
+      "end": 35.2
+    },
+    {
+      "text": "There's a thousand roads before us\n",
+      "start": 35.36,
+      "end": 38.72
+    },
+    {
+      "text": "And the ocean in our way\n",
+      "start": 38.72,
+      "end": 41.31
+    },
+    {
+      "text": "So let the tradewinds carry me\n",
+      "start": 42.02,
+      "end": 44.63
+    },
+    {
+      "text": "Across the endless sea\n",
+      "start": 45.92,
+      "end": 48.24
+    },
+    {
+      "text": "Where the stars fall down like memories\n",
+      "start": 48.24,
+      "end": 51.44
+    },
+    {
+      "text": "And everything is free\n",
+      "start": 52.68,
+      "end": 55.28
+    },
+    {
+      "text": "Oh, we were young, we were wild\n",
+      "start": 55.28,
+      "end": 58.75
+    },
+    {
+      "text": "Like the waves beneath the sky\n",
+      "start": 59.04,
+      "end": 61.93
+    },
+    {
+      "text": "If I ever lose my way\n",
+      "start": 62.24,
+      "end": 65.36
+    },
+    {
+      "text": "I'll follow where the wind goes tonight\n",
+      "start": 65.36,
+      "end": 69.79
+    },
+    {
+      "text": "And I don't know where we're going\n",
+      "start": 82.8,
+      "end": 85.65
+    },
+    {
+      "text": "I just know we can't stay\n",
+      "start": 86.09,
+      "end": 89.36
+    },
+    {
+      "text": "There's a thousand roads before us\n",
+      "start": 89.52,
+      "end": 92.88
+    },
+    {
+      "text": "And the ocean in our way\n",
+      "start": 92.88,
+      "end": 96.0
+    },
+    {
+      "text": "So let the tradewinds carry me\n",
+      "start": 96.24,
+      "end": 98.71
+    },
+    {
+      "text": "Across the endless sea\n",
+      "start": 100.0,
+      "end": 102.32
+    },
+    {
+      "text": "Where the stars fall down like memories\n",
+      "start": 102.32,
+      "end": 105.52
+    },
+    {
+      "text": "And everything is free\n",
+      "start": 106.72,
+      "end": 109.28
+    },
+    {
+      "text": "Oh, we were young, we were wild\n",
+      "start": 109.28,
+      "end": 112.8
+    },
+    {
+      "text": "Like the waves beneath the sky\n",
+      "start": 113.04,
+      "end": 116.0
+    },
+    {
+      "text": "If I ever lose my way\n",
+      "start": 116.16,
+      "end": 119.24
+    },
+    {
+      "text": "I'll follow where the wind goes tonight\n",
+      "start": 119.24,
+      "end": 123.8
+    }
+  ]
+}

@@ -457,7 +457,7 @@ public class ArtistProfileService {
         String text = lines.stream().map(com.qingfeng.music.lyrics.playback.PlaybackLyrics.Line::text)
                 .collect(java.util.stream.Collectors.joining("\n"));
         return new com.qingfeng.music.lyrics.playback.PlaybackLyrics.Snapshot(
-                lines.isEmpty() ? "EMPTY" : "READY", text, lines, false);
+                lines.isEmpty() ? stored.map(s -> java.util.Set.of("PREPARING","FETCHING","UNKNOWN").contains(s.status()) ? s.status() : "EMPTY").orElse("EMPTY") : "READY", text, lines, false);
     }
 
     public MediaApi.Content publicAudio(String publicId, String song, long version) {

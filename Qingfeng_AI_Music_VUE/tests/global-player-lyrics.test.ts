@@ -63,7 +63,7 @@ it('a lost sync response polls the existing job instead of posting again', async
   expect(document.body.textContent).toContain('第一句唱词'); expect(api.sync).toHaveBeenCalledTimes(1)
 })
 it('missing sample timing is honest and curated timing can be supplied without network calls', async () => {
-  player.current = { ...track(), audio: '/media/sample-feng-ye-xing-v1-preview-128.mp3' }; mount(); await flush()
+  api.public.mockResolvedValue({...snapshot('EMPTY'),text:''}); player.current = { ...track(), audio: '/media/sample-feng-ye-xing-v1-preview-128.mp3' }; mount(); await flush()
   expect(document.body.textContent).toContain('暂无歌词'); expect(api.get).not.toHaveBeenCalled()
   player.current = { ...player.current, lyricLines: lines }; player.time = 20; await flush()
   expect(document.body.textContent).toContain('第二句唱词')
@@ -76,4 +76,18 @@ it('volume controls expose accessible percentage, mute and the slider action', a
   mount(); await flush(); const slider = document.querySelector<HTMLInputElement>('[aria-label="音量"]')!
   expect(slider.getAttribute('aria-valuetext')).toBe('60%'); slider.value = '0.25'; slider.dispatchEvent(new Event('input')); expect(player.setVolume).toHaveBeenCalledWith(0.25)
   document.querySelector<HTMLButtonElement>('[aria-label="静音"]')!.click(); expect(player.toggleMute).toHaveBeenCalledOnce()
+})
+
+it('hot songs read their catalog timeline and never start a provider job', async () => {
+  player.current={...track(),audio:'/media/sample-feng-ye-xing-v1-preview-128.mp3'}
+  mount(); await flush(); player.time=12; await flush()
+  expect(api.public).toHaveBeenCalledWith('public/hot-songs/feng-ye-xing/lyrics')
+  expect(document.body.textContent).toContain('第一句唱词'); expect(api.sync).not.toHaveBeenCalled()
+})
+it('preparing public songs update automatically when the background timeline is ready', async () => {
+  player.current={...track(),audio:'/api/public/artists/a/songs/b/2/audio'}
+  api.public.mockResolvedValueOnce(snapshot('PREPARING')).mockResolvedValue(snapshot())
+  mount(); await flush(); expect(document.body.textContent).toContain('歌词准备中')
+  await vi.advanceTimersByTimeAsync(3000); await flush();player.time=20;await flush()
+  expect(document.body.textContent).toContain('第二句唱词');expect(api.sync).not.toHaveBeenCalled()
 })

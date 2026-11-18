@@ -802,6 +802,18 @@
       "flows": [
         "SPA document"
       ]
+    },
+    {
+      "controller": "HotSongLyricsController",
+      "source": "com/qingfeng/music/server/web/publicapi/HotSongLyricsController.java",
+      "mappingDeclarations": [
+        "@RequestMapping(\"/api/public/hot-songs\")",
+        "@GetMapping(\"/{track}/lyrics\")"
+      ],
+      "mode": "native",
+      "flows": [
+        "open_feature:home"
+      ]
     }
   ]
 }

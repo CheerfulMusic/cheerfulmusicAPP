@@ -12,6 +12,8 @@ export function lyricsSource(audio: string) {
   if (own) {
     try { return { kind: 'owner' as const, work: decodeURIComponent(own[1]!), asset: decodeURIComponent(own[2]!) } } catch { return undefined }
   }
+  const sample = path.match(/^\/media\/sample-([a-z0-9-]+)-v1-preview-128\.mp3$/)
+  if (sample) return { kind: 'public' as const, path: `public/hot-songs/${sample[1]}/lyrics` }
   const published = path.match(/\/public\/artists\/([^/]+)\/songs\/([^/]+)\/(\d+)\/audio$/)
   if (published) return { kind: 'public' as const, path: `public/artists/${published[1]}/songs/${published[2]}/${published[3]}/lyrics` }
   return undefined
@@ -59,7 +61,7 @@ export function useCurrentLyrics() {
     if (source?.kind === 'owner' && data.value?.status === 'NOT_REQUESTED' && data.value.canSync && player.playing && !attempted) {
       attempted = true; void load(turn, true); return
     }
-    if (data.value?.status === 'FETCHING' || data.value?.status === 'UNKNOWN' || !data.value && failures)
+    if (data.value?.status === 'PREPARING' || data.value?.status === 'FETCHING' || data.value?.status === 'UNKNOWN' || !data.value && failures)
       timer = setTimeout(() => { void load(turn) }, Math.min(15000, 3000 * 2 ** failures))
   }
   watch(() => [player.current?.id, player.current?.audio, player.current?.lyricLines] as const, () => {
@@ -76,6 +78,7 @@ export function useCurrentLyrics() {
     const position = lyricPosition(lines, player.time)
     if (position.active >= 0) return { text: lines[position.active]!.text, literal: true }
     if (lines.length) return { text: player.time < lines[0]!.start ? '前奏…' : player.time >= lines[lines.length - 1]!.end ? '尾奏…' : '间奏…', literal: false }
+    if (data.value?.status === 'PREPARING') return { text: '歌词准备中…', literal: false }
     if (loading.value || data.value?.status === 'FETCHING') return { text: '歌词加载中…', literal: false }
     return { text: data.value?.text ? '暂无同步歌词' : '暂无歌词', literal: false }
   })

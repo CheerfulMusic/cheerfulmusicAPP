@@ -1,0 +1,244 @@
+{
+  "sourceKey": "sample:after-midnight:64a534a7-f648-3f72-9e09-554c5a8bbb80",
+  "audioSha256": "81f05f0bc2102be47fc13fc2a8b2fec41be9b878d9b2c1af35966550f6869175",
+  "recognition": "Qwen3-ForcedAligner-0.6B",
+  "duration": 203.84,
+  "warnings": [],
+  "words": [
+    {
+      "text": "Oh, yeah\n",
+      "start": 1.52,
+      "end": 6.4
+    },
+    {
+      "text": "It's getting late again\n",
+      "start": 10.8,
+      "end": 12.24
+    },
+    {
+      "text": "I know, I know\n",
+      "start": 17.6,
+      "end": 17.84
+    },
+    {
+      "text": "Three in the morning, I'm losing my mind\n",
+      "start": 37.44,
+      "end": 40.32
+    },
+    {
+      "text": "Your silhouette dancing in the back of my eyes\n",
+      "start": 41.6,
+      "end": 44.88
+    },
+    {
+      "text": "I got a new girl, but she don't feel right\n",
+      "start": 45.68,
+      "end": 48.8
+    },
+    {
+      "text": "I'm chasing your ghost through the city tonight\n",
+      "start": 49.28,
+      "end": 51.84
+    },
+    {
+      "text": "Red lights flashing on an empty street\n",
+      "start": 53.92,
+      "end": 57.2
+    },
+    {
+      "text": "Got your perfume still haunting my sheets\n",
+      "start": 58.0,
+      "end": 61.36
+    },
+    {
+      "text": "I tell myself that I'm better alone\n",
+      "start": 62.16,
+      "end": 65.2
+    },
+    {
+      "text": "But I keep checking every time you call my phone\n",
+      "start": 65.2,
+      "end": 69.28
+    },
+    {
+      "text": "And I know we crossed the line\n",
+      "start": 69.4,
+      "end": 71.24
+    },
+    {
+      "text": "But I still want you tonight\n",
+      "start": 71.64,
+      "end": 73.24
+    },
+    {
+      "text": "Every time I close my eyes\n",
+      "start": 73.72,
+      "end": 75.72
+    },
+    {
+      "text": "You're the only thing I find\n",
+      "start": 75.72,
+      "end": 77.4
+    },
+    {
+      "text": "After midnight\n",
+      "start": 78.02,
+      "end": 78.26
+    },
+    {
+      "text": "I keep falling for your lies\n",
+      "start": 79.14,
+      "end": 81.38
+    },
+    {
+      "text": "Under red lights\n",
+      "start": 81.8,
+      "end": 82.92
+    },
+    {
+      "text": "I can see it in your eyes\n",
+      "start": 84.12,
+      "end": 85.88
+    },
+    {
+      "text": "Don't you leave me\n",
+      "start": 85.9,
+      "end": 86.86
+    },
+    {
+      "text": "When the morning comes alive\n",
+      "start": 88.22,
+      "end": 89.5
+    },
+    {
+      "text": "After midnight\n",
+      "start": 90.1,
+      "end": 91.38
+    },
+    {
+      "text": "You're the reason I survive\n",
+      "start": 92.34,
+      "end": 94.42
+    },
+    {
+      "text": "Oh-oh, after midnight\n",
+      "start": 95.74,
+      "end": 98.7
+    },
+    {
+      "text": "Oh-oh, one more night\n",
+      "start": 100.8,
+      "end": 101.6
+    },
+    {
+      "text": "Oh-oh, after midnight\n",
+      "start": 103.5,
+      "end": 107.74
+    },
+    {
+      "text": "I don't wanna say goodbye\n",
+      "start": 109.12,
+      "end": 110.08
+    },
+    {
+      "text": "Two missed calls, now I'm driving downtown\n",
+      "start": 111.0,
+      "end": 114.52
+    },
+    {
+      "text": "Same old places where we used to hang around\n",
+      "start": 115.0,
+      "end": 118.68
+    },
+    {
+      "text": "You said forever, but forever broke down\n",
+      "start": 119.08,
+      "end": 122.92
+    },
+    {
+      "text": "Now I'm hearing your voice in every single sound\n",
+      "start": 122.92,
+      "end": 126.36
+    },
+    {
+      "text": "If loving you is dangerous\n",
+      "start": 127.32,
+      "end": 129.32
+    },
+    {
+      "text": "Then I don't wanna be saved\n",
+      "start": 129.96,
+      "end": 134.44
+    },
+    {
+      "text": "If everything turns into dust\n",
+      "start": 134.44,
+      "end": 137.56
+    },
+    {
+      "text": "I'd still make the same mistake\n",
+      "start": 137.72,
+      "end": 142.68
+    },
+    {
+      "text": "After midnight\n",
+      "start": 143.0,
+      "end": 143.64
+    },
+    {
+      "text": "I keep falling for your lies\n",
+      "start": 143.64,
+      "end": 147.16
+    },
+    {
+      "text": "Under red lights\n",
+      "start": 147.2,
+      "end": 149.52
+    },
+    {
+      "text": "I can see it in your eyes\n",
+      "start": 149.52,
+      "end": 151.2
+    },
+    {
+      "text": "Don't you leave me\n",
+      "start": 151.86,
+      "end": 153.06
+    },
+    {
+      "text": "When the morning comes alive\n",
+      "start": 153.06,
+      "end": 154.82
+    },
+    {
+      "text": "After midnight\n",
+      "start": 155.62,
+      "end": 157.38
+    },
+    {
+      "text": "You're the reason I survive\n",
+      "start": 157.62,
+      "end": 159.78
+    },
+    {
+      "text": "After midnight\n",
+      "start": 163.76,
+      "end": 163.92
+    },
+    {
+      "text": "After midnight\n",
+      "start": 170.0,
+      "end": 172.24
+    },
+    {
+      "text": "After midnight\n",
+      "start": 180.56,
+      "end": 181.44
+    },
+    {
+      "text": "Oh, I still need you tonight\n",
+      "start": 187.96,
+      "end": 194.2
+    }
+  ]
+}

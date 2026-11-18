@@ -1,0 +1,6 @@
+# Optional, isolated offline tool. Not installed in the Java service or daily runtime.
+qwen-asr==0.0.6
+torch==2.15.0
+transformers==4.57.6
+soundfile==0.14.0
+librosa==1.0.1

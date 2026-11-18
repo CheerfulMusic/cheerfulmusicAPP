@@ -3,7 +3,7 @@ package com.qingfeng.music.lyrics.playback;
 import java.util.*;
 import java.util.regex.Pattern;
 
-/** 播放时间轴与已归档音频绑定，不随可编辑歌词版本改变。所有时间均来自供应商。 */
+/** 播放时间轴与已归档音频绑定，不随可编辑歌词版本改变。时间来自供应商或音频对齐。 */
 public final class PlaybackLyrics {
     private PlaybackLyrics() {}
     public record Word(String text,double start,double end) {}

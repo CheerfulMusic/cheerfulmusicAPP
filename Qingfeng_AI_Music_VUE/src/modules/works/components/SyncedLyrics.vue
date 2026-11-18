@@ -119,7 +119,7 @@ async function load(){
 function pollIfNeeded(){
   clearTimeout(pollTimer)
   // 查询可重试，提交不可盲重试；网络波动最多连续重查五次，总等待不超过三分钟。
-  if(disposed||syncing.value||Date.now()>=pollUntil||pollFailures>=5||!(data.value?.status==='FETCHING'||data.value?.status==='UNKNOWN'||!data.value&&error.value))return
+  if(disposed||syncing.value||Date.now()>=pollUntil||pollFailures>=5||!(data.value?.status==='PREPARING'||data.value?.status==='FETCHING'||data.value?.status==='UNKNOWN'||!data.value&&error.value))return
   const turn=sequence,work=props.workId,asset=props.assetId
   pollTimer=setTimeout(async()=>{
     if(disposed||turn!==sequence)return
@@ -154,7 +154,7 @@ async function center(smooth=true){
 function manualScroll(){if(!timed.value)return;following.value=false;clearTimeout(followTimer);followTimer=setTimeout(()=>resume(),6000)}
 function resume(smooth=true){clearTimeout(followTimer);following.value=props.followEnabled!==false;if(following.value)void center(smooth)}
 function jump(time:number){resume(false);emit('seek',time)}
-function visible(){if(document.visibilityState==='visible'&&isCurrent.value){resume(false);if(data.value?.status==='FETCHING'||data.value?.status==='UNKNOWN'||!data.value){pollUntil=Date.now()+180000;pollFailures=0;pollIfNeeded()}autoSync()}}
+function visible(){if(document.visibilityState==='visible'&&isCurrent.value){resume(false);if(data.value?.status==='PREPARING'||data.value?.status==='FETCHING'||data.value?.status==='UNKNOWN'||!data.value){pollUntil=Date.now()+180000;pollFailures=0;pollIfNeeded()}autoSync()}}
 watch(()=>props.followEnabled,()=>resume(false))
 watch(()=>[props.workId,props.assetId,props.refreshKey],()=>{void load()},{immediate:true})
 watch(()=>[player.playing,isCurrent.value,loading.value,data.value?.status],()=>{autoSync();if(isCurrent.value&&player.playing)resume(false)})
