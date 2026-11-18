@@ -11,11 +11,13 @@ import org.springframework.core.io.Resource;
 import org.springframework.http.*;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.util.HtmlUtils;
+import tools.jackson.databind.ObjectMapper;
 
 /** 在原有收听页的 HTML 首次响应中提供预览信息；不公开作品编辑地址或私人故事。 */
 @RestController
 @Profile({"mysql", "test"})
 public class GiftPageController {
+    private static final ObjectMapper JSON = new ObjectMapper();
     private final SharingApi sharing;
     private final String origin;
     private final Resource index;
@@ -70,13 +72,25 @@ public class GiftPageController {
         // 字符串拼接避免 replaceAll 将用户标题里的 $ 或反斜线解释为替换表达式。
         int head = shell.toLowerCase(java.util.Locale.ROOT).indexOf("</head>");
         if (head < 0) throw new IOException("前端入口缺少 head");
-        return html(HttpStatus.OK, shell.substring(0, head) + metadata + shell.substring(head));
+        int bodyEnd = shell.toLowerCase(java.util.Locale.ROOT).lastIndexOf("</body>");
+        if (bodyEnd < head) throw new IOException("前端入口缺少 body");
+        String data = JSON.writeValueAsString(new InitialGift(token, gift.title(), gift.recipient(), gift.message(),
+                gift.lyrics(), gift.audioOrigin(), gift.createdAt().toString(), gift.expiresAt().toString(), gift.hasCover()))
+                .replace("<", "\\u003c").replace(">", "\\u003e").replace("&", "\\u0026");
+        String bootstrap = "<script type=\"application/json\" id=\"qf-initial-gift\">" + data + "</script>";
+        return html(HttpStatus.OK, shell.substring(0, head) + metadata + shell.substring(head, bodyEnd)
+                + bootstrap + shell.substring(bodyEnd));
     }
+
+    private record InitialGift(String token, String title, String recipient, String message, String lyrics,
+                               String audioOrigin, String createdAt, String expiresAt, boolean hasCover) {}
 
     private String escape(String value) { return HtmlUtils.htmlEscape(value, "UTF-8"); }
     private ResponseEntity<String> html(HttpStatus status, String body) {
-        return ResponseEntity.status(status).contentType(new MediaType("text", "html", StandardCharsets.UTF_8))
+        var response = ResponseEntity.status(status).contentType(new MediaType("text", "html", StandardCharsets.UTF_8))
                 .cacheControl(CacheControl.noStore()).header("Referrer-Policy", "no-referrer")
-                .header("X-Robots-Tag", "noindex, nofollow, noarchive").body(body);
+                .header("X-Robots-Tag", "noindex, nofollow, noarchive");
+        if (status == HttpStatus.OK) response.header("Server-Timing", "gift_data;desc=\"inline\"");
+        return response.body(body);
     }
 }

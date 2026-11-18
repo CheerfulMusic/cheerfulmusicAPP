@@ -37,9 +37,10 @@ import java.util.regex.Pattern;
 public class SiteEventController {
     public static final Set<String> ALLOWED_EVENTS = Set.of(
             "pageview", "page_leave", "gift_view", "creation_start", "lyrics_generated", "song_generated",
-            "checkout_start", "purchase", "audio_play", "gift_download");
+            "checkout_start", "purchase", "audio_play", "gift_download", "gift_card_ready", "gift_play_result");
+    private static final Set<String> GIFT_PERFORMANCE_EVENTS = Set.of("gift_card_ready", "gift_play_result");
     private static final Set<String> ALLOWED_PAYLOAD_KEYS = Set.of(
-            "route", "durationMs", "audioOrigin", "provenance", "provider", "result", "plan", "status");
+            "route", "durationMs", "audioOrigin", "provenance", "provider", "result", "plan", "status", "mode");
     private static final Pattern GIFT_TOKEN = Pattern.compile("/gift/[A-Za-z0-9_-]{20,}");
     private static final Pattern WORK_ID = Pattern.compile("/works/[A-Za-z0-9_-]{8,}");
     private static final int MAX_PAYLOAD = 2048;
@@ -79,7 +80,8 @@ public class SiteEventController {
         if (resolver != null) country = resolver.resolveCountry(ClientIp.resolve(servletRequest));
         try {
             template.update(INSERT_SQL, row(clean, payloadJson(clean.payload()),
-                    creatorId(servletRequest), durationMs(clean.payload()), country));
+                    GIFT_PERFORMANCE_EVENTS.contains(clean.event()) ? "" : creatorId(servletRequest),
+                    durationMs(clean.payload()), country));
         } catch (RuntimeException ignored) {
             // 埋点失败不影响业务，也不向前端抛错。
         }
@@ -123,6 +125,15 @@ public class SiteEventController {
     /** 返回 null 表示拒绝；不信任前端，路径与来源在此二次脱敏。 */
     static EventRequest sanitize(EventRequest request) {
         if (request == null || request.event() == null || !ALLOWED_EVENTS.contains(request.event())) return null;
+        if (GIFT_PERFORMANCE_EVENTS.contains(request.event())) {
+            String key = "gift_card_ready".equals(request.event()) ? "mode" : "result";
+            Set<String> allowed = "mode".equals(key) ? Set.of("inline", "fetch") : Set.of("playing", "error");
+            if (request.payload() == null || !(request.payload().get(key) instanceof String mode)
+                    || !allowed.contains(mode) || !(request.payload().get("durationMs") instanceof Number)) return null;
+            Long elapsed = durationMs(request.payload());
+            if (elapsed == null || elapsed > 60_000) return null;
+            return new EventRequest(request.event(), "/gift/:token", "", "", "", Map.of(key, mode, "durationMs", elapsed));
+        }
         return new EventRequest(request.event(), cleanPath(request.pagePath()), cleanReferrer(request.referrer()),
                 cleanId(request.visitorId()), cleanId(request.sessionId()), request.payload());
     }
@@ -147,7 +158,7 @@ public class SiteEventController {
             if (!"https".equalsIgnoreCase(uri.getScheme()) && !"http".equalsIgnoreCase(uri.getScheme())) return "";
             if (uri.getHost() == null) return "";
             var port = uri.getPort() > 0 ? ":" + uri.getPort() : "";
-            var text = uri.getScheme() + "://" + uri.getHost() + port + (uri.getPath() == null ? "" : uri.getPath());
+            var text = uri.getScheme() + "://" + uri.getHost() + port + cleanPath(uri.getPath());
             return text.length() > 512 ? text.substring(0, 512) : text;
         } catch (IllegalArgumentException e) {
             return "";
