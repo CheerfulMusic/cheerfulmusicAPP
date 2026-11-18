@@ -192,6 +192,46 @@ class AutomaticCoverIntegrationTest {
                 "databaseUuid",db.queryForObject("SELECT @@server_uuid",String.class),"visionModel",com.qingfeng.music.infrastructure.provider.ArkCoverTitleVerifier.DEFAULT_MODEL)));
     }
 
+    @Test @EnabledIfEnvironmentVariable(named="QF_LIVE_ARK_COVER_CANDIDATE",matches=".+")
+    void realArkVerifiesSavedCandidateWithoutRegeneratingIt() throws Exception {
+        assertEquals("true",System.getenv("QF_LIVE_ARK_COVER"));
+        var song=fixture();
+        db.update("UPDATE generation_task SET title='晚风写给你' WHERE id=?",song.task);
+        jobs.enqueue(song.task);
+        var job=jobs.claim(10000,Instant.now()).orElseThrow();
+        assertEquals(song.task,job.task());
+        jobs.accepted(job,"https://expired.example.test/previously-generated.jpg");
+        var path=java.nio.file.Path.of(System.getenv("QF_LIVE_ARK_COVER_CANDIDATE"));
+        byte[] original=java.nio.file.Files.readAllBytes(path);
+        covers.saveGenerated(song.owner,song.work,job.id(),new ByteArrayInputStream(original));
+        String key=System.getenv("ARK_API_KEY");assertNotNull(key);assertFalse(key.isBlank());
+        var verifier=new com.qingfeng.music.infrastructure.provider.ArkCoverTitleVerifier(key,
+                com.qingfeng.music.infrastructure.provider.ArkCoverTitleVerifier.DEFAULT_MODEL);
+        var checks=new AtomicInteger();
+        var runner=new AutomaticCoverConfiguration.Runner(jobs,prompt->{throw new AssertionError("Saved candidate must not regenerate");},
+                covers,url->{throw new AssertionError("Saved candidate must not redownload");},10000,(picture,title)->{
+            if(checks.getAndIncrement()<2)throw new IOException("simulated temporary verification outage");
+            return verifier.matches(picture,title);
+        });
+        runner.run();due(song);runner.run();
+        assertEquals("COVER_SAVING",state(song));assertNull(covers.current(song.work));
+        due(song);runner.run();
+        assertEquals("COVER_DONE",state(song));assertEquals(3,checks.get());
+        assertEquals("SAVING",db.queryForObject("SELECT status FROM generation_task WHERE id=?",String.class,song.task));
+        String selected=covers.current(song.work);assertNotNull(selected);
+        assertEquals(1,covers.state(song.owner,song.work).assets().size());
+        complete(song);assertEquals(selected,covers.current(song.work));
+        var folder=java.nio.file.Path.of("target/live-ark-cover");java.nio.file.Files.createDirectories(folder);
+        try(var input=covers.open(song.owner,song.work,selected).source().open()){
+            byte[] saved=input.readAllBytes();java.nio.file.Files.write(folder.resolve("verified-cover.jpg"),saved);
+            assertEquals(1024,ImageIO.read(new ByteArrayInputStream(saved)).getWidth());
+        }
+        java.nio.file.Files.writeString(folder.resolve("verification.json"),new tools.jackson.databind.ObjectMapper().writeValueAsString(java.util.Map.of(
+                "state",state(song),"generationCalls",0,"downloads",0,"verificationAttempts",checks.get(),"reusedRealGeneratedCandidate",true,
+                "isolatedDatabase",db.queryForObject("SELECT DATABASE()",String.class),"databaseUuid",db.queryForObject("SELECT @@server_uuid",String.class),
+                "visionModel",com.qingfeng.music.infrastructure.provider.ArkCoverTitleVerifier.DEFAULT_MODEL)));
+    }
+
     @Test void candidateSurvivesDomainNetworkFailuresAndOnlyVerificationRetries() throws Exception {
         var song=fixture();complete(song);byte[] image=image();
         var creates=new AtomicInteger();var reads=new AtomicInteger();var checks=new AtomicInteger();
