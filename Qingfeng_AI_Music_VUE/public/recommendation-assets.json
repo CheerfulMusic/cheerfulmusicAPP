@@ -1,0 +1,294 @@
+{
+  "version": 1,
+  "cdnHost": "media.cheerfulmusic.com",
+  "assets": [
+    {
+      "trackId": "feng-ye-xing",
+      "kind": "original",
+      "path": "/media/sample-feng-ye-xing-v1.mp3",
+      "key": "qingfeng/recommendation-samples/20261118/original/686329f818bc/sample-feng-ye-xing-v1.mp3",
+      "bytes": 4254496,
+      "sha256": "686329f818bc5b9b9aef54027bdd7c64be4bfaa7f9257536081d6ea19270a01c"
+    },
+    {
+      "trackId": "feng-ye-xing",
+      "kind": "audio",
+      "path": "/media/sample-feng-ye-xing-v1-preview-128.mp3",
+      "key": "qingfeng/recommendation-samples/20261118/audio/22c66d4eb1ca/sample-feng-ye-xing-v1-preview-128.mp3",
+      "bytes": 3401133,
+      "sha256": "22c66d4eb1cad6223e226ae7d34ddbcc1ff0443fd68049e04d93abe5dc8ebe37"
+    },
+    {
+      "trackId": "feng-ye-xing",
+      "kind": "cover",
+      "path": "/media/sample-feng-ye-xing-v1-cover.jpg",
+      "key": "qingfeng/recommendation-samples/20261118/cover/2c2b7a5895fd/sample-feng-ye-xing-v1-cover.jpg",
+      "bytes": 10554,
+      "sha256": "2c2b7a5895fd2bbd0b9036e96617bfebf95476f3864f41a39245b254de75144e"
+    },
+    {
+      "trackId": "ming-chui-si-hai",
+      "kind": "original",
+      "path": "/media/sample-ming-chui-si-hai-v1.mp3",
+      "key": "qingfeng/recommendation-samples/20261118/original/a232d55b2928/sample-ming-chui-si-hai-v1.mp3",
+      "bytes": 3467296,
+      "sha256": "a232d55b29287176c8eac522081c311fe44db360abdfabd5cedd106ccc045b58"
+    },
+    {
+      "trackId": "ming-chui-si-hai",
+      "kind": "audio",
+      "path": "/media/sample-ming-chui-si-hai-v1-preview-128.mp3",
+      "key": "qingfeng/recommendation-samples/20261118/audio/b93e1b37649a/sample-ming-chui-si-hai-v1-preview-128.mp3",
+      "bytes": 2443821,
+      "sha256": "b93e1b37649ac8ac24161fb986332cb98e0b8afbc54b669b052a1c0bbb575931"
+    },
+    {
+      "trackId": "ming-chui-si-hai",
+      "kind": "cover",
+      "path": "/media/sample-ming-chui-si-hai-v1-cover.jpg",
+      "key": "qingfeng/recommendation-samples/20261118/cover/d13cad0bd45d/sample-ming-chui-si-hai-v1-cover.jpg",
+      "bytes": 9489,
+      "sha256": "d13cad0bd45da74f17f981d542cdcd5d5fe41835aff98711ef0b552358fc86e9"
+    },
+    {
+      "trackId": "liu-lang-shi-ren",
+      "kind": "original",
+      "path": "/media/sample-liu-lang-shi-ren-v1.mp3",
+      "key": "qingfeng/recommendation-samples/20261118/original/50e10320b7af/sample-liu-lang-shi-ren-v1.mp3",
+      "bytes": 2820256,
+      "sha256": "50e10320b7af17a5b01f0625c9cb22a4b53d72747979aecc192e0f3d00911977"
+    },
+    {
+      "trackId": "liu-lang-shi-ren",
+      "kind": "audio",
+      "path": "/media/sample-liu-lang-shi-ren-v1-preview-128.mp3",
+      "key": "qingfeng/recommendation-samples/20261118/audio/38982b6e494a/sample-liu-lang-shi-ren-v1-preview-128.mp3",
+      "bytes": 2253741,
+      "sha256": "38982b6e494ab777e3c2c8279febfe21a93aef485f8412ddcf8d1c9d7114245b"
+    },
+    {
+      "trackId": "liu-lang-shi-ren",
+      "kind": "cover",
+      "path": "/media/sample-liu-lang-shi-ren-v1-cover.jpg",
+      "key": "qingfeng/recommendation-samples/20261118/cover/00f6b6e417d8/sample-liu-lang-shi-ren-v1-cover.jpg",
+      "bytes": 13640,
+      "sha256": "00f6b6e417d8d0d04761cca37ba505c32fae697b7969176866c780d3d4f349b6"
+    },
+    {
+      "trackId": "luo-yu-de-cao-chang",
+      "kind": "original",
+      "path": "/media/sample-luo-yu-de-cao-chang-v1.mp3",
+      "key": "qingfeng/recommendation-samples/20261118/original/4f62652ce53d/sample-luo-yu-de-cao-chang-v1.mp3",
+      "bytes": 4348401,
+      "sha256": "4f62652ce53df242f3315f74c20af6a1b0ddee2b2eb7d7f766afc01d418e4fc6"
+    },
+    {
+      "trackId": "luo-yu-de-cao-chang",
+      "kind": "audio",
+      "path": "/media/sample-luo-yu-de-cao-chang-v1-preview-128.mp3",
+      "key": "qingfeng/recommendation-samples/20261118/audio/0220c9dc57c5/sample-luo-yu-de-cao-chang-v1-preview-128.mp3",
+      "bytes": 2957229,
+      "sha256": "0220c9dc57c587e142b2cc9afbc6706a7410b8094cdae9a4a2a1d3de003ba070"
+    },
+    {
+      "trackId": "luo-yu-de-cao-chang",
+      "kind": "cover",
+      "path": "/media/sample-luo-yu-de-cao-chang-v1-cover.jpg",
+      "key": "qingfeng/recommendation-samples/20261118/cover/dd030f7cfbd2/sample-luo-yu-de-cao-chang-v1-cover.jpg",
+      "bytes": 10811,
+      "sha256": "dd030f7cfbd2ce95b09f6e1bfb52bf8f0e9b3fe07ebbad7c2225097b7236525d"
+    },
+    {
+      "trackId": "mei-jian-fu-yun",
+      "kind": "original",
+      "path": "/media/sample-mei-jian-fu-yun-v1.mp3",
+      "key": "qingfeng/recommendation-samples/20261118/original/7532a1af5c88/sample-mei-jian-fu-yun-v1.mp3",
+      "bytes": 4479272,
+      "sha256": "7532a1af5c883d060c0365daa071b716977cfc20106cfb836432c7ead71a2bac"
+    },
+    {
+      "trackId": "mei-jian-fu-yun",
+      "kind": "audio",
+      "path": "/media/sample-mei-jian-fu-yun-v1-preview-128.mp3",
+      "key": "qingfeng/recommendation-samples/20261118/audio/8d073ed8655f/sample-mei-jian-fu-yun-v1-preview-128.mp3",
+      "bytes": 3105069,
+      "sha256": "8d073ed8655f7cf79cb4f54c2c9928997248fcb84dc84a77f7164a2e331c630a"
+    },
+    {
+      "trackId": "mei-jian-fu-yun",
+      "kind": "cover",
+      "path": "/media/sample-mei-jian-fu-yun-v1-cover.jpg",
+      "key": "qingfeng/recommendation-samples/20261118/cover/7232cc6e8753/sample-mei-jian-fu-yun-v1-cover.jpg",
+      "bytes": 11662,
+      "sha256": "7232cc6e87534808659e7c2af8a881f3def298e01764e4f0e7b1519c07c976c9"
+    },
+    {
+      "trackId": "wu-ren-dai-ti",
+      "kind": "original",
+      "path": "/media/sample-wu-ren-dai-ti-v1.mp3",
+      "key": "qingfeng/recommendation-samples/20261118/original/9f0049f70a05/sample-wu-ren-dai-ti-v1.mp3",
+      "bytes": 4083126,
+      "sha256": "9f0049f70a0564fb2ff3305f8033e5fa2a4a7dcb2a4fd0fe3004fae4f7865c77"
+    },
+    {
+      "trackId": "wu-ren-dai-ti",
+      "kind": "audio",
+      "path": "/media/sample-wu-ren-dai-ti-v1-preview-128.mp3",
+      "key": "qingfeng/recommendation-samples/20261118/audio/b935566a8e41/sample-wu-ren-dai-ti-v1-preview-128.mp3",
+      "bytes": 2938413,
+      "sha256": "b935566a8e41eae9c773708224e1b4e4cdd3c54aaef4b5ba8ab958cb7ce016ca"
+    },
+    {
+      "trackId": "wu-ren-dai-ti",
+      "kind": "cover",
+      "path": "/media/sample-wu-ren-dai-ti-v1-cover.jpg",
+      "key": "qingfeng/recommendation-samples/20261118/cover/39c83ab25ca7/sample-wu-ren-dai-ti-v1-cover.jpg",
+      "bytes": 11573,
+      "sha256": "39c83ab25ca7ae4b53b6997b634feff8690a3c30e3a391816eabc8a37aeaf1af"
+    },
+    {
+      "trackId": "wu-ren-qu",
+      "kind": "original",
+      "path": "/media/sample-wu-ren-qu-v1.mp3",
+      "key": "qingfeng/recommendation-samples/20261118/original/91472125aa2d/sample-wu-ren-qu-v1.mp3",
+      "bytes": 3510876,
+      "sha256": "91472125aa2d428c613925b88b7f9c29bdb159f2b95eeffa076763239f6b8d43"
+    },
+    {
+      "trackId": "wu-ren-qu",
+      "kind": "audio",
+      "path": "/media/sample-wu-ren-qu-v1-preview-128.mp3",
+      "key": "qingfeng/recommendation-samples/20261118/audio/44ba19c8f10c/sample-wu-ren-qu-v1-preview-128.mp3",
+      "bytes": 2556333,
+      "sha256": "44ba19c8f10cb697d026634da2eb6df09dff9b1a75c4195849e3b25855d0f51a"
+    },
+    {
+      "trackId": "wu-ren-qu",
+      "kind": "cover",
+      "path": "/media/sample-wu-ren-qu-v1-cover.jpg",
+      "key": "qingfeng/recommendation-samples/20261118/cover/c8c72b5bc21f/sample-wu-ren-qu-v1-cover.jpg",
+      "bytes": 8583,
+      "sha256": "c8c72b5bc21f6e09b329bcf7a33a3346ba8f27dfd29d8117581b45992e3ef0f0"
+    },
+    {
+      "trackId": "wu-ye-zhi-shi",
+      "kind": "original",
+      "path": "/media/sample-wu-ye-zhi-shi-v1.mp3",
+      "key": "qingfeng/recommendation-samples/20261118/original/a43f1d007364/sample-wu-ye-zhi-shi-v1.mp3",
+      "bytes": 6510016,
+      "sha256": "a43f1d007364a4f65e072f20a62ad34dbbe5eb793062c61fb7bc7f7dd8ff1de9"
+    },
+    {
+      "trackId": "wu-ye-zhi-shi",
+      "kind": "audio",
+      "path": "/media/sample-wu-ye-zhi-shi-v1-preview-128.mp3",
+      "key": "qingfeng/recommendation-samples/20261118/audio/85caa0fbde16/sample-wu-ye-zhi-shi-v1-preview-128.mp3",
+      "bytes": 2603181,
+      "sha256": "85caa0fbde1668a045ce2cb51442e7d7354fd60658049e084cd0a8a8f96e914b"
+    },
+    {
+      "trackId": "wu-ye-zhi-shi",
+      "kind": "cover",
+      "path": "/media/sample-wu-ye-zhi-shi-v1-cover.jpg",
+      "key": "qingfeng/recommendation-samples/20261118/cover/4338828721de/sample-wu-ye-zhi-shi-v1-cover.jpg",
+      "bytes": 19839,
+      "sha256": "4338828721deed445f8bdbf4e68fbb2b0db24cf0b176640d439b8d43430a46aa"
+    },
+    {
+      "trackId": "meng-de-chi-bang",
+      "kind": "original",
+      "path": "/media/sample-meng-de-chi-bang-v1.mp3",
+      "key": "qingfeng/recommendation-samples/20261118/original/9eb39b442789/sample-meng-de-chi-bang-v1.mp3",
+      "bytes": 3606552,
+      "sha256": "9eb39b442789666a6df5bbe7fa62cf5b23f9a0c0647a0251177bb02caf6bfdad"
+    },
+    {
+      "trackId": "meng-de-chi-bang",
+      "kind": "audio",
+      "path": "/media/sample-meng-de-chi-bang-v1-preview-128.mp3",
+      "key": "qingfeng/recommendation-samples/20261118/audio/604cf455628c/sample-meng-de-chi-bang-v1-preview-128.mp3",
+      "bytes": 2466093,
+      "sha256": "604cf455628c7af1335b95fd15f86e01287acc9354069b0c33994e9c5c14c502"
+    },
+    {
+      "trackId": "meng-de-chi-bang",
+      "kind": "cover",
+      "path": "/media/sample-meng-de-chi-bang-v1-cover.jpg",
+      "key": "qingfeng/recommendation-samples/20261118/cover/d6970859a663/sample-meng-de-chi-bang-v1-cover.jpg",
+      "bytes": 21712,
+      "sha256": "d6970859a663811312143ebcf700905451f9931068d37ec331963d114526b837"
+    },
+    {
+      "trackId": "after-midnight",
+      "kind": "original",
+      "path": "/media/sample-after-midnight-v1.mp3",
+      "key": "qingfeng/recommendation-samples/20261118/original/2420e68a6615/sample-after-midnight-v1.mp3",
+      "bytes": 4788288,
+      "sha256": "2420e68a66154052547919fb8faeb35f837fb597a06b7b670df9f3a94a9bb8a7"
+    },
+    {
+      "trackId": "after-midnight",
+      "kind": "audio",
+      "path": "/media/sample-after-midnight-v1-preview-128.mp3",
+      "key": "qingfeng/recommendation-samples/20261118/audio/81f05f0bc210/sample-after-midnight-v1-preview-128.mp3",
+      "bytes": 3262509,
+      "sha256": "81f05f0bc2102be47fc13fc2a8b2fec41be9b878d9b2c1af35966550f6869175"
+    },
+    {
+      "trackId": "after-midnight",
+      "kind": "cover",
+      "path": "/media/sample-after-midnight-v1-cover.jpg",
+      "key": "qingfeng/recommendation-samples/20261118/cover/96c87fa9ce5d/sample-after-midnight-v1-cover.jpg",
+      "bytes": 34401,
+      "sha256": "96c87fa9ce5d62154991e158e855e9920b8a114df2c718de2adf3e031922b054"
+    },
+    {
+      "trackId": "if-you-wanna-feel-me",
+      "kind": "original",
+      "path": "/media/sample-if-you-wanna-feel-me-v1.mp3",
+      "key": "qingfeng/recommendation-samples/20261118/original/55e9c6484abd/sample-if-you-wanna-feel-me-v1.mp3",
+      "bytes": 3363968,
+      "sha256": "55e9c6484abd253cc4408deb73d4544ba5bb89e875635d61dbaf1143caf726d5"
+    },
+    {
+      "trackId": "if-you-wanna-feel-me",
+      "kind": "audio",
+      "path": "/media/sample-if-you-wanna-feel-me-v1-preview-128.mp3",
+      "key": "qingfeng/recommendation-samples/20261118/audio/d7a36f814716/sample-if-you-wanna-feel-me-v1-preview-128.mp3",
+      "bytes": 2282541,
+      "sha256": "d7a36f8147169b35f8fff581b8fe681f5c3d6a2d1d867f6baf4f1f8b00c451eb"
+    },
+    {
+      "trackId": "if-you-wanna-feel-me",
+      "kind": "cover",
+      "path": "/media/sample-if-you-wanna-feel-me-v1-cover.jpg",
+      "key": "qingfeng/recommendation-samples/20261118/cover/912f661b3f41/sample-if-you-wanna-feel-me-v1-cover.jpg",
+      "bytes": 18841,
+      "sha256": "912f661b3f41f5a7cf5e902bca4d18b25f79f6286d712391076d3de698031821"
+    },
+    {
+      "trackId": "where-the-wind-goes",
+      "kind": "original",
+      "path": "/media/sample-where-the-wind-goes-v1.mp3",
+      "key": "qingfeng/recommendation-samples/20261118/original/a52c6ce07d83/sample-where-the-wind-goes-v1.mp3",
+      "bytes": 3113001,
+      "sha256": "a52c6ce07d838548354744f2bda78bf200af7eb59e2b16d693310a6d6a60ffae"
+    },
+    {
+      "trackId": "where-the-wind-goes",
+      "kind": "audio",
+      "path": "/media/sample-where-the-wind-goes-v1-preview-128.mp3",
+      "key": "qingfeng/recommendation-samples/20261118/audio/0c02a67bf367/sample-where-the-wind-goes-v1-preview-128.mp3",
+      "bytes": 2207661,
+      "sha256": "0c02a67bf3670a5ffed95e5bd2074cbbd2f7a50c3b8e91cbbecba9e6e07060cc"
+    },
+    {
+      "trackId": "where-the-wind-goes",
+      "kind": "cover",
+      "path": "/media/sample-where-the-wind-goes-v1-cover.jpg",
+      "key": "qingfeng/recommendation-samples/20261118/cover/df8ceefe125e/sample-where-the-wind-goes-v1-cover.jpg",
+      "bytes": 32697,
+      "sha256": "df8ceefe125ed523b675c4f3e1771f445aed8676ea4585f44e5a845ecff2633a"
+    }
+  ]
+}

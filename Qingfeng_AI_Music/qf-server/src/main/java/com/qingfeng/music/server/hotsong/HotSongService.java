@@ -23,10 +23,11 @@ import java.util.Set;
  */
 @Service @Profile({"mysql","test"})
 public class HotSongService {
-    /** 与前端 src/modules/home/model/tracks.ts 的 9 首内置试听曲目一一对应。 */
-    public static final Set<String> TRACKS = Set.of(
+    /** 保留历史曲目的互动记录，并接入本次精选歌曲。 */
+    public static final Set<String> TRACKS = java.util.stream.Stream.concat(java.util.stream.Stream.of(
             "love", "family", "travel", "red-guofeng", "rain-disco",
-            "tomorrow-rock", "scenery-folk", "hometown-electronic", "river-instrumental");
+            "tomorrow-rock", "scenery-folk", "hometown-electronic", "river-instrumental"),
+            RecommendationSamples.SONGS.stream().map(RecommendationSamples.Song::id)).collect(java.util.stream.Collectors.toUnmodifiableSet());
     private static final String COLUMNS = "track_id,plays,likes,favorites,comments";
     private static final Map<String, String> REACTION_COLUMNS = Map.of("like", "likes", "favorite", "favorites");
 

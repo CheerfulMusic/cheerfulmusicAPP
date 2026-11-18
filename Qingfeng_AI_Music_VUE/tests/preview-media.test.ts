@@ -18,6 +18,8 @@ it('verifies all nine actual preview MP3s and produces byte/hash metadata',()=>{
  const manifest=previewMediaManifest(fileURLToPath(new URL('..',import.meta.url)))
  expect(manifest.assets.filter(a=>a.path.endsWith('.mp3'))).toHaveLength(9)
  expect(manifest.assets.every(a=>a.bytes>0&&/^[a-f0-9]{64}$/.test(a.sha256))).toBe(true)
+ expect(manifest.remoteAssets).toHaveLength(24)
+ expect(manifest.remoteAssets.every(a=>a.bytes>0&&a.key.includes(a.sha256.slice(0,12)))).toBe(true)
 })
 it('blocks builds when sparse checkout omits audio',()=>{
  expect(()=>previewMediaManifest(fixture(null))).toThrow('Missing preview asset: /media/sample.mp3')
@@ -29,4 +31,9 @@ it('does not substitute or re-encode original audio',()=>{
  const root=fixture(Buffer.from('ID3original-audio')),manifest=previewMediaManifest(root)
  expect(manifest.assets.find(a=>a.path.endsWith('.mp3'))?.bytes).toBe(17)
  expect(readFileSync(resolve(root,'public/media/sample.mp3')).toString()).toBe('ID3original-audio')
+})
+it('rejects a CDN track without its checked object manifest',()=>{
+ const root=fixture(Buffer.from('ID3original-audio'))
+ writeFileSync(resolve(root,'src/modules/home/model/tracks.ts'),`export const tracks=[{id:'new-song',delivery:'CDN',audio:'/media/sample-new-song-v1-preview-128.mp3',cover:'/media/sample-new-song-v1-cover.jpg'}]`)
+ expect(()=>previewMediaManifest(root)).toThrow('Invalid CDN preview asset')
 })

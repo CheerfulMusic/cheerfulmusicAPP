@@ -307,3 +307,7 @@ html:has(.playlist-dialog[open]) { overflow:hidden; }
   .playlist-explore .explore-footer h3 { font-size: 18px; }
   .playlist-explore .explore-footer .p-button { margin-top: 14px; }
 }
+.playlist-track-lyrics { margin: 0 0 14px 64px; color: var(--muted); font-size: 13px; }
+.playlist-track-lyrics summary { padding: 8px 0; cursor: pointer; color: var(--accent-text); }
+.playlist-track-lyrics p { white-space: pre-wrap; line-height: 1.9; margin: 8px 0; }
+@media (max-width: 700px) { .playlist-track-lyrics { margin-left: 0; } }

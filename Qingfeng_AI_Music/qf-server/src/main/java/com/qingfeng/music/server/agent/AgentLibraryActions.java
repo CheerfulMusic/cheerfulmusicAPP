@@ -336,7 +336,7 @@ public final class AgentLibraryActions implements AgentApplicationActions {
         return new Result((active?"已":"已取消")+(favorite?"收藏":"点赞")+"《"+sample.title()+"》。","discover",List.of(new Item(track,sample.title(),"平台试听样曲",Map.of("trackId",track,"liked",toggle.liked(),"favorited",toggle.favorited(),"audioUrl",sample.audio()))),List.of(),action);
     }
     private record Sample(String id,String title,String style,String audio) {}
-    private static final List<Sample> SAMPLES=List.of(
+    private static final List<Sample> SAMPLES=java.util.stream.Stream.concat(List.of(
         new Sample("love","把平凡唱给你","爱情 温柔陪伴","/media/sample-love-v2-preview-128.mp3"),
         new Sample("family","走了那么远","家庭 抒情流行","/media/sample-family-v2-preview-128.mp3"),
         new Sample("travel","去有海风的地方","自由旅行","/media/sample-ocean-travel-v2-preview-128.mp3"),
@@ -345,7 +345,9 @@ public final class AgentLibraryActions implements AgentApplicationActions {
         new Sample("tomorrow-rock","明天再说","摇滚","/media/sample-tomorrow-rock-v1-preview-128.mp3"),
         new Sample("scenery-folk","最美的风景","民谣","/media/sample-scenery-folk-v1-preview-128.mp3"),
         new Sample("hometown-electronic","hometown lover","电子","/media/sample-hometown-electronic-v1-preview-128.mp3"),
-        new Sample("river-instrumental","When the River Breathes","纯音乐","/media/sample-river-instrumental-v1-preview-128.mp3"));
+        new Sample("river-instrumental","When the River Breathes","纯音乐","/media/sample-river-instrumental-v1-preview-128.mp3")).stream(),
+        com.qingfeng.music.server.hotsong.RecommendationSamples.SONGS.stream().map(song ->
+            new Sample(song.id(), song.title(), song.genre(), song.audio()))).toList();
     private static String title(WorkApi.Work w) { return w.title()==null||w.title().isBlank()?"未命名作品":w.title(); }
     private String displayTitle(String owner,WorkApi.Work work) {
         if(work.title()!=null&&!work.title().isBlank()&&!"智能创作".equals(work.title()))return work.title();

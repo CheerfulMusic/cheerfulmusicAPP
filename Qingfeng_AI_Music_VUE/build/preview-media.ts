@@ -1,5 +1,5 @@
 import {createHash} from 'node:crypto'
-import {readFileSync,realpathSync} from 'node:fs'
+import {existsSync,readFileSync,realpathSync} from 'node:fs'
 import {isAbsolute,relative,resolve} from 'node:path'
 import * as ts from 'typescript'
 import type {Plugin} from 'vite'
@@ -9,13 +9,31 @@ export function previewMediaManifest(root:string) {
  const declaration=source.statements.filter(ts.isVariableStatement).flatMap(s=>s.declarationList.declarations).find(d=>ts.isIdentifier(d.name)&&d.name.text==='tracks')
  if(!declaration?.initializer||!ts.isArrayLiteralExpression(declaration.initializer)||!declaration.initializer.elements.length)throw new Error('Cannot verify preview track assets')
  const paths=new Set<string>()
+ const remoteAssets: {path:string;key:string;bytes:number;sha256:string}[]=[]
+ const remoteFile=resolve(root,'public/recommendation-assets.json')
+ const remoteManifest=existsSync(remoteFile)?JSON.parse(readFileSync(remoteFile,'utf8')):{assets:[]}
  for(const track of declaration.initializer.elements){
   if(!ts.isObjectLiteralExpression(track))throw new Error('Preview tracks must declare verifiable assets')
   for(const key of ['audio','cover']){
-   const field=track.properties.find(p=>ts.isPropertyAssignment(p)&&p.name.getText(source)===key)
+   const field=track.properties.find(p=>ts.isPropertyAssignment(p)&&p.name.getText(source).replace(/^['"]|['"]$/g,'')===key)
    if(!field||!ts.isPropertyAssignment(field)||!ts.isStringLiteral(field.initializer))throw new Error('Missing static preview '+key)
    const path=field.initializer.text
    if(!path.startsWith('/media/')||path.split('/').some(s=>s==='..'||s==='.'))throw new Error('Invalid preview asset path: '+path)
+   const delivery=track.properties.find(p=>ts.isPropertyAssignment(p)&&p.name.getText(source).replace(/^['"]|['"]$/g,'')==='delivery')
+   if(delivery&&ts.isPropertyAssignment(delivery)&&ts.isStringLiteral(delivery.initializer)&&delivery.initializer.text==='CDN'){
+    const id=track.properties.find(p=>ts.isPropertyAssignment(p)&&p.name.getText(source).replace(/^['"]|['"]$/g,'')==='id')
+    const trackId=id&&ts.isPropertyAssignment(id)&&ts.isStringLiteral(id.initializer)?id.initializer.text:''
+    const suffix=key==='audio'?'-preview-128.mp3':'-cover.jpg'
+    const asset=remoteManifest.assets.find((entry:{path:string})=>entry.path===path)
+    if(!/^[a-z0-9-]+$/.test(trackId)||path!==`/media/sample-${trackId}-v1${suffix}`||!asset
+      ||asset.trackId!==trackId||asset.kind!==key||!Number.isSafeInteger(asset.bytes)||asset.bytes<=0
+      ||!/^[a-f0-9]{64}$/.test(asset.sha256)
+      ||asset.key!==`qingfeng/recommendation-samples/20261118/${key}/${asset.sha256.slice(0,12)}/${path.slice('/media/'.length)}`){
+     throw new Error('Invalid CDN preview asset: '+path)
+    }
+    remoteAssets.push({path,key:asset.key,bytes:asset.bytes,sha256:asset.sha256})
+    continue
+   }
    paths.add(path)
   }
  }
@@ -31,7 +49,7 @@ export function previewMediaManifest(root:string) {
   if(path.endsWith('.mp3')&&!(bytes.subarray(0,3).toString()==='ID3'||bytes[0]===0xff&&(bytes[1]!&0xe0)===0xe0))throw new Error('Invalid MP3 preview asset: '+path)
   return{path,bytes:bytes.length,sha256:createHash('sha256').update(bytes).digest('hex')}
  })
- return{version:1,assets}
+ return{version:1,assets,remoteAssets}
 }
 
 export function previewMediaPlugin():Plugin {
