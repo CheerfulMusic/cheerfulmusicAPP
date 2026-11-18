@@ -35,7 +35,7 @@ describe('published legal documents', () => {
     const publicPath = `/legal/${pdf}`
     const html = readFileSync(`public/legal/${page}.html`, 'utf8')
     const document = new DOMParser().parseFromString(html, 'text/html')
-    expect(document.querySelector('iframe')?.getAttribute('src')).toBe(publicPath)
+    expect(document.querySelector('iframe')).toBeNull()
     expect(document.querySelector(`a[href="${publicPath}"][target="_blank"]`)).not.toBeNull()
     expect(document.querySelector(`a[href="${publicPath}"][download]`)).not.toBeNull()
     expect(document.body.textContent).toContain(date)
