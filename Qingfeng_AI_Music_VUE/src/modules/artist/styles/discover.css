@@ -117,6 +117,10 @@
 .discover-message { padding: 28px 20px; border-radius: 8px; background: #f7f7f9; color: var(--discover-muted); }
 .discover-message p { margin: 0 0 12px; color: inherit; }
 .discover-more { margin-top: 24px; text-align: center; }
+@media (min-width: 1201px) {
+  .discover-songs { justify-items: center; }
+  .discover-songs > .discover-song { width: 80%; }
+}
 @media (max-width: 1200px) {
   .discover-header-inner { gap: 26px; }
   .discover-nav { gap: 24px; }
