@@ -37,4 +37,3 @@ function status(){
     <div class="q-player-volume"><button type="button" class="q-player-mute" :aria-label="t(player.muted||player.volume===0?'取消静音':'静音')" :aria-pressed="player.muted||player.volume===0" @click="player.toggleMute"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M11 4 5 9H2v6h3l6 5V4Z"/><path v-if="!player.muted&&player.volume>0" d="M15 8a6 6 0 0 1 0 8m3-11a10 10 0 0 1 0 14"/><path v-else d="m16 9 6 6m0-6-6 6"/></svg></button><input type="range" min="0" max="1" step="0.01" :value="player.muted?0:player.volume" :aria-label="t('音量')" :aria-valuetext="`${Math.round((player.muted?0:player.volume)*100)}%`" @input="player.setVolume(Number(($event.target as HTMLInputElement).value))"></div>
     <button class="q-player-close" :aria-label="t('关闭播放器')" @click="player.close">×</button></aside>
 </template>
-

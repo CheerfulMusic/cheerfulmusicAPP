@@ -49,10 +49,13 @@
 .discover-hero-previous, .discover-hero-next { position: absolute; top: calc(50% - 18px); display: grid; place-items: center; width: 32px; height: 36px; padding: 0; border: 0; border-radius: 50%; background: #08263855; color: #fff; font-size: 28px !important; line-height: 1; }
 .discover-hero-previous { left: 12px; }
 .discover-hero-next { right: 12px; }
-.discover-hero-dots { position: absolute; bottom: 15px; left: 50%; display: flex; gap: 3px; transform: translateX(-50%); }
+.discover-hero-controls { position: absolute; bottom: 12px; left: 50%; display: flex; align-items: center; gap: 8px; transform: translateX(-50%); }
+.discover-hero-dots { display: flex; gap: 3px; }
 .discover-hero-dots button { display: grid; place-items: center; width: 24px; height: 24px; padding: 0; border: 0; background: transparent; }
 .discover-hero-dots button::after { content: ''; width: 7px; height: 7px; border: 1px solid #fff; border-radius: 50%; }
 .discover-hero-dots button[aria-pressed="true"]::after { background: #fff; }
+.discover-hero-rotation { display: grid; place-items: center; width: 28px; height: 28px; padding: 0; border: 1px solid #ffffff99; border-radius: 50%; background: #08263855; color: #fff; }
+.discover-hero-rotation svg { width: 12px; height: 12px; }
 .discover-content { display: grid; grid-template-columns: minmax(0, 1fr) 320px; align-items: start; gap: 28px; padding-top: 28px; }
 .discover-main { min-width: 0; }
 .discover-section-heading, .discover-side-heading { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 16px; }
