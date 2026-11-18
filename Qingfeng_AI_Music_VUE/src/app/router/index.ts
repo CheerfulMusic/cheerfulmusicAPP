@@ -7,6 +7,7 @@ export const router = createRouter({
   history: platform.kind === 'web' ? createWebHistory() : createWebHashHistory(),
   scrollBehavior,
   routes: [
+    { path: '/help', name: 'help', component: () => import('../pages/HelpPage.vue') },
     { path: '/', name: 'home', component: () => import('../../modules/home/pages/PremiumHomePage.vue') },
     { path: '/create', name: 'studio', component: () => import('../../modules/studio/pages/DraftStudioPage.vue') },
     { path: '/create/photo', name: 'photo-studio', component: () => import('../../modules/studio/pages/PhotoStudioPage.vue') },
