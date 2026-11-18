@@ -17,7 +17,7 @@ describe('help and support', () => {
   it('opens editable email drafts rather than claiming to submit feedback', () => {
     const page = mount(HelpPage, { global })
     const link = page.get('#feedback a')
-    const url = new URL(link.attributes('href'))
+    const url = new URL(link.attributes('href') ?? '')
     expect(url.protocol).toBe('mailto:')
     expect(url.pathname).toBe('labelmanager@cheerfulmusic.co.uk')
     expect(url.searchParams.get('body')).toContain('复现步骤')

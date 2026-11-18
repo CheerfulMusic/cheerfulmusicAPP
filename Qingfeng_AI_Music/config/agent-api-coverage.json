@@ -793,7 +793,7 @@
       "controller": "WebPageController",
       "source": "com/qingfeng/music/server/web/WebPageController.java",
       "mappingDeclarations": [
-        "@GetMapping({\"/\",\"/create\",\"/create/photo\",\"/works\",\"/works/{id}\",\"/account\",\"/profile\",\"/artist/{id}\",\"/discover\",\"/recharge\",\"/analytics\",\"/agent\"})",
+        "@GetMapping({\"/\",\"/create\",\"/create/photo\",\"/works\",\"/works/{id}\",\"/account\",\"/profile\",\"/artist/{id}\",\"/discover\",\"/recharge\",\"/analytics\",\"/agent\",\"/help\"})",
         "@GetMapping(\"/legal/terms\")",
         "@GetMapping(\"/legal/privacy\")"
       ],
