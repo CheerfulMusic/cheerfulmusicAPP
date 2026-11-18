@@ -45,7 +45,6 @@
 .discover-hero-listen { display: inline-flex; align-items: center; gap: 10px; min-height: 40px; margin-top: 24px; padding: 8px 18px; border: 1px solid #ffffffb3; border-radius: 24px; background: #153e5633; color: #fff; font-size: .9rem; font-weight: 500; }
 .discover-hero-listen svg { width: 15px; height: 15px; }
 .discover-hero-listen:hover { background: #fff; color: #243f50; }
-.discover-hero-cover { position: absolute; right: 8%; width: clamp(180px, 19vw, 280px); height: auto; aspect-ratio: 1; border-radius: 8px; object-fit: cover; box-shadow: 0 12px 30px #05203940; }
 .discover-hero-previous, .discover-hero-next { position: absolute; top: calc(50% - 18px); display: grid; place-items: center; width: 32px; height: 36px; padding: 0; border: 0; border-radius: 50%; background: #08263855; color: #fff; font-size: 28px !important; line-height: 1; }
 .discover-hero-previous { left: 12px; }
 .discover-hero-next { right: 12px; }
@@ -155,8 +154,6 @@
   .discover-hero-content { width: 77%; padding: 28px; }
   .discover-hero h2 { font-size: 1.75rem; }
   .discover-hero p, .discover-hero-artist { font-size: .9rem; }
-  .discover-hero.has-featured .discover-hero-content { width: 65%; }
-  .discover-hero-cover { right: 6%; width: 28%; }
   .discover-hero-previous { left: 4px; }
   .discover-hero-next { right: 4px; }
   .discover-content { grid-template-columns: minmax(0, 1fr); gap: 32px; padding-top: 24px; }
@@ -175,11 +172,9 @@
   .discover-page-heading { display: block; }
   .discover-page-heading p { margin-top: 7px; padding-left: 0; border: 0; }
   .discover-hero { height: 260px; }
-  .discover-hero-content, .discover-hero.has-featured .discover-hero-content { width: 100%; padding: 25px; }
-  .discover-hero.has-featured .discover-hero-content { width: 70%; padding-right: 4px; }
+  .discover-hero-content { width: 100%; padding: 25px; }
   .discover-hero h2 { font-size: 1.6rem; }
   .discover-hero p { max-width: 190px; line-height: 1.6; }
-  .discover-hero-cover { right: 18px; width: 26%; }
   .discover-hero-label { font-size: .74rem; }
   .discover-hero-listen { margin-top: 20px; font-size: .83rem; }
   .discover-section-heading h2, .discover-side-heading h2 { font-size: 1.13rem; }

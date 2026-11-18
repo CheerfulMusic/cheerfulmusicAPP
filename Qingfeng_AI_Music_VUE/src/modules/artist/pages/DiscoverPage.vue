@@ -248,7 +248,7 @@ onBeforeUnmount(() => {
 
     <div class="discover-width">
       <div class="discover-page-heading"><h1>{{ t('音乐广场') }}</h1><p>{{ t('聆听每一份创作的灵感') }}</p></div>
-      <section class="discover-hero" :class="{ 'has-featured': hero }" :aria-label="t('广场推荐')" :aria-roledescription="t('轮播')"
+      <section class="discover-hero" :aria-label="t('广场推荐')" :aria-roledescription="t('轮播')"
         @mouseenter="heroHovered = true" @mouseleave="heroHovered = false" @focusin="heroFocused = true" @focusout="heroFocusOut">
         <img class="discover-hero-background" :src="coast" alt="" width="2172" height="724" fetchpriority="high">
         <div class="discover-hero-content">
@@ -259,7 +259,6 @@ onBeforeUnmount(() => {
           <button v-if="hero" type="button" class="discover-hero-listen" :aria-label="t(playing(hero.track) ? '暂停 {title}' : '试听 {title}', { title: hero.song.title })" @click="play(hero, heroRows)"><PlaybackIcon :playing="playing(hero.track)" />{{ t(playing(hero.track) ? '暂停' : '立即聆听') }}</button>
           <a v-else class="discover-hero-listen" href="#discover-tracks"><PlaybackIcon :playing="false" />{{ t('立即聆听') }}</a>
         </div>
-        <img v-if="hero" class="discover-hero-cover" :src="hero.track.cover" :alt="t('歌曲封面')" width="260" height="260">
         <template v-if="heroSlideCount > 1">
           <button class="discover-hero-previous" type="button" :aria-label="t('上一张推荐')" @click="changeHero(-1)">‹</button>
           <button class="discover-hero-next" type="button" :aria-label="t('下一张推荐')" @click="changeHero(1)">›</button>

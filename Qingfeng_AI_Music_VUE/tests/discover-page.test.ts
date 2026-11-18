@@ -69,6 +69,7 @@ describe('Discover editorial layout with real content', () => {
     await wrapper.get('[aria-label="下一张推荐"]').trigger('click')
     expect(wrapper.get('.discover-hero h2').text()).toBe('歌曲热门1')
     expect(wrapper.get('.discover-hero-label').text()).toBe('热门作品')
+    expect(wrapper.findAll('.discover-hero img').map(image => image.classes())).toEqual([['discover-hero-background']])
     await wrapper.get('[aria-label="下一张推荐"]').trigger('click')
     expect(wrapper.get('.discover-hero h2').text()).toBe('歌曲热门2')
     await wrapper.get('[aria-label="查看推荐：歌曲热门5"]').trigger('click')
