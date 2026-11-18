@@ -5,7 +5,7 @@
 ## 准备
 
 1. 使用生产等效的完整迁移版本初始化独立 MySQL 8.0，数据库名以 `_payment_load` 结尾，端口例如 23306。独立后端监听 `127.0.0.1:18080`，明确连接该数据库，不加载 `.secrets/production-main.local.properties`。禁止连接日常 8080、5173、13306 或默认数据库3306；不要为此改动日常主库配置。
-2. 启用隔离后台 Inbox worker，确认 Stripe 配置为 sandbox，商户匹配。应用必须运行新版账本（包含 credit_account、p0_credit_batch 和带 merchant_scope/env_scope 的 Inbox）。监控账户须有业务表只读权限和 SHOW GLOBAL STATUS 权限；额外锁等待SQL可能需要 PROCESS、performance_schema/sys 的读取权限。
+2. 启用隔离后台 Inbox worker，确认 Stripe 配置为 sandbox，商户匹配。应用必须运行新版账本（包含 credit_account、p0_credit_batch 和带 merchant_scope/env_scope 的 Inbox）。监控账户须有业务表只读权限和 SHOW GLOBAL STATUS 权限；死锁计数读取information_schema.INNODB_METRICS.lock_deadlocks（MySQL 8.0没有Innodb_deadlocks全局状态变量），要求PROCESS权限；额外锁等待SQL可能需要 PROCESS、performance_schema/sys 的读取权限。
 3. 准备102个不同的隔离用户及102笔 PENDING 订单，账户行已初始化。前两个用于50并发重复、乱序；其余100用于不同用户同时支付。用户在测试期间不得有其他积分业务。每笔订单对应正确的 Stripe sandbox Checkout Session、金额、币种、商户、payment intent 与支付事实。准备完后暂停自动回调投递，确保测试前没有到账；本脚本是这批事件的唯一投递方。
 4. 每个订单准备一份原始 sandbox `checkout.session.completed` 或 `checkout.session.async_payment_succeeded` JSON。乱序订单再准备独立 event ID 的 `checkout.session.async_payment_failed`、`checkout.session.expired` JSON，均指向同一 Session。必须包含 `livemode:false`。后两项是隔离环境的故障注入事件；不能假装同一实际支付既成功又失败。
 5. 渠道查询必须能返回准备好的权威事实：可选真实 Stripe Sandbox（会受供应商限流影响），或在隔离测试专用构建中注入可控 Stripe 网关，保留签名校验、Inbox和数据库事务。不能给生产代码添加跳过验签的开关。伪造一个 paid JSON 并不能让真实渠道查询认可付款；没有匹配渠道事实，测试应失败或等待超时，而不是视为通过。

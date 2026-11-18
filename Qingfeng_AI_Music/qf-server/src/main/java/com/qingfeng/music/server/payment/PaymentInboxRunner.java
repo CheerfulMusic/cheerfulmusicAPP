@@ -12,21 +12,35 @@ public class PaymentInboxRunner {
     private static final org.slf4j.Logger log=org.slf4j.LoggerFactory.getLogger(PaymentInboxRunner.class);
     private final PayPalPaymentService paypal;
     private final java.util.List<VerifiedPaymentProcessor> processors;
-    private int nextProcessor;
+    private final java.util.concurrent.atomic.AtomicInteger nextProcessor=new java.util.concurrent.atomic.AtomicInteger();
     private final java.util.concurrent.ExecutorService workers;
     private final java.util.function.LongSupplier monotonicClock;
     private final java.util.Map<String,Long> lastWarnings=new java.util.HashMap<>();
-    private final java.util.concurrent.atomic.AtomicBoolean polling=new java.util.concurrent.atomic.AtomicBoolean();
+    private final java.util.List<java.util.concurrent.atomic.AtomicBoolean> polling;
     private final java.util.concurrent.atomic.AtomicBoolean reconciling=new java.util.concurrent.atomic.AtomicBoolean();
     private final java.util.concurrent.atomic.AtomicBoolean stopping=new java.util.concurrent.atomic.AtomicBoolean();
     @org.springframework.beans.factory.annotation.Autowired
+    public PaymentInboxRunner(PayPalPaymentService paypal,java.util.List<VerifiedPaymentProcessor> processors,
+            @org.springframework.beans.factory.annotation.Value("${qingfeng.payment.inbox.worker-concurrency:4}") int concurrency){
+        this(paypal,processors,newWorkers(concurrency),System::nanoTime,concurrency);
+    }
+    private static java.util.concurrent.ExecutorService newWorkers(int concurrency){
+        if(concurrency<1||concurrency>32)throw new IllegalArgumentException("Payment concurrency must be 1..32");
+        return java.util.concurrent.Executors.newFixedThreadPool(concurrency+1,r->{var thread=new Thread(r,"payment-inbox-worker");thread.setDaemon(true);return thread;});
+    }
     public PaymentInboxRunner(PayPalPaymentService paypal,java.util.List<VerifiedPaymentProcessor> processors){
-        this(paypal,processors,java.util.concurrent.Executors.newFixedThreadPool(2,r->{var thread=new Thread(r,"payment-inbox-worker");thread.setDaemon(true);return thread;}));
+        this(paypal,processors,newWorkers(1));
     }
     PaymentInboxRunner(PayPalPaymentService paypal,java.util.List<VerifiedPaymentProcessor> processors,java.util.concurrent.ExecutorService workers){
         this(paypal,processors,workers,System::nanoTime);
     }
     PaymentInboxRunner(PayPalPaymentService paypal,java.util.List<VerifiedPaymentProcessor> processors,java.util.concurrent.ExecutorService workers,java.util.function.LongSupplier monotonicClock){
+        this(paypal,processors,workers,monotonicClock,1);
+    }
+    PaymentInboxRunner(PayPalPaymentService paypal,java.util.List<VerifiedPaymentProcessor> processors,
+            java.util.concurrent.ExecutorService workers,java.util.function.LongSupplier monotonicClock,int concurrency){
+        if(concurrency<1||concurrency>32)throw new IllegalArgumentException("Payment concurrency must be 1..32");
+        this.polling=java.util.stream.IntStream.range(0,concurrency).mapToObj(i->new java.util.concurrent.atomic.AtomicBoolean()).toList();
         this.paypal=paypal;this.processors=java.util.List.copyOf(processors);
         this.workers=java.util.Objects.requireNonNull(workers);
         this.monotonicClock=java.util.Objects.requireNonNull(monotonicClock);
@@ -35,14 +49,13 @@ public class PaymentInboxRunner {
     }
     public PaymentInboxRunner(PayPalPaymentService paypal){this(paypal,java.util.List.of(paypal));}
     @Scheduled(fixedDelayString="${qingfeng.payment.inbox.scan-ms:1000}")
-    public void runOnce(){submit("poll",polling,this::pollBatch);}
+    public void runOnce(){for(var lane:polling)submit("poll",lane,this::pollBatch);}
     void pollBatch(){
         // Rotate across providers; a busy channel cannot consume every polling turn.
         int idle=0;
         var failedProviders=new java.util.HashSet<String>();
         for(int attempts=0;attempts<10&&!processors.isEmpty()&&idle<processors.size();attempts++){
-            var processor=processors.get(nextProcessor++%processors.size());
-            if(nextProcessor==Integer.MAX_VALUE)nextProcessor=0;
+            var processor=processors.get(nextProcessor.getAndUpdate(i->i+1==processors.size()?0:i+1));
             String provider=processor.provider();
             if(failedProviders.contains(provider)){idle++;continue;}
             try{if(processor.processNextEvent())idle=0;else idle++;}
@@ -62,7 +75,7 @@ public class PaymentInboxRunner {
         }
     }
     private void submit(String stage,java.util.concurrent.atomic.AtomicBoolean running,Runnable task){
-        // At most one task of each kind is queued/running. Provider HTTP never blocks the shared Spring scheduler.
+        // At most one task per polling lane and one reconciliation task is queued/running. Provider HTTP never blocks the shared Spring scheduler.
         if(!running.compareAndSet(false,true))return;
         try{workers.execute(()->{try{task.run();}catch(RuntimeException failed){failure(stage,"ALL",failed);}finally{running.set(false);}});}
         catch(java.util.concurrent.RejectedExecutionException rejected){

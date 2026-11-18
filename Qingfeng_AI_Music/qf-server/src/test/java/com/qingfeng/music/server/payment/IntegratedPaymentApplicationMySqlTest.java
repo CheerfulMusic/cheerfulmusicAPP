@@ -175,7 +175,7 @@ class IntegratedPaymentApplicationMySqlTest {
     static Map<String,Object> configuration(){
         Map<String,Object> values=new LinkedHashMap<>();
         values.put("spring.datasource.url",url);values.put("spring.datasource.username",user);values.put("spring.datasource.password",password);values.put("spring.datasource.driver-class-name","com.mysql.cj.jdbc.Driver");
-        values.put("spring.datasource.hikari.maximum-pool-size",16);values.put("spring.datasource.hikari.connection-init-sql","SET SESSION innodb_lock_wait_timeout=5");
+        values.put("spring.datasource.hikari.maximum-pool-size",16);values.put("spring.datasource.hikari.connection-init-sql","SET SESSION innodb_lock_wait_timeout=5, time_zone='+00:00'");
         values.put("spring.flyway.target",String.valueOf(APPLICATION_SCHEMA_TARGET));values.put("spring.flyway.clean-disabled",true);values.put("spring.sql.init.mode","never");values.put("server.address","127.0.0.1");values.put("server.port",0);
         values.put("qingfeng.credits.writer-fence.enabled",true);values.put("qingfeng.credits.writer-fence.expected-database",database);values.put("qingfeng.credits.writer-fence.expected-port",23316);values.put("qingfeng.credits.enabled",true);
         values.put("qingfeng.stripe.enabled",true);values.put("qingfeng.stripe.accepting-new-orders",true);values.put("qingfeng.stripe.environment","sandbox");values.put("qingfeng.stripe.account-id",ACCOUNT);values.put("qingfeng.stripe.api-key","sk_test_integrated_offline_fixture");values.put("qingfeng.stripe.webhook-secret",SECRET);
@@ -1084,6 +1084,94 @@ class IntegratedPaymentApplicationMySqlTest {
         assertEquals(1,number("SELECT COUNT(*) FROM credit_ledger WHERE reference_id=? AND entry_type='CREDIT'","payment:"+p.order()));
         assertEquals(100,number("SELECT SUM(amount) FROM credit_ledger WHERE owner_id=?",buyer.creatorId()));
         assertEquals(1,number("SELECT COUNT(*) FROM p0_credit_batch WHERE reference=?","payment:"+p.order()));
+    }
+
+    @Test @Order(33) void fiftyDuplicateCallbacksHundredOwnersAndContendedDebitsKeepInnoDbFundsExact() throws Exception {
+        var countersBefore=lockCounters();
+        var duplicate=pending(owner());SESSIONS.put(duplicate.session(),session(duplicate.session(),duplicate.order(),true));
+        String event="evt_"+unique();
+        var pool=Executors.newFixedThreadPool(100);
+        var httpTimes=java.util.Collections.synchronizedList(new ArrayList<Long>());
+        var debitTimes=java.util.Collections.synchronizedList(new ArrayList<Long>());
+        try {
+            var start=new CountDownLatch(1);var duplicateCalls=new ArrayList<Future<?>>();
+            for(int n=0;n<50;n++)duplicateCalls.add(pool.submit(()->{
+                awaitDownload(start);long began=System.nanoTime();
+                try{accepted("checkout.session.completed",duplicate.session(),event);}catch(Exception e){throw new IllegalStateException(e);}
+                httpTimes.add(System.nanoTime()-began);
+            }));
+            start.countDown();for(var f:duplicateCalls)f.get(40,TimeUnit.SECONDS);
+            drainParallel();
+            assertEquals(100,ledger.balance(duplicate.owner().creatorId()));
+            assertEquals(1,number("SELECT COUNT(*) FROM payment_webhook_inbox WHERE event_id=?",event));
+            assertEquals(1,number("SELECT COUNT(*) FROM credit_ledger WHERE reference_id=?","payment:"+duplicate.order()));
+            // Distinct event IDs for the SAME paid session must also be idempotent.
+            for(int n=0;n<5;n++)accepted("checkout.session.completed",duplicate.session(),"evt_"+unique());
+            accepted("checkout.session.async_payment_failed",duplicate.session(),"evt_"+unique());
+            accepted("checkout.session.expired",duplicate.session(),"evt_"+unique());drainParallel();
+            assertEquals("PAID",db.queryForObject("SELECT status FROM payment_order WHERE id=?",String.class,duplicate.order()));
+            assertEquals(100,ledger.balance(duplicate.owner().creatorId()));
+
+            var buyers=new ArrayList<Paid>();
+            for(int n=0;n<100;n++){
+                var p=pending(owner());SESSIONS.put(p.session(),session(p.session(),p.order(),true));buyers.add(p);
+            }
+            var release=new CountDownLatch(1);var payments=new ArrayList<Future<?>>();
+            for(var p:buyers)payments.add(pool.submit(()->{
+                awaitDownload(release);long began=System.nanoTime();
+                try{accepted("checkout.session.completed",p.session(),"evt_"+unique());}catch(Exception e){throw new IllegalStateException(e);}
+                httpTimes.add(System.nanoTime()-began);
+            }));
+            release.countDown();for(var f:payments)f.get(40,TimeUnit.SECONDS);drainParallel();
+            var debitRelease=new CountDownLatch(1);var debits=new ArrayList<Future<?>>();
+            for(var p:buyers)debits.add(pool.submit(()->{
+                awaitDownload(debitRelease);long began=System.nanoTime();ledger.debit(p.owner().creatorId(),5,"load-debit:"+unique());debitTimes.add(System.nanoTime()-began);
+            }));
+            debitRelease.countDown();for(var f:debits)f.get(40,TimeUnit.SECONDS);
+            for(var p:buyers){
+                assertEquals(95,ledger.balance(p.owner().creatorId()));
+                assertEquals(1,number("SELECT COUNT(*) FROM credit_ledger WHERE entry_type='CREDIT' AND reference_id=?","payment:"+p.order()));
+                assertEquals(100,number("SELECT original FROM p0_credit_batch WHERE reference=?","payment:"+p.order()));
+            }
+            var wins=new java.util.concurrent.atomic.AtomicInteger();var denied=new java.util.concurrent.atomic.AtomicInteger();
+            var contested=new CountDownLatch(1);var competing=new ArrayList<Future<?>>();
+            for(int n=0;n<50;n++)competing.add(pool.submit(()->{
+                awaitDownload(contested);
+                try{ledger.debit(duplicate.owner().creatorId(),3,"contended:"+unique());wins.incrementAndGet();}
+                catch(DomainException expected){assertEquals("INSUFFICIENT_CREDITS",expected.code());denied.incrementAndGet();}
+            }));
+            contested.countDown();for(var f:competing)f.get(40,TimeUnit.SECONDS);
+            assertEquals(33,wins.get());assertEquals(17,denied.get());assertEquals(1,ledger.balance(duplicate.owner().creatorId()));
+        } finally {pool.shutdownNow();assertTrue(pool.awaitTermination(15,TimeUnit.SECONDS));}
+        var after=lockCounters();assertEquals(countersBefore.get("Innodb_deadlocks"),after.get("Innodb_deadlocks"),"Even internally recovered deadlocks are failures");
+        assertTrue(after.get("Uptime")>=countersBefore.get("Uptime"));
+        System.out.println("PAYMENT_LOAD_RESULT callback_samples="+httpTimes.size()+" callback_p99_ms="+p99Millis(httpTimes)
+            +" distinct_owner_debit_samples="+debitTimes.size()+" debit_p99_ms="+p99Millis(debitTimes)
+            +" row_lock_waits_delta="+(after.get("Innodb_row_lock_waits")-countersBefore.get("Innodb_row_lock_waits"))
+            +" row_lock_time_ms_delta="+(after.get("Innodb_row_lock_time")-countersBefore.get("Innodb_row_lock_time"))
+            +" deadlocks_delta="+(after.get("Innodb_deadlocks")-countersBefore.get("Innodb_deadlocks")));
+    }
+    private static double p99Millis(List<Long> samples){var sorted=samples.stream().sorted().toList();return sorted.get((int)Math.ceil(sorted.size()*.99)-1)/1_000_000d;}
+    private static Map<String,Long> lockCounters(){
+        var result=new HashMap<String,Long>();
+        var monitoring=new JdbcTemplate(new DriverManagerDataSource(url,required("MONITOR_USER"),required("MONITOR_PASSWORD")));
+        monitoring.queryForList("SHOW GLOBAL STATUS WHERE Variable_name IN ('Innodb_row_lock_waits','Innodb_row_lock_time','Uptime')")
+          .forEach(r->result.put((String)r.get("Variable_name"),Long.parseLong((String)r.get("Value"))));
+        var deadlocks=monitoring.queryForMap("SELECT COUNT,STATUS FROM information_schema.INNODB_METRICS WHERE NAME='lock_deadlocks'");
+        assertEquals("enabled",deadlocks.get("STATUS"));
+        result.put("Innodb_deadlocks",((Number)deadlocks.get("COUNT")).longValue());return result;
+    }
+    private static void drainParallel() throws Exception {
+        var runner=new PaymentInboxRunner(paypal,List.of(stripe,paypal),4);
+        try{
+            long deadline=System.nanoTime()+TimeUnit.SECONDS.toNanos(40);
+            while(System.nanoTime()<deadline){
+                runner.runOnce();
+                if(number("SELECT COUNT(*) FROM payment_webhook_inbox WHERE status IN ('PENDING','PROCESSING') AND next_attempt_at<=CURRENT_TIMESTAMP")==0)return;
+                Thread.sleep(25);
+            }
+            fail("Parallel payment workers failed to settle due deliveries");
+        }finally{runner.stop();}
     }
 
 }

@@ -2,7 +2,9 @@
 -- Capture before/after; compute DELTA, never treat lifetime totals as test results.
 SHOW GLOBAL STATUS WHERE Variable_name IN
  ('Innodb_row_lock_time','Innodb_row_lock_waits','Innodb_row_lock_current_waits',
-  'Innodb_row_lock_time_max','Innodb_deadlocks','Uptime');
+  'Innodb_row_lock_time_max','Uptime');
+-- MySQL 8.0 deadlock count comes from INNODB_METRICS, not an Innodb_deadlocks status variable.
+SELECT NAME,COUNT,STATUS FROM information_schema.INNODB_METRICS WHERE NAME='lock_deadlocks';
 -- row_lock_time is milliseconds. Mean wait = delta(time)/delta(waits).
 -- This is global, so isolate other workloads. Do not FLUSH STATUS during a run.
 

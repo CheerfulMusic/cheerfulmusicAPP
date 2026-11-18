@@ -16,6 +16,16 @@ class PaymentRateLimitIsolationTest {
         for(int i=1;i<600;i++)assertTrue(filter.allow("payment-webhook:/api/public/paypal/webhook",600));
         var blocked=new MockHttpServletResponse();filter.doFilter(new MockHttpServletRequest("POST","/api/public/paypal/webhook"),blocked,(q,s)->fail("limit bypass"));assertEquals(429,blocked.getStatus());
     }
+    @Test void stripeUsesItsOwnBucketEvenWhenOrdinaryWritesAreExhausted()throws Exception{
+        var filter=new ApiRateLimitFilter(Clock.systemUTC(),null,3);
+        for(int i=0;i<60;i++)assertTrue(filter.allow("write:127.0.0.1",60));
+        for(int i=0;i<3;i++){
+            var request=new MockHttpServletRequest("POST","/api/public/stripe/webhook");request.setRemoteAddr("127.0.0.1");
+            var response=new MockHttpServletResponse();filter.doFilter(request,response,(q,s)->((jakarta.servlet.http.HttpServletResponse)s).setStatus(204));assertEquals(204,response.getStatus());
+        }
+        var blocked=new MockHttpServletResponse();filter.doFilter(new MockHttpServletRequest("POST","/api/public/stripe/webhook"),blocked,(q,s)->fail("Stripe ingress is still bounded"));assertEquals(429,blocked.getStatus());
+        var other=new MockHttpServletResponse();filter.doFilter(new MockHttpServletRequest("POST","/api/public/paypal/webhook"),other,(q,s)->((jakarta.servlet.http.HttpServletResponse)s).setStatus(204));assertEquals(204,other.getStatus());
+    }
     @Test void sharedRateStoreOutageDoesNotCallApplication()throws Exception{
         var filter=new ApiRateLimitFilter(Clock.systemUTC(),(key,limit)->{throw new IllegalStateException("offline");});var response=new MockHttpServletResponse();
         filter.doFilter(new MockHttpServletRequest("POST","/api/public/paypal/webhook"),response,(q,s)->fail("unprotected request"));assertEquals(503,response.getStatus());

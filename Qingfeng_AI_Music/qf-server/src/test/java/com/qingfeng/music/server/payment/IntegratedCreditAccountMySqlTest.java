@@ -35,6 +35,8 @@ import static org.junit.jupiter.api.Assertions.*;
 class IntegratedCreditAccountMySqlTest {
     private static final String ACCOUNT="acct_refund_offline",ENV="sandbox",PROVIDER="STRIPE";
     private static JdbcTemplate db;
+    private static com.zaxxer.hikari.HikariDataSource source;
+    @AfterAll static void closePool(){if(source!=null)source.close();}
     private static TransactionTemplate tx;
     private static JdbcFencedCreditsLedger ledger;
     private static final Set<String> OWNERS=ConcurrentHashMap.newKeySet();
@@ -58,7 +60,9 @@ class IntegratedCreditAccountMySqlTest {
         String database=required("P0_INTEGRATED_CREDITS_MYSQL_DATABASE"),url=required("P0_INTEGRATED_CREDITS_MYSQL_URL");
         if(!database.matches("p0_integrated_credits_20261112r[0-9]+")||!url.matches("jdbc:mysql://127\\.0\\.0\\.1:23316/"+database+"(?:\\?.*)?"))
             throw new IllegalStateException("Only a new explicitly isolated refund schema is permitted");
-        var source=new DriverManagerDataSource(url,required("P0_INTEGRATED_CREDITS_MYSQL_USER"),required("P0_INTEGRATED_CREDITS_MYSQL_PASSWORD"));
+        source=new com.zaxxer.hikari.HikariDataSource();source.setJdbcUrl(url);
+        source.setUsername(required("P0_INTEGRATED_CREDITS_MYSQL_USER"));source.setPassword(required("P0_INTEGRATED_CREDITS_MYSQL_PASSWORD"));
+        source.setMaximumPoolSize(16);source.setMinimumIdle(2);source.setConnectionTimeout(10000);
         db=new JdbcTemplate(source);
         try(var connection=source.getConnection();var statement=connection.createStatement()){
             try(var identity=statement.executeQuery("SELECT VERSION(),@@server_uuid,@@datadir,@@port,@@bind_address,DATABASE(),CURRENT_ROLE(),@@transaction_isolation")){
@@ -348,7 +352,7 @@ class IntegratedCreditAccountMySqlTest {
         try{
             var first=pool.submit(()->tx.executeWithoutResult(s->{db.queryForList("SELECT id FROM creator WHERE id=? FOR UPDATE",inviter);inviterHeld.countDown();await(inviteeCredited);ledger.credit(inviter,FirstLoginCredits.AMOUNT,"first-login:"+inviter);releaseInviter.countDown();}));
             assertTrue(inviterHeld.await(10,TimeUnit.SECONDS));var second=pool.submit(()->tx.executeWithoutResult(s->login.grant(invitee)));
-            first.get(10,TimeUnit.SECONDS);second.get(10,TimeUnit.SECONDS);assertEquals(19,FirstLoginCredits.AMOUNT);assertEquals(39,ledger.balance(inviter));assertEquals(19,ledger.balance(invitee));assertEquals(0,releaseInviter.getCount());
+            first.get(10,TimeUnit.SECONDS);second.get(10,TimeUnit.SECONDS);assertEquals(19,FirstLoginCredits.AMOUNT);assertEquals(38,ledger.balance(inviter));assertEquals(19,ledger.balance(invitee));assertEquals(0,releaseInviter.getCount());
         }finally{pool.shutdownNow();assertTrue(pool.awaitTermination(10,TimeUnit.SECONDS));}
     }
 
