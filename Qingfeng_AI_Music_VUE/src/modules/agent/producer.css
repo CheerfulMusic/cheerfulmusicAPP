@@ -96,7 +96,11 @@
 .agent-click-sparks .pointer-ribbon{position:fixed;height:4px;border-radius:80%;pointer-events:none;transform-origin:left center;background:white;box-shadow:0 0 5px 2px #f4ceff,0 0 12px 3px #a86aee;animation:ribbon-fade .35s both}
 .agent-click-sparks>span::after{content:'✦';position:absolute;left:-20px;top:-20px;width:40px;height:40px;display:grid;place-items:center;border:2px solid #fff;border-radius:50%;background:#cf9eff55;color:white;box-shadow:0 0 12px 6px #c385fa;animation:click-halo .65s ease-out both}
 @keyframes ribbon-fade{to{opacity:0}}@keyframes click-halo{from{transform:scale(.3)}to{transform:scale(1.9);opacity:0}}
-@media(prefers-reduced-motion:reduce){.pointer-ribbon,.agent-click-sparks>span::after{display:none}}
+@media(prefers-reduced-motion:reduce){
+  .agent-click-sparks{display:block}
+  .agent-click-sparks .pointer-ribbon,.agent-click-sparks>span>*{display:none}
+  .agent-click-sparks>span::after{animation:none;width:18px;height:18px;left:-9px;top:-9px;font-size:12px;box-shadow:0 0 0 2px #935adb}
+}
 
 .listen-details .timed-line{padding:8px;border-left:2px solid #d8c7eb}
 .timed-line time{font-size:10px;color:#9380ac;margin-right:8px}

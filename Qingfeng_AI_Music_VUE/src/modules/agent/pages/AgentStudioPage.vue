@@ -45,7 +45,7 @@ const avatar = useUserAvatar()
 function avatarImageFailed(event: Event) { const img = event.target as HTMLImageElement; if (!img.src.endsWith('/brand/music-person.svg')) img.src = '/brand/music-person.svg' }
 
 const profileAvatar = useProfileAvatar()
-const { sparks, burst, trail, move } = useMusicClicks()
+const { sparks, trail, layerTarget } = useMusicClicks()
 const { appearance, style: appearanceStyle, reset: resetAppearance } = useChatAppearance()
 const avatarGeneration = useAvatarGeneration(avatar.refresh, refreshCredits)
 const avatarDialog = ref(false)
@@ -296,8 +296,8 @@ onBeforeUnmount(() => { avatarDisposed = true; window.removeEventListener('qingf
 </script>
 
 <template>
-  <div class="agent-studio agent-playful agent-producer" :style="appearanceStyle" @click.capture="burst" @pointermove="move">
-    <Teleport to="body"><div class="agent-click-sparks" aria-hidden="true"><i v-for="dot in trail" :key="dot.id" class="pointer-ribbon" :style="{left:dot.x+'px',top:dot.y+'px',width:dot.length+'px',transform:'rotate('+dot.angle+'rad)'}"/> <span v-for="spark in sparks" :key="spark.id" :style="{ left: `${spark.x}px`, top: `${spark.y}px` }"><i/><b/></span></div></Teleport>
+  <div class="agent-studio agent-playful agent-producer" :style="appearanceStyle">
+    <Teleport :to="layerTarget"><div class="agent-click-sparks" aria-hidden="true"><i v-for="dot in trail" :key="dot.id" class="pointer-ribbon" :style="{left:dot.x+'px',top:dot.y+'px',width:dot.length+'px',transform:'rotate('+dot.angle+'rad)'}"/> <span v-for="spark in sparks" :key="spark.id" :style="{ left: `${spark.x}px`, top: `${spark.y}px` }"><i/><b/></span></div></Teleport>
     <div class="agent-scenery" aria-hidden="true"><span/><span/><span/></div>
     <section class="agent-conversation" :aria-label="tr('音乐创作对话', 'Music conversation')">
       <header class="agent-conversation-head">
