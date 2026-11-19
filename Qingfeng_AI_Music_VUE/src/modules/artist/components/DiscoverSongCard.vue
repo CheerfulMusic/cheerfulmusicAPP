@@ -41,9 +41,7 @@ defineEmits<{ play: [] }>()
 .discover-song { min-width: 0; }
 .discover-art { position: relative; overflow: hidden; aspect-ratio: 1; border-radius: 8px; background: #f1f2f4; }
 .discover-art > img { display: block; width: 100%; height: 100%; object-fit: cover; }
-.discover-play { position: absolute; inset: auto 10px 10px auto; display: grid; place-items: center; width: 36px; height: 36px; padding: 0; border: 0; border-radius: 50%; background: #fff; color: #28282c; box-shadow: 0 2px 12px #0002; }
-.discover-play:hover, .discover-play[aria-pressed="true"] { background: #f44336; color: #fff; }
-.discover-play svg { width: 15px; height: 15px; }
+.discover-play { position: absolute; inset: auto 10px 10px auto; padding: 0; }
 .discover-duration { position: absolute; inset: auto auto 12px 10px; padding: 2px 6px; border-radius: 4px; color: #fff; background: #18232bbf; font-size: .75rem; font-variant-numeric: tabular-nums; }
 .discover-song-heading { display: flex; align-items: baseline; gap: 8px; margin-top: 10px; }
 .discover-song-heading h3 { overflow: hidden; margin: 0; font: inherit; font-size: .98rem; font-weight: 650; line-height: 1.5; text-overflow: ellipsis; white-space: nowrap; }
@@ -58,6 +56,6 @@ defineEmits<{ play: [] }>()
   .discover-song-heading h3 { font-size: .89rem; }
   .discover-song-genre { display: none; }
   .discover-song-meta { flex-wrap: wrap; gap: 0 5px; font-size: .76rem; }
-  .discover-play { width: 34px; height: 34px; inset: auto 8px 8px auto; }
+  .discover-play { inset: auto 8px 8px auto; }
 }
 </style>
