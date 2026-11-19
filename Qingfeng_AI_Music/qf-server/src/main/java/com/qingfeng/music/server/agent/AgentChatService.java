@@ -30,7 +30,7 @@ public final class AgentChatService {
                            String taskId,String continuationKey,Instant createdAt,boolean workResolved,boolean versionResolved) {
         boolean automatic(){return continuationKey!=null;}
     }
-    private static final String CONTINUE="继续已安排的操作";
+    static final String CONTINUE="继续已安排的操作";
     private static final Set<String> SOCIAL=Set.of("share","revoke_share","like","unlike","play","download","cancel");
     private static final Set<String> CLIENT_MEDIA=Set.of("play","download");
     private static final Set<String> ACTIVE=Set.of("QUEUED","SUBMITTING","RUNNING","SAVING","SUBMISSION_UNKNOWN");
@@ -68,7 +68,9 @@ public final class AgentChatService {
             SongCard current=current(owner);
             Pending pending=pending(history);
             boolean confirmation=AgentChatPolicy.confirmed(text)&&pending!=null&&!pending.automatic();
-            boolean continuation=CONTINUE.equals(text)&&pending!=null&&pending.automatic();
+            boolean continuation=CONTINUE.equals(text);
+            if(continuation && (pending==null || !pending.automatic() || !key.equals(pending.continuationKey())))
+                throw new DomainException("AGENT_PLAN_STALE","之前的操作计划已停止，请重新说明要执行的操作。");
             String authorizedText=text;
             if(pending==null&&text.matches("(?:需要|好的|可以|继续)[。！!]*")&&recentStoryboardRequest(history))
                 authorizedText="查看当前作品的 MV 分镜方案和费用";

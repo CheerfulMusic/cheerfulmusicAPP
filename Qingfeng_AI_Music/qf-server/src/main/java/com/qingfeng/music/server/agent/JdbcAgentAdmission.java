@@ -42,7 +42,9 @@ public final class JdbcAgentAdmission implements AgentAdmission {
                 if("ABANDONED".equals(row.get("state")))throw denied("AGENT_REQUEST_ABANDONED","本轮尚未执行，积分或对话次数已退回，请重新发送消息。");
                 // A lost completion acknowledgement must replay the committed turn, never re-plan it.
                 String turnId=UUID.nameUUIDFromBytes((conversation+":"+key).getBytes(StandardCharsets.UTF_8)).toString();
-                if(count("SELECT COUNT(*) FROM agent_message WHERE id=? AND conversation_id=? AND role='user' AND state='DONE'",turnId,conversation)>0){
+                var states=jdbc.queryForList("SELECT state FROM agent_message WHERE id=? AND conversation_id=? AND role='user'",String.class,turnId,conversation);
+                if(states.contains("FAILED"))throw denied("REQUEST_KEY_CONFLICT","这条请求已经结束。请核对已有作品和任务后继续。");
+                if(states.contains("DONE")){
                     jdbc.update("UPDATE agent_request_admission SET state='DONE',updated_at=CURRENT_TIMESTAMP WHERE id=?",id);return new Ticket(id,owner,true);
                 }
                 throw new DomainException("AGENT_TURN_IN_PROGRESS","原请求正在处理或等待核对。请查看当前作品和任务；不会自动重新执行这条请求。");
@@ -54,7 +56,16 @@ public final class JdbcAgentAdmission implements AgentAdmission {
                 ||count("SELECT COUNT(*) FROM agent_request_admission WHERE creator_id=? AND state IN ('RESERVED','RUNNING') AND lease_until>?",owner,Timestamp.from(now))>=limits.userConcurrent())throw denied("AGENT_BUSY","当前对话请求较多，请稍后再试；本次尚未开始执行。");
             if(count("SELECT COUNT(*) FROM agent_request_admission WHERE created_at>?",Timestamp.from(now.minusSeconds(60)))>=limits.globalRpm()
                 ||count("SELECT COUNT(*) FROM agent_request_admission WHERE creator_id=? AND created_at>?",owner,Timestamp.from(now.minusSeconds(60)))>=limits.userRpm())throw denied("AGENT_RATE_LIMITED","对话请求较频繁，请稍后再试；本次尚未开始执行。");
-            long reservation=com.qingfeng.music.agent.application.ExactLyricEdit.parse(text)!=null?0:limits.reservationTokens();
+            boolean continuation = AgentChatService.CONTINUE.equals(text.trim());
+            if (continuation) {
+                var latest = jdbc.queryForList("SELECT role,content_json FROM agent_message WHERE conversation_id=? AND kind='TEXT' ORDER BY seq DESC LIMIT 1", conversation);
+                if (latest.isEmpty() || !"assistant".equals(latest.get(0).get("role")))
+                    throw denied("AGENT_PLAN_STALE","续办计划已失效。");
+                var plan = json.readTree(String.valueOf(latest.get(0).get("content_json")));
+                if (!"waiting".equals(plan.path("kind").asText()) || !key.equals(plan.path("continuationKey").asText()))
+                    throw denied("AGENT_PLAN_STALE","续办计划已失效。");
+            }
+            long reservation=continuation || com.qingfeng.music.agent.application.ExactLyricEdit.parse(text)!=null?0:limits.reservationTokens();
             if(reservation>0&&count("SELECT COALESCE(SUM(reserved_tokens),0) FROM agent_request_admission WHERE usage_day=?",day)>limits.globalDailyTokens()-reservation)
                 throw denied("AGENT_TOKEN_BUDGET_EXCEEDED","平台今日对话容量已满，请稍后再试；本次未扣积分。");
             boolean paidTurn=false, purchasedPack=false;

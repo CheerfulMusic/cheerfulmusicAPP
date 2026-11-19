@@ -55,6 +55,29 @@ beforeEach(() => {
 afterEach(() => { for (const wrapper of wrappers.splice(0)) wrapper.unmount(); vi.useRealTimers() })
 
 describe('真实 Agent 对话与作品', () => {
+  it('keeps a draft when conversation initialization fails twice', async () => {
+    api.current.mockRejectedValue(new Error('offline'))
+    const { wrapper } = await page()
+    const input = wrapper.get('textarea')
+    await input.setValue('unfinished lyrics')
+    await input.trigger('keydown', {key:'Enter'})
+    await flushPromises()
+    expect(input.element.value).toBe('unfinished lyrics')
+    expect(api.send).not.toHaveBeenCalled()
+  })
+  it('unlocks the composer after a terminal request conflict', async () => {
+    const { wrapper } = await page()
+    api.send.mockRejectedValueOnce(new ApiError('ended',409,'REQUEST_KEY_CONFLICT'))
+    const input = wrapper.get('textarea')
+    await input.setValue('first')
+    await input.trigger('keydown', {key:'Enter'})
+    await flushPromises()
+    await input.setValue('second')
+    await input.trigger('keydown', {key:'Enter'})
+    await flushPromises()
+    expect(api.send).toHaveBeenCalledTimes(2)
+    expect(api.send.mock.calls[0]![2]).not.toBe(api.send.mock.calls[1]![2])
+  })
   it('对话控制歌词跟随与循环，不额外调用生成接口',async()=>{
     const {wrapper,player}=await page(state({songCard:song}))
     api.send.mockResolvedValueOnce(state({songCard:song,action:'disable_lyric_follow',messages:[message('已发送关闭歌词跟随操作',80)]}))

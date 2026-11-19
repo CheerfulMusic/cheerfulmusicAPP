@@ -150,8 +150,10 @@ async function send(extra?: string) {
   const text = (extra ?? input.value).trim()
   if (!text) return
   notice.value = ''
-  if (!extra) input.value = ''
-  const result = await conversation.send(text, locale.value)
+  const draft = input.value
+  const result = await conversation.send(text, locale.value, () => {
+    if (extra === undefined && input.value === draft) input.value = ''
+  })
   await handleResult(result)
 }
 function runCommand(command: AgentCommand) {

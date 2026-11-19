@@ -52,6 +52,16 @@ class AgentAdmissionTest {
         assertThrows(DomainException.class,()->gate.heartbeat(first));assertThrows(DomainException.class,()->gate.acquire("o0","c0",key,"你好",null));
         assertFalse(gate.acquire("o1","c1",key(),"你好",null).replay());
     }
+    @Test void failedTurnIsTerminalOnRetry() {
+        var gate=gate(limits(1,60,1_000_000));
+        String key=key();
+        var ticket=gate.acquire("o0","c0",key,"你好",null);
+        gate.start(ticket); gate.finish(ticket,false);
+        String turn=UUID.nameUUIDFromBytes(("c0:"+key).getBytes(StandardCharsets.UTF_8)).toString();
+        jdbc.update("INSERT INTO agent_message(id,conversation_id,role,state) VALUES(?,'c0','user','FAILED')",turn);
+        assertEquals("REQUEST_KEY_CONFLICT",assertThrows(DomainException.class,
+            ()->gate.acquire("o0","c0",key,"你好",null)).code());
+    }
     @Test void lostCompletionAcknowledgementRecoversOnlyCommittedTurn(){
         var gate=gate(limits(1,60,1_000_000));String key=key();var ticket=gate.acquire("o0","c0",key,"你好",null);gate.start(ticket);
         String turn=UUID.nameUUIDFromBytes(("c0:"+key).getBytes(StandardCharsets.UTF_8)).toString();jdbc.update("INSERT INTO agent_message(id,conversation_id,role,state) VALUES(?,'c0','user','DONE')",turn);
@@ -77,6 +87,18 @@ class AgentAdmissionTest {
         return gate(new AgentAdmission.Limits(8,1,60,60,1000000,7248,1024,Duration.ofSeconds(60))).withCredits(ledger);
     }
     void useFree(AgentAdmission gate){var t=gate.acquire("o0","c0",key(),"你好",null);gate.start(t);gate.finish(t,true);}
+    @Test void onlyIssuedContinuationResumesWithoutSpendingAnotherTurn() {
+        var ledger=billing(); var gate=paidGate(ledger); useFree(gate);
+        String continuation=key();
+        jdbc.execute("ALTER TABLE agent_message ADD (kind VARCHAR(16), seq BIGINT, content_json TEXT)");
+        jdbc.update("INSERT INTO agent_message(id,conversation_id,role,state,kind,seq,content_json) VALUES(?,?,?,?,?,?,?)",
+            key(),"c0","assistant","DONE","TEXT",1,"{\"kind\":\"waiting\",\"continuationKey\":\""+continuation+"\"}");
+        assertThrows(DomainException.class,()->gate.acquire("o0","c0",key(),AgentChatService.CONTINUE,null,true));
+        var ticket=gate.acquire("o0","c0",continuation,AgentChatService.CONTINUE,null);
+        gate.start(ticket); gate.finish(ticket,true);
+        assertTrue(gate.acquire("o0","c0",continuation,AgentChatService.CONTINUE,null).replay());
+        assertEquals(3,ledger.balance("o0"));
+    }
     @Test void paidTurnRequiresConsentDebitsOnceAndReplaysWithoutAnotherCharge(){
         var ledger=billing();var gate=paidGate(ledger);useFree(gate);String key=key();
         assertEquals("AGENT_CHAT_PAYMENT_REQUIRED",assertThrows(DomainException.class,()->gate.acquire("o0","c0",key,"继续聊",null)).code());
