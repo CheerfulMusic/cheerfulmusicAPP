@@ -162,14 +162,14 @@
   background:#f3eef9 linear-gradient(180deg,#f7f2ffc9,#fff9ffe0 55%,#f0eaf9c4);
 }
 .agent-shell .music-shell-body{
-  background:linear-gradient(180deg,#f3ecffd6,#faf7ffe8 53%,#ece6f8c9),url('./assets/inspiration-galaxy.png') center/cover no-repeat;
+  background:#e5ddf7 url('./assets/studio-landscape.png') center / cover no-repeat;
 }
 .agent-producer.agent-studio{color:#333e36}
 .agent-producer .agent-conversation{
-  background:#f6ecff url('./assets/conversation-background.png') center/100% 100% no-repeat;
+  background:rgb(255 255 255 / 15%);
   border:1px solid #ffffffdb;
 }
-.agent-producer .producer-tools,.agent-producer .producer-collection>section,.agent-producer .agent-preview{border:1px solid #dedfd6;border-radius:18px;background:#fffefbec;box-shadow:0 4px 18px #343c2f09}
+.agent-producer .producer-tools,.agent-producer .producer-collection>section,.agent-producer .agent-preview{border:1px solid #ffffffbf;border-radius:18px;background:rgb(255 254 255 / 78%);box-shadow:0 4px 18px #343c2f09}
 .agent-producer .agent-preview .record-summary{display:grid;grid-template-columns:minmax(80px,.9fr) minmax(0,1.15fr);gap:14px;align-items:center;margin:4px 0 12px}
 .agent-producer .record-summary .agent-album{width:100%;padding:0 16% 0 0;margin:0;box-sizing:border-box}
 .agent-producer .record-summary .agent-album-art{border-radius:12px}
@@ -189,4 +189,9 @@
   .agent-shell .consumer-header-inner{width:calc(100% - 20px);gap:4px}
   .agent-shell .consumer-brand{min-width:0;flex-shrink:1}
   .agent-shell .consumer-brand img{max-width:100%;object-fit:contain}
+}
+
+.agent-producer .producer-tools{backdrop-filter:none;background:linear-gradient(180deg,#fffdfbe0 0%,#fffdfbd9 55%,#fffdfb50 100%)}
+@media(max-width:1180px){
+  .agent-shell .music-shell-body{background-attachment:fixed;background-position:45% center}
 }
