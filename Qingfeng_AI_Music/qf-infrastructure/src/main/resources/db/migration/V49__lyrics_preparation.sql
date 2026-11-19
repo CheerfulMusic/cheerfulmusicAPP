@@ -27,8 +27,8 @@ SET @qf_lyrics_job_ddl = CONCAT('CREATE TABLE lyrics_preparation_job (
  next_attempt_at TIMESTAMP(6) NOT NULL,
  last_submit_at TIMESTAMP(6) NULL,
  error_code VARCHAR(80) NULL,
- created_at TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
- updated_at TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+ created_at TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+ updated_at TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
  CONSTRAINT fk_preparation_asset FOREIGN KEY(asset_id) REFERENCES media_asset(id),
  CONSTRAINT fk_preparation_work FOREIGN KEY(work_id) REFERENCES music_work(id),
  INDEX ix_lyrics_preparation_queue (state,next_attempt_at)

@@ -75,7 +75,7 @@ AGENT_ALLOWANCE_MIGRATION_SHA256 = '8ce991cea50af971ca6d748c1a37b304a8ee11d7969f
 FEATURE_MIGRATION_SHA256 = {
     "V47__music_video_projects.sql": "b4a25044d77906e891d56632f037a68a1ba5dad2073a129188b11b8bcba8a08a",
     "V48__phone_binding.sql": "09aeadab869727486bac96ac9200ad47310132763ad49020c0abe7844b359ca3",
-    "V49__lyrics_preparation.sql": "9fc1d6ff28f7836ff122f2495005d3edb691a2154a2df12341fa5620b76036ec",
+    "V49__lyrics_preparation.sql": "c0cde3e30b4e2bac3b3690c70dfd1125abced7045f1163ec9ee33a5c214616b4",
 }
 
 class GateError(ValueError):
