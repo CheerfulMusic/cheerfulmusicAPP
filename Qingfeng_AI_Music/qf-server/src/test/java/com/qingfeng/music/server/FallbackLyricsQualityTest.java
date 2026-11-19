@@ -5,6 +5,7 @@ import com.qingfeng.music.lyrics.application.FallbackLyricsWriter;
 import com.qingfeng.music.lyrics.application.LyricsWriter;
 import com.qingfeng.music.work.api.WorkApi;
 import java.time.Instant;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -41,5 +42,17 @@ class FallbackLyricsQualityTest {
         assertEquals("QWEN", result.source());
         verify(primary, times(1)).write(WORK, "zh-CN");
         verify(backup, times(1)).write(WORK, "zh-CN");
+    }
+
+    @Test void aDraftWrittenByTheBackupIsRepairedByTheSameProviderOnly() {
+        var primary = mock(LyricsWriter.class);
+        var backup = mock(LyricsWriter.class);
+        when(backup.source()).thenReturn("QWEN");
+        var request = new LyricsWriter.SectionRepair(WORK, "zh-CN", "", "",
+            new LyricsWriter.Draft("小碗", "[Verse]\n门口的小碗", null, "QWEN"), Map.of(1, "Chorus"));
+        when(backup.repairSections(request)).thenReturn(Map.of(1, "妈，也留一瓣给自己"));
+        assertEquals(Map.of(1, "妈，也留一瓣给自己"), new FallbackLyricsWriter(primary, backup).repairSections(request));
+        verifyNoInteractions(primary);
+        verify(backup).repairSections(request);
     }
 }

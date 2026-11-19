@@ -280,6 +280,18 @@ class QuickCreationIntegrationTest {
         assertEquals(before,writer.calls.get());
     }
 
+    @Test void quickRetryChecksAnOriginalRequestThatIsStillPending(){
+        var flow=start();
+        var entry=repository.find(work.id(),flow.id()).orElseThrow();
+        assertTrue(requests.claim(owner,work.id(),entry.lyricsKey(),"offline-original"));
+        jdbc.update("UPDATE quick_creation SET status='FAILED',error_code='LYRICS_SUBMISSION_UNKNOWN' WHERE id=?",flow.id());
+        int before=writer.calls.get();
+        assertEquals("LYRICS_REQUEST_PENDING",assertThrows(DomainException.class,()->service.retry(owner,work.id(),flow.id())).code());
+        assertEquals(entry.lyricsKey(),repository.find(work.id(),flow.id()).orElseThrow().lyricsKey());
+        assertEquals(before,writer.calls.get());
+        requests.failed(work.id(),entry.lyricsKey(),"LYRICS_STRUCTURE_MISMATCH");
+    }
+
     @Test void changingOrDeletingWorkStopsQueuedCreationAndOtherOwnersCannotReadIt(){
         var flow=start();String stranger=identity.create().creatorId();
         assertThrows(DomainException.class,()->service.get(stranger,work.id(),flow.id()));

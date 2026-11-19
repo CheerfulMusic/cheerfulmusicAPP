@@ -162,6 +162,7 @@ public final class OpenAiLyricsWriter implements LyricsWriter {
             "text",Map.of("format",Map.of("type","text")),"reasoning",Map.of("effort","medium"),"max_output_tokens",8000,"store",false,"stream",false));
         try {
             var response=LyricsHttpTransport.post(client,endpoint,key,body,LyricsQualityReview.remaining(deadline));
+            if (response.statusCode() == 408 || response.statusCode() == 504) throw new HttpTimeoutException("Lyrics refinement timed out");
             if(response.statusCode()!=200){LOG.log(System.Logger.Level.WARNING,"Lyrics refinement incomplete: work={0}, status={1}",workId,response.statusCode());throw LyricsQualityReview.unverified();}
             return LyricsWritingPrompt.refined(draft,outputText(response.body()));
         } catch (DomainException | tools.jackson.core.JacksonException invalid) {
@@ -170,8 +171,18 @@ public final class OpenAiLyricsWriter implements LyricsWriter {
         }
     }
 
+    @Override public Map<Integer, String> repairSections(SectionRepair request) {
+        var properties = new LinkedHashMap<String, Object>();
+        request.missing().keySet().forEach(index -> properties.put(index.toString(), string(5000)));
+        String body = json.writeValueAsString(Map.of("model", model, "instructions", LyricsSectionRepair.instructions(request.language()),
+            "input", List.of(Map.of("role", "user", "content", json.writeValueAsString(LyricsSectionRepair.material(request)))),
+            "text", Map.of("format", Map.of("type", "json_schema", "name", "missing_lyric_sections", "strict", true, "schema", object(properties))),
+            "reasoning", Map.of("effort", "low"), "max_output_tokens", 4000, "store", false, "stream", false));
+        return LyricsSectionRepair.post(client, endpoint, key, body, request, this::outputText);
+    }
+
     private Draft parse(String body,boolean photo) {
-        return parseSong(json.readTree(outputText(body)), photo, photo ? source() : null);
+        return parseSong(LyricsWritingPrompt.jsonObject(outputText(body)), photo, photo ? source() : null);
     }
 
     private String outputText(String body) {
@@ -210,7 +221,7 @@ public final class OpenAiLyricsWriter implements LyricsWriter {
     private static String requiredText(JsonNode node, String name, int max, boolean nonblank) {
         var field = node.path(name);
         if (!field.isString()) throw incomplete();
-        String value = field.asText().trim();
+        String value = name.equals("lyrics") ? com.qingfeng.music.lyrics.application.LyricsFormatting.unwrap(field.asText()) : field.asText().trim();
         if (value.length() > max || nonblank && value.isBlank()) throw incomplete();
         return value;
     }

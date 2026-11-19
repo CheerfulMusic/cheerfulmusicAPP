@@ -40,13 +40,14 @@ public final class QwenLyricsWriter implements LyricsWriter {
             var response=LyricsHttpTransport.post(client,endpoint,key,body,fullNew
                 ?LyricsQualityReview.remaining(deadline,LyricsQualityReview.GENERATION_TIMEOUT):Duration.ofSeconds(90));
             if(response.statusCode()!=200)LOG.log(System.Logger.Level.WARNING,"Lyrics provider HTTP failure: work={0}, status={1}",work.id(),response.statusCode());
+            if(response.statusCode()==408||response.statusCode()==504)throw new HttpTimeoutException("Lyrics generation timed out");
+            if(response.statusCode()==502)throw new java.io.IOException("Lyrics gateway outcome unknown");
             if(response.statusCode()==401||response.statusCode()==403)throw new DomainException("LYRICS_PROVIDER_UNAVAILABLE","歌词服务认证失败，请检查后端千问密钥");
             if(response.statusCode()==402)throw new DomainException("LYRICS_PROVIDER_UNAVAILABLE","千问余额不足，请充值后重试");
             if(response.statusCode()!=200)throw new DomainException("LYRICS_PROVIDER_UNAVAILABLE","歌词生成服务暂时繁忙，请稍后再试");
-            var choice=json.readTree(response.body()).path("choices").path(0);
-            if(!choice.path("finish_reason").asText().equals("stop"))throw new DomainException("LYRICS_RESPONSE_INVALID","歌词生成结果不完整，请稍后重新发起");
-            var result=json.readTree(choice.path("message").path("content").asText());
+            var result=LyricsWritingPrompt.jsonObject(outputText(response.body()));
             var plan=result.path("plan");
+            if(!result.path("title").isString()||!result.path("lyrics").isString())throw invalidResponse();
             if(!fullNew)return new Draft(result.path("title").asText(""),result.path("lyrics").asText(""),
                 plan.isObject()?json.treeToValue(plan,com.qingfeng.music.settings.CreativePlan.class):null);
             var draft=OpenAiLyricsWriter.parseSong(result,false,null);
@@ -69,13 +70,32 @@ public final class QwenLyricsWriter implements LyricsWriter {
             "enable_thinking",false,"max_tokens",4000,"stream",false));
         try {
             var response=LyricsHttpTransport.post(client,endpoint,key,body,LyricsQualityReview.remaining(deadline));
+            if(response.statusCode()==408||response.statusCode()==504)throw new HttpTimeoutException("Lyrics refinement timed out");
             if(response.statusCode()!=200)throw LyricsQualityReview.unverified();
-            var choice=json.readTree(response.body()).path("choices").path(0);
-            if(!"stop".equals(choice.path("finish_reason").asText())||!choice.path("message").path("content").isString())throw LyricsQualityReview.unverified();
-            return LyricsWritingPrompt.refined(draft,choice.path("message").path("content").asText());
+            return LyricsWritingPrompt.refined(draft,outputText(response.body()));
         } catch (DomainException | tools.jackson.core.JacksonException invalid) {
             // A failed refinement must never trigger a second provider generation or return the initial draft.
             throw LyricsQualityReview.unverified();
         }
+    }
+
+    @Override public Map<Integer, String> repairSections(SectionRepair request) {
+        String body = json.writeValueAsString(Map.of("model", model, "messages", List.of(
+            Map.of("role", "system", "content", LyricsSectionRepair.instructions(request.language())),
+            Map.of("role", "user", "content", json.writeValueAsString(LyricsSectionRepair.material(request)))),
+            "response_format", Map.of("type", "json_object"), "enable_thinking", false, "max_tokens", 4000, "stream", false));
+        return LyricsSectionRepair.post(client, endpoint, key, body, request, this::outputText);
+    }
+
+    private String outputText(String body) {
+        var choice = json.readTree(body).path("choices").path(0);
+        var message = choice.path("message");
+        if (!"stop".equals(choice.path("finish_reason").asText()) || !message.path("content").isString()
+                || !message.path("refusal").asText("").isBlank()) throw invalidResponse();
+        return message.path("content").asText();
+    }
+
+    private static DomainException invalidResponse() {
+        return new DomainException("LYRICS_RESPONSE_INVALID", "歌词生成结果不完整，请稍后重新发起");
     }
 }
