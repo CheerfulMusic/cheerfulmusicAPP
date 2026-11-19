@@ -1,13 +1,15 @@
-# 北京时间 19:00 发布
+# 人人是歌手每日正式发布
 
-两名开发者都推送到 origin/main。脚本在 fetch 后固定提交，在独立工作树调用该提交的 release_gate.py，使用项目固定的 Node、离线 npm/Maven 缓存和 Java 17。演练会通过 SSH 读取线上 JAR 内的提交号。相同版本直接退出。缺少提交标记、候选版本未包含线上版本或包含数据库迁移文件变更时停止，迁移走专项发布。
+Windows 任务 QingfengMusic-DailyRelease 在北京时间每天 19:00 运行，使用 yth 登录会话。这台电脑需要开机、联网并保持登录。错过时段不补发。任务的下一次运行时间和状态可用 Get-ScheduledTaskInfo QingfengMusic-DailyRelease 查看。
 
-在本地 main 工作树运行下面的命令，替换为发布账户实际使用的 SSH 别名、仓库内已准备好的依赖缓存和 JDK 路径。如项目测试需要隔离 MySQL，传入已有的 --cohort 清单（安装入口对应 -Cohort）。使用 Python 3.11 或更高版本。部署账户需要非交互 SSH、已核对的主机密钥，以及执行服务器发布步骤所需的 sudo 权限。
+入口 daily-release.py 先拉取远端并固定 origin/main，通过本机已配置的阿里云 Workbench 和 ECS 执行助手访问深圳生产实例。当前版本相同就退出。候选必须包含线上提交。数据库迁移变化转专项发布。
 
-    python scripts/daily-release.py --host music-prod --java-home "D:\jdk17" --cache-root ".cache"
-    .\scripts\install-daily-release.ps1 -SshHost music-prod -JavaHome "D:\jdk17" -CacheRoot ".cache"
+有新提交时，在短路径下的临时 Git 副本中运行候选提交的 release_gate.py。复用项目的 Node/npm/Maven 缓存，临时启动两个绑定回环地址的 MySQL 8.0.46 实例（23316、57346），验证实例身份并为本次测试创建独立数据库。前端测试和构建、后端 Maven verify 通过后，上传 JAR、提交清单、构建契约及校验信息。
 
-第一条单次演练，第二条注册每天 19:00 演练。正式授权后在安装命令加 -Publish；已有同名任务时确认替换。任务使用当前已登录的 Windows 账户，机器需保持开机且时区为北京时间，错过不补跑。可通过任务计划程序禁用。每次执行日志位于 %LOCALAPPDATA%\QingfengMusic\release-logs，失败返回非零退出码。
+服务器流程使用项目共享发布锁，校验当前版本和数据库迁移记录，备份当前版本、配置、数据库，在隔离 MySQL 中实际恢复备份并核对。登记产物批准信息后，使用线上启动守卫校验新旧版本，再原子切换、重启并检查服务、首页、关键页面和资源。切换失败会尝试恢复上版及原批准策略。深圳服务器保存备份和发布回执。Windows 运行日志位于 %LOCALAPPDATA%\QingfengMusic\release-logs。
 
-正式模式校验上传 JAR、检查当前版本、运行备份服务并校验新备份，保存旧 JAR 和服务配置。切换后检查本机健康状态和公网首页，失败则切回旧目录并复查。涉及本次业务变更的专门验收需按变更内容补充。备份校验覆盖归档可读性，完整数据库恢复演练沿用项目已有流程。
-可在服务器安装可执行的 /usr/local/sbin/qingfeng-release-smoke，接收当前提交号，执行本次功能的只读验收；非零退出触发回退。
+本机安装参数（从 main 工作树运行，CacheRoot 指向主工作区的共享私有缓存）：
+
+    .\scripts\install-daily-release.ps1 -Scratch D:\it_ai\qfr -JavaHome D:\jdk17 -CacheRoot "$env:USERPROFILE\Documents\ChatGPT\人人是歌手\.cache" -Publish
+
+手工演练使用同一 Python 入口和对应的 --scratch、--java-home、--cache-root 参数，省略 --publish。加 --verify-current 可在版本相同时执行完整本地测试与构建。独立执行演练时避开定时窗口。安装账户须能使用 Git、项目依赖缓存、Python 3.11+、PyMySQL、Maven、Workbench 和原有深圳 ECS 执行助手。
