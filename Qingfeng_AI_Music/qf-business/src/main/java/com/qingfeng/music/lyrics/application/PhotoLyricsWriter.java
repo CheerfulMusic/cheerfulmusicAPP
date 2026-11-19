@@ -5,5 +5,7 @@ import java.util.List;
 
 @FunctionalInterface
 public interface PhotoLyricsWriter {
+    LyricsStructure DEFAULT_STRUCTURE = new LyricsStructure("ABCD", false);
+
     LyricsWriter.Draft write(WorkApi.Work work, String language, List<byte[]> jpegs, LyricsWriter.Direction direction);
 }

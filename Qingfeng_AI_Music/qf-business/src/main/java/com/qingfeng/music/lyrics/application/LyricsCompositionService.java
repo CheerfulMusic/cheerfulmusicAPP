@@ -72,7 +72,7 @@ public final class LyricsCompositionService {
     }
     public LyricsApi.Revision composePhoto(String owner,String work,long expectedVersion,String key,String language,List<byte[]> photos){
         if(photos.isEmpty())throw new DomainException("INVALID_LYRICS_REQUEST","请选择 1–5 张照片。");
-        return compose(owner,work,expectedVersion,key,language,"",null,new LyricsStructure(null,false),writer,List.copyOf(photos),null);
+        return compose(owner,work,expectedVersion,key,language,"",null,PhotoLyricsWriter.DEFAULT_STRUCTURE,writer,List.copyOf(photos),null);
     }
     private LyricsApi.Revision compose(String owner,String work,long expectedVersion,String key,String language,String instructions,
                                        String baseRevisionId,LyricsStructure structure,LyricsWriter selectedWriter,List<byte[]> photos,
@@ -82,10 +82,11 @@ public final class LyricsCompositionService {
         String requirements=instructions==null?"":instructions.trim();
         if(requirements.length()>1000)throw new DomainException("INVALID_LYRICS_REQUEST","修改要求不能超过1000字");
         String structureInstruction=structure.instruction();
-        String material=expectedVersion+"\n"+language+"\n"+requirements+"\n"+(baseRevisionId==null?"":baseRevisionId)+structureInstruction;
+        boolean photoRequest=!photos.isEmpty();
+        // A server-side photo default must not change the fingerprint of an existing request.
+        String material=expectedVersion+"\n"+language+"\n"+requirements+"\n"+(baseRevisionId==null?"":baseRevisionId)+(photoRequest?"":structureInstruction);
         if(structure.customSections()!=null)material+="\n"+structure.templateId();
         if(rewriteSource!=null)material+="\nrewrite-all:"+fingerprint(rewriteSource);
-        boolean photoRequest=!photos.isEmpty();
         if(photos.size()==1) {
             // Preserve the fingerprint used by existing single-photo requests.
             material+="\nphoto:"+digest(photos.get(0));

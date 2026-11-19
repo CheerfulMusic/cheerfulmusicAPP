@@ -82,7 +82,7 @@ public final class ChatPhotoLyricsWriter implements PhotoLyricsWriter {
                 Map.of("url", "data:image/jpeg;base64," + Base64.getEncoder().encodeToString(photo))));
         }
         var input = new LinkedHashMap<String, Object>(Map.of("model", model, "messages", List.of(
-            Map.of("role", "system", "content", LyricsWritingPrompt.system(language) + PHOTO_BRIEF),
+            Map.of("role", "system", "content", LyricsWritingPrompt.system(language) + PHOTO_BRIEF + DEFAULT_STRUCTURE.instruction()),
             Map.of("role", "user", "content", content)), "response_format", Map.of("type", "json_object"),
             "max_tokens", 3800, "stream", false));
         if ("DOUBAO".equals(source)) input.put("thinking", Map.of("type", "disabled"));

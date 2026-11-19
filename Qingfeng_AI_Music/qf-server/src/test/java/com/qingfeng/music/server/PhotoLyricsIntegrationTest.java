@@ -96,7 +96,23 @@ class PhotoLyricsIntegrationTest {
         }
 
         private static LyricsWriter.Draft photoDraft(String source) {
-                return new LyricsWriter.Draft("海边","[Verse]\n风吹过海面",
+                return new LyricsWriter.Draft("海边","""
+                    [Verse]
+                    风吹过海面
+                    [Pre-Chorus]
+                    把脚印留在沙滩
+                    [Chorus]
+                    和你一起看海
+                    [Interlude]
+                    [Pre-Chorus]
+                    等天边慢慢亮起来
+                    [Chorus]
+                    和你一起看海
+                    [Bridge]
+                    明天也记得这一刻
+                    [Chorus]
+                    和你一起看海
+                    """,
                     new CreativePlan("",ARRANGEMENT,"","温暖民谣","Warm folk","AUTO","两个人坐在海边。"),source);
         }
     }
@@ -121,6 +137,9 @@ class PhotoLyricsIntegrationTest {
         String revision=field(created,"id");
         assertFalse(JSON.readTree(created.body()).path("confirmed").asBoolean());
         assertEquals("DOUBAO",field(created,"source"));
+        assertEquals("ABCD",field(created,"templateId"));
+        assertFalse(JSON.readTree(created.body()).path("chorusFirst").asBoolean());
+        PhotoLyricsWriter.DEFAULT_STRUCTURE.validate(field(created,"lyrics"));
         assertEquals(revision,field(upload(session,root,key,png),"id"));
         assertEquals(409,upload(session,root,key,photo(Color.BLUE)).statusCode());
         assertEquals(initialCalls+1,photoCalls.get());
@@ -170,6 +189,8 @@ class PhotoLyricsIntegrationTest {
         byte[] image = photo(Color.BLUE);
         var result = upload(session, root, key, image);
         assertEquals("QWEN", field(result, "source"));
+        assertEquals("ABCD", field(result, "templateId"));
+        PhotoLyricsWriter.DEFAULT_STRUCTURE.validate(field(result, "lyrics"));
         assertEquals(field(result, "id"), field(upload(session, root, key, image), "id"));
         assertEquals(primaryBefore + 1, photoCalls.get());
         assertEquals(fallbackBefore + 1, qwenPhotoCalls.get());
