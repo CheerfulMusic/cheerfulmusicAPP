@@ -2427,6 +2427,7 @@ export const english: Record<string, string> = {
   "热门": "Popular",
   "热门创作者": "Popular creators",
   "推荐歌单": "Recommended playlists",
+  "圣诞": "Christmas",
   "全部风格": "All genres",
   "其他风格": "Other genres",
   "搜索结果：{query}": "Search results for {query}",

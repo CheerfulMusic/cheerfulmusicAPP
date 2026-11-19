@@ -8,14 +8,14 @@ import PlaybackIcon from '../../../shared/ui/PlaybackIcon.vue'
 import ArtistAvatar from '../components/ArtistAvatar.vue'
 import DiscoverSongCard from '../components/DiscoverSongCard.vue'
 import DiscoverShelf from '../components/DiscoverShelf.vue'
-import { discoverGenres, discoverPlaylistArt, shelfCover, type DiscoverShelfTrack, type PublishedShelfTrack } from '../model/discover-shelves'
+import { discoverGenres, shelfCover, type DiscoverShelfTrack, type PublishedShelfTrack } from '../model/discover-shelves'
 import PlaylistDetails from '../../home/components/PlaylistDetails.vue'
-import { usePreviewPlaylists } from '../../home/model/playlists'
-import { usePreviewTracks } from '../../home/model/tracks'
+import { usePreviewPlaylists, type PreviewPlaylist } from '../../home/model/playlists'
+import { usePreviewTracks, type PreviewTrack } from '../../home/model/tracks'
 import { accountState } from '../../../shared/identity/account-state'
 import { logtoState } from '../../../shared/identity/logto-state'
 import {
-  getDiscoverShelves, listDiscoverSongs, publicAvatarUrl, publicTrack, recordDiscoverPlay,
+  getDiscoverShelves, getPublicArtist, listDiscoverSongs, publicAvatarUrl, publicTrack, recordDiscoverPlay,
   type DiscoverArtist, type DiscoverShelves, type DiscoverSong,
 } from '../api/artist'
 import coast from '../../../assets/discover/editorial/coast.webp'
@@ -24,6 +24,11 @@ import mistyGarden from '../../../assets/discover/carousel-misty-garden.webp'
 import airportGuitar from '../../../assets/discover/carousel-airport-guitar.webp'
 import seaStacks from '../../../assets/discover/carousel-sea-stacks.webp'
 import countryside from '../../../assets/discover/carousel-countryside.webp'
+import mandopopCover from '../../../assets/discover/playlists/mandopop.webp'
+import electronicCover from '../../../assets/discover/playlists/electronic.webp'
+import globalPopCover from '../../../assets/discover/playlists/global-pop.webp'
+import discoCover from '../../../assets/discover/playlists/disco.webp'
+import christmasCover from '../../../assets/discover/playlists/christmas.webp'
 
 const tabs = [
   { id: 'latest', label: '最新发布' },
@@ -40,9 +45,17 @@ const latestShelfSize = 32
 const heroRotationMs = 30_000
 const streetlightSongId = '0f831f4b-1f3f-4d14-b6cf-b33534863622'
 const replacedHeroSongId = 'acfaa9d5-ce74-477f-9db8-d3700311a26c'
+const christmasArtistId = '308036ef-8bef-486f-88cc-8266e5797768'
+const christmasSongId = 'd4b1ec5a-e68f-43e6-8624-226981ecef5c'
+const previewPlaylistCovers = new Map([
+  ['mandopop', mandopopCover],
+  ['electronic', electronicCover],
+  ['global-pop', globalPopCover],
+])
 const player = usePlayer()
-const previewPlaylists = usePreviewPlaylists({ includeHouseReleases: true })
+const previewPlaylists = usePreviewPlaylists()
 const previewTracks = usePreviewTracks()
+const christmasTracks = ref<PreviewTrack[]>([])
 const tab = ref<(typeof tabs)[number]['id']>('latest')
 const genre = ref('')
 const search = ref('')
@@ -147,26 +160,43 @@ const visibleArtists = computed(() => {
   }])).values())
   return showAllArtists.value ? found : found.slice(0, 3)
 })
-function samplePlaylist(id: string, title: string, subtitle: string, cover?: string) {
-  const tracks = previewTracks.value.filter(track => track.filters.includes(id))
-  const [firstTrack] = tracks
-  return firstTrack && { id, title: t(title), subtitle, cover: cover ?? firstTrack.cover, tracks }
-}
-const playlists = computed(() => {
-  const house = previewPlaylists.value.find(playlist => playlist.id === 'house')
-  return [
-    ...previewPlaylists.value.filter(playlist => playlist.id !== 'house'),
-    samplePlaylist('disco', 'Disco', 'DISCO', discoverPlaylistArt.disco),
-    house && { ...house, cover: discoverPlaylistArt.house },
-    samplePlaylist('folk', '民谣', 'FOLK', discoverPlaylistArt.folk),
-    samplePlaylist('instrumental', '轻音乐', 'INSTRUMENTAL'),
-  ].filter(playlist => playlist !== undefined)
-})
+const playlists = computed<PreviewPlaylist[]>(() => [
+  ...previewPlaylists.value.flatMap(playlist => {
+    const cover = previewPlaylistCovers.get(playlist.id)
+    return cover ? [{ ...playlist, cover }] : []
+  }),
+  {
+    id: 'disco', title: t('Disco'), subtitle: 'DISCO', cover: discoCover,
+    tracks: previewTracks.value.filter(track => track.filters.includes('disco')),
+  },
+  {
+    id: 'christmas', title: t('圣诞'), subtitle: 'CHRISTMAS', cover: christmasCover,
+    tracks: christmasTracks.value,
+  },
+])
 const visiblePlaylists = computed(() => {
   const keyword = query.value.toLocaleLowerCase()
-  return playlists.value.filter(playlist => playlist.tracks.length && playlist.title.toLocaleLowerCase().includes(keyword))
+  return playlists.value.filter(playlist => [playlist.title, playlist.subtitle]
+    .some(label => label.toLocaleLowerCase().includes(keyword)))
 })
 const playlistDetails = computed(() => playlists.value.find(playlist => playlist.id === selectedPlaylist.value))
+
+async function loadChristmasPlaylist() {
+  try {
+    const artist = await getPublicArtist(christmasArtistId)
+    const song = artist.songs.find(item => item.id === christmasSongId)
+    if (disposed || !song) return
+    christmasTracks.value = [{
+      ...publicTrack(christmasArtistId, song), authoredTitle: true,
+      recipient: '', subtitle: artist.stageName, category: t('圣诞'), filters: ['christmas'],
+      tags: [t('圣诞')], style: 'Christmas', occasion: '',
+      durationSeconds: 0, description: '', quote: '',
+      publication: { artistId: christmasArtistId, stageName: artist.stageName, song },
+    }]
+  } catch {
+    // Keep the playlist available if its public release cannot be loaded.
+  }
+}
 
 async function loadShelves() {
   const attempt = ++shelvesRequest
@@ -347,7 +377,7 @@ async function play(row: DiscoverShelfTrack, queue: DiscoverShelfTrack[] = rows.
   }
 }
 
-onMounted(() => { initializeHeroRotation(); void loadEditorial() })
+onMounted(() => { initializeHeroRotation(); void loadEditorial(); void loadChristmasPlaylist() })
 onBeforeUnmount(() => {
   disposed = true; ++request; ++editorialRequest; ++shelvesRequest
   clearInterval(heroTimer)
@@ -419,8 +449,10 @@ onBeforeUnmount(() => {
         <section id="discover-playlists" class="discover-playlists" aria-labelledby="discover-playlists-title">
           <header class="discover-section-heading"><h2 id="discover-playlists-title">{{ t('推荐歌单') }}</h2><RouterLink to="/#inspiration">{{ t('查看更多') }} <span aria-hidden="true">›</span></RouterLink></header>
           <ul v-if="visiblePlaylists.length" class="discover-playlist-tiles">
-            <li v-for="playlist in visiblePlaylists" :key="playlist.id"><button type="button" @click="selectedPlaylist = playlist.id">
-              <img :src="playlist.cover" alt="" loading="lazy" width="400" height="160">
+            <li v-for="playlist in visiblePlaylists" :key="playlist.id"><button type="button"
+              :class="{ 'discover-playlist-disco': playlist.id === 'disco', 'discover-playlist-christmas': playlist.id === 'christmas' }"
+              @click="selectedPlaylist = playlist.id">
+              <img :src="playlist.cover" alt="" loading="lazy">
               <span class="discover-playlist-title"><strong>{{ playlist.title }}</strong><span>{{ t('{count} 首作品', { count: playlist.tracks.length }) }}</span></span>
             </button></li>
           </ul>
