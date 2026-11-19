@@ -51,17 +51,21 @@ public class PaymentInboxRunner {
     @Scheduled(fixedDelayString="${qingfeng.payment.inbox.scan-ms:1000}")
     public void runOnce(){for(var lane:polling)submit("poll",lane,this::pollBatch);}
     void pollBatch(){
-        // Rotate across providers; a busy channel cannot consume every polling turn.
-        int idle=0;
-        var failedProviders=new java.util.HashSet<String>();
-        for(int attempts=0;attempts<10&&!processors.isEmpty()&&idle<processors.size();attempts++){
-            var processor=processors.get(nextProcessor.getAndUpdate(i->i+1==processors.size()?0:i+1));
-            String provider=processor.provider();
-            if(failedProviders.contains(provider)){idle++;continue;}
-            try{if(processor.processNextEvent())idle=0;else idle++;}
-            catch(RuntimeException unavailable){
-                // Leave durable deliveries recoverable and do not retry a broken channel again in this batch.
-                failedProviders.add(provider);idle++;failure("poll",provider,unavailable);
+        if (processors.isEmpty()) return;
+        // Each lane visits every channel in order, even when other lanes are polling concurrently.
+        int index = nextProcessor.getAndUpdate(i -> (i + 1) % processors.size());
+        var idleProviders = new java.util.HashSet<String>();
+        for (int attempts = 0; attempts < 10 && idleProviders.size() < processors.size(); ) {
+            var processor = processors.get(index);
+            index = (index + 1) % processors.size();
+            String provider = processor.provider();
+            if (idleProviders.contains(provider)) continue;
+            attempts++;
+            try {
+                if (!processor.processNextEvent()) idleProviders.add(provider);
+            } catch (RuntimeException unavailable) {
+                idleProviders.add(provider);
+                failure("poll", provider, unavailable);
             }
         }
     }

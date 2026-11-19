@@ -2,7 +2,7 @@
 # API and worker instances share the SAME approved main DB in real use.
 # Tests use a completely isolated DB and sandbox credentials.
 qingfeng.payment.inbox.scheduler-enabled=true
-qingfeng.payment.inbox.worker-concurrency=4
+qingfeng.payment.inbox.worker-concurrency=8
 qingfeng.payment.inbox.scan-ms=100
 # Reuse a successful structural inspection for up to one second per DB and writer epoch.
 # The ACTIVE gate and opposite-mode order check still run on each call.
