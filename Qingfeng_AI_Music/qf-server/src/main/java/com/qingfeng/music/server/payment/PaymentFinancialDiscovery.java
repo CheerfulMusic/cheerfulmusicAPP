@@ -112,6 +112,8 @@ public final class PaymentFinancialDiscovery {
         JsonNode page=stripeApi.financialPage(stream,start,end,cursor);
         if(!"list".equals(text(page,"object")) || !page.path("data").isArray() || page.path("data").size()>100
                 || !page.path("has_more").isBoolean())throw new IllegalStateException("Incomplete Stripe listing");
+        if(stream.equals("events") && start<clock.instant().minusSeconds(30L*86400).getEpochSecond())
+            throw new IllegalStateException("Stripe event retention exceeded; historical reconciliation required");
         String last="";
         Set<String> seen=new HashSet<>();
         for(JsonNode item:page.path("data")){
@@ -120,13 +122,13 @@ public final class PaymentFinancialDiscovery {
                     || !seen.add(last) || last.equals(cursor))throw new IllegalStateException("Invalid Stripe listing scope or cursor");
             if(stream.equals("events")){
                 if(!last.matches("evt_[A-Za-z0-9_]{1,124}") || !"event".equals(text(item,"object")))throw new IllegalStateException("Invalid Stripe event");
-                if(item.hasNonNull("account") && !stripeApi.merchantId().equals(text(item,"account")))throw new IllegalStateException("Unexpected event account");
+                if(item.has("account") && !item.path("account").isNull() && !stripeApi.merchantId().equals(text(item,"account")))throw new IllegalStateException("Unexpected event account");
                 String type=text(item,"type");
                 if(!type.startsWith("refund.") && !type.startsWith("charge.dispute."))throw new IllegalStateException("Unexpected financial event");
                 stripe.recordPointer(last,type,text(item.path("data").path("object"),"id"));
             }else{
                 boolean refund=stream.equals("refunds");
-                if(!last.matches(refund?"re_[A-Za-z0-9_]{1,125}":"du_[A-Za-z0-9_]{1,125}") || !(refund?"refund":"dispute").equals(text(item,"object")))
+                if(!last.matches(refund?"re_[A-Za-z0-9_]{1,125}":"(?:dp|du)_[A-Za-z0-9_]{1,125}") || !(refund?"refund":"dispute").equals(text(item,"object")))
                     throw new IllegalStateException("Invalid financial resource");
                 stripe.recordPointer(id(stream,last,text(item,"status")),refund?"refund.updated":"charge.dispute.updated",last);
             }

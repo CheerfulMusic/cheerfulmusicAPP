@@ -78,8 +78,10 @@ public final class StripeCheckoutGateway {
 
     private void refreshAccount() {
         JsonNode account=send("GET","/account",null,null);
-        if (!accountId.equals(account.path("id").asString()))
+        if (!accountId.equals(account.path("id").asString())) {
+            accountVerified=false;
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,"Stripe merchant identity mismatch");
+        }
         verifiedCountry=account.path("country").asString("").trim().toUpperCase(java.util.Locale.ROOT);
         verifiedChargesEnabled=account.path("charges_enabled").asBoolean(false);
         purchaseCheckedAt=monotonicClock.getAsLong();
