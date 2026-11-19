@@ -312,7 +312,8 @@
       "source": "com/qingfeng/music/server/web/app/DiscoverEditorialController.java",
       "mappingDeclarations": [
         "@RequestMapping(\"/api/app/discover/editor\")",
-        "@PutMapping(\"/songs/{song}\")"
+        "@PutMapping(\"/songs/{song}\")",
+        "@PutMapping(\"/songs/{song}/{version}/vocal\")"
       ],
       "mode": "native",
       "flows": [
@@ -634,6 +635,7 @@
       "mappingDeclarations": [
         "@RequestMapping(\"/api/public/discover\")",
         "@GetMapping",
+        "@GetMapping(params = \"view=shelves\")",
         "@PostMapping(\"/songs/{song}/{version}/play\")"
       ],
       "mode": "native",

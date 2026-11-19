@@ -241,7 +241,7 @@ onBeforeUnmount(() => {
           </template>
         </div>
       </div>
-      <p v-if="published" class="save-info">{{ t('保存后将同步更新广场和歌手主页的歌曲封面。') }}</p>
+      <p v-if="published" class="save-info">{{ t('保存后将同步更新歌手主页和广场搜索结果里的歌曲封面。') }}</p>
       <p v-if="!state && loading" role="status">{{ t('正在读取封面…') }}</p>
       <p v-if="error" class="notice error" role="alert">{{ t(error) }}</p>
       <button v-if="!state && !loading" type="button" class="button secondary" @click="load">{{ t('重试') }}</button>

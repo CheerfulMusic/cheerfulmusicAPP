@@ -14,7 +14,11 @@ import com.qingfeng.music.media.api.SharedMediaAccess;
 import com.qingfeng.music.server.security.LogtoIdentityService;
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
@@ -53,6 +57,8 @@ public class ArtistProfileService {
                                String genre, long plays) {}
     public record DiscoverArtist(String artistId, String stageName, String avatarKey, long songs, long plays) {}
     public record DiscoverPage(List<DiscoverSong> songs, boolean hasMore, List<DiscoverArtist> artists) {}
+    public record DiscoverShelves(boolean listeningDataAvailable, List<DiscoverSong> today,
+                                 List<DiscoverSong> vocal, Map<String, List<DiscoverSong>> genres) {}
     private record ProfileRow(String creatorId, String publicId, String stageName, String tagline,
                               String avatarKey, String coverKey, String featuredReleaseId, boolean published) {}
 
@@ -80,13 +86,16 @@ public class ArtistProfileService {
             JOIN music_work w ON w.id=r.work_id AND w.owner_id=r.creator_id AND w.deleted_at IS NULL
             WHERE r.creator_id=? AND r.show_on_profile=TRUE
             """;
-    private static final String DISCOVER_RELEASES = """
+    private static final String DISCOVER_JOINS = """
             FROM artist_song_release r
             JOIN artist_profile p ON p.creator_id=r.creator_id AND p.published=TRUE
             JOIN music_work w ON w.id=r.work_id AND w.owner_id=r.creator_id AND w.deleted_at IS NULL
             LEFT JOIN hot_song_metric m ON m.track_id=CONCAT('discover:',r.id)
+            """;
+    private static final String DISCOVER_VISIBLE = """
             WHERE r.show_on_profile=TRUE AND r.discover_published_at IS NOT NULL
             """;
+    private static final String DISCOVER_RELEASES = DISCOVER_JOINS + DISCOVER_VISIBLE;
     // Publish only known genres. The original style text can contain private creation instructions.
     private static final String DISCOVER_GENRE = """
             CASE
@@ -95,10 +104,21 @@ public class ArtistProfileService {
               WHEN w.style LIKE '%摇滚%' OR LOWER(w.style) LIKE '%rock%' THEN 'rock'
               WHEN w.style LIKE '%电子%' OR LOWER(w.style) LIKE '%electronic%' THEN 'electronic'
               WHEN w.style LIKE '%纯音乐%' OR LOWER(w.style) LIKE '%instrumental%' THEN 'instrumental'
+              WHEN w.style LIKE '%欧美流行%' OR LOWER(w.style) LIKE '%western pop%'
+                OR LOWER(w.style) LIKE '%global pop%' OR LOWER(w.style) LIKE '%western-pop%' THEN 'global-pop'
+              WHEN w.style LIKE '%爵士%' OR w.style LIKE '%灵魂乐%' OR LOWER(w.style) LIKE '%jazz%'
+                OR LOWER(w.style) LIKE '%soul%' OR LOWER(w.style) LIKE '%r&b%' THEN 'jazz-soul'
               WHEN w.style LIKE '%流行%' OR LOWER(w.style) LIKE '%pop%' THEN 'pop'
               ELSE 'other'
             END
             """;
+    private static final ZoneId DISCOVER_DAY_ZONE = ZoneId.of("Asia/Shanghai");
+    private static final String DISCOVER_ORDER_NEWEST = " ORDER BY r.discover_published_at DESC,r.id DESC";
+    private static final RowMapper<DiscoverSong> DISCOVER_SONG_ROW = (rs, row) ->
+            new DiscoverSong(rs.getString("public_id"), rs.getString("stage_name"),
+                    new PublicSong(rs.getString("id"), rs.getLong("version"), rs.getString("title"),
+                            rs.getString("cover_id") != null, publicCoverVersion(rs.getString("cover_id"))),
+                    rs.getTimestamp("discover_published_at").toInstant(), rs.getString("genre"), rs.getLong("plays"));
 
     private final JdbcTemplate db;
     private final IdentityApi identity;
@@ -107,6 +127,7 @@ public class ArtistProfileService {
     private final SharedMediaAccess audio;
     private final SharedCoverAccess covers;
     private final com.qingfeng.music.lyrics.playback.PlaybackLyricsRepository playbackLyrics;
+    private volatile Boolean discoverShelfStorageReady;
 
     public ArtistProfileService(JdbcTemplate db, IdentityApi identity, LogtoIdentityService logto,
                                 MediaApi media, SharedMediaAccess audio, SharedCoverAccess covers,
@@ -373,25 +394,36 @@ public class ArtistProfileService {
         if (updated == 0) throw missing();
     }
 
+    @Transactional
+    public void setDiscoverVocal(String releaseId, long version, boolean approved) {
+        if (!discoverShelfStorageReady()) {
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE);
+        }
+        if (!isDiscoverRelease(releaseId, version)) throw missing();
+        if (approved) {
+            db.update("""
+                    INSERT INTO discover_vocal_approval(release_id,release_version) VALUES (?,?)
+                    ON DUPLICATE KEY UPDATE release_id=release_id
+                    """, releaseId, version);
+        } else {
+            db.update("DELETE FROM discover_vocal_approval WHERE release_id=? AND release_version=?", releaseId, version);
+        }
+    }
+
     @Transactional(readOnly = true)
     public DiscoverPage discover(boolean featured, boolean popular, String genre, String query, int offset) {
         int pageSize = 24;
         String keyword = "%" + query.strip().toLowerCase(java.util.Locale.ROOT)
                 .replace("!", "!!").replace("%", "!%").replace("_", "!_") + "%";
         String order = popular ? " ORDER BY plays DESC, r.discover_published_at DESC,r.id DESC"
-                : " ORDER BY r.discover_published_at DESC,r.id DESC";
-        var songs = db.query("""
-                SELECT p.public_id,p.stage_name,r.id,r.version,r.title,r.cover_id,r.discover_published_at,
-                       COALESCE(m.plays,0) AS plays,
-                """ + DISCOVER_GENRE + " AS genre " + DISCOVER_RELEASES
-                + (featured ? " AND r.discover_featured=TRUE" : "") + """
+                : DISCOVER_ORDER_NEWEST;
+        // Keep legacy 'pop' searches inclusive of international pop.
+        String genreFilter = "pop".equals(genre) ? " IN (?, 'global-pop')" : "=?";
+        var songs = discoverSongs("COALESCE(m.plays,0)", (featured ? " AND r.discover_featured=TRUE" : "") + """
                  AND (LOWER(r.title) LIKE ? ESCAPE '!' OR LOWER(p.stage_name) LIKE ? ESCAPE '!')
                  AND (?='' OR
-                """ + DISCOVER_GENRE + "=?)" + order + " LIMIT ? OFFSET ?",
-                (rs, row) -> new DiscoverSong(rs.getString("public_id"), rs.getString("stage_name"),
-                        new PublicSong(rs.getString("id"), rs.getLong("version"), rs.getString("title"),
-                                rs.getString("cover_id") != null, publicCoverVersion(rs.getString("cover_id"))), rs.getTimestamp("discover_published_at").toInstant(),
-                        rs.getString("genre"), rs.getLong("plays")), keyword, keyword, genre, genre, pageSize + 1, offset);
+                """ + DISCOVER_GENRE + genreFilter + ")" + order + " LIMIT ? OFFSET ?",
+                keyword, keyword, genre, genre, pageSize + 1, offset);
         var artists = offset == 0 ? db.query("""
                 SELECT p.public_id,p.stage_name,p.avatar_key,COUNT(*) AS songs,COALESCE(SUM(m.plays),0) AS plays
                 """ + DISCOVER_RELEASES + """
@@ -402,16 +434,71 @@ public class ArtistProfileService {
         return new DiscoverPage(songs.stream().limit(pageSize).toList(), songs.size() > pageSize, artists);
     }
 
-    public void recordDiscoverPlay(String song, long version) {
-        if (db.query("SELECT r.id " + DISCOVER_RELEASES + " AND r.id=? AND r.version=?",
-                (rs, row) -> rs.getString(1), song, version).isEmpty()) throw missing();
-        String track = "discover:" + song;
-        String increment = "UPDATE hot_song_metric SET plays=plays+1,updated_at=CURRENT_TIMESTAMP WHERE track_id=?";
-        if (db.update(increment, track) > 0) return;
+    @Transactional(readOnly = true)
+    public DiscoverShelves discoverShelves() {
+        var genres = new LinkedHashMap<String, List<DiscoverSong>>();
+        for (String genre : List.of("electronic", "global-pop", "folk", "rock", "jazz-soul")) {
+            genres.put(genre, discoverSongs("COALESCE(m.plays,0)", " AND " + DISCOVER_GENRE + "=?"
+                    + DISCOVER_ORDER_NEWEST + " LIMIT 12", genre));
+        }
+        if (!discoverShelfStorageReady()) return new DiscoverShelves(false, List.of(), List.of(), genres);
+
+        var today = queryDiscoverSongs("d.plays", """
+                JOIN discover_daily_play d ON d.release_id=r.id AND d.release_version=r.version AND d.play_day=?
+                """, " ORDER BY d.plays DESC,r.discover_published_at DESC,r.id DESC LIMIT 12",
+                LocalDate.now(DISCOVER_DAY_ZONE));
+        var vocal = discoverSongs("COALESCE(m.plays,0)", """
+                 AND EXISTS (SELECT 1 FROM discover_vocal_approval a
+                             WHERE a.release_id=r.id AND a.release_version=r.version)
+                """ + DISCOVER_ORDER_NEWEST + " LIMIT 12");
+        return new DiscoverShelves(true, today, vocal, genres);
+    }
+
+    private List<DiscoverSong> discoverSongs(String playExpression, String tail, Object... args) {
+        return queryDiscoverSongs(playExpression, "", tail, args);
+    }
+
+    private List<DiscoverSong> queryDiscoverSongs(String playExpression, String join, String tail, Object... args) {
+        return db.query("""
+                SELECT p.public_id,p.stage_name,r.id,r.version,r.title,r.cover_id,r.discover_published_at,
+                """ + playExpression + " AS plays," + DISCOVER_GENRE + " AS genre " + DISCOVER_JOINS + join + DISCOVER_VISIBLE + tail,
+                DISCOVER_SONG_ROW, args);
+    }
+
+    // The app also runs against installations whose Flyway target predates these shelves.
+    private boolean discoverShelfStorageReady() {
+        Boolean ready = discoverShelfStorageReady;
+        if (ready != null) return ready;
         try {
-            db.update("INSERT INTO hot_song_metric(track_id,plays,updated_at) VALUES (?,1,CURRENT_TIMESTAMP)", track);
-        } catch (org.springframework.dao.DuplicateKeyException raced) {
-            db.update(increment, track);
+            db.queryForObject("SELECT COUNT(*) FROM discover_daily_play WHERE 1=0", Long.class);
+            db.queryForObject("SELECT COUNT(*) FROM discover_vocal_approval WHERE 1=0", Long.class);
+            discoverShelfStorageReady = true;
+        } catch (org.springframework.jdbc.BadSqlGrammarException missingTable) {
+            String state = missingTable.getSQLException().getSQLState();
+            if (!"42S02".equals(state) && !"42S04".equals(state)) throw missingTable;
+            discoverShelfStorageReady = false;
+        }
+        return discoverShelfStorageReady;
+    }
+
+    private boolean isDiscoverRelease(String song, long version) {
+        return !db.query("SELECT r.id " + DISCOVER_RELEASES + " AND r.id=? AND r.version=?",
+                (rs, row) -> rs.getString(1), song, version).isEmpty();
+    }
+
+    @Transactional
+    public void recordDiscoverPlay(String song, long version) {
+        if (!isDiscoverRelease(song, version)) throw missing();
+        String track = "discover:" + song;
+        db.update("""
+                INSERT INTO hot_song_metric(track_id,plays,updated_at) VALUES (?,1,CURRENT_TIMESTAMP)
+                ON DUPLICATE KEY UPDATE plays=plays+1,updated_at=CURRENT_TIMESTAMP
+                """, track);
+        if (discoverShelfStorageReady()) {
+            db.update("""
+                    INSERT INTO discover_daily_play(play_day,release_id,release_version,plays) VALUES (?,?,?,1)
+                    ON DUPLICATE KEY UPDATE plays=plays+1
+                    """, LocalDate.now(DISCOVER_DAY_ZONE), song, version);
         }
     }
 

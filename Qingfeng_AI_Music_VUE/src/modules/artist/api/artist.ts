@@ -78,6 +78,13 @@ interface DiscoverPage {
   artists?: DiscoverArtist[]
 }
 
+export interface DiscoverShelves {
+  listeningDataAvailable: boolean
+  today: DiscoverSong[]
+  vocal: DiscoverSong[]
+  genres: Record<string, DiscoverSong[]>
+}
+
 const mine = 'app/artist-profile'
 const publicArtist = (id: string) => `public/artists/${encodeURIComponent(id)}`
 const release = (work: string) => `${mine}/releases/${encodeURIComponent(work)}`
@@ -163,6 +170,11 @@ export function listDiscoverSongs(tab: 'latest' | 'featured' | 'popular', offset
     offset: String(offset), genre, q: query,
   })
   return requestJson<DiscoverPage>(`public/discover?${params}`)
+}
+
+export async function getDiscoverShelves() {
+  const result = await requestJson<DiscoverShelves | DiscoverPage>('public/discover?view=shelves')
+  return 'listeningDataAvailable' in result ? result : undefined
 }
 
 export function recordDiscoverPlay(song: PublishedSong) {

@@ -2,6 +2,7 @@ package com.qingfeng.music.server.web.publicapi;
 
 import com.qingfeng.music.server.artist.ArtistProfileService;
 import com.qingfeng.music.server.artist.ArtistProfileService.DiscoverPage;
+import com.qingfeng.music.server.artist.ArtistProfileService.DiscoverShelves;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Pattern;
@@ -32,10 +33,15 @@ public class DiscoverController {
     public ResponseEntity<DiscoverPage> list(
             @RequestParam(defaultValue = "false") boolean featured,
             @RequestParam(defaultValue = "false") boolean popular,
-            @RequestParam(defaultValue = "") @Pattern(regexp = "|folk|guofeng|rock|electronic|instrumental|pop|other") String genre,
+            @RequestParam(defaultValue = "") @Pattern(regexp = "|folk|guofeng|rock|electronic|instrumental|pop|global-pop|jazz-soul|other") String genre,
             @RequestParam(defaultValue = "") @Size(max = 100) String q,
             @RequestParam(defaultValue = "0") @Min(0) @Max(100000) int offset) {
         return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(profiles.discover(featured, popular, genre, q, offset));
+    }
+
+    @GetMapping(params = "view=shelves")
+    public ResponseEntity<DiscoverShelves> shelves() {
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(profiles.discoverShelves());
     }
 
     @PostMapping("/songs/{song}/{version}/play")
