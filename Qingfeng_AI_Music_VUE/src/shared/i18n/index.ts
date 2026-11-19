@@ -4,8 +4,8 @@ import { english } from './en'
 export type Locale = 'zh-CN' | 'en'
 export const localeStorageKey = 'qingfeng.locale'
 function savedLocale(): Locale {
-  try { return localStorage.getItem(localeStorageKey) === 'en' ? 'en' : 'zh-CN' }
-  catch { return 'zh-CN' }
+  try { return localStorage.getItem(localeStorageKey) === 'zh-CN' ? 'zh-CN' : 'en' }
+  catch { return 'en' }
 }
 const selected = ref<Locale>(savedLocale())
 export const locale = readonly(selected)
