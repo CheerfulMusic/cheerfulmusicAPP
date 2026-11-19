@@ -2054,6 +2054,7 @@ export const english: Record<string, string> = {
   "音乐已完成，正在恢复保存": "Music is ready; recovering the saved audio",
   '音频保存尚未完成': 'Audio saving is incomplete',
   '试听首版': 'Listen to the first version',
+  '查看作品': 'View song',
   '首版可试听，正在恢复保存其余版本。': 'The first version is ready. Retrying the remaining versions.',
   '音频保存遇到问题，正在后台自动重试。': 'Saving the audio hit a problem. We’re retrying in the background.',
   '首版可试听，其余版本正在保存。': 'The first version is ready. The remaining versions are still saving.',
