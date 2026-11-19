@@ -22,7 +22,7 @@ INSTANCE = "i-wz9ackvz6v9qvyuzvsgi"
 
 
 def output(*args, cwd=ROOT, **kwargs):
-    result = subprocess.run(args, cwd=cwd, stdout=subprocess.PIPE, text=True, **kwargs)
+    result = subprocess.run(args, cwd=cwd, stdout=subprocess.PIPE, text=True, encoding="utf-8", **kwargs)
     if result.returncode:
         print(result.stdout[-4000:], flush=True)
         result.check_returncode()
