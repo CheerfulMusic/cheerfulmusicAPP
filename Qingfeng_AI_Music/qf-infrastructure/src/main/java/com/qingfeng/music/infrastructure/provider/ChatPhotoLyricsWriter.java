@@ -81,15 +81,9 @@ public final class ChatPhotoLyricsWriter implements PhotoLyricsWriter {
             content.add(Map.of("type", "image_url", "image_url",
                 Map.of("url", "data:image/jpeg;base64," + Base64.getEncoder().encodeToString(photo))));
         }
-        var input = new LinkedHashMap<String, Object>(Map.of("model", model, "messages", List.of(
-            Map.of("role", "system", "content", LyricsWritingPrompt.system(language) + PHOTO_BRIEF + DEFAULT_STRUCTURE.instruction()),
-            Map.of("role", "user", "content", content)), "response_format", Map.of("type", "json_object"),
-            "max_tokens", 3800, "stream", false));
-        if ("DOUBAO".equals(source)) input.put("thinking", Map.of("type", "disabled"));
-        else input.put("enable_thinking", false);
-
+        String prompt = LyricsWritingPrompt.system(language) + PHOTO_BRIEF + DEFAULT_STRUCTURE.instruction();
         try {
-            var response = LyricsHttpTransport.post(client, endpoint, key, json.writeValueAsString(input),
+            var response = LyricsHttpTransport.post(client, endpoint, key, requestBody(prompt, content, 3800),
                 Duration.ofSeconds(50), "qingfeng-music-photo-lyrics/1");
             int status = response.statusCode();
             if (status != 200) {
@@ -100,12 +94,7 @@ public final class ChatPhotoLyricsWriter implements PhotoLyricsWriter {
                     throw new DomainException("LYRICS_PROVIDER_REJECTED", "照片歌词服务暂时无法接受请求，请稍后再试。");
                 throw new DomainException("LYRICS_PROVIDER_UNAVAILABLE", "照片歌词服务无法处理这次请求，请调整素材后再试。");
             }
-            var choice = json.readTree(response.body()).path("choices").path(0);
-            var message = choice.path("message");
-            if ("content_filter".equals(choice.path("finish_reason").asText()) || message.path("refusal").isString() && !message.path("refusal").asText().isBlank())
-                throw new DomainException("LYRICS_PROVIDER_UNAVAILABLE", "这次照片素材暂时无法用于写词，请调整后再试。");
-            if (!"stop".equals(choice.path("finish_reason").asText()) || !message.path("content").isString()) throw incomplete();
-            return OpenAiLyricsWriter.parseSong(LyricsWritingPrompt.jsonObject(message.path("content").asText()), true, source);
+            return OpenAiLyricsWriter.parseSong(LyricsWritingPrompt.jsonObject(outputText(response.body())), true, source);
         } catch (HttpTimeoutException timeout) {
             throw new DomainException("LYRICS_PROVIDER_TIMEOUT", "等待照片歌词结果超时，请先查看原请求进度。");
         } catch (IOException network) {
@@ -116,6 +105,35 @@ public final class ChatPhotoLyricsWriter implements PhotoLyricsWriter {
         } catch (JacksonException invalid) {
             throw incomplete();
         }
+    }
+
+    @Override
+    public Map<Integer, String> repairSections(LyricsWriter.SectionRepair request) {
+        var material = new LinkedHashMap<String, Object>(LyricsSectionRepair.material(request));
+        material.put("photoSummary", request.draft().plan().photoSummary());
+        String prompt = LyricsSectionRepair.instructions(request.language())
+            + "\nphotoSummary 是已识别的画面素材。沿用可见细节和用户提供的事实，避免推断人物身份、关系或经历。";
+        String body = requestBody(prompt, json.writeValueAsString(material), 4000);
+        return LyricsSectionRepair.post(client, endpoint, key, body, request, this::outputText);
+    }
+
+    private String requestBody(String prompt, Object content, int maxTokens) {
+        var input = new LinkedHashMap<String, Object>(Map.of("model", model, "messages", List.of(
+            Map.of("role", "system", "content", prompt), Map.of("role", "user", "content", content)),
+            "response_format", Map.of("type", "json_object"), "max_tokens", maxTokens, "stream", false));
+        if ("DOUBAO".equals(source)) input.put("thinking", Map.of("type", "disabled"));
+        else input.put("enable_thinking", false);
+        return json.writeValueAsString(input);
+    }
+
+    private String outputText(String body) {
+        var choice = json.readTree(body).path("choices").path(0);
+        var message = choice.path("message");
+        if ("content_filter".equals(choice.path("finish_reason").asText())
+                || message.path("refusal").isString() && !message.path("refusal").asText().isBlank())
+            throw new DomainException("LYRICS_PROVIDER_UNAVAILABLE", "这次照片素材暂时无法用于写词，请调整后再试。");
+        if (!"stop".equals(choice.path("finish_reason").asText()) || !message.path("content").isString()) throw incomplete();
+        return message.path("content").asText();
     }
 
     private static DomainException incomplete() {

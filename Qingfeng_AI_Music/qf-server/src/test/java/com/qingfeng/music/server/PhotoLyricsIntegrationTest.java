@@ -19,12 +19,15 @@ import java.net.http.HttpResponse;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.zip.CRC32;
 import javax.imageio.ImageIO;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -84,7 +87,11 @@ class PhotoLyricsIntegrationTest {
                 if (work.story().startsWith("兜底")) {
                     throw new DomainException("LYRICS_PROVIDER_REJECTED", "豆包测试拒绝");
                 }
-                return photoDraft("DOUBAO");
+                var draft = photoDraft("DOUBAO");
+                if (work.story().equals("段落顺序不符")) {
+                    return new LyricsWriter.Draft(draft.title(), "[Chorus]\n和你一起看海\n[Verse]\n风吹过海面", draft.plan(), draft.source());
+                }
+                return draft;
             };
             return new FallbackPhotoLyricsWriter(primary, (work,language,images,direction)->{
                 qwenPhotoCalls.incrementAndGet();
@@ -177,9 +184,10 @@ class PhotoLyricsIntegrationTest {
         assertEquals(initialCalls+1,photoCalls.get());
     }
 
-    @Test void fallbackAndReplayChargeOnlyOnceForTheSamePhotoRequest() throws Exception {
+    @ParameterizedTest @ValueSource(strings={"兜底成功", "段落顺序不符"})
+    void fallbackAndReplayChargeOnlyOnceForTheSamePhotoRequest(String story) throws Exception {
         var session = session();
-        String work = createPaidWork(session, "兜底成功");
+        String work = createPaidWork(session, story);
         String owner = owner(work);
         long balanceBefore = credits.balance(owner);
         int primaryBefore = photoCalls.get();
@@ -196,6 +204,7 @@ class PhotoLyricsIntegrationTest {
         assertEquals(fallbackBefore + 1, qwenPhotoCalls.get());
         assertEquals(balanceBefore - 5, credits.balance(owner));
         assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM credit_consumption WHERE work_id=? AND request_key=? AND amount=5 AND refunded=0", Integer.class, work, key));
+        assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM lyric_revision WHERE work_id=?", Integer.class, work));
     }
 
     @Test void definiteFailureOfBothProvidersRefundsTheCharge() throws Exception {

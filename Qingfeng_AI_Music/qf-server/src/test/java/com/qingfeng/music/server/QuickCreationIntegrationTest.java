@@ -47,9 +47,9 @@ class QuickCreationIntegrationTest {
         @Bean @Primary FakeGeneration quickMusic(){return new FakeGeneration();}
     }
     static class FakeWriter implements LyricsWriter {
-        final AtomicInteger calls=new AtomicInteger();Direction direction;String failureCode;
+        final AtomicInteger calls=new AtomicInteger();Direction direction;String failureCode;boolean malformedDraft;
         public boolean isConfigured(){return true;}
-        public Draft write(WorkApi.Work work,String language){calls.incrementAndGet();if(failureCode!=null)throw new DomainException(failureCode,"offline failure");return new Draft("小碗","[Verse]\n橘子放在门边\n[Chorus]\n谢谢你等我回家");}
+        public Draft write(WorkApi.Work work,String language){calls.incrementAndGet();if(failureCode!=null)throw new DomainException(failureCode,"offline failure");return new Draft("小碗",malformedDraft?"":"[Verse]\n橘子放在门边\n[Chorus]\n谢谢你等我回家");}
         public Draft write(WorkApi.Work work,String language,String instructions,String previous,Direction direction){this.direction=direction;return write(work,language);}
     }
     static class FakeGeneration implements GenerationApi {
@@ -72,7 +72,7 @@ class QuickCreationIntegrationTest {
     @Autowired com.qingfeng.music.infrastructure.persistence.lyrics.LyricsMapper lyricsMapper;
     QuickCreationService service;String owner;WorkApi.Work work;
     @BeforeEach void setup(){
-        writer.failureCode=null;music.reject=false;music.loseAcknowledgement=false;music.busy=false;
+        writer.failureCode=null;writer.malformedDraft=false;music.reject=false;music.loseAcknowledgement=false;music.busy=false;
         owner=identity.create().creatorId();work=works.create(owner,new WorkApi.Draft("妈妈","生日","门口剥好的橘子","谢谢陪伴","温暖民谣",""));
         service=new QuickCreationService(repository,works,lyrics,composer,music,true);
     }
@@ -109,9 +109,12 @@ class QuickCreationIntegrationTest {
         return new FakeWriter() { @Override public String source() { return "QWEN"; } };
     }
     @org.junit.jupiter.params.ParameterizedTest
-    @org.junit.jupiter.params.provider.ValueSource(strings={"LYRICS_PROVIDER_CONNECT_FAILED","LYRICS_PROVIDER_REJECTED"})
+    @org.junit.jupiter.params.provider.ValueSource(strings={"LYRICS_PROVIDER_CONNECT_FAILED","LYRICS_PROVIDER_REJECTED",
+        "LYRICS_RESPONSE_INVALID", "MALFORMED_DRAFT"})
     void fallbackCompletesOneQuickCreationWithoutDuplicatingLyricsOrMusic(String code) {
-        var backup = backupWriter(); writer.failureCode = code;
+        var backup = backupWriter();
+        if (code.equals("MALFORMED_DRAFT")) writer.malformedDraft = true;
+        else writer.failureCode = code;
         service = withFallback(writer, backup);
         int calls = writer.calls.get(), songs = music.purchases.get();
         String key = UUID.randomUUID().toString();

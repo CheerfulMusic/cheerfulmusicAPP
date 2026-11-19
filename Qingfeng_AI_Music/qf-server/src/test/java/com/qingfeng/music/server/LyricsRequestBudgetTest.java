@@ -48,7 +48,7 @@ class LyricsRequestBudgetTest {
             second.set(LyricsRequestBudget.deadline(Duration.ofHours(1)));
             return new LyricsWriter.Draft("test", "words");
         });
-        try (var parent = LyricsRequestBudget.enter(Duration.ofSeconds(10))) {
+        try (var parent = LyricsRequestBudget.enter(Duration.ofSeconds(45))) {
             long original = LyricsRequestBudget.deadline(Duration.ofHours(1));
             assertEquals("QWEN", new FallbackLyricsWriter(primary, backup).write(work, "zh-CN").source());
             assertEquals(original, first.get());
@@ -57,6 +57,20 @@ class LyricsRequestBudgetTest {
         }
         verify(primary, times(1)).write(work, "zh-CN");
         verify(backup, times(1)).write(work, "zh-CN");
+    }
+
+    @Test void confirmedInvalidResponseDoesNotStartBackupWhenTooLittleTimeRemains() {
+        var primary = mock(LyricsWriter.class);
+        var backup = mock(LyricsWriter.class);
+        var work = mock(WorkApi.Work.class);
+        when(primary.isConfigured()).thenReturn(true);
+        when(backup.isConfigured()).thenReturn(true);
+        when(primary.write(work, "zh-CN")).thenThrow(new DomainException("LYRICS_RESPONSE_INVALID", "invalid"));
+        try (var parent = LyricsRequestBudget.enter(Duration.ofSeconds(10))) {
+            assertEquals("LYRICS_RESPONSE_INVALID", assertThrows(DomainException.class,
+                () -> new FallbackLyricsWriter(primary, backup).write(work, "zh-CN")).code());
+        }
+        verify(backup, never()).write(any(), anyString());
     }
 
     @Test void lyricBudgetDoesNotReplaceOrClearTheAgentCancellationScope() {

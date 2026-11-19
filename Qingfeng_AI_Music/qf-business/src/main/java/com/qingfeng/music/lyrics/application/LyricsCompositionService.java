@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
+import java.util.function.Function;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
@@ -116,23 +117,12 @@ public final class LyricsCompositionService {
             var writingDirection=new LyricsWriter.Direction(direction==null?snapshot.style():direction.style(),direction==null?"":direction.negativeTags(),snapshot.vocalGender());
             String context=photoPlan==null?"":"\n【照片画面素材，仅用于创作】\n"+photoPlan.photoSummary();
             String writingRequirements=(rewriteSource==null?"":REWRITE_ALL_INSTRUCTION)+requirements+context+structureInstruction;
-            var draft=photoRequest?photoWriter.write(snapshot,language,photos,writingDirection)
-                :selectedWriter.write(snapshot,language,writingRequirements,previous,writingDirection);
-            requireVersion(owner,work,expectedVersion);
-            if(draft.title()==null||draft.title().isBlank()||draft.title().length()>80||draft.lyrics()==null)throw invalidDraft();
-            String normalized=LyricsStructure.normalizeHeaders(LyricsFormatting.unwrap(draft.lyrics()));
-            if(normalized.isBlank()||normalized.length()>5000||normalized.startsWith("{")||LyricsFormatting.hasFence(normalized))throw invalidDraft();
-            var prepared=structure.prepare(normalized);
-            Map<Integer,String> replacements=Map.of();
-            if(!prepared.missing().isEmpty()){
-                var candidate=new LyricsWriter.Draft(draft.title(),normalized,draft.plan(),draft.source());
-                replacements=selectedWriter.repairSections(new LyricsWriter.SectionRepair(snapshot,language,writingRequirements,previous,
-                    candidate,prepared.missing()));
-                requireVersion(owner,work,expectedVersion);
-            }
-            String completed=prepared.complete(replacements);
-            if(completed.length()>5000)throw invalidDraft();
-            structure.validate(completed);
+            var draft = photoRequest
+                ? photoWriter.writeValidated(snapshot, language, photos, writingDirection, (provider, candidate) ->
+                    validateDraft(owner, snapshot, language, writingRequirements, previous, structure, candidate, provider::repairSections))
+                : selectedWriter.writeValidated(snapshot, language, writingRequirements, previous, writingDirection, (provider, candidate) ->
+                    validateDraft(owner, snapshot, language, writingRequirements, previous, structure, candidate, provider::repairSections));
+            String completed = draft.lyrics();
             if(rewriteSource!=null){
                 String rewritten=comparableLyrics(completed);
                 if(rewritten.isEmpty()||rewritten.equals(comparableLyrics(rewriteSource))||rewritten.equals(comparableLyrics(baseLyrics)))
@@ -153,6 +143,29 @@ public final class LyricsCompositionService {
             throw error;
         }
     }
+
+    private LyricsWriter.Draft validateDraft(String owner, WorkApi.Work work, String language, String instructions,
+                                            String previous, LyricsStructure structure, LyricsWriter.Draft draft,
+                                            Function<LyricsWriter.SectionRepair, Map<Integer, String>> repair) {
+        requireVersion(owner, work.id(), work.version());
+        if (draft == null || draft.title() == null || draft.title().isBlank() || draft.title().length() > 80 || draft.lyrics() == null)
+            throw invalidDraft();
+        String normalized = LyricsStructure.normalizeHeaders(LyricsFormatting.unwrap(draft.lyrics()));
+        if (normalized.length() > 5000 || normalized.startsWith("{") || LyricsFormatting.hasFence(normalized)
+                || comparableLyrics(normalized).isEmpty()) throw invalidDraft();
+        var prepared = structure.prepare(normalized);
+        Map<Integer, String> replacements = Map.of();
+        if (!prepared.missing().isEmpty()) {
+            var candidate = new LyricsWriter.Draft(draft.title(), normalized, draft.plan(), draft.source());
+            replacements = repair.apply(new LyricsWriter.SectionRepair(work, language, instructions, previous, candidate, prepared.missing()));
+            requireVersion(owner, work.id(), work.version());
+        }
+        String completed = prepared.complete(replacements);
+        if (completed.length() > 5000) throw invalidDraft();
+        structure.validate(completed);
+        return new LyricsWriter.Draft(draft.title(), completed, draft.plan(), draft.source());
+    }
+
     private void requireVersion(String owner,String work,long expectedVersion){
         if(works.get(owner,work).version()!=expectedVersion)throw new DomainException("WORK_VERSION_CONFLICT","作品已修改，请重新载入后保存歌词");
     }

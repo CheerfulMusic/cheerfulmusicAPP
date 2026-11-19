@@ -134,9 +134,18 @@ class OpenAiLyricsWriterTest {
     }
 
     @Test void rejectsRefusalsEvenOnCompletedResponse() throws Exception {
-        assertInvalid(JSON.writeValueAsString(Map.of("status", "completed", "output", List.of(
-            Map.of("type", "message", "role", "assistant", "status", "completed", "content",
-                List.of(Map.of("type", "refusal", "refusal", "private-provider-detail")))))));
+        var refusal = Map.of("type", "refusal", "refusal", "private-provider-detail");
+        var message = Map.of("type", "message", "role", "assistant", "status", "completed", "content", List.of(refusal));
+        String response = JSON.writeValueAsString(Map.of("status", "completed", "output", List.of(message)));
+        try (var fixture = new Fixture(200, response)) {
+            var backup = mock(LyricsWriter.class);
+            when(backup.isConfigured()).thenReturn(true);
+            var error = assertThrows(DomainException.class,
+                () -> new FallbackLyricsWriter(fixture.writer(), backup).write(WORK, "zh-CN"));
+            assertEquals("LYRICS_CONTENT_REJECTED", error.code());
+            assertFalse(error.getMessage().contains("private-provider-detail"));
+            verify(backup, never()).write(any(), anyString());
+        }
     }
 
     @ParameterizedTest @ValueSource(strings = {"title", "lyrics", "plan"})

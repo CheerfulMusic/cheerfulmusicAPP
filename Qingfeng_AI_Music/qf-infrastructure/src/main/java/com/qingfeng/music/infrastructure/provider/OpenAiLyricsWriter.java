@@ -187,6 +187,7 @@ public final class OpenAiLyricsWriter implements LyricsWriter {
 
     private String outputText(String body) {
         var response = json.readTree(body);
+        if ("content_filter".equals(response.path("incomplete_details").path("reason").asText())) throw contentRejected();
         if (!"completed".equals(response.path("status").asText()) ||
             (!response.path("error").isMissingNode() && !response.path("error").isNull()))
             throw incomplete();
@@ -197,8 +198,7 @@ public final class OpenAiLyricsWriter implements LyricsWriter {
             if (!"assistant".equals(item.path("role").asText()) || !"completed".equals(item.path("status").asText()))
                 throw incomplete();
             for (var part : item.path("content")) {
-                if ("refusal".equals(part.path("type").asText()))
-                    throw new DomainException("LYRICS_RESPONSE_INVALID", "这次内容暂时无法编写，请调整创作描述后再试；已有内容仍会保留。");
+                if ("refusal".equals(part.path("type").asText())) throw contentRejected();
                 if ("output_text".equals(part.path("type").asText())) text.append(part.path("text").asText());
             }
         }
@@ -244,6 +244,9 @@ public final class OpenAiLyricsWriter implements LyricsWriter {
     }
     private static DomainException incomplete() {
         return new DomainException("LYRICS_RESPONSE_INVALID", "歌词生成结果不完整，请稍后重新发起；已有内容仍会保留。");
+    }
+    private static DomainException contentRejected() {
+        return new DomainException("LYRICS_CONTENT_REJECTED", "这次内容暂时无法编写，请调整创作描述后再试；已有内容仍会保留。");
     }
     private static DomainException unavailable(String message) { return new DomainException("LYRICS_PROVIDER_UNAVAILABLE", message); }
 }

@@ -252,6 +252,7 @@ export const english: Record<string, string> = {
   '例如：这是妈妈第一次看到海。': 'For example, this was Mom’s first time seeing the ocean.',
   '照片会发送给 AI 用于本次创作。分享作品时不会公开原图。': 'Your photos are sent to AI for this song. Sharing the song keeps the original photos private.',
   '正在准备照片并编写歌词…': 'Uploading photos and writing lyrics…',
+  '正在编写歌词，必要时会自动补齐段落或切换模型。': 'Writing your lyrics. Missing sections will be filled in or the model will switch if needed.',
   '照片写歌暂不可用，请稍后再试。': 'Writing from photos is unavailable right now. Try again later.',
   '照片歌词生成失败，请稍后再试。': 'Could not write lyrics from your photos. Try again later.',
   '核对歌词进度': 'Check lyric progress',
