@@ -15,6 +15,7 @@ vi.mock('../src/shared/identity/credit-balance',()=>({announceCreditsChanged:vi.
 const tiers=[100,300,700]
 const usd=tiers.map((credits,i)=>({id:['starter','standard','plus'][i]+'-USD',title:credits+' Credits',amount:[9.9,25.9,49.9][i]!,currency:'USD',credits}))
 const cny=tiers.map((credits,i)=>({id:['starter','standard','plus'][i]+'-CNY-wechat_pay',title:credits+' Credits',amount:[68.8,178.8,338.8][i]!,currency:'CNY',credits,paymentMethod:'wechat_pay' as const}))
+const mini = { id: 'mini-CNY-wechat_pay', title: '35 Credits', amount: 29.9, currency: 'CNY', credits: 35, paymentMethod: 'wechat_pay' as const }
 const orderId='33333333-3333-4333-8333-333333333333'
 let app: App|undefined
 let catalog: {enabled:boolean;packages:typeof usd;paymentMethods?:StripePaymentMethod[]}
@@ -81,6 +82,25 @@ describe('wallet choices in the actual recharge component',()=>{
     expect(submitted).toEqual([{packageId:'standard-CNY-wechat_pay',paymentMethod:'wechat_pay'}])
     expect(readPendingOrders(localStorage,'wallet-owner','stripe')).toEqual([orderId])
     expect(pay.disabled).toBe(true)
+  })
+  it('shows the 35-credit offer only for WeChat CNY and submits its server offer ID', async () => {
+    catalog.paymentMethods![2]!.packages = [mini, ...cny]
+    const root = await mount()
+    await choose(root, 'wechat_pay')
+    expect([...root.querySelectorAll('.plan-price')].map(node => node.textContent))
+      .toEqual(['¥29.90', '¥68.80', '¥178.80', '¥338.80'])
+    root.querySelector<HTMLButtonElement>('.plan')!.click()
+    await nextTick()
+    expect(root.querySelector('.summary-total')?.textContent).toContain('¥29.90')
+    await choose(root, 'card')
+    expect(root.querySelector('.summary-total')?.textContent).toContain('$25.90')
+    expect(root.querySelectorAll('.plan')).toHaveLength(3)
+    await choose(root, 'wechat_pay')
+    root.querySelector<HTMLButtonElement>('.plan')!.click()
+    await nextTick()
+    root.querySelector<HTMLButtonElement>('button.pay-button')!.click()
+    await drain()
+    expect(submitted).toEqual([{ packageId: 'mini-CNY-wechat_pay', paymentMethod: 'wechat_pay' }])
   })
   it('offers Apple Pay honestly as a hosted card wallet and sends the choice',async()=>{
     const root=await mount();await choose(root,'apple_pay')

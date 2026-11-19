@@ -119,14 +119,14 @@ class StripeWalletPaymentServiceTest {
         assertEquals(List.of(new CheckoutCall(order(response),new BigDecimal("68.80"),"CNY","wechat_pay")),creates);verifyNoInteractions(ledger);
     }
 
-    @Test void allThreeCnyOffersPersistApprovedFixedSnapshotsAndNeverConvertDollarPrices(){
-        String[] names={"starter","standard","plus"},amounts={"68.80","178.80","338.80"};long[] credits={100,300,700};
+    @Test void allCnyOffersPersistApprovedFixedSnapshotsAndNeverConvertDollarPrices(){
+        String[] names={"mini","starter","standard","plus"},amounts={"29.90","68.80","178.80","338.80"};long[] credits={35,100,300,700};
         for(int i=0;i<names.length;i++){
             var result=service.create(owner(),names[i]+"-CNY-wechat_pay","wechat_pay");var row=stored(order(result));
             assertEquals(new BigDecimal(amounts[i]),row.get("amount"));assertEquals("CNY",row.get("currency"));assertEquals(credits[i],((Number)row.get("credits")).longValue());
             assertEquals("wechat_pay",creates.get(i).method());assertEquals(new BigDecimal(amounts[i]),creates.get(i).amount());
         }
-        assertEquals(3,number("SELECT COUNT(*) FROM payment_order"));verify(gateway,never()).createSession(anyString(),anyString(),any(),anyString());verifyNoInteractions(ledger);
+        assertEquals(4,number("SELECT COUNT(*) FROM payment_order"));verify(gateway,never()).createSession(anyString(),anyString(),any(),anyString());verifyNoInteractions(ledger);
     }
 
     @Test void gbWechatUsdIsRejectedBeforeCreatingAnyLocalOrRemoteOrder(){
@@ -173,14 +173,14 @@ class StripeWalletPaymentServiceTest {
         assertEquals(List.of(new CheckoutCall(order,new BigDecimal("68.80"),"CNY","wechat_pay")),creates);verify(gateway,never()).createSession(anyString(),anyString(),any(),anyString());verifyNoInteractions(ledger);
     }
 
-    @Test void verifiedCnyCompletionAndDifferentAsyncEventsGrantOnlyTheStoredCreditsOnce(){
-        var owner=owner();String order=order(service.create(owner,"starter-CNY-wechat_pay","wechat_pay"));fact(order,"complete","paid");
+    @Test void verifiedMiniCnyCompletionAndDifferentAsyncEventsGrantOnlyTheStoredCreditsOnce(){
+        var owner=owner();String order=order(service.create(owner,"mini-CNY-wechat_pay","wechat_pay"));fact(order,"complete","paid");
         var one=due(order,"checkout.session.completed");assertTrue(service.processNextEvent());
         var duplicate=due(order,"checkout.session.async_payment_succeeded");assertTrue(service.processNextEvent());
-        assertEquals("PAID",stored(order).get("status"));verify(ledger,times(1)).credit(owner.id(),100L,"payment:"+order);
+        assertEquals("PAID",stored(order).get("status"));verify(ledger,times(1)).credit(owner.id(),35L,"payment:"+order);
         verify(ledger,times(2)).bindPayment("STRIPE",MERCHANT,"sandbox",owner.id(),order,sessions.get(sessionId(order)).path("payment_intent").asString(),"CNY");
         verify(inbox).completeOwned(eq(one),eq(owner.id()),any(),anyString());verify(inbox).completeOwned(eq(duplicate),eq(owner.id()),any(),anyString());verify(inbox,never()).retry(any());
-        var view=service.order(owner,order);assertEquals("CNY",view.get("currency"));assertEquals(new BigDecimal("68.80"),view.get("amount"));assertEquals("wechat_pay",view.get("paymentMethod"));
+        var view=service.order(owner,order);assertEquals("CNY",view.get("currency"));assertEquals(new BigDecimal("29.90"),view.get("amount"));assertEquals("wechat_pay",view.get("paymentMethod"));
     }
 
     @Test void completedButUnpaidWechatWaitsForAuthoritativeSuccessWithoutIssuingCredits(){

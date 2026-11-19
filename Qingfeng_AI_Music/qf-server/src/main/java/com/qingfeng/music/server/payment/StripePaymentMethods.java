@@ -18,6 +18,7 @@ import org.springframework.web.server.ResponseStatusException;
  */
 public final class StripePaymentMethods {
     private static final Set<String> METHODS = Set.of("card", "apple_pay", "wechat_pay");
+    private static final String WECHAT_CNY_MINI_ID = "mini-CNY-wechat_pay";
     private static final Pattern WECHAT_OFFER = Pattern.compile("(starter|standard|plus)-(USD|CNY|GBP)-wechat_pay");
     private static final List<String> WECHAT_CURRENCIES = List.of("USD", "CNY", "GBP");
 
@@ -46,6 +47,7 @@ public final class StripePaymentMethods {
 
         var offers = new ArrayList<Offer>();
         for (var pack : usdPackages) offers.add(wechatOffer(pack, pack.amount(), "USD"));
+        offers.add(new Offer(WECHAT_CNY_MINI_ID, "35 Credits", new BigDecimal("29.90"), "CNY", 35, "wechat_pay"));
         offers.add(cnyOffer(catalog, environment, "starter", "68.80"));
         offers.add(cnyOffer(catalog, environment, "standard", "178.80"));
         offers.add(cnyOffer(catalog, environment, "plus", "338.80"));
@@ -72,7 +74,7 @@ public final class StripePaymentMethods {
 
     public Offer select(String packageId, String requestedMethod) {
         String method = requestedMethod == null
-            ? packageId != null && WECHAT_OFFER.matcher(packageId).matches() ? "wechat_pay" : "card"
+            ? isWechatOffer(packageId) ? "wechat_pay" : "card"
             : requestedMethod;
         if (!METHODS.contains(method)) throw rejected(HttpStatus.BAD_REQUEST, "PAYMENT_METHOD_UNSUPPORTED");
         String reason = disabledReason(method, true);
@@ -100,10 +102,14 @@ public final class StripePaymentMethods {
             if("paypal".equals(method))throw new IllegalArgumentException("PayPal offer cannot route to Stripe");
             return "wechat_pay".equals(method)?"wechat_pay":"card";
         }
-        if (packageId != null && WECHAT_OFFER.matcher(packageId).matches()) return "wechat_pay";
+        if (isWechatOffer(packageId)) return "wechat_pay";
         if (packageId != null && packageId.endsWith("-wechat_pay"))
             throw new IllegalArgumentException("Invalid persisted WeChat offer");
         return "card";
+    }
+
+    private static boolean isWechatOffer(String packageId) {
+        return WECHAT_CNY_MINI_ID.equals(packageId) || packageId != null && WECHAT_OFFER.matcher(packageId).matches();
     }
 
     public Offer selectAcceptance(PaymentCatalog.Package pack,String method){
