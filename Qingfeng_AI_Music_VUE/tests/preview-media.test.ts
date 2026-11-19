@@ -23,9 +23,9 @@ function fixture(audio:Buffer|null){
  if(audio)writeFileSync(resolve(root,'public/media/sample.mp3'),audio)
  return root
 }
-it('verifies all nine actual preview MP3s and produces byte/hash metadata',()=>{
+it('verifies all nineteen local preview MP3s and produces byte/hash metadata',()=>{
  const manifest=previewMediaManifest(fileURLToPath(new URL('..',import.meta.url)))
- expect(manifest.assets.filter(a=>a.path.endsWith('.mp3'))).toHaveLength(9)
+ expect(manifest.assets.filter(a=>a.path.endsWith('.mp3'))).toHaveLength(19)
  expect(manifest.assets.every(a=>a.bytes>0&&/^[a-f0-9]{64}$/.test(a.sha256))).toBe(true)
  expect(manifest.remoteAssets).toHaveLength(24)
  expect(manifest.remoteAssets.every(a=>a.bytes>0&&a.key.includes(a.sha256.slice(0,12)))).toBe(true)

@@ -73,14 +73,17 @@ describe('Discover editorial layout with real content', () => {
     expect(wrapper.get('.test-playlist').text()).toContain('Static Bloom')
   })
 
-  it('fills the fifth slot with a playable folk playlist when House is unavailable', async () => {
+  it('keeps the supplied House songs playable when the public artist lookup is unavailable', async () => {
     mocks.profile.mockRejectedValue(new Error('unavailable'))
     const wrapper = await open()
     const tiles = wrapper.findAll('.discover-playlist-tiles button')
     expect(tiles).toHaveLength(5)
-    expect(tiles[4]!.get('strong').text()).toBe('民谣')
+    expect(tiles[4]!.get('strong').text()).toBe('House')
     await tiles[4]!.trigger('click')
-    expect(wrapper.get('.test-playlist').text()).toContain('最美的风景')
+    expect(wrapper.get('.test-playlist').text()).toContain('Body Language')
+    expect(wrapper.get('.test-playlist').text()).toContain('Into the Sun')
+    expect(wrapper.get('.test-playlist').text()).toContain('One More Night')
+    expect(wrapper.get('.test-playlist').text()).not.toContain('Gravity')
   })
 
   it('keeps the introduction first and cycles through the top five songs from the global popular feed', async () => {

@@ -52,6 +52,20 @@ class HotSongEngagementTest {
   assertEquals(1,liked.stat().likes());
  }
 
+ @Test void newlySuppliedSongsSupportPlayLikeAndFavoriteWithoutCreatingUnknownTracks(){
+  var listener=creator(true);
+  for(var track:java.util.List.of("body-language","into-the-sun","one-more-night",
+          "all-night-one-more-time","euphoric-drop","i-run-this-show","light-it-up",
+          "cant-stop-this-feeling","midnight-call","summer-on-repeat")){
+   assertEquals(0,songs.stat(track).plays(),track);
+   assertEquals(1,songs.play(track).plays(),track);
+   assertEquals(1,songs.react(listener,track,"like",true).stat().likes(),track);
+   assertEquals(1,songs.react(listener,track,"favorite",true).stat().favorites(),track);
+  }
+  assertEquals(10,jdbc.queryForObject("SELECT COUNT(*) FROM hot_song_metric",Integer.class));
+  assertThrows(DomainException.class,()->songs.play("another-unlisted-song"));
+ }
+
  @Test void repeatedClicksCountOnceAndRemovalNeverGoesBelowZero(){
   var listener=creator(true);
   assertEquals(1,songs.react(listener,"travel","like",true).stat().likes());
