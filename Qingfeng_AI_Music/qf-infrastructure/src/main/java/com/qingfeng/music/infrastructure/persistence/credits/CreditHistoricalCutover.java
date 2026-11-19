@@ -31,6 +31,9 @@ public final class CreditHistoricalCutover {
     private static final String OPTIONAL_V48 = "V48__phone_binding.sql";
     private static final String OPTIONAL_V48_SHA256 = "09aeadab869727486bac96ac9200ad47310132763ad49020c0abe7844b359ca3";
     private static final int OPTIONAL_V48_CHECKSUM = -481399581;
+    private static final String OPTIONAL_V49 = "V49__lyrics_preparation.sql";
+    private static final String OPTIONAL_V49_SHA256 = "c0cde3e30b4e2bac3b3690c70dfd1125abced7045f1163ec9ee33a5c214616b4";
+    private static final int OPTIONAL_V49_CHECKSUM = -1886072734;
     private static final Set<String> EMPTY_FINANCIAL_TABLES = Set.of(
         "p0_credit_allocation", "p0_credit_payment_binding", "p0_credit_refund", "p0_credit_dispute",
         "p0_credit_return", "p0_credit_financial_audit", "p0_credit_recovery", "p0_credit_recovery_audit",
@@ -465,7 +468,7 @@ public final class CreditHistoricalCutover {
             for (var resource : resources) {
                 String name = Objects.requireNonNull(resource.getFilename());
                 int version = Integer.parseInt(name.substring(1, name.indexOf("__")));
-                require(version >= 1 && version <= 48, "HISTORY_UNAPPROVED_RESOURCE_EXTENSION");
+                require(version >= 1 && version <= 49, "HISTORY_UNAPPROVED_RESOURCE_EXTENSION");
                 CRC32 crc = new CRC32();
                 String text;
                 try (var input = resource.getInputStream()) { text = new String(input.readAllBytes(), StandardCharsets.UTF_8); }
@@ -489,14 +492,18 @@ public final class CreditHistoricalCutover {
                             && OPTIONAL_V48_SHA256.equals(digest(normalized.getBytes(StandardCharsets.UTF_8))),
                             "HISTORY_UNAPPROVED_RESOURCE_EXTENSION");
                 }
+                if (version == 49) {
+                    String normalized = text.replace("\r\n", "\n").replace('\r', '\n');
+                    require(OPTIONAL_V49.equals(name) && (int) crc.getValue() == OPTIONAL_V49_CHECKSUM
+                            && OPTIONAL_V49_SHA256.equals(digest(normalized.getBytes(StandardCharsets.UTF_8))),
+                            "HISTORY_UNAPPROVED_RESOURCE_EXTENSION");
+                }
                 require(expected.put(version, new History(version, name, (int) crc.getValue())) == null, "DUPLICATE_CLASSPATH_MIGRATION");
             }
             // Known later resources must form an exact prefix, not widen the historical source contract.
-            for (int version = 1; version <= 45; version++)
+            int lastVersion = expected.isEmpty() ? 45 : Math.max(45, expected.lastKey());
+            for (int version = 1; version <= lastVersion; version++)
                 require(expected.containsKey(version), "HISTORY_RESOURCE_CHAIN_INCOMPLETE");
-            require(expected.size() == 45 || expected.size() == 46 || expected.size() == 47 || expected.size() == 48, "HISTORY_RESOURCE_CHAIN_INCOMPLETE");
-            require(!expected.containsKey(48) || expected.containsKey(47), "HISTORY_RESOURCE_CHAIN_INCOMPLETE");
-            require(!expected.containsKey(47) || expected.containsKey(46), "HISTORY_RESOURCE_CHAIN_INCOMPLETE");
             require(actual.size() == 44 || actual.size() == 45, "HISTORY_CHAIN_LENGTH_MISMATCH");
             for (int i = 0; i < actual.size(); i++)
                 require(actual.get(i).version() == i + 1 && actual.get(i).equals(expected.get(i + 1)), "HISTORY_SCRIPT_OR_CHECKSUM_MISMATCH");

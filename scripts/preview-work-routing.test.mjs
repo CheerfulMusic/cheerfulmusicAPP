@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {createServer as createHttpServer} from 'node:http';
 import {createRequire} from 'node:module';
 import {pathToFileURL} from 'node:url';
-import {withLocalPhotoCapability,withLocalWorkMetadata,workMetadataRule} from './preview-work-routing.mjs';
+import {withLocalPhotoCapability,withLocalWorkMetadata,workMetadataRule,recommendationMediaRule} from './preview-work-routing.mjs';
 
 test('metadata routing is exact, repeatable and rejects unknown config',()=>{
   const original='const target = "http://127.0.0.1:8080"; const config={proxy: {}}';
@@ -26,7 +26,7 @@ test('real Vite proxy sends metadata GET/POST/PUT/DELETE locally and preserves r
   };
   const local=await serve('local'),remote=await serve('remote');let vite;
   try{
-    const original=`const target = ${JSON.stringify(local.url)}; const production={target:${JSON.stringify(remote.url)},changeOrigin:true}; export default {server:{proxy: {'^/api/app':production,'/api':{target,changeOrigin:true}}}};`;
+    const original=`const target = ${JSON.stringify(local.url)}; const production={target:${JSON.stringify(remote.url)},changeOrigin:true}; export default {server:{proxy: {'^/api/app':production,'/media':production,'/api':{target,changeOrigin:true}}}};`;
     const {default:config}=await import('data:text/javascript,'+encodeURIComponent(withLocalWorkMetadata(original)));
     const require=createRequire(new URL('../Qingfeng_AI_Music_VUE/package.json',import.meta.url));
     const {createServer}=await import(pathToFileURL(require.resolve('vite')).href);
@@ -48,7 +48,15 @@ test('real Vite proxy sends metadata GET/POST/PUT/DELETE locally and preserves r
       assert.deepEqual(await response.json(),{upstream:'local',method,path});
       assert.equal(response.headers.get('x-qf-preview-api'),'local-creation');
     }
-    for(const path of ['/api/app/works/abc/audio/asset','/api/app/works/abc/covers/cover','/api/app/music-settings/simplify'])assert.equal((await(await fetch(url+path)).json()).upstream,'remote');
+    for(const path of ['/media/sample-feng-ye-xing-v1-cover.jpg','/media/sample-feng-ye-xing-v1-preview-128.mp3','/media/sample-feng-ye-xing-v1-preview-128.mp3?reauth=1']){
+      assert.ok(new RegExp(recommendationMediaRule).test(path));
+      const response=await fetch(url+path);
+      assert.deepEqual(await response.json(),{upstream:'local',method:'GET',path});
+      assert.equal(response.headers.get('x-qf-preview-api'),'local-recommendation-media');
+    }
+    const head=await fetch(url+'/media/sample-feng-ye-xing-v1-cover.jpg',{method:'HEAD'});
+    assert.equal(head.headers.get('x-qf-preview-api'),'local-recommendation-media');
+    for(const path of ['/api/app/works/abc/audio/asset','/api/app/works/abc/covers/cover','/api/app/music-settings/simplify','/media/trending-genres-v1.png'])assert.equal((await(await fetch(url+path)).json()).upstream,'remote');
   }finally{await vite?.close();await Promise.all([local.server,remote.server].map(server=>new Promise(resolve=>server.close(resolve))));}
 });
 

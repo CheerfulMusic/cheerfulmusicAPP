@@ -618,6 +618,7 @@
         "@GetMapping",
         "@GetMapping(\"/avatar/{key}\")",
         "@GetMapping(\"/cover/{key}\")",
+        "@GetMapping(\"/songs/{song}/{version}/lyrics\")",
         "@GetMapping(\"/songs/{song}/{version}/audio\")",
         "@GetMapping(\"/songs/{song}/{version}/cover\")"
       ],
@@ -802,6 +803,18 @@
       "mode": "protocol",
       "flows": [
         "SPA document"
+      ]
+    },
+    {
+      "controller": "HotSongLyricsController",
+      "source": "com/qingfeng/music/server/web/publicapi/HotSongLyricsController.java",
+      "mappingDeclarations": [
+        "@RequestMapping(\"/api/public/hot-songs\")",
+        "@GetMapping(\"/{track}/lyrics\")"
+      ],
+      "mode": "native",
+      "flows": [
+        "open_feature:home"
       ]
     }
   ]

@@ -21,6 +21,40 @@ def gate_module():
     return module
 
 
+def cdn_preview_audio(archive, manifest):
+    remote = manifest.get('remoteAssets', [])
+    if not isinstance(remote, list):
+        raise ValueError('Invalid CDN preview manifest')
+    if not remote:
+        return set()
+    static = 'BOOT-INF/classes/static/'
+    catalog = json.loads(archive.read(static + 'recommendation-assets.json'))
+    if catalog.get('version') != 1 or not isinstance(catalog.get('assets'), list):
+        raise ValueError('Invalid CDN preview catalog')
+    routes = archive.read('BOOT-INF/classes/com/qingfeng/music/server/hotsong/RecommendationSamples.class')
+    by_path = {item['path']: item for item in catalog['assets']}
+    if len(by_path) != len(catalog['assets']):
+        raise ValueError('Duplicate CDN preview catalog path')
+    paths = set()
+    audio = set()
+    for asset in remote:
+        path, key, size, digest = (asset.get(name) for name in ('path', 'key', 'bytes', 'sha256'))
+        match = re.fullmatch(r'/media/(sample-([a-z0-9-]+)-v1(-preview-128[.]mp3|-cover[.]jpg))', path or '')
+        if not match or path in paths or type(size) is not int or size <= 0 or not re.fullmatch('[0-9a-f]{64}', digest or ''):
+            raise ValueError('Invalid CDN preview asset')
+        filename, track_id, suffix = match.groups()
+        kind = 'audio' if suffix.endswith('.mp3') else 'cover'
+        key_pattern = r'qingfeng/recommendation-samples/[0-9]{8}/' + kind + '/' + digest[:12] + '/' + re.escape(filename)
+        if not re.fullmatch(key_pattern, key or '') or by_path.get(path) != {
+            'trackId': track_id, 'kind': kind, 'path': path, 'key': key, 'bytes': size, 'sha256': digest,
+        } or key.encode() not in routes:
+            raise ValueError('CDN preview asset does not match catalog and server route')
+        paths.add(path)
+        if kind == 'audio':
+            audio.add(path)
+    return audio
+
+
 def verify(release, policy):
     release = Path(release).resolve()
     policy = json.loads(Path(policy).read_text(encoding='utf-8'))
@@ -88,7 +122,8 @@ def verify(release, policy):
         for name in names:
             if name.startswith('BOOT-INF/classes/static/assets/') and name.endswith('.js'):
                 referenced_audio.update(re.findall(r'''["'`](/media/[^"'`\\\s]+\.mp3)["'`]''', z.read(name).decode()))
-        if not referenced_audio or referenced_audio != declared_audio:
+        cdn_audio = cdn_preview_audio(z, manifest)
+        if not referenced_audio or declared_audio & cdn_audio or referenced_audio != declared_audio | cdn_audio:
             raise ValueError('Preview audio references do not match verified assets')
     return digest
 

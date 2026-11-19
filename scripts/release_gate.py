@@ -72,7 +72,11 @@ AGENT_ALLOWANCE_MIGRATION = 'V46__agent_chat_allowance.sql'
 AGENT_ALLOWANCE_MIGRATION_SHA256 = '8ce991cea50af971ca6d748c1a37b304a8ee11d7969f06dd455dc16629638f86'
 
 
-FEATURE_MIGRATION_SHA256 = {'V47__music_video_projects.sql': 'b4a25044d77906e891d56632f037a68a1ba5dad2073a129188b11b8bcba8a08a', 'V48__phone_binding.sql': '09aeadab869727486bac96ac9200ad47310132763ad49020c0abe7844b359ca3'}
+FEATURE_MIGRATION_SHA256 = {
+    "V47__music_video_projects.sql": "b4a25044d77906e891d56632f037a68a1ba5dad2073a129188b11b8bcba8a08a",
+    "V48__phone_binding.sql": "09aeadab869727486bac96ac9200ad47310132763ad49020c0abe7844b359ca3",
+    "V49__lyrics_preparation.sql": "c0cde3e30b4e2bac3b3690c70dfd1125abced7045f1163ec9ee33a5c214616b4",
+}
 
 class GateError(ValueError):
     pass
@@ -147,7 +151,11 @@ def verify_migration_set(normalized):
                         AGENT_ALLOWANCE_MIGRATION: AGENT_ALLOWANCE_MIGRATION_SHA256}
     mv_expected = {**release_expected, "V47__music_video_projects.sql": FEATURE_MIGRATION_SHA256["V47__music_video_projects.sql"]}
     phone_expected = {**mv_expected, "V48__phone_binding.sql": FEATURE_MIGRATION_SHA256["V48__phone_binding.sql"]}
-    if set(normalized) == set(phone_expected):
+    lyrics_expected = {**phone_expected, "V49__lyrics_preparation.sql": FEATURE_MIGRATION_SHA256["V49__lyrics_preparation.sql"]}
+    if set(normalized) == set(lyrics_expected):
+        expected = lyrics_expected
+        extension = {"agentAllowanceVersion": "46", "musicVideoVersion": "47", "phoneBindingVersion": "48", "lyricsPreparationVersion": "49"}
+    elif set(normalized) == set(phone_expected):
         expected = phone_expected
         extension = {"agentAllowanceVersion": "46", "musicVideoVersion": "47", "phoneBindingVersion": "48"}
     elif set(normalized) == set(mv_expected):
@@ -160,7 +168,7 @@ def verify_migration_set(normalized):
         expected = rollback_expected
         extension = {}
     else:
-        raise GateError("Canonical migration chain must contain core V1..V45 followed by consecutive approved extensions through V48")
+        raise GateError("Canonical migration chain must contain core V1..V45 followed by consecutive approved extensions through V49")
     for name, digest in expected.items():
         if normalized[name] != digest:
             raise GateError("Canonical migration source changed: " + name)
@@ -573,7 +581,7 @@ def build(workspace, baseline, java_home, cache_root, isolated_mysql_cohort=None
     if not mvn:
         raise GateError("Maven required")
     execute("dependencies", [npm, "ci", "--offline", "--ignore-scripts", "--cache", str(cache_root / "npm")], frontend)
-    execute("frontendTest", [npm, "test"], frontend)
+    execute("frontendTest", [npm, "test", "--", "--maxWorkers=4", "--testTimeout=15000"], frontend)
     execute("frontendBuild", [npm, "run", "build"], frontend)
     metadata = export / "Qingfeng_AI_Music/deploy/release-metadata"
     metadata.mkdir(parents=True, exist_ok=True)

@@ -188,7 +188,7 @@ class AgentLibraryActionsTest {
         verify(covers,never()).edit(any(),any(),any(),any(),any());
     }
     @Test void discoveredSamplesAreExplicitAndUseOnlyExistingWhitelist(){
-        var result=run("discover_music",Map.of());assertEquals(9,result.items().size());
+        var result=run("discover_music",Map.of());assertEquals(HotSongService.TRACKS.size(),result.items().size());
         assertEquals(HotSongService.TRACKS,new HashSet<>(result.items().stream().map(AgentApplicationActions.Item::id).toList()));
         assertTrue(result.items().stream().allMatch(i->i.subtitle().contains("试听样曲")));
     }

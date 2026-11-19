@@ -3,14 +3,14 @@ import {ref,onMounted,onBeforeUnmount} from 'vue'
 import {t} from '../../../shared/i18n'
 import {usePlayer} from '../../../shared/player/store'
 import type {PreviewPlaylist} from '../model/playlists'
-import {recordPlay} from '../model/hot-songs'
+import {recordPreviewPlay} from '../model/published-recommendations'
 import PreviewTrackRow from './PreviewTrackRow.vue'
 
 const props=defineProps<{playlist:PreviewPlaylist}>(),emit=defineEmits<{close:[]}>()
 const dialog=ref<HTMLDialogElement>(),player=usePlayer()
 onMounted(()=>dialog.value?.showModal())
 onBeforeUnmount(()=>dialog.value?.close())
-function playAll(){const first=props.playlist.tracks[0];if(first){player.setQueue(props.playlist.tracks);if(player.current?.id!==first.id||!player.playing&&!player.starting){recordPlay(first.id);void player.toggle(first)}}}
+async function playAll(){const first=props.playlist.tracks[0];if(first){player.setQueue(props.playlist.tracks);if(player.current?.id!==first.id||!player.playing&&!player.starting){await player.toggle(first);if(player.current?.audio===first.audio&&player.playing)void recordPreviewPlay(first)}}}
 function backdrop(event:MouseEvent){if(event.target!==dialog.value)return;const box=dialog.value.getBoundingClientRect();if(event.clientX<box.left||event.clientX>box.right||event.clientY<box.top||event.clientY>box.bottom)emit('close')}
 </script>
 
@@ -22,6 +22,7 @@ function backdrop(event:MouseEvent){if(event.target!==dialog.value)return;const 
       <ul class="playlist-detail-tracks"><li v-for="track in playlist.tracks" :key="track.id">
         <PreviewTrackRow :track="track" :queue="playlist.tracks"/>
         <p class="playlist-track-description">{{ track.description }}</p>
+        <details v-if="track.lyrics" class="playlist-track-lyrics"><summary>{{ t('歌词') }}</summary><p>{{ track.lyrics }}</p></details>
         <div class="playlist-track-actions"><span class="playlist-track-labels"><span v-for="tag in track.tags" :key="tag">{{ tag }}</span></span><RouterLink :to="{path:'/create',query:{occasion:track.occasion,style:track.style}}" @click="emit('close')">{{ t('用这个风格创作') }} <span aria-hidden="true">↗</span></RouterLink></div>
       </li></ul>
     </dialog>

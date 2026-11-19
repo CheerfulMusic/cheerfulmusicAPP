@@ -73,6 +73,11 @@ public final class MediaCdnSigner {
         return sign("/"+value,primaryKey);
     }
 
+    public Optional<URI> recommendation(String filename) {
+        if (!enabled) return Optional.empty();
+        return RecommendationOssRedirect.objectKey(filename).flatMap(key -> sign("/" + key, primaryKey));
+    }
+
     /** 主/备 KEY 轮换：用备 KEY 重新签发同一 URI，供轮换期与单测使用。 */
     public Optional<URI> signWithBackup(String uri){
         if(backupKey.isEmpty()||uri==null||!uri.startsWith("/"))return Optional.empty();

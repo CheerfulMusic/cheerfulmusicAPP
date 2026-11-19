@@ -22,7 +22,7 @@ public final class InviteGateFilter extends OncePerRequestFilter {
     private static final String GOOGLE_CALLBACK = "/api/public/auth/google/callback";
     private static final String PUBLIC_ID = "[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}";
     private static final Pattern ARTIST_READ = Pattern.compile("/api/public/artists/" + PUBLIC_ID
-            + "(?:/(?:avatar|cover)/" + PUBLIC_ID + "|/songs/" + PUBLIC_ID + "/[1-9][0-9]{0,18}/(?:audio|cover))?");
+            + "(?:/(?:avatar|cover)/" + PUBLIC_ID + "|/songs/" + PUBLIC_ID + "/[1-9][0-9]{0,18}/(?:audio|cover|lyrics))?");
     private static final Pattern DISCOVER_PLAY = Pattern.compile("/api/public/discover/songs/" + PUBLIC_ID + "/[1-9][0-9]{0,18}/play");
 
     private final InviteGateService gate;
@@ -43,6 +43,7 @@ public final class InviteGateFilter extends OncePerRequestFilter {
         boolean analytics = ANALYTICS.contains(path);
         // 热歌推荐是首页公开展示，播放计次也不含个人信息；内测门禁不应让它变成 0。
         boolean hotSong = ("GET".equals(request.getMethod()) && "/api/public/hot-songs".equals(path))
+                || ("GET".equals(request.getMethod()) && path.matches("/api/public/hot-songs/[a-z0-9-]{1,64}/lyrics"))
                 || ("POST".equals(request.getMethod()) && path.matches("/api/public/hot-songs/[A-Za-z0-9_-]{1,64}/play"));
         if (!gate.settings().enabled() || !apiLike || publicGift || publicArtist || discoverPlay || ENTRANCES.contains(path) || analytics || hotSong || webhook
                 || gate.expiresAt(request) > 0) {

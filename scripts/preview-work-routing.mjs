@@ -3,6 +3,7 @@ import {pathToFileURL} from 'node:url';
 
 export const workMetadataRule='^/api/app/works(?:/[^/?]+)?(?:[?]|$)';
 export const creationSettingsRule='^/api/app/(?:music-settings/(?:catalog|preview)|works/[^/?]+/(?:music-settings(?:/preview)?|creative-direction|lyrics(?:/[^/?]+)*|generations(?:/preflight)?))(?:[?]|$)';
+export const recommendationMediaRule='^/media/sample-[a-z0-9-]+-v1(?:-preview-128\\.mp3|-cover\\.jpg)(?:[?]|$)';
 const photoCapabilityRule='^/api/public/system/photo-preview(?:[?]|$)';
 const photoCapabilityFlag="'import.meta.env.VITE_LOCAL_PHOTO_CAPABILITY': JSON.stringify('true')";
 
@@ -17,14 +18,18 @@ export function withLocalPhotoCapability(config){
 }
 
 export function withLocalWorkMetadata(config){
-  const missing=[workMetadataRule,creationSettingsRule].filter(rule=>!config.includes(rule));
+  const missing=[workMetadataRule,creationSettingsRule,recommendationMediaRule].filter(rule=>!config.includes(JSON.stringify(rule))&&!config.includes(rule));
   if(!missing.length)return config;
   const marker='proxy: {';
   if(config.split(marker).length!==2||!config.includes('const target ='))throw new Error('Unrecognized preview proxy configuration');
-  // 保存、写词和提交共用新版曲风校验。媒体仍交给原代理。
+  // 当前源码的创作接口和推荐媒体使用本机后端，推荐媒体由后端签发 CDN 地址。
   const routes=missing.map(rule=>{
-    const source=rule===workMetadataRule?'local-work':'local-creation';
-    return `\n      '${rule}': { target, changeOrigin: true, configure(proxy) { proxy.on('proxyRes', response => { response.headers['x-qf-preview-api']='${source}'; }); } },`;
+    const source={
+      [workMetadataRule]:'local-work',
+      [creationSettingsRule]:'local-creation',
+      [recommendationMediaRule]:'local-recommendation-media',
+    }[rule];
+    return `\n      ${JSON.stringify(rule)}: { target, changeOrigin: true, configure(proxy) { proxy.on('proxyRes', response => { response.headers['x-qf-preview-api']='${source}'; }); } },`;
   });
   return config.replace(marker,marker+routes.join(''));
 }

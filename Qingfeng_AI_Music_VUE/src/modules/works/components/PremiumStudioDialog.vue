@@ -11,9 +11,9 @@ const dialog = ref<HTMLDialogElement>(), content = ref<HTMLElement>()
 const selected = ref(''), notice = ref(''), copied = ref(false)
 const player = usePlayer()
 const plans = [
-  { id: 'professional', title: '专业制作', price: '¥20,000', suffix: '起', description: '让你的歌曲拥有完整的专业制作', features: ['专业编曲', '录音指导', '混音与母带', '音乐平台发行'] },
-  { id: 'producer', title: '高级制作人定制', price: '¥50,000', suffix: '起', description: '与资深制作人一起打磨你的声音', features: ['资深制作人参与', '专属创作与编曲', '完整音乐制作'] },
-  { id: 'bespoke', title: '顶级定制', price: '¥100,000+', suffix: '', description: '围绕你的音乐目标定制完整方案', features: ['制作人及团队定制', '录音棚与制作资源', '发行需求单独沟通', '全球音乐发行', '真人视频拍摄'] },
+  { id: 'professional', title: '专业制作', price: 'US$4,000', suffix: '起', description: '让你的歌曲拥有完整的专业制作', features: ['专业编曲', '录音指导', '混音与母带', '音乐平台发行'] },
+  { id: 'producer', title: '高级制作人定制', price: 'US$10,000', suffix: '起', description: '与资深制作人一起打磨你的声音', features: ['资深制作人参与', '专属创作与编曲', '完整音乐制作'] },
+  { id: 'bespoke', title: '顶级定制', price: 'US$20,000', suffix: '', description: '围绕你的音乐目标定制完整方案', features: ['制作人及团队定制', '录音棚与制作资源', '发行需求单独沟通', '全球音乐发行', '真人视频拍摄'] },
 ]
 const chosen = computed(() => plans.find(plan => plan.id === selected.value))
 const images = [
@@ -137,7 +137,7 @@ onBeforeUnmount(() => dialog.value?.close())
             <span class="premium-features"><span v-for="feature in plan.features" :key="feature">{{ t(feature) }}</span></span>
           </label>
         </fieldset>
-        <p class="premium-price-note">{{ t('价格为人民币参考预算 最终按制作人 录音棚 制作团队及发行需求单独报价 选择方案不会扣款') }}</p>
+        <p class="premium-price-note">{{ t('价格为美元参考预算 最终按制作人 录音棚 制作团队及发行需求单独报价 选择方案不会扣款') }}</p>
         <div class="premium-contact"><span>{{ t('制作咨询') }} <a :href="'mailto:' + consultationEmail">{{ consultationEmail }}</a></span><button type="button" :disabled="!chosen" @click="copyBrief">{{ copied ? t('再次复制需求') : t('复制定制需求') }}</button><small>{{ t('预约按钮将打开邮件草稿 由你确认发送') }}</small></div>
         <div v-if="notice" class="premium-notice" role="status">{{ t(notice) }}</div>
       </template>

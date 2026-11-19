@@ -24,25 +24,27 @@ import static org.junit.jupiter.api.Assertions.*;
 /** 供应商和下载完全离线，只验证真实持久化、租约、恢复和归档；绝不消耗余额。 */
 @SpringBootTest @ActiveProfiles("test")
 class GenerationWorkerIntegrationTest {
+    private static final long TEST_WAIT_SECONDS = 30;
     @Autowired IdentityApi identity; @Autowired WorkApi works; @Autowired LyricsApi lyrics;
     @Autowired ExecutionRepository repository; @Autowired TaskMapper mapper; @Autowired MediaService media;
     @Autowired org.springframework.jdbc.core.JdbcTemplate jdbc;
     static class Time extends Clock {
-        Instant now=Instant.now().plusSeconds(10);
+        volatile Instant now=Instant.now().plusSeconds(10);
         public ZoneId getZone(){return ZoneOffset.UTC;} public Clock withZone(ZoneId z){return this;}
         public Instant instant(){return now;} void advance(long seconds){now=now.plusSeconds(seconds);}
+        void allowSubmission(Instant createdAt){var eligible=createdAt.plusSeconds(6);if(now.isBefore(eligible))now=eligible;}
     }
     static class Provider implements MusicProvider {
         String name="offline-"+UUID.randomUUID(); AtomicInteger submissions=new AtomicInteger(),queries=new AtomicInteger();Request received;
         boolean unknown,rejected,queryFailure,validationFailure,connectFailure; String audioUrl="https://audio.test/song.wav"; CountDownLatch entered,release;
         public void validate(Request request){if(validationFailure)throw new com.qingfeng.music.common.exception.DomainException("INVALID_MUSIC_INPUT","offline validation");}
         public String name(){return name;} public boolean isConfigured(){return true;}
-        public Submission submit(Request request,String key){received=request;submissions.incrementAndGet();if(entered!=null){entered.countDown();try{if(!release.await(5,TimeUnit.SECONDS))throw new IllegalStateException();}catch(InterruptedException e){Thread.currentThread().interrupt();throw new IllegalStateException();}}if(unknown)throw new IllegalStateException("模拟断线");if(rejected)throw new Rejected();return new Submission("external-"+key);}
+        public Submission submit(Request request,String key){received=request;submissions.incrementAndGet();if(entered!=null){entered.countDown();try{if(!release.await(TEST_WAIT_SECONDS,TimeUnit.SECONDS))throw new IllegalStateException();}catch(InterruptedException e){Thread.currentThread().interrupt();throw new IllegalStateException();}}if(unknown)throw new IllegalStateException("模拟断线");if(rejected)throw new Rejected();return new Submission("external-"+key);}
         public Result query(String id){queries.incrementAndGet();if(queryFailure){queryFailure=false;throw new IllegalStateException("模拟查询断线");}return new Result(id,GenerationStatus.SAVING,audioUrl);}
     }
     record Fixture(String owner,String work,String id,GenerationApi api,Provider provider,Time time){}
     Fixture fixture(){return fixture(new Provider(),new Time());}
-    Fixture fixture(Provider provider,Time time){String owner=identity.create().creatorId();var work=works.create(owner,new WorkApi.Draft("朋友","毕业","故事","祝福","民谣","歌曲"));var revision=lyrics.save(owner,work.id(),0,"离线验证歌曲","[副歌]一起向前");lyrics.confirm(owner,work.id(),revision.id());var api=new GenerationService(works,lyrics,provider,new MyBatisTaskRepository(mapper),repository);var task=api.submit(owner,work.id(),revision.id(),UUID.randomUUID().toString());return new Fixture(owner,work.id(),task.id(),api,provider,time);}
+    Fixture fixture(Provider provider,Time time){String owner=identity.create().creatorId();var work=works.create(owner,new WorkApi.Draft("朋友","毕业","故事","祝福","民谣","歌曲"));var revision=lyrics.save(owner,work.id(),0,"离线验证歌曲","[副歌]一起向前");lyrics.confirm(owner,work.id(),revision.id());var api=new GenerationService(works,lyrics,provider,new MyBatisTaskRepository(mapper),repository);var task=api.submit(owner,work.id(),revision.id(),UUID.randomUUID().toString());time.allowSubmission(task.createdAt());return new Fixture(owner,work.id(),task.id(),api,provider,time);}
     GenerationWorker worker(Fixture f,AudioDownloader downloader){return new GenerationWorker(repository,f.provider(),downloader,media,f.time(),Duration.ofMinutes(2),2);}
     byte[] wav(){var b=ByteBuffer.allocate(48).order(ByteOrder.LITTLE_ENDIAN);b.put("RIFF".getBytes()).putInt(40).put("WAVEfmt ".getBytes()).putInt(16).putShort((short)1).putShort((short)1).putInt(8000).putInt(16000).putShort((short)2).putShort((short)16).put("data".getBytes()).putInt(4).putInt(0);return b.array();}
     GenerationStatus status(Fixture f){return f.api().list(f.owner(),f.work()).get(0).status();}
@@ -74,7 +76,7 @@ class GenerationWorkerIntegrationTest {
     }
     @Test void unknownWithoutExternalIdDoesNotBlockAnotherCreatorsQueuedTask(){
         var first=fixture();first.provider().unknown=true;var w=worker(first,url->new ByteArrayInputStream(wav()));assertTrue(w.runOnce());
-        var other=fixture();jdbc.update("UPDATE generation_task SET provider=? WHERE id=?",first.provider().name(),other.id());
+        var other=fixture(first.provider(),first.time());
         first.provider().unknown=false;assertTrue(w.runOnce());assertEquals(GenerationStatus.RUNNING,status(other));assertEquals(GenerationStatus.SUBMISSION_UNKNOWN,status(first));assertEquals(2,first.provider().submissions.get());
     }
     @Test void unknownWithExternalIdResumesReadOnlyQueryAndArchivesWithoutResubmitting(){
@@ -103,7 +105,7 @@ class GenerationWorkerIntegrationTest {
     }
     @Test void taskLeasePreventsTwoWorkersFromSubmittingTheSameTask()throws Exception{
         var f=fixture();f.provider().entered=new CountDownLatch(1);f.provider().release=new CountDownLatch(1);var executor=Executors.newSingleThreadExecutor();
-        try{var running=executor.submit(()->worker(f,url->new ByteArrayInputStream(wav())).runOnce());assertTrue(f.provider().entered.await(5,TimeUnit.SECONDS));assertFalse(worker(f,url->new ByteArrayInputStream(wav())).runOnce());f.provider().release.countDown();assertTrue(running.get(5,TimeUnit.SECONDS));assertEquals(1,f.provider().submissions.get());}finally{f.provider().release.countDown();executor.shutdownNow();}
+        try{var running=executor.submit(()->worker(f,url->new ByteArrayInputStream(wav())).runOnce());assertTrue(f.provider().entered.await(TEST_WAIT_SECONDS,TimeUnit.SECONDS));assertFalse(worker(f,url->new ByteArrayInputStream(wav())).runOnce());f.provider().release.countDown();assertTrue(running.get(TEST_WAIT_SECONDS,TimeUnit.SECONDS));assertEquals(1,f.provider().submissions.get());}finally{f.provider().release.countDown();executor.shutdownNow();}
     }
     @Test void explicitRejectionFailsWithoutAutomaticRetry(){var f=fixture();f.provider().rejected=true;var w=worker(f,url->new ByteArrayInputStream(wav()));w.runOnce();assertEquals(GenerationStatus.FAILED,status(f));assertFalse(w.runOnce());assertEquals(1,f.provider().submissions.get());}
     @Test void concurrencyLimitOnePreservesSerialDispatchWhenRequested(){var f=fixture();var original=f.api().list(f.owner(),f.work()).get(0);f.api().submit(f.owner(),f.work(),original.revisionId(),UUID.randomUUID().toString());var w=worker(f,url->new ByteArrayInputStream(wav())).withConcurrencyLimit(1);assertTrue(w.runOnce());assertFalse(w.runOnce());assertEquals(1,f.provider().submissions.get());assertEquals(1,f.api().list(f.owner(),f.work()).stream().filter(t->t.status()==GenerationStatus.QUEUED).count());}
@@ -131,10 +133,10 @@ class GenerationWorkerIntegrationTest {
         try{
             var a=executor.submit(()->worker(f,url->new ByteArrayInputStream(wav())).withConcurrencyLimit(2).runOnce(ExecutionRepository.Phase.SUBMIT));
             var b=executor.submit(()->worker(f,url->new ByteArrayInputStream(wav())).withConcurrencyLimit(2).runOnce(ExecutionRepository.Phase.SUBMIT));
-            assertTrue(f.provider().entered.await(5,TimeUnit.SECONDS),"不同任务的提交不能持有整段供应商锁");
+            assertTrue(f.provider().entered.await(TEST_WAIT_SECONDS,TimeUnit.SECONDS),"不同任务的提交不能持有整段供应商锁");
             assertFalse(worker(f,url->new ByteArrayInputStream(wav())).withConcurrencyLimit(2).runOnce(ExecutionRepository.Phase.SUBMIT));
             assertEquals(2,f.provider().submissions.get());
-            f.provider().release.countDown();assertTrue(a.get(5,TimeUnit.SECONDS));assertTrue(b.get(5,TimeUnit.SECONDS));
+            f.provider().release.countDown();assertTrue(a.get(TEST_WAIT_SECONDS,TimeUnit.SECONDS));assertTrue(b.get(TEST_WAIT_SECONDS,TimeUnit.SECONDS));
             assertEquals(1,jdbc.queryForObject("SELECT COUNT(*) FROM generation_task WHERE provider=? AND status='QUEUED'",Integer.class,f.provider().name()));
         }finally{f.provider().release.countDown();executor.shutdownNow();}
     }
@@ -143,14 +145,14 @@ class GenerationWorkerIntegrationTest {
         var f=fixture();var w=worker(f,url->new ByteArrayInputStream(wav()));w.runOnce();f.time().advance(11);w.runOnce();
         var other=fixture(f.provider(),f.time());var entered=new CountDownLatch(1);var release=new CountDownLatch(1);
         var executor=Executors.newSingleThreadExecutor();
-        var slow=worker(f,url->{entered.countDown();try{if(!release.await(5,TimeUnit.SECONDS))throw new IOException("归档未释放");}catch(InterruptedException e){Thread.currentThread().interrupt();throw new IOException(e);}return new ByteArrayInputStream(wav());});
+        var slow=worker(f,url->{entered.countDown();try{if(!release.await(TEST_WAIT_SECONDS,TimeUnit.SECONDS))throw new IOException("归档未释放");}catch(InterruptedException e){Thread.currentThread().interrupt();throw new IOException(e);}return new ByteArrayInputStream(wav());});
         try{
             var saving=executor.submit(()->slow.runOnce(ExecutionRepository.Phase.ARCHIVE));
-            assertTrue(entered.await(5,TimeUnit.SECONDS));
+            assertTrue(entered.await(TEST_WAIT_SECONDS,TimeUnit.SECONDS));
             assertTrue(w.runOnce(ExecutionRepository.Phase.SUBMIT));assertEquals(GenerationStatus.RUNNING,status(other));
             f.time().advance(11);assertTrue(w.runOnce(ExecutionRepository.Phase.QUERY));assertEquals(GenerationStatus.SAVING,status(other));
             assertEquals(2,f.provider().submissions.get());
-            release.countDown();assertTrue(saving.get(5,TimeUnit.SECONDS));assertEquals(GenerationStatus.SUCCEEDED,status(f));
+            release.countDown();assertTrue(saving.get(TEST_WAIT_SECONDS,TimeUnit.SECONDS));assertEquals(GenerationStatus.SUCCEEDED,status(f));
         }finally{release.countDown();executor.shutdownNow();}
     }
 

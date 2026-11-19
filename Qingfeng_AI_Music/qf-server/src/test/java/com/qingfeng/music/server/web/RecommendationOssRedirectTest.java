@@ -17,6 +17,24 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 class RecommendationOssRedirectTest {
+    @Test void curatedAudioAndCoversUseCdnWithoutAnOssProbeAndRenewExpiredUrls() {
+        var cdn = new MediaCdnSigner(true, "https://cdn.example.com", "test-key", "", 600, "0", "qingfeng/audio/", "qingfeng/covers/");
+        var redirect = new RecommendationOssRedirect(null, "", false, Clock.systemUTC(), cdn);
+        for (String file : new String[]{"sample-feng-ye-xing-v1-preview-128.mp3", "sample-feng-ye-xing-v1-cover.jpg"}) {
+            String object = com.qingfeng.music.server.hotsong.RecommendationSamples.objectKey(file).orElseThrow();
+            assertTrue(RecommendationOssRedirect.isSamplePath("/media/" + file));
+            var initial = redirect.destination("/media/" + file, "GET", false).orElseThrow();
+            var renewed = redirect.destination("/media/" + file, "GET", true).orElseThrow();
+            assertEquals("cdn.example.com", initial.getHost());
+            assertEquals("/" + object, initial.getPath());
+            assertNotEquals(initial.getQuery(), renewed.getQuery());
+            assertTrue(redirect.destination("/media/" + file, "HEAD", false).isPresent());
+            assertTrue(redirect.destination("/media/" + file, "POST", false).isEmpty());
+        }
+        assertTrue(cdn.recommendation("../private.mp3").isEmpty());
+        assertTrue(cdn.recommendation("sample-unknown-v1-preview-128.mp3").isEmpty());
+    }
+
     private static final String FILE = "/media/sample-red-guofeng-v1.mp3";
     private static final String KEY = RecommendationOssRedirect.PREFIX + "sample-red-guofeng-v1.mp3";
     private static final Clock CLOCK = Clock.fixed(Instant.parse("2026-11-16T00:00:00Z"), ZoneOffset.UTC);

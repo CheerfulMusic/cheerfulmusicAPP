@@ -1,7 +1,8 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 import { NativeAudioPool } from './audio-cache'
-export interface PlayableTrack { id: string; title: string; titleKey?: string; cover: string; audio: string; provenance?: 'SAMPLE' | 'IMPORTED' | 'GENERATED' }
+import type { LyricLine } from '../../modules/works/api/detail'
+export interface PlayableTrack { id: string; title: string; titleKey?: string; cover: string; audio: string; provenance?: 'SAMPLE' | 'IMPORTED' | 'GENERATED'; lyricLines?: readonly LyricLine[] }
 export const usePlayer = defineStore('player', () => {
   const current=ref<PlayableTrack|null>(null),playing=ref(false),starting=ref(false),buffering=ref(false),time=ref(0),duration=ref(0),error=ref(''),queue=ref<PlayableTrack[]>([])
   const hasQueue=computed(()=>queue.value.length>1&&queue.value.some(track=>track.id===current.value?.id))
@@ -9,6 +10,11 @@ export const usePlayer = defineStore('player', () => {
   const repeatOne=ref(false)
   function toggleRepeat(){repeatOne.value=!repeatOne.value}
   const seekVersion=ref(0),segment=ref<{track:string;start:number;end:number;loop:boolean}|null>(null)
+  const volume=ref(readVolume()),muted=ref(false)
+  function readVolume(){try{const raw=localStorage.getItem('qingfeng.player.volume');const value=raw===null?1:Number(raw);return Number.isFinite(value)?Math.min(1,Math.max(0,value)):1}catch{return 1}}
+  function applyVolume(){if(audio){audio.volume=volume.value;audio.muted=muted.value}}
+  function setVolume(value:number){if(!Number.isFinite(value))return;volume.value=Math.min(1,Math.max(0,value));muted.value=false;applyVolume();try{localStorage.setItem('qingfeng.player.volume',String(volume.value))}catch{/* Storage may be disabled. */}}
+  function toggleMute(){if(volume.value===0){setVolume(0.5);return}muted.value=!muted.value;applyVolume()}
   let audio:HTMLAudioElement|undefined,operation=0,waitingTimer:ReturnType<typeof setTimeout>|undefined,autoAdvance=true
   type SegmentState={track:string;start:number;end:number;loop:boolean}
   type RestoreState={time:number;paused:boolean;playbackRate:number;segment:SegmentState|null;playing:boolean;starting:boolean;buffering:boolean;duration:number;queue:PlayableTrack[];autoAdvance:boolean}
@@ -170,6 +176,7 @@ export const usePlayer = defineStore('player', () => {
     const adopted=pool.acquire(track.audio, element)
     if (adopted !== element) return false
     audio=element
+    applyVolume()
     current.value=track
     queue.value=[track]
     autoAdvance=false
@@ -197,7 +204,7 @@ export const usePlayer = defineStore('player', () => {
     audio=undefined;current.value=track;playing.value=false;starting.value=true;time.value=0;duration.value=0
     if(!queue.value.some(item=>item.id===track.id&&item.audio===track.audio)){queue.value=[track];autoAdvance=false}
     try{
-      const element=pool.acquire(track.audio);audio=element;element.preload='auto'
+      const element=pool.acquire(track.audio);audio=element;applyVolume();element.preload='auto'
       if(!element.getAttribute('src'))element.src=track.audio
       else if(element.error)element.load()
       if(element.ended||Number.isFinite(element.duration)&&element.currentTime>=element.duration)element.currentTime=0
@@ -237,5 +244,5 @@ export const usePlayer = defineStore('player', () => {
   function close(){cancelReauth();operation++;segment.value=null;repeatOne.value=false;audio?.pause();if(audio)audio.preload='metadata';current.value=null;queue.value=[];time.value=0;duration.value=0;error.value='';starting.value=false;stopWaiting();playing.value=false}
   /** 身份切换和分享失效彻底释放，与普通收起播放器分开。 */
   function reset(){close();audio=undefined;pool.clear()}
-  return {current,playing,starting,buffering,time,duration,error,hasQueue,tracks,repeatOne,toggleRepeat,seekVersion,adoptGiftPreview,toggle,seek,close,reset,setQueue,next,updateCover,updateTitles,segment,playSegment,stopSegment}
+  return {volume,muted,setVolume,toggleMute,current,playing,starting,buffering,time,duration,error,hasQueue,tracks,repeatOne,toggleRepeat,seekVersion,adoptGiftPreview,toggle,seek,close,reset,setQueue,next,updateCover,updateTitles,segment,playSegment,stopSegment}
 })

@@ -12,7 +12,7 @@ spec.loader.exec_module(guard)
 
 
 class GuardTest(unittest.TestCase):
-    def fixture(self, missing=False, missing_audio=False):
+    def fixture(self, missing=False, missing_audio=False, cdn=False, mismatched_cdn=False):
         base = Path(__file__).resolve().parents[2] / '.cache/guard-test-tmp'
         base.mkdir(parents=True, exist_ok=True)
         directory = tempfile.TemporaryDirectory(dir=base)
@@ -29,9 +29,23 @@ class GuardTest(unittest.TestCase):
             for migration in sorted((Path(__file__).resolve().parents[1] / 'qf-infrastructure/src/main/resources/db/migration').glob('V*__*.sql')):
                 z.writestr(prefix + 'db/migration/' + migration.name, migration.read_bytes())
             z.writestr(prefix + 'static/index.html', '<script src="/assets/index-abc.js"></script>')
-            z.writestr(prefix + 'static/assets/index-abc.js', 'IdentityPage-abc.js RechargePage-abc.js AnalyticsPage-abc.js `/media/sample.mp3`')
+            entry = 'IdentityPage-abc.js RechargePage-abc.js AnalyticsPage-abc.js `/media/sample.mp3`'
             audio = b'ID3original-audio'
-            z.writestr(prefix + 'static/preview-media-manifest.json', json.dumps({'version': 1, 'assets': [{'path': '/media/sample.mp3', 'bytes': len(audio), 'sha256': hashlib.sha256(audio).hexdigest()}]}))
+            manifest = {'version': 1, 'assets': [{'path': '/media/sample.mp3', 'bytes': len(audio), 'sha256': hashlib.sha256(audio).hexdigest()}]}
+            if cdn:
+                filename = 'sample-cdn-song-v1-preview-128.mp3'
+                path, sha = '/media/' + filename, 'f'*64
+                key = 'qingfeng/recommendation-samples/20261118/audio/' + sha[:12] + '/' + filename
+                asset = {'path': path, 'key': key, 'bytes': 37, 'sha256': sha}
+                manifest['remoteAssets'] = [asset]
+                catalog = dict(asset, trackId='cdn-song', kind='audio')
+                if mismatched_cdn:
+                    catalog['bytes'] += 1
+                z.writestr(prefix + 'static/recommendation-assets.json', json.dumps({'version': 1, 'assets': [catalog]}))
+                z.writestr(prefix + 'com/qingfeng/music/server/hotsong/RecommendationSamples.class', key)
+                entry += ' `' + path + '`'
+            z.writestr(prefix + 'static/assets/index-abc.js', entry)
+            z.writestr(prefix + 'static/preview-media-manifest.json', json.dumps(manifest))
             if not missing_audio:
                 z.writestr(prefix + 'static/media/sample.mp3', audio)
             for name, body in [('IdentityPage', 'payment-orders' if missing else 'cancel-order payment-orders'), ('RechargePage', '/account#payment-orders'), ('AnalyticsPage', 'analytics')]:
@@ -55,6 +69,15 @@ class GuardTest(unittest.TestCase):
     def test_complete_artifact(self):
         root, policy = self.fixture()
         guard.verify(root, policy)
+
+    def test_cataloged_cdn_preview_is_accepted(self):
+        root, policy = self.fixture(cdn=True)
+        guard.verify(root, policy)
+
+    def test_cdn_preview_metadata_mismatch_is_rejected(self):
+        root, policy = self.fixture(cdn=True, mismatched_cdn=True)
+        with self.assertRaisesRegex(ValueError, 'CDN preview asset does not match'):
+            guard.verify(root, policy)
 
     def test_old_order_component_rejected_even_if_hash_approved(self):
         root, policy = self.fixture(missing=True)

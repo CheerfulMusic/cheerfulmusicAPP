@@ -34,8 +34,8 @@ public class StorageConfiguration {
         Path defaultRoot=Path.of(env.getProperty("qingfeng.media.directory","./data/audio")).resolveSibling("covers");
         return new CoverImageStore(Path.of(env.getProperty("qingfeng.cover.directory",defaultRoot.toString())),client,setting(env,"qingfeng.oss.bucket"),env.getProperty("qingfeng.oss.cover-prefix","qingfeng/covers/"),env.getProperty("qingfeng.media.storage","local").equals("oss"));
     }
-    @Bean @DependsOn("mediaFileStore") com.qingfeng.music.server.web.RecommendationOssRedirect recommendationOssRedirect(Environment env){
-        return new com.qingfeng.music.server.web.RecommendationOssRedirect(client,setting(env,"qingfeng.oss.bucket"),env.getProperty("qingfeng.recommendation-oss.enabled",Boolean.class,false),java.time.Clock.systemUTC());
+    @Bean @DependsOn("mediaFileStore") com.qingfeng.music.server.web.RecommendationOssRedirect recommendationOssRedirect(Environment env,com.qingfeng.music.server.web.MediaCdnSigner cdn){
+        return new com.qingfeng.music.server.web.RecommendationOssRedirect(client,setting(env,"qingfeng.oss.bucket"),env.getProperty("qingfeng.recommendation-oss.enabled",Boolean.class,false),java.time.Clock.systemUTC(),cdn);
     }
     private String required(Environment env,String name){String value=setting(env,name);if(value.isBlank())throw new IllegalArgumentException("缺少存储配置项："+name);return value;}
     @jakarta.annotation.PreDestroy void close(){if(client!=null)client.shutdown();}

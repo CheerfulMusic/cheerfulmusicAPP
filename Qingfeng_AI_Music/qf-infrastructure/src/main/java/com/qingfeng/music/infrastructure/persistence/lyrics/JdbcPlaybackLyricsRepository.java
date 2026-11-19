@@ -21,6 +21,8 @@ public final class JdbcPlaybackLyricsRepository implements PlaybackLyricsReposit
     public boolean claim(String owner,Source source,String key){
         jdbc.update("INSERT INTO media_lyrics_timeline(asset_id,work_id,state,updated_at) VALUES(?,?,'NOT_REQUESTED',CURRENT_TIMESTAMP) ON DUPLICATE KEY UPDATE asset_id=asset_id",source.assetId(),source.workId());
         return Boolean.TRUE.equals(transactions.execute(tx->{
+            // Keep the same lock order as background preparation and usage admission.
+            jdbc.queryForObject("SELECT kind FROM model_usage_lock WHERE kind='TIMING' FOR UPDATE",String.class);
             jdbc.queryForObject("SELECT asset_id FROM media_lyrics_timeline WHERE asset_id=? FOR UPDATE",String.class,source.assetId());
             var existing=find(source.assetId()).orElseThrow();
             if(!Set.of("NOT_REQUESTED","FAILED").contains(existing.status())||key.equals(existing.requestKey()))return false;

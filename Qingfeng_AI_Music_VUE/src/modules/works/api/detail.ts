@@ -27,7 +27,7 @@ export const getRevision = (work: string, revision: string) => call<Revision>(`a
 export interface Allowance {dailyLimit:number;dailyRemaining:number;concurrentLimit:number;active:number;resetsAt:string;dailyUnlimited?:boolean;concurrentUnlimited?:boolean}
 export const getUsage = () => call<{music:Allowance;lyrics:Allowance;cover?:Allowance}>('app/usage')
 export interface LyricLine {text:string;start:number;end:number}
-export interface PlaybackLyrics {status:'NOT_REQUESTED'|'FETCHING'|'READY'|'EMPTY'|'FAILED'|'UNKNOWN';text:string;lines:LyricLine[];canSync:boolean}
+export interface PlaybackLyrics {status:'NOT_REQUESTED'|'PREPARING'|'FETCHING'|'READY'|'EMPTY'|'FAILED'|'UNKNOWN'|'REVIEW'|'CANCELLED';text:string;lines:LyricLine[];canSync:boolean}
 export const getPlaybackLyrics = (work:string,asset:string)=>call<PlaybackLyrics>(`app/works/${work}/audio/${asset}/lyrics`)
 export async function syncPlaybackLyrics(work:string,asset:string,requestKey:string){await ensureCreator();return requestJson<PlaybackLyrics>(`app/works/${work}/audio/${asset}/lyrics/sync`,'POST',{requestKey},130000)}
 export const saveRevision = (work: string, workVersion: number, title: string, lyrics: string, baseRevisionId?: string) => call<Revision>(`app/works/${work}/lyrics`, 'POST', { workVersion, title, lyrics, baseRevisionId })
@@ -68,7 +68,8 @@ export async function rhymeLyricLine(work: string, input: LyricRhymeRequest) {
 export interface LyricSelectionInput {requestId: string; workVersion: number; lyrics: string; keptLines: number[]; language: string}
 export async function rewriteLyricSelection(work: string, input: LyricSelectionInput) {
   await ensureCreator()
-  return requestJson<{lyrics: string}>(`app/works/${encodeURIComponent(work)}/lyrics/rewrite-selection`, 'POST', input, 110000)
+  // One preview can include an initial 85s model call and one bounded repair.
+  return requestJson<{lyrics: string}>(`app/works/${encodeURIComponent(work)}/lyrics/rewrite-selection`, 'POST', input, 190000)
 }
 export const confirmRevision = (work: string, revision: string) => call<Revision>(`app/works/${work}/lyrics/${revision}/confirm`, 'POST', {})
 export const saveAudioNote = (work:string,asset:string,note:string,version:number) => call<AudioAsset>(`app/works/${encodeURIComponent(work)}/audio/${encodeURIComponent(asset)}/note`,'PUT',{note,version})

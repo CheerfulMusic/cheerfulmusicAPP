@@ -33,9 +33,15 @@ public final class RecommendationOssRedirect {
     private final String bucket;
     private final boolean enabled;
     private final Clock clock;
+    private final MediaCdnSigner cdn;
 
     public RecommendationOssRedirect(OSS client, String bucket, boolean enabled, Clock clock) {
+        this(client, bucket, enabled, clock, null);
+    }
+
+    public RecommendationOssRedirect(OSS client, String bucket, boolean enabled, Clock clock, MediaCdnSigner cdn) {
         this.client = client; this.bucket = bucket; this.enabled = enabled; this.clock = clock;
+        this.cdn = cdn;
     }
 
     private boolean exists(String key) {
@@ -59,14 +65,23 @@ public final class RecommendationOssRedirect {
     }
 
     public static boolean isSamplePath(String path) {
-        return path != null && path.startsWith("/media/") && SAMPLES.contains(path.substring("/media/".length()));
+        return path != null && path.startsWith("/media/") && objectKey(path.substring("/media/".length())).isPresent();
+    }
+
+    static Optional<String> objectKey(String name) {
+        if (name == null) return Optional.empty();
+        var curated = com.qingfeng.music.server.hotsong.RecommendationSamples.objectKey(name);
+        if (curated.isPresent()) return curated;
+        if (!SAMPLES.contains(name)) return Optional.empty();
+        return Optional.of((name.endsWith("-preview-128.mp3") ? PREVIEW_PREFIX : PREFIX) + name);
     }
 
     public Optional<URI> destination(String path, String method, boolean reauth) {
-        if (!enabled || client == null || bucket == null || bucket.isBlank() || reauth
-                || !("GET".equals(method) || "HEAD".equals(method)) || !isSamplePath(path)) return Optional.empty();
+        if (!("GET".equals(method) || "HEAD".equals(method)) || !isSamplePath(path)) return Optional.empty();
         String name = path.substring("/media/".length());
-        String key = (name.endsWith("-preview-128.mp3") ? PREVIEW_PREFIX : PREFIX) + name;
+        String key = objectKey(name).orElseThrow();
+        if (cdn != null && cdn.enabled()) return cdn.recommendation(name);
+        if (!enabled || client == null || bucket == null || bucket.isBlank() || reauth) return Optional.empty();
         try {
             if (!exists(key)) return Optional.empty();
             var expires = Date.from(clock.instant().plusSeconds(3600));

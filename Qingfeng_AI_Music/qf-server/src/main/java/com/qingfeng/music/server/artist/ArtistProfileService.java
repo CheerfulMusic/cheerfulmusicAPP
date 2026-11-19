@@ -106,15 +106,18 @@ public class ArtistProfileService {
     private final MediaApi media;
     private final SharedMediaAccess audio;
     private final SharedCoverAccess covers;
+    private final com.qingfeng.music.lyrics.playback.PlaybackLyricsRepository playbackLyrics;
 
     public ArtistProfileService(JdbcTemplate db, IdentityApi identity, LogtoIdentityService logto,
-                                MediaApi media, SharedMediaAccess audio, SharedCoverAccess covers) {
+                                MediaApi media, SharedMediaAccess audio, SharedCoverAccess covers,
+                                com.qingfeng.music.lyrics.playback.PlaybackLyricsRepository playbackLyrics) {
         this.db = db;
         this.identity = identity;
         this.logto = logto;
         this.media = media;
         this.audio = audio;
         this.covers = covers;
+        this.playbackLyrics = playbackLyrics;
     }
 
     public boolean hasAccount(String creator) {
@@ -442,6 +445,19 @@ public class ArtistProfileService {
     public MediaApi.MediaRef publicAudioRef(String publicId, String song, long version) {
         var release = publicRelease(publicId, song, version);
         return audio.ref(release.workId(), release.assetId());
+    }
+
+    /** Only archived timing for the exact visible release; never expose editable drafts or create provider jobs. */
+    @Transactional(readOnly = true)
+    public com.qingfeng.music.lyrics.playback.PlaybackLyrics.Snapshot publicPlaybackLyrics(String publicId, String song, long version) {
+        var release = publicRelease(publicId, song, version);
+        var stored = playbackLyrics.find(release.assetId());
+        var lines = stored.filter(s -> "READY".equals(s.status()))
+                .map(s -> com.qingfeng.music.lyrics.playback.PlaybackLyrics.lines(s.words())).orElse(List.of());
+        String text = lines.stream().map(com.qingfeng.music.lyrics.playback.PlaybackLyrics.Line::text)
+                .collect(java.util.stream.Collectors.joining("\n"));
+        return new com.qingfeng.music.lyrics.playback.PlaybackLyrics.Snapshot(
+                lines.isEmpty() ? stored.map(s -> java.util.Set.of("PREPARING","FETCHING","UNKNOWN").contains(s.status()) ? s.status() : "EMPTY").orElse("EMPTY") : "READY", text, lines, false);
     }
 
     public MediaApi.Content publicAudio(String publicId, String song, long version) {

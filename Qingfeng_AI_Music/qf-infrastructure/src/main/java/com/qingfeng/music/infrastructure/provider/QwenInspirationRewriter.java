@@ -100,13 +100,15 @@ public final class QwenInspirationRewriter implements InspirationRewriter {
     @Override public List<Replacement> rewriteSelection(String text, String language, List<Integer> targetIndices) {
         var rows = request(SELECTION_SYSTEM, Map.of("text", text, "lyricLanguage", language, "targetIndices", targetIndices),
             85, 12000).path("replacements");
-        if (!rows.isArray() || rows.size() != targetIndices.size()) throw invalid();
+        if (!rows.isArray()) throw invalid();
         var replacements = new ArrayList<Replacement>(rows.size());
         for (var row : rows) {
             var index = row.path("index");
             var line = row.path("text");
-            if (!index.isIntegralNumber() || !index.canConvertToInt() || !line.isString()) throw invalid();
-            replacements.add(new Replacement(index.intValue(), line.stringValue()));
+            // Keep usable rows from a partial response. The business layer validates each target
+            // and repairs only the missing/invalid positions, without coercing strings to indices.
+            if (!index.isIntegralNumber() || !index.canConvertToInt()) { replacements.add(null); continue; }
+            replacements.add(new Replacement(index.intValue(), line.isString() ? line.stringValue() : null));
         }
         return replacements;
     }
