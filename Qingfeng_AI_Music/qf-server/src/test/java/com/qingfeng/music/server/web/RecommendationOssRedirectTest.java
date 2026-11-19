@@ -17,6 +17,20 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 class RecommendationOssRedirectTest {
+    @Test void restoredSamplesUseTheirLegacyAudioAndCheckedCoverObjects() {
+        var cdn = new MediaCdnSigner(true, "https://cdn.example.com", "test-key", "", 600, "0", "qingfeng/audio/", "qingfeng/covers/");
+        var redirect = new RecommendationOssRedirect(null, "", false, Clock.systemUTC(), cdn);
+        var audio = redirect.destination("/media/sample-love-v2-preview-128.mp3", "GET", true).orElseThrow();
+        assertEquals("/" + RecommendationOssRedirect.PREVIEW_PREFIX + "sample-love-v2-preview-128.mp3", audio.getPath());
+        for (String cover : new String[]{"explore-love-v1.webp", "explore-guofeng-v1.svg", "explore-disco-v1.jpg"}) {
+            var destination = redirect.destination("/media/" + cover, "GET", false).orElseThrow();
+            assertEquals("cdn.example.com", destination.getHost());
+            assertTrue(destination.getPath().matches("/qingfeng/recommendation-samples/20261119/cover/[a-f0-9]{12}/" + java.util.regex.Pattern.quote(cover)));
+            assertTrue(destination.getQuery().startsWith("auth_key="));
+        }
+        assertTrue(redirect.destination("/media/explore-unknown-v1.jpg", "GET", false).isEmpty());
+    }
+
     @Test void newHashNamedSamplesUseTheSameSignedCdnAndRejectUnknownOrChangedHashes() {
         var cdn=new MediaCdnSigner(true,"https://cdn.example.com","test-key","",600,"0","qingfeng/audio/","qingfeng/covers/");
         var redirect=new RecommendationOssRedirect(null,"",false,Clock.systemUTC(),cdn);

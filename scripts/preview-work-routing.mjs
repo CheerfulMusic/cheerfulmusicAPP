@@ -3,7 +3,7 @@ import {pathToFileURL} from 'node:url';
 
 export const workMetadataRule='^/api/app/works(?:/[^/?]+)?(?:[?]|$)';
 export const creationSettingsRule='^/api/app/(?:music-settings/(?:catalog|preview)|works/[^/?]+/(?:music-settings(?:/preview)?|creative-direction|lyrics(?:/[^/?]+)*|generations(?:/preflight)?))(?:[?]|$)';
-export const recommendationMediaRule='^/media/(?:sample-[a-z0-9-]+-v1(?:-preview-128\\.mp3|-cover\\.jpg)|recommendations/[a-z0-9-]+-[a-f0-9]{12}-(?:preview-128\\.mp3|cover\\.jpg))(?:[?]|$)';
+export const recommendationMediaRule='^/media/(?:sample-[a-z0-9-]+-v[12](?:-preview-128\\.mp3|-cover\\.jpg)|explore-(?:(?:love|family|travel)-v1\\.webp|(?:disco|rock|electronic|instrumental)-v1\\.jpg|guofeng-v1\\.svg)|recommendations/[a-z0-9-]+-[a-f0-9]{12}-(?:preview-128\\.mp3|cover\\.jpg))(?:[?]|$)';
 const photoCapabilityRule='^/api/public/system/photo-preview(?:[?]|$)';
 const photoCapabilityFlag="'import.meta.env.VITE_LOCAL_PHOTO_CAPABILITY': JSON.stringify('true')";
 

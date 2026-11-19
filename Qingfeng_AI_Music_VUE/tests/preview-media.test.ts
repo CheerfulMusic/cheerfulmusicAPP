@@ -11,6 +11,7 @@ it('routes recommendation audio and covers through the normal development entry'
  const config=await viteConfig({command:'serve',mode:'test'})
  const rules=Object.keys(config.server!.proxy!).filter(rule=>rule.startsWith('^')).map(rule=>new RegExp(rule))
  for(const path of ['/media/sample-feng-ye-xing-v1-preview-128.mp3','/media/sample-feng-ye-xing-v1-cover.jpg','/media/sample-feng-ye-xing-v1-preview-128.mp3?reauth=1',
+   '/media/sample-love-v2-preview-128.mp3','/media/sample-love-v2-preview-128.mp3?reauth=1','/media/explore-family-v1.webp','/media/explore-guofeng-v1.svg',
    '/media/recommendations/body-language-8e59749c37e9-preview-128.mp3','/media/recommendations/body-language-c251e80045fe-cover.jpg',
    '/media/recommendations/body-language-8e59749c37e9-preview-128.mp3?reauth=1']){
   expect(rules.some(rule=>rule.test(path)),path).toBe(true)
@@ -31,10 +32,13 @@ function fixture(audio:Buffer|null){
 }
 it('verifies all local and CDN preview assets and produces byte/hash metadata',()=>{
  const manifest=previewMediaManifest(fileURLToPath(new URL('..',import.meta.url)))
- expect(manifest.assets.filter(a=>a.path.endsWith('.mp3'))).toHaveLength(9)
- expect(manifest.assets.every(a=>a.bytes>0&&/^[a-f0-9]{64}$/.test(a.sha256))).toBe(true)
- expect(manifest.remoteAssets).toHaveLength(44)
- expect(manifest.remoteAssets.every(a=>a.bytes>0&&a.key.includes(a.sha256.slice(0,12)))).toBe(true)
+ expect(manifest.assets).toEqual([])
+ expect(manifest.remoteAssets).toHaveLength(61)
+ const legacy=manifest.remoteAssets.filter(a=>a.key.startsWith('qingfeng/recommendation-samples/preview-128-v1/'))
+ expect(legacy).toHaveLength(9)
+ expect(legacy.every(a=>a.key.endsWith(a.path.split('/').pop()!))).toBe(true)
+ expect(manifest.remoteAssets.every(a=>a.bytes>0&&/^[a-f0-9]{64}$/.test(a.sha256)&&(legacy.includes(a)||a.key.includes(a.sha256.slice(0,12))))).toBe(true)
+ expect(manifest.remoteAssets.filter(a=>a.path==='/media/explore-family-v1.webp')).toHaveLength(1)
 })
 it('blocks builds when sparse checkout omits audio',()=>{
  expect(()=>previewMediaManifest(fixture(null))).toThrow('Missing preview asset: /media/sample.mp3')

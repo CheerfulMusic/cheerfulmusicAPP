@@ -33,6 +33,14 @@ public final class RecommendationSamples {
         new Song("summer-on-repeat", "Summer on Repeat", "欧美流行", "/media/recommendations/summer-on-repeat-68e4b531c543-preview-128.mp3"));
 
     private static final Map<String, String> OBJECTS = Map.ofEntries(
+        Map.entry("explore-love-v1.webp", "qingfeng/recommendation-samples/20261119/cover/bfeb8fbf154f/explore-love-v1.webp"),
+        Map.entry("explore-guofeng-v1.svg", "qingfeng/recommendation-samples/20261119/cover/a1f2b7d7bf16/explore-guofeng-v1.svg"),
+        Map.entry("explore-family-v1.webp", "qingfeng/recommendation-samples/20261119/cover/85bd1657b6b3/explore-family-v1.webp"),
+        Map.entry("explore-travel-v1.webp", "qingfeng/recommendation-samples/20261119/cover/0c4d6638746a/explore-travel-v1.webp"),
+        Map.entry("explore-instrumental-v1.jpg", "qingfeng/recommendation-samples/20261119/cover/2c2b7a5895fd/explore-instrumental-v1.jpg"),
+        Map.entry("explore-electronic-v1.jpg", "qingfeng/recommendation-samples/20261119/cover/964c9ed3be67/explore-electronic-v1.jpg"),
+        Map.entry("explore-disco-v1.jpg", "qingfeng/recommendation-samples/20261119/cover/4338828721de/explore-disco-v1.jpg"),
+        Map.entry("explore-rock-v1.jpg", "qingfeng/recommendation-samples/20261119/cover/00f6b6e417d8/explore-rock-v1.jpg"),
         Map.entry("sample-feng-ye-xing-v1.mp3", "qingfeng/recommendation-samples/20261118/original/686329f818bc/sample-feng-ye-xing-v1.mp3"),
         Map.entry("sample-feng-ye-xing-v1-preview-128.mp3", "qingfeng/recommendation-samples/20261118/audio/22c66d4eb1ca/sample-feng-ye-xing-v1-preview-128.mp3"),
         Map.entry("sample-feng-ye-xing-v1-cover.jpg", "qingfeng/recommendation-samples/20261118/cover/2c2b7a5895fd/sample-feng-ye-xing-v1-cover.jpg"),

@@ -529,6 +529,222 @@
       "key": "qingfeng/recommendation-samples/20261119/cover/d8a226ab9537/summer-on-repeat-d8a226ab9537-cover.jpg",
       "bytes": 13446,
       "sha256": "d8a226ab953766058c226ba3d00e36afc6816fe1d83cffacaf776e62b5f39beb"
+    },
+    {
+      "trackId": "love",
+      "kind": "original",
+      "path": "/media/sample-love-v2.mp3",
+      "key": "qingfeng/recommendation-samples/v1/sample-love-v2.mp3",
+      "bytes": 3971598,
+      "sha256": "6baf4941f45fa22a7591bc7bea5db8bd7219422b50652d7d59f54636d8241bd6"
+    },
+    {
+      "trackId": "love",
+      "kind": "audio",
+      "path": "/media/sample-love-v2-preview-128.mp3",
+      "key": "qingfeng/recommendation-samples/preview-128-v1/sample-love-v2-preview-128.mp3",
+      "bytes": 2895748,
+      "sha256": "4b211d9a3d850b61461cb7877c7ca29cf888002ac72faf121dd21617a75c72c1"
+    },
+    {
+      "trackId": "love",
+      "kind": "cover",
+      "path": "/media/explore-love-v1.webp",
+      "key": "qingfeng/recommendation-samples/20261119/cover/bfeb8fbf154f/explore-love-v1.webp",
+      "bytes": 129802,
+      "sha256": "bfeb8fbf154fe982d5edfe143e37563d55eb55a69e0281019a523dc3b47e3c8b"
+    },
+    {
+      "trackId": "red-guofeng",
+      "kind": "original",
+      "path": "/media/sample-red-guofeng-v1.mp3",
+      "key": "qingfeng/recommendation-samples/v1/sample-red-guofeng-v1.mp3",
+      "bytes": 8038208,
+      "sha256": "f9b9fca9eb51af67ea7121dfaf31ba47ce795694903cfecea86021457c196380"
+    },
+    {
+      "trackId": "red-guofeng",
+      "kind": "audio",
+      "path": "/media/sample-red-guofeng-v1-preview-128.mp3",
+      "key": "qingfeng/recommendation-samples/preview-128-v1/sample-red-guofeng-v1-preview-128.mp3",
+      "bytes": 3216044,
+      "sha256": "be132f50d6485843b328e190af125882581df8e334084012ec5238d245b51c9a"
+    },
+    {
+      "trackId": "red-guofeng",
+      "kind": "cover",
+      "path": "/media/explore-guofeng-v1.svg",
+      "key": "qingfeng/recommendation-samples/20261119/cover/a1f2b7d7bf16/explore-guofeng-v1.svg",
+      "bytes": 957,
+      "sha256": "a1f2b7d7bf16890423ba072d877156585ea7c691a876d43d7cc147c439c066d0"
+    },
+    {
+      "trackId": "family",
+      "kind": "original",
+      "path": "/media/sample-family-v2.mp3",
+      "key": "qingfeng/recommendation-samples/v1/sample-family-v2.mp3",
+      "bytes": 3900244,
+      "sha256": "2b4c9fe0d338aa0ce2a52183bfa8fd0affcd49dc6cd03d8d1c80697414b35762"
+    },
+    {
+      "trackId": "family",
+      "kind": "audio",
+      "path": "/media/sample-family-v2-preview-128.mp3",
+      "key": "qingfeng/recommendation-samples/preview-128-v1/sample-family-v2-preview-128.mp3",
+      "bytes": 2601003,
+      "sha256": "98b7c05c0b8b1a0ca27be21c6ef280e57648c5a90bcdca0c5efd2685d55c1a4f"
+    },
+    {
+      "trackId": "family",
+      "kind": "cover",
+      "path": "/media/explore-family-v1.webp",
+      "key": "qingfeng/recommendation-samples/20261119/cover/85bd1657b6b3/explore-family-v1.webp",
+      "bytes": 250192,
+      "sha256": "85bd1657b6b3b120d4e390d2209034e1baa6347a43519844898f40752c4be874"
+    },
+    {
+      "trackId": "travel",
+      "kind": "original",
+      "path": "/media/sample-ocean-travel-v2.mp3",
+      "key": "qingfeng/recommendation-samples/v1/sample-ocean-travel-v2.mp3",
+      "bytes": 8262848,
+      "sha256": "f25c962f027cd7cc9a3bb71421396771d8d03bcc28f101aa904864088b9f4276"
+    },
+    {
+      "trackId": "travel",
+      "kind": "audio",
+      "path": "/media/sample-ocean-travel-v2-preview-128.mp3",
+      "key": "qingfeng/recommendation-samples/preview-128-v1/sample-ocean-travel-v2-preview-128.mp3",
+      "bytes": 3305900,
+      "sha256": "c510d984162aa8ac453ca9b07a202c857f3b8260f8ae61de2f69e62871c0ad14"
+    },
+    {
+      "trackId": "travel",
+      "kind": "cover",
+      "path": "/media/explore-travel-v1.webp",
+      "key": "qingfeng/recommendation-samples/20261119/cover/0c4d6638746a/explore-travel-v1.webp",
+      "bytes": 140604,
+      "sha256": "0c4d6638746a249a787faf53d15d3bf9762cacd330eda3604842f8d4fc6b9285"
+    },
+    {
+      "trackId": "river-instrumental",
+      "kind": "original",
+      "path": "/media/sample-river-instrumental-v1.mp3",
+      "key": "qingfeng/recommendation-samples/v1/sample-river-instrumental-v1.mp3",
+      "bytes": 4250306,
+      "sha256": "664e7d735c9aa4f1b05bb8f462cb89affaa9f6fc47e902b14f061c87e6aa95ae"
+    },
+    {
+      "trackId": "river-instrumental",
+      "kind": "audio",
+      "path": "/media/sample-river-instrumental-v1-preview-128.mp3",
+      "key": "qingfeng/recommendation-samples/preview-128-v1/sample-river-instrumental-v1-preview-128.mp3",
+      "bytes": 3168812,
+      "sha256": "730bfc6ae22da8cfd5dad1b1dab99b248b4cb3ce4db7e94e4d76834ce6b41101"
+    },
+    {
+      "trackId": "river-instrumental",
+      "kind": "cover",
+      "path": "/media/explore-instrumental-v1.jpg",
+      "key": "qingfeng/recommendation-samples/20261119/cover/2c2b7a5895fd/explore-instrumental-v1.jpg",
+      "bytes": 10554,
+      "sha256": "2c2b7a5895fd2bbd0b9036e96617bfebf95476f3864f41a39245b254de75144e"
+    },
+    {
+      "trackId": "scenery-folk",
+      "kind": "original",
+      "path": "/media/sample-scenery-folk-v1.mp3",
+      "key": "qingfeng/recommendation-samples/v1/sample-scenery-folk-v1.mp3",
+      "bytes": 4437376,
+      "sha256": "396048d27e4dfb981d2828f7f58a996657d0ef7d07e4c53c363be7c2f93cde98"
+    },
+    {
+      "trackId": "scenery-folk",
+      "kind": "audio",
+      "path": "/media/sample-scenery-folk-v1-preview-128.mp3",
+      "key": "qingfeng/recommendation-samples/preview-128-v1/sample-scenery-folk-v1-preview-128.mp3",
+      "bytes": 1774124,
+      "sha256": "76c861022b6a2417fd5ea9a91cbb1a0709a051f548ab04d072ed5c17f757972b"
+    },
+    {
+      "trackId": "scenery-folk",
+      "kind": "cover",
+      "path": "/media/explore-family-v1.webp",
+      "key": "qingfeng/recommendation-samples/20261119/cover/85bd1657b6b3/explore-family-v1.webp",
+      "bytes": 250192,
+      "sha256": "85bd1657b6b3b120d4e390d2209034e1baa6347a43519844898f40752c4be874"
+    },
+    {
+      "trackId": "hometown-electronic",
+      "kind": "original",
+      "path": "/media/sample-hometown-electronic-v1.mp3",
+      "key": "qingfeng/recommendation-samples/v1/sample-hometown-electronic-v1.mp3",
+      "bytes": 2531191,
+      "sha256": "796356dd12b36ecd041a698e902a07366cbc641fdad4dd00ac22f527f7c2951d"
+    },
+    {
+      "trackId": "hometown-electronic",
+      "kind": "audio",
+      "path": "/media/sample-hometown-electronic-v1-preview-128.mp3",
+      "key": "qingfeng/recommendation-samples/preview-128-v1/sample-hometown-electronic-v1-preview-128.mp3",
+      "bytes": 1805228,
+      "sha256": "617af0333bacd3f36aeb066744248f8d1f51d9115803f4e9de490aebb5a32548"
+    },
+    {
+      "trackId": "hometown-electronic",
+      "kind": "cover",
+      "path": "/media/explore-electronic-v1.jpg",
+      "key": "qingfeng/recommendation-samples/20261119/cover/964c9ed3be67/explore-electronic-v1.jpg",
+      "bytes": 10674,
+      "sha256": "964c9ed3be67c58ec60524a3f1af9ed5b83bbf9ed5ad8c5fe21d35d65b21d2bc"
+    },
+    {
+      "trackId": "rain-disco",
+      "kind": "original",
+      "path": "/media/sample-rain-disco-v1.mp3",
+      "key": "qingfeng/recommendation-samples/v1/sample-rain-disco-v1.mp3",
+      "bytes": 2246488,
+      "sha256": "001d0062fecf6d39656000c5ef1dc3f5132ec4a7f0c7e0f32948b433260d7e3f"
+    },
+    {
+      "trackId": "rain-disco",
+      "kind": "audio",
+      "path": "/media/sample-rain-disco-v1-preview-128.mp3",
+      "key": "qingfeng/recommendation-samples/preview-128-v1/sample-rain-disco-v1-preview-128.mp3",
+      "bytes": 1517228,
+      "sha256": "5b91c60e81e721eba4ae725a25332915e810dde61a9cde19fd5a3193a098adfa"
+    },
+    {
+      "trackId": "rain-disco",
+      "kind": "cover",
+      "path": "/media/explore-disco-v1.jpg",
+      "key": "qingfeng/recommendation-samples/20261119/cover/4338828721de/explore-disco-v1.jpg",
+      "bytes": 19839,
+      "sha256": "4338828721deed445f8bdbf4e68fbb2b0db24cf0b176640d439b8d43430a46aa"
+    },
+    {
+      "trackId": "tomorrow-rock",
+      "kind": "original",
+      "path": "/media/sample-tomorrow-rock-v1.mp3",
+      "key": "qingfeng/recommendation-samples/v1/sample-tomorrow-rock-v1.mp3",
+      "bytes": 4906310,
+      "sha256": "77962b18e2b4c52d73c57cfa950f22b837e1d57e6ddf5d685e51cd0c40127712"
+    },
+    {
+      "trackId": "tomorrow-rock",
+      "kind": "audio",
+      "path": "/media/sample-tomorrow-rock-v1-preview-128.mp3",
+      "key": "qingfeng/recommendation-samples/preview-128-v1/sample-tomorrow-rock-v1-preview-128.mp3",
+      "bytes": 3476012,
+      "sha256": "2de964777292cf8c50223ca2cf14ac54b8572ba18e6446d52629fe2922919655"
+    },
+    {
+      "trackId": "tomorrow-rock",
+      "kind": "cover",
+      "path": "/media/explore-rock-v1.jpg",
+      "key": "qingfeng/recommendation-samples/20261119/cover/00f6b6e417d8/explore-rock-v1.jpg",
+      "bytes": 13640,
+      "sha256": "00f6b6e417d8d0d04761cca37ba505c32fae697b7969176866c780d3d4f349b6"
     }
   ]
 }
