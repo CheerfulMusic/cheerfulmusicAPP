@@ -7,6 +7,7 @@ from pathlib import Path
 import re
 import subprocess
 import tempfile
+import time
 import wave
 
 import imageio_ffmpeg
@@ -102,7 +103,16 @@ def main():
     bucket_name = args.bucket or settings["qingfeng.oss.bucket"]
 
     def open_bucket():
-        return oss2.Bucket(auth, endpoint, bucket_name, region=region, connect_timeout=30)
+        return oss2.Bucket(auth, endpoint, bucket_name, region=region, connect_timeout=180)
+
+    def stage_asset(row):
+        for attempt in range(3):
+            try:
+                return plan_asset(open_bucket(), prefix, ffmpeg, row, True)
+            except oss2.exceptions.OssError as error:
+                if attempt == 2 or (error.status != -2 and error.status not in {429, 500, 502, 503, 504}):
+                    raise
+                time.sleep(5 * (attempt + 1))
 
     bucket = open_bucket()
     with pymysql.connect(host="127.0.0.1", port=args.port, database="qingfeng_music",
@@ -155,7 +165,7 @@ def main():
                     with ThreadPoolExecutor(max_workers=args.workers) as executor:
                         for offset in range(0, len(pending), args.workers):
                             tasks = [
-                                executor.submit(plan_asset, open_bucket(), prefix, ffmpeg, row, True)
+                                executor.submit(stage_asset, row)
                                 for row in pending[offset:offset + args.workers]
                             ]
                             for task in tasks:
@@ -172,13 +182,19 @@ def main():
                 entries = [json.loads(line) for line in manifest]
             if not entries:
                 raise ValueError("empty manifest")
-            for entry in entries:
-                source, target = entry["old"], entry["new"]
-                if args.action == "rollback":
-                    source, target = target, source
-                head = bucket.head_object(prefix + target[1][4:])
+            target_version = "old" if args.action == "rollback" else "new"
+
+            def verify_reference(entry):
+                target = entry[target_version]
+                head = open_bucket().head_object(prefix + target[1][4:])
                 if head.content_length != target[3] or head.content_type != target[2]:
                     raise ValueError("referenced object failed validation")
+                if target_version == "new" and head.headers.get("x-oss-meta-qf-wav-sha256") != target[4]:
+                    raise ValueError("referenced WAV checksum metadata changed")
+
+            with ThreadPoolExecutor(max_workers=args.workers) as executor:
+                for _ in executor.map(verify_reference, entries):
+                    pass
             for entry in entries:
                 source, target = entry["old"], entry["new"]
                 if args.action == "rollback":
