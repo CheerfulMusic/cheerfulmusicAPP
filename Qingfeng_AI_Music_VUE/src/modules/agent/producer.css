@@ -76,3 +76,59 @@
 }
 .producer-collection .hot-featured>button{inset:0;width:100%;height:100%;border:0;border-radius:inherit;background:transparent;backdrop-filter:none;cursor:pointer}
 .hot-featured>button>span{position:absolute;right:14px;bottom:16px;display:grid;place-items:center;width:36px;height:36px;border:1px solid #ffffff80;border-radius:50%;background:#ffffff25;backdrop-filter:blur(10px)}
+
+.agent-producer .agent-conversation{background:#f6ecff url('./assets/conversation-background.png') center/100% 100% no-repeat;border-radius:24px;padding:clamp(12px,1.2vw,22px);box-sizing:border-box}
+.agent-producer .agent-chat{background:transparent}
+.agent-producer .producer-collection ol,.agent-producer .shelf-list{overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:#c6ade7 transparent}
+.agent-producer .producer-collection ol{max-height:clamp(145px,23vh,290px)}
+.agent-producer .shelf-list{max-height:clamp(140px,24vh,310px)}
+.agent-producer .producer-shelf:focus{outline:2px solid #b58ae8}
+.agent-producer .agent-user-avatar{padding:0;border:0;cursor:pointer}
+.agent-shell .consumer-header-inner{justify-content:space-between}
+.agent-login,.listen-footer button{border:1px solid #d9c7f2;border-radius:999px;color:#7046ae;background:#fcf9ff;padding:8px 12px;cursor:pointer}
+.music-player-heading,.listening-panel>header{text-align:center;color:#69557f;font-size:13px;font-weight:650;letter-spacing:.04em;margin-bottom:18px}
+.listen-footer{display:flex;flex-wrap:wrap;justify-content:space-evenly;gap:5px;margin-top:auto;padding-top:16px}
+.listen-footer button:last-child{color:#bc436b;border-color:#f2bfd1}
+.agent-producer .listening-panel{display:flex;flex-direction:column;min-height:min(74vh,760px)}
+.listening-panel .listen-meta{align-self:center;background:#efe7f9;padding:3px 12px;border-radius:15px}
+.agent-producer .listen-actions{display:flex;justify-content:space-evenly}
+.agent-producer .listen-details{flex:1}
+.agent-click-sparks .pointer-ribbon{position:fixed;height:4px;border-radius:80%;pointer-events:none;transform-origin:left center;background:white;box-shadow:0 0 5px 2px #f4ceff,0 0 12px 3px #a86aee;animation:ribbon-fade .35s both}
+.agent-click-sparks>span::after{content:'✦';position:absolute;left:-20px;top:-20px;width:40px;height:40px;display:grid;place-items:center;border:2px solid #fff;border-radius:50%;background:#cf9eff55;color:white;box-shadow:0 0 12px 6px #c385fa;animation:click-halo .65s ease-out both}
+@keyframes ribbon-fade{to{opacity:0}}@keyframes click-halo{from{transform:scale(.3)}to{transform:scale(1.9);opacity:0}}
+@media(prefers-reduced-motion:reduce){.pointer-ribbon,.agent-click-sparks>span::after{display:none}}
+
+.listen-details .timed-line{padding:8px;border-left:2px solid #d8c7eb}
+.timed-line time{font-size:10px;color:#9380ac;margin-right:8px}
+.preview-only{font-size:12px;color:#897794;align-self:center}
+.voice-picker{display:flex;flex-wrap:wrap;gap:4px;margin:6px}.voice-picker button{border:1px solid #d5bcef;background:#f7f1ff;color:#603a8b;border-radius:16px;padding:5px 8px}
+@media(min-width:1181px){
+.agent-producer.agent-studio{height:calc(100dvh - 85px);min-height:540px;box-sizing:border-box;padding-block:16px;grid-template-rows:minmax(0,1fr)}
+.agent-producer.agent-studio>:is(.agent-conversation,.agent-preview,.producer-tools,.producer-collection){height:100%;min-height:0;max-height:100%;box-sizing:border-box}
+.agent-producer.agent-studio>:is(.producer-tools,.agent-preview,.producer-collection){overflow:auto;scrollbar-width:thin}
+.agent-producer .producer-collection{grid-template-rows:minmax(0,1.55fr) minmax(0,1fr);align-content:stretch}
+.agent-producer .producer-collection>section{display:flex;flex-direction:column;min-height:0;height:100%;box-sizing:border-box}
+.agent-producer .producer-collection .hot-featured{flex:none}
+.agent-producer .producer-collection ol,.agent-producer .producer-collection .shelf-list{max-height:none;min-height:0;overflow-y:auto}
+.agent-producer .listening-panel{min-height:100%;box-sizing:border-box}
+.agent-producer .listen-details{min-height:80px;max-height:24vh}
+}
+
+.listen-actions button{display:grid;justify-items:center;gap:4px;font-size:11px}
+.listen-actions button i{font:600 21px/1.1 system-ui;color:#41304e}
+.listen-actions button[aria-pressed=true] i{color:#ef426d}
+.agent-producer .agent-preview-meta{text-align:center}
+.agent-producer .agent-preview .agent-album-art{border-radius:16px}
+.agent-producer .agent-player .agent-preview-range{accent-color:#9164ed}
+.agent-producer .agent-preview .agent-player-controls>.agent-preview-play{box-shadow:0 4px 16px #a578ef55}
+
+.tool-brief{display:grid;gap:8px;padding:10px;border:1px solid #dfd1f2;border-radius:14px;background:#fbf8ff;width:100%;box-sizing:border-box}
+.tool-brief header{display:flex;align-items:center;justify-content:space-between}
+.tool-brief header button{border:0;background:transparent;font-size:19px;color:#785c94}
+.tool-brief label{display:grid;gap:4px;font-size:12px;color:#715f88}
+.tool-brief :is(select,textarea){min-width:0;width:100%;box-sizing:border-box;border:1px solid #dfd3ed;border-radius:8px;padding:6px;color:#39284d;background:white;font:inherit}
+.tool-start{border:0;border-radius:10px;padding:8px;background:#8255ce;color:white;cursor:pointer}
+
+.listening-panel input.agent-preview-range{display:block;width:100%;height:4px;border-radius:999px;background:#e7dcf6;accent-color:#9463ed;margin:10px 0}
+.agent-producer .producer-tools>button{padding:9px 7px;margin:3px 0}
+.agent-producer .producer-tools small{line-height:1.4}

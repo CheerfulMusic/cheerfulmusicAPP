@@ -170,7 +170,7 @@ describe('真实 Agent 对话与作品', () => {
     await input.trigger('keydown', { key: 'Enter', isComposing: false }); await flushPromises()
     expect(api.send).toHaveBeenCalledWith('c1', '给妈妈写一首歌', expect.any(String), 'zh-CN')
   })
-  it('我的作品直接装入播放队列，草稿和更多打开作品页',async()=>{
+  it('我的作品直接装入播放队列，草稿可在页内打开',async()=>{
     const {listWorks}=await import('../src/modules/works/api/works')
     const row={work:{id:'own',title:'我的成品',updatedAt:'2026-11-19'},audioId:'audio1',audioOrigin:'GENERATED'}
     vi.mocked(listWorks).mockResolvedValueOnce([row,{...row,work:{...row.work,id:'draft'},audioId:null}] as Awaited<ReturnType<typeof listWorks>>)
@@ -179,8 +179,8 @@ describe('真实 Agent 对话与作品', () => {
     await wrapper.get('button.shelf-song').trigger('click')
     expect(toggle).toHaveBeenCalledWith(expect.objectContaining({id:'audio1',audio:'/api/app/works/own/audio/audio1'}))
     expect(player.tracks.map(track=>track.id)).toEqual(['audio1'])
-    expect(wrapper.get('a.shelf-song').attributes('href')).toBe('/works/draft')
-    expect(wrapper.get('.producer-shelf header a').attributes('href')).toBe('/works')
+    expect(wrapper.findAll('button.shelf-song')).toHaveLength(2)
+    expect(wrapper.find('.producer-shelf a').exists()).toBe(false)
     expect(api.send).not.toHaveBeenCalled()
   })
   it('问候调用真实消息接口，不生成本地创作方案或假歌曲', async () => {
@@ -213,7 +213,7 @@ describe('真实 Agent 对话与作品', () => {
     api.send.mockResolvedValue(state({ songCard: song, liked: true, action: 'share', shareUrl: '/gift/real-token' }))
     await wrapper.findAll('.agent-preview-actions button')[1]!.trigger('click'); await flushPromises()
     expect(api.send.mock.calls[1]?.[1]).toBe('分享当前作品')
-    expect(wrapper.find('.agent-share-link a').attributes('href')).toMatch(/\/gift\/real-token$/)
+    expect((wrapper.get('.agent-share-link input').element as HTMLInputElement).value).toMatch(/\/gift\/real-token$/)
   })
   it('只有歌词时没有可播放的试听曲，生成音乐仍在同一会话完成', async () => {
     const { wrapper } = await page(state({ songCard: { ...song, audioUrl: '', status: 'DRAFT' } }))
@@ -452,10 +452,10 @@ describe('会话恢复与任务生命周期', () => {
   })
 })
 
-it('用户头像显示资料头像并链接到可修改头像的我的资料页', async () => {
+it('用户头像显示资料头像并提供页内修改按钮', async () => {
   const { wrapper } = await page(state({ messages: [message('写一首歌', 1, 'user')] }))
-  const avatar = wrapper.get('a.agent-user-avatar')
-  expect(avatar.attributes('href')).toBe('/profile')
+  const avatar = wrapper.get('button.agent-user-avatar')
+  expect(avatar.attributes('href')).toBeUndefined()
   expect(avatar.attributes('aria-label')).toContain('修改头像')
   expect(avatar.get('img').attributes('src')).toBe('/brand/music-person.svg')
 })
@@ -465,11 +465,11 @@ it('账号头像更新时优先展示上传或 AI 生成的结果，缺省时回
   avatarRefs.profile!.value = '/artist/avatar'
   avatarRefs.account!.value = '/api/app/avatar/image?v=uploaded'
   await flushPromises()
-  expect(wrapper.get('a.agent-user-avatar img').attributes('src')).toBe('/api/app/avatar/image?v=uploaded')
+  expect(wrapper.get('button.agent-user-avatar img').attributes('src')).toBe('/api/app/avatar/image?v=uploaded')
   avatarRefs.account!.value = '/api/app/avatar/image?v=generated'
   await flushPromises()
-  expect(wrapper.get('a.agent-user-avatar img').attributes('src')).toBe('/api/app/avatar/image?v=generated')
+  expect(wrapper.get('button.agent-user-avatar img').attributes('src')).toBe('/api/app/avatar/image?v=generated')
   avatarRefs.account!.value = ''
   await flushPromises()
-  expect(wrapper.get('a.agent-user-avatar img').attributes('src')).toBe('/artist/avatar')
+  expect(wrapper.get('button.agent-user-avatar img').attributes('src')).toBe('/artist/avatar')
 })

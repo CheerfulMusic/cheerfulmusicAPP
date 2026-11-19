@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import AgentGenerationWait from './AgentGenerationWait.vue'
 import { computed } from 'vue'
 import { locale } from '../../../shared/i18n'
 import type { AgentProgress } from '../model/progress'
@@ -10,7 +11,8 @@ const label = computed(() => {
 </script>
 
 <template>
-  <div class="agent-progress-card" :class="{ 'is-error': progress.stage === 'error' }">
+  <AgentGenerationWait v-if="progress.stage==='tool_started' && ['generate_song','generate_lyrics'].includes(progress.action || '')" :kind="progress.action==='generate_song'?'music':'lyrics'"/>
+  <div v-else class="agent-progress-card" :class="{ 'is-error': progress.stage === 'error' }">
     <small>{{ label }}</small><p>{{ progress.text }}</p>
   </div>
 </template>

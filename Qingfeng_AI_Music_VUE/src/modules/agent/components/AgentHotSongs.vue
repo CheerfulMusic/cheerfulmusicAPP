@@ -6,7 +6,7 @@ import { usePreviewTracks, type PreviewTrack } from '../../home/model/tracks'
 import { loadHotSongs, sortByHeat, hotFailure, hotLoading, recordPlay } from '../../home/model/hot-songs'
 const tr = (zh: string, en: string) => locale.value === 'en' ? en : zh
 const player = usePlayer(), tracks = usePreviewTracks(), ranking = ref<string[]>([])
-const songs = computed(() => [...tracks.value].sort((a,b) => ranking.value.indexOf(a.id)-ranking.value.indexOf(b.id)).slice(0,6))
+const songs = computed(() => [...tracks.value].sort((a,b) => ranking.value.indexOf(a.id)-ranking.value.indexOf(b.id)))
 async function refresh() { await loadHotSongs(true); ranking.value = sortByHeat(tracks.value).map(track => track.id) }
 onMounted(() => { void refresh() })
 function active(track: PreviewTrack) { return player.current?.id === track.id && (player.playing || player.starting) }
@@ -15,7 +15,7 @@ function duration(seconds: number) { return `${Math.floor(seconds/60)}:${String(
 </script>
 <template>
   <section class="agent-hot-songs" :aria-label="tr('热歌推荐榜','Popular songs')">
-    <header><h2>{{ tr('热歌推荐','Recommended songs') }}</h2><a href="/#inspiration">{{ tr('更多','More') }} ›</a></header>
+    <header><h2>{{ tr('热歌推荐','Recommended songs') }}</h2></header>
     <div v-if="songs[0]" class="hot-featured">
       <img :src="songs[0].cover" alt=""/><div class="hot-featured-shade"/>
       <span class="hot-featured-label">{{ tr('热歌推荐','RECOMMENDED') }} / 01</span>
