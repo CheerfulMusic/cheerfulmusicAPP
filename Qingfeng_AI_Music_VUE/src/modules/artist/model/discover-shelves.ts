@@ -88,5 +88,3 @@ export function shelfCover(shelf: keyof typeof artwork | 'vocal', index: number)
   const palette = artwork[shelf]
   return covers[palette[index % palette.length]! - 1]!
 }
-
-export const discoverPlaylistArt = { disco: cover29, house: cover19, folk: cover31 }

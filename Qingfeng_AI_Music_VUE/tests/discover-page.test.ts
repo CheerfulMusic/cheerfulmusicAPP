@@ -2,7 +2,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import type { DiscoverSong } from '../src/modules/artist/api/artist'
-import { houseSelections } from '../src/modules/home/model/published-recommendations'
 import type { PlayableTrack } from '../src/shared/player/store'
 
 const mocks = vi.hoisted(() => ({
@@ -48,9 +47,10 @@ beforeEach(() => {
   mocks.shelves.mockResolvedValue(shelfData([song('popular')]))
   mocks.profile.mockResolvedValue({
     stageName: 'SergioBeats',
-    songs: houseSelections.map(({ songId }, index) => ({
-      id: songId, version: 1, title: index === 0 ? 'Gravity' : 'Static Bloom', hasCover: true,
-    })),
+    songs: [
+      { id: 'd4b1ec5a-e68f-43e6-8624-226981ecef5c', version: 1, title: 'Christmas Sky', hasCover: true },
+      { id: '0485811c-0297-4513-9fb1-75f981af8707', version: 1, title: 'Gravity', hasCover: true },
+    ],
   })
   mocks.toggle.mockImplementation(async (track: PlayableTrack) => {
     mocks.player.playing = !(mocks.player.current?.audio === track.audio && mocks.player.playing)
@@ -65,7 +65,7 @@ afterEach(() => {
 })
 
 describe('Discover editorial layout with real content', () => {
-  it('shows seven playlists, up to seven picks and the latest shelf before vocal and daily hits', async () => {
+  it('shows five playlists, up to seven picks and the latest shelf before vocal and daily hits', async () => {
     const featured = Array.from({ length: 8 }, (_, i) => song(`精选${i + 1}`))
     const latest = Array.from({ length: 37 }, (_, i) => song(`新歌${i + 1}`))
     mocks.shelves.mockResolvedValue(shelfData([song('热门')], [song('真人')]))
@@ -82,23 +82,24 @@ describe('Discover editorial layout with real content', () => {
     ])
     expect(wrapper.get('#discover-vocal .shelf-wide').text()).toContain('歌曲真人')
     const tiles = wrapper.findAll('.discover-playlist-tiles button')
-    expect(tiles.map(tile => tile.get('strong').text())).toEqual(['华语流行', '电子', '欧美流行', 'Disco', 'House', '民谣', '轻音乐'])
+    expect(tiles.map(tile => tile.get('strong').text())).toEqual(['华语流行', '电子', '欧美流行', 'Disco', '圣诞'])
+    expect(tiles.map(tile => tile.get('img').attributes('src').split('/').at(-1))).toEqual([
+      'mandopop.webp', 'electronic.webp', 'global-pop.webp', 'disco.webp', 'christmas.webp',
+    ])
     await tiles[4]!.trigger('click')
-    expect(wrapper.get('.test-playlist').text()).toContain('Gravity')
-    expect(wrapper.get('.test-playlist').text()).toContain('Static Bloom')
+    expect(wrapper.get('.test-playlist').text()).toContain('Christmas Sky')
+    expect(wrapper.get('.test-playlist').text()).not.toContain('Gravity')
   })
 
-  it('keeps the supplied House songs playable when the public artist lookup is unavailable', async () => {
+  it('keeps the Christmas playlist visible when its public artist lookup is unavailable', async () => {
     mocks.profile.mockRejectedValue(new Error('unavailable'))
     const wrapper = await open()
     const tiles = wrapper.findAll('.discover-playlist-tiles button')
-    expect(tiles).toHaveLength(7)
-    expect(tiles[4]!.get('strong').text()).toBe('House')
+    expect(tiles).toHaveLength(5)
+    expect(tiles[4]!.get('strong').text()).toBe('圣诞')
     await tiles[4]!.trigger('click')
-    expect(wrapper.get('.test-playlist').text()).toContain('Body Language')
-    expect(wrapper.get('.test-playlist').text()).toContain('Into the Sun')
-    expect(wrapper.get('.test-playlist').text()).toContain('One More Night')
-    expect(wrapper.get('.test-playlist').text()).not.toContain('Gravity')
+    expect(wrapper.get('.test-playlist').text()).toContain('圣诞')
+    expect(wrapper.findAll('.test-playlist span')).toHaveLength(0)
   })
 
   it('keeps the introduction first and cycles through the top five songs from the global popular feed', async () => {
