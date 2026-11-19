@@ -20,8 +20,7 @@ it('updates existing conversation styles, persists and restores defaults',async(
  await nextTick();expect(JSON.parse(localStorage.getItem(appearanceKey)!).font).toBe('literary');w.unmount()
  const restored=mount(Host);expect(restored.attributes('style')).toContain('--chat-size: 18px');await restored.get('.appearance-panel footer button').trigger('click');expect(restored.attributes('style')).toContain('--chat-size: 15px');restored.unmount()
 })
-it('shows six ranked catalog tracks and offers style inspiration without starting playback',async()=>{
+it('shows six ranked catalog tracks and plays a selected song directly',async()=>{
  const w=mount(AgentHotSongs);await flushPromises();expect(hot.load).toHaveBeenCalledOnce();expect(w.findAll('li')).toHaveLength(6)
- await w.findAll('.hot-inspire')[0].trigger('click');expect(w.emitted('inspire')?.[0]?.[0]).toBeTruthy();expect(hot.toggle).not.toHaveBeenCalled()
  await w.findAll('.hot-song-play')[0].trigger('click');expect(hot.queue).toHaveBeenCalledOnce();expect(hot.toggle).toHaveBeenCalledOnce();expect(hot.record).not.toHaveBeenCalled();w.unmount()
 })

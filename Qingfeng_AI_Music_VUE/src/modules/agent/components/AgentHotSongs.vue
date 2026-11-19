@@ -4,7 +4,6 @@ import { locale } from '../../../shared/i18n'
 import { usePlayer } from '../../../shared/player/store'
 import { usePreviewTracks, type PreviewTrack } from '../../home/model/tracks'
 import { loadHotSongs, sortByHeat, hotFailure, hotLoading, recordPlay } from '../../home/model/hot-songs'
-const emit = defineEmits<{ inspire: [style: string] }>()
 const tr = (zh: string, en: string) => locale.value === 'en' ? en : zh
 const player = usePlayer(), tracks = usePreviewTracks(), ranking = ref<string[]>([])
 const songs = computed(() => [...tracks.value].sort((a,b) => ranking.value.indexOf(a.id)-ranking.value.indexOf(b.id)).slice(0,6))
@@ -16,19 +15,16 @@ function duration(seconds: number) { return `${Math.floor(seconds/60)}:${String(
 </script>
 <template>
   <section class="agent-hot-songs" :aria-label="tr('热歌推荐榜','Popular songs')">
-    <header><div><small>THE INSPIRATION CHART</small><h2>{{ tr('先听见灵感','Find your inspiration') }}</h2></div><span class="hot-chart-mark" aria-hidden="true">↗</span></header>
-    <p class="hot-chart-intro">{{ tr('从喜欢的一首歌，开始你的创作。','Your next song starts with a little inspiration.') }}</p>
+    <header><h2>{{ tr('热歌推荐','Recommended songs') }}</h2><a href="/#inspiration">{{ tr('更多','More') }} ›</a></header>
     <div v-if="songs[0]" class="hot-featured">
       <img :src="songs[0].cover" alt=""/><div class="hot-featured-shade"/>
       <span class="hot-featured-label">{{ tr('热歌推荐','RECOMMENDED') }} / 01</span>
       <div class="hot-featured-copy"><small>{{ songs[0].genre || songs[0].category }}</small><h3>{{ songs[0].title }}</h3></div>
-      <button type="button" :aria-label="(active(songs[0])?tr('暂停','Pause '):tr('试听','Play '))+songs[0].title" :aria-pressed="active(songs[0])" @click="play(songs[0])">{{ active(songs[0]) ? 'Ⅱ' : '▶' }}</button>
+      <button type="button" :aria-label="(active(songs[0])?tr('暂停','Pause '):tr('试听','Play '))+songs[0].title" :aria-pressed="active(songs[0])" @click="play(songs[0])"><span aria-hidden="true">{{ active(songs[0]) ? 'Ⅱ' : '▶' }}</span></button>
     </div>
-    <div class="hot-chart-heading"><strong>{{ tr('热歌推荐榜','Popular songs') }}</strong><span>{{ tr('站内试听 · 互动排序','Plays & engagement') }}</span></div>
-    <ol><li v-for="(track,index) in songs" :key="track.id" :class="{'is-playing':active(track)}"><span class="hot-rank">{{ String(index+1).padStart(2,'0') }}</span><button class="hot-song-play" type="button" :aria-label="(active(track)?tr('暂停','Pause '):tr('试听','Play '))+track.title" :aria-pressed="active(track)" @click="play(track)"><img :src="track.cover" alt="" loading="lazy"/><span><strong>{{ track.title }}</strong><small>{{ track.genre || track.category }} · {{ duration(track.durationSeconds) }}</small></span><i aria-hidden="true">{{ active(track)?'Ⅱ':'▶' }}</i></button><button class="hot-inspire" type="button" :aria-label="tr('用这个风格创作：','Create in this style: ')+track.style" :title="tr('用这个风格创作','Use this style')" @click="emit('inspire', track.style)">↗</button></li></ol>
+    <ol><li v-for="(track,index) in songs" :key="track.id" :class="{'is-playing':active(track)}"><span class="hot-rank">{{ String(index+1).padStart(2,'0') }}</span><button class="hot-song-play" type="button" :aria-label="(active(track)?tr('暂停','Pause '):tr('试听','Play '))+track.title" :aria-pressed="active(track)" @click="play(track)"><img :src="track.cover" alt="" loading="lazy"/><span><strong>{{ track.title }}</strong><small>{{ track.genre || track.category }} · {{ duration(track.durationSeconds) }}</small></span><i aria-hidden="true">{{ active(track)?'Ⅱ':'▶' }}</i></button></li></ol>
     <p v-if="player.error && songs.some(track => track.id===player.current?.id)" class="hot-chart-error" role="status">{{ player.error }}</p>
     <p v-if="hotFailure" class="hot-chart-error" role="status">{{ tr('热度暂未更新，先为你展示精选试听。','Showing curated songs while rankings are unavailable.') }} <button type="button" :disabled="hotLoading" @click="refresh">{{ tr('重试','Retry') }}</button></p>
     <p v-else-if="hotLoading" class="hot-chart-note" role="status">{{ tr('正在更新热度…','Updating ranking…') }}</p>
-    <footer class="hot-chart-note">{{ tr('你的作品完成后，会在这里展示。','Your own song will appear here when it is ready.') }}</footer>
   </section>
 </template>

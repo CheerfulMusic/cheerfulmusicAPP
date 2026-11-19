@@ -2,6 +2,7 @@
 import '../playful.css'
 import '../producer.css'
 import SyncedLyrics from '../../works/components/SyncedLyrics.vue'
+import AgentListeningPanel from '../components/AgentListeningPanel.vue'
 import AgentWorkShelf from '../components/AgentWorkShelf.vue'
 import ChatAppearance from '../components/ChatAppearance.vue'
 import AgentHotSongs from '../components/AgentHotSongs.vue'
@@ -156,6 +157,7 @@ async function send(extra?: string) {
   })
   await handleResult(result)
 }
+function goToLibrary(){ window.location.assign('/works') }
 function runCommand(command: AgentCommand) {
   if (blocked.value) return
   if (command.kind === 'send') { void send(command.text); return }
@@ -327,11 +329,15 @@ onBeforeUnmount(() => { avatarDisposed = true; window.removeEventListener('qingf
     <nav class="producer-tools" :aria-label="tr('创作助手','Creation assistant')">
       <h2>✦ {{ tr('创作助手','Creation assistant') }}</h2>
       <button v-for="tool in [{icon:'✧',title:'灵感策划',en:'Inspiration',detail:'发现创作灵感',detailEn:'Find your inspiration',prompt:'帮我构思一首歌，先聊聊创作灵感'}, {icon:'✎',title:'歌词创作',en:'Write lyrics',detail:'写出打动人心的歌词',detailEn:'Words that move you',prompt:'帮我写一首歌词，主题是'}, {icon:'♫',title:'音乐制作',en:'Make music',detail:'定制专属曲风',detailEn:'Find your sound',prompt:'帮我生成音乐，我想要的曲风是'}, {icon:'✣',title:'歌曲精修',en:'Refine your song',detail:'让作品更动人',detailEn:'Make every line yours',prompt:'帮我修改当前作品的歌词，我想改的是'}, {icon:'▶',title:'MV 制作',en:'Create a music video',detail:'剧情分镜与动态镜头',detailEn:'Bring your song to life',prompt:'根据当前歌曲帮我设计剧情 MV，先给我分镜方案和费用，再确认生成'}, {icon:'▧',title:'封面创作',en:'Cover artwork',detail:'为音乐描绘画面',detailEn:'Give your song a face',prompt:'帮我为当前作品设计封面，画面是'}]" :key="tool.title" type="button" :disabled="blocked" @click="input = tr(tool.prompt, tool.en + ': ')"><i>{{ tool.icon }}</i><span><strong>{{ tr(tool.title,tool.en) }}</strong><small>{{ tr(tool.detail,tool.detailEn) }}</small></span></button>
-      <button class="producer-library" type="button" :disabled="blocked" @click="send('查看我的作品')"><i>▥</i><span><strong>{{ tr('我的作品','My songs') }}</strong><small>{{ tr('继续你的音乐故事','Continue your musical story') }}</small></span><b>›</b></button>
+      <button class="producer-library" type="button" @click="goToLibrary"><i>▥</i><span><strong>{{ tr('我的作品','My songs') }}</strong><small>{{ tr('继续你的音乐故事','Continue your musical story') }}</small></span><b>›</b></button>
       <p>{{ tr('让音乐，连接更美好的你。','Let music bring out the best in you.') }}</p>
     </nav>
+    <div class="producer-collection">
+      <AgentHotSongs/>
+      <AgentWorkShelf :refresh-key="`${songCard?.songId}:${songCard?.revision}:${messages.length}`"/>
+    </div>
     <aside class="agent-preview" :aria-label="songCard?.songId ? tr('当前作品', 'Current song') : tr('热歌推荐', 'Song recommendations')">
-      <template v-if="songCard?.songId">
+      <template v-if="songCard?.songId && (!player.current || currentPlaying)">
         <div class="agent-album">
           <div class="agent-record" :class="{ 'is-spinning': isPlaying }" aria-hidden="true"><span/></div>
           <div class="agent-album-art"><span class="agent-album-badge">{{ taskRunning ? tr('创作中', 'Creating') : tr('我的作品', 'My song') }}</span><img :src="safeLink(songCard.coverUrl) || defaultCover()" :alt="tr('歌曲封面', 'Song artwork')"/>
@@ -365,9 +371,8 @@ onBeforeUnmount(() => { avatarDisposed = true; window.removeEventListener('qingf
         <div v-if="publicLink" class="agent-share-link"><a :href="publicLink" target="_blank" rel="noopener noreferrer">{{ tr('打开分享页面', 'Open share page') }}</a><button type="button" @click="copyShare">{{ tr('复制链接', 'Copy link') }}</button></div>
         <div class="agent-preview-actions agent-bottom-actions"><button type="button" :disabled="blocked || !playable" @click="send('下载当前作品')">↓ {{ downloadUnlocked ? tr('免费下载', 'Free download') : tr('下载（首次15积分）', 'Download (15 credits first time)') }}</button><button type="button" :disabled="blocked || !playable" @click="send('分享当前作品')">♧ {{ tr('分享', 'Share') }}</button><button type="button" :disabled="blocked" @click="input = tr('参考当前作品，帮我创作一首同风格的新歌', 'Create a new song inspired by the style of the current song')">✦ {{ tr('改编同款', 'Create a version') }}</button></div>
       </template>
-      <AgentHotSongs v-else @inspire="input = tr(`帮我创作一首${$event}风格的歌，主题是`, `Help me create a ${$event} song about `)"/>
+      <AgentListeningPanel v-else/>
     </aside>
-    <AgentWorkShelf :refresh-key="`${songCard?.songId}:${songCard?.revision}:${messages.length}`" :disabled="blocked" @select="send(`打开作品 ${$event}`)" @more="send('查看我的作品')"/>
     <AgentFeatureDialog v-if="featurePanel" :key="JSON.stringify(featurePanel)" :target="featurePanel" @close="featurePanel = null" @refresh="conversation.refresh()" @send="send"/>
     <AgentNativeDialog v-if="nativePanel" :key="`${nativePanel.kind}:${nativePanel.workId || ''}`" :kind="nativePanel.kind" :work-id="nativePanel.workId" @close="nativePanel = null" @refresh="conversation.refresh()" @send="send"/>
   </div>

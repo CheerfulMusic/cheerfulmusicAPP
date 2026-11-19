@@ -27,7 +27,7 @@ vi.mock('../src/modules/studio/api/works', () => ({ loadWork: api.loadWork }))
 vi.mock('../src/modules/agent/api/reference', () => ({ requestReferenceAnalysis: vi.fn(async () => undefined) }))
 vi.mock('../src/modules/agent/components/AgentHotSongs.vue', () => ({ default: { template: '<section class="agent-hot-songs">热歌推荐榜</section>' } }))
 vi.mock('../src/modules/works/api/works',()=>({listWorks:vi.fn(async()=>[])}))
-vi.mock('../src/modules/works/api/detail',()=>({getPlaybackLyrics:vi.fn(async()=>({status:'NOT_REQUESTED',canSync:false,lines:[]})),rewriteLyricLine:vi.fn(),syncPlaybackLyrics:vi.fn()}))
+vi.mock('../src/modules/works/api/detail',()=>({audioUrl:(work:string,asset:string)=>'/api/app/works/'+work+'/audio/'+asset,getPlaybackLyrics:vi.fn(async()=>({status:'NOT_REQUESTED',canSync:false,lines:[]})),rewriteLyricLine:vi.fn(),syncPlaybackLyrics:vi.fn()}))
 import AgentStudioPage from '../src/modules/agent/pages/AgentStudioPage.vue'
 import { useAgentConversation } from '../src/modules/agent/composables/useAgentConversation'
 import { usePlayer } from '../src/shared/player/store'
@@ -170,17 +170,30 @@ describe('真实 Agent 对话与作品', () => {
     await input.trigger('keydown', { key: 'Enter', isComposing: false }); await flushPromises()
     expect(api.send).toHaveBeenCalledWith('c1', '给妈妈写一首歌', expect.any(String), 'zh-CN')
   })
+  it('我的作品直接装入播放队列，草稿和更多打开作品页',async()=>{
+    const {listWorks}=await import('../src/modules/works/api/works')
+    const row={work:{id:'own',title:'我的成品',updatedAt:'2026-11-19'},audioId:'audio1',audioOrigin:'GENERATED'}
+    vi.mocked(listWorks).mockResolvedValueOnce([row,{...row,work:{...row.work,id:'draft'},audioId:null}] as Awaited<ReturnType<typeof listWorks>>)
+    const {wrapper,toggle,player}=await page()
+    await vi.waitFor(()=>expect(wrapper.find('button.shelf-song').exists()).toBe(true))
+    await wrapper.get('button.shelf-song').trigger('click')
+    expect(toggle).toHaveBeenCalledWith(expect.objectContaining({id:'audio1',audio:'/api/app/works/own/audio/audio1'}))
+    expect(player.tracks.map(track=>track.id)).toEqual(['audio1'])
+    expect(wrapper.get('a.shelf-song').attributes('href')).toBe('/works/draft')
+    expect(wrapper.get('.producer-shelf header a').attributes('href')).toBe('/works')
+    expect(api.send).not.toHaveBeenCalled()
+  })
   it('问候调用真实消息接口，不生成本地创作方案或假歌曲', async () => {
     api.send.mockResolvedValue(state({ messages: [message('你好', 1, 'user'), message('你好！我可以和你聊天、一起写歌。', 2)] }))
     const { wrapper } = await page()
     expect(wrapper.find('.agent-hot-songs').exists()).toBe(true)
-    expect(wrapper.find('.agent-preview-play').exists()).toBe(false)
+    expect(wrapper.find('.listening-panel').exists()).toBe(true)
     await wrapper.find('textarea').setValue('你好')
     await wrapper.find('form').trigger('submit'); await flushPromises()
     expect(api.send).toHaveBeenCalledWith('c1', '你好', expect.stringMatching(/^[\da-f-]{36}$/), 'zh-CN')
     expect(wrapper.text()).toContain('你好！我可以和你聊天、一起写歌。')
     expect(wrapper.find('.agent-brief-card').exists()).toBe(false)
-    expect(wrapper.find('.agent-preview-play').exists()).toBe(false)
+    expect(wrapper.find('.listening-panel').exists()).toBe(true)
   })
   it('刷新恢复服务端消息、作品歌词和点赞状态；播放对象就是展示的作品版本', async () => {
     const { wrapper, toggle } = await page(state({ messages: [message('歌词已写好')], songCard: song, liked: true }))
@@ -265,7 +278,8 @@ describe('真实 Agent 对话与作品', () => {
     expect(seek).toHaveBeenCalledWith(75)
     player.current = { ...player.current, id: 'another-version' }
     await wrapper.vm.$nextTick()
-    expect(range.attributes('disabled')).toBeDefined()
+    expect(wrapper.get('.listening-panel h2').text()).toBe(song.title)
+    expect(wrapper.get('.listening-panel input[type=range]').attributes('max')).toBe('120')
   })
   it('改编同款只填入创作意图，不自动发起可能消耗积分的请求', async () => {
     const { wrapper } = await page(state({ songCard: song }))
