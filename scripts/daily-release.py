@@ -66,7 +66,8 @@ sha256sum app.jar | cut -d' ' -f1
     scratch.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(dir=scratch) as temp:
         repo = Path(temp) / "src"
-        output("git","clone","--shared","--no-checkout",str(ROOT),str(repo))
+        output("git","init","--quiet",str(repo))
+        output("git","fetch","--no-tags","--update-shallow",str(ROOT),candidate,cwd=repo)
         output("git","-c","advice.detachedHead=false","checkout","--detach",candidate,cwd=repo)
         deps = repo / ".cache"
         deps.mkdir(exist_ok=True)
