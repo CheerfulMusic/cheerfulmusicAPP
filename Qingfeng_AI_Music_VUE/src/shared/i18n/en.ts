@@ -1,5 +1,9 @@
 /** Chinese source copy is the stable message key; business option values stay unchanged. */
 export const english: Record<string, string> = {
+  '昵称、账号或手机号后四位': 'Name, account, or last four phone digits',
+  '正在按手机号尾号查找账号…': 'Searching by the last four phone digits…',
+  '手机号尾号查询失败。': 'Could not search by phone digits.',
+  '所选周期内无访问记录': 'No recorded visits in the selected period',
   "运营数据中心": "Operations analytics",
   "站点数据看板": "Site analytics",
   "了解用户访问、页面表现与创作行为，持续优化 Cheerful Music。": "Track visits, page performance, and music creation on Cheerful Music.",

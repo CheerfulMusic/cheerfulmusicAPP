@@ -3,7 +3,7 @@ import { computed, ref, useId, watch } from 'vue'
 import { locale, t } from '../../../shared/i18n'
 import AnalyticsPagination from './AnalyticsPagination.vue'
 import { useAnalyticsPagination } from '../model/pagination'
-import type { AnalyticsUserPageRow, AnalyticsUserRow, AnalyticsUserSort } from '../api/analytics'
+import { analyticsPhoneUsers, type AnalyticsPhoneUser, type AnalyticsUserPageRow, type AnalyticsUserRow, type AnalyticsUserSort } from '../api/analytics'
 import { accountDetail, accountName, accountTypeLabel, avatarText, dwellLabel, filterUsers, isGuest, pageName, type UserFilter } from '../model/dwell'
 
 const props = defineProps<{
@@ -15,11 +15,10 @@ const props = defineProps<{
   detailLoading?: boolean
   detailError?: string
 }>()
-defineEmits<{ toggle: [creatorId: string]; retrySort: [] }>()
+const emit = defineEmits<{ toggle: [creatorId: string]; retrySort: []; denied: [] }>()
 
 const filter = defineModel<UserFilter>('filter', { default: 'all' })
 const sort = defineModel<AnalyticsUserSort>('sort', { default: 'active' })
-const identityRows = computed(() => filterUsers(props.rows, filter.value))
 const guests = computed(() => props.rows.filter(row => isGuest(row.accountType)).length)
 const signed = computed(() => props.rows.length - guests.value)
 
@@ -32,7 +31,7 @@ function time(value: string): string {
 }
 
 const columns = [
-  { label: '用户', value: (row: AnalyticsUserRow) => [accountName(row), accountDetail(row), row.creatorId].filter(Boolean) },
+  { label: '用户', value: (row: AnalyticsUserRow) => [accountName(row), accountDetail(row), row.phoneMasked ?? '', row.creatorId].filter(Boolean) },
   { label: '登录方式', value: (row: AnalyticsUserRow) => [accountTypeLabel(row.accountType)] },
   { label: '创作', value: (row: AnalyticsUserRow) => [works(row)] },
   { label: '访问', value: (row: AnalyticsUserRow) => [visits(row)] },
@@ -41,6 +40,43 @@ const columns = [
 ]
 const filterId = useId()
 const queries = ref(columns.map(() => ''))
+type DisplayUser = AnalyticsUserRow & { noActivity?: true }
+const suffix = computed(() => filter.value === 'guest' ? '' : /^(?:\*{4})?([0-9]{4})$/.exec(queries.value[0]?.trim() ?? '')?.[1] ?? '')
+const phoneUsers = ref<AnalyticsPhoneUser[]>([])
+const phoneState = ref<'idle' | 'loading' | 'failed'>('idle')
+const retryPhone = ref(0)
+
+watch([suffix, retryPhone], ([value], _, onCleanup) => {
+  phoneUsers.value = []
+  phoneState.value = value ? 'loading' : 'idle'
+  if (!value) return
+  let current = true
+  const timer = setTimeout(async () => {
+    try {
+      const data = await analyticsPhoneUsers(value)
+      if (!current) return
+      if (!data.allowed) { emit('denied'); return }
+      if (data.error) { phoneState.value = 'failed'; return }
+      phoneUsers.value = data.users ?? []
+      phoneState.value = 'idle'
+    } catch {
+      if (current) phoneState.value = 'failed'
+    }
+  }, 250)
+  onCleanup(() => { clearTimeout(timer); current = false })
+})
+
+const identityRows = computed(() => {
+  const rows = new Map<string, DisplayUser>(props.rows.map(row => [row.creatorId, row]))
+  for (const match of phoneUsers.value) {
+    const active = rows.get(match.creatorId)
+    rows.set(match.creatorId, active ? { ...active, phoneMasked: match.phoneMasked } : {
+      ...match, email: null, pv: 0, pageviews: 0, avgDurationMs: 0, samples: 0,
+      firstSeen: '', lastSeen: '', noActivity: true,
+    })
+  }
+  return filterUsers([...rows.values()], filter.value)
+})
 const suggestions = computed(() => columns.map(column => [...new Set(identityRows.value.flatMap(column.value))]))
 const normalize = (value: string) => value.trim().toLowerCase().replaceAll(',', '')
 const visible = computed(() => identityRows.value.filter(row => columns.every((column, index) => {
@@ -67,28 +103,33 @@ watch(sort, () => { page.value = 1 })
     <p v-if="sorting" class="users-sort-hint" role="status">{{ t('正在加载用户列表…') }}</p>
     <p v-else-if="!sortError" class="users-sort-hint">{{ t(sort === 'latest' ? '按最近访问时间从新到旧排序' : '按所选周期内的访问量从高到低排序') }}</p>
 
-    <div v-if="rows.length && !sortError" class="column-filters">
+    <div v-if="!sortError" class="column-filters">
       <label v-for="(column, index) in columns" :key="column.label">
         {{ t(column.label) }}
-        <input v-model="queries[index]" type="search" :list="`${filterId}-${index}`" :placeholder="t('输入或选择')">
+        <input v-model="queries[index]" type="search" :list="`${filterId}-${index}`" :placeholder="t(index === 0 ? '昵称、账号或手机号后四位' : '输入或选择')">
         <datalist :id="`${filterId}-${index}`">
           <option v-for="value in suggestions[index]" :key="value" :value="value" />
         </datalist>
       </label>
     </div>
+    <p v-if="phoneState === 'loading'" class="users-sort-hint" role="status">{{ t('正在按手机号尾号查找账号…') }}</p>
+    <p v-else-if="phoneState === 'failed'" class="users-sort-hint" role="alert">
+      {{ t('手机号尾号查询失败。') }} <button type="button" class="analytics-retry" @click="retryPhone++">{{ t('重试') }}</button>
+    </p>
     <div v-if="sortError" class="users-empty" role="alert">
       {{ t(sortError) }}
       <button type="button" class="analytics-retry" @click="$emit('retrySort')">{{ t('重试') }}</button>
     </div>
-    <div v-else-if="!rows.length" class="users-empty">{{ t('所选时间范围内暂无用户数据。') }}</div>
-    <div v-else-if="!visible.length" class="users-empty">{{ t('当前筛选下没有用户。') }}</div>
-    <ul v-else class="users-list">
+    <div v-else-if="!rows.length && !suffix" class="users-empty">{{ t('所选时间范围内暂无用户数据。') }}</div>
+    <div v-else-if="!visible.length && phoneState === 'idle'" class="users-empty">{{ t('当前筛选下没有用户。') }}</div>
+    <ul v-else-if="visible.length" class="users-list">
       <li v-for="row in displayed" :key="row.creatorId" :class="{ open: openUser === row.creatorId }">
         <button type="button" class="users-row" :aria-expanded="openUser === row.creatorId" :aria-controls="`user-pages-${row.creatorId}`" @click="$emit('toggle', row.creatorId)">
           <span class="avatar" :class="{ guest: isGuest(row.accountType) }" aria-hidden="true">{{ avatarText(row) }}</span>
           <span class="user-main">
             <strong>{{ accountName(row) }}</strong>
             <span v-if="accountDetail(row)" class="user-sub">{{ accountDetail(row) }}</span>
+            <span v-if="row.noActivity" class="user-sub">{{ t('所选周期内无访问记录') }}</span>
             <code class="user-id" :title="row.creatorId">{{ row.creatorId }}</code>
           </span>
           <span class="type-badge" :class="{ guest: isGuest(row.accountType) }">{{ accountTypeLabel(row.accountType) }}</span>

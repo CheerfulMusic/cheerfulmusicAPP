@@ -128,6 +128,9 @@ export function validResponse(path:string,method:string,value:unknown):boolean{
  if(/^app\/artist-profile\/releases\/[^/]+\/discover$/.test(path))
   return method==='DELETE'?myArtist(value):method==='PUT'&&artistRelease(value)&&obj(value)&&value.onDiscover===true
  if(/^public\/hot-songs\/[^/]+\/play$/.test(path))return method==='POST'&&hotStat(value)
+ if(path==='app/analytics/phone-users')return method==='GET'&&obj(value)&&typeof value.allowed==='boolean'&&
+  (!value.allowed||(value.error==='QUERY_FAILED'&&value.users===undefined)||list(value.users,u=>obj(u)&&
+   text(u.creatorId)&&text(u.accountType)&&(u.name===null||str(u.name))&&str(u.phoneMasked)&&/^\*{4}[0-9]{4}$/.test(u.phoneMasked)))
  if(path==='app/analytics/country-users')return method==='GET'&&obj(value)&&typeof value.allowed==='boolean'&&
   (!value.allowed||(value.error==='QUERY_FAILED'&&value.users===undefined)||list(value.users,u=>obj(u)&&
    (u.creatorId===null||str(u.creatorId))&&text(u.accountType)&&(u.name===null||str(u.name))&&

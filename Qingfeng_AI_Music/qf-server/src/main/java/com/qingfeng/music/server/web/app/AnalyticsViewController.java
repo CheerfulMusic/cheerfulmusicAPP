@@ -375,6 +375,24 @@ public class AnalyticsViewController {
         return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(body);
     }
 
+    /** 已验证账号查询独立于访问埋点，只向看板白名单开放，并且只返回掩码。 */
+    @GetMapping("/phone-users")
+    public ResponseEntity<Map<String, Object>> phoneUsers(@RequestParam String suffix) {
+        if (!allowed(currentCreatorId())) {
+            return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(Map.of("allowed", false));
+        }
+        if (suffix == null || !suffix.matches("[0-9]{4}")) {
+            return ResponseEntity.badRequest().cacheControl(CacheControl.noStore()).build();
+        }
+        try {
+            return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(Map.of(
+                    "allowed", true, "users", detail.phoneUsers(suffix)));
+        } catch (RuntimeException e) {
+            return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(Map.of(
+                    "allowed", true, "error", "QUERY_FAILED"));
+        }
+    }
+
     @GetMapping("/country-users")
     public ResponseEntity<Map<String, Object>> countryUsers(@RequestParam String country,
                                                             @RequestParam(defaultValue = "30") int days) {

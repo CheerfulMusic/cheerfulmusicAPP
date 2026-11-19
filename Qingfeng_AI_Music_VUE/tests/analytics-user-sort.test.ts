@@ -50,6 +50,22 @@ describe('数据看板用户排序', () => {
     expect(names(wrapper)).toEqual([])
   })
 
+  it('按尾号找到没有访问记录的手机号账号，清除筛选时恢复活跃列表', async () => {
+    const lookup = vi.fn(() => json({ allowed: true, users: [
+      { creatorId: 'phone-account', accountType: 'OIDC_PHONE', name: null, phoneMasked: '****1234' },
+    ] }))
+    const wrapper = start(url => url.includes('/phone-users?suffix=1234') ? lookup() : json({ ...summary(), users: [] }))
+    await flushPromises()
+    const search = wrapper.get('.column-filters input')
+    await search.setValue('1234')
+    await vi.waitFor(() => expect(names(wrapper)).toEqual(['****1234']))
+    expect(lookup).toHaveBeenCalledTimes(1)
+    expect(wrapper.text()).toContain('所选周期内无访问记录')
+    expect(wrapper.text()).toContain('0 位登录用户')
+    await search.setValue('')
+    expect(names(wrapper)).toEqual([])
+  })
+
   it('默认活跃；最新向服务端重新取数，并保留仅登录筛选', async () => {
     const urls: string[] = []
     const wrapper = start(url => { urls.push(url); return json(summary(url.includes('userSort=latest'))) })

@@ -87,6 +87,26 @@ public class AnalyticsDetailService {
                 country, Timestamp.from(since));
     }
 
+    public record PhoneUser(String creatorId, String accountType, String name, String phoneMasked) {}
+
+    public List<PhoneUser> phoneUsers(String suffix) {
+        return db.query("""
+                SELECT p.creator_id, COALESCE(g.display_name, o.display_name) name,
+                       CASE WHEN g.creator_id IS NOT NULL THEN 'GOOGLE'
+                            WHEN o.email IS NOT NULL AND o.email <> '' THEN 'OIDC_EMAIL'
+                            ELSE 'OIDC_PHONE' END account_type
+                FROM (
+                    SELECT b.creator_id FROM creator_phone_binding b WHERE RIGHT(TRIM(b.phone_masked), 4)=?
+                    UNION ALL
+                    SELECT i.creator_id FROM creator_oidc_identity i WHERE RIGHT(TRIM(i.phone_masked), 4)=?
+                    AND NOT EXISTS (SELECT 1 FROM creator_phone_binding b WHERE b.creator_id=i.creator_id)
+                ) p LEFT JOIN creator_oidc_identity o ON o.creator_id=p.creator_id
+                LEFT JOIN creator_google_identity g ON g.creator_id=p.creator_id
+                ORDER BY p.creator_id
+                """, (rs, n) -> new PhoneUser(rs.getString("creator_id"), rs.getString("account_type"),
+                        rs.getString("name"), "****" + suffix), suffix, suffix);
+    }
+
     private static final int LIMIT = 50;
 
     private final JdbcTemplate db;

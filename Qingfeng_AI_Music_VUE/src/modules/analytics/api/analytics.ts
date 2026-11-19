@@ -51,3 +51,8 @@ export interface AnalyticsCountryUser {
 export const analyticsCountryUsers = (country: string, days: number) =>
   getJson<{ allowed: boolean; users?: AnalyticsCountryUser[]; error?: string }>(
     `app/analytics/country-users?days=${days}&country=${encodeURIComponent(country)}`)
+
+export type AnalyticsPhoneUser = Pick<AnalyticsUserRow, 'creatorId' | 'accountType' | 'name'> & { phoneMasked: string }
+export const analyticsPhoneUsers = (suffix: string) =>
+  getJson<{ allowed: boolean; users?: AnalyticsPhoneUser[]; error?: string }>(
+    `app/analytics/phone-users?suffix=${encodeURIComponent(suffix)}`)

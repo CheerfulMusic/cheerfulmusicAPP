@@ -44,6 +44,7 @@ class AnalyticsPageUsersSqlTest {
                     + "created_at TIMESTAMP(6), creator_id VARCHAR(36), duration_ms BIGINT, country VARCHAR(128))");
             statement.execute("CREATE TABLE creator_google_identity (creator_id VARCHAR(36), email VARCHAR(320), display_name VARCHAR(200))");
             statement.execute("CREATE TABLE creator_oidc_identity (creator_id VARCHAR(36), email VARCHAR(320), phone_masked VARCHAR(40), display_name VARCHAR(200))");
+            statement.execute("CREATE TABLE creator_phone_binding (creator_id VARCHAR(36) PRIMARY KEY, phone_masked VARCHAR(40))");
             statement.execute("CREATE TABLE creator_authing_identity (creator_id VARCHAR(36), email VARCHAR(320), display_name VARCHAR(200))");
         }
         jdbc.update("INSERT INTO creator_google_identity VALUES ('creator-1','a@example.com','Alice')");
@@ -145,6 +146,28 @@ class AnalyticsPageUsersSqlTest {
 
         login("creator-2");
         assertEquals(java.util.Map.of("allowed", false), controller.countryUsers("中国", 30).getBody());
+    }
+
+    @Test @SuppressWarnings("unchecked")
+    void phoneLookupFindsRegisteredAccountsWithoutEventsAndHonorsPhoneBindings() {
+        jdbc.update("INSERT INTO creator_oidc_identity VALUES ('no-events',NULL,'****1234',NULL)");
+        jdbc.update("INSERT INTO creator_oidc_identity VALUES ('old-number',NULL,'****1234',NULL)");
+        jdbc.update("INSERT INTO creator_phone_binding VALUES ('old-number','****4321')");
+        jdbc.update("INSERT INTO creator_phone_binding VALUES ('creator-1','****1234')");
+
+        var response = controller.phoneUsers("1234");
+        assertEquals(200, response.getStatusCode().value());
+        assertEquals("no-store", response.getHeaders().getCacheControl());
+        var body = response.getBody();
+        assertNotNull(body);
+        assertEquals(List.of(
+                new AnalyticsDetailService.PhoneUser("creator-1", "GOOGLE", "Alice", "****1234"),
+                new AnalyticsDetailService.PhoneUser("no-events", "OIDC_PHONE", null, "****1234")),
+                (List<AnalyticsDetailService.PhoneUser>) body.get("users"));
+        assertEquals(400, controller.phoneUsers("12345").getStatusCode().value());
+
+        login("creator-2");
+        assertEquals(java.util.Map.of("allowed", false), controller.phoneUsers("1234").getBody());
     }
 
     @Test

@@ -300,7 +300,8 @@ const detailRowsForUser = computed(() => userPages.value[pageUsersKey(days.value
           :detail-loading="userPagesLoading === pageUsersKey(days, openUser)"
           :detail-error="userPagesError"
           @toggle="toggleUser"
-          @retry-sort="loadUserSort" />
+          @retry-sort="loadUserSort"
+          @denied="denyAccess" />
       </section>
 
       <section class="block" aria-labelledby="sec-recharge">

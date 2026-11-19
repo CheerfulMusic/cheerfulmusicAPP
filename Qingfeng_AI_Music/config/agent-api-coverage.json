@@ -207,6 +207,7 @@
         "@GetMapping(\"/access\")",
         "@GetMapping(\"/summary\")",
         "@GetMapping(\"/page-users\")",
+        "@GetMapping(\"/phone-users\")",
         "@GetMapping(\"/country-users\")",
         "@GetMapping(\"/user-pages\")"
       ],
