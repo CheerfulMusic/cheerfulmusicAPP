@@ -314,6 +314,12 @@ class GateTests(unittest.TestCase):
         modified = dict(migrations); modified["V49__lyrics_preparation.sql"] = "0" * 64
         with self.assertRaises(gate.GateError): gate.verify_migration_set(modified)
         self.assertEqual("50", gate.verify_migration_set(migrations)["agentAdmissionVersion"])
+        self.assertEqual("51", gate.verify_migration_set(migrations)["paymentReconciliationVersion"])
+        for change in ("V50__agent_admission_version.sql","V51__payment_reconciliation_cursor.sql"):
+            modified = dict(migrations); modified[change] = "0" * 64
+            with self.assertRaises(gate.GateError): gate.verify_migration_set(modified)
+        migrations.pop("V51__payment_reconciliation_cursor.sql")
+        self.assertEqual("50", gate.verify_migration_set(migrations)["agentAdmissionVersion"])
         migrations.pop("V50__agent_admission_version.sql")
         pre_lyrics = {k: v for k, v in migrations.items() if k != "V49__lyrics_preparation.sql"}
         self.assertEqual("48", gate.verify_migration_set(pre_lyrics)["phoneBindingVersion"])

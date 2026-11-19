@@ -96,6 +96,15 @@ public final class PaymentFinancialDiscovery {
                     (rs,n)->new Cursor(rs.getLong(1),rs.getLong(2),rs.getString(3),rs.getLong(4)),s.provider,s.merchant,s.environment,s.stream);
             start=c.start;
             if(start>=cutoff)break;
+            if(s.stream.equals("events") && start<cutoff-29L*86400){
+                // Provider event retention is finite. Keep an explicit audit gap and
+                // resume inside retention so a prolonged outage cannot suppress new changes.
+                long resume=cutoff-29L*86400;
+                if(db.update("UPDATE payment_reconciliation_cursor SET retention_gap_start=COALESCE(retention_gap_start,window_start),retention_gap_end=?,window_start=?,window_end=0,page_token='',revision=revision+1 WHERE provider=? AND merchant_scope=? AND env_scope=? AND stream=? AND revision=?",
+                        resume,resume,s.provider,s.merchant,s.environment,s.stream,c.revision)==1)
+                    log.error("payment_discovery_retention_gap provider={} from={} until={}",s.provider,start,resume);
+                continue;
+            }
             long end=c.end==0?Math.min(cutoff,start+width):c.end;
             // Re-read the seam. A page is checkpointed only after every inbox insert has committed.
             String next=reader.read(start-60,end,c.token);
@@ -112,8 +121,6 @@ public final class PaymentFinancialDiscovery {
         JsonNode page=stripeApi.financialPage(stream,start,end,cursor);
         if(!"list".equals(text(page,"object")) || !page.path("data").isArray() || page.path("data").size()>100
                 || !page.path("has_more").isBoolean())throw new IllegalStateException("Incomplete Stripe listing");
-        if(stream.equals("events") && start<clock.instant().minusSeconds(30L*86400).getEpochSecond())
-            throw new IllegalStateException("Stripe event retention exceeded; historical reconciliation required");
         String last="";
         Set<String> seen=new HashSet<>();
         for(JsonNode item:page.path("data")){

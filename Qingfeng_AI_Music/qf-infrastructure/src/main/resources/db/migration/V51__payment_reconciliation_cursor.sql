@@ -6,6 +6,8 @@ CREATE TABLE payment_reconciliation_cursor (
     window_start BIGINT NOT NULL,
     window_end BIGINT NOT NULL,
     page_token VARCHAR(2048) NOT NULL,
+    retention_gap_start BIGINT NULL,
+    retention_gap_end BIGINT NULL,
     revision BIGINT NOT NULL DEFAULT 0,
     updated_at TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
     PRIMARY KEY(provider,merchant_scope,env_scope,stream)
