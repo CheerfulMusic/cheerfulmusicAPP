@@ -22,7 +22,7 @@ public final class QuickCreationService {
         this.repository=repository;this.works=works;this.lyrics=lyrics;this.composer=composer;this.generation=generation;this.enabled=enabled;
     }
     public record View(String id,String workId,String status,String revisionId,String taskId,String errorCode,
-                       boolean canRetry,Instant createdAt){}
+                       boolean canRetry,Instant createdAt,String previewAssetId){}
     public View start(String owner,String work,long version,String key,String language){
         var current=works.get(owner,work);
         if(!enabled)throw new DomainException("QUICK_CREATION_UNAVAILABLE","一键创作暂不可用，可以切换自定义创作，先完善歌词。");
@@ -53,11 +53,11 @@ public final class QuickCreationService {
     }
     private View view(String owner,QuickCreationRepository.Entry entry){
         var task=music(entry);
-        return task.map(t->new View(entry.id(),entry.workId(),t.status().name(),t.revisionId(),t.id(),t.errorCode(),false,entry.createdAt()))
+        return task.map(t->new View(entry.id(),entry.workId(),t.status().name(),t.revisionId(),t.id(),t.errorCode(),false,entry.createdAt(),t.previewAssetId()))
             .orElseGet(()->{
                 String status="LYRICS_SUBMISSION_UNKNOWN".equals(entry.errorCode())?"FAILED":entry.status();
                 return new View(entry.id(),entry.workId(),status,entry.revisionId(),entry.taskId(),entry.errorCode(),
-                    status.equals("FAILED")&&works.get(owner,entry.workId()).version()==entry.workVersion(),entry.createdAt());
+                    status.equals("FAILED")&&works.get(owner,entry.workId()).version()==entry.workVersion(),entry.createdAt(),null);
             });
     }
     public boolean runOnce(){

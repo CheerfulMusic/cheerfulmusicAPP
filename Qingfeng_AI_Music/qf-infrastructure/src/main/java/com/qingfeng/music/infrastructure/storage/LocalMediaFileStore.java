@@ -12,13 +12,19 @@ public final class LocalMediaFileStore implements MediaFileStore {
     private static final long LIMIT=20L*1024*1024;
     private final Path root;
     public LocalMediaFileStore(Path root)throws IOException{Files.createDirectories(root);this.root=root.toRealPath();}
-    public Saved save(InputStream content)throws IOException{
+    public Saved save(InputStream content)throws IOException{return save(content,(stage,elapsed)->{});}
+    public Saved save(InputStream content,java.util.function.BiConsumer<Stage,Long> observe)throws IOException{
+        long started=System.nanoTime();
         Path temporary=Files.createTempFile(root,"upload-",".part");boolean moved=false;
         try(var input=new BufferedInputStream(content)){
-            byte[] header=input.readNBytes(12);String type;
-            if(header.length==12&&header[0]=='R'&&header[1]=='I'&&header[2]=='F'&&header[3]=='F'&&header[8]=='W'&&header[9]=='A'&&header[10]=='V'&&header[11]=='E')type="audio/wav";
-            else if(header.length>=3&&((header[0]=='I'&&header[1]=='D'&&header[2]=='3')||((header[0]&255)==255&&(header[1]&224)==224)))type="audio/mpeg";
-            else throw new DomainException("INVALID_AUDIO","仅支持具有有效容器头的WAV或MP3音频");
+            byte[] header=input.readNBytes(12);
+            long validationStarted=System.nanoTime();
+            String type;
+            try{
+                if(header.length==12&&header[0]=='R'&&header[1]=='I'&&header[2]=='F'&&header[3]=='F'&&header[8]=='W'&&header[9]=='A'&&header[10]=='V'&&header[11]=='E')type="audio/wav";
+                else if(header.length>=3&&((header[0]=='I'&&header[1]=='D'&&header[2]=='3')||((header[0]&255)==255&&(header[1]&224)==224)))type="audio/mpeg";
+                else throw new DomainException("INVALID_AUDIO","仅支持具有有效容器头的WAV或MP3音频");
+            }finally{observe.accept(Stage.VALIDATE,System.nanoTime()-validationStarted);}
             MessageDigest digest;try{digest=MessageDigest.getInstance("SHA-256");}catch(NoSuchAlgorithmException e){throw new IllegalStateException(e);}
             long size=header.length;
             try(var output=Files.newOutputStream(temporary)){output.write(header);digest.update(header);byte[] buffer=new byte[8192];int n;
@@ -28,7 +34,10 @@ public final class LocalMediaFileStore implements MediaFileStore {
             String key=UUID.randomUUID()+(type.equals("audio/wav")?".wav":".mp3");Path destination=resolve(key);
             try{Files.move(temporary,destination,StandardCopyOption.ATOMIC_MOVE);}catch(AtomicMoveNotSupportedException e){Files.move(temporary,destination);}
             moved=true;return new Saved(key,size,type,HexFormat.of().formatHex(digest.digest()));
-        }finally{if(!moved)Files.deleteIfExists(temporary);}
+        }finally{
+            observe.accept(Stage.STAGE_FILE,System.nanoTime()-started);
+            if(!moved)Files.deleteIfExists(temporary);
+        }
     }
     public InputStream open(String key)throws IOException{
         Path file=resolve(key);if(!Files.isRegularFile(file,LinkOption.NOFOLLOW_LINKS)||!file.toRealPath().startsWith(root))throw new FileNotFoundException("音频资源不存在");

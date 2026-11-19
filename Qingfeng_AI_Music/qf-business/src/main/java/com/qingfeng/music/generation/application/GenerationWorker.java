@@ -2,6 +2,10 @@ package com.qingfeng.music.generation.application;
 
 import com.qingfeng.music.generation.application.port.*;
 import com.qingfeng.music.generation.domain.GenerationStatus;
+import com.qingfeng.music.common.exception.DomainException;
+import com.qingfeng.music.media.application.MediaFileStore;
+import com.qingfeng.music.media.application.MediaRepository;
+import java.io.*;
 import java.time.*;
 import java.util.UUID;
 import java.util.concurrent.*;
@@ -150,30 +154,92 @@ public final class GenerationWorker {
     private void save(ExecutionRepository.Execution execution) {
         var task=execution.task(); String token=execution.leaseToken();
         String attempt=repository.attempt(task.id(),"ARCHIVE",now());
+        String candidate="primary";
         try {
             String asset=null;
             var tracks=candidates==null?java.util.List.<AudioCandidates.Candidate>of():candidates.get(task.id());
             if(tracks.isEmpty()){
-                try(var input=downloader.open(execution.audioUrl())){asset=archive.store(task.id(),task.workId(),input);}
+                asset=archive.existingCandidate(task.id(),candidate).orElse(null);
+                if(asset==null)try(var input=download(task.id(),candidate,execution.audioUrl())){
+                    asset=archive.store(task.id(),task.workId(),input);
+                }
             }else for(var track:tracks){
-                String saved=archive.existingCandidate(task.id(),track.key()).orElse(null);
-                if(saved==null)try(var input=downloader.open(track.audio().audioUrl())){saved=archive.storeCandidate(task.id(),task.workId(),track.key(),track.audio(),input);}
-                if(track.key().equals("primary"))asset=saved;
+                candidate=track.key();
+                String saved=archive.existingCandidate(task.id(),candidate).orElse(null);
+                if(saved==null)try(var input=download(task.id(),candidate,track.audio().audioUrl())){
+                    saved=archive.storeCandidate(task.id(),task.workId(),candidate,track.audio(),input);
+                }
+                if(candidate.equals("primary"))asset=saved;
             }
             if(asset==null)throw new IllegalStateException("主候选音频未保存");
             repository.succeeded(task.id(),token,asset,now());
             repository.finishAttempt(attempt,"COMPLETED",null,now());
         } catch (Exception error) {
-            // 临时下载地址可能已过期。只读查询可刷新地址，绝不重新提交生成。
-            if(error instanceof java.io.IOException && execution.providerTaskId()!=null){
-                try{var latest=provider.query(execution.providerTaskId());if(latest!=null&&execution.providerTaskId().equals(latest.providerTaskId())&&latest.temporaryAudioUrl()!=null&&latest.temporaryAudioUrl().length()<=4096&&(latest.status()==GenerationStatus.SAVING||latest.status()==GenerationStatus.SUCCEEDED)){if(edits!=null&&latest.audioInfo()!=null)edits.recordAudio(task.id(),latest.audioInfo());if(candidates!=null&&!candidates.get(task.id()).isEmpty())candidates.remember(task.id(),latest.candidates());repository.refreshAudioUrl(task.id(),token,latest.temporaryAudioUrl());}}
-                catch(RuntimeException ignored){/* 保留失败状态与已有外部任务标识，稍后只重试归档。 */}
-            }
+            var downloadFailure=findCause(error,AudioDownloader.DownloadFailure.class);
+            var uploadFailure=findCause(error,MediaFileStore.UploadFailure.class);
+            boolean refresh=downloadFailure!=null&&(downloadFailure.problem()==AudioDownloader.Problem.LINK_EXPIRED
+                ||downloadFailure.problem()==AudioDownloader.Problem.URL_NOT_REGISTERED);
+            if(refresh&&execution.providerTaskId()!=null)refreshArchiveLinks(execution);
             int attempts=execution.archiveAttempts()+1;
             repository.archiveFailed(task.id(),token,attempts,attempts>=maxArchiveAttempts,now(),now().plusSeconds(Math.min(300,15L<<Math.min(4,attempts))));
             repository.finishAttempt(attempt,"RETRY","AUDIO_ARCHIVE_FAILED",now());
-            log(task.id(),"ARCHIVE","AUDIO_ARCHIVE_FAILED",error);
+            String reason=downloadFailure!=null?"DOWNLOAD_"+downloadFailure.problem()
+                :uploadFailure!=null?"OSS_UPLOAD"
+                :error instanceof MediaRepository.RegistrationFailure?"REGISTER"
+                :error instanceof DomainException domain?domain.code()
+                :"ARCHIVE_INTERNAL";
+            LOG.warning("music_task task="+task.id()+" phase=ARCHIVE code=AUDIO_ARCHIVE_FAILED exception="
+                +error.getClass().getSimpleName()+" candidate="+candidate+" reason="+reason);
         }
+    }
+    private void refreshArchiveLinks(ExecutionRepository.Execution execution){
+        try{
+            var latest=provider.query(execution.providerTaskId());
+            if(latest==null||!execution.providerTaskId().equals(latest.providerTaskId())
+                ||latest.temporaryAudioUrl()==null||latest.temporaryAudioUrl().isBlank()||latest.temporaryAudioUrl().length()>4096
+                ||(latest.status()!=GenerationStatus.SAVING&&latest.status()!=GenerationStatus.SUCCEEDED))return;
+            String task=execution.task().id();
+            if(edits!=null&&latest.audioInfo()!=null)edits.recordAudio(task,latest.audioInfo());
+            if(candidates!=null&&!candidates.get(task).isEmpty())candidates.remember(task,latest.candidates());
+            repository.refreshAudioUrl(task,execution.leaseToken(),latest.temporaryAudioUrl());
+        }catch(RuntimeException error){
+            log(execution.task().id(),"ARCHIVE_URL","ARCHIVE_URL_REFRESH_FAILED",error);
+        }
+    }
+    private static <T extends Throwable> T findCause(Throwable error,Class<T> type){
+        for(Throwable cause=error;cause!=null;cause=cause.getCause()){
+            if(type.isInstance(cause))return type.cast(cause);
+        }
+        return null;
+    }
+    private InputStream download(String task,String candidate,String url)throws IOException{
+        long started=System.nanoTime();
+        InputStream input;
+        try{input=downloader.open(url);}
+        catch(IOException|RuntimeException failure){logDownload(task,candidate,System.nanoTime()-started);throw failure;}
+        return new FilterInputStream(input){
+            private long nanos=System.nanoTime()-started;
+            private boolean closed;
+            @Override public int read()throws IOException{
+                long readStarted=System.nanoTime();
+                try{return super.read();}
+                finally{nanos+=System.nanoTime()-readStarted;}
+            }
+            @Override public int read(byte[] bytes,int offset,int length)throws IOException{
+                long readStarted=System.nanoTime();
+                try{return super.read(bytes,offset,length);}
+                finally{nanos+=System.nanoTime()-readStarted;}
+            }
+            @Override public void close()throws IOException{
+                if(closed)return;
+                closed=true;
+                try{super.close();}
+                finally{logDownload(task,candidate,nanos);}
+            }
+        };
+    }
+    private void logDownload(String task,String candidate,long nanos){
+        LOG.info("music_archive_step task="+task+" candidate="+candidate+" stage=DOWNLOAD elapsedMs="+TimeUnit.NANOSECONDS.toMillis(nanos));
     }
     private void log(String task,String phase,String code,Throwable error){LOG.warning("music_task task="+task+" phase="+phase+" code="+code+" exception="+error.getClass().getSimpleName());}
 }

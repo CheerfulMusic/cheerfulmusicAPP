@@ -3,13 +3,13 @@ import {afterEach,beforeEach,expect,it,vi} from 'vitest'
 import {createApp,nextTick,reactive,type App} from 'vue'
 import WorkDetailPage from '../src/modules/works/pages/WorkDetailPage.vue'
 import type {AudioAsset} from '../src/modules/works/api/detail'
-const api=vi.hoisted(()=>({work:vi.fn(),tasks:vi.fn(),system:vi.fn(),quick:vi.fn(),audio:vi.fn(),selection:vi.fn(),usage:vi.fn(),revision:vi.fn(),push:vi.fn(),paid:vi.fn(),publication:vi.fn(),covers:vi.fn(),lyricsReady:false,route:{params:{id:'work-a'},query:{}}}))
+const api=vi.hoisted(()=>({work:vi.fn(),tasks:vi.fn(),system:vi.fn(),quick:vi.fn(),audio:vi.fn(),selection:vi.fn(),usage:vi.fn(),revision:vi.fn(),push:vi.fn(),paid:vi.fn(),retryArchive:vi.fn(),publication:vi.fn(),covers:vi.fn(),lyricsReady:false,route:{params:{id:'work-a'},query:{}}}))
 vi.mock('vue-router',()=>({useRoute:()=>reactive(api.route),useRouter:()=>({push:api.push}),onBeforeRouteLeave:vi.fn(),onBeforeRouteUpdate:vi.fn()}))
 vi.mock('../src/modules/studio',()=>({loadWork:api.work}))
 vi.mock('../src/shared/http/system',()=>({getSystemInfo:api.system}))
 vi.mock('../src/modules/artist/api/artist',async original=>({...await original<typeof import('../src/modules/artist/api/artist')>(),getSongPublication:api.publication}))
 vi.mock('../src/shared/http/api-client',async original=>({...await original<typeof import('../src/shared/http/api-client')>(),currentCreatorId:()=> 'fixture-owner'}))
-vi.mock('../src/modules/works/api/detail',async original=>({...await original<typeof import('../src/modules/works/api/detail')>(),listTasks:api.tasks,listAudio:api.audio,getUsage:api.usage,getRevision:api.revision,submitTask:api.paid}))
+vi.mock('../src/modules/works/api/detail',async original=>({...await original<typeof import('../src/modules/works/api/detail')>(),listTasks:api.tasks,listAudio:api.audio,getUsage:api.usage,getRevision:api.revision,submitTask:api.paid,retryTaskArchive:api.retryArchive}))
 vi.mock('../src/modules/works/api/section-edits',()=>({getAudioSelection:api.selection,selectAudio:api.paid}))
 vi.mock('../src/modules/works/api/covers',()=>({loadCovers:api.covers,coverUrl:(_work:string,id?:string)=>id?`/covers/${id}`:undefined}))
 vi.mock('../src/shared/player/store',()=>({usePlayer:()=>({current:null,tracks:[],setQueue:vi.fn(),toggle:vi.fn(),updateTitles:vi.fn()})}))
@@ -40,6 +40,31 @@ beforeEach(()=>{
  api.work.mockImplementation(async(id:string)=>({id,version:1,title:'晚风把今天吹成一首歌',style:'流行',story:'我的故事',recipient:'',vocalGender:'AUTO',message:''}));api.tasks.mockResolvedValue([]);api.system.mockResolvedValue({capabilities:{musicGeneration:true}});api.quick.mockResolvedValue(null);api.audio.mockResolvedValue([audio]);api.selection.mockResolvedValue({asset:audio,version:1});api.usage.mockResolvedValue({music:{dailyUnlimited:true}});api.revision.mockResolvedValue(null)
 })
 afterEach(()=>{app?.unmount();app=undefined;document.body.innerHTML='';vi.restoreAllMocks();vi.useRealTimers()})
+it.each([{mode:'custom'},{revision:'photo-lyrics',language:'zh-CN'}])('loads the first playable version before archive completion on work detail %j',async query=>{
+ vi.useFakeTimers()
+ api.route.query=query
+ api.tasks.mockResolvedValue([{id:'task-a',status:'SAVING'}])
+ api.audio.mockResolvedValue([])
+ api.selection.mockResolvedValue({asset:null,version:0})
+ mount();await flush()
+ expect(visible('#song-result')).toBe(false)
+ const first={...audio,generationTaskId:'task-a'}
+ api.audio.mockResolvedValue([first])
+ api.selection.mockResolvedValue({asset:first,version:1})
+ api.tasks.mockResolvedValue([{id:'task-a',status:'SAVING',previewAssetId:first.id,errorCode:'AUDIO_ARCHIVE_FAILED'}])
+ await vi.advanceTimersByTimeAsync(8000);await flush()
+ expect(visible('#song-result')).toBe(true)
+ expect(document.body.textContent).toContain('首版可试听，正在恢复保存其余版本')
+ expect(document.body.textContent).not.toContain('仅重试保存音频')
+ api.tasks.mockResolvedValue([{id:'task-a',status:'FAILED',previewAssetId:first.id,errorCode:'AUDIO_ARCHIVE_FAILED'}])
+ await vi.advanceTimersByTimeAsync(8000);await flush()
+ expect(visible('#song-result')).toBe(true)
+ const retry=[...document.querySelectorAll('button')].find(b=>b.textContent?.trim()==='仅重试保存音频')!
+ api.retryArchive.mockResolvedValue(undefined)
+ retry.click();retry.click();await flush()
+ expect(api.retryArchive).toHaveBeenCalledExactlyOnceWith('work-a','task-a')
+ expect(api.paid).not.toHaveBeenCalled()
+})
 it('refreshes a cover that finishes before an active music task, even when the initial cover read preceded submission',async()=>{
  vi.useFakeTimers()
  api.tasks.mockResolvedValue([{id:'task-a',status:'RUNNING'}])

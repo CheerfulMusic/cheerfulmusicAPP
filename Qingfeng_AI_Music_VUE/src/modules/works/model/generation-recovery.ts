@@ -44,3 +44,12 @@ export function generationProblem(code:string|null|undefined){
     default:return ''
   }
 }
+
+export function audioArchiveMessage(status:string,code:string|null|undefined,previewReady=false){
+  if(status==='SAVING'){
+    if(code==='AUDIO_ARCHIVE_FAILED')return previewReady?'首版可试听，正在恢复保存其余版本。':'音频保存遇到问题，正在后台自动重试。'
+    if(previewReady)return '首版可试听，其余版本正在保存。'
+  }
+  if(status==='FAILED'&&code==='AUDIO_ARCHIVE_FAILED'&&previewReady)return '首版可试听，其余版本未保存。可以仅重试保存音频。'
+  return ''
+}

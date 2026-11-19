@@ -115,7 +115,7 @@ async function play(asset: AudioAsset) {
     <div v-if="assets.length" class="song-version-list">
       <h3>{{ t('对比歌曲版本') }}</h3>
       <p class="save-info">{{ t('切换试听后，再选择你想送出的版本。') }}</p>
-      <article v-for="item in assets" :key="item.id" class="audio-row-item" :class="{selected:selected===item.id}">
+      <article v-for="item in assets" :key="item.id" :id="'audio-version-'+item.id" tabindex="-1" class="audio-row-item" :class="{selected:selected===item.id}">
         <label>
           <input type="radio" :checked="selected===item.id" :value="item.id" :disabled="!!deleting||(item.sectionEdit&&item.id!==selected)" @change="select(item)">
           <span>

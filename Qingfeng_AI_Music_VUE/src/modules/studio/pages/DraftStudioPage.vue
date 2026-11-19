@@ -46,7 +46,7 @@ const quickSession=useQuickSession()
 const {flow:quickFlow,workId:quickWorkId,title:quickTitle,locked:quickLocked,dialogOpen:quickDialogOpen,initialStatus:quickInitialStatus,submissionPending:quickSubmissionPending,unknown:quickUnknown,issue:quickIssue,canResume:quickCanResume}=quickSession
 function setQuickDialogOpen(open:boolean){if(open)quickSession.show();else quickSession.close()}
 async function viewQuickResult(){
- if(!quickWorkId.value||quickFlow.value?.status!=='SUCCEEDED')return
+ if(!quickWorkId.value||!quickFlow.value||(quickFlow.value.status!=='SUCCEEDED'&&!quickFlow.value.previewAssetId))return
  await router.push({path:`/works/${quickWorkId.value}`,query:{quick:quickFlow.value.id,mode:'quick',language:quickSession.intent.value?.language||language.value}})
 }
 const musicCatalog=ref<MusicCatalog>(),preferences=ref<MusicPreferences>(),musicBaseline=ref(''),musicIssue=ref(''),musicPersisted=ref(false)

@@ -1,6 +1,8 @@
 package com.qingfeng.music.server;
 
 import com.aliyun.oss.OSS;
+import com.aliyun.oss.ClientException;
+import com.aliyun.oss.OSSException;
 import com.aliyun.oss.model.*;
 import com.qingfeng.music.infrastructure.storage.*;
 import java.io.*;
@@ -32,6 +34,32 @@ class StorageBoundaryTest {
         assertTrue(route.exists(saved.key()));route.discard(saved.key());assertFalse(route.exists(saved.key()));try(var files=Files.list(root.resolve("staging"))){assertEquals(0,files.count());}
     }
     @Test void downloaderRejectsPrivateUnapprovedAndNonHttpsLocations(){var downloader=new AllowlistedAudioDownloader(Set.of("localhost"));for(String value:List.of("http://localhost/a","https://localhost/a","https://unapproved.example/a","https://name:password@localhost/a","file:///tmp/a"))assertThrows(IOException.class,()->downloader.validate(URI.create(value)));}
+    @Test void transientCloudUploadReusesTheStagedFileAndObjectKey()throws Exception{
+        List<String> attempts=new ArrayList<>();
+        OSS client=(OSS)Proxy.newProxyInstance(OSS.class.getClassLoader(),new Class[]{OSS.class},(proxy,method,args)->{
+            assertEquals("putObject",method.getName());
+            var request=(PutObjectRequest)args[0];
+            attempts.add(request.getKey());
+            assertArrayEquals(wav(),request.getInputStream().readAllBytes());
+            if(attempts.size()==1)throw new ClientException("mock timeout","SocketTimeout","mock");
+            return new PutObjectResult();
+        });
+        var cloud=new OssMediaFileStore(client,"qingfeng-test","qingfeng/audio/",new LocalMediaFileStore(root));
+        cloud.save(new ByteArrayInputStream(wav()));
+        assertEquals(2,attempts.size());
+        assertEquals(attempts.get(0),attempts.get(1));
+        try(var files=Files.list(root)){assertEquals(0,files.count());}
+    }
+    @Test void cloudPermissionFailureDoesNotRetryThePut()throws Exception{
+        var attempts=new java.util.concurrent.atomic.AtomicInteger();
+        OSS client=(OSS)Proxy.newProxyInstance(OSS.class.getClassLoader(),new Class[]{OSS.class},(proxy,method,args)->{
+            attempts.incrementAndGet();
+            throw new OSSException("mock access denied","AccessDenied","mock","mock",null,null,null);
+        });
+        var cloud=new OssMediaFileStore(client,"qingfeng-test","qingfeng/audio/",new LocalMediaFileStore(root));
+        assertThrows(com.qingfeng.music.media.application.MediaFileStore.UploadFailure.class,()->cloud.save(new ByteArrayInputStream(wav())));
+        assertEquals(1,attempts.get());
+    }
     @Test void providerApprovalIsForOneExactUrlAndStillRejectsInternalAddresses(){
         var urls=new ProviderAudioUrls();urls.approve("https://media.example/song.mp3?signature=one");
         assertTrue(urls.contains(URI.create("https://media.example/song.mp3?signature=one")));
