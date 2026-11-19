@@ -39,6 +39,9 @@ const genres = [
   { id: 'instrumental', label: '纯音乐' }, { id: 'other', label: '其他风格' },
 ]
 const covers = [sunset, moon, mountains, lavender, city, lake]
+const heroRotationMs = 30_000
+const streetlightSongId = '0f831f4b-1f3f-4d14-b6cf-b33534863622'
+const replacedHeroSongId = 'acfaa9d5-ce74-477f-9db8-d3700311a26c'
 const player = usePlayer()
 const previewPlaylists = usePreviewPlaylists({ includeHouseReleases: true })
 const previewTracks = usePreviewTracks()
@@ -49,6 +52,7 @@ const query = ref('')
 const songs = ref<DiscoverSong[]>([])
 const featuredSongs = ref<DiscoverSong[]>([])
 const popularSongs = ref<DiscoverSong[]>([])
+const supplementalHeroSong = ref<DiscoverSong>()
 const editorialLoading = ref(true)
 const popularFailed = ref(false)
 const heroIndex = ref(0)
@@ -87,8 +91,12 @@ function withTracks(items: DiscoverSong[]) {
 const rows = computed(() => withTracks(songs.value))
 const featuredRows = computed(() => withTracks(featuredSongs.value).slice(0, 7))
 const popularRows = computed(() => withTracks(popularSongs.value).slice(0, 3))
-// The public popular endpoint orders by plays DESC, then publication time and ID.
-const heroRows = computed(() => withTracks(popularSongs.value).slice(0, 5))
+const heroRows = computed(() => {
+  const streetlight = popularSongs.value.find(item => item.song.id === streetlightSongId) ?? supplementalHeroSong.value
+  const slides = popularSongs.value.filter(item => item.song.id !== replacedHeroSongId && item.song.id !== streetlightSongId)
+  if (streetlight) slides.splice(1, 0, streetlight)
+  return withTracks(slides.slice(0, 5))
+})
 const heroSlideCount = computed(() => heroRows.value.length + 1)
 const hero = computed(() => heroIndex.value === 0 ? undefined : heroRows.value[heroIndex.value - 1])
 const heroBackgrounds = [neon, meadow, inkMountains, moonClouds, goldenStage]
@@ -132,8 +140,14 @@ async function loadEditorial() {
     listDiscoverSongs('popular', 0, '', '').then(page => {
       if (!active()) return
       popularSongs.value = page.songs
+      supplementalHeroSong.value = undefined
       heroIndex.value = 0
       popularFailed.value = false
+      if (!page.songs.some(item => item.song.id === streetlightSongId)) {
+        void listDiscoverSongs('latest', 0, '', 'Streetlight').then(result => {
+          if (active()) supplementalHeroSong.value = result.songs.find(item => item.song.id === streetlightSongId)
+        }).catch(() => { /* The rest of the carousel can still use the popular feed. */ })
+      }
     }).catch(() => {
       if (active()) popularFailed.value = true
     }).finally(() => {
@@ -150,7 +164,7 @@ function restartHeroRotation() {
   heroTimer = undefined
   if (disposed || heroSlideCount.value < 2 || heroPaused.value || heroHovered.value || heroFocused.value
     || !pageVisible.value || reducedMotion.value || player.playing || player.starting) return
-  heroTimer = setInterval(() => changeHero(1), 6000)
+  heroTimer = setInterval(() => changeHero(1), heroRotationMs)
 }
 function heroFocusOut(event: FocusEvent) {
   heroFocused.value = event.relatedTarget instanceof Node && (event.currentTarget as HTMLElement).contains(event.relatedTarget)

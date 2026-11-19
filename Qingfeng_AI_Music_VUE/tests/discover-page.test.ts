@@ -88,7 +88,7 @@ describe('Discover editorial layout with real content', () => {
     mocks.list.mockImplementation(async (tab: string) => page(tab === 'featured' ? [song('精选一')] : tab === 'popular' ? popular : [song(tab)]))
     const wrapper = await open()
     expect(mocks.list.mock.calls).toEqual([
-      ['latest', 0, '', ''], ['featured', 0, '', ''], ['popular', 0, '', ''],
+      ['latest', 0, '', ''], ['featured', 0, '', ''], ['popular', 0, '', ''], ['latest', 0, '', 'Streetlight'],
     ])
     expect(wrapper.get('.discover-hero h2').text()).toBe('让好音乐，被更多人听见')
     const introductionBackground = wrapper.get('.discover-hero-background').attributes('src')
@@ -116,7 +116,34 @@ describe('Discover editorial layout with real content', () => {
     expect(wrapper.get('.discover-hero h2').text()).toBe('歌曲热门5')
     expect(wrapper.find('[aria-label="查看推荐：歌曲热门6"]').exists()).toBe(false)
     expect(wrapper.get('.discover-featured').text()).toContain('歌曲精选一')
-    expect(mocks.list).toHaveBeenCalledTimes(3)
+  })
+
+  it.each([true, false])('replaces the second slide with Streetlight and keeps the ranking intact (in feed: %s)', async (inFeed) => {
+    const replaced = song('acfaa9d5-ce74-477f-9db8-d3700311a26c')
+    replaced.song.title = '老爷子的领地'
+    const streetlight = song('0f831f4b-1f3f-4d14-b6cf-b33534863622')
+    streetlight.song.title = 'Streetlight'
+    streetlight.song.version = 2
+    streetlight.stageName = 'SWALEN'
+    const ranked = [song('第一'), replaced, song('第三'), song('第四'), song('第五')]
+    if (inFeed) ranked.push(streetlight)
+    mocks.list.mockImplementation(async (tab: string, _offset: number, _genre: string, query: string) =>
+      page(tab === 'popular' ? ranked : query === 'Streetlight' ? [song('同名作品'), streetlight] : []))
+
+    const wrapper = await open()
+    const dots = wrapper.findAll('.discover-hero-dots button')
+    expect(dots).toHaveLength(6)
+    expect(dots[2]!.attributes('aria-label')).toBe('查看推荐：Streetlight')
+    expect(wrapper.find('[aria-label="查看推荐：老爷子的领地"]').exists()).toBe(false)
+    expect(wrapper.get('.discover-ranking').text()).toContain('老爷子的领地')
+    expect(mocks.list.mock.calls.some(call => call[3] === 'Streetlight')).toBe(!inFeed)
+
+    await dots[2]!.trigger('click')
+    expect(wrapper.get('.discover-hero').text()).toContain('SWALEN')
+    await wrapper.get('.discover-hero-listen').trigger('click')
+    await flushPromises()
+    expect(mocks.toggle.mock.calls[0]![0].id).toBe(streetlight.song.id)
+    expect(mocks.record).toHaveBeenCalledWith(streetlight.song)
   })
 
   it('keeps the main songs usable when recommendations fail and recovers the side feed on retry', async () => {
@@ -232,27 +259,29 @@ describe('Discover editorial layout with real content', () => {
     expect(mocks.record).toHaveBeenCalledTimes(1)
   })
 
-  it('rotates every six seconds, pauses on hover or focus and supports explicit pause and resume', async () => {
+  it('rotates every 30 seconds, pauses on hover or focus and supports explicit pause and resume', async () => {
     vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] })
     mocks.list.mockImplementation(async (tab: string) => page(tab === 'popular' ? [song('热门一'), song('热门二')] : [song(tab)]))
     const wrapper = await open()
-    await vi.advanceTimersByTimeAsync(6000)
+    await vi.advanceTimersByTimeAsync(29_999)
+    expect(wrapper.get('.discover-hero h2').text()).toBe('让好音乐，被更多人听见')
+    await vi.advanceTimersByTimeAsync(1)
     expect(wrapper.get('.discover-hero h2').text()).toBe('歌曲热门一')
     await wrapper.get('.discover-hero').trigger('mouseenter')
-    await vi.advanceTimersByTimeAsync(12000)
+    await vi.advanceTimersByTimeAsync(60_000)
     expect(wrapper.get('.discover-hero h2').text()).toBe('歌曲热门一')
     await wrapper.get('.discover-hero').trigger('mouseleave')
-    await vi.advanceTimersByTimeAsync(6000)
+    await vi.advanceTimersByTimeAsync(30_000)
     expect(wrapper.get('.discover-hero h2').text()).toBe('歌曲热门二')
     await wrapper.get('.discover-hero').trigger('focusin')
-    await vi.advanceTimersByTimeAsync(6000)
+    await vi.advanceTimersByTimeAsync(30_000)
     expect(wrapper.get('.discover-hero h2').text()).toBe('歌曲热门二')
     await wrapper.get('.discover-hero').trigger('focusout', { relatedTarget: null })
     await wrapper.get('[aria-label="暂停轮播"]').trigger('click')
-    await vi.advanceTimersByTimeAsync(6000)
+    await vi.advanceTimersByTimeAsync(30_000)
     expect(wrapper.get('.discover-hero h2').text()).toBe('歌曲热门二')
     await wrapper.get('[aria-label="继续轮播"]').trigger('click')
-    await vi.advanceTimersByTimeAsync(6000)
+    await vi.advanceTimersByTimeAsync(30_000)
     expect(wrapper.get('.discover-hero h2').text()).toBe('让好音乐，被更多人听见')
     expect(mocks.toggle).not.toHaveBeenCalled()
   })
@@ -266,7 +295,7 @@ describe('Discover editorial layout with real content', () => {
     document.dispatchEvent(new Event('visibilitychange'))
     await flushPromises()
     expect(vi.getTimerCount()).toBe(0)
-    await vi.advanceTimersByTimeAsync(12000)
+    await vi.advanceTimersByTimeAsync(60_000)
     expect(wrapper.get('.discover-hero h2').text()).toBe('让好音乐，被更多人听见')
     visibility.mockReturnValue('visible')
     document.dispatchEvent(new Event('visibilitychange'))
@@ -283,7 +312,7 @@ describe('Discover editorial layout with real content', () => {
     const wrapper = await open()
     expect(wrapper.findAll('.discover-hero-dots button')).toHaveLength(2)
     expect(vi.getTimerCount()).toBe(0)
-    await vi.advanceTimersByTimeAsync(12000)
+    await vi.advanceTimersByTimeAsync(60_000)
     expect(wrapper.get('.discover-hero h2').text()).toBe('让好音乐，被更多人听见')
     await wrapper.get('[aria-label="下一张推荐"]').trigger('click')
     expect(wrapper.get('.discover-hero h2').text()).toBe('歌曲popular')
