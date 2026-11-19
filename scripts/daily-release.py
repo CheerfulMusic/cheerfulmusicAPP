@@ -84,7 +84,7 @@ sha256sum app.jar | cut -d' ' -f1
                     "--workspace",repo,"--baseline",baseline,"--cache-root",deps,
                     "--java-home",args.java_home,"--isolated-mysql-cohort",manifest))
         except Exception:
-            evidence = Path(os.environ["LOCALAPPDATA"]) / "QingfengMusic/release-logs" / Path(temp).name
+            evidence = Path(args.scratch).resolve() / "release-logs" / Path(temp).name
             evidence.mkdir(parents=True, exist_ok=True)
             for entry in deps.glob("b/*/*.log"):
                 shutil.copy2(entry, evidence / entry.name)
@@ -138,7 +138,13 @@ if __name__ == "__main__":
     parser.add_argument("--verify-current",action="store_true")
     parser.add_argument("--publish",action="store_true")
     options = parser.parse_args()
-    logs = Path(os.environ["LOCALAPPDATA"])/"QingfengMusic/release-logs"
+    runtime = Path(options.scratch).resolve()
+    temp_root = runtime / "temp"
+    temp_root.mkdir(parents=True, exist_ok=True)
+    for key in ("TEMP", "TMP", "TMPDIR"):
+        os.environ[key] = str(temp_root)
+    tempfile.tempdir = str(temp_root)
+    logs = runtime / "release-logs"
     logs.mkdir(parents=True,exist_ok=True)
     log = logs/(datetime.now().strftime("%Y%m%d-%H%M%S-%f")+".log")
     print(log,flush=True)
