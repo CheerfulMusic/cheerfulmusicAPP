@@ -7,7 +7,9 @@ import org.springframework.stereotype.Service;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 /**
@@ -36,6 +38,54 @@ public class AnalyticsDetailService {
                     + "WHEN o.email IS NOT NULL AND o.email <> '' THEN 'OIDC_EMAIL' "
                     + "WHEN o.creator_id IS NOT NULL THEN 'OIDC_PHONE' "
                     + "WHEN a.creator_id IS NOT NULL THEN 'AUTHING' ELSE 'GUEST' END";
+
+    public static final String REAL_VISITOR_PREDICATE = "visitor_id <> 'ANONYMIZED' AND session_id <> 'ANONYMIZED'";
+    private static final Map<String, String> COUNTRY_CODES = countryCodes();
+
+    private static Map<String, String> countryCodes() {
+        var codes = new HashMap<String, String>();
+        for (String code : Locale.getISOCountries()) {
+            var region = new Locale("", code);
+            codes.put(region.getDisplayCountry(Locale.SIMPLIFIED_CHINESE), code);
+            codes.put(region.getDisplayCountry(Locale.ENGLISH), code);
+            codes.put(code, code);
+        }
+        codes.putAll(Map.ofEntries(
+                Map.entry("中国香港", "HK"), Map.entry("中国澳门", "MO"), Map.entry("中国台湾", "TW"),
+                Map.entry("香港", "HK"), Map.entry("澳门", "MO"), Map.entry("台湾", "TW"),
+                Map.entry("俄罗斯联邦", "RU"), Map.entry("捷克共和国", "CZ"),
+                Map.entry("波斯尼亚和黑塞哥维那", "BA"), Map.entry("刚果民主共和国", "CD"),
+                Map.entry("刚果共和国", "CG"), Map.entry("象牙海岸", "CI"), Map.entry("科索沃", "XK")));
+        return Map.copyOf(codes);
+    }
+
+    public static String countryCode(String country) {
+        return COUNTRY_CODES.getOrDefault(country, "");
+    }
+
+    public record CountryUser(String creatorId, String accountType, String name, String email,
+                              String phoneMasked, long hits, Instant lastSeen) {}
+
+    public List<CountryUser> countryUsers(String country, Instant since) {
+        return db.query("""
+                SELECT t.creator_id, %s account_type, COALESCE(g.email, o.email) email,
+                       COALESCE(g.display_name, o.display_name, a.display_name) name, o.phone_masked,
+                       t.hits, t.last_seen
+                FROM (
+                    SELECT creator_id, CASE WHEN creator_id IS NULL OR creator_id='' THEN visitor_id END guest_id,
+                           COUNT(*) hits, MAX(created_at) last_seen
+                    FROM site_event WHERE country=? AND created_at>=? AND %s
+                    GROUP BY creator_id, CASE WHEN creator_id IS NULL OR creator_id='' THEN visitor_id END
+                ) t LEFT JOIN creator_google_identity g ON g.creator_id=t.creator_id
+                LEFT JOIN creator_oidc_identity o ON o.creator_id=t.creator_id
+                LEFT JOIN creator_authing_identity a ON a.creator_id=t.creator_id
+                ORDER BY t.hits DESC, t.last_seen DESC, t.creator_id ASC, t.guest_id ASC
+                """.formatted(IDENTITY_SQL, REAL_VISITOR_PREDICATE),
+                (rs, n) -> new CountryUser(rs.getString("creator_id"), rs.getString("account_type"),
+                        rs.getString("name"), rs.getString("email"), rs.getString("phone_masked"),
+                        rs.getLong("hits"), rs.getTimestamp("last_seen").toInstant()),
+                country, Timestamp.from(since));
+    }
 
     private static final int LIMIT = 50;
 

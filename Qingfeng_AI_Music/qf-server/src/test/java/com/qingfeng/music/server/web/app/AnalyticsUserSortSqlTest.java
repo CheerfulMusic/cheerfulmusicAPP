@@ -42,7 +42,7 @@ class AnalyticsUserSortSqlTest {
         jdbc.execute("CREATE TABLE creator_oidc_identity (creator_id VARCHAR(36), email VARCHAR(320), phone_masked VARCHAR(40), display_name VARCHAR(200))");
         jdbc.execute("CREATE TABLE creator_authing_identity (creator_id VARCHAR(36), email VARCHAR(320), display_name VARCHAR(200))");
         jdbc.execute("CREATE TABLE music_work (id VARCHAR(36) PRIMARY KEY, owner_id VARCHAR(36), created_at TIMESTAMP(6))");
-        jdbc.execute("CREATE TABLE payment_order (creator_id VARCHAR(36), package_id VARCHAR(80), amount DECIMAL(18,2), currency VARCHAR(3), credits BIGINT, status VARCHAR(24), created_at TIMESTAMP(6))");
+        jdbc.execute("CREATE TABLE payment_order (id VARCHAR(36) PRIMARY KEY, creator_id VARCHAR(36), package_id VARCHAR(80), amount DECIMAL(18,2), currency VARCHAR(3), credits BIGINT, status VARCHAR(24), created_at TIMESTAMP(6))");
         var provider = (ObjectProvider<JdbcTemplate>) mock(ObjectProvider.class);
         when(provider.getIfAvailable()).thenReturn(jdbc);
         var environment = new MockEnvironment().withProperty("qingfeng.analytics.viewer-creator-ids", "viewer");
@@ -90,6 +90,24 @@ class AnalyticsUserSortSqlTest {
         var latest = ids("latest");
         assertEquals(50, latest.size());
         assertEquals("newest", latest.get(0), "Newest must be selected from all users, not re-sort the active top 50");
+    }
+
+    @Test @SuppressWarnings("unchecked")
+    void dashboardCanPaginateBeyondTheLegacyFiftyRowLimit() {
+        for (int i = 0; i < 51; i++) {
+            var creator = String.format("user-%02d", i);
+            event(creator, "pageview", recent);
+            jdbc.update("INSERT INTO payment_order VALUES (?,?,?,?,?,?,?,?)", creator, creator,
+                    "package", 10, "USD", 100, "PAID", Timestamp.from(recent));
+        }
+        var body = controller.summary(30, "active", true).getBody();
+        assertNotNull(body);
+        assertFalse(body.containsKey("error"));
+        assertEquals(51, ((List<?>) body.get("users")).size());
+        var orders = (List<Map<String, Object>>) body.get("recharges");
+        assertEquals(51, orders.size());
+        assertEquals("user-50", orders.get(0).get("orderId"));
+        assertEquals("user-00", orders.get(50).get("orderId"));
     }
 
     @Test void activeUsesDisplayedPageviewsRatherThanAllEventCount() {

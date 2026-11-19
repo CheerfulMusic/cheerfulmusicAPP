@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { locale, t } from '../../../shared/i18n'
 import { computed } from 'vue'
 import type { AnalyticsPageRow, AnalyticsPageUserRow } from '../api/analytics'
 import { dwellLabel, pageName, shareOf } from '../model/dwell'
@@ -22,31 +23,30 @@ function percent(value: number): string {
 
 <template>
   <div class="perf">
-    <div v-if="!rows.length" class="perf-empty">所选时间范围内还没有页面访问。</div>
+    <div v-if="!rows.length" class="perf-empty">{{ t('所选时间范围内还没有页面访问。') }}</div>
     <template v-else>
       <div class="perf-head" aria-hidden="true">
         <span class="col-rank">#</span>
-        <span class="col-page">页面</span>
-        <span class="col-pv">访问量</span>
-        <span class="col-share">占比</span>
-        <span class="col-dwell">平均停留</span>
-        <span class="col-samples">样本</span>
+        <span class="col-page">{{ t('页面') }}</span>
+        <span class="col-pv">{{ t('访问量') }}</span>
+        <span class="col-share">{{ t('占比') }}</span>
+        <span class="col-dwell">{{ t('平均停留') }}</span>
+        <span class="col-samples">{{ t('样本') }}</span>
         <span class="col-toggle"></span>
       </div>
       <ul class="perf-list">
         <li v-for="(row, index) in rows" :key="row.pagePath" :class="{ open: openPath === row.pagePath }">
-          <button type="button" class="perf-row" :title="`${pageName(row.pagePath)} ${row.pagePath || '/'} · PV ${row.pv.toLocaleString('zh-CN')} · 平均停留 ${dwellLabel(row.avgDurationMs, row.samples)} · 有效样本 ${row.samples}`" :aria-expanded="openPath === row.pagePath" :aria-controls="`perf-users-${index}`" @click="$emit('toggle', row.pagePath)">
+          <button type="button" class="perf-row" :aria-expanded="openPath === row.pagePath" :aria-controls="`perf-users-${index}`" @click="$emit('toggle', row.pagePath)">
             <span class="col-rank">{{ index + 1 }}</span>
             <span class="col-page">
               <strong>{{ pageName(row.pagePath) }}</strong>
-              <code>{{ row.pagePath || '/' }}</code>
             </span>
-            <span class="col-pv">{{ row.pv.toLocaleString('zh-CN') }}</span>
+            <span class="col-pv">{{ row.pv.toLocaleString(locale) }}</span>
             <span class="col-share">
               <span class="share-track"><i :style="{ width: `${shareOf(row.pv, totalPv) * 100}%` }"></i></span>
               <small>{{ percent(row.pv) }}</small>
             </span>
-            <span class="col-dwell" :title="row.samples ? `基于 ${row.samples} 次有效停留` : '还没有有效停留样本'">{{ dwellLabel(row.avgDurationMs, row.samples) }}</span>
+            <span class="col-dwell" :title="row.samples ? t('基于 {count} 次有效停留', { count: row.samples }) : t('还没有有效停留样本')">{{ dwellLabel(row.avgDurationMs, row.samples) }}</span>
             <span class="col-samples">{{ row.samples || '—' }}</span>
             <span class="col-toggle" aria-hidden="true"><i></i></span>
           </button>
@@ -78,7 +78,6 @@ function percent(value: number): string {
 .col-rank { color: #b6a8a1; font-size: 12px; font-variant-numeric: tabular-nums; }
 .col-page { min-width: 0; }
 .col-page strong { display: block; font-size: 13.5px; font-weight: 600; color: #2c2522; }
-.col-page code { display: block; margin-top: 2px; color: #a2948e; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .col-pv { text-align: right; font-size: 14px; font-weight: 600; color: #2c2522; font-variant-numeric: tabular-nums; }
 .col-share { display: flex; align-items: center; gap: 8px; }
 .share-track { flex: 1; height: 7px; border-radius: 999px; background: #f6ebe6; overflow: hidden; }
@@ -97,6 +96,5 @@ function percent(value: number): string {
   .perf-head { display: none; }
   .perf-row { grid-template-columns: 20px minmax(90px, 1fr) 52px 16px; gap: 10px; padding: 11px 6px; }
   .col-share, .col-dwell { display: none; }
-  .col-page code { font-size: 10px; }
 }
 </style>

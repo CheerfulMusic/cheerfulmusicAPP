@@ -128,6 +128,10 @@ export function validResponse(path:string,method:string,value:unknown):boolean{
  if(/^app\/artist-profile\/releases\/[^/]+\/discover$/.test(path))
   return method==='DELETE'?myArtist(value):method==='PUT'&&artistRelease(value)&&obj(value)&&value.onDiscover===true
  if(/^public\/hot-songs\/[^/]+\/play$/.test(path))return method==='POST'&&hotStat(value)
+ if(path==='app/analytics/country-users')return method==='GET'&&obj(value)&&typeof value.allowed==='boolean'&&
+  (!value.allowed||(value.error==='QUERY_FAILED'&&value.users===undefined)||list(value.users,u=>obj(u)&&
+   (u.creatorId===null||str(u.creatorId))&&text(u.accountType)&&(u.name===null||str(u.name))&&
+   (u.email===null||str(u.email))&&(u.phoneMasked===null||str(u.phoneMasked))&&num(u.hits)&&text(u.lastSeen)))
  if(path==='app/analytics/page-users')return method==='GET'&&obj(value)&&typeof value.allowed==='boolean'&&(value.allowed!==true||(num(value.days)&&text(value.pagePath)&&list(value.users,u=>obj(u)&&text(u.creatorId)&&text(u.accountType)&&(u.name===null||str(u.name))&&(u.email===null||str(u.email))&&(u.phoneMasked===null||str(u.phoneMasked))&&num(u.avgDurationMs)&&num(u.samples)&&Number(u.samples)>=0)))
  if(path==='app/analytics/access')return method==='GET'&&analyticsAccessBody(value)
  if(path==='app/analytics/summary')return method==='GET'&&analyticsSummaryBody(value)

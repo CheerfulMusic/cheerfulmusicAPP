@@ -1,5 +1,8 @@
 <script setup lang="ts">
 import { computed, ref, useId, watch } from 'vue'
+import { locale, t } from '../../../shared/i18n'
+import AnalyticsPagination from './AnalyticsPagination.vue'
+import { useAnalyticsPagination } from '../model/pagination'
 import type { AnalyticsUserPageRow, AnalyticsUserRow, AnalyticsUserSort } from '../api/analytics'
 import { accountDetail, accountName, accountTypeLabel, avatarText, dwellLabel, filterUsers, isGuest, pageName, type UserFilter } from '../model/dwell'
 
@@ -20,12 +23,12 @@ const identityRows = computed(() => filterUsers(props.rows, filter.value))
 const guests = computed(() => props.rows.filter(row => isGuest(row.accountType)).length)
 const signed = computed(() => props.rows.length - guests.value)
 
-function visits(row: AnalyticsUserRow): string { return Number.isFinite(row.pageviews) ? row.pageviews.toLocaleString('zh-CN') : '—' }
-function works(row: AnalyticsUserRow): string { return Number.isFinite(row.works) ? row.works!.toLocaleString('zh-CN') : '—' }
+function visits(row: AnalyticsUserRow): string { return Number.isFinite(row.pageviews) ? row.pageviews.toLocaleString(locale.value) : '—' }
+function works(row: AnalyticsUserRow): string { return Number.isFinite(row.works) ? row.works!.toLocaleString(locale.value) : '—' }
 function time(value: string): string {
   if (!value) return '—'
   const date = new Date(value)
-  return Number.isNaN(date.getTime()) ? '—' : date.toLocaleString('zh-CN', { hour12: false, month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+  return Number.isNaN(date.getTime()) ? '—' : date.toLocaleString(locale.value, { hour12: false, month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })
 }
 
 const columns = [
@@ -33,53 +36,52 @@ const columns = [
   { label: '登录方式', value: (row: AnalyticsUserRow) => [accountTypeLabel(row.accountType)] },
   { label: '创作', value: (row: AnalyticsUserRow) => [works(row)] },
   { label: '访问', value: (row: AnalyticsUserRow) => [visits(row)] },
-  { label: '停留', value: (row: AnalyticsUserRow) => [dwellLabel(row.avgDurationMs, row.samples), row.samples ? `${row.samples} 次停留` : '无有效样本'] },
+  { label: '停留', value: (row: AnalyticsUserRow) => [dwellLabel(row.avgDurationMs, row.samples), row.samples ? t('{count} 次停留', { count: row.samples }) : t('无有效样本')] },
   { label: '最近访问', value: (row: AnalyticsUserRow) => [time(row.lastSeen)] },
 ]
 const filterId = useId()
 const queries = ref(columns.map(() => ''))
-const expanded = ref(false)
 const suggestions = computed(() => columns.map(column => [...new Set(identityRows.value.flatMap(column.value))]))
 const normalize = (value: string) => value.trim().toLowerCase().replaceAll(',', '')
 const visible = computed(() => identityRows.value.filter(row => columns.every((column, index) => {
   const query = normalize(queries.value[index] ?? '')
   return !query || column.value(row).some(value => normalize(value).includes(query))
 })))
-const displayed = computed(() => expanded.value ? visible.value : visible.value.slice(0, 10))
-watch([visible, sort], () => { expanded.value = false })
+const { page, displayed } = useAnalyticsPagination(visible)
+watch(sort, () => { page.value = 1 })
 </script>
 
 <template>
   <div class="users">
     <div class="users-toolbar">
-      <p class="users-summary">{{ signed }} 位登录用户 · {{ guests }} 位游客</p>
+      <p class="users-summary">{{ t('{count} 位登录用户 · {guests} 位游客', { count: signed, guests }) }}</p>
       <div class="users-controls">
-        <div class="users-sort users-filter" role="group" aria-label="用户排序">
-          <button v-for="option in [{ id: 'active', label: '活跃' }, { id: 'latest', label: '最新' }]" :key="option.id" type="button" :class="{ active: sort === option.id }" :aria-pressed="sort === option.id" @click="sort = option.id as AnalyticsUserSort">{{ option.label }}</button>
+        <div class="users-sort users-filter" role="group" :aria-label="t('用户排序')">
+          <button v-for="option in [{ id: 'active', label: '活跃' }, { id: 'latest', label: '最新' }]" :key="option.id" type="button" :class="{ active: sort === option.id }" :aria-pressed="sort === option.id" @click="sort = option.id as AnalyticsUserSort">{{ t(option.label) }}</button>
         </div>
-        <div class="users-filter" role="group" aria-label="按身份筛选用户">
-          <button v-for="option in [{ id: 'all', label: '全部' }, { id: 'signed', label: '仅登录' }, { id: 'guest', label: '仅游客' }]" :key="option.id" type="button" :class="{ active: filter === option.id }" :aria-pressed="filter === option.id" @click="filter = option.id as UserFilter">{{ option.label }}</button>
+        <div class="users-filter" role="group" :aria-label="t('按身份筛选用户')">
+          <button v-for="option in [{ id: 'all', label: '全部' }, { id: 'signed', label: '仅登录' }, { id: 'guest', label: '仅游客' }]" :key="option.id" type="button" :class="{ active: filter === option.id }" :aria-pressed="filter === option.id" @click="filter = option.id as UserFilter">{{ t(option.label) }}</button>
         </div>
       </div>
     </div>
-    <p v-if="sorting" class="users-sort-hint" role="status">正在加载用户列表…</p>
-    <p v-else-if="!sortError" class="users-sort-hint">{{ sort === 'latest' ? '按最近访问时间从新到旧排序' : '按所选周期内的访问量从高到低排序' }}，展示前 50 位用户。</p>
+    <p v-if="sorting" class="users-sort-hint" role="status">{{ t('正在加载用户列表…') }}</p>
+    <p v-else-if="!sortError" class="users-sort-hint">{{ t(sort === 'latest' ? '按最近访问时间从新到旧排序' : '按所选周期内的访问量从高到低排序') }}</p>
 
     <div v-if="rows.length && !sortError" class="column-filters">
       <label v-for="(column, index) in columns" :key="column.label">
-        {{ column.label }}
-        <input v-model="queries[index]" type="search" :list="`${filterId}-${index}`" placeholder="输入或选择">
+        {{ t(column.label) }}
+        <input v-model="queries[index]" type="search" :list="`${filterId}-${index}`" :placeholder="t('输入或选择')">
         <datalist :id="`${filterId}-${index}`">
           <option v-for="value in suggestions[index]" :key="value" :value="value" />
         </datalist>
       </label>
     </div>
     <div v-if="sortError" class="users-empty" role="alert">
-      加载失败。{{ sortError }}
-      <button type="button" class="analytics-retry" @click="$emit('retrySort')">重试</button>
+      {{ t(sortError) }}
+      <button type="button" class="analytics-retry" @click="$emit('retrySort')">{{ t('重试') }}</button>
     </div>
-    <div v-else-if="!rows.length" class="users-empty">所选时间范围内暂无用户数据。</div>
-    <div v-else-if="!visible.length" class="users-empty">当前筛选下没有用户。</div>
+    <div v-else-if="!rows.length" class="users-empty">{{ t('所选时间范围内暂无用户数据。') }}</div>
+    <div v-else-if="!visible.length" class="users-empty">{{ t('当前筛选下没有用户。') }}</div>
     <ul v-else class="users-list">
       <li v-for="row in displayed" :key="row.creatorId" :class="{ open: openUser === row.creatorId }">
         <button type="button" class="users-row" :aria-expanded="openUser === row.creatorId" :aria-controls="`user-pages-${row.creatorId}`" @click="$emit('toggle', row.creatorId)">
@@ -90,29 +92,27 @@ watch([visible, sort], () => { expanded.value = false })
             <code class="user-id" :title="row.creatorId">{{ row.creatorId }}</code>
           </span>
           <span class="type-badge" :class="{ guest: isGuest(row.accountType) }">{{ accountTypeLabel(row.accountType) }}</span>
-          <span class="metric"><strong>{{ works(row) }}</strong><small>创作</small></span>
-          <span class="metric"><strong>{{ visits(row) }}</strong><small>访问</small></span>
-          <span class="metric"><strong>{{ dwellLabel(row.avgDurationMs, row.samples) }}</strong><small>{{ row.samples ? `${row.samples} 次停留` : '无有效样本' }}</small></span>
+          <span class="metric"><strong>{{ works(row) }}</strong><small>{{ t('创作') }}</small></span>
+          <span class="metric"><strong>{{ visits(row) }}</strong><small>{{ t('访问') }}</small></span>
+          <span class="metric"><strong>{{ dwellLabel(row.avgDurationMs, row.samples) }}</strong><small>{{ row.samples ? t('{count} 次停留', { count: row.samples }) : t('无有效样本') }}</small></span>
           <span class="last-seen">{{ time(row.lastSeen) }}</span>
           <span class="caret" aria-hidden="true"></span>
         </button>
         <div v-if="openUser === row.creatorId" :id="`user-pages-${row.creatorId}`" class="user-detail">
-          <p v-if="detailLoading" class="user-detail-state">正在读取页面明细…</p>
-          <p v-else-if="detailError" class="user-detail-state error" role="alert">{{ detailError }}</p>
-          <p v-else-if="!(detailRows ?? []).length" class="user-detail-state">这位用户在当前时间范围内没有有效停留记录。</p>
+          <p v-if="detailLoading" class="user-detail-state">{{ t('正在读取页面明细…') }}</p>
+          <p v-else-if="detailError" class="user-detail-state error" role="alert">{{ t(detailError) }}</p>
+          <p v-else-if="!(detailRows ?? []).length" class="user-detail-state">{{ t('这位用户在当前时间范围内没有有效停留记录。') }}</p>
           <ul v-else class="user-pages">
             <li v-for="page in detailRows" :key="page.pagePath">
-              <span class="user-page-name">{{ pageName(page.pagePath) }} <code>{{ page.pagePath }}</code></span>
+              <span class="user-page-name">{{ pageName(page.pagePath) }}</span>
               <span class="user-page-metric">{{ dwellLabel(page.avgDurationMs, page.samples) }}</span>
-              <span class="user-page-samples">{{ page.samples }} 次</span>
+              <span class="user-page-samples">{{ t('{count} 次', { count: page.samples }) }}</span>
             </li>
           </ul>
         </div>
       </li>
     </ul>
-    <button v-if="!sortError && visible.length > 10" type="button" class="users-expand" :aria-expanded="expanded" @click="expanded = !expanded">
-      {{ expanded ? '收起其余用户' : `展开其余 ${visible.length - 10} 条` }}
-    </button>
+    <AnalyticsPagination v-if="!sortError" v-model="page" :total="visible.length" :label="t('用户活跃分页')" />
   </div>
 </template>
 
@@ -120,7 +120,6 @@ watch([visible, sort], () => { expanded.value = false })
 .column-filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(125px, 1fr)); gap: 10px; margin: 12px 0; }
 .column-filters label { display: grid; gap: 5px; color: #665650; font-size: 12px; }
 .column-filters input, .users-expand { min-width: 0; min-height: 36px; padding: 6px 10px; border: 1px solid #f0e1dc; border-radius: 8px; background: #fffaf8; color: #493a35; font: inherit; }
-.users-expand { display: block; margin: 12px auto 0; cursor: pointer; }
 .users-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 14px; }
 .users-summary { margin: 0; color: #8a7c76; font-size: 12px; }
 .users-controls { display: flex; flex-wrap: wrap; gap: 8px; }

@@ -31,22 +31,21 @@ const names = (wrapper: VueWrapper) => wrapper.findAll('.users-row .user-main st
 afterEach(() => { wrappers.splice(0).forEach(wrapper => wrapper.unmount()); vi.unstubAllGlobals() })
 
 describe('数据看板用户排序', () => {
-  it('默认展示十条，可展开并筛选原先收起的用户', async () => {
-    const users = Array.from({ length: 12 }, (_, index) => ({
+  it('默认展示二十条，支持翻页和跨页筛选', async () => {
+    const users = Array.from({ length: 22 }, (_, index) => ({
       ...people[0]!, creatorId: `user-${index}`, name: `Listener ${index}`, works: index,
     }))
     const wrapper = start(() => json({ ...summary(), users }))
     await flushPromises()
-    expect(names(wrapper)).toHaveLength(10)
-    await wrapper.get('.users-expand').trigger('click')
-    expect(names(wrapper)).toHaveLength(12)
-    await wrapper.get('.users-expand').trigger('click')
-    expect(names(wrapper)).toHaveLength(10)
+    expect(names(wrapper)).toHaveLength(20)
+    const pagination = wrapper.get('[aria-label="用户活跃分页"]')
+    await pagination.findAll('button')[1]!.trigger('click')
+    expect(names(wrapper)).toEqual(['Listener 20', 'Listener 21'])
     const inputs = wrapper.findAll('.column-filters input')
     expect(inputs).toHaveLength(6)
-    expect(wrapper.get('.column-filters datalist').findAll('option').map(option => option.attributes('value'))).toContain('Listener 11')
-    await inputs[0]!.setValue('listener 11')
-    expect(names(wrapper)).toEqual(['Listener 11'])
+    expect(wrapper.get('.column-filters datalist').findAll('option').map(option => option.attributes('value'))).toContain('Listener 21')
+    await inputs[0]!.setValue('listener 21')
+    expect(names(wrapper)).toEqual(['Listener 21'])
     await inputs[2]!.setValue('12')
     expect(names(wrapper)).toEqual([])
   })

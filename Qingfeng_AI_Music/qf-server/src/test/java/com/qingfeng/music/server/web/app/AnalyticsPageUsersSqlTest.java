@@ -41,7 +41,7 @@ class AnalyticsPageUsersSqlTest {
             statement.execute("DROP ALL OBJECTS");
             statement.execute("CREATE TABLE site_event (id VARCHAR(36) PRIMARY KEY, visitor_id VARCHAR(64), session_id VARCHAR(64), "
                     + "event VARCHAR(50), page_path VARCHAR(512), referrer VARCHAR(512), payload TEXT, "
-                    + "created_at TIMESTAMP(6), creator_id VARCHAR(36), duration_ms BIGINT)");
+                    + "created_at TIMESTAMP(6), creator_id VARCHAR(36), duration_ms BIGINT, country VARCHAR(128))");
             statement.execute("CREATE TABLE creator_google_identity (creator_id VARCHAR(36), email VARCHAR(320), display_name VARCHAR(200))");
             statement.execute("CREATE TABLE creator_oidc_identity (creator_id VARCHAR(36), email VARCHAR(320), phone_masked VARCHAR(40), display_name VARCHAR(200))");
             statement.execute("CREATE TABLE creator_authing_identity (creator_id VARCHAR(36), email VARCHAR(320), display_name VARCHAR(200))");
@@ -60,7 +60,7 @@ class AnalyticsPageUsersSqlTest {
         leave("e5", "/create", "creator-1", null, now);
         leave("e6", "/create", "creator-1", 999000, stale);
         leave("e7", "/works", "creator-1", 99000, now);
-        jdbc.update("INSERT INTO site_event VALUES ('e8','v','s','pageview','/create','',NULL,?, 'creator-1', 50000)", now);
+        jdbc.update("INSERT INTO site_event VALUES ('e8','v','s','pageview','/create','',NULL,?, 'creator-1', 50000,NULL)", now);
 
         var identity = mock(IdentityApi.class);
         when(identity.googleIdentity(anyString())).thenReturn(Optional.empty());
@@ -77,7 +77,7 @@ class AnalyticsPageUsersSqlTest {
     @AfterEach void clearContext() { SecurityContextHolder.clearContext(); }
 
     private void leave(String id, String page, String creator, Integer duration, Timestamp at) {
-        jdbc.update("INSERT INTO site_event VALUES (?,?,?,?,?,?,?,?,?,?)",
+        jdbc.update("INSERT INTO site_event VALUES (?,?,?,?,?,?,?,?,?,?,NULL)",
                 id, "v-" + id, "s-" + id, "page_leave", page, "", null, at, creator,
                 duration == null ? null : duration.longValue());
     }
@@ -123,6 +123,28 @@ class AnalyticsPageUsersSqlTest {
         assertEquals(1, users.size());
         assertEquals(99000L, users.get(0).avgDurationMs());
         assertEquals(1L, users.get(0).samples());
+    }
+
+    @Test @SuppressWarnings("unchecked")
+    void countryUsersIncludeGuestsAndExcludeOtherCountriesAndAnonymizedTraffic() {
+        jdbc.update("UPDATE site_event SET country='中国' WHERE id IN ('e1','e2','e4','e6','e8')");
+        jdbc.update("UPDATE site_event SET country='美国' WHERE id='e7'");
+        jdbc.update("UPDATE site_event SET creator_id=NULL WHERE id='e4'");
+        jdbc.update("UPDATE site_event SET session_id='ANONYMIZED' WHERE id='e8'");
+
+        var body = controller.countryUsers("中国", 30).getBody();
+        assertNotNull(body);
+        var users = (List<AnalyticsDetailService.CountryUser>) body.get("users");
+        assertNotNull(users, () -> body.toString());
+        assertEquals(2, users.size());
+        assertEquals("Alice", users.get(0).name());
+        assertEquals(2L, users.get(0).hits());
+        assertNull(users.get(1).creatorId());
+        assertEquals("GUEST", users.get(1).accountType());
+        assertEquals("CN", AnalyticsDetailService.countryCode("中国"));
+
+        login("creator-2");
+        assertEquals(java.util.Map.of("allowed", false), controller.countryUsers("中国", 30).getBody());
     }
 
     @Test

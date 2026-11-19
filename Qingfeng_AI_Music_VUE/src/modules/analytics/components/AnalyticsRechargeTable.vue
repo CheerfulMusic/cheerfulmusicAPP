@@ -1,60 +1,97 @@
 <script setup lang="ts">
+import { computed, ref } from 'vue'
+import { formatDate, locale, t } from '../../../shared/i18n'
+import AnalyticsPagination from './AnalyticsPagination.vue'
+import { useAnalyticsPagination } from '../model/pagination'
 import type { AnalyticsRechargeRow } from '../api/analytics'
-import { accountName, accountTypeLabel, isGuest } from '../model/dwell'
+import { accountDetail, accountName, accountTypeLabel, isGuest } from '../model/dwell'
 
 const props = defineProps<{ rows: AnalyticsRechargeRow[] }>()
 
 function amount(row: AnalyticsRechargeRow): string {
   if (typeof row.amount !== 'number' || !Number.isFinite(row.amount)) return '—'
-  return row.amount.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-}
-function time(value: string): string {
-  if (!value) return '—'
-  const date = new Date(value)
-  return Number.isNaN(date.getTime()) ? '—' : date.toLocaleString('zh-CN', { hour12: false, month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+  return row.amount.toLocaleString(locale.value, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 const statusClass = (status: string) =>
   ({ PAID: 'paid', PENDING: 'pending', CANCELLED: 'cancelled', FAILED: 'failed' } as Record<string, string>)[status] ?? 'other'
-const statusLabel = (status: string) =>
-  ({ PAID: '已支付', PENDING: '待支付', CANCELLED: '已取消', FAILED: '失败' } as Record<string, string>)[status] ?? status
+const statuses: Record<string, string> = {
+  PAID: '已支付', PENDING: '待支付', CANCELLED: '已取消', FAILED: '失败',
+  REFUNDED: '已退款', DISPUTED: '争议中', CREATED: '已创建', EXPIRED: '已过期',
+}
+const statusLabel = (status: string) => t(Object.hasOwn(statuses, status) ? statuses[status]! : '其他状态')
+const currencyLabel = (currency: string) => /^[A-Z]{3}$/.test(currency)
+  ? new Intl.DisplayNames(locale.value, { type: 'currency', fallback: 'none' }).of(currency) ?? t('未知币种')
+  : t('未知币种')
+
+const user = ref('')
+const status = ref('')
+const currency = ref('')
+const statusOptions = computed(() => [...new Set(props.rows.map(row => row.status))])
+const currencyOptions = computed(() => [...new Set(props.rows.map(row => row.currency))].sort())
+const visible = computed(() => {
+  const query = user.value.trim().toLowerCase()
+  return props.rows.filter(row =>
+    (!query || [accountName(row), accountDetail(row)].some(value => value.toLowerCase().includes(query)))
+    && (!status.value || row.status === status.value)
+    && (!currency.value || row.currency === currency.value))
+})
+const { page, displayed } = useAnalyticsPagination(visible)
 </script>
 
 <template>
   <div class="recharge">
-    <div v-if="!rows.length" class="recharge-empty">所选时间范围内暂无充值记录。</div>
+    <div v-if="rows.length" class="analytics-filters">
+      <label>{{ t('用户') }}
+        <input v-model="user" type="search" :placeholder="t('搜索昵称或账号')">
+      </label>
+      <label>{{ t('状态') }}
+        <select v-model="status">
+          <option value="">{{ t('全部状态') }}</option>
+          <option v-for="option in statusOptions" :key="option" :value="option">{{ statusLabel(option) }}</option>
+        </select>
+      </label>
+      <label>{{ t('币种') }}
+        <select v-model="currency">
+          <option value="">{{ t('全部币种') }}</option>
+          <option v-for="option in currencyOptions" :key="option" :value="option">{{ currencyLabel(option) }}</option>
+        </select>
+      </label>
+    </div>
+    <div v-if="!visible.length" class="recharge-empty">{{ t(rows.length ? '当前筛选下没有充值记录。' : '所选时间范围内暂无充值记录。') }}</div>
     <div v-else class="recharge-scroll">
       <table class="recharge-table">
         <thead>
           <tr>
-            <th class="col-user">用户</th>
-            <th class="col-type">账号</th>
-            <th class="col-pkg">套餐</th>
-            <th class="col-amount">金额</th>
-            <th class="col-credits">积分</th>
-            <th class="col-status">状态</th>
-            <th class="col-time">时间</th>
+            <th class="col-user">{{ t('用户') }}</th>
+            <th class="col-type">{{ t('账号') }}</th>
+            <th class="col-pkg">{{ t('套餐') }}</th>
+            <th class="col-amount">{{ t('金额') }}</th>
+            <th class="col-credits">{{ t('积分') }}</th>
+            <th class="col-status">{{ t('状态') }}</th>
+            <th class="col-time">{{ t('时间') }}</th>
           </tr>
         </thead>
         <tbody>
-          <tr v-for="row in rows" :key="row.creatorId + row.createdAt + row.packageId">
+          <tr v-for="(row, index) in displayed" :key="row.orderId ?? index">
             <td class="col-user">
               <div class="user-cell">
                 <strong>{{ accountName(row) }}</strong>
-                <code :title="row.creatorId">{{ row.creatorId }}</code>
+                <small v-if="accountDetail(row)">{{ accountDetail(row) }}</small>
               </div>
             </td>
             <td class="col-type">
               <span class="type-badge" :class="{ guest: isGuest(row.accountType) }">{{ accountTypeLabel(row.accountType) }}</span>
             </td>
-            <td class="col-pkg"><code>{{ row.packageId }}</code></td>
-            <td class="col-amount">{{ amount(row) }} <small>{{ row.currency }}</small></td>
-            <td class="col-credits">{{ Number.isFinite(row.credits) ? row.credits.toLocaleString('zh-CN') : '—' }}</td>
+            <td class="col-pkg">{{ Number.isFinite(row.credits) ? t('{credits} 积分套餐', { credits: row.credits.toLocaleString(locale) }) : '—' }}</td>
+            <td class="col-amount">{{ amount(row) }} <small>{{ currencyLabel(row.currency) }}</small></td>
+            <td class="col-credits">{{ Number.isFinite(row.credits) ? row.credits.toLocaleString(locale) : '—' }}</td>
             <td class="col-status"><span class="status-badge" :class="statusClass(row.status)">{{ statusLabel(row.status) }}</span></td>
-            <td class="col-time">{{ time(row.createdAt) }}</td>
+            <td class="col-time">{{ row.createdAt ? formatDate(row.createdAt) : '—' }}</td>
           </tr>
         </tbody>
       </table>
     </div>
+    <AnalyticsPagination v-model="page" :total="visible.length" :label="t('充值明细分页')" />
   </div>
 </template>
 
@@ -70,10 +107,8 @@ const statusLabel = (status: string) =>
 .recharge-table tbody tr:hover td { background: #fff7f4; }
 .user-cell { display: grid; gap: 2px; min-width: 0; }
 .user-cell strong { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.user-cell code { color: #b3a59e; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .type-badge { padding: 2px 9px; border-radius: 999px; background: #eef1f6; color: #4b5a6b; font-size: 11px; white-space: nowrap; }
 .type-badge.guest { background: #f6ece6; color: #92684a; }
-.col-pkg code { color: #5f534e; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; }
 .col-amount { font-variant-numeric: tabular-nums; white-space: nowrap; }
 .col-amount small { color: #a2948e; font-size: 10px; margin-left: 2px; }
 .col-credits { font-variant-numeric: tabular-nums; text-align: right; }
