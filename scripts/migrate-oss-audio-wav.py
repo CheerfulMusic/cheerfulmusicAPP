@@ -172,13 +172,19 @@ def main():
                 entries = [json.loads(line) for line in manifest]
             if not entries:
                 raise ValueError("empty manifest")
-            for entry in entries:
-                source, target = entry["old"], entry["new"]
-                if args.action == "rollback":
-                    source, target = target, source
-                head = bucket.head_object(prefix + target[1][4:])
+            target_version = "old" if args.action == "rollback" else "new"
+
+            def verify_reference(entry):
+                target = entry[target_version]
+                head = open_bucket().head_object(prefix + target[1][4:])
                 if head.content_length != target[3] or head.content_type != target[2]:
                     raise ValueError("referenced object failed validation")
+                if target_version == "new" and head.headers.get("x-oss-meta-qf-wav-sha256") != target[4]:
+                    raise ValueError("referenced WAV checksum metadata changed")
+
+            with ThreadPoolExecutor(max_workers=args.workers) as executor:
+                for _ in executor.map(verify_reference, entries):
+                    pass
             for entry in entries:
                 source, target = entry["old"], entry["new"]
                 if args.action == "rollback":
