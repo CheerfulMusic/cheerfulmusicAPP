@@ -81,6 +81,8 @@ describe('Discover editorial layout with real content', () => {
       'discover-latest', 'discover-vocal', 'discover-today',
     ])
     expect(wrapper.get('#discover-vocal .shelf-wide').text()).toContain('歌曲真人')
+    expect(wrapper.get('#discover-featured header').text()).toContain('编辑精选')
+    expect(wrapper.get('#discover-today header').text()).toContain('按当日播放量排序')
     const tiles = wrapper.findAll('.discover-playlist-tiles button')
     expect(tiles.map(tile => tile.get('strong').text())).toEqual(['华语流行', '电子', '欧美流行', 'Disco', '圣诞'])
     expect(tiles.map(tile => tile.get('img').attributes('src')?.split('/').at(-1))).toEqual([
@@ -186,6 +188,29 @@ describe('Discover editorial layout with real content', () => {
     await flushPromises()
     expect(wrapper.get('.discover-ranking').text()).toContain('歌曲popular')
     expect(wrapper.get('#discover-latest').text()).toContain('歌曲latest')
+  })
+
+  it('fills empty picks and daily charts with public releases and labeled cumulative plays', async () => {
+    const newest = song('最新')
+    const sameCreator = { ...song('同歌手'), artistId: newest.artistId }
+    const nextCreator = song('不同歌手')
+    mocks.shelves.mockResolvedValue({ ...shelfData([]), listeningDataAvailable: false })
+    mocks.list.mockImplementation(async (tab: string) => {
+      if (tab === 'featured') return page([])
+      if (tab === 'popular') return page([song('累计热门', 123), song('无播放', 0)])
+      return page([newest, sameCreator, nextCreator])
+    })
+    const wrapper = await open()
+    const featured = wrapper.get('#discover-featured')
+    expect(featured.get('header').text()).toContain('新声推荐')
+    expect(featured.findAll('.shelf-square .track-title').map(title => title.text())).toEqual(['歌曲最新', '歌曲不同歌手'])
+    const hot = wrapper.get('#discover-today')
+    expect(hot.get('header').text()).toContain('暂按累计播放量排序')
+    expect(hot.findAll('.shelf-square .track-title').map(title => title.text())).toEqual(['歌曲累计热门'])
+    expect(hot.get('.track-count').text()).toBe('123')
+    expect(wrapper.get('#discover-popular-title').text()).toBe('累计热歌榜')
+    await featured.get('header button').trigger('click')
+    expect(mocks.list).toHaveBeenLastCalledWith('latest', 0, '', '')
   })
 
   it('does not fabricate featured songs or ranking positions for empty feeds', async () => {

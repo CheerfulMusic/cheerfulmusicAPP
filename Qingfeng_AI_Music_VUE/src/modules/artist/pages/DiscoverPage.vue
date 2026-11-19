@@ -98,8 +98,25 @@ function withTracks(items: DiscoverSong[], shelf?: Parameters<typeof shelfCover>
 }
 const rows = computed(() => withTracks(songs.value))
 const latestRows = computed(() => withTracks(latestSongs.value, 'latest'))
-const featuredRows = computed(() => withTracks(featuredSongs.value.slice(0, 7), 'featured'))
-const todayRows = computed(() => withTracks(shelves.value?.today ?? [], 'today'))
+const latestRecommendations = computed(() => {
+  if (editorialLoading.value || featuredFailed.value || featuredSongs.value.length) return []
+
+  const creators = new Set<string>()
+  return latestSongs.value.filter(item => {
+    if (creators.has(item.artistId)) return false
+    creators.add(item.artistId)
+    return true
+  })
+})
+const featuredRows = computed(() => withTracks(
+  (latestRecommendations.value.length ? latestRecommendations.value : featuredSongs.value).slice(0, 7), 'featured',
+))
+const dailySongs = computed(() => shelves.value?.today ?? [])
+const cumulativeHotSongs = computed(() => dailySongs.value.length || editorialLoading.value
+  ? [] : popularSongs.value.filter(item => (item.plays ?? 0) > 0).slice(0, 10))
+const todayRows = computed(() => withTracks(
+  cumulativeHotSongs.value.length ? cumulativeHotSongs.value : dailySongs.value, 'today',
+))
 const vocalRows = computed(() => withTracks(shelves.value?.vocal ?? [], 'vocal'))
 const ranking = computed(() => todayRows.value.slice(0, 5))
 const genreShelves = computed(() => discoverGenres.map(section => {
@@ -485,8 +502,8 @@ onBeforeUnmount(() => {
         <div v-else class="discover-shelves">
           <section id="discover-featured" class="discover-shelf">
             <header class="discover-section-heading">
-              <div class="discover-shelf-heading"><h2>{{ t('青风推荐') }}</h2><p>{{ t('编辑精选') }}</p></div>
-              <button type="button" @click="openBrowse('featured')">{{ t('查看全部') }} ›</button>
+              <div class="discover-shelf-heading"><h2>{{ t('青风推荐') }}</h2><p>{{ t(latestRecommendations.length ? '新声推荐' : '编辑精选') }}</p></div>
+              <button type="button" @click="openBrowse(latestRecommendations.length ? 'latest' : 'featured')">{{ t('查看全部') }} ›</button>
             </header>
             <DiscoverShelf :label="t('青风推荐')" :rows="featuredRows" variant="square" :loading="editorialLoading"
               :failed="featuredFailed" :empty="t('还没有精选歌曲。')" @retry="loadEditorial" @play="play($event, featuredRows)" />
@@ -510,7 +527,7 @@ onBeforeUnmount(() => {
           </section>
           <section id="discover-today" class="discover-shelf">
             <header class="discover-section-heading">
-              <div class="discover-shelf-heading"><h2>{{ t('今日热歌') }}</h2><p>{{ t('按当日播放量排序') }}</p></div>
+              <div class="discover-shelf-heading"><h2>{{ t('今日热歌') }}</h2><p>{{ t(cumulativeHotSongs.length ? '暂按累计播放量排序' : '按当日播放量排序') }}</p></div>
               <button v-if="todayRows.length" type="button" :aria-expanded="expanded === 'today'"
                 @click="expanded = expanded === 'today' ? undefined : 'today'">{{ t(expanded === 'today' ? '收起' : '查看全部') }} ›</button>
             </header>
@@ -565,7 +582,7 @@ onBeforeUnmount(() => {
         </section>
         <section class="discover-side-panel" aria-labelledby="discover-popular-title">
           <header class="discover-side-heading">
-            <h2 id="discover-popular-title">{{ t('今日热歌榜') }}</h2>
+            <h2 id="discover-popular-title">{{ t(cumulativeHotSongs.length ? '累计热歌榜' : '今日热歌榜') }}</h2>
             <button v-if="ranking.length" type="button" @click="showShelf('discover-today')">{{ t('查看榜单') }} ›</button>
           </header>
           <ol v-if="ranking.length" class="discover-ranking">
