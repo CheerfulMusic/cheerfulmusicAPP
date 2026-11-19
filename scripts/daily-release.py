@@ -138,6 +138,7 @@ if __name__ == "__main__":
         parser.add_argument("--"+key,required=True)
     parser.add_argument("--verify-current",action="store_true")
     parser.add_argument("--publish",action="store_true")
+    parser.add_argument("--log-attached", action="store_true", help=argparse.SUPPRESS)
     options = parser.parse_args()
     runtime = Path(options.scratch).resolve()
     temp_root = runtime / "temp"
@@ -145,11 +146,16 @@ if __name__ == "__main__":
     for key in ("TEMP", "TMP", "TMPDIR"):
         os.environ[key] = str(temp_root)
     tempfile.tempdir = str(temp_root)
-    logs = runtime / "release-logs"
-    logs.mkdir(parents=True,exist_ok=True)
-    log = logs/(datetime.now().strftime("%Y%m%d-%H%M%S-%f")+".log")
-    print(log,flush=True)
-    with log.open("w",encoding="utf-8") as stream:
-        os.dup2(stream.fileno(),1)
-        os.dup2(stream.fileno(),2)
+    if options.log_attached:
         main(options)
+    else:
+        logs = runtime / "release-logs"
+        logs.mkdir(parents=True, exist_ok=True)
+        log = logs / (datetime.now().strftime("%Y%m%d-%H%M%S-%f") + ".log")
+        with log.open("wb") as stream:
+            result = subprocess.run(
+                [sys.executable, "-u", __file__, *sys.argv[1:], "--log-attached"],
+                stdin=subprocess.DEVNULL, stdout=stream, stderr=subprocess.STDOUT,
+                env={**os.environ, "PYTHONIOENCODING": "utf-8"},
+            )
+        sys.exit(result.returncode)
