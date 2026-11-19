@@ -309,11 +309,17 @@ class GateTests(unittest.TestCase):
         migrations = {p.name: gate.normalized_migration_sha(p.read_bytes()) for p in
             (ROOT / "Qingfeng_AI_Music/qf-infrastructure/src/main/resources/db/migration").glob("V*__*.sql")}
         self.assertEqual("49", gate.verify_migration_set(migrations)["lyricsPreparationVersion"])
+        self.assertEqual("50", gate.verify_migration_set(migrations)["discoverShelvesVersion"])
         missing = dict(migrations); missing.pop("V47__music_video_projects.sql")
         with self.assertRaises(gate.GateError): gate.verify_migration_set(missing)
         modified = dict(migrations); modified["V49__lyrics_preparation.sql"] = "0" * 64
         with self.assertRaises(gate.GateError): gate.verify_migration_set(modified)
-        pre_lyrics = {k: v for k, v in migrations.items() if k != "V49__lyrics_preparation.sql"}
+        discover_name = "V50__discover_daily_plays_and_vocal_approval.sql"
+        modified = {**migrations, discover_name: "0" * 64}
+        with self.assertRaises(gate.GateError): gate.verify_migration_set(modified)
+        pre_discover = {k: v for k, v in migrations.items() if k != discover_name}
+        self.assertEqual("49", gate.verify_migration_set(pre_discover)["lyricsPreparationVersion"])
+        pre_lyrics = {k: v for k, v in pre_discover.items() if k != "V49__lyrics_preparation.sql"}
         self.assertEqual("48", gate.verify_migration_set(pre_lyrics)["phoneBindingVersion"])
         rollback = {k: v for k, v in migrations.items() if k not in gate.FEATURE_MIGRATION_SHA256}
         self.assertEqual("46", gate.verify_migration_set(rollback)["agentAllowanceVersion"])

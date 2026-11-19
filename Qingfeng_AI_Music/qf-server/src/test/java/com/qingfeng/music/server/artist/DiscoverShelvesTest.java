@@ -21,8 +21,24 @@ class DiscoverShelvesTest {
         migrate(source, "V1__creator_and_work.sql", "V2__lyrics_media_and_sharing.sql",
                 "V26__hot_song_engagement.sql", "V27__work_soft_delete.sql");
         db.execute("CREATE TABLE cover_asset (id VARCHAR(36) PRIMARY KEY)");
-        migrate(source, "V40__artist_profiles_and_releases.sql", "V44__discover_song_publication.sql",
-                "V50__discover_daily_plays_and_vocal_approval.sql");
+        migrate(source, "V40__artist_profiles_and_releases.sql", "V44__discover_song_publication.sql");
+        // H2 exercises the service queries; MySQL V50 resolves the production column collation.
+        db.execute("""
+                CREATE TABLE discover_daily_play (
+                    play_day DATE NOT NULL,
+                    release_id VARCHAR(36) NOT NULL,
+                    release_version BIGINT NOT NULL,
+                    plays BIGINT NOT NULL,
+                    PRIMARY KEY (play_day, release_id, release_version)
+                )
+                """);
+        db.execute("""
+                CREATE TABLE discover_vocal_approval (
+                    release_id VARCHAR(36) NOT NULL,
+                    release_version BIGINT NOT NULL,
+                    PRIMARY KEY (release_id, release_version)
+                )
+                """);
         db.update("INSERT INTO creator VALUES ('owner',CURRENT_TIMESTAMP)");
         db.update("INSERT INTO artist_profile(creator_id,public_id,stage_name,tagline,published) VALUES ('owner','artist','歌手','',TRUE)");
         addSong(db, "jazz", "爵士 / Soul");

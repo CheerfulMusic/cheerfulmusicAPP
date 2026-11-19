@@ -35,8 +35,8 @@ public final class CreditHistoricalCutover {
     private static final String OPTIONAL_V49_SHA256 = "c0cde3e30b4e2bac3b3690c70dfd1125abced7045f1163ec9ee33a5c214616b4";
     private static final int OPTIONAL_V49_CHECKSUM = -1886072734;
     private static final String OPTIONAL_V50 = "V50__discover_daily_plays_and_vocal_approval.sql";
-    private static final String OPTIONAL_V50_SHA256 = "c6aa5d356708b148353af26de99ab2c0786c2d970366283dc112d2d4a78db24d";
-    private static final int OPTIONAL_V50_CHECKSUM = 818829647;
+    private static final String OPTIONAL_V50_SHA256 = "bcedc1392b8623d7d31516f01c101f17aa170ae105ac6866f7a7ef71b77f510a";
+    private static final int OPTIONAL_V50_CHECKSUM = -2123351923;
     private static final Set<String> EMPTY_FINANCIAL_TABLES = Set.of(
         "p0_credit_allocation", "p0_credit_payment_binding", "p0_credit_refund", "p0_credit_dispute",
         "p0_credit_return", "p0_credit_financial_audit", "p0_credit_recovery", "p0_credit_recovery_audit",
