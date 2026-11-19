@@ -2,7 +2,7 @@
 # API and worker instances share the SAME approved main DB in real use.
 # Tests use a completely isolated DB and sandbox credentials.
 qingfeng.payment.inbox.scheduler-enabled=true
-qingfeng.payment.inbox.worker-concurrency=8
+qingfeng.payment.inbox.worker-concurrency=16
 qingfeng.payment.inbox.scan-ms=100
 # Reuse a successful structural inspection for up to one second per DB and writer epoch.
 # The ACTIVE gate and opposite-mode order check still run on each call.
@@ -10,7 +10,7 @@ qingfeng.stripe.reuse-schema-check=true
 qingfeng.payment.reconcile.scan-ms=60000
 # Budget total connections across ALL API/worker instances against MySQL capacity.
 # Example pool capacity, not a production sizing guarantee:
-spring.datasource.hikari.maximum-pool-size=16
+spring.datasource.hikari.maximum-pool-size=32
 # Preserve any existing init SQL; merge these assignments rather than overwriting it.
 spring.datasource.hikari.connection-init-sql=SET SESSION time_zone='+00:00', innodb_lock_wait_timeout=5
 # Financial writer protocol, authoritative verification and startup DB integrity checks stay enabled.
