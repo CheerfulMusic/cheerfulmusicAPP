@@ -25,11 +25,25 @@ export function previewMediaManifest(root:string) {
     const trackId=id&&ts.isPropertyAssignment(id)&&ts.isStringLiteral(id.initializer)?id.initializer.text:''
     const suffix=key==='audio'?'-preview-128.mp3':'-cover.jpg'
     const asset=remoteManifest.assets.find((entry:{path:string})=>entry.path===path)
-    if(!/^[a-z0-9-]+$/.test(trackId)||path!==`/media/sample-${trackId}-v1${suffix}`||!asset
+    if(!/^[a-z0-9-]+$/.test(trackId)||!asset
       ||asset.trackId!==trackId||asset.kind!==key||!Number.isSafeInteger(asset.bytes)||asset.bytes<=0
-      ||!/^[a-f0-9]{64}$/.test(asset.sha256)
-      ||asset.key!==`qingfeng/recommendation-samples/20261118/${key}/${asset.sha256.slice(0,12)}/${path.slice('/media/'.length)}`){
+      ||!/^[a-f0-9]{64}$/.test(asset.sha256)){
      throw new Error('Invalid CDN preview asset: '+path)
+    }
+    const hash=asset.sha256.slice(0,12),date=String(asset.key).split('/')[2]||''
+    const filename=path.slice(path.lastIndexOf('/')+1)
+    const validPath=path===`/media/sample-${trackId}-v1${suffix}`
+      ||path===`/media/recommendations/${trackId}-${hash}-${key==='audio'?'preview-128.mp3':'cover.jpg'}`
+    if(!validPath||!/^\d{8}$/.test(date)
+      ||asset.key!==`qingfeng/recommendation-samples/${date}/${key}/${hash}/${filename}`){
+     throw new Error('Invalid CDN preview asset: '+path)
+    }
+    // Local fallback copies, when present, must be the same bytes as the uploaded object.
+    const localFile=resolve(root,'public','.'+path)
+    if(existsSync(localFile)){
+     const bytes=readFileSync(localFile)
+     if(bytes.length!==asset.bytes||createHash('sha256').update(bytes).digest('hex')!==asset.sha256)
+      throw new Error('CDN fallback asset differs from uploaded object: '+path)
     }
     remoteAssets.push({path,key:asset.key,bytes:asset.bytes,sha256:asset.sha256})
     continue

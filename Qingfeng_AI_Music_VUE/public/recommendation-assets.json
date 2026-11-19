@@ -289,6 +289,246 @@
       "key": "qingfeng/recommendation-samples/20261118/cover/df8ceefe125e/sample-where-the-wind-goes-v1-cover.jpg",
       "bytes": 32697,
       "sha256": "df8ceefe125ed523b675c4f3e1771f445aed8676ea4585f44e5a845ecff2633a"
+    },
+    {
+      "trackId": "body-language",
+      "kind": "original",
+      "path": "/media/recommendations/body-language-75866f9525b8-original.mp3",
+      "key": "qingfeng/recommendation-samples/20261119/original/75866f9525b8/body-language-75866f9525b8-original.mp3",
+      "bytes": 3831331,
+      "sha256": "75866f9525b8a9a646224efb2b7c597520d175c8ada5292d1c55a422103e6833"
+    },
+    {
+      "trackId": "body-language",
+      "kind": "audio",
+      "path": "/media/recommendations/body-language-8e59749c37e9-preview-128.mp3",
+      "key": "qingfeng/recommendation-samples/20261119/audio/8e59749c37e9/body-language-8e59749c37e9-preview-128.mp3",
+      "bytes": 2656173,
+      "sha256": "8e59749c37e926a192392eb0a40ebc48475b102c1c49d9dd3fc45f0d00de1033"
+    },
+    {
+      "trackId": "body-language",
+      "kind": "cover",
+      "path": "/media/recommendations/body-language-c251e80045fe-cover.jpg",
+      "key": "qingfeng/recommendation-samples/20261119/cover/c251e80045fe/body-language-c251e80045fe-cover.jpg",
+      "bytes": 12733,
+      "sha256": "c251e80045fe709435ee80896f6f2a26d92bb60a3142d23d253be46921da4f44"
+    },
+    {
+      "trackId": "into-the-sun",
+      "kind": "original",
+      "path": "/media/recommendations/into-the-sun-b23db1cfb49c-original.mp3",
+      "key": "qingfeng/recommendation-samples/20261119/original/b23db1cfb49c/into-the-sun-b23db1cfb49c-original.mp3",
+      "bytes": 4334953,
+      "sha256": "b23db1cfb49c6ad0e247aa0e695e9baa1f032ad3631430ffbe0ffd3c3784cb13"
+    },
+    {
+      "trackId": "into-the-sun",
+      "kind": "audio",
+      "path": "/media/recommendations/into-the-sun-70d136c3fe1d-preview-128.mp3",
+      "key": "qingfeng/recommendation-samples/20261119/audio/70d136c3fe1d/into-the-sun-70d136c3fe1d-preview-128.mp3",
+      "bytes": 3020589,
+      "sha256": "70d136c3fe1d9ff5dd639e52748bcbdec3538cd82b71f543cbe00013c59f729f"
+    },
+    {
+      "trackId": "into-the-sun",
+      "kind": "cover",
+      "path": "/media/recommendations/into-the-sun-297c430b1904-cover.jpg",
+      "key": "qingfeng/recommendation-samples/20261119/cover/297c430b1904/into-the-sun-297c430b1904-cover.jpg",
+      "bytes": 9546,
+      "sha256": "297c430b19042d5fa6c8100a41371e24c8236adbc1fd3d03524b552da26e2db0"
+    },
+    {
+      "trackId": "one-more-night",
+      "kind": "original",
+      "path": "/media/recommendations/one-more-night-2e2b17e5fe33-original.mp3",
+      "key": "qingfeng/recommendation-samples/20261119/original/2e2b17e5fe33/one-more-night-2e2b17e5fe33-original.mp3",
+      "bytes": 3938243,
+      "sha256": "2e2b17e5fe3336d2400ba58fcf0d9f8a01e9e66a656fe8a95b75e15aae30e5ef"
+    },
+    {
+      "trackId": "one-more-night",
+      "kind": "audio",
+      "path": "/media/recommendations/one-more-night-3e375188eafa-preview-128.mp3",
+      "key": "qingfeng/recommendation-samples/20261119/audio/3e375188eafa/one-more-night-3e375188eafa-preview-128.mp3",
+      "bytes": 2771373,
+      "sha256": "3e375188eafa17ae1a038c5b3eb96ea9d841efe73055e49b1e76cb5c106d1180"
+    },
+    {
+      "trackId": "one-more-night",
+      "kind": "cover",
+      "path": "/media/recommendations/one-more-night-f04f4723634a-cover.jpg",
+      "key": "qingfeng/recommendation-samples/20261119/cover/f04f4723634a/one-more-night-f04f4723634a-cover.jpg",
+      "bytes": 10369,
+      "sha256": "f04f4723634a3591f2f7d80abefc575308c821c377262a30107c0a2af8d6e040"
+    },
+    {
+      "trackId": "all-night-one-more-time",
+      "kind": "original",
+      "path": "/media/recommendations/all-night-one-more-time-08527ffd4e13-original.mp3",
+      "key": "qingfeng/recommendation-samples/20261119/original/08527ffd4e13/all-night-one-more-time-08527ffd4e13-original.mp3",
+      "bytes": 3713267,
+      "sha256": "08527ffd4e13e0ca1c89ad8b1799d4f6035ec4fc802effcb131388a14d77c5cc"
+    },
+    {
+      "trackId": "all-night-one-more-time",
+      "kind": "audio",
+      "path": "/media/recommendations/all-night-one-more-time-2f881a6c54ab-preview-128.mp3",
+      "key": "qingfeng/recommendation-samples/20261119/audio/2f881a6c54ab/all-night-one-more-time-2f881a6c54ab-preview-128.mp3",
+      "bytes": 2605869,
+      "sha256": "2f881a6c54ab8163cd3b93d0271fc5bbd5809b8f629a2f8bb26e9e3e7f195a35"
+    },
+    {
+      "trackId": "all-night-one-more-time",
+      "kind": "cover",
+      "path": "/media/recommendations/all-night-one-more-time-2a75588e032c-cover.jpg",
+      "key": "qingfeng/recommendation-samples/20261119/cover/2a75588e032c/all-night-one-more-time-2a75588e032c-cover.jpg",
+      "bytes": 7940,
+      "sha256": "2a75588e032c746ed92cf69c9e52ce1509e3854b2ea75285b00573957d203ebe"
+    },
+    {
+      "trackId": "euphoric-drop",
+      "kind": "original",
+      "path": "/media/recommendations/euphoric-drop-7ccede996f95-original.mp3",
+      "key": "qingfeng/recommendation-samples/20261119/original/7ccede996f95/euphoric-drop-7ccede996f95-original.mp3",
+      "bytes": 4466511,
+      "sha256": "7ccede996f959243ffa7d9bd3b2aab533170f454d9822d27a8aeaec283dfbfce"
+    },
+    {
+      "trackId": "euphoric-drop",
+      "kind": "audio",
+      "path": "/media/recommendations/euphoric-drop-bceceadc198d-preview-128.mp3",
+      "key": "qingfeng/recommendation-samples/20261119/audio/bceceadc198d/euphoric-drop-bceceadc198d-preview-128.mp3",
+      "bytes": 3243693,
+      "sha256": "bceceadc198d511217cf4cb6055f31c1e444585e72c7a52d530a2413241ca65f"
+    },
+    {
+      "trackId": "euphoric-drop",
+      "kind": "cover",
+      "path": "/media/recommendations/euphoric-drop-ded7c496d5d0-cover.jpg",
+      "key": "qingfeng/recommendation-samples/20261119/cover/ded7c496d5d0/euphoric-drop-ded7c496d5d0-cover.jpg",
+      "bytes": 12063,
+      "sha256": "ded7c496d5d029a3cfda0f200d8a935deb42ab67513d20554cdb7bc69b39c9b8"
+    },
+    {
+      "trackId": "i-run-this-show",
+      "kind": "original",
+      "path": "/media/recommendations/i-run-this-show-57f17118fe51-original.mp3",
+      "key": "qingfeng/recommendation-samples/20261119/original/57f17118fe51/i-run-this-show-57f17118fe51-original.mp3",
+      "bytes": 3905201,
+      "sha256": "57f17118fe51f21bd2ce96e5128ce6468e2f7e9126ce6dfba23be19f9ecc28af"
+    },
+    {
+      "trackId": "i-run-this-show",
+      "kind": "audio",
+      "path": "/media/recommendations/i-run-this-show-3c234aa9e239-preview-128.mp3",
+      "key": "qingfeng/recommendation-samples/20261119/audio/3c234aa9e239/i-run-this-show-3c234aa9e239-preview-128.mp3",
+      "bytes": 2738733,
+      "sha256": "3c234aa9e2391c8473161ef40b666234fa6764e42e8aa7e3e69a13138ed4b93c"
+    },
+    {
+      "trackId": "i-run-this-show",
+      "kind": "cover",
+      "path": "/media/recommendations/i-run-this-show-568bd52479f8-cover.jpg",
+      "key": "qingfeng/recommendation-samples/20261119/cover/568bd52479f8/i-run-this-show-568bd52479f8-cover.jpg",
+      "bytes": 10251,
+      "sha256": "568bd52479f8d915e6cdebc6c077fc9c5d9805c699259853ce3b0b9138438f19"
+    },
+    {
+      "trackId": "light-it-up",
+      "kind": "original",
+      "path": "/media/recommendations/light-it-up-93b6e9cbb33d-original.mp3",
+      "key": "qingfeng/recommendation-samples/20261119/original/93b6e9cbb33d/light-it-up-93b6e9cbb33d-original.mp3",
+      "bytes": 4772868,
+      "sha256": "93b6e9cbb33dfca1dd3981059f5e4ae379d109ce0a6a737819bfb135e5ea068e"
+    },
+    {
+      "trackId": "light-it-up",
+      "kind": "audio",
+      "path": "/media/recommendations/light-it-up-14f42b2a754b-preview-128.mp3",
+      "key": "qingfeng/recommendation-samples/20261119/audio/14f42b2a754b/light-it-up-14f42b2a754b-preview-128.mp3",
+      "bytes": 3346221,
+      "sha256": "14f42b2a754be639b7bf4b1d7f96d9d02c51c2f1fe436157dc025631421e27ee"
+    },
+    {
+      "trackId": "light-it-up",
+      "kind": "cover",
+      "path": "/media/recommendations/light-it-up-65eecb7659b8-cover.jpg",
+      "key": "qingfeng/recommendation-samples/20261119/cover/65eecb7659b8/light-it-up-65eecb7659b8-cover.jpg",
+      "bytes": 13323,
+      "sha256": "65eecb7659b89c0ccef489fe3b63d3e7295746942eaaed65d0f1657038e668b1"
+    },
+    {
+      "trackId": "cant-stop-this-feeling",
+      "kind": "original",
+      "path": "/media/recommendations/cant-stop-this-feeling-77ae9f0b28c1-original.mp3",
+      "key": "qingfeng/recommendation-samples/20261119/original/77ae9f0b28c1/cant-stop-this-feeling-77ae9f0b28c1-original.mp3",
+      "bytes": 3635151,
+      "sha256": "77ae9f0b28c1273852cfc6a9bb8bf582f3c5a38faf5489c56425e45f3857efb2"
+    },
+    {
+      "trackId": "cant-stop-this-feeling",
+      "kind": "audio",
+      "path": "/media/recommendations/cant-stop-this-feeling-34244d3c6efc-preview-128.mp3",
+      "key": "qingfeng/recommendation-samples/20261119/audio/34244d3c6efc/cant-stop-this-feeling-34244d3c6efc-preview-128.mp3",
+      "bytes": 2503341,
+      "sha256": "34244d3c6efc2f47b27d28aa9fa9a3c626147f5beeb5a59c79b664d5bd8ebf13"
+    },
+    {
+      "trackId": "cant-stop-this-feeling",
+      "kind": "cover",
+      "path": "/media/recommendations/cant-stop-this-feeling-10ead733a829-cover.jpg",
+      "key": "qingfeng/recommendation-samples/20261119/cover/10ead733a829/cant-stop-this-feeling-10ead733a829-cover.jpg",
+      "bytes": 12939,
+      "sha256": "10ead733a8298b2ed79a0a6e77d633ccdfb9419aef3404a61b5aed5b563b75a2"
+    },
+    {
+      "trackId": "midnight-call",
+      "kind": "original",
+      "path": "/media/recommendations/midnight-call-3f55b61098b6-original.mp3",
+      "key": "qingfeng/recommendation-samples/20261119/original/3f55b61098b6/midnight-call-3f55b61098b6-original.mp3",
+      "bytes": 2971292,
+      "sha256": "3f55b61098b6350a5e7a3fb3e15e074c0598bc4b87d13e53ac1ad1b8a74aefac"
+    },
+    {
+      "trackId": "midnight-call",
+      "kind": "audio",
+      "path": "/media/recommendations/midnight-call-8a6cdb33c69e-preview-128.mp3",
+      "key": "qingfeng/recommendation-samples/20261119/audio/8a6cdb33c69e/midnight-call-8a6cdb33c69e-preview-128.mp3",
+      "bytes": 2048301,
+      "sha256": "8a6cdb33c69e8a0dca05f91a8000e9d1b0029b1a00df8852f0c53af4a1d51078"
+    },
+    {
+      "trackId": "midnight-call",
+      "kind": "cover",
+      "path": "/media/recommendations/midnight-call-2a951cfbf59c-cover.jpg",
+      "key": "qingfeng/recommendation-samples/20261119/cover/2a951cfbf59c/midnight-call-2a951cfbf59c-cover.jpg",
+      "bytes": 26415,
+      "sha256": "2a951cfbf59cd2f5ece48f3f51b95d9d2bea4e817f8ccf850b93abe123f3e2db"
+    },
+    {
+      "trackId": "summer-on-repeat",
+      "kind": "original",
+      "path": "/media/recommendations/summer-on-repeat-43d1d5b73d13-original.mp3",
+      "key": "qingfeng/recommendation-samples/20261119/original/43d1d5b73d13/summer-on-repeat-43d1d5b73d13-original.mp3",
+      "bytes": 4033241,
+      "sha256": "43d1d5b73d13907fb81deabe7f4c53f21d07cfbb176cf21662ee9f918ea0c792"
+    },
+    {
+      "trackId": "summer-on-repeat",
+      "kind": "audio",
+      "path": "/media/recommendations/summer-on-repeat-68e4b531c543-preview-128.mp3",
+      "key": "qingfeng/recommendation-samples/20261119/audio/68e4b531c543/summer-on-repeat-68e4b531c543-preview-128.mp3",
+      "bytes": 2739501,
+      "sha256": "68e4b531c54307104a1f58b6aeeac46ddd68298d75a645887b3b4f0dc2bae6d5"
+    },
+    {
+      "trackId": "summer-on-repeat",
+      "kind": "cover",
+      "path": "/media/recommendations/summer-on-repeat-d8a226ab9537-cover.jpg",
+      "key": "qingfeng/recommendation-samples/20261119/cover/d8a226ab9537/summer-on-repeat-d8a226ab9537-cover.jpg",
+      "bytes": 13446,
+      "sha256": "d8a226ab953766058c226ba3d00e36afc6816fe1d83cffacaf776e62b5f39beb"
     }
   ]
 }

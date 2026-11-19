@@ -62,6 +62,23 @@ describe('CDN 签名过期的一次性重新授权',()=>{
 
 
 describe('推荐音频 OSS 失败时回退',()=>{
+ it('新增的哈希命名推荐歌曲在签名失效后重新授权并恢复进度',async()=>{
+  const player=usePlayer(),sample={...track('body-language'),provenance:'SAMPLE' as const,audio:'/media/recommendations/body-language-8e59749c37e9-preview-128.mp3'}
+  await player.toggle(sample);const audio=FakeAudio.current
+  audio.currentTime=7;audio.paused=false;audio.currentSrc=sample.audio;audio.error={code:4};audio.dispatchEvent(new Event('error'))
+  expect(audio.src).toContain(sample.audio+'?reauth=');expect(audio.load).not.toHaveBeenCalled()
+  audio.error=null;audio.dispatchEvent(new Event('loadedmetadata'))
+  expect(audio.currentTime).toBe(7);expect(player.playing).toBe(true);expect(FakeAudio.instances).toHaveLength(1)
+  const renewed=audio.src;audio.error={code:4};audio.dispatchEvent(new Event('error'))
+  expect(audio.src).toBe(renewed);expect(player.error).toContain('无法加载')
+ })
+ it('新增推荐歌曲缓冲停滞时只自动刷新一次签名',async()=>{
+  const player=usePlayer(),sample={...track('body-language'),audio:'/media/recommendations/body-language-8e59749c37e9-preview-128.mp3'}
+  await player.toggle(sample);const audio=FakeAudio.current;vi.useFakeTimers();audio.dispatchEvent(new Event('waiting'))
+  await vi.advanceTimersByTimeAsync(15000);expect(audio.src).toContain('?reauth=')
+  audio.dispatchEvent(new Event('loadedmetadata'));audio.dispatchEvent(new Event('waiting'))
+  await vi.advanceTimersByTimeAsync(15000);expect(player.error).toContain('等待时间较长')
+ })
  it('签名过期返回不支持时回退本地并恢复进度',async()=>{const player=usePlayer();const sample={...track('sample'),audio:'/media/sample-red.mp3'};await player.toggle(sample);const a=FakeAudio.current;a.currentTime=7;a.paused=false;a.error={code:4};a.dispatchEvent(new Event('error'));expect(a.src).toContain('/media/sample-red.mp3?reauth=');a.error=null;a.dispatchEvent(new Event('loadedmetadata'));expect(a.currentTime).toBe(7);expect(player.playing).toBe(true)})
  it('等待超时自动回退一次，再次超时提示重试',async()=>{const player=usePlayer();const sample={...track('sample'),audio:'/media/sample-red.mp3'};await player.toggle(sample);const a=FakeAudio.current;vi.useFakeTimers();a.dispatchEvent(new Event('waiting'));await vi.advanceTimersByTimeAsync(15000);expect(a.src).toContain('/media/sample-red.mp3?reauth=');a.dispatchEvent(new Event('loadedmetadata'));a.dispatchEvent(new Event('waiting'));await vi.advanceTimersByTimeAsync(15000);expect(player.error).toContain('等待时间较长');expect(player.playing).toBe(false)})
 })

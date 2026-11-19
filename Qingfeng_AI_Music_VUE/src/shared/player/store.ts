@@ -26,13 +26,13 @@ export const usePlayer = defineStore('player', () => {
   const same=(track:PlayableTrack)=>current.value?.id===track.id&&current.value?.audio===track.audio
   function stopWaiting(){clearTimeout(waitingTimer);buffering.value=false}
   function readDuration(){duration.value=audio&&Number.isFinite(audio.duration)?audio.duration:0}
-  function isSample(){return /^\/media\/sample-[a-z0-9-]+\.mp3$/.test(current.value?.audio||'')}
+  function isSample(){return /^\/media\/(?:sample-[a-z0-9-]+\.mp3|recommendations\/[a-z0-9-]+-[a-f0-9]{12}-preview-128\.mp3)$/.test(current.value?.audio||'')}
   function waitForAudio(){
     stopWaiting();buffering.value=true
     waitingTimer=setTimeout(()=>{if(isSample()&&reauthorize(false,true))return;operation++;starting.value=false;audio?.pause();stopWaiting();error.value='播放等待时间较长，请点击重试。'},15000)
   }
-  /** 302 后 currentSrc 是否含 auth_key 属方案 E-1 待实测；检测不到时 code 4 按非 CDN 终态处理。 */
-  function cdnSigned(element:HTMLAudioElement){try{return element.currentSrc.includes('auth_key=')||(/^\/media\/sample-[a-z0-9-]+\.mp3$/.test(current.value?.audio||'')&&/[?&]x-oss-signature=/i.test(element.currentSrc))}catch{return false}}
+  /** 重定向后 currentSrc 可能保留同源地址；推荐音频还通过受限的媒体路径识别。 */
+  function cdnSigned(element:HTMLAudioElement){try{return element.currentSrc.includes('auth_key=')||(isSample()&&/[?&]x-oss-signature=/i.test(element.currentSrc))}catch{return false}}
   function retriable(code:number|null,element:HTMLAudioElement|undefined){
     if(code===2)return true
     if(code===4)return !!element&&(cdnSigned(element)||isSample())

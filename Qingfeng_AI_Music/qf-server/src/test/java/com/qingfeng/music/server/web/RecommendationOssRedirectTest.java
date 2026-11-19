@@ -17,6 +17,22 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 class RecommendationOssRedirectTest {
+    @Test void newHashNamedSamplesUseTheSameSignedCdnAndRejectUnknownOrChangedHashes() {
+        var cdn=new MediaCdnSigner(true,"https://cdn.example.com","test-key","",600,"0","qingfeng/audio/","qingfeng/covers/");
+        var redirect=new RecommendationOssRedirect(null,"",false,Clock.systemUTC(),cdn);
+        for(var file:java.util.List.of("recommendations/body-language-8e59749c37e9-preview-128.mp3","recommendations/body-language-c251e80045fe-cover.jpg")){
+            var destination=redirect.destination("/media/"+file,"GET",false).orElseThrow();
+            assertEquals("cdn.example.com",destination.getHost());
+            assertTrue(destination.getPath().startsWith("/qingfeng/recommendation-samples/20261119/"));
+            assertTrue(destination.getQuery().startsWith("auth_key="));
+            assertTrue(redirect.destination("/media/"+file,"HEAD",false).isPresent());
+            assertNotEquals(destination.getQuery(),redirect.destination("/media/"+file,"GET",true).orElseThrow().getQuery());
+            assertTrue(redirect.destination("/media/"+file,"POST",false).isEmpty());
+        }
+        assertTrue(redirect.destination("/media/recommendations/body-language-000000000000-preview-128.mp3","GET",false).isEmpty());
+        assertTrue(redirect.destination("/media/recommendations/unknown-8e59749c37e9-preview-128.mp3","GET",false).isEmpty());
+        assertTrue(redirect.destination("/media/recommendations/../private.mp3","GET",false).isEmpty());
+    }
     @Test void curatedAudioAndCoversUseCdnWithoutAnOssProbeAndRenewExpiredUrls() {
         var cdn = new MediaCdnSigner(true, "https://cdn.example.com", "test-key", "", 600, "0", "qingfeng/audio/", "qingfeng/covers/");
         var redirect = new RecommendationOssRedirect(null, "", false, Clock.systemUTC(), cdn);

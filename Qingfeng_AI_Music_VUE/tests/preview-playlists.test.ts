@@ -10,7 +10,7 @@ describe('compact preview playlists',()=>{
   for(const playlist of playlists){expect(playlist.tracks.every(Boolean)).toBe(true)}
   const ids=playlists.flatMap(playlist=>playlist.tracks.map(track=>track.id))
   expect(new Set(ids).size).toBe(ids.length)
-  expect([...ids].sort()).toEqual(tracks.filter(track=>track.delivery==='CDN'||track.audio.startsWith('/media/recommendations/')).map(track=>track.id).sort())
+  expect([...ids].sort()).toEqual(tracks.filter(track=>track.delivery==='CDN').map(track=>track.id).sort())
  })
  it('filters new pop songs without duplicates or changing the full playlist',()=>{
   const before=JSON.stringify(playlists)
@@ -30,17 +30,17 @@ describe('compact preview playlists',()=>{
   expect(filterPlaylists(playlists,'house').flatMap(playlist=>playlist.tracks).map(track=>track.title)).toEqual(['Body Language','Into the Sun','One More Night'])
   expect(filterPlaylists(playlists,'instrumental').flatMap(playlist=>playlist.tracks).map(track=>track.title)).toEqual(['Euphoric Drop'])
  })
- it('keeps authored titles and eight supplied lyrics without changing old track IDs',()=>{
+ it('keeps authored titles and seventeen supplied lyrics without changing old track IDs',()=>{
   const supplied=tracks.filter(track=>track.delivery==='CDN')
   expect(supplied.every(track=>track.authoredTitle)).toBe(true)
-  expect(supplied.filter(track=>track.lyrics)).toHaveLength(8)
+  expect(supplied.filter(track=>track.lyrics)).toHaveLength(17)
   expect(tracks.find(track=>track.id==='family')!.audio).toBe('/media/sample-family-v2-preview-128.mp3')
  })
  it('includes the nine supplied lyric documents and keeps the instrumental free of invented lyrics',()=>{
   const added=tracks.filter(track=>track.audio.startsWith('/media/recommendations/'))
   expect(added).toHaveLength(10)
   expect(added.filter(track=>track.lyrics)).toHaveLength(9)
-  expect(added.every(track=>track.authoredTitle&&track.durationSeconds>120)).toBe(true)
+  expect(added.every(track=>track.authoredTitle&&track.delivery==='CDN'&&track.durationSeconds>120)).toBe(true)
   expect(added.find(track=>track.id==='into-the-sun')!.lyrics).toContain('Where the ocean meets the sky\n')
   expect(added.find(track=>track.id==='euphoric-drop')!.lyrics).toBeUndefined()
  })
