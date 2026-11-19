@@ -81,8 +81,7 @@ onBeforeUnmount(() => {
 <template>
   <div class="music-shell consumer-shell" :class="{'gift-shell':publicListening, 'home-light-shell':isHome, 'agent-shell':isAgent, 'discover-shell':isDiscover}">
     <a class="skip-link" href="#main-content">{{ t('跳到主要内容') }}</a>
-    <header v-if="isAgent" class="consumer-header"><div class="consumer-header-inner"><BrandLogo standalone/><LanguageSwitcher/><button v-if="!accountState.authenticated && !logtoState.authenticated" class="agent-login" @click="showLoginDialog()">{{ t('登录/注册') }}</button></div></header>
-    <header v-else-if="!isDiscover" class="consumer-header">
+    <header v-if="!isDiscover" class="consumer-header">
       <div class="consumer-header-inner">
         <RouterLink class="consumer-brand" to="/" :aria-label="t('Cheerful Music 青风音乐首页')"><BrandLogo :compact="mobile || publicListening" standalone/></RouterLink>
         <nav v-if="!publicListening" class="consumer-navigation" :aria-label="t('主导航')">
@@ -109,7 +108,7 @@ onBeforeUnmount(() => {
         </div>
       </div>
     </header>
-    <template v-if="menuOpen && !publicListening && !isAgent">
+    <template v-if="menuOpen && !publicListening">
       <button class="navigation-backdrop" :aria-label="t('关闭导航')" @click="closeMenu"></button>
       <section id="consumer-navigation" ref="menu" class="consumer-mobile-menu" role="dialog" :aria-label="t('音乐网站导航')" aria-modal="true">
         <div class="consumer-menu-heading"><strong>{{ t('想从哪里开始？') }}</strong><button class="consumer-menu-close" :aria-label="t('关闭导航')" @click="closeMenu"><NavIcon name="close"/></button></div>

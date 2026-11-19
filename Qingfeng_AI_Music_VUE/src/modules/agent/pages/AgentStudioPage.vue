@@ -2,7 +2,7 @@
 import '../playful.css'
 import '../producer.css'
 import SyncedLyrics from '../../works/components/SyncedLyrics.vue'
-import AgentBubbleGame from '../components/AgentBubbleGame.vue'
+import InspirationGalaxy from '../components/InspirationGalaxy.vue'
 import AgentListeningPanel from '../components/AgentListeningPanel.vue'
 import AgentWorkShelf from '../components/AgentWorkShelf.vue'
 import ChatAppearance from '../components/ChatAppearance.vue'
@@ -374,7 +374,7 @@ onBeforeUnmount(() => { avatarDisposed = true; window.removeEventListener('qingf
     </div>
     <aside class="agent-preview" :aria-label="songCard?.songId ? tr('当前作品', 'Current song') : tr('热歌推荐', 'Song recommendations')">
       <template v-if="songCard?.songId && (!player.current || currentPlaying)"><header class="music-player-heading">{{ tr('音乐播放','Music player') }}</header>
-        <div class="agent-album">
+        <div class="record-summary"><div class="agent-album">
           <div class="agent-record" :class="{ 'is-spinning': isPlaying }" aria-hidden="true"><span/></div>
           <div class="agent-album-art"><span class="agent-album-badge">{{ taskRunning ? tr('创作中', 'Creating') : tr('我的作品', 'My song') }}</span><img :src="safeLink(songCard.coverUrl) || defaultCover()" :alt="tr('歌曲封面', 'Song artwork')"/>
             <button v-if="playable" type="button" class="agent-cover-play" :aria-label="isPlaying ? tr('暂停这首歌', 'Pause this song') : tr('播放这首歌', 'Play this song')" @click="togglePlay">{{ isPlaying ? 'Ⅱ' : '▶' }}</button>
@@ -382,8 +382,8 @@ onBeforeUnmount(() => { avatarDisposed = true; window.removeEventListener('qingf
           </div>
         </div>
         <div class="agent-preview-meta"><strong>{{ songCard.title || tr('未命名作品', 'Untitled song') }}</strong><span v-if="songCard.style">{{ songCard.style }}</span></div>
-        <p class="agent-song-status" role="status">{{ statusText }}</p>
-        <AgentBubbleGame/>
+        </div><p class="agent-song-status" role="status">{{ statusText }}</p>
+
         <div class="agent-player">
           <input class="agent-preview-range" type="range" min="0" :max="duration || 1" :value="playTime" :disabled="!currentPlaying || !duration" :aria-label="tr('播放进度', 'Playback position')" @input="player.seek(Number(($event.target as HTMLInputElement).value))"/>
           <div class="agent-player-times"><span>{{ formatTime(playTime) }}</span><span>{{ formatTime(duration) }}</span></div>
@@ -395,6 +395,7 @@ onBeforeUnmount(() => { avatarDisposed = true; window.removeEventListener('qingf
             <button type="button" :disabled="!player.tracks.length" :aria-expanded="showQueue" :aria-label="tr('播放列表', 'Playback queue')" @click="showQueue = !showQueue">☷</button>
           </div>
         </div>
+        <InspirationGalaxy :work-id="songCard.songId" :asset-id="songCard.assetId"/>
         <div v-if="showQueue && player.tracks.length" class="agent-play-queue" :aria-label="tr('播放列表', 'Playback queue')"><button v-for="track in player.tracks" :key="track.id" type="button" :aria-current="player.current?.id === track.id ? 'true' : undefined" @click="player.toggle(track)">{{ track.title }}</button></div>
         <p v-if="player.current && !currentPlaying" class="agent-player-other">{{ tr('播放器正在播放其他作品', 'The player is on another song') }}</p>
         <p v-if="currentPlaying && player.error" class="agent-upload-error" role="alert">{{ player.error }}</p>
@@ -402,7 +403,7 @@ onBeforeUnmount(() => { avatarDisposed = true; window.removeEventListener('qingf
           <button v-for="tab in (['lyrics', 'story', 'more'] as const)" :key="tab" type="button" role="tab" :aria-selected="previewTab === tab" @click="previewTab = tab">{{ tab === 'lyrics' ? tr('歌词', 'Lyrics') : tab === 'story' ? tr('作品故事', 'Story') : tr('更多', 'More') }}</button>
         </div>
         <label v-if="songCard.assetId && previewTab==='lyrics'" class="producer-lyric-switch"><span>♫ {{ tr('歌词滚动播放','Follow lyrics') }}</span><input v-model="lyricFollow" type="checkbox" role="switch" :aria-label="tr('歌词滚动播放','Follow lyrics')"/></label>
-        <div v-if="previewTab === 'lyrics'" class="agent-tab-content agent-real-lyrics" role="tabpanel"><strong v-if="songCard.lyrics" class="agent-lyrics-title">♫ {{ songCard.title }}</strong><SyncedLyrics v-if="songCard.assetId" :key="songCard.assetId" :work-id="songCard.songId" :asset-id="songCard.assetId" :player-track-id="playable?.id" :lyrics="songCard.lyrics" :auto-sync-enabled="false" :follow-enabled="lyricFollow" :refresh-key="lyricRefresh" @seek="player.seek($event)"/><p v-else>{{ songCard.lyrics || tr('还没有歌词，可以在对话中让我写。', 'No lyrics yet. Ask me to write them.') }}</p></div>
+        <div v-if="previewTab === 'lyrics'" class="agent-tab-content agent-real-lyrics" role="tabpanel"><strong v-if="songCard.lyrics" class="agent-lyrics-title">♫ {{ songCard.title }}</strong><SyncedLyrics show-times v-if="songCard.assetId" :key="songCard.assetId" :work-id="songCard.songId" :asset-id="songCard.assetId" :player-track-id="playable?.id" :lyrics="songCard.lyrics" :auto-sync-enabled="false" :follow-enabled="lyricFollow" :refresh-key="lyricRefresh" @seek="player.seek($event)"/><p v-else>{{ songCard.lyrics || tr('还没有歌词，可以在对话中让我写。', 'No lyrics yet. Ask me to write them.') }}</p></div>
         <div v-else-if="previewTab === 'story'" class="agent-tab-content agent-story-empty" role="tabpanel"><p v-if="storyLoading">{{ tr('正在加载作品故事…', 'Loading story…') }}</p><p v-else-if="storyError">{{ tr('作品故事加载失败', 'Unable to load story') }} <button type="button" @click="fetchStory">{{ tr('重试', 'Retry') }}</button></p><p v-else>{{ story || tr('暂无作品故事', 'No story yet') }}</p></div>
         <div v-else class="agent-tab-content agent-song-actions" role="tabpanel"><button v-if="!taskRunning" type="button" class="agent-start-button" :disabled="blocked || !songCard.lyrics" @click="send('用当前歌词生成音乐')">{{ audioUrl ? tr('重新生成音乐', 'Generate another version') : tr('生成音乐', 'Generate music') }}</button><button v-else type="button" :disabled="blocked" @click="send('停止生成')">{{ tr('停止生成', 'Cancel generation') }}</button><button type="button" :disabled="blocked" @click="input = tr('把副歌改得更温柔，保留其他部分', 'Make the chorus gentler and keep the rest')">{{ tr('修改歌词', 'Revise lyrics') }}</button></div>
         <div v-if="publicLink" class="agent-share-link"><input readonly :value="publicLink" :aria-label="tr('分享链接','Share link')"/><button type="button" @click="copyShare">{{ tr('复制链接', 'Copy link') }}</button></div>
