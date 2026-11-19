@@ -581,7 +581,7 @@ def build(workspace, baseline, java_home, cache_root, isolated_mysql_cohort=None
     if not mvn:
         raise GateError("Maven required")
     execute("dependencies", [npm, "ci", "--offline", "--ignore-scripts", "--cache", str(cache_root / "npm")], frontend)
-    execute("frontendTest", [npm, "test"], frontend)
+    execute("frontendTest", [npm, "test", "--", "--maxWorkers=4", "--testTimeout=15000"], frontend)
     execute("frontendBuild", [npm, "run", "build"], frontend)
     metadata = export / "Qingfeng_AI_Music/deploy/release-metadata"
     metadata.mkdir(parents=True, exist_ok=True)
