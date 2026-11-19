@@ -126,10 +126,13 @@ def verify(release, policy):
         if manifest_path not in names:
             raise ValueError('Missing preview media manifest')
         manifest = json.loads(z.read(manifest_path))
-        if manifest.get('version') != 1 or not manifest.get('assets'):
+        assets = manifest.get('assets')
+        remote_assets = manifest.get('remoteAssets', [])
+        if (manifest.get('version') != 1 or not isinstance(assets, list)
+                or not isinstance(remote_assets, list) or not (assets or remote_assets)):
             raise ValueError('Invalid preview media manifest')
         declared_audio = set()
-        for asset in manifest['assets']:
+        for asset in assets:
             path = asset['path']
             if not path.startswith('/media/') or '..' in path.split('/'):
                 raise ValueError('Invalid preview asset path')

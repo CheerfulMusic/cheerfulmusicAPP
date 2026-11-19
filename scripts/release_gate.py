@@ -242,7 +242,9 @@ def inspect_artifact(jar):
         try:
             manifest = json.loads(z.read(preview))
             assets = manifest["assets"]
-            if manifest.get("version") != 1 or not assets:
+            remote_assets = manifest.get("remoteAssets", [])
+            if (manifest.get("version") != 1 or not isinstance(assets, list)
+                    or not isinstance(remote_assets, list) or not (assets or remote_assets)):
                 raise GateError("Invalid preview manifest")
             declared = set()
             for asset in assets:
