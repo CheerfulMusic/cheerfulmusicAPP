@@ -76,7 +76,7 @@ class StripeOrderReconciliationTest {
         String order=create();var p=pointer(order);assertTrue(p.path("original_scope").asBoolean());assertEquals(MERCHANT,p.path("merchant").asString());assertEquals("sandbox",p.path("environment").asString());assertEquals("9.90",p.path("amount").asString());assertEquals(100,p.path("credits").asLong());assertEquals("USD",p.path("currency").asString());assertEquals(stored(order).get("creator_id"),p.path("owner").asString());
     }
     @Test void failedRecoveryPointerInsertRollsBackOrderBeforeAnySupplierPost(){
-        var fail=mock(PaymentInbox.class);doThrow(new IllegalStateException("synthetic durable store unavailable")).when(fail).acceptVerified(anyString(),anyString(),anyString(),anyString(),anyString(),anyString());
+        var fail=mock(PaymentInbox.class);doThrow(new IllegalStateException("synthetic durable store unavailable")).when(fail).acceptVerified(anyString(),anyString(),anyString(),anyString(),anyString(),anyString(),anyInt());
         var env=new MockEnvironment();var s=new StripePaymentService(db,tx,ledger,new PaymentCatalog(env),gateway,json,fail,env);ReflectionTestUtils.setField(s,"enabled",true);ReflectionTestUtils.setField(s,"acceptingNewOrders",true);
         assertThrows(RuntimeException.class,()->s.create(owner(),"starter-USD"));assertEquals(0,count("SELECT COUNT(*) FROM payment_order"));verify(gateway,never()).createSession(anyString(),anyString(),any(),anyString());
     }
@@ -101,6 +101,23 @@ class StripeOrderReconciliationTest {
         var pages=new java.util.concurrent.atomic.AtomicInteger();
         when(gateway.sessionsCreatedBetween(any(),nullable(String.class))).thenAnswer(c->{int page=pages.incrementAndGet();return page==1?list(true,List.of(first)):list(true,List.of(session("cs_cursor_page_"+page,"unrelated",new BigDecimal("9.90"),"USD","open","unpaid")));});
         assertTrue(service.processNextEvent());assertEquals(3,pages.get());assertEquals("CREATION_UNKNOWN",stored(order).get("status"));assertEquals(1,count("SELECT COUNT(*) FROM payment_inbox_attempt WHERE result='WAITING'"));verifyNoInteractions(ledger);verify(gateway,never()).retrieveSession(anyString());
+    }
+    @Test void resumesFourthPageAfterRestartAndKeepsCandidateFromEarlierPage() {
+        String order=failedCreation();paid(order);String id=sessionId(order);
+        var item=facts.get(id);
+        var next=session("cs_page_two","other",new BigDecimal("9.90"),"USD","open","unpaid");
+        var third=session("cs_page_three","other",new BigDecimal("9.90"),"USD","open","unpaid");
+        when(gateway.sessionsCreatedBetween(any(),nullable(String.class))).thenAnswer(call->{
+            String cursor=call.getArgument(1);
+            if(cursor==null)return list(true,List.of(item));
+            if(cursor.equals(id))return list(true,List.of(next));
+            if(cursor.equals("cs_page_two"))return list(true,List.of(third));
+            assertEquals("cs_page_three",cursor);
+            return list(false,List.of());
+        });
+        assertTrue(service.processNextEvent());verifyNoInteractions(ledger);
+        due();service=restarted();assertTrue(service.processNextEvent());
+        assertEquals("PAID",stored(order).get("status"));verify(ledger,times(1)).credit(anyString(),eq(100L),eq("payment:"+order));
     }
     @Test void twoSessionsForOneOrderAreAmbiguousAndNeverGrantCredits(){
         String order=failedCreation();paid(order);var second=session("cs_second_fixture",order,new BigDecimal("9.90"),"USD","complete","paid");when(gateway.sessionsCreatedBetween(any(),nullable(String.class))).thenReturn(list(false,List.of(facts.get(sessionId(order)),second)));

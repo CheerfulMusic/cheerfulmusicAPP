@@ -37,6 +37,8 @@ public final class StripeCheckoutGateway {
     private volatile boolean accountVerified;
     private volatile String verifiedCountry = "";
     private volatile boolean verifiedChargesEnabled;
+    private volatile long purchaseCheckedAt;
+    private final java.util.function.LongSupplier monotonicClock = System::nanoTime;
     @Value("${qingfeng.stripe.environment:sandbox}") private String environment;
     @Value("${qingfeng.stripe.account-id:}") private String accountId;
     @Value("${qingfeng.stripe.api-key:}") private String apiKey;
@@ -70,13 +72,22 @@ public final class StripeCheckoutGateway {
         if (accountVerified) return;
         synchronized (this) {
             if (accountVerified) return;
-            JsonNode account=send("GET","/account",null,null);
-            if (!accountId.equals(account.path("id").asString()))
-                throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,"Stripe account is not the configured merchant");
-            verifiedCountry=account.path("country").asString("").trim().toUpperCase(java.util.Locale.ROOT);
-            verifiedChargesEnabled=account.path("charges_enabled").asBoolean(false);
-            accountVerified=true;
+            refreshAccount();
         }
+    }
+
+    private void refreshAccount() {
+        JsonNode account=send("GET","/account",null,null);
+        if (!accountId.equals(account.path("id").asString()))
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,"Stripe merchant identity mismatch");
+        verifiedCountry=account.path("country").asString("").trim().toUpperCase(java.util.Locale.ROOT);
+        verifiedChargesEnabled=account.path("charges_enabled").asBoolean(false);
+        purchaseCheckedAt=monotonicClock.getAsLong();
+        accountVerified=true;
+    }
+
+    private synchronized void refreshPurchaseCapabilityIfExpired() {
+        if (monotonicClock.getAsLong()-purchaseCheckedAt >= Duration.ofSeconds(60).toNanos()) refreshAccount();
     }
 
     public JsonNode createSession(String orderId, String title, BigDecimal amount, String currency) {
@@ -98,6 +109,7 @@ public final class StripeCheckoutGateway {
             || !("USD".equals(currency)||("CNY".equals(currency)||"GBP".equals(currency))&&"wechat_pay".equals(checkoutMethod)))
             throw new IllegalArgumentException("Unsupported Stripe checkout method or currency");
         verifyAccount();
+        if (isLive()) refreshPurchaseCapabilityIfExpired();
         // Receiving an existing payment/return remains possible when new charges are paused.
         if(isLive()&&!verifiedChargesEnabled)
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,"Stripe new payments are currently unavailable");
@@ -151,6 +163,19 @@ public final class StripeCheckoutGateway {
         return get("/checkout/sessions",query);
     }
     public record InstantRange(long from,long until) {}
+
+    JsonNode financialPage(String stream,long start,long end,String cursor) {
+        String filter = switch(stream) {
+            case "refunds","disputes" -> "";
+            case "events" -> "&types%5B%5D=refund.created&types%5B%5D=refund.updated&types%5B%5D=refund.failed"
+                + "&types%5B%5D=charge.dispute.created&types%5B%5D=charge.dispute.updated&types%5B%5D=charge.dispute.closed"
+                + "&types%5B%5D=charge.dispute.funds_reinstated&types%5B%5D=charge.dispute.funds_withdrawn";
+            default -> throw new IllegalArgumentException("Unknown Stripe feed");
+        };
+        verifyAccount();
+        return get("/"+stream,"limit=100&created%5Bgte%5D="+start+"&created%5Blte%5D="+end+filter
+                +(cursor.isEmpty()?"":"&starting_after="+safeId(cursor)));
+    }
 
     public JsonNode retrieveRefund(String refundId) { verifyAccount(); return get("/refunds/" + safeId(refundId), null); }
     public JsonNode retrieveDispute(String disputeId) {
