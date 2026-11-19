@@ -47,12 +47,48 @@ public class PaymentInbox {
             if(!type.equals(prior.get("event_type"))||!fingerprint.equals(prior.get("payload_hash")))throw new IllegalStateException("Conflicting payment event identity");
         }
     }
+    private record Scope(String provider, String merchant, String environment) {}
+    // A batch contains hints only. Lease ownership is always decided by the conditional UPDATE.
+    private final Map<Scope,ArrayDeque<String>> candidates = new LinkedHashMap<>(16, .75f, true) {
+        @Override protected boolean removeEldestEntry(Map.Entry<Scope,ArrayDeque<String>> eldest) {
+            return size() > 32;
+        }
+    };
+
+    private String nextCandidate(Scope scope) {
+        ArrayDeque<String> batch;
+        synchronized (candidates) {
+            batch = candidates.computeIfAbsent(scope, ignored -> new ArrayDeque<>());
+        }
+        synchronized (batch) {
+            if (batch.isEmpty()) {
+                // One ordered range per status on idx_payment_inbox_due. Only the two
+                // bounded result sets need to be merged to include expired leases fairly.
+                String range = """
+                        SELECT event_id,next_attempt_at FROM payment_webhook_inbox
+                        WHERE provider=? AND merchant_scope=? AND env_scope=? AND status=?
+                          AND next_attempt_at<=CURRENT_TIMESTAMP
+                          AND (lease_until IS NULL OR lease_until<=CURRENT_TIMESTAMP)
+                        ORDER BY next_attempt_at,lease_until,event_id LIMIT 32
+                        """;
+                String sql = "SELECT event_id FROM ((" + range + ") UNION ALL (" + range
+                        + ")) due ORDER BY next_attempt_at,event_id LIMIT 32";
+                batch.addAll(db.query(sql, (rs,n) -> rs.getString(1),
+                        scope.provider(),scope.merchant(),scope.environment(),"PENDING",
+                        scope.provider(),scope.merchant(),scope.environment(),"PROCESSING"));
+            }
+            return batch.pollFirst();
+        }
+    }
+
     public Optional<Delivery> claim(String provider){return layout()==Layout.LEGACY?claimLegacy(provider):claim(provider,LEGACY_SCOPE,LEGACY_SCOPE);}
     public Optional<Delivery> claim(String provider,String merchant,String environment){
         requireScoped();
         identity(provider,merchant,environment,"claim");
-        var ids=db.query("SELECT event_id FROM payment_webhook_inbox WHERE provider=? AND merchant_scope=? AND env_scope=? AND status IN ('PENDING','PROCESSING') AND next_attempt_at<=CURRENT_TIMESTAMP AND (lease_until IS NULL OR lease_until<=CURRENT_TIMESTAMP) ORDER BY next_attempt_at,created_at,event_id LIMIT 20",(rs,n)->rs.getString(1),provider,merchant,environment);
-        for(String id:ids){
+        Scope scope = new Scope(provider,merchant,environment);
+        for (int attempt = 0; attempt < 32; attempt++) {
+            String id = nextCandidate(scope);
+            if (id == null) break;
             String token=UUID.randomUUID().toString();
             int changed=db.update("UPDATE payment_webhook_inbox SET status='PROCESSING',lease_token=?,lease_until=TIMESTAMPADD(SECOND,180,CURRENT_TIMESTAMP),attempts=attempts+1,updated_at=CURRENT_TIMESTAMP WHERE provider=? AND merchant_scope=? AND env_scope=? AND event_id=? AND status IN ('PENDING','PROCESSING') AND next_attempt_at<=CURRENT_TIMESTAMP AND (lease_until IS NULL OR lease_until<=CURRENT_TIMESTAMP)",token,provider,merchant,environment,id);
             if(changed==1){
