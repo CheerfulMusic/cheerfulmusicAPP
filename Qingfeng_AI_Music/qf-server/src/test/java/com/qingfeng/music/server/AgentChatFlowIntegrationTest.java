@@ -28,7 +28,8 @@ import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 /** Real HTTP, persistence and business services; only external model providers are offline doubles. */
-@org.springframework.test.context.jdbc.Sql(scripts="classpath:db/migration/V47__music_video_projects.sql", executionPhase=org.springframework.test.context.jdbc.Sql.ExecutionPhase.BEFORE_TEST_CLASS)
+@org.springframework.test.context.jdbc.Sql(scripts={"classpath:db/migration/V46__agent_chat_allowance.sql",
+        "classpath:db/migration/V47__music_video_projects.sql","classpath:db/migration/V50__agent_admission_version.sql"}, executionPhase=org.springframework.test.context.jdbc.Sql.ExecutionPhase.BEFORE_TEST_CLASS)
 @SpringBootTest(webEnvironment=SpringBootTest.WebEnvironment.RANDOM_PORT, properties={
         "spring.datasource.url=jdbc:h2:mem:agent_chat_flow;MODE=MySQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1",
         "qingfeng.agent.chat.enabled=true", "qingfeng.lyrics.enabled=true", "qingfeng.generation.enabled=true",
@@ -106,6 +107,23 @@ class AgentChatFlowIntegrationTest {
     }
     private JsonNode say(Browser browser, String text) throws Exception { return say(browser,text,UUID.randomUUID().toString()); }
     private JsonNode state(Browser browser) throws Exception { return ok(request(browser.http(),"GET","/api/app/agent/conversations/"+browser.conversation()+"/state",null,null)); }
+
+    @Autowired com.qingfeng.music.server.agent.AgentAdmission admission;
+
+    @Test void archivedInterruptedRequestReturnsCurrentStateWithoutRestarting() throws Exception {
+        Browser user = browser();
+        String key = UUID.randomUUID().toString(), text = "查看我的作品";
+        var ticket = admission.acquire(user.creator(),user.conversation(),key,text,null);
+        admission.startTurn(ticket,user.conversation(),() -> turns.claim(user.creator(),user.conversation(),key,text));
+        admission.finish(ticket,false);
+        db.update("UPDATE agent_message SET created_at=? WHERE conversation_id=?",
+                java.sql.Timestamp.from(java.time.Instant.now().minusSeconds(601)),user.conversation());
+        ok(request(user.http(),"POST","/api/app/agent/conversations/"+user.conversation()+"/reset",Map.of(),user.csrf()));
+        assertEquals(0,say(user,text,key).path("messages").size());
+        assertEquals(1,db.queryForObject("SELECT COUNT(*) FROM agent_message WHERE conversation_id=? AND role='system' AND state='FAILED'",
+                Integer.class,user.conversation()));
+        assertEquals(1,db.queryForObject("SELECT COUNT(*) FROM agent_request_admission WHERE conversation_id=?",Integer.class,user.conversation()));
+    }
 
     @Test void conversationCreatesRevisesGeneratesAndSharesTheSameRealWork() throws Exception {
         Browser browser = browser();

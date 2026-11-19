@@ -58,8 +58,8 @@ class IntegratedPaymentApplicationMySqlTest {
     static final String PREFIX="P0_INTEGRATION_APPLICATION_MYSQL_",ACCOUNT="acct_offline12345678",PAYPAL_MERCHANT="TESTMERCHANT";
     static final int APPLICATION_SCHEMA_TARGET=applicationSchemaTarget();
     private static int applicationSchemaTarget(){
-        String target=System.getenv().getOrDefault("P0_PAYMENT_APPLICATION_SCHEMA_TARGET","46");
-        if(!Set.of("45","46").contains(target))throw new IllegalArgumentException("Isolated application schema target must be exactly 45 or 46");
+        String target=System.getenv().getOrDefault("P0_PAYMENT_APPLICATION_SCHEMA_TARGET","50");
+        if(!Set.of("45","46","50").contains(target))throw new IllegalArgumentException("Isolated application schema target must be exactly 45, 46 or 50");
         return Integer.parseInt(target);
     }
     static final String SECRET="whsec_integrated_offline_fixture_not_a_real_credential";
@@ -82,7 +82,7 @@ class IntegratedPaymentApplicationMySqlTest {
     @BeforeAll static void proveMigrateMapActivateThenStartFullApplication() throws Exception {
         // Current production business behavior includes durable five-turn Agent packs.
         // V45-only compatibility remains on the original 0a31540-based recovery branch.
-        assertEquals(46,APPLICATION_SCHEMA_TARGET,"This production baseline requires V46; use the original recovery branch for the V45-only application cohort");
+        assertEquals(50,APPLICATION_SCHEMA_TARGET,"This application requires the V50 agent admission schema; use the matching revision for older application cohorts");
         database=required("DATABASE");url=required("URL");user=required("USER");password=required("PASSWORD");
         if(!database.matches("p0_integration_application_20261112r[0-9]+")||!url.matches("jdbc:mysql://127\\.0\\.0\\.1:23316/"+database+"(?:\\?.*)?")
             ||"root".equalsIgnoreCase(user)||url.toLowerCase(Locale.ROOT).matches(".*(?:password=|user=|socketfactory|dnssrv|loadbalance|address=).*"))
@@ -121,7 +121,7 @@ class IntegratedPaymentApplicationMySqlTest {
         CreditSchemaReadiness.requireActive(db);
         assertEquals(45,number("SELECT COUNT(*) FROM flyway_schema_history WHERE success=1 AND version IS NOT NULL"));
         assertEquals(17,number("SELECT COUNT(*) FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA=DATABASE()"));
-        if(APPLICATION_SCHEMA_TARGET==46){
+        if(APPLICATION_SCHEMA_TARGET>=46){
             var before=exactFinancialSnapshot();before.remove("flyway_schema_history");
             var triggers=db.queryForList("SELECT TRIGGER_NAME,EVENT_MANIPULATION,EVENT_OBJECT_TABLE,ACTION_TIMING,ACTION_STATEMENT FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA=DATABASE() ORDER BY TRIGGER_NAME");
             // Install the exact Git V46 only in this fresh isolated database, after the financial cutover contract is ACTIVE.
@@ -145,6 +145,7 @@ class IntegratedPaymentApplicationMySqlTest {
             assertEquals(1,db.update("DELETE FROM agent_chat_allowance WHERE creator_id=?",legacyOwner));
             assertEquals(0,number("SELECT COUNT(*) FROM agent_chat_allowance"));
         }
+        Flyway.configure().dataSource(source).locations("classpath:db/migration").cleanDisabled(true).target("50").load().migrate();
         assertApplicationSchemaTarget();CreditSchemaReadiness.requireActive(db);settings=configuration();start();
     }
     private static void assertApplicationSchemaTarget(){

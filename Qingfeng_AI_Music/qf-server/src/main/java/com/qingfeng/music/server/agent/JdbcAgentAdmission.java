@@ -1,5 +1,7 @@
 package com.qingfeng.music.server.agent;
 
+import com.qingfeng.music.agent.api.AgentTurnStore.Claim;
+import java.util.function.Supplier;
 import com.qingfeng.music.common.exception.DomainException;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -32,17 +34,22 @@ public final class JdbcAgentAdmission implements AgentAdmission {
         String id=hash(conversation+":"+key),fingerprint=hash(payload);
         return tx.execute(status->{
             jdbc.queryForObject("SELECT id FROM agent_admission_lock WHERE id=1 FOR UPDATE",Integer.class);
-            if(jdbc.queryForList("SELECT id FROM agent_conversation WHERE id=? AND creator_id=?",String.class,conversation,owner).isEmpty())throw new DomainException("AGENT_CONVERSATION_NOT_FOUND","会话不存在或不属于当前用户。");
+            var versions=jdbc.queryForList("SELECT history_epoch FROM agent_conversation WHERE id=? AND creator_id=? FOR UPDATE",Long.class,conversation,owner);
+            if(versions.isEmpty())throw new DomainException("AGENT_CONVERSATION_NOT_FOUND","会话不存在或不属于当前用户。");
             Instant now=jdbc.queryForObject("SELECT CURRENT_TIMESTAMP",Timestamp.class).toInstant();
             var rows=jdbc.queryForList("SELECT creator_id,fingerprint,state,lease_until FROM agent_request_admission WHERE id=?",id);
             if(!rows.isEmpty()){
                 var row=rows.get(0);
                 if(!owner.equals(row.get("creator_id"))||!fingerprint.equals(row.get("fingerprint")))throw new DomainException("REQUEST_KEY_CONFLICT","同一请求标识不能用于不同的消息。");
                 if("DONE".equals(row.get("state")))return new Ticket(id,owner,true);
+                if("CANCELLED".equals(row.get("state")))throw denied("REQUEST_KEY_CONFLICT","会话已经重置，此请求已取消。");
                 if("ABANDONED".equals(row.get("state")))throw denied("AGENT_REQUEST_ABANDONED","本轮尚未执行，积分或对话次数已退回，请重新发送消息。");
                 // A lost completion acknowledgement must replay the committed turn, never re-plan it.
                 String turnId=UUID.nameUUIDFromBytes((conversation+":"+key).getBytes(StandardCharsets.UTF_8)).toString();
-                var states=jdbc.queryForList("SELECT state FROM agent_message WHERE id=? AND conversation_id=? AND role='user'",String.class,turnId,conversation);
+                var messages=jdbc.queryForList("SELECT role,state FROM agent_message WHERE id=? AND conversation_id=?",turnId,conversation);
+                if(!messages.isEmpty() && "system".equals(messages.get(0).get("role")))
+                    return new Ticket(id,owner,true);
+                var states=messages.stream().map(message->message.get("state")).toList();
                 if(states.contains("FAILED"))throw denied("REQUEST_KEY_CONFLICT","这条请求已经结束。请核对已有作品和任务后继续。");
                 if(states.contains("DONE")){
                     jdbc.update("UPDATE agent_request_admission SET state='DONE',updated_at=CURRENT_TIMESTAMP WHERE id=?",id);return new Ticket(id,owner,true);
@@ -82,17 +89,73 @@ public final class JdbcAgentAdmission implements AgentAdmission {
                 }
                 jdbc.update("UPDATE agent_chat_allowance SET remaining_turns=remaining_turns-1 WHERE creator_id=?",owner);
             }
-            jdbc.update("INSERT INTO agent_request_admission(id,creator_id,conversation_id,request_key,fingerprint,state,usage_day,reserved_tokens,lease_until,created_at,updated_at) VALUES(?,?,?,?,?,'RESERVED',?,?,?,?,?)",id,owner,conversation,key,fingerprint,day,reservation,Timestamp.from(now.plus(limits.lease())),Timestamp.from(now),Timestamp.from(now));
+            jdbc.update("INSERT INTO agent_request_admission(id,creator_id,conversation_id,request_key,fingerprint,conversation_version,state,usage_day,reserved_tokens,lease_until,created_at,updated_at) VALUES(?,?,?,?,?,?,'RESERVED',?,?,?,?,?)",id,owner,conversation,key,fingerprint,versions.get(0),day,reservation,Timestamp.from(now.plus(limits.lease())),Timestamp.from(now),Timestamp.from(now));
             if(paidTurn)jdbc.update("UPDATE agent_request_admission SET paid_turn=1,purchased_pack=? WHERE id=?",purchasedPack?1:0,id);
             return new Ticket(id,owner,false);
         });
     }
+    @Override public Claim startTurn(Ticket ticket, String conversation, Supplier<Claim> claim) {
+        if (ticket.replay()) return tx.execute(status -> {
+            Claim existing = claim.get();
+            if (existing.fresh()) throw denied("REQUEST_KEY_CONFLICT","原请求结果不可用，请刷新会话。");
+            return existing;
+        });
+        Claim result = tx.execute(status -> {
+            lockAdmission();
+            var version = jdbc.queryForObject("SELECT history_epoch FROM agent_conversation WHERE id=? AND creator_id=? FOR UPDATE",
+                    Long.class, conversation, ticket.owner());
+            var rows = jdbc.queryForList("SELECT conversation_version FROM agent_request_admission WHERE id=? AND conversation_id=? AND state='RESERVED' FOR UPDATE",
+                    Long.class, ticket.id(), conversation);
+            if (rows.isEmpty()) throw denied("REQUEST_KEY_CONFLICT","本次请求已结束，请刷新会话。");
+            if (!Objects.equals(rows.get(0), version)) {
+                refundReservation(ticket, "CANCELLED", false);
+                return null;
+            }
+            start(ticket);
+            return claim.get();
+        });
+        // Throw after commit so the cancellation and refund remain durable.
+        if (result == null) throw denied("REQUEST_KEY_CONFLICT","会话已经重置，此请求已取消。");
+        return result;
+    }
     @Override public void start(Ticket ticket){if(ticket.replay())return;if(jdbc.update("UPDATE agent_request_admission SET state='RUNNING',updated_at=CURRENT_TIMESTAMP WHERE id=? AND state='RESERVED' AND lease_until>CURRENT_TIMESTAMP",ticket.id())!=1)throw denied("AGENT_ADMISSION_LOST","本轮执行资格已失效，请先核对原请求状态。");}
     @Override public void heartbeat(Ticket ticket){if(ticket.replay())return;tx.executeWithoutResult(s->{Instant now=jdbc.queryForObject("SELECT CURRENT_TIMESTAMP",Timestamp.class).toInstant();if(jdbc.update("UPDATE agent_request_admission SET lease_until=?,updated_at=? WHERE id=? AND state='RUNNING' AND lease_until>?",Timestamp.from(now.plus(limits.lease())),Timestamp.from(now),ticket.id(),Timestamp.from(now))!=1)throw denied("AGENT_ADMISSION_LOST","本轮执行资格已失效，后续步骤已停止。");});}
-    @Override public void finish(Ticket ticket,boolean completed){if(!ticket.replay())jdbc.update("UPDATE agent_request_admission SET state=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND state IN ('RESERVED','RUNNING')",completed?"DONE":"UNCERTAIN",ticket.id());}
+    @Override public void finish(Ticket ticket,boolean completed){if(!ticket.replay())jdbc.update("UPDATE agent_request_admission SET state=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND state='RUNNING'",completed?"DONE":"UNCERTAIN",ticket.id());}
     @Override public void abandon(Ticket ticket){if(ticket.replay())return;tx.executeWithoutResult(s->{
-        jdbc.queryForObject("SELECT id FROM agent_admission_lock WHERE id=1 FOR UPDATE",Integer.class);
-        if(count("SELECT COUNT(*) FROM agent_request_admission WHERE id=? AND state='RESERVED'",ticket.id())==0)return;
+        lockAdmission();
+        refundReservation(ticket, "ABANDONED", true);
+    });}
+
+    private void lockAdmission() {
+        jdbc.queryForObject("SELECT id FROM agent_admission_lock WHERE id=1 FOR UPDATE", Integer.class);
+    }
+
+    public void recoverExpired() {
+        Instant now = jdbc.queryForObject("SELECT CURRENT_TIMESTAMP",Timestamp.class).toInstant();
+        var cutoff = Timestamp.from(now.minus(Duration.ofMinutes(5)));
+        String cursor = "";
+        while (true) {
+            var batch = jdbc.queryForList("SELECT id,creator_id,conversation_id,request_key FROM agent_request_admission WHERE state='RESERVED' AND created_at<=? AND lease_until<=? AND id>? ORDER BY id LIMIT 100",
+                    cutoff, Timestamp.from(now), cursor);
+            for (var row : batch) {
+                String id = row.get("id").toString();
+                String conversation = row.get("conversation_id").toString();
+                String message = UUID.nameUUIDFromBytes((conversation+":"+row.get("request_key")).getBytes(StandardCharsets.UTF_8)).toString();
+                tx.executeWithoutResult(status -> {
+                    lockAdmission();
+                    if (count("SELECT COUNT(*) FROM agent_request_admission WHERE id=? AND state='RESERVED' AND created_at<=? AND lease_until<=?",id,cutoff,Timestamp.from(now)) == 1
+                            && count("SELECT COUNT(*) FROM agent_message WHERE conversation_id=? AND id=?",conversation,message) == 0)
+                        refundReservation(new Ticket(id,row.get("creator_id").toString(),false), "ABANDONED", false);
+                });
+                cursor = id;
+            }
+            if (batch.size() < 100) return;
+        }
+    }
+
+    private void refundReservation(Ticket ticket, String terminal, boolean allowFreeRetry) {
+        int changed = jdbc.update("UPDATE agent_request_admission SET state=?,reserved_tokens=0,updated_at=CURRENT_TIMESTAMP WHERE id=? AND state='RESERVED'",terminal,ticket.id());
+        if (changed == 0) return;
         if(count("SELECT paid_turn FROM agent_request_admission WHERE id=?",ticket.id())>0){
             boolean purchased=count("SELECT purchased_pack FROM agent_request_admission WHERE id=?",ticket.id())>0;
             long remaining=count("SELECT remaining_turns FROM agent_chat_allowance WHERE creator_id=?",ticket.owner());
@@ -101,13 +164,11 @@ public final class JdbcAgentAdmission implements AgentAdmission {
                 credits.refund(ticket.owner(),debitReference(ticket.id()));
                 jdbc.update("UPDATE agent_chat_allowance SET remaining_turns=remaining_turns-4 WHERE creator_id=?",ticket.owner());
             }else jdbc.update("UPDATE agent_chat_allowance SET remaining_turns=remaining_turns+1 WHERE creator_id=?",ticket.owner());
-            jdbc.update("UPDATE agent_request_admission SET state='ABANDONED',reserved_tokens=0,updated_at=CURRENT_TIMESTAMP WHERE id=?",ticket.id());
         }else if(credits!=null&&count("SELECT COUNT(*) FROM credit_ledger WHERE owner_id=? AND reference_id=? AND entry_type='DEBIT'",ticket.owner(),debitReference(ticket.id()))>0){
             // Pre-upgrade single-turn reservations retain their original refund semantics.
             credits.refund(ticket.owner(),debitReference(ticket.id()));
-            jdbc.update("UPDATE agent_request_admission SET state='ABANDONED',reserved_tokens=0,updated_at=CURRENT_TIMESTAMP WHERE id=?",ticket.id());
-        }else jdbc.update("DELETE FROM agent_request_admission WHERE id=? AND state='RESERVED'",ticket.id());
-    });}
+        }else if (allowFreeRetry) jdbc.update("DELETE FROM agent_request_admission WHERE id=? AND state=?",ticket.id(),terminal);
+    }
     private long count(String sql,Object...args){var value=jdbc.queryForObject(sql,Long.class,args);return value==null?0:value;}
     private static DomainException denied(String code,String message){return new DomainException(code,message);}
     static String hash(String value){try{return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8)));}catch(Exception e){throw new IllegalStateException(e);}}

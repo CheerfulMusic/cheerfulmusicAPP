@@ -313,6 +313,8 @@ class GateTests(unittest.TestCase):
         with self.assertRaises(gate.GateError): gate.verify_migration_set(missing)
         modified = dict(migrations); modified["V49__lyrics_preparation.sql"] = "0" * 64
         with self.assertRaises(gate.GateError): gate.verify_migration_set(modified)
+        self.assertEqual("50", gate.verify_migration_set(migrations)["agentAdmissionVersion"])
+        migrations.pop("V50__agent_admission_version.sql")
         pre_lyrics = {k: v for k, v in migrations.items() if k != "V49__lyrics_preparation.sql"}
         self.assertEqual("48", gate.verify_migration_set(pre_lyrics)["phoneBindingVersion"])
         rollback = {k: v for k, v in migrations.items() if k not in gate.FEATURE_MIGRATION_SHA256}

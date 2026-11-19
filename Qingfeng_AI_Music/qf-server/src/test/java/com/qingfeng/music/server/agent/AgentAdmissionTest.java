@@ -22,10 +22,12 @@ class AgentAdmissionTest {
     JdbcDataSource source;JdbcTemplate jdbc;
     @BeforeEach void setup(){
         source=new JdbcDataSource();source.setURL("jdbc:h2:mem:admission_"+UUID.randomUUID()+";MODE=MySQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1;LOCK_TIMEOUT=10000");jdbc=new JdbcTemplate(source);
-        jdbc.execute("CREATE TABLE creator(id VARCHAR(36) PRIMARY KEY)");jdbc.execute("CREATE TABLE agent_conversation(id VARCHAR(36) PRIMARY KEY,creator_id VARCHAR(36))");
+        jdbc.execute("CREATE TABLE creator(id VARCHAR(36) PRIMARY KEY)");jdbc.execute("CREATE TABLE agent_conversation(id VARCHAR(36) PRIMARY KEY,creator_id VARCHAR(36),history_epoch BIGINT DEFAULT 0 NOT NULL)");
         jdbc.execute("CREATE TABLE agent_message(id VARCHAR(36) PRIMARY KEY,conversation_id VARCHAR(36),role VARCHAR(16),state VARCHAR(16))");
+        jdbc.execute("ALTER TABLE agent_message ADD (kind VARCHAR(16), seq BIGINT, content_json TEXT, created_at TIMESTAMP)");
         new ResourceDatabasePopulator(new ClassPathResource("db/migration/V35__agent_admission.sql")).execute(source);
         new ResourceDatabasePopulator(new ClassPathResource("db/migration/V46__agent_chat_allowance.sql")).execute(source);
+        new ResourceDatabasePopulator(new ClassPathResource("db/migration/V50__agent_admission_version.sql")).execute(source);
         for(int i=0;i<20;i++){jdbc.update("INSERT INTO creator(id) VALUES(?)","o"+i);jdbc.update("INSERT INTO agent_conversation(id,creator_id) VALUES(?,?)","c"+i,"o"+i);}
     }
     AgentAdmission.Limits limits(int concurrent,int rpm,long tokens){return new AgentAdmission.Limits(concurrent,1,rpm,rpm,tokens,tokens,1024,Duration.ofSeconds(60));}
@@ -87,10 +89,91 @@ class AgentAdmissionTest {
         return gate(new AgentAdmission.Limits(8,1,60,60,1000000,7248,1024,Duration.ofSeconds(60))).withCredits(ledger);
     }
     void useFree(AgentAdmission gate){var t=gate.acquire("o0","c0",key(),"你好",null);gate.start(t);gate.finish(t,true);}
+    private com.qingfeng.music.agent.api.AgentTurnStore turnStore() {
+        return new com.qingfeng.music.infrastructure.persistence.agent.JdbcAgentTurnStore(jdbc,
+                new TransactionTemplate(new DataSourceTransactionManager(source)));
+    }
+
+    @Test void archivedRequestCanReenterWithoutRepeatingItsEffects() {
+        var gate = gate(limits(1, 60, 1_000_000));
+        var store = turnStore();
+        String key = key();
+        var ticket = gate.acquire("o0", "c0", key, "原消息", null);
+        assertTrue(gate.startTurn(ticket, "c0", () -> store.claim("o0","c0",key,"原消息")).fresh());
+        gate.finish(ticket, false);
+        jdbc.update("UPDATE agent_message SET role='system',kind='REQUEST',state='FAILED' WHERE conversation_id='c0'");
+        jdbc.update("UPDATE agent_conversation SET history_epoch=history_epoch+1 WHERE id='c0'");
+        var replay = gate.acquire("o0","c0",key,"原消息",null);
+        assertTrue(replay.replay());
+        assertFalse(gate.startTurn(replay,"c0",() -> store.claim("o0","c0",key,"原消息")).fresh());
+        assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM agent_message",Integer.class));
+    }
+
+    @Test void resetBetweenAdmissionAndWorkerClaimCancelsAndRefunds() throws Exception {
+        var ledger = billing(); var gate = paidGate(ledger); useFree(gate);
+        String key = key(); var store = turnStore();
+        var admitted = new CountDownLatch(1); var reset = new CountDownLatch(1);
+        var worker = Executors.newSingleThreadExecutor();
+        try {
+            var result = worker.submit(() -> {
+                var ticket = gate.acquire("o0","c0",key,"生成",null,true);
+                admitted.countDown();
+                assertTrue(reset.await(5,TimeUnit.SECONDS));
+                return assertThrows(DomainException.class,() -> gate.startTurn(ticket,"c0",
+                        () -> store.claim("o0","c0",key,"生成"))).code();
+            });
+            assertTrue(admitted.await(5,TimeUnit.SECONDS));
+            assertEquals(2,ledger.balance("o0"));
+            jdbc.update("UPDATE agent_conversation SET history_epoch=history_epoch+1 WHERE id='c0'");
+            reset.countDown();
+            assertEquals("REQUEST_KEY_CONFLICT",result.get(5,TimeUnit.SECONDS));
+            assertThrows(DomainException.class,() -> gate.acquire("o0","c0",key,"生成",null,true));
+            assertEquals(0,jdbc.queryForObject("SELECT COUNT(*) FROM agent_message",Integer.class));
+            assertEquals("CANCELLED",jdbc.queryForObject("SELECT state FROM agent_request_admission WHERE request_key=?",String.class,key));
+            assertEquals(3,ledger.balance("o0"));
+        } finally {reset.countDown(); worker.shutdownNow();}
+    }
+
+    @Test void twoRecoveryWorkersRefundAnExpiredReservationExactlyOnce() throws Exception {
+        var ledger = billing(); var gate = paidGate(ledger); useFree(gate);
+        var ticket = gate.acquire("o0","c0",key(),"继续",null,true);
+        var cutoff = java.sql.Timestamp.from(Instant.now().minusSeconds(360));
+        jdbc.update("UPDATE agent_request_admission SET created_at=?,lease_until=? WHERE id=?",cutoff,cutoff,ticket.id());
+        var workers = Executors.newFixedThreadPool(2);
+        try {
+            var start = new CountDownLatch(1);
+            Callable<Void> sweep = () -> {start.await();gate.recoverExpired();return null;};
+            var a = workers.submit(sweep); var b = workers.submit(sweep);
+            start.countDown(); a.get(5,TimeUnit.SECONDS); b.get(5,TimeUnit.SECONDS);
+        } finally { workers.shutdownNow(); }
+        assertEquals("ABANDONED",jdbc.queryForObject("SELECT state FROM agent_request_admission WHERE id=?",String.class,ticket.id()));
+        assertEquals(0,jdbc.queryForObject("SELECT remaining_turns FROM agent_chat_allowance WHERE creator_id='o0'",Integer.class));
+        assertEquals(3,ledger.balance("o0"));
+        assertEquals(1,jdbc.queryForObject("SELECT COUNT(*) FROM credit_ledger WHERE entry_type='REFUND'",Integer.class));
+    }
+    @Test void recoveryRestoresPrepaidTurnAndPreservesRequestsWithExecutionEvidence() {
+        var ledger = billing(); var gate = paidGate(ledger); useFree(gate);
+        var paid = gate.acquire("o0","c0",key(),"购买次数",null,true);
+        gate.start(paid); gate.finish(paid,true);
+        String key = key();
+        var reserved = gate.acquire("o0","c0",key,"下一次",null,true);
+        var expired = java.sql.Timestamp.from(Instant.now().minusSeconds(360));
+        jdbc.update("UPDATE agent_request_admission SET created_at=?,lease_until=? WHERE id=?",expired,expired,reserved.id());
+        String message = UUID.nameUUIDFromBytes(("c0:"+key).getBytes(StandardCharsets.UTF_8)).toString();
+        jdbc.update("INSERT INTO agent_message(id,conversation_id,role,state) VALUES(?,'c0','user','RUNNING')",message);
+        gate.recoverExpired();
+        assertEquals("RESERVED",jdbc.queryForObject("SELECT state FROM agent_request_admission WHERE id=?",String.class,reserved.id()));
+        assertEquals(3,jdbc.queryForObject("SELECT remaining_turns FROM agent_chat_allowance WHERE creator_id='o0'",Integer.class));
+        jdbc.update("DELETE FROM agent_message WHERE id=?",message);
+        gate.recoverExpired(); gate.recoverExpired();
+        assertEquals(4,jdbc.queryForObject("SELECT remaining_turns FROM agent_chat_allowance WHERE creator_id='o0'",Integer.class));
+        assertEquals(2,ledger.balance("o0"));
+    }
+
     @Test void onlyIssuedContinuationResumesWithoutSpendingAnotherTurn() {
         var ledger=billing(); var gate=paidGate(ledger); useFree(gate);
         String continuation=key();
-        jdbc.execute("ALTER TABLE agent_message ADD (kind VARCHAR(16), seq BIGINT, content_json TEXT)");
+
         jdbc.update("INSERT INTO agent_message(id,conversation_id,role,state,kind,seq,content_json) VALUES(?,?,?,?,?,?,?)",
             key(),"c0","assistant","DONE","TEXT",1,"{\"kind\":\"waiting\",\"continuationKey\":\""+continuation+"\"}");
         assertThrows(DomainException.class,()->gate.acquire("o0","c0",key(),AgentChatService.CONTINUE,null,true));

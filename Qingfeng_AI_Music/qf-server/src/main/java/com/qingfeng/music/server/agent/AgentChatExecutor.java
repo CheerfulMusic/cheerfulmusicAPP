@@ -35,10 +35,15 @@ public final class AgentChatExecutor implements AutoCloseable {
     private void execute(AgentAdmission.Ticket ticket,AgentRequestScope scope,DeferredResult<AgentChatService.Snapshot> result,String owner,String conversation,String text,String key,String locale){
         boolean completed=false;ScheduledFuture<?> renewal=null;
         try(var ignored=scope.enter()){
-            admission.start(ticket);
-            renewal=heartbeat.scheduleWithFixedDelay(()->{try{admission.heartbeat(ticket);}catch(RuntimeException failure){scope.cancel();}},10,10,TimeUnit.SECONDS);
+            var started = new AtomicBoolean();
+            renewal=heartbeat.scheduleWithFixedDelay(()->{try{if(started.get())admission.heartbeat(ticket);}catch(RuntimeException failure){scope.cancel();}},10,10,TimeUnit.SECONDS);
             AgentRequestScope.check();
-            var snapshot=chat.send(owner,conversation,text,key,locale);completed=true;
+            var snapshot=chat.send(owner,conversation,text,key,locale,claim -> {
+                var resultClaim = admission.startTurn(ticket,conversation,claim);
+                started.set(true);
+                return resultClaim;
+            });
+            completed=true;
             admission.finish(ticket,true);result.setResult(snapshot);
         }catch(Throwable failure){result.setErrorResult(failure);}
         finally{if(renewal!=null)renewal.cancel(false);if(!completed)try{admission.finish(ticket,false);}catch(RuntimeException ignored){}slots.release();}

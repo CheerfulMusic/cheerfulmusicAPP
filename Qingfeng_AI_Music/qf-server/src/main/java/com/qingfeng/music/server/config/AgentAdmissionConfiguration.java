@@ -19,8 +19,17 @@ public class AgentAdmissionConfiguration {
         env.getProperty("qingfeng.agent.admission.global-rpm",Integer.class,60),env.getProperty("qingfeng.agent.admission.user-rpm",Integer.class,6),
         env.getProperty("qingfeng.agent.admission.global-daily-tokens",Long.class,100_000_000L),env.getProperty("qingfeng.agent.admission.user-daily-tokens",Long.class,2_000_000L),
         env.getProperty("qingfeng.agent.admission.max-prompt-bytes",Integer.class,65536),Duration.ofSeconds(env.getProperty("qingfeng.agent.admission.deadline-seconds",Long.class,150L)+120));}
-    @Bean AgentAdmission agentAdmission(JdbcTemplate jdbc,PlatformTransactionManager manager,AgentAdmission.Limits limits,Environment env,ObjectProvider<StringRedisTemplate> redis,com.qingfeng.music.credits.CreditsLedger credits){
-        AgentAdmission database=new JdbcAgentAdmission(jdbc,new TransactionTemplate(manager),limits,ZoneId.of(env.getProperty("qingfeng.usage.zone","Asia/Shanghai"))).withCredits(credits);
+    @Bean JdbcAgentAdmission durableAgentAdmission(JdbcTemplate jdbc,PlatformTransactionManager manager,AgentAdmission.Limits limits,Environment env,com.qingfeng.music.credits.CreditsLedger credits){
+        return new JdbcAgentAdmission(jdbc,new TransactionTemplate(manager),limits,ZoneId.of(env.getProperty("qingfeng.usage.zone","Asia/Shanghai"))).withCredits(credits);
+    }
+    @Bean @Profile("mysql")
+    @ConditionalOnProperty(name="qingfeng.agent.admission.recovery-enabled", havingValue="true", matchIfMissing=true)
+    ReservationRecovery reservationRecovery(JdbcAgentAdmission database){return new ReservationRecovery(database);}
+    record ReservationRecovery(JdbcAgentAdmission database) {
+        @org.springframework.scheduling.annotation.Scheduled(fixedDelayString="${qingfeng.agent.admission.recovery-delay-ms:60000}")
+        public void scan(){database.recoverExpired();}
+    }
+    @Bean @Primary AgentAdmission agentAdmission(JdbcAgentAdmission database,AgentAdmission.Limits limits,Environment env,ObjectProvider<StringRedisTemplate> redis){
         return switch(env.getProperty("qingfeng.agent.admission.mode","db")){
             case "db"->database;
             case "redis"->{if(!env.getProperty("qingfeng.redis.enabled",Boolean.class,false))throw new IllegalArgumentException("Redis Agent admission requires qingfeng.redis.enabled=true");yield new RedisAgentAdmission(database,redis.getObject(),limits,env.getProperty("qingfeng.agent.admission.redis-namespace","qingfeng"));}

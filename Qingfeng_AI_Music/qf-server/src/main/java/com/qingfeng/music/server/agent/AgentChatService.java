@@ -16,6 +16,8 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
+import java.util.function.Function;
+import java.util.function.Supplier;
 
 /** Bounded durable plans: model proposals never grant execution authority. */
 public final class AgentChatService {
@@ -53,12 +55,17 @@ public final class AgentChatService {
     public Snapshot state(String owner,String conversation){return snapshot(owner,conversation,null);}
     public Snapshot state(String owner,String conversation,Long afterSeq,Long historyEpoch){return snapshot(owner,conversation,null,null,afterSeq,historyEpoch);}
     public Snapshot send(String owner,String conversation,String text,String key,String locale) {
+        return send(owner,conversation,text,key,locale,Supplier::get);
+    }
+    Snapshot send(String owner,String conversation,String text,String key,String locale,
+                  Function<Supplier<AgentTurnStore.Claim>,AgentTurnStore.Claim> begin) {
         if(text==null||text.isBlank()||text.length()>4000)throw new DomainException("INVALID_AGENT_MESSAGE","请输入 1–4000 字的消息。");
         try{UUID.fromString(key);}catch(Exception ignored){throw new DomainException("INVALID_REQUEST_KEY","缺少有效的消息请求标识。");}
         text=text.trim();
         AgentRequestScope.check();
         var history=conversations.listRecentMessages(owner,conversation,80);
-        var claim=turns.claim(owner,conversation,key,text);
+        String message=text;
+        var claim=begin.apply(()->turns.claim(owner,conversation,key,message));
         if(!claim.fresh()) {
             var previous=json.readValue(claim.resultJson(),Outcome.class);
             return snapshot(owner,conversation,previous.action(),previous);
