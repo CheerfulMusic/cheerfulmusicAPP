@@ -81,7 +81,7 @@ def checkout_candidate(source, repo, candidate):
     # A separate index and build cache on D; keep ancestry from the shallow partial clone.
     output("git", "init", "--quiet", str(repo))
     objects = output("git", "rev-parse", "--path-format=absolute", "--git-path", "objects", cwd=source)
-    (repo / ".git/objects/info/alternates").write_text(Path(objects).as_posix() + "\n", encoding="utf-8")
+    (repo / ".git/objects/info/alternates").write_text(Path(objects).as_posix() + "\n", encoding="utf-8", newline="\n")
     shallow = Path(output("git", "rev-parse", "--path-format=absolute", "--git-path", "shallow", cwd=source))
     if shallow.is_file():
         shutil.copyfile(shallow, repo / ".git/shallow")
