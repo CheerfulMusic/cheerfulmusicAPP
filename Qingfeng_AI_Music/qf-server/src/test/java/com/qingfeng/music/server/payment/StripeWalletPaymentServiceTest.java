@@ -68,6 +68,24 @@ class StripeWalletPaymentServiceTest {
         environment=walletEnvironment("GB",true);service=service(environment);
     }
 
+    @Test void schemaReuseRequiresAnActiveWriterAndRevalidatesEachNewEpoch() {
+        ReflectionTestUtils.setField(service,"reuseSchemaCheck",true);
+        String identitySql = "SELECT CONCAT(@@server_uuid";
+        doReturn("server/db/epoch1").when(db).queryForObject(startsWith(identitySql),eq(String.class));
+        assertEquals(true,service.catalog().get("enabled"));
+
+        doThrow(new org.springframework.dao.EmptyResultDataAccessException(1))
+                .when(db).queryForObject(startsWith(identitySql),eq(String.class));
+        assertEquals(false,service.catalog().get("enabled"));
+
+        doReturn("server/db/epoch2").when(db).queryForObject(startsWith(identitySql),eq(String.class));
+        var history = CreditSchemaReadiness.CHECKS.get("v45_exact_history");
+        doReturn(0).when(db).queryForObject(history.sql(),Integer.class);
+        assertEquals(false,service.catalog().get("enabled"));
+        doReturn(history.expected()).when(db).queryForObject(history.sql(),Integer.class);
+        assertEquals(true,service.catalog().get("enabled"));
+    }
+
     @AfterEach void stopOnlyTheOwnedMemoryDatabase(){if(db!=null)db.execute("SHUTDOWN");}
 
     private MockEnvironment walletEnvironment(String country,boolean wechat){return new MockEnvironment()
