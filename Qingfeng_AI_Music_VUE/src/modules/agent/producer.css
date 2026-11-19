@@ -74,7 +74,7 @@
 .producer-collection .hot-featured>button{inset:0;width:100%;height:100%;border:0;border-radius:inherit;background:transparent;backdrop-filter:none;cursor:pointer}
 .hot-featured>button>span{position:absolute;right:14px;bottom:16px;display:grid;place-items:center;width:36px;height:36px;border:1px solid #ffffff80;border-radius:50%;background:#ffffff25;backdrop-filter:blur(10px)}
 
-.agent-producer .agent-conversation{background:#f4f7f5 none;border-radius:24px;padding:clamp(12px,1.2vw,22px);box-sizing:border-box}
+.agent-producer .agent-conversation{border-radius:24px;padding:clamp(12px,1.2vw,22px);box-sizing:border-box}
 .agent-producer .agent-chat{background:transparent}
 .agent-producer .producer-collection ol,.agent-producer .shelf-list{overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:#c2d2c7 transparent}
 .agent-producer .producer-collection ol{max-height:clamp(145px,23vh,290px)}
@@ -158,10 +158,18 @@
 .agent-producer .agent-preview input.agent-preview-range:disabled{cursor:default}
 
 /* The standard site navigation keeps its own palette. */
-.consumer-shell.agent-shell{background:#f4f4ef}
+.consumer-shell.agent-shell{
+  background:#f3eef9 linear-gradient(180deg,#f7f2ffc9,#fff9ffe0 55%,#f0eaf9c4);
+}
+.agent-shell .music-shell-body{
+  background:linear-gradient(180deg,#f3ecffd6,#faf7ffe8 53%,#ece6f8c9),url('./assets/inspiration-galaxy.png') center/cover no-repeat;
+}
 .agent-producer.agent-studio{color:#333e36}
-.agent-producer .agent-conversation{background:#faf9f5;border:1px solid #e1e2d9}
-.agent-producer .producer-tools,.agent-producer .producer-collection>section,.agent-producer .agent-preview{border:1px solid #dedfd6;border-radius:18px;background:#fffefa;box-shadow:0 4px 18px #343c2f09}
+.agent-producer .agent-conversation{
+  background:#f6ecff url('./assets/conversation-background.png') center/100% 100% no-repeat;
+  border:1px solid #ffffffdb;
+}
+.agent-producer .producer-tools,.agent-producer .producer-collection>section,.agent-producer .agent-preview{border:1px solid #dedfd6;border-radius:18px;background:#fffefbec;box-shadow:0 4px 18px #343c2f09}
 .agent-producer .agent-preview .record-summary{display:grid;grid-template-columns:minmax(80px,.9fr) minmax(0,1.15fr);gap:14px;align-items:center;margin:4px 0 12px}
 .agent-producer .record-summary .agent-album{width:100%;padding:0 16% 0 0;margin:0;box-sizing:border-box}
 .agent-producer .record-summary .agent-album-art{border-radius:12px}
