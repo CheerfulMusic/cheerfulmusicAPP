@@ -254,9 +254,24 @@ class OpenAiLyricsWriterTest {
         assertEquals("Acoustic guitar",draft.plan().suggestedArrangement());assertEquals("AUTO",draft.plan().vocalGender());
     }
     @Test void invalidRefinementNeverReturnsInitialDraft() throws Exception {
-        for(String text:List.of(" ","字".repeat(5001),"{}","```lyrics\n正文\n```"))
+        for(String text:List.of(" ","字".repeat(5001),"{}","```lyrics\n正文", "{\"lyrics\":\"正文\"} {\"lyrics\":\"续文\"}"))
             assertReviewUnverified(200,JSON.writeValueAsString(completed(text)));
         for(int status:List.of(401,429,500,503))assertReviewUnverified(status,"private-provider-detail");
+    }
+
+    @Test void sectionRepairUsesOneBoundedStructuredRequestForMissingPositions() throws Exception {
+        try (var fixture = new Fixture(200, JSON.writeValueAsString(completed(Map.of("2", "Missing bridge lyrics"))))) {
+            var repair = new LyricsWriter.SectionRepair(WORK, "en", "Keep the story", "",
+                new LyricsWriter.Draft("Original title", "[Verse]\nKeep these lyrics"), Map.of(2, "Bridge"));
+            assertEquals(Map.of(2, "Missing bridge lyrics"), fixture.writer().repairSections(repair));
+            var sent = fixture.received.get();
+            var format = sent.path("text").path("format");
+            assertTrue(format.path("strict").asBoolean());
+            assertEquals(JSON.readTree("[\"2\"]"), format.path("schema").path("required"));
+            var material = JSON.readTree(sent.path("input").path(0).path("content").asText());
+            assertEquals(JSON.readTree("{\"2\":\"Bridge\"}"), material.path("missingSections"));
+            assertEquals(1, fixture.calls.get());
+        }
     }
 
     @Test void eachEditorialNetworkFailurePreservesUnknownOutcomeWithoutAnotherCall() throws Exception {

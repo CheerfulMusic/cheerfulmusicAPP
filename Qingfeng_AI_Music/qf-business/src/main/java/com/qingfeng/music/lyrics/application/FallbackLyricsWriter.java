@@ -4,6 +4,7 @@ import com.qingfeng.music.common.exception.DomainException;
 import com.qingfeng.music.common.concurrent.LyricsRequestBudget;
 import com.qingfeng.music.work.api.WorkApi;
 import java.time.Duration;
+import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
 
@@ -37,6 +38,11 @@ public final class FallbackLyricsWriter implements LyricsWriter {
 
     @Override public Draft write(WorkApi.Work work, String language, String instructions, String previousLyrics, Direction direction) {
         return attempt(writer -> writer.write(work, language, instructions, previousLyrics, direction));
+    }
+
+    @Override public Map<Integer, String> repairSections(SectionRepair request) {
+        if (backup.source().equals(request.draft().source())) return backup.repairSections(request);
+        return primary.repairSections(request);
     }
 
     private Draft attempt(Function<LyricsWriter, Draft> write) {

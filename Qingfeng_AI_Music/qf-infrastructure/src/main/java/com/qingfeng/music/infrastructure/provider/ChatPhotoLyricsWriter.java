@@ -105,7 +105,7 @@ public final class ChatPhotoLyricsWriter implements PhotoLyricsWriter {
             if ("content_filter".equals(choice.path("finish_reason").asText()) || message.path("refusal").isString() && !message.path("refusal").asText().isBlank())
                 throw new DomainException("LYRICS_PROVIDER_UNAVAILABLE", "这次照片素材暂时无法用于写词，请调整后再试。");
             if (!"stop".equals(choice.path("finish_reason").asText()) || !message.path("content").isString()) throw incomplete();
-            return OpenAiLyricsWriter.parseSong(json.readTree(message.path("content").asText()), true, source);
+            return OpenAiLyricsWriter.parseSong(LyricsWritingPrompt.jsonObject(message.path("content").asText()), true, source);
         } catch (HttpTimeoutException timeout) {
             throw new DomainException("LYRICS_PROVIDER_TIMEOUT", "等待照片歌词结果超时，请先查看原请求进度。");
         } catch (IOException network) {

@@ -61,4 +61,23 @@ class LyricsStructureTest {
         assertThrows(DomainException.class,()->new LyricsStructure("AAB",false,List.of("Chorus")));
         assertDoesNotThrow(()->new LyricsStructure("CUSTOM",false,Collections.nCopies(LyricsStructure.MAX_CUSTOM_SECTIONS,"Verse")));
     }
+
+    @Test void normalizesKnownStyleVariantsAndReinsertsAnInstrumentalSectionLocally() {
+        var structure = new LyricsStructure("CUSTOM", false, List.of("Verse 1", "Interlude", "Chorus"));
+        String normalized = LyricsStructure.normalizeHeaders(LyricsFormatting.unwrap("\uFEFF```lyrics\r\n## 【主歌１】\r\n雨停在窗边\r\n**［chorus］**\r\n风沿着原路回来\r\n```"));
+        var prepared = structure.prepare(normalized);
+        assertTrue(prepared.missing().isEmpty());
+        assertEquals("[Verse 1]\n雨停在窗边\n[Interlude]\n[Chorus]\n风沿着原路回来", prepared.complete(Map.of()));
+    }
+
+    @Test void repairsExplicitEmptyRepeatedSlotAndRefusesAmbiguousOrMisplacedText() {
+        var structure = new LyricsStructure("CUSTOM", false, List.of("Verse", "Chorus", "Chorus"));
+        var prepared = structure.prepare("[Verse]\n天刚亮\n[Chorus]\n第一次副歌\n[Chorus]");
+        assertEquals(Map.of(2, "Chorus"), prepared.missing());
+        assertEquals("[Verse]\n天刚亮\n[Chorus]\n第一次副歌\n[Chorus]\n第二次副歌", prepared.complete(Map.of(2, "第二次副歌")));
+        assertThrows(DomainException.class, () -> structure.prepare("[Verse]\n天刚亮\n[Chorus]\n哪一次副歌"));
+        assertThrows(DomainException.class, () -> structure.prepare("[Chorus]\n副歌\n[Verse]\n主歌"));
+        assertThrows(DomainException.class, () -> prepared.complete(Map.of(2, "## 【副歌】\n伪装的段落")));
+        assertThrows(DomainException.class, () -> prepared.complete(Map.of(1, "试图覆盖已有歌词", 2, "第二次副歌")));
+    }
 }

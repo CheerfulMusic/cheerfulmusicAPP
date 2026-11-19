@@ -42,6 +42,8 @@ public final class QuickCreationService {
         // 已创建的音乐任务交给原任务恢复策略；不得在这里重新购买音乐。
         var task=music(entry);if(task.isPresent())return view(owner,entry);
         if(current.version()!=entry.workVersion())throw new DomainException("WORK_VERSION_CONFLICT","内容已修改，请切换自定义创作继续制作。");
+        if(entry.revisionId()==null&&composer.requestState(owner,work,entry.lyricsKey()).status().equals("PENDING"))
+            throw new DomainException("LYRICS_REQUEST_PENDING","歌词仍在编写中，可以稍后刷新编写状态。");
         if(!repository.retry(work,id,UUID.randomUUID().toString()))throw new DomainException("QUICK_CREATION_CONFLICT","创作仍在处理中，请先刷新进度。");
         return get(owner,work,id);
     }

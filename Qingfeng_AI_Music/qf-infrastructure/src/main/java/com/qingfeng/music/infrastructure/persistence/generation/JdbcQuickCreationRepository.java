@@ -84,6 +84,9 @@ public final class JdbcQuickCreationRepository implements QuickCreationRepositor
             WHERE work_id=? AND id=? AND task_id IS NULL
               AND (status='FAILED' OR (status='SUBMISSION_UNKNOWN' AND error_code='LYRICS_SUBMISSION_UNKNOWN'))
               AND (lease_until IS NULL OR lease_until<CURRENT_TIMESTAMP)
+              AND NOT EXISTS (
+                  SELECT 1 FROM lyrics_composition_request r WHERE r.work_id=quick_creation.work_id
+                    AND r.request_key=quick_creation.lyrics_key AND r.status='PENDING')
               AND NOT EXISTS (SELECT 1 FROM generation_task g WHERE g.work_id=quick_creation.work_id AND g.request_key=quick_creation.music_key)
             """,lyricsKey,work,id)==1;
     });}
