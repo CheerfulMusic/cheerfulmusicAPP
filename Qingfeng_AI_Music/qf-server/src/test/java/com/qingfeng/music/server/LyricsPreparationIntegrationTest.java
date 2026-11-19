@@ -17,7 +17,7 @@ import static org.junit.jupiter.api.Assertions.*;
 @SpringBootTest(properties={"spring.datasource.url=jdbc:h2:mem:lyrics_preparation;MODE=MySQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1",
         "spring.flyway.target=49","qingfeng.generation.enabled=true","qingfeng.lyrics.timing.enabled=true","qingfeng.usage.timing.daily-per-creator=2"})
 @Import(LyricsPreparationIntegrationTest.TranscriptionConfig.class)
-@org.springframework.test.context.jdbc.Sql(scripts="classpath:db/migration/V49__lyrics_preparation.sql",executionPhase=org.springframework.test.context.jdbc.Sql.ExecutionPhase.BEFORE_TEST_CLASS)
+@org.springframework.test.context.jdbc.Sql(scripts="classpath:h2-lyrics-preparation.sql",executionPhase=org.springframework.test.context.jdbc.Sql.ExecutionPhase.BEFORE_TEST_CLASS)
 class LyricsPreparationIntegrationTest extends PlaybackLyricsIntegrationTest {
     @TestConfiguration(proxyBeanMethods=false) static class TranscriptionConfig {
         @Bean @Primary FakeTranscription fakeTranscription(){return new FakeTranscription();}

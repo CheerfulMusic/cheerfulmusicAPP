@@ -47,7 +47,8 @@ class CreditMigrationContractTests(unittest.TestCase):
         actual = {p.name: gate.normalized_migration_sha(p.read_bytes()) for p in SQL.glob("V*__*.sql")}
         contract = gate.verify_migration_set(actual)
         self.assertEqual("e6c351f21ece6fb096ff425ca4b690232632de21", contract["coreSourceCommit"])
-        self.assertEqual(46, len(actual))
+        self.assertEqual(49, len(actual))
+        self.assertEqual("49", contract["lyricsPreparationVersion"])
         self.assertEqual(44, len(gate.CORE_MIGRATION_SHA256))
         self.assertEqual(gate.AGENT_ALLOWANCE_MIGRATION_SHA256,
                          actual[gate.AGENT_ALLOWANCE_MIGRATION])
