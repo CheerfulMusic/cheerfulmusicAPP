@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import BrowserDownloadHelp from '../shared/BrowserDownloadHelp.vue'
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { platform } from '../platform'
@@ -15,4 +16,4 @@ const layout = computed(() => platform.kind === 'web' || community.value ? WebLa
 const publicListening = computed(() => route.name === 'gift' || community.value)
 const standalonePreview = computed(() => import.meta.env.DEV && route.name === 'payment-preview')
 </script>
-<template><RouterView v-if="standalonePreview" /><BetaAccessGate v-else :public-access="publicListening"><component :is="layout"><RouterView /></component><template v-if="!community"><LoginModal /><WelcomeModal /><QuickCompletionNotice /></template></BetaAccessGate><AnalyticsConsentBanner /></template>
+<template><RouterView v-if="standalonePreview" /><BetaAccessGate v-else :public-access="publicListening"><component :is="layout"><RouterView /></component><template v-if="!community"><LoginModal /><WelcomeModal /><QuickCompletionNotice /></template></BetaAccessGate><AnalyticsConsentBanner /><BrowserDownloadHelp /></template>

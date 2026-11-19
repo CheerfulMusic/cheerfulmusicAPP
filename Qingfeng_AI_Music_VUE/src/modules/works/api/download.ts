@@ -1,3 +1,4 @@
+import { needsExternalDownloadBrowser, showBrowserDownloadHelp } from '../../../shared/browser-download'
 import { ensureCreator, requestJson, ApiError } from '../../../shared/http/api-client'
 import { showLoginDialog } from '../../../shared/identity/login-dialog'
 import { t } from '../../../shared/i18n'
@@ -9,6 +10,8 @@ export async function downloadStatus(path: string): Promise<DownloadStatus> {
   return requestJson<DownloadStatus>(path)
 }
 export async function downloadSong(path: string, url: string, filename: string): Promise<boolean> {
+  // WeChat can block attachment delivery after unlock. Guide before any paid operation.
+  if (needsExternalDownloadBrowser()) { showBrowserDownloadHelp(); return false }
   try {
     const status = await downloadStatus(path)
     const prompt = path.startsWith('public/gifts/')
