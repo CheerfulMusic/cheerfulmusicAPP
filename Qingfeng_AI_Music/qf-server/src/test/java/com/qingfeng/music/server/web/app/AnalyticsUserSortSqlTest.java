@@ -15,6 +15,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
@@ -135,6 +136,41 @@ class AnalyticsUserSortSqlTest {
         assertEquals(0, users.get(1).get("pageviews"));
         assertEquals("", users.get(1).get("lastSeen"));
         assertEquals(1L, ((Map<?, ?>) body.get("totals")).get("pageviews"));
+    }
+
+    @Test @SuppressWarnings("unchecked")
+    void uniqueVisitorsDeduplicateAccountsAcrossDevicesWithoutMergingSharedAccounts() {
+        var today = LocalDate.now();
+        var yesterday = today.minusDays(1);
+        jdbc.update("INSERT INTO creator_google_identity VALUES ('alice','alice@example.com','Alice',?)", Timestamp.from(earlier));
+        jdbc.update("INSERT INTO creator_oidc_identity VALUES ('bob',NULL,'****1234',NULL,?)", Timestamp.from(earlier));
+
+        visit("first-device", null, yesterday);
+        visit("first-device", "alice", today);
+        visit("second-device", "alice", today);
+        visit("shared", "alice", today);
+        visit("shared", "bob", today);
+        visit("shared", null, today);
+        visit("guest-browser", "guest-session-1", yesterday);
+        visit("guest-browser", "guest-session-2", today);
+        visit("", null, today);
+        visit("ANONYMIZED", "alice", today);
+
+        var body = controller.summary(30).getBody();
+        assertNotNull(body);
+        assertFalse(body.containsKey("error"));
+        var totals = (Map<String, Object>) body.get("totals");
+        assertEquals(4L, totals.get("uv"), "Alice, Bob, the ambiguous shared browser, and one guest browser");
+        assertEquals(9L, totals.get("pageviews"));
+        var daily = (List<Map<String, Object>>) body.get("daily");
+        assertEquals(List.of(yesterday.toString(), today.toString()), daily.stream().map(row -> row.get("d")).toList());
+        assertEquals(List.of(2L, 4L), daily.stream().map(row -> row.get("uv")).toList());
+    }
+
+    private void visit(String visitor, String creator, LocalDate day) {
+        jdbc.update("INSERT INTO site_event(id,visitor_id,session_id,event,page_path,created_at,creator_id) VALUES(?,?,?,?,?,?,?)",
+                UUID.randomUUID().toString(), visitor, UUID.randomUUID().toString(), "pageview", "/create",
+                Timestamp.valueOf(day.atStartOfDay()), creator);
     }
 
     @Test void activeUsesDisplayedPageviewsRatherThanAllEventCount() {

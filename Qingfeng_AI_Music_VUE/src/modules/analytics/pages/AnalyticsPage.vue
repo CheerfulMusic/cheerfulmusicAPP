@@ -242,7 +242,7 @@ const detailRowsForUser = computed(() => userPages.value[pageUsersKey(days.value
         </div>
         <div v-else class="analytics-kpis">
           <AnalyticsKpiCard :label="t('访问量 PV')" :value="number(totals?.pageviews)" :hint="t('总访问次数 · 仅页面浏览')" icon="eye" tint="coral" :spark="trend.map(point => point.pageviews)" />
-          <AnalyticsKpiCard :label="t('独立访客 UV')" :value="number(totals?.uv)" :hint="t('独立访问人数 · 按访客标识去重')" icon="users" tint="green" :spark="trend.map(point => point.uv)" />
+          <AnalyticsKpiCard :label="t('独立访客 UV')" :value="number(totals?.uv)" :hint="t('登录按账号去重 · 游客按浏览器去重')" icon="users" tint="green" :spark="trend.map(point => point.uv)" />
           <AnalyticsKpiCard :label="t('平均访问时长')" :value="durationValue(totals?.avgDurationMs)" :hint="totalSamples ? t('基于 {count} 次有效停留', { count: number(totalSamples) }) : t('还没有有效停留样本')" icon="clock" tint="violet" />
           <AnalyticsKpiCard :label="t('累计停留时长')" :value="durationValue(totals?.totalDurationMs)" :hint="t('会话数 {sessions} · 有效停留 {samples} 次', { sessions: number(totals?.sessions), samples: number(totalSamples) })" icon="hourglass" tint="amber" />
           <AnalyticsKpiCard :label="t('创作次数')" :value="number(totals?.creations ?? summary?.creations)" :hint="t('周期内新增作品')" tint="coral" />

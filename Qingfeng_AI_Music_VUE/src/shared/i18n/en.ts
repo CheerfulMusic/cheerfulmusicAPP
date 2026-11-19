@@ -24,7 +24,7 @@ export const english: Record<string, string> = {
   "累计停留时长": "Total time spent",
   "创作次数": "Creations",
   "总访问次数 · 仅页面浏览": "Total page views",
-  "独立访问人数 · 按访客标识去重": "Counted once per visitor",
+  "登录按账号去重 · 游客按浏览器去重": "Signed-in visits by account · Guest visits by browser",
   "周期内新增作品": "New works during the selected period",
   "充值总额": "Total recharge amount",
   "已支付订单": "Paid orders",

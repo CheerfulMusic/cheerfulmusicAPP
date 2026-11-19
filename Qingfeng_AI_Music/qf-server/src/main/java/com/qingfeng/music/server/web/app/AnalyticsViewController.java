@@ -49,6 +49,35 @@ public class AnalyticsViewController {
      */
     private static final String REAL_VISITOR_PREDICATE = AnalyticsDetailService.REAL_VISITOR_PREDICATE;
 
+    // Only verified accounts are portable across devices. Guest IDs are scoped to a browser.
+    // A browser linked to multiple accounts in the window cannot safely attribute its guest events.
+    private static final String UV_EVENTS = """
+            WITH visitor_events AS (
+                SELECT s.visitor_id, s.session_id, s.created_at, s.event, s.duration_ms,
+                       CASE WHEN g.creator_id IS NOT NULL OR o.creator_id IS NOT NULL OR a.creator_id IS NOT NULL
+                            THEN s.creator_id END account_id
+                FROM site_event s
+                LEFT JOIN creator_google_identity g ON g.creator_id=s.creator_id
+                LEFT JOIN creator_oidc_identity o ON o.creator_id=s.creator_id
+                LEFT JOIN creator_authing_identity a ON a.creator_id=s.creator_id
+                WHERE s.created_at >= ? AND %s
+            ),
+            browser_accounts AS (
+                SELECT visitor_id, MIN(account_id) account_id
+                FROM visitor_events
+                WHERE visitor_id <> '' AND account_id IS NOT NULL
+                GROUP BY visitor_id HAVING COUNT(DISTINCT account_id)=1
+            ),
+            unique_visitor_events AS (
+                SELECT e.session_id, e.created_at, e.event, e.duration_ms,
+                       CASE WHEN COALESCE(e.account_id, b.account_id) IS NOT NULL
+                            THEN CONCAT('account:', COALESCE(e.account_id, b.account_id))
+                            WHEN e.visitor_id <> '' THEN CONCAT('browser:', e.visitor_id)
+                       END visitor_key
+                FROM visitor_events e LEFT JOIN browser_accounts b ON b.visitor_id=e.visitor_id
+            )
+            """.formatted(REAL_VISITOR_PREDICATE);
+
     private final IdentityApi identity;
     private final ObjectProvider<JdbcTemplate> jdbc;
     private final Environment environment;
@@ -207,18 +236,18 @@ public class AnalyticsViewController {
         var listLimit = fullLists ? "" : " LIMIT 50";
         try {
             body.put("totals", template.query(
-                    "SELECT COUNT(*) pv, COUNT(CASE WHEN event='pageview' THEN 1 END) pageviews, "
-                            + "COUNT(DISTINCT visitor_id) uv, COUNT(DISTINCT session_id) sessions, "
+                    UV_EVENTS + "SELECT COUNT(*) pv, COUNT(CASE WHEN event='pageview' THEN 1 END) pageviews, "
+                            + "COUNT(DISTINCT visitor_key) uv, COUNT(DISTINCT session_id) sessions, "
                             + "COALESCE(AVG(CASE WHEN event='page_leave' THEN duration_ms END),0) avg_duration_ms, "
                             + "COALESCE(SUM(CASE WHEN event='page_leave' THEN duration_ms END),0) total_duration_ms "
-                            + "FROM site_event WHERE created_at >= ? AND " + REAL_VISITOR_PREDICATE,
+                            + "FROM unique_visitor_events",
                     (rs, n) -> map(rs.getLong("pv"), rs.getLong("pageviews"), rs.getLong("uv"), rs.getLong("sessions"),
                             rs.getLong("avg_duration_ms"), rs.getLong("total_duration_ms")), since).stream().findFirst().orElseGet(LinkedHashMap::new));
             body.put("daily", template.query(
-                    "SELECT CAST(created_at AS DATE) d, COUNT(*) pv, COUNT(CASE WHEN event='pageview' THEN 1 END) pageviews, "
-                            + "COUNT(DISTINCT visitor_id) uv, "
-                            + "COALESCE(AVG(CASE WHEN event='page_leave' THEN duration_ms END),0) avg_duration_ms FROM site_event "
-                            + "WHERE created_at >= ? AND " + REAL_VISITOR_PREDICATE + " GROUP BY CAST(created_at AS DATE) ORDER BY d",
+                    UV_EVENTS + "SELECT CAST(created_at AS DATE) d, COUNT(*) pv, COUNT(CASE WHEN event='pageview' THEN 1 END) pageviews, "
+                            + "COUNT(DISTINCT visitor_key) uv, "
+                            + "COALESCE(AVG(CASE WHEN event='page_leave' THEN duration_ms END),0) avg_duration_ms "
+                            + "FROM unique_visitor_events GROUP BY CAST(created_at AS DATE) ORDER BY d",
                     (rs, n) -> {
                         var row = new LinkedHashMap<String, Object>();
                         row.put("d", String.valueOf(rs.getDate("d")));
