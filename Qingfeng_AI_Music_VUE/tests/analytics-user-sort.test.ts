@@ -50,6 +50,18 @@ describe('数据看板用户排序', () => {
     expect(names(wrapper)).toEqual([])
   })
 
+  it('默认列出新注册但没有访问记录的账号，并单独计数', async () => {
+    const newAccount = {
+      creatorId: 'new-phone', name: null, email: null, phoneMasked: '****1234', accountType: 'OIDC_PHONE',
+      pv: 0, pageviews: 0, avgDurationMs: 0, samples: 0, firstSeen: '', lastSeen: '', works: 1, noActivity: true,
+    }
+    const wrapper = start(() => json({ ...summary(), users: [...people, newAccount] }))
+    await flushPromises()
+    expect(names(wrapper)).toEqual(['Old Active', 'Guest Middle', 'Recent Visitor', '****1234'])
+    expect(wrapper.get('.users-summary').text()).toContain('2 位登录用户 · 1 位游客 · 1 位新注册账号暂无访问记录')
+    expect(wrapper.text()).toContain('所选周期内无访问记录')
+  })
+
   it('按尾号找到没有访问记录的手机号账号，清除筛选时恢复活跃列表', async () => {
     const lookup = vi.fn(() => json({ allowed: true, users: [
       { creatorId: 'phone-account', accountType: 'OIDC_PHONE', name: null, phoneMasked: '****1234' },

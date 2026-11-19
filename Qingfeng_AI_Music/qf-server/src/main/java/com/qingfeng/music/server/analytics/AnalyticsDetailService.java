@@ -8,9 +8,11 @@ import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * 看板下钻查询：某个页面上每个人的停留时长。
@@ -85,6 +87,52 @@ public class AnalyticsDetailService {
                         rs.getString("name"), rs.getString("email"), rs.getString("phone_masked"),
                         rs.getLong("hits"), rs.getTimestamp("last_seen").toInstant()),
                 country, Timestamp.from(since));
+    }
+
+    public List<Map<String, Object>> recentRegisteredUsers(Timestamp since, Set<String> activeIds) {
+        return db.query("""
+                SELECT r.creator_id, %s account_type,
+                       COALESCE(g.display_name, o.display_name, a.display_name) name,
+                       COALESCE(g.email, o.email, a.email) email,
+                       COALESCE(b.phone_masked, o.phone_masked) phone_masked,
+                       (SELECT COUNT(*) FROM music_work w WHERE w.owner_id=r.creator_id) works
+                FROM (
+                    SELECT creator_id, MIN(created_at) registered_at
+                    FROM (
+                        SELECT creator_id, created_at FROM creator_google_identity
+                        UNION ALL SELECT creator_id, created_at FROM creator_oidc_identity
+                        UNION ALL SELECT creator_id, created_at FROM creator_authing_identity
+                    ) identities
+                    GROUP BY creator_id HAVING MIN(created_at)>=?
+                ) r
+                LEFT JOIN creator_google_identity g ON g.creator_id=r.creator_id
+                LEFT JOIN creator_oidc_identity o ON o.creator_id=r.creator_id
+                LEFT JOIN creator_authing_identity a ON a.creator_id=r.creator_id
+                LEFT JOIN creator_phone_binding b ON b.creator_id=r.creator_id
+                ORDER BY r.registered_at DESC, r.creator_id ASC
+                """.formatted(IDENTITY_SQL), rs -> {
+            var rows = new ArrayList<Map<String, Object>>();
+            while (rs.next()) {
+                String creatorId = rs.getString("creator_id");
+                if (activeIds.contains(creatorId)) continue;
+                var row = new LinkedHashMap<String, Object>();
+                row.put("creatorId", creatorId);
+                row.put("accountType", rs.getString("account_type"));
+                row.put("name", rs.getString("name"));
+                row.put("email", rs.getString("email"));
+                row.put("phoneMasked", rs.getString("phone_masked"));
+                row.put("works", rs.getLong("works"));
+                row.put("pv", 0);
+                row.put("pageviews", 0);
+                row.put("avgDurationMs", 0);
+                row.put("samples", 0);
+                row.put("firstSeen", "");
+                row.put("lastSeen", "");
+                row.put("noActivity", true);
+                rows.add(row);
+            }
+            return rows;
+        }, since);
     }
 
     public record PhoneUser(String creatorId, String accountType, String name, String phoneMasked) {}

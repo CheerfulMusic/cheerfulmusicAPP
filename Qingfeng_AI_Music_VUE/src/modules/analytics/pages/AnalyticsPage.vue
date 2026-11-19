@@ -282,7 +282,7 @@ const detailRowsForUser = computed(() => userPages.value[pageUsersKey(days.value
 
       <section class="block" aria-labelledby="sec-users">
         <div class="section-title"><h2 id="sec-users">{{ t('用户活跃') }}</h2></div>
-        <p class="block-hint">{{ t('账号由服务端关联身份表取得；「游客」只创建了浏览器会话，未绑定 Google / 邮箱 / 手机身份。点击用户可查看其在各页面的停留。') }}</p>
+        <p class="block-hint">{{ t('点击用户查看页面停留明细。所选周期内新注册且无访问记录的账号列在活跃用户之后。') }}</p>
         <div v-if="unavailable" class="analytics-unavailable" role="alert">
           <strong>{{ t('用户数据不可用') }}</strong>
           <span>{{ t('查询失败时不会显示成没有用户。') }}</span>

@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -245,7 +246,7 @@ public class AnalyticsViewController {
                         return row;
                     }, since, since));
             // 身份来自三张互斥的身份表；都没有绑定的就是游客会话（游客也带 creator_id，不能被当成登录用户）。
-            body.put("users", template.query(
+            List<Map<String, Object>> users = template.query(
                     "SELECT t.creator_id, t.account_type, t.name, t.email, t.phone_masked, COUNT(*) pv, "
                             + "COALESCE(w.works,0) works, "
                             + "COUNT(CASE WHEN t.event='pageview' THEN 1 END) pageviews, "
@@ -281,7 +282,15 @@ public class AnalyticsViewController {
                         row.put("firstSeen", rs.getTimestamp("first_seen") == null ? "" : rs.getTimestamp("first_seen").toInstant().toString());
                         row.put("lastSeen", rs.getTimestamp("last_seen") == null ? "" : rs.getTimestamp("last_seen").toInstant().toString());
                         return row;
-                    }, since));
+                    }, since);
+            if (fullLists) {
+                var activeIds = new HashSet<String>();
+                for (var row : users) activeIds.add((String) row.get("creatorId"));
+                var allUsers = new ArrayList<>(users);
+                allUsers.addAll(detail.recentRegisteredUsers(since, activeIds));
+                users = allUsers;
+            }
+            body.put("users", users);
             // 创作次数：music_work 按创建时间统计周期内新增作品。
             body.put("creations", template.query(
                     "SELECT COUNT(*) c FROM music_work WHERE created_at >= ?",

@@ -20,7 +20,8 @@ const emit = defineEmits<{ toggle: [creatorId: string]; retrySort: []; denied: [
 const filter = defineModel<UserFilter>('filter', { default: 'all' })
 const sort = defineModel<AnalyticsUserSort>('sort', { default: 'active' })
 const guests = computed(() => props.rows.filter(row => isGuest(row.accountType)).length)
-const signed = computed(() => props.rows.length - guests.value)
+const registeredWithoutVisits = computed(() => props.rows.filter(row => row.noActivity).length)
+const signed = computed(() => props.rows.length - guests.value - registeredWithoutVisits.value)
 
 function visits(row: AnalyticsUserRow): string { return Number.isFinite(row.pageviews) ? row.pageviews.toLocaleString(locale.value) : '—' }
 function works(row: AnalyticsUserRow): string { return Number.isFinite(row.works) ? row.works!.toLocaleString(locale.value) : '—' }
@@ -40,7 +41,6 @@ const columns = [
 ]
 const filterId = useId()
 const queries = ref(columns.map(() => ''))
-type DisplayUser = AnalyticsUserRow & { noActivity?: true }
 const suffix = computed(() => filter.value === 'guest' ? '' : /^(?:\*{4})?([0-9]{4})$/.exec(queries.value[0]?.trim() ?? '')?.[1] ?? '')
 const phoneUsers = ref<AnalyticsPhoneUser[]>([])
 const phoneState = ref<'idle' | 'loading' | 'failed'>('idle')
@@ -67,7 +67,7 @@ watch([suffix, retryPhone], ([value], _, onCleanup) => {
 })
 
 const identityRows = computed(() => {
-  const rows = new Map<string, DisplayUser>(props.rows.map(row => [row.creatorId, row]))
+  const rows = new Map<string, AnalyticsUserRow>(props.rows.map(row => [row.creatorId, row]))
   for (const match of phoneUsers.value) {
     const active = rows.get(match.creatorId)
     rows.set(match.creatorId, active ? { ...active, phoneMasked: match.phoneMasked } : {
@@ -90,7 +90,7 @@ watch(sort, () => { page.value = 1 })
 <template>
   <div class="users">
     <div class="users-toolbar">
-      <p class="users-summary">{{ t('{count} 位登录用户 · {guests} 位游客', { count: signed, guests }) }}</p>
+      <p class="users-summary">{{ t('{count} 位登录用户 · {guests} 位游客', { count: signed, guests }) }}<template v-if="registeredWithoutVisits"> · {{ t('{count} 位新注册账号暂无访问记录', { count: registeredWithoutVisits }) }}</template></p>
       <div class="users-controls">
         <div class="users-sort users-filter" role="group" :aria-label="t('用户排序')">
           <button v-for="option in [{ id: 'active', label: '活跃' }, { id: 'latest', label: '最新' }]" :key="option.id" type="button" :class="{ active: sort === option.id }" :aria-pressed="sort === option.id" @click="sort = option.id as AnalyticsUserSort">{{ t(option.label) }}</button>

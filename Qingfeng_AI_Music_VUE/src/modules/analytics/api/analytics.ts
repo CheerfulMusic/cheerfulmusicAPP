@@ -8,7 +8,7 @@ export interface AnalyticsDaily { d: string; pv: number; pageviews: number; uv: 
 export interface AnalyticsPageRow { pagePath: string; pv: number; avgDurationMs: number; samples: number }
 export interface AnalyticsUserRow {
   creatorId: string; accountType: string; name: string | null; email: string | null; phoneMasked: string | null
-  pv: number; pageviews: number; avgDurationMs: number; samples: number; firstSeen: string; lastSeen: string; works?: number
+  pv: number; pageviews: number; avgDurationMs: number; samples: number; firstSeen: string; lastSeen: string; works?: number; noActivity?: boolean
 }
 export type AnalyticsUserSort = 'active' | 'latest'
 export interface AnalyticsRechargeRow {
