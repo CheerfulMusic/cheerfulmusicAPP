@@ -35,6 +35,7 @@ public class NativeAuthController {
         final long started=System.currentTimeMillis();
         final LogtoNativeClient.Interaction flow;
         int attempts;
+        boolean codeVerified, identified;
         Pending(String creator,String token,String channel,String value,String purpose,String verification,LogtoNativeClient.Interaction flow){
             this.creator=creator;this.tokenHash=hash(token);this.channel=channel;this.value=value;this.purpose=purpose;this.verification=verification;this.flow=flow;
         }
@@ -120,7 +121,10 @@ public class NativeAuthController {
         synchronized(browser){
             Pending pending=pending(request,"email",value,"register");var client=client();
             try{
-                client.verifyCode(pending.flow,"email",value,pending.verification,input.code);
+                if (!pending.codeVerified) {
+                    client.verifyCode(pending.flow,"email",value,pending.verification,input.code);
+                    pending.codeVerified = true;
+                }
                 client.registrationPassword(pending.flow,input.password);
                 client.identify(pending.flow,pending.verification);
                 return finish(request,response,client,pending.flow,"email",value);
@@ -134,8 +138,14 @@ public class NativeAuthController {
         synchronized(browser){
             Pending pending=pending(request,"email",value,"reset");var client=client();
             try{
-                client.verifyCode(pending.flow,"email",value,pending.verification,input.code);
-                client.identify(pending.flow,pending.verification);
+                if (!pending.codeVerified) {
+                    client.verifyCode(pending.flow,"email",value,pending.verification,input.code);
+                    pending.codeVerified = true;
+                }
+                if (!pending.identified) {
+                    client.identify(pending.flow,pending.verification);
+                    pending.identified = true;
+                }
                 client.resetPassword(pending.flow,input.password);
                 identities.revokeSessionsForVerifiedEmail(value);
                 browser.removeAttribute(PENDING);

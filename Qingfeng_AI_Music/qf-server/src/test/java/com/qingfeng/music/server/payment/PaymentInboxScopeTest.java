@@ -33,6 +33,28 @@ class PaymentInboxScopeTest {
     long balance(){return db.queryForObject("SELECT balance FROM creator WHERE id=?",Long.class,OWNER);}
     int count(String table){return db.queryForObject("SELECT COUNT(*) FROM "+table,Integer.class);}
 
+    @Test void manualReviewAlertIsEmittedOnlyAfterTheQuarantineCommits(){
+        var logger=(ch.qos.logback.classic.Logger)org.slf4j.LoggerFactory.getLogger(PaymentInbox.class);
+        var appender=new ch.qos.logback.core.read.ListAppender<ch.qos.logback.classic.spi.ILoggingEvent>();appender.start();logger.addAppender(appender);
+        try{
+            accept("evt_manual_commit");var delivery=claim();
+            tx.executeWithoutResult(status->{inbox.markManual(delivery,"TEST_REVIEW");status.setRollbackOnly();});
+            assertTrue(appender.list.isEmpty());assertEquals("PROCESSING",state("evt_manual_commit"));
+            inbox.markManual(delivery,"TEST_REVIEW");assertEquals(1,appender.list.size());
+            assertTrue(appender.list.get(0).getFormattedMessage().contains("payment_manual_review"));assertEquals("MANUAL",state("evt_manual_commit"));
+        }finally{logger.detachAppender(appender);appender.stop();}
+    }
+    @Test void repeatedWorkerCrashesEventuallyQuarantineWithoutAnyFinancialMutation(){
+        accept("evt_crash_loop");
+        for(int n=1;n<=8;n++){
+            var delivery=claim();assertEquals(n,delivery.attempt());
+            db.update("UPDATE payment_webhook_inbox SET lease_until=TIMESTAMPADD(SECOND,-1,CURRENT_TIMESTAMP) WHERE event_id='evt_crash_loop'");
+        }
+        assertTrue(inbox.claim(PROVIDER,MERCHANT,ENV).isEmpty());
+        assertEquals("MANUAL",state("evt_crash_loop"));assertEquals(100,balance());
+        assertEquals("LEASE_RECOVERY_EXHAUSTED",db.queryForObject("SELECT last_error FROM payment_webhook_inbox WHERE event_id='evt_crash_loop'",String.class));
+        assertEquals(1,count("payment_inbox_attempt"));
+    }
     @Test void identicalEventIdsRemainSeparateAcrossMerchantEnvironmentAndLegacy(){
         accept("evt_same");
         inbox.acceptVerified(PROVIDER,"acct_other12345678",ENV,"evt_same","refund.updated","{}");

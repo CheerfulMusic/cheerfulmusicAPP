@@ -11,11 +11,13 @@ import org.springframework.core.io.Resource;
 import org.springframework.http.*;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.util.HtmlUtils;
+import tools.jackson.databind.ObjectMapper;
 
 /** 在原有收听页的 HTML 首次响应中提供预览信息；不公开作品编辑地址或私人故事。 */
 @RestController
 @Profile({"mysql", "test"})
 public class GiftPageController {
+    private static final ObjectMapper JSON = new ObjectMapper();
     private final SharingApi sharing;
     private final String origin;
     private final Resource index;
@@ -35,6 +37,7 @@ public class GiftPageController {
 
     @GetMapping(value = "/gift/{token}", produces = "text/html;charset=UTF-8")
     public ResponseEntity<String> page(@PathVariable String token) throws IOException {
+        long start = System.nanoTime();
         SharingApi.Gift gift;
         try { gift = sharing.get(token); }
         catch (DomainException error) {
@@ -43,6 +46,7 @@ public class GiftPageController {
                     + "<title>分享已失效 | Cheerful Music</title><h1>这首歌的分享已失效</h1>"
                     + "<p>This song link is unavailable. 请向作者索取新的收听链接</p><a href=\"/\">Cheerful Music</a></html>");
         }
+        long loaded = System.nanoTime();
         if (!index.exists()) return html(HttpStatus.SERVICE_UNAVAILABLE,
                 "<!doctype html><meta charset=\"UTF-8\"><title>Cheerful Music</title><p>收听页面暂时不可用，请稍后重试</p>");
         String title = escape(gift.title());
@@ -70,13 +74,64 @@ public class GiftPageController {
         // 字符串拼接避免 replaceAll 将用户标题里的 $ 或反斜线解释为替换表达式。
         int head = shell.toLowerCase(java.util.Locale.ROOT).indexOf("</head>");
         if (head < 0) throw new IOException("前端入口缺少 head");
-        return html(HttpStatus.OK, shell.substring(0, head) + metadata + shell.substring(head));
+        int bodyEnd = shell.toLowerCase(java.util.Locale.ROOT).lastIndexOf("</body>");
+        if (bodyEnd < head) throw new IOException("前端入口缺少 body");
+        String data = JSON.writeValueAsString(new InitialGift(token, gift.title(), gift.recipient(), gift.message(),
+                gift.lyrics(), gift.audioOrigin(), gift.createdAt().toString(), gift.expiresAt().toString(), gift.hasCover()))
+                .replace("<", "\\u003c").replace(">", "\\u003e").replace("&", "\\u0026");
+        String bootstrap = "<script type=\"application/json\" id=\"qf-initial-gift\">" + data + "</script>";
+        String headHtml = shell.substring(0, head).replace("<link rel=\"stylesheet\"",
+                "<link data-gift-styles media=\"print\" rel=\"stylesheet\"");
+        String preview = """
+                <section id="qf-gift-preview" aria-labelledby="qf-gift-heading"
+                    style="box-sizing:border-box;max-width:36rem;margin:8vh auto;padding:1.5rem;color:#302525;background:#fffafb;font:1rem system-ui,sans-serif">
+                  <img src="%s" width="112" height="112" alt="" style="object-fit:cover;border-radius:12px">
+                  <h1 id="qf-gift-heading" style="overflow-wrap:anywhere">%s</h1>
+                  <audio controls preload="none" controlslist="nodownload" style="width:100%%" aria-labelledby="qf-gift-heading" src="%s"></audio>
+                </section>
+                """.formatted(gift.hasCover() ? "/api/public/gifts/" + escape(token) + "/cover" : "/brand/share-default-cover.png",
+                        title, "/api/public/gifts/" + escape(token) + "/audio");
+        String content = shell.substring(head, bodyEnd).replace("<body>", "<body>" + preview);
+        String body = headHtml + metadata + mediaPreconnect() + content
+                + bootstrap + shell.substring(bodyEnd);
+        long prepared = System.nanoTime();
+        String timing = "gift_data;desc=\"inline\", gift_lookup;dur=" + elapsedMillis(start, loaded)
+                + ", gift_render;dur=" + elapsedMillis(loaded, prepared);
+        return html(HttpStatus.OK, body, timing);
     }
 
+    @Value("${qingfeng.cdn.domain:}")
+    private String mediaDomain;
+
+    private String mediaPreconnect() {
+        if (mediaDomain == null || mediaDomain.isBlank()) return "";
+        try {
+            URI cdn = URI.create(mediaDomain);
+            if ("https".equals(cdn.getScheme()) && cdn.getHost() != null && cdn.getUserInfo() == null)
+                return "<link rel=\"preconnect\" href=\"" + escape("https://" + cdn.getRawAuthority()) + "\">";
+        } catch (IllegalArgumentException ignored) {
+            // An optional hint must never prevent the gift from opening.
+        }
+        return "";
+    }
+
+    private record InitialGift(String token, String title, String recipient, String message, String lyrics,
+                               String audioOrigin, String createdAt, String expiresAt, boolean hasCover) {}
+
     private String escape(String value) { return HtmlUtils.htmlEscape(value, "UTF-8"); }
+    private static long elapsedMillis(long start, long end) {
+        return java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(end - start);
+    }
+
     private ResponseEntity<String> html(HttpStatus status, String body) {
-        return ResponseEntity.status(status).contentType(new MediaType("text", "html", StandardCharsets.UTF_8))
+        return html(status, body, null);
+    }
+
+    private ResponseEntity<String> html(HttpStatus status, String body, String timing) {
+        var response = ResponseEntity.status(status).contentType(new MediaType("text", "html", StandardCharsets.UTF_8))
                 .cacheControl(CacheControl.noStore()).header("Referrer-Policy", "no-referrer")
-                .header("X-Robots-Tag", "noindex, nofollow, noarchive").body(body);
+                .header("X-Robots-Tag", "noindex, nofollow, noarchive");
+        if (timing != null) response.header("Server-Timing", timing);
+        return response.body(body);
     }
 }

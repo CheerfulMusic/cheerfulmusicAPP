@@ -26,6 +26,11 @@ import './app/styles/global-player.css'
 import { initializeLocale } from './shared/i18n'
 import { installPageLeaveTracking, trackPageView } from './shared/analytics/track'
 
+document.querySelectorAll<HTMLLinkElement>('link[data-gift-styles]').forEach(link => { link.media = 'all' })
+router.afterEach(to => {
+  const preview = document.getElementById('qf-gift-preview')
+  if (preview && !preview.hidden && to.name !== 'gift') preview.remove()
+})
 initializeLocale()
 installPageLeaveTracking()
 router.afterEach(to => { trackPageView(String(to.name ?? 'unknown')) })

@@ -21,6 +21,16 @@ const purchaseUncertain = ref(false)
 const orderNotice = ref('')
 const unresolvedOrders = ref<Order[]>([])
 const recentOrders = ref<Order[]>([])
+const orderPeriod = ref<number>(0)
+const visibleOrders = computed(() => {
+  if (!orderPeriod.value) return recentOrders.value
+  const now = Date.now()
+  const cutoff = now - orderPeriod.value * 24 * 60 * 60 * 1000
+  return recentOrders.value.filter(order => {
+    const created = Date.parse(order.createdAt ?? '')
+    return created >= cutoff && created <= now
+  })
+})
 const paypalApproved = ref<string[]>([])
 const catalogError = ref(false)
 const selectedCurrency = 'USD'
@@ -229,10 +239,19 @@ watch(signedIn, (current, previous) => { if (current !== previous) void load() }
       <p v-if="orderNotice" class="subtle" role="status">{{ t(orderNotice) }}</p>
       <p class="wallet-entry"><RouterLink to="/recharge">{{ locale==='en'?'View card, Apple Pay and WeChat Pay options':'查看银行卡、Apple Pay 和微信支付方式' }}</RouterLink></p>
       <p v-if="catalogError" class="subtle" role="status">{{ t('部分积分或支付信息暂时无法读取，请稍后刷新。') }}</p>
-      <section v-if="signedIn" class="history" :aria-label="t('最近订单')">
-        <h3>{{ t('我的订单') }}</h3><p class="history-help">{{ t('待付款订单可继续支付或申请取消；是否可取消由服务端核对付款状态。') }}</p>
+      <details v-if="signedIn" class="history">
+        <summary>{{ t('我的订单') }}</summary>
+        <p class="history-help">{{ t('待付款订单可继续支付或申请取消；是否可取消由服务端核对付款状态。') }}</p>
+        <label v-if="recentOrders.length" class="order-period">
+          {{ t('下单时间') }}
+          <select v-model="orderPeriod">
+            <option :value="0">{{ t('全部时间') }}</option>
+            <option v-for="days in [7, 30, 90]" :key="days" :value="days">{{ t('最近 {count} 天', { count: days }) }}</option>
+          </select>
+        </label>
         <p v-if="!recentOrders.length" class="subtle">{{ t(purchaseUncertain ? '订单暂时无法读取，请稍后刷新。' : '暂无订单。') }}</p>
-        <ul v-else class="orders"><li v-for="order in recentOrders" :key="`${order.provider}:${order.orderId}`">
+        <p v-else-if="!visibleOrders.length" class="subtle" role="status">{{ t('这段时间内暂无订单。') }}</p>
+        <ul v-else class="orders"><li v-for="order in visibleOrders" :key="`${order.provider}:${order.orderId}`">
           <div><strong>{{ t(orderStatus(order.status)) }}</strong> · {{ order.provider === 'paypal' ? 'PayPal' : order.provider === 'stripe' ? 'Stripe' : 'Airwallex' }}<template v-if="order.credits != null"> · {{ order.credits }} {{ t('积分') }}</template><template v-if="orderTime(order.createdAt)"> · {{ orderTime(order.createdAt) }}</template></div>
           <div v-if="orderAmount(order)" class="order-amount">{{ orderAmount(order) }}<span v-if="order.paymentMethod==='wechat_pay'"> · {{ locale==='en'?'WeChat Pay':'微信支付' }}</span></div>
           <div class="order-number">{{ t('订单号') }}：<code>{{ order.orderId }}</code></div>
@@ -248,7 +267,7 @@ watch(signedIn, (current, previous) => { if (current !== previous) void load() }
             <p v-else class="subtle">{{ t('订单创建结果尚未确认，请刷新核对，暂不能直接取消。') }}</p>
           </div>
         </li></ul>
-      </section>
+      </details>
       <div v-if="!availableCurrencies.length && !catalogError" class="empty-state"><span class="empty-icon" aria-hidden="true">♪</span><div><strong>{{ t('积分购买暂未开放。') }}</strong><p>{{ t('开放后可在这里选购积分。') }}</p></div></div>
       <template v-else-if="availableCurrencies.length">
         <p v-if="!isPreview && !signedIn" class="subtle">{{ t('请先登录账号，再购买积分。') }}</p>
@@ -263,6 +282,9 @@ watch(signedIn, (current, previous) => { if (current !== previous) void load() }
   </section>
 </template>
 <style scoped>
+.history summary { cursor: pointer; font-size: 21px; font-weight: 700; }
+.order-period { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 13px; color: var(--text); }
+.order-period select { min-height: 44px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--text); font: inherit; }
 #payment-orders{scroll-margin-top:110px}.history{padding:22px;border:2px solid #ee8069;border-radius:16px;background:#fff8f4}.history h3{font-size:21px!important}.history-help{font-size:13px;color:var(--muted);line-height:1.7}.history .orders li{padding:18px;background:var(--surface)}.order-number{margin-top:8px}.order-actions{display:flex;gap:12px;flex-wrap:wrap;margin-top:14px}.order-action{min-height:44px;padding:10px 22px;border-radius:10px;border:1px solid #e27660;font-size:14px;font-weight:700;cursor:pointer}.order-action.primary{background:#ed614b;color:#fff}.order-action.cancel-order{background:var(--surface);color:#b94432}.order-action:disabled{opacity:.5;cursor:wait}
 
 .credits-section { margin-top:34px; padding:26px; border:1px solid var(--line); border-radius:20px; background:var(--surface); }

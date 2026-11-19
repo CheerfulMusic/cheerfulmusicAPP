@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ApiError, resetCreatorSession, retryAfterSeconds } from '../src/shared/http/api-client'
 import { readNativeLoginStatus, registerWithEmail, resetEmailPassword, sendLoginCode, signInWithEmail, signInWithEmailCode, signInWithPhone } from '../src/modules/identity/api/native-login'
-import { loginCodeKey, nativeLoginError, resendSeconds } from '../src/modules/identity/model/native-login'
+import { validNewPassword, loginCodeKey, nativeLoginError, resendSeconds } from '../src/modules/identity/model/native-login'
 import { callingCode, countryOptions, internationalPhone, internationalSmsPhone, phoneCountries, smsRegionAvailable } from '../src/modules/identity/model/international-phone'
 
 afterEach(() => { vi.unstubAllGlobals(); resetCreatorSession() })
@@ -127,4 +127,11 @@ it('honors hour-long retry windows and rejects malformed retry headers', () => {
   expect(retryAfterSeconds('60')).toBe(60)
   expect(retryAfterSeconds(null)).toBeUndefined()
   expect(retryAfterSeconds('invalid')).toBeUndefined()
+})
+
+it.each(['12345678', 'abcdefgh', 'ABCDEFGH', 'aaaaaaaa', '1'.repeat(128), 'abcd1234'])('accepts length-only password %s', value => {
+  expect(validNewPassword(value)).toBe(true)
+})
+it.each(['', '1234567', 'a'.repeat(129)])('rejects password outside length bounds', value => {
+  expect(validNewPassword(value)).toBe(false)
 })

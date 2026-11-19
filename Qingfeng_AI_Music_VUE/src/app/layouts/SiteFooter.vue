@@ -13,16 +13,15 @@ const products = [
   { label: '高端定制服务', to: '', premium: true },
 ]
 const support = [
-  { label: '使用指南', to: '' },
-  { label: '常见问题 (FAQ)', to: '' },
-  { label: '联系客服', to: '' },
-  { label: '反馈建议', to: '' },
+  { label: '使用指南', to: '/help#guide' },
+  { label: '常见问题 (FAQ)', to: '/help#faq' },
+  { label: '联系客服', to: '/help#contact' },
+  { label: '反馈建议', to: '/help#feedback' },
 ]
 const legal = [
   { label: '用户服务条款（含积分与退款规则）', href: '/legal/terms.html' },
   { label: '隐私政策', href: '/legal/privacy.html' },
   { label: '音乐作品发布与社区规则', href: '/legal/community.html' },
-  { label: '版权与授权说明', href: '' },
 ]
 </script>
 
@@ -75,15 +74,12 @@ const legal = [
 
           <nav class="footer-column" :aria-label="t('帮助与支持')">
             <h2>{{ t('帮助与支持') }}</h2>
-            <span v-for="item in support" :key="item.label" class="footer-link footer-link-static">{{ t(item.label) }}</span>
+            <RouterLink v-for="item in support" :key="item.label" class="footer-link" :to="item.to">{{ t(item.label) }}</RouterLink>
           </nav>
 
           <nav class="footer-column" :aria-label="t('法律与政策')">
             <h2>{{ t('法律与政策') }}</h2>
-            <template v-for="item in legal" :key="item.label">
-              <a v-if="item.href" class="footer-link" :href="item.href">{{ t(item.label) }}</a>
-              <span v-else class="footer-link footer-link-static">{{ t(item.label) }}</span>
-            </template>
+            <a v-for="item in legal" :key="item.label" class="footer-link" :href="item.href">{{ t(item.label) }}</a>
           </nav>
 
           <section class="footer-cta" :aria-label="t('立即创作你的第一首歌')">

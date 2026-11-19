@@ -109,8 +109,9 @@ export const usePlayer = defineStore('player', () => {
     element.src=track.audio+separator+'reauth='+(++reauthSequence)
     return true
   }
-  const pool=new NativeAudioPool(source=>{
-    const element=new Audio();element.preload='auto'
+  const pool=new NativeAudioPool((source, provided)=>{
+    const element=provided ?? new Audio()
+    element.preload='auto'
     const active=()=>element===audio&&current.value?.audio===source
     element.addEventListener('timeupdate',()=>{
       if(!active()||pendingRestore)return
@@ -170,6 +171,22 @@ export const usePlayer = defineStore('player', () => {
     })
     return element
   })
+  function adoptGiftPreview(track:PlayableTrack, element:HTMLAudioElement) {
+    if (current.value || element.getAttribute('src') !== track.audio || (element.paused && element.currentTime === 0)) return false
+    const adopted=pool.acquire(track.audio, element)
+    if (adopted !== element) return false
+    audio=element
+    applyVolume()
+    current.value=track
+    queue.value=[track]
+    autoAdvance=false
+    playing.value=!element.paused
+    starting.value=!element.paused && element.readyState < 3
+    time.value=element.currentTime
+    readDuration()
+    if (starting.value) waitForAudio()
+    return true
+  }
   async function toggle(track:PlayableTrack){
     cancelReauth()
     const turn=++operation
@@ -227,5 +244,5 @@ export const usePlayer = defineStore('player', () => {
   function close(){cancelReauth();operation++;segment.value=null;repeatOne.value=false;audio?.pause();if(audio)audio.preload='metadata';current.value=null;queue.value=[];time.value=0;duration.value=0;error.value='';starting.value=false;stopWaiting();playing.value=false}
   /** 身份切换和分享失效彻底释放，与普通收起播放器分开。 */
   function reset(){close();audio=undefined;pool.clear()}
-  return {volume,muted,setVolume,toggleMute,current,playing,starting,buffering,time,duration,error,hasQueue,tracks,repeatOne,toggleRepeat,seekVersion,toggle,seek,close,reset,setQueue,next,updateCover,updateTitles,segment,playSegment,stopSegment}
+  return {volume,muted,setVolume,toggleMute,current,playing,starting,buffering,time,duration,error,hasQueue,tracks,repeatOne,toggleRepeat,seekVersion,adoptGiftPreview,toggle,seek,close,reset,setQueue,next,updateCover,updateTitles,segment,playSegment,stopSegment}
 })

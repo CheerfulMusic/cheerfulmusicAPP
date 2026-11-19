@@ -61,7 +61,7 @@ onMounted(async () => {
     ])
     await ensureCreator()
     if (typeof route.query.invite === 'string') {
-      try { await requestJson('app/referrals/accept', 'POST', {code:route.query.invite}); inviteNotice.value = '邀请已记录，首次登录成功后邀请人将获得 20 积分。' }
+      try { await requestJson('app/referrals/accept', 'POST', {code:route.query.invite}); inviteNotice.value = '邀请已记录，首次登录成功后邀请人将获得 19 积分。' }
       catch (e) { inviteNotice.value = e instanceof Error ? e.message : '邀请链接无效' }
     }
     if (googleStatus.value.authenticated || logtoState.value.authenticated) {
@@ -209,10 +209,10 @@ async function recover() {
       <div class="profile-footer"><NavIcon name="recovery" /><p>{{ t('首次登录会保留当前作品。不同账号的音乐收藏不会自动合并。') }}</p></div>
     </template>
   </section>
-  <section v-if="inviteNotice || inviteLink" class="account-profile" aria-label="邀请好友">
+  <section v-if="inviteNotice || inviteLink" id="invite-rewards" class="account-profile" aria-label="邀请好友">
     <h2>邀请好友</h2>
     <p v-if="inviteNotice">{{ inviteNotice }}</p>
-    <template v-if="inviteLink"><p>邀请一位新用户首次登录，你将获得 20 积分。</p><label class="field">邀请链接<input :value="inviteLink" readonly @focus="($event.target as HTMLInputElement).select()"></label><button class="button secondary" type="button" @click="copyInvite">复制邀请链接</button></template>
+    <template v-if="inviteLink"><p>邀请一位新用户首次登录，你将获得 19 积分。</p><label class="field">邀请链接<input :value="inviteLink" readonly @focus="($event.target as HTMLInputElement).select()"></label><button class="button secondary" type="button" @click="copyInvite">复制邀请链接</button></template>
   </section>
   <CreditsPanel :key="`${googleStatus.authenticated}:${googleStatus.email || ''}:${logtoState.authenticated}:${logtoState.email || ''}:${logtoState.phoneMasked || ''}:${logtoState.name || ''}`" />
   <section class="recovery-section" :aria-label="t('备用找回方式')">

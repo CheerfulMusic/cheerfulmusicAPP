@@ -31,6 +31,26 @@ const names = (wrapper: VueWrapper) => wrapper.findAll('.users-row .user-main st
 afterEach(() => { wrappers.splice(0).forEach(wrapper => wrapper.unmount()); vi.unstubAllGlobals() })
 
 describe('数据看板用户排序', () => {
+  it('默认展示十条，可展开并筛选原先收起的用户', async () => {
+    const users = Array.from({ length: 12 }, (_, index) => ({
+      ...people[0]!, creatorId: `user-${index}`, name: `Listener ${index}`, works: index,
+    }))
+    const wrapper = start(() => json({ ...summary(), users }))
+    await flushPromises()
+    expect(names(wrapper)).toHaveLength(10)
+    await wrapper.get('.users-expand').trigger('click')
+    expect(names(wrapper)).toHaveLength(12)
+    await wrapper.get('.users-expand').trigger('click')
+    expect(names(wrapper)).toHaveLength(10)
+    const inputs = wrapper.findAll('.column-filters input')
+    expect(inputs).toHaveLength(6)
+    expect(wrapper.get('.column-filters datalist').findAll('option').map(option => option.attributes('value'))).toContain('Listener 11')
+    await inputs[0]!.setValue('listener 11')
+    expect(names(wrapper)).toEqual(['Listener 11'])
+    await inputs[2]!.setValue('12')
+    expect(names(wrapper)).toEqual([])
+  })
+
   it('默认活跃；最新向服务端重新取数，并保留仅登录筛选', async () => {
     const urls: string[] = []
     const wrapper = start(url => { urls.push(url); return json(summary(url.includes('userSort=latest'))) })
@@ -95,8 +115,12 @@ describe('数据看板用户排序', () => {
       : json(summary()))
     await flushPromises()
     defer = true
+    const kpis = wrapper.get('.analytics-kpis').element
     await wrapper.get('[aria-label="用户排序"]').findAll('button')[1]!.trigger('click')
     await flushPromises()
+    expect(wrapper.get('.analytics-kpis').element).toBe(kpis)
+    expect(wrapper.text()).toContain('正在加载用户列表')
+    expect(names(wrapper)).toContain('Old Active')
     await wrapper.get('.analytics-range').findAll('button')[0]!.trigger('click')
     await flushPromises()
     expect(pending).toHaveLength(2)

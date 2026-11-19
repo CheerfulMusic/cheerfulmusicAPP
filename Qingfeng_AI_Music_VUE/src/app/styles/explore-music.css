@@ -311,3 +311,17 @@ html:has(.playlist-dialog[open]) { overflow:hidden; }
 .playlist-track-lyrics summary { padding: 8px 0; cursor: pointer; color: var(--accent-text); }
 .playlist-track-lyrics p { white-space: pre-wrap; line-height: 1.9; margin: 8px 0; }
 @media (max-width: 700px) { .playlist-track-lyrics { margin-left: 0; } }
+
+@media (max-width: 700px) {
+  .playlist-explore .explore-gallery {
+    position: relative;
+    margin-inline-end: 0;
+    padding-inline-end: 0;
+    overscroll-behavior-x: contain;
+  }
+  .playlist-dialog {
+    max-height: calc(100dvh - 24px);
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+  }
+}

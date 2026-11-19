@@ -8,6 +8,7 @@ import BrandLogo from '../../shared/ui/BrandLogo.vue'
 import SiteFooter from './SiteFooter.vue'
 import NavIcon from '../../shared/ui/NavIcon.vue'
 import LanguageSwitcher from '../../shared/i18n/LanguageSwitcher.vue'
+import RewardsMenu from '../../shared/ui/RewardsMenu.vue'
 import UserAccountMenu from '../../shared/ui/UserAccountMenu.vue'
 import { accountState, ensureAccountState, refreshAccountState } from '../../shared/identity/account-state'
 import { logtoState, refreshLogtoState } from '../../shared/identity/logto-state'
@@ -97,6 +98,7 @@ onBeforeUnmount(() => {
           <LanguageSwitcher/>
           <RouterLink v-if="!publicListening" class="consumer-my-music" :class="{'is-active':route.path.startsWith('/works')}" to="/works"><NavIcon name="music"/><span>{{ t('我的音乐') }}</span></RouterLink>
           <RouterLink v-if="!publicListening" class="consumer-recharge" to="/recharge">{{ locale === 'en' ? 'Credits' : '充值' }}</RouterLink>
+          <RewardsMenu v-if="!publicListening"/>
           <UserAccountMenu v-if="!publicListening" :navigation-open="menuOpen" @opened="menuOpen=false" />
           <RouterLink v-if="!publicListening && creditBalance !== null" class="consumer-credits" to="/recharge" :aria-label="`${t('可用积分')} ${creditBalance}`">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 14.2 8.8 20 11l-5.8 2.2L12 19l-2.2-5.8L4 11l5.8-2.2L12 3Z"/></svg>

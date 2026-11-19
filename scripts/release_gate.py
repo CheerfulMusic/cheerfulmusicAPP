@@ -454,6 +454,7 @@ def load_isolated_backend_cohort(cache_root, manifest_path):
             if path.is_symlink() or not path.is_file() or path.resolve().parent != cache_root / directory:
                 raise GateError("Missing private isolated backend database configuration")
             cfg = load_json(path)
+            monitor = cfg.pop("monitor", None) if label == "application" else None
             name = prefix_name + selected_revision
             if (set(cfg) != {"host", "port", "database", "user", "password", "uuid"}
                     or cfg["host"] != "127.0.0.1" or cfg["port"] != 23316
@@ -486,6 +487,22 @@ def load_isolated_backend_cohort(cache_root, manifest_path):
                         cursor.execute("SELECT CURRENT_ROLE()")
                         if cursor.fetchone() != ("NONE",):
                             raise GateError("Isolated backend database user has an active role")
+            if monitor is not None:
+                if (set(monitor) != {"user", "password"} or not all(isinstance(v, str) and v for v in monitor.values())
+                        or monitor["user"].lower() == "root" or monitor["user"] == cfg["user"]):
+                    raise GateError("Invalid isolated lock monitor")
+                with pymysql.connect(host="127.0.0.1", port=23316, database=name, connect_timeout=2,
+                                     read_timeout=5, **monitor) as connection, connection.cursor() as cursor:
+                    cursor.execute("SHOW GRANTS")
+                    scopes = {row[0].split(" TO ", 1)[0] for row in cursor.fetchall()}
+                    if scopes != {"GRANT PROCESS ON *.*", "GRANT SELECT ON `" + name + "`.*"}:
+                        raise GateError("Isolated lock monitor must have only PROCESS and fixture SELECT")
+                    cursor.execute("SELECT CURRENT_ROLE()")
+                    if cursor.fetchone() != ("NONE",):
+                        raise GateError("Isolated lock monitor has an active role")
+                backend[env_prefix + "MONITOR_USER"] = monitor["user"]
+                backend[env_prefix + "MONITOR_PASSWORD"] = monitor["password"]
+                secrets.update(monitor.values())
             url = "jdbc:mysql://127.0.0.1:23316/" + name + "?useSSL=false&allowPublicKeyRetrieval=true&connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true"
             backend.update({env_prefix + "URL": url, env_prefix + "DATABASE": name,
                             env_prefix + "USER": cfg["user"], env_prefix + "PASSWORD": cfg["password"],

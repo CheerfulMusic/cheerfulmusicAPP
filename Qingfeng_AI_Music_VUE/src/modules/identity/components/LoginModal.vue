@@ -9,7 +9,7 @@ import { refreshLogtoState, resetLogtoState } from '../../../shared/identity/log
 import { beginGoogleLogin } from '../api/google-login'
 import { readNativeLoginStatus, registerWithEmail, resetEmailPassword, sendLoginCode, signInWithEmail, signInWithEmailCode, signInWithPhone, type CodePurpose, type NativeLoginStatus } from '../api/native-login'
 import { callingCode, countryOptions, internationalSmsPhone, smsRegionAvailable, type PhoneCountry } from '../model/international-phone'
-import { loginCodeKey, nativeLoginError, resendSeconds } from '../model/native-login'
+import { validNewPassword, loginCodeKey, nativeLoginError, resendSeconds } from '../model/native-login'
 import { validateLoginIdentifier } from '../model/login-identifier'
 import GoogleMark from './GoogleMark.vue'
 
@@ -88,7 +88,7 @@ function onClosed() {
   if (returnFocus?.isConnected) returnFocus.focus()
   returnFocus = null
 }
-function onBackdropClick(event: MouseEvent) { if (event.target === dialog.value) close() }
+function onBackdropClick(event: MouseEvent) { event.stopPropagation() }
 function changeMethod(next: 'email' | 'phone') {
   if (locked.value) return
   method.value = next; emailMode.value = 'sign-in'; clearSensitive()
@@ -148,8 +148,8 @@ async function submit() {
   }
   if (needsPassword.value) {
     if (!password.value || password.value.length > 128) { invalid('请输入密码。', 'password'); return }
-    if (emailMode.value !== 'sign-in' && (password.value.length < 8 || !/[A-Za-z]/.test(password.value) || !/\d/.test(password.value))) {
-      invalid('密码不符合要求，请使用至少8位字符并包含字母和数字。', 'password'); return
+    if (emailMode.value !== 'sign-in' && !validNewPassword(password.value)) {
+      invalid('密码长度须为8至128位。', 'password'); return
     }
   }
   const version = epoch, identifier = normalizedIdentifier.value
@@ -196,8 +196,6 @@ async function continueWithGoogle() {
 
         <div class="social-options" :aria-label="t('社交账号登录')">
           <button class="social-button" type="button" :disabled="statusLoading || !googleReady || locked" :aria-busy="openingGoogle" @click="continueWithGoogle"><GoogleMark/><span>{{ t(openingGoogle ? '正在前往 Google…' : '使用 Google 继续') }}</span><small v-if="statusLoading">{{ t('检查中…') }}</small><small v-else-if="!googleReady">{{ t('暂不可用') }}</small></button>
-          <button class="social-button coming-soon" type="button" disabled><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M18.7 19.5c-.8 1.2-1.7 2.5-3.1 2.5-1.3 0-1.8-.8-3.3-.8s-2 .8-3.3.8c-1.3.1-2.3-1.3-3.2-2.6-1.7-2.5-3-7-.3-10.1a4.9 4.9 0 0 1 4.1-2.5c1.3 0 2.5.9 3.3.9.8 0 2.3-1.1 3.9-.9a4.8 4.8 0 0 1 3.7 2c-.1.1-2.2 1.3-2.2 3.8 0 3.1 2.7 4.1 2.7 4.1 0 .1-.4 1.5-1.4 3ZM14 5.1A5.4 5.4 0 0 0 15.3 1a5.5 5.5 0 0 0-3.6 1.9 5.2 5.2 0 0 0-1.3 4c1.4.1 2.8-.4 3.6-1.8Z"/></svg><span>{{ t('使用 Apple 继续') }}</span><small>{{ t('待开放') }}</small></button>
-          <button class="social-button coming-soon" type="button" disabled><svg viewBox="0 0 28 24" fill="currentColor" aria-hidden="true"><path d="M11 2C5.5 2 1 5.6 1 10c0 2.5 1.5 4.8 3.7 6.2L4 19l3.4-1.5c1.2.4 2.4.5 3.6.5h.5a6.6 6.6 0 0 1-.5-2.5c0-4.1 4-7.5 9-7.5h.6C19.6 4.6 15.7 2 11 2Zm-3.5 6a1.2 1.2 0 1 1 0-2.4 1.2 1.2 0 0 1 0 2.4Zm7 0a1.2 1.2 0 1 1 0-2.4 1.2 1.2 0 0 1 0 2.4ZM27 15.5c0-3.6-3.5-6.5-7.5-6.5S12 11.9 12 15.5s3.5 6.5 7.5 6.5a9 9 0 0 0 2.8-.4L25 23l-.5-2.3c1.6-1.2 2.5-3 2.5-5.2Zm-10-1a1 1 0 1 1 0-2 1 1 0 0 1 0 2Zm5 0a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"/></svg><span>{{ t('使用微信继续') }}</span><small>{{ t('待开放') }}</small></button>
         </div>
 
         <div class="divider"><span>{{ t('或使用邮箱 / 手机号登录') }}</span></div>
@@ -223,8 +221,8 @@ async function continueWithGoogle() {
 
           <template v-if="needsPassword">
             <div class="field-heading password-heading"><label for="login-password">{{ t(emailMode === 'sign-in' ? '密码' : '设置密码') }}</label><button v-if="emailMode === 'sign-in' && nativeStatus?.passwordResetEnabled" type="button" :disabled="locked" @click="changeMode('reset')">{{ t('忘记密码？') }}</button></div>
-            <div class="pill-input"><input id="login-password" v-model="password" :type="showPassword ? 'text' : 'password'" :autocomplete="emailMode === 'sign-in' ? 'current-password' : 'new-password'" maxlength="128" :disabled="locked" :aria-invalid="fieldError === 'password'" :aria-describedby="emailMode === 'sign-in' ? 'login-feedback' : 'password-hint login-feedback'" :placeholder="t(emailMode === 'sign-in' ? '请输入密码' : '至少8位，包含字母和数字')" @input="clearError"><button class="password-visibility" type="button" :aria-label="t(showPassword ? '隐藏密码' : '显示密码')" :aria-pressed="showPassword" @click="showPassword = !showPassword"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z" stroke="currentColor" stroke-width="1.6"/><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.6"/><path v-if="!showPassword" d="m4 3 16 18" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></button></div>
-            <p v-if="emailMode !== 'sign-in'" id="password-hint" class="password-hint">{{ t('使用8至128位字符，包含字母和数字。') }}</p>
+            <div class="pill-input"><input id="login-password" v-model="password" :type="showPassword ? 'text' : 'password'" :autocomplete="emailMode === 'sign-in' ? 'current-password' : 'new-password'" maxlength="128" :disabled="locked" :aria-invalid="fieldError === 'password'" :aria-describedby="emailMode === 'sign-in' ? 'login-feedback' : 'password-hint login-feedback'" :placeholder="t(emailMode === 'sign-in' ? '请输入密码' : '8至128位，可使用纯数字或英文')" @input="clearError"><button class="password-visibility" type="button" :aria-label="t(showPassword ? '隐藏密码' : '显示密码')" :aria-pressed="showPassword" @click="showPassword = !showPassword"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z" stroke="currentColor" stroke-width="1.6"/><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.6"/><path v-if="!showPassword" d="m4 3 16 18" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></button></div>
+            <p v-if="emailMode !== 'sign-in'" id="password-hint" class="password-hint">{{ t('使用8至128位字符，可使用纯数字、纯英文或混合字符。') }}</p>
           </template>
           <div id="login-feedback" class="form-feedback" :class="{'has-error':error}" :role="error ? 'alert' : 'status'" aria-live="polite"><p v-if="error">{{ t(error) }}</p><p v-else-if="statusLoading">{{ t('正在检查登录服务…') }}</p><p v-else-if="phoneRegionUnavailable">{{ t('该地区短信暂未开通，请使用邮箱登录。') }}</p><p v-else-if="!channelReady">{{ t('当前登录方式暂不可用，请稍后重试。') }}</p><p v-else-if="notice">{{ t(notice) }}</p><p v-else-if="method === 'phone' || emailUsesCode">{{ t('未注册的账号验证后将自动创建。') }}</p></div>
           <button class="continue-button" type="submit" :disabled="locked || statusLoading || !channelReady">{{ t(busy ? '正在处理…' : submitLabel) }}</button>
@@ -247,7 +245,7 @@ async function continueWithGoogle() {
 .login-card > .close-button { position:absolute; top:24px; right:25px; display:grid; place-items:center; width:32px; height:32px; padding:6px; border:0; border-radius:50%; background:transparent; color:#807b78; }.close-button:hover { background:#f7edeb; color:#3b3330; }.close-button svg { width:23px; height:23px; }
 .login-content { margin-top:25px; text-align:center; }.login-content h2 { margin:0; color:#171616; font-size:clamp(22px,4vw,29px); font-weight:760; letter-spacing:-.055em; line-height:1.4; }.login-description { margin:8px 0 18px; color:#868181; font-size:14px; line-height:1.6; }
 .login-bonus { display:flex; align-items:center; justify-content:center; gap:9px; margin:0 -12px 19px; padding:10px 12px; border-radius:15px; background:#ffeceb; color:#dc4c35; font-size:12px; line-height:1.6; font-weight:650; }.login-bonus svg { width:20px; height:20px; flex:none; }
-.social-options { display:grid; gap:10px; }.social-button { position:relative; display:flex; align-items:center; width:100%; min-height:44px; padding:10px 17px; border:1px solid #dcdadb; border-radius:17px; background:#ffffff91; color:#262323; box-shadow:inset 0 0 0 1px #f4f1f1; }.social-button:not(:disabled):hover { border-color:#eea597; background:#fff5f1; }.social-button svg { flex:none; width:23px; height:23px; }.social-button span { flex:1; padding:0 35px 0 12px; font-size:14px; font-weight:650; line-height:1.5; }.social-button small { position:absolute; right:13px; color:#8e8783; font-size:10px; }.social-button:disabled { background:#f6f5f5; color:#928d8b; cursor:not-allowed; }.social-button.coming-soon svg { opacity:.6; }
+.social-options { display:grid; gap:10px; }.social-button { position:relative; display:flex; align-items:center; width:100%; min-height:44px; padding:10px 17px; border:1px solid #dcdadb; border-radius:17px; background:#ffffff91; color:#262323; box-shadow:inset 0 0 0 1px #f4f1f1; }.social-button:not(:disabled):hover { border-color:#eea597; background:#fff5f1; }.social-button svg { flex:none; width:23px; height:23px; }.social-button span { flex:1; padding:0 35px 0 12px; font-size:14px; font-weight:650; line-height:1.5; }.social-button small { position:absolute; right:13px; color:#8e8783; font-size:10px; }.social-button:disabled { background:#f6f5f5; color:#928d8b; cursor:not-allowed; }
 .divider { display:flex; align-items:center; gap:13px; margin:21px 0 16px; color:#999393; font-size:12px; line-height:1.5; }.divider::before,.divider::after { content:''; height:1px; flex:1; background:#ede9e9; }.divider span { flex:none; }
 .method-switch { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:3px; margin-bottom:17px; padding:3px; border-radius:99px; background:#f1eff0; }.method-switch button { min-height:36px; padding:7px 10px; border:1px solid transparent; border-radius:99px; background:transparent; color:#7d7777; font-size:14px; font-weight:650; line-height:1.4; }.method-switch button[aria-pressed=true] { border-color:#ffe0dc; background:#fff7f5; color:#db553b; box-shadow:0 2px 8px #b7603c13; }
 .mode-caption { margin:-3px 0 14px; font-size:13px; color:#7a6b65; }.login-form { text-align:left; }.field-heading { display:block; margin:14px 0 7px; color:#4b4542; font-size:12px; font-weight:650; line-height:1.5; }.login-form > .field-heading:first-child { margin-top:0; }.password-heading { display:flex; align-items:center; justify-content:space-between; gap:12px; }.password-heading button { padding:0; color:#e45a42; font-size:12px; font-weight:650; }

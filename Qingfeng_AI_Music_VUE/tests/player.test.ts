@@ -73,3 +73,18 @@ describe('全局音量',()=>{
  it('静音保留原音量，滑到零后取消静音恢复可听音量',async()=>{const p=usePlayer();await p.toggle(track('one'));p.setVolume(0.3);p.toggleMute();expect((FakeAudio.current as any).muted).toBe(true);p.toggleMute();expect((FakeAudio.current as any).muted).toBe(false);expect(p.volume).toBe(0.3);p.setVolume(0);p.toggleMute();expect(p.volume).toBe(0.5)})
  it('持久化设置，忽略非法值并限制范围',()=>{const p=usePlayer();p.setVolume(9);expect(p.volume).toBe(1);p.setVolume(-2);expect(p.volume).toBe(0);p.setVolume(NaN);expect(p.volume).toBe(0);p.setVolume(0.45);setActivePinia(createPinia());expect(usePlayer().volume).toBe(0.45)})
 })
+
+it('keeps the native gift preview playing at its original position across mount', async () => {
+  const player = usePlayer(), song = track('gift'), preview = new FakeAudio()
+  preview.src = song.audio
+  preview.paused = false
+  preview.currentTime = 4
+  expect(player.adoptGiftPreview(song, preview as unknown as HTMLAudioElement)).toBe(true)
+  expect(player.time).toBe(4)
+  expect(player.playing).toBe(true)
+  expect(preview.play).not.toHaveBeenCalled()
+  expect(preview.load).not.toHaveBeenCalled()
+  await player.toggle(song)
+  expect(preview.paused).toBe(true)
+  expect(FakeAudio.instances).toHaveLength(1)
+})

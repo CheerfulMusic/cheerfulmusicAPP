@@ -1,5 +1,6 @@
 package com.qingfeng.music.server.payment;
 
+import com.zaxxer.hikari.HikariDataSource;
 import com.qingfeng.music.infrastructure.persistence.credits.LocalFinancialCohort;
 import com.qingfeng.music.infrastructure.persistence.credits.JdbcCreditsLedger;
 import com.qingfeng.music.infrastructure.persistence.credits.JdbcFencedCreditsLedger;
@@ -26,7 +27,6 @@ import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.*;
 import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.jdbc.support.JdbcTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 import static org.junit.jupiter.api.Assertions.*;
@@ -35,6 +35,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class IntegratedCreditAccountMySqlTest {
     private static final String ACCOUNT="acct_refund_offline",ENV="sandbox",PROVIDER="STRIPE";
     private static JdbcTemplate db;
+    private static HikariDataSource source;
     private static TransactionTemplate tx;
     private static JdbcFencedCreditsLedger ledger;
     private static final Set<String> OWNERS=ConcurrentHashMap.newKeySet();
@@ -58,7 +59,13 @@ class IntegratedCreditAccountMySqlTest {
         String database=required("P0_INTEGRATED_CREDITS_MYSQL_DATABASE"),url=required("P0_INTEGRATED_CREDITS_MYSQL_URL");
         if(!database.matches("p0_integrated_credits_20261112r[0-9]+")||!url.matches("jdbc:mysql://127\\.0\\.0\\.1:23316/"+database+"(?:\\?.*)?"))
             throw new IllegalStateException("Only a new explicitly isolated refund schema is permitted");
-        var source=new DriverManagerDataSource(url,required("P0_INTEGRATED_CREDITS_MYSQL_USER"),required("P0_INTEGRATED_CREDITS_MYSQL_PASSWORD"));
+        source = new HikariDataSource();
+        source.setJdbcUrl(url);
+        source.setUsername(required("P0_INTEGRATED_CREDITS_MYSQL_USER"));
+        source.setPassword(required("P0_INTEGRATED_CREDITS_MYSQL_PASSWORD"));
+        // Preserve the 16-way concurrency scenarios while reusing sockets for invariant checks.
+        source.setMaximumPoolSize(24);
+        source.setMinimumIdle(0);
         db=new JdbcTemplate(source);
         try(var connection=source.getConnection();var statement=connection.createStatement()){
             try(var identity=statement.executeQuery("SELECT VERSION(),@@server_uuid,@@datadir,@@port,@@bind_address,DATABASE(),CURRENT_ROLE(),@@transaction_isolation")){
@@ -117,6 +124,10 @@ class IntegratedCreditAccountMySqlTest {
     private static long adjusted(Paid p){return number("SELECT adjusted FROM p0_credit_batch WHERE reference=?","payment:"+p.order());}
     private static long held(Paid p){return number("SELECT held FROM p0_credit_batch WHERE reference=?","payment:"+p.order());}
     private static long returnRows(Paid p){return number("SELECT COUNT(*) FROM credit_ledger WHERE owner_id=? AND entry_type='REFUND_RETURN'",p.owner());}
+    @AfterAll static void closeTestConnections() {
+        if (source != null) source.close();
+    }
+
     private static void concurrent(List<Runnable> actions) throws Exception {
         var pool=Executors.newFixedThreadPool(actions.size());var barrier=new CyclicBarrier(actions.size());
         try{var futures=new ArrayList<Future<?>>();for(Runnable action:actions)futures.add(pool.submit(()->{barrier.await(10,TimeUnit.SECONDS);action.run();return null;}));
@@ -348,7 +359,7 @@ class IntegratedCreditAccountMySqlTest {
         try{
             var first=pool.submit(()->tx.executeWithoutResult(s->{db.queryForList("SELECT id FROM creator WHERE id=? FOR UPDATE",inviter);inviterHeld.countDown();await(inviteeCredited);ledger.credit(inviter,FirstLoginCredits.AMOUNT,"first-login:"+inviter);releaseInviter.countDown();}));
             assertTrue(inviterHeld.await(10,TimeUnit.SECONDS));var second=pool.submit(()->tx.executeWithoutResult(s->login.grant(invitee)));
-            first.get(10,TimeUnit.SECONDS);second.get(10,TimeUnit.SECONDS);assertEquals(19,FirstLoginCredits.AMOUNT);assertEquals(39,ledger.balance(inviter));assertEquals(19,ledger.balance(invitee));assertEquals(0,releaseInviter.getCount());
+            first.get(10,TimeUnit.SECONDS);second.get(10,TimeUnit.SECONDS);assertEquals(19,FirstLoginCredits.AMOUNT);assertEquals(38,ledger.balance(inviter));assertEquals(19,ledger.balance(invitee));assertEquals(0,releaseInviter.getCount());
         }finally{pool.shutdownNow();assertTrue(pool.awaitTermination(10,TimeUnit.SECONDS));}
     }
 
