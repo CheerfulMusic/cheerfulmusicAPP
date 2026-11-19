@@ -8,7 +8,11 @@ import { downloadSong } from '../src/modules/works/api/download'
 import { ApiError } from '../src/shared/http/api-client'
 describe('download unlock',()=>{
  afterEach(()=>vi.unstubAllGlobals())
- it.each(['Mozilla/5.0 (Linux; Android 14) MicroMessenger/8.0', 'Mozilla/5.0 (iPhone; CPU iPhone OS 18) MicroMessenger/8.0'])('guides mobile WeChat before authentication or charging: %s',async userAgent=>{
+ it.each(['Mozilla/5.0 (Linux; Android 14) MicroMessenger/8.0', 'Mozilla/5.0 (iPhone; CPU iPhone OS 18) MicroMessenger/8.0',
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) MicroMessenger/7.0.20 WindowsWechat/3.9.12',
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) MicroMessenger/6.8.0 MacWechat/3.8.9',
+  'Mozilla/5.0 (Windows NT 10.0) WindowsWechat/4.0',
+  'Mozilla/5.0 (Macintosh) WeChat/4.0'])('guides desktop and mobile WeChat before authentication or charging: %s',async userAgent=>{
   vi.stubGlobal('navigator',{userAgent})
   const {browserDownloadOpen,closeBrowserDownloadHelp}=await import('../src/shared/browser-download')
   const click=vi.spyOn(HTMLAnchorElement.prototype,'click').mockImplementation(()=>{})

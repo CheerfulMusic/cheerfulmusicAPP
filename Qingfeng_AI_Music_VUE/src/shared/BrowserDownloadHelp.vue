@@ -20,9 +20,9 @@ async function copyPage() {
 </script>
 <template>
   <dialog ref="dialog" class="download-help" aria-labelledby="download-help-title" @close="closeBrowserDownloadHelp" @cancel="closeBrowserDownloadHelp">
-    <h2 id="download-help-title">{{ t('请在手机浏览器下载歌曲') }}</h2>
-    <p>{{ t('微信内置浏览器会限制文件下载。请点击右上角「…」，选择「在浏览器打开」，然后再次点击下载。') }}</p>
-    <p>{{ t('也可以复制当前页面链接，用 Safari 或 Chrome 打开。若需要登录，请使用同一账号；已解锁的作品不会重复扣费。') }}</p>
+    <h2 id="download-help-title">{{ t('请在系统浏览器下载歌曲') }}</h2>
+    <p>{{ t('微信内置浏览器可能限制文件下载。请通过页面右上角菜单选择「在浏览器打开」，然后再次点击下载。') }}</p>
+    <p>{{ t('电脑和手机均可复制当前页面链接，用 Edge、Chrome 或 Safari 打开。若需要登录，请使用同一账号；已解锁的作品不会重复扣费。') }}</p>
     <p>{{ t('本次操作未发起解锁或扣费。') }}</p>
     <label for="download-page-link">{{ t('当前页面链接') }}</label>
     <input id="download-page-link" :value="page" readonly @focus="($event.target as HTMLInputElement).select()" />
