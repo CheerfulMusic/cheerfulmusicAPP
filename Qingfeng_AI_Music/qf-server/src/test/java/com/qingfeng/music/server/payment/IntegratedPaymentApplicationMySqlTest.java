@@ -571,6 +571,28 @@ class IntegratedPaymentApplicationMySqlTest {
         assertEquals(1,number("SELECT COUNT(*) FROM credit_ledger WHERE entry_type='CREDIT' AND reference_id=?","payment:"+p.order()));
         assertEquals(1,number("SELECT COUNT(*) FROM p0_credit_payment_binding WHERE order_id=?",p.order()));
     }
+    @Test @Order(22) void delayedOrderRecoveryLeavesWebhooksImmediatelyEligible() throws Exception {
+        var previous = org.springframework.test.util.ReflectionTestUtils.getField(stripe,"initialReconcileDelaySeconds");
+        try {
+            org.springframework.test.util.ReflectionTestUtils.setField(stripe,"initialReconcileDelaySeconds",120);
+            var missing = pending(owner());
+            var received = paid();
+            for (var order : List.of(missing,received)) {
+                String recovery = "reconcile-order-" + order.order();
+                assertEquals(1,number("SELECT COUNT(*) FROM payment_webhook_inbox WHERE event_id=? AND status='PENDING' AND TIMESTAMPDIFF(SECOND,created_at,next_attempt_at)=120",recovery));
+                db.update("UPDATE payment_webhook_inbox SET next_attempt_at=CURRENT_TIMESTAMP WHERE event_id=?",recovery);
+            }
+            SESSIONS.put(missing.session(),session(missing.session(),missing.order(),true));
+            drain();
+            for (var order : List.of(missing,received)) {
+                assertEquals(100,ledger.balance(order.owner().creatorId()));
+                assertEquals(1,number("SELECT COUNT(*) FROM credit_ledger WHERE entry_type='CREDIT' AND reference_id=?","payment:"+order.order()));
+                assertEquals("DONE",db.queryForObject("SELECT status FROM payment_webhook_inbox WHERE event_id=?",String.class,"reconcile-order-"+order.order()));
+            }
+        } finally {
+            org.springframework.test.util.ReflectionTestUtils.setField(stripe,"initialReconcileDelaySeconds",previous);
+        }
+    }
     @Test @Order(23) void paypalRefundBeforeCompletionRecoversProvenCaptureAtomicallyAndKeepsOnlyItsRemainingRightsUnderReview() throws Exception {
         var user=owner();var created=business(user,"/api/app/paypal/orders","POST",JSON.writeValueAsString(Map.of("packageId","starter-USD")));
         assertEquals(200,created.statusCode(),created.body());String order=JSON.readTree(created.body()).path("orderId").asString();

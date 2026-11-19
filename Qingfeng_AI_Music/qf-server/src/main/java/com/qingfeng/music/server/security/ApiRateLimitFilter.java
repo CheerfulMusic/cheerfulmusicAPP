@@ -10,8 +10,8 @@ import java.util.*;
 /** DB Agent admission remains independent. Optional Redis shares HTTP buckets across instances. */
 public final class ApiRateLimitFilter extends OncePerRequestFilter {
     @FunctionalInterface public interface SharedGate {boolean allow(String key,int limit);}
-    private record Bucket(long window,int count){}
-    private final Map<String,Bucket> buckets=new HashMap<>();
+    private final Map<String,Integer> buckets=new HashMap<>();
+    private long localWindow=Long.MIN_VALUE;
     private final Clock clock;
     private final SharedGate shared;
     private final int webhookLimit;
@@ -28,10 +28,16 @@ public final class ApiRateLimitFilter extends OncePerRequestFilter {
     }
     private synchronized boolean allowLocal(String key,int limit){
         long window=clock.millis()/60000;
-        if(buckets.size()>=10000)buckets.entrySet().removeIf(e->e.getValue().window()!=window);
-        var old=buckets.get(key);int count=old!=null&&old.window()==window?old.count():0;
-        if(count>=limit||(!buckets.containsKey(key)&&buckets.size()>=10000))return false;
-        buckets.put(key,new Bucket(window,count+1));return true;
+        if (window > localWindow) {
+            buckets.clear();
+            localWindow = window;
+        }
+        Integer count = buckets.get(key);
+        if (count == null && buckets.size() >= 10_000) return false;
+        int used = count == null ? 0 : count;
+        if (used >= limit) return false;
+        buckets.put(key, used + 1);
+        return true;
     }
     protected void doFilterInternal(HttpServletRequest request,HttpServletResponse response,FilterChain chain)throws ServletException,IOException{
         String path=request.getRequestURI();

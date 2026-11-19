@@ -38,6 +38,7 @@ public final class StripePaymentService implements VerifiedPaymentProcessor {
     private final ObjectMapper json;
     private final PaymentInbox inbox;
     private java.time.Clock reconciliationClock=java.time.Clock.systemUTC();
+    @Value("${qingfeng.stripe.initial-reconcile-delay-seconds:0}") private int initialReconcileDelaySeconds;
     @Value("${qingfeng.stripe.enabled:false}") private boolean enabled;
     @Value("${qingfeng.stripe.accepting-new-orders:false}") private boolean acceptingNewOrders;
     @Value("${qingfeng.stripe.canary-owner-ids:}") private String canaryOwnerIds="";
@@ -385,7 +386,8 @@ public final class StripePaymentService implements VerifiedPaymentProcessor {
         pointer.put("currency",row.get("currency"));pointer.put("credits",((Number)row.get("credits")).longValue());
         pointer.put("package",row.get("package_id"));pointer.put("created",((java.sql.Timestamp)row.get("created_at")).toInstant().toEpochMilli());
         pointer.put("original_scope",originalScope);
-        inbox.acceptVerified(provider(),gateway.merchantId(),gateway.environment(),eventId,ORDER_RECONCILE,json.writeValueAsString(pointer));
+        inbox.acceptVerified(provider(),gateway.merchantId(),gateway.environment(),eventId,ORDER_RECONCILE,json.writeValueAsString(pointer),
+                originalScope ? initialReconcileDelaySeconds : 0);
     }
     private Resolution reconcileOrder(JsonNode pointer){
         String id=text(pointer.path("resource")),owner=text(pointer.path("owner"));
