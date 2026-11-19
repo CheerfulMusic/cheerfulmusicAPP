@@ -26,6 +26,11 @@ final class LyricsHttpTransport {
 
     static HttpResponse<String> post(HttpClient client, URI endpoint, String key, String json, Duration maximum)
             throws IOException, InterruptedException {
+        return post(client, endpoint, key, json, maximum, null);
+    }
+
+    static HttpResponse<String> post(HttpClient client, URI endpoint, String key, String json, Duration maximum, String userAgent)
+            throws IOException, InterruptedException {
         if (maximum.isZero() || maximum.isNegative()) throw new java.net.http.HttpTimeoutException("Lyrics transport budget exhausted");
         long deadline = com.qingfeng.music.common.concurrent.LyricsRequestBudget.deadline(
             com.qingfeng.music.common.concurrent.AgentRequestScope.timeout(maximum));
@@ -44,9 +49,10 @@ final class LyricsHttpTransport {
             var request = HttpRequest.newBuilder(endpoint)
                 .timeout(Duration.ofNanos(Math.max(1, deadline - System.nanoTime())))
                 .header("Authorization", "Bearer " + key).header("Content-Type", "application/json")
-                .POST(body).build();
+                .POST(body);
+            if (userAgent != null) request.header("User-Agent", userAgent);
             try {
-                return client.send(request, HttpResponse.BodyHandlers.ofString());
+                return client.send(request.build(), HttpResponse.BodyHandlers.ofString());
             } catch (ConnectException | HttpConnectTimeoutException | UnknownHostException connectionFailure) {
                 logFailure(endpoint, attempt, bodyStarted.get(), connectionFailure);
                 // Once the transport has requested the body, acceptance is uncertain even if reconnecting failed.

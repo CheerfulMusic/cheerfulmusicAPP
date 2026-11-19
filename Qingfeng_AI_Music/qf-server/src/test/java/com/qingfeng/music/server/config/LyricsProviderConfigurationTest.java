@@ -10,6 +10,25 @@ import org.springframework.mock.env.MockEnvironment;
 import static org.junit.jupiter.api.Assertions.*;
 
 class LyricsProviderConfigurationTest {
+    @Test void photoCapabilityUsesItsOwnProviders() {
+        var env = new MockEnvironment().withProperty("qingfeng.lyrics.photo.enabled", "true")
+            .withProperty("qingfeng.providers.ark.api-key", "")
+            .withProperty("qingfeng.lyrics.photo.qwen-api-key", "")
+            .withProperty("OPENAI_API_KEY", "offline-openai-key");
+        assertFalse(LyricsCompositionConfiguration.photoLyricsConfigured(env));
+        env.setProperty("qingfeng.providers.ark.api-key", "offline-ark-key");
+        assertTrue(LyricsCompositionConfiguration.photoLyricsConfigured(env));
+        env = new MockEnvironment().withProperty("qingfeng.lyrics.photo.enabled", "true")
+            .withProperty("qingfeng.providers.ark.api-key", "");
+        env.setProperty("qingfeng.providers.qwen.api-key", "offline-qwen-key");
+        assertTrue(LyricsCompositionConfiguration.photoLyricsConfigured(env));
+        env.setProperty("qingfeng.lyrics.photo.qwen-endpoint", "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions");
+        assertFalse(LyricsCompositionConfiguration.photoLyricsConfigured(env));
+        env.setProperty("qingfeng.lyrics.photo.qwen-api-key", "offline-dashscope-key");
+        assertTrue(LyricsCompositionConfiguration.photoLyricsConfigured(env));
+        env.setProperty("qingfeng.lyrics.photo.enabled", "false");
+        assertFalse(LyricsCompositionConfiguration.photoLyricsConfigured(env));
+    }
     private final LyricsCompositionConfiguration config = new LyricsCompositionConfiguration();
 
     @Test void explicitOpenAiUsesItsOwnKeyAndInspirationKeepsItsQwenConfiguration() {

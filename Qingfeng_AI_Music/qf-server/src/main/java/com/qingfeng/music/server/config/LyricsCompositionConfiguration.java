@@ -4,7 +4,9 @@ import com.qingfeng.music.lyrics.api.LyricsApi;
 import com.qingfeng.music.work.api.WorkApi;
 import com.qingfeng.music.infrastructure.provider.QwenLyricsWriter;
 import com.qingfeng.music.infrastructure.provider.OpenAiLyricsWriter;
+import com.qingfeng.music.infrastructure.provider.ChatPhotoLyricsWriter;
 import com.qingfeng.music.infrastructure.persistence.lyrics.*;
+import java.net.URI;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.*;
 import org.springframework.core.env.Environment;
@@ -56,13 +58,29 @@ public class LyricsCompositionConfiguration {
             env.getProperty("qingfeng.providers.openai.proxy-url",""));
     }
     public static boolean photoLyricsConfigured(Environment env){
-        return env.getProperty("qingfeng.lyrics.photo.enabled",Boolean.class,false)&&!openAiKey(env).isBlank();
+        return env.getProperty("qingfeng.lyrics.photo.enabled",Boolean.class,false)
+            && (!arkPhotoKey(env).isBlank() || !qwenPhotoKey(env).isBlank());
     }
     @Bean @Profile({"mysql","test"})
     @org.springframework.boot.autoconfigure.condition.ConditionalOnProperty(name="qingfeng.lyrics.photo.enabled",havingValue="true")
     PhotoLyricsWriter photoLyricsWriter(Environment env){
-        var writer=openAiWriter(env);
-        return writer.isConfigured()?writer::writePhoto:null;
+        String arkKey = arkPhotoKey(env);
+        String qwenKey = qwenPhotoKey(env);
+        var doubao = arkKey.isBlank() ? null : ChatPhotoLyricsWriter.doubao(arkKey,
+            env.getProperty("qingfeng.lyrics.photo.doubao-model", ChatPhotoLyricsWriter.DOUBAO_MODEL));
+        String qwenEndpoint = env.getProperty("qingfeng.lyrics.photo.qwen-endpoint", RewriteProviderSettings.endpoint(env));
+        var qwen = qwenKey.isBlank() ? null : ChatPhotoLyricsWriter.qwen(qwenKey,
+            env.getProperty("qingfeng.lyrics.photo.qwen-model", ChatPhotoLyricsWriter.QWEN_MODEL), URI.create(qwenEndpoint));
+        if (doubao == null) return qwen;
+        return qwen == null ? doubao : new FallbackPhotoLyricsWriter(doubao, qwen);
+    }
+    private static String arkPhotoKey(Environment env) {
+        return env.getProperty("qingfeng.providers.ark.api-key", env.getProperty("ARK_API_KEY", "")).trim();
+    }
+    private static String qwenPhotoKey(Environment env) {
+        String key = env.getProperty("qingfeng.lyrics.photo.qwen-api-key");
+        if (key != null) return key.trim();
+        return env.containsProperty("qingfeng.lyrics.photo.qwen-endpoint") ? "" : RewriteProviderSettings.key(env);
     }
     private QwenLyricsWriter qwenLyricsWriter(Environment env){
         return new QwenLyricsWriter(RewriteProviderSettings.key(env), RewriteProviderSettings.model(env),

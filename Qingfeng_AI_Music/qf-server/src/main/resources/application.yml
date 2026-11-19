@@ -131,6 +131,8 @@ qingfeng:
   lyrics:
     provider: openai
     qwen-fallback-enabled: true
+    # 照片写歌优先使用既有火山方舟密钥。千问兜底沿用千问端点，也可为照片单独配置
+    # qingfeng.lyrics.photo.qwen-endpoint 与配套的 qingfeng.lyrics.photo.qwen-api-key。
     timing:
       enabled: true
   generation:
