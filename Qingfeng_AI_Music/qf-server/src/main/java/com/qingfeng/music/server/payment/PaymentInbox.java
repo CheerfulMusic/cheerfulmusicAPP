@@ -32,13 +32,18 @@ public class PaymentInbox {
         acceptVerified(provider,LEGACY_SCOPE,LEGACY_SCOPE,eventId,type,payload);
     }
     public void acceptVerified(String provider,String merchant,String environment,String eventId,String type,String payload){
+        acceptVerified(provider,merchant,environment,eventId,type,payload,0);
+    }
+
+    void acceptVerified(String provider,String merchant,String environment,String eventId,String type,String payload,int initialDelaySeconds){
+        if(initialDelaySeconds<0 || initialDelaySeconds>300)throw new IllegalArgumentException("Initial payment check delay must be 0..300 seconds");
         requireScoped();
         identity(provider,merchant,environment,eventId);
         if(type==null||!type.matches("[A-Za-z0-9_.]{1,96}")||payload==null||payload.length()>30000)throw new IllegalArgumentException("Invalid payment event");
         String fingerprint=hash(payload);
         try{
             tx.executeWithoutResult(t->{
-                db.update("INSERT INTO payment_webhook_inbox(provider,merchant_scope,env_scope,event_id,event_type,payload,payload_hash,status,attempts,next_attempt_at,created_at,updated_at) VALUES(?,?,?,?,?,?,?,'PENDING',0,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)",provider,merchant,environment,eventId,type,payload,fingerprint);
+                db.update("INSERT INTO payment_webhook_inbox(provider,merchant_scope,env_scope,event_id,event_type,payload,payload_hash,status,attempts,next_attempt_at,created_at,updated_at) VALUES(?,?,?,?,?,?,?,'PENDING',0,TIMESTAMPADD(SECOND,?,CURRENT_TIMESTAMP),CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)",provider,merchant,environment,eventId,type,payload,fingerprint,initialDelaySeconds);
                 String id=UUID.nameUUIDFromBytes((provider+"\0"+merchant+"\0"+environment+"\0"+eventId).getBytes(StandardCharsets.UTF_8)).toString();
                 events.publish("payment.inbox",id,id);
             });
