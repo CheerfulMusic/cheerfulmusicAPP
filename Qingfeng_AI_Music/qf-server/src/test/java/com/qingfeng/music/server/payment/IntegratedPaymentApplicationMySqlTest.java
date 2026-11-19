@@ -606,7 +606,7 @@ class IntegratedPaymentApplicationMySqlTest {
         REFUNDS.put(refund,JSON.valueToTree(Map.of("id",refund,"object","refund","livemode",false,"status","succeeded","currency","cny","amount",2990,"payment_intent",mini.intent())));
         assertEquals(35,ledger.balance(mini.owner().creatorId()));
         var gateway=application.getBean(StripeCheckoutGateway.class);
-        var page=JSON.valueToTree(Map.of("object","list","has_more",false,"data",List.of(REFUNDS.get(refund))));
+        var page=JSON.valueToTree(Map.of("object","list","has_more",false,"data",List.of(Map.of("object","refund","id",refund,"status","succeeded"))));
         doReturn(page).when(gateway).financialPage(eq("refunds"),anyLong(),anyLong(),anyString());
         var worker=new PaymentFinancialDiscovery(stripe,gateway,paypal,db,1);
         try {

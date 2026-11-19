@@ -118,8 +118,13 @@ public final class PaymentFinancialDiscovery {
         Set<String> seen=new HashSet<>();
         for(JsonNode item:page.path("data")){
             last=text(item,"id");
-            if(!item.path("livemode").isBoolean() || item.path("livemode").asBoolean()!=stripeApi.isLive()
-                    || !seen.add(last) || last.equals(cursor))throw new IllegalStateException("Invalid Stripe listing scope or cursor");
+            // Refund summaries may omit livemode. Their scope is established by the
+            // authenticated merchant GET; events and disputes also carry an explicit mode.
+            if(!stream.equals("refunds") || item.has("livemode")){
+                if(!item.path("livemode").isBoolean() || item.path("livemode").asBoolean()!=stripeApi.isLive())
+                    throw new IllegalStateException("Invalid financial resource mode");
+            }
+            if(!seen.add(last) || last.equals(cursor))throw new IllegalStateException("Invalid Stripe listing cursor");
             if(stream.equals("events")){
                 if(!last.matches("evt_[A-Za-z0-9_]{1,124}") || !"event".equals(text(item,"object")))throw new IllegalStateException("Invalid Stripe event");
                 if(item.has("account") && !item.path("account").isNull() && !stripeApi.merchantId().equals(text(item,"account")))throw new IllegalStateException("Unexpected event account");
