@@ -1490,6 +1490,8 @@ export const english: Record<string, string> = {
   "你的专属歌曲，完成了。": "Your song is ready.",
   "你的音乐礼物，准备好了。": "Your music gift is ready.",
   "歌曲试听": "Listen to your song",
+  "试听第一个版本": "Play the first version",
+  "暂停试听": "Pause preview",
   "试听歌曲": "Play song",
   "送出音乐礼物": "Send this song as a gift",
   "下载歌曲": "Download song",

@@ -114,6 +114,6 @@ onBeforeUnmount(()=>{alive=false;window.clearInterval(timer);document.removeEven
    </div>
   </div>
  </section>
- <MusicGenerationDialog v-if="dialogOpen!==undefined||flow" :open="open" :status="dialogStatus" :title="title" :created-at="flow?.createdAt" :sync-issue="!!issue" :error="flow?.status==='FAILED'?failureCopy:issue||submissionIssue" :error-code="flow?.errorCode" quick :result-ready="resultReady" @close="setOpen(false)" @view="setOpen(false);emit('view')"/>
+ <MusicGenerationDialog v-if="dialogOpen!==undefined||flow" :open="open" :work-id="workId" :task-id="flow?.taskId" :status="dialogStatus" :title="title" :created-at="flow?.createdAt" :sync-issue="!!issue" :error="flow?.status==='FAILED'?failureCopy:issue||submissionIssue" :error-code="flow?.errorCode" quick :result-ready="resultReady" @close="setOpen(false)" @view="setOpen(false);emit('view')"/>
 </template>
 <style scoped>.quick-progress{display:flex;gap:20px;margin:20px 0;padding:24px;border:1px solid #f0c5bc;border-radius:22px;background:#fff6f2}.quick-progress-icon{font-size:36px;color:#f93822}.quick-progress-copy{min-width:0}.quick-progress strong{font-size:20px}.quick-progress p{color:#806967;line-height:1.7}.quick-progress a{color:#bf3b29;align-self:center}.quick-progress .button{font-size:14px;min-height:40px;padding:9px 18px}.active{animation:pulse 2s ease-in-out infinite}@keyframes pulse{50%{opacity:.5}}@media(prefers-reduced-motion:reduce){.active{animation:none}}</style>

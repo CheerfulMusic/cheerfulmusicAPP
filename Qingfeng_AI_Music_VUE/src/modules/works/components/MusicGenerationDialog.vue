@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch, useId } from 'vue'
 import { t } from '../../../shared/i18n'
+import FirstRecordingPreview from './FirstRecordingPreview.vue'
 import {generationProblem} from '../model/generation-recovery'
 
-const props = defineProps<{ open: boolean; status: string; title: string; error?: string;errorCode?:string|null; syncIssue?: boolean;createdAt?:string;submitAfter?:string;cancelling?:boolean;cover?:string;quick?:boolean;resultReady?:boolean }>()
+const props = defineProps<{ open: boolean; workId?:string; taskId?:string|null; status: string; title: string; error?: string;errorCode?:string|null; syncIssue?: boolean;createdAt?:string;submitAfter?:string;cancelling?:boolean;cover?:string;quick?:boolean;resultReady?:boolean }>()
 const dialogId=useId(),titleId=`music-generation-title-${dialogId}`,descriptionId=`music-generation-description-${dialogId}`
 const emit = defineEmits<{ close: []; view: [];cancel:[];archive:[] }>()
 const problem=computed(()=>generationProblem(props.errorCode)||props.error)
@@ -62,6 +63,7 @@ onBeforeUnmount(() => { dialog.value?.close();syncScrollLock() })
       <p v-if="problem" class="generation-error" role="alert">{{ t(problem) }}</p>
       <p v-else-if="syncIssue && !settled" class="generation-error" role="status">{{ t('暂时无法更新进度，请稍后查看。关闭弹窗不会重新提交任务。') }}</p>
       <p v-else-if="!uncertainLyrics" class="generation-note">{{ complete ? t('把这份旋律，送给你心里的那个人。') : settled ? t('你的故事和歌词仍保存在作品中。') : t('好旋律值得等待，关闭弹窗不会取消任务。') }}</p>
+      <FirstRecordingPreview v-if="open && workId && taskId && (status === 'SAVING' || archiveFailed)" :key="workId + taskId" :work-id="workId" :task-id="taskId" :title="title" :cover="cover" />
       <button class="generation-primary" type="button" :disabled="quick&&complete&&!resultReady" autofocus @click="complete ? emit('view') : emit('close')">{{ quick&&complete&&!resultReady?t('正在读取歌曲，请稍候…'):complete ? t('试听歌曲') : settled ? t('返回作品') : t('收起，后台继续') }}</button>
       <button v-if="archiveFailed&&!quick" class="generation-cancel" :disabled="cancelling" @click="emit('archive')">{{ t('仅重试保存音频') }}</button>
       <button v-if="status==='QUEUED'&&!quick" class="generation-cancel" :disabled="cancelling" @click="emit('cancel')">{{ cancelling?t('正在撤销…'):t('撤销这次生成') }}</button>
