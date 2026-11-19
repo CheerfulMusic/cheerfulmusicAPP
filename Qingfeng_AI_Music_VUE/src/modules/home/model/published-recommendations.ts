@@ -7,6 +7,7 @@ import { recordPlay } from './hot-songs'
 export const houseSelections = [
   { artistId: '308036ef-8bef-486f-88cc-8266e5797768', songId: '0485811c-0297-4513-9fb1-75f981af8707', durationSeconds: 233.184 },
   { artistId: '308036ef-8bef-486f-88cc-8266e5797768', songId: '45e28036-c2bc-4f44-886c-3e40ddb32bf0', durationSeconds: 226.56 },
+  { artistId: '308036ef-8bef-486f-88cc-8266e5797768', songId: 'd29a567d-988a-44fe-b5d8-c15ab625a23a', durationSeconds: 244.824 },
 ] as const
 
 const houseTracks = ref<PreviewTrack[]>([])

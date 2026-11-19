@@ -24,9 +24,6 @@ import mistyGarden from '../../../assets/discover/carousel-misty-garden.webp'
 import airportGuitar from '../../../assets/discover/carousel-airport-guitar.webp'
 import seaStacks from '../../../assets/discover/carousel-sea-stacks.webp'
 import countryside from '../../../assets/discover/carousel-countryside.webp'
-import mandopopCover from '../../../assets/discover/playlists/mandopop.webp'
-import electronicCover from '../../../assets/discover/playlists/electronic.webp'
-import globalPopCover from '../../../assets/discover/playlists/global-pop.webp'
 import discoCover from '../../../assets/discover/playlists/disco.webp'
 import christmasCover from '../../../assets/discover/playlists/christmas.webp'
 
@@ -47,11 +44,7 @@ const streetlightSongId = '0f831f4b-1f3f-4d14-b6cf-b33534863622'
 const replacedHeroSongId = 'acfaa9d5-ce74-477f-9db8-d3700311a26c'
 const christmasArtistId = '308036ef-8bef-486f-88cc-8266e5797768'
 const christmasSongId = 'd4b1ec5a-e68f-43e6-8624-226981ecef5c'
-const previewPlaylistCovers = new Map([
-  ['mandopop', mandopopCover],
-  ['electronic', electronicCover],
-  ['global-pop', globalPopCover],
-])
+const discoverPreviewPlaylistIds = new Set(['mandopop', 'electronic', 'global-pop'])
 const player = usePlayer()
 const previewPlaylists = usePreviewPlaylists()
 const previewTracks = usePreviewTracks()
@@ -161,10 +154,7 @@ const visibleArtists = computed(() => {
   return showAllArtists.value ? found : found.slice(0, 3)
 })
 const playlists = computed<PreviewPlaylist[]>(() => [
-  ...previewPlaylists.value.flatMap(playlist => {
-    const cover = previewPlaylistCovers.get(playlist.id)
-    return cover ? [{ ...playlist, cover }] : []
-  }),
+  ...previewPlaylists.value.filter(playlist => discoverPreviewPlaylistIds.has(playlist.id)),
   {
     id: 'disco', title: t('Disco'), subtitle: 'DISCO', cover: discoCover,
     tracks: previewTracks.value.filter(track => track.filters.includes('disco')),

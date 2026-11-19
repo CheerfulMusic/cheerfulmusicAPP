@@ -19,7 +19,7 @@ const wrappers: VueWrapper[] = []
 function profile(): PublicArtist {
   return { stageName: 'SergioBeats', tagline: '', avatarKey: null, coverKey: null, featuredReleaseId: null,
     songs: houseSelections.map((selection, index) => ({ id: selection.songId, version: 2,
-      title: ['Gravity', 'Static Bloom'][index]!, hasCover: true, coverVersion: `cover-${index}` })) }
+      title: ['Gravity', 'Static Bloom', 'Let The Rhythm'][index]!, hasCover: true, coverVersion: `cover-${index}` })) }
 }
 async function open() {
   let playlists!: ReturnType<typeof usePreviewPlaylists>
@@ -30,12 +30,12 @@ async function open() {
 beforeEach(() => { vi.resetAllMocks(); mocks.profile.mockResolvedValue(profile()); mocks.discoverPlay.mockResolvedValue(undefined) })
 afterEach(() => { wrappers.splice(0).forEach(wrapper => wrapper.unmount()) })
 
-it('adds the two existing releases to House with current public audio, cover and original titles', async () => {
+it('adds the three existing releases to House with current public audio, cover and original titles', async () => {
   const playlists = await open()
   expect(mocks.profile).toHaveBeenCalledExactlyOnceWith(houseSelections[0].artistId)
-  expect(playlists.value.map(playlist => playlist.tracks.length)).toEqual([14, 8, 6, 5])
+  expect(playlists.value.map(playlist => playlist.tracks.length)).toEqual([14, 8, 6, 6])
   const house = playlists.value.find(playlist => playlist.id === 'house')!
-  expect(house.tracks.map(track => track.title)).toEqual(['Body Language', 'Into the Sun', 'One More Night', 'Gravity', 'Static Bloom'])
+  expect(house.tracks.map(track => track.title)).toEqual(['Body Language', 'Into the Sun', 'One More Night', 'Gravity', 'Static Bloom', 'Let The Rhythm'])
   for (const track of house.tracks.filter(track => track.publication)) {
     expect(track.audio).toBe(`/api/public/artists/${houseSelections[0].artistId}/songs/${track.id}/2/audio`)
     expect(track.cover).toContain(`/songs/${track.id}/2/cover?cover=`)
@@ -43,8 +43,8 @@ it('adds the two existing releases to House with current public audio, cover and
     expect(track.filters).toEqual(['house', 'electronic'])
     expect(track.durationSeconds).toBeGreaterThan(220)
   }
-  expect(filterPlaylists(playlists.value, 'house').flatMap(playlist => playlist.tracks)).toHaveLength(5)
-  expect(filterPlaylists(playlists.value, 'electronic').flatMap(playlist => playlist.tracks)).toHaveLength(13)
+  expect(filterPlaylists(playlists.value, 'house').flatMap(playlist => playlist.tracks)).toHaveLength(6)
+  expect(filterPlaylists(playlists.value, 'electronic').flatMap(playlist => playlist.tracks)).toHaveLength(14)
   expect(tracks).toHaveLength(31) // Public releases are not copied into the demo catalogue.
 })
 
