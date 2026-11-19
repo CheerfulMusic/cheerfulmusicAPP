@@ -2,6 +2,7 @@
 import '../playful.css'
 import '../producer.css'
 import SyncedLyrics from '../../works/components/SyncedLyrics.vue'
+import AgentBubbleGame from '../components/AgentBubbleGame.vue'
 import AgentListeningPanel from '../components/AgentListeningPanel.vue'
 import AgentWorkShelf from '../components/AgentWorkShelf.vue'
 import ChatAppearance from '../components/ChatAppearance.vue'
@@ -299,6 +300,18 @@ onBeforeUnmount(() => { avatarDisposed = true; window.removeEventListener('qingf
   <div class="agent-studio agent-playful agent-producer" :style="appearanceStyle">
     <Teleport :to="layerTarget"><div class="agent-click-sparks" aria-hidden="true"><i v-for="dot in trail" :key="dot.id" class="pointer-ribbon" :style="{left:dot.x+'px',top:dot.y+'px',width:dot.length+'px',transform:'rotate('+dot.angle+'rad)'}"/> <span v-for="spark in sparks" :key="spark.id" :style="{ left: `${spark.x}px`, top: `${spark.y}px` }"><i/><b/></span></div></Teleport>
     <div class="agent-scenery" aria-hidden="true"><span/><span/><span/></div>
+    <nav class="producer-tools" :aria-label="tr('创作助手','Creation assistant')">
+      <h2>✦ {{ tr('创作助手','Creation assistant') }}</h2>
+      <button v-for="tool in [{icon:'✧',title:'灵感策划',en:'Inspiration',detail:'发现创作灵感',detailEn:'Find your inspiration',prompt:'帮我构思一首歌，先聊聊创作灵感'}, {icon:'✎',title:'歌词创作',en:'Write lyrics',detail:'写出打动人心的歌词',detailEn:'Words that move you',prompt:'帮我写一首歌词，主题是'}, {icon:'♫',title:'音乐制作',en:'Make music',detail:'定制专属曲风',detailEn:'Find your sound',prompt:'帮我生成音乐，我想要的曲风是'}, {icon:'♬',title:'声音合成',en:'Vocals',detail:'选择 AI 演唱声音',detailEn:'Choose a singing voice',prompt:'请用当前歌词生成演唱版本，人声选择：'}, {icon:'✣',title:'歌曲精修',en:'Refine your song',detail:'让作品更动人',detailEn:'Make every line yours',prompt:'帮我修改当前作品的歌词，我想改的是'}, {icon:'▶',title:'MV 制作',en:'Create a music video',detail:'剧情分镜与动态镜头',detailEn:'Bring your song to life',prompt:'根据当前歌曲帮我设计剧情 MV，先给我分镜方案和费用，再确认生成'}, {icon:'▧',title:'封面创作',en:'Cover artwork',detail:'为音乐描绘画面',detailEn:'Give your song a face',prompt:'帮我为当前作品设计封面，画面是'}]" :key="tool.title" type="button" :disabled="blocked" @click="chooseTool(tool)"><i>{{ tool.icon }}</i><span><strong>{{ tr(tool.title,tool.en) }}</strong><small>{{ tr(tool.detail,tool.detailEn) }}</small></span></button>
+      <form v-if="activeTool" class="tool-brief" @submit.prevent="startTool">
+        <header><strong>{{ tr(activeTool.title,activeTool.en) }}</strong><button type="button" :aria-label="tr('关闭','Close')" @click="activeTool=null">×</button></header>
+        <label v-if="activeTool.title==='声音合成'">{{ tr('演唱声音','Singing voice') }}<select v-model="vocal"><option v-for="(voice,i) in ['男声','女声','男女对唱']" :key="voice" :value="voice">{{ tr(voice,['Male','Female','Duet'][i]!) }}</option></select></label>
+        <label>{{ tr('创作要求','Creative brief') }}<textarea v-model="toolBrief" rows="3" :required="activeTool.title!=='声音合成'"/></label>
+        <button class="tool-start" :disabled="blocked || (!toolBrief.trim() && activeTool.title!=='声音合成')">{{ tr('发送创作要求','Send brief') }}</button>
+      </form>
+      <button class="producer-library" type="button" @click="goToLibrary"><i>▥</i><span><strong>{{ tr('我的作品','My songs') }}</strong><small>{{ tr('继续你的音乐故事','Continue your musical story') }}</small></span><b>›</b></button>
+      <p>{{ tr('让音乐，连接更美好的你。','Let music bring out the best in you.') }}</p>
+    </nav>
     <section class="agent-conversation" :aria-label="tr('音乐创作对话', 'Music conversation')">
       <header class="agent-conversation-head">
         <span class="agent-conversation-pill"><i class="studio-status-dot" aria-hidden="true"/> {{ tr('音乐创作助手', 'Music creation assistant') }}</span>
@@ -355,18 +368,6 @@ onBeforeUnmount(() => { avatarDisposed = true; window.removeEventListener('qingf
       </div>
     </section>
     <Teleport to="body"><UserAvatarDialog v-if="avatarDialog" :busy="avatar.busy.value" :error="avatar.error.value" :disabled="blocked" :generation-available="avatarGeneration.available.value" @close="avatarDialog = false" @upload="uploadAvatar" @generate="generateAvatar"/></Teleport>
-    <nav class="producer-tools" :aria-label="tr('创作推荐','Creation tools')">
-      <h2>✦ {{ tr('创作推荐','Creation tools') }}</h2>
-      <button v-for="tool in [{icon:'✧',title:'灵感策划',en:'Inspiration',detail:'发现创作灵感',detailEn:'Find your inspiration',prompt:'帮我构思一首歌，先聊聊创作灵感'}, {icon:'✎',title:'歌词创作',en:'Write lyrics',detail:'写出打动人心的歌词',detailEn:'Words that move you',prompt:'帮我写一首歌词，主题是'}, {icon:'♫',title:'音乐制作',en:'Make music',detail:'定制专属曲风',detailEn:'Find your sound',prompt:'帮我生成音乐，我想要的曲风是'}, {icon:'♬',title:'声音合成',en:'Vocals',detail:'选择 AI 演唱声音',detailEn:'Choose a singing voice',prompt:'请用当前歌词生成演唱版本，人声选择：'}, {icon:'✣',title:'歌曲精修',en:'Refine your song',detail:'让作品更动人',detailEn:'Make every line yours',prompt:'帮我修改当前作品的歌词，我想改的是'}, {icon:'▶',title:'MV 制作',en:'Create a music video',detail:'剧情分镜与动态镜头',detailEn:'Bring your song to life',prompt:'根据当前歌曲帮我设计剧情 MV，先给我分镜方案和费用，再确认生成'}, {icon:'▧',title:'封面创作',en:'Cover artwork',detail:'为音乐描绘画面',detailEn:'Give your song a face',prompt:'帮我为当前作品设计封面，画面是'}]" :key="tool.title" type="button" :disabled="blocked" @click="chooseTool(tool)"><i>{{ tool.icon }}</i><span><strong>{{ tr(tool.title,tool.en) }}</strong><small>{{ tr(tool.detail,tool.detailEn) }}</small></span></button>
-      <form v-if="activeTool" class="tool-brief" @submit.prevent="startTool">
-        <header><strong>{{ tr(activeTool.title,activeTool.en) }}</strong><button type="button" :aria-label="tr('关闭','Close')" @click="activeTool=null">×</button></header>
-        <label v-if="activeTool.title==='声音合成'">{{ tr('演唱声音','Singing voice') }}<select v-model="vocal"><option v-for="(voice,i) in ['男声','女声','男女对唱']" :key="voice" :value="voice">{{ tr(voice,['Male','Female','Duet'][i]!) }}</option></select></label>
-        <label>{{ tr('创作要求','Creative brief') }}<textarea v-model="toolBrief" rows="3" :required="activeTool.title!=='声音合成'"/></label>
-        <button class="tool-start" :disabled="blocked || (!toolBrief.trim() && activeTool.title!=='声音合成')">{{ tr('发送创作要求','Send brief') }}</button>
-      </form>
-      <button class="producer-library" type="button" @click="goToLibrary"><i>▥</i><span><strong>{{ tr('我的作品','My songs') }}</strong><small>{{ tr('继续你的音乐故事','Continue your musical story') }}</small></span><b>›</b></button>
-      <p>{{ tr('让音乐，连接更美好的你。','Let music bring out the best in you.') }}</p>
-    </nav>
     <div class="producer-collection">
       <AgentHotSongs/>
       <AgentWorkShelf @open="featurePanel={feature:'work',workId:$event}" :refresh-key="`${songCard?.songId}:${songCard?.revision}:${messages.length}`"/>
@@ -382,6 +383,7 @@ onBeforeUnmount(() => { avatarDisposed = true; window.removeEventListener('qingf
         </div>
         <div class="agent-preview-meta"><strong>{{ songCard.title || tr('未命名作品', 'Untitled song') }}</strong><span v-if="songCard.style">{{ songCard.style }}</span></div>
         <p class="agent-song-status" role="status">{{ statusText }}</p>
+        <AgentBubbleGame/>
         <div class="agent-player">
           <input class="agent-preview-range" type="range" min="0" :max="duration || 1" :value="playTime" :disabled="!currentPlaying || !duration" :aria-label="tr('播放进度', 'Playback position')" @input="player.seek(Number(($event.target as HTMLInputElement).value))"/>
           <div class="agent-player-times"><span>{{ formatTime(playTime) }}</span><span>{{ formatTime(duration) }}</span></div>

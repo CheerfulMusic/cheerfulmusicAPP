@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import AgentBubbleGame from './AgentBubbleGame.vue'
 import { computed, ref, watch } from 'vue'
 import { usePlayer } from '../../../shared/player/store'
 import { lyricsSource } from '../../../shared/player/current-lyrics'
@@ -90,6 +91,7 @@ async function download(){
       <button @click="owner ? emit('work',owner.work) : tab='story'"><i aria-hidden="true">···</i>{{ tr('详情','Details') }}</button>
     </div>
     <p v-if="sample && hotLoginHint" role="status">{{ hotLoginHint }}</p>
+    <AgentBubbleGame/>
     <input class="agent-preview-range" type="range" min="0" :max="duration||1" :value="player.time" :disabled="!player.duration" :aria-label="tr('播放进度','Playback position')" @input="player.seek(Number(($event.target as HTMLInputElement).value))"/>
     <div class="agent-player-times"><span>{{ clock(player.time) }}</span><span>{{ clock(duration) }}</span></div>
     <div class="agent-player-controls">
