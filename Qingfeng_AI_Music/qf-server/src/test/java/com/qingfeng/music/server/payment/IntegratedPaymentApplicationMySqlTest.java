@@ -561,7 +561,7 @@ class IntegratedPaymentApplicationMySqlTest {
             var card=paid();assertEquals(100,ledger.balance(card.owner().creatorId()));assertEquals("USD",db.queryForObject("SELECT currency FROM payment_order WHERE id=?",String.class,card.order()));
             var paypalOwner=owner();var paypalCreated=business(paypalOwner,"/api/app/paypal/orders","POST","{\"packageId\":\"starter-USD\"}");assertEquals(200,paypalCreated.statusCode(),paypalCreated.body());String paypalOrder=JSON.readTree(paypalCreated.body()).path("orderId").asString();var capture=business(paypalOwner,"/api/app/paypal/orders/"+paypalOrder+"/capture","POST","{}");assertEquals(200,capture.statusCode(),capture.body());assertEquals("PAID",JSON.readTree(capture.body()).path("status").asString());assertEquals(100,ledger.balance(paypalOwner.creatorId()));
             assertEquals("PAYPAL_SANDBOX",db.queryForObject("SELECT provider FROM payment_order WHERE id=?",String.class,paypalOrder));assertEquals("USD",db.queryForObject("SELECT currency FROM payment_order WHERE id=?",String.class,paypalOrder));assertEquals(1,number("SELECT COUNT(*) FROM credit_ledger WHERE entry_type='CREDIT' AND reference_id=?","payment:"+old.order()));
-        }finally{settings.clear();settings.putAll(original);}
+        }finally{settings.clear();settings.putAll(original);application.close();start();}
     }
     @Test @Order(22) void missingStripePaymentWebhookIsRecoveredFromDurableOriginalScopeAndGrantedExactlyOnce() throws Exception {
         var p=pending(owner());assertEquals(0,ledger.balance(p.owner().creatorId()));
