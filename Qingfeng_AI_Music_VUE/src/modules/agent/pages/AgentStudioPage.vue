@@ -14,7 +14,7 @@ import { useCredits } from '../../../shared/credits/useCredits'
 import { accountState } from '../../../shared/identity/account-state'
 import { logtoState } from '../../../shared/identity/logto-state'
 import { useAgentConversation } from '../composables/useAgentConversation'
-import { messageText, type ConversationSnapshot } from '../model/conversation'
+import { displayTurnText, messageText, type ConversationSnapshot } from '../model/conversation'
 import { analyzeAudioFile, cancelAnalysis, forgetAnalysis, MAX_REFERENCE_BYTES } from '../model/audio-analysis'
 import { BPM_CONFIDENCE_THRESHOLD } from '../model/audio-features'
 import { requestReferenceAnalysis } from '../api/reference'
@@ -295,7 +295,7 @@ onBeforeUnmount(() => { avatarDisposed = true; window.removeEventListener('qingf
           <div class="agent-message-content"><AgentProgressCard v-if="message.progress" :progress="message.progress"/><div v-else-if="messageText(message)" class="agent-bubble" :class="{ 'agent-message-failed': message.state === 'FAILED' }"><AgentMessageText :text="messageText(message)"/></div><AgentResultCard v-if="message.result" :result="message.result" :disabled="blocked" :current="message.id === lastAssistantId" @command="runCommand"/></div>
           <a v-if="message.role === 'user'" href="/profile" class="agent-user-avatar" @click="openProfile" :aria-label="tr('我的资料，修改头像', 'My profile, change avatar')" :title="tr('我的资料 · 点击修改头像', 'My profile · Change avatar')"><img :src="avatar.avatarUrl.value || profileAvatar.imageUrl.value || '/brand/music-person.svg'" :alt="tr('我的头像', 'My avatar')" @error="avatarImageFailed"/></a>
         </div>
-        <div v-if="pending && !pendingAlreadySaved" class="agent-message user agent-pending"><div class="agent-bubble"><p>{{ pending.text }}</p><small>{{ sending ? tr('发送中…', 'Sending…') : tr('结果待确认', 'Awaiting confirmation') }}</small></div></div>
+        <div v-if="pending && !pendingAlreadySaved" class="agent-message user agent-pending"><div class="agent-bubble"><p>{{ displayTurnText(pending.text) }}</p><small>{{ sending ? tr('发送中…', 'Sending…') : tr('结果待确认', 'Awaiting confirmation') }}</small></div></div>
         <p v-if="sending" class="agent-typing" role="status"><span class="agent-typing-spinner" aria-hidden="true"/>{{ tr('正在处理你的请求…', 'Working on your request…') }}</p>
         <div v-if="!messages.length && !loading" class="agent-quick-card"><strong>{{ tr('试着说', 'Try saying') }}</strong><div class="agent-quick-grid"><button v-for="prompt in prompts" :key="prompt" type="button" :disabled="blocked" @click="send(prompt)"><span>{{ prompt }}</span></button></div></div>
       </div>

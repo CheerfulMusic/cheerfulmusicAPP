@@ -43,6 +43,8 @@ class AgentChatFlowIntegrationTest {
         @Bean @Primary AgentChatModel conversationModel() {
             return context -> {
                 String text = context.text();
+                if (text.equals("方向定好了")) return new AgentChatModel.Plan("chat",
+                        Map.of("choices",List.of("generate_lyrics","create_work","discuss")), "中文、空灵、梦想与星光");
                 if (text.equals("查看我的作品")) return new AgentChatModel.Plan("list_works",Map.of(),"查看作品。");
                 if (text.equals("选择第二首")) return new AgentChatModel.Plan("select_work",Map.of("index",2),"选择第二首。");
                 if (text.equals("把当前作品改名为夏天")) return new AgentChatModel.Plan("rename_work",Map.of("title","夏天"),"修改标题。");
@@ -123,6 +125,15 @@ class AgentChatFlowIntegrationTest {
         assertEquals(1,db.queryForObject("SELECT COUNT(*) FROM agent_message WHERE conversation_id=? AND role='system' AND state='FAILED'",
                 Integer.class,user.conversation()));
         assertEquals(1,db.queryForObject("SELECT COUNT(*) FROM agent_request_admission WHERE conversation_id=?",Integer.class,user.conversation()));
+    }
+
+    @Test void creativeMenuSelectionProducesRealLyricsOverHttp() throws Exception {
+        Browser user=browser();
+        var offered=say(user,"方向定好了");
+        assertTrue(offered.path("messages").toString().contains("choice_menu"));
+        var selected=say(user,"1");
+        assertEquals("generate_lyrics",selected.path("action").asText());
+        assertTrue(selected.path("songCard").path("lyrics").asText().contains("一起走过校园"));
     }
 
     @Test void conversationCreatesRevisesGeneratesAndSharesTheSameRealWork() throws Exception {

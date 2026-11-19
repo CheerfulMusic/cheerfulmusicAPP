@@ -83,7 +83,11 @@ public final class AgentChatService {
                 authorizedText="查看当前作品的 MV 分镜方案和费用";
             AgentChatModel.Plan plan;
             int modelCalls=0;
-            if(pending!=null&&Set.of("取消操作","取消确认","算了","不用了","停止后续操作").contains(text)) {
+            var selection=AgentChoiceMenu.select(text,history,locale);
+            if(selection!=null){
+                authorizedText=selection.intent();
+                plan=selection.plan();
+            } else if(pending!=null&&Set.of("取消操作","取消确认","算了","不用了","停止后续操作").contains(text)) {
                 plan=new AgentChatModel.Plan("chat",Map.of(),"已停止后续操作。已经完成的操作和已提交的生成任务会保留。");
             } else if(confirmation||continuation) {
                 if(!pendingValid(pending,current,continuation)||continuation&&!key.equals(pending.continuationKey()))
@@ -135,7 +139,7 @@ public final class AgentChatService {
                 Map<String,Object> args=new LinkedHashMap<>(step.args());
                 boolean explicitlyConfirmed=confirmation&&i==0;
                 boolean requested=AgentChatPolicy.actionRequested(proposed,authorizedText);
-                if("chat".equals(proposed)){append(owner,conversation,Map.of("text",safeReply(plan.reply())));break;}
+                if("chat".equals(proposed)){append(owner,conversation,AgentChoiceMenu.reply(plan,safeReply(plan.reply()),locale));break;}
                 var capability=capability(proposed);
                 if(!requested&&!explicitlyConfirmed&&!"read".equals(capability.effect())) {
                     if(AgentChatPolicy.paidMusicAction(proposed)&&!AgentChatPolicy.chatOnly(authorizedText)&&!AgentChatPolicy.deniesAction(authorizedText)){
@@ -301,6 +305,9 @@ public final class AgentChatService {
         if(instruction.matches("(?:查看|列出|显示)我的作品[。！!]*")&&executor("list_works")!=null)
             return new AgentChatModel.Plan("list_works",Map.of(),"");
         boolean chat=plan.orderedSteps().stream().allMatch(s->"chat".equals(s.action()));
+        if(chat && plan.reply()!=null && plan.reply().startsWith("还没有执行「")
+                && instruction.matches("(?:请|请帮我|帮我)?(?:直接)?(?:开始)?(?:生成|写)歌词[。！!]?"))
+            return new AgentChatModel.Plan("generate_lyrics",Map.of("text",instruction),"");
         // Parser rejections and genuine clarification must never be upgraded to paid work.
         if(chat&&plan.reply()!=null&&plan.reply().matches("(?s).*(?:尚未|还没有|不能|无法|请先|请选择|需要确认|不支持|未执行).*"))return plan;
         boolean blockedDraft=plan.orderedSteps().stream().anyMatch(s->"create_work".equals(s.action()))&&!AgentChatPolicy.actionRequested("create_work",text);
