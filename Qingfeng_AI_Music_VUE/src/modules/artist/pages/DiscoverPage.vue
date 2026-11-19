@@ -22,11 +22,11 @@ import lavender from '../../../assets/discover/cover-4.webp'
 import city from '../../../assets/discover/cover-5.webp'
 import lake from '../../../assets/discover/cover-6.webp'
 import coast from '../../../assets/discover/editorial-coast.webp'
-import neon from '../../../assets/discover/carousel-neon.webp'
-import meadow from '../../../assets/discover/carousel-meadow.webp'
-import inkMountains from '../../../assets/discover/carousel-mountains.webp'
-import moonClouds from '../../../assets/discover/carousel-moon.webp'
-import goldenStage from '../../../assets/discover/carousel-stage.webp'
+import cactus from '../../../assets/discover/carousel-cactus.webp'
+import mistyGarden from '../../../assets/discover/carousel-misty-garden.webp'
+import airportGuitar from '../../../assets/discover/carousel-airport-guitar.webp'
+import seaStacks from '../../../assets/discover/carousel-sea-stacks.webp'
+import countryside from '../../../assets/discover/carousel-countryside.webp'
 
 const tabs = [
   { id: 'latest', label: '最新发布' },
@@ -99,8 +99,14 @@ const heroRows = computed(() => {
 })
 const heroSlideCount = computed(() => heroRows.value.length + 1)
 const hero = computed(() => heroIndex.value === 0 ? undefined : heroRows.value[heroIndex.value - 1])
-const heroBackgrounds = [neon, meadow, inkMountains, moonClouds, goldenStage]
-const heroBackground = computed(() => hero.value ? heroBackgrounds[heroIndex.value - 1]! : coast)
+const heroBackgrounds = [
+  { src: cactus, position: '65% top' },
+  { src: mistyGarden, position: 'center 60%' },
+  { src: airportGuitar, position: '62% 32%' },
+  { src: seaStacks, position: '54% 68%' },
+  { src: countryside, position: '15% center' },
+]
+const heroBackground = computed(() => hero.value && heroBackgrounds[heroIndex.value - 1])
 const heroTitleLength = computed(() => Array.from(hero.value?.song.title ?? '').length)
 const visibleArtists = computed(() => {
   const found = artists.value ?? Array.from(new Map(songs.value.map(song => [song.artistId, {
@@ -187,7 +193,7 @@ watch([heroIndex, heroSlideCount], () => {
   if (disposed || heroSlideCount.value < 2 || typeof Image === 'undefined') return
   const nextIndex = (heroIndex.value + 1) % heroSlideCount.value
   const nextImage = new Image()
-  nextImage.src = nextIndex === 0 ? coast : heroBackgrounds[nextIndex - 1]!
+  nextImage.src = heroBackgrounds[nextIndex - 1]?.src ?? coast
 })
 function genreLabel(genre?: string) {
   return genre && genre !== 'other' ? t(genres.find(item => item.id === genre)?.label ?? '') : ''
@@ -295,7 +301,8 @@ onBeforeUnmount(() => {
       <div class="discover-page-heading"><h1>{{ t('音乐广场') }}</h1><p>{{ t('聆听每一份创作的灵感') }}</p></div>
       <section class="discover-hero" :class="{ 'is-song-slide': hero }" :aria-label="t('广场推荐')" :aria-roledescription="t('轮播')"
         @mouseenter="heroHovered = true" @mouseleave="heroHovered = false" @focusin="heroFocused = true" @focusout="heroFocusOut">
-        <img class="discover-hero-background" :src="heroBackground" alt="" width="2172" height="724" fetchpriority="high">
+        <img class="discover-hero-background" :src="heroBackground?.src ?? coast"
+          :style="{ objectPosition: heroBackground?.position }" alt="" width="2172" height="724" fetchpriority="high">
         <div class="discover-hero-content">
           <span class="discover-hero-label">{{ t(hero ? '热门作品' : '音乐广场') }}</span>
           <h2 :class="{ 'discover-hero-song-title': hero, 'is-long-title': heroTitleLength > 10, 'is-very-long-title': heroTitleLength > 32 }" :title="hero?.song.title">{{ hero?.song.title || t('让好音乐，被更多人听见') }}</h2>
