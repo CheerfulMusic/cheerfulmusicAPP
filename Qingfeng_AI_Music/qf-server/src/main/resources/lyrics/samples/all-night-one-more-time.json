@@ -1,0 +1,119 @@
+{
+  "sourceKey": "sample:all-night-one-more-time:b66239b5-d232-324e-af90-355ccc115819",
+  "audioSha256": "2f881a6c54ab8163cd3b93d0271fc5bbd5809b8f629a2f8bb26e9e3e7f195a35",
+  "recognition": "faster-whisper-1.2.1 / large-v3-turbo + small; authored text and recorded vocal order reviewed",
+  "duration": 162.8,
+  "warnings": [],
+  "words": [
+    {
+      "text": "Move close, stay low\n",
+      "start": 11.58,
+      "end": 15.26
+    },
+    {
+      "text": "Let the rhythm take control\n",
+      "start": 15.26,
+      "end": 18.72
+    },
+    {
+      "text": "All night, one more time\n",
+      "start": 18.72,
+      "end": 22.56
+    },
+    {
+      "text": "Hold that heat, cross the line\n",
+      "start": 22.56,
+      "end": 26.24
+    },
+    {
+      "text": "All night, one more time\n",
+      "start": 26.24,
+      "end": 30.0
+    },
+    {
+      "text": "Feel it hit, feel it ride\n",
+      "start": 30.0,
+      "end": 33.82
+    },
+    {
+      "text": "One more time\n",
+      "start": 39.16,
+      "end": 41.46
+    },
+    {
+      "text": "All night\n",
+      "start": 46.64,
+      "end": 49.12
+    },
+    {
+      "text": "One more time\n",
+      "start": 54.02,
+      "end": 56.3
+    },
+    {
+      "text": "One more time\n",
+      "start": 68.02,
+      "end": 71.4
+    },
+    {
+      "text": "No talking, just a look\n",
+      "start": 77.66,
+      "end": 81.86
+    },
+    {
+      "text": "You already know the rules\n",
+      "start": 81.86,
+      "end": 85.7
+    },
+    {
+      "text": "Come closer, take your time\n",
+      "start": 85.7,
+      "end": 89.4
+    },
+    {
+      "text": "We can lose track of the night\n",
+      "start": 89.4,
+      "end": 93.12
+    },
+    {
+      "text": "One more time\n",
+      "start": 105.4,
+      "end": 108.66
+    },
+    {
+      "text": "One more time\n",
+      "start": 108.66,
+      "end": 116.1
+    },
+    {
+      "text": "One more time\n",
+      "start": 128.9,
+      "end": 131.04
+    },
+    {
+      "text": "Hold that heat, cross the line\n",
+      "start": 131.04,
+      "end": 135.06
+    },
+    {
+      "text": "One more time\n",
+      "start": 136.36,
+      "end": 138.58
+    },
+    {
+      "text": "All night\n",
+      "start": 139.52,
+      "end": 140.48
+    },
+    {
+      "text": "Feel it hit, feel it ride\n",
+      "start": 140.46,
+      "end": 144.24
+    },
+    {
+      "text": "One more time\n",
+      "start": 158.86,
+      "end": 160.84
+    }
+  ]
+}

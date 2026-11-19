@@ -3,6 +3,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { createApp, h, nextTick, reactive, type App } from 'vue'
 import GlobalPlayer from '../src/shared/player/GlobalPlayer.vue'
 import type { PlaybackLyrics } from '../src/modules/works/api/detail'
+import { lyricsSource } from '../src/shared/player/current-lyrics'
 const api = vi.hoisted(() => ({ get: vi.fn(), sync: vi.fn(), public: vi.fn() }))
 vi.mock('../src/modules/works/api/detail', () => ({ getPlaybackLyrics: api.get, syncPlaybackLyrics: api.sync }))
 vi.mock('../src/shared/http/api-client', () => ({ requestJson: api.public }))
@@ -83,6 +84,34 @@ it('hot songs read their catalog timeline and never start a provider job', async
   mount(); await flush(); player.time=12; await flush()
   expect(api.public).toHaveBeenCalledWith('public/hot-songs/feng-ye-xing/lyrics')
   expect(document.body.textContent).toContain('第一句唱词'); expect(api.sync).not.toHaveBeenCalled()
+})
+it('new hash-named samples read the timeline for that audio version and keep authored words literal', async () => {
+  player.current={...track(),audio:'/media/recommendations/body-language-8e59749c37e9-preview-128.mp3'}
+  api.public.mockResolvedValue({...snapshot(),lines:[{text:"Don't talk, just dance",start:10,end:15}]})
+  mount();await flush();player.time=12;await flush()
+  expect(api.public).toHaveBeenCalledWith('public/hot-songs/body-language/lyrics?audioHash=8e59749c37e9')
+  expect(document.body.textContent).toContain("Don't talk, just dance");expect(api.sync).not.toHaveBeenCalled()
+})
+it('explicit instrumental metadata is shown without polling or sync attempts', async () => {
+  player.current={...track(),audio:'/media/recommendations/euphoric-drop-bceceadc198d-preview-128.mp3'}
+  api.public.mockResolvedValue({status:'INSTRUMENTAL',text:'',lines:[],canSync:false})
+  mount();await flush();expect(document.body.textContent).toContain('纯音乐（无歌词）')
+  await vi.advanceTimersByTimeAsync(60000);expect(api.public).toHaveBeenCalledTimes(1);expect(api.sync).not.toHaveBeenCalled()
+})
+it('changing a recommendation audio hash invalidates an in-flight response for the old recording', async () => {
+  let finish!: (value:PlaybackLyrics)=>void
+  api.public.mockReturnValueOnce(new Promise(resolve=>{finish=resolve})).mockResolvedValue({...snapshot(),lines:[{text:'新版录音唱词',start:10,end:15}]})
+  player.current={...track(),audio:'/media/recommendations/body-language-8e59749c37e9-preview-128.mp3'}
+  mount();await flush()
+  player.current={...player.current,audio:'/media/recommendations/body-language-123456789abc-preview-128.mp3'}
+  await flush();player.time=12;await flush();finish(snapshot());await flush()
+  expect(api.public).toHaveBeenLastCalledWith('public/hot-songs/body-language/lyrics?audioHash=123456789abc')
+  expect(document.body.textContent).toContain('新版录音唱词');expect(document.body.textContent).not.toContain('第一句唱词')
+})
+it('rejects non-audio and malformed recommendation paths instead of treating a cover as a lyric source', () => {
+  expect(lyricsSource('/media/recommendations/body-language-c251e80045fe-cover.jpg')).toBeUndefined()
+  expect(lyricsSource('/media/recommendations/body-language-short-preview-128.mp3')).toBeUndefined()
+  expect(lyricsSource('/media/recommendations/body-language-8e59749c37e9-preview-128.mp3/private')).toBeUndefined()
 })
 it('preparing public songs update automatically when the background timeline is ready', async () => {
   player.current={...track(),audio:'/api/public/artists/a/songs/b/2/audio'}

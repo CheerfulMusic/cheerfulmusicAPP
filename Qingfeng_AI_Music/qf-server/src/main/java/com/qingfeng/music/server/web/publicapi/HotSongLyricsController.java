@@ -14,9 +14,15 @@ public class HotSongLyricsController {
     private final LyricsPreparation preparation;
     public HotSongLyricsController(LyricsPreparation preparation){this.preparation=preparation;}
     @GetMapping("/{track}/lyrics")
-    public ResponseEntity<PlaybackLyrics.Snapshot> lyrics(@PathVariable String track) {
-        if(RecommendationSamples.SONGS.stream().noneMatch(song->song.id().equals(track)))
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND);
+    public ResponseEntity<PlaybackLyrics.Snapshot> lyrics(@PathVariable String track,
+            @RequestParam(name="audioHash",required=false) String audioHash) {
+        var song=RecommendationSamples.SONGS.stream().filter(item->item.id().equals(track)).findFirst()
+                .orElseThrow(()->new ResponseStatusException(HttpStatus.NOT_FOUND));
+        if(audioHash!=null){
+            String key=RecommendationSamples.objectKey(song.audio().substring("/media/".length())).orElseThrow();
+            if(!audioHash.matches("[a-f0-9]{12}")||!key.contains("/audio/"+audioHash+"/"))
+                throw new ResponseStatusException(HttpStatus.NOT_FOUND);
+        }
         return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(preparation.sample(track));
     }
 }

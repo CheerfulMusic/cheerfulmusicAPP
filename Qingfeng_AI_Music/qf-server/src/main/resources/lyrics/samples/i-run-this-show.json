@@ -1,0 +1,179 @@
+{
+  "sourceKey": "sample:i-run-this-show:e968da7c-bccd-3df5-8a59-d86476babb40",
+  "audioSha256": "3c234aa9e2391c8473161ef40b666234fa6764e42e8aa7e3e69a13138ed4b93c",
+  "recognition": "faster-whisper-1.2.1 / large-v3-turbo + small; authored text and recorded vocal order reviewed",
+  "duration": 171.12,
+  "warnings": [],
+  "words": [
+    {
+      "text": "Come a little closer\n",
+      "start": 2.4,
+      "end": 4.86
+    },
+    {
+      "text": "Keep your eyes on me\n",
+      "start": 5.78,
+      "end": 8.38
+    },
+    {
+      "text": "When the room goes quiet\n",
+      "start": 9.6,
+      "end": 12.48
+    },
+    {
+      "text": "You know where to be\n",
+      "start": 12.48,
+      "end": 15.68
+    },
+    {
+      "text": "One step, lean in\n",
+      "start": 17.12,
+      "end": 20.16
+    },
+    {
+      "text": "Two hands, don’t blink\n",
+      "start": 20.16,
+      "end": 24.28
+    },
+    {
+      "text": "Hold that look, hold that line\n",
+      "start": 24.54,
+      "end": 26.98
+    },
+    {
+      "text": "You can have this moment if you move on time\n",
+      "start": 26.98,
+      "end": 30.72
+    },
+    {
+      "text": "Get close, get close, don’t let go\n",
+      "start": 30.72,
+      "end": 35.18
+    },
+    {
+      "text": "Right here, right now, take it slow\n",
+      "start": 35.18,
+      "end": 38.88
+    },
+    {
+      "text": "Get close, get close, lose control\n",
+      "start": 38.88,
+      "end": 42.44
+    },
+    {
+      "text": "You know, you know, I run this show\n",
+      "start": 42.44,
+      "end": 47.44
+    },
+    {
+      "text": "Get close, get close\n",
+      "start": 53.36,
+      "end": 54.88
+    },
+    {
+      "text": "I run this show\n",
+      "start": 54.88,
+      "end": 58.82
+    },
+    {
+      "text": "Get close, get close\n",
+      "start": 58.82,
+      "end": 62.5
+    },
+    {
+      "text": "Don’t let go\n",
+      "start": 67.3,
+      "end": 69.72
+    },
+    {
+      "text": "Red lips, cool nerve\n",
+      "start": 76.34,
+      "end": 79.68
+    },
+    {
+      "text": "I decide what you deserve\n",
+      "start": 79.68,
+      "end": 83.56
+    },
+    {
+      "text": "Say my name, then wait your turn\n",
+      "start": 83.56,
+      "end": 87.32
+    },
+    {
+      "text": "Watch me make the whole place burn\n",
+      "start": 87.32,
+      "end": 91.24
+    },
+    {
+      "text": "One step, lean in\n",
+      "start": 91.24,
+      "end": 95.0
+    },
+    {
+      "text": "Two hands, don’t blink\n",
+      "start": 95.0,
+      "end": 98.46
+    },
+    {
+      "text": "Hold that look, hold that line\n",
+      "start": 98.62,
+      "end": 101.4
+    },
+    {
+      "text": "You can have this moment if you move on time\n",
+      "start": 101.4,
+      "end": 105.02
+    },
+    {
+      "text": "Get close, get close, don’t let go\n",
+      "start": 105.02,
+      "end": 109.44
+    },
+    {
+      "text": "Right here, right now, take it slow\n",
+      "start": 109.44,
+      "end": 112.96
+    },
+    {
+      "text": "Get close, get close, lose control\n",
+      "start": 112.96,
+      "end": 116.6
+    },
+    {
+      "text": "You know, you know, I run this show\n",
+      "start": 116.66,
+      "end": 121.62
+    },
+    {
+      "text": "Get close, get close\n",
+      "start": 123.32,
+      "end": 129.06
+    },
+    {
+      "text": "I run this show\n",
+      "start": 130.48,
+      "end": 132.86
+    },
+    {
+      "text": "Get close, get close\n",
+      "start": 134.12,
+      "end": 136.46
+    },
+    {
+      "text": "Don’t let go\n",
+      "start": 141.5,
+      "end": 143.82
+    },
+    {
+      "text": "Come a little closer\n",
+      "start": 150.66,
+      "end": 153.32
+    },
+    {
+      "text": "You know where to be\n",
+      "start": 155.32,
+      "end": 158.42
+    }
+  ]
+}

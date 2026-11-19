@@ -169,6 +169,7 @@ export const english: Record<string, string> = {
   '歌词加载中…': 'Loading lyrics…',
   '歌词准备中…': 'Preparing lyrics…',
   '暂无同步歌词': 'Synced lyrics unavailable',
+  '纯音乐（无歌词）': 'Instrumental · No lyrics',
 
   '广场推荐': 'Discover highlights',
   '热门作品': 'Popular songs',

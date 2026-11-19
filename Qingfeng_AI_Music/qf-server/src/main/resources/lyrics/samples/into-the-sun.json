@@ -1,0 +1,144 @@
+{
+  "sourceKey": "sample:into-the-sun:11f3b4ee-3001-3d62-9365-aca819849b2b",
+  "audioSha256": "70d136c3fe1d9ff5dd639e52748bcbdec3538cd82b71f543cbe00013c59f729f",
+  "recognition": "faster-whisper-1.2.1 / large-v3-turbo + small; authored text and recorded vocal order reviewed",
+  "duration": 188.72,
+  "warnings": [],
+  "words": [
+    {
+      "text": "Oh, we rise\n",
+      "start": 0.0,
+      "end": 2.54
+    },
+    {
+      "text": "Into the sun\n",
+      "start": 2.54,
+      "end": 6.2
+    },
+    {
+      "text": "Into the sun\n",
+      "start": 6.2,
+      "end": 10.52
+    },
+    {
+      "text": "I’ve been searching for a place\n",
+      "start": 17.04,
+      "end": 21.02
+    },
+    {
+      "text": "Where the ocean meets the sky\n",
+      "start": 21.02,
+      "end": 24.4
+    },
+    {
+      "text": "Every shadow fades away\n",
+      "start": 24.4,
+      "end": 28.1
+    },
+    {
+      "text": "When I see you in the light\n",
+      "start": 28.1,
+      "end": 31.92
+    },
+    {
+      "text": "Take my hand\n",
+      "start": 31.92,
+      "end": 34.18
+    },
+    {
+      "text": "Don’t let go\n",
+      "start": 34.18,
+      "end": 35.74
+    },
+    {
+      "text": "Feel the rhythm\n",
+      "start": 35.74,
+      "end": 37.74
+    },
+    {
+      "text": "Let it flow\n",
+      "start": 37.74,
+      "end": 39.34
+    },
+    {
+      "text": "Into the sun\n",
+      "start": 44.6,
+      "end": 46.72
+    },
+    {
+      "text": "We keep on running\n",
+      "start": 48.12,
+      "end": 50.84
+    },
+    {
+      "text": "Into the sun\n",
+      "start": 52.0,
+      "end": 54.08
+    },
+    {
+      "text": "A new beginning\n",
+      "start": 54.08,
+      "end": 58.2
+    },
+    {
+      "text": "Oh, we rise\n",
+      "start": 58.2,
+      "end": 65.24
+    },
+    {
+      "text": "Oh, we rise\n",
+      "start": 65.24,
+      "end": 69.62
+    },
+    {
+      "text": "Into the sun\n",
+      "start": 73.82,
+      "end": 76.34
+    },
+    {
+      "text": "Into the sun\n",
+      "start": 76.34,
+      "end": 83.76
+    },
+    {
+      "text": "When the world is falling down\n",
+      "start": 105.56,
+      "end": 109.5
+    },
+    {
+      "text": "We can turn it all around\n",
+      "start": 109.5,
+      "end": 112.76
+    },
+    {
+      "text": "Feel the earth beneath our feet\n",
+      "start": 113.28,
+      "end": 116.72
+    },
+    {
+      "text": "Let the music set us free\n",
+      "start": 116.72,
+      "end": 120.32
+    },
+    {
+      "text": "Into the sun\n",
+      "start": 125.78,
+      "end": 127.96
+    },
+    {
+      "text": "We keep on running\n",
+      "start": 129.34,
+      "end": 131.82
+    },
+    {
+      "text": "Into the sun\n",
+      "start": 133.24,
+      "end": 135.44
+    },
+    {
+      "text": "A new beginning\n",
+      "start": 135.44,
+      "end": 139.06
+    }
+  ]
+}

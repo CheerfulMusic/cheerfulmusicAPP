@@ -1,0 +1,279 @@
+{
+  "sourceKey": "sample:light-it-up:7ea96217-5eeb-3290-b5c5-3ffdcad6f487",
+  "audioSha256": "14f42b2a754be639b7bf4b1d7f96d9d02c51c2f1fe436157dc025631421e27ee",
+  "recognition": "faster-whisper-1.2.1 / large-v3-turbo + small; authored text and recorded vocal order reviewed",
+  "duration": 209.08,
+  "warnings": [],
+  "words": [
+    {
+      "text": "We are young\n",
+      "start": 17.42,
+      "end": 20.0
+    },
+    {
+      "text": "We are wild\n",
+      "start": 20.0,
+      "end": 23.9
+    },
+    {
+      "text": "Tonight\n",
+      "start": 25.86,
+      "end": 27.26
+    },
+    {
+      "text": "We're coming alive\n",
+      "start": 29.08,
+      "end": 31.66
+    },
+    {
+      "text": "Underneath the neon sky\n",
+      "start": 35.66,
+      "end": 38.4
+    },
+    {
+      "text": "I can feel the fire inside\n",
+      "start": 38.4,
+      "end": 42.08
+    },
+    {
+      "text": "Every heartbeat takes me higher\n",
+      "start": 42.6,
+      "end": 46.42
+    },
+    {
+      "text": "We're electric, we're on fire\n",
+      "start": 46.42,
+      "end": 50.22
+    },
+    {
+      "text": "No more waiting for the sun\n",
+      "start": 50.22,
+      "end": 54.26
+    },
+    {
+      "text": "Tonight we are the chosen ones\n",
+      "start": 54.26,
+      "end": 58.36
+    },
+    {
+      "text": "Leave the shadows far behind\n",
+      "start": 58.36,
+      "end": 61.58
+    },
+    {
+      "text": "Let the universe collide\n",
+      "start": 62.48,
+      "end": 65.2
+    },
+    {
+      "text": "Take me higher, higher\n",
+      "start": 65.2,
+      "end": 67.7
+    },
+    {
+      "text": "Set my soul on fire\n",
+      "start": 67.7,
+      "end": 70.92
+    },
+    {
+      "text": "Can you feel it coming?\n",
+      "start": 72.18,
+      "end": 74.56
+    },
+    {
+      "text": "We're never coming down\n",
+      "start": 75.78,
+      "end": 78.1
+    },
+    {
+      "text": "Three, two, one...\n",
+      "start": 78.96,
+      "end": 80.68
+    },
+    {
+      "text": "LET'S GO!\n",
+      "start": 80.68,
+      "end": 81.22
+    },
+    {
+      "text": "Light it up, up, up!\n",
+      "start": 81.28,
+      "end": 82.82
+    },
+    {
+      "text": "We're burning through the night\n",
+      "start": 82.82,
+      "end": 84.84
+    },
+    {
+      "text": "Light it up, up, up!\n",
+      "start": 84.84,
+      "end": 86.52
+    },
+    {
+      "text": "We're taking over the sky\n",
+      "start": 86.52,
+      "end": 88.48
+    },
+    {
+      "text": "Oh-oh-oh-oh!\n",
+      "start": 88.48,
+      "end": 90.5
+    },
+    {
+      "text": "We will never stop\n",
+      "start": 90.5,
+      "end": 92.56
+    },
+    {
+      "text": "Oh-oh-oh-oh!\n",
+      "start": 92.56,
+      "end": 94.22
+    },
+    {
+      "text": "Turn it up, light it up!\n",
+      "start": 94.42,
+      "end": 96.32
+    },
+    {
+      "text": "Light it up, up, up!\n",
+      "start": 96.32,
+      "end": 98.2
+    },
+    {
+      "text": "We're burning through the night\n",
+      "start": 98.2,
+      "end": 100.12
+    },
+    {
+      "text": "Light it up, up, up!\n",
+      "start": 100.12,
+      "end": 101.9
+    },
+    {
+      "text": "We're taking over the sky\n",
+      "start": 101.9,
+      "end": 103.72
+    },
+    {
+      "text": "Oh-oh-oh-oh!\n",
+      "start": 103.72,
+      "end": 105.76
+    },
+    {
+      "text": "We will never stop\n",
+      "start": 105.76,
+      "end": 107.82
+    },
+    {
+      "text": "Oh-oh-oh-oh!\n",
+      "start": 107.82,
+      "end": 109.68
+    },
+    {
+      "text": "Turn it up, light it up!\n",
+      "start": 109.68,
+      "end": 111.68
+    },
+    {
+      "text": "Feel the rhythm in your veins\n",
+      "start": 112.08,
+      "end": 120.06
+    },
+    {
+      "text": "Wash away the tears and pain\n",
+      "start": 120.06,
+      "end": 123.74
+    },
+    {
+      "text": "Every moment, every sound\n",
+      "start": 123.74,
+      "end": 127.22
+    },
+    {
+      "text": "We are lost and we are found\n",
+      "start": 127.22,
+      "end": 130.7
+    },
+    {
+      "text": "Take me higher, higher\n",
+      "start": 130.7,
+      "end": 133.06
+    },
+    {
+      "text": "Set my soul on fire\n",
+      "start": 133.06,
+      "end": 136.32
+    },
+    {
+      "text": "Can you feel it coming?\n",
+      "start": 137.42,
+      "end": 139.86
+    },
+    {
+      "text": "We're never coming down\n",
+      "start": 141.0,
+      "end": 143.4
+    },
+    {
+      "text": "Higher!\n",
+      "start": 148.98,
+      "end": 149.94
+    },
+    {
+      "text": "Higher!\n",
+      "start": 152.7,
+      "end": 153.66
+    },
+    {
+      "text": "Are you ready?\n",
+      "start": 156.0,
+      "end": 157.7
+    },
+    {
+      "text": "LET'S GO!\n",
+      "start": 161.4,
+      "end": 161.78
+    },
+    {
+      "text": "Up, up, up!\n",
+      "start": 161.8,
+      "end": 163.24
+    },
+    {
+      "text": "We're burning through the night\n",
+      "start": 163.82,
+      "end": 165.28
+    },
+    {
+      "text": "Up, up, up!\n",
+      "start": 165.92,
+      "end": 166.94
+    },
+    {
+      "text": "We're taking over the sky\n",
+      "start": 167.12,
+      "end": 169.0
+    },
+    {
+      "text": "Oh\n",
+      "start": 169.0,
+      "end": 169.72
+    },
+    {
+      "text": "We will never stop\n",
+      "start": 170.02,
+      "end": 172.74
+    },
+    {
+      "text": "Oh-oh-oh-oh!\n",
+      "start": 172.74,
+      "end": 174.96
+    },
+    {
+      "text": "Turn it up, light it up!\n",
+      "start": 174.96,
+      "end": 176.86
+    }
+  ]
+}
