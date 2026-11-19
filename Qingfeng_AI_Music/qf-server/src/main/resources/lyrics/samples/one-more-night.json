@@ -1,0 +1,164 @@
+{
+  "sourceKey": "sample:one-more-night:5f9c5ed0-5815-35cd-9f5f-b9e72b609da0",
+  "audioSha256": "3e375188eafa17ae1a038c5b3eb96ea9d841efe73055e49b1e76cb5c106d1180",
+  "recognition": "faster-whisper-1.2.1 / large-v3-turbo + small; authored text and recorded vocal order reviewed",
+  "duration": 173.16,
+  "warnings": [],
+  "words": [
+    {
+      "text": "One more night\n",
+      "start": 0.0,
+      "end": 2.58
+    },
+    {
+      "text": "Just one more night\n",
+      "start": 7.36,
+      "end": 10.04
+    },
+    {
+      "text": "With you\n",
+      "start": 11.82,
+      "end": 13.38
+    },
+    {
+      "text": "The city sleeps but we’re still wide awake\n",
+      "start": 17.1,
+      "end": 20.6
+    },
+    {
+      "text": "Another chance, another chance to take\n",
+      "start": 20.6,
+      "end": 24.46
+    },
+    {
+      "text": "Your silhouette beneath the neon lights\n",
+      "start": 24.46,
+      "end": 28.14
+    },
+    {
+      "text": "I don’t wanna say goodbye tonight\n",
+      "start": 28.14,
+      "end": 31.64
+    },
+    {
+      "text": "If tomorrow never comes\n",
+      "start": 31.64,
+      "end": 35.62
+    },
+    {
+      "text": "Would you stay until the sun?\n",
+      "start": 35.62,
+      "end": 39.18
+    },
+    {
+      "text": "We don’t need a reason why\n",
+      "start": 39.98,
+      "end": 42.4
+    },
+    {
+      "text": "Just another night\n",
+      "start": 43.74,
+      "end": 45.78
+    },
+    {
+      "text": "Give me one more night\n",
+      "start": 45.92,
+      "end": 48.64
+    },
+    {
+      "text": "One more night with you\n",
+      "start": 48.9,
+      "end": 52.2
+    },
+    {
+      "text": "Dancing through the lights\n",
+      "start": 52.86,
+      "end": 55.46
+    },
+    {
+      "text": "Like we used to do\n",
+      "start": 55.46,
+      "end": 57.96
+    },
+    {
+      "text": "Give me one more night\n",
+      "start": 59.52,
+      "end": 61.42
+    },
+    {
+      "text": "Before we say goodbye\n",
+      "start": 61.42,
+      "end": 62.98
+    },
+    {
+      "text": "We can make forever\n",
+      "start": 62.98,
+      "end": 65.2
+    },
+    {
+      "text": "Last until the morning light\n",
+      "start": 65.2,
+      "end": 67.12
+    },
+    {
+      "text": "The music fades but I can feel you near\n",
+      "start": 101.2,
+      "end": 105.66
+    },
+    {
+      "text": "Every moment makes it crystal clear\n",
+      "start": 105.66,
+      "end": 109.22
+    },
+    {
+      "text": "We both know this can’t go on forever\n",
+      "start": 109.22,
+      "end": 112.68
+    },
+    {
+      "text": "But tonight we’re still together\n",
+      "start": 112.68,
+      "end": 115.98
+    },
+    {
+      "text": "Give me one more night\n",
+      "start": 115.98,
+      "end": 118.66
+    },
+    {
+      "text": "One more night with you\n",
+      "start": 118.96,
+      "end": 122.1
+    },
+    {
+      "text": "Dancing through the lights\n",
+      "start": 122.1,
+      "end": 124.18
+    },
+    {
+      "text": "Like we used to do\n",
+      "start": 124.38,
+      "end": 127.8
+    },
+    {
+      "text": "One more night\n",
+      "start": 143.68,
+      "end": 146.18
+    },
+    {
+      "text": "One more night\n",
+      "start": 147.88,
+      "end": 151.06
+    },
+    {
+      "text": "One more night\n",
+      "start": 151.06,
+      "end": 153.52
+    },
+    {
+      "text": "With you\n",
+      "start": 155.0,
+      "end": 156.9
+    }
+  ]
+}

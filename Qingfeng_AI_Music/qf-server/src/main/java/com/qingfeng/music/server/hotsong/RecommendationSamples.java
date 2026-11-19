@@ -20,7 +20,17 @@ public final class RecommendationSamples {
         new Song("meng-de-chi-bang", "梦的翅膀受了伤", "电子", "/media/sample-meng-de-chi-bang-v1-preview-128.mp3"),
         new Song("after-midnight", "AFTER MIDNIGHT", "欧美流行", "/media/sample-after-midnight-v1-preview-128.mp3"),
         new Song("if-you-wanna-feel-me", "if you wanna feel me", "欧美流行", "/media/sample-if-you-wanna-feel-me-v1-preview-128.mp3"),
-        new Song("where-the-wind-goes", "Where the Wind Goes", "欧美流行", "/media/sample-where-the-wind-goes-v1-preview-128.mp3"));
+        new Song("where-the-wind-goes", "Where the Wind Goes", "欧美流行", "/media/sample-where-the-wind-goes-v1-preview-128.mp3"),
+        new Song("body-language", "Body Language", "House", "/media/recommendations/body-language-8e59749c37e9-preview-128.mp3"),
+        new Song("into-the-sun", "Into the Sun", "House", "/media/recommendations/into-the-sun-70d136c3fe1d-preview-128.mp3"),
+        new Song("one-more-night", "One More Night", "House", "/media/recommendations/one-more-night-3e375188eafa-preview-128.mp3"),
+        new Song("all-night-one-more-time", "All Night One More Time", "电子", "/media/recommendations/all-night-one-more-time-2f881a6c54ab-preview-128.mp3"),
+        new Song("euphoric-drop", "Euphoric Drop", "电子", "/media/recommendations/euphoric-drop-bceceadc198d-preview-128.mp3"),
+        new Song("i-run-this-show", "I Run This Show", "电子", "/media/recommendations/i-run-this-show-3c234aa9e239-preview-128.mp3"),
+        new Song("light-it-up", "LIGHT IT UP", "电子", "/media/recommendations/light-it-up-14f42b2a754b-preview-128.mp3"),
+        new Song("cant-stop-this-feeling", "Can't Stop This Feeling", "欧美流行", "/media/recommendations/cant-stop-this-feeling-34244d3c6efc-preview-128.mp3"),
+        new Song("midnight-call", "Midnight Call", "欧美流行", "/media/recommendations/midnight-call-8a6cdb33c69e-preview-128.mp3"),
+        new Song("summer-on-repeat", "Summer on Repeat", "欧美流行", "/media/recommendations/summer-on-repeat-68e4b531c543-preview-128.mp3"));
 
     private static final Map<String, String> OBJECTS = Map.ofEntries(
         Map.entry("sample-feng-ye-xing-v1.mp3", "qingfeng/recommendation-samples/20261118/original/686329f818bc/sample-feng-ye-xing-v1.mp3"),

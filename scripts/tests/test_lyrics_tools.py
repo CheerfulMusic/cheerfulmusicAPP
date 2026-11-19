@@ -9,6 +9,14 @@ align = module('align-sample-lyrics')
 prepare = module('prepare-sample-lyrics')
 
 class LyricsToolsTest(unittest.TestCase):
+    def test_hash_named_preview_uses_the_checked_manifest_and_rejects_changed_bytes(self):
+        with tempfile.TemporaryDirectory() as folder:
+            directory=Path(folder);file=directory/'body-language-8e59749c37e9-preview-128.mp3';file.write_bytes(b'audio')
+            assets={'body-language':{'path':'/media/recommendations/'+file.name,'sha256':hashlib.sha256(b'audio').hexdigest()}}
+            self.assertEqual(align.preview_audio('body-language',directory,assets),file)
+            file.write_bytes(b'changed')
+            with self.assertRaises(ValueError):align.preview_audio('body-language',directory,assets)
+            with self.assertRaises(ValueError):align.preview_audio('unknown',directory,assets)
     def test_headers_are_not_treated_as_sung_words(self):
         self.assertEqual(align.lyric_lines('[Intro - Whispered]\n原稿一句\nverse1\n原稿二句\n（prechorus）\n原稿三句\n《歌名》'), ['原稿一句','原稿二句','原稿三句'])
     def test_repeated_sections_keep_their_own_actual_time(self):
