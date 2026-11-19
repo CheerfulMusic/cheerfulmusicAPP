@@ -23,6 +23,7 @@ class CreditHistoricalCutoverTest {
     private static Set<String> codes(Plan plan) { var result = new HashSet<String>(); plan.issues().forEach(i -> result.add(i.code())); return result; }
     private static final String V46 = "V46__agent_chat_allowance.sql";
     private static final String V47 = "V47__music_video_projects.sql";
+    private static final String V49 = "V49__lyrics_preparation.sql";
     private static List<Resource> classpathMigrations() throws Exception {
         return new ArrayList<>(Arrays.asList(new PathMatchingResourcePatternResolver().getResources("classpath*:db/migration/V*__*.sql")));
     }
@@ -141,7 +142,7 @@ class CreditHistoricalCutoverTest {
         assertEquals("HISTORY_SCRIPT_OR_CHECKSUM_MISMATCH", assertThrows(IllegalStateException.class, () -> verifyHistory(reordered, resources)).getMessage());
     }
     @Test void approvedExtensionsMayCoexistWithoutChangingHistoricalSourceVersions() throws Exception {
-        var resources = classpathMigrations(); assertEquals(48, resources.size());
+        var resources = classpathMigrations(); assertEquals(49, resources.size());
         var optional = resources.stream().filter(item -> V47.equals(item.getFilename())).findFirst().orElseThrow();
         try (var stream = optional.getInputStream()) { assertEquals(-48314744, checksum(stream.readAllBytes())); }
         for (int limit : List.of(44, 45)) {
@@ -186,6 +187,15 @@ class CreditHistoricalCutoverTest {
             modified.add(resource(name, "SELECT 1;".getBytes(StandardCharsets.UTF_8)));
             assertEquals("HISTORY_UNAPPROVED_RESOURCE_EXTENSION", assertThrows(IllegalStateException.class, () -> verifyHistory(actual, modified)).getMessage());
         }
+    }
+
+    @Test void lyricsPreparationResourceIsPinnedAndCannotSkipPhoneBinding() throws Exception {
+        var resources = classpathMigrations(); var actual = history(resources, 44);
+        var missing = new ArrayList<>(resources); missing.removeIf(r -> version(r) == 48);
+        assertEquals("HISTORY_RESOURCE_CHAIN_INCOMPLETE", assertThrows(IllegalStateException.class, () -> verifyHistory(actual, missing)).getMessage());
+        var modified = new ArrayList<>(resources); modified.removeIf(r -> version(r) == 49);
+        modified.add(resource(V49, "SELECT 1;".getBytes(StandardCharsets.UTF_8)));
+        assertEquals("HISTORY_UNAPPROVED_RESOURCE_EXTENSION", assertThrows(IllegalStateException.class, () -> verifyHistory(actual, modified)).getMessage());
     }
 
     @Test void remainingOpeningNeverInventsHistoricalFifoAndRefundsRetainExactReferences() {
