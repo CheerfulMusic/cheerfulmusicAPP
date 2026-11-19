@@ -38,12 +38,80 @@ def digest(path):
         return hashlib.file_digest(stream, "sha256").hexdigest()
 
 
+def merged_commit(source, local, upstream):
+    """Prepare the merge without changing an index or a developer's working files."""
+    base = output("git", "merge-base", local, upstream, cwd=source)
+    if base == local:
+        return upstream
+    if base == upstream:
+        return local
+    tree = output("git", "merge-tree", "--write-tree", local, upstream, cwd=source)
+    return output("git", "commit-tree", tree, "-p", local, "-p", upstream,
+                  "-m", "Merge origin/main for daily release", cwd=source)
+
+
+def check_main(source, expected):
+    if (output("git", "symbolic-ref", "HEAD", cwd=source) != "refs/heads/main"
+            or output("git", "rev-parse", "HEAD", cwd=source) != expected):
+        raise RuntimeError("Local main moved; retry with the new commits")
+
+
+def remote_head(source):
+    line = output("git", "ls-remote", "--exit-code", "origin", "refs/heads/main", cwd=source)
+    return line.split()[0]
+
+
+def sync_and_push(source, local, upstream, candidate):
+    check_main(source, local)
+    if remote_head(source) != upstream:
+        raise RuntimeError("Remote main moved during verification; retry the merge and tests")
+    if local != candidate:
+        output("git", "-c", "merge.autoStash=false", "merge", "--ff-only", "--no-autostash",
+               candidate, cwd=source)
+    check_main(source, candidate)
+    if upstream != candidate:
+        # Ordinary non-force push also rejects a concurrent divergent update.
+        output("git", "push", "origin", candidate + ":refs/heads/main", cwd=source)
+    if remote_head(source) != candidate:
+        raise RuntimeError("Remote main does not match the verified candidate")
+    print("Synchronized local and remote main:", candidate, flush=True)
+
+
+def checkout_candidate(source, repo, candidate):
+    # A separate index and build cache on D; keep ancestry from the shallow partial clone.
+    output("git", "init", "--quiet", str(repo))
+    objects = output("git", "rev-parse", "--path-format=absolute", "--git-path", "objects", cwd=source)
+    (repo / ".git/objects/info/alternates").write_text(Path(objects).as_posix() + "\n", encoding="utf-8")
+    shallow = Path(output("git", "rev-parse", "--path-format=absolute", "--git-path", "shallow", cwd=source))
+    if shallow.is_file():
+        shutil.copyfile(shallow, repo / ".git/shallow")
+    url = output("git", "remote", "get-url", "origin", cwd=source)
+    output("git", "remote", "add", "origin", url, cwd=repo)
+    output("git", "config", "remote.origin.promisor", "true", cwd=repo)
+    output("git", "config", "remote.origin.partialclonefilter", "blob:none", cwd=repo)
+    output("git", "-c", "advice.detachedHead=false", "checkout", "--detach", candidate, cwd=repo)
+
+
 def main(args):
     os.environ["GIT_TERMINAL_PROMPT"] = "0"
     cache = Path(args.cache_root).resolve()
     helper = cache / "cn-move-20261118/exec_checked.py"
-    output("git", "fetch", "--all", "--prune")
-    candidate = output("git", "rev-parse", "--verify", "refs/remotes/origin/main^{commit}")
+    source = Path(args.source_main).resolve(strict=True)
+    local = output("git", "rev-parse", "refs/heads/main", cwd=source)
+    check_main(source, local)
+    if source == ROOT:
+        raise ValueError("Configure the developer main worktree, distinct from the release runner")
+    if output("git", "remote", "get-url", "origin", cwd=source) != output("git", "remote", "get-url", "origin"):
+        raise ValueError("Developer and release repositories must share origin")
+    proxy = subprocess.run(["git", "config", "--get", "http.https://github.com.proxy"],
+                           cwd=ROOT, capture_output=True, text=True)
+    if proxy.returncode == 0:
+        count = int(os.environ.get("GIT_CONFIG_COUNT", "0"))
+        os.environ.update({f"GIT_CONFIG_KEY_{count}": "http.https://github.com.proxy",
+                           f"GIT_CONFIG_VALUE_{count}": proxy.stdout.strip(), "GIT_CONFIG_COUNT": str(count+1)})
+    output("git", "fetch", "--all", "--prune", cwd=source)
+    upstream = output("git", "rev-parse", "refs/remotes/origin/main^{commit}", cwd=source)
+    candidate = merged_commit(source, local, upstream)
     old, live, checksum = remote(helper, """
 cd /opt/qingfeng-music/current
 pwd -P
@@ -55,20 +123,20 @@ sha256sum app.jar | cut -d' ' -f1
             and all(re.fullmatch("[a-f0-9]{40}", x) for x in (live,candidate))
             and re.fullmatch("[a-f0-9]{64}", checksum)):
         raise ValueError("Invalid production baseline")
-    print(f"Shenzhen live={live} origin/main={candidate}", flush=True)
-    if candidate == live and not args.verify_current:
+    print(f"Shenzhen live={live} local={local} origin/main={upstream} candidate={candidate}", flush=True)
+    if candidate == live == upstream and not args.verify_current:
+        if args.publish and local != candidate:
+            sync_and_push(source, local, upstream, candidate)
         print("Already current")
         return
-    output("git", "merge-base", "--is-ancestor", live, candidate)
-    if output("git","diff","--name-only",live,candidate,"--",":(glob)**/db/migration/**"):
+    output("git", "merge-base", "--is-ancestor", live, candidate, cwd=source)
+    if output("git","diff","--name-only",live,candidate,"--",":(glob)**/db/migration/**",cwd=source):
         raise ValueError("Migration changes require a migration release")
     scratch = Path(args.scratch).resolve()
     scratch.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(dir=scratch) as temp:
         repo = Path(temp) / "src"
-        output("git","init","--quiet",str(repo))
-        output("git","fetch","--no-tags","--update-shallow",str(ROOT),candidate,cwd=repo)
-        output("git","-c","advice.detachedHead=false","checkout","--detach",candidate,cwd=repo)
+        checkout_candidate(source, repo, candidate)
         deps = repo / ".cache"
         deps.mkdir(exist_ok=True)
         for name in ("npm","maven","toolchains","payment-mysql-8046-20261111"):
@@ -100,7 +168,10 @@ sha256sum app.jar | cut -d' ' -f1
                 or json.loads(contract.read_text())["jarSha256"] != plan["jarSha256"]):
             raise RuntimeError("Package differs from verified build")
         print("Build verified",flush=True)
-        if not args.publish or live == candidate:
+        if not args.publish:
+            return
+        sync_and_push(source, local, upstream, candidate)
+        if live == candidate:
             return
         tag = "daily-"+candidate[:12]+"-"+uuid.uuid4().hex[:8]
         stage = "/srv/qingfeng-data/qingfeng-release-staging/"+tag
@@ -113,6 +184,8 @@ sha256sum app.jar | cut -d' ' -f1
                 tar.add(path,arcname=path.name)
         workbench = Path(os.environ["LOCALAPPDATA"])/"Programs/workbench/workbench.exe"
         output(workbench,"upload",bundle,dest,"-i",INSTANCE,"-r","cn-shenzhen","-o","json")
+        if remote_head(source) != candidate:
+            raise RuntimeError("Remote main changed after upload; leaving production untouched")
         remote(helper, f"""umask 077
 echo '{digest(bundle)}  {dest}' | sha256sum -c -
 mkdir -m 700 {stage}
@@ -134,7 +207,7 @@ systemd-run --unit=qf-{tag} --property=UMask=0077 /usr/bin/python3.11 {stage}/da
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    for key in ("cache-root","java-home","scratch"):
+    for key in ("cache-root","java-home","scratch","source-main"):
         parser.add_argument("--"+key,required=True)
     parser.add_argument("--verify-current",action="store_true")
     parser.add_argument("--publish",action="store_true")

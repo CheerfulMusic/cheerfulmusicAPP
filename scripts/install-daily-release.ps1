@@ -3,6 +3,7 @@ param(
     [Parameter(Mandatory)][string]$JavaHome,
     [Parameter(Mandatory)][string]$CacheRoot,
 
+    [Parameter(Mandatory)][string]$SourceMain,
     [switch]$Publish
 )
 $ErrorActionPreference = 'Stop'
@@ -11,6 +12,7 @@ if ((Get-TimeZone).Id -ne 'China Standard Time') {
 }
 $python = (Get-Command python.exe -CommandType Application | Select-Object -First 1).Source
 $items = @((Join-Path $PSScriptRoot 'daily-release.py'), '--scratch', $Scratch,
+    '--source-main', (Resolve-Path -LiteralPath $SourceMain).Path,
     '--java-home', (Resolve-Path -LiteralPath $JavaHome).Path,
     '--cache-root', (Resolve-Path -LiteralPath $CacheRoot).Path)
 if ($Publish) { $items += '--publish' }
