@@ -58,8 +58,8 @@ class IntegratedPaymentApplicationMySqlTest {
     static final String PREFIX="P0_INTEGRATION_APPLICATION_MYSQL_",ACCOUNT="acct_offline12345678",PAYPAL_MERCHANT="TESTMERCHANT";
     static final int APPLICATION_SCHEMA_TARGET=applicationSchemaTarget();
     private static int applicationSchemaTarget(){
-        String target=System.getenv().getOrDefault("P0_PAYMENT_APPLICATION_SCHEMA_TARGET","50");
-        if(!Set.of("45","46","50").contains(target))throw new IllegalArgumentException("Isolated application schema target must be exactly 45, 46 or 50");
+        String target=System.getenv().getOrDefault("P0_PAYMENT_APPLICATION_SCHEMA_TARGET","51");
+        if(!Set.of("50","51").contains(target))throw new IllegalArgumentException("Isolated application schema target must be 50 or 51");
         return Integer.parseInt(target);
     }
     static final String SECRET="whsec_integrated_offline_fixture_not_a_real_credential";
@@ -82,7 +82,7 @@ class IntegratedPaymentApplicationMySqlTest {
     @BeforeAll static void proveMigrateMapActivateThenStartFullApplication() throws Exception {
         // Current production business behavior includes durable five-turn Agent packs.
         // V45-only compatibility remains on the original 0a31540-based recovery branch.
-        assertEquals(50,APPLICATION_SCHEMA_TARGET,"This application requires the V50 agent admission schema; use the matching revision for older application cohorts");
+        assertTrue(APPLICATION_SCHEMA_TARGET>=50,"This application requires the V50 agent admission schema; use the matching revision for older application cohorts");
         database=required("DATABASE");url=required("URL");user=required("USER");password=required("PASSWORD");
         if(!database.matches("p0_integration_application_20261112r[0-9]+")||!url.matches("jdbc:mysql://127\\.0\\.0\\.1:23316/"+database+"(?:\\?.*)?")
             ||"root".equalsIgnoreCase(user)||url.toLowerCase(Locale.ROOT).matches(".*(?:password=|user=|socketfactory|dnssrv|loadbalance|address=).*"))
@@ -145,7 +145,7 @@ class IntegratedPaymentApplicationMySqlTest {
             assertEquals(1,db.update("DELETE FROM agent_chat_allowance WHERE creator_id=?",legacyOwner));
             assertEquals(0,number("SELECT COUNT(*) FROM agent_chat_allowance"));
         }
-        Flyway.configure().dataSource(source).locations("classpath:db/migration").cleanDisabled(true).target("50").load().migrate();
+        Flyway.configure().dataSource(source).locations("classpath:db/migration").cleanDisabled(true).target(String.valueOf(APPLICATION_SCHEMA_TARGET)).load().migrate();
         assertApplicationSchemaTarget();CreditSchemaReadiness.requireActive(db);settings=configuration();start();
     }
     private static void assertApplicationSchemaTarget(){
@@ -237,10 +237,14 @@ class IntegratedPaymentApplicationMySqlTest {
                 });
             }).when(gateway).expireSession(anyString());
             doAnswer(call->known(SESSIONS,call.getArgument(0))).when(gateway).retrieveSession(anyString());doAnswer(call->known(REFUNDS,call.getArgument(0))).when(gateway).retrieveRefund(anyString());doAnswer(call->known(DISPUTES,call.getArgument(0))).when(gateway).retrieveDispute(anyString());doAnswer(call->known(CHARGES,call.getArgument(0))).when(gateway).retrieveCharge(anyString());doAnswer(call->known(BALANCES,call.getArgument(0))).when(gateway).retrieveBalanceTransaction(anyString());
+            doReturn(json.valueToTree(Map.of("object","list","data",List.of(),"has_more",false))).when(gateway).financialPage(anyString(),anyLong(),anyLong(),anyString());
             doThrow(new AssertionError("Unexpected external refund-list query")).when(gateway).refundsForCharge(anyString());doThrow(new AssertionError("Unexpected external dispute-list query")).when(gateway).disputesForCharge(anyString());return gateway;
         }
         @Bean PayPalCheckoutGateway offlinePayPalGateway(){
             var gateway=mock(PayPalCheckoutGateway.class);when(gateway.verifyWebhook(any(),any())).thenReturn(true);
+            when(gateway.refundReport(any(),any())).thenAnswer(call->JSON.valueToTree(Map.of("complete",true,"account_number",PAYPAL_MERCHANT,
+                "end_date",call.getArgument(1).toString(),"last_refreshed_datetime",call.getArgument(1).toString(),"transaction_details",List.of())));
+            when(gateway.disputeUpdates(anyLong(),anyLong(),anyString())).thenReturn(JSON.valueToTree(Map.of("items",List.of(),"links",List.of())));
             when(gateway.create(anyString(),anyString(),any(),anyString(),anyString(),anyString())).thenAnswer(call->{String remote="P"+unique().substring(0,20),order=call.getArgument(0);PAYPAL_ORDERS.put(remote,new PayPalCheckoutGateway.Snapshot(remote,order,"APPROVED",PAYPAL_MERCHANT,"","",new BigDecimal("9.90"),"USD"));return new PayPalCheckoutGateway.Created(remote,"https://www.sandbox.paypal.com/checkoutnow?token="+remote);});
             when(gateway.retrieve(anyString())).thenAnswer(call->{var fact=PAYPAL_ORDERS.get(call.getArgument(0));if(fact==null)throw new AssertionError("Unregistered PayPal resource; external API forbidden");return fact;});
             when(gateway.capture(anyString(),anyString())).thenAnswer(call->{String remote=call.getArgument(0);var prior=PAYPAL_ORDERS.get(remote);if(prior==null)throw new AssertionError("Unknown capture order");var fact=new PayPalCheckoutGateway.Snapshot(remote,prior.reference(),"COMPLETED",PAYPAL_MERCHANT,"C"+unique().substring(0,20),"COMPLETED",new BigDecimal("9.90"),"USD");PAYPAL_ORDERS.put(remote,fact);return fact;});
@@ -557,7 +561,7 @@ class IntegratedPaymentApplicationMySqlTest {
             var card=paid();assertEquals(100,ledger.balance(card.owner().creatorId()));assertEquals("USD",db.queryForObject("SELECT currency FROM payment_order WHERE id=?",String.class,card.order()));
             var paypalOwner=owner();var paypalCreated=business(paypalOwner,"/api/app/paypal/orders","POST","{\"packageId\":\"starter-USD\"}");assertEquals(200,paypalCreated.statusCode(),paypalCreated.body());String paypalOrder=JSON.readTree(paypalCreated.body()).path("orderId").asString();var capture=business(paypalOwner,"/api/app/paypal/orders/"+paypalOrder+"/capture","POST","{}");assertEquals(200,capture.statusCode(),capture.body());assertEquals("PAID",JSON.readTree(capture.body()).path("status").asString());assertEquals(100,ledger.balance(paypalOwner.creatorId()));
             assertEquals("PAYPAL_SANDBOX",db.queryForObject("SELECT provider FROM payment_order WHERE id=?",String.class,paypalOrder));assertEquals("USD",db.queryForObject("SELECT currency FROM payment_order WHERE id=?",String.class,paypalOrder));assertEquals(1,number("SELECT COUNT(*) FROM credit_ledger WHERE entry_type='CREDIT' AND reference_id=?","payment:"+old.order()));
-        }finally{settings.clear();settings.putAll(original);}
+        }finally{settings.clear();settings.putAll(original);application.close();start();}
     }
     @Test @Order(22) void missingStripePaymentWebhookIsRecoveredFromDurableOriginalScopeAndGrantedExactlyOnce() throws Exception {
         var p=pending(owner());assertEquals(0,ledger.balance(p.owner().creatorId()));
@@ -593,6 +597,74 @@ class IntegratedPaymentApplicationMySqlTest {
             org.springframework.test.util.ReflectionTestUtils.setField(stripe,"initialReconcileDelaySeconds",previous);
         }
     }
+    @Test @Order(22) void missingRefundIsDiscoveredAndLateWebhookCannotDebitTwice() throws Exception {
+        org.junit.jupiter.api.Assumptions.assumeTrue(APPLICATION_SCHEMA_TARGET>=51);
+        var mini=walletPending(owner(),"mini","29.90",35);
+        SESSIONS.put(mini.session(),walletSession(mini.session(),mini.order(),new BigDecimal("29.90"),"CNY",true));
+        accepted("checkout.session.completed",mini.session(),"evt_"+unique());drain();
+        String refund="re_"+unique();
+        REFUNDS.put(refund,JSON.valueToTree(Map.of("id",refund,"object","refund","livemode",false,"status","succeeded","currency","cny","amount",2990,"payment_intent",mini.intent())));
+        assertEquals(35,ledger.balance(mini.owner().creatorId()));
+        var gateway=application.getBean(StripeCheckoutGateway.class);
+        var page=JSON.valueToTree(Map.of("object","list","has_more",false,"data",List.of(Map.of("object","refund","id",refund,"status","succeeded"))));
+        doReturn(page).when(gateway).financialPage(eq("refunds"),anyLong(),anyLong(),anyString());
+        var worker=new PaymentFinancialDiscovery(stripe,gateway,paypal,db,1);
+        try {
+            worker.scanStripe();drain();assertEquals(0,ledger.balance(mini.owner().creatorId()));worker.scanStripe();
+            accepted("refund.updated",refund,"evt_"+unique());drain();
+            assertEquals(0,ledger.balance(mini.owner().creatorId()));
+            assertEquals(1,number("SELECT COUNT(*) FROM p0_credit_refund WHERE order_id=?",mini.order()));
+            assertEquals(2990,number("SELECT SUM(amount_minor) FROM p0_credit_refund WHERE order_id=?",mini.order()));
+        } finally {
+            worker.stop();
+            doReturn(JSON.valueToTree(Map.of("object","list","data",List.of(),"has_more",false))).when(gateway).financialPage(eq("refunds"),anyLong(),anyLong(),anyString());
+        }
+    }
+    @Test @Order(22) void interruptedFinancialFeedRetriesFailedPageAfterRestart() {
+        org.junit.jupiter.api.Assumptions.assumeTrue(APPLICATION_SCHEMA_TARGET>=51);
+        var scope=new PaymentFinancialDiscovery.Scope("STRIPE_SANDBOX","acct_cursor_fixture","sandbox","refunds");
+        var api=application.getBean(StripeCheckoutGateway.class);
+        var a=new PaymentFinancialDiscovery(stripe,api,paypal,db,1);
+        var b=new PaymentFinancialDiscovery(stripe,api,paypal,db,1);
+        var tokens=new ArrayList<String>();
+        long cutoff=Instant.now().getEpochSecond();
+        try {
+            assertThrows(IllegalStateException.class,()->a.advance(scope,cutoff,86400,(from,to,token)->{
+                tokens.add(token);if(token.isEmpty())return "page-2";throw new IllegalStateException("provider busy");
+            }));
+            assertEquals(0,b.advance(scope,cutoff,86400,(from,to,token)->{tokens.add(token);return "";}));
+            assertEquals(List.of("","page-2","page-2"),tokens);
+        } finally {a.stop();b.stop();}
+    }
+
+    @Test @Order(22) void paypalReportingDiscoversRefundAndOpenDisputeWithoutCallbacks() throws Exception {
+        org.junit.jupiter.api.Assumptions.assumeTrue(APPLICATION_SCHEMA_TARGET>=51);
+        var user=owner();
+        var created=business(user,"/api/app/paypal/orders","POST","{\"packageId\":\"starter-USD\"}");
+        String order=JSON.readTree(created.body()).path("orderId").asString();
+        assertEquals(200,business(user,"/api/app/paypal/orders/"+order+"/capture","POST","{}").statusCode());
+        String capture=db.queryForObject("SELECT provider_capture_id FROM payment_order WHERE id=?",String.class,order);
+        String refund="R"+unique().substring(0,20), dispute="PP-"+unique();
+        PAYPAL_REFUNDS.put(refund,JSON.valueToTree(Map.of("id",refund,"status","COMPLETED","amount",Map.of("value","1.98","currency_code","USD"),
+            "links",List.of(Map.of("rel","up","href","https://api-m.sandbox.paypal.com/v2/payments/captures/"+capture)))));
+        var api=paypal.gateway();String updated=Instant.now().toString();
+        var fact=JSON.valueToTree(Map.of("dispute_id",dispute,"update_time",updated,"status","OPEN","dispute_amount",Map.of("currency_code","USD","value","7.92"),
+            "disputed_transactions",List.of(Map.of("seller_transaction_id",capture))));
+        doReturn(fact).when(api).retrieveDispute(dispute);
+        var listing=mock(PayPalCheckoutGateway.class);var discoveryPayPal=spy(paypal);doReturn(listing).when(discoveryPayPal).gateway();
+        when(listing.refundReport(any(),any())).thenAnswer(call->JSON.valueToTree(Map.of("complete",true,"account_number",PAYPAL_MERCHANT,
+            "end_date",call.getArgument(1).toString(),"last_refreshed_datetime",call.getArgument(1).toString(),
+            "transaction_details",List.of(Map.of("transaction_info",Map.of("transaction_id",refund,"transaction_event_code","T1107","transaction_updated_date",updated))))));
+        when(listing.disputeUpdates(anyLong(),anyLong(),anyString())).thenReturn(JSON.valueToTree(Map.of("items",List.of(fact),"links",List.of())));
+        var worker=new PaymentFinancialDiscovery(stripe,application.getBean(StripeCheckoutGateway.class),discoveryPayPal,db,1);
+        try{
+            worker.scanPayPal();drain();worker.scanPayPal();drain();
+            assertEquals(1,number("SELECT COUNT(*) FROM p0_credit_refund WHERE order_id=? AND amount_minor=198",order));
+            assertEquals(80,ledger.balance(user.creatorId()));
+            assertEquals(1,number("SELECT COUNT(*) FROM p0_credit_dispute WHERE order_id=? AND external_id=?",order,dispute));
+        }finally{worker.stop();}
+    }
+
     @Test @Order(23) void paypalRefundBeforeCompletionRecoversProvenCaptureAtomicallyAndKeepsOnlyItsRemainingRightsUnderReview() throws Exception {
         var user=owner();var created=business(user,"/api/app/paypal/orders","POST",JSON.writeValueAsString(Map.of("packageId","starter-USD")));
         assertEquals(200,created.statusCode(),created.body());String order=JSON.readTree(created.body()).path("orderId").asString();

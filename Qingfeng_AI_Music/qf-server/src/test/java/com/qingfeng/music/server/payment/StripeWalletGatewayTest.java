@@ -40,6 +40,28 @@ class StripeWalletGatewayTest {
         ReflectionTestUtils.setField(gateway,"webhookSecret","whsec_offline_fixture");ReflectionTestUtils.setField(gateway,"businessCountry",configuredCountry);
         return new Fixture(gateway,requests);
     }
+    @Test void livePurchaseChecksRefreshAfterSixtySecondsWhileRefundReadsStayAvailable() throws Exception {
+        var enabled=new java.util.concurrent.atomic.AtomicBoolean(true);
+        var http=mock(HttpClient.class);
+        when(http.send(any(HttpRequest.class),any(HttpResponse.BodyHandler.class))).thenAnswer(c->{
+            HttpRequest request=c.getArgument(0);
+            var response=mock(HttpResponse.class);
+            when(response.statusCode()).thenReturn(200);
+            when(response.body()).thenReturn(request.uri().getPath().equals("/v1/account")
+                ?new ObjectMapper().writeValueAsString(Map.of("id",ACCOUNT,"country","GB","charges_enabled",enabled.get()))
+                :"{\"id\":\"re_test\"}");
+            return response;
+        });
+        var gateway=new StripeCheckoutGateway(new ObjectMapper(),http);
+        ReflectionTestUtils.setField(gateway,"environment","live");ReflectionTestUtils.setField(gateway,"accountId",ACCOUNT);
+        ReflectionTestUtils.setField(gateway,"apiKey","sk_live_offline_fixture");ReflectionTestUtils.setField(gateway,"webhookSecret","whsec_offline_fixture");
+        gateway.verifyNewPurchase("card","USD");enabled.set(false);
+        ReflectionTestUtils.setField(gateway,"purchaseCheckedAt",System.nanoTime()-61_000_000_000L);
+        assertThrows(ResponseStatusException.class,()->gateway.verifyNewPurchase("card","USD"));
+        assertEquals("re_test",gateway.retrieveRefund("re_test").path("id").asString());
+        enabled.set(true);ReflectionTestUtils.setField(gateway,"purchaseCheckedAt",System.nanoTime()-61_000_000_000L);
+        gateway.verifyNewPurchase("card","USD");
+    }
     private Fixture fixture(String country) throws Exception {return fixture(country,country,false,true,ACCOUNT);}
     private static Map<String,String> fields(HttpRequest request){
         var result=new CompletableFuture<byte[]>();var bytes=new java.io.ByteArrayOutputStream();

@@ -73,6 +73,7 @@ AGENT_ALLOWANCE_MIGRATION_SHA256 = '8ce991cea50af971ca6d748c1a37b304a8ee11d7969f
 
 
 FEATURE_MIGRATION_SHA256 = {
+    "V51__payment_reconciliation_cursor.sql": "7030c4fba4bc5009ca921fb59f931ebef952f6f93d67efd77889c298cd2ee045",
     "V47__music_video_projects.sql": "b4a25044d77906e891d56632f037a68a1ba5dad2073a129188b11b8bcba8a08a",
     "V48__phone_binding.sql": "09aeadab869727486bac96ac9200ad47310132763ad49020c0abe7844b359ca3",
     "V50__agent_admission_version.sql": "83af90babf7a7a299177d08d0b3e1eb79bcabf7cc0454cbd4d6025ae074e5591",
@@ -154,7 +155,11 @@ def verify_migration_set(normalized):
     phone_expected = {**mv_expected, "V48__phone_binding.sql": FEATURE_MIGRATION_SHA256["V48__phone_binding.sql"]}
     lyrics_expected = {**phone_expected, "V49__lyrics_preparation.sql": FEATURE_MIGRATION_SHA256["V49__lyrics_preparation.sql"]}
     admission_expected = {**lyrics_expected, "V50__agent_admission_version.sql": FEATURE_MIGRATION_SHA256["V50__agent_admission_version.sql"]}
-    if set(normalized) == set(admission_expected):
+    financial_expected = {**admission_expected, "V51__payment_reconciliation_cursor.sql": FEATURE_MIGRATION_SHA256["V51__payment_reconciliation_cursor.sql"]}
+    if set(normalized) == set(financial_expected):
+        expected = financial_expected
+        extension = {"agentAllowanceVersion": "46", "musicVideoVersion": "47", "phoneBindingVersion": "48", "lyricsPreparationVersion": "49", "agentAdmissionVersion": "50", "paymentReconciliationVersion": "51"}
+    elif set(normalized) == set(admission_expected):
         expected = admission_expected
         extension = {"agentAllowanceVersion": "46", "musicVideoVersion": "47", "phoneBindingVersion": "48", "lyricsPreparationVersion": "49", "agentAdmissionVersion": "50"}
     elif set(normalized) == set(lyrics_expected):
@@ -173,7 +178,7 @@ def verify_migration_set(normalized):
         expected = rollback_expected
         extension = {}
     else:
-        raise GateError("Canonical migration chain must contain core V1..V45 followed by consecutive approved extensions through V50")
+        raise GateError("Canonical migration chain must contain core V1..V45 followed by consecutive approved extensions through V51")
     for name, digest in expected.items():
         if normalized[name] != digest:
             raise GateError("Canonical migration source changed: " + name)
