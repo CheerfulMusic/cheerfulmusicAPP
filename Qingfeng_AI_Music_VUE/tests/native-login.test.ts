@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { setAnalyticsEnabled, trackPageView } from '../src/shared/analytics/track'
 import { ApiError, resetCreatorSession, retryAfterSeconds } from '../src/shared/http/api-client'
 import { readNativeLoginStatus, registerWithEmail, resetEmailPassword, sendLoginCode, signInWithEmail, signInWithEmailCode, signInWithPhone } from '../src/modules/identity/api/native-login'
 import { validNewPassword, loginCodeKey, nativeLoginError, resendSeconds } from '../src/modules/identity/model/native-login'
@@ -27,6 +28,28 @@ describe('same-site sign-in', () => {
     expect(fetch).toHaveBeenLastCalledWith(`/api/public/auth/native/${path}`, expect.objectContaining({
       method:'POST',credentials:'same-origin',body:JSON.stringify(body),headers:expect.objectContaining({'X-XSRF-TOKEN':'native-csrf'}),
     }))
+  })
+  it('starts an authenticated page view only after phone sign-in succeeds', async () => {
+    vi.stubGlobal('location', { pathname: '/create' })
+    vi.stubGlobal('document', { referrer: '', visibilityState: 'visible' })
+    const beacon = vi.fn(() => true)
+    vi.stubGlobal('navigator', { sendBeacon: beacon })
+    setAnalyticsEnabled(true)
+    try {
+      trackPageView('create')
+      beacon.mockClear()
+      mockServer({ sent: true })
+      await expect(signInWithPhone('+8613800123456', '123456')).rejects.toMatchObject({ code: 'INVALID_RESPONSE' })
+      expect(beacon).not.toHaveBeenCalled()
+      mockServer({ authenticated: true })
+      await signInWithPhone('+8613800123456', '123456')
+      expect(beacon).toHaveBeenCalledTimes(1)
+      const payload = await (beacon.mock.calls[0] as unknown as [string, Blob])[1].text()
+      expect(JSON.parse(payload)).toMatchObject({ event: 'pageview', pagePath: '/create' })
+      expect(payload).not.toContain('+8613800123456')
+    } finally {
+      setAnalyticsEnabled(false)
+    }
   })
   it('sends only the explicit channel, normalized address and purpose', async () => {
     const fetch = mockServer({sent:true,resendAfter:60})
