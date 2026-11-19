@@ -66,10 +66,47 @@ public final class StripePaymentService implements VerifiedPaymentProcessor {
     }
     @Override public String provider(){return gateway.provider();}
 
+    @Value("${qingfeng.stripe.reuse-schema-check:false}")
+    private boolean reuseSchemaCheck;
+    private record VerifiedSchema(String identity, long checkedAt) {}
+    private volatile VerifiedSchema verifiedSchema;
+
+    private String activeWriterIdentity() {
+        return db.queryForObject("""
+                SELECT CONCAT(@@server_uuid, '/', DATABASE(), '/', p.epoch)
+                FROM p0_credit_writer_policy p JOIN p0_credit_cutover_state c ON c.id=p.id
+                WHERE p.id=1 AND p.protocol=3 AND CHAR_LENGTH(p.epoch)>0
+                  AND c.status='ACTIVE' AND c.activated_at IS NOT NULL
+                """, String.class);
+    }
+
+    private boolean verifiedRecently(VerifiedSchema snapshot, String identity) {
+        return snapshot != null && snapshot.identity().equals(identity)
+                && System.nanoTime() - snapshot.checkedAt() < Duration.ofSeconds(1).toNanos();
+    }
+
+    private boolean financialSchemaReady() {
+        if (!reuseSchemaCheck) return CreditSchemaReadiness.ready(db);
+        String identity = activeWriterIdentity();
+        if (verifiedRecently(verifiedSchema, identity)) return true;
+        synchronized (this) {
+            if (verifiedRecently(verifiedSchema, identity)) return true;
+            verifiedSchema = null;
+            // Pin the identity and the full inspection to the same database connection.
+            VerifiedSchema checked = tx.execute(status -> {
+                String writer = activeWriterIdentity();
+                if (!CreditSchemaReadiness.ready(db) || !identity.equals(writer)) return null;
+                return new VerifiedSchema(writer, System.nanoTime());
+            });
+            verifiedSchema = checked;
+            return checked != null;
+        }
+    }
+
     private boolean schemaReady() {
         if (!(ledger instanceof JdbcFencedCreditsLedger) || !enabled || !gateway.configured()) return false;
         try {
-            if(!CreditSchemaReadiness.ready(db))return false;
+            if(!financialSchemaReady())return false;
             Integer otherModePending=db.queryForObject("SELECT COUNT(*) FROM payment_order WHERE provider IN ('STRIPE_SANDBOX','STRIPE_LIVE') AND provider<>? AND status IN ('CREATING','CREATION_UNKNOWN','PENDING')",Integer.class,gateway.provider());
             return otherModePending!=null && otherModePending==0;
         } catch (RuntimeException missingMigration) { return false; }

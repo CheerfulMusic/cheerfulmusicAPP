@@ -3,7 +3,10 @@
 # Tests use a completely isolated DB and sandbox credentials.
 qingfeng.payment.inbox.scheduler-enabled=true
 qingfeng.payment.inbox.worker-concurrency=4
-qingfeng.payment.inbox.scan-ms=1000
+qingfeng.payment.inbox.scan-ms=100
+# Reuse a successful structural inspection for up to one second per DB and writer epoch.
+# The ACTIVE gate and opposite-mode order check still run on each call.
+qingfeng.stripe.reuse-schema-check=true
 qingfeng.payment.reconcile.scan-ms=60000
 # Budget total connections across ALL API/worker instances against MySQL capacity.
 # Example pool capacity, not a production sizing guarantee:
