@@ -1,5 +1,6 @@
 import hashlib
 import importlib.util
+import io
 import json
 from pathlib import Path
 import tempfile
@@ -78,6 +79,39 @@ class GuardTest(unittest.TestCase):
         root, policy = self.fixture(cdn=True, mismatched_cdn=True)
         with self.assertRaisesRegex(ValueError, 'CDN preview asset does not match'):
             guard.verify(root, policy)
+
+    def test_accepts_hashed_recommendations_and_shared_covers_and_checks_legacy_routes(self):
+        digest = 'f' * 64
+        routes = [
+            ('song', 'audio', 'recommendations/song-ffffffffffff-preview-128.mp3',
+             '20261119/audio/ffffffffffff/song-ffffffffffff-preview-128.mp3'),
+            ('family', 'cover', 'explore-family-v1.webp', '20261119/cover/ffffffffffff/explore-family-v1.webp'),
+            ('folk', 'cover', 'explore-family-v1.webp', '20261119/cover/ffffffffffff/explore-family-v1.webp'),
+            ('family', 'audio', 'sample-family-v2-preview-128.mp3', 'preview-128-v1/sample-family-v2-preview-128.mp3'),
+        ]
+        catalog = []
+        for track, kind, route, key in routes:
+            catalog.append({'trackId': track, 'kind': kind, 'path': '/media/' + route,
+                            'key': 'qingfeng/recommendation-samples/' + key, 'bytes': 37, 'sha256': digest})
+        manifest = {'remoteAssets': list({item['path']: {k: item[k] for k in ('path', 'key', 'bytes', 'sha256')}
+                                          for item in catalog}.values())}
+        classes = 'BOOT-INF/classes/com/qingfeng/music/server/'
+        for legacy_filename in ('sample-family-v2-preview-128.mp3', 'sample-unrelated-v2-preview-128.mp3'):
+            buffer = io.BytesIO()
+            with zipfile.ZipFile(buffer, 'w') as artifact:
+                artifact.writestr('BOOT-INF/classes/static/recommendation-assets.json',
+                                  json.dumps({'version': 1, 'assets': catalog}))
+                artifact.writestr(classes + 'hotsong/RecommendationSamples.class', '\n'.join(
+                    item['path'].removeprefix('/media/') + '\n' + item['key'] for item in catalog[:-1]))
+                artifact.writestr(classes + 'web/RecommendationOssRedirect.class',
+                                  'qingfeng/recommendation-samples/preview-128-v1/\n' + legacy_filename)
+            with zipfile.ZipFile(buffer) as artifact:
+                if 'family' in legacy_filename:
+                    self.assertEqual(guard.cdn_preview_audio(artifact, manifest),
+                                     {catalog[0]['path'], catalog[-1]['path']})
+                else:
+                    with self.assertRaisesRegex(ValueError, 'server route'):
+                        guard.cdn_preview_audio(artifact, manifest)
 
     def test_old_order_component_rejected_even_if_hash_approved(self):
         root, policy = self.fixture(missing=True)

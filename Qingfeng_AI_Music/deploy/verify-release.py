@@ -31,23 +31,46 @@ def cdn_preview_audio(archive, manifest):
     catalog = json.loads(archive.read(static + 'recommendation-assets.json'))
     if catalog.get('version') != 1 or not isinstance(catalog.get('assets'), list):
         raise ValueError('Invalid CDN preview catalog')
-    routes = archive.read('BOOT-INF/classes/com/qingfeng/music/server/hotsong/RecommendationSamples.class')
-    by_path = {item['path']: item for item in catalog['assets']}
-    if len(by_path) != len(catalog['assets']):
-        raise ValueError('Duplicate CDN preview catalog path')
+    classes = 'BOOT-INF/classes/com/qingfeng/music/server/'
+    routes = archive.read(classes + 'hotsong/RecommendationSamples.class')
+    by_path = {}
+    catalog_tracks = set()
+    for item in catalog['assets']:
+        track_id, path = item['trackId'], item['path']
+        if (track_id, path) in catalog_tracks:
+            raise ValueError('Duplicate CDN preview catalog track and path')
+        catalog_tracks.add((track_id, path))
+        by_path.setdefault(path, []).append(item)
     paths = set()
     audio = set()
     for asset in remote:
         path, key, size, digest = (asset.get(name) for name in ('path', 'key', 'bytes', 'sha256'))
-        match = re.fullmatch(r'/media/(sample-([a-z0-9-]+)-v1(-preview-128[.]mp3|-cover[.]jpg))', path or '')
-        if not match or path in paths or type(size) is not int or size <= 0 or not re.fullmatch('[0-9a-f]{64}', digest or ''):
+        if (not isinstance(path, str) or not path.startswith('/media/') or path in paths
+                or type(size) is not int or size <= 0 or not re.fullmatch('[0-9a-f]{64}', digest or '')):
             raise ValueError('Invalid CDN preview asset')
-        filename, track_id, suffix = match.groups()
-        kind = 'audio' if suffix.endswith('.mp3') else 'cover'
+        route = path.removeprefix('/media/')
+        filename = route.rsplit('/', 1)[-1]
+        kind = 'audio' if filename.endswith('-preview-128.mp3') else 'cover'
+        hash_prefix = digest[:12]
+        suffix = 'preview-128.mp3' if kind == 'audio' else 'cover.jpg'
+        legacy = (kind == 'audio' and re.fullmatch(r'sample-[a-z0-9-]+-v[12]-preview-128[.]mp3', route)
+                  and key == 'qingfeng/recommendation-samples/preview-128-v1/' + filename)
         key_pattern = r'qingfeng/recommendation-samples/[0-9]{8}/' + kind + '/' + digest[:12] + '/' + re.escape(filename)
-        if not re.fullmatch(key_pattern, key or '') or by_path.get(path) != {
-            'trackId': track_id, 'kind': kind, 'path': path, 'key': key, 'bytes': size, 'sha256': digest,
-        } or key.encode() not in routes:
+        entries = by_path.get(path, [])
+        matches_catalog = bool(entries)
+        for entry in entries:
+            track_id = entry['trackId']
+            valid_route = (legacy or route in (f'sample-{track_id}-v1-{suffix}', f'recommendations/{track_id}-{hash_prefix}-{suffix}')
+                           or (kind == 'cover' and re.fullmatch(r'explore-[a-z0-9-]+-v1[.](?:jpg|webp|svg)', route)))
+            matches_catalog &= bool(re.fullmatch(r'[a-z0-9-]+', track_id) and valid_route and entry == {
+                'trackId': track_id, 'kind': kind, 'path': path, 'key': key, 'bytes': size, 'sha256': digest,
+            })
+        if legacy:
+            legacy_routes = archive.read(classes + 'web/RecommendationOssRedirect.class')
+            mapped = filename.encode() in legacy_routes and b'qingfeng/recommendation-samples/preview-128-v1/' in legacy_routes
+        else:
+            mapped = bool(re.fullmatch(key_pattern, key or '') and key.encode() in routes and route.encode() in routes)
+        if not matches_catalog or not mapped:
             raise ValueError('CDN preview asset does not match catalog and server route')
         paths.add(path)
         if kind == 'audio':
