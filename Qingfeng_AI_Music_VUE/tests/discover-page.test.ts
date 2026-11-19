@@ -83,7 +83,7 @@ describe('Discover editorial layout with real content', () => {
     expect(wrapper.get('#discover-vocal .shelf-wide').text()).toContain('歌曲真人')
     const tiles = wrapper.findAll('.discover-playlist-tiles button')
     expect(tiles.map(tile => tile.get('strong').text())).toEqual(['华语流行', '电子', '欧美流行', 'Disco', '圣诞'])
-    expect(tiles.map(tile => tile.get('img').attributes('src').split('/').at(-1))).toEqual([
+    expect(tiles.map(tile => tile.get('img').attributes('src')?.split('/').at(-1))).toEqual([
       'mandopop.webp', 'electronic.webp', 'global-pop.webp', 'disco.webp', 'christmas.webp',
     ])
     await tiles[4]!.trigger('click')
