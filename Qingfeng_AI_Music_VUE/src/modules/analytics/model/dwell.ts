@@ -1,11 +1,13 @@
+import { t } from '../../../shared/i18n'
+
 /** 看板里所有停留时长共用的格式化：真实为零才显示「0 秒」。 */
 export function formatDuration(ms: number): string {
-  if (!Number.isFinite(ms) || ms <= 0) return '0 秒'
+  if (!Number.isFinite(ms) || ms <= 0) return t('{seconds} 秒', { seconds: 0 })
   const seconds = Math.round(ms / 1000)
-  if (seconds < 60) return `${seconds} 秒`
+  if (seconds < 60) return t('{seconds} 秒', { seconds })
   const minutes = Math.floor(seconds / 60)
-  if (minutes < 60) return `${minutes} 分 ${seconds % 60} 秒`
-  return `${Math.floor(minutes / 60)} 小时 ${minutes % 60} 分`
+  if (minutes < 60) return t('{minutes} 分 {seconds} 秒', { minutes, seconds: seconds % 60 })
+  return t('{hours} 小时 {minutes} 分', { hours: Math.floor(minutes / 60), minutes: minutes % 60 })
 }
 
 /** 页面与用户的停留单元格：没有样本时显示「—」，不能伪装成 0 秒。 */
@@ -24,10 +26,10 @@ export type AccountType = 'GOOGLE' | 'OIDC_EMAIL' | 'OIDC_PHONE' | 'AUTHING' | '
 export function accountTypeLabel(type: string | null | undefined): string {
   switch (type) {
     case 'GOOGLE': return 'Google'
-    case 'OIDC_EMAIL': return '邮箱登录'
-    case 'OIDC_PHONE': return '手机登录'
-    case 'AUTHING': return '账号登录'
-    default: return '游客'
+    case 'OIDC_EMAIL': return t('邮箱登录')
+    case 'OIDC_PHONE': return t('手机登录')
+    case 'AUTHING': return t('账号登录')
+    default: return t('游客')
   }
 }
 
@@ -36,7 +38,7 @@ export function isGuest(type: string | null | undefined): boolean {
 }
 
 export interface AccountRow {
-  creatorId: string; accountType?: string | null; name?: string | null; email?: string | null; phoneMasked?: string | null
+  creatorId: string | null; accountType?: string | null; name?: string | null; email?: string | null; phoneMasked?: string | null
 }
 
 /** 主显示名：昵称 > 邮箱 > 手机掩码 > 「未登录游客」。 */
@@ -45,7 +47,7 @@ export function accountName(row: AccountRow): string {
   if (name) return name
   if (row.email && row.email.trim()) return row.email
   if (row.phoneMasked && row.phoneMasked.trim()) return row.phoneMasked
-  return '未登录游客'
+  return isGuest(row.accountType) ? t('未登录游客') : t('未命名用户')
 }
 
 /** 副标题：已有昵称时补邮箱，手机号单独补掩码；游客没有可展示的账号信息。 */
@@ -118,11 +120,24 @@ const PAGE_NAMES: Record<string, string> = {
   '/gift/:token': '分享页',
   '/analytics': '数据看板',
   '/agent': 'AI 工作台',
+  '/discover': '广场',
+  '/profile': '个人资料',
+  '/create/photo': '照片创作',
+  '/help': '创作帮助',
+  '/legal/terms': '服务条款',
+  '/legal/privacy': '隐私政策',
+  '/legal/terms.html': '服务条款',
+  '/legal/privacy.html': '隐私政策',
+  '/payment-preview': '支付预览',
 }
 
-/** 页面中文名；未收录的路径直接回退到路径本身，不臆造名称。 */
+/** 页面路径仅用于查询，展示时使用可翻译的页面名称。 */
 export function pageName(path: string): string {
-  return PAGE_NAMES[path] ?? (path || '/')
+  const clean = (path || '/').split(/[?#]/)[0]!.replace(/\/$/, '') || '/'
+  if (/^\/artist\/[^/]+$/.test(clean)) return t('音乐人主页')
+  if (/^\/works\/[^/]+$/.test(clean)) return t('作品详情')
+  if (/^\/gift\/[^/]+$/.test(clean)) return t('分享页')
+  return t(Object.hasOwn(PAGE_NAMES, clean) ? PAGE_NAMES[clean]! : '其他页面')
 }
 
 /** 头像首字母：优先昵称/邮箱首字符，游客用「游」。 */
@@ -130,6 +145,6 @@ export function avatarText(row: AccountRow): string {
   const name = row.name?.trim()
   if (name) return [...name][0]!.toUpperCase()
   if (row.email && row.email.trim()) return row.email.trim()[0]!.toUpperCase()
-  if (row.phoneMasked && row.phoneMasked.trim()) return '手'
-  return isGuest(row.accountType) ? '游' : '访'
+  if (row.phoneMasked && row.phoneMasked.trim()) return t('手')
+  return isGuest(row.accountType) ? t('游') : t('访')
 }

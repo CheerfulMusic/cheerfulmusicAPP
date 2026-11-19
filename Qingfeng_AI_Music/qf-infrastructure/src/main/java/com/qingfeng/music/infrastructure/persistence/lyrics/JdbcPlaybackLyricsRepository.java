@@ -19,10 +19,10 @@ public final class JdbcPlaybackLyricsRepository implements PlaybackLyricsReposit
     public Optional<Stored> find(String asset){return jdbc.query("SELECT state,words_json,request_key,updated_at FROM media_lyrics_timeline WHERE asset_id=?",(r,n)->new Stored(r.getString(1),decode(r.getString(2)),r.getString(3),r.getTimestamp(4).toInstant()),asset).stream().findFirst();}
     private List<PlaybackLyrics.Word> decode(String raw){return raw==null?List.of():List.of(json.readValue(raw,PlaybackLyrics.Word[].class));}
     public boolean claim(String owner,Source source,String key){
-        jdbc.update("INSERT INTO media_lyrics_timeline(asset_id,work_id,state,updated_at) VALUES(?,?,'NOT_REQUESTED',CURRENT_TIMESTAMP) ON DUPLICATE KEY UPDATE asset_id=asset_id",source.assetId(),source.workId());
         return Boolean.TRUE.equals(transactions.execute(tx->{
             // Keep the same lock order as background preparation and usage admission.
             jdbc.queryForObject("SELECT kind FROM model_usage_lock WHERE kind='TIMING' FOR UPDATE",String.class);
+            jdbc.update("INSERT INTO media_lyrics_timeline(asset_id,work_id,state,updated_at) VALUES(?,?,'NOT_REQUESTED',CURRENT_TIMESTAMP) ON DUPLICATE KEY UPDATE asset_id=asset_id",source.assetId(),source.workId());
             jdbc.queryForObject("SELECT asset_id FROM media_lyrics_timeline WHERE asset_id=? FOR UPDATE",String.class,source.assetId());
             var existing=find(source.assetId()).orElseThrow();
             if(!Set.of("NOT_REQUESTED","FAILED").contains(existing.status())||key.equals(existing.requestKey()))return false;

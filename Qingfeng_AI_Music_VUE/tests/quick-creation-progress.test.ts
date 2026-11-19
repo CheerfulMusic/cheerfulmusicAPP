@@ -7,6 +7,7 @@ import type {QuickCreation} from '../src/modules/studio/api/quick-creation'
 const mocks=vi.hoisted(()=>({latest:vi.fn(),retry:vi.fn(),retryArchive:vi.fn()}))
 vi.mock('../src/modules/studio/api/quick-creation',()=>({latestQuickCreation:mocks.latest,retryQuickCreation:mocks.retry,quickInProgress:(s:string)=>['QUEUED','WRITING','LYRICS_READY','SUBMITTING_MUSIC','MUSIC_QUEUED','SUBMITTING','RUNNING','SAVING','SUBMISSION_UNKNOWN'].includes(s)}))
 vi.mock('../src/modules/works/api/detail',()=>({retryTaskArchive:mocks.retryArchive}))
+vi.mock('../src/modules/works/components/FirstRecordingPreview.vue',()=>({default:{template:'<button>试听首版</button>'}}))
 vi.mock('../src/shared/credits/useCredits', async () => {
  const {ref}=await import('vue')
  return {useCredits:()=>({credits:ref({enabled:true,balance:100,lyricsNextCost:5,musicCost:10}),refreshCredits:async()=>{}})}
@@ -53,7 +54,9 @@ it('offers the first version during automatic archive recovery before the task f
  const dialog=document.querySelector('dialog')!
  expect(dialog.textContent).toContain('首版可试听，正在恢复保存其余版本')
  expect(dialog.textContent).not.toContain('仅重试保存音频')
- dialog.querySelector<HTMLButtonElement>('.generation-primary')!.click()
+ expect(dialog.textContent).toContain('试听首版')
+ const viewWork=[...dialog.querySelectorAll('button')].find(button=>button.textContent?.trim()==='查看作品')!
+ viewWork.click()
  expect(view).toHaveBeenCalledOnce()
  expect(mocks.retryArchive).not.toHaveBeenCalled()
 })

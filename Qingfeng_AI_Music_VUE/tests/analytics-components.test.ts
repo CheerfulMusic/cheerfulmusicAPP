@@ -56,7 +56,7 @@ it('页面表现按行渲染访问量、占比与停留，无样本显示「—�
   ]
   const html = await render(AnalyticsPagePerformance, { rows, openPath: '/create', detailRows: [], detailLoading: true })
   expect(html).toContain('创作页')
-  expect(html).toContain('/create')
+  expect(html).not.toContain('/create')
   expect(html).toContain('283')
   expect(html).toContain('100%')
   expect(html).toContain('52 秒')

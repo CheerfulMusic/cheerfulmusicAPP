@@ -8,15 +8,15 @@ export interface AnalyticsDaily { d: string; pv: number; pageviews: number; uv: 
 export interface AnalyticsPageRow { pagePath: string; pv: number; avgDurationMs: number; samples: number }
 export interface AnalyticsUserRow {
   creatorId: string; accountType: string; name: string | null; email: string | null; phoneMasked: string | null
-  pv: number; pageviews: number; avgDurationMs: number; samples: number; firstSeen: string; lastSeen: string; works?: number
+  pv: number; pageviews: number; avgDurationMs: number; samples: number; firstSeen: string; lastSeen: string; works?: number; noActivity?: boolean
 }
 export type AnalyticsUserSort = 'active' | 'latest'
 export interface AnalyticsRechargeRow {
   creatorId: string; accountType: string; name: string | null; email: string | null; phoneMasked: string | null
-  packageId: string; amount: number; currency: string; credits: number; status: string; createdAt: string
+  orderId?: string; packageId: string; amount: number; currency: string; credits: number; status: string; createdAt: string
 }
 export interface AnalyticsRecharge { orders: number; amount: number; credits: number }
-export interface AnalyticsCountryRow { country: string; visitors: number; hits: number }
+export interface AnalyticsCountryRow { country: string; countryCode?: string; visitors: number; hits: number }
 export interface AnalyticsSummary {
   allowed: boolean; days?: number; totals?: AnalyticsTotals; daily?: AnalyticsDaily[]
   pages?: AnalyticsPageRow[]; users?: AnalyticsUserRow[]; creations?: number
@@ -33,7 +33,7 @@ export interface AnalyticsPageUsers {
 
 export const analyticsAccess = () => getJson<{ allowed: boolean; viewer?: string }>('app/analytics/access')
 export const analyticsSummary = (days: number, userSort: AnalyticsUserSort = 'active') =>
-  getJson<AnalyticsSummary>(`app/analytics/summary?days=${days}&userSort=${userSort}`)
+  getJson<AnalyticsSummary>(`app/analytics/summary?days=${days}&userSort=${userSort}&fullLists=true`)
 export const analyticsPageUsers = (pagePath: string, days: number) =>
   getJson<AnalyticsPageUsers>(`app/analytics/page-users?days=${days}&pagePath=${encodeURIComponent(pagePath)}`)
 
@@ -43,3 +43,16 @@ export interface AnalyticsUserPages {
 }
 export const analyticsUserPages = (creatorId: string, days: number) =>
   getJson<AnalyticsUserPages>(`app/analytics/user-pages?days=${days}&creatorId=${encodeURIComponent(creatorId)}`)
+
+export interface AnalyticsCountryUser {
+  creatorId: string | null; accountType: string; name: string | null; email: string | null; phoneMasked: string | null
+  hits: number; lastSeen: string
+}
+export const analyticsCountryUsers = (country: string, days: number) =>
+  getJson<{ allowed: boolean; users?: AnalyticsCountryUser[]; error?: string }>(
+    `app/analytics/country-users?days=${days}&country=${encodeURIComponent(country)}`)
+
+export type AnalyticsPhoneUser = Pick<AnalyticsUserRow, 'creatorId' | 'accountType' | 'name'> & { phoneMasked: string }
+export const analyticsPhoneUsers = (suffix: string) =>
+  getJson<{ allowed: boolean; users?: AnalyticsPhoneUser[]; error?: string }>(
+    `app/analytics/phone-users?suffix=${encodeURIComponent(suffix)}`)

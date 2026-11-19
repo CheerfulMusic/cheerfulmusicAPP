@@ -623,7 +623,7 @@ async function backToStory(){
       </div>
     </form>
   </dialog>
-  <MusicGenerationDialog :open="generationOpen" :status="generationStatus" :title="trackedTask?.title||work?.title||''" :error="submissionIssue||(trackedTask?.status==='FAILED'&&trackedTask.errorCode==='AUDIO_ARCHIVE_FAILED'?error:'')" :error-code="trackedTask?.errorCode" :preview-ready="!!trackedTask?.previewAssetId" :sync-issue="progressIssue||trackedTask?.errorCode==='QUERY_RETRY'" :created-at="trackedTask?.createdAt" :submit-after="trackedTask?.nextAttemptAt" :cancelling="cancelling||submitting" :cover="artwork" @cancel="cancelGeneration" @archive="trackedTask&&retryArchive(trackedTask)" @close="generationOpen=false" @view="viewGeneratedMusic"/>
+  <MusicGenerationDialog :open="generationOpen" :status="generationStatus" :title="trackedTask?.title||work?.title||''" :error="submissionIssue||(trackedTask?.status==='FAILED'&&trackedTask.errorCode==='AUDIO_ARCHIVE_FAILED'?error:'')" :error-code="trackedTask?.errorCode" :work-id="work?.id" :preview-asset-id="trackedTask?.previewAssetId" :sync-issue="progressIssue||trackedTask?.errorCode==='QUERY_RETRY'" :created-at="trackedTask?.createdAt" :submit-after="trackedTask?.nextAttemptAt" :cancelling="cancelling||submitting" :cover="artwork" @cancel="cancelGeneration" @archive="trackedTask&&retryArchive(trackedTask)" @close="generationOpen=false" @view="viewGeneratedMusic"/>
 </template>
 <style scoped>
 .lyric-studio-header { position:relative; margin-bottom:30px; }

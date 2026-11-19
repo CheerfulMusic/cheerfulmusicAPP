@@ -29,7 +29,7 @@ it('renders the per-user dwell table with full identity and an explicit guest la
   expect(html).toContain('Google')
   expect(html).toContain('未登录游客')
   expect(html).toContain('游客')
-  expect(html).toContain('6c768124-f26a-44bc-bc2a-7946108b1bd4')
+  expect(html).not.toContain('6c768124-f26a-44bc-bc2a-7946108b1bd4')
   expect(html).toContain('1 分 12 秒')
   expect(html).toContain('共 2 位用户')
   expect(html).toContain('其中 1 位游客')

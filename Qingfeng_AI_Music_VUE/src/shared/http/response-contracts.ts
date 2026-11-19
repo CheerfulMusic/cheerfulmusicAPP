@@ -65,7 +65,7 @@ const analyticsCount=(v:unknown)=>num(v)&&Number(v)>=0
 const analyticsTotals=(v:unknown)=>obj(v)&&['pv','pageviews','uv','sessions','avgDurationMs','totalDurationMs'].every(k=>analyticsCount(v[k]))
 const analyticsDaily=(v:unknown)=>obj(v)&&text(v.d)&&['pv','pageviews','uv','avgDurationMs'].every(k=>analyticsCount(v[k]))
 const analyticsPageRow=(v:unknown)=>obj(v)&&text(v.pagePath)&&analyticsCount(v.pv)&&analyticsCount(v.avgDurationMs)&&analyticsCount(v.samples)
-const analyticsUserRow=(v:unknown)=>obj(v)&&str(v.creatorId)&&text(v.accountType)&&['name','email','phoneMasked'].every(k=>v[k]===null||str(v[k]))&&['pv','pageviews','avgDurationMs','samples'].every(k=>analyticsCount(v[k]))&&str(v.firstSeen)&&str(v.lastSeen)
+const analyticsUserRow=(v:unknown)=>obj(v)&&str(v.creatorId)&&text(v.accountType)&&['name','email','phoneMasked'].every(k=>v[k]===null||str(v[k]))&&['pv','pageviews','avgDurationMs','samples'].every(k=>analyticsCount(v[k]))&&str(v.firstSeen)&&str(v.lastSeen)&&(v.noActivity===undefined||typeof v.noActivity==='boolean')
 const analyticsCountryRow=(v:unknown)=>obj(v)&&text(v.country)&&analyticsCount(v.visitors)&&analyticsCount(v.hits)
 /**
  * 统计看板：allowed 明确拒绝时不带数据；QUERY_FAILED 只带 error，绝不能被当成 0 展示。
@@ -128,6 +128,13 @@ export function validResponse(path:string,method:string,value:unknown):boolean{
  if(/^app\/artist-profile\/releases\/[^/]+\/discover$/.test(path))
   return method==='DELETE'?myArtist(value):method==='PUT'&&artistRelease(value)&&obj(value)&&value.onDiscover===true
  if(/^public\/hot-songs\/[^/]+\/play$/.test(path))return method==='POST'&&hotStat(value)
+ if(path==='app/analytics/phone-users')return method==='GET'&&obj(value)&&typeof value.allowed==='boolean'&&
+  (!value.allowed||(value.error==='QUERY_FAILED'&&value.users===undefined)||list(value.users,u=>obj(u)&&
+   text(u.creatorId)&&text(u.accountType)&&(u.name===null||str(u.name))&&str(u.phoneMasked)&&/^\*{4}[0-9]{4}$/.test(u.phoneMasked)))
+ if(path==='app/analytics/country-users')return method==='GET'&&obj(value)&&typeof value.allowed==='boolean'&&
+  (!value.allowed||(value.error==='QUERY_FAILED'&&value.users===undefined)||list(value.users,u=>obj(u)&&
+   (u.creatorId===null||str(u.creatorId))&&text(u.accountType)&&(u.name===null||str(u.name))&&
+   (u.email===null||str(u.email))&&(u.phoneMasked===null||str(u.phoneMasked))&&num(u.hits)&&text(u.lastSeen)))
  if(path==='app/analytics/page-users')return method==='GET'&&obj(value)&&typeof value.allowed==='boolean'&&(value.allowed!==true||(num(value.days)&&text(value.pagePath)&&list(value.users,u=>obj(u)&&text(u.creatorId)&&text(u.accountType)&&(u.name===null||str(u.name))&&(u.email===null||str(u.email))&&(u.phoneMasked===null||str(u.phoneMasked))&&num(u.avgDurationMs)&&num(u.samples)&&Number(u.samples)>=0)))
  if(path==='app/analytics/access')return method==='GET'&&analyticsAccessBody(value)
  if(path==='app/analytics/summary')return method==='GET'&&analyticsSummaryBody(value)

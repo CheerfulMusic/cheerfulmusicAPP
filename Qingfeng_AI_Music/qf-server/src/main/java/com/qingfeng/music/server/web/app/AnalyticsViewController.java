@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -46,7 +47,36 @@ public class AnalyticsViewController {
      * 否则 COUNT(DISTINCT) 会把全部匿名化行误算成 1 个额外真实访客。正常数据无此哨兵值，行集合不变，口径零偏差。
      * 各聚合统一引用此常量，避免散落硬编码导致后续遗漏（见隐私治理方案 §2.B.6 / §15.1）。
      */
-    private static final String REAL_VISITOR_PREDICATE = "visitor_id <> 'ANONYMIZED' AND session_id <> 'ANONYMIZED'";
+    private static final String REAL_VISITOR_PREDICATE = AnalyticsDetailService.REAL_VISITOR_PREDICATE;
+
+    // Only verified accounts are portable across devices. Guest IDs are scoped to a browser.
+    // A browser linked to multiple accounts in the window cannot safely attribute its guest events.
+    private static final String UV_EVENTS = """
+            WITH visitor_events AS (
+                SELECT s.visitor_id, s.session_id, s.created_at, s.event, s.duration_ms,
+                       CASE WHEN g.creator_id IS NOT NULL OR o.creator_id IS NOT NULL OR a.creator_id IS NOT NULL
+                            THEN s.creator_id END account_id
+                FROM site_event s
+                LEFT JOIN creator_google_identity g ON g.creator_id=s.creator_id
+                LEFT JOIN creator_oidc_identity o ON o.creator_id=s.creator_id
+                LEFT JOIN creator_authing_identity a ON a.creator_id=s.creator_id
+                WHERE s.created_at >= ? AND %s
+            ),
+            browser_accounts AS (
+                SELECT visitor_id, MIN(account_id) account_id
+                FROM visitor_events
+                WHERE visitor_id <> '' AND account_id IS NOT NULL
+                GROUP BY visitor_id HAVING COUNT(DISTINCT account_id)=1
+            ),
+            unique_visitor_events AS (
+                SELECT e.session_id, e.created_at, e.event, e.duration_ms,
+                       CASE WHEN COALESCE(e.account_id, b.account_id) IS NOT NULL
+                            THEN CONCAT('account:', COALESCE(e.account_id, b.account_id))
+                            WHEN e.visitor_id <> '' THEN CONCAT('browser:', e.visitor_id)
+                       END visitor_key
+                FROM visitor_events e LEFT JOIN browser_accounts b ON b.visitor_id=e.visitor_id
+            )
+            """.formatted(REAL_VISITOR_PREDICATE);
 
     private final IdentityApi identity;
     private final ObjectProvider<JdbcTemplate> jdbc;
@@ -177,16 +207,20 @@ public class AnalyticsViewController {
         return summary(days, "active");
     }
 
+    public ResponseEntity<Map<String, Object>> summary(int days, String userSort) {
+        return summary(days, userSort, false);
+    }
+
     @GetMapping("/summary")
     public ResponseEntity<Map<String, Object>> summary(@RequestParam(defaultValue = "30") int days,
-                                                       @RequestParam(defaultValue = "active") String userSort) {
+                                                       @RequestParam(defaultValue = "active") String userSort,
+                                                       @RequestParam(defaultValue = "false") boolean fullLists) {
         var body = new LinkedHashMap<String, Object>();
         body.put("allowed", false);
         if (!allowed(currentCreatorId())) {
             return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(body);
         }
         // Only fixed SQL fragments are selected; request input is never inserted into SQL.
-        // Order before LIMIT so a recent low-traffic user is not hidden by the active top 50.
         final String userOrder;
         if ("active".equals(userSort)) userOrder = "pageviews DESC, last_seen DESC, t.creator_id ASC";
         else if ("latest".equals(userSort)) userOrder = "last_seen DESC, pageviews DESC, t.creator_id ASC";
@@ -199,20 +233,21 @@ public class AnalyticsViewController {
         var since = Timestamp.from(Instant.now().minus(window, ChronoUnit.DAYS));
         body.put("allowed", true);
         body.put("days", window);
+        var listLimit = fullLists ? "" : " LIMIT 50";
         try {
             body.put("totals", template.query(
-                    "SELECT COUNT(*) pv, COUNT(CASE WHEN event='pageview' THEN 1 END) pageviews, "
-                            + "COUNT(DISTINCT visitor_id) uv, COUNT(DISTINCT session_id) sessions, "
+                    UV_EVENTS + "SELECT COUNT(*) pv, COUNT(CASE WHEN event='pageview' THEN 1 END) pageviews, "
+                            + "COUNT(DISTINCT visitor_key) uv, COUNT(DISTINCT session_id) sessions, "
                             + "COALESCE(AVG(CASE WHEN event='page_leave' THEN duration_ms END),0) avg_duration_ms, "
                             + "COALESCE(SUM(CASE WHEN event='page_leave' THEN duration_ms END),0) total_duration_ms "
-                            + "FROM site_event WHERE created_at >= ? AND " + REAL_VISITOR_PREDICATE,
+                            + "FROM unique_visitor_events",
                     (rs, n) -> map(rs.getLong("pv"), rs.getLong("pageviews"), rs.getLong("uv"), rs.getLong("sessions"),
                             rs.getLong("avg_duration_ms"), rs.getLong("total_duration_ms")), since).stream().findFirst().orElseGet(LinkedHashMap::new));
             body.put("daily", template.query(
-                    "SELECT CAST(created_at AS DATE) d, COUNT(*) pv, COUNT(CASE WHEN event='pageview' THEN 1 END) pageviews, "
-                            + "COUNT(DISTINCT visitor_id) uv, "
-                            + "COALESCE(AVG(CASE WHEN event='page_leave' THEN duration_ms END),0) avg_duration_ms FROM site_event "
-                            + "WHERE created_at >= ? AND " + REAL_VISITOR_PREDICATE + " GROUP BY CAST(created_at AS DATE) ORDER BY d",
+                    UV_EVENTS + "SELECT CAST(created_at AS DATE) d, COUNT(*) pv, COUNT(CASE WHEN event='pageview' THEN 1 END) pageviews, "
+                            + "COUNT(DISTINCT visitor_key) uv, "
+                            + "COALESCE(AVG(CASE WHEN event='page_leave' THEN duration_ms END),0) avg_duration_ms "
+                            + "FROM unique_visitor_events GROUP BY CAST(created_at AS DATE) ORDER BY d",
                     (rs, n) -> {
                         var row = new LinkedHashMap<String, Object>();
                         row.put("d", String.valueOf(rs.getDate("d")));
@@ -240,7 +275,7 @@ public class AnalyticsViewController {
                         return row;
                     }, since, since));
             // 身份来自三张互斥的身份表；都没有绑定的就是游客会话（游客也带 creator_id，不能被当成登录用户）。
-            body.put("users", template.query(
+            List<Map<String, Object>> users = template.query(
                     "SELECT t.creator_id, t.account_type, t.name, t.email, t.phone_masked, COUNT(*) pv, "
                             + "COALESCE(w.works,0) works, "
                             + "COUNT(CASE WHEN t.event='pageview' THEN 1 END) pageviews, "
@@ -260,7 +295,7 @@ public class AnalyticsViewController {
                             + "WHERE s.creator_id IS NOT NULL AND s.creator_id <> '' AND s.created_at >= ?"
                             + ") t LEFT JOIN (SELECT owner_id, COUNT(*) works FROM music_work GROUP BY owner_id) w ON w.owner_id = t.creator_id "
                             + "GROUP BY t.creator_id, t.account_type, t.name, t.email, t.phone_masked "
-                            + "ORDER BY " + userOrder + " LIMIT 50",
+                            + "ORDER BY " + userOrder + listLimit,
                     (rs, n) -> {
                         var row = new LinkedHashMap<String, Object>();
                         row.put("creatorId", rs.getString("creator_id"));
@@ -276,7 +311,15 @@ public class AnalyticsViewController {
                         row.put("firstSeen", rs.getTimestamp("first_seen") == null ? "" : rs.getTimestamp("first_seen").toInstant().toString());
                         row.put("lastSeen", rs.getTimestamp("last_seen") == null ? "" : rs.getTimestamp("last_seen").toInstant().toString());
                         return row;
-                    }, since));
+                    }, since);
+            if (fullLists) {
+                var activeIds = new HashSet<String>();
+                for (var row : users) activeIds.add((String) row.get("creatorId"));
+                var allUsers = new ArrayList<>(users);
+                allUsers.addAll(detail.recentRegisteredUsers(since, activeIds));
+                users = allUsers;
+            }
+            body.put("users", users);
             // 创作次数：music_work 按创建时间统计周期内新增作品。
             body.put("creations", template.query(
                     "SELECT COUNT(*) c FROM music_work WHERE created_at >= ?",
@@ -294,14 +337,14 @@ public class AnalyticsViewController {
                     }, since).stream().findFirst().orElseGet(LinkedHashMap::new));
             // 充值明细：周期内全部订单（含未支付/失败），关联身份表给出账号信息，按时间倒序。
             body.put("recharges", template.query(
-                    "SELECT p.creator_id, p.package_id, p.amount, p.currency, p.credits, p.status, p.created_at, "
+                    "SELECT " + (fullLists ? "p.id, " : "") + "p.creator_id, p.package_id, p.amount, p.currency, p.credits, p.status, p.created_at, "
                             + "COALESCE(g.email, o.email) email, COALESCE(g.display_name, o.display_name, a.display_name) name, o.phone_masked, "
                             + "CASE WHEN g.creator_id IS NOT NULL THEN 'GOOGLE' WHEN o.email IS NOT NULL AND o.email <> '' THEN 'OIDC_EMAIL' "
                             + "WHEN o.creator_id IS NOT NULL THEN 'OIDC_PHONE' WHEN a.creator_id IS NOT NULL THEN 'AUTHING' ELSE 'GUEST' END account_type "
                             + "FROM payment_order p LEFT JOIN creator_google_identity g ON g.creator_id=p.creator_id "
                             + "LEFT JOIN creator_oidc_identity o ON o.creator_id=p.creator_id "
                             + "LEFT JOIN creator_authing_identity a ON a.creator_id=p.creator_id "
-                            + "WHERE p.created_at >= ? ORDER BY p.created_at DESC LIMIT 50",
+                            + "WHERE p.created_at >= ? ORDER BY p.created_at DESC" + (fullLists ? ", p.id DESC" : "") + listLimit,
                     (rs, n) -> {
                         var row = new LinkedHashMap<String, Object>();
                         row.put("creatorId", rs.getString("creator_id"));
@@ -309,6 +352,7 @@ public class AnalyticsViewController {
                         row.put("name", rs.getString("name"));
                         row.put("email", rs.getString("email"));
                         row.put("phoneMasked", rs.getString("phone_masked"));
+                        if (fullLists) row.put("orderId", rs.getString("id"));
                         row.put("packageId", rs.getString("package_id"));
                         row.put("amount", rs.getDouble("amount"));
                         row.put("currency", rs.getString("currency"));
@@ -322,10 +366,12 @@ public class AnalyticsViewController {
             body.put("countries", template.query(
                     "SELECT country, COUNT(DISTINCT visitor_id) visitors, COUNT(*) hits "
                             + "FROM site_event WHERE created_at >= ? AND country IS NOT NULL AND " + REAL_VISITOR_PREDICATE
-                            + " GROUP BY country ORDER BY visitors DESC LIMIT 50",
+                            + " GROUP BY country ORDER BY visitors DESC, country ASC" + listLimit,
                     (rs, n) -> {
                         var row = new LinkedHashMap<String, Object>();
-                        row.put("country", rs.getString("country"));
+                        var country = rs.getString("country");
+                        row.put("country", country);
+                        if (fullLists) row.put("countryCode", AnalyticsDetailService.countryCode(country));
                         row.put("visitors", rs.getLong("visitors"));
                         row.put("hits", rs.getLong("hits"));
                         return row;
@@ -365,6 +411,43 @@ public class AnalyticsViewController {
             body.put("error", "QUERY_FAILED");
         }
         return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(body);
+    }
+
+    /** 已验证账号查询独立于访问埋点，只向看板白名单开放，并且只返回掩码。 */
+    @GetMapping("/phone-users")
+    public ResponseEntity<Map<String, Object>> phoneUsers(@RequestParam String suffix) {
+        if (!allowed(currentCreatorId())) {
+            return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(Map.of("allowed", false));
+        }
+        if (suffix == null || !suffix.matches("[0-9]{4}")) {
+            return ResponseEntity.badRequest().cacheControl(CacheControl.noStore()).build();
+        }
+        try {
+            return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(Map.of(
+                    "allowed", true, "users", detail.phoneUsers(suffix)));
+        } catch (RuntimeException e) {
+            return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(Map.of(
+                    "allowed", true, "error", "QUERY_FAILED"));
+        }
+    }
+
+    @GetMapping("/country-users")
+    public ResponseEntity<Map<String, Object>> countryUsers(@RequestParam String country,
+                                                            @RequestParam(defaultValue = "30") int days) {
+        if (!allowed(currentCreatorId())) {
+            return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(Map.of("allowed", false));
+        }
+        if (country == null || country.isBlank() || country.length() > 128) {
+            return ResponseEntity.badRequest().cacheControl(CacheControl.noStore()).build();
+        }
+        int window = Math.max(1, Math.min(days, 90));
+        try {
+            return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(Map.of(
+                    "allowed", true, "users", detail.countryUsers(country, Instant.now().minus(window, ChronoUnit.DAYS))));
+        } catch (RuntimeException e) {
+            return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(Map.of(
+                    "allowed", true, "error", "QUERY_FAILED"));
+        }
     }
 
     /** 用户下钻：某个用户在各页面的停留；权限与其它看板接口一致。 */

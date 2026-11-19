@@ -31,23 +31,50 @@ const names = (wrapper: VueWrapper) => wrapper.findAll('.users-row .user-main st
 afterEach(() => { wrappers.splice(0).forEach(wrapper => wrapper.unmount()); vi.unstubAllGlobals() })
 
 describe('数据看板用户排序', () => {
-  it('默认展示十条，可展开并筛选原先收起的用户', async () => {
-    const users = Array.from({ length: 12 }, (_, index) => ({
+  it('默认展示二十条，支持翻页和跨页筛选', async () => {
+    const users = Array.from({ length: 22 }, (_, index) => ({
       ...people[0]!, creatorId: `user-${index}`, name: `Listener ${index}`, works: index,
     }))
     const wrapper = start(() => json({ ...summary(), users }))
     await flushPromises()
-    expect(names(wrapper)).toHaveLength(10)
-    await wrapper.get('.users-expand').trigger('click')
-    expect(names(wrapper)).toHaveLength(12)
-    await wrapper.get('.users-expand').trigger('click')
-    expect(names(wrapper)).toHaveLength(10)
+    expect(names(wrapper)).toHaveLength(20)
+    const pagination = wrapper.get('[aria-label="用户活跃分页"]')
+    await pagination.findAll('button')[1]!.trigger('click')
+    expect(names(wrapper)).toEqual(['Listener 20', 'Listener 21'])
     const inputs = wrapper.findAll('.column-filters input')
     expect(inputs).toHaveLength(6)
-    expect(wrapper.get('.column-filters datalist').findAll('option').map(option => option.attributes('value'))).toContain('Listener 11')
-    await inputs[0]!.setValue('listener 11')
-    expect(names(wrapper)).toEqual(['Listener 11'])
+    expect(wrapper.get('.column-filters datalist').findAll('option').map(option => option.attributes('value'))).toContain('Listener 21')
+    await inputs[0]!.setValue('listener 21')
+    expect(names(wrapper)).toEqual(['Listener 21'])
     await inputs[2]!.setValue('12')
+    expect(names(wrapper)).toEqual([])
+  })
+
+  it('默认列出新注册但没有访问记录的账号，并单独计数', async () => {
+    const newAccount = {
+      creatorId: 'new-phone', name: null, email: null, phoneMasked: '****1234', accountType: 'OIDC_PHONE',
+      pv: 0, pageviews: 0, avgDurationMs: 0, samples: 0, firstSeen: '', lastSeen: '', works: 1, noActivity: true,
+    }
+    const wrapper = start(() => json({ ...summary(), users: [...people, newAccount] }))
+    await flushPromises()
+    expect(names(wrapper)).toEqual(['Old Active', 'Guest Middle', 'Recent Visitor', '****1234'])
+    expect(wrapper.get('.users-summary').text()).toContain('2 位登录用户 · 1 位游客 · 1 位新注册账号暂无访问记录')
+    expect(wrapper.text()).toContain('所选周期内无访问记录')
+  })
+
+  it('按尾号找到没有访问记录的手机号账号，清除筛选时恢复活跃列表', async () => {
+    const lookup = vi.fn(() => json({ allowed: true, users: [
+      { creatorId: 'phone-account', accountType: 'OIDC_PHONE', name: null, phoneMasked: '****1234' },
+    ] }))
+    const wrapper = start(url => url.includes('/phone-users?suffix=1234') ? lookup() : json({ ...summary(), users: [] }))
+    await flushPromises()
+    const search = wrapper.get('.column-filters input')
+    await search.setValue('1234')
+    await vi.waitFor(() => expect(names(wrapper)).toEqual(['****1234']))
+    expect(lookup).toHaveBeenCalledTimes(1)
+    expect(wrapper.text()).toContain('所选周期内无访问记录')
+    expect(wrapper.text()).toContain('0 位登录用户')
+    await search.setValue('')
     expect(names(wrapper)).toEqual([])
   })
 

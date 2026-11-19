@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { locale, t } from '../../../shared/i18n'
 import { computed, ref } from 'vue'
 import type { TrendPoint } from '../model/dwell'
 
@@ -62,12 +63,12 @@ const activeLeft = computed(() => (hovered.value >= 0 ? (x(hovered.value) / W) *
 <template>
   <div class="trend">
     <div v-if="!hasData" class="trend-empty">
-      <strong>这段时间还没有访问</strong>
-      <span>有真实浏览后，PV / UV 曲线会出现在这里。</span>
+      <strong>{{ t('这段时间还没有访问') }}</strong>
+      <span>{{ t('有真实浏览后，PV / UV 曲线会出现在这里。') }}</span>
     </div>
     <div v-else class="trend-canvas">
       <svg class="trend-svg" :viewBox="`0 0 ${W} ${H}`" role="img"
-           :aria-label="`访问趋势，共 ${points.length} 天，最高 PV ${Math.max(...points.map(p => p.pageviews))}`"
+           :aria-label="t('访问趋势，共 {days} 天，最高访问量 {peak}', { days: points.length, peak: Math.max(...points.map(p => p.pageviews)) })"
            @pointermove="onMove" @pointerleave="onLeave">
         <g class="grid">
           <g v-for="tick in yTicks" :key="tick.value">
@@ -92,13 +93,13 @@ const activeLeft = computed(() => (hovered.value >= 0 ? (x(hovered.value) / W) *
         <rect :x="PAD.l" :y="PAD.t" :width="W - PAD.l - PAD.r" :height="H - PAD.t - PAD.b" fill="transparent" />
       </svg>
       <div class="trend-legend">
-        <span><i class="swatch pv"></i>PV 访问量</span>
-        <span><i class="swatch uv"></i>UV 独立访客</span>
+        <span><i class="swatch pv"></i>{{ t('PV 访问量') }}</span>
+        <span><i class="swatch uv"></i>{{ t('UV 独立访客') }}</span>
       </div>
       <div v-if="active" class="trend-tip" :style="{ left: `${activeLeft}%` }">
         <strong>{{ active.d }}</strong>
-        <span><i class="swatch pv"></i>PV {{ active.pageviews.toLocaleString('zh-CN') }}</span>
-        <span><i class="swatch uv"></i>UV {{ active.uv.toLocaleString('zh-CN') }}</span>
+        <span><i class="swatch pv"></i>{{ t('PV 访问量') }} {{ active.pageviews.toLocaleString(locale) }}</span>
+        <span><i class="swatch uv"></i>{{ t('UV 独立访客') }} {{ active.uv.toLocaleString(locale) }}</span>
       </div>
     </div>
   </div>
