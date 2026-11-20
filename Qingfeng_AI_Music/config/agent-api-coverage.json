@@ -799,6 +799,8 @@
       "source": "com/qingfeng/music/server/web/WebPageController.java",
       "mappingDeclarations": [
         "@GetMapping({\"/\",\"/create\",\"/create/photo\",\"/works\",\"/works/{id}\",\"/account\",\"/profile\",\"/artist/{id}\",\"/discover\",\"/recharge\",\"/analytics\",\"/agent\",\"/help\"})",
+        "@GetMapping({\"/zh-CN\",\"/zh-CN/\"})",
+        "@GetMapping({\"/en\",\"/en/\"})",
         "@GetMapping(\"/legal/terms\")",
         "@GetMapping(\"/legal/privacy\")"
       ],

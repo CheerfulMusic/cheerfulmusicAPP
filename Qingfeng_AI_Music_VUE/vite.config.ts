@@ -2,6 +2,7 @@ import { defineConfig, loadEnv } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import legacy from '@vitejs/plugin-legacy'
 import {previewMediaPlugin} from './build/preview-media'
+import { homeSeoPlugin } from './build/home-seo'
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
@@ -9,6 +10,7 @@ export default defineConfig(({ mode }) => {
     plugins: [
       vue(),
       previewMediaPlugin(),
+      homeSeoPlugin(),
       // 微信/老版本内置 WebView 对 <script type="module" crossorigin> 有静默失败坑，
       // 会整页白屏（#app 为空、仅 <title> 显示）。生成一份 nomodule 的 ES5 兜底，
       // 让所有 WebView 都能加载，桌面现代浏览器仍走原 module 构建。

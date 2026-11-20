@@ -1,7 +1,8 @@
 import { readonly, ref } from 'vue'
 import { english } from './en'
+import { homeLocale, homeSeo, homeSeoLinks, type Locale } from './home-seo'
 
-export type Locale = 'zh-CN' | 'en'
+export type { Locale } from './home-seo'
 export const localeStorageKey = 'qingfeng.locale'
 function savedLocale(): Locale {
   try { return localStorage.getItem(localeStorageKey) === 'en' ? 'en' : 'zh-CN' }
@@ -19,18 +20,33 @@ export function t(message: string, params: Record<string, string | number> = {})
   const copy = selected.value === 'en' ? english[message] ?? message : message
   return copy.replace(/\{(\w+)\}/g, (placeholder, key: string) => String(params[key] ?? placeholder))
 }
+let localizedHome: Locale | undefined
 function updateDocument() {
   if (typeof document === 'undefined') return
   document.documentElement.lang = selected.value
-  document.title = '青风音乐'
-  document.querySelector('meta[name="description"]')?.setAttribute('content', t('把你的故事唱成歌，送给重要的人。用青风音乐记录回忆，制作专属音乐礼物。'))
+  const seo = localizedHome && homeSeo[localizedHome]
+  document.title = seo ? seo.title : '青风音乐'
+  document.querySelector('meta[name="description"]')?.setAttribute('content', seo ? seo.description : t('把你的故事唱成歌，送给重要的人。用青风音乐记录回忆，制作专属音乐礼物。'))
+  document.head.querySelectorAll('link[data-home-seo]').forEach(link => link.remove())
+  if (localizedHome) {
+    for (const attributes of homeSeoLinks(localizedHome)) {
+      const link = document.createElement('link')
+      link.setAttribute('data-home-seo', '')
+      for (const [name, value] of Object.entries(attributes)) link.setAttribute(name, value)
+      document.head.append(link)
+    }
+  }
 }
 export function setLocale(value: Locale) {
   selected.value = value
   try { localStorage.setItem(localeStorageKey, value) } catch { /* Language switching still works without browser storage. */ }
   updateDocument()
 }
-export function initializeLocale() { updateDocument() }
+export function updatePageLocale(path: string) {
+  localizedHome = homeLocale(path)
+  if (localizedHome) setLocale(localizedHome)
+  else updateDocument()
+}
 export function formatDate(value: string | number | Date): string {
   const date = new Date(value)
   return Number.isNaN(date.getTime()) ? '—' : new Intl.DateTimeFormat(selected.value, { dateStyle: 'medium', timeStyle: 'short' }).format(date)
