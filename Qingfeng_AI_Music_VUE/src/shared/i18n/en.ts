@@ -825,7 +825,7 @@ export const english: Record<string, string> = {
   '让每一个想法 都有自己的旋律': 'Give every idea a melody of its own',
   '写下灵感 选择风格 唱出属于你的声音': 'Start with an idea Choose your style Create your own sound',
   '人人都是歌手': 'Everyone Can Be a Singer',
-  '无需音乐基础 简单几步 创作属于你的歌曲': 'Create your own song in just a few clicks No music skills needed',
+  '无需音乐基础 简单几步 创作属于你的歌曲': 'Create your own song in just a few clicks. No music skills needed',
   '开始创作': 'Start creating',
   '点击试听，边加载边播放。': 'Tap to listen. Playback starts as the song loads.',
   '正在连接音频，马上开始…': 'Connecting to your song…',
