@@ -30,8 +30,13 @@ public class ReferralController {
 @Service @Profile({"mysql","test"})
 class JdbcReferralRewards implements ReferralRewards {
     private final JdbcTemplate db;
-    private final CreditsLedger credits;
-    JdbcReferralRewards(JdbcTemplate db, CreditsLedger credits) { this.db = db; this.credits = credits; }
+    private final com.qingfeng.music.credits.FirstLoginCredits.Award award;
+    JdbcReferralRewards(JdbcTemplate db, CreditsLedger credits) { this.db = db; this.award = credits::credit; }
+    @org.springframework.beans.factory.annotation.Autowired
+    JdbcReferralRewards(JdbcTemplate db, com.qingfeng.music.server.config.GiftBudget gifts) {
+        this.db = db;
+        this.award = gifts::referral;
+    }
     @Override public String code(String creator) {
         if (!verified(creator)) throw new DomainException("REFERRAL_LOGIN_REQUIRED", "请先登录账号，再分享邀请链接");
         return creator;
@@ -51,7 +56,7 @@ class JdbcReferralRewards implements ReferralRewards {
     }
     public void rewardForFirstLogin(String invitee) {
         var inviters = db.query("SELECT inviter_id FROM referral_pending WHERE invitee_id=?", (rs,n)->rs.getString(1), invitee);
-        if (!inviters.isEmpty()) credits.credit(inviters.get(0), 19, "invite:" + invitee);
+        if (!inviters.isEmpty()) award.grant(inviters.get(0), 19, "invite:" + invitee);
     }
     private boolean verified(String creator) {
         Integer count = db.queryForObject("SELECT (SELECT COUNT(*) FROM creator_google_identity WHERE creator_id=?) + (SELECT COUNT(*) FROM creator_oidc_identity WHERE creator_id=?)", Integer.class, creator, creator);

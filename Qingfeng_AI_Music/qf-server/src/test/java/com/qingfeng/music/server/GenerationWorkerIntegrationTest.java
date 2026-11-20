@@ -48,6 +48,21 @@ class GenerationWorkerIntegrationTest {
     GenerationWorker worker(Fixture f,AudioDownloader downloader){return new GenerationWorker(repository,f.provider(),downloader,media,f.time(),Duration.ofMinutes(2),2);}
     byte[] wav(){var b=ByteBuffer.allocate(48).order(ByteOrder.LITTLE_ENDIAN);b.put("RIFF".getBytes()).putInt(40).put("WAVEfmt ".getBytes()).putInt(16).putShort((short)1).putShort((short)1).putInt(8000).putInt(16000).putShort((short)2).putShort((short)16).put("data".getBytes()).putInt(4).putInt(0);return b.array();}
     GenerationStatus status(Fixture f){return f.api().list(f.owner(),f.work()).get(0).status();}
+    @Test void emptyScansAcrossThreeNodesLeaveTheProviderLockUntouched() throws Exception {
+        String provider = "idle-" + UUID.randomUUID();
+        var pool = Executors.newFixedThreadPool(3);
+        try {
+            var jobs = new java.util.ArrayList<Future<?>>();
+            for (int node = 0; node < 3; node++) jobs.add(pool.submit(() -> {
+                var now = Instant.now();
+                for (var phase : ExecutionRepository.Phase.values())
+                    assertTrue(repository.claim(provider, UUID.randomUUID().toString(), now, now.plusSeconds(120), phase, 100).isEmpty());
+            }));
+            for (var job : jobs) job.get(TEST_WAIT_SECONDS, TimeUnit.SECONDS);
+            assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM generation_worker_lock WHERE provider=?", Integer.class, provider));
+        } finally { pool.shutdownNow(); }
+    }
+
     @Test void localPreparationFailureIsNotAnUnknownSubmission(){
         var f=fixture();f.provider().validationFailure=true;assertTrue(worker(f,url->new ByteArrayInputStream(wav())).runOnce());
         assertEquals(GenerationStatus.FAILED,status(f));assertEquals("LOCAL_PREPARATION_FAILED",f.api().list(f.owner(),f.work()).get(0).errorCode());

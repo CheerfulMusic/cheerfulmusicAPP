@@ -14,12 +14,17 @@ public class ProviderConfiguration {
     @Bean ProviderAudioUrls providerAudioUrls() {return new ProviderAudioUrls();}
     @Bean @org.springframework.context.annotation.Profile({"mysql","test"})
     KieRequestLimiter kieRequestLimiter(org.springframework.jdbc.core.JdbcTemplate jdbc,
-            org.springframework.transaction.PlatformTransactionManager manager,Environment env){
+            org.springframework.transaction.PlatformTransactionManager manager,Environment env,
+            io.micrometer.core.instrument.MeterRegistry registry){
+        var creates = registry.timer("qingfeng.kie.admission.wait", "operation", "create");
+        var reads = registry.timer("qingfeng.kie.admission.wait", "operation", "read");
         return new KieRequestLimiter(jdbc,new org.springframework.transaction.support.TransactionTemplate(manager),
             env.getProperty("qingfeng.providers.kie.rate-limit.scope","primary"),
             env.getProperty("qingfeng.providers.kie.rate-limit.creates-per-ten-seconds",Integer.class,18),
             env.getProperty("qingfeng.providers.kie.rate-limit.reads-per-second",Integer.class,8),
-            java.time.Duration.ofSeconds(env.getProperty("qingfeng.providers.kie.rate-limit.max-wait-seconds",Long.class,30L)));
+            java.time.Duration.ofSeconds(env.getProperty("qingfeng.providers.kie.rate-limit.max-wait-seconds",Long.class,30L)))
+            .recordWaitTimes(ns -> creates.record(ns,java.util.concurrent.TimeUnit.NANOSECONDS),
+                             ns -> reads.record(ns,java.util.concurrent.TimeUnit.NANOSECONDS));
     }
     @Bean MusicProvider musicProvider(Environment environment,ProviderAudioUrls audioUrls,
             org.springframework.beans.factory.ObjectProvider<KieRequestLimiter> limiters) {

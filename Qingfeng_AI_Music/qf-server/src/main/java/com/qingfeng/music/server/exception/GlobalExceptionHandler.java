@@ -8,12 +8,20 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+    private final io.micrometer.core.instrument.Counter globalBusy;
+
+    public GlobalExceptionHandler(org.springframework.beans.factory.ObjectProvider<io.micrometer.core.instrument.MeterRegistry> registries) {
+        var registry = registries.getIfAvailable();
+        globalBusy = registry == null ? null : registry.counter("qingfeng.generation.rejections", "reason", "global_busy");
+    }
+
     @ExceptionHandler(org.springframework.web.multipart.MaxUploadSizeExceededException.class)
     public ResponseEntity<ErrorResponse> uploadTooLarge() {
         return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE).body(new ErrorResponse("INVALID_AUDIO_SIZE", "音频不能超过20MB"));
     }
     @ExceptionHandler(DomainException.class)
     public ResponseEntity<ErrorResponse> domain(DomainException error) {
+        if ("GLOBAL_GENERATION_BUSY".equals(error.code()) && globalBusy != null) globalBusy.increment();
         HttpStatus status = error.code().endsWith("QUOTA_EXCEEDED") || error.code().endsWith("GENERATION_BUSY") ? HttpStatus.TOO_MANY_REQUESTS : error.code().endsWith("UNAVAILABLE") ? HttpStatus.SERVICE_UNAVAILABLE : error.code().endsWith("NOT_FOUND") ? HttpStatus.NOT_FOUND : error.code().startsWith("INVALID_") ? HttpStatus.BAD_REQUEST : HttpStatus.CONFLICT;
         return ResponseEntity.status(status).body(new ErrorResponse(error.code(), error.getMessage()));
     }

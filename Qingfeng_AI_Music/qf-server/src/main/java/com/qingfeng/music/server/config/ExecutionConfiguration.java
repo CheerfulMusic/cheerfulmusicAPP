@@ -24,6 +24,18 @@ public class ExecutionConfiguration {
         coverJobs.ifAvailable(jobs -> repository.withAutomaticCover(jobs::enqueue));
         return repository;
     }
+    @Bean io.micrometer.core.instrument.binder.MeterBinder generationCapacityMetrics(
+            ExecutionMapper mapper, MusicProvider provider) {
+        return registry -> {
+            io.micrometer.core.instrument.Gauge.builder("qingfeng.generation.inflight", mapper,
+                    value -> value.inFlight(provider.name(), Instant.now())).register(registry);
+            io.micrometer.core.instrument.Gauge.builder("qingfeng.generation.oldest.ready.seconds", mapper, value -> {
+                Instant now = Instant.now();
+                Instant oldest = value.oldestReadySubmission(provider.name(), now);
+                return oldest == null ? 0 : Duration.between(oldest, now).toMillis() / 1000.0;
+            }).register(registry);
+        };
+    }
     @Bean AudioDownloader audioDownloader(@Value("${qingfeng.generation.audio-hosts:}")String hosts,ProviderAudioUrls audioUrls){return new AllowlistedAudioDownloader(Arrays.stream(hosts.split(",")).map(String::trim).map(String::toLowerCase).filter(s->!s.isEmpty()).collect(Collectors.toSet()),audioUrls);}
     @Bean AudioCandidates audioCandidates(org.springframework.jdbc.core.JdbcTemplate jdbc){return new JdbcAudioCandidates(jdbc);}
     @Bean GenerationWorker generationWorker(ExecutionRepository repository,MusicProvider provider,AudioDownloader downloader,GeneratedAudioArchive archive,com.qingfeng.music.generation.application.SectionEditRepository edits,com.qingfeng.music.settings.MusicSettings settings,AudioCandidates candidates,@Value("${qingfeng.generation.review-after-minutes:30}")long reviewMinutes,@Value("${qingfeng.generation.max-query-failures:6}")int queryFailures,@Value("${qingfeng.generation.max-in-flight:100}")int maxInFlight){return new GenerationWorker(repository,provider,downloader,archive,Clock.systemUTC(),Duration.ofMinutes(2),5).withSectionEdits(edits).withSettings(settings).withCandidates(candidates).withRecoveryPolicy(Duration.ofMinutes(reviewMinutes),queryFailures).withConcurrencyLimit(maxInFlight);}
@@ -34,12 +46,12 @@ public class ExecutionConfiguration {
             @Value("${qingfeng.generation.submit-workers:2}")int submitWorkers,
             @Value("${qingfeng.generation.query-workers:4}")int queryWorkers,
             @Value("${qingfeng.generation.archive-workers:2}")int archiveWorkers){
-        return new GenerationDispatcher(worker::runOnce,Duration.ofMillis(scanMillis),submitWorkers,queryWorkers,archiveWorkers);
+        return new GenerationDispatcher(Duration.ofMillis(scanMillis),submitWorkers,queryWorkers,archiveWorkers,worker::runOnce);
     }
     @Bean(destroyMethod="close")
     @ConditionalOnProperty(name={"qingfeng.generation.enabled","qingfeng.generation.vocal-adjustment-worker-enabled"},havingValue="true")
     GenerationDispatcher vocalAdjustmentRunner(GenerationWorker worker){
-        return new GenerationDispatcher(worker::runVocalAdjustment,Duration.ofSeconds(2),1,1,1);
+        return new GenerationDispatcher(Duration.ofSeconds(2),1,1,1,worker::runVocalAdjustment);
     }
     @Bean
     org.springframework.context.ApplicationListener<org.springframework.boot.context.event.ApplicationReadyEvent> generationRunnerStartup(

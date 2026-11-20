@@ -6,6 +6,13 @@ import java.util.List;
 
 @Mapper
 public interface ExecutionMapper {
+    String PHASE_CONDITION =
+        "<choose>" +
+        "<when test=\"phase == 'SUBMIT'\"> AND status='QUEUED'</when>" +
+        "<when test=\"phase == 'QUERY'\"> AND (status IN ('SUBMITTING','RUNNING') OR (status='SUBMISSION_UNKNOWN' AND provider_task_id IS NOT NULL))</when>" +
+        "<when test=\"phase == 'ARCHIVE'\"> AND status='SAVING'</when>" +
+        "<otherwise>AND (status IN ('QUEUED','SUBMITTING','RUNNING','SAVING') OR (status='SUBMISSION_UNKNOWN' AND provider_task_id IS NOT NULL))</otherwise>" +
+        "</choose>";
     @Insert("INSERT INTO generation_worker_lock(provider) VALUES(#{provider}) ON DUPLICATE KEY UPDATE provider=provider")
     void ensureProvider(String provider);
     @Update("UPDATE generation_worker_lock SET lease_token=#{token},lease_until=#{until} WHERE provider=#{provider} AND (lease_until IS NULL OR lease_until<=#{now})")
@@ -17,22 +24,25 @@ public interface ExecutionMapper {
     String claimGate(@Param("provider")String provider,@Param("token")String token,@Param("now")Instant now);
     @Select("SELECT COUNT(*) FROM generation_task WHERE provider=#{provider} AND (status IN ('SUBMITTING','RUNNING','SUBMISSION_UNKNOWN') OR (status='QUEUED' AND lease_until>#{now}))")
     int inFlight(@Param("provider")String provider,@Param("now")Instant now);
+    @Select("SELECT provider FROM generation_worker_lock WHERE provider=#{provider} AND (lease_token IS NULL OR lease_until<=#{now} OR lease_token=#{token}) FOR SHARE")
+    String sharedGate(@Param("provider")String provider,@Param("token")String token,@Param("now")Instant now);
+    @Select("SELECT MIN(next_attempt_at) FROM generation_task WHERE provider=#{provider} AND status='QUEUED' AND next_attempt_at<=#{now} AND (lease_until IS NULL OR lease_until<=#{now})")
+    Instant oldestReadySubmission(@Param("provider")String provider,@Param("now")Instant now);
     @Select({"<script>",
         "SELECT g.id FROM generation_task g WHERE g.provider=#{provider}",
-        "<choose>",
-        "<when test=\"phase == 'SUBMIT'\">AND g.status='QUEUED'</when>",
-        "<when test=\"phase == 'QUERY'\">AND (g.status IN ('SUBMITTING','RUNNING') OR (g.status='SUBMISSION_UNKNOWN' AND g.provider_task_id IS NOT NULL))</when>",
-        "<when test=\"phase == 'ARCHIVE'\">AND g.status='SAVING'</when>",
-        "<otherwise>AND (g.status IN ('QUEUED','SUBMITTING','RUNNING','SAVING') OR (g.status='SUBMISSION_UNKNOWN' AND g.provider_task_id IS NOT NULL))</otherwise>",
-        "</choose>",
+        PHASE_CONDITION,
         "AND g.next_attempt_at &lt;= #{now} AND (g.lease_until IS NULL OR g.lease_until &lt;= #{now})",
         "<if test='!allowSubmission'>AND g.status &lt;&gt; 'QUEUED'</if>",
         "ORDER BY g.next_attempt_at,g.created_at,g.id LIMIT 20",
         "</script>"})
     List<String> candidates(@Param("provider")String provider,@Param("now")Instant now,
                             @Param("phase")String phase,@Param("allowSubmission")boolean allowSubmission);
-    @Update("UPDATE generation_task SET lease_token=#{token},lease_until=#{until} WHERE id=#{id} AND (status IN ('QUEUED','SUBMITTING','RUNNING','SAVING') OR (status='SUBMISSION_UNKNOWN' AND provider_task_id IS NOT NULL)) AND next_attempt_at<=#{now} AND (lease_until IS NULL OR lease_until<=#{now})")
-    int claim(@Param("id")String id,@Param("token")String token,@Param("now")Instant now,@Param("until")Instant until);
+    @Update({"<script>","UPDATE generation_task SET lease_token=#{token},lease_until=#{until} WHERE id=#{id} AND provider=#{provider}",
+        PHASE_CONDITION,
+        "AND next_attempt_at &lt;= #{now} AND (lease_until IS NULL OR lease_until &lt;= #{now})",
+        "<if test='!allowSubmission'>AND status &lt;&gt; 'QUEUED'</if>","</script>"})
+    int claim(@Param("id")String id,@Param("provider")String provider,@Param("phase")String phase,
+              @Param("allowSubmission")boolean allowSubmission,@Param("token")String token,@Param("now")Instant now,@Param("until")Instant until);
     @Select("SELECT * FROM generation_task WHERE id=#{id}") TaskRow find(String id);
     @Update("UPDATE generation_task SET lease_token=NULL,lease_until=NULL WHERE id=#{id} AND lease_token=#{token}")
     void release(@Param("id")String id,@Param("token")String token);
