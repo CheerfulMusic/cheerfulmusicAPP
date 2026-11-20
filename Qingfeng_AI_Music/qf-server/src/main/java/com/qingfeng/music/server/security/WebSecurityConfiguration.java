@@ -37,6 +37,8 @@ public class WebSecurityConfiguration {
                 .requestMatchers(org.springframework.http.HttpMethod.GET,"/api/public/invite/status").permitAll()
                 .requestMatchers(org.springframework.http.HttpMethod.POST,"/api/public/invite/enter").permitAll()
                 .requestMatchers(org.springframework.http.HttpMethod.GET,"/","/index.html","/assets/**","/brand/**","/media/**","/create","/create/photo","/works","/works/*","/gift/*","/account","/profile","/artist/*","/discover","/recharge","/analytics","/agent","/help","/legal/**").permitAll()
+                .requestMatchers(org.springframework.http.HttpMethod.GET,"/zh-CN","/zh-CN/","/zh-CN/index.html","/en","/en/","/en/index.html").permitAll()
+                .requestMatchers(org.springframework.http.HttpMethod.HEAD,"/zh-CN","/zh-CN/","/zh-CN/index.html","/en","/en/","/en/index.html").permitAll()
                 .requestMatchers(org.springframework.http.HttpMethod.HEAD,"/gift/*","/discover","/brand/share-default-cover.png").permitAll()
                 .requestMatchers(request -> "HEAD".equals(request.getMethod()) && com.qingfeng.music.server.web.RecommendationOssRedirect.isSamplePath(request.getServletPath())).permitAll()
                 .requestMatchers("/api/public/system/info", "/api/public/csrf", "/api/public/session", "/api/public/session/recover", "/actuator/health").permitAll()

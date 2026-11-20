@@ -23,7 +23,8 @@ import './app/styles/home-light.css'
 import './app/styles/brand-theme.css'
 import './app/styles/agent.css'
 import './app/styles/global-player.css'
-import { initializeLocale } from './shared/i18n'
+import { updatePageLocale } from './shared/i18n'
+import { platform } from './platform'
 import { installPageLeaveTracking, trackPageView } from './shared/analytics/track'
 
 document.querySelectorAll<HTMLLinkElement>('link[data-gift-styles]').forEach(link => { link.media = 'all' })
@@ -31,7 +32,11 @@ router.afterEach(to => {
   const preview = document.getElementById('qf-gift-preview')
   if (preview && !preview.hidden && to.name !== 'gift') preview.remove()
 })
-initializeLocale()
+const isWeb = platform.kind === 'web'
+updatePageLocale(isWeb ? window.location.pathname : '')
+router.afterEach((to, _from, failure) => {
+  if (!failure) updatePageLocale(isWeb ? to.path : '')
+})
 installPageLeaveTracking()
 router.afterEach(to => { trackPageView(String(to.name ?? 'unknown')) })
 createApp(App).use(createPinia()).use(router).mount('#app')

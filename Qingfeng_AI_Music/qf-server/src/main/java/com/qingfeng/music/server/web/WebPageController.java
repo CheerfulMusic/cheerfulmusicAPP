@@ -6,6 +6,10 @@ import org.springframework.web.bind.annotation.GetMapping;
 public class WebPageController {
     @GetMapping({"/","/create","/create/photo","/works","/works/{id}","/account","/profile","/artist/{id}","/discover","/recharge","/analytics","/agent","/help"})
     public String index(){return "forward:/index.html";}
+    @GetMapping({"/zh-CN","/zh-CN/"})
+    public String chineseHome(){return "forward:/zh-CN/index.html";}
+    @GetMapping({"/en","/en/"})
+    public String englishHome(){return "forward:/en/index.html";}
     @GetMapping("/legal/terms") public String legacyTerms(){return "redirect:/legal/terms.html";}
     @GetMapping("/legal/privacy") public String legacyPrivacy(){return "redirect:/legal/privacy.html";}
 }
