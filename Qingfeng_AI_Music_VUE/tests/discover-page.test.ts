@@ -80,6 +80,10 @@ describe('Discover editorial layout with real content', () => {
     const upcoming = section.get('li:last-child')
     expect(upcoming.text()).toContain('待上线')
     expect(upcoming.find('button').exists()).toBe(false)
+    expect(upcoming.get('img').attributes('src')).toContain('carousel-sea-stacks')
+    expect(section.findAll('li button img').map(image => image.attributes('src').split('/').at(-1))).toEqual([
+      'hu-ran-xia-qi-yu.webp', 'liu-lang-shi-ren.webp', 'ming-tian-zai-shuo.webp', 'zou-le-na-me-yuan.webp',
+    ])
     expect(section.findAll('li button')).toHaveLength(4)
     await section.get('[aria-label="试听 流浪诗人"]').trigger('click')
     expect(mocks.toggle.mock.calls[0]![0].audio).toMatch(/^\/media\/recommendations\/vocal-liu-lang-shi-ren-/)
