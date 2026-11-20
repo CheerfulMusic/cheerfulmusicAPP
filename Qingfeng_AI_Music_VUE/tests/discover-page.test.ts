@@ -143,6 +143,7 @@ describe('Discover editorial layout with real content', () => {
 
     expect(wrapper.get('#discover-featured h2').text()).toBe(brand)
     expect(wrapper.get('#discover-featured .shelf-tracks').attributes('aria-label')).toBe(brand)
+    expect(wrapper.find('#discover-playlists header a').exists()).toBe(false)
     expect(wrapper.findAll('.discover-shelf header button').map(button => button.element.closest('section')?.id))
       .toEqual(['discover-vocal', 'discover-today'])
     expect(wrapper.get('#discover-global-pop .shelf-square .track-artist').text()).toBe('SergioBeats')

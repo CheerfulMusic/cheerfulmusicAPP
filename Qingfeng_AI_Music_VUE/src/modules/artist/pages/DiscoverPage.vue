@@ -456,7 +456,9 @@ onBeforeUnmount(() => {
     <div class="discover-width discover-content">
       <section class="discover-main" :aria-label="t('音乐广场')">
         <section id="discover-playlists" class="discover-playlists" aria-labelledby="discover-playlists-title">
-          <header class="discover-section-heading"><h2 id="discover-playlists-title">{{ t('推荐歌单') }}</h2><RouterLink to="/#inspiration">{{ t('查看更多') }} <span aria-hidden="true">›</span></RouterLink></header>
+          <header class="discover-section-heading">
+            <h2 id="discover-playlists-title">{{ t('推荐歌单') }}</h2>
+          </header>
           <ul v-if="visiblePlaylists.length" class="discover-playlist-tiles">
             <li v-for="playlist in visiblePlaylists" :key="playlist.id"><button type="button"
               :class="{ 'discover-playlist-disco': playlist.id === 'disco', 'discover-playlist-christmas': playlist.id === 'christmas' }"
