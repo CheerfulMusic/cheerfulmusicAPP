@@ -217,6 +217,34 @@ describe('Discover editorial layout with real content', () => {
     expect(mocks.record).toHaveBeenCalledWith(streetlight.song)
   })
 
+  it('pairs the two songs with their carousel artwork and plays the matching track', async () => {
+    const micangshan = song('09aaf684-2b68-438f-aa17-8730a352bf74')
+    micangshan.song.title = '米仓山'
+    const invincible = song('57bb7310-c64c-4873-b239-f2a268a7dedd')
+    invincible.song.title = '无敌的歌'
+    const streetlight = song('0f831f4b-1f3f-4d14-b6cf-b33534863622')
+    const popular = [song('航线'), micangshan, invincible, song('雨夜'), streetlight]
+    mocks.list.mockImplementation(async (tab: string) => page(tab === 'popular' ? popular : []))
+    mocks.shelves.mockResolvedValue(shelfData(popular))
+
+    const wrapper = await open()
+    const dots = wrapper.findAll('.discover-hero-dots button')
+    expect(dots[3]!.attributes('aria-label')).toBe('查看推荐：无敌的歌')
+    expect(dots[4]!.attributes('aria-label')).toBe('查看推荐：米仓山')
+    for (const [dot, expected, artwork] of [
+      [dots[3]!, invincible, 'carousel-airport-guitar'],
+      [dots[4]!, micangshan, 'carousel-countryside'],
+    ] as const) {
+      await dot.trigger('click')
+      expect(wrapper.get('.discover-hero h2').text()).toBe(expected.song.title)
+      expect(wrapper.get('.discover-hero-background').attributes('src')).toContain(artwork)
+      await wrapper.get('.discover-hero-listen').trigger('click')
+      expect(mocks.toggle.mock.calls.at(-1)![0].id).toBe(expected.song.id)
+    }
+    expect(wrapper.findAll('.discover-ranking-info strong').map(title => title.text()))
+      .toEqual(popular.map(item => item.song.title))
+  })
+
   it('keeps the main songs usable when recommendations fail and recovers the side feed on retry', async () => {
     let failed = true
     mocks.shelves.mockImplementation(async () => {

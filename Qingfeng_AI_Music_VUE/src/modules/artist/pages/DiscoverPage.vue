@@ -43,6 +43,8 @@ const latestShelfSize = 32
 const heroRotationMs = 30_000
 const streetlightSongId = '0f831f4b-1f3f-4d14-b6cf-b33534863622'
 const replacedHeroSongId = 'acfaa9d5-ce74-477f-9db8-d3700311a26c'
+const invincibleSongId = '57bb7310-c64c-4873-b239-f2a268a7dedd'
+const micangshanSongId = '09aaf684-2b68-438f-aa17-8730a352bf74'
 const christmasArtistId = '308036ef-8bef-486f-88cc-8266e5797768'
 const christmasSongId = 'd4b1ec5a-e68f-43e6-8624-226981ecef5c'
 const discoverPreviewPlaylistIds = new Set(['mandopop', 'electronic', 'global-pop'])
@@ -146,7 +148,15 @@ const heroRows = computed(() => {
   const streetlight = popularSongs.value.find(item => item.song.id === streetlightSongId) ?? supplementalHeroSong.value
   const slides = popularSongs.value.filter(item => item.song.id !== replacedHeroSongId && item.song.id !== streetlightSongId)
   if (streetlight) slides.splice(1, 0, streetlight)
-  return withTracks(slides.slice(0, 5))
+  const visible = slides.slice(0, 5)
+  const invincible = visible.find(item => item.song.id === invincibleSongId)
+  const micangshan = visible.find(item => item.song.id === micangshanSongId)
+  if (!invincible || !micangshan) return withTracks(visible)
+
+  // Match the airport guitar and countryside artwork slots, respectively.
+  const ordered = visible.filter(item => item !== invincible && item !== micangshan)
+  ordered.splice(2, 0, invincible, micangshan)
+  return withTracks(ordered)
 })
 const heroSlideCount = computed(() => heroRows.value.length + 1)
 const hero = computed(() => heroIndex.value === 0 ? undefined : heroRows.value[heroIndex.value - 1])
