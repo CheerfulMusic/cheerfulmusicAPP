@@ -19,7 +19,9 @@ import {
   getDiscoverShelves, getPublicArtist, listDiscoverSongs, publicAvatarUrl, publicTrack, recordDiscoverPlay,
   type DiscoverArtist, type DiscoverShelves, type DiscoverSong,
 } from '../api/artist'
-import coast from '../../../assets/discover/editorial/coast.webp'
+import walkedFar from '../../../assets/discover/carousel-walked-far.webp'
+import christmasSky from '../../../assets/discover/carousel-christmas-sky.webp'
+import christmasSkyCover from '../../../assets/discover/christmas-sky-cover.webp'
 import cactus from '../../../assets/discover/carousel-cactus.webp'
 import mistyGarden from '../../../assets/discover/carousel-misty-garden.webp'
 import airportGuitar from '../../../assets/discover/carousel-airport-guitar.webp'
@@ -68,7 +70,7 @@ const featuredSongs = ref<DiscoverSong[]>([])
 const popularSongs = ref<DiscoverSong[]>([])
 const supplementalHeroSong = ref<DiscoverSong>()
 const editorialLoading = ref(true)
-const heroIndex = ref(0)
+const selectedHeroTrackId = ref('')
 const heroPaused = ref(false)
 const heroHovered = ref(false)
 const heroFocused = ref(false)
@@ -95,7 +97,8 @@ const signedIn = computed(() => accountState.value.authenticated || logtoState.v
 function withTracks(items: DiscoverSong[], shelf?: Parameters<typeof shelfCover>[0]): PublishedShelfTrack[] {
   return items.map((item, index) => {
     const track = publicTrack(item.artistId, item.song)
-    if (shelf || !item.song.hasCover) track.cover = shelfCover(shelf ?? 'latest', index)
+    if (shelf === 'latest' && item.song.id === christmasSongId) track.cover = christmasSkyCover
+    else if (shelf || !item.song.hasCover) track.cover = shelfCover(shelf ?? 'latest', index)
     return { ...item, track }
   })
 }
@@ -144,22 +147,6 @@ const genreShelves = computed(() => discoverGenres.map(section => {
     : []
   return { ...section, square: tracks.slice(0, 7), wide }
 }))
-const heroRows = computed(() => {
-  const streetlight = popularSongs.value.find(item => item.song.id === streetlightSongId) ?? supplementalHeroSong.value
-  const slides = popularSongs.value.filter(item => item.song.id !== replacedHeroSongId && item.song.id !== streetlightSongId)
-  if (streetlight) slides.splice(1, 0, streetlight)
-  const visible = slides.slice(0, 5)
-  const invincible = visible.find(item => item.song.id === invincibleSongId)
-  const micangshan = visible.find(item => item.song.id === micangshanSongId)
-  if (!invincible || !micangshan) return withTracks(visible)
-
-  // Match the airport guitar and countryside artwork slots, respectively.
-  const ordered = visible.filter(item => item !== invincible && item !== micangshan)
-  ordered.splice(2, 0, invincible, micangshan)
-  return withTracks(ordered)
-})
-const heroSlideCount = computed(() => heroRows.value.length + 1)
-const hero = computed(() => heroIndex.value === 0 ? undefined : heroRows.value[heroIndex.value - 1])
 const heroBackgrounds = [
   { src: seaStacks, position: '58% center' },
   { src: cactus, position: '65% top' },
@@ -167,15 +154,46 @@ const heroBackgrounds = [
   { src: countryside, position: '15% center' },
   { src: mistyGarden, position: 'center 60%' },
 ]
-const heroBackground = computed(() => hero.value && heroBackgrounds[heroIndex.value - 1])
-const adjacentHero = (step: number, fallback: string) => computed<{ src: string; position?: string }>(() => {
-  if (heroSlideCount.value < 2) return { src: fallback }
-  const index = (heroIndex.value + step + heroSlideCount.value) % heroSlideCount.value
-  return heroBackgrounds[index - 1] ?? { src: coast }
+const walkedFarRow = vocalPerformanceRows.find(row => row.track.id === 'vocal-zou-le-na-me-yuan')!
+const heroSlides = computed(() => {
+  const streetlight = popularSongs.value.find(item => item.song.id === streetlightSongId) ?? supplementalHeroSong.value
+  const candidates = popularSongs.value.filter(item =>
+    item.song.id !== replacedHeroSongId && item.song.id !== streetlightSongId && item.song.id !== christmasSongId)
+  if (streetlight) candidates.splice(1, 0, streetlight)
+  const visible = candidates.slice(0, heroBackgrounds.length)
+  const invincible = visible.find(item => item.song.id === invincibleSongId)
+  const micangshan = visible.find(item => item.song.id === micangshanSongId)
+  let ordered = visible
+  if (invincible && micangshan) {
+    // Match the airport guitar and countryside artwork slots, respectively.
+    ordered = visible.filter(item => item !== invincible && item !== micangshan)
+    ordered.splice(2, 0, invincible, micangshan)
+  }
+
+  const slides = [
+    { row: walkedFarRow, artwork: { src: walkedFar, position: '68% center' } },
+    ...withTracks(ordered).map((row, index) => ({ row, artwork: heroBackgrounds[index]! })),
+  ]
+  const release = latestSongs.value.find(item => item.song.id === christmasSongId)
+    ?? popularSongs.value.find(item => item.song.id === christmasSongId)
+    ?? christmasTracks.value[0]?.publication
+  if (release) {
+    const track = { ...publicTrack(release.artistId, release.song), cover: christmasSkyCover }
+    slides.push({ row: { ...release, track }, artwork: { src: christmasSky, position: '67% center' } })
+  }
+  return slides
 })
-const heroBefore = adjacentHero(-1, mistyGarden)
-const heroAfter = adjacentHero(1, seaStacks)
-const heroTitleLength = computed(() => Array.from(hero.value?.song.title ?? '').length)
+const heroSlideCount = computed(() => heroSlides.value.length)
+const heroIndex = computed(() => Math.max(0, heroSlides.value.findIndex(slide => slide.row.track.id === selectedHeroTrackId.value)))
+const hero = computed(() => heroSlides.value[heroIndex.value]!.row)
+const heroRows = computed(() => heroSlides.value.map(slide => slide.row))
+const heroBackground = computed(() => heroSlides.value[heroIndex.value]!.artwork)
+function heroIndexAt(step: number) {
+  return (heroIndex.value + step + heroSlideCount.value) % heroSlideCount.value
+}
+const heroBefore = computed(() => heroSlides.value[heroIndexAt(-1)]!.artwork)
+const heroAfter = computed(() => heroSlides.value[heroIndexAt(1)]!.artwork)
+const heroTitleLength = computed(() => Array.from(hero.value.track.title).length)
 const visibleArtists = computed(() => {
   const found = artists.value ?? Array.from(new Map(latestSongs.value.map(song => [song.artistId, {
     artistId: song.artistId, stageName: song.stageName, avatarKey: null,
@@ -206,7 +224,7 @@ async function loadChristmasPlaylist() {
     const song = artist.songs.find(item => item.id === christmasSongId)
     if (disposed || !song) return
     christmasTracks.value = [{
-      ...publicTrack(christmasArtistId, song), authoredTitle: true,
+      ...publicTrack(christmasArtistId, song), cover: christmasSkyCover, authoredTitle: true,
       recipient: '', subtitle: artist.stageName, category: t('圣诞'), filters: ['christmas'],
       tags: [t('圣诞')], style: 'Christmas', occasion: '',
       durationSeconds: 0, description: '', quote: '',
@@ -256,7 +274,6 @@ async function loadEditorial() {
       if (!active()) return
       popularSongs.value = page.songs
       supplementalHeroSong.value = undefined
-      heroIndex.value = 0
       if (!page.songs.some(item => item.song.id === streetlightSongId)) {
         const result = await listDiscoverSongs('latest', 0, '', 'Streetlight')
         if (active()) supplementalHeroSong.value = result.songs.find(item => item.song.id === streetlightSongId)
@@ -268,7 +285,7 @@ async function loadEditorial() {
 }
 
 function changeHero(direction: number) {
-  heroIndex.value = (heroIndex.value + direction + heroSlideCount.value) % heroSlideCount.value
+  selectedHeroTrackId.value = heroSlides.value[heroIndexAt(direction)]!.row.track.id
 }
 function restartHeroRotation() {
   clearInterval(heroTimer)
@@ -293,12 +310,11 @@ function initializeHeroRotation() {
   document.addEventListener('visibilitychange', visibilityChanged)
   restartHeroRotation()
 }
-// Warm only the next slide; the introduction remains the first, eagerly loaded image.
+// Warm only the next slide.
 watch([heroIndex, heroSlideCount], () => {
   if (disposed || heroSlideCount.value < 2 || typeof Image === 'undefined') return
-  const nextIndex = (heroIndex.value + 1) % heroSlideCount.value
   const nextImage = new Image()
-  nextImage.src = heroBackgrounds[nextIndex - 1]?.src ?? coast
+  nextImage.src = heroAfter.value.src
 })
 function genreLabel(genre?: string) {
   return genre && genre !== 'other' ? t(genres.find(item => item.id === genre)?.label ?? '') : ''
@@ -432,21 +448,19 @@ onBeforeUnmount(() => {
       <div class="discover-page-heading"><h1>{{ t('音乐广场') }}</h1></div>
       <section class="discover-hero" :aria-label="t('广场推荐')" :aria-roledescription="t('轮播')"
         @mouseenter="heroHovered = true" @mouseleave="heroHovered = false" @focusin="heroFocused = true" @focusout="heroFocusOut">
-        <div class="discover-hero-preview discover-hero-preview-before">
+        <div v-if="heroSlideCount > 1" class="discover-hero-preview discover-hero-preview-before">
           <img :src="heroBefore.src" :style="{ objectPosition: heroBefore.position }" alt="">
         </div>
-        <div class="discover-hero-main">
-          <img class="discover-hero-background" :src="heroBackground?.src ?? coast"
-            :style="{ objectPosition: heroBackground?.position }" alt="" width="2172" height="724" fetchpriority="high">
+        <div class="discover-hero-main" :class="{ 'is-single': heroSlideCount === 1 }">
+          <img class="discover-hero-background" :src="heroBackground.src"
+            :style="{ objectPosition: heroBackground.position }" alt="" width="1536" height="591" fetchpriority="high">
           <div class="discover-hero-content">
-            <h2 :class="{ 'is-long-title': heroTitleLength > 10, 'is-very-long-title': heroTitleLength > 32 }" :title="hero?.song.title">{{ hero?.song.title || t('风从海上来') }}</h2>
-            <RouterLink v-if="hero" class="discover-hero-artist" :to="{ name: 'artist-home', params: { id: hero.artistId } }">{{ hero.stageName }}</RouterLink>
-            <p v-else>{{ t('从一段故事，到一首属于你的歌。') }}</p>
-            <button v-if="hero" type="button" class="discover-hero-listen" :aria-label="t(playing(hero.track) ? '暂停 {title}' : '试听 {title}', { title: hero.song.title })" @click="play(hero, heroRows)"><PlaybackIcon :playing="playing(hero.track)" />{{ t(playing(hero.track) ? '暂停' : '立即聆听') }}</button>
-            <a v-else class="discover-hero-listen" href="#discover-latest" @click.prevent="showShelf('discover-latest')"><PlaybackIcon :playing="false" />{{ t('立即聆听') }}</a>
+            <h2 :class="{ 'is-long-title': heroTitleLength > 10, 'is-very-long-title': heroTitleLength > 32 }" :title="hero.track.title">{{ hero.track.title }}</h2>
+            <RouterLink v-if="hero.artistId && hero.stageName" class="discover-hero-artist" :to="{ name: 'artist-home', params: { id: hero.artistId } }">{{ hero.stageName }}</RouterLink>
+            <button type="button" class="discover-hero-listen" :aria-label="t(playing(hero.track) ? '暂停 {title}' : '试听 {title}', { title: hero.track.title })" @click="play(hero, heroRows)"><PlaybackIcon :playing="playing(hero.track)" />{{ t(playing(hero.track) ? '暂停' : '立即聆听') }}</button>
           </div>
         </div>
-        <div class="discover-hero-preview discover-hero-preview-after">
+        <div v-if="heroSlideCount > 1" class="discover-hero-preview discover-hero-preview-after">
           <img :src="heroAfter.src" :style="{ objectPosition: heroAfter.position }" alt="">
         </div>
         <template v-if="heroSlideCount > 1">
@@ -454,8 +468,9 @@ onBeforeUnmount(() => {
           <button class="discover-hero-next" type="button" :aria-label="t('下一张推荐')" @click="changeHero(1)">›</button>
           <div class="discover-hero-controls">
             <div class="discover-hero-dots" role="group" :aria-label="t('切换推荐')">
-              <button type="button" :aria-label="t('查看音乐广场介绍')" :aria-pressed="heroIndex === 0" @click="heroIndex = 0"></button>
-              <button v-for="(row, index) in heroRows" :key="row.song.id" type="button" :aria-label="t('查看推荐：{title}', { title: row.song.title })" :aria-pressed="heroIndex === index + 1" @click="heroIndex = index + 1"></button>
+              <button v-for="(row, index) in heroRows" :key="row.track.id" type="button"
+                :aria-label="t('查看推荐：{title}', { title: row.track.title })" :aria-pressed="heroIndex === index"
+                @click="selectedHeroTrackId = row.track.id"></button>
             </div>
             <button class="discover-hero-rotation" type="button" :aria-label="t(heroPaused ? '继续轮播' : '暂停轮播')" :aria-pressed="heroPaused" @click="heroPaused = !heroPaused"><PlaybackIcon :playing="!heroPaused" /></button>
           </div>
