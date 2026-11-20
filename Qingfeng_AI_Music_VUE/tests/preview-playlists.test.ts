@@ -5,10 +5,10 @@ import {tracks} from '../src/modules/home/model/tracks'
 const playlists:PreviewPlaylist[]=playlistDefinitions.map(playlist=>({...playlist,tracks:playlist.trackIds.map(id=>tracks.find(track=>track.id===id)!)}))
 describe('compact preview playlists',()=>{
  it('keeps the existing recommendations and restores each sample to its requested playlist once',()=>{
-  expect(playlists.map(playlist=>playlist.title)).toEqual(['华语流行','电子','欧美流行','House'])
-  expect(playlists.map(playlist=>playlist.tracks.length)).toEqual([14,8,6,3])
+  expect(playlists.map(playlist=>playlist.title)).toEqual(['华语流行','电子','欧美流行','Hip-Hop&R&B'])
+  expect(playlists.map(playlist=>playlist.tracks.length)).toEqual([14,11,6,0])
   expect(playlists[0]!.tracks.slice(-6).map(track=>track.id)).toEqual(['love','red-guofeng','family','travel','river-instrumental','scenery-folk'])
-  expect(playlists[1]!.tracks.slice(-3).map(track=>track.id)).toEqual(['hometown-electronic','rain-disco','tomorrow-rock'])
+  expect(playlists[1]!.tracks.slice(-6).map(track=>track.id)).toEqual(['hometown-electronic','rain-disco','tomorrow-rock','body-language','into-the-sun','one-more-night'])
   for(const playlist of playlists){expect(playlist.tracks.every(Boolean)).toBe(true)}
   const ids=playlists.flatMap(playlist=>playlist.tracks.map(track=>track.id))
   expect(new Set(ids).size).toBe(ids.length)

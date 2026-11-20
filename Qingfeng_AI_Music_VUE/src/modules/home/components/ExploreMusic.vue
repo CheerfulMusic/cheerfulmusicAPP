@@ -6,7 +6,7 @@ import {usePreviewPlaylists,filterPlaylists} from '../model/playlists'
 import {hotFailure,hotLoginHint,loadHotSongs,loadMyReactions,signedIn,sortByHeat} from '../model/hot-songs'
 import PlaylistCard from './PlaylistCard.vue'
 import PlaylistDetails from './PlaylistDetails.vue'
-const playlists=usePreviewPlaylists({includeHouseReleases:true}),filter=ref('all'),more=ref(false),gallery=ref<HTMLElement>(),selectedPlaylist=ref('')
+const playlists=usePreviewPlaylists({forHome:true}),filter=ref('all'),more=ref(false),gallery=ref<HTMLElement>(),selectedPlaylist=ref('')
 const moreToggle=ref<HTMLButtonElement>()
 const primaryFilters=previewFilters.slice(0,8),extraFilters=previewFilters.slice(8)
 const selectedExtra=computed(()=>extraFilters.find(option=>option.id===filter.value))

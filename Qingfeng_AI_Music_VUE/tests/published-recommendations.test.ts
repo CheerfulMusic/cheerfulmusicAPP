@@ -23,20 +23,20 @@ function profile(): PublicArtist {
 }
 async function open() {
   let playlists!: ReturnType<typeof usePreviewPlaylists>
-  wrappers.push(mount(defineComponent({ setup() { playlists = usePreviewPlaylists({includeHouseReleases:true}); return () => null } })))
+  wrappers.push(mount(defineComponent({ setup() { playlists = usePreviewPlaylists({forHome:true}); return () => null } })))
   await flushPromises()
   return playlists
 }
 beforeEach(() => { vi.resetAllMocks(); mocks.profile.mockResolvedValue(profile()); mocks.discoverPlay.mockResolvedValue(undefined) })
 afterEach(() => { wrappers.splice(0).forEach(wrapper => wrapper.unmount()) })
 
-it('adds the three existing releases to House with current public audio, cover and original titles', async () => {
+it('merges House previews and current public releases into the home Electronic playlist', async () => {
   const playlists = await open()
   expect(mocks.profile).toHaveBeenCalledExactlyOnceWith(houseSelections[0].artistId)
-  expect(playlists.value.map(playlist => playlist.tracks.length)).toEqual([14, 8, 6, 6])
-  const house = playlists.value.find(playlist => playlist.id === 'house')!
-  expect(house.tracks.map(track => track.title)).toEqual(['Body Language', 'Into the Sun', 'One More Night', 'Gravity', 'Static Bloom', 'Let The Rhythm'])
-  for (const track of house.tracks.filter(track => track.publication)) {
+  expect(playlists.value.map(playlist => playlist.tracks.length)).toEqual([14, 14, 6, 0])
+  const electronic = playlists.value.find(playlist => playlist.id === 'electronic')!
+  expect(electronic.tracks.slice(-6).map(track => track.title)).toEqual(['Body Language', 'Into the Sun', 'One More Night', 'Gravity', 'Static Bloom', 'Let The Rhythm'])
+  for (const track of electronic.tracks.filter(track => track.publication)) {
     expect(track.audio).toBe(`/api/public/artists/${houseSelections[0].artistId}/songs/${track.id}/2/audio`)
     expect(track.cover).toContain(`/songs/${track.id}/2/cover?cover=`)
     expect(track.publication?.stageName).toBe('SergioBeats')
@@ -55,12 +55,12 @@ it('stops recommending withdrawn releases and uses updated cover versions on ref
   updated.songs[0]!.coverVersion = 'updated-cover'
   mocks.profile.mockResolvedValue(updated)
   await loadHouseRecommendations()
-  const house = playlists.value.find(playlist => playlist.id === 'house')!
-  expect(house.tracks.map(track => track.title)).toEqual(['Body Language', 'Into the Sun', 'One More Night', 'Static Bloom'])
-  expect(house.tracks.find(track => track.publication)!.cover).toContain('?cover=updated-cover')
+  const electronic = playlists.value.find(playlist => playlist.id === 'electronic')!
+  expect(electronic.tracks.slice(-4).map(track => track.title)).toEqual(['Body Language', 'Into the Sun', 'One More Night', 'Static Bloom'])
+  expect(electronic.tracks.find(track => track.publication)!.cover).toContain('?cover=updated-cover')
   mocks.profile.mockRejectedValue(new Error('Artist page is private'))
   await loadHouseRecommendations()
-  expect(playlists.value.find(playlist => playlist.id === 'house')!.tracks.map(track => track.title)).toEqual(['Body Language', 'Into the Sun', 'One More Night'])
+  expect(playlists.value.find(playlist => playlist.id === 'electronic')!.tracks.slice(-3).map(track => track.title)).toEqual(['Body Language', 'Into the Sun', 'One More Night'])
   expect(playlists.value[0]!.tracks).toHaveLength(14)
 })
 
@@ -76,7 +76,7 @@ it('shares simultaneous artist lookups between playlist consumers', async () => 
 
 it('records public plays through the existing discover endpoint, retries failures and preserves demo counters', async () => {
   const playlists = await open()
-  const [gravity, bloom] = playlists.value.find(playlist => playlist.id === 'house')!.tracks.filter(track => track.publication)
+  const [gravity, bloom] = playlists.value.find(playlist => playlist.id === 'electronic')!.tracks.filter(track => track.publication)
   await Promise.all([recordPreviewPlay(gravity!), recordPreviewPlay(gravity!)])
   expect(mocks.discoverPlay).toHaveBeenCalledExactlyOnceWith(gravity!.publication!.song)
   expect(mocks.samplePlay).not.toHaveBeenCalled()
