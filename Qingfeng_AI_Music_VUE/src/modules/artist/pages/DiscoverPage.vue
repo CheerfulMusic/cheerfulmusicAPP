@@ -8,7 +8,10 @@ import PlaybackIcon from '../../../shared/ui/PlaybackIcon.vue'
 import ArtistAvatar from '../components/ArtistAvatar.vue'
 import DiscoverSongCard from '../components/DiscoverSongCard.vue'
 import DiscoverShelf from '../components/DiscoverShelf.vue'
-import { discoverGenres, shelfCover, type DiscoverShelfTrack, type PublishedShelfTrack } from '../model/discover-shelves'
+import {
+  christmasSongId, discoverGenres, discoverReleaseCover, withDiscoverPreviewCover,
+  type DiscoverShelfTrack, type PublishedShelfTrack,
+} from '../model/discover-shelves'
 import { vocalPerformanceRows } from '../model/vocal-performances'
 import PlaylistDetails from '../../home/components/PlaylistDetails.vue'
 import { usePreviewPlaylists, type PreviewPlaylist } from '../../home/model/playlists'
@@ -21,7 +24,6 @@ import {
 } from '../api/artist'
 import walkedFar from '../../../assets/discover/carousel-walked-far.webp'
 import christmasSky from '../../../assets/discover/carousel-christmas-sky.webp'
-import christmasSkyCover from '../../../assets/discover/christmas-sky-cover.webp'
 import cactus from '../../../assets/discover/carousel-cactus.webp'
 import mistyGarden from '../../../assets/discover/carousel-misty-garden.webp'
 import airportGuitar from '../../../assets/discover/carousel-airport-guitar.webp'
@@ -48,7 +50,6 @@ const replacedHeroSongId = 'acfaa9d5-ce74-477f-9db8-d3700311a26c'
 const invincibleSongId = '57bb7310-c64c-4873-b239-f2a268a7dedd'
 const micangshanSongId = '09aaf684-2b68-438f-aa17-8730a352bf74'
 const christmasArtistId = '308036ef-8bef-486f-88cc-8266e5797768'
-const christmasSongId = 'd4b1ec5a-e68f-43e6-8624-226981ecef5c'
 const discoverPreviewPlaylistIds = new Set(['mandopop', 'electronic', 'global-pop'])
 const player = usePlayer()
 const previewPlaylists = usePreviewPlaylists()
@@ -94,16 +95,16 @@ let motionQuery: MediaQueryList | undefined
 
 const count = computed(() => new Intl.NumberFormat(locale.value))
 const signedIn = computed(() => accountState.value.authenticated || logtoState.value.authenticated)
-function withTracks(items: DiscoverSong[], shelf?: Parameters<typeof shelfCover>[0]): PublishedShelfTrack[] {
-  return items.map((item, index) => {
-    const track = publicTrack(item.artistId, item.song)
-    if (shelf === 'latest' && item.song.id === christmasSongId) track.cover = christmasSkyCover
-    else if (shelf || !item.song.hasCover) track.cover = shelfCover(shelf ?? 'latest', index)
-    return { ...item, track }
-  })
+function publicDiscoverTrack(artistId: string, song: DiscoverSong['song']) {
+  const track = publicTrack(artistId, song)
+  track.cover = discoverReleaseCover(song, track.cover)
+  return track
+}
+function withTracks(items: DiscoverSong[]): PublishedShelfTrack[] {
+  return items.map(item => ({ ...item, track: publicDiscoverTrack(item.artistId, item.song) }))
 }
 const rows = computed(() => withTracks(songs.value))
-const latestRows = computed(() => withTracks(latestSongs.value, 'latest'))
+const latestRows = computed(() => withTracks(latestSongs.value))
 const latestRecommendations = computed(() => {
   if (editorialLoading.value || featuredFailed.value || featuredSongs.value.length) return []
 
@@ -115,36 +116,32 @@ const latestRecommendations = computed(() => {
   })
 })
 const featuredRows = computed(() => withTracks(
-  (latestRecommendations.value.length ? latestRecommendations.value : featuredSongs.value).slice(0, 7), 'featured',
+  (latestRecommendations.value.length ? latestRecommendations.value : featuredSongs.value).slice(0, 7),
 ))
 const dailySongs = computed(() => shelves.value?.today ?? [])
 const cumulativeHotSongs = computed(() => dailySongs.value.length || editorialLoading.value
   ? [] : popularSongs.value.filter(item => (item.plays ?? 0) > 0).slice(0, 10))
 const todayRows = computed(() => withTracks(
-  cumulativeHotSongs.value.length ? cumulativeHotSongs.value : dailySongs.value, 'today',
+  cumulativeHotSongs.value.length ? cumulativeHotSongs.value : dailySongs.value,
 ))
-const vocalRows = computed(() => [...vocalPerformanceRows, ...withTracks(shelves.value?.vocal ?? [], 'vocal')])
+const vocalRows = computed(() => [...vocalPerformanceRows, ...withTracks(shelves.value?.vocal ?? [])])
 const upcomingVocal = { title: '唯一的航线', cover: seaStacks }
 const ranking = computed(() => todayRows.value.slice(0, 5))
 const genreShelves = computed(() => discoverGenres.map(section => {
-  const publicRows = withTracks(shelves.value?.genres[section.id] ?? [], section.id)
+  const publicRows = withTracks(shelves.value?.genres[section.id] ?? [])
   const publishedIds = new Set(publicRows.map(row => row.song.id))
   const examples = previewTracks.value
     .filter(track => section.samples.some(genre => track.filters.includes(genre))
       && (!track.publication || !publishedIds.has(track.publication.song.id)))
-    .map((track, index): DiscoverShelfTrack => ({
-      track: { ...track, cover: shelfCover(section.id, publicRows.length + index) },
+    .map((track): DiscoverShelfTrack => ({
+      track: withDiscoverPreviewCover(track),
       stageName: track.publication?.stageName ?? '',
       durationSeconds: track.durationSeconds,
       song: track.publication?.song,
       artistId: track.publication?.artistId,
     }))
   const tracks = [...publicRows, ...examples]
-  const wide = section.hasWideRow
-    ? [...tracks.slice(7), ...tracks.slice(0, 7)].slice(0, 4).map((row, index) => ({
-        ...row, track: { ...row.track, cover: shelfCover(`${section.id}-wide`, index) },
-      }))
-    : []
+  const wide = section.hasWideRow ? [...tracks.slice(7), ...tracks.slice(0, 7)].slice(0, 4) : []
   return { ...section, square: tracks.slice(0, 7), wide }
 }))
 const heroBackgrounds = [
@@ -178,7 +175,7 @@ const heroSlides = computed(() => {
     ?? popularSongs.value.find(item => item.song.id === christmasSongId)
     ?? christmasTracks.value[0]?.publication
   if (release) {
-    const track = { ...publicTrack(release.artistId, release.song), cover: christmasSkyCover }
+    const track = publicDiscoverTrack(release.artistId, release.song)
     slides.push({ row: { ...release, track }, artwork: { src: christmasSky, position: '67% center' } })
   }
   return slides
@@ -201,10 +198,12 @@ const visibleArtists = computed(() => {
   return showAllArtists.value ? found : found.slice(0, 3)
 })
 const playlists = computed<PreviewPlaylist[]>(() => [
-  ...previewPlaylists.value.filter(playlist => discoverPreviewPlaylistIds.has(playlist.id)),
+  ...previewPlaylists.value.filter(playlist => discoverPreviewPlaylistIds.has(playlist.id)).map(playlist => ({
+    ...playlist, tracks: playlist.tracks.map(withDiscoverPreviewCover),
+  })),
   {
     id: 'disco', title: t('Disco'), subtitle: 'DISCO', cover: discoCover,
-    tracks: previewTracks.value.filter(track => track.filters.includes('disco')),
+    tracks: previewTracks.value.filter(track => track.filters.includes('disco')).map(withDiscoverPreviewCover),
   },
   {
     id: 'christmas', title: t('圣诞'), subtitle: 'CHRISTMAS', cover: christmasCover,
@@ -224,7 +223,7 @@ async function loadChristmasPlaylist() {
     const song = artist.songs.find(item => item.id === christmasSongId)
     if (disposed || !song) return
     christmasTracks.value = [{
-      ...publicTrack(christmasArtistId, song), cover: christmasSkyCover, authoredTitle: true,
+      ...publicDiscoverTrack(christmasArtistId, song), authoredTitle: true,
       recipient: '', subtitle: artist.stageName, category: t('圣诞'), filters: ['christmas'],
       tags: [t('圣诞')], style: 'Christmas', occasion: '',
       durationSeconds: 0, description: '', quote: '',

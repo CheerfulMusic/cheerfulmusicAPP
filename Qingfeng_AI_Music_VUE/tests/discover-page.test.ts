@@ -67,6 +67,35 @@ afterEach(() => {
 })
 
 describe('Discover editorial layout with real content', () => {
+  it('keeps covers tied to the song across shelves and uses dedicated artwork for Global Pop previews', async () => {
+    const crossroads = song('0a67006e-997d-49b1-a162-a1a02f424c91')
+    crossroads.song.title = '路口相逢'
+    crossroads.song.hasCover = false
+    const station = song('21282ee4-0645-4a38-aa08-3ba3b79be197')
+    station.song.title = '晚风车站'
+    station.song.hasCover = false
+    const original = song('original')
+    mocks.list.mockResolvedValue(page([crossroads, station, original]))
+    mocks.shelves.mockResolvedValue({ ...shelfData([station, crossroads]), genres: { folk: [original, station] } })
+    const wrapper = await open()
+    const covers = (title: string) => wrapper.findAll('.shelf-track')
+      .filter(card => card.get('.track-title').text() === title)
+      .map(card => card.get('img').attributes('src'))
+
+    expect(covers('路口相逢')).toHaveLength(3)
+    expect(new Set(covers('路口相逢')).size).toBe(1)
+    expect(covers('路口相逢')[0]).toContain('lu-kou-xiang-feng.webp')
+    expect(new Set(covers('晚风车站')).size).toBe(1)
+    expect(covers('晚风车站')[0]).toContain('wan-feng-che-zhan.webp')
+    expect(new Set(covers(original.song.title)).size).toBe(1)
+    expect(covers(original.song.title)[0]).toContain('/public/artists/artist-original/songs/original/1/cover')
+
+    expect(covers('AFTER MIDNIGHT')).toHaveLength(2)
+    expect(new Set(covers('AFTER MIDNIGHT')).size).toBe(1)
+    expect(covers('AFTER MIDNIGHT')[0]).toContain('after-midnight.webp')
+    expect(covers('Midnight Call')[0]).toContain('midnight-call.webp')
+  })
+
   it('plays the four distinct vocal recordings and keeps the upcoming entry out of the queue and carousel logic', async () => {
     const ai = song('sole-route')
     ai.song.title = '唯一的航线'
@@ -81,7 +110,7 @@ describe('Discover editorial layout with real content', () => {
     expect(upcoming.text()).toContain('待上线')
     expect(upcoming.find('button').exists()).toBe(false)
     expect(upcoming.get('img').attributes('src')).toContain('carousel-sea-stacks')
-    expect(section.findAll('li button img').map(image => image.attributes('src').split('/').at(-1))).toEqual([
+    expect(section.findAll('li button img').map(image => image.attributes('src')?.split('/').at(-1))).toEqual([
       'hu-ran-xia-qi-yu.webp', 'liu-lang-shi-ren.webp', 'ming-tian-zai-shuo.webp', 'zou-le-na-me-yuan.webp',
     ])
     expect(section.findAll('li button')).toHaveLength(4)
