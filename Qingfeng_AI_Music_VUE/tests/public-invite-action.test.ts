@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { createApp, nextTick } from 'vue'
+import { createApp, h, nextTick } from 'vue'
 import { expect, it, vi } from 'vitest'
 import Gate from '../src/modules/beta-access/BetaAccessGate.vue'
 vi.mock('../src/modules/beta-access/api', () => ({
@@ -20,3 +20,31 @@ it('opens the invite input when a protected action is requested on a public page
 })
 
 vi.mock('/brand/logo-symbol.svg', () => ({ default: '/brand/logo-symbol.svg' }))
+
+it('keeps the public preview readable and still requires an invitation for the app', async () => {
+ const show = vi.spyOn(HTMLDialogElement.prototype, 'showModal').mockImplementation(function(this: HTMLDialogElement) { this.open = true })
+ const close = vi.spyOn(HTMLDialogElement.prototype, 'close').mockImplementation(function(this: HTMLDialogElement) { this.open = false })
+ const host = document.createElement('div'); document.body.append(host)
+ const app = createApp({
+  render: () => h(Gate, { publicPreview: true }, {
+   default: () => h('p', 'Protected app'),
+   'public-preview': ({ openInvite }: { openInvite: () => void }) => h('button', { onClick: openInvite }, 'Open invite'),
+  }),
+ })
+ app.mount(host)
+ try {
+  await new Promise(resolve => setTimeout(resolve, 0)); await nextTick()
+  expect(host.textContent).not.toContain('Protected app')
+  expect(show).not.toHaveBeenCalled()
+  host.querySelector('button')?.click()
+  await nextTick()
+  const dialog = host.querySelector('dialog')!
+  expect(dialog.open).toBe(true)
+  dialog.dispatchEvent(new Event('cancel', { cancelable: true }))
+  await nextTick()
+  expect(close).toHaveBeenCalled()
+  expect(dialog.open).toBe(false)
+  expect(host.textContent).toContain('Open invite')
+  expect(host.textContent).not.toContain('Protected app')
+ } finally { app.unmount(); host.remove(); vi.restoreAllMocks() }
+})

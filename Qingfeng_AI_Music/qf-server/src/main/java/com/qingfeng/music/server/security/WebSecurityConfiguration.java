@@ -1,8 +1,10 @@
 package com.qingfeng.music.server.security;
 
 import com.qingfeng.music.server.invite.InviteGateFilter;
+import jakarta.servlet.DispatcherType;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.web.SecurityFilterChain;
@@ -16,6 +18,19 @@ import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
 /** 公开引导与带令牌的礼物读取；个人写接口要求创建者会话与CSRF。 */
 @Configuration(proxyBeanMethods = false)
 public class WebSecurityConfiguration {
+    private static final String[] SEO_PAGES = {
+            "/robots.txt", "/sitemap.xml",
+            "/zh-CN", "/zh-CN/", "/zh-CN/index.html",
+            "/en", "/en/", "/en/index.html",
+            "/discover", "/discover/", "/discover/index.html",
+            "/help", "/help/", "/help/index.html"
+    };
+
+    private static final String[] SPA_PAGES = {
+            "/", "/index.html", "/create", "/create/photo", "/works", "/works/*",
+            "/account", "/profile", "/artist/*", "/recharge", "/analytics", "/agent"
+    };
+
     @Bean UserDetailsService unavailableIdentity() {
         return username -> { throw new UsernameNotFoundException("身份服务尚未接入"); };
     }
@@ -29,17 +44,24 @@ public class WebSecurityConfiguration {
         var samples = recommendationOss.getIfAvailable();
         if (samples != null) http.addFilterAfter(new com.qingfeng.music.server.web.RecommendationOssFilter(samples), org.springframework.security.web.access.intercept.AuthorizationFilter.class);
         if (filter!=null) http.addFilterAfter(new ApiRateLimitFilter(java.time.Clock.systemUTC(),env.getProperty("qingfeng.redis.enabled",Boolean.class,false)&&env.getProperty("qingfeng.redis.api-rate-limit-enabled",Boolean.class,true)?new RedisApiRateGate(redis.getObject()):null,env.getProperty("qingfeng.payment.webhook.rate-limit-per-minute",Integer.class,600)),CreatorSessionFilter.class);
-        return http.csrf(csrf -> csrf.ignoringRequestMatchers("/api/public/payments/airwallex/webhook", "/api/public/paypal/webhook", "/api/public/events", "/api/public/hot-songs/*/play", "/api/public/discover/songs/*/*/play")
+        return http.headers(headers -> headers.addHeaderWriter((request, response) -> {
+                if (request.getDispatcherType() == DispatcherType.REQUEST && "/index.html".equals(request.getServletPath())) {
+                    response.setHeader("X-Robots-Tag", "noindex");
+                }
+            }))
+            .csrf(csrf -> csrf.ignoringRequestMatchers("/api/public/payments/airwallex/webhook", "/api/public/paypal/webhook", "/api/public/events", "/api/public/hot-songs/*/play", "/api/public/discover/songs/*/*/play")
             .ignoringRequestMatchers(request->"POST".equals(request.getMethod())&&java.util.Set.of("/api/public/auth/sms/deliver","/api/public/stripe/webhook").contains(request.getServletPath()))
             .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse()).csrfTokenRequestHandler(new CsrfTokenRequestAttributeHandler()))
             .authorizeHttpRequests(auth -> auth
-                .dispatcherTypeMatchers(jakarta.servlet.DispatcherType.ERROR,jakarta.servlet.DispatcherType.ASYNC).permitAll()
+                .dispatcherTypeMatchers(DispatcherType.ERROR, DispatcherType.ASYNC).permitAll()
                 .requestMatchers(org.springframework.http.HttpMethod.GET,"/api/public/invite/status").permitAll()
                 .requestMatchers(org.springframework.http.HttpMethod.POST,"/api/public/invite/enter").permitAll()
-                .requestMatchers(org.springframework.http.HttpMethod.GET,"/","/index.html","/assets/**","/brand/**","/media/**","/create","/create/photo","/works","/works/*","/gift/*","/account","/profile","/artist/*","/discover","/recharge","/analytics","/agent","/help","/legal/**").permitAll()
-                .requestMatchers(org.springframework.http.HttpMethod.GET,"/zh-CN","/zh-CN/","/zh-CN/index.html","/en","/en/","/en/index.html").permitAll()
-                .requestMatchers(org.springframework.http.HttpMethod.HEAD,"/zh-CN","/zh-CN/","/zh-CN/index.html","/en","/en/","/en/index.html").permitAll()
-                .requestMatchers(org.springframework.http.HttpMethod.HEAD,"/gift/*","/discover","/brand/share-default-cover.png").permitAll()
+                .requestMatchers(HttpMethod.GET, SPA_PAGES).permitAll()
+                .requestMatchers(HttpMethod.HEAD, SPA_PAGES).permitAll()
+                .requestMatchers(HttpMethod.GET, SEO_PAGES).permitAll()
+                .requestMatchers(HttpMethod.HEAD, SEO_PAGES).permitAll()
+                .requestMatchers(HttpMethod.GET,"/assets/**","/brand/**","/media/**","/gift/*","/legal/**").permitAll()
+                .requestMatchers(HttpMethod.HEAD,"/gift/*","/brand/share-default-cover.png").permitAll()
                 .requestMatchers(request -> "HEAD".equals(request.getMethod()) && com.qingfeng.music.server.web.RecommendationOssRedirect.isSamplePath(request.getServletPath())).permitAll()
                 .requestMatchers("/api/public/system/info", "/api/public/csrf", "/api/public/session", "/api/public/session/recover", "/actuator/health").permitAll()
                 .requestMatchers(org.springframework.http.HttpMethod.POST,"/api/public/events").permitAll()
@@ -70,6 +92,7 @@ public class WebSecurityConfiguration {
                 if(!isPageNavigation(request.getRequestURI())){response.sendError(403);return;}
                 // 页面级导航未列入白名单：交给 Vue 入口，未知路径由前端 catch-all 渲染。
                 // 直接 sendError 会落到 Spring Boot 默认白标错误页，把 Whitelabel 暴露给用户。
+                response.setHeader("X-Robots-Tag", "noindex");
                 request.getRequestDispatcher("/index.html").forward(request,response);
             }))
             .httpBasic(AbstractHttpConfigurer::disable)
