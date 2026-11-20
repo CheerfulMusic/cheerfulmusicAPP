@@ -129,7 +129,7 @@ const genreShelves = computed(() => discoverGenres.map(section => {
       && (!track.publication || !publishedIds.has(track.publication.song.id)))
     .map((track, index): DiscoverShelfTrack => ({
       track: { ...track, cover: shelfCover(section.id, publicRows.length + index) },
-      stageName: track.publication?.stageName ?? t('青风试听'),
+      stageName: track.publication?.stageName ?? '',
       durationSeconds: track.durationSeconds,
       song: track.publication?.song,
       artistId: track.publication?.artistId,
@@ -504,16 +504,14 @@ onBeforeUnmount(() => {
         <div v-else class="discover-shelves">
           <section id="discover-featured" class="discover-shelf">
             <header class="discover-section-heading">
-              <div class="discover-shelf-heading"><h2>{{ t('青风推荐') }}</h2><p>{{ t(latestRecommendations.length ? '新声推荐' : '编辑精选') }}</p></div>
-              <button type="button" @click="openBrowse(latestRecommendations.length ? 'latest' : 'featured')">{{ t('查看全部') }} ›</button>
+              <div class="discover-shelf-heading"><h2>{{ t('青风音乐') }}</h2><p>{{ t(latestRecommendations.length ? '新声推荐' : '编辑精选') }}</p></div>
             </header>
-            <DiscoverShelf :label="t('青风推荐')" :rows="featuredRows" variant="square" :loading="editorialLoading"
+            <DiscoverShelf :label="t('青风音乐')" :rows="featuredRows" variant="square" :loading="editorialLoading"
               :failed="featuredFailed" :empty="t('还没有精选歌曲。')" @retry="loadEditorial" @play="play($event, featuredRows)" />
           </section>
           <section id="discover-latest" class="discover-shelf">
             <header class="discover-section-heading">
               <h2>{{ t('今日新歌') }}</h2>
-              <button type="button" @click="openBrowse('latest')">{{ t('查看全部') }} ›</button>
             </header>
             <DiscoverShelf :label="t('今日新歌')" :rows="latestRows" variant="compact" :loading="editorialLoading"
               :failed="latestFailed" @retry="loadEditorial" @play="play($event, latestRows)" />
@@ -540,7 +538,6 @@ onBeforeUnmount(() => {
           <section v-for="section in genreShelves" :id="'discover-' + section.id" :key="section.id" class="discover-shelf">
             <header class="discover-section-heading">
               <h2>{{ t(section.label) }}</h2>
-              <button type="button" @click="openBrowse('latest', section.id)">{{ t('查看全部') }} ›</button>
             </header>
             <DiscoverShelf :label="t(section.label)" :rows="section.square" variant="square" :loading="editorialLoading"
               :failed="shelvesFailed" @retry="loadShelves" @play="play($event, section.square)" />

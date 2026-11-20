@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import type { DiscoverSong } from '../src/modules/artist/api/artist'
+import { setLocale } from '../src/shared/i18n'
 import type { PlayableTrack } from '../src/shared/player/store'
 
 const mocks = vi.hoisted(() => ({
@@ -60,6 +61,7 @@ beforeEach(() => {
 })
 afterEach(() => {
   wrappers.splice(0).forEach(wrapper => wrapper.unmount())
+  setLocale('zh-CN')
   vi.useRealTimers()
   vi.restoreAllMocks()
 })
@@ -127,6 +129,28 @@ describe('Discover editorial layout with real content', () => {
     await tiles[4]!.trigger('click')
     expect(wrapper.get('.test-playlist').text()).toContain('圣诞')
     expect(wrapper.findAll('.test-playlist span')).toHaveLength(0)
+  })
+
+  it.each([
+    ['zh-CN', '青风音乐'],
+    ['en', 'Cheerful Music'],
+  ] as const)('shows the brand and keeps only real artist credits in %s', async (language, brand) => {
+    setLocale(language)
+    const release = song('欧美作品')
+    release.stageName = 'SergioBeats'
+    mocks.shelves.mockResolvedValue({ ...shelfData([song('热门')]), genres: { 'global-pop': [release] } })
+    const wrapper = await open()
+
+    expect(wrapper.get('#discover-featured h2').text()).toBe(brand)
+    expect(wrapper.get('#discover-featured .shelf-tracks').attributes('aria-label')).toBe(brand)
+    expect(wrapper.findAll('.discover-shelf header button').map(button => button.element.closest('section')?.id))
+      .toEqual(['discover-vocal', 'discover-today'])
+    expect(wrapper.get('#discover-global-pop .shelf-square .track-artist').text()).toBe('SergioBeats')
+    for (const variant of ['square', 'wide']) {
+      const track = wrapper.findAll(`#discover-global-pop .shelf-${variant} .shelf-track`)
+        .find(card => card.get('.track-title').text() === 'AFTER MIDNIGHT')
+      expect(track?.find('.track-meta').exists()).toBe(false)
+    }
   })
 
   it('keeps the introduction first and cycles through the top five songs from the global popular feed', async () => {
@@ -234,8 +258,6 @@ describe('Discover editorial layout with real content', () => {
     expect(hot.findAll('.shelf-square .track-title').map(title => title.text())).toEqual(['歌曲累计热门'])
     expect(hot.get('.track-count').text()).toBe('123')
     expect(wrapper.get('#discover-popular-title').text()).toBe('累计热歌榜')
-    await featured.get('header button').trigger('click')
-    expect(mocks.list).toHaveBeenLastCalledWith('latest', 0, '', '')
   })
 
   it('does not fabricate featured songs or ranking positions for empty feeds', async () => {
@@ -252,7 +274,7 @@ describe('Discover editorial layout with real content', () => {
   it('preserves genre, search, paging and deduplication without filtering editorial recommendations', async () => {
     mocks.list.mockImplementation(async (tab: string, offset: number) => page(offset ? [song('latest'), song('第二页')] : [song(tab)], !offset))
     const wrapper = await open()
-    await wrapper.get('#discover-latest header button').trigger('click')
+    await wrapper.get('form').trigger('submit')
     await flushPromises()
     await wrapper.get('.discover-genre').setValue('folk')
     await flushPromises()
