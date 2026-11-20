@@ -48,7 +48,9 @@ test('real Vite proxy sends metadata GET/POST/PUT/DELETE locally and preserves r
       assert.deepEqual(await response.json(),{upstream:'local',method,path});
       assert.equal(response.headers.get('x-qf-preview-api'),'local-creation');
     }
-    for(const path of ['/media/sample-feng-ye-xing-v1-cover.jpg','/media/sample-feng-ye-xing-v1-preview-128.mp3','/media/sample-feng-ye-xing-v1-preview-128.mp3?reauth=1']){
+    for(const path of ['/media/sample-feng-ye-xing-v1-cover.jpg','/media/sample-feng-ye-xing-v1-preview-128.mp3','/media/sample-feng-ye-xing-v1-preview-128.mp3?reauth=1',
+      '/media/recommendations/body-language-8e59749c37e9-preview-128.mp3','/media/recommendations/body-language-c251e80045fe-cover.jpg',
+      '/media/recommendations/body-language-8e59749c37e9-preview-128.mp3?reauth=1']){
       assert.ok(new RegExp(recommendationMediaRule).test(path));
       const response=await fetch(url+path);
       assert.deepEqual(await response.json(),{upstream:'local',method:'GET',path});

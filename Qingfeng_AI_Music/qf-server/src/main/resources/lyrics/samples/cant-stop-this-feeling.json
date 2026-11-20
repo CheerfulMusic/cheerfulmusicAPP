@@ -1,0 +1,274 @@
+{
+  "sourceKey": "sample:cant-stop-this-feeling:b737eeb4-5a7e-334e-b736-19d0a2e10f5a",
+  "audioSha256": "34244d3c6efc2f47b27d28aa9fa9a3c626147f5beeb5a59c79b664d5bd8ebf13",
+  "recognition": "faster-whisper-1.2.1 / large-v3-turbo + small; authored text and recorded vocal order reviewed",
+  "duration": 156.4,
+  "warnings": [],
+  "words": [
+    {
+      "text": "Oh-oh, yeah\n",
+      "start": 1.18,
+      "end": 2.66
+    },
+    {
+      "text": "I can’t stop, I can’t stop\n",
+      "start": 3.16,
+      "end": 4.8
+    },
+    {
+      "text": "Oh-oh\n",
+      "start": 4.84,
+      "end": 5.78
+    },
+    {
+      "text": "Woke up with the sunlight on my face\n",
+      "start": 8.64,
+      "end": 11.26
+    },
+    {
+      "text": "Got a little rhythm running through my veins\n",
+      "start": 12.52,
+      "end": 15.22
+    },
+    {
+      "text": "No plans, no worries, no place to be\n",
+      "start": 15.22,
+      "end": 18.4
+    },
+    {
+      "text": "Tonight the whole world’s waiting on me\n",
+      "start": 19.16,
+      "end": 22.92
+    },
+    {
+      "text": "Got my friends all calling on the phone\n",
+      "start": 23.74,
+      "end": 26.18
+    },
+    {
+      "text": "But I don’t wanna spend another night alone\n",
+      "start": 26.18,
+      "end": 28.16
+    },
+    {
+      "text": "Turn it up, let the speakers blow\n",
+      "start": 28.16,
+      "end": 30.1
+    },
+    {
+      "text": "There’s only one direction that I wanna go\n",
+      "start": 30.1,
+      "end": 32.18
+    },
+    {
+      "text": "Hands up, we’re getting closer\n",
+      "start": 32.18,
+      "end": 34.32
+    },
+    {
+      "text": "One touch, the night takes over\n",
+      "start": 34.32,
+      "end": 36.3
+    },
+    {
+      "text": "Don’t think, just let it happen\n",
+      "start": 36.3,
+      "end": 38.34
+    },
+    {
+      "text": "I feel it coming, coming, coming\n",
+      "start": 38.34,
+      "end": 40.18
+    },
+    {
+      "text": "I can’t stop this feeling\n",
+      "start": 40.18,
+      "end": 43.14
+    },
+    {
+      "text": "My heart keeps beating\n",
+      "start": 43.14,
+      "end": 45.16
+    },
+    {
+      "text": "We got the whole night, whole night\n",
+      "start": 45.16,
+      "end": 47.44
+    },
+    {
+      "text": "And I don’t need a reason\n",
+      "start": 47.44,
+      "end": 48.64
+    },
+    {
+      "text": "I can’t stop this feeling\n",
+      "start": 48.64,
+      "end": 51.1
+    },
+    {
+      "text": "The room keeps spinning\n",
+      "start": 51.1,
+      "end": 53.06
+    },
+    {
+      "text": "We got the whole night, whole night\n",
+      "start": 53.06,
+      "end": 55.38
+    },
+    {
+      "text": "And we’re just getting started\n",
+      "start": 55.38,
+      "end": 56.52
+    },
+    {
+      "text": "Oh-oh-oh, can’t stop now\n",
+      "start": 56.52,
+      "end": 60.28
+    },
+    {
+      "text": "Oh-oh-oh, don’t slow down\n",
+      "start": 60.28,
+      "end": 64.14
+    },
+    {
+      "text": "Oh-oh-oh, feel that sound\n",
+      "start": 64.14,
+      "end": 68.1
+    },
+    {
+      "text": "We ain’t coming down\n",
+      "start": 68.1,
+      "end": 72.04
+    },
+    {
+      "text": "Everybody moving like a movie scene\n",
+      "start": 72.04,
+      "end": 74.36
+    },
+    {
+      "text": "Your smile got me somewhere in between\n",
+      "start": 74.36,
+      "end": 76.16
+    },
+    {
+      "text": "One more drink, one more song\n",
+      "start": 76.16,
+      "end": 78.16
+    },
+    {
+      "text": "I don’t wanna know where the night goes wrong\n",
+      "start": 78.16,
+      "end": 80.18
+    },
+    {
+      "text": "Hands up, we’re getting closer\n",
+      "start": 80.18,
+      "end": 81.9
+    },
+    {
+      "text": "One touch, the night takes over\n",
+      "start": 81.9,
+      "end": 83.86
+    },
+    {
+      "text": "Don’t think, just let it happen\n",
+      "start": 83.86,
+      "end": 85.84
+    },
+    {
+      "text": "I feel it coming, coming, coming\n",
+      "start": 85.84,
+      "end": 87.72
+    },
+    {
+      "text": "I can’t stop this feeling\n",
+      "start": 87.72,
+      "end": 90.64
+    },
+    {
+      "text": "My heart keeps beating\n",
+      "start": 90.64,
+      "end": 92.66
+    },
+    {
+      "text": "We got the whole night, whole night\n",
+      "start": 92.66,
+      "end": 94.96
+    },
+    {
+      "text": "And I don’t need a reason\n",
+      "start": 94.96,
+      "end": 96.16
+    },
+    {
+      "text": "No tomorrow, no regrets\n",
+      "start": 96.16,
+      "end": 98.46
+    },
+    {
+      "text": "This is something we won’t forget\n",
+      "start": 98.46,
+      "end": 100.38
+    },
+    {
+      "text": "When the morning comes around\n",
+      "start": 100.38,
+      "end": 102.68
+    },
+    {
+      "text": "We’ll still be dancing to this sound\n",
+      "start": 103.8,
+      "end": 107.7
+    },
+    {
+      "text": "I can’t stop this feeling\n",
+      "start": 107.7,
+      "end": 110.48
+    },
+    {
+      "text": "My heart keeps beating\n",
+      "start": 110.48,
+      "end": 112.5
+    },
+    {
+      "text": "We got the whole night, whole night\n",
+      "start": 112.5,
+      "end": 114.8
+    },
+    {
+      "text": "And I don’t need a reason\n",
+      "start": 114.8,
+      "end": 115.98
+    },
+    {
+      "text": "I can’t stop this feeling\n",
+      "start": 115.98,
+      "end": 118.42
+    },
+    {
+      "text": "The room keeps spinning\n",
+      "start": 118.42,
+      "end": 120.42
+    },
+    {
+      "text": "We got the whole night, whole night\n",
+      "start": 120.42,
+      "end": 122.66
+    },
+    {
+      "text": "And we’re just getting started\n",
+      "start": 122.66,
+      "end": 123.78
+    },
+    {
+      "text": "Oh-oh-oh, can’t stop now\n",
+      "start": 127.76,
+      "end": 131.44
+    },
+    {
+      "text": "Oh-oh-oh, don’t slow down\n",
+      "start": 131.44,
+      "end": 135.4
+    }
+  ]
+}

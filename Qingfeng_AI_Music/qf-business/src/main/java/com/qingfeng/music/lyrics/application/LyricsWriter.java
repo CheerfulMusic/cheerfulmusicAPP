@@ -1,5 +1,7 @@
 package com.qingfeng.music.lyrics.application;
 import com.qingfeng.music.work.api.WorkApi;
+import java.util.Map;
+import java.util.function.BiFunction;
 public interface LyricsWriter {
     boolean isConfigured();
     default String source(){return "AI";}
@@ -8,6 +10,13 @@ public interface LyricsWriter {
     Draft write(WorkApi.Work work,String language);
     default Draft write(WorkApi.Work work,String language,String instructions,String previousLyrics){return write(work,language);}
     default Draft write(WorkApi.Work work,String language,String instructions,String previousLyrics,String musicDirection){return write(work,language,instructions,previousLyrics);}
+    default Draft writeValidated(WorkApi.Work work, String language, String instructions, String previousLyrics,
+                                 Direction direction, BiFunction<LyricsWriter, Draft, Draft> validate) {
+        return validate.apply(this, write(work, language, instructions, previousLyrics, direction));
+    }
+    record SectionRepair(WorkApi.Work work, String language, String instructions, String previousLyrics,
+                         Draft draft, Map<Integer, String> missing) {}
+    default Map<Integer, String> repairSections(SectionRepair request) { throw LyricsStructure.mismatch(); }
     record Draft(String title,String lyrics,com.qingfeng.music.settings.CreativePlan plan,String source) {
         public Draft(String title,String lyrics,com.qingfeng.music.settings.CreativePlan plan){this(title,lyrics,plan,null);}
         public Draft(String title,String lyrics){this(title,lyrics,null);}

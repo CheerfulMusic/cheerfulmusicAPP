@@ -23,7 +23,7 @@ beforeEach(() => {
 afterEach(() => wrapper.unmount())
 
 it('lets the owner save the current cover again to synchronize an old publication', async () => {
-  expect(wrapper.text()).toContain('保存后将同步更新广场和歌手主页')
+  expect(wrapper.text()).toContain('保存后将同步更新歌手主页和广场搜索结果')
   await wrapper.findAll('button').find(button => button.text() === '保存封面')!.trigger('click')
   await flushPromises()
   expect(api.select).toHaveBeenCalledWith('work', 'current', 4)

@@ -4,8 +4,10 @@ import {createApp,h,nextTick,reactive,type App} from 'vue'
 import QuickCreationProgress from '../src/modules/studio/components/QuickCreationProgress.vue'
 import type {QuickCreation} from '../src/modules/studio/api/quick-creation'
 
-const mocks=vi.hoisted(()=>({latest:vi.fn(),retry:vi.fn()}))
+const mocks=vi.hoisted(()=>({latest:vi.fn(),retry:vi.fn(),retryArchive:vi.fn()}))
 vi.mock('../src/modules/studio/api/quick-creation',()=>({latestQuickCreation:mocks.latest,retryQuickCreation:mocks.retry,quickInProgress:(s:string)=>['QUEUED','WRITING','LYRICS_READY','SUBMITTING_MUSIC','MUSIC_QUEUED','SUBMITTING','RUNNING','SAVING','SUBMISSION_UNKNOWN'].includes(s)}))
+vi.mock('../src/modules/works/api/detail',()=>({retryTaskArchive:mocks.retryArchive}))
+vi.mock('../src/modules/works/components/FirstRecordingPreview.vue',()=>({default:{template:'<button>试听首版</button>'}}))
 vi.mock('../src/shared/credits/useCredits', async () => {
  const {ref}=await import('vue')
  return {useCredits:()=>({credits:ref({enabled:true,balance:100,lyricsNextCost:5,musicCost:10}),refreshCredits:async()=>{}})}
@@ -44,6 +46,31 @@ it('keeps a dismissed dialog closed across polling and lets the user reopen it',
  click('查看生成进度');await flush()
  expect(document.querySelector<HTMLDialogElement>('dialog')?.open).toBe(true)
  expect(document.querySelector('.generation-live')?.textContent).toContain('谱曲与演唱')
+})
+it('offers the first version during automatic archive recovery before the task finishes',async()=>{
+ const {view}=mount(false,'navigate');await flush()
+ mocks.latest.mockResolvedValue(flow('SAVING',{taskId:'task-a',previewAssetId:'audio-a',errorCode:'AUDIO_ARCHIVE_FAILED'}))
+ await vi.advanceTimersByTimeAsync(4000);await flush()
+ const dialog=document.querySelector('dialog')!
+ expect(dialog.textContent).toContain('首版可试听，正在恢复保存其余版本')
+ expect(dialog.textContent).not.toContain('仅重试保存音频')
+ expect(dialog.textContent).toContain('试听首版')
+ const viewWork=[...dialog.querySelectorAll('button')].find(button=>button.textContent?.trim()==='查看作品')!
+ viewWork.click()
+ expect(view).toHaveBeenCalledOnce()
+ expect(mocks.retryArchive).not.toHaveBeenCalled()
+})
+it('retries one terminal archive on the original music task even when clicked twice',async()=>{
+ mocks.latest.mockResolvedValue(flow('FAILED',{taskId:'task-a',previewAssetId:'audio-a',errorCode:'AUDIO_ARCHIVE_FAILED'}))
+ let complete!:()=>void
+ mocks.retryArchive.mockReturnValue(new Promise<void>(resolve=>{complete=resolve}))
+ mount(false,'navigate');await flush()
+ click('仅重试保存音频');click('仅重试保存音频')
+ expect(mocks.retryArchive).toHaveBeenCalledExactlyOnceWith('work-a','task-a')
+ expect(mocks.retry).not.toHaveBeenCalled()
+ mocks.latest.mockResolvedValue(flow('SAVING',{taskId:'task-a',previewAssetId:'audio-a'}))
+ complete();await flush()
+ expect(document.querySelector('dialog')?.textContent).toContain('其余版本正在保存')
 })
 it('automatically reveals the result only after the saved audio can be displayed',async()=>{
  const {props,view}=mount();await flush()

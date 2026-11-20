@@ -27,7 +27,7 @@ class AgentAdmissionTest {
         jdbc.execute("ALTER TABLE agent_message ADD (kind VARCHAR(16), seq BIGINT, content_json TEXT, created_at TIMESTAMP)");
         new ResourceDatabasePopulator(new ClassPathResource("db/migration/V35__agent_admission.sql")).execute(source);
         new ResourceDatabasePopulator(new ClassPathResource("db/migration/V46__agent_chat_allowance.sql")).execute(source);
-        new ResourceDatabasePopulator(new ClassPathResource("db/migration/V50__agent_admission_version.sql")).execute(source);
+        new ResourceDatabasePopulator(new ClassPathResource("db/migration/V53__agent_admission_version.sql")).execute(source);
         for(int i=0;i<20;i++){jdbc.update("INSERT INTO creator(id) VALUES(?)","o"+i);jdbc.update("INSERT INTO agent_conversation(id,creator_id) VALUES(?,?)","c"+i,"o"+i);}
     }
     AgentAdmission.Limits limits(int concurrent,int rpm,long tokens){return new AgentAdmission.Limits(concurrent,1,rpm,rpm,tokens,tokens,1024,Duration.ofSeconds(60));}

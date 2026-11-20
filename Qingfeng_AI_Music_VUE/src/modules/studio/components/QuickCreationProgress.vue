@@ -6,6 +6,8 @@ import {latestQuickCreation,retryQuickCreation,quickInProgress,type QuickCreatio
 import {useCredits} from '../../../shared/credits/useCredits'
 import {quickCreationCost} from '../../../shared/credits/credit-gate'
 import MusicGenerationDialog from '../../works/components/MusicGenerationDialog.vue'
+import {retryTaskArchive} from '../../works/api/detail'
+import {audioArchiveMessage,generationProblem} from '../../works/model/generation-recovery'
 const props=withDefaults(defineProps<{
  workId:string;title?:string;autoOpen?:boolean;resultReady?:boolean;initialFlow?:QuickCreation|null
  awaitingSubmission?:boolean;completionMode?:'reveal'|'navigate'
@@ -22,13 +24,16 @@ function setOpen(value:boolean){
  else if(value!==props.dialogOpen)emit('visibility',value)
 }
 let openedFlow='',presentedResult=''
-let alive=true,polling=false,workSequence=0
+let alive=true,polling=false,workSequence=0,readSequence=0
 const labels:Record<string,string>={QUEUED:'创作已排队',WRITING:'正在编写歌词',LYRICS_READY:'歌词已完成 正在准备音乐',SUBMITTING_MUSIC:'正在准备音乐',MUSIC_QUEUED:'音乐已排队',SUBMITTING:'正在提交音乐',RUNNING:'正在制作音乐',SAVING:'正在保存音频',SUBMISSION_UNKNOWN:'提交结果待核对',SUCCEEDED:'你的歌曲已完成',FAILED:'这次创作暂未完成',CANCELLED:'已撤销'}
 const active=computed(()=>!!flow.value&&quickInProgress(flow.value.status))
+const archiveFailed=computed(()=>flow.value?.status==='FAILED'&&flow.value.errorCode==='AUDIO_ARCHIVE_FAILED')
+const archiveMessage=computed(()=>flow.value?audioArchiveMessage(flow.value.status,flow.value.errorCode,!!flow.value.previewAssetId):'')
 const uncertainLyrics=computed(()=>flow.value?.status==='SUBMISSION_UNKNOWN'&&flow.value.errorCode==='LYRICS_SUBMISSION_UNKNOWN')
 const dialogStatus=computed(()=>flow.value?.status==='QUEUED'&&flow.value.taskId?'MUSIC_QUEUED':flow.value?.status||props.submissionStatus||'QUEUED')
 const failureCopy=computed(()=>{
  const code=flow.value?.errorCode
+ if(archiveFailed.value)return archiveMessage.value||generationProblem(code)
  if(code==='INSUFFICIENT_CREDITS')return '积分不足 已有歌词已保留 充值后可继续生成音乐'
  if(code==='WORK_VERSION_CONFLICT')return '内容已经修改 请使用自定义创作继续完善当前作品'
  if(code==='LYRICS_SUBMISSION_UNKNOWN')return lyricTimeoutMessage
@@ -40,13 +45,13 @@ const failureCopy=computed(()=>{
 function receive(result:QuickCreation|null){
  const previous=flow.value;flow.value=result;issue.value='';emit('resolved',result);emit('busy',!!result&&quickInProgress(result.status))
  if(result?.canRetry&&(!previous?.canRetry||previous.id!==result.id))void refreshCredits().catch(()=>{})
- if(result&&(previous?.id!==result.id||previous.status!==result.status||previous.revisionId!==result.revisionId||previous.taskId!==result.taskId))emit('updated',result)
+ if(result&&(previous?.id!==result.id||previous.status!==result.status||previous.revisionId!==result.revisionId||previous.taskId!==result.taskId||previous.previewAssetId!==result.previewAssetId||previous.errorCode!==result.errorCode))emit('updated',result)
  if(result&&props.dialogOpen===undefined&&props.autoOpen&&quickInProgress(result.status)&&openedFlow!==result.id){openedFlow=result.id;setOpen(true)}
 }
-async function refresh(){
- if(!props.workId||props.submissionPending||polling||!alive)return
- const turn=workSequence
- const current=()=>alive&&turn===workSequence
+async function refresh(replaceRead=false){
+ if(!props.workId||props.submissionPending||(polling&&!replaceRead)||!alive)return
+ const turn=workSequence,read=++readSequence
+ const current=()=>alive&&turn===workSequence&&read===readSequence
  polling=true
  let ok=false
  try{
@@ -69,6 +74,20 @@ async function retry(){
   if(current()){receive(result);setOpen(true)}
  }catch(e){
   if(current())issue.value=e instanceof Error?e.message:'暂时无法继续创作'
+ }finally{if(current())retrying.value=false}
+}
+async function retryArchive(){
+ const taskId=flow.value?.taskId
+ if(!archiveFailed.value||!taskId||retrying.value)return
+ const turn=workSequence
+ const current=()=>alive&&turn===workSequence
+ retrying.value=true
+ issue.value=''
+ try{
+  await retryTaskArchive(props.workId,taskId)
+  if(current()){await refresh(true);if(current())setOpen(true)}
+ }catch(e){
+  if(current())issue.value=e instanceof Error?e.message:'重试保存失败'
  }finally{if(current())retrying.value=false}
 }
 // 音频已能展示时再收起弹窗，避免“已完成”先到、歌曲结果尚未读取的空白过渡。
@@ -99,21 +118,22 @@ onBeforeUnmount(()=>{alive=false;window.clearInterval(timer);document.removeEven
   <div class="quick-progress-icon" :class="{active}">♪</div>
   <div class="quick-progress-copy">
    <strong>{{ t(uncertainLyrics?'歌词结果待核对':flow?labels[flow.status]||'正在核对创作进度':'正在核对创作进度') }}</strong>
-   <p v-if="flow">{{ t(uncertainLyrics?'歌词服务连接中断，创作描述已保留。可以刷新查看，请勿重复提交。':active?'可以离开页面 在我的音乐中继续查看进度':flow.status==='SUCCEEDED'?(resultReady?'歌曲已保存 可以试听与分享':'正在读取歌曲，请稍候…'):failureCopy) }}</p>
+   <p v-if="flow">{{ t(archiveMessage||(uncertainLyrics?'歌词服务连接中断，创作描述已保留。可以刷新查看，请勿重复提交。':active?'可以离开页面 在我的音乐中继续查看进度':flow.status==='SUCCEEDED'?(resultReady?'歌曲已保存 可以试听与分享':'正在读取歌曲，请稍候…'):failureCopy)) }}</p>
    <p v-if="issue" role="alert">{{ t(issue) }}</p>
    <p v-if="flow?.canRetry&&retryCost!==null">{{ t('重试预计消耗 {cost} 积分',{cost:retryCost}) }}</p>
    <div class="actions">
     <button v-if="flow&&active" class="button" @click="setOpen(true)">{{ t('查看生成进度') }}</button>
+    <button v-if="flow?.previewAssetId&&completionMode==='navigate'" class="button" @click="emit('view')">{{ t('试听首版') }}</button>
     <button v-if="flow?.status==='SUCCEEDED'&&resultReady&&completionMode==='navigate'" class="button" @click="emit('view')">{{ t('试听歌曲') }}</button>
     <RouterLink v-if="flow?.errorCode==='INSUFFICIENT_CREDITS'" class="button" to="/recharge">{{ t('去充值') }}</RouterLink>
-    <RouterLink v-if="flow?.errorCode==='AUDIO_ARCHIVE_FAILED'&&completionMode==='navigate'" :to="`/works/${workId}?mode=quick`">{{ t('查看创作记录') }}</RouterLink>
-    <RouterLink v-if="flow&&['FAILED','CANCELLED'].includes(flow.status)" :to="`/create?work=${workId}&mode=custom`">{{ t('自定义创作') }}</RouterLink>
+    <button v-if="archiveFailed&&completionMode==='navigate'" class="button secondary" type="button" :disabled="retrying" @click="retryArchive">{{ t('仅重试保存音频') }}</button>
+    <RouterLink v-if="flow&&!archiveFailed&&['FAILED','CANCELLED'].includes(flow.status)" :to="`/create?work=${workId}&mode=custom`">{{ t('自定义创作') }}</RouterLink>
     <RouterLink v-if="uncertainLyrics&&completionMode==='navigate'" class="button" to="/create?mode=quick">{{ t('继续创作一首歌') }}</RouterLink>
-    <button class="button secondary" @click="refresh">{{ t('刷新进度') }}</button>
+    <button class="button secondary" @click="refresh()">{{ t('刷新进度') }}</button>
     <button v-if="flow?.canRetry" class="button" :disabled="retrying" @click="retry">{{ t(retrying?'正在继续…':flow.revisionId?'继续生成音乐':'重试歌词生成') }}</button>
    </div>
   </div>
  </section>
- <MusicGenerationDialog v-if="dialogOpen!==undefined||flow" :open="open" :work-id="workId" :task-id="flow?.taskId" :status="dialogStatus" :title="title" :created-at="flow?.createdAt" :sync-issue="!!issue" :error="flow?.status==='FAILED'?failureCopy:issue||submissionIssue" :error-code="flow?.errorCode" quick :result-ready="resultReady" @close="setOpen(false)" @view="setOpen(false);emit('view')"/>
+ <MusicGenerationDialog v-if="dialogOpen!==undefined||flow" :open="open" :status="dialogStatus" :title="title" :created-at="flow?.createdAt" :sync-issue="!!issue" :error="flow?.status==='FAILED'&&!archiveFailed?failureCopy:issue||submissionIssue" :error-code="flow?.errorCode" :work-id="workId" :preview-asset-id="flow?.previewAssetId" :cancelling="retrying" quick :result-ready="resultReady" @archive="retryArchive" @close="setOpen(false)" @view="setOpen(false);emit('view')"/>
 </template>
 <style scoped>.quick-progress{display:flex;gap:20px;margin:20px 0;padding:24px;border:1px solid #f0c5bc;border-radius:22px;background:#fff6f2}.quick-progress-icon{font-size:36px;color:#f93822}.quick-progress-copy{min-width:0}.quick-progress strong{font-size:20px}.quick-progress p{color:#806967;line-height:1.7}.quick-progress a{color:#bf3b29;align-self:center}.quick-progress .button{font-size:14px;min-height:40px;padding:9px 18px}.active{animation:pulse 2s ease-in-out infinite}@keyframes pulse{50%{opacity:.5}}@media(prefers-reduced-motion:reduce){.active{animation:none}}</style>

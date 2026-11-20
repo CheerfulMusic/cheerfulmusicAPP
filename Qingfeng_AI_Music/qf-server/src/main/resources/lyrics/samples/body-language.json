@@ -1,0 +1,164 @@
+{
+  "sourceKey": "sample:body-language:f396e9ce-af6e-3b45-a0dc-13b7f209ecb3",
+  "audioSha256": "8e59749c37e926a192392eb0a40ebc48475b102c1c49d9dd3fc45f0d00de1033",
+  "recognition": "faster-whisper-1.2.1 / large-v3-turbo + small; authored text and recorded vocal order reviewed",
+  "duration": 165.96,
+  "warnings": [],
+  "words": [
+    {
+      "text": "Don't say a word\n",
+      "start": 0.66,
+      "end": 2.42
+    },
+    {
+      "text": "Just move\n",
+      "start": 8.42,
+      "end": 9.94
+    },
+    {
+      "text": "Just move\n",
+      "start": 12.24,
+      "end": 13.76
+    },
+    {
+      "text": "I see you looking from across the room\n",
+      "start": 15.5,
+      "end": 18.42
+    },
+    {
+      "text": "You know exactly what I'm gonna do\n",
+      "start": 19.22,
+      "end": 22.08
+    },
+    {
+      "text": "No conversation, no introduction\n",
+      "start": 22.98,
+      "end": 26.34
+    },
+    {
+      "text": "Just let the rhythm take control of you\n",
+      "start": 26.34,
+      "end": 29.76
+    },
+    {
+      "text": "I don't need your name\n",
+      "start": 29.76,
+      "end": 31.98
+    },
+    {
+      "text": "I don't need your number\n",
+      "start": 31.98,
+      "end": 33.9
+    },
+    {
+      "text": "Let your body talk\n",
+      "start": 33.9,
+      "end": 35.74
+    },
+    {
+      "text": "Take me somewhere under\n",
+      "start": 36.14,
+      "end": 37.8
+    },
+    {
+      "text": "Body language\n",
+      "start": 41.94,
+      "end": 43.26
+    },
+    {
+      "text": "Body, body language\n",
+      "start": 43.46,
+      "end": 45.08
+    },
+    {
+      "text": "Don't talk, just dance\n",
+      "start": 45.08,
+      "end": 46.78
+    },
+    {
+      "text": "Body, body language\n",
+      "start": 48.84,
+      "end": 50.68
+    },
+    {
+      "text": "Body language\n",
+      "start": 52.76,
+      "end": 54.26
+    },
+    {
+      "text": "Body, body language\n",
+      "start": 56.26,
+      "end": 58.06
+    },
+    {
+      "text": "No words tonight\n",
+      "start": 73.6,
+      "end": 76.3
+    },
+    {
+      "text": "Just you and I\n",
+      "start": 76.3,
+      "end": 80.5
+    },
+    {
+      "text": "Feel the bass\n",
+      "start": 81.8,
+      "end": 83.6
+    },
+    {
+      "text": "Feel the vibe\n",
+      "start": 85.3,
+      "end": 87.36
+    },
+    {
+      "text": "Let your body\n",
+      "start": 96.34,
+      "end": 98.22
+    },
+    {
+      "text": "Let your body\n",
+      "start": 98.22,
+      "end": 99.36
+    },
+    {
+      "text": "Let your body\n",
+      "start": 99.36,
+      "end": 100.32
+    },
+    {
+      "text": "Let your body talk\n",
+      "start": 100.32,
+      "end": 102.1
+    },
+    {
+      "text": "Body language\n",
+      "start": 104.5,
+      "end": 105.76
+    },
+    {
+      "text": "Body, body language\n",
+      "start": 105.76,
+      "end": 107.46
+    },
+    {
+      "text": "Body, body language\n",
+      "start": 107.5,
+      "end": 109.38
+    },
+    {
+      "text": "Don't talk, just dance\n",
+      "start": 111.16,
+      "end": 113.1
+    },
+    {
+      "text": "Body, body language\n",
+      "start": 113.3,
+      "end": 114.9
+    },
+    {
+      "text": "Body, body language\n",
+      "start": 114.9,
+      "end": 116.78
+    }
+  ]
+}

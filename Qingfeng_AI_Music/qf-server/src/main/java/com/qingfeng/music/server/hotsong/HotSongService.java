@@ -26,7 +26,10 @@ public class HotSongService {
     /** 保留历史曲目的互动记录，并接入本次精选歌曲。 */
     public static final Set<String> TRACKS = java.util.stream.Stream.concat(java.util.stream.Stream.of(
             "love", "family", "travel", "red-guofeng", "rain-disco",
-            "tomorrow-rock", "scenery-folk", "hometown-electronic", "river-instrumental"),
+            "tomorrow-rock", "scenery-folk", "hometown-electronic", "river-instrumental",
+            "body-language", "into-the-sun", "one-more-night",
+            "all-night-one-more-time", "euphoric-drop", "i-run-this-show", "light-it-up",
+            "cant-stop-this-feeling", "midnight-call", "summer-on-repeat"),
             RecommendationSamples.SONGS.stream().map(RecommendationSamples.Song::id)).collect(java.util.stream.Collectors.toUnmodifiableSet());
     private static final String COLUMNS = "track_id,plays,likes,favorites,comments";
     private static final Map<String, String> REACTION_COLUMNS = Map.of("like", "likes", "favorite", "favorites");

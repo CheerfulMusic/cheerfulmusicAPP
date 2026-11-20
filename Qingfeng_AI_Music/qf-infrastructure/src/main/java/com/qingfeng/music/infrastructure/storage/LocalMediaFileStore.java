@@ -23,13 +23,21 @@ public final class LocalMediaFileStore implements MediaFileStore {
         this.wavEncoder = wavEncoder;
     }
     public Saved save(InputStream content)throws IOException{
+        return save(content, (stage, elapsed) -> {});
+    }
+    public Saved save(InputStream content, java.util.function.BiConsumer<Stage,Long> observe)throws IOException{
+        long started = System.nanoTime();
         Path temporary=Files.createTempFile(root,"upload-",".part");
         Path converted = null;
         try(var input=new BufferedInputStream(content)){
-            byte[] header=input.readNBytes(12);String type;
-            if(header.length==12&&header[0]=='R'&&header[1]=='I'&&header[2]=='F'&&header[3]=='F'&&header[8]=='W'&&header[9]=='A'&&header[10]=='V'&&header[11]=='E')type="audio/wav";
-            else if(header.length>=3&&((header[0]=='I'&&header[1]=='D'&&header[2]=='3')||((header[0]&255)==255&&(header[1]&224)==224)))type="audio/mpeg";
-            else throw new DomainException("INVALID_AUDIO","仅支持具有有效容器头的WAV或MP3音频");
+            byte[] header=input.readNBytes(12);
+            long validationStarted=System.nanoTime();
+            String type;
+            try{
+                if(header.length==12&&header[0]=='R'&&header[1]=='I'&&header[2]=='F'&&header[3]=='F'&&header[8]=='W'&&header[9]=='A'&&header[10]=='V'&&header[11]=='E')type="audio/wav";
+                else if(header.length>=3&&((header[0]=='I'&&header[1]=='D'&&header[2]=='3')||((header[0]&255)==255&&(header[1]&224)==224)))type="audio/mpeg";
+                else throw new DomainException("INVALID_AUDIO","仅支持具有有效容器头的WAV或MP3音频");
+            }finally{observe.accept(Stage.VALIDATE,System.nanoTime()-validationStarted);}
             MessageDigest digest;try{digest=MessageDigest.getInstance("SHA-256");}catch(NoSuchAlgorithmException e){throw new IllegalStateException(e);}
             long size=header.length;
             long limit = wavEncoder != null && type.equals("audio/wav") ? WAV_LIMIT : LIMIT;
@@ -53,6 +61,7 @@ public final class LocalMediaFileStore implements MediaFileStore {
             try{Files.move(archived,destination,StandardCopyOption.ATOMIC_MOVE);}catch(AtomicMoveNotSupportedException e){Files.move(archived,destination);}
             return new Saved(key,size,type,HexFormat.of().formatHex(digest.digest()));
         } finally {
+            observe.accept(Stage.STAGE_FILE, System.nanoTime()-started);
             try { Files.deleteIfExists(temporary); }
             finally { if (converted != null) Files.deleteIfExists(converted); }
         }

@@ -454,6 +454,10 @@ class InviteGateIntegrationTest {
         assertFalse(send(visitor, "GET", feed + "?genre=rock", null, null).body().contains(song.id()));
         assertFalse(send(visitor, "GET", feed + "?q=%25", null, null).body().contains(song.id()));
         assertFalse(firstFeed.body().contains("民谣"), "Private style text should not be returned");
+        var shelves = send(visitor, "GET", feed + "?view=shelves", null, null);
+        assertEquals(200, shelves.statusCode(), shelves.body());
+        assertTrue(shelves.body().contains("\"listeningDataAvailable\":false"), shelves.body());
+        assertTrue(shelves.body().contains(song.id()), shelves.body());
         String playPath = feed + "/songs/" + song.id() + "/1/play";
         assertEquals(204, send(visitor, "POST", playPath, null, null).statusCode());
         assertEquals(404, send(visitor, "POST", playPath.replace("/1/", "/2/"), null, null).statusCode());

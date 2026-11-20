@@ -3,6 +3,7 @@ package com.qingfeng.music.server;
 import com.qingfeng.music.common.exception.DomainException;
 import com.qingfeng.music.common.concurrent.AgentRequestScope;
 import com.qingfeng.music.infrastructure.provider.OpenAiLyricsWriter;
+import com.qingfeng.music.infrastructure.provider.QwenLyricsWriter;
 import com.qingfeng.music.credits.CreditsLedger;
 import com.qingfeng.music.identity.api.IdentityApi;
 import com.qingfeng.music.lyrics.api.LyricsApi;
@@ -10,10 +11,20 @@ import com.qingfeng.music.lyrics.application.CompositionRequests;
 import com.qingfeng.music.lyrics.application.LyricsCompositionService;
 import com.qingfeng.music.lyrics.application.LyricsWriter;
 import com.qingfeng.music.work.api.WorkApi;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.net.http.HttpTimeoutException;
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Flow;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.BeforeEach;
@@ -28,6 +39,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.context.annotation.Primary;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
+import tools.jackson.databind.ObjectMapper;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
@@ -37,6 +49,9 @@ import static org.junit.jupiter.api.Assertions.*;
 @SpringBootTest(webEnvironment=SpringBootTest.WebEnvironment.RANDOM_PORT,properties={
     "spring.datasource.url=jdbc:h2:mem:lyrics_credits;MODE=MySQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1",
     "qingfeng.lyrics.enabled=true",
+    "qingfeng.providers.openai.api-key=",
+    "qingfeng.providers.qwen.api-key=offline-unused-key",
+    "qingfeng.providers.qwen.base-url=http://127.0.0.1:1/v1",
     "qingfeng.credits.enabled=true",
     "qingfeng.credits.lyrics-cost=5",
     "qingfeng.credits.music-cost=15",
@@ -48,7 +63,8 @@ import static org.junit.jupiter.api.Assertions.*;
 class LyricsCreditsIntegrationTest {
     static final long LYRICS_COST = 5L;
     @TestConfiguration(proxyBeanMethods=false) static class Offline {
-        @Bean @Primary LyricsWriter offlineLyricsWriter(){return new RecordingWriter();}
+        @Bean @Primary @org.springframework.beans.factory.annotation.Qualifier("customLyricsWriter")
+        LyricsWriter offlineLyricsWriter(){return new RecordingWriter();}
     }
     static class RecordingWriter implements LyricsWriter {
         final AtomicInteger calls=new AtomicInteger();
@@ -63,6 +79,9 @@ class LyricsCreditsIntegrationTest {
             if(failure!=null)throw failure;
             if(emptyResult)return new Draft("新的歌","   ");
             return new Draft("新的歌","[Chorus]\n愿你的每一天都有光");
+        }
+        @Override public Map<Integer, String> repairSections(SectionRepair request) {
+            return delegate.repairSections(request);
         }
     }
     @Autowired IdentityApi identity; @Autowired WorkApi works; @Autowired LyricsApi lyrics;
@@ -251,6 +270,89 @@ class LyricsCreditsIntegrationTest {
         assertEquals(0,jdbc.queryForObject("SELECT COUNT(*) FROM credit_ledger WHERE entry_type='REFUND' AND reference_id=?",Integer.class,"lyrics:"+f.work+":"+key));
         assertEquals("LYRICS_REQUEST_PENDING",assertThrows(DomainException.class,()->composer.compose(f.owner,f.work,0,key,"zh-CN")).code());
         assertEquals(2,sends.get());assertEquals(1,writer.calls.get());
+    }
+
+    @Test void missingSectionRepairPreservesGoodLyricsAndChargesOnlyOnce() throws Exception {
+        var f=chargedFixture();fund(f,20);String key=UUID.randomUUID().toString();
+        var calls=scriptSectionRepair("```json\n{\"1\":\"缺的这一段\"}\n```", false);
+        var revision=composeWithSections(f,key);
+        assertEquals("[Verse]\n原主歌\n[Pre-Chorus]\n缺的这一段\n[Chorus]\n原副歌",revision.lyrics());
+        assertEquals(revision.id(),composeWithSections(f,key).id());
+        assertEquals(revision.id(),composer.requestState(f.owner,f.work,key).revisionId());
+        assertEquals(3,calls.size());assertEquals(1,lyrics.list(f.owner,f.work).size());
+        assertEquals(20-LYRICS_COST,credits.balance(f.owner));
+        assertEquals(List.of(key),consumptions(f.owner).stream().map(Consumption::requestKey).toList());
+    }
+
+    @Test void malformedSectionRepairFailsOnceRefundsAndNeverSavesTheFragment() throws Exception {
+        var f=chargedFixture();fund(f,20);String key=UUID.randomUUID().toString();
+        var calls=scriptSectionRepair("{\"0\":\"覆盖已经合格的歌词\",\"1\":\"缺的这一段\"}", false);
+        assertEquals("LYRICS_STRUCTURE_MISMATCH",assertThrows(DomainException.class,()->composeWithSections(f,key)).code());
+        assertEquals("FAILED",composer.requestState(f.owner,f.work,key).status());
+        assertEquals("LYRICS_REQUEST_FAILED",assertThrows(DomainException.class,()->composeWithSections(f,key)).code());
+        assertEquals(3,calls.size());assertTrue(lyrics.list(f.owner,f.work).isEmpty());
+        assertEquals(20,credits.balance(f.owner));
+        assertEquals(1,consumptions(f.owner).size());assertEquals(1,consumptions(f.owner).get(0).refunded());
+    }
+
+    @Test void timedOutSectionRepairKeepsOriginalKeyForLookupWithoutAnotherCallOrDebit() throws Exception {
+        var f=chargedFixture();fund(f,20);String key=UUID.randomUUID().toString();
+        var calls=scriptSectionRepair("", true);
+        assertEquals("LYRICS_PROVIDER_TIMEOUT",assertThrows(DomainException.class,()->composeWithSections(f,key)).code());
+        assertEquals(new LyricsCompositionService.RequestState("UNKNOWN",null,"LYRICS_PROVIDER_TIMEOUT"),composer.requestState(f.owner,f.work,key));
+        assertEquals("LYRICS_REQUEST_PENDING",assertThrows(DomainException.class,()->composeWithSections(f,key)).code());
+        assertEquals(3,calls.size());assertTrue(lyrics.list(f.owner,f.work).isEmpty());
+        assertEquals(20-LYRICS_COST,credits.balance(f.owner));
+        assertEquals(1,consumptions(f.owner).size());assertEquals("UNKNOWN",consumptions(f.owner).get(0).status());
+    }
+
+    private LyricsApi.Revision composeWithSections(Fixture fixture,String key) {
+        return composer.composeCustom(fixture.owner,fixture.work,0,key,"zh-CN","沿用原有故事",null,"CUSTOM",false,
+            List.of("Verse","Pre-Chorus","Chorus"));
+    }
+
+    private List<HttpRequest> scriptSectionRepair(String replacement, boolean timeout) throws Exception {
+        var client=org.mockito.Mockito.mock(HttpClient.class);
+        var calls=new ArrayList<HttpRequest>();
+        var json=new ObjectMapper();
+        String candidate="```lyrics\n## 【主歌】\n原主歌\n[Chorus]\n原副歌\n```";
+        var plan=Map.of("requirements","","suggestedArrangement","Acoustic guitar","negativeTags","",
+            "summaryZh","按所选风格编配","summaryEn","Selected style","vocalGender","AUTO");
+        org.mockito.Mockito.when(client.<String>send(org.mockito.ArgumentMatchers.any(),org.mockito.ArgumentMatchers.any())).thenAnswer(call->{
+            HttpRequest request=call.getArgument(0);calls.add(request);
+            String output=switch(calls.size()) {
+                case 1 -> json.writeValueAsString(Map.of("title","一首歌","lyrics",candidate,"plan",plan));
+                case 2 -> candidate;
+                case 3 -> {
+                    var sent=json.readTree(readRequestBody(request));
+                    assertEquals("json_object",sent.path("response_format").path("type").asText());
+                    var context=json.readTree(sent.path("messages").path(1).path("content").asText());
+                    assertEquals(json.readTree("{\"1\":\"Pre-Chorus\"}"),context.path("missingSections"));
+                    assertEquals("[Verse]\n原主歌\n[Chorus]\n原副歌",context.path("lyrics").asText());
+                    if(timeout)throw new HttpTimeoutException("offline section repair timeout");
+                    yield replacement;
+                }
+                default -> throw new AssertionError("Unexpected additional model request");
+            };
+            @SuppressWarnings("unchecked") HttpResponse<String> response=org.mockito.Mockito.mock(HttpResponse.class);
+            org.mockito.Mockito.when(response.statusCode()).thenReturn(200);
+            org.mockito.Mockito.when(response.body()).thenReturn(json.writeValueAsString(Map.of("choices",List.of(
+                Map.of("finish_reason","stop","message",Map.of("content",output))))));
+            return response;
+        });
+        writer.delegate=new QwenLyricsWriter("offline-key","qwen3.8-flash",URI.create("https://example.invalid"),client);
+        return calls;
+    }
+
+    private static String readRequestBody(HttpRequest request) {
+        var output=new java.io.ByteArrayOutputStream();
+        request.bodyPublisher().orElseThrow().subscribe(new Flow.Subscriber<ByteBuffer>() {
+            public void onSubscribe(Flow.Subscription subscription) { subscription.request(Long.MAX_VALUE); }
+            public void onNext(ByteBuffer item) { byte[] bytes=new byte[item.remaining()];item.get(bytes);output.writeBytes(bytes); }
+            public void onError(Throwable failure) { throw new AssertionError(failure); }
+            public void onComplete() {}
+        });
+        return output.toString(StandardCharsets.UTF_8);
     }
 
     private static java.net.http.HttpResponse<String> qualityStageResponse(int stage){

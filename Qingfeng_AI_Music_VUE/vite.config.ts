@@ -34,7 +34,7 @@ export default defineConfig(({ mode }) => {
       port: 5173,
       strictPort: true,
       proxy: {
-        '^/media/sample-[a-z0-9-]+-v1(?:-preview-128\\.mp3|-cover\\.jpg)(?:[?]|$)': {
+        '^/media/(?:sample-[a-z0-9-]+-v[12](?:-preview-128\\.mp3|-cover\\.jpg)|explore-(?:(?:love|family|travel)-v1\\.webp|(?:disco|rock|electronic|instrumental)-v1\\.jpg|guofeng-v1\\.svg)|recommendations/[a-z0-9-]+-[a-f0-9]{12}-(?:preview-128\\.mp3|cover\\.jpg))(?:[?]|$)': {
           target: env.VITE_API_PROXY_TARGET || 'http://127.0.0.1:8080',
           changeOrigin: true,
         },

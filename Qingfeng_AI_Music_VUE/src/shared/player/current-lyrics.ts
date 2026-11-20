@@ -14,6 +14,8 @@ export function lyricsSource(audio: string) {
   }
   const sample = path.match(/^\/media\/sample-([a-z0-9-]+)-v1-preview-128\.mp3$/)
   if (sample) return { kind: 'public' as const, path: `public/hot-songs/${sample[1]}/lyrics` }
+  const supplied = path.match(/^\/media\/recommendations\/([a-z0-9-]+)-([a-f0-9]{12})-preview-128\.mp3$/)
+  if (supplied) return { kind: 'public' as const, path: `public/hot-songs/${supplied[1]}/lyrics?audioHash=${supplied[2]}` }
   const published = path.match(/\/public\/artists\/([^/]+)\/songs\/([^/]+)\/(\d+)\/audio$/)
   if (published) return { kind: 'public' as const, path: `public/artists/${published[1]}/songs/${published[2]}/${published[3]}/lyrics` }
   return undefined
@@ -80,6 +82,7 @@ export function useCurrentLyrics() {
     if (lines.length) return { text: player.time < lines[0]!.start ? '前奏…' : player.time >= lines[lines.length - 1]!.end ? '尾奏…' : '间奏…', literal: false }
     if (data.value?.status === 'PREPARING') return { text: '歌词准备中…', literal: false }
     if (loading.value || data.value?.status === 'FETCHING') return { text: '歌词加载中…', literal: false }
+    if (data.value?.status === 'INSTRUMENTAL') return { text: '纯音乐（无歌词）', literal: false }
     return { text: data.value?.text ? '暂无同步歌词' : '暂无歌词', literal: false }
   })
   return { line }

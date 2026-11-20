@@ -34,7 +34,7 @@ import {restoreRemakeSettings} from '../model/remake-settings'
 import { ApiError,currentCreatorId,requestJson } from '../../../shared/http/api-client'
 import GenerationRecovery from '../components/GenerationRecovery.vue'
 import {closeTaskChecking} from '../api/detail'
-import {needsGenerationRefresh,rememberGeneration,recoverGeneration,forgetGeneration,uncertainSubmission,generationProblem,previousPublicationScope,rememberPublicationScope,type GenerationPublication,type PendingGeneration,type PublicationScope} from '../model/generation-recovery'
+import {needsGenerationRefresh,rememberGeneration,recoverGeneration,forgetGeneration,uncertainSubmission,audioArchiveMessage,generationProblem,previousPublicationScope,rememberPublicationScope,type GenerationPublication,type PendingGeneration,type PublicationScope} from '../model/generation-recovery'
 import {creditGap,isCreditShortfall,type Credits} from '../model/credit-shortfall'
 const props = defineProps<{ embeddedWorkId?: string }>()
 const emit=defineEmits<{ openWithinAgent:[path:string] }>()
@@ -312,28 +312,36 @@ function showProgress() { if (pendingTask.value) trackedTaskId.value = pendingTa
 async function viewGeneratedMusic() {
   generationOpen.value = false; await nextTick()
   if(!asset.value)listenAfterLoad.value=true
-  const section = document.getElementById('song-result') || document.getElementById('work-audio')
+  const previewId=trackedTask.value?.previewAssetId||quickFlow.value?.previewAssetId
+  const section = previewId&&asset.value?.id!==previewId
+    ? document.getElementById('audio-version-'+previewId)||document.getElementById('work-audio')
+    : document.getElementById('song-result')||document.getElementById('work-audio')
   section?.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block:'center' })
   section?.focus({preventScroll:true})
 }
 const mediaRefresh = ref(0)
 const statusLabels: Record<string,string> = {CANCELLED:'已撤销',QUEUED:'等待处理',SUBMITTING:'正在提交',RUNNING:'音乐创作中',SAVING:'正在保存音频',SUCCEEDED:'创作完成',FAILED:'处理未完成',SUBMISSION_UNKNOWN:'提交结果待核对'}
-let polling = false
-async function refreshTasks() {
-  if (!work.value || polling || document.visibilityState === 'hidden') return
-  const workId = work.value.id, turn = sequence
+let polling = false, taskReadSequence = 0
+function refreshTasks(){return readTasks(false)}
+async function readTasks(replaceRead:boolean) {
+  if (!work.value || (polling && !replaceRead) || document.visibilityState === 'hidden') return
+  const workId = work.value.id, turn = sequence, read = ++taskReadSequence
+  const current=()=>turn===sequence&&read===taskReadSequence
   polling = true
   try {
     const latest = await listTasks(workId)
-    if (turn !== sequence || work.value?.id !== workId) return
+    if (!current() || work.value?.id !== workId) return
     const firstRead = !tasksReady.value
     const completedNewVersion = latest.some(next => next.status === 'SUCCEEDED' &&
       !tasks.value.some(old => old.id === next.id && old.status === 'SUCCEEDED'))
+    const completedNeedsRefresh=completedNewVersion&&(!firstRead||mediaState.value==='ready'&&!asset.value)
+    const previewArrived=latest.some(next=>next.previewAssetId&&
+      !tasks.value.some(old=>old.id===next.id&&old.previewAssetId===next.previewAssetId))
     if (completedNewVersion) void refreshCover(workId, turn)
-    if (completedNewVersion && (!firstRead || mediaState.value === 'ready' && !asset.value)) {
+    if (completedNeedsRefresh || (previewArrived && (!firstRead || mediaState.value === 'ready'))) {
       mediaRefresh.value++
-      void updateAllowance()
     }
+    if(completedNeedsRefresh)void updateAllowance()
     tasks.value = latest
     tasksReady.value = true
     taskReadIssue.value = false
@@ -352,12 +360,12 @@ async function refreshTasks() {
       error.value = ''
     }
   } catch {
-    if (turn === sequence) {
+    if (current()) {
       progressIssue.value = true
       taskReadIssue.value = true
     }
   } finally {
-    if (turn === sequence) polling = false
+    if (current()) polling = false
   }
 }
 async function refreshCover(id: string, turn: number) {
@@ -376,7 +384,17 @@ const coverTimer = window.setInterval(() => {
 const pollTimer = window.setInterval(() => { if (work.value&&(!tasksReady.value||taskReadIssue.value||needsGenerationRefresh(tasks.value,submissionUnknown.value))) void refreshTasks() }, 8000)
 document.addEventListener('visibilitychange', refreshTasks)
 onBeforeUnmount(() => { window.clearInterval(pollTimer);window.clearInterval(coverTimer); document.removeEventListener('visibilitychange', refreshTasks); sequence++ })
-async function retryArchive(task: GenerationTask) { if (!work.value || submitting.value) return; submitting.value = true; error.value = ''; try { await retryTaskArchive(work.value.id, task.id); await refreshTasks() } catch (e) { error.value = e instanceof Error ? e.message : '重试保存失败' } finally { submitting.value = false } }
+async function retryArchive(task: GenerationTask) {
+  if(!work.value||submitting.value||task.status!=='FAILED'||task.errorCode!=='AUDIO_ARCHIVE_FAILED')return
+  const workId=work.value.id,turn=sequence
+  submitting.value=true;error.value=''
+  try{
+    await retryTaskArchive(workId,task.id)
+    if(turn===sequence)await readTasks(true)
+  }catch(e){
+    if(turn===sequence)error.value=e instanceof Error?e.message:'重试保存失败'
+  }finally{if(turn===sequence)submitting.value=false}
+}
 async function closeChecking(task:GenerationTask){
   if(!work.value||submitting.value)return
   const workId=work.value.id;submitting.value=true;error.value=''
@@ -531,8 +549,8 @@ async function backToStory(){
     <p v-if="generationNotice" class="notice" role="status">{{ t(generationNotice) }}</p>
     <p v-if="inputIssue" class="notice"><button class="text-button" @click="backToStory">{{ t('调整音乐要求') }}</button> · {{ t('尚未开始音乐生成，你的歌词和设置已保留。') }}</p>
     <section v-if="submissionUnknown&&!pendingTask" class="notice generation-recovery" role="status"><strong>{{ t('正在核对上次提交，暂不发起新的音乐创作。') }}</strong><p>{{ t('你的请求标识已保留。可以刷新核对，或使用原请求继续；不会创建新的生成请求。') }}</p><div class="actions"><button class="button secondary" :disabled="submitting" @click="refreshTasks">{{ t('刷新核对状态') }}</button><button class="button secondary" :disabled="submitting||!pendingIntent" @click="resumeOriginalRequest">{{ t('恢复原请求') }}</button></div></section>
-    <p v-if="pendingTask&&!generationOpen&&!quickBusy&&(!quickJourney||asset)" class="notice" role="status">{{ t(generationProblem(pendingTask.errorCode)||'音乐正在后台制作，可以继续浏览，稍后回来查看。') }} <button class="text-button" @click="showProgress">{{ t('查看生成进度') }}</button></p>
-    <section v-if="latestFailure&&!pendingTask" class="notice" role="status"><p>{{ t(generationProblem(latestFailure.errorCode)||'音乐服务未完成这次创作，歌词和设置已保留。') }}</p><button v-if="latestFailure.errorCode==='AUDIO_ARCHIVE_FAILED'" class="button secondary" :disabled="submitting" @click="retryArchive(latestFailure)">{{ t('仅重试保存音频') }}</button></section>
+    <p v-if="pendingTask&&!generationOpen&&!quickBusy&&(!quickJourney||asset)" class="notice" role="status">{{ t(audioArchiveMessage(pendingTask.status,pendingTask.errorCode,!!pendingTask.previewAssetId)||generationProblem(pendingTask.errorCode)||'音乐正在后台制作，可以继续浏览，稍后回来查看。') }} <button class="text-button" @click="showProgress">{{ t('查看生成进度') }}</button></p>
+    <section v-if="latestFailure&&!pendingTask" class="notice" role="status"><p>{{ t(audioArchiveMessage(latestFailure.status,latestFailure.errorCode,!!latestFailure.previewAssetId)||generationProblem(latestFailure.errorCode)||'音乐服务未完成这次创作，歌词和设置已保留。') }}</p><button v-if="latestFailure.errorCode==='AUDIO_ARCHIVE_FAILED'" class="button secondary" :disabled="submitting" @click="retryArchive(latestFailure)">{{ t('仅重试保存音频') }}</button></section>
     <GenerationRecovery v-if="pendingTask?.status==='SUBMISSION_UNKNOWN'" :task="pendingTask" :busy="submitting" @refresh="refreshTasks" @close="closeChecking(pendingTask)"/>
     <SongResult v-if="asset" :work="work" :asset="asset" :title="songTitle" :version="songVersion" :rename-song="renameSong" :cover="artwork" :pending="!!pendingTask" :checking="submissionUnknown" :busy="submitting||quickBusy||!tasksReady||taskReadIssue||!quickChecked||quickReadIssue||(!pendingTask&&!submissionUnknown&&(!modelReady||!generationLyricsReady))" :lyrics="giftRevision?.lyrics||''" :language="giftRevision?.language" :section-open="sectionOpen" :publication-label="publicationLabel" :publication-action="publicationAction" :publication-busy="publicationBusy || !publicationCoverReady" :can-replace-publication="canReplacePublication" @gift="sendGift" @premium="premiumOpen=true" @publish="openSongPublication(publicationAction === '设为私密' ? 'private' : 'publish')" @replace-publication="openSongPublication('publish')" @regenerate="openMusicAdjustment" @cover="openCover" @edit="openSection"/>
     <p v-if="coverNotice" class="save-info" role="status">{{ t(coverNotice) }}</p>
@@ -609,7 +627,7 @@ async function backToStory(){
       </div>
     </form>
   </dialog>
-  <MusicGenerationDialog :open="generationOpen" :work-id="work?.id" :task-id="trackedTask?.id" :status="generationStatus" :title="trackedTask?.title||work?.title||''" :error="submissionIssue" :error-code="trackedTask?.errorCode" :sync-issue="progressIssue||trackedTask?.errorCode==='QUERY_RETRY'" :created-at="trackedTask?.createdAt" :submit-after="trackedTask?.nextAttemptAt" :cancelling="cancelling||submitting" :cover="artwork" @cancel="cancelGeneration" @archive="trackedTask&&retryArchive(trackedTask)" @close="generationOpen=false" @view="viewGeneratedMusic"/>
+  <MusicGenerationDialog :open="generationOpen" :status="generationStatus" :title="trackedTask?.title||work?.title||''" :error="submissionIssue||(trackedTask?.status==='FAILED'&&trackedTask.errorCode==='AUDIO_ARCHIVE_FAILED'?error:'')" :error-code="trackedTask?.errorCode" :work-id="work?.id" :preview-asset-id="trackedTask?.previewAssetId" :sync-issue="progressIssue||trackedTask?.errorCode==='QUERY_RETRY'" :created-at="trackedTask?.createdAt" :submit-after="trackedTask?.nextAttemptAt" :cancelling="cancelling||submitting" :cover="artwork" @cancel="cancelGeneration" @archive="trackedTask&&retryArchive(trackedTask)" @close="generationOpen=false" @view="viewGeneratedMusic"/>
 </template>
 <style scoped>
 .lyric-studio-header { position:relative; margin-bottom:30px; }

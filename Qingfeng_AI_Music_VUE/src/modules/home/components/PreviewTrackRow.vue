@@ -20,7 +20,7 @@ async function play(){const wasPlaying=playing.value;player.setQueue(props.queue
   <div class="explore-track-item">
     <button type="button" class="explore-track-row listen-action" :class="{'is-playing':playing}" :aria-label="t('{action}{title}',{action:playing?t('暂停'):t('试听'),title:track.title})" :aria-pressed="playing" @click="play">
       <img :src="track.cover" alt="" width="52" height="52" loading="lazy">
-      <span class="explore-track-copy"><strong :title="track.title">{{ track.title }}</strong><span>{{ track.genre||track.category }} <span aria-hidden="true">·</span> {{ duration }}</span></span>
+      <span class="explore-track-copy"><strong :title="track.title">{{ track.title }}</strong><span>{{ track.genre||track.category }}<template v-if="track.durationSeconds > 0"> <span aria-hidden="true">·</span> {{ duration }}</template></span></span>
       <span class="explore-track-play"><PlaybackIcon :playing="playing"/></span>
     </button>
     <div v-if="track.publication" class="hot-song-meta"><RouterLink :to="{name:'artist-home',params:{id:track.publication.artistId}}">{{ track.publication.stageName }}</RouterLink></div>

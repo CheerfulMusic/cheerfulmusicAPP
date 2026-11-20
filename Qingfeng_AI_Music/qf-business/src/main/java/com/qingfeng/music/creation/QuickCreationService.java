@@ -22,7 +22,7 @@ public final class QuickCreationService {
         this.repository=repository;this.works=works;this.lyrics=lyrics;this.composer=composer;this.generation=generation;this.enabled=enabled;
     }
     public record View(String id,String workId,String status,String revisionId,String taskId,String errorCode,
-                       boolean canRetry,Instant createdAt){}
+                       boolean canRetry,Instant createdAt,String previewAssetId){}
     public View start(String owner,String work,long version,String key,String language){
         var current=works.get(owner,work);
         if(!enabled)throw new DomainException("QUICK_CREATION_UNAVAILABLE","一键创作暂不可用，可以切换自定义创作，先完善歌词。");
@@ -42,6 +42,8 @@ public final class QuickCreationService {
         // 已创建的音乐任务交给原任务恢复策略；不得在这里重新购买音乐。
         var task=music(entry);if(task.isPresent())return view(owner,entry);
         if(current.version()!=entry.workVersion())throw new DomainException("WORK_VERSION_CONFLICT","内容已修改，请切换自定义创作继续制作。");
+        if(entry.revisionId()==null&&composer.requestState(owner,work,entry.lyricsKey()).status().equals("PENDING"))
+            throw new DomainException("LYRICS_REQUEST_PENDING","歌词仍在编写中，可以稍后刷新编写状态。");
         if(!repository.retry(work,id,UUID.randomUUID().toString()))throw new DomainException("QUICK_CREATION_CONFLICT","创作仍在处理中，请先刷新进度。");
         return get(owner,work,id);
     }
@@ -51,11 +53,11 @@ public final class QuickCreationService {
     }
     private View view(String owner,QuickCreationRepository.Entry entry){
         var task=music(entry);
-        return task.map(t->new View(entry.id(),entry.workId(),t.status().name(),t.revisionId(),t.id(),t.errorCode(),false,entry.createdAt()))
+        return task.map(t->new View(entry.id(),entry.workId(),t.status().name(),t.revisionId(),t.id(),t.errorCode(),false,entry.createdAt(),t.previewAssetId()))
             .orElseGet(()->{
                 String status="LYRICS_SUBMISSION_UNKNOWN".equals(entry.errorCode())?"FAILED":entry.status();
                 return new View(entry.id(),entry.workId(),status,entry.revisionId(),entry.taskId(),entry.errorCode(),
-                    status.equals("FAILED")&&works.get(owner,entry.workId()).version()==entry.workVersion(),entry.createdAt());
+                    status.equals("FAILED")&&works.get(owner,entry.workId()).version()==entry.workVersion(),entry.createdAt(),null);
             });
     }
     public boolean runOnce(){

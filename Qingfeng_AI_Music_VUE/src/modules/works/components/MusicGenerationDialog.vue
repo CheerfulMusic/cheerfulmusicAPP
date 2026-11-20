@@ -1,14 +1,16 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch, useId } from 'vue'
 import { t } from '../../../shared/i18n'
+import {audioArchiveMessage,generationProblem} from '../model/generation-recovery'
 import FirstRecordingPreview from './FirstRecordingPreview.vue'
-import {generationProblem} from '../model/generation-recovery'
 
-const props = defineProps<{ open: boolean; workId?:string; taskId?:string|null; status: string; title: string; error?: string;errorCode?:string|null; syncIssue?: boolean;createdAt?:string;submitAfter?:string;cancelling?:boolean;cover?:string;quick?:boolean;resultReady?:boolean }>()
+const props = defineProps<{ open: boolean; workId?:string; previewAssetId?:string|null; status: string; title: string; error?: string;errorCode?:string|null; syncIssue?: boolean;createdAt?:string;submitAfter?:string;cancelling?:boolean;cover?:string;quick?:boolean;resultReady?:boolean }>()
 const dialogId=useId(),titleId=`music-generation-title-${dialogId}`,descriptionId=`music-generation-description-${dialogId}`
 const emit = defineEmits<{ close: []; view: [];cancel:[];archive:[] }>()
-const problem=computed(()=>generationProblem(props.errorCode)||props.error)
 const archiveFailed=computed(()=>props.status==='FAILED'&&props.errorCode==='AUDIO_ARCHIVE_FAILED')
+const archiveMessage=computed(()=>audioArchiveMessage(props.status,props.errorCode,!!props.previewAssetId))
+const previewAvailable=computed(()=>!!props.previewAssetId&&(props.status==='SAVING'||archiveFailed.value))
+const problem=computed(()=>archiveMessage.value||(props.status==='SAVING'?'':generationProblem(props.errorCode))||props.error)
 const dialog = ref<HTMLDialogElement>()
 const clock=ref(Date.now())
 const cancelled=computed(()=>props.status==='CANCELLED')
@@ -21,9 +23,9 @@ const uncertainLyrics = computed(() => unknown.value && props.errorCode === 'LYR
 const settled = computed(() => complete.value || failed.value || unknown.value || cancelled.value)
 const stage = computed(() => complete.value ? 3 : props.status === 'SAVING' ? 2 : props.status === 'RUNNING'||props.quick&&['LYRICS_READY','SUBMITTING_MUSIC','MUSIC_QUEUED','SUBMITTING'].includes(props.status) ? 1 : ['PREPARING','SUBMITTING_QUICK'].includes(props.status) ? -1 : 0)
 const stages=computed(()=>props.quick?['编写歌词','谱曲与演唱','保存音频']:['提交创作','谱曲与演唱','保存音频'])
-const heading = computed(() => cancelled.value?'这次创作已撤销':complete.value ? '你的音乐准备好了' : archiveFailed.value?'音乐已完成，正在恢复保存':failed.value ? '这次创作暂未完成' : uncertainLyrics.value ? '歌词结果待核对' : unknown.value ? '正在核对歌曲结果' : '你的故事，正在成为一首歌')
+const heading = computed(() => cancelled.value?'这次创作已撤销':complete.value ? '你的音乐准备好了' : archiveFailed.value?'音频保存尚未完成':failed.value ? '这次创作暂未完成' : uncertainLyrics.value ? '歌词结果待核对' : unknown.value ? '正在核对歌曲结果' : '你的故事，正在成为一首歌')
 const labels: Record<string, string> = {CANCELLED:'尚未提交音乐服务，本次歌曲额度已释放。', QUEUED:'即将开始，你仍可以撤销这次创作', SUBMITTING:'正在提交你的音乐创作', RUNNING:'正在为歌词谱曲与演唱', SAVING:'旋律已完成，正在保存音频', SUCCEEDED:'音乐已保存，可以试听和分享', FAILED:'歌词和设置已保留，请查看下方说明选择下一步。', SUBMISSION_UNKNOWN:'提交结果仍待确认，请稍后查看进度，避免重复提交。' }
-const quickLabels:Record<string,string>={PREPARING:'正在保存创作要求',SUBMITTING_QUICK:'正在提交你的音乐创作',QUEUED:'创作已排队',WRITING:'正在编写歌词',LYRICS_READY:'歌词已完成 正在准备音乐',SUBMITTING_MUSIC:'正在准备音乐',MUSIC_QUEUED:'音乐已排队',SUCCEEDED:'正在读取歌曲，请稍候…'}
+const quickLabels:Record<string,string>={PREPARING:'正在保存创作要求',SUBMITTING_QUICK:'正在提交你的音乐创作',QUEUED:'创作已排队',WRITING:'正在编写歌词，必要时会自动补齐段落或切换模型。',LYRICS_READY:'歌词已完成 正在准备音乐',SUBMITTING_MUSIC:'正在准备音乐',MUSIC_QUEUED:'音乐已排队',SUCCEEDED:'正在读取歌曲，请稍候…'}
 function syncOpen() {
   if (!dialog.value) return
   if (props.open && !dialog.value.open) dialog.value.showModal()
@@ -60,12 +62,14 @@ onBeforeUnmount(() => { dialog.value?.close();syncScrollLock() })
       <div class="generation-live" role="status" aria-live="polite" aria-atomic="true"><span v-if="!settled" class="generation-live-dot" aria-hidden="true"></span><p :id="descriptionId">{{ uncertainLyrics?t('歌词服务连接中断，创作描述已保留。可以刷新查看，请勿重复提交。'):syncIssue&&status==='RUNNING'?t('正在核对歌曲结果，暂未确认最新状态'):t(quick&&quickLabels[status]||labels[status] || '正在同步音乐创作进度') }}</p></div>
       <p v-if="!settled&&createdAt" class="generation-elapsed">{{ status==='QUEUED'&&remaining>0?t('{seconds} 秒后开始提交',{seconds:remaining}):t('已等待 {seconds} 秒',{seconds:elapsed}) }}</p>
       <ol v-if="!failed && !unknown && !cancelled" class="generation-stages" :aria-label="t('音乐创作阶段')"><li v-for="(label,index) in stages" :key="label" :class="{current:stage===index,done:stage>index}" :aria-current="stage===index?'step':undefined"><span class="generation-stage-line"></span><span>{{ t(label) }}</span></li></ol>
-      <p v-if="problem" class="generation-error" role="alert">{{ t(problem) }}</p>
+      <p v-if="problem" :class="status==='SAVING'&&archiveMessage?'generation-note':'generation-error'" :role="status==='SAVING'&&archiveMessage?'status':'alert'">{{ t(problem) }}</p>
       <p v-else-if="syncIssue && !settled" class="generation-error" role="status">{{ t('暂时无法更新进度，请稍后查看。关闭弹窗不会重新提交任务。') }}</p>
       <p v-else-if="!uncertainLyrics" class="generation-note">{{ complete ? t('把这份旋律，送给你心里的那个人。') : settled ? t('你的故事和歌词仍保存在作品中。') : t('好旋律值得等待，关闭弹窗不会取消任务。') }}</p>
-      <FirstRecordingPreview v-if="open && workId && taskId && (status === 'SAVING' || archiveFailed)" :key="workId + taskId" :work-id="workId" :task-id="taskId" :title="title" :cover="cover" />
-      <button class="generation-primary" type="button" :disabled="quick&&complete&&!resultReady" autofocus @click="complete ? emit('view') : emit('close')">{{ quick&&complete&&!resultReady?t('正在读取歌曲，请稍候…'):complete ? t('试听歌曲') : settled ? t('返回作品') : t('收起，后台继续') }}</button>
-      <button v-if="archiveFailed&&!quick" class="generation-cancel" :disabled="cancelling" @click="emit('archive')">{{ t('仅重试保存音频') }}</button>
+      <p v-if="archiveFailed&&error&&error!==problem" class="generation-error" role="alert">{{ t(error) }}</p>
+      <FirstRecordingPreview v-if="open&&previewAvailable&&workId&&previewAssetId" :work-id="workId" :asset-id="previewAssetId" :title="title" :cover="cover" />
+      <button :class="previewAvailable?'generation-cancel':'generation-primary'" type="button" :disabled="quick&&complete&&!resultReady" autofocus @click="complete||previewAvailable ? emit('view') : emit('close')">{{ previewAvailable?t('查看作品'):quick&&complete&&!resultReady?t('正在读取歌曲，请稍候…'):complete ? t('试听歌曲') : settled ? t('返回作品') : t('收起，后台继续') }}</button>
+      <button v-if="archiveFailed" type="button" class="generation-cancel" :disabled="cancelling" @click="emit('archive')">{{ t('仅重试保存音频') }}</button>
+      <button v-if="status==='SAVING'&&previewAvailable" type="button" class="generation-cancel" @click="emit('close')">{{ t('收起，后台继续') }}</button>
       <button v-if="status==='QUEUED'&&!quick" class="generation-cancel" :disabled="cancelling" @click="emit('cancel')">{{ cancelling?t('正在撤销…'):t('撤销这次生成') }}</button>
       <p v-if="!settled" class="generation-footnote">{{ t('你可以继续浏览，稍后在作品页查看进度。') }}</p>
     </dialog>

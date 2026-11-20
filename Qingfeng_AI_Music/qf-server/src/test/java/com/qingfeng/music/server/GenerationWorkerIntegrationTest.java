@@ -27,6 +27,7 @@ class GenerationWorkerIntegrationTest {
     private static final long TEST_WAIT_SECONDS = 30;
     @Autowired IdentityApi identity; @Autowired WorkApi works; @Autowired LyricsApi lyrics;
     @Autowired ExecutionRepository repository; @Autowired TaskMapper mapper; @Autowired MediaService media;
+    @Autowired AudioCandidates candidates;
     @Autowired org.springframework.jdbc.core.JdbcTemplate jdbc;
     static class Time extends Clock {
         volatile Instant now=Instant.now().plusSeconds(10);
@@ -40,7 +41,8 @@ class GenerationWorkerIntegrationTest {
         public void validate(Request request){if(validationFailure)throw new com.qingfeng.music.common.exception.DomainException("INVALID_MUSIC_INPUT","offline validation");}
         public String name(){return name;} public boolean isConfigured(){return true;}
         public Submission submit(Request request,String key){received=request;submissions.incrementAndGet();if(entered!=null){entered.countDown();try{if(!release.await(TEST_WAIT_SECONDS,TimeUnit.SECONDS))throw new IllegalStateException();}catch(InterruptedException e){Thread.currentThread().interrupt();throw new IllegalStateException();}}if(unknown)throw new IllegalStateException("模拟断线");if(rejected)throw new Rejected();return new Submission("external-"+key);}
-        public Result query(String id){queries.incrementAndGet();if(queryFailure){queryFailure=false;throw new IllegalStateException("模拟查询断线");}return new Result(id,GenerationStatus.SAVING,audioUrl);}
+        java.util.List<AudioInfo> tracks=java.util.List.of();
+        public Result query(String id){queries.incrementAndGet();if(queryFailure){queryFailure=false;throw new IllegalStateException("模拟查询断线");}return new Result(id,GenerationStatus.SAVING,audioUrl,null,tracks);}
     }
     record Fixture(String owner,String work,String id,GenerationApi api,Provider provider,Time time){}
     Fixture fixture(){return fixture(new Provider(),new Time());}
@@ -114,6 +116,55 @@ class GenerationWorkerIntegrationTest {
         var f=fixture();AtomicInteger downloads=new AtomicInteger();var w=worker(f,url->{downloads.incrementAndGet();throw new IOException("模拟下载失败");});w.runOnce();f.time().advance(11);w.runOnce();w.runOnce();f.time().advance(61);w.runOnce();assertEquals(GenerationStatus.FAILED,status(f));assertEquals(2,downloads.get());
         assertThrows(com.qingfeng.music.common.exception.DomainException.class,()->f.api().retryArchive(identity.create().creatorId(),f.work(),f.id()));
         f.api().retryArchive(f.owner(),f.work(),f.id());assertTrue(worker(f,url->new ByteArrayInputStream(wav())).runOnce());assertEquals(GenerationStatus.SUCCEEDED,status(f));assertEquals(1,f.provider().submissions.get());
+    }
+    @Test void firstCandidateIsPlayableWhileTheOtherIsSavingAndSurvivesTerminalFailure()throws IOException{
+        var f=fixture();
+        String secondUrl="https://audio.test/other.wav";
+        f.provider().tracks=java.util.List.of(new MusicProvider.AudioInfo("first",1,f.provider().audioUrl),new MusicProvider.AudioInfo("other",1,secondUrl));
+        var primaryDownloads=new AtomicInteger();
+        var secondaryDownloads=new AtomicInteger();
+        var w=worker(f,url->{
+            if(!url.equals(secondUrl)){
+                primaryDownloads.incrementAndGet();
+                return new ByteArrayInputStream(wav());
+            }
+            var task=f.api().list(f.owner(),f.work()).get(0);
+            assertEquals(GenerationStatus.SAVING,task.status());
+            assertNull(task.assetId());
+            assertNotNull(task.previewAssetId());
+            assertEquals(task.previewAssetId(),media.selection(f.owner(),f.work()).assetId());
+            try(var audio=media.open(f.owner(),f.work(),task.previewAssetId()).source().open()){
+                assertArrayEquals(wav(),audio.readAllBytes());
+            }
+            if(secondaryDownloads.incrementAndGet()>2)return new ByteArrayInputStream(wav());
+            return new InputStream(){
+                @Override public int read()throws IOException{throw new AudioDownloader.DownloadFailure(AudioDownloader.Problem.READ_TIMEOUT);}
+            };
+        }).withCandidates(candidates);
+        assertTrue(w.runOnce());
+        f.time().advance(11);
+        assertTrue(w.runOnce());
+        assertTrue(w.runOnce());
+        assertEquals(GenerationStatus.SAVING,status(f));
+        f.time().advance(31);
+        assertTrue(w.runOnce());
+        var failed=f.api().list(f.owner(),f.work()).get(0);
+        assertEquals(GenerationStatus.FAILED,failed.status());
+        assertNotNull(failed.previewAssetId());
+        assertEquals(1,media.list(f.owner(),f.work()).size());
+        assertEquals(1,f.provider().queries.get());
+
+        f.api().retryArchive(f.owner(),f.work(),f.id());
+        assertThrows(com.qingfeng.music.common.exception.DomainException.class,()->f.api().retryArchive(f.owner(),f.work(),f.id()));
+        assertTrue(w.runOnce());
+        var complete=f.api().list(f.owner(),f.work()).get(0);
+        assertEquals(GenerationStatus.SUCCEEDED,complete.status());
+        assertEquals(failed.previewAssetId(),complete.assetId());
+        assertNull(complete.previewAssetId());
+        assertEquals(2,media.list(f.owner(),f.work()).size());
+        assertEquals(1,primaryDownloads.get());
+        assertEquals(3,secondaryDownloads.get());
+        assertEquals(1,f.provider().submissions.get());
     }
     @Test void queryFailureRetainsExternalTaskAndCanResume(){
         var f=fixture();var w=worker(f,url->new ByteArrayInputStream(wav()));w.runOnce();f.time().advance(11);f.provider().queryFailure=true;w.runOnce();assertEquals(GenerationStatus.RUNNING,status(f));f.time().advance(31);w.runOnce();assertEquals(GenerationStatus.SAVING,status(f));assertEquals(1,f.provider().submissions.get());
@@ -191,5 +242,5 @@ class GenerationWorkerIntegrationTest {
         f.time().advance(11);assertTrue(w.runOnce(ExecutionRepository.Phase.QUERY));assertTrue(w.runOnce(ExecutionRepository.Phase.ARCHIVE));
         assertEquals(GenerationStatus.SUCCEEDED,status(f));assertEquals(1,f.provider().submissions.get());
     }
-    @Test void expiredAudioUrlIsRefreshedByReadonlyQueryWithoutResubmission(){var f=fixture();var w=worker(f,url->{if(url.endsWith("song.wav"))throw new IOException("模拟临时链接过期");return new ByteArrayInputStream(wav());});w.runOnce();f.time().advance(11);w.runOnce();f.provider().audioUrl="https://audio.test/fresh.wav";w.runOnce();assertEquals(GenerationStatus.SAVING,status(f));f.time().advance(31);w.runOnce();assertEquals(GenerationStatus.SUCCEEDED,status(f));assertEquals(1,f.provider().submissions.get());}
+    @Test void expiredAudioUrlIsRefreshedByReadonlyQueryWithoutResubmission(){var f=fixture();var w=worker(f,url->{if(url.endsWith("song.wav"))throw new AudioDownloader.DownloadFailure(AudioDownloader.Problem.LINK_EXPIRED);return new ByteArrayInputStream(wav());});w.runOnce();f.time().advance(11);w.runOnce();f.provider().audioUrl="https://audio.test/fresh.wav";w.runOnce();assertEquals(GenerationStatus.SAVING,status(f));f.time().advance(31);w.runOnce();assertEquals(GenerationStatus.SUCCEEDED,status(f));assertEquals(1,f.provider().submissions.get());assertEquals(2,f.provider().queries.get());}
 }

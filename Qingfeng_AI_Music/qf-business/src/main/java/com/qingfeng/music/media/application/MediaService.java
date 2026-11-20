@@ -9,6 +9,7 @@ import java.time.Instant;
 import java.util.*;
 
 public class MediaService implements MediaApi, SharedMediaAccess, GeneratedAudioArchive {
+    private static final java.util.logging.Logger LOG=java.util.logging.Logger.getLogger(MediaService.class.getName());
     private static final long MAX_AUDIO=20L*1024*1024;
     private final WorkApi works;
     private final MediaRepository repository;
@@ -38,13 +39,19 @@ public class MediaService implements MediaApi, SharedMediaAccess, GeneratedAudio
         if(!repository.reserve(work,MAX_AUDIO,capacity))throw new DomainException("STORAGE_QUOTA_EXCEEDED","作品音频容量不足，请联系维护人员扩容");
         MediaFileStore.Saved saved=null;boolean registering=false,rollback=false;MediaRepository.Stored effective=null;
         try{
-            saved=files.save(input);
+            saved=task==null?files.save(input):files.save(input,(stage,nanos)->logArchiveStep(task,candidate,stage,nanos));
             var asset=new Asset(UUID.randomUUID().toString(),work,origin,saved.contentType(),saved.size(),saved.sha256(),Instant.now());
             registering=true;
+            long registrationStarted=System.nanoTime();
             try{effective=task==null?repository.register(asset,saved.key(),null,MAX_AUDIO):repository.registerCandidate(asset,saved.key(),task,MAX_AUDIO,candidate,source);}
             catch(MediaRepository.RegistrationFailure error){rollback=error.rolledBack();throw error;}
+            finally{if(task!=null)logArchiveStep(task,candidate,MediaFileStore.Stage.REGISTER,System.nanoTime()-registrationStarted);}
             return effective.asset();
-        }catch(IOException e){throw new DomainException("MEDIA_STORAGE_UNAVAILABLE","音频保存失败，可以稍后重试");}
+        }catch(IOException e){
+            var failure=new DomainException("MEDIA_STORAGE_UNAVAILABLE","音频保存失败，可以稍后重试");
+            failure.initCause(e);
+            throw failure;
+        }
         finally{
             // 只有从未登记或事务明确回滚时才退额并删文件；提交未知保留文件与预留供核对。
             boolean compensate=!registering||rollback;
@@ -52,6 +59,9 @@ public class MediaService implements MediaApi, SharedMediaAccess, GeneratedAudio
             catch(IOException cleanup){/* 孤儿文件由停机维护扫描隔离，避免覆盖原始数据库错误。 */}
             finally{if(compensate)repository.release(work,MAX_AUDIO);}
         }
+    }
+    private void logArchiveStep(String task,String candidate,MediaFileStore.Stage stage,long nanos){
+        LOG.info("music_archive_step task="+task+" candidate="+candidate+" stage="+stage+" elapsedMs="+java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(nanos));
     }
     public Asset get(String owner,String work,String id){works.get(owner,work);return find(work,id).asset();}
     public Optional<String> generatedRevision(String owner,String work,String asset){works.get(owner,work);return repository.generatedRevision(work,asset);}

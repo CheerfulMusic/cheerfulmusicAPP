@@ -14,6 +14,7 @@ import com.qingfeng.music.lyrics.application.InspirationRewriteService;
 import com.qingfeng.music.media.api.MediaApi;
 import com.qingfeng.music.server.agent.AgentLibraryActions;
 import com.qingfeng.music.server.hotsong.HotSongService;
+import com.qingfeng.music.server.hotsong.RecommendationSamples;
 import com.qingfeng.music.work.api.WorkApi;
 import java.time.Instant;
 import java.util.*;
@@ -188,8 +189,13 @@ class AgentLibraryActionsTest {
         verify(covers,never()).edit(any(),any(),any(),any(),any());
     }
     @Test void discoveredSamplesAreExplicitAndUseOnlyExistingWhitelist(){
-        var result=run("discover_music",Map.of());assertEquals(HotSongService.TRACKS.size(),result.items().size());
-        assertEquals(HotSongService.TRACKS,new HashSet<>(result.items().stream().map(AgentApplicationActions.Item::id).toList()));
+        var expected=new HashSet<>(Set.of("love","family","travel","red-guofeng","rain-disco",
+            "tomorrow-rock","scenery-folk","hometown-electronic","river-instrumental"));
+        RecommendationSamples.SONGS.forEach(song->expected.add(song.id()));
+        var result=run("discover_music",Map.of());
+        assertEquals(expected.size(),result.items().size());
+        assertEquals(expected,new HashSet<>(result.items().stream().map(AgentApplicationActions.Item::id).toList()));
+        assertTrue(HotSongService.TRACKS.containsAll(expected));
         assertTrue(result.items().stream().allMatch(i->i.subtitle().contains("试听样曲")));
     }
     static AgentMessage message(String body){return new AgentMessage("M","C",1,"assistant","TEXT","DONE",body,null,NOW);}

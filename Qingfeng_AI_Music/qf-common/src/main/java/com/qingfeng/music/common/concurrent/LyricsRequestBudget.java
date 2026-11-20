@@ -17,6 +17,11 @@ public final class LyricsRequestBudget implements AutoCloseable {
 
     public static LyricsRequestBudget enter(Duration maximum) { return new LyricsRequestBudget(maximum); }
 
+    public static boolean hasRemaining(Duration minimum) {
+        var current = CURRENT.get();
+        return current == null || current.deadline - System.nanoTime() >= minimum.toNanos();
+    }
+
     /** Does not change the current context; callers retain the earlier parent or phase deadline. */
     public static long deadline(Duration maximum) {
         if (maximum == null || maximum.isZero() || maximum.isNegative())

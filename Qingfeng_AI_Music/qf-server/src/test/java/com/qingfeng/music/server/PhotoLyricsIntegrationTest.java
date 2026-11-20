@@ -1,5 +1,8 @@
 package com.qingfeng.music.server;
 
+import com.qingfeng.music.common.exception.DomainException;
+import com.qingfeng.music.credits.CreditsLedger;
+import com.qingfeng.music.lyrics.application.FallbackPhotoLyricsWriter;
 import com.qingfeng.music.lyrics.application.LyricsWriter;
 import com.qingfeng.music.lyrics.application.PhotoLyricsWriter;
 import com.qingfeng.music.settings.CreativePlan;
@@ -16,12 +19,15 @@ import java.net.http.HttpResponse;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.zip.CRC32;
 import javax.imageio.ImageIO;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -29,12 +35,15 @@ import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.context.annotation.Primary;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import tools.jackson.databind.ObjectMapper;
 import static org.junit.jupiter.api.Assertions.*;
 
 @SpringBootTest(webEnvironment=SpringBootTest.WebEnvironment.RANDOM_PORT, properties={
-    "qingfeng.lyrics.photo.enabled=true", "qingfeng.providers.openai.api-key=offline-test",
+    "qingfeng.lyrics.photo.enabled=true", "qingfeng.providers.ark.api-key=offline-test",
+    "qingfeng.credits.enabled=true", "qingfeng.credits.lyrics-cost=5",
+    "spring.datasource.url=jdbc:h2:mem:photo_lyrics;MODE=MySQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1",
     "qingfeng.generation.enabled=true", "qingfeng.invite-gate.enabled=false"
 })
 @ActiveProfiles("test")
@@ -44,12 +53,16 @@ class PhotoLyricsIntegrationTest {
     private static final String ARRANGEMENT="Warm folk, acoustic guitar, slow tempo";
     @Value("${local.server.port}") int port;
     @Autowired AtomicInteger photoCalls;
+    @Autowired AtomicInteger qwenPhotoCalls;
+    @Autowired JdbcTemplate jdbc;
+    @Autowired CreditsLedger credits;
 
     @TestConfiguration(proxyBeanMethods=false)
     static class OfflinePhoto {
         @Bean AtomicInteger photoCalls(){return new AtomicInteger();}
-        @Bean @Primary PhotoLyricsWriter offlinePhotoWriter(AtomicInteger photoCalls){
-            return (work,language,images,direction)->{
+        @Bean AtomicInteger qwenPhotoCalls(){return new AtomicInteger();}
+        @Bean @Primary PhotoLyricsWriter offlinePhotoWriter(AtomicInteger photoCalls, AtomicInteger qwenPhotoCalls){
+            PhotoLyricsWriter primary = (work,language,images,direction)->{
                 photoCalls.incrementAndGet();
                 assertEquals("zh-CN",language);
                 try{
@@ -68,9 +81,46 @@ class PhotoLyricsIntegrationTest {
                         assertEquals(1,images.size());
                     }
                 }catch(java.io.IOException invalid){throw new AssertionError(invalid);}
-                return new LyricsWriter.Draft("海边","[Verse]\n风吹过海面",
-                    new CreativePlan("",ARRANGEMENT,"","温暖民谣","Warm folk","AUTO","两个人坐在海边。"),"OPENAI");
+                if (work.story().equals("结果未确认")) {
+                    throw new DomainException("LYRICS_PROVIDER_TIMEOUT", "豆包测试超时");
+                }
+                if (work.story().startsWith("兜底")) {
+                    throw new DomainException("LYRICS_PROVIDER_REJECTED", "豆包测试拒绝");
+                }
+                var draft = photoDraft("DOUBAO");
+                if (work.story().equals("段落顺序不符")) {
+                    return new LyricsWriter.Draft(draft.title(), "[Chorus]\n和你一起看海\n[Verse]\n风吹过海面", draft.plan(), draft.source());
+                }
+                return draft;
             };
+            return new FallbackPhotoLyricsWriter(primary, (work,language,images,direction)->{
+                qwenPhotoCalls.incrementAndGet();
+                if (work.story().equals("兜底也失败")) {
+                    throw new DomainException("LYRICS_RESPONSE_INVALID", "千问测试拒绝");
+                }
+                return photoDraft("QWEN");
+            });
+        }
+
+        private static LyricsWriter.Draft photoDraft(String source) {
+                return new LyricsWriter.Draft("海边","""
+                    [Verse]
+                    风吹过海面
+                    [Pre-Chorus]
+                    把脚印留在沙滩
+                    [Chorus]
+                    和你一起看海
+                    [Interlude]
+                    [Pre-Chorus]
+                    等天边慢慢亮起来
+                    [Chorus]
+                    和你一起看海
+                    [Bridge]
+                    明天也记得这一刻
+                    [Chorus]
+                    和你一起看海
+                    """,
+                    new CreativePlan("",ARRANGEMENT,"","温暖民谣","Warm folk","AUTO","两个人坐在海边。"),source);
         }
     }
 
@@ -81,6 +131,7 @@ class PhotoLyricsIntegrationTest {
         assertTrue(capabilities.path("photoLyrics").asBoolean());
         String work=field(call(session,"POST","/api/app/works",Map.of(
             "recipient","","occasion","","story","","message","","style","自动推荐","title","照片创作")),"id");
+        credits.credit(owner(work), 30, "photo-music-test-" + work);
         String root="/api/app/works/"+work;
         String key=UUID.randomUUID().toString();
         byte[] png=withTextChunk(photo(Color.ORANGE),10*1024*1024);
@@ -92,7 +143,10 @@ class PhotoLyricsIntegrationTest {
         var created=upload(session,root,key,png);
         String revision=field(created,"id");
         assertFalse(JSON.readTree(created.body()).path("confirmed").asBoolean());
-        assertEquals("OPENAI",field(created,"source"));
+        assertEquals("DOUBAO",field(created,"source"));
+        assertEquals("ABCD",field(created,"templateId"));
+        assertFalse(JSON.readTree(created.body()).path("chorusFirst").asBoolean());
+        PhotoLyricsWriter.DEFAULT_STRUCTURE.validate(field(created,"lyrics"));
         assertEquals(revision,field(upload(session,root,key,png),"id"));
         assertEquals(409,upload(session,root,key,photo(Color.BLUE)).statusCode());
         assertEquals(initialCalls+1,photoCalls.get());
@@ -128,6 +182,69 @@ class PhotoLyricsIntegrationTest {
         assertEquals(revision,field(uploadParts(session,root,key,"photos",first,other,other,other,last),"id"));
         assertEquals(409,uploadParts(session,root,key,"photos",last,other,other,other,first).statusCode());
         assertEquals(initialCalls+1,photoCalls.get());
+    }
+
+    @ParameterizedTest @ValueSource(strings={"兜底成功", "段落顺序不符"})
+    void fallbackAndReplayChargeOnlyOnceForTheSamePhotoRequest(String story) throws Exception {
+        var session = session();
+        String work = createPaidWork(session, story);
+        String owner = owner(work);
+        long balanceBefore = credits.balance(owner);
+        int primaryBefore = photoCalls.get();
+        int fallbackBefore = qwenPhotoCalls.get();
+        String root = "/api/app/works/" + work;
+        String key = UUID.randomUUID().toString();
+        byte[] image = photo(Color.BLUE);
+        var result = upload(session, root, key, image);
+        assertEquals("QWEN", field(result, "source"));
+        assertEquals("ABCD", field(result, "templateId"));
+        PhotoLyricsWriter.DEFAULT_STRUCTURE.validate(field(result, "lyrics"));
+        assertEquals(field(result, "id"), field(upload(session, root, key, image), "id"));
+        assertEquals(primaryBefore + 1, photoCalls.get());
+        assertEquals(fallbackBefore + 1, qwenPhotoCalls.get());
+        assertEquals(balanceBefore - 5, credits.balance(owner));
+        assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM credit_consumption WHERE work_id=? AND request_key=? AND amount=5 AND refunded=0", Integer.class, work, key));
+        assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM lyric_revision WHERE work_id=?", Integer.class, work));
+    }
+
+    @Test void definiteFailureOfBothProvidersRefundsTheCharge() throws Exception {
+        var session = session();
+        String work = createPaidWork(session, "兜底也失败");
+        String owner = owner(work);
+        long balanceBefore = credits.balance(owner);
+        String root = "/api/app/works/" + work;
+        String key = UUID.randomUUID().toString();
+        var failed = upload(session, root, key, photo(Color.BLUE));
+        assertTrue(failed.statusCode() >= 400);
+        assertEquals("FAILED", field(call(session, "GET", root + "/lyrics/requests/" + key, null), "status"));
+        assertEquals(balanceBefore, credits.balance(owner));
+        assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM credit_consumption WHERE work_id=? AND request_key=? AND refunded=1", Integer.class, work, key));
+        assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM lyric_revision WHERE work_id=?", Integer.class, work));
+    }
+
+    @Test void ambiguousTimeoutKeepsTheOriginalRequestWithNoSecondProvider() throws Exception {
+        var session = session();
+        String work = createPaidWork(session, "结果未确认");
+        int fallbackBefore = qwenPhotoCalls.get();
+        String root = "/api/app/works/" + work;
+        String key = UUID.randomUUID().toString();
+        assertTrue(upload(session, root, key, photo(Color.BLUE)).statusCode() >= 400);
+        assertEquals("UNKNOWN", field(call(session, "GET", root + "/lyrics/requests/" + key, null), "status"));
+        assertEquals(fallbackBefore, qwenPhotoCalls.get());
+    }
+
+    private String createPaidWork(Session session, String story) throws Exception {
+        String work = field(call(session, "POST", "/api/app/works", Map.of(
+            "recipient", "", "occasion", "", "story", story, "message", "", "style", "自动推荐", "title", "照片创作")), "id");
+        String owner = owner(work);
+        jdbc.update("INSERT INTO model_usage_reservation(kind,work_id,request_key,owner_id,usage_day,created_at) VALUES('LYRIC_GRANT',?, '00000000-0000-0000-0000-000000000000',?,CURRENT_DATE,CURRENT_TIMESTAMP)", work, owner);
+        jdbc.update("INSERT INTO model_usage_reservation(kind,work_id,request_key,owner_id,usage_day,created_at) VALUES('LYRIC_REDEEM',?,?,?,CURRENT_DATE,CURRENT_TIMESTAMP)", work, UUID.randomUUID().toString(), owner);
+        credits.credit(owner, 20, "photo-test-fund-" + owner);
+        return work;
+    }
+
+    private String owner(String work) {
+        return jdbc.queryForObject("SELECT owner_id FROM music_work WHERE id=?", String.class, work);
     }
 
     private byte[] photo(Color color) throws Exception {

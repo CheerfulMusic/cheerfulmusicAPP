@@ -75,8 +75,13 @@ class QwenLyricsWriterTest {
   assertEquals("Acoustic guitar",output.plan().suggestedArrangement());assertEquals("AUTO",output.plan().vocalGender());
  }
  @Test void invalidRefinementNeverReturnsInitialDraft()throws Exception{
-  for(String text:List.of(" ","字".repeat(5001),"{}","```lyrics\n正文\n```"))
+  for(String text:List.of(" ","字".repeat(5001),"{}","```lyrics\n正文", "{\"lyrics\":\"第一段\",\"lyrics\":\"重复字段\"}"))
    assertEquals("LYRICS_QUALITY_UNVERIFIED",assertThrows(DomainException.class,()->writeWithRefinement(text)).code());
+ }
+ @Test void safeRefinementWrappersAreRemovedWithoutCallingAgain()throws Exception{
+  String lyrics="[Verse]\n唱给街角的风";
+  assertEquals(lyrics,writeWithRefinement("```lyrics\n"+lyrics+"\n```").lyrics());
+  assertEquals(lyrics,writeWithRefinement(JSON.writeValueAsString(Map.of("lyrics",lyrics))).lyrics());
  }
  private LyricsWriter.Draft writeWithRefinement(String lyrics)throws Exception{
   var client=org.mockito.Mockito.mock(HttpClient.class);var calls=new AtomicInteger();

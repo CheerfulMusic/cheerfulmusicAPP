@@ -50,11 +50,12 @@ class LyricsExistingSongsLocalTest extends LyricsPreparationIntegrationTest {
         }
         int samples=0;
         for(var song:RecommendationSamples.SONGS) {
-            var value=preparation.sample(song.id());assertEquals("READY",value.status(),song.id());
-            assertFalse(value.lines().isEmpty(),song.id());assertFalse(value.canSync());
+            boolean instrumental=song.id().equals("euphoric-drop");String expected=instrumental?"INSTRUMENTAL":"READY";
+            var value=preparation.sample(song.id());assertEquals(expected,value.status(),song.id());
+            assertEquals(instrumental,value.lines().isEmpty(),song.id());assertFalse(value.canSync());
             var response=request("GET","/api/public/hot-songs/"+song.id()+"/lyrics");
             assertEquals(200,response.statusCode(),response.body());assertEquals("no-store",response.headers().firstValue("Cache-Control").orElseThrow());
-            assertEquals("READY",json.readTree(response.body()).path("status").asText());samples++;
+            assertEquals(expected,json.readTree(response.body()).path("status").asText());samples++;
         }
         assertEquals(404,request("GET","/api/public/hot-songs/unknown-file/lyrics").statusCode());
         assertEquals(403,request("POST","/api/public/hot-songs/feng-ye-xing/lyrics").statusCode());

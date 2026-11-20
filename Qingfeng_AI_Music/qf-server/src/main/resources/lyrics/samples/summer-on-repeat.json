@@ -1,0 +1,264 @@
+{
+  "sourceKey": "sample:summer-on-repeat:7b2948a8-623f-3da0-9d06-a3ec7156a51c",
+  "audioSha256": "68e4b531c54307104a1f58b6aeeac46ddd68298d75a645887b3b4f0dc2bae6d5",
+  "recognition": "faster-whisper-1.2.1 / large-v3-turbo + small; authored text and recorded vocal order reviewed",
+  "duration": 171.16,
+  "warnings": [],
+  "words": [
+    {
+      "text": "Summer on repeat\n",
+      "start": 4.74,
+      "end": 6.38
+    },
+    {
+      "text": "One more time\n",
+      "start": 6.38,
+      "end": 8.76
+    },
+    {
+      "text": "Summer on repeat\n",
+      "start": 12.18,
+      "end": 14.98
+    },
+    {
+      "text": "Summer on repeat\n",
+      "start": 15.0,
+      "end": 16.5
+    },
+    {
+      "text": "Summer on repeat\n",
+      "start": 16.5,
+      "end": 23.86
+    },
+    {
+      "text": "Windows down on the highway\n",
+      "start": 31.44,
+      "end": 34.18
+    },
+    {
+      "text": "Your sunglasses on my face\n",
+      "start": 35.16,
+      "end": 38.38
+    },
+    {
+      "text": "We got nowhere we gotta be\n",
+      "start": 38.38,
+      "end": 41.64
+    },
+    {
+      "text": "Just you and me and the summer breeze\n",
+      "start": 41.64,
+      "end": 46.18
+    },
+    {
+      "text": "Radio playing our favorite song\n",
+      "start": 47.92,
+      "end": 50.86
+    },
+    {
+      "text": "Singing every word with the windows on\n",
+      "start": 50.86,
+      "end": 54.96
+    },
+    {
+      "text": "The sun goes down but we don’t care\n",
+      "start": 54.96,
+      "end": 58.08
+    },
+    {
+      "text": "There’s magic in the midnight air\n",
+      "start": 58.08,
+      "end": 61.22
+    },
+    {
+      "text": "Don’t wanna go home\n",
+      "start": 63.44,
+      "end": 65.64
+    },
+    {
+      "text": "Don’t wanna slow down\n",
+      "start": 65.82,
+      "end": 67.7
+    },
+    {
+      "text": "Let’s keep this feeling\n",
+      "start": 67.86,
+      "end": 69.56
+    },
+    {
+      "text": "Until the sun comes around\n",
+      "start": 69.56,
+      "end": 72.7
+    },
+    {
+      "text": "Put the summer on repeat\n",
+      "start": 72.84,
+      "end": 74.38
+    },
+    {
+      "text": "Dancing barefoot in the street\n",
+      "start": 74.8,
+      "end": 76.54
+    },
+    {
+      "text": "Every little memory\n",
+      "start": 76.78,
+      "end": 78.48
+    },
+    {
+      "text": "Feels like a movie scene\n",
+      "start": 78.48,
+      "end": 80.62
+    },
+    {
+      "text": "We don’t ever need to sleep\n",
+      "start": 80.7,
+      "end": 82.66
+    },
+    {
+      "text": "Got the whole world underneath\n",
+      "start": 82.8,
+      "end": 84.24
+    },
+    {
+      "text": "You and I, just you and me\n",
+      "start": 84.72,
+      "end": 87.54
+    },
+    {
+      "text": "Put the summer on repeat\n",
+      "start": 88.08,
+      "end": 89.74
+    },
+    {
+      "text": "On repeat\n",
+      "start": 89.74,
+      "end": 91.76
+    },
+    {
+      "text": "On repeat\n",
+      "start": 91.76,
+      "end": 93.78
+    },
+    {
+      "text": "On repeat\n",
+      "start": 93.78,
+      "end": 95.54
+    },
+    {
+      "text": "Put the summer on repeat\n",
+      "start": 95.6,
+      "end": 97.88
+    },
+    {
+      "text": "You and me\n",
+      "start": 103.56,
+      "end": 105.0
+    },
+    {
+      "text": "Late night drives and ocean views\n",
+      "start": 105.0,
+      "end": 109.1
+    },
+    {
+      "text": "Every little road leads back to you\n",
+      "start": 109.68,
+      "end": 113.1
+    },
+    {
+      "text": "We got a thousand miles to go\n",
+      "start": 113.1,
+      "end": 115.88
+    },
+    {
+      "text": "But I don’t wanna take it slow\n",
+      "start": 115.88,
+      "end": 120.4
+    },
+    {
+      "text": "If the summer disappears\n",
+      "start": 120.4,
+      "end": 123.24
+    },
+    {
+      "text": "I’ll remember you were here\n",
+      "start": 123.38,
+      "end": 125.3
+    },
+    {
+      "text": "Even when the seasons change\n",
+      "start": 125.3,
+      "end": 127.24
+    },
+    {
+      "text": "We’ll be dancing just the same\n",
+      "start": 127.54,
+      "end": 129.38
+    },
+    {
+      "text": "Put the summer on repeat\n",
+      "start": 136.9,
+      "end": 139.1
+    },
+    {
+      "text": "Dancing barefoot in the street\n",
+      "start": 139.1,
+      "end": 141.22
+    },
+    {
+      "text": "Every little memory\n",
+      "start": 141.22,
+      "end": 143.14
+    },
+    {
+      "text": "Feels like a movie scene\n",
+      "start": 143.14,
+      "end": 145.24
+    },
+    {
+      "text": "On repeat\n",
+      "start": 145.24,
+      "end": 146.3
+    },
+    {
+      "text": "On repeat\n",
+      "start": 146.44,
+      "end": 150.24
+    },
+    {
+      "text": "You and me\n",
+      "start": 150.24,
+      "end": 153.64
+    },
+    {
+      "text": "Summer on repeat\n",
+      "start": 153.98,
+      "end": 156.02
+    },
+    {
+      "text": "On repeat\n",
+      "start": 156.02,
+      "end": 158.14
+    },
+    {
+      "text": "Summer on repeat\n",
+      "start": 158.14,
+      "end": 160.02
+    },
+    {
+      "text": "On repeat\n",
+      "start": 160.02,
+      "end": 162.24
+    },
+    {
+      "text": "Repeat\n",
+      "start": 165.68,
+      "end": 166.76
+    },
+    {
+      "text": "Summer on repeat\n",
+      "start": 167.16,
+      "end": 170.12
+    }
+  ]
+}

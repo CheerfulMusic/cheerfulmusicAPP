@@ -31,14 +31,28 @@ public class DiscoverEditorialController {
     }
 
     public record FeatureRequest(@NotNull Boolean featured) {}
+    public record VocalRequest(@NotNull Boolean approved) {}
 
     @PutMapping("/songs/{song}")
     public ResponseEntity<Void> feature(@AuthenticationPrincipal CreatorPrincipal principal,
             @PathVariable UUID song, @Valid @RequestBody FeatureRequest request) {
+        requireEditor(principal);
+        profiles.setDiscoverFeatured(song.toString(), request.featured());
+        return ResponseEntity.noContent().build();
+    }
+
+    @PutMapping("/songs/{song}/{version}/vocal")
+    public ResponseEntity<Void> vocal(@AuthenticationPrincipal CreatorPrincipal principal,
+            @PathVariable UUID song, @PathVariable @jakarta.validation.constraints.Positive long version,
+            @Valid @RequestBody VocalRequest request) {
+        requireEditor(principal);
+        profiles.setDiscoverVocal(song.toString(), version, request.approved());
+        return ResponseEntity.noContent().build();
+    }
+
+    private void requireEditor(CreatorPrincipal principal) {
         if (principal == null || !editors.contains(principal.id()) || !profiles.hasAccount(principal.id())) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN);
         }
-        profiles.setDiscoverFeatured(song.toString(), request.featured());
-        return ResponseEntity.noContent().build();
     }
 }

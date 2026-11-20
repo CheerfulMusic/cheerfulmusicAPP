@@ -4,14 +4,16 @@ import com.qingfeng.music.common.exception.DomainException;
 import com.qingfeng.music.common.concurrent.LyricsRequestBudget;
 import com.qingfeng.music.work.api.WorkApi;
 import java.time.Duration;
+import java.util.Map;
 import java.util.Set;
+import java.util.function.BiFunction;
 import java.util.function.Function;
 
 public final class FallbackLyricsWriter implements LyricsWriter {
     private static final System.Logger LOG = System.getLogger(FallbackLyricsWriter.class.getName());
-    private static final Set<String> SAFE_FAILURES = Set.of("LYRICS_PROVIDER_CONNECT_FAILED", "LYRICS_PROVIDER_REJECTED");
-    // Leave time for the backup writer within the studio's 120-second request window.
-    private static final long FAILOVER_WINDOW = Duration.ofSeconds(25).toNanos();
+    private static final Set<String> SAFE_FAILURES = Set.of("LYRICS_PROVIDER_CONNECT_FAILED", "LYRICS_PROVIDER_REJECTED",
+        "LYRICS_RESPONSE_INVALID", "LYRICS_STRUCTURE_MISMATCH");
+    private static final Duration MINIMUM_BACKUP_TIME = Duration.ofSeconds(30);
     private final LyricsWriter primary;
     private final LyricsWriter backup;
 
@@ -39,15 +41,24 @@ public final class FallbackLyricsWriter implements LyricsWriter {
         return attempt(writer -> writer.write(work, language, instructions, previousLyrics, direction));
     }
 
+    @Override public Draft writeValidated(WorkApi.Work work, String language, String instructions, String previousLyrics,
+                                          Direction direction, BiFunction<LyricsWriter, Draft, Draft> validate) {
+        return attempt(writer -> writer.writeValidated(work, language, instructions, previousLyrics, direction, validate));
+    }
+
+    @Override public Map<Integer, String> repairSections(SectionRepair request) {
+        if (backup.source().equals(request.draft().source())) return backup.repairSections(request);
+        return primary.repairSections(request);
+    }
+
     private Draft attempt(Function<LyricsWriter, Draft> write) {
         try (var ignored = LyricsRequestBudget.enter(Duration.ofSeconds(110))) {
             if (backup.isConfigured() && !primary.isConfigured()) return writeWithSource(backup, write);
-            long started = System.nanoTime();
             try {
                 return writeWithSource(primary, write);
             } catch (DomainException error) {
                 if (!SAFE_FAILURES.contains(error.code()) || !backup.isConfigured()
-                        || System.nanoTime() - started > FAILOVER_WINDOW) throw error;
+                        || !LyricsRequestBudget.hasRemaining(MINIMUM_BACKUP_TIME)) throw error;
                 LOG.log(System.Logger.Level.WARNING, "Switching lyric provider from {0} to {1}: {2}",
                     primary.source(), backup.source(), error.code());
                 return writeWithSource(backup, write);

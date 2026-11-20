@@ -345,6 +345,7 @@ onBeforeUnmount(() => {
           </button>
           <small v-if="props.embedded && credits && credits.lyricsNextCost !== null && !needsCheck">{{ credits.lyricsNextCost===0?t('本次生成歌词免费'):t('本次生成消耗 {cost} 积分', { cost: credits.lyricsNextCost }) }}</small>
           <CreditCostHint v-else-if="credits && credits.lyricsNextCost !== null && !needsCheck" :cost="credits.lyricsNextCost" :paid-cost="credits.lyricsCost" :balance="credits.balance" :busy="busy"/>
+          <small v-if="busy && draftWorkId && !needsCheck" role="status">{{ t('正在编写歌词，必要时会自动补齐段落或切换模型。') }}</small>
           <small class="photo-privacy">{{ t('照片会发送给 AI 用于本次创作。分享作品时不会公开原图。') }}</small>
         </div>
         <button v-if="locked && !busy && !needsCheck" type="button" class="text-button" @click="reset">{{ t('修改创作素材') }}</button>

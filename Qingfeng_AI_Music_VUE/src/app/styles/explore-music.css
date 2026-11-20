@@ -191,11 +191,10 @@ html:has(.playlist-dialog[open]) { overflow:hidden; }
 .playlist-genre-banner {
   display: block;
   width: 100%;
+  height: auto;
   aspect-ratio: 2.45;
   border-radius: 11px;
-  background-image: url('/media/trending-genres-v1.png');
-  background-size: 400% auto;
-  background-repeat: no-repeat;
+  object-fit: cover;
   background-color: var(--surface-raised);
 }
 .playlist-explore .explore-category-heading p {
@@ -213,18 +212,17 @@ html:has(.playlist-dialog[open]) { overflow:hidden; }
 }
 .playlist-explore .explore-track-list {
   flex: 1;
-  margin: 13px 0 0;
-  min-height: 282px;
+  margin: 9px 0 0;
 }
-.playlist-explore .explore-track-item { position: relative; }
+.playlist-explore .explore-track-item { padding: 7px 0 6px; }
 .playlist-explore .explore-track-row {
-  min-height: 94px;
+  min-height: 44px;
   gap: 10px;
-  padding: 12px 0 29px;
+  padding: 0;
 }
 .playlist-explore .explore-track-row > img {
-  width: 46px;
-  height: 46px;
+  width: 44px;
+  height: 44px;
   border-radius: 9px;
 }
 .playlist-explore .explore-track-copy > strong {
@@ -245,20 +243,16 @@ html:has(.playlist-dialog[open]) { overflow:hidden; }
   color: var(--accent);
 }
 .playlist-explore .hot-song-meta {
-  position: absolute;
-  left: 56px;
-  right: 0;
-  bottom: 10px;
-  margin: 0;
-  gap: 7px;
-  flex-wrap: wrap;
+  min-height: 22px;
+  margin: 0 0 0 54px;
+  gap: 1px 7px;
 }
 .playlist-explore .hot-metric { font-size: 10px; }
 .playlist-explore .hot-metric:last-child:not(button) { display: none; }
 .playlist-explore .playlist-more {
-  min-height: 41px;
+  min-height: 38px;
   margin-top: 0;
-  padding: 10px 0 0;
+  padding: 7px 0 0;
   border: 0;
   border-top: 1px solid var(--line);
   border-radius: 0;

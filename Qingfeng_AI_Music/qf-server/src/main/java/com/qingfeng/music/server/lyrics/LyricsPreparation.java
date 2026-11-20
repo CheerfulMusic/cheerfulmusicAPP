@@ -183,6 +183,8 @@ public final class LyricsPreparation {
         if(resource.exists())try(var stream=resource.getInputStream()) {
             var saved=json.readTree(stream.readAllBytes());
             if(sampleKey(sample).equals(saved.path("sourceKey").asText())) {
+                if(saved.path("instrumental").asBoolean(false))
+                    return Optional.of(new PlaybackLyrics.Snapshot("INSTRUMENTAL","",List.of(),false));
                 var words=List.of(json.treeToValue(saved.path("words"),PlaybackLyrics.Word[].class));
                 var lines=PlaybackLyrics.lines(words);
                 if(!lines.isEmpty())return Optional.of(new PlaybackLyrics.Snapshot("READY",lines.stream().map(PlaybackLyrics.Line::text).collect(java.util.stream.Collectors.joining("\n")),lines,false));

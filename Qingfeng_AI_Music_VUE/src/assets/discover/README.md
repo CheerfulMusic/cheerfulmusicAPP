@@ -4,27 +4,15 @@
 
 使用内置 imagegen 生成，原图 2172 × 724，WebP 质量 88。提示词：全景海边公路，自然的蓝色海面和午后阳光，一对青年从背后走在画面右侧，左侧保留海天留白；自然摄影，无文字、标志或水印。网页标题及按钮由代码渲染。
 
-| 文件 | 设计 | 歌名区 |
+后五张来自用户提供的「轮播图封面」照片，按文件名升序排列。照片经 imagegen 横向扩展到 2172 × 724，转为 WebP（质量 88）。页面按每张图的主体位置裁切，并预取下一张背景。
+
+| 轮播位置 | 原始照片 | 横幅文件 |
 | --- | --- | --- |
-| `carousel-neon.webp` | 雨夜霓虹：蓝紫城市、雨幕、青红反光 | 深蓝色中央留白 |
-| `carousel-meadow.webp` | 晨光旷野：清晨草地、野花、暖金晨雾 | 柔和绿色中央留白 |
-| `carousel-mountains.webp` | 东方山水：青灰山峦、水墨烟岚、铜色日轮 | 中央淡雾 |
-| `carousel-moon.webp` | 紫月云海：紫色夜空、玫瑰色云层、弯月 | 暗紫色中央留白 |
-| `carousel-stage.webp` | 金色舞台：暖金光束、钢琴、复古话筒、深色帷幕 | 深色中央留白 |
-
-## 图片来源与复现提示词
-
-2026-11-18 使用 Codex 内置 imagegen 工具新生成五张背景。原图均为 2172 × 724，转为 WebP（quality 88）；无文字、无 Logo、无水印。图片随项目打包，不依赖外部图片链接。页面只预取下一张轮播背景。
-
-共同提示词：`Create one premium music website carousel background, seamless panoramic 3:1 banner, approximately 2172 x 724. Cinematic editorial composition. Place the characteristic scenery at the outer thirds and reserve a spacious quiet central title zone for a white handwritten song title rendered later by webpage code. No text, lettering, logos, watermark, frame, or UI.`
-
-分别追加的设计提示词：
-
-- 雨夜霓虹：`A rainy nocturnal city with restrained cyan and magenta neon reflections, atmospheric wet streets, cinematic photography, rich deep blue central negative space. No readable signs or people in the central title area.`
-- 晨光旷野：`A peaceful sunrise meadow, warm golden light, delicate wildflowers near the edges, layers of mist and soft green rolling fields. Calm, hopeful, airy editorial photography with a quiet central title area.`
-- 东方山水：`Elegant Chinese ink landscape, blue-gray mountain silhouettes framing both sides, layered mist, delicate ink wash texture, a restrained copper sun toward the upper right. Spacious pale atmospheric center, sophisticated modern album art.`
-- 紫月云海：`Dreamlike violet night sky above a rose-tinted sea of clouds, a delicate crescent toward the left, subtle stars, expansive deep purple central sky, poetic and serene, refined cinematic album art.`
-- 金色舞台：`An intimate elegant music stage in deep chocolate black and warm amber tones. A vintage grand piano only in the far right outer third, a slim microphone stand at the far left edge, velvet curtains, warm side spotlights and subtle floating dust. Keep the central half dark and spacious. No performers or faces.`
+| 第 2 张 | `IMG_2919.JPG` | `carousel-cactus.webp` |
+| 第 3 张 | `IMG_2920.JPG` | `carousel-misty-garden.webp` |
+| 第 4 张 | `IMG_2921.JPG` | `carousel-airport-guitar.webp` |
+| 第 5 张 | `IMG_2922.JPG` | `carousel-sea-stacks.webp` |
+| 第 6 张 | `IMG_2923.JPG` | `carousel-countryside.webp` |
 
 ## 行书字体
 

@@ -25,7 +25,7 @@ import tools.jackson.databind.ObjectMapper;
 import static org.junit.jupiter.api.Assertions.*;
 
 @org.springframework.test.context.jdbc.Sql(scripts={"classpath:db/migration/V46__agent_chat_allowance.sql",
-        "classpath:db/migration/V50__agent_admission_version.sql"}, executionPhase=org.springframework.test.context.jdbc.Sql.ExecutionPhase.BEFORE_TEST_CLASS)
+        "classpath:db/migration/V53__agent_admission_version.sql"}, executionPhase=org.springframework.test.context.jdbc.Sql.ExecutionPhase.BEFORE_TEST_CLASS)
 @SpringBootTest(webEnvironment=SpringBootTest.WebEnvironment.RANDOM_PORT,properties={
     "spring.datasource.url=jdbc:h2:mem:avatar_generation_http;MODE=MySQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1",
     "qingfeng.agent.chat.enabled=true", "qingfeng.credits.enabled=true",
