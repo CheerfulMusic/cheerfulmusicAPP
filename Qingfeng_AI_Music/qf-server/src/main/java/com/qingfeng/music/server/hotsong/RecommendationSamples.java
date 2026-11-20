@@ -33,6 +33,14 @@ public final class RecommendationSamples {
         new Song("summer-on-repeat", "Summer on Repeat", "欧美流行", "/media/recommendations/summer-on-repeat-68e4b531c543-preview-128.mp3"));
 
     private static final Map<String, String> OBJECTS = Map.ofEntries(
+        Map.entry("recommendations/vocal-hu-ran-xia-qi-yu-b6f3f97e3182-preview-128.mp3", "qingfeng/recommendation-samples/20261120/audio/b6f3f97e3182/vocal-hu-ran-xia-qi-yu-b6f3f97e3182-preview-128.mp3"),
+        Map.entry("recommendations/vocal-hu-ran-xia-qi-yu-8f41f4f0460a-cover.jpg", "qingfeng/recommendation-samples/20261120/cover/8f41f4f0460a/vocal-hu-ran-xia-qi-yu-8f41f4f0460a-cover.jpg"),
+        Map.entry("recommendations/vocal-liu-lang-shi-ren-58376af9823c-preview-128.mp3", "qingfeng/recommendation-samples/20261120/audio/58376af9823c/vocal-liu-lang-shi-ren-58376af9823c-preview-128.mp3"),
+        Map.entry("recommendations/vocal-liu-lang-shi-ren-e187026fea88-cover.jpg", "qingfeng/recommendation-samples/20261120/cover/e187026fea88/vocal-liu-lang-shi-ren-e187026fea88-cover.jpg"),
+        Map.entry("recommendations/vocal-ming-tian-zai-shuo-5fb7dd7a316d-preview-128.mp3", "qingfeng/recommendation-samples/20261120/audio/5fb7dd7a316d/vocal-ming-tian-zai-shuo-5fb7dd7a316d-preview-128.mp3"),
+        Map.entry("recommendations/vocal-ming-tian-zai-shuo-abb350e340c7-cover.jpg", "qingfeng/recommendation-samples/20261120/cover/abb350e340c7/vocal-ming-tian-zai-shuo-abb350e340c7-cover.jpg"),
+        Map.entry("recommendations/vocal-zou-le-na-me-yuan-5ecdb2d00d7a-preview-128.mp3", "qingfeng/recommendation-samples/20261120/audio/5ecdb2d00d7a/vocal-zou-le-na-me-yuan-5ecdb2d00d7a-preview-128.mp3"),
+        Map.entry("recommendations/vocal-zou-le-na-me-yuan-4e668639a1a1-cover.jpg", "qingfeng/recommendation-samples/20261120/cover/4e668639a1a1/vocal-zou-le-na-me-yuan-4e668639a1a1-cover.jpg"),
         Map.entry("explore-love-v1.webp", "qingfeng/recommendation-samples/20261119/cover/bfeb8fbf154f/explore-love-v1.webp"),
         Map.entry("explore-guofeng-v1.svg", "qingfeng/recommendation-samples/20261119/cover/a1f2b7d7bf16/explore-guofeng-v1.svg"),
         Map.entry("explore-family-v1.webp", "qingfeng/recommendation-samples/20261119/cover/85bd1657b6b3/explore-family-v1.webp"),

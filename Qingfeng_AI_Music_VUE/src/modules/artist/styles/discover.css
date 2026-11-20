@@ -82,6 +82,7 @@
 .discover-shelf-heading p { margin: 0; color: var(--discover-muted); font-size: 12px; }
 .discover-vocal .discover-shelf-heading { display: block; }
 .discover-vocal .discover-shelf-heading p { margin-top: 6px; }
+.discover-vocal :deep(.shelf-wide:not(.is-expanded)) { grid-auto-columns: max(172px, (100% - 88px) / 5); }
 
 .discover-playlist-tiles, .discover-songs, .discover-side-list, .discover-ranking, .discover-genre-links { margin: 0; padding: 0; list-style: none; }
 .discover-playlist-tiles { display: grid; grid-auto-flow: column; grid-auto-columns: max(200px, (100% - 66px) / 3.42); gap: 22px; overflow-x: auto; padding-bottom: 10px; scrollbar-color: auto; }

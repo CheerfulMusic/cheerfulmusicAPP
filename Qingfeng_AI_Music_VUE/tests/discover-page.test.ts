@@ -65,6 +65,31 @@ afterEach(() => {
 })
 
 describe('Discover editorial layout with real content', () => {
+  it('plays the four distinct vocal recordings and keeps the upcoming entry out of the queue and carousel logic', async () => {
+    const ai = song('sole-route')
+    ai.song.title = '唯一的航线'
+    mocks.shelves.mockResolvedValue(shelfData([]))
+    mocks.list.mockImplementation(async (tab: string) => page(tab === 'popular' ? [ai] : []))
+    const wrapper = await open()
+    const section = wrapper.get('#discover-vocal')
+    expect(section.findAll('.track-title').map(title => title.text())).toEqual([
+      '忽然下起雨', '流浪诗人', '明天再说', '走了那么远', '唯一的航线',
+    ])
+    const upcoming = section.get('li:last-child')
+    expect(upcoming.text()).toContain('待上线')
+    expect(upcoming.find('button').exists()).toBe(false)
+    expect(section.findAll('li button')).toHaveLength(4)
+    await section.get('[aria-label="试听 流浪诗人"]').trigger('click')
+    expect(mocks.toggle.mock.calls[0]![0].audio).toMatch(/^\/media\/recommendations\/vocal-liu-lang-shi-ren-/)
+    expect(mocks.queue.mock.calls[0]![0].map((track: PlayableTrack) => track.title)).toEqual([
+      '忽然下起雨', '流浪诗人', '明天再说', '走了那么远',
+    ])
+    expect(mocks.record).not.toHaveBeenCalled()
+    await wrapper.get('[aria-label="查看推荐：唯一的航线"]').trigger('click')
+    await wrapper.get('.discover-hero-listen').trigger('click')
+    expect(mocks.toggle.mock.calls[1]![0].id).toBe(ai.song.id)
+  })
+
   it('shows five playlists, up to seven picks and the latest shelf before vocal and daily hits', async () => {
     const featured = Array.from({ length: 8 }, (_, i) => song(`精选${i + 1}`))
     const latest = Array.from({ length: 37 }, (_, i) => song(`新歌${i + 1}`))

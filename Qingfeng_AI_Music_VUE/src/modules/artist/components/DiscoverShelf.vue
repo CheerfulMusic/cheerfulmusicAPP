@@ -15,6 +15,7 @@ const props = defineProps<{
   empty?: string
   showPlays?: boolean
   expanded?: boolean
+  upcoming?: { title: string; cover: string }
 }>()
 const emit = defineEmits<{ play: [row: DiscoverShelfTrack]; retry: [] }>()
 const player = usePlayer()
@@ -48,8 +49,8 @@ function clock(seconds: number) {
         </span>
         <span class="track-text">
           <span class="track-title" :title="row.track.title">{{ row.track.title }}</span>
-          <span class="track-meta">
-            <span class="track-artist">{{ row.stageName }}</span>
+          <span v-if="row.stageName || (showPlays && row.plays !== undefined)" class="track-meta">
+            <span v-if="row.stageName" class="track-artist">{{ row.stageName }}</span>
             <span v-if="showPlays && row.plays !== undefined" class="track-count"><NavIcon name="play" />{{ formatCount.format(row.plays) }}</span>
           </span>
           <span v-if="props.variant === 'compact'" class="track-progress" aria-hidden="true">
@@ -58,6 +59,17 @@ function clock(seconds: number) {
           </span>
         </span>
       </button>
+    </li>
+    <li v-if="upcoming" key="upcoming">
+      <div class="shelf-track shelf-track-upcoming">
+        <span class="track-art">
+          <img :src="upcoming.cover" alt="" loading="lazy" decoding="async">
+        </span>
+        <span class="track-text">
+          <span class="track-title" :title="upcoming.title">{{ upcoming.title }}</span>
+          <span class="track-meta">{{ t('待上线') }}</span>
+        </span>
+      </div>
     </li>
   </ul>
   <p v-else-if="loading" class="shelf-status" role="status">{{ t('正在加载歌曲…') }}</p>
@@ -141,6 +153,7 @@ function clock(seconds: number) {
 .shelf-wide .track-play { z-index: 1; }
 .shelf-wide .track-title { font-size: 16px; font-weight: 600; }
 .shelf-wide .track-meta { color: #f0f5ef; font-size: 11px; }
+.shelf-track-upcoming .track-meta { width: fit-content; padding: 2px 7px; border-radius: 4px; background: #162824d9; }
 .shelf-status { margin: 0; padding: 14px 0; color: var(--discover-muted); font-size: 13px; }
 .shelf-status button { margin-inline-start: 6px; }
 @media (max-width: 1100px) {

@@ -9,6 +9,7 @@ import ArtistAvatar from '../components/ArtistAvatar.vue'
 import DiscoverSongCard from '../components/DiscoverSongCard.vue'
 import DiscoverShelf from '../components/DiscoverShelf.vue'
 import { discoverGenres, shelfCover, type DiscoverShelfTrack, type PublishedShelfTrack } from '../model/discover-shelves'
+import { vocalPerformanceRows } from '../model/vocal-performances'
 import PlaylistDetails from '../../home/components/PlaylistDetails.vue'
 import { usePreviewPlaylists, type PreviewPlaylist } from '../../home/model/playlists'
 import { usePreviewTracks, type PreviewTrack } from '../../home/model/tracks'
@@ -117,7 +118,8 @@ const cumulativeHotSongs = computed(() => dailySongs.value.length || editorialLo
 const todayRows = computed(() => withTracks(
   cumulativeHotSongs.value.length ? cumulativeHotSongs.value : dailySongs.value, 'today',
 ))
-const vocalRows = computed(() => withTracks(shelves.value?.vocal ?? [], 'vocal'))
+const vocalRows = computed(() => [...vocalPerformanceRows, ...withTracks(shelves.value?.vocal ?? [], 'vocal')])
+const upcomingVocal = { title: '唯一的航线', cover: seaStacks }
 const ranking = computed(() => todayRows.value.slice(0, 5))
 const genreShelves = computed(() => discoverGenres.map(section => {
   const publicRows = withTracks(shelves.value?.genres[section.id] ?? [], section.id)
@@ -522,8 +524,8 @@ onBeforeUnmount(() => {
               <button v-if="vocalRows.length" type="button" :aria-expanded="expanded === 'vocal'"
                 @click="expanded = expanded === 'vocal' ? undefined : 'vocal'">{{ t(expanded === 'vocal' ? '收起' : '查看全部') }} ›</button>
             </header>
-            <DiscoverShelf :label="t('真人演唱')" :rows="vocalRows" variant="wide" :loading="editorialLoading" :failed="shelvesFailed"
-              :expanded="expanded === 'vocal'" :empty="t('真人演唱作品即将上新。')" @retry="loadShelves" @play="play($event, vocalRows)" />
+            <DiscoverShelf :label="t('真人演唱')" :rows="vocalRows" :upcoming="upcomingVocal" variant="wide"
+              :expanded="expanded === 'vocal'" @play="play($event, vocalRows)" />
           </section>
           <section id="discover-today" class="discover-shelf">
             <header class="discover-section-heading">

@@ -2540,6 +2540,7 @@ export const english: Record<string, string> = {
   '新声推荐': 'New releases to discover',
   '今日新歌': 'New songs',
   '真人演唱': 'Sung by creators',
+  '待上线': 'Coming soon',
   '用 AI 创作歌曲，再用自己的声音唱出来。': 'Create a song with AI, then sing it in your own voice.',
   '真人演唱作品即将上新。': 'Creator performances are coming soon.',
   '今日热歌': 'Today’s hits',

@@ -65,6 +65,16 @@ class RecommendationOssRedirectTest {
         assertTrue(cdn.recommendation("sample-unknown-v1-preview-128.mp3").isEmpty());
     }
 
+    @Test void vocalRecordingAndArtworkHaveTheirOwnCdnObjects() {
+        var cdn = new MediaCdnSigner(true, "https://cdn.example.com", "test-key", "", 600, "0", "", "");
+        var redirect = new RecommendationOssRedirect(null, "", false, Clock.systemUTC(), cdn);
+        var audio = redirect.destination("/media/recommendations/vocal-liu-lang-shi-ren-58376af9823c-preview-128.mp3", "GET", false).orElseThrow();
+        var artwork = redirect.destination("/media/recommendations/vocal-liu-lang-shi-ren-e187026fea88-cover.jpg", "GET", false).orElseThrow();
+        assertEquals("/qingfeng/recommendation-samples/20261120/audio/58376af9823c/vocal-liu-lang-shi-ren-58376af9823c-preview-128.mp3", audio.getPath());
+        assertEquals("/qingfeng/recommendation-samples/20261120/cover/e187026fea88/vocal-liu-lang-shi-ren-e187026fea88-cover.jpg", artwork.getPath());
+        assertTrue(redirect.destination("/media/recommendations/vocal-liu-lang-shi-ren-58376af9823c-original.wav", "GET", false).isEmpty());
+    }
+
     private static final String FILE = "/media/sample-red-guofeng-v1.mp3";
     private static final String KEY = RecommendationOssRedirect.PREFIX + "sample-red-guofeng-v1.mp3";
     private static final Clock CLOCK = Clock.fixed(Instant.parse("2026-11-16T00:00:00Z"), ZoneOffset.UTC);
