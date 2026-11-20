@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import FilingLink from "../../shared/ui/FilingLink.vue"
 import { defineAsyncComponent, ref } from 'vue'
 import { t } from '../../shared/i18n'
 
@@ -89,7 +90,7 @@ const legal = [
         </div>
 
         <div class="footer-bottom">
-          <p class="footer-filing"><a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer" lang="zh-CN">粤ICP备2023023949号</a></p>
+          <p class="footer-filing"><FilingLink /></p>
           <p class="footer-copyright" lang="en">© 2026 Cheerful Music Limited. All rights reserved.</p>
           <div class="footer-company" lang="en">
             <p>Cheerful Music Limited <span>|</span> Company No. 14502629 <span>|</span> Registered in England and Wales</p>
