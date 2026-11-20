@@ -39,8 +39,8 @@ input::placeholder,textarea::placeholder { color:#9a858e; opacity:1; }
 .consumer-navigation a.is-active,.consumer-my-music.is-active { color:var(--accent-text); }
 .consumer-navigation a.is-active { position:relative; }
 .consumer-navigation a.is-active::after { content:''; position:absolute; height:2px; border-radius:4px; bottom:1px; left:4px; right:4px; background:var(--accent); }
-.consumer-my-music,.language-switch button { color:#665259; }
-.language-switch button.selected { color:var(--ink); }
+.consumer-my-music,.language-switch button,.language-switch a { color:#665259; }
+.language-switch button.selected,.language-switch a.selected { color:var(--ink); }
 .language-switch>span { color:#b5a3aa; }
 .mobile-menu-toggle { border-color:var(--line); color:#665259; }
 .consumer-mobile-menu { background:var(--surface); border-color:var(--line); box-shadow:0 20px 65px #44221120; }

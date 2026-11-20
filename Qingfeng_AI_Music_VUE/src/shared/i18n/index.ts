@@ -1,6 +1,7 @@
 import { readonly, ref } from 'vue'
 import { english } from './en'
-import { homeLocale, homeSeo, homeSeoLinks, type Locale } from './home-seo'
+import { homeLocale, type Locale } from './home-seo'
+import { sitePage, socialMetadata, websiteSchema } from './site-seo'
 
 export type { Locale } from './home-seo'
 export const localeStorageKey = 'qingfeng.locale'
@@ -20,22 +21,35 @@ export function t(message: string, params: Record<string, string | number> = {})
   const copy = selected.value === 'en' ? english[message] ?? message : message
   return copy.replace(/\{(\w+)\}/g, (placeholder, key: string) => String(params[key] ?? placeholder))
 }
-let localizedHome: Locale | undefined
+let pagePath = ''
 function updateDocument() {
   if (typeof document === 'undefined') return
   document.documentElement.lang = selected.value
-  const seo = localizedHome && homeSeo[localizedHome]
-  document.title = seo ? seo.title : '青风音乐'
-  document.querySelector('meta[name="description"]')?.setAttribute('content', seo ? seo.description : t('把你的故事唱成歌，送给重要的人。用青风音乐记录回忆，制作专属音乐礼物。'))
-  document.head.querySelectorAll('link[data-home-seo]').forEach(link => link.remove())
-  if (localizedHome) {
-    for (const attributes of homeSeoLinks(localizedHome)) {
-      const link = document.createElement('link')
-      link.setAttribute('data-home-seo', '')
-      for (const [name, value] of Object.entries(attributes)) link.setAttribute(name, value)
-      document.head.append(link)
-    }
+  document.head.querySelectorAll('[data-site-seo]').forEach(element => element.remove())
+  if (document.head.querySelector('meta[property="og:type"][content="music.song"]')) {
+    if (pagePath.startsWith('/gift/')) return
+    document.head.querySelectorAll('meta[property^="og:"], meta[name^="twitter:"], meta[name="robots"]')
+      .forEach(element => element.remove())
   }
+  const page = sitePage(pagePath, selected.value)
+  document.title = page?.title ?? '青风音乐'
+  document.querySelector('meta[name="description"]')?.setAttribute(
+    'content', page?.description ?? t('把你的故事唱成歌，送给重要的人。用青风音乐记录回忆，制作专属音乐礼物。'),
+  )
+  if (!page) return
+
+  function appendTag(tag: 'link' | 'meta' | 'script', attributes: Record<string, string | undefined>, content?: string) {
+    const element = document.createElement(tag)
+    element.setAttribute('data-site-seo', '')
+    for (const [name, value] of Object.entries(attributes)) {
+      if (value !== undefined) element.setAttribute(name, value)
+    }
+    if (content) element.textContent = content
+    document.head.append(element)
+  }
+  for (const attributes of page.links) appendTag('link', attributes)
+  for (const attributes of socialMetadata(page)) appendTag('meta', attributes)
+  if (page.path === '/') appendTag('script', { type: 'application/ld+json' }, JSON.stringify(websiteSchema))
 }
 export function setLocale(value: Locale) {
   selected.value = value
@@ -43,7 +57,8 @@ export function setLocale(value: Locale) {
   updateDocument()
 }
 export function updatePageLocale(path: string) {
-  localizedHome = homeLocale(path)
+  pagePath = path
+  const localizedHome = homeLocale(path)
   if (localizedHome) setLocale(localizedHome)
   else updateDocument()
 }

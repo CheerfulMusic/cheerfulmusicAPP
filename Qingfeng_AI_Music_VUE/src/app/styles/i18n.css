@@ -6,9 +6,10 @@
 .bilingual-description > span { display:block; }
 .bilingual-description .description-translation { margin-top:10px; font-size:13px; color:var(--muted); line-height:1.7; }
 @media(max-width:600px) { .consumer-shell .p-intro .bilingual-headline { font-size:36px; } .consumer-shell .p-intro .headline-translation { font-size:27px; margin-top:14px; } .bilingual-description .description-translation { font-size:12px; } }
-.language-switch button { min-width:30px; min-height:36px; padding:5px; color:var(--muted); border-radius:8px; }
-.language-switch button:hover { color:var(--ink); background:var(--surface-raised); }
-.language-switch button.selected { color:var(--ink); font-weight:700; }
+.language-switch button,.language-switch a { min-width:30px; min-height:36px; padding:5px; color:var(--muted); border-radius:8px; }
+.language-switch a { display:inline-flex; align-items:center; justify-content:center; }
+.language-switch button:hover,.language-switch a:hover { color:var(--ink); background:var(--surface-raised); }
+.language-switch button.selected,.language-switch a.selected { color:var(--ink); font-weight:700; }
 .language-switch > span { color:var(--muted); }
 .app-header { display:flex; align-items:center; justify-content:space-between; gap:12px; }
 html[lang="en"] .consumer-header-inner { gap:20px; }
@@ -51,8 +52,8 @@ html[lang="en"] .draft-aside h2 { line-height:1.4; }
   .gift-shell .consumer-create { display:none; }
 }
 @media(max-width:420px) {
-  .language-switch > span,.language-switch button.selected { display:none; }
-  .language-switch button { min-width:31px; border:1px solid var(--line); }
+  .language-switch > span,.language-switch button.selected,.language-switch a.selected { display:none; }
+  .language-switch button,.language-switch a { min-width:31px; border:1px solid var(--line); }
   html[lang="en"] .consumer-shell .p-intro h1 { font-size:36px; }
   html[lang="en"] .consumer-shell .p-button { font-size:12px; }
   html[lang="en"] .draft-steps { gap:7px; font-size:11px; }
