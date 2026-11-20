@@ -42,7 +42,7 @@ const genres = [
   { id: 'jazz-soul', label: '爵士与灵魂乐' }, { id: 'other', label: '其他风格' },
 ]
 const latestShelfSize = 32
-const heroRotationMs = 30_000
+const heroRotationMs = 10_000
 const streetlightSongId = '0f831f4b-1f3f-4d14-b6cf-b33534863622'
 const replacedHeroSongId = 'acfaa9d5-ce74-477f-9db8-d3700311a26c'
 const invincibleSongId = '57bb7310-c64c-4873-b239-f2a268a7dedd'

@@ -414,11 +414,11 @@ describe('Discover editorial layout with real content', () => {
     expect(mocks.record).toHaveBeenCalledTimes(1)
   })
 
-  it('rotates every 30 seconds, pauses on hover or focus and supports explicit pause and resume', async () => {
+  it('rotates every 10 seconds, pauses on hover or focus and supports explicit pause and resume', async () => {
     vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] })
     mocks.list.mockImplementation(async (tab: string) => page(tab === 'popular' ? [song('热门一'), song('热门二')] : [song(tab)]))
     const wrapper = await open()
-    await vi.advanceTimersByTimeAsync(29_999)
+    await vi.advanceTimersByTimeAsync(9_999)
     expect(wrapper.get('.discover-hero h2').text()).toBe('走了那么远')
     await vi.advanceTimersByTimeAsync(1)
     expect(wrapper.get('.discover-hero h2').text()).toBe('歌曲热门一')
@@ -426,7 +426,7 @@ describe('Discover editorial layout with real content', () => {
     await vi.advanceTimersByTimeAsync(60_000)
     expect(wrapper.get('.discover-hero h2').text()).toBe('歌曲热门一')
     await wrapper.get('.discover-hero').trigger('mouseleave')
-    await vi.advanceTimersByTimeAsync(30_000)
+    await vi.advanceTimersByTimeAsync(10_000)
     expect(wrapper.get('.discover-hero h2').text()).toBe('歌曲热门二')
     await wrapper.get('.discover-hero').trigger('focusin')
     await vi.advanceTimersByTimeAsync(30_000)
@@ -436,7 +436,7 @@ describe('Discover editorial layout with real content', () => {
     await vi.advanceTimersByTimeAsync(30_000)
     expect(wrapper.get('.discover-hero h2').text()).toBe('歌曲热门二')
     await wrapper.get('[aria-label="继续轮播"]').trigger('click')
-    await vi.advanceTimersByTimeAsync(30_000)
+    await vi.advanceTimersByTimeAsync(10_000)
     expect(wrapper.get('.discover-hero h2').text()).toBe('Christmas Sky')
     expect(mocks.toggle).not.toHaveBeenCalled()
   })
