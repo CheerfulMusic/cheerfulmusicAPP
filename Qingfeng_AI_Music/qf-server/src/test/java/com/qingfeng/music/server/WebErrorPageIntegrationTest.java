@@ -152,6 +152,11 @@ class WebErrorPageIntegrationTest {
         List<String> broken = new ArrayList<>();
         for (String route : routes) {
             var response = get(route, "text/html");
+            if ("/discover".equals(route)) {
+                assertEquals(302, response.statusCode());
+                assertEquals("/", response.headers().firstValue("Location").orElseThrow());
+                continue;
+            }
             if(java.util.Set.of("/legal/terms","/legal/privacy").contains(route)) {
                 assertEquals(302,response.statusCode());
                 var target=URI.create("http://127.0.0.1:"+port).resolve(response.headers().firstValue("Location").orElseThrow());
