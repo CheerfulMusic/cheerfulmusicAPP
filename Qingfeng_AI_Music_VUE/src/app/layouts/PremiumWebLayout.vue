@@ -134,6 +134,7 @@ onBeforeUnmount(() => {
 .discover-shell :deep(.q-player-info) { flex:initial; width:210px; max-width:210px; }
 .discover-shell :deep(.q-player-info > strong) { font-weight:600; }
 .discover-shell :deep(.q-player-info > span) { color:#767680; }
+.discover-shell :deep(.q-player-toggle) { border:0; background:#ff4438; color:#fff; }
 @media (max-width:700px) {
   .discover-shell :deep(.q-player) { gap:10px; padding:10px 16px; }
   .discover-shell :deep(.q-player-info) { flex:1; width:auto; max-width:none; }

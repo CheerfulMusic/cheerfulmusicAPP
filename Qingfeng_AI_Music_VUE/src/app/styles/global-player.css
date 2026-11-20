@@ -4,7 +4,6 @@
 .q-player .q-player-info > strong { font-size:14px; }
 .q-player > .q-player-lyric { flex:0 1 clamp(260px, 26vw, 440px); min-width:0; white-space:pre-line; overflow-wrap:anywhere; font-size:14px; font-weight:500; line-height:1.45; text-align:center; color:var(--ink); }
 .q-player .q-player-progress { flex:1 1 120px; min-width:60px; }
-.q-player .q-player-toggle { border:0; border-radius:6px; background:transparent; color:var(--accent-text); }
 .q-player .q-player-volume { display:flex; flex:0 0 108px; align-items:center; gap:6px; }
 .q-player .q-player-mute { display:grid; place-items:center; width:30px; height:36px; flex-shrink:0; color:var(--muted); }
 .q-player .q-player-mute svg { width:20px; height:20px; }

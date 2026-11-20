@@ -239,7 +239,7 @@ html:has(.playlist-dialog[open]) { overflow:hidden; }
   width: 27px;
   height: 27px;
   background: transparent;
-  border: 1px solid var(--accent-border, #eeb3a6);
+  border-radius: 0;
   color: var(--accent);
 }
 .playlist-explore .hot-song-meta {
