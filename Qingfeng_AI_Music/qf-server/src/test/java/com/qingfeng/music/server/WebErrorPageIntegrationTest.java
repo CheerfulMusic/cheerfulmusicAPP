@@ -67,7 +67,7 @@ class WebErrorPageIntegrationTest {
     }
 
     @Test void searchEntryUrlsAreReadableWithoutAuthentication() throws Exception {
-        for (String path : List.of("/", "/zh-CN/", "/en/", "/discover", "/help")) {
+        for (String path : List.of("/", "/zh-CN/", "/en/", "/help")) {
             var response = get(path, "text/html");
             assertEquals(200, response.statusCode(), path);
             assertTrue(response.body().contains("id=\"app\""), path);
@@ -85,10 +85,17 @@ class WebErrorPageIntegrationTest {
         assertEquals(403, get("/home.html", "text/html").statusCode());
     }
 
+    @Test void discoverTemporarilyRedirectsHome() throws Exception {
+        for (String path : List.of("/discover", "/discover/", "/discover/index.html")) {
+            var response = get(path, "text/html");
+            assertEquals(302, response.statusCode(), path);
+            assertEquals("/", response.headers().firstValue("Location").orElse(""));
+        }
+    }
+
     @Test void duplicateSearchEntryUrlsRedirectPermanentlyWithoutChangingTheQuery() throws Exception {
         var routes = Map.of("/zh-CN", "/zh-CN/", "/zh-CN/index.html", "/zh-CN/",
                 "/en", "/en/", "/en/index.html", "/en/",
-                "/discover/", "/discover", "/discover/index.html", "/discover",
                 "/help/", "/help", "/help/index.html", "/help");
         String query = "?q=%E9%9F%B3%E4%B9%90&ref=a%2Fb";
         for (var route : routes.entrySet()) {

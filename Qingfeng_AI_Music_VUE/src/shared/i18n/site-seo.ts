@@ -40,7 +40,7 @@ const sections = {
   },
 } as const
 
-export const sitePagePaths = ['/', homeSeo.en.path, homeSeo['zh-CN'].path, '/discover', '/help'] as const
+export const sitePagePaths = ['/', homeSeo.en.path, homeSeo['zh-CN'].path, '/help'] as const
 
 export function sitePage(path: string, preferredLocale: Locale = 'en') {
   const localized = homeLocale(path)
@@ -58,7 +58,7 @@ export function sitePage(path: string, preferredLocale: Locale = 'en') {
     }
   }
   const canonical = path.replace(/\/$/, '')
-  if (canonical !== '/discover' && canonical !== '/help') return
+  if (canonical !== '/help') return
   return {
     ...sections[canonical][language],
     path: canonical,
@@ -71,7 +71,6 @@ export function landingLinks(language: Locale) {
   return [
     { href: homeSeo.en.path, text: 'English', lang: 'en' },
     { href: homeSeo['zh-CN'].path, text: '简体中文', lang: 'zh-CN' },
-    { href: '/discover', text: sections['/discover'][language].heading },
     { href: '/help', text: sections['/help'][language].heading },
   ]
 }
