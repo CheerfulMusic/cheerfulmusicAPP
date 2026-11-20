@@ -1,26 +1,28 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { globSync, readFileSync } from 'node:fs'
 import { english } from '../src/shared/i18n/en'
 
-afterEach(() => { vi.unstubAllGlobals(); vi.resetModules() })
+beforeEach(() => { vi.resetModules() })
+afterEach(() => { vi.unstubAllGlobals() })
 
 describe('Chinese and English interface', () => {
-  it('starts in Chinese and restores a saved English preference after reload', async () => {
+  it('starts in English and restores a saved Chinese preference after reload', async () => {
     const storage = new Map<string, string>()
     vi.stubGlobal('localStorage', { getItem: (key: string) => storage.get(key), setItem: (key: string, value: string) => storage.set(key, value) })
     const first = await import('../src/shared/i18n')
-    expect(first.locale.value).toBe('zh-CN')
-    first.setLocale('en')
+    expect(first.locale.value).toBe('en')
+    expect(first.t('保存草稿')).toBe('Save draft')
+    first.setLocale('zh-CN')
     vi.resetModules()
     const restored = await import('../src/shared/i18n')
-    expect(restored.locale.value).toBe('en')
-    expect(restored.t('保存草稿')).toBe('Save draft')
+    expect(restored.locale.value).toBe('zh-CN')
+    expect(restored.t('保存草稿')).toBe('保存草稿')
   })
 
   it('still switches when browser storage is blocked and keeps inserted user text intact', async () => {
     vi.stubGlobal('localStorage', { getItem() { throw new Error('blocked') }, setItem() { throw new Error('blocked') } })
-    const { setLocale, t } = await import('../src/shared/i18n')
-    setLocale('en')
+    const { locale, setLocale, t } = await import('../src/shared/i18n')
+    expect(locale.value).toBe('en')
     expect(t('亲爱的{recipient}，', { recipient: '妈妈 {someone} <3' })).toBe('Dear 妈妈 {someone} <3,')
     expect(t('请求失败（503），请检查服务状态')).toContain('(503)')
     setLocale('zh-CN')

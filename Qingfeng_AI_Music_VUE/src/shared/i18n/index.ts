@@ -4,8 +4,8 @@ import { english } from './en'
 export type Locale = 'zh-CN' | 'en'
 export const localeStorageKey = 'qingfeng.locale'
 function savedLocale(): Locale {
-  try { return localStorage.getItem(localeStorageKey) === 'en' ? 'en' : 'zh-CN' }
-  catch { return 'zh-CN' }
+  try { return localStorage.getItem(localeStorageKey) === 'zh-CN' ? 'zh-CN' : 'en' }
+  catch { return 'en' }
 }
 const selected = ref<Locale>(savedLocale())
 export const locale = readonly(selected)
@@ -22,7 +22,7 @@ export function t(message: string, params: Record<string, string | number> = {})
 function updateDocument() {
   if (typeof document === 'undefined') return
   document.documentElement.lang = selected.value
-  document.title = '青风音乐'
+  document.title = t('青风音乐')
   document.querySelector('meta[name="description"]')?.setAttribute('content', t('把你的故事唱成歌，送给重要的人。用青风音乐记录回忆，制作专属音乐礼物。'))
 }
 export function setLocale(value: Locale) {

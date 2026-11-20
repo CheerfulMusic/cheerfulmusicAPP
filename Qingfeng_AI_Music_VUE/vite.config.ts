@@ -1,3 +1,4 @@
+/// <reference types="vitest/config" />
 import { defineConfig, loadEnv } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import legacy from '@vitejs/plugin-legacy'
@@ -28,6 +29,7 @@ export default defineConfig(({ mode }) => {
       }),
     ],
     base: '/',
+    test: { setupFiles: ['./tests/setup-locale.ts'] },
     server: {
       port: 5173,
       strictPort: true,
