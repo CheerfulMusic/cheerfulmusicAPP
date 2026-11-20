@@ -28,7 +28,7 @@ export function renderSitePage(html: string, page: SitePage) {
   const links = landingLinks(page.language).map(({ href, text, lang }) =>
     `<a href="${href}"${lang ? ` lang="${lang}" hreflang="${lang}"` : ''}>${escapeHtml(text)}</a>`,
   ).join(' ')
-  const landing = `<main class="seo-landing"><h1>${escapeHtml(page.heading)}</h1><p>${escapeHtml(page.description)}</p><nav>${links}</nav></main>`
+  const landing = `<main class="seo-landing"><h1>${escapeHtml(page.heading)}</h1><p>${escapeHtml(page.description)}</p><nav>${links}</nav><footer><a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer" lang="zh-CN">粤ICP备2023023949号</a></footer></main>`
   return html
     .replace(/<html lang="[^"]*">/, `<html lang="${page.language}">`)
     .replace(/<title>[^<]*<\/title>/, `<title>${escapeHtml(page.title)}</title>`)

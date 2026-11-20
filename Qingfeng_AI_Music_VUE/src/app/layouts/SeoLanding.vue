@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import FilingLink from "../../shared/ui/FilingLink.vue"
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { locale } from '../../shared/i18n'
@@ -21,5 +22,6 @@ const page = computed(() => sitePage(props.path, locale.value))
       </template>
     </nav>
     <slot />
+    <footer><FilingLink /></footer>
   </main>
 </template>

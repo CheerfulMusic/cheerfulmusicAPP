@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import FilingLink from "../../shared/ui/FilingLink.vue"
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { t } from '../../shared/i18n'
 import LanguageSwitcher from '../../shared/i18n/LanguageSwitcher.vue'
@@ -88,11 +89,13 @@ onBeforeUnmount(() => { disposed = true; clearTimeout(expiryTimer); window.remov
       <div v-else-if="error"><p class="beta-access-error" role="alert">{{ t(error) }}</p><button class="beta-access-primary" type="button" @click="check">{{ t('重新验证') }}</button></div>
       <p class="beta-access-note">{{ t('邀请码由内测邀请人提供。') }}</p>
       <button v-if="publicPreview" type="button" class="button secondary" @click="cancelInvite">{{ t('关闭') }}</button>
+      <footer class="beta-access-filing"><FilingLink /></footer>
     </section>
   </dialog>
 </template>
 
 <style scoped>
+.beta-access-filing { margin-top: 12px; text-align: center; color: #68594f; }
 .beta-access-screen { position:fixed; inset:0; background:#fffaf8; }
 .beta-access-dialog { width:min(464px,calc(100% - 32px)); max-width:none; max-height:calc(100dvh - 32px); padding:0; border:1px solid #f2ded5; border-radius:28px; color:#282320; background:#fffaf8; color-scheme:light; box-shadow:0 24px 100px #6e3e1e1a; }
 .beta-access-dialog::backdrop { background:radial-gradient(ellipse at 75% 20%,#ffe3d9ed,#fff8f3f5 65%); backdrop-filter:blur(16px); }
