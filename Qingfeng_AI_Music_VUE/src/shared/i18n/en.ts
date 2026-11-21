@@ -503,7 +503,7 @@ export const english: Record<string, string> = {
   "专属音乐制作": "Custom music production",
   "让青风音乐制作团队为你的歌完成编曲、录音与混音。": "Have the Cheerful Music production team arrange, record and mix your song.",
   "关于青风音乐": "About Cheerful Music",
-  "下载青风音乐公司介绍 PDF（中文版）": "Download the Cheerful Music company profile PDF in Chinese",
+  "下载青风音乐公司介绍 PDF": "Download the Cheerful Music company profile PDF",
   "下载 PDF": "Download PDF",
   "青风音乐（Cheerful Music）由歌手兼制作人蒋雪儿（Snow.J）创办，2019 年在深圳成立，2023 年设立伦敦办公室。团队深耕国风与华语流行，参与制作或发行的《踏山河》《小城夏天》《半生雪》均登顶过国内主流音乐平台榜单。": "Singer and producer Snow.J founded Cheerful Music in Shenzhen in 2019. The label opened a London office in 2023. Known for Chinese-style music and Mandopop, it helped produce or release chart-topping tracks including Ta Shan He, Xiao Cheng Xia Tian and Ban Sheng Xue.",
   "《一笑江湖》随“科目三”舞蹈走红海外，2025 年登上 Spotify 日本 Viral 50 榜第 2 名。《相思遥》入选全球 600 多份歌单，张含韵和郭雨昂在 2025 年除夕的央视综合频道节目《金蛇起舞中国年味》中演唱了这首歌。": "Yi Xiao Jiang Hu went viral around the world with the Ke Mu San dance and reached No. 2 on Spotify’s Viral 50 chart in Japan in 2025. Xiang Si Yao appeared on more than 600 playlists worldwide and was performed by Zhang Hanyun and Guo Yu’ang on CCTV-1’s 2025 Lunar New Year’s Eve special Jin She Qi Wu Zhong Guo Nian Wei.",
