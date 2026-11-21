@@ -1,8 +1,9 @@
+export const siteName = 'Cheerful Music'
+
 export const homeSeo = {
   'zh-CN': {
-    path: '/zh-CN/',
+    path: '/',
     heading: '人人是歌手',
-    title: '人人是歌手 | AI音乐创作平台 - 青风音乐',
     description: '青风音乐 AI 音乐创作平台。无需音乐基础，简单几步即可生成专属歌曲，发布作品，分享音乐，让人人都能成为歌手。',
   },
   en: {
@@ -17,10 +18,8 @@ export type Locale = keyof typeof homeSeo
 export const siteOrigin = 'https://cheerfulmusic.com'
 
 export function homeLocale(path: string): Locale | undefined {
-  return (Object.keys(homeSeo) as Locale[]).find(locale => {
-    const localizedPath = homeSeo[locale].path
-    return path === localizedPath || path === localizedPath.slice(0, -1)
-  })
+  // The root follows the visitor's saved interface language.
+  if (path === homeSeo.en.path || path === homeSeo.en.path.slice(0, -1)) return 'en'
 }
 
 export function homeSeoLinks(path: string): { rel: string; href: string; hreflang?: string }[] {

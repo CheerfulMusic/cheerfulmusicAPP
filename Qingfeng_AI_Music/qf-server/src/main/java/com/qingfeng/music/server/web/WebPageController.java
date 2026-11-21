@@ -30,14 +30,9 @@ public class WebPageController {
         return "forward:/index.html";
     }
 
-    @GetMapping("/zh-CN/")
-    public ResponseEntity<Resource> chineseHome() {
-        return publicDocument("zh-CN/index.html");
-    }
-
-    @GetMapping({"/zh-CN","/zh-CN/index.html"})
+    @GetMapping({"/zh-CN", "/zh-CN/", "/zh-CN/index.html"})
     public ResponseEntity<Void> redirectChineseHome(HttpServletRequest request) {
-        return permanentRedirect(request, "/zh-CN/");
+        return permanentRedirect(request, "/");
     }
 
     @GetMapping("/en/")

@@ -1,18 +1,11 @@
-import { homeLocale, homeSeo, homeSeoLinks, siteOrigin, type Locale } from './home-seo'
-
-const defaultHomeTitle = 'Cheerful Music'
+import { homeLocale, homeSeo, homeSeoLinks, siteName, siteOrigin, type Locale } from './home-seo'
 
 const defaultHome = {
   en: {
-    heading: 'Cheerful Music',
-    title: defaultHomeTitle,
+    heading: siteName,
     description: 'Make a song from your ideas with Cheerful Music. Explore songs from other creators and choose the English or Simplified Chinese site.',
   },
-  'zh-CN': {
-    heading: '青风音乐',
-    title: defaultHomeTitle,
-    description: '用青风音乐把灵感变成歌曲，聆听社区创作者的作品。网站提供简体中文和英文版本。',
-  },
+  'zh-CN': homeSeo['zh-CN'],
 } as const
 
 const sections = {
@@ -42,19 +35,19 @@ const sections = {
   },
 } as const
 
-export const sitePagePaths = ['/', homeSeo.en.path, homeSeo['zh-CN'].path, '/discover', '/help'] as const
+export const sitePagePaths = [homeSeo['zh-CN'].path, homeSeo.en.path, '/discover', '/help'] as const
 
-export function sitePage(path: string, preferredLocale: Locale = 'en') {
+export function sitePage(path: string, preferredLocale?: Locale) {
   const localized = homeLocale(path)
-  const language = localized ?? preferredLocale
+  const language = localized ?? preferredLocale ?? (path === '/' ? 'zh-CN' : 'en')
   if (path === '/' || localized) {
     const canonical = localized ? homeSeo[localized].path : '/'
-    const copy = localized ? homeSeo[localized] : defaultHome[language]
+    const copy = localized ? homeSeo.en : defaultHome[language]
     return {
       path: canonical,
       language,
       heading: copy.heading,
-      title: copy.title,
+      title: localized ? homeSeo.en.title : siteName,
       description: copy.description,
       links: homeSeoLinks(canonical),
     }
@@ -80,28 +73,28 @@ export function landingLinks(language: Locale) {
 
 export function socialMetadata(page: NonNullable<ReturnType<typeof sitePage>>) {
   const image = siteOrigin + '/brand/share-default-cover.png'
-  const siteName = page.language === 'en' ? 'Cheerful Music' : '青风音乐'
+  const brand = page.path === '/' || page.language === 'en' ? siteName : '青风音乐'
   return [
     { property: 'og:type', content: 'website' },
-    { property: 'og:site_name', content: siteName },
+    { property: 'og:site_name', content: brand },
     { property: 'og:title', content: page.title },
     { property: 'og:description', content: page.description },
     { property: 'og:url', content: siteOrigin + page.path },
     { property: 'og:locale', content: page.language === 'en' ? 'en_US' : 'zh_CN' },
     { property: 'og:image', content: image },
-    { property: 'og:image:alt', content: siteName },
+    { property: 'og:image:alt', content: brand },
     { name: 'twitter:card', content: 'summary_large_image' },
     { name: 'twitter:title', content: page.title },
     { name: 'twitter:description', content: page.description },
     { name: 'twitter:image', content: image },
-    { name: 'twitter:image:alt', content: siteName },
+    { name: 'twitter:image:alt', content: brand },
   ]
 }
 
 export const websiteSchema = {
   '@context': 'https://schema.org',
   '@type': 'WebSite',
-  name: 'Cheerful Music',
+  name: siteName,
   alternateName: ['青风音乐', '人人是歌手'],
   url: siteOrigin + '/',
 }

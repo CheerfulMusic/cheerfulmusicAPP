@@ -3,45 +3,52 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import { expect, it } from 'vitest'
 import LanguageSwitcher from '../src/shared/i18n/LanguageSwitcher.vue'
-import { locale, setLocale } from '../src/shared/i18n'
+import { locale, setLocale, updatePageLocale } from '../src/shared/i18n'
 
 function createTestRouter() {
   const component = { template: '<main />' }
-  return createRouter({
+  const router = createRouter({
     history: createMemoryHistory(),
     routes: [
-      { path: '/', name: 'home', alias: ['/en/', '/zh-CN/'], component },
+      { path: '/', name: 'home', alias: '/en/', component },
       { path: '/works', name: 'works', component },
     ],
   })
+  router.afterEach((to, _from, failure) => { if (!failure) updatePageLocale(to.path) })
+  return router
 }
 
-it('links to both localized homepages and follows aliases without losing the query or hash', async () => {
+it('switches both ways on the root without changing the URL or tab title', async () => {
   const router = createTestRouter()
+  setLocale('zh-CN')
   await router.push('/?utm_source=search#how')
   const wrapper = mount(LanguageSwitcher, { global: { plugins: [router] } })
   try {
-    const chinese = wrapper.get('a[hreflang="zh-CN"]')
-    const english = wrapper.get('a[hreflang="en"]')
-    expect(chinese.attributes('href')).toBe('/zh-CN/?utm_source=search#how')
-    expect(english.attributes('href')).toBe('/en/?utm_source=search#how')
-    expect(english.attributes('aria-current')).toBeUndefined()
+    for (const language of ['en', 'zh-CN']) {
+      const button = wrapper.get(`button[lang="${language}"]`)
+      await button.trigger('click')
+      expect(router.currentRoute.value.fullPath).toBe('/?utm_source=search#how')
+      expect(document.documentElement.lang).toBe(language)
+      expect(document.title).toBe('Cheerful Music')
+      expect(document.querySelector('meta[property="og:site_name"]')?.getAttribute('content')).toBe('Cheerful Music')
+      expect(button.attributes('aria-pressed')).toBe('true')
+    }
+  } finally {
+    wrapper.unmount()
+  }
+})
 
-    const openInNewTab = new MouseEvent('click', { button: 0, ctrlKey: true, cancelable: true })
-    english.element.dispatchEvent(openInNewTab)
-    expect(openInNewTab.defaultPrevented).toBe(false)
+it('returns visitors from the English search landing page to the root when they choose Chinese', async () => {
+  const router = createTestRouter()
+  await router.push('/en/?utm_source=search#how')
+  const wrapper = mount(LanguageSwitcher, { global: { plugins: [router] } })
+  try {
+    expect(locale.value).toBe('en')
+    await wrapper.get('button[lang="zh-CN"]').trigger('click')
     await flushPromises()
-    expect(router.currentRoute.value.path).toBe('/')
-
-    await english.trigger('click')
-    await flushPromises()
-    expect(router.currentRoute.value.fullPath).toBe('/en/?utm_source=search#how')
-    expect(english.attributes('aria-current')).toBe('page')
-    await chinese.trigger('click')
-    await flushPromises()
-    expect(router.currentRoute.value.fullPath).toBe('/zh-CN/?utm_source=search#how')
-    expect(chinese.attributes('aria-current')).toBe('page')
-    expect(english.attributes('aria-current')).toBeUndefined()
+    expect(router.currentRoute.value.fullPath).toBe('/?utm_source=search#how')
+    expect(locale.value).toBe('zh-CN')
+    expect(document.title).toBe('Cheerful Music')
   } finally {
     wrapper.unmount()
   }

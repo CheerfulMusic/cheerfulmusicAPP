@@ -18,6 +18,19 @@ describe('Chinese and English interface', () => {
     expect(restored.t('保存草稿')).toBe('保存草稿')
   })
 
+  it('defaults to the Chinese root language and restores an explicit English choice on reload', async () => {
+    const storage = new Map<string, string>()
+    vi.stubGlobal('localStorage', { getItem: (key: string) => storage.get(key), setItem: (key: string, value: string) => storage.set(key, value) })
+    vi.stubGlobal('document', { documentElement: { lang: 'zh-CN' }, querySelector: () => ({}) })
+    const first = await import('../src/shared/i18n')
+    expect(first.locale.value).toBe('zh-CN')
+
+    storage.set(first.localeStorageKey, 'en')
+    vi.resetModules()
+    const restored = await import('../src/shared/i18n')
+    expect(restored.locale.value).toBe('en')
+  })
+
   it('still switches when browser storage is blocked and keeps inserted user text intact', async () => {
     vi.stubGlobal('localStorage', { getItem() { throw new Error('blocked') }, setItem() { throw new Error('blocked') } })
     const { locale, setLocale, t } = await import('../src/shared/i18n')

@@ -1,13 +1,18 @@
 import { readonly, ref } from 'vue'
 import { english } from './en'
-import { homeLocale, type Locale } from './home-seo'
+import { homeLocale, siteOrigin, type Locale } from './home-seo'
 import { sitePage, socialMetadata, websiteSchema } from './site-seo'
 
 export type { Locale } from './home-seo'
 export const localeStorageKey = 'qingfeng.locale'
 function savedLocale(): Locale {
-  try { return localStorage.getItem(localeStorageKey) === 'zh-CN' ? 'zh-CN' : 'en' }
-  catch { return 'en' }
+  try {
+    const saved = localStorage.getItem(localeStorageKey)
+    if (saved === 'en' || saved === 'zh-CN') return saved
+  } catch { /* Fall back to the page language when storage is unavailable. */ }
+  if (typeof document !== 'undefined' && document.querySelector(`link[data-site-seo][rel="canonical"][href="${siteOrigin}/"]`) &&
+      document.documentElement.lang === 'zh-CN') return 'zh-CN'
+  return 'en'
 }
 const selected = ref<Locale>(savedLocale())
 export const locale = readonly(selected)
