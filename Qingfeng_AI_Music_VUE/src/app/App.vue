@@ -14,7 +14,7 @@ import { t } from '../shared/i18n'
 const route = useRoute()
 const community = computed(() => route.name === 'artist-home' || route.name === 'discover')
 const layout = computed(() => platform.kind === 'web' || community.value ? WebLayout : AppLayout)
-const publicListening = computed(() => route.name === 'gift' || community.value)
+const publicListening = computed(() => route.name === 'gift' || route.name === 'artist-home')
 const standalonePreview = computed(() => import.meta.env.DEV && route.name === 'payment-preview')
 const publicPreview = computed(() => platform.kind === 'web' && route.name === 'help')
 </script>

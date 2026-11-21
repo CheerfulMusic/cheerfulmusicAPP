@@ -30,8 +30,8 @@ class Backend(BaseHTTPRequestHandler):
         self.server.requests.append((self.command, path, self.headers.get("Cookie")))
         marker = None
         if self.server.role == "primary":
-            if path == DISCOVER:
-                time.sleep(self.server.discover_delay)
+            if path == "/":
+                time.sleep(self.server.home_delay)
             if path == "/api/public/gifts/" + "A" * 43:
                 status = self.server.authority
                 if status == 200 and self.server.active_marker:
@@ -64,7 +64,7 @@ def upstream(role):
         server.requests = []
         server.authority = server.local_status = server.primary_status = 200
         server.active_marker = True
-        server.discover_delay = 0
+        server.home_delay = 0
         worker = Thread(target=server.serve_forever, daemon=True)
         worker.start()
         try:
@@ -162,14 +162,15 @@ def run(executable, snippets):
         with upstream("reader") as reader, upstream("primary") as primary, gateway(
                 executable, temp, snippets, reader, primary) as port:
             verify_static_compression(port)
-            assert request(port, DISCOVER + "?featured=true") == (200, "singapore-read")
+            assert request(port, DISCOVER + "?featured=true") == (200, None)
+            assert primary.requests[-1] == ("GET", DISCOVER, "session=fixture")
+            assert request(port, "/") == (200, "singapore-read")
             assert request(port, "/__qf_region_ready")[0] == 204
-            assert ("GET", DISCOVER, None) in reader.requests
-            assert request(port, DISCOVER, "POST")[0] == 403
+            assert ("GET", "/", None) in reader.requests
             reader.local_status = 503
             assert request(port, "/__qf_region_ready")[0] == 503
-            assert request(port, DISCOVER) == (200, "shenzhen-fallback")
-            assert primary.requests[-1] == ("GET", DISCOVER, None)
+            assert request(port, "/") == (200, "shenzhen-fallback")
+            assert primary.requests[-1] == ("GET", "/", None)
             assert request(port, "/api/app/credits") == (200, None)
             assert primary.requests[-1] == ("GET", "/api/app/credits", "session=fixture")
             assert request(port, DISCOVER + "/songs/fixture/1/play", "POST") == (200, None)
@@ -199,10 +200,10 @@ def run(executable, snippets):
             reader.local_status = 404
             assert request(port, GIFT) == (200, "shenzhen-fallback")
             reader.local_status = 503
-            primary.discover_delay = 1.3
+            primary.home_delay = 1.3
             before = len(primary.requests)
             with ThreadPoolExecutor(max_workers=12) as pool:
-                codes = sorted(pool.map(lambda _: request(port, DISCOVER)[0], range(12)))
+                codes = sorted(pool.map(lambda _: request(port, "/")[0], range(12)))
             assert codes == [503] * 8 + [504] * 4, codes
             assert len(primary.requests) - before == 4
         for path in temp.glob("qingfeng-sg-*.log"):
