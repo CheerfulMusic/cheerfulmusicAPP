@@ -670,6 +670,7 @@ export const english: Record<string, string> = {
   '内测体验': 'Private beta',
   '让灵感，先在这里发声。': 'Your next song starts here.',
   '青风音乐正在内测，输入邀请码即可开始体验。': 'Cheerful Music is in private beta. Enter your invitation code to explore.',
+  '把灵感写成歌词，用 AI 生成专属歌曲。输入邀请码即可体验。': 'Turn your ideas into lyrics and create your own song with AI. Enter your invitation code to get started.',
   '正在验证内测资格…': 'Checking your invitation…',
   '内测邀请码': 'Invitation code',
   '请输入邀请码': 'Enter your invitation code',

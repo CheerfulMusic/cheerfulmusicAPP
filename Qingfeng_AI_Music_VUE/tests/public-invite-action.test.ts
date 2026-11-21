@@ -2,6 +2,7 @@
 import { createApp, h, nextTick } from 'vue'
 import { expect, it, vi } from 'vitest'
 import Gate from '../src/modules/beta-access/BetaAccessGate.vue'
+import { locale, setLocale } from '../src/shared/i18n'
 vi.mock('../src/modules/beta-access/api', () => ({
  readInviteStatus: vi.fn(async () => ({ enabled: true, admitted: false, csrfToken: 'test', expiresAt: '' })),
  enterInvite: vi.fn(), InviteError: class extends Error {}
@@ -20,6 +21,23 @@ it('opens the invite input when a protected action is requested on a public page
 })
 
 vi.mock('/brand/logo-symbol.svg', () => ({ default: '/brand/logo-symbol.svg' }))
+
+it('automatically opens the homepage invite with the localized product name', async () => {
+ const show = vi.spyOn(HTMLDialogElement.prototype, 'showModal').mockImplementation(function(this: HTMLDialogElement) { this.open = true })
+ const host = document.createElement('div'); document.body.append(host)
+ const previous = locale.value
+ setLocale('zh-CN')
+ const app = createApp(Gate, { homeEntry: true }); app.mount(host)
+ try {
+  await nextTick()
+  expect(show).toHaveBeenCalled()
+  expect(host.querySelector('h1')?.textContent).toBe('青风音乐 AI 音乐创作平台')
+  setLocale('en')
+  await nextTick()
+  expect(host.querySelector('h1')?.textContent).toBe('Everyone Can Be a Singer')
+  expect(host.querySelector('.beta-access-brand')?.textContent).toBe('Cheerful Music')
+ } finally { app.unmount(); host.remove(); setLocale(previous); vi.restoreAllMocks() }
+})
 
 it('keeps the public preview readable and still requires an invitation for the app', async () => {
  const show = vi.spyOn(HTMLDialogElement.prototype, 'showModal').mockImplementation(function(this: HTMLDialogElement) { this.open = true })

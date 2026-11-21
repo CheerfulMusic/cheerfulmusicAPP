@@ -21,7 +21,7 @@ const publicPreview = computed(() => platform.kind === 'web' && route.name === '
 </script>
 <template>
   <RouterView v-if="standalonePreview" />
-  <BetaAccessGate v-else :public-access="publicListening" :public-preview="publicPreview">
+  <BetaAccessGate v-else :public-access="publicListening" :public-preview="publicPreview" :home-entry="route.name === 'home'">
     <template #public-preview="{ openInvite }">
       <SeoLanding :path="route.path">
         <button type="button" class="button" @click="openInvite">{{ t('请输入邀请码') }}</button>

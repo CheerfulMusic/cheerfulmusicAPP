@@ -34,7 +34,7 @@ describe('crawlable site pages', () => {
 
   it('publishes the Chinese search entry at the root and keeps the separate English search title', () => {
     expect(parsePage('/').documentElement.lang).toBe('zh-CN')
-    expect(parsePage('/').querySelector('h1')?.textContent).toBe('人人是歌手')
+    expect(parsePage('/').querySelector('h1')?.textContent).toBe('青风音乐 AI 音乐创作平台')
     expect(parsePage('/en/').title).toBe('Everyone Can Be a Singer | AI Music Maker – Cheerful Music')
     expect(sitePage('/zh-CN/')).toBeUndefined()
   })
