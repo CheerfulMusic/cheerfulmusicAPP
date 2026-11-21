@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
-import { t, defaultCover } from '../../../shared/i18n'
+import { t, locale, defaultCover } from '../../../shared/i18n'
 import { usePlayer } from '../../../shared/player/store'
 import PlaybackIcon from '../../../shared/ui/PlaybackIcon.vue'
 import { audioUrl, type AudioAsset } from '../api/detail'
@@ -102,8 +102,8 @@ onBeforeUnmount(() => dialog.value?.close())
         <section class="premium-about" aria-labelledby="premium-about-title">
           <header class="premium-about-header">
             <h3 id="premium-about-title">{{ t('关于青风音乐') }}</h3>
-            <a class="premium-profile-download" href="/media/premium-studio/cheerful-music-company-profile-zh-260730.pdf"
-               download="青风音乐 Cheerful Music260730中文版.pdf" :aria-label="t('下载青风音乐公司介绍 PDF（中文版）')">
+            <a class="premium-profile-download" :href="`/media/premium-studio/cheerful-music-company-profile-${locale === 'en' ? 'en' : 'zh'}-260730.pdf`"
+               :download="locale === 'en' ? 'Cheerful Music Company Profile 260730.pdf' : '青风音乐 Cheerful Music260730中文版.pdf'" :aria-label="t('下载青风音乐公司介绍 PDF')">
               <span aria-hidden="true">↓</span>{{ t('下载 PDF') }}
             </a>
           </header>
