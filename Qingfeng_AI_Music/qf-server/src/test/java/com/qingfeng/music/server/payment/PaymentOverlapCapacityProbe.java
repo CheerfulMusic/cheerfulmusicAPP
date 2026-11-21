@@ -26,7 +26,11 @@ final class PaymentOverlapCapacityProbe {
         }
         Object oldDelay = ReflectionTestUtils.getField(stripe, "initialReconcileDelaySeconds");
         Object oldReuse = ReflectionTestUtils.getField(stripe, "reuseSchemaCheck");
+        Object oldComplete = ReflectionTestUtils.getField(stripe, "completeRecoveryOnPaidCallback");
         try {
+            ReflectionTestUtils.setField(stripe, "completeRecoveryOnPaidCallback",
+                    Boolean.parseBoolean(System.getProperty("qf.payment.capacity.complete-recovery-on-paid-callback",
+                            config.getProperty("qingfeng.stripe.complete-recovery-on-paid-callback","false"))));
             ReflectionTestUtils.setField(stripe, "initialReconcileDelaySeconds",
                     Integer.parseInt(config.getProperty("qingfeng.stripe.initial-reconcile-delay-seconds")));
             ReflectionTestUtils.setField(stripe, "reuseSchemaCheck",
@@ -35,6 +39,7 @@ final class PaymentOverlapCapacityProbe {
         } finally {
             ReflectionTestUtils.setField(stripe, "initialReconcileDelaySeconds", oldDelay);
             ReflectionTestUtils.setField(stripe, "reuseSchemaCheck", oldReuse);
+            ReflectionTestUtils.setField(stripe, "completeRecoveryOnPaidCallback", oldComplete);
         }
     }
 
@@ -71,6 +76,12 @@ final class PaymentOverlapCapacityProbe {
                 Thread.sleep(500);
             }
             for (var order : orders) verifySettlement(order);
+            long confirmedByCallback = number("""
+                    SELECT COUNT(*) FROM payment_inbox_attempt
+                    WHERE result='DONE' AND attempt=0 AND evidence_id LIKE 'stripe-paid-callback:%'
+                    """);
+            System.out.printf("RECOVERY confirmedByCallback=%d processedByWorker=%d%n",
+                    confirmedByCallback, count - confirmedByCallback);
             reportLatency(orders, expectedCallbacks,
                     Integer.parseInt(config.getProperty("qingfeng.stripe.initial-reconcile-delay-seconds")));
             System.out.printf("VERIFIED orders=%d callbacks=%d recoveries=%d peakDue=%d%n",

@@ -200,8 +200,34 @@ public class PaymentInbox {
             db.update("UPDATE payment_webhook_inbox SET status='PENDING',attempts=0,lease_token=NULL,lease_until=NULL,next_attempt_at=CURRENT_TIMESTAMP,last_error=NULL,updated_at=CURRENT_TIMESTAMP WHERE provider=? AND merchant_scope=? AND env_scope=? AND event_id=? AND status='MANUAL'",provider,merchant,environment,eventId);
         });
     }
+    /** Called in the settlement transaction, after locking the owner and verifying the paid order. */
+    void completeScheduledRecovery(String provider, String merchant, String environment, String eventId,
+                                   String type, String originalPayload, String evidence) {
+        tx.executeWithoutResult(status -> {
+            int updated = db.update("""
+                    UPDATE payment_webhook_inbox SET status='DONE',updated_at=CURRENT_TIMESTAMP
+                    WHERE provider=? AND merchant_scope=? AND env_scope=? AND event_id=? AND event_type=?
+                      AND status='PENDING' AND attempts=0 AND last_error IS NULL
+                      AND lease_token IS NULL AND lease_until IS NULL AND next_attempt_at>CURRENT_TIMESTAMP
+                      AND payload_hash=? AND CAST(payload AS BINARY)=CAST(? AS BINARY)
+                    """, provider, merchant, environment, eventId, type, hash(originalPayload), originalPayload);
+            if (updated == 1) {
+                // No worker lease was taken. Attempt zero records which paid callback supplied the evidence.
+                insertAttempt(provider, merchant, environment, eventId, 0, "DONE", evidence);
+            }
+        });
+    }
+
+    private void insertAttempt(String provider, String merchant, String environment, String eventId,
+                               int attempt, String result, String evidence) {
+        db.update("""
+                INSERT INTO payment_inbox_attempt(id,provider,merchant_scope,env_scope,event_id,attempt,result,evidence_id,created_at)
+                VALUES(?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)
+                """,UUID.randomUUID().toString(),provider,merchant,environment,eventId,attempt,result,evidence);
+    }
+
     private void audit(Delivery d,String result,String evidence){
-        db.update("INSERT INTO payment_inbox_attempt(id,provider,merchant_scope,env_scope,event_id,attempt,result,evidence_id,created_at) VALUES(?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)",UUID.randomUUID().toString(),d.provider(),d.merchant(),d.environment(),d.eventId(),Math.max(0,d.attempt()),result,evidence);
+        insertAttempt(d.provider(), d.merchant(), d.environment(), d.eventId(), Math.max(0,d.attempt()), result, evidence);
         if("MANUAL".equals(result)){
             // Emit only after durable quarantine commits. No payload, secret or raw exception message.
             org.springframework.transaction.support.TransactionSynchronizationManager.registerSynchronization(new org.springframework.transaction.support.TransactionSynchronization(){

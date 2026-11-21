@@ -617,6 +617,56 @@ class IntegratedPaymentApplicationMySqlTest {
         assertEquals(1,number("SELECT COUNT(*) FROM credit_ledger WHERE entry_type='CREDIT' AND reference_id=?","payment:"+p.order()));
         assertEquals(1,number("SELECT COUNT(*) FROM p0_credit_payment_binding WHERE order_id=?",p.order()));
     }
+    @Test @Order(22) void paidCallbackCompletesOnlyItsPristineRecoveryAtomically() throws Exception {
+        var oldDelay = org.springframework.test.util.ReflectionTestUtils.getField(stripe,"initialReconcileDelaySeconds");
+        var oldComplete = org.springframework.test.util.ReflectionTestUtils.getField(stripe,"completeRecoveryOnPaidCallback");
+        try {
+            org.springframework.test.util.ReflectionTestUtils.setField(stripe,"initialReconcileDelaySeconds",120);
+            org.springframework.test.util.ReflectionTestUtils.setField(stripe,"completeRecoveryOnPaidCallback",true);
+            var order = pending(owner());
+            String recovery = "reconcile-order-" + order.order();
+            String event = "evt_" + unique();
+            SESSIONS.put(order.session(),session(order.session(),order.order(),true));
+            accepted("checkout.session.completed",order.session(),event);
+            db.execute("""
+                    CREATE TRIGGER reject_recovery_evidence BEFORE INSERT ON payment_inbox_attempt FOR EACH ROW
+                    BEGIN IF NEW.evidence_id LIKE 'stripe-paid-callback:%' THEN
+                      SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='SYNTHETIC_RECOVERY_AUDIT_FAILURE';
+                    END IF; END
+                    """);
+            try {
+                drain();
+                assertEquals(0,ledger.balance(order.owner().creatorId()));
+                assertEquals("PENDING",db.queryForObject("SELECT status FROM payment_order WHERE id=?",String.class,order.order()));
+                assertEquals(1,number("SELECT COUNT(*) FROM payment_webhook_inbox WHERE event_id=? AND status='PENDING' AND attempts=0",recovery));
+            } finally {
+                db.execute("DROP TRIGGER reject_recovery_evidence");
+            }
+            due(event);
+            drain();
+            accepted("checkout.session.completed",order.session(),"evt_" + unique());
+            drain();
+            assertEquals(100,ledger.balance(order.owner().creatorId()));
+            assertEquals(1,number("SELECT COUNT(*) FROM payment_webhook_inbox WHERE event_id=? AND status='DONE' AND attempts=0",recovery));
+            assertEquals(1,number("SELECT COUNT(*) FROM payment_inbox_attempt WHERE event_id=? AND result='DONE' AND attempt=0 AND evidence_id=?",recovery,"stripe-paid-callback:"+event));
+
+            var changed = pending(owner());
+            String changedRecovery = "reconcile-order-" + changed.order();
+            db.update("UPDATE payment_webhook_inbox SET payload=CONCAT(payload,' ') WHERE event_id=?",changedRecovery);
+            SESSIONS.put(changed.session(),session(changed.session(),changed.order(),true));
+            accepted("checkout.session.completed",changed.session(),"evt_" + unique());
+            drain();
+            assertEquals(100,ledger.balance(changed.owner().creatorId()));
+            assertEquals(1,number("SELECT COUNT(*) FROM payment_webhook_inbox WHERE event_id=? AND status='PENDING'",changedRecovery));
+            due(changedRecovery);
+            drain();
+            assertEquals(1,number("SELECT COUNT(*) FROM payment_webhook_inbox WHERE event_id=? AND status='DONE' AND attempts=1",changedRecovery));
+        } finally {
+            org.springframework.test.util.ReflectionTestUtils.setField(stripe,"initialReconcileDelaySeconds",oldDelay);
+            org.springframework.test.util.ReflectionTestUtils.setField(stripe,"completeRecoveryOnPaidCallback",oldComplete);
+        }
+    }
+
     @Test @Order(22) void delayedOrderRecoveryLeavesWebhooksImmediatelyEligible() throws Exception {
         var previous = org.springframework.test.util.ReflectionTestUtils.getField(stripe,"initialReconcileDelaySeconds");
         try {
