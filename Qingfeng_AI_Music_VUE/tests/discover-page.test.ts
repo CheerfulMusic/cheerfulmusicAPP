@@ -84,7 +84,7 @@ describe('Discover editorial layout with real content', () => {
 
     expect(covers('路口相逢')).toHaveLength(3)
     expect(new Set(covers('路口相逢')).size).toBe(1)
-    expect(covers('路口相逢')[0]).toContain('lu-kou-xiang-feng.webp')
+    expect(covers('路口相逢')[0]).toContain('cover-06.webp')
     expect(new Set(covers('晚风车站')).size).toBe(1)
     expect(covers('晚风车站')[0]).toContain('wan-feng-che-zhan.webp')
     expect(new Set(covers(original.song.title)).size).toBe(1)
@@ -94,6 +94,29 @@ describe('Discover editorial layout with real content', () => {
     expect(new Set(covers('AFTER MIDNIGHT')).size).toBe(1)
     expect(covers('AFTER MIDNIGHT')[0]).toContain('after-midnight.webp')
     expect(covers('Midnight Call')[0]).toContain('midnight-call.webp')
+  })
+
+  it('keeps editorial artwork stable across scoped shelves and preserves the original in other sections', async () => {
+    const gravity = song('0485811c-0297-4513-9fb1-75f981af8707')
+    gravity.song.title = 'Gravity'
+    const streetlight = song('0f831f4b-1f3f-4d14-b6cf-b33534863622')
+    streetlight.song.title = 'Streetlight'
+    mocks.list.mockImplementation(async (tab: string) =>
+      page(tab === 'featured' ? [streetlight, gravity] : [gravity, streetlight]))
+    mocks.shelves.mockResolvedValue({
+      ...shelfData([gravity, streetlight]),
+      genres: { electronic: [gravity], folk: [gravity] },
+    })
+    const wrapper = await open()
+    const cover = (section: string, title: string) => wrapper.findAll(section + ' .shelf-track')
+      .find(card => card.get('.track-title').text() === title)?.get('img').attributes('src')
+
+    for (const section of ['#discover-featured', '#discover-latest', '#discover-today', '#discover-electronic']) {
+      expect(cover(section, 'Gravity')).toContain('cover-23.webp')
+    }
+    expect(cover('#discover-today', 'Streetlight')).toContain('cover-14.webp')
+    expect(cover('#discover-folk', 'Gravity')).toContain('/1/cover')
+    expect(wrapper.get('.discover-ranking img').attributes('src')).toContain('/1/cover')
   })
 
   it('plays the four distinct vocal recordings and keeps the upcoming entry out of the queue and carousel logic', async () => {

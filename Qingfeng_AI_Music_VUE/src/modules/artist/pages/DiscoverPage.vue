@@ -8,6 +8,7 @@ import PlaybackIcon from '../../../shared/ui/PlaybackIcon.vue'
 import ArtistAvatar from '../components/ArtistAvatar.vue'
 import DiscoverSongCard from '../components/DiscoverSongCard.vue'
 import DiscoverShelf from '../components/DiscoverShelf.vue'
+import { withDiscoverEditorialCover } from '../model/discover-editorial-artwork'
 import {
   christmasSongId, discoverGenres, discoverReleaseCover, withDiscoverPreviewCover,
   type DiscoverShelfTrack, type PublishedShelfTrack,
@@ -100,11 +101,14 @@ function publicDiscoverTrack(artistId: string, song: DiscoverSong['song']) {
   track.cover = discoverReleaseCover(song, track.cover)
   return track
 }
-function withTracks(items: DiscoverSong[]): PublishedShelfTrack[] {
-  return items.map(item => ({ ...item, track: publicDiscoverTrack(item.artistId, item.song) }))
+function withTracks(items: DiscoverSong[], useEditorialCover = false): PublishedShelfTrack[] {
+  return items.map(item => {
+    const track = publicDiscoverTrack(item.artistId, item.song)
+    return { ...item, track: useEditorialCover ? withDiscoverEditorialCover(track) : track }
+  })
 }
 const rows = computed(() => withTracks(songs.value))
-const latestRows = computed(() => withTracks(latestSongs.value))
+const latestRows = computed(() => withTracks(latestSongs.value, true))
 const latestRecommendations = computed(() => {
   if (editorialLoading.value || featuredFailed.value || featuredSongs.value.length) return []
 
@@ -117,29 +121,34 @@ const latestRecommendations = computed(() => {
 })
 const featuredRows = computed(() => withTracks(
   (latestRecommendations.value.length ? latestRecommendations.value : featuredSongs.value).slice(0, 7),
+  true,
 ))
 const dailySongs = computed(() => shelves.value?.today ?? [])
 const cumulativeHotSongs = computed(() => dailySongs.value.length || editorialLoading.value
   ? [] : popularSongs.value.filter(item => (item.plays ?? 0) > 0).slice(0, 10))
-const todayRows = computed(() => withTracks(
-  cumulativeHotSongs.value.length ? cumulativeHotSongs.value : dailySongs.value,
-))
+const rankedSongs = computed(() => cumulativeHotSongs.value.length ? cumulativeHotSongs.value : dailySongs.value)
+const todayRows = computed(() => withTracks(rankedSongs.value, true))
+const rankingRows = computed(() => withTracks(rankedSongs.value))
 const vocalRows = computed(() => [...vocalPerformanceRows, ...withTracks(shelves.value?.vocal ?? [])])
 const upcomingVocal = { title: '唯一的航线', cover: seaStacks }
-const ranking = computed(() => todayRows.value.slice(0, 5))
+const ranking = computed(() => rankingRows.value.slice(0, 5))
 const genreShelves = computed(() => discoverGenres.map(section => {
-  const publicRows = withTracks(shelves.value?.genres[section.id] ?? [])
+  const useEditorialCover = section.id === 'electronic' || section.id === 'rock' || section.id === 'jazz-soul'
+  const publicRows = withTracks(shelves.value?.genres[section.id] ?? [], useEditorialCover)
   const publishedIds = new Set(publicRows.map(row => row.song.id))
   const examples = previewTracks.value
     .filter(track => section.samples.some(genre => track.filters.includes(genre))
       && (!track.publication || !publishedIds.has(track.publication.song.id)))
-    .map((track): DiscoverShelfTrack => ({
-      track: withDiscoverPreviewCover(track),
-      stageName: track.publication?.stageName ?? '',
-      durationSeconds: track.durationSeconds,
-      song: track.publication?.song,
-      artistId: track.publication?.artistId,
-    }))
+    .map((preview): DiscoverShelfTrack => {
+      const track = withDiscoverPreviewCover(preview)
+      return {
+        track: useEditorialCover ? withDiscoverEditorialCover(track) : track,
+        stageName: track.publication?.stageName ?? '',
+        durationSeconds: track.durationSeconds,
+        song: track.publication?.song,
+        artistId: track.publication?.artistId,
+      }
+    })
   const tracks = [...publicRows, ...examples]
   const wide = section.hasWideRow ? [...tracks.slice(7), ...tracks.slice(0, 7)].slice(0, 4) : []
   return { ...section, square: tracks.slice(0, 7), wide }
@@ -612,7 +621,7 @@ onBeforeUnmount(() => {
           </header>
           <ol v-if="ranking.length" class="discover-ranking">
             <li v-for="(row, index) in ranking" :key="row.track.audio">
-              <button type="button" class="discover-ranking-row" :aria-label="t(playing(row.track) ? '暂停 {title}' : '试听 {title}', { title: row.song.title })" @click="play(row, todayRows)">
+              <button type="button" class="discover-ranking-row" :aria-label="t(playing(row.track) ? '暂停 {title}' : '试听 {title}', { title: row.song.title })" @click="play(row, rankingRows)">
                 <span class="discover-rank" aria-hidden="true">{{ String(index + 1).padStart(2, '0') }}</span>
                 <span v-if="index === 0" class="discover-ranking-cover"><img :src="row.track.cover" alt="" width="42" height="42" loading="lazy"></span>
                 <span class="discover-ranking-info"><strong>{{ row.song.title }}</strong><span>{{ row.stageName }}</span></span>
