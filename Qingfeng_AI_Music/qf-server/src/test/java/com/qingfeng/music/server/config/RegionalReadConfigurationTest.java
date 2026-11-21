@@ -35,7 +35,7 @@ class RegionalReadConfigurationTest {
         String path = "/gift/" + "A".repeat(43);
         assertEquals(404, response(true, proof, path, false));
         assertEquals(503, response(true, proof, path, true));
-        assertEquals(503, response(false, proof, "/api/public/discover", false));
+        assertEquals(404, response(false, proof, "/api/public/discover", false));
         Files.createFile(proof);
         Files.setLastModifiedTime(proof, FileTime.from(Instant.now().minusSeconds(1)));
         assertEquals(404, response(false, proof, path, true));
@@ -54,7 +54,7 @@ class RegionalReadConfigurationTest {
 
     @Test
     void acceptsOnlyExplicitReadRoutes() {
-        assertTrue(RegionalReadConfiguration.allows("GET", "/api/public/discover"));
+        assertFalse(RegionalReadConfiguration.allows("GET", "/api/public/discover"));
         assertTrue(RegionalReadConfiguration.allows("HEAD", "/assets/site.js"));
         assertFalse(RegionalReadConfiguration.allows("POST", "/api/public/discover"));
         assertFalse(RegionalReadConfiguration.allows("GET", "/api/app/credits"));
