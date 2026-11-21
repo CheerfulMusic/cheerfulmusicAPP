@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import FilingLink from "../../shared/ui/FilingLink.vue"
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { t } from '../../shared/i18n'
+import { locale, t } from '../../shared/i18n'
+import { homeSeo, siteName } from '../../shared/i18n/home-seo'
 import LanguageSwitcher from '../../shared/i18n/LanguageSwitcher.vue'
 import { enterInvite, InviteError, readInviteStatus, type InviteStatus } from './api'
 
-const props = defineProps<{ publicAccess?: boolean; publicPreview?: boolean }>()
+const props = defineProps<{ publicAccess?: boolean; publicPreview?: boolean; homeEntry?: boolean }>()
 const dialog = ref<HTMLDialogElement>(), input = ref<HTMLInputElement>()
 const everAdmitted = ref(false), admitted = ref(false), checking = ref(true), submitting = ref(false)
 const status = ref<InviteStatus>(), code = ref(''), error = ref('')
@@ -76,9 +77,9 @@ onBeforeUnmount(() => { disposed = true; clearTimeout(expiryTimer); window.remov
     <section class="beta-access-card" :aria-busy="busy">
       <div class="beta-access-top"><span class="beta-access-label">{{ t('内测体验') }}</span><LanguageSwitcher/></div>
       <img class="beta-access-logo" src="/brand/logo-symbol.svg" alt="" width="56" height="56">
-      <p class="beta-access-brand">Cheerful Music</p>
-      <h1 id="beta-access-title">{{ t('让灵感，先在这里发声。') }}</h1>
-      <p id="beta-access-description">{{ t('青风音乐正在内测，输入邀请码即可开始体验。') }}</p>
+      <p class="beta-access-brand">{{ siteName }}</p>
+      <h1 id="beta-access-title">{{ homeEntry ? homeSeo[locale].heading : t('让灵感，先在这里发声。') }}</h1>
+      <p id="beta-access-description">{{ homeEntry ? t('把灵感写成歌词，用 AI 生成专属歌曲。输入邀请码即可体验。') : t('青风音乐正在内测，输入邀请码即可开始体验。') }}</p>
       <p v-if="checking" class="beta-access-checking" role="status">{{ t('正在验证内测资格…') }}</p>
       <form v-else-if="status" @submit.prevent="submit">
         <label for="beta-invite-code">{{ t('内测邀请码') }}</label>

@@ -3,7 +3,7 @@ export const siteName = 'Cheerful Music'
 export const homeSeo = {
   'zh-CN': {
     path: '/',
-    heading: '人人是歌手',
+    heading: '青风音乐 AI 音乐创作平台',
     description: '青风音乐 AI 音乐创作平台。无需音乐基础，简单几步即可生成专属歌曲，发布作品，分享音乐，让人人都能成为歌手。',
   },
   en: {
