@@ -10,6 +10,8 @@ import java.util.*;
 /** DB Agent admission remains independent. Optional Redis shares HTTP buckets across instances. */
 public final class ApiRateLimitFilter extends OncePerRequestFilter {
     @FunctionalInterface public interface SharedGate {boolean allow(String key,int limit);}
+    // A session can use separate read, write and analytics buckets in the same minute.
+    private static final int MAX_LOCAL_BUCKETS = 32_768;
     private final Map<String,Integer> buckets=new HashMap<>();
     private long localWindow=Long.MIN_VALUE;
     private final Clock clock;
@@ -33,7 +35,7 @@ public final class ApiRateLimitFilter extends OncePerRequestFilter {
             localWindow = window;
         }
         Integer count = buckets.get(key);
-        if (count == null && buckets.size() >= 10_000) return false;
+        if (count == null && buckets.size() >= MAX_LOCAL_BUCKETS) return false;
         int used = count == null ? 0 : count;
         if (used >= limit) return false;
         buckets.put(key, used + 1);

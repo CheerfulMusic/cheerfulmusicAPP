@@ -9,7 +9,7 @@ class RateLimitTest {
         var clock = org.mockito.Mockito.mock(Clock.class);
         org.mockito.Mockito.when(clock.millis()).thenReturn(60_000L);
         var limiter = new ApiRateLimitFilter(clock);
-        for (int i=0; i<10_000; i++) assertTrue(limiter.allow("actor-"+i,2));
+        for (int i=0; i<32_768; i++) assertTrue(limiter.allow("actor-"+i,2));
         assertFalse(limiter.allow("new",2));
         assertTrue(limiter.allow("actor-0",2));
         assertFalse(limiter.allow("actor-0",2));

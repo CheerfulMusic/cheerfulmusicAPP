@@ -17,10 +17,11 @@ public class ExecutionConfiguration {
     @Bean ExecutionRepository executionRepository(ExecutionMapper mapper, org.springframework.jdbc.core.JdbcTemplate jdbc,
             org.springframework.transaction.PlatformTransactionManager manager, com.qingfeng.music.credits.CreditsLedger credits,
             com.qingfeng.music.credits.LyricFreeAllowance lyricFreeAllowance,
+            com.qingfeng.music.infrastructure.persistence.usage.JdbcUsageBudget budget,
             org.springframework.beans.factory.ObjectProvider<com.qingfeng.music.infrastructure.persistence.cover.JdbcAutomaticCoverJobs> coverJobs){
         var repository = new MyBatisExecutionRepository(mapper)
                 .withCredits(jdbc,new org.springframework.transaction.support.TransactionTemplate(manager),credits)
-                .withLyricFreeAllowance(lyricFreeAllowance);
+                .withLyricFreeAllowance(lyricFreeAllowance).withPermitReset(budget::resetMusicPermits);
         coverJobs.ifAvailable(jobs -> repository.withAutomaticCover(jobs::enqueue));
         return repository;
     }
