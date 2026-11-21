@@ -78,4 +78,19 @@ mvn -pl qf-server -am test '-Dtest=MusicCapacityHttpTest' '-Dsurefire.failIfNoSp
 
 实际输入速率以全部建单和回调投递完成的耗时为分母。每次采样结束后等待 5 秒再取下一次样本，积压同时包含已到期的回调及对账任务。P95 取已完成的 checkout.session.completed 事件的 updated_at 与 created_at 之差，两次写入使用秒级 CURRENT_TIMESTAMP。数据不包含用户在支付渠道停留的时间。75 单/秒是此次 3 分钟实验的低延迟档，100 单/秒已出现积压。
 
-复测时使用全新的隔离财务测试库，单独选择测试方法 IntegratedPaymentApplicationMySqlTest#settlePaymentsAcrossRecoveryWindow。传入 -Dqf.payment.capacity.overlap=true 开启本测试，-Dqf.payment.capacity=true 启用隔离测试回调限额。-Dqf.payment.capacity.orders-per-second 和 -Dqf.payment.capacity.worker-concurrency 分别控制输入速率和处理线程数，默认 75 和 4。
+复测时使用全新的隔离财务测试库，单独选择测试方法 IntegratedPaymentApplicationMySqlTest#settlePaymentsAcrossRecoveryWindow。传入 -Dqf.payment.capacity.overlap=true 开启本测试，-Dqf.payment.capacity=true 启用隔离测试回调限额。-Dqf.payment.capacity.orders-per-second 和 -Dqf.payment.capacity.worker-concurrency 分别控制输入速率和处理线程数，输入速率默认 75，未指定线程数时读取容量 profile 的 worker-concurrency。
+
+### 每秒 100 单下的线程分配对照
+
+每轮 180 秒、18000 笔。沿用上节的隔离环境和缺失、重复回调比例。每种方案各运行一次，选定的 8 个共享线程配置再独立运行一次。每轮结束后均逐单核对了支付状态、唯一入账流水和余额。
+
+| 线程分配 | 签名回调持久化至完成 P95 | 缺失回调订单从首次对账到期至完成 P95 | 到期未完成任务采样峰值 |
+|---|---:|---:|---:|
+| 4 个共享 | 16 秒 | 17 秒 | 3025 |
+| 3 个处理回调，1 个处理对账 | 10 秒 | 35 秒 | 4174 |
+| 3 个处理回调，1 个处理对账，空闲时协助另一队列 | 10 秒 | 33 秒 | 4135 |
+| 6 个共享 | 1 秒 | 2 秒 | 500 |
+| 8 个共享 | 1 秒 | 1 秒 | 189 |
+| 8 个共享，直接读取容量配置复测 | 1 秒 | 1 秒 | 188 |
+
+容量 profile 采用 8 个共享线程。复测中 18000 个输入任务在 180.05 秒内完成，180 个缺失回调的订单在首次对账到期后最迟 2 秒完成。首次对账在建单后 120 秒到期。秒级延迟数据来自测试库，真实渠道耗时、限额与长时间稳定性须独立验收。

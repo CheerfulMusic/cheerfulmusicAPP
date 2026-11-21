@@ -42,7 +42,8 @@ final class PaymentOverlapCapacityProbe {
         int rate = Integer.getInteger("qf.payment.capacity.orders-per-second", 75);
         assertTrue(rate > 0);
         int count = Math.multiplyExact(rate, INPUT_SECONDS);
-        int lanes = Integer.getInteger("qf.payment.capacity.worker-concurrency", 4);
+        int lanes = Integer.getInteger("qf.payment.capacity.worker-concurrency",
+                Integer.parseInt(config.getProperty("qingfeng.payment.inbox.worker-concurrency", "4")));
         var workers = new PaymentInboxRunner(paypal, List.of(stripe, paypal), lanes,
                 Integer.parseInt(config.getProperty("qingfeng.payment.inbox.batch-size")));
         int scanMs = Integer.parseInt(config.getProperty("qingfeng.payment.inbox.scan-ms"));
@@ -70,6 +71,8 @@ final class PaymentOverlapCapacityProbe {
                 Thread.sleep(500);
             }
             for (var order : orders) verifySettlement(order);
+            reportLatency(orders, expectedCallbacks,
+                    Integer.parseInt(config.getProperty("qingfeng.stripe.initial-reconcile-delay-seconds")));
             System.out.printf("VERIFIED orders=%d callbacks=%d recoveries=%d peakDue=%d%n",
                     count, callbacks.get(), recoveries.get(), peakDue.get());
         } finally {
@@ -77,6 +80,33 @@ final class PaymentOverlapCapacityProbe {
             scheduler.shutdownNow();
             workers.stop();
         }
+    }
+
+    private static void reportLatency(List<Paid> orders, int callbacks, int firstRecoveryDelay) {
+        if (callbacks > 0) {
+            long p95 = number("""
+                    SELECT TIMESTAMPDIFF(SECOND, created_at, updated_at) AS elapsed_seconds
+                    FROM payment_webhook_inbox WHERE event_type='checkout.session.completed' AND status='DONE'
+                    ORDER BY elapsed_seconds LIMIT 1 OFFSET ?
+                    """, percentile95Index(callbacks));
+            System.out.printf("CALLBACK count=%d recordedToDoneP95Seconds=%d%n", callbacks, p95);
+        }
+        var lateRecoverySeconds = new ArrayList<Long>();
+        for (int index = 0; index < orders.size(); index += 100) {
+            long elapsed = number("""
+                    SELECT TIMESTAMPDIFF(SECOND, created_at, updated_at)
+                    FROM payment_webhook_inbox WHERE event_id=? AND status='DONE'
+                    """, "reconcile-order-" + orders.get(index).order());
+            lateRecoverySeconds.add(elapsed - firstRecoveryDelay);
+        }
+        lateRecoverySeconds.sort(Long::compare);
+        System.out.printf("MISSING_CALLBACK count=%d dueToDoneP95Seconds=%d maxSeconds=%d%n",
+                lateRecoverySeconds.size(), lateRecoverySeconds.get(percentile95Index(lateRecoverySeconds.size())),
+                lateRecoverySeconds.get(lateRecoverySeconds.size() - 1));
+    }
+
+    private static int percentile95Index(int count) {
+        return (int) Math.ceil(0.95 * count) - 1;
     }
 
     private Paid createAndNotify(int sequence) throws Exception {
