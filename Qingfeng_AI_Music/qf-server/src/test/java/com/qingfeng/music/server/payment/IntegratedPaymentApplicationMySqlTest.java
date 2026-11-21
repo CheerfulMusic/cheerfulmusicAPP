@@ -175,6 +175,7 @@ class IntegratedPaymentApplicationMySqlTest {
     static void assertHistory(JsonNode expected){var row=db.queryForMap("SELECT script,checksum,success FROM flyway_schema_history WHERE version=?",expected.path("version").asString());assertEquals(expected.path("script").asString(),row.get("script"));assertEquals(expected.path("checksum").asInt(),((Number)row.get("checksum")).intValue());assertTrue(Boolean.TRUE.equals(row.get("success"))||row.get("success") instanceof Number n&&n.intValue()==1);}
     static Map<String,Object> configuration(){
         Map<String,Object> values=new LinkedHashMap<>();
+        if(Boolean.getBoolean("qf.payment.capacity")) values.put("qingfeng.payment.webhook.rate-limit-per-minute",12000);
         values.put("spring.datasource.url",url);values.put("spring.datasource.username",user);values.put("spring.datasource.password",password);values.put("spring.datasource.driver-class-name","com.mysql.cj.jdbc.Driver");
         values.put("spring.datasource.hikari.maximum-pool-size",16);values.put("spring.datasource.hikari.connection-init-sql","SET SESSION innodb_lock_wait_timeout=5, time_zone='+00:00'");
         values.put("spring.flyway.target",String.valueOf(APPLICATION_SCHEMA_TARGET));values.put("spring.flyway.clean-disabled",true);values.put("spring.sql.init.mode","never");values.put("server.address","127.0.0.1");values.put("server.port",0);
@@ -267,6 +268,41 @@ class IntegratedPaymentApplicationMySqlTest {
     static Paid pending(IdentityApi.Session owner) throws Exception {
         var response=business(owner,"/api/app/stripe/orders","POST","{\"packageId\":\"starter-USD\",\"amount\":0.01,\"credits\":999999,\"currency\":\"GBP\"}");assertEquals(200,response.statusCode(),response.body());String order=JSON.readTree(response.body()).path("orderId").asString();assertFalse(order.isBlank());
         var stored=db.queryForMap("SELECT * FROM payment_order WHERE id=?",order);assertEquals(new BigDecimal("9.90"),stored.get("amount"));assertEquals("USD",stored.get("currency"));assertEquals(100,((Number)stored.get("credits")).longValue());assertEquals("PENDING",stored.get("status"));assertEquals("STRIPE_SANDBOX",stored.get("provider"));String id=(String)stored.get("provider_link_id");return new Paid(owner,order,id,SESSIONS.get(id).path("payment_intent").asString());
+    }
+    @Test
+    @org.junit.jupiter.api.condition.EnabledIfSystemProperty(named="qf.payment.capacity", matches="true")
+    void drainVerifiedStripeBacklog() throws Exception {
+        for (int batchSize : List.of(10,128)) {
+            String prefix="evt_capacity"+batchSize+"x";
+            var orders=new ArrayList<Paid>();
+            for(int i=0;i<2500;i++){
+                var p=pending(owner());
+                orders.add(p);
+                SESSIONS.put(p.session(),session(p.session(),p.order(),true));
+                String event=prefix+i;
+                accepted("checkout.session.completed",p.session(),event);
+                if(i%100==0)accepted("checkout.session.completed",p.session(),event);
+            }
+            var runner=new PaymentInboxRunner(paypal,List.of(stripe,paypal),4,batchSize);
+            var scheduler=Executors.newSingleThreadScheduledExecutor();
+            long start=System.nanoTime();
+            String doneSql="SELECT COUNT(*) FROM payment_webhook_inbox WHERE provider='STRIPE_SANDBOX' AND LEFT(event_id,?)=? AND status='DONE'";
+            try{
+                scheduler.scheduleWithFixedDelay(runner::runOnce,0,1,TimeUnit.SECONDS);
+                while(number(doneSql,prefix.length(),prefix)<orders.size()){
+                    assertTrue(System.nanoTime()-start<TimeUnit.MINUTES.toNanos(5),"Unsettled backlog");
+                    Thread.sleep(100);
+                }
+            }finally{scheduler.shutdownNow();runner.stop();}
+            double elapsed=(System.nanoTime()-start)/1e9;
+            System.out.printf("PAYMENT_DRAIN lanes=4 scanMs=1000 batch=%d settled=%d seconds=%.2f completedPerSecond=%.1f%n",
+                batchSize,orders.size(),elapsed,orders.size()/elapsed);
+            for(var p:orders){
+                assertEquals("PAID",db.queryForObject("SELECT status FROM payment_order WHERE id=?",String.class,p.order()));
+                assertEquals(1,number("SELECT COUNT(*) FROM credit_ledger WHERE owner_id=? AND reference_id=? AND entry_type='CREDIT' AND amount=100",p.owner().creatorId(),"payment:"+p.order()));
+                assertEquals(100,ledger.balance(p.owner().creatorId()));
+            }
+        }
     }
     static Paid paid() throws Exception{return paid(owner());}
     static Paid paid(IdentityApi.Session owner) throws Exception {var paid=pending(owner);SESSIONS.put(paid.session(),session(paid.session(),paid.order(),true));accepted("checkout.session.completed",paid.session(),"evt_"+unique());drain();assertEquals("PAID",db.queryForObject("SELECT status FROM payment_order WHERE id=?",String.class,paid.order()));return paid;}

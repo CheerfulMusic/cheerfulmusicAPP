@@ -19,10 +19,15 @@ public class PaymentInboxRunner {
     private final java.util.List<java.util.concurrent.atomic.AtomicBoolean> polling;
     private final java.util.concurrent.atomic.AtomicBoolean reconciling=new java.util.concurrent.atomic.AtomicBoolean();
     private final java.util.concurrent.atomic.AtomicBoolean stopping=new java.util.concurrent.atomic.AtomicBoolean();
+    private final int batchSize;
     @org.springframework.beans.factory.annotation.Autowired
     public PaymentInboxRunner(PayPalPaymentService paypal,java.util.List<VerifiedPaymentProcessor> processors,
-            @org.springframework.beans.factory.annotation.Value("${qingfeng.payment.inbox.worker-concurrency:4}") int concurrency){
-        this(paypal,processors,newWorkers(concurrency),System::nanoTime,concurrency);
+            @org.springframework.beans.factory.annotation.Value("${qingfeng.payment.inbox.worker-concurrency:4}") int concurrency,
+            @org.springframework.beans.factory.annotation.Value("${qingfeng.payment.inbox.batch-size:10}") int batchSize){
+        this(paypal,processors,newWorkers(concurrency),System::nanoTime,concurrency,batchSize);
+    }
+    public PaymentInboxRunner(PayPalPaymentService paypal,java.util.List<VerifiedPaymentProcessor> processors,int concurrency){
+        this(paypal,processors,concurrency,10);
     }
     private static java.util.concurrent.ExecutorService newWorkers(int concurrency){
         if(concurrency<1||concurrency>32)throw new IllegalArgumentException("Payment concurrency must be 1..32");
@@ -39,6 +44,12 @@ public class PaymentInboxRunner {
     }
     PaymentInboxRunner(PayPalPaymentService paypal,java.util.List<VerifiedPaymentProcessor> processors,
             java.util.concurrent.ExecutorService workers,java.util.function.LongSupplier monotonicClock,int concurrency){
+        this(paypal,processors,workers,monotonicClock,concurrency,10);
+    }
+    private PaymentInboxRunner(PayPalPaymentService paypal,java.util.List<VerifiedPaymentProcessor> processors,
+            java.util.concurrent.ExecutorService workers,java.util.function.LongSupplier monotonicClock,int concurrency,int batchSize){
+        if(batchSize<1 || batchSize>256)throw new IllegalArgumentException("Payment batch size must be 1..256");
+        this.batchSize=batchSize;
         if(concurrency<1||concurrency>32)throw new IllegalArgumentException("Payment concurrency must be 1..32");
         this.polling=java.util.stream.IntStream.range(0,concurrency).mapToObj(i->new java.util.concurrent.atomic.AtomicBoolean()).toList();
         this.paypal=paypal;this.processors=java.util.List.copyOf(processors);
@@ -55,7 +66,7 @@ public class PaymentInboxRunner {
         // Each lane visits every channel in order, even when other lanes are polling concurrently.
         int index = nextProcessor.getAndUpdate(i -> (i + 1) % processors.size());
         var idleProviders = new java.util.HashSet<String>();
-        for (int attempts = 0; attempts < 10 && idleProviders.size() < processors.size(); ) {
+        for (int attempts = 0; attempts < batchSize && !stopping.get() && idleProviders.size() < processors.size(); ) {
             var processor = processors.get(index);
             index = (index + 1) % processors.size();
             String provider = processor.provider();

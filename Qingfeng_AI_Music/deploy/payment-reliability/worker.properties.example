@@ -2,6 +2,9 @@
 # API and worker instances share the SAME approved main DB in real use.
 # Tests use a completely isolated DB and sandbox credentials.
 qingfeng.payment.inbox.scheduler-enabled=true
+# Per lane, at most this many processing attempts per scan. Empty channels stop early.
+# Increase on the payment worker after checking DB headroom and gateway read quotas.
+# qingfeng.payment.inbox.batch-size=128
 qingfeng.payment.inbox.worker-concurrency=16
 qingfeng.payment.inbox.scan-ms=100
 # Reuse a successful structural inspection for up to one second per DB and writer epoch.
