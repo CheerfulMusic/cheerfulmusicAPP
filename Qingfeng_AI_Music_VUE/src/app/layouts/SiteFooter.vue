@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import FilingLink from "../../shared/ui/FilingLink.vue"
 import { defineAsyncComponent, ref } from 'vue'
 import { t } from '../../shared/i18n'
 
@@ -89,6 +90,7 @@ const legal = [
         </div>
 
         <div class="footer-bottom">
+          <p class="footer-filing"><FilingLink /></p>
           <p class="footer-copyright" lang="en">© 2026 Cheerful Music Limited. All rights reserved.</p>
           <div class="footer-company" lang="en">
             <p>Cheerful Music Limited <span>|</span> Company No. 14502629 <span>|</span> Registered in England and Wales</p>
@@ -102,6 +104,7 @@ const legal = [
 </template>
 
 <style scoped>
+.footer-filing a { color: inherit; text-decoration: underline; text-underline-offset: 3px; }
 .site-footer { position: relative; width: 100%; margin-top: 0; }
 .footer-wave { display: block; height: 16px; line-height: 0; }
 .footer-wave svg { display: block; width: 100%; height: 100%; }

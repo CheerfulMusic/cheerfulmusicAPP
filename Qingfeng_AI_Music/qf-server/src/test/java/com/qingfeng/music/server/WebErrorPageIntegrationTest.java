@@ -10,6 +10,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.junit.jupiter.api.Test;
@@ -36,8 +37,13 @@ class WebErrorPageIntegrationTest {
     private final HttpClient client = HttpClient.newHttpClient();
 
     private HttpResponse<String> get(String path, String accept) throws Exception {
+        return request(path, accept, "GET");
+    }
+
+    private HttpResponse<String> request(String path, String accept, String method) throws Exception {
         return client.send(HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + path))
-                .header("Accept", accept).GET().build(), HttpResponse.BodyHandlers.ofString());
+                .header("Accept", accept).method(method, HttpRequest.BodyPublishers.noBody()).build(),
+                HttpResponse.BodyHandlers.ofString());
     }
 
     private static void assertNoWhitelabel(HttpResponse<String> response) {
@@ -56,7 +62,58 @@ class WebErrorPageIntegrationTest {
         var response = get("/no-such-page-here", "text/html");
         assertEquals(200, response.statusCode());
         assertTrue(response.body().contains("id=\"app\""));
+        assertEquals("noindex", response.headers().firstValue("X-Robots-Tag").orElse(""));
         assertNoWhitelabel(response);
+    }
+
+    @Test void searchEntryUrlsAreReadableWithoutAuthentication() throws Exception {
+        for (String path : List.of("/", "/en/", "/discover", "/help")) {
+            var response = get(path, "text/html");
+            assertEquals(200, response.statusCode(), path);
+            assertTrue(response.body().contains("id=\"app\""), path);
+            assertTrue(response.headers().firstValue("X-Robots-Tag").isEmpty(), path);
+            var head = request(path, "text/html", "HEAD");
+            assertEquals(200, head.statusCode(), path);
+            assertTrue(head.body().isEmpty(), path);
+        }
+        for (var document : Map.of("/robots.txt", "Sitemap:", "/sitemap.xml", "<urlset").entrySet()) {
+            var response = get(document.getKey(), "*/*");
+            assertEquals(200, response.statusCode(), document.getKey());
+            assertTrue(response.body().contains(document.getValue()), document.getKey());
+            assertEquals(200, request(document.getKey(), "*/*", "HEAD").statusCode(), document.getKey());
+        }
+        assertEquals(403, get("/home.html", "text/html").statusCode());
+    }
+
+    @Test void duplicateSearchEntryUrlsRedirectPermanentlyWithoutChangingTheQuery() throws Exception {
+        var routes = Map.of("/zh-CN", "/", "/zh-CN/", "/", "/zh-CN/index.html", "/",
+                "/en", "/en/", "/en/index.html", "/en/",
+                "/discover/", "/discover", "/discover/index.html", "/discover",
+                "/help/", "/help", "/help/index.html", "/help");
+        String query = "?q=%E9%9F%B3%E4%B9%90&ref=a%2Fb";
+        for (var route : routes.entrySet()) {
+            for (String method : List.of("GET", "HEAD")) {
+                var response = request(route.getKey() + query, "text/html", method);
+                assertEquals(308, response.statusCode(), route.getKey());
+                assertEquals(route.getValue() + query, response.headers().firstValue("Location").orElse(""));
+            }
+        }
+    }
+
+    @Test void privateAppEntryUrlsKeepTheirSpaAndExcludeItFromSearch() throws Exception {
+        for (String path : List.of("/account", "/works", "/works/example", "/profile",
+                "/recharge", "/analytics", "/create", "/create/photo", "/agent", "/index.html")) {
+            var response = get(path, "text/html");
+            assertEquals(200, response.statusCode(), path);
+            assertEquals("noindex", response.headers().firstValue("X-Robots-Tag").orElse(""), path);
+            assertTrue(response.body().contains("id=\"app\""), path);
+            var head = request(path, "text/html", "HEAD");
+            assertEquals(200, head.statusCode(), path);
+            assertEquals("noindex", head.headers().firstValue("X-Robots-Tag").orElse(""), path);
+        }
+        var publicProfile = get("/artist/example", "text/html");
+        assertEquals(200, publicProfile.statusCode());
+        assertTrue(publicProfile.headers().firstValue("X-Robots-Tag").isEmpty());
     }
 
     @Test void missingStaticResourceReturnsFriendlyPageInsteadOfWhitelabel() throws Exception {

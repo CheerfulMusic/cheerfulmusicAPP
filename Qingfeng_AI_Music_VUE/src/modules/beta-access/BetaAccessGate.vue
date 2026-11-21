@@ -1,19 +1,26 @@
 <script setup lang="ts">
+import FilingLink from "../../shared/ui/FilingLink.vue"
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { t } from '../../shared/i18n'
+import { locale, t } from '../../shared/i18n'
+import { homeSeo, siteName } from '../../shared/i18n/home-seo'
 import LanguageSwitcher from '../../shared/i18n/LanguageSwitcher.vue'
 import { enterInvite, InviteError, readInviteStatus, type InviteStatus } from './api'
 
-const props = defineProps<{ publicAccess?: boolean }>()
+const props = defineProps<{ publicAccess?: boolean; publicPreview?: boolean; homeEntry?: boolean }>()
 const dialog = ref<HTMLDialogElement>(), input = ref<HTMLInputElement>()
 const everAdmitted = ref(false), admitted = ref(false), checking = ref(true), submitting = ref(false)
 const status = ref<InviteStatus>(), code = ref(''), error = ref('')
 const busy = computed(() => checking.value || submitting.value)
 const actionRequiresInvite = ref(false)
 const accessible = computed(() => admitted.value || (props.publicAccess && !actionRequiresInvite.value))
+const showPreview = computed(() => props.publicPreview && !accessible.value)
 let disposed = false, lastCheck = 0, expiryTimer: ReturnType<typeof setTimeout> | undefined
 
-async function show() { await nextTick(); if (!disposed && !accessible.value && !dialog.value?.open) dialog.value?.showModal() }
+async function show() {
+  await nextTick()
+  if (disposed || accessible.value || dialog.value?.open || (props.publicPreview && !actionRequiresInvite.value)) return
+  dialog.value?.showModal()
+}
 async function apply(value: InviteStatus) {
   if (disposed) return
   status.value = value; admitted.value = value.admitted
@@ -45,11 +52,17 @@ async function submit() {
   } finally { submitting.value = false }
 }
 function required() { actionRequiresInvite.value = true; admitted.value = false; void show(); if (!busy.value) void check() }
-function focus() { if (!props.publicAccess && !busy.value && Date.now() - lastCheck > 60000) void check() }
-watch(() => props.publicAccess, value => {
+function openInvite() { actionRequiresInvite.value = true; void show(); if (!status.value && !busy.value) void check() }
+function cancelInvite() {
+  if (!props.publicPreview) return
   actionRequiresInvite.value = false
-  if (value) dialog.value?.close()
-  else { void show(); void check() }
+  dialog.value?.close()
+}
+function focus() { if (!props.publicAccess && !busy.value && Date.now() - lastCheck > 60000) void check() }
+watch(() => [props.publicAccess, props.publicPreview], ([value, preview]) => {
+  actionRequiresInvite.value = false
+  if (value || preview) dialog.value?.close()
+  if (!value) { void show(); void check() }
 })
 onMounted(() => { if (!props.publicAccess) { void show(); void check() } else checking.value = false; window.addEventListener('qingfeng:invite-required', required); window.addEventListener('focus', focus) })
 onBeforeUnmount(() => { disposed = true; clearTimeout(expiryTimer); window.removeEventListener('qingfeng:invite-required', required); window.removeEventListener('focus', focus) })
@@ -57,15 +70,16 @@ onBeforeUnmount(() => { disposed = true; clearTimeout(expiryTimer); window.remov
 
 <template>
   <!-- Keep an open editor mounted if an invitation expires; never resend its API requests. -->
-  <div v-if="everAdmitted || publicAccess" :inert="!accessible || undefined"><slot /></div>
-  <div v-else class="beta-access-screen" aria-hidden="true"></div>
-  <dialog ref="dialog" class="beta-access-dialog" aria-labelledby="beta-access-title" aria-describedby="beta-access-description" @cancel.prevent @close="!accessible && show()">
+  <div v-if="everAdmitted || publicAccess" v-show="!showPreview" :inert="!accessible || undefined"><slot /></div>
+  <div v-else-if="!showPreview" class="beta-access-screen" aria-hidden="true"></div>
+  <slot v-if="showPreview" name="public-preview" :open-invite="openInvite" />
+  <dialog ref="dialog" class="beta-access-dialog" aria-labelledby="beta-access-title" aria-describedby="beta-access-description" @cancel.prevent="cancelInvite" @close="!accessible && show()">
     <section class="beta-access-card" :aria-busy="busy">
       <div class="beta-access-top"><span class="beta-access-label">{{ t('内测体验') }}</span><LanguageSwitcher/></div>
       <img class="beta-access-logo" src="/brand/logo-symbol.svg" alt="" width="56" height="56">
-      <p class="beta-access-brand">Cheerful Music</p>
-      <h1 id="beta-access-title">{{ t('让灵感，先在这里发声。') }}</h1>
-      <p id="beta-access-description">{{ t('青风音乐正在内测，输入邀请码即可开始体验。') }}</p>
+      <p class="beta-access-brand">{{ siteName }}</p>
+      <h1 id="beta-access-title">{{ homeEntry ? homeSeo[locale].heading : t('让灵感，先在这里发声。') }}</h1>
+      <p id="beta-access-description">{{ homeEntry ? t('把灵感写成歌词，用 AI 生成专属歌曲。输入邀请码即可体验。') : t('青风音乐正在内测，输入邀请码即可开始体验。') }}</p>
       <p v-if="checking" class="beta-access-checking" role="status">{{ t('正在验证内测资格…') }}</p>
       <form v-else-if="status" @submit.prevent="submit">
         <label for="beta-invite-code">{{ t('内测邀请码') }}</label>
@@ -75,11 +89,14 @@ onBeforeUnmount(() => { disposed = true; clearTimeout(expiryTimer); window.remov
       </form>
       <div v-else-if="error"><p class="beta-access-error" role="alert">{{ t(error) }}</p><button class="beta-access-primary" type="button" @click="check">{{ t('重新验证') }}</button></div>
       <p class="beta-access-note">{{ t('邀请码由内测邀请人提供。') }}</p>
+      <button v-if="publicPreview" type="button" class="button secondary" @click="cancelInvite">{{ t('关闭') }}</button>
+      <footer class="beta-access-filing"><FilingLink /></footer>
     </section>
   </dialog>
 </template>
 
 <style scoped>
+.beta-access-filing { margin-top: 12px; text-align: center; color: #68594f; }
 .beta-access-screen { position:fixed; inset:0; background:#fffaf8; }
 .beta-access-dialog { width:min(464px,calc(100% - 32px)); max-width:none; max-height:calc(100dvh - 32px); padding:0; border:1px solid #f2ded5; border-radius:28px; color:#282320; background:#fffaf8; color-scheme:light; box-shadow:0 24px 100px #6e3e1e1a; }
 .beta-access-dialog::backdrop { background:radial-gradient(ellipse at 75% 20%,#ffe3d9ed,#fff8f3f5 65%); backdrop-filter:blur(16px); }
@@ -101,7 +118,7 @@ onBeforeUnmount(() => { disposed = true; clearTimeout(expiryTimer); window.remov
 .beta-access-error { color:#b53725; font-size:13px; line-height:1.7; margin:12px 0 0; }
 .beta-access-checking { font-size:14px; color:#7e6b60; padding:12px 0; }
 .beta-access-note { color:#958173; text-align:center; font-size:12px; margin:24px 0 0; }
-.beta-access-top :deep(.language-switch button) { color:#645249; }
+.beta-access-top :deep(.language-switch button),.beta-access-top :deep(.language-switch a) { color:#645249; }
 .beta-access-top :deep(.language-switch > span) { color:#a39185; }
 @media(max-width:480px) { .beta-access-card { padding:22px 24px 25px; } .beta-access-card h1 { font-size:24px; } }
 </style>
