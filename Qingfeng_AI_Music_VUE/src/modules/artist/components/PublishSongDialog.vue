@@ -114,7 +114,8 @@ onBeforeUnmount(() => dialog.value?.close())
             </button>
             <template v-else-if="complete && !needsProfile">
               <RouterLink v-if="artist && !discover" :to="{ name: 'artist-home', params: { id: artist } }" class="button secondary" @click="close">{{ t('查看主页') }}</RouterLink>
-              <button v-if="!selection.song?.onDiscover" class="button" type="button" @click="discover = true; notice = ''">{{ t('发布到广场') }}</button>
+              <RouterLink v-if="selection.song?.onDiscover" to="/discover" class="button" @click="close">{{ t('查看广场') }}</RouterLink>
+              <button v-else class="button" type="button" @click="discover = true; notice = ''">{{ t('发布到广场') }}</button>
             </template>
           </template>
         </div>

@@ -50,11 +50,14 @@ public class WebPageController {
         return permanentRedirect(request, "/en/");
     }
 
-    @GetMapping({"/discover", "/discover/", "/discover/index.html"})
+    @GetMapping("/discover")
+    public ResponseEntity<Resource> discover() {
+        return publicDocument("discover/index.html");
+    }
+
+    @GetMapping({"/discover/","/discover/index.html"})
     public ResponseEntity<Void> redirectDiscover(HttpServletRequest request) {
-        return ResponseEntity.status(HttpStatus.FOUND)
-                .header(HttpHeaders.CACHE_CONTROL, "no-store")
-                .header(HttpHeaders.LOCATION, request.getContextPath() + "/").build();
+        return permanentRedirect(request, "/discover");
     }
 
     @GetMapping("/help")
