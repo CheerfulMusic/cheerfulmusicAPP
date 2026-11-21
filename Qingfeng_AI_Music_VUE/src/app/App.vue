@@ -16,7 +16,7 @@ const community = computed(() => route.name === 'artist-home' || route.name === 
 const layout = computed(() => platform.kind === 'web' || community.value ? WebLayout : AppLayout)
 const publicListening = computed(() => route.name === 'gift' || community.value)
 const standalonePreview = computed(() => import.meta.env.DEV && route.name === 'payment-preview')
-const publicPreview = computed(() => platform.kind === 'web' && (route.name === 'home' || route.name === 'help'))
+const publicPreview = computed(() => platform.kind === 'web' && route.name === 'help')
 </script>
 <template>
   <RouterView v-if="standalonePreview" />

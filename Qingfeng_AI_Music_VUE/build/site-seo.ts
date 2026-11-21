@@ -1,7 +1,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import type { Plugin } from 'vite'
-import { siteOrigin } from '../src/shared/i18n/home-seo'
+import { homeLocale, siteOrigin } from '../src/shared/i18n/home-seo'
 import { landingLinks, sitePage, sitePagePaths, socialMetadata, websiteSchema } from '../src/shared/i18n/site-seo'
 
 type SitePage = NonNullable<ReturnType<typeof sitePage>>
@@ -29,12 +29,14 @@ export function renderSitePage(html: string, page: SitePage) {
     `<a href="${href}"${lang ? ` lang="${lang}" hreflang="${lang}"` : ''}>${escapeHtml(text)}</a>`,
   ).join(' ')
   const landing = `<main class="seo-landing"><h1>${escapeHtml(page.heading)}</h1><p>${escapeHtml(page.description)}</p><nav>${links}</nav><footer><a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer" lang="zh-CN">粤ICP备2023023949号</a></footer></main>`
+  const home = page.path === '/' || homeLocale(page.path)
+  const initialContent = home ? `<noscript>${landing}</noscript>` : landing
   return html
     .replace(/<html lang="[^"]*">/, `<html lang="${page.language}">`)
     .replace(/<title>[^<]*<\/title>/, `<title>${escapeHtml(page.title)}</title>`)
     .replace(/<meta name="description" content="[^"]*">/, `<meta name="description" content="${escapeHtml(page.description)}">`)
     .replace('</head>', `${metadata.join('\n')}\n</head>`)
-    .replace('<div id="app"></div>', `<div id="app">${landing}</div>`)
+    .replace('<div id="app"></div>', `<div id="app">${initialContent}</div>`)
 }
 
 const crawlFiles = {
