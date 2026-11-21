@@ -58,8 +58,8 @@ class IntegratedPaymentApplicationMySqlTest {
     static final String PREFIX="P0_INTEGRATION_APPLICATION_MYSQL_",ACCOUNT="acct_offline12345678",PAYPAL_MERCHANT="TESTMERCHANT";
     static final int APPLICATION_SCHEMA_TARGET=applicationSchemaTarget();
     private static int applicationSchemaTarget(){
-        String target=System.getenv().getOrDefault("P0_PAYMENT_APPLICATION_SCHEMA_TARGET","51");
-        if(!Set.of("50","51").contains(target))throw new IllegalArgumentException("Isolated application schema target must be 50 or 51");
+        String target=System.getenv().getOrDefault("P0_PAYMENT_APPLICATION_SCHEMA_TARGET","53");
+        if(!Set.of("50","51","53").contains(target))throw new IllegalArgumentException("Isolated application schema target must be 50, 51 or 53");
         return Integer.parseInt(target);
     }
     static final String SECRET="whsec_integrated_offline_fixture_not_a_real_credential";
