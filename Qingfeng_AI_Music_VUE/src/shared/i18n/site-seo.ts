@@ -1,14 +1,16 @@
 import { homeLocale, homeSeo, homeSeoLinks, siteOrigin, type Locale } from './home-seo'
 
+const defaultHomeTitle = 'Cheerful Music'
+
 const defaultHome = {
   en: {
     heading: 'Cheerful Music',
-    title: 'Cheerful Music | AI Song Maker & Music Community',
+    title: defaultHomeTitle,
     description: 'Make a song from your ideas with Cheerful Music. Explore songs from other creators and choose the English or Simplified Chinese site.',
   },
   'zh-CN': {
     heading: '青风音乐',
-    title: '青风音乐 | AI 歌曲创作与音乐社区',
+    title: defaultHomeTitle,
     description: '用青风音乐把灵感变成歌曲，聆听社区创作者的作品。网站提供简体中文和英文版本。',
   },
 } as const

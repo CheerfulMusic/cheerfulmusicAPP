@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 import { renderSitePage } from '../build/site-seo'
 import { siteOrigin } from '../src/shared/i18n/home-seo'
 import { sitePage, sitePagePaths } from '../src/shared/i18n/site-seo'
-import { updatePageLocale } from '../src/shared/i18n'
+import { setLocale, updatePageLocale } from '../src/shared/i18n'
 
 const shell = readFileSync('index.html', 'utf8')
 const parsePage = (path: string) => new DOMParser().parseFromString(renderSitePage(shell, sitePage(path)!), 'text/html')
@@ -41,6 +41,17 @@ describe('crawlable site pages', () => {
     const pages = sitePagePaths.map(path => sitePage(path)!)
     expect(new Set(pages.map(page => page.title)).size).toBe(pages.length)
     expect(new Set(pages.map(page => page.description)).size).toBe(pages.length)
+  })
+
+  it.each(['en', 'zh-CN'] as const)('uses only the brand in the root homepage title for %s', language => {
+    const html = renderSitePage(shell, sitePage('/', language)!)
+    const page = new DOMParser().parseFromString(html, 'text/html')
+    expect(page.title).toBe('Cheerful Music')
+
+    setLocale(language)
+    updatePageLocale('/')
+    expect(document.documentElement.lang).toBe(language)
+    expect(document.title).toBe(page.title)
   })
 
   it('replaces metadata on client navigation and clears it on private destinations', () => {
