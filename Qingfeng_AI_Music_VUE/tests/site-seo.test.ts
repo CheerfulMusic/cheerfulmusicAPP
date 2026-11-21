@@ -20,15 +20,23 @@ describe('crawlable site pages', () => {
     expect(page.querySelector('meta[property="og:url"]')?.getAttribute('content')).toBe(siteOrigin + path)
     expect(page.querySelector('meta[name="twitter:card"]')?.getAttribute('content')).toBe('summary_large_image')
     expect(page.querySelector('h1')?.textContent).toBe(metadata.heading)
-    expect(page.querySelector('a[href="/zh-CN/"]')?.getAttribute('hreflang')).toBe('zh-CN')
+    expect(page.querySelector('a[href="/"]')?.getAttribute('hreflang')).toBe('zh-CN')
+    expect(page.querySelector('a[href="/en/"]')?.getAttribute('hreflang')).toBe('en')
     expect(page.querySelectorAll('script[type="application/ld+json"]')).toHaveLength(path === '/' ? 1 : 0)
   })
 
-  it.each(['/', '/en/', '/zh-CN/'])('publishes the same three alternates at %s', path => {
+  it.each(['/', '/en/'])('publishes the same three alternates at %s', path => {
     const page = parsePage(path)
     const alternates = Object.fromEntries(Array.from(page.querySelectorAll('link[hreflang]'),
       link => [link.getAttribute('hreflang'), link.getAttribute('href')]))
-    expect(alternates).toEqual({ en: siteOrigin + '/en/', 'zh-CN': siteOrigin + '/zh-CN/', 'x-default': siteOrigin + '/' })
+    expect(alternates).toEqual({ en: siteOrigin + '/en/', 'zh-CN': siteOrigin + '/', 'x-default': siteOrigin + '/' })
+  })
+
+  it('publishes the Chinese search entry at the root and keeps the separate English search title', () => {
+    expect(parsePage('/').documentElement.lang).toBe('zh-CN')
+    expect(parsePage('/').querySelector('h1')?.textContent).toBe('人人是歌手')
+    expect(parsePage('/en/').title).toBe('Everyone Can Be a Singer | AI Music Maker – Cheerful Music')
+    expect(sitePage('/zh-CN/')).toBeUndefined()
   })
 
   it('leaves the shared account and gift shell free of site metadata', () => {
@@ -58,10 +66,10 @@ describe('crawlable site pages', () => {
     document.head.innerHTML = '<title>青风音乐</title><meta name="description">'
     updatePageLocale('/en/')
     expect(document.title).toBe(sitePage('/en/')!.title)
-    updatePageLocale('/zh-CN/')
-    expect(document.title).toBe(sitePage('/zh-CN/')!.title)
+    updatePageLocale('/')
+    expect(document.title).toBe('Cheerful Music')
     expect(document.querySelectorAll('link[rel="canonical"]')).toHaveLength(1)
-    expect(document.querySelector('link[rel="canonical"]')?.getAttribute('href')).toBe(siteOrigin + '/zh-CN/')
+    expect(document.querySelector('link[rel="canonical"]')?.getAttribute('href')).toBe(siteOrigin + '/')
     updatePageLocale('/account')
     expect(document.querySelectorAll('[data-site-seo]')).toHaveLength(0)
   })

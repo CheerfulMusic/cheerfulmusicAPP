@@ -9,7 +9,7 @@ export const router = createRouter({
   scrollBehavior,
   routes: [
     { path: '/help', name: 'help', component: () => import('../pages/HelpPage.vue') },
-    { path: '/', name: 'home', alias: platform.kind === 'web' ? [homeSeo['zh-CN'].path, homeSeo.en.path] : undefined, component: () => import('../../modules/home/pages/PremiumHomePage.vue') },
+    { path: '/', name: 'home', alias: platform.kind === 'web' ? homeSeo.en.path : undefined, component: () => import('../../modules/home/pages/PremiumHomePage.vue') },
     { path: '/create', name: 'studio', component: () => import('../../modules/studio/pages/DraftStudioPage.vue') },
     { path: '/create/photo', name: 'photo-studio', component: () => import('../../modules/studio/pages/PhotoStudioPage.vue') },
     { path: '/agent', name: 'agent', component: () => import('../../modules/agent/pages/AgentStudioPage.vue') },

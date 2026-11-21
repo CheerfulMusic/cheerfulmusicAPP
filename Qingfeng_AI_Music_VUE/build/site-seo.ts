@@ -1,6 +1,6 @@
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
-import type { Plugin } from 'vite'
+import type { Connect, Plugin } from 'vite'
 import { homeLocale, siteOrigin } from '../src/shared/i18n/home-seo'
 import { landingLinks, sitePage, sitePagePaths, socialMetadata, websiteSchema } from '../src/shared/i18n/site-seo'
 
@@ -65,10 +65,21 @@ function htmlFile(path: string) {
   return path === '/' ? '/home.html' : `${path.replace(/\/$/, '')}/index.html`
 }
 
+const redirectLegacyChineseHome: Connect.NextHandleFunction = (request, response, next) => {
+  if (request.method !== 'GET' && request.method !== 'HEAD') return next()
+  const url = request.url ?? ''
+  const path = url.split('?')[0] ?? ''
+  if (path !== '/zh-CN' && path !== '/zh-CN/' && path !== '/zh-CN/index.html') return next()
+  response.statusCode = 308
+  response.setHeader('Location', '/' + url.slice(path.length))
+  response.end()
+}
+
 export function siteSeoPlugin(): Plugin {
   return {
     name: 'site-seo',
     configureServer(server) {
+      server.middlewares.use(redirectLegacyChineseHome)
       server.middlewares.use((request, response, next) => {
         const path = request.url?.split('?')[0]
         const file = Object.entries(crawlFiles).find(([url]) => url === path)?.[1]
@@ -78,6 +89,7 @@ export function siteSeoPlugin(): Plugin {
       })
     },
     configurePreviewServer(server) {
+      server.middlewares.use(redirectLegacyChineseHome)
       server.middlewares.use((request, _response, next) => {
         const path = request.url?.split('?')[0]
         const page = path && sitePage(path)

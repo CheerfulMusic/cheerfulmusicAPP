@@ -67,7 +67,7 @@ class WebErrorPageIntegrationTest {
     }
 
     @Test void searchEntryUrlsAreReadableWithoutAuthentication() throws Exception {
-        for (String path : List.of("/", "/zh-CN/", "/en/", "/discover", "/help")) {
+        for (String path : List.of("/", "/en/", "/discover", "/help")) {
             var response = get(path, "text/html");
             assertEquals(200, response.statusCode(), path);
             assertTrue(response.body().contains("id=\"app\""), path);
@@ -86,7 +86,7 @@ class WebErrorPageIntegrationTest {
     }
 
     @Test void duplicateSearchEntryUrlsRedirectPermanentlyWithoutChangingTheQuery() throws Exception {
-        var routes = Map.of("/zh-CN", "/zh-CN/", "/zh-CN/index.html", "/zh-CN/",
+        var routes = Map.of("/zh-CN", "/", "/zh-CN/", "/", "/zh-CN/index.html", "/",
                 "/en", "/en/", "/en/index.html", "/en/",
                 "/discover/", "/discover", "/discover/index.html", "/discover",
                 "/help/", "/help", "/help/index.html", "/help");
