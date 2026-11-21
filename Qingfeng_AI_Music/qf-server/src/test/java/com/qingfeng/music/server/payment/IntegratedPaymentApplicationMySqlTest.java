@@ -304,6 +304,12 @@ class IntegratedPaymentApplicationMySqlTest {
             }
         }
     }
+    @Test
+    @org.junit.jupiter.api.condition.EnabledIfSystemProperty(named="qf.payment.capacity.overlap", matches="true")
+    void settlePaymentsAcrossRecoveryWindow() throws Exception {
+        PaymentOverlapCapacityProbe.run();
+    }
+
     static Paid paid() throws Exception{return paid(owner());}
     static Paid paid(IdentityApi.Session owner) throws Exception {var paid=pending(owner);SESSIONS.put(paid.session(),session(paid.session(),paid.order(),true));accepted("checkout.session.completed",paid.session(),"evt_"+unique());drain();assertEquals("PAID",db.queryForObject("SELECT status FROM payment_order WHERE id=?",String.class,paid.order()));return paid;}
     static HttpResponse<String> stripeEvent(String kind,String resource,String event) throws Exception {

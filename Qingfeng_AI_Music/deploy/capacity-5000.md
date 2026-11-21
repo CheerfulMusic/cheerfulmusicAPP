@@ -64,3 +64,18 @@ mvn -pl qf-server -am test '-Dtest=MusicCapacityHttpTest' '-Dsurefire.failIfNoSp
 | 120 秒 | 开启 | 100 ms | 6 | 0.29 秒 |
 
 首次对账延迟会把一部分后台工作移到观测窗口之后。0 秒对照组测量了 2250 条对账任务同时到期的情形。持续多轮对账和真实支付渠道耗时仍需单独验收。
+
+### 建单和到期对账重叠
+
+2026-11-22 在隔离 MySQL 8.0.46 和离线 Stripe 下，每轮按目标速率启动 180 秒的 HTTP 建单与回调任务，保留 120 秒的首次兜底对账延迟。每 100 笔中有一笔故意不投递回调，另一笔重复投递同一个签名回调。最后等所有对账都完成，再逐单核对已支付状态、唯一的 100 积分流水和余额。四轮共 85500 笔，均通过。
+
+| 目标单/秒 | 处理线程 | 实际输入单/秒 | 已到期未完成任务采样峰值 | 回调持久化至 DONE 的 P95 |
+|---:|---:|---:|---:|---:|
+| 75 | 4 | 75.0 | 75 | 同一秒内 |
+| 100 | 4 | 100.0 | 2918 | 16 秒 |
+| 150 | 4 | 146.1 | 16635 | 74 秒 |
+| 150 | 8 | 140.0 | 12303 | 48 秒 |
+
+实际输入速率以全部建单和回调投递完成的耗时为分母。每次采样结束后等待 5 秒再取下一次样本，积压同时包含已到期的回调及对账任务。P95 取已完成的 checkout.session.completed 事件的 updated_at 与 created_at 之差，两次写入使用秒级 CURRENT_TIMESTAMP。数据不包含用户在支付渠道停留的时间。75 单/秒是此次 3 分钟实验的低延迟档，100 单/秒已出现积压。
+
+复测时使用全新的隔离财务测试库，单独选择测试方法 IntegratedPaymentApplicationMySqlTest#settlePaymentsAcrossRecoveryWindow。传入 -Dqf.payment.capacity.overlap=true 开启本测试，-Dqf.payment.capacity=true 启用隔离测试回调限额。-Dqf.payment.capacity.orders-per-second 和 -Dqf.payment.capacity.worker-concurrency 分别控制输入速率和处理线程数，默认 75 和 4。
