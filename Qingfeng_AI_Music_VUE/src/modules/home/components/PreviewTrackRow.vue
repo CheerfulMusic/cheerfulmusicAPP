@@ -7,7 +7,7 @@ import type {PreviewTrack} from '../model/tracks'
 import {formatHotCount,hotStat,isFavorited,isLiked,isPending,toggleReaction} from '../model/hot-songs'
 import {recordPreviewPlay} from '../model/published-recommendations'
 
-const props=defineProps<{track:PreviewTrack;queue:PreviewTrack[]}>()
+const props=defineProps<{track:PreviewTrack;queue:PreviewTrack[];hideMetrics?:boolean}>()
 const player=usePlayer()
 const playing=computed(()=>player.current?.id===props.track.id&&(player.playing||player.starting))
 const stat=computed(()=>hotStat(props.track.id))
@@ -24,7 +24,7 @@ async function play(){const wasPlaying=playing.value;player.setQueue(props.queue
       <span class="explore-track-play"><PlaybackIcon :playing="playing"/></span>
     </button>
     <div v-if="track.publication" class="hot-song-meta"><RouterLink :to="{name:'artist-home',params:{id:track.publication.artistId}}">{{ track.publication.stageName }}</RouterLink></div>
-    <div v-else class="hot-song-meta">
+    <div v-else-if="!hideMetrics" class="hot-song-meta">
       <span class="hot-metric"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2.5 12.5 8 4 13.5Z"/></svg>{{ formatHotCount(stat.plays) }}<span class="sr-only">{{ t('播放量') }}</span></span>
       <button type="button" class="hot-metric hot-action" :class="{active:liked}" :aria-pressed="liked" :disabled="isPending(track.id,'like')" @click="toggleReaction(track.id,'like')">
         <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 13.2 3 8.4a2.9 2.9 0 1 1 5-3.4 2.9 2.9 0 1 1 5 3.4Z"/></svg>{{ formatHotCount(stat.likes) }}<span class="sr-only">{{ liked?t('已点赞'):t('点赞') }}</span>

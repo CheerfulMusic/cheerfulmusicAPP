@@ -23,7 +23,13 @@ class FrontendAssetConfigurationTest {
             var mvc = MockMvcBuilders.webAppContextSetup(context).build();
             mvc.perform(get("/assets/fixture-1234abcd.js")).andExpect(status().isOk())
                     .andExpect(header().string("Cache-Control", "max-age=31536000, public, immutable"));
-            mvc.perform(get("/assets/missing-1234abcd.js")).andExpect(status().isNotFound())
+            mvc.perform(get("/assets/fixture-1234abcd.webp")).andExpect(status().isOk())
+                    .andExpect(content().contentType("image/webp"))
+                    .andExpect(header().string("Cache-Control", "max-age=31536000, public, immutable"));
+            mvc.perform(get("/assets/fixture-1234abcd.png")).andExpect(status().isOk())
+                    .andExpect(content().contentType("image/png"))
+                    .andExpect(header().string("Cache-Control", "max-age=31536000, public, immutable"));
+            mvc.perform(get("/assets/missing-1234abcd.webp")).andExpect(status().isNotFound())
                     .andExpect(header().doesNotExist("Cache-Control"));
         }
     }

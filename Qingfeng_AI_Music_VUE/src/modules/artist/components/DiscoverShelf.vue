@@ -40,9 +40,10 @@ function clock(seconds: number) {
 <template>
   <ul v-if="rows.length" class="shelf-tracks" :class="[`shelf-${variant}`, { 'is-expanded': expanded }]" :aria-label="label" tabindex="0">
     <li v-for="row in rows" :key="row.track.audio">
-      <button type="button" class="shelf-track" :aria-pressed="isPlaying(row)"
-        :aria-label="t(isPlaying(row) ? '暂停 {title}' : '试听 {title}', { title: row.track.title })"
-        @click="emit('play', row)">
+      <div class="shelf-track" :class="{ 'is-playing': isPlaying(row) }">
+        <button type="button" class="shelf-track-play" :aria-pressed="isPlaying(row)"
+          :aria-label="t(isPlaying(row) ? '暂停 {title}' : '试听 {title}', { title: row.track.title })"
+          @click="emit('play', row)"></button>
         <span class="track-art">
           <img :src="row.track.cover" alt="" loading="lazy" decoding="async">
           <span class="track-play" aria-hidden="true"><PlaybackIcon :playing="isPlaying(row)" /></span>
@@ -50,7 +51,9 @@ function clock(seconds: number) {
         <span class="track-text">
           <span class="track-title" :title="row.track.title">{{ row.track.title }}</span>
           <span v-if="row.stageName || (showPlays && row.plays !== undefined)" class="track-meta">
-            <span v-if="row.stageName" class="track-artist">{{ row.stageName }}</span>
+            <RouterLink v-if="row.stageName && row.artistId" class="track-artist"
+              :to="{ name: 'artist-home', params: { id: row.artistId } }">{{ row.stageName }}</RouterLink>
+            <span v-else-if="row.stageName" class="track-artist">{{ row.stageName }}</span>
             <span v-if="showPlays && row.plays !== undefined" class="track-count"><NavIcon name="play" />{{ formatCount.format(row.plays) }}</span>
           </span>
           <span v-if="props.variant === 'compact'" class="track-progress" aria-hidden="true">
@@ -58,7 +61,7 @@ function clock(seconds: number) {
             {{ clock(isCurrent(row) ? player.time : 0) }} / {{ isCurrent(row) && player.duration ? clock(player.duration) : row.durationSeconds ? clock(row.durationSeconds) : '—' }}
           </span>
         </span>
-      </button>
+      </div>
     </li>
     <li v-if="upcoming" key="upcoming">
       <div class="shelf-track shelf-track-upcoming">
@@ -96,7 +99,7 @@ function clock(seconds: number) {
 @supports not selector(::-webkit-scrollbar) {
   .shelf-tracks { scrollbar-color: #ced5ce transparent; scrollbar-width: thin; }
 }
-.shelf-tracks:focus-visible, .shelf-track:focus-visible { outline: 2px solid #c63b2a; outline-offset: -2px; }
+.shelf-tracks:focus-visible, .shelf-track-play:focus-visible { outline: 2px solid #c63b2a; outline-offset: -2px; }
 .shelf-square { grid-auto-columns: 152px; }
 .shelf-compact { grid-template-rows: repeat(4, 54px); grid-auto-columns: calc((100% - 72px) / 5); gap: 9px 18px; }
 .shelf-wide { grid-auto-columns: calc((100% - 66px) / 3.42); gap: 22px; }
@@ -107,13 +110,11 @@ function clock(seconds: number) {
   position: relative;
   display: block;
   width: 100%;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: inherit;
   text-align: start;
-  font: inherit;
 }
+.shelf-track-play { position: absolute; z-index: 1; inset: 0; width: 100%; padding: 0; border: 0; border-radius: inherit; background: transparent; }
+a.track-artist { position: relative; z-index: 2; color: inherit; }
+a.track-artist:is(:hover, :focus-visible) { text-decoration: underline; }
 .track-art { position: relative; display: block; overflow: hidden; border-radius: 4px; background: #eef0ed; }
 .track-art img { display: block; width: 100%; height: 100%; object-fit: cover; }
 .shelf-square .track-art { aspect-ratio: 1; }
@@ -130,8 +131,7 @@ function clock(seconds: number) {
   opacity: 0;
 }
 .track-play svg, .track-count svg { width: 12px; height: 12px; }
-.shelf-track:hover .track-play, .shelf-track:focus-visible .track-play,
-.shelf-track[aria-pressed="true"] .track-play, .shelf-wide .track-play { opacity: 1; }
+.shelf-track:is(:hover, :focus-within, .is-playing) .track-play, .shelf-wide .track-play { opacity: 1; }
 .track-text { display: block; margin-top: 7px; }
 .track-title, .track-artist { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .track-title { font-size: 14px; font-weight: 500; line-height: 1.4; }
@@ -143,9 +143,9 @@ function clock(seconds: number) {
 .shelf-compact .track-text { margin: 0; padding-right: 4px; }
 .shelf-compact .track-title { font-size: 13px; }
 .shelf-compact .track-meta { margin-top: 2px; font-size: 11px; }
-.shelf-compact .shelf-track:is(:hover, :focus-visible, [aria-pressed="true"]) { border-color: transparent; border-radius: 4px; background: #f1f6f2; }
+.shelf-compact .shelf-track:is(:hover, :focus-within, .is-playing) { border-color: transparent; border-radius: 4px; background: #f1f6f2; }
 .track-progress { display: none; align-items: center; gap: 5px; margin-top: 3px; color: #426957; font-size: 9px; line-height: 1; white-space: nowrap; }
-.shelf-track:is(:hover, :focus-visible, [aria-pressed="true"]) .track-progress { display: flex; }
+.shelf-track:is(:hover, :focus-within, .is-playing) .track-progress { display: flex; }
 .track-progress progress { flex: 1; width: 0; height: 3px; accent-color: #547d64; }
 .shelf-wide .shelf-track { display: flex; align-items: flex-end; height: 114px; padding: 12px 42px 12px 14px; overflow: hidden; isolation: isolate; border-radius: 6px; color: #fff; }
 .shelf-wide .track-art { position: absolute; z-index: -1; inset: 0; }

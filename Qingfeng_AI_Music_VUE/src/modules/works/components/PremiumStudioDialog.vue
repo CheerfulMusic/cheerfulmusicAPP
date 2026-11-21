@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
-import { t, locale, defaultCover } from '../../../shared/i18n'
+import { t, defaultCover } from '../../../shared/i18n'
 import { usePlayer } from '../../../shared/player/store'
 import PlaybackIcon from '../../../shared/ui/PlaybackIcon.vue'
 import { audioUrl, type AudioAsset } from '../api/detail'
@@ -102,10 +102,16 @@ onBeforeUnmount(() => dialog.value?.close())
         <section class="premium-about" aria-labelledby="premium-about-title">
           <header class="premium-about-header">
             <h3 id="premium-about-title">{{ t('关于青风音乐') }}</h3>
-            <a class="premium-profile-download" :href="`/media/premium-studio/cheerful-music-company-profile-${locale === 'en' ? 'en' : 'zh'}-260730.pdf`"
-               :download="locale === 'en' ? 'Cheerful Music Company Profile 260730.pdf' : '青风音乐 Cheerful Music260730中文版.pdf'" :aria-label="t('下载青风音乐公司介绍 PDF')">
-              <span aria-hidden="true">↓</span>{{ t('下载 PDF') }}
-            </a>
+            <div class="premium-profile-downloads">
+              <a class="premium-profile-download" href="/media/premium-studio/cheerful-music-company-profile-zh-260730.pdf"
+                 download="青风音乐 Cheerful Music260730中文版.pdf" :aria-label="t('下载青风音乐公司介绍 PDF（中文版）')">
+                <span aria-hidden="true">↓</span>{{ t('中文版 PDF') }}
+              </a>
+              <a class="premium-profile-download" href="/media/premium-studio/cheerful-music-company-profile-en-260730.pdf"
+                 download="Cheerful Music Company Profile - English.pdf" :aria-label="t('下载青风音乐公司介绍 PDF（英文版）')">
+                <span aria-hidden="true">↓</span>{{ t('英文版 PDF') }}
+              </a>
+            </div>
           </header>
           <p>{{ t('青风音乐（Cheerful Music）由歌手兼制作人蒋雪儿（Snow.J）创办，2019 年在深圳成立，2023 年设立伦敦办公室。团队深耕国风与华语流行，参与制作或发行的《踏山河》《小城夏天》《半生雪》均登顶过国内主流音乐平台榜单。') }}</p>
           <p>{{ t('《一笑江湖》随“科目三”舞蹈走红海外，2025 年登上 Spotify 日本 Viral 50 榜第 2 名。《相思遥》入选全球 600 多份歌单，张含韵和郭雨昂在 2025 年除夕的央视综合频道节目《金蛇起舞中国年味》中演唱了这首歌。') }}</p>
@@ -169,7 +175,8 @@ onBeforeUnmount(() => dialog.value?.close())
 .premium-about h3,.premium-works h3 { font-size:19px; font-weight:650; color:#fff; margin:0 0 8px; }
 .premium-about-header { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:6px 12px; margin-bottom:10px; }
 .premium-about-header h3 { margin:0; }
-.premium-profile-download { display:inline-flex; align-items:center; gap:6px; min-height:36px; padding:0 12px; margin-inline-start:auto; border:1px solid #73514d; border-radius:18px; color:#ffb2a2; text-decoration:none; font-size:13px; font-weight:600; white-space:nowrap; }
+.premium-profile-downloads { display:flex; flex-wrap:wrap; gap:8px; margin-inline-start:auto; }
+.premium-profile-download { display:inline-flex; align-items:center; gap:6px; min-height:36px; padding:0 12px; border:1px solid #73514d; border-radius:18px; color:#ffb2a2; text-decoration:none; font-size:13px; font-weight:600; white-space:nowrap; }
 .premium-profile-download:hover { background:#382725; border-color:#aa746a; }
 .premium-profile-download:focus-visible { outline:2px solid #ffb3a6; outline-offset:4px; }
 .premium-about p { font-size:14px; line-height:1.75; color:#c7bac5; margin:0; }
@@ -196,6 +203,7 @@ onBeforeUnmount(() => dialog.value?.close())
   .premium-studio-dialog h2 { font-size:25px; margin-right:34px; }
   .premium-about { padding:16px; }
   .premium-about-header { padding-inline-end:24px; }
+  .premium-profile-downloads { margin-inline-start:0; }
   .premium-track-list,.premium-plans,.premium-gallery { grid-template-columns:1fr; }
   .premium-plan { gap:10px; padding:18px; }
   .premium-price { font-size:30px; }

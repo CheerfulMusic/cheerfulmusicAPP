@@ -3,12 +3,17 @@ import { defineStore } from 'pinia'
 import { NativeAudioPool } from './audio-cache'
 import type { LyricLine } from '../../modules/works/api/detail'
 export interface PlayableTrack { id: string; title: string; titleKey?: string; cover: string; audio: string; provenance?: 'SAMPLE' | 'IMPORTED' | 'GENERATED'; lyricLines?: readonly LyricLine[] }
+export type RepeatMode = 'default' | 'one' | 'list'
 export const usePlayer = defineStore('player', () => {
   const current=ref<PlayableTrack|null>(null),playing=ref(false),starting=ref(false),buffering=ref(false),time=ref(0),duration=ref(0),error=ref(''),queue=ref<PlayableTrack[]>([])
-  const hasQueue=computed(()=>queue.value.length>1&&queue.value.some(track=>track.id===current.value?.id))
+  const queueIndex=computed(()=>queue.value.findIndex(track=>track.id===current.value?.id&&track.audio===current.value?.audio))
+  const hasQueue=computed(()=>queue.value.length>1&&queueIndex.value>=0)
   const tracks=computed(()=>Object.freeze(queue.value.map(track=>Object.freeze({...track}))))
-  const repeatOne=ref(false)
-  function toggleRepeat(){repeatOne.value=!repeatOne.value}
+  const repeatPreference=ref<RepeatMode>('default')
+  const repeatMode=computed(()=>repeatPreference.value==='list'&&!hasQueue.value?'default':repeatPreference.value)
+  const repeatOne=computed(()=>repeatMode.value==='one')
+  function setRepeatMode(mode:RepeatMode){if(mode!=='list'||hasQueue.value)repeatPreference.value=mode}
+  function toggleRepeat(){setRepeatMode(repeatOne.value?'default':'one')}
   const seekVersion=ref(0),segment=ref<{track:string;start:number;end:number;loop:boolean}|null>(null)
   const volume=ref(readVolume()),muted=ref(false)
   function readVolume(){try{const raw=localStorage.getItem('qingfeng.player.volume');const value=raw===null?1:Number(raw);return Number.isFinite(value)?Math.min(1,Math.max(0,value)):1}catch{return 1}}
@@ -166,8 +171,8 @@ export const usePlayer = defineStore('player', () => {
         }
         return
       }
-      const index=queue.value.findIndex(track=>track.id===current.value?.id)
-      if(autoAdvance&&hasQueue.value&&index<queue.value.length-1)void next()
+      if(repeatMode.value==='list')void next(1,true)
+      else if(autoAdvance&&hasQueue.value&&queueIndex.value<queue.value.length-1)void next()
     })
     return element
   })
@@ -187,7 +192,7 @@ export const usePlayer = defineStore('player', () => {
     if (starting.value) waitForAudio()
     return true
   }
-  async function toggle(track:PlayableTrack){
+  async function toggle(track:PlayableTrack,fromBeginning=false){
     cancelReauth()
     const turn=++operation
     // 仅「可重试」的错误路由到重新授权；code 1/3 与非 CDN 的 code 4 保留原有 load() 手动重试入口。
@@ -207,7 +212,7 @@ export const usePlayer = defineStore('player', () => {
       const element=pool.acquire(track.audio);audio=element;applyVolume();element.preload='auto'
       if(!element.getAttribute('src'))element.src=track.audio
       else if(element.error)element.load()
-      if(element.ended||Number.isFinite(element.duration)&&element.currentTime>=element.duration)element.currentTime=0
+      if((fromBeginning&&element.currentTime>0)||element.ended||Number.isFinite(element.duration)&&element.currentTime>=element.duration)element.currentTime=0
       readDuration();time.value=element.currentTime;waitForAudio()
       // 直接在点击处理内调用play，前面不能await整首fetch或其他网络请求。
       const pending=element.play()
@@ -228,8 +233,12 @@ export const usePlayer = defineStore('player', () => {
     if (current.value) current.value = renamed(current.value)
     if (queue.value.some(track => titles.has(track.id))) queue.value = queue.value.map(renamed)
   }
-  function setQueue(tracks:PlayableTrack[],advance=true){queue.value=tracks;autoAdvance=advance}
-  async function next(direction=1){if(!hasQueue.value)return;const index=queue.value.findIndex(track=>track.id===current.value?.id),track=queue.value[(index+direction+queue.value.length)%queue.value.length];if(track)await toggle(track)}
+  function setQueue(tracks:PlayableTrack[],advance=true){queue.value=[...tracks];autoAdvance=advance}
+  async function next(direction=1,fromBeginning=false){
+    if(!hasQueue.value)return
+    const track=queue.value[(queueIndex.value+direction+queue.value.length)%queue.value.length]
+    if(track)await toggle(track,fromBeginning)
+  }
   function seek(value:number){restoreSeekGuard=false;clearTimeout(seekGuardTimer);segment.value=null;if(audio&&Number.isFinite(value)&&duration.value>0){try{audio.currentTime=Math.min(duration.value,Math.max(0,value));time.value=audio.currentTime;seekVersion.value++}catch{error.value='当前音频暂不支持跳转进度'}}}
   async function playSegment(track:PlayableTrack,start:number,end:number,loop=true){
     if(!Number.isFinite(start)||!Number.isFinite(end)||start<0||end<=start)return
@@ -241,8 +250,8 @@ export const usePlayer = defineStore('player', () => {
     seek(start);segment.value={track:track.id,start,end:until,loop}
   }
   function stopSegment(pause=false){segment.value=null;if(pause){cancelReauth();operation++;starting.value=false;audio?.pause();stopWaiting()}}
-  function close(){cancelReauth();operation++;segment.value=null;repeatOne.value=false;audio?.pause();if(audio)audio.preload='metadata';current.value=null;queue.value=[];time.value=0;duration.value=0;error.value='';starting.value=false;stopWaiting();playing.value=false}
+  function close(){cancelReauth();operation++;segment.value=null;setRepeatMode('default');audio?.pause();if(audio)audio.preload='metadata';current.value=null;queue.value=[];time.value=0;duration.value=0;error.value='';starting.value=false;stopWaiting();playing.value=false}
   /** 身份切换和分享失效彻底释放，与普通收起播放器分开。 */
   function reset(){close();audio=undefined;pool.clear()}
-  return {volume,muted,setVolume,toggleMute,current,playing,starting,buffering,time,duration,error,hasQueue,tracks,repeatOne,toggleRepeat,seekVersion,adoptGiftPreview,toggle,seek,close,reset,setQueue,next,updateCover,updateTitles,segment,playSegment,stopSegment}
+  return {volume,muted,setVolume,toggleMute,current,playing,starting,buffering,time,duration,error,hasQueue,tracks,repeatMode,setRepeatMode,repeatOne,toggleRepeat,seekVersion,adoptGiftPreview,toggle,seek,close,reset,setQueue,next,updateCover,updateTitles,segment,playSegment,stopSegment}
 })

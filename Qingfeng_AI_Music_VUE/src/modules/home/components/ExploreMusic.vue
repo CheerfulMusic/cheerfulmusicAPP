@@ -13,8 +13,13 @@ const selectedExtra=computed(()=>extraFilters.find(option=>option.id===filter.va
 // 热度顺序在打开页面时定一次：点赞或播放后不会把卡片在眼皮底下重排。
 const ranking=ref<Record<string,number>>({})
 function freezeRanking(){const all=playlists.value.flatMap(playlist=>playlist.tracks);ranking.value=Object.fromEntries(sortByHeat(all).map((track,index)=>[track.id,index]))}
-const visible=computed(()=>filterPlaylists(playlists.value,filter.value).map(playlist=>({...playlist,tracks:[...playlist.tracks].sort((a,b)=>(ranking.value[a.id]??99)-(ranking.value[b.id]??99))})))
-const details=computed(()=>playlists.value.find(playlist=>playlist.id===selectedPlaylist.value))
+const rankedPlaylists=computed(()=>playlists.value.map(playlist=>({
+  ...playlist,
+  tracks:[...playlist.tracks].sort((a,b)=>(ranking.value[a.id]??99)-(ranking.value[b.id]??99)),
+})))
+const fullQueues=computed(()=>new Map(rankedPlaylists.value.map(playlist=>[playlist.id,playlist.tracks])))
+const visible=computed(()=>filterPlaylists(rankedPlaylists.value,filter.value))
+const details=computed(()=>rankedPlaylists.value.find(playlist=>playlist.id===selectedPlaylist.value))
 const resultCount=computed(()=>visible.value.reduce((total,playlist)=>total+playlist.tracks.length,0))
 async function choose(id:string){filter.value=id;more.value=false;await nextTick();gallery.value?.scrollTo({left:0,behavior:'instant'});if(extraFilters.some(option=>option.id===id))moreToggle.value?.focus({preventScroll:true})}
 onMounted(async()=>{await loadHotSongs();freezeRanking();void loadMyReactions()})
@@ -28,7 +33,7 @@ watch(()=>signedIn(),()=>{void loadMyReactions()})
   <div class="explore-toolbar"><nav class="genre-tabs" :aria-label="t('筛选试听作品')"><button type="button" :class="{selected:filter==='all'}" :aria-pressed="filter==='all'" @click="choose('all')">{{t('全部')}}</button><button v-for="option in primaryFilters" :key="option.id" type="button" :class="{selected:filter===option.id}" :aria-pressed="filter===option.id" @click="choose(option.id)">{{t(option.label)}}</button><button ref="moreToggle" type="button" :class="{selected:!!selectedExtra}" :aria-expanded="more" aria-controls="explore-style-filters" @click="more=!more">{{selectedExtra?t(selectedExtra.label):t(more?'收起风格':'更多风格')}} <span aria-hidden="true">{{more?'−':'+'}}</span></button></nav><p class="swipe-hint">{{t('左右滑动，探索更多作品')}} <span aria-hidden="true">↔</span></p></div>
   <div v-if="more" id="explore-style-filters" class="playlist-style-filters"><nav class="genre-tabs" :aria-label="t('更多试听风格')"><button v-for="option in extraFilters" :key="option.id" type="button" :class="{selected:filter===option.id}" :aria-pressed="filter===option.id" @click="choose(option.id)">{{t(option.label)}}</button></nav></div>
   <p class="sr-only" role="status" aria-live="polite">{{ t('找到 {count} 首歌曲',{count:resultCount}) }}</p>
-  <div ref="gallery" class="explore-gallery" :class="{'is-filtered':filter!=='all'}" tabindex="0" :aria-label="t('试听歌单列表')"><PlaylistCard v-for="playlist in visible" :key="playlist.id" :playlist="playlist" @more="selectedPlaylist=playlist.id"/></div>
+  <div ref="gallery" class="explore-gallery" :class="{'is-filtered':filter!=='all'}" tabindex="0" :aria-label="t('试听歌单列表')"><PlaylistCard v-for="playlist in visible" :key="playlist.id" :playlist="playlist" :queue="fullQueues.get(playlist.id)!" @more="selectedPlaylist=playlist.id"/></div>
   <p v-if="!visible.length" class="explore-no-results" role="status">{{t('这个风格的歌曲即将上新，先听听其他风格吧。')}}</p>
   <footer class="explore-footer"><h3>{{t('下一首，听见你的创作')}}</h3><RouterLink class="p-button" to="/create">{{t('开始创作')}} <span aria-hidden="true">↗</span></RouterLink></footer>
   <PlaylistDetails v-if="details" :playlist="details" @close="selectedPlaylist=''"/>

@@ -18,7 +18,7 @@ function mount() { app = createApp({ render: () => h(GlobalPlayer) }); app.mount
 beforeEach(() => {
   vi.useFakeTimers(); vi.clearAllMocks(); sessionStorage.clear()
   player = reactive({ current: track(), playing: true, starting: false, buffering: false, error: '', time: 0, duration: 30,
-    volume: 0.6, muted: false, hasQueue: true, toggle: vi.fn(), next: vi.fn(), seek: vi.fn(), close: vi.fn(), setVolume: vi.fn(), toggleMute: vi.fn() })
+    volume: 0.6, muted: false, hasQueue: true, repeatMode: 'default', setRepeatMode: vi.fn(), toggle: vi.fn(), next: vi.fn(), seek: vi.fn(), close: vi.fn(), setVolume: vi.fn(), toggleMute: vi.fn() })
   api.get.mockResolvedValue(snapshot()); api.public.mockResolvedValue(snapshot()); api.sync.mockResolvedValue(snapshot())
 })
 afterEach(() => { app?.unmount(); app = undefined; document.body.innerHTML = ''; vi.useRealTimers(); vi.restoreAllMocks() })
@@ -77,6 +77,21 @@ it('volume controls expose accessible percentage, mute and the slider action', a
   mount(); await flush(); const slider = document.querySelector<HTMLInputElement>('[aria-label="音量"]')!
   expect(slider.getAttribute('aria-valuetext')).toBe('60%'); slider.value = '0.25'; slider.dispatchEvent(new Event('input')); expect(player.setVolume).toHaveBeenCalledWith(0.25)
   document.querySelector<HTMLButtonElement>('[aria-label="静音"]')!.click(); expect(player.toggleMute).toHaveBeenCalledOnce()
+})
+
+it('opens playback modes, disables playlist repeat for one song and closes the menu on selection', async () => {
+  player.hasQueue = false
+  mount(); await flush()
+  const trigger = document.querySelector<HTMLButtonElement>('[aria-label="播放模式：默认播放"]')!
+  trigger.click(); await flush()
+  const menu = document.querySelector('[aria-label="播放模式"]')!
+  const options = Array.from(menu.querySelectorAll('button'))
+  expect(options.map(option => option.textContent?.trim().replace(/\s+✓$/, ''))).toEqual(['默认播放', '单曲循环', '列表循环'])
+  expect(options[2]?.disabled).toBe(true)
+  options[1]?.click(); await flush()
+  expect(player.setRepeatMode).toHaveBeenCalledWith('one')
+  expect(trigger.getAttribute('aria-expanded')).toBe('false')
+  expect(document.activeElement).toBe(trigger)
 })
 
 it('hot songs read their catalog timeline and never start a provider job', async () => {

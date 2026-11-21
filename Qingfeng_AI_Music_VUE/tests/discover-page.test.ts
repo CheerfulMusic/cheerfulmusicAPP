@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
+import { createMemoryHistory, createRouter } from 'vue-router'
 import type { DiscoverSong } from '../src/modules/artist/api/artist'
 import { setLocale } from '../src/shared/i18n'
 import type { PlayableTrack } from '../src/shared/player/store'
@@ -133,7 +134,7 @@ describe('Discover editorial layout with real content', () => {
     expect(upcoming.text()).toContain('待上线')
     expect(upcoming.find('button').exists()).toBe(false)
     expect(upcoming.get('img').attributes('src')).toContain('carousel-sea-stacks')
-    expect(section.findAll('li button img').map(image => image.attributes('src')?.split('/').at(-1))).toEqual([
+    expect(section.findAll('.shelf-track:not(.shelf-track-upcoming) img').map(image => image.attributes('src')?.split('/').at(-1))).toEqual([
       'hu-ran-xia-qi-yu.webp', 'liu-lang-shi-ren.webp', 'ming-tian-zai-shuo.webp', 'zou-le-na-me-yuan.webp',
     ])
     expect(section.findAll('li button')).toHaveLength(4)
@@ -416,18 +417,57 @@ describe('Discover editorial layout with real content', () => {
     expect(wrapper.get('#discover-tracks').text()).not.toContain('歌曲旧结果')
   })
 
+  it('opens the public artist page from song bylines without starting playback', async () => {
+    const release = song('单曲')
+    mocks.list.mockResolvedValue(page([release]))
+    mocks.shelves.mockResolvedValue({ ...shelfData([release]), genres: { 'global-pop': [release] } })
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [
+        { path: '/artist/:id', name: 'artist-home', component: { template: '<div />' } },
+        { path: '/:pathMatch(.*)*', component: { template: '<div />' } },
+      ],
+    })
+    await router.push('/discover')
+    const wrapper = mount(DiscoverPage, { global: { plugins: [router] } })
+    wrappers.push(wrapper)
+    await flushPromises()
+
+    const expectedUrl = '/artist/' + encodeURIComponent(release.artistId)
+    for (const selector of [
+      '#discover-featured .track-artist',
+      '#discover-latest .track-artist',
+      '#discover-today .track-artist',
+      '#discover-global-pop .shelf-square .track-artist',
+      '#discover-global-pop .shelf-wide .track-artist',
+      '.discover-ranking-info a',
+    ]) {
+      const link = wrapper.get(selector)
+      expect(link.attributes('href')).toBe(expectedUrl)
+      expect(link.element.closest('button')).toBeNull()
+    }
+    await wrapper.get('#discover-latest .track-artist').trigger('click')
+    await flushPromises()
+    expect(router.currentRoute.value).toMatchObject({ name: 'artist-home', params: { id: release.artistId } })
+    expect(mocks.toggle).not.toHaveBeenCalled()
+    expect(mocks.record).not.toHaveBeenCalled()
+
+    await wrapper.get('#discover-latest .shelf-track-play').trigger('click')
+    expect(mocks.toggle.mock.lastCall![0].id).toBe(release.song.id)
+  })
+
   it('plays the selected ranking queue and updates matching play counts across sections once', async () => {
     mocks.shelves.mockImplementation(async () => shelfData([song('共同作品', 12 + mocks.record.mock.calls.length), song('榜单第二')]))
     mocks.list.mockResolvedValue(page([song('共同作品')]))
     const wrapper = await open()
-    await wrapper.get('.discover-ranking-row').trigger('click')
+    await wrapper.get('.discover-ranking-play').trigger('click')
     await flushPromises()
     expect(mocks.queue.mock.calls[0]![0].map((track: PlayableTrack) => track.id)).toEqual(['共同作品', '榜单第二'])
     expect(mocks.record).toHaveBeenCalledTimes(1)
     expect(wrapper.get('.discover-ranking-row .discover-ranking-count').text()).toBe('13')
     expect(wrapper.get('#discover-today .track-count').text()).toBe('13')
-    await wrapper.get('.discover-ranking-row').trigger('click')
-    await wrapper.get('.discover-ranking-row').trigger('click')
+    await wrapper.get('.discover-ranking-play').trigger('click')
+    await wrapper.get('.discover-ranking-play').trigger('click')
     await flushPromises()
     expect(mocks.record).toHaveBeenCalledTimes(1)
   })
@@ -435,7 +475,7 @@ describe('Discover editorial layout with real content', () => {
   it('keeps failed playback out of play statistics and opens the actual playlist', async () => {
     mocks.toggle.mockImplementation(async () => undefined)
     const wrapper = await open()
-    await wrapper.get('.discover-ranking-row').trigger('click')
+    await wrapper.get('.discover-ranking-play').trigger('click')
     await flushPromises()
     expect(mocks.record).not.toHaveBeenCalled()
     const firstTitle = wrapper.get('.discover-playlist-title strong').text()

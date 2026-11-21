@@ -119,15 +119,18 @@
 .discover-genre-links :is(a, button):hover { color: var(--discover-accent); }
 .discover-genre-links span { color: #657268; }
 .discover-ranking > li + li { border-top: 1px solid #eff1ef; }
-.discover-ranking-row { display: flex; align-items: center; gap: 9px; width: 100%; min-height: 48px; padding: 7px 0; border: 0; background: transparent; color: inherit; text-align: start; }
+.discover-ranking-row { position: relative; display: flex; align-items: center; gap: 9px; min-height: 48px; padding: 7px 0; }
+.discover-ranking-play { position: absolute; z-index: 1; inset: 0; width: 100%; padding: 0; border: 0; background: transparent; }
 .discover-rank { width: 18px; flex: none; color: #657268; font-size: 12px; font-variant-numeric: tabular-nums; }
 .discover-ranking > li:first-child .discover-rank { color: var(--discover-accent); font-weight: 700; }
 .discover-ranking-cover { width: 42px; height: 42px; flex: none; overflow: hidden; border-radius: 4px; }
 .discover-ranking-cover img { width: 100%; height: 100%; object-fit: cover; }
 .discover-ranking-info { flex: 1; min-width: 0; }
-.discover-ranking-info strong, .discover-ranking-info > span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.discover-ranking-info > * { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .discover-ranking-info strong { font-size: 13px; font-weight: 500; }
-.discover-ranking-info > span, .discover-ranking-count { color: var(--discover-muted); font-size: 11px; }
+.discover-ranking-info :is(a, span), .discover-ranking-count { color: var(--discover-muted); font-size: 11px; }
+.discover-ranking-info a { position: relative; z-index: 2; width: fit-content; max-width: 100%; }
+.discover-ranking-info a:is(:hover, :focus-visible) { color: var(--discover-accent); text-decoration: underline; }
 .discover-ranking-count { flex: none; }
 .discover-ranking-row:hover strong { color: var(--discover-accent); }
 .discover-side-empty { margin: 0; color: var(--discover-muted); font-size: 13px; line-height: 1.7; }

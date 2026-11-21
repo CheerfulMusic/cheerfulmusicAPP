@@ -9,6 +9,7 @@ import ArtistAvatar from '../components/ArtistAvatar.vue'
 import DiscoverSongCard from '../components/DiscoverSongCard.vue'
 import DiscoverShelf from '../components/DiscoverShelf.vue'
 import { withDiscoverEditorialCover } from '../model/discover-editorial-artwork'
+import { discoverSongArtwork, type HeroArtwork } from '../model/discover-hero-artwork'
 import {
   christmasSongId, discoverGenres, discoverReleaseCover, withDiscoverPreviewCover,
   type DiscoverShelfTrack, type PublishedShelfTrack,
@@ -25,11 +26,6 @@ import {
 } from '../api/artist'
 import walkedFar from '../../../assets/discover/carousel-walked-far.webp'
 import christmasSky from '../../../assets/discover/carousel-christmas-sky.webp'
-import cactus from '../../../assets/discover/carousel-cactus.webp'
-import mistyGarden from '../../../assets/discover/carousel-misty-garden.webp'
-import airportGuitar from '../../../assets/discover/carousel-airport-guitar.webp'
-import seaStacks from '../../../assets/discover/carousel-sea-stacks.webp'
-import countryside from '../../../assets/discover/carousel-countryside.webp'
 import discoCover from '../../../assets/discover/playlists/disco.webp'
 import christmasCover from '../../../assets/discover/playlists/christmas.webp'
 
@@ -130,7 +126,7 @@ const rankedSongs = computed(() => cumulativeHotSongs.value.length ? cumulativeH
 const todayRows = computed(() => withTracks(rankedSongs.value, true))
 const rankingRows = computed(() => withTracks(rankedSongs.value))
 const vocalRows = computed(() => [...vocalPerformanceRows, ...withTracks(shelves.value?.vocal ?? [])])
-const upcomingVocal = { title: '唯一的航线', cover: seaStacks }
+const upcomingVocal = { title: '唯一的航线', cover: discoverSongArtwork[0].compact }
 const ranking = computed(() => rankingRows.value.slice(0, 5))
 const genreShelves = computed(() => discoverGenres.map(section => {
   const useEditorialCover = section.id === 'electronic' || section.id === 'rock' || section.id === 'jazz-soul'
@@ -153,20 +149,13 @@ const genreShelves = computed(() => discoverGenres.map(section => {
   const wide = section.hasWideRow ? [...tracks.slice(7), ...tracks.slice(0, 7)].slice(0, 4) : []
   return { ...section, square: tracks.slice(0, 7), wide }
 }))
-const heroBackgrounds = [
-  { src: seaStacks, position: '58% center' },
-  { src: cactus, position: '65% top' },
-  { src: airportGuitar, position: '62% 32%' },
-  { src: countryside, position: '15% center' },
-  { src: mistyGarden, position: 'center 60%' },
-]
 const walkedFarRow = vocalPerformanceRows.find(row => row.track.id === 'vocal-zou-le-na-me-yuan')!
 const heroSlides = computed(() => {
   const streetlight = popularSongs.value.find(item => item.song.id === streetlightSongId) ?? supplementalHeroSong.value
   const candidates = popularSongs.value.filter(item =>
     item.song.id !== replacedHeroSongId && item.song.id !== streetlightSongId && item.song.id !== christmasSongId)
   if (streetlight) candidates.splice(1, 0, streetlight)
-  const visible = candidates.slice(0, heroBackgrounds.length)
+  const visible = candidates.slice(0, discoverSongArtwork.length)
   const invincible = visible.find(item => item.song.id === invincibleSongId)
   const micangshan = visible.find(item => item.song.id === micangshanSongId)
   let ordered = visible
@@ -176,16 +165,16 @@ const heroSlides = computed(() => {
     ordered.splice(2, 0, invincible, micangshan)
   }
 
-  const slides = [
-    { row: walkedFarRow, artwork: { src: walkedFar, position: '68% center' } },
-    ...withTracks(ordered).map((row, index) => ({ row, artwork: heroBackgrounds[index]! })),
+  const slides: { row: DiscoverShelfTrack; artwork: HeroArtwork }[] = [
+    { row: walkedFarRow, artwork: { desktop: walkedFar, compact: walkedFar, position: '68% center' } },
+    ...withTracks(ordered).map((row, index) => ({ row, artwork: discoverSongArtwork[index]! })),
   ]
   const release = latestSongs.value.find(item => item.song.id === christmasSongId)
     ?? popularSongs.value.find(item => item.song.id === christmasSongId)
     ?? christmasTracks.value[0]?.publication
   if (release) {
     const track = publicDiscoverTrack(release.artistId, release.song)
-    slides.push({ row: { ...release, track }, artwork: { src: christmasSky, position: '67% center' } })
+    slides.push({ row: { ...release, track }, artwork: { desktop: christmasSky, compact: christmasSky, position: '67% center' } })
   }
   return slides
 })
@@ -318,12 +307,6 @@ function initializeHeroRotation() {
   document.addEventListener('visibilitychange', visibilityChanged)
   restartHeroRotation()
 }
-// Warm only the next slide.
-watch([heroIndex, heroSlideCount], () => {
-  if (disposed || heroSlideCount.value < 2 || typeof Image === 'undefined') return
-  const nextImage = new Image()
-  nextImage.src = heroAfter.value.src
-})
 function genreLabel(genre?: string) {
   return genre && genre !== 'other' ? t(genres.find(item => item.id === genre)?.label ?? '') : ''
 }
@@ -457,11 +440,17 @@ onBeforeUnmount(() => {
       <section class="discover-hero" :aria-label="t('广场推荐')" :aria-roledescription="t('轮播')"
         @mouseenter="heroHovered = true" @mouseleave="heroHovered = false" @focusin="heroFocused = true" @focusout="heroFocusOut">
         <div v-if="heroSlideCount > 1" class="discover-hero-preview discover-hero-preview-before">
-          <img :src="heroBefore.src" :style="{ objectPosition: heroBefore.position }" alt="">
+          <picture>
+            <source media="(min-width: 521px)" :srcset="heroBefore.compact">
+            <img :style="{ objectPosition: heroBefore.position }" alt="" loading="lazy" decoding="async" fetchpriority="low">
+          </picture>
         </div>
         <div class="discover-hero-main" :class="{ 'is-single': heroSlideCount === 1 }">
-          <img class="discover-hero-background" :src="heroBackground.src"
-            :style="{ objectPosition: heroBackground.position }" alt="" width="1536" height="591" fetchpriority="high">
+          <picture>
+            <source media="(max-width: 760px)" :srcset="heroBackground.compact">
+            <img class="discover-hero-background" :src="heroBackground.desktop"
+              :style="{ objectPosition: heroBackground.position }" alt="" width="1536" height="512" fetchpriority="high">
+          </picture>
           <div class="discover-hero-content">
             <h2 :class="{ 'is-long-title': heroTitleLength > 10, 'is-very-long-title': heroTitleLength > 32 }" :title="hero.track.title">{{ hero.track.title }}</h2>
             <RouterLink v-if="hero.artistId && hero.stageName" class="discover-hero-artist" :to="{ name: 'artist-home', params: { id: hero.artistId } }">{{ hero.stageName }}</RouterLink>
@@ -469,7 +458,10 @@ onBeforeUnmount(() => {
           </div>
         </div>
         <div v-if="heroSlideCount > 1" class="discover-hero-preview discover-hero-preview-after">
-          <img :src="heroAfter.src" :style="{ objectPosition: heroAfter.position }" alt="">
+          <picture>
+            <source media="(min-width: 521px)" :srcset="heroAfter.compact">
+            <img :style="{ objectPosition: heroAfter.position }" alt="" loading="lazy" decoding="async" fetchpriority="low">
+          </picture>
         </div>
         <template v-if="heroSlideCount > 1">
           <button class="discover-hero-previous" type="button" :aria-label="t('上一张推荐')" @click="changeHero(-1)">‹</button>
@@ -621,12 +613,17 @@ onBeforeUnmount(() => {
           </header>
           <ol v-if="ranking.length" class="discover-ranking">
             <li v-for="(row, index) in ranking" :key="row.track.audio">
-              <button type="button" class="discover-ranking-row" :aria-label="t(playing(row.track) ? '暂停 {title}' : '试听 {title}', { title: row.song.title })" @click="play(row, rankingRows)">
+              <div class="discover-ranking-row">
+                <button type="button" class="discover-ranking-play" :aria-label="t(playing(row.track) ? '暂停 {title}' : '试听 {title}', { title: row.song.title })" @click="play(row, rankingRows)"></button>
                 <span class="discover-rank" aria-hidden="true">{{ String(index + 1).padStart(2, '0') }}</span>
                 <span v-if="index === 0" class="discover-ranking-cover"><img :src="row.track.cover" alt="" width="42" height="42" loading="lazy"></span>
-                <span class="discover-ranking-info"><strong>{{ row.song.title }}</strong><span>{{ row.stageName }}</span></span>
+                <span class="discover-ranking-info">
+                  <strong>{{ row.song.title }}</strong>
+                  <RouterLink v-if="row.artistId && row.stageName" :to="{ name: 'artist-home', params: { id: row.artistId } }">{{ row.stageName }}</RouterLink>
+                  <span v-else-if="row.stageName">{{ row.stageName }}</span>
+                </span>
                 <span v-if="row.plays !== undefined" class="discover-ranking-count">{{ count.format(row.plays) }}</span>
-              </button>
+              </div>
             </li>
           </ol>
           <p v-else-if="editorialLoading" class="discover-side-empty" role="status">{{ t('正在加载歌曲…') }}</p>

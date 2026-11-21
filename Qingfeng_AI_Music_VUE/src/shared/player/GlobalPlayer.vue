@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import PlaybackIcon from '../ui/PlaybackIcon.vue'
+import PlaybackModeButton from './PlaybackModeButton.vue'
 import { t, localizedCover } from '../i18n/index'
 import { usePlayer } from './store'
 import { useCurrentLyrics } from './current-lyrics'
@@ -29,8 +30,11 @@ function status(){
     <div class="q-player-info"><strong>{{ player.current.titleKey ? t(player.current.titleKey) : player.current.title }}</strong></div>
     <span class="q-player-lyric" :title="status()">{{ status() }}</span>
     <button class="q-player-toggle" :aria-label="(player.playing || player.starting) ? t('暂停') : t('播放')" @click="player.toggle(player.current)"><PlaybackIcon :playing="player.playing||player.starting"/></button>
-    <button v-if="player.hasQueue" class="q-player-step" :aria-label="t('上一首')" @click="player.next(-1)">‹</button>
-    <button v-if="player.hasQueue" class="q-player-step" :aria-label="t('下一首')" @click="player.next()">›</button>
+    <div class="q-player-navigation">
+      <button v-if="player.hasQueue" type="button" class="q-player-step" :aria-label="t('上一首')" @click="player.next(-1)">‹</button>
+      <button v-if="player.hasQueue" type="button" class="q-player-step" :aria-label="t('下一首')" @click="player.next()">›</button>
+      <PlaybackModeButton />
+    </div>
     <button v-if="player.error" class="q-player-retry" @click="player.toggle(player.current)">{{ t('重试') }}</button>
     <span>{{ label(player.time) }}</span>
     <input class="q-player-progress" type="range" min="0" :max="player.duration || 1" :disabled="!player.duration" step="0.1" :value="player.time" :aria-label="t('播放进度')" @input="player.seek(Number(($event.target as HTMLInputElement).value))">
