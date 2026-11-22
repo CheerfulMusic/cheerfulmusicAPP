@@ -102,7 +102,8 @@ async function loginWithGoogle() {
   catch { googleError.value = '暂时无法开始 Google 登录，请稍后重试。'; googleBusy.value = false }
 }
 async function manageGoogleSession(action: 'switch' | 'logout') {
-  if (accountBusy.value || !googleStatus.value.authenticated) return
+  if (googleBusy.value || accountLoggingOut.value) return
+  if (!googleStatus.value.authenticated && (action === 'switch' || !logtoState.value.authenticated)) return
   googleBusy.value = true; googleError.value = ''; googleNotice.value = ''
   try {
     await logoutAccount()
@@ -168,7 +169,7 @@ async function recover() {
           <p class="profile-description">{{ logtoState.authenticated ? (logtoState.email || maskedPhoneLabel(logtoState.phoneMasked) || t('可以在其他设备找回你的音乐。')) : t('使用邮箱或手机号登录，保留并同步你的音乐作品。') }}</p>
         </div>
       </div>
-      <div class="profile-actions"><span v-if="logtoState.authenticated" class="connection-badge">{{ t('已连接') }}</span><button type="button" class="google-sign-in" @click="showLoginDialog">{{ t('查看登录方式') }}</button></div>
+      <div class="profile-actions"><button v-if="logtoState.authenticated && !googleStatus.authenticated" type="button" class="session-logout" :disabled="googleBusy || accountLoggingOut" @click="manageGoogleSession('logout')">{{ t(accountLoggingOut ? '正在处理…' : '退出此设备') }}</button><span v-if="logtoState.authenticated" class="connection-badge">{{ t('已连接') }}</span><button type="button" class="google-sign-in" @click="showLoginDialog">{{ t('查看登录方式') }}</button></div>
     </div>
     <div class="profile-footer"><NavIcon name="recovery" /><p>{{ t('不同账号的音乐不会自动合并。') }}</p></div>
   </section>

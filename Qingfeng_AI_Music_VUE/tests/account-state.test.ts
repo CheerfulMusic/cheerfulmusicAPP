@@ -33,7 +33,7 @@ describe('shared account state', () => {
     expect(resetPlayer).not.toHaveBeenCalled()
   })
 
-  it('uses a CSRF-protected logout and keeps the confirmed signed-out state if the follow-up read fails', async () => {
+  it('uses a CSRF-protected logout and completes without a follow-up provider-status read', async () => {
     let statusReads = 0
     const fetch = vi.fn(async (url: string, _init?: RequestInit) => url.endsWith('/csrf') ? reply({ token: 'test-csrf' })
       : url.endsWith('/session') ? reply({ creatorId: 'current-creator' })
@@ -48,6 +48,7 @@ describe('shared account state', () => {
     expect(fetch).toHaveBeenCalledWith('/api/public/session/logout', expect.objectContaining({
       method: 'POST', credentials: 'same-origin', body: '{}', headers: expect.objectContaining({ 'X-XSRF-TOKEN': 'test-csrf' }),
     }))
+    expect(statusReads).toBe(1)
     expect(accountState.value).toEqual(signedOut)
     expect(resetPlayer).toHaveBeenCalledTimes(1)
   })

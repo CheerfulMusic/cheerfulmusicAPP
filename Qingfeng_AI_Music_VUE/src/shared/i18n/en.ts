@@ -600,6 +600,8 @@ export const english: Record<string, string> = {
   "重试创建分享链接": "Try creating the link again",
   "创建歌曲分享链接": "Create share link",
   "分享链接暂时无法创建，请重试。": "Could not create the share link. Please try again.",
+  "复制链接到微信": "Copy link for WeChat",
+  "链接已复制，在微信聊天中粘贴即可发送。": "Link copied. Paste it into a WeChat conversation to send.",
   "已复制分享链接，发给朋友即可收听。": "Link copied. Send it to a friend to listen.",
   "请分享这里的链接，不要复制浏览器里的作品编辑地址。原始故事和编辑权限不会公开。": "Share this link rather than the editor address in your browser. Your original story and editing access stay private.",
   "管理分享": "Manage sharing",
