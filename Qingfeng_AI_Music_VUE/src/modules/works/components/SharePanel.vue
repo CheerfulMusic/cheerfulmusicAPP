@@ -75,11 +75,16 @@ function checkLink() {
   if (valid()) return true
   error.value = '分享链接已过期，请重新创建分享。'; return false
 }
-async function copy() {
+const linkInput = ref<HTMLInputElement>()
+async function copy(forWeChat = false) {
   if (!checkLink()) return
   const turn = generation
-  try { await navigator.clipboard.writeText(link.value); if (turn === generation) notice.value = '已复制分享链接，发给朋友即可收听。' }
-  catch { if (turn === generation) notice.value = '请选中链接手动复制。' }
+  try { await navigator.clipboard.writeText(link.value); if (turn === generation) notice.value = forWeChat ? '链接已复制，在微信聊天中粘贴即可发送。' : '已复制分享链接，发给朋友即可收听。' }
+  catch {
+    if (turn !== generation) return
+    linkInput.value?.focus(); linkInput.value?.select()
+    notice.value = '请选中链接手动复制。'
+  }
 }
 async function share() {
   if (sharing.value || !song.value || !checkLink()) return
@@ -152,6 +157,7 @@ onBeforeUnmount(() => { generation++; clearPoster(); dialog.value?.close() })
         </article>
         <div class="share-primary-actions">
           <button ref="shareButton" class="button" type="button" :disabled="sharing" @click="share">{{ t(sharing ? '正在打开分享…' : '分享歌曲卡片') }}</button>
+          <button class="button secondary" type="button" @click="copy(true)">{{ t('复制链接到微信') }}</button>
           <button class="button secondary" type="button" :aria-expanded="posterOpen" @click="openPoster">{{ t(posterOpen ? '收起音乐海报' : '制作音乐海报') }}</button>
         </div>
         <p class="share-platform-note">{{ t('卡片展示由接收应用决定，点击后进入公开收听页。') }}</p>
@@ -162,8 +168,8 @@ onBeforeUnmount(() => { generation++; clearPoster(); dialog.value?.close() })
           <a class="text-button" :href="link" target="_blank" rel="noopener noreferrer">{{ t('预览收听页') }} ↗</a>
         </div>
         <div class="share-link-actions">
-          <input id="song-share-link" :value="link" readonly @focus="($event.target as HTMLInputElement).select()">
-          <button class="button share-copy-link" type="button" @click="copy">{{ t('复制分享链接') }}</button>
+          <input ref="linkInput" id="song-share-link" :value="link" readonly @focus="($event.target as HTMLInputElement).select()">
+          <button class="button share-copy-link" type="button" @click="copy()">{{ t('复制分享链接') }}</button>
         </div>
       </section>
       <section v-if="song && link && !busy && posterOpen" class="share-poster-workspace" :aria-label="t('音乐海报')">

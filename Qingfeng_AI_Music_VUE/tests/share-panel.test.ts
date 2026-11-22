@@ -61,6 +61,14 @@ describe('share panel state and poster lifecycle', () => {
     expect(copy.closest('details')).toBeNull()
     copy.click(); await flush()
     expect(writeText).toHaveBeenCalledExactlyOnceWith(url)
+    button('复制链接到微信').click(); await flush()
+    expect(writeText).toHaveBeenLastCalledWith(url)
+    expect(document.body.textContent).toContain('链接已复制，在微信聊天中粘贴即可发送。')
+    writeText.mockRejectedValueOnce(new Error('denied'))
+    button('复制链接到微信').click(); await flush()
+    const input = document.querySelector<HTMLInputElement>('#song-share-link')!
+    expect(input.selectionEnd! - input.selectionStart!).toBe(input.value.length)
+    expect(document.body.textContent).toContain('请选中链接手动复制。')
     expect(document.querySelector('.share-card-art img')?.getAttribute('src')).toContain('/cover?proxy=true')
   })
   it('retries reading without creating a second token when the public snapshot request fails', async () => {
