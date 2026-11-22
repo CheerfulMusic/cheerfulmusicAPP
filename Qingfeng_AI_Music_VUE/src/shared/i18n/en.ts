@@ -685,6 +685,7 @@ export const english: Record<string, string> = {
   '为下一首歌准备': 'READY FOR YOUR NEXT SONG',
   '开放后可在这里选购积分。': 'When available, you can purchase credits here.',
   '选择积分套餐': 'Choose a credit package',
+  '充值积分': 'Recharge credits',
   '选择适合你的创作计划。': 'Choose the package that fits your creative plans.',
   '选择付款币种': 'Choose payment currency',
   '支付方式': 'Payment method',

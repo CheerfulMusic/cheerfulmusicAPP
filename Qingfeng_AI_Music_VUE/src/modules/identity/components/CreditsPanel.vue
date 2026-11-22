@@ -7,19 +7,21 @@ import { logtoState } from '../../../shared/identity/logto-state'
 import { t, locale } from '../../../shared/i18n'
 import { readPendingOrders, savePendingOrders } from '../model/payment-orders'
 import { canCapturePaypal, paypalReturn } from '../model/paypal-return'
-import { isPendingOrder, mergeOrderHistory, orderAmount, trustedCheckoutUrl, type Order, type Provider } from '../model/order-history'
+import { isPendingOrder, mergeOrderHistory, orderAmount, trustedCheckoutUrl, type Order } from '../model/order-history'
 
 const props = withDefaults(defineProps<{ preview?: boolean }>(), { preview: false })
 // Preview is only reachable in a development build and must never call the payment API.
 const isPreview = import.meta.env.DEV && props.preview
 
-type Package = { id: string; title: string; amount: number; currency: string; credits: number }
-type Catalog = { enabled: boolean; packages: Package[] }
 type Credits = { enabled: boolean; balance: number; musicCost: number }
-const catalogs = ref<Record<Provider, Catalog>>({airwallex:{enabled:false,packages:[]},paypal:{enabled:false,packages:[]},stripe:{enabled:false,packages:[]}}), credits = ref<Credits>(), loading = ref(true), busy = ref(false), error = ref('')
-const purchaseUncertain = ref(false)
+const previewPackages = [
+  { credits: 100, amount: 9.9 },
+  { credits: 300, amount: 25.9 },
+  { credits: 700, amount: 49.9 },
+]
+const credits = ref<Credits>(), loading = ref(true), busy = ref(false), error = ref('')
+const historyUnavailable = ref(false)
 const orderNotice = ref('')
-const unresolvedOrders = ref<Order[]>([])
 const recentOrders = ref<Order[]>([])
 const orderPeriod = ref<number>(0)
 const visibleOrders = computed(() => {
@@ -32,26 +34,15 @@ const visibleOrders = computed(() => {
   })
 })
 const paypalApproved = ref<string[]>([])
-const catalogError = ref(false)
-const selectedCurrency = 'USD'
+const balanceUnavailable = ref(false)
 const signedIn = computed(() => accountState.value.authenticated || logtoState.value.authenticated)
-const availableCurrencies = computed(() => Object.values(catalogs.value).some(c => c.enabled && c.packages.some(p => p.currency === selectedCurrency)) ? ['USD'] : [])
-const visibleProviders = computed(() => (['paypal', 'stripe', 'airwallex'] as const).map(provider => ({
-  provider, packages: catalogs.value[provider].enabled ? catalogs.value[provider].packages.filter(p => p.currency === selectedCurrency) : []
-})).filter(group => group.packages.length > 0))
 let loadEpoch = 0
 async function load() {
   const epoch = ++loadEpoch
-  loading.value = true; error.value = ''; orderNotice.value = ''; unresolvedOrders.value = []; recentOrders.value = []
+  loading.value = true; error.value = ''; orderNotice.value = ''; historyUnavailable.value = false; recentOrders.value = []
   if (isPreview) {
-    const packages = ['USD'].flatMap(currency => [
-      { id: `starter-${currency}`, title: '100 Credits', amount: 9.9, currency, credits: 100 },
-      { id: `standard-${currency}`, title: '300 Credits', amount: 25.9, currency, credits: 300 },
-      { id: `plus-${currency}`, title: '700 Credits', amount: 49.9, currency, credits: 700 },
-    ])
     credits.value = { enabled: true, balance: 0, musicCost: 5 }
-    catalogs.value = { airwallex: { enabled: false, packages: [] }, paypal: { enabled: true, packages }, stripe: { enabled: false, packages: [] } }
-    catalogError.value = false; loading.value = false
+    loading.value = false
     return
   }
   try {
@@ -59,15 +50,15 @@ async function load() {
     if (epoch !== loadEpoch) return
     const creatorId = currentCreatorId()
     if (signedIn.value) {
-      const stillPending: Order[] = []
+      let stillPending = false
       let recent: Order[] = []
       let paidAny = false
-      let historyUnavailable = false
+      let failedHistory = false
       for (const provider of ['airwallex','paypal','stripe'] as const) {
         const base = provider === 'paypal' ? 'app/paypal/orders' : provider === 'stripe' ? 'app/stripe/orders' : 'app/payments/orders'
         let history: { orders: Omit<Order, 'provider'>[] }
         try { history = await requestJson<{orders:Omit<Order, 'provider'>[]}>(base) }
-        catch { historyUnavailable = true; continue }
+        catch { failedHistory = true; continue }
         recent = mergeOrderHistory(recent, history.orders.map(order => ({ ...order, provider })))
         const unresolved = history.orders.filter(order => isPendingOrder(order.status))
         const pending = [...new Set([...unresolved.map(order => order.orderId), ...readPendingOrders(localStorage, creatorId, provider)])]
@@ -92,8 +83,8 @@ async function load() {
             const updated: Order = {...existing, orderId:id, status:result.status as Order['status'], credits:result.credits, ...(result.amount !== undefined && result.currency ? {amount:result.amount,currency:result.currency} : {}), ...(result.packageId ? {packageId:result.packageId} : {}), ...(result.paymentMethod ? {paymentMethod:result.paymentMethod} : {}), provider}
             recent = mergeOrderHistory(recent, [updated])
             if (!isPendingOrder(updated.status)) { paid.push(id); if (result.status === 'PAID') paidAny = true }
-            else stillPending.push(updated)
-          } catch { const unknown: Order = {...existing || {orderId:id,status:'UNKNOWN' as const},provider}; stillPending.push(unknown); recent = mergeOrderHistory(recent, [unknown]) }
+            else stillPending = true
+          } catch { const unknown: Order = {...existing || {orderId:id,status:'UNKNOWN' as const},provider}; stillPending = true; recent = mergeOrderHistory(recent, [unknown]) }
         }
         if (currentCreatorId() !== creatorId) return
         if (paid.length) savePendingOrders(localStorage, creatorId, readPendingOrders(localStorage, creatorId, provider).filter(id => !paid.includes(id)),provider)
@@ -104,22 +95,16 @@ async function load() {
         }
       }
       if (epoch !== loadEpoch) return
-      unresolvedOrders.value = stillPending
       recentOrders.value = recent
-      purchaseUncertain.value = historyUnavailable
-      if (historyUnavailable) orderNotice.value = '暂时无法核对全部订单，请稍后刷新再购买。'
-      else if (stillPending.length) orderNotice.value = '有订单仍待确认，请稍后刷新；请先核对付款记录，避免重复支付。'
+      historyUnavailable.value = failedHistory
+      if (failedHistory) orderNotice.value = '暂时无法核对全部订单，请稍后刷新再购买。'
+      else if (stillPending) orderNotice.value = '有订单仍待确认，请稍后刷新；请先核对付款记录，避免重复支付。'
       else if (paidAny) orderNotice.value = '支付已确认，积分余额已更新。'
     }
-    const [c, a, p, s] = await Promise.allSettled([
-      requestJson<Credits>('app/credits'), requestJson<Catalog>('app/payments/catalog'), requestJson<Catalog>('app/paypal/catalog'), requestJson<Catalog>('app/stripe/catalog')
-    ])
+    const balance = await requestJson<Credits>('app/credits').catch(() => undefined)
     if (epoch !== loadEpoch) return
-    credits.value = c.status === 'fulfilled' ? c.value : undefined
-    catalogs.value.airwallex = a.status === 'fulfilled' ? a.value : { enabled: false, packages: [] }
-    catalogs.value.paypal = p.status === 'fulfilled' ? p.value : { enabled: false, packages: [] }
-    catalogs.value.stripe = s.status === 'fulfilled' ? s.value : { enabled: false, packages: [] }
-    catalogError.value = c.status === 'rejected' || a.status === 'rejected' || p.status === 'rejected' || s.status === 'rejected'
+    credits.value = balance
+    balanceUnavailable.value = balance === undefined
   } catch { if (epoch === loadEpoch) error.value = '暂时无法读取积分信息，请稍后重试。' }
   finally { if (epoch === loadEpoch) loading.value = false }
 }
@@ -197,10 +182,7 @@ async function cancelPaypal(order: Order) {
   if (currentCreatorId() === creatorId) await load()
   if (failed && currentCreatorId() === creatorId) orderNotice.value = '取消未成功，订单可能已授权或状态尚未确认；请刷新核对，勿重复付款。'
 }
-function price(item: Package) {
-  try { return new Intl.NumberFormat(locale.value, { style: 'currency', currency: item.currency }).format(item.amount) }
-  catch { return `${item.currency} ${item.amount}` }
-}
+const previewPrice = (amount: number) => new Intl.NumberFormat(locale.value, { style: 'currency', currency: 'USD' }).format(amount)
 function orderTime(value?: string) {
   if (!value || Number.isNaN(Date.parse(value))) return ''
   return new Intl.DateTimeFormat(locale.value, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value))
@@ -208,37 +190,21 @@ function orderTime(value?: string) {
 function orderStatus(status: Order['status']) {
   return status === 'PAID' ? '支付已确认' : status === 'CANCELLED' ? '已取消支付' : status === 'FAILED' ? '支付失败' : status === 'PENDING' ? '订单等待支付确认' : status === 'CREATING' ? '订单创建状态待核对' : '订单状态暂无法确认'
 }
-async function buy(item: Package, provider: Provider) {
-  if (isPreview) { orderNotice.value = '这是界面预览，不会产生订单或扣款。'; return }
-  if (busy.value || purchaseUncertain.value || unresolvedOrders.value.length || !signedIn.value) return
-  busy.value = true; error.value = ''
-  try {
-    await ensureCreator()
-    const creatorId = currentCreatorId()
-    const endpoint = provider === 'paypal' ? 'app/paypal/orders' : provider === 'stripe' ? 'app/stripe/orders' : 'app/payments/orders'
-    const order = await requestJson<{orderId: string; checkoutUrl: string}>(endpoint, 'POST', {packageId: item.id}, 30000)
-    if (currentCreatorId() !== creatorId) throw new Error('Identity changed')
-    savePendingOrders(localStorage, creatorId, [...readPendingOrders(localStorage, creatorId, provider), order.orderId],provider)
-    window.location.assign(trustedCheckoutUrl(order.checkoutUrl, provider))
-  } catch {
-    purchaseUncertain.value = true
-    error.value = '暂时无法确认订单状态，请刷新账户后核对，避免重复付款。'
-    busy.value = false
-  }
-}
 onMounted(load)
 watch(signedIn, (current, previous) => { if (current !== previous) void load() })
 </script>
 <template>
   <section id="payment-orders" class="credits-section" :aria-label="t('创作积分')">
     <div class="credits-head"><div><span class="eyebrow">{{ t('为下一首歌准备') }}</span><h2>{{ t('创作积分') }}</h2><p>{{ t('购买积分，用于创作歌曲。') }}</p></div><button type="button" class="refresh" :disabled="loading || busy" @click="load">{{ t('刷新') }}</button></div>
+    <div v-if="!isPreview" class="recharge-entry">
+      <RouterLink class="recharge-link" to="/recharge">{{ t('充值积分') }}</RouterLink>
+    </div>
     <p v-if="loading" class="subtle" role="status">{{ t('正在读取积分…') }}</p>
     <p v-else-if="error" class="error" role="alert">{{ t(error) }}</p>
     <template v-else>
       <div v-if="credits && (signedIn || credits.enabled)" class="balance"><span>{{ t('可用积分') }}</span><strong>{{ credits.balance }}</strong><small v-if="credits.enabled">{{ t('每次歌曲生成消耗 {count} 积分', {count: credits.musicCost}) }}</small></div>
       <p v-if="orderNotice" class="subtle" role="status">{{ t(orderNotice) }}</p>
-      <p class="wallet-entry"><RouterLink to="/recharge">{{ locale==='en'?'View card, Apple Pay and WeChat Pay options':'查看银行卡、Apple Pay 和微信支付方式' }}</RouterLink></p>
-      <p v-if="catalogError" class="subtle" role="status">{{ t('部分积分或支付信息暂时无法读取，请稍后刷新。') }}</p>
+      <p v-if="balanceUnavailable" class="subtle" role="status">{{ t('暂时无法读取积分信息，请稍后重试。') }}</p>
       <details v-if="signedIn" class="history">
         <summary>{{ t('我的订单') }}</summary>
         <p class="history-help">{{ t('待付款订单可继续支付或申请取消；是否可取消由服务端核对付款状态。') }}</p>
@@ -249,7 +215,7 @@ watch(signedIn, (current, previous) => { if (current !== previous) void load() }
             <option v-for="days in [7, 30, 90]" :key="days" :value="days">{{ t('最近 {count} 天', { count: days }) }}</option>
           </select>
         </label>
-        <p v-if="!recentOrders.length" class="subtle">{{ t(purchaseUncertain ? '订单暂时无法读取，请稍后刷新。' : '暂无订单。') }}</p>
+        <p v-if="!recentOrders.length" class="subtle">{{ t(historyUnavailable ? '订单暂时无法读取，请稍后刷新。' : '暂无订单。') }}</p>
         <p v-else-if="!visibleOrders.length" class="subtle" role="status">{{ t('这段时间内暂无订单。') }}</p>
         <ul v-else class="orders"><li v-for="order in visibleOrders" :key="`${order.provider}:${order.orderId}`">
           <div><strong>{{ t(orderStatus(order.status)) }}</strong> · {{ order.provider === 'paypal' ? 'PayPal' : order.provider === 'stripe' ? 'Stripe' : 'Airwallex' }}<template v-if="order.credits != null"> · {{ order.credits }} {{ t('积分') }}</template><template v-if="orderTime(order.createdAt)"> · {{ orderTime(order.createdAt) }}</template></div>
@@ -268,13 +234,18 @@ watch(signedIn, (current, previous) => { if (current !== previous) void load() }
           </div>
         </li></ul>
       </details>
-      <div v-if="!availableCurrencies.length && !catalogError" class="empty-state"><span class="empty-icon" aria-hidden="true">♪</span><div><strong>{{ t('积分购买暂未开放。') }}</strong><p>{{ t('开放后可在这里选购积分。') }}</p></div></div>
-      <template v-else-if="availableCurrencies.length">
-        <p v-if="!isPreview && !signedIn" class="subtle">{{ t('请先登录账号，再购买积分。') }}</p>
+      <template v-if="isPreview">
         <div class="selection-head"><div><h3>{{ t('选择积分套餐') }}</h3><p>{{ t('选择适合你的创作计划。') }}</p></div><span class="currency-label">USD $</span></div>
-        <section v-for="group in visibleProviders" :key="group.provider" class="provider-section" :aria-label="group.provider === 'paypal' ? 'PayPal' : group.provider === 'stripe' ? 'Stripe' : 'Airwallex'">
-          <div class="provider-label">{{ t('支付方式') }} · {{ group.provider === 'paypal' ? 'PayPal' : group.provider === 'stripe' ? 'Stripe' : 'Airwallex' }}</div>
-          <div class="packages"><article v-for="item in group.packages" :key="item.id" class="package"><div class="package-top"><span class="package-caption">{{ t('创作积分') }}</span><span aria-hidden="true">✦</span></div><strong>{{ item.credits }} <small>{{ t('积分') }}</small></strong><p class="package-price">{{ price(item) }}</p><button type="button" class="buy-button" :disabled="!isPreview && (busy || purchaseUncertain || unresolvedOrders.length > 0 || !signedIn)" @click="buy(item, group.provider)">{{ busy ? t('正在前往支付…') : t('选择此套餐') }}</button></article></div>
+        <section class="provider-section" aria-label="PayPal">
+          <div class="provider-label">{{ t('支付方式') }} · PayPal</div>
+          <div class="packages">
+            <article v-for="item in previewPackages" :key="item.credits" class="package">
+              <div class="package-top"><span class="package-caption">{{ t('创作积分') }}</span><span aria-hidden="true">✦</span></div>
+              <strong>{{ item.credits }} <small>{{ t('积分') }}</small></strong>
+              <p class="package-price">{{ previewPrice(item.amount) }}</p>
+              <button type="button" class="buy-button" @click="orderNotice = '这是界面预览，不会产生订单或扣款。'">{{ t('选择此套餐') }}</button>
+            </article>
+          </div>
         </section>
         <p class="subtle">{{ t('支付完成后，积分将在确认到账后发放。') }}</p>
       </template>
@@ -289,11 +260,14 @@ watch(signedIn, (current, previous) => { if (current !== previous) void load() }
 
 .credits-section { margin-top:34px; padding:26px; border:1px solid var(--line); border-radius:20px; background:var(--surface); }
 .credits-head { display:flex; align-items:start; justify-content:space-between; gap:16px; }
+.recharge-entry { margin-bottom:20px; }
+.recharge-link { display:inline-flex; align-items:center; min-height:44px; padding:10px 22px; border-radius:10px; background:var(--accent); color:var(--on-accent); font-weight:700; }
+.recharge-link:hover { background:#e94935; }
 .credits-head h2 { margin:6px 0; font-size:20px; }.credits-head p,.subtle { color:var(--muted); font-size:13px; line-height:1.7; }.credits-head p { margin:0 0 18px; }.eyebrow { color:var(--accent-text); font-size:11px; font-weight:700; letter-spacing:.08em; }
 .refresh { color:var(--accent-text); font-size:12px; }.balance { display:flex; align-items:baseline; gap:12px; margin:8px 0 20px; }.balance span,.balance small { color:var(--muted); font-size:12px; }.balance strong { color:var(--accent-text); font-size:28px; }
 .history { margin:20px 0; }.history h3 { font-size:15px; margin:0 0 10px; }.orders { list-style:none; padding:0; color:var(--muted); font-size:12px; line-height:1.8; overflow-wrap:anywhere; }.orders li { padding:10px 12px; margin:8px 0; border:1px solid var(--line); border-radius:10px; }.orders strong { color:var(--text); }
-.empty-state { display:flex; gap:15px; align-items:center; padding:18px; background:var(--surface-raised); border:1px solid var(--line); border-radius:14px; }.empty-icon { display:grid; place-items:center; width:42px; height:42px; border-radius:14px; background:#f8e7dd; color:#aa6552; font-size:20px; }.empty-state strong { font-size:13px; }.empty-state p,.selection-head p { margin:5px 0 0; color:var(--muted); font-size:12px; }
-.selection-head { display:flex; justify-content:space-between; align-items:center; gap:16px; margin:24px 0 16px; }.selection-head h3 { margin:0; font-size:15px; }.currency-switch { display:flex; padding:3px; border:1px solid var(--line); border-radius:999px; background:var(--surface-raised); }.currency-switch button { padding:7px 12px; border-radius:999px; font-size:12px; font-weight:700; color:var(--muted); }.currency-switch button[aria-pressed=true] { background:var(--surface); color:var(--accent-text); box-shadow:0 2px 8px #47352a16; }
+.selection-head p { margin:5px 0 0; color:var(--muted); font-size:12px; }
+.selection-head { display:flex; justify-content:space-between; align-items:center; gap:16px; margin:24px 0 16px; }.selection-head h3 { margin:0; font-size:15px; }
 .provider-label { margin:14px 0 9px; color:var(--muted); font-size:12px; font-weight:600; }.packages { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; margin-bottom:18px; }.package { padding:18px; border:1px solid var(--line); border-radius:15px; background:var(--surface-raised); }.package-top { display:flex; justify-content:space-between; gap:8px; color:var(--accent-text); margin-bottom:14px; }.package-caption { font-size:12px; }.package strong { font-size:25px; }.package small { font-size:12px; font-weight:400; }.package-price { margin:8px 0 18px; color:var(--muted); font-size:14px; }.buy-button { width:100%; padding:10px 12px; border:1px solid var(--line); border-radius:10px; background:var(--surface); font-size:12px; font-weight:700; }.buy-button:disabled,.refresh:disabled { opacity:.5; cursor:not-allowed; }.error { color:var(--danger); font-size:12px; }
 @media(max-width:640px){.credits-section{padding:20px;margin-top:28px}.balance{flex-wrap:wrap}.balance small{width:100%}.selection-head{align-items:flex-start;flex-direction:column}.packages{grid-template-columns:1fr}.package{display:grid;grid-template-columns:1fr auto;align-items:center;gap:4px 16px}.package-top{grid-column:1/-1;margin-bottom:2px}.package-price{margin:0}.buy-button{grid-column:1/-1;margin-top:8px}}
 </style>
