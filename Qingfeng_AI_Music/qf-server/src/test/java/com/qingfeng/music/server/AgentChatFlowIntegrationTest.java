@@ -46,7 +46,7 @@ class AgentChatFlowIntegrationTest {
                 if (text.equals("方向定好了")) return new AgentChatModel.Plan("chat",
                         Map.of("choices",List.of("generate_lyrics","create_work","discuss")), "中文、空灵、梦想与星光");
                 if (text.equals("查看我的作品")) return new AgentChatModel.Plan("list_works",Map.of(),"查看作品。");
-                if (text.equals("选择第二首")) return new AgentChatModel.Plan("select_work",Map.of("index",2),"选择第二首。");
+                if (text.equals("选择第二首") || text.equals("打开第二首")) return new AgentChatModel.Plan("select_work",Map.of("index",2),"选择第二首。");
                 if (text.equals("把当前作品改名为夏天")) return new AgentChatModel.Plan("rename_work",Map.of("title","夏天"),"修改标题。");
                 if (text.equals("删除当前作品")) return new AgentChatModel.Plan("delete_work",Map.of(),"删除选定作品。");
                 if (text.equals("查看我的积分")) return new AgentChatModel.Plan("get_credits",Map.of(),"查询积分。");
@@ -85,6 +85,7 @@ class AgentChatFlowIntegrationTest {
     @Autowired com.qingfeng.music.settings.MusicSettings settings;
     @Autowired com.qingfeng.music.agent.api.AgentTurnStore turns;
     @Autowired WorkApi works;
+    @Autowired com.qingfeng.music.lyrics.api.LyricsApi lyrics;
     private final ObjectMapper json = new ObjectMapper();
     private record Browser(HttpClient http, String csrf, String creator, String conversation) {}
     private HttpResponse<String> request(HttpClient client, String method, String path, Object body, String csrf) throws Exception {
@@ -111,6 +112,37 @@ class AgentChatFlowIntegrationTest {
     private JsonNode state(Browser browser) throws Exception { return ok(request(browser.http(),"GET","/api/app/agent/conversations/"+browser.conversation()+"/state",null,null)); }
 
     @Autowired com.qingfeng.music.server.agent.AgentAdmission admission;
+
+    @Test void lastLineUsesTheDisplayedWorksPreviousLyricsAfterRefreshAndRetry() throws Exception {
+        var user=browser();
+        var draft=new WorkApi.Draft("朋友","旅行","旧日海岸","","民谣","同名歌");
+        var work=works.create(user.creator(),draft);
+        String original="[副歌]\n旧版的第一句\n旧版的最后一句";
+        var old=lyrics.save(user.creator(),work.id(),work.version(),"海边初稿",original);
+        lyrics.confirm(user.creator(),work.id(),old.id());
+        var updated=works.update(user.creator(),work.id(),work.version(),draft);
+        var latest=lyrics.save(user.creator(),work.id(),updated.version(),"海边新稿","新版第一句\n新版末句");
+        lyrics.confirm(user.creator(),work.id(),latest.id());
+        works.create(user.creator(),draft);
+        db.update("UPDATE music_work SET updated_at='2025-01-01' WHERE id=?",work.id());
+        db.update("UPDATE lyric_revision SET created_at='2025-01-01' WHERE id=?",old.id());
+        var list=lastText(say(user,"列出我的作品。"));
+        assertEquals(work.id(),list.path("items").get(1).path("id").asText());
+        assertEquals(latest.id(),say(user,"打开第二首").path("songCard").path("revisionId").asText());
+        assertEquals(old.id(),say(user,"看上一版歌词").path("songCard").path("revisionId").asText());
+        assertEquals(old.id(),state(user).path("songCard").path("revisionId").asText());
+        assertTrue(lastText(say(user,"只改最后一句，先别生成。")).path("text").asText().contains("新句"));
+        String key=UUID.randomUUID().toString(),command="把最后一句改成“海风替我说晚安”，先别生成。";
+        var edited=say(user,command,key).path("songCard");
+        assertEquals(work.id(),edited.path("songId").asText());
+        assertEquals("[副歌]\n旧版的第一句\n海风替我说晚安",edited.path("lyrics").asText());
+        assertEquals(edited,say(user,command,key).path("songCard"));
+        assertEquals(3,lyrics.list(user.creator(),work.id()).size());
+        assertEquals(original,lyrics.get(user.creator(),work.id(),old.id()).lyrics());
+        assertEquals(latest.lyrics(),lyrics.get(user.creator(),work.id(),latest.id()).lyrics());
+        assertEquals(0,db.queryForObject("SELECT COUNT(*) FROM generation_task WHERE work_id=?",Integer.class,work.id()));
+        assertEquals(0,db.queryForObject("SELECT COUNT(*) FROM credit_ledger WHERE owner_id=? AND entry_type='DEBIT'",Integer.class,user.creator()));
+    }
 
     @Test void archivedInterruptedRequestReturnsCurrentStateWithoutRestarting() throws Exception {
         Browser user = browser();

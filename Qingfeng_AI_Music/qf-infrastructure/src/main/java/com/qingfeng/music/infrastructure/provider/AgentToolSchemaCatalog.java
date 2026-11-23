@@ -94,7 +94,7 @@ public final class AgentToolSchemaCatalog {
         // Confirmation/version fields are populated by prepare(), never supplied as model authority.
         all.put("delete_work",object(withWork(Map.of())));
         for(String action:List.of("list_versions","list_audio","list_covers","upload_cover","upload_audio","list_tasks","list_section_edits","index_work_memory"))all.put(action,object(withWork(Map.of())));
-        all.put("select_version",object(withWork(fields("revisionId",id(),"index",integer(1,50)))));
+        all.put("select_version",object(withWork(fields("revisionId",id(),"index",integer(1,50),"relative",enumeration("previous")))));
         all.put("replace_lyric_line",object(fields()));
         all.put("save_lyrics",object(withWork(fields("title",text(100),"lyrics",text(12000),"baseRevisionId",id())),"title","lyrics"));
         all.put("select_audio",object(withWork(fields("assetId",id(),"index",integer(1,50),"revisionId",id()))));

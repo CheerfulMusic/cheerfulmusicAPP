@@ -94,6 +94,8 @@ public final class AgentChatService {
                     throw new DomainException("AGENT_PLAN_STALE","作品或任务状态已变化，之前的操作计划已停止。请重新说明要执行的操作。");
                 authorizedText=pending.authorizedText();
                 plan=new AgentChatModel.Plan(null,Map.of(),"",pending.steps());
+            } else if(com.qingfeng.music.agent.application.ExactLyricEdit.needsReplacement(text)) {
+                plan=new AgentChatModel.Plan("chat",Map.of(),"想把这句改成什么？请把新句写在「改成」后面，我会只替换你指定的那一行。");
             } else {
                 var supplied=AgentLyricInput.parse(text);
                 if(!supplied.lyrics().isBlank()&&supplied.instruction().isBlank()) {
@@ -112,6 +114,8 @@ public final class AgentChatService {
                     var exact=com.qingfeng.music.agent.application.ExactLyricEdit.parse(text);
                     String fast=AgentChatPolicy.currentSocial(text);
                     if(exact!=null)plan=new AgentChatModel.Plan("replace_lyric_line",Map.of(),"");
+                    else if(text.matches("(?:请)?(?:看|看看|查看|打开|切换到)上一版(?:的)?歌词[。！!]*")&&executor("select_version")!=null)
+                        plan=new AgentChatModel.Plan("select_version",Map.of("relative","previous"),"");
                     else if(fast!=null)plan=new AgentChatModel.Plan(fast,Map.of(),"");
                     else if(text.matches("(?:查看|列出|显示)?(?:全部|所有|可用)(?:功能|能力)|能力清单"))plan=new AgentChatModel.Plan("list_capabilities",Map.of(),"");
                     else if(!authorizedText.equals(text)&&executor("video_capabilities")!=null)plan=new AgentChatModel.Plan("video_capabilities",Map.of(),"");

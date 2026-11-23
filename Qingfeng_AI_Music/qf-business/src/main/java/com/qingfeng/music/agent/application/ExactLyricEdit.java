@@ -4,13 +4,33 @@ import java.util.regex.Pattern;
 
 /** Explicit replacement text is data, never another tool instruction. */
 public record ExactLyricEdit(String position,String replacement) {
-    private static final Pattern REQUEST=Pattern.compile("^(?:请|麻烦)?(?:帮我)?(?:把|将)?(?:当前歌词的?|这首歌的?|歌词的?)?(最后|第一)(?:一)?(?:句|行)(?:歌词)?(?:改成|改为|替换为|换成)[：:，,]?\\s*(.{1,500})$",Pattern.DOTALL);
+    private static final String LINE="(?:当前歌词的?|这首歌的?|歌词的?)?(最后|第一)(?:一)?(?:句|行)(?:歌词)?";
+    private static final String REPLACE="(?:改成|改为|替换为|换成)";
+    private static final String PREFIX="(?:请|麻烦)?(?:帮我)?";
+    private static final Pattern REQUEST=Pattern.compile(PREFIX+"(?:只)?(?:把|将|改)?"+LINE+"[，,]?"+REPLACE+"[：:，,]?\\s*(.{1,500})",Pattern.DOTALL);
+    private static final String CONTROL="(?:(?:其他|其余)(?:歌词)?(?:保持不变|不变|不动)|(?:先别|先不|暂不|不要|别)(?:生成|制作)(?:音乐|歌曲|音频|视频|MV)?)";
+    private static final Pattern TRAILING_CONTROLS=Pattern.compile("(?:[，,；;。]\\s*"+CONTROL+"\\s*)+[。.!！]?$");
+    private static final Pattern MISSING=Pattern.compile(PREFIX+"(?:(?:只)?(?:改|修改|改写|替换)(?:一下)?"+LINE+"|(?:把|将)?"+LINE+REPLACE+")[：:，,。.!！\\s]*");
+
+    public static boolean needsReplacement(String text) {
+        return text!=null&&MISSING.matcher(withoutControls(text)).matches();
+    }
+    private static String withoutControls(String text) {
+        return TRAILING_CONTROLS.matcher(text.strip()).replaceFirst("").strip();
+    }
     public static ExactLyricEdit parse(String text){
         if(text==null)return null;
-        var match=REQUEST.matcher(text.strip());if(!match.matches())return null;
-        String replacement=match.group(2).strip().replaceFirst("[，,；;。]\\s*(?:其他|其余)(?:歌词)?(?:保持不变|不变|不动)[。！!]?\\s*$","").strip();
+        String instruction=withoutControls(text);
+        if(MISSING.matcher(instruction).matches())return null;
+        var match=REQUEST.matcher(instruction);if(!match.matches())return null;
+        String replacement=match.group(2).strip();
         if(replacement.isEmpty()||replacement.contains("\n")||replacement.contains("\r"))return null;
-        if((replacement.startsWith("“")&&replacement.endsWith("”"))||(replacement.startsWith("‘")&&replacement.endsWith("’"))||(replacement.startsWith("\"")&&replacement.endsWith("\""))||(replacement.startsWith("'")&&replacement.endsWith("'")))replacement=replacement.substring(1,replacement.length()-1);
+        String closing=switch(replacement.charAt(0)){case '“'->"”";case '‘'->"’";case '「'->"」";case '『'->"』";case '"'->"\"";case '\''->"'";default->null;};
+        if(closing!=null){
+            String quoted=replacement.replaceFirst("[。.!！]+$","");
+            if(quoted.length()<2||!quoted.endsWith(closing))return null;
+            replacement=quoted.substring(1,quoted.length()-1);
+        }
         return replacement.isBlank()?null:new ExactLyricEdit(match.group(1),replacement);
     }
     public String apply(String lyrics){

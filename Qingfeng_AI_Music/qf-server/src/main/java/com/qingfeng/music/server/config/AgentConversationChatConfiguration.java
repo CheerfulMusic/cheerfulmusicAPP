@@ -43,8 +43,8 @@ public class AgentConversationChatConfiguration {
     }
     @Bean AgentTurnStore agentTurnStore(JdbcTemplate jdbc,PlatformTransactionManager manager){return new JdbcAgentTurnStore(jdbc,new TransactionTemplate(manager));}
     @Bean AgentLibraryActions agentLibraryActions(WorkApi works,LyricsApi lyrics,MediaApi media,GenerationApi generation,CoverApi covers,
-            ConversationService conversations,HotSongService hot,InspirationRewriteService inspiration,com.qingfeng.music.server.query.WorkLibraryQuery library){
-        return new AgentLibraryActions(works,lyrics,media,generation,covers,conversations,hot,inspiration).withLibrary(library);
+            ConversationService conversations,HotSongService hot,InspirationRewriteService inspiration,com.qingfeng.music.server.query.WorkLibraryQuery library,PlatformTransactionManager manager){
+        return new AgentLibraryActions(works,lyrics,media,generation,covers,conversations,hot,inspiration,new TransactionTemplate(manager)).withLibrary(library);
     }
     @Bean AgentStudioActions agentStudioActions(WorkApi works,MusicSettings settings,MusicBriefService briefs,LyricLineRewriteService lines,
             PlaybackLyricsService playback,SectionEditingService sections,ConversationService conversations){
