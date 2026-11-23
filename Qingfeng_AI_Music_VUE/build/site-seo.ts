@@ -2,7 +2,7 @@ import { mkdirSync, writeFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import type { Connect, Plugin } from 'vite'
 import { homeLocale, homeSeo, siteName, siteOrigin } from '../src/shared/i18n/home-seo'
-import { landingLinks, sitePage, sitePagePaths, socialMetadata, websiteSchema } from '../src/shared/i18n/site-seo'
+import { discoverLocale, landingLinks, sitePage, sitePagePaths, socialMetadata, websiteSchema } from '../src/shared/i18n/site-seo'
 
 type SitePage = NonNullable<ReturnType<typeof sitePage>>
 
@@ -25,7 +25,7 @@ export function renderSitePage(html: string, page: SitePage) {
   if (page.path === '/') {
     metadata.push(`<script data-site-seo type="application/ld+json">${JSON.stringify(websiteSchema)}</script>`)
   }
-  const links = landingLinks(page.language).map(({ href, text, lang }) =>
+  const links = landingLinks(page.language, page.path).map(({ href, text, lang }) =>
     `<a href="${href}"${lang ? ` lang="${lang}" hreflang="${lang}"` : ''}>${escapeHtml(text)}</a>`,
   ).join(' ')
   const guide = page.guide
@@ -35,12 +35,13 @@ export function renderSitePage(html: string, page: SitePage) {
   const heading = `<h1>${escapeHtml(page.heading)}</h1>`
   const filing = '<a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer" lang="zh-CN">粤ICP备2023023949号</a>'
   const landing = `<main class="seo-landing">${heading}<p>${escapeHtml(page.description)}</p>${guideContent}<nav>${links}</nav><footer>${filing}</footer></main>`
-  let initialContent = page.path === '/discover' ? `<noscript>${landing}</noscript>` : landing
-  if (page.path === '/' || homeLocale(page.path)) {
+  let initialContent = landing
+  const home = page.path === '/' || homeLocale(page.path) !== undefined
+  if (home || discoverLocale(page.path)) {
     initialContent = `<main class="beta-access-entry"><section class="beta-access-dialog beta-access-card">
       <img class="beta-access-logo" src="/brand/logo-symbol.svg" alt="" width="56" height="56">
       <p class="beta-access-brand">${escapeHtml(siteName)}</p>${heading}
-      <p class="beta-access-intro">${escapeHtml(homeSeo[page.language].inviteDescription)}</p>
+      <p class="beta-access-intro">${escapeHtml(home ? homeSeo[page.language].inviteDescription : page.description)}</p>
       <nav class="beta-access-guides">${links}</nav><footer class="beta-access-filing">${filing}</footer>
     </section></main>`
   }

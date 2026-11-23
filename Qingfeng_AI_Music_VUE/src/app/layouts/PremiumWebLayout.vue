@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { t, locale } from '../../shared/i18n/index'
+import { t, locale, discoverHref } from '../../shared/i18n/index'
 import { homeLocale, homeSeo } from '../../shared/i18n/home-seo'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
@@ -30,14 +30,14 @@ const isAgent = computed(() => route.name === 'agent')
 const isDiscover = computed(() => route.name === 'discover')
 const isPhotoStudio = computed(() => route.name === 'photo-studio')
 const authenticated = computed(() => accountState.value.authenticated || logtoState.value.authenticated)
-const navigation = [
+const navigation = computed(() => [
   { to: '/', label: '首页', icon: 'home', agent: false },
   { to: '/create', label: '开始创作', icon: 'home', agent: false },
   { to: '/agent', label: '智能助手', icon: 'agent', agent: true },
   { to: '/#inspiration', label: '推荐', icon: 'music', agent: false },
-  { to: '/discover', label: '广场', icon: 'music', agent: false },
+  { to: discoverHref.value, label: '广场', icon: 'music', agent: false },
   { to: '/#how', label: '如何制作', icon: 'guide', agent: false },
-]
+])
 const isActive = (to: string) => {
   if (to.startsWith('/#')) return route.name === 'home' && route.hash === to.slice(1)
   if (to === '/') return isHome.value && !route.hash
@@ -102,7 +102,7 @@ onBeforeUnmount(() => {
           </template>
         </nav>
         <div class="consumer-header-actions">
-          <RouterLink v-if="route.name === 'artist-home'" class="consumer-discover-link" to="/discover">{{ t('广场') }}</RouterLink>
+          <RouterLink v-if="route.name === 'artist-home'" class="consumer-discover-link" :to="discoverHref">{{ t('广场') }}</RouterLink>
           <LanguageSwitcher/>
           <RouterLink v-if="!publicListening" class="consumer-my-music" :class="{'is-active':route.path.startsWith('/works')}" to="/works"><NavIcon name="music"/><span>{{ t('我的音乐') }}</span></RouterLink>
           <RouterLink v-if="!publicListening" class="consumer-recharge" to="/recharge">{{ locale === 'en' ? 'Credits' : '充值' }}</RouterLink>

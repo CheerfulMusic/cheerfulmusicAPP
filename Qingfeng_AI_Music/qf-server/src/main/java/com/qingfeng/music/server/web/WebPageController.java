@@ -48,14 +48,14 @@ public class WebPageController {
         return permanentRedirect(request, "/en/");
     }
 
-    @GetMapping("/discover")
-    public ResponseEntity<Resource> discover() {
-        return publicDocument("discover/index.html");
+    @GetMapping({"/discover", "/en/discover"})
+    public ResponseEntity<Resource> discover(HttpServletRequest request) {
+        return publicDocument(localizedPath(request, "/discover").substring(1) + "/index.html");
     }
 
-    @GetMapping({"/discover/","/discover/index.html"})
+    @GetMapping({"/discover/", "/discover/index.html", "/en/discover/", "/en/discover/index.html"})
     public ResponseEntity<Void> redirectDiscover(HttpServletRequest request) {
-        return permanentRedirect(request, "/discover");
+        return permanentRedirect(request, localizedPath(request, "/discover"));
     }
 
     @GetMapping("/help")
@@ -70,12 +70,12 @@ public class WebPageController {
 
     @GetMapping({GUIDE, "/en" + GUIDE})
     public ResponseEntity<Resource> guide(HttpServletRequest request, @PathVariable("topic") String topic) {
-        return publicDocument(guidePath(request, topic).substring(1) + "/index.html");
+        return publicDocument(localizedPath(request, "/guide/" + topic).substring(1) + "/index.html");
     }
 
     @GetMapping({GUIDE + "/", GUIDE + "/index.html", "/en" + GUIDE + "/", "/en" + GUIDE + "/index.html"})
     public ResponseEntity<Void> redirectGuide(HttpServletRequest request, @PathVariable("topic") String topic) {
-        return permanentRedirect(request, guidePath(request, topic));
+        return permanentRedirect(request, localizedPath(request, "/guide/" + topic));
     }
 
     @GetMapping("/legal/terms") public String legacyTerms(){return "redirect:/legal/terms.html";}
@@ -87,9 +87,9 @@ public class WebPageController {
         return ResponseEntity.ok().contentType(MediaType.parseMediaType("text/html;charset=UTF-8")).body(document);
     }
 
-    private static String guidePath(HttpServletRequest request, String topic) {
+    private static String localizedPath(HttpServletRequest request, String path) {
         String localePrefix = request.getRequestURI().startsWith(request.getContextPath() + "/en/") ? "/en" : "";
-        return localePrefix + "/guide/" + topic;
+        return localePrefix + path;
     }
 
     private static ResponseEntity<Void> permanentRedirect(HttpServletRequest request, String target) {

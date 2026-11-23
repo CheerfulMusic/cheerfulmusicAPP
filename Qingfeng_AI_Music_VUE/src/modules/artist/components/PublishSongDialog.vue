@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import { t } from '../../../shared/i18n'
+import { discoverHref, t } from '../../../shared/i18n'
 import { getSongPublication, ownerTrack, publishSong, publishSongToDiscover, type ArtistRelease, type SongPublication } from '../api/artist'
 
 const props = defineProps<{ source: SongPublication; cover: string; discover?: boolean }>()
@@ -114,7 +114,7 @@ onBeforeUnmount(() => dialog.value?.close())
             </button>
             <template v-else-if="complete && !needsProfile">
               <RouterLink v-if="artist && !discover" :to="{ name: 'artist-home', params: { id: artist } }" class="button secondary" @click="close">{{ t('查看主页') }}</RouterLink>
-              <RouterLink v-if="selection.song?.onDiscover" to="/discover" class="button" @click="close">{{ t('查看广场') }}</RouterLink>
+              <RouterLink v-if="selection.song?.onDiscover" :to="discoverHref" class="button" @click="close">{{ t('查看广场') }}</RouterLink>
               <button v-else class="button" type="button" @click="discover = true; notice = ''">{{ t('发布到广场') }}</button>
             </template>
           </template>

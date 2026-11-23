@@ -1,7 +1,8 @@
-import { readonly, ref } from 'vue'
+import { computed, readonly, ref } from 'vue'
+import { platform } from '../../platform'
 import { english } from './en'
 import { homeLocale, type Locale } from './home-seo'
-import { sitePage, socialMetadata, websiteSchema } from './site-seo'
+import { discoverLocale, discoverPaths, sitePage, socialMetadata, websiteSchema } from './site-seo'
 
 export type { Locale } from './home-seo'
 export const localeStorageKey = 'qingfeng.locale'
@@ -11,6 +12,7 @@ function savedLocale(): Locale {
 }
 const selected = ref<Locale>(savedLocale())
 export const locale = readonly(selected)
+export const discoverHref = computed(() => platform.kind === 'web' ? discoverPaths[selected.value] : '/discover')
 
 /** Translate interface copy only. Never pass authored stories, names or lyrics here. */
 export function t(message: string, params: Record<string, string | number> = {}): string {
@@ -59,8 +61,8 @@ export function setLocale(value: Locale) {
 }
 export function updatePageLocale(path: string) {
   pagePath = path
-  const localizedHome = homeLocale(path)
-  if (localizedHome) setLocale(localizedHome)
+  const routeLanguage = homeLocale(path) ?? discoverLocale(path)
+  if (routeLanguage) setLocale(routeLanguage)
   else updateDocument()
 }
 export function formatDate(value: string | number | Date): string {

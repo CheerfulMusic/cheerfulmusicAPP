@@ -19,10 +19,11 @@ import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
 @Configuration(proxyBeanMethods = false)
 public class WebSecurityConfiguration {
     private static final String[] SEO_PAGES = {
-            "/robots.txt", "/sitemap.xml",
+            "/robots.txt", "/sitemap.xml", "/favicon.ico", "/brand/favicon-96.png",
             "/zh-CN", "/zh-CN/", "/zh-CN/index.html",
             "/en", "/en/", "/en/index.html",
             "/discover", "/discover/", "/discover/index.html",
+            "/en/discover", "/en/discover/", "/en/discover/index.html",
             "/help", "/help/", "/help/index.html",
             "/guide/*", "/guide/*/", "/guide/*/index.html",
             "/en/guide/*", "/en/guide/*/", "/en/guide/*/index.html"
