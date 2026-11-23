@@ -1,6 +1,12 @@
 import { homeLocale, homePaths, homeSeo, localizedSeoLinks, siteName, siteOrigin, type Locale } from './home-seo'
 import { siteGuide, siteGuideLinks, siteGuidePaths } from './site-guides'
 
+const englishRootSeo = {
+  ...homeSeo.en,
+  searchTitle: 'Cheerful Music (青风音乐) | Make Your Own Song',
+  description: 'Cheerful Music (青风音乐) turns a song idea into original music with AI. Choose a style, edit the lyrics and share your song.',
+}
+
 export const discoverPaths = { 'zh-CN': '/discover', en: '/en/discover' } as const
 
 export const discoverSeo = {
@@ -54,7 +60,7 @@ export function sitePage(path: string, preferredLocale?: Locale) {
   const language = localized ?? preferredLocale ?? (path === '/' ? 'zh-CN' : 'en')
   if (path === '/' || localized) {
     const canonical = localized ? homeSeo[localized].path : '/'
-    const copy = homeSeo[language]
+    const copy = !localized && language === 'en' ? englishRootSeo : homeSeo[language]
     return {
       path: canonical,
       language,
