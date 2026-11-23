@@ -101,10 +101,14 @@ describe('crawlable site pages', () => {
     const page = new DOMParser().parseFromString(html, 'text/html')
     expect(page.title).toBe('Cheerful Music')
 
+    document.head.innerHTML = parsePage('/').head.innerHTML
     setLocale(language)
     updatePageLocale('/')
     expect(document.documentElement.lang).toBe(language)
     expect(document.title).toBe(page.title)
+    const description = document.querySelector('meta[name="description"]')?.getAttribute('content')
+    expect(description).toContain('青风音乐')
+    expect(description).not.toBe(sitePage('/en/')!.description)
   })
 
   it('replaces metadata on client navigation and clears it on private destinations', () => {
