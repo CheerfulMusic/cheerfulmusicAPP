@@ -42,8 +42,8 @@ installPageLeaveTracking()
 router.afterEach(to => { trackPageView(String(to.name ?? 'unknown')) })
 const app = createApp(App).use(createPinia()).use(router)
 const mountApp = () => app.mount('#app')
-// Leave the public landing content in place while the router loads the first page.
-if (isWeb && document.querySelector('#app > .seo-landing')) {
+// Keep the rendered page visible until the router can mount its matching view.
+if (isWeb && document.querySelector('#app > .seo-landing, #app > .beta-access-entry')) {
   void router.isReady().then(mountApp, mountApp)
 } else {
   mountApp()

@@ -33,6 +33,16 @@ describe('crawlable site pages', () => {
     expect(alternates).toEqual({ en: siteOrigin + '/en/', 'zh-CN': siteOrigin + '/', 'x-default': siteOrigin + '/' })
   })
 
+  it.each(['/', '/en/'])('shows one heading and the guide links in the initial invitation card at %s', path => {
+    const page = parsePage(path)
+    page.querySelectorAll('noscript').forEach(node => node.remove())
+    const card = page.querySelector('#app > main.beta-access-entry')
+    expect(card?.querySelector('h1')?.textContent).toBe(sitePage(path)!.heading)
+    expect(page.querySelectorAll('h1')).toHaveLength(1)
+    expect(card?.querySelectorAll('nav a[href*="/guide/"]')).toHaveLength(4)
+    expect(card?.querySelector('form')).toBeNull()
+  })
+
   it('publishes the Chinese search entry at the root and keeps the separate English search title', () => {
     expect(parsePage('/').documentElement.lang).toBe('zh-CN')
     expect(parsePage('/').querySelector('h1')?.textContent).toBe('青风音乐 AI 音乐创作平台')
