@@ -353,7 +353,13 @@ onBeforeUnmount(() => { avatarDisposed = true; window.removeEventListener('qingf
 
 <template>
   <div class="agent-studio agent-playful agent-producer" :style="appearanceStyle">
-    <Teleport :to="layerTarget"><div class="agent-click-sparks" aria-hidden="true"><i v-for="dot in trail" :key="dot.id" class="pointer-ribbon" :style="{left:dot.x+'px',top:dot.y+'px',width:dot.length+'px',transform:'rotate('+dot.angle+'rad)'}"/> <span v-for="spark in sparks" :key="spark.id" :style="{ left: `${spark.x}px`, top: `${spark.y}px` }"><i/><b/></span></div></Teleport>
+    <Teleport :to="layerTarget">
+      <div class="agent-click-sparks" aria-hidden="true">
+        <i v-for="dot in trail" :key="dot.id" class="pointer-ribbon"
+           :style="{ left: dot.x + 'px', top: dot.y + 'px', width: dot.length + 'px', transform: 'rotate(' + dot.angle + 'rad)' }"/>
+        <span v-for="spark in sparks" :key="spark.id" class="click-halo" :style="{ left: spark.x + 'px', top: spark.y + 'px' }">✦</span>
+      </div>
+    </Teleport>
     <nav class="producer-tools" :aria-label="tr('创作助手','Creation assistant')">
       <h2><button type="button" class="creation-menu-trigger" aria-haspopup="dialog" :aria-expanded="creationView !== null" @click="openCreationPanel('menu')"><span aria-hidden="true">✦</span> {{ tr('创作助手','Creation assistant') }}</button></h2>
       <button v-for="tool in creationTools" :key="tool.id" type="button" :disabled="blocked"

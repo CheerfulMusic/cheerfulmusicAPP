@@ -2,7 +2,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
-import { effectScope } from 'vue'
+import { effectScope, nextTick } from 'vue'
+import type { Window as HappyWindow } from 'happy-dom'
+import { readFileSync } from 'node:fs'
 const avatarRefs = vi.hoisted(() => ({ account: null as null | { value: string }, profile: null as null | { value: string } }))
 vi.mock('../src/modules/agent/api/events', () => ({ observeConversation: (_id: string, _seq: number, _epoch: number | undefined, _receive: unknown, signal: AbortSignal) => new Promise<void>(resolve => signal.addEventListener('abort', () => resolve(), { once: true })) }))
 vi.mock('../src/modules/agent/composables/useProfileAvatar', async () => {
@@ -55,6 +57,35 @@ beforeEach(() => {
 afterEach(() => { for (const wrapper of wrappers.splice(0)) wrapper.unmount(); vi.useRealTimers() })
 
 describe('真实 Agent 对话与作品', () => {
+  it.each(['no-preference', 'reduce'])('在 %s 模式下，点击页面显示星芒反馈', async motion => {
+    const device = (window as unknown as HappyWindow).happyDOM.settings.device
+    const originalMotion = device.prefersReducedMotion
+    const style = document.createElement('style')
+    device.prefersReducedMotion = motion
+    style.textContent = ['playful', 'producer'].map(name => readFileSync('src/modules/agent/' + name + '.css', 'utf8')).join('\n')
+    document.head.append(style)
+    try {
+      await page()
+      vi.useFakeTimers()
+      document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0, clientX: 51, clientY: 92 }))
+      await nextTick()
+      const layer = document.querySelector<HTMLElement>('.agent-click-sparks')!
+      const halo = layer.querySelector<HTMLElement>('.click-halo')!
+      expect(halo.textContent).toBe('✦')
+      expect([halo.style.left, halo.style.top]).toEqual(['51px', '92px'])
+      expect(getComputedStyle(layer).display).not.toBe('none')
+      expect(getComputedStyle(layer).pointerEvents).toBe('none')
+      const animation = getComputedStyle(halo).animation
+      if (motion === 'reduce') expect(animation).toBe('none')
+      else expect(animation).toContain('studio-click-halo')
+      await vi.advanceTimersByTimeAsync(750)
+      expect(layer.querySelector('.click-halo')).toBeNull()
+    } finally {
+      style.remove()
+      device.prefersReducedMotion = originalMotion
+    }
+  })
+
   it('打开助手可在聊天里选择工具和主题，也可补充文字后一起发送', async () => {
     const { wrapper } = await page()
     const panel = wrapper.get('.agent-chat [role="dialog"]')

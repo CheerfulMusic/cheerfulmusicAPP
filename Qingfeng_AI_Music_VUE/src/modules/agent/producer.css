@@ -1,6 +1,7 @@
 /* The assistant owns its viewport and its player on this route. */
 .consumer-shell.agent-shell {
   --studio-nav: 60px;
+  --studio-frame-width: clamp(90%, 1428px, calc(100% - 40px));
   --studio-ink: #242039;
   --studio-muted: #625e7c;
   --studio-accent: #6541c1;
@@ -11,7 +12,7 @@
 }
 .agent-shell .music-shell-body { background: transparent; }
 .agent-shell .consumer-header { background: linear-gradient(100deg, #f4ebffcf, #fcfaffeb 48%, #eee8ffc9); border-color: #ffffff7d; }
-.agent-shell .consumer-header-inner { height: var(--studio-nav); width: min(1320px, calc(100% - 48px)); gap: clamp(10px, 1.5vw, 24px); }
+.agent-shell .consumer-header-inner { height: var(--studio-nav); width: var(--studio-frame-width); gap: clamp(10px, 1.5vw, 24px); }
 .agent-shell .consumer-navigation { gap: clamp(14px, 1.7vw, 28px); }
 .agent-shell .consumer-navigation a { font-size: 14px; color: #332c49; }
 .agent-shell .consumer-navigation .agent-nav-link { color: #5831af; }
@@ -21,10 +22,10 @@
 .agent-shell .consumer-brand .brand-logo { gap: 5px; }
 .agent-producer.agent-studio {
   box-sizing: border-box; display: grid;
-  grid-template-columns: minmax(128px, 152fr) minmax(0, 584fr) minmax(194px, 263fr) minmax(270px, 393fr);
+  grid-template-columns: clamp(128px, 10.65%, 224px) minmax(0, 584fr) minmax(194px, 263fr) minmax(270px, 393fr);
   grid-template-rows: minmax(0, 1fr);
   grid-template-areas: "tools chat collection player";
-  gap: 12px; width: min(1428px, calc(100% - 40px));
+  gap: clamp(12px, .75vw, 24px); width: var(--studio-frame-width);
   height: calc(100dvh - var(--studio-nav)); min-height: 578px;
   padding: 14px 0 24px; margin-inline: auto; color: var(--studio-ink);
 }
@@ -93,7 +94,7 @@
 .producer-welcome p span { margin-left: 4px; }
 .agent-producer .agent-chat { gap: 14px; padding: 6px 2px 9px; background: transparent; }
 .agent-producer .agent-message { flex: none; gap: 8px; }
-.agent-producer .agent-message-content { max-width: calc(100% - 39px); min-width: 0; }
+.agent-producer .agent-message-content { max-width: min(calc(100% - 39px), 50rem); min-width: 0; }
 .agent-producer :is(.agent-bot-avatar, .agent-user-avatar) { width: 30px; height: 30px; flex: 0 0 30px; }
 .agent-producer .agent-bot-avatar img { width: 26px; height: 24px; }
 .agent-producer .agent-user-avatar { padding: 0; border: 2px solid #fff8f9; box-shadow: none; }
@@ -226,8 +227,8 @@
 .agent-producer .listening-panel { display: flex; flex: 1 0 auto; flex-direction: column; min-width: 0; min-height: 100%; }
 .agent-producer .music-player-heading { flex: none; margin: 0 4px 17px; }
 .player-meter { margin-left: auto; width: 16px; height: 15px; color: #6235be; background: linear-gradient(currentColor,currentColor) left bottom / 3px 8px no-repeat, linear-gradient(currentColor,currentColor) center bottom / 3px 14px no-repeat, linear-gradient(currentColor,currentColor) right bottom / 3px 10px no-repeat; }
-.record-summary { display: grid; grid-template-columns: minmax(64px, 34%) minmax(0, 1fr); gap: clamp(10px, 1vw, 18px); align-items: center; min-width: 0; margin: 0 5px 10px; }
-.agent-producer .record-summary .agent-album { position: relative; width: 100%; max-width: 125px; margin: 0; padding: 0; }
+.record-summary { --album-limit: 125px; display: grid; grid-template-columns: minmax(64px, min(34%, var(--album-limit))) minmax(0, 1fr); gap: clamp(10px, 1vw, 18px); align-items: center; min-width: 0; margin: 0 5px 10px; }
+.agent-producer .record-summary .agent-album { position: relative; width: 100%; margin: 0; padding: 0; }
 .agent-producer .agent-album-art { position: relative; width: 100%; aspect-ratio: 1; overflow: hidden; filter: none; border-radius: 13px; box-shadow: 0 4px 12px #57426a15; }
 .agent-producer .agent-album-art > img { display: block; width: 100%; height: 100%; border-radius: inherit; object-fit: cover; }
 .agent-producer .agent-album-badge { left: 4px; top: 4px; padding: 2px 6px; background: #332743bf; color: white; font-size: 9px; }
@@ -301,8 +302,26 @@
 .agent-song-actions button, .agent-share-link button, .agent-story-empty button { border: 1px solid #d6c8ed; border-radius: 10px; padding: 5px 9px; background: #f8f3ff; color: #5f4287; cursor: pointer; }
 .agent-producer .agent-play-queue { max-height: 94px; flex: none; overflow: auto; padding: 3px; }
 .agent-producer .agent-pending small { display: block; color: #51685a; font-size: 10px; }
-.agent-click-sparks .pointer-ribbon { position: fixed; height: 3px; border-radius: 80%; pointer-events: none; transform-origin: left center; background: white; box-shadow: 0 0 5px 2px #e5d7ff, 0 0 12px #a187cc; animation: studio-ribbon-fade .35s both; }
+.agent-click-sparks { position: fixed; inset: 0; z-index: 9999; overflow: hidden; pointer-events: none; }
+.agent-click-sparks .click-halo {
+  position: absolute; display: grid; place-items: center; box-sizing: border-box;
+  width: 40px; height: 40px; margin: -20px; border: 2px solid white; border-radius: 50%;
+  background: #a778e799; color: white; font: bold 20px/1 system-ui; text-shadow: 0 1px 3px #573181;
+  box-shadow: 0 0 0 1px #865ab2, 0 0 12px 5px #c394f3b8; animation: studio-click-halo .65s ease-out both;
+}
+@keyframes studio-click-halo {
+  from { opacity: 1; transform: scale(.45); }
+  30% { opacity: 1; }
+  to { opacity: 0; transform: scale(1.75); }
+}
+.agent-click-sparks .pointer-ribbon { position: absolute; height: 3px; border-radius: 80%; transform-origin: left center; background: white; box-shadow: 0 0 5px 2px #e5d7ff, 0 0 12px #a187cc; animation: studio-ribbon-fade .35s both; }
 @keyframes studio-ribbon-fade { to { opacity: 0; } }
+
+/* Keep room for the chart rows, lyrics and transport on shallow ultrawide displays. */
+@media (min-width: 1600px) and (min-aspect-ratio: 2/1) {
+  .producer-collection .hot-featured { max-height: 22dvh; }
+  .agent-producer .inspiration-galaxy { width: min(100%, max(15rem, calc(100dvh - 26rem))); align-self: center; }
+}
 
 @media (min-width: 1201px) {
   html[lang="en"] .agent-shell .consumer-navigation { gap: 16px; }
@@ -320,7 +339,7 @@
   .agent-producer.agent-studio { padding-block: 9px 12px; }
   .producer-welcome { height: 105px; }
   .agent-producer .music-player-heading { margin-bottom: 9px; }
-  .agent-producer .record-summary .agent-album { max-width: 91px; }
+  .record-summary { --album-limit: 91px; }
   .agent-player-controls { margin-bottom: 8px; }
   .agent-producer .galaxy-scene { aspect-ratio: 2.45; }
 }
@@ -363,7 +382,6 @@
   .inspiration-chips button { flex: none; }
   .agent-producer .agent-preview { height: auto; min-height: 545px; padding: 16px; }
   .agent-producer .listen-details, .agent-producer .agent-tab-content { flex: 0 1 auto; min-height: 115px; max-height: 250px; }
-  .agent-producer .record-summary .agent-album { max-width: 125px; }
   .agent-producer .listen-footer, .agent-producer .agent-bottom-actions { margin-top: 8px; }
   .producer-collection { max-height: 500px; }
   .agent-shell .appearance-panel fieldset { min-width: 0; }
@@ -376,6 +394,10 @@
   .producer-collection .shelf-empty { padding: 12px 0; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .agent-click-sparks { display: none; }
+  .agent-click-sparks .pointer-ribbon { display: none; }
+  .agent-click-sparks .click-halo {
+    width: 20px; height: 20px; margin: -10px; border-width: 1px; background: #7851a8; font-size: 13px;
+    box-shadow: 0 0 0 1px #7851a8; animation: none;
+  }
   .agent-producer *, .agent-producer *::after { animation: none !important; transition: none !important; }
 }
