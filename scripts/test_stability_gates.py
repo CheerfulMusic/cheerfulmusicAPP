@@ -1,3 +1,4 @@
+import re
 import hashlib
 import importlib.util
 import io
@@ -310,8 +311,10 @@ class GateTests(unittest.TestCase):
             (ROOT / "Qingfeng_AI_Music/qf-infrastructure/src/main/resources/db/migration").glob("V*__*.sql")}
         self.assertEqual("49", gate.verify_migration_set(migrations)["lyricsPreparationVersion"])
         self.assertEqual("50", gate.verify_migration_set(migrations)["discoverShelvesVersion"])
-        reference_name = "V51__generation_audio_reference.sql"
-        self.assertEqual("51", gate.verify_migration_set(migrations)["generationAudioReferenceVersion"])
+        reference_name = "V55__generation_audio_reference.sql"
+        self.assertEqual("55", gate.verify_migration_set(migrations)["generationAudioReferenceVersion"])
+        prior = {k: v for k, v in migrations.items() if k != reference_name}
+        self.assertEqual("54", gate.verify_migration_set(prior)["songShareStatisticsVersion"])
         with self.assertRaises(gate.GateError): gate.verify_migration_set({**migrations, reference_name: "0" * 64})
         missing = dict(migrations); missing.pop("V47__music_video_projects.sql")
         with self.assertRaises(gate.GateError): gate.verify_migration_set(missing)
@@ -320,7 +323,7 @@ class GateTests(unittest.TestCase):
         discover_name = "V50__discover_daily_plays_and_vocal_approval.sql"
         modified = {**migrations, discover_name: "0" * 64}
         with self.assertRaises(gate.GateError): gate.verify_migration_set(modified)
-        pre_discover = {k: v for k, v in migrations.items() if k not in {discover_name, reference_name}}
+        pre_discover = {k: v for k, v in migrations.items() if not re.match(r"^V5[0-5]__", k)}
         self.assertEqual("49", gate.verify_migration_set(pre_discover)["lyricsPreparationVersion"])
         pre_lyrics = {k: v for k, v in pre_discover.items() if k != "V49__lyrics_preparation.sql"}
         self.assertEqual("48", gate.verify_migration_set(pre_lyrics)["phoneBindingVersion"])

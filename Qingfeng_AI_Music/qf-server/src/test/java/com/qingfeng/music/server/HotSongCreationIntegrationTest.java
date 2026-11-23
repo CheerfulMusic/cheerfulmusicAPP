@@ -40,7 +40,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = {
     "spring.datasource.url=jdbc:h2:mem:hot_song_creation;MODE=MySQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1",
-    "spring.flyway.target=51",
+    "spring.flyway.target=55",
     "qingfeng.lyrics.enabled=true", "qingfeng.generation.enabled=true",
     "qingfeng.credits.enabled=true", "qingfeng.credits.lyrics-cost=5", "qingfeng.credits.music-cost=15",
     "qingfeng.generation.scheduler-enabled=false", "qingfeng.quick.scheduler-enabled=false"
@@ -61,7 +61,7 @@ class HotSongCreationIntegrationTest {
     private static final String CLIP_KEY = "qingfeng/generation-reference/body-language/0123456789ab.mp3";
 
     @BeforeAll void applyReferenceMigrationInIsolatedH2() {
-        var migration = new org.springframework.core.io.ClassPathResource("db/migration/V51__generation_audio_reference.sql");
+        var migration = new org.springframework.core.io.ClassPathResource("db/migration/V55__generation_audio_reference.sql");
         new org.springframework.jdbc.datasource.init.ResourceDatabasePopulator(migration).execute(db.getDataSource());
     }
 
