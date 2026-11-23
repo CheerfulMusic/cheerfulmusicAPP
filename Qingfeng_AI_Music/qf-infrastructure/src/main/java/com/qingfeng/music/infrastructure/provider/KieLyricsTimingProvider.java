@@ -57,6 +57,7 @@ public final class KieLyricsTimingProvider implements LyricsTimingProvider {
             var builder=HttpRequest.newBuilder(base.resolve(path)).timeout(Duration.ofSeconds(55)).header("Authorization","Bearer "+key).header("Accept","application/json");
             if(body!=null)builder.header("Content-Type","application/json").POST(HttpRequest.BodyPublishers.ofString(body));
             var response=client.send(builder.build(),HttpResponse.BodyHandlers.ofString());
+            if(body!=null&&response.statusCode()>=500)throw new IllegalStateException("时间轴请求结果未知");
             if(response.statusCode()!=200||response.body().length()>4_000_000)throw new Rejected();
             var result=json.readTree(response.body());if(result.path("code").asInt(-1)!=200)throw new Rejected();return result;
         }catch(InterruptedException interrupted){Thread.currentThread().interrupt();throw new IllegalStateException("时间轴请求结果未知",interrupted);}

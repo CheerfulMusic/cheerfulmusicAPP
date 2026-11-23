@@ -30,7 +30,7 @@ class KieLyricsTimingProviderTest {
         assertThrows(LyricsTimingProvider.Rejected.class,()->provider.fetch("task1","https://cdn.example/song.mp3?id=mine"));
         assertEquals(0,posts.get());assertEquals(1,gets.get());
     }
-    HttpServer server;KieLyricsTimingProvider provider;AtomicInteger posts=new AtomicInteger(),gets=new AtomicInteger();String getReply=null;String received="",endpoint="",reply="{\"code\":200,\"data\":{\"alignedWords\":[{\"word\":\"hello\\n\",\"success\":true,\"startS\":2.3,\"endS\":5.6}]}}";
+    HttpServer server;KieLyricsTimingProvider provider;AtomicInteger posts=new AtomicInteger(),gets=new AtomicInteger();int postStatus=200;String getReply=null;String received="",endpoint="",reply="{\"code\":200,\"data\":{\"alignedWords\":[{\"word\":\"hello\\n\",\"success\":true,\"startS\":2.3,\"endS\":5.6}]}}";
     @BeforeEach void start()throws Exception{
         server=HttpServer.create(new InetSocketAddress("127.0.0.1",0),0);
         server.createContext("/",exchange->{
@@ -38,7 +38,7 @@ class KieLyricsTimingProviderTest {
             if(exchange.getRequestMethod().equals("GET")){gets.incrementAndGet();response="{\"code\":200,\"data\":{\"taskId\":\"task1\",\"state\":\"success\",\"resultJson\":{\"data\":[{\"id\":\"wrong-version\",\"audio_url\":\"https://cdn.example/other.mp3\"},{\"id\":\"right-version\",\"audio_url\":\"https://cdn.example/song.mp3?Expires=2\"}]}}}";}
             else{posts.incrementAndGet();endpoint=exchange.getRequestURI().getPath();received=new String(exchange.getRequestBody().readAllBytes(),StandardCharsets.UTF_8);response=reply;}
             if(exchange.getRequestMethod().equals("GET")&&getReply!=null)response=getReply;
-            byte[] bytes=response.getBytes(StandardCharsets.UTF_8);exchange.sendResponseHeaders(200,bytes.length);exchange.getResponseBody().write(bytes);exchange.close();
+            byte[] bytes=response.getBytes(StandardCharsets.UTF_8);exchange.sendResponseHeaders(exchange.getRequestMethod().equals("POST")?postStatus:200,bytes.length);exchange.getResponseBody().write(bytes);exchange.close();
         });server.start();provider=create("compatible");
     }
     KieLyricsTimingProvider create(String mode){return new KieLyricsTimingProvider("test-key",mode,URI.create("http://127.0.0.1:"+server.getAddress().getPort()),HttpClient.newHttpClient());}
@@ -52,6 +52,11 @@ class KieLyricsTimingProviderTest {
         var json=new ObjectMapper().readTree(received);assertEquals("right-version",json.path("audioId").asText());assertEquals("task1",json.path("taskId").asText());
     }
     @Test void explicitFailureDoesNotAutomaticallyFallbackOrRetry(){reply="{\"code\":500,\"msg\":\"Connection refused\"}";assertThrows(LyricsTimingProvider.Rejected.class,()->provider.fetch("task1","https://cdn.example/song.mp3"));assertEquals(1,posts.get());}
+    @Test void serverErrorAfterPostLeavesTheOutcomeUnknown(){
+        postStatus=502;
+        assertThrows(IllegalStateException.class,()->provider.fetch("task1","https://cdn.example/song.mp3"));
+        assertEquals(1,posts.get());
+    }
     @Test void refusesAnUnmatchedAudioBeforePost(){assertThrows(LyricsTimingProvider.Rejected.class,()->provider.fetch("task1","https://different.example/unknown.mp3"));assertEquals(0,posts.get());}
     @Test void supportsConfiguredUnifiedResponseAndSnakeCaseTiming(){
         provider=create("unified");reply="{\"code\":200,\"data\":{\"code\":200,\"data\":{\"aligned_words\":[{\"word\":\"hello\",\"success\":true,\"start_s\":3,\"end_s\":4}]}}}";

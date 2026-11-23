@@ -11,3 +11,10 @@ spring:
 mybatis:
   configuration:
     map-underscore-to-camel-case: true
+qingfeng:
+  lyrics:
+    preparation:
+      enabled: true
+      scheduler-enabled: true
+      backfill-published: false
+      transcription-fallback-enabled: false

@@ -24,12 +24,17 @@ class LyricsPreparationIntegrationTest extends PlaybackLyricsIntegrationTest {
     }
     static class FakeTranscription implements AudioTranscriptionProvider {
         AtomicInteger submits=new AtomicInteger(),polls=new AtomicInteger();String state="READY",submission="OK";
-        public boolean isConfigured(){return true;}
+        boolean configured=true;
+        public boolean isConfigured(){return configured;}
         public String submit(String audio){submits.incrementAndGet();if(submission.equals("UNKNOWN"))throw new IllegalStateException("timeout");if(submission.equals("REJECT"))throw new Rejected("PROVIDER_422");if(submission.equals("AUTH"))throw new Rejected("PROVIDER_401");return "external-task";}
         public Result poll(String task){polls.incrementAndGet();if(state.equals("READ_FAIL"))throw new IllegalStateException("read failed");return new Result(state,state.equals("READY")?List.of(new PlaybackLyrics.Word("已识别的演唱歌词\n",5,9)):List.of());}
     }
     @Autowired LyricsPreparation preparation;@Autowired FakeTranscription transcribe;@Autowired PlaybackLyricsRepository repository;
     @Autowired PlatformTransactionManager manager;
+    @Autowired com.qingfeng.music.usage.UsageBudget budget;
+    PlaybackLyricsService queuedService(LyricsPreparation queue) {
+        return new PlaybackLyricsService(media,repository,timing,true,(owner,source,key)->queue.enqueueInteractive(owner,source,key,budget));
+    }
     @BeforeEach void clearJobs(){
         assertTrue(jdbc.getDataSource()!=null);
         try(var connection=jdbc.getDataSource().getConnection()){assertTrue(connection.getMetaData().getURL().startsWith("jdbc:h2:mem:"));}
@@ -40,7 +45,7 @@ class LyricsPreparationIntegrationTest extends PlaybackLyricsIntegrationTest {
         // Prior fixtures are retained but excluded from scans; no real data is present in this H2-only test database.
         jdbc.update("UPDATE music_work SET deleted_at=CURRENT_TIMESTAMP WHERE deleted_at IS NULL");
         jdbc.update("DELETE FROM lyrics_preparation_control");
-        transcribe.submits.set(0);transcribe.polls.set(0);transcribe.state="READY";transcribe.submission="OK";
+        transcribe.submits.set(0);transcribe.polls.set(0);transcribe.state="READY";transcribe.submission="OK";transcribe.configured=true;
     }
     Fixture transcriptionFixture(){var f=fixture();jdbc.update("UPDATE generation_task SET provider_task_id=NULL WHERE asset_id=?",f.asset());preparation.enqueueArchived(25);return f;}
     String state(){return jdbc.queryForObject("SELECT state FROM lyrics_preparation_job ORDER BY created_at,source_key LIMIT 1",String.class);}
@@ -108,8 +113,67 @@ class LyricsPreparationIntegrationTest extends PlaybackLyricsIntegrationTest {
     }
 
     @Test void manualAndAutomaticPreparationRaceWithoutDuplicateProviderCalls()throws Exception {
-        var f=fixture();var pool=Executors.newFixedThreadPool(2);
-        try{var a=pool.submit(()->preparation.enqueueArchived(25));var b=pool.submit(()->service.sync(f.owner(),f.work(),f.asset(),UUID.randomUUID().toString()));a.get(10,TimeUnit.SECONDS);b.get(10,TimeUnit.SECONDS);preparation.processOnce();assertEquals(1,timing.calls.get());assertEquals("READY",repository.find(f.asset()).orElseThrow().status());}finally{pool.shutdownNow();}
+        var f=fixture();var pool=Executors.newFixedThreadPool(2);var queued=queuedService(preparation);
+        try{
+            var a=pool.submit(()->preparation.enqueueArchived(25));
+            var b=pool.submit(()->queued.sync(f.owner(),f.work(),f.asset(),UUID.randomUUID().toString()));
+            a.get(10,TimeUnit.SECONDS);assertEquals("PREPARING",b.get(10,TimeUnit.SECONDS).status());
+            assertEquals(1,jdbc.queryForObject("SELECT COUNT(*) FROM lyrics_preparation_job",Integer.class));
+            assertEquals(0,timing.calls.get());
+            preparation.processOnce();
+            assertEquals(1,timing.calls.get());assertEquals("READY",repository.find(f.asset()).orElseThrow().status());
+        }finally{pool.shutdownNow();}
+    }
+
+    @Test void retriesOnlyDefiniteFailuresAndNeverRestartsAnEarlierRequest() {
+        var f=fixture();
+        var queue=new LyricsPreparation(jdbc,new TransactionTemplate(manager),repository,timing,transcribe,40,false);
+        var queued=queuedService(queue);
+        var first=UUID.randomUUID().toString();
+        var second=UUID.randomUUID().toString();
+        timing.mode="FAILED";
+        assertEquals("PREPARING",queued.sync(f.owner(),f.work(),f.asset(),first).status());
+        queue.processOnce();
+        assertEquals("FAILED",queued.sync(f.owner(),f.work(),f.asset(),first).status());
+        assertEquals("PREPARING",queued.sync(f.owner(),f.work(),f.asset(),second).status());
+        queue.processOnce();
+        assertEquals("FAILED",queued.sync(f.owner(),f.work(),f.asset(),first).status());
+        queue.processOnce();
+        assertEquals(2,timing.calls.get());
+        assertEquals(0,transcribe.submits.get());
+        assertEquals(2,budgetCount(f.owner()));
+    }
+
+    @Test void waitingForAProviderPollDoesNotBlockNewAudioAndDoesNotResubmitTheKnownTask() {
+        var waiting=transcriptionFixture();
+        preparation.processOnce();
+        assertEquals("POLLING",state());
+        jdbc.update("UPDATE lyrics_preparation_job SET next_attempt_at=TIMESTAMP '2099-01-01 00:00:00'");
+        var newer=fixture();
+        assertEquals(1,preparation.enqueueArchived(25));
+        preparation.processOnce();
+        assertEquals("READY",repository.find(newer.asset()).orElseThrow().status());
+        assertEquals(0,transcribe.polls.get());
+        due();preparation.processOnce();
+        assertEquals("READY",repository.find(waiting.asset()).orElseThrow().status());
+        assertEquals(1,transcribe.submits.get());
+        assertEquals(1,transcribe.polls.get());
+    }
+
+    @Test void anUnavailableProviderDoesNotBlockJobsUsingAConfiguredProvider() {
+        var waiting=transcriptionFixture();
+        jdbc.update("UPDATE lyrics_preparation_job SET created_at=TIMESTAMP '2000-01-01 00:00:00'");
+        transcribe.configured=false;
+        var newer=fixture();
+        assertEquals(1,preparation.enqueueArchived(25));
+        preparation.processOnce();
+        assertEquals("READY",repository.find(newer.asset()).orElseThrow().status());
+        assertEquals("PREPARING",repository.find(waiting.asset()).orElseThrow().status());
+        assertEquals(0,transcribe.submits.get());
+    }
+
+    private int budgetCount(String owner) {
+        return jdbc.queryForObject("SELECT COUNT(*) FROM model_usage_reservation WHERE owner_id=? AND kind='TIMING'",Integer.class,owner);
     }
 
     @Test void onlyNewArchivesAndHistoricPublicSongsAreAutomaticallyQueued(){

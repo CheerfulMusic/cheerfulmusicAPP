@@ -3,6 +3,7 @@ import java.time.Instant;
 import java.util.*;
 
 public interface PlaybackLyricsRepository {
+    long FETCH_TIMEOUT_SECONDS = 180;
     record Source(String assetId,String workId,String provider,String providerTaskId,String audioUrl,String lyrics) {}
     record Stored(String status,List<PlaybackLyrics.Word> words,String requestKey,Instant updatedAt) {}
     Optional<Source> source(String work,String asset);
@@ -10,4 +11,8 @@ public interface PlaybackLyricsRepository {
     boolean claim(String owner,Source source,String key);
     void finish(String asset,String key,String state,List<PlaybackLyrics.Word> words);
     void expire(String asset,Instant before);
+
+    static String reservationKey(String asset, String key) {
+        return UUID.nameUUIDFromBytes((asset+":"+key).getBytes(java.nio.charset.StandardCharsets.UTF_8)).toString();
+    }
 }
