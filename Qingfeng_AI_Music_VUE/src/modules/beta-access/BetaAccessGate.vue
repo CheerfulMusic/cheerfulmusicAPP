@@ -3,12 +3,12 @@ import FilingLink from "../../shared/ui/FilingLink.vue"
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { locale, t } from '../../shared/i18n'
 import { homeSeo, siteName } from '../../shared/i18n/home-seo'
-import { siteGuideLinks } from '../../shared/i18n/site-guides'
+import { discoverPaths, discoverSeo, landingLinks } from '../../shared/i18n/site-seo'
 import { platform } from '../../platform'
 import LanguageSwitcher from '../../shared/i18n/LanguageSwitcher.vue'
 import { enterInvite, InviteError, readInviteStatus, type InviteStatus } from './api'
 
-const props = defineProps<{ publicAccess?: boolean; publicPreview?: boolean; homeEntry?: boolean }>()
+const props = defineProps<{ publicAccess?: boolean; publicPreview?: boolean; homeEntry?: boolean; discoverEntry?: boolean }>()
 const dialog = ref<HTMLDialogElement>(), input = ref<HTMLInputElement>()
 const everAdmitted = ref(false), admitted = ref(false), checking = ref(true), submitting = ref(false)
 const status = ref<InviteStatus>(), code = ref(''), error = ref('')
@@ -16,7 +16,15 @@ const busy = computed(() => checking.value || submitting.value)
 const actionRequiresInvite = ref(false)
 const accessible = computed(() => admitted.value || (props.publicAccess && !actionRequiresInvite.value))
 const showPreview = computed(() => props.publicPreview && !accessible.value)
-const guideLinks = computed(() => siteGuideLinks(locale.value))
+const entryCopy = computed(() => {
+  if (props.discoverEntry) return discoverSeo[locale.value]
+  if (props.homeEntry) {
+    const home = homeSeo[locale.value]
+    return { heading: home.heading, description: home.inviteDescription }
+  }
+})
+const entryLinks = computed(() => landingLinks(locale.value, props.discoverEntry ? discoverPaths[locale.value] : '/')
+  .filter(link => !link.lang))
 let disposed = false, lastCheck = 0, expiryTimer: ReturnType<typeof setTimeout> | undefined
 
 async function show() {
@@ -81,8 +89,8 @@ onBeforeUnmount(() => { disposed = true; clearTimeout(expiryTimer); window.remov
       <div class="beta-access-top"><span class="beta-access-label">{{ t('内测体验') }}</span><LanguageSwitcher/></div>
       <img class="beta-access-logo" src="/brand/logo-symbol.svg" alt="" width="56" height="56">
       <p class="beta-access-brand">{{ siteName }}</p>
-      <h1 id="beta-access-title">{{ homeEntry ? homeSeo[locale].heading : t('让灵感，先在这里发声。') }}</h1>
-      <p id="beta-access-description" class="beta-access-intro">{{ homeEntry ? homeSeo[locale].inviteDescription : t('青风音乐正在内测，输入邀请码即可开始体验。') }}</p>
+      <h1 id="beta-access-title">{{ entryCopy?.heading ?? t('让灵感，先在这里发声。') }}</h1>
+      <p id="beta-access-description" class="beta-access-intro">{{ entryCopy?.description ?? t('青风音乐正在内测，输入邀请码即可开始体验。') }}</p>
       <p v-if="checking" class="beta-access-checking" role="status">{{ t('正在验证内测资格…') }}</p>
       <form v-else-if="status" @submit.prevent="submit">
         <label for="beta-invite-code">{{ t('内测邀请码') }}</label>
@@ -92,8 +100,8 @@ onBeforeUnmount(() => { disposed = true; clearTimeout(expiryTimer); window.remov
       </form>
       <div v-else-if="error"><p class="beta-access-error" role="alert">{{ t(error) }}</p><button class="beta-access-primary" type="button" @click="check">{{ t('重新验证') }}</button></div>
       <p class="beta-access-note">{{ t('邀请码由内测邀请人提供。') }}</p>
-      <nav v-if="homeEntry && platform.kind === 'web'" class="beta-access-guides" :aria-label="locale === 'en' ? 'Music guides' : '音乐使用指南'">
-        <a v-for="link in guideLinks" :key="link.href" :href="link.href">{{ link.text }}</a>
+      <nav v-if="entryCopy && platform.kind === 'web'" class="beta-access-guides" :aria-label="locale === 'en' ? 'Music guides' : '音乐使用指南'">
+        <a v-for="link in entryLinks" :key="link.href" :href="link.href">{{ link.text }}</a>
       </nav>
       <button v-if="publicPreview" type="button" class="button secondary" @click="cancelInvite">{{ t('关闭') }}</button>
       <footer class="beta-access-filing"><FilingLink /></footer>

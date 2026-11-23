@@ -3,6 +3,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { platform } from '../../platform'
 import { locale, setLocale, t, type Locale } from './index'
 import { homeLocale, homeSeo } from './home-seo'
+import { discoverPaths } from './site-seo'
 
 const route = useRoute()
 const router = useRouter()
@@ -12,10 +13,14 @@ const languages = [
 ] as const
 
 async function switchLanguage(value: Locale) {
-  if (platform.kind === 'web' && route?.name === 'home' && homeLocale(route.path) === 'en' && value === 'zh-CN') {
-    // The English entry is an alias of the root, so force navigation between them.
-    const failure = await router.push({ path: homeSeo[value].path, query: route.query, hash: route.hash, force: true })
-    if (failure) return
+  if (platform.kind === 'web' && route) {
+    let target: string | undefined
+    if (route.name === 'discover') target = discoverPaths[value]
+    else if (route.name === 'home' && homeLocale(route.path) === 'en' && value === 'zh-CN') target = homeSeo[value].path
+    if (target && target !== route.path) {
+      const failure = await router.push({ path: target, query: route.query, hash: route.hash, force: true })
+      if (failure) return
+    }
   }
   setLocale(value)
 }

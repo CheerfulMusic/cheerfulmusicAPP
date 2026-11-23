@@ -3,6 +3,7 @@ import { createRouter, createWebHashHistory, createWebHistory } from 'vue-router
 import { platform } from '../../platform'
 import { scrollBehavior } from './scroll'
 import { homeSeo } from '../../shared/i18n/home-seo'
+import { discoverPaths } from '../../shared/i18n/site-seo'
 import { siteGuidePaths } from '../../shared/i18n/site-guides'
 import SeoLanding from '../layouts/SeoLanding.vue'
 
@@ -32,7 +33,7 @@ export const router = createRouter({
     { path: '/profile', name: 'artist-profile', component: () => import('../../modules/artist/pages/MyArtistProfilePage.vue') },
     { path: '/artist/:id', name: 'artist-home', component: () => import('../../modules/artist/pages/PublicArtistPage.vue') },
     { path: '/artist/:id/albums/:album', name: 'artist-album', component: () => import('../../modules/artist/pages/PublicAlbumPage.vue') },
-    { path: '/discover', name: 'discover', component: () => import('../../modules/artist/pages/DiscoverPage.vue') },
+    { path: '/discover', name: 'discover', alias: platform.kind === 'web' ? discoverPaths.en : undefined, component: () => import('../../modules/artist/pages/DiscoverPage.vue') },
     { path: '/legal/terms', component: { render: () => null }, beforeEnter: () => { window.location.replace('/legal/terms.html'); return false } },
     { path: '/legal/privacy', component: { render: () => null }, beforeEnter: () => { window.location.replace('/legal/privacy.html'); return false } },
     { path: '/recharge', name: 'recharge', component: () => import('../../modules/identity/pages/RechargePage.vue') },
