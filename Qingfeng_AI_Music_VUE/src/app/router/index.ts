@@ -3,12 +3,20 @@ import { createRouter, createWebHashHistory, createWebHistory } from 'vue-router
 import { platform } from '../../platform'
 import { scrollBehavior } from './scroll'
 import { homeSeo } from '../../shared/i18n/home-seo'
+import { siteGuidePaths } from '../../shared/i18n/site-guides'
+import SeoLanding from '../layouts/SeoLanding.vue'
 
 export const router = createRouter({
   history: platform.kind === 'web' ? createWebHistory() : createWebHashHistory(),
   scrollBehavior,
   routes: [
     { path: '/help', name: 'help', component: () => import('../pages/HelpPage.vue') },
+    ...(platform.kind === 'web' ? siteGuidePaths.map(path => ({
+      path,
+      component: SeoLanding,
+      props: { path },
+      meta: { publicGuide: true },
+    })) : []),
     { path: '/', name: 'home', alias: platform.kind === 'web' ? homeSeo.en.path : undefined, component: () => import('../../modules/home/pages/PremiumHomePage.vue') },
     { path: '/create', name: 'studio', component: () => import('../../modules/studio/pages/DraftStudioPage.vue') },
     { path: '/create/photo', name: 'photo-studio', component: () => import('../../modules/studio/pages/PhotoStudioPage.vue') },
