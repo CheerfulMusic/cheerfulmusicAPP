@@ -115,8 +115,10 @@ public final class AgentChatService {
                     var exact=com.qingfeng.music.agent.application.ExactLyricEdit.parse(text);
                     String fast=AgentChatPolicy.currentSocial(text);
                     String lookup=AgentReadOnlyLookup.match(text,capabilities(),false);
+                    var libraryCommand=AgentLibraryCommand.parse(text);
                     if(exact!=null)plan=new AgentChatModel.Plan("replace_lyric_line",Map.of(),"");
                     else if(lookup!=null)plan=new AgentChatModel.Plan(lookup,Map.of(),"");
+                    else if(libraryCommand!=null&&executor(libraryCommand.action())!=null)plan=libraryCommand;
                     else if(text.matches("(?:请)?(?:看|看看|查看|打开|切换到)上一版(?:的)?歌词[。！!]*")&&executor("select_version")!=null)
                         plan=new AgentChatModel.Plan("select_version",Map.of("relative","previous"),"");
                     else if(fast!=null)plan=new AgentChatModel.Plan(fast,Map.of(),"");
@@ -312,8 +314,6 @@ public final class AgentChatService {
             return new AgentChatModel.Plan("get_credits",Map.of(),"");
         if(instruction.matches("(?:歌词呢|查看歌词|显示完整歌词|完整歌词|正在制作吗|生成好了吗)[？?。！!]*"))
             return new AgentChatModel.Plan("get_current_song",Map.of(),"");
-        var open=java.util.regex.Pattern.compile("^(?:请|帮我)?打开作品\\s+([a-fA-F0-9-]{36})[。！!]*$").matcher(instruction);
-        if(open.matches()&&executor("select_work")!=null)return new AgentChatModel.Plan("select_work",Map.of("workId",open.group(1)),"");
         boolean chat=plan.orderedSteps().stream().allMatch(s->"chat".equals(s.action()));
         if(chat && plan.reply()!=null && plan.reply().startsWith("还没有执行「")
                 && instruction.matches("(?:请|请帮我|帮我)?(?:直接)?(?:开始)?(?:生成|写)歌词[。！!]?"))
@@ -389,7 +389,16 @@ public final class AgentChatService {
         if(action!=null)body.put("action",action);
         append(owner,conversation,body);
     }
-    private SongCard current(String owner){var c=tools.dispatch(AgentTool.GET_CURRENT_SONG,new AgentTool.GetCurrentSongArgs(),owner,UUID.randomUUID().toString()).songCard();return c==null||c.songId()==null||c.songId().isBlank()?null:c;}
+    private SongCard current(String owner){
+        try{
+            var card=tools.dispatch(AgentTool.GET_CURRENT_SONG,new AgentTool.GetCurrentSongArgs(),owner,UUID.randomUUID().toString()).songCard();
+            return card==null||card.songId()==null||card.songId().isBlank()?null:card;
+        }catch(DomainException error){
+            // A work removed in another tab is no longer a current target for this conversation.
+            if("WORK_NOT_FOUND".equals(error.code()))return null;
+            throw error;
+        }
+    }
     private Snapshot snapshot(String owner,String conversation,String action) {
         return snapshot(owner,conversation,action,null);
     }

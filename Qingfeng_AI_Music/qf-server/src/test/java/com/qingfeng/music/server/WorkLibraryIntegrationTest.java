@@ -20,6 +20,33 @@ import org.springframework.jdbc.core.JdbcTemplate;
 @SpringBootTest(properties={"spring.datasource.url=jdbc:h2:mem:work_library;MODE=MySQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1","qingfeng.generation.enabled=true"})
 @ActiveProfiles("test") @Import(GenerationSubmissionIntegrationTest.Providers.class)
 class WorkLibraryIntegrationTest {
+    @Test void knownSongsRankInTopThreeForTitlesAndOriginalLines(){
+        String owner=identity.create().creatorId();
+        String[] titles={"海边来信","月台上的灯","旧操场"};
+        String[] lines={"海风替我说晚安","最后一班列车绕过家乡","粉笔灰落在旧跑道上"};
+        String[] stories={"海岛旅行时写给朋友的晚安歌","回老家陪父亲赶末班火车","毕业时送给同班同学的轻快民谣"};
+        String[] themes={"海岛旅行","陪爸爸坐末班车回乡的歌","去年写给毕业同学、风格很轻快的那首"};
+        var ids=new java.util.ArrayList<String>();
+        for(int i=0;i<titles.length;i++){
+            var w=works.create(owner,new WorkApi.Draft("","","故事。".repeat(165)+stories[i],"","",titles[i]));
+            ids.add(w.id());
+            var revision=lyrics.save(owner,w.id(),0,titles[i],"前一行\n"+lines[i]);
+            lyrics.confirm(owner,w.id(),revision.id());
+            jdbc.update("UPDATE music_work SET updated_at='2024-01-01' WHERE id=?",w.id());
+        }
+        for(int i=0;i<4;i++)works.create(owner,new WorkApi.Draft("","","灵感笔记里提到《海边来信》","","","磁带笔记"+i));
+        int titleHits=0,lineHits=0,themeHits=0;
+        for(int i=0;i<ids.size();i++){
+            if(topThree(owner,titles[i],ids.get(i)))titleHits++;
+            if(topThree(owner,lines[i],ids.get(i)))lineHits++;
+            if(topThree(owner,themes[i],ids.get(i)))themeHits++;
+        }
+        System.out.printf("SEARCH_TOP3 titles=%d/3 lines=%d/3 themes=%d/3%n",titleHits,lineHits,themeHits);
+        assertEquals(3,titleHits);assertEquals(3,lineHits);assertTrue(themeHits>=1);
+    }
+    private boolean topThree(String owner,String query,String expected){
+        return library.search(owner,query,0).stream().limit(3).anyMatch(item->expected.equals(item.work().id()));
+    }
     @Autowired IdentityApi identity;@Autowired WorkApi works;@Autowired LyricsApi lyrics;@Autowired GenerationApi tasks;@Autowired MediaService media;@Autowired WorkLibraryQuery library;@Autowired JdbcTemplate jdbc;
     @Test void exposesCompletedVideoBeforeNewQueuedTaskAndIsolatesOwners(){
         String owner=identity.create().creatorId(),other=identity.create().creatorId();

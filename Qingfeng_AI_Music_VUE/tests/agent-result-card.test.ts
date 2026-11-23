@@ -54,6 +54,18 @@ describe('conversation result cards', () => {
     expect(wrapper.emitted('command')).toHaveLength(2)
     wrapper.unmount()
   })
+  it('shows the quoted lines and opens exactly their lyric revision', async () => {
+    const command = { kind: 'send', label: '打开命中版本', text: '打开作品 w1 的歌词版本 r1' }
+    const result = assistantResult(message({ kind: 'works', items: [{ id: 'w1', title: '海边来信', data: {
+      workId: 'w1', revisionId: 'r1', lyricVersion: 1, matchSource: 'lyrics', excerpt: '上一句\n海风替我说晚安',
+    } }], commands: [command] }))!
+    const wrapper = mount(AgentResultCard, { props: { result, disabled: false, current: true } })
+    expect(wrapper.find('blockquote').text()).toMatch(/V1/)
+    expect(wrapper.find('blockquote p').text()).toBe('上一句\n海风替我说晚安')
+    await wrapper.get('.agent-work-open').trigger('click')
+    expect(wrapper.emitted('command')).toEqual([[command]])
+    wrapper.unmount()
+  })
   it('retains subtitles and actions on non-work result cards', async () => {
     const command = { kind: 'send', label: '选择版本', text: '选择第 1 版' }
     const result = assistantResult(message({ kind: 'versions', items: [{ id: 'r1', title: '歌词版本', subtitle: '已确认', data: {} }], commands: [command] }))!

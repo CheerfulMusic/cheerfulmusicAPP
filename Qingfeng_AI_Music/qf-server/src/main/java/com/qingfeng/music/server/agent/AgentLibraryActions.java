@@ -15,6 +15,8 @@ import com.qingfeng.music.lyrics.api.LyricsApi;
 import com.qingfeng.music.lyrics.application.InspirationRewriteService;
 import com.qingfeng.music.media.api.MediaApi;
 import com.qingfeng.music.server.hotsong.HotSongService;
+import com.qingfeng.music.server.query.WorkLibraryQuery;
+import com.qingfeng.music.server.query.WorkSearchEvidence;
 import com.qingfeng.music.work.api.WorkApi;
 import tools.jackson.databind.ObjectMapper;
 import java.util.*;
@@ -47,7 +49,7 @@ public final class AgentLibraryActions implements AgentApplicationActions {
     public AgentLibraryActions withLibrary(com.qingfeng.music.server.query.WorkLibraryQuery library) { this.library=library; return this; }
     public List<Capability> capabilities() { return List.of(
         cap("create_work","新建空白作品草稿并选中，不生成歌词或音乐、不收费。用户自带歌词或音频且没有作品时可先执行此动作","title?:100字内标题,recipient?:80字内收礼人,occasion?:32字内场景,story?:4000字内故事,message?:500字内寄语","write"),
-        cap("list_works","列出我的作品，按标题、故事、歌词关键词查询（每页20首，非语义搜索）","query?:关键词,page?:0起页码","read"),
+        cap("list_works","列出本人作品。记得歌名、歌词原句或故事关键词时用此查询，结果含命中片段和歌词修订，每页20首","query?:用户记得的原文（不含提问和外层引号）,page?:0起页码","read"),
         cap("select_work","打开另一首我的作品；同名时先列出候选，绝不猜测","workId?:作品ID,index?:上次作品列表的1起序号,query?:标题","write"),
         cap("rename_work","修改作品名称，保留其他创作设定","workId?:作品ID,title:新名称","write"),
         cap("update_work","修改创作故事、收礼人、场景、寄语或作品标题，只更新明确提供的字段","workId?:作品ID,recipient?:80字内收礼人,occasion?:32字内场景,story?:4000字内故事,message?:500字内寄语,title?:100字内标题","write"),
@@ -110,9 +112,13 @@ public final class AgentLibraryActions implements AgentApplicationActions {
         if ("rewrite_inspiration".equals(action)) return ok(action,inspiration.rewrite(owner,required(args,"text",4000),value(args,"language","zh-CN"),key));
         if (!supports(action)) throw invalid("不支持的作品操作。");
         WorkApi.Work work;
+        String listedRevision=null;
         if ("select_work".equals(action) && args.containsKey("index") && !args.containsKey("workId")) {
             var resolved = new LinkedHashMap<>(args);
-            resolved.put("workId",fromResult(owner,conversation,"works","workId",null,args,true));
+            var data=resultData(owner,conversation,"works",null,args);
+            if(data==null||data.path("workId").asText("").isBlank())throw invalid("没有可对应的作品列表，请先查看列表再选择序号。");
+            resolved.put("workId",data.path("workId").asText());
+            listedRevision=data.path("revisionId").asText("");
             args = resolved;
         }
         try { work=work(owner,conversation,args,current); }
@@ -120,6 +126,7 @@ public final class AgentLibraryActions implements AgentApplicationActions {
         String id=work.id();
         return switch(action) {
             case "select_work" -> {
+                if(listedRevision!=null&&!listedRevision.isBlank())yield openLyrics(owner,conversation,id,listedRevision,action);
                 var selection=media.selection(owner,id);
                 String asset=selection==null?null:selection.assetId();
                 var selected=asset==null?null:media.get(owner,id,asset);
@@ -243,8 +250,13 @@ public final class AgentLibraryActions implements AgentApplicationActions {
         int page=(int)number(args,"page",0); if(page<0||page>10000) throw invalid("作品页码超出范围。");
         String query=value(args,"query","").toLowerCase(Locale.ROOT);
         List<LibraryWork> found=search(owner,query,page);
-        var items=found.stream().map(w->new Item(w.work().id(),w.title(),w.status()+" · 作品版本 "+w.work().version(),Map.<String,Object>of("workId",w.work().id(),"version",w.work().version(),"createdAt",w.work().createdAt().toString(),"status",w.status()))).toList();
-        var commands=new ArrayList<Command>(); found.stream().limit(10).forEach(w->commands.add(send("打开「"+w.title()+"」","打开作品 "+w.work().id())));
+        var items=found.stream().map(w->{
+            var data=new LinkedHashMap<String,Object>(Map.of("workId",w.work().id(),"version",w.work().version(),"createdAt",w.work().createdAt().toString(),"status",w.status()));
+            if(w.evidence()!=null)w.evidence().addTo(data);
+            return new Item(w.work().id(),w.title(),w.status()+" · 作品版本 "+w.work().version(),data);
+        }).toList();
+        var commands=new ArrayList<Command>();
+        found.stream().limit(query.isBlank()?10:20).forEach(w->commands.add(send("打开「"+w.title()+"」",AgentLibraryCommand.open(w.work().id(),w.evidence()==null?null:w.evidence().revisionId()))));
         if(found.size()==20) commands.add(send("下一页","列出我的作品，第 "+(page+2)+" 页（page="+(page+1)+"）"+(query.isBlank()?"":"，关键词："+query)));
         return new Result(clarification!=null?clarification:found.isEmpty()?"没有找到符合条件的作品。":"这是你的作品。可以告诉我打开第几首，或按关键词查询。"+(query.isBlank()?"":"（匹配标题、故事和歌词文字，非语义搜索）"),"works",items,commands,clarification==null?"list_works":null);
     }
@@ -253,15 +265,20 @@ public final class AgentLibraryActions implements AgentApplicationActions {
         point(owner,conversation,work,selected.id(),null,null);
         return ok(action,"已打开所选歌词版本《"+selected.title()+"》。\n"+selected.lyrics());
     }
-    private record LibraryWork(WorkApi.Work work,String title,String status) {}
+    private record LibraryWork(WorkApi.Work work,String title,String status,WorkSearchEvidence evidence) {}
+    private LibraryWork libraryWork(WorkLibraryQuery.Item item){
+        var work=item.work();String display=work.title();
+        if(display==null||display.isBlank()||"智能创作".equals(display))display=item.songTitle();
+        return new LibraryWork(work,display==null||display.isBlank()?title(work):display,item.status(),item.evidence());
+    }
     private List<LibraryWork> libraryPage(String owner,int page) {
-        if(library==null) return works.list(owner,page).stream().map(w->new LibraryWork(w,title(w),"作品")).toList();
-        return library.list(owner,page).stream().map(item->{var w=item.work();String display=w.title();if(display==null||display.isBlank()||"智能创作".equals(display))display=item.songTitle();return new LibraryWork(w,display==null||display.isBlank()?title(w):display,item.status());}).toList();
+        if(library==null) return works.list(owner,page).stream().map(w->new LibraryWork(w,title(w),"作品",null)).toList();
+        return library.list(owner,page).stream().map(this::libraryWork).toList();
     }
     private List<LibraryWork> search(String owner,String query,int page) {
         if(query.isBlank()) return libraryPage(owner,page);
         if(library==null)return libraryPage(owner,page).stream().filter(w->w.title().toLowerCase(Locale.ROOT).contains(query)).toList();
-        return library.search(owner,query,page).stream().map(item->{var w=item.work();String display=w.title();if(display==null||display.isBlank()||"智能创作".equals(display))display=item.songTitle();return new LibraryWork(w,display==null||display.isBlank()?title(w):display,item.status());}).toList();
+        return library.search(owner,query,page).stream().map(this::libraryWork).toList();
     }
     private WorkApi.Work work(String owner,String conversation,Map<String,Object> args,SongCard current) {
         String id=value(args,"workId",null);
@@ -325,6 +342,12 @@ public final class AgentLibraryActions implements AgentApplicationActions {
     }
     private String fromResult(String owner,String conversation,String kind,String key,String work,Map<String,Object> args,boolean required) {
         if(!args.containsKey("index")) return null;
+        var data=resultData(owner,conversation,kind,work,args);
+        String result=data==null?"":data.path(key).asText("");
+        if(!result.isBlank())return result;
+        if(required) throw invalid("没有可对应的列表，请先查看列表再选择序号。"); return null;
+    }
+    private tools.jackson.databind.JsonNode resultData(String owner,String conversation,String kind,String work,Map<String,Object> args) {
         long ordinal=number(args,"index",0); if(ordinal<1||ordinal>50) throw invalid("列表序号应从1开始。");
         var history=conversations.listRecentMessages(owner,conversation,80);
         for(int n=history.size()-1;n>=0;n--) {
@@ -332,14 +355,15 @@ public final class AgentLibraryActions implements AgentApplicationActions {
             var body=json.readTree(history.get(n).contentJson());
             if(!body.has("items")) continue;
             // Only the most recent visible list can resolve an ordinal: older lists may mean something else.
-            if(!kind.equals(body.path("kind").asText())) break;
+            String listedKind=body.path("kind").asText();
+            if(!kind.equals(listedKind)&&!("works".equals(kind)&&"memory".equals(listedKind))) break;
             var items=body.path("items");
             if(ordinal>items.size()) throw invalid("列表没有这个序号，请重新选择。");
             var data=items.get((int)ordinal-1).path("data");
             if(work!=null&&!work.equals(data.path("workId").asText())) throw invalid("该列表属于另一首作品，请重新查看当前作品列表。");
-            String result=data.path(key).asText(""); if(!result.isBlank()) return result; break;
+            return data;
         }
-        if(required) throw invalid("没有可对应的列表，请先查看列表再选择序号。"); return null;
+        return null;
     }
     private void point(String owner,String conversation,String work,String revision,String task,String asset) {
         point(owner,conversation,work,revision,task,asset,conversations.state(owner,conversation));
