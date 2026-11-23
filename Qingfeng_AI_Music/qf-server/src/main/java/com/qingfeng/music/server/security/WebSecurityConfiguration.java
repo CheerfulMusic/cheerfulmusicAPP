@@ -51,7 +51,7 @@ public class WebSecurityConfiguration {
                     response.setHeader("X-Robots-Tag", "noindex");
                 }
             }))
-            .csrf(csrf -> csrf.ignoringRequestMatchers("/api/public/payments/airwallex/webhook", "/api/public/paypal/webhook", "/api/public/events", "/api/wechat/jssdk-error", "/api/public/hot-songs/*/play", "/api/public/discover/songs/*/*/play")
+            .csrf(csrf -> csrf.ignoringRequestMatchers("/api/public/payments/airwallex/webhook", "/api/public/paypal/webhook", "/api/public/events", "/api/wechat/jssdk-error", "/api/songs/*/play", "/api/public/hot-songs/*/play", "/api/public/discover/songs/*/*/play")
             .ignoringRequestMatchers(request->"POST".equals(request.getMethod())&&java.util.Set.of("/api/public/auth/sms/deliver","/api/public/stripe/webhook").contains(request.getServletPath()))
             .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse()).csrfTokenRequestHandler(new CsrfTokenRequestAttributeHandler()))
             .authorizeHttpRequests(auth -> auth
@@ -71,7 +71,7 @@ public class WebSecurityConfiguration {
                 .requestMatchers(org.springframework.http.HttpMethod.GET,"/api/public/discover").permitAll()
                 .requestMatchers(org.springframework.http.HttpMethod.HEAD,"/api/public/discover").permitAll()
                 .requestMatchers(org.springframework.http.HttpMethod.POST,"/api/public/discover/songs/*/*/play").permitAll()
-                .requestMatchers(org.springframework.http.HttpMethod.POST,"/api/public/hot-songs/*/play").permitAll()
+                .requestMatchers(org.springframework.http.HttpMethod.POST,"/api/public/hot-songs/*/play","/api/songs/*/play").permitAll()
                 .requestMatchers(org.springframework.http.HttpMethod.GET,"/api/public/auth/google/status",GoogleOAuthFlow.CALLBACK).permitAll()
                 .requestMatchers(org.springframework.http.HttpMethod.POST,"/api/public/auth/google/start","/api/public/session/logout").permitAll()
                 .requestMatchers(org.springframework.http.HttpMethod.GET,"/api/public/auth/logto/status").permitAll()

@@ -4,14 +4,21 @@ import { createApp, h, nextTick, reactive, type App } from 'vue'
 import SharePanel from '../src/modules/works/components/SharePanel.vue'
 import type { Revision, AudioAsset } from '../src/modules/works/api/detail'
 
-const mocks = vi.hoisted(() => ({ create: vi.fn(), get: vi.fn(), revoke: vi.fn(), poster: vi.fn() }))
-vi.mock('../src/modules/works/api/detail', () => ({ createShare: mocks.create, revokeShares: mocks.revoke }))
-vi.mock('../src/shared/http/api-client', () => ({ requestJson: mocks.get, apiUrl: (s: string) => '/api/' + s }))
+const mocks = vi.hoisted(() => ({ create: vi.fn(), get: vi.fn(), revoke: vi.fn(), revokeVersion: vi.fn(), poster: vi.fn() }))
+vi.mock('../src/modules/works/api/detail', () => ({ createShare: mocks.create, getSongShareStatus: mocks.get, revokeShares: mocks.revoke, revokeSongShare: mocks.revokeVersion }))
+vi.mock('../src/shared/http/api-client', () => ({ apiUrl: (s: string) => '/api/' + s }))
 vi.mock('../src/shared/player/store', () => ({ usePlayer: () => ({ current: null, playing: false, starting: false, toggle: vi.fn(), reset: vi.fn() }) }))
 vi.mock('../src/modules/works/model/song-poster', () => ({ renderSongPoster: mocks.poster }))
 let app: App | undefined
 const flush = async () => { for (let i = 0; i < 5; i++) { await nextTick(); await new Promise(r => setTimeout(r, 0)) } }
 const token = 'A'.repeat(43)
+const privateState = { status: 'PRIVATE', card: null, views: 0, plays: 0 }
+function active(songId = token, title = '我的歌') {
+  return { status: 'SHAREABLE', views: 5, plays: 2, card: {
+    songId, title, lyrics: '[Verse]\n窗台那盆薄荷\nKeep the light on', hasCover: true,
+    expiresAt: new Date(Date.now() + 86400000).toISOString(),
+  } }
+}
 function mount(origin: AudioAsset['origin'] = 'GENERATED') {
   const revision = origin === 'GENERATED' ? { id: 'revision-a', confirmed: true } as Revision : null
   const props = reactive({ open: true, workId: 'work-a', revision, asset: { id: 'audio-a', origin } as AudioAsset })
@@ -25,34 +32,47 @@ beforeEach(() => {
   Object.defineProperty(HTMLDialogElement.prototype, 'close', { configurable: true, value() { this.open = false } })
   Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: vi.fn(() => 'blob:poster') })
   Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: vi.fn() })
-  mocks.create.mockResolvedValue({ token, songId: token, expiresAt: new Date(Date.now() + 86400000).toISOString() })
-  mocks.get.mockResolvedValue({ title: '我的歌', lyrics: '[Verse]\n窗台那盆薄荷\nKeep the light on', hasCover: true })
+  mocks.create.mockResolvedValue(undefined)
+  mocks.get.mockResolvedValue(privateState)
   mocks.poster.mockResolvedValue(new Blob(['image'], { type: 'image/png' }))
 })
 afterEach(() => { app?.unmount(); app = undefined; document.body.innerHTML = ''; vi.unstubAllGlobals(); vi.restoreAllMocks() })
 describe('share panel state and poster lifecycle', () => {
-  it('creates a fresh link for the second generated audio even when the page has no lyric revision', async () => {
+  it('requires the creator to enable each version independently', async () => {
     const props = mount(); await flush()
-    expect(mocks.create).toHaveBeenLastCalledWith('work-a', 'audio-a', undefined)
-    const secondToken = 'B'.repeat(43)
-    mocks.create.mockResolvedValueOnce({ token: secondToken, songId: secondToken, expiresAt: new Date(Date.now() + 86400000).toISOString() })
+    expect(mocks.create).not.toHaveBeenCalled()
+    expect(document.body.textContent).toContain('未启用歌曲分享页')
+    mocks.get.mockResolvedValueOnce(active())
+    button('启用公开试听').click(); await flush()
+    expect(mocks.create).toHaveBeenCalledExactlyOnceWith('work-a', 'audio-a', undefined, undefined)
     props.asset = { ...props.asset, id: 'audio-b' }; props.revision = null
     await flush()
-    expect(mocks.create).toHaveBeenLastCalledWith('work-a', 'audio-b', undefined)
-    expect(mocks.get).toHaveBeenLastCalledWith(`public/gifts/${secondToken}`)
-    expect(document.querySelector<HTMLInputElement>('.share-link-panel input')?.value).toContain('/song/' + secondToken)
-    expect(button('复制分享链接')).toBeTruthy()
+    expect(mocks.get).toHaveBeenLastCalledWith('work-a', 'audio-b')
+    expect(mocks.create).toHaveBeenCalledTimes(1)
+    expect(document.querySelector('.share-link-panel')).toBeNull()
+    const secondId = 'B'.repeat(43)
+    mocks.get.mockResolvedValueOnce(active(secondId))
+    button('启用公开试听').click(); await flush()
+    expect(mocks.create).toHaveBeenLastCalledWith('work-a', 'audio-b', undefined, undefined)
+    expect(document.querySelector<HTMLInputElement>('.share-link-panel input')?.value).toContain('/song/' + secondId)
   })
-  it('keeps the confirmed lyric requirement for imported audio', async () => {
+  it('enables imported audio only after lyric confirmation and explicit opt-in', async () => {
     const props = mount('IMPORTED')
-    await flush(); expect(mocks.create).not.toHaveBeenCalled()
+    await flush()
+    expect(button('启用公开试听')).toBeUndefined()
     props.revision = { id: 'revision-import', confirmed: true } as Revision
-    await flush(); expect(mocks.create).toHaveBeenCalledExactlyOnceWith('work-a', 'audio-a', 'revision-import')
+    await flush()
+    expect(mocks.create).not.toHaveBeenCalled()
+    button('启用公开试听').click(); await flush()
+    expect(mocks.create).toHaveBeenCalledExactlyOnceWith('work-a', 'audio-a', 'revision-import', undefined)
   })
   it('offers direct access to copy the public URL alongside the card and poster', async () => {
     const writeText = vi.fn().mockResolvedValue(undefined)
     vi.stubGlobal('navigator', { clipboard: { writeText } })
+    mocks.get.mockResolvedValue(active())
     mount(); await flush()
+    expect(mocks.create).not.toHaveBeenCalled()
+    expect(document.body.textContent).toContain('5 次访问')
     expect(document.querySelector('.share-card-copy h3')?.textContent).toBe('我的歌')
     expect(button('分享歌曲卡片')).toBeTruthy(); expect(button('制作音乐海报')).toBeTruthy()
     const copy = button('复制分享链接')
@@ -69,26 +89,34 @@ describe('share panel state and poster lifecycle', () => {
     const input = document.querySelector<HTMLInputElement>('#song-share-link')!
     expect(input.selectionEnd! - input.selectionStart!).toBe(input.value.length)
     expect(document.body.textContent).toContain('请选中链接手动复制。')
-    expect(document.querySelector('.share-card-art img')?.getAttribute('src')).toContain('/cover?proxy=true')
+    expect(document.querySelector('.share-card-art img')?.getAttribute('src')).toContain('/songs/' + token + '/cover')
   })
-  it('retries reading without creating a second token when the public snapshot request fails', async () => {
+  it('retries only the status read after a confirmed change', async () => {
+    mount(); await flush()
     mocks.get.mockRejectedValueOnce(new Error('暂时无法读取'))
-    mount(); await flush(); button('重试创建分享链接').click(); await flush()
-    expect(mocks.create).toHaveBeenCalledTimes(1); expect(mocks.get).toHaveBeenCalledTimes(2)
+    button('启用公开试听').click(); await flush()
+    mocks.get.mockResolvedValueOnce(active())
+    button('重新读取分享状态').click(); await flush()
+    expect(mocks.create).toHaveBeenCalledTimes(1)
     expect(document.querySelector('.share-card-copy h3')?.textContent).toBe('我的歌')
   })
-  it('discards an old work response when the user switches works during creation', async () => {
-    let resolve!: (value: unknown) => void
-    mocks.create.mockImplementationOnce(() => new Promise(r => { resolve = r }))
-    const props = mount(); await flush(); props.workId = 'work-b'; props.revision = { id: 'revision-b', confirmed: true } as Revision
-    mocks.get.mockResolvedValue({ title: '第二首歌', lyrics: '新歌词' }); await flush()
-    resolve({ token: 'B'.repeat(43), expiresAt: new Date(Date.now() + 86400000).toISOString() }); await flush()
+  it('discards an old work response after switching songs', async () => {
+    let finish!: () => void
+    mocks.create.mockImplementationOnce(() => new Promise<void>(resolve => { finish = resolve }))
+    const props = mount(); await flush()
+    button('启用公开试听').click(); await flush()
+    mocks.get.mockResolvedValueOnce(active('B'.repeat(43),'第二首歌'))
+    props.workId = 'work-b'
+    await flush()
+    finish(); await flush()
     expect(document.querySelector('.share-card-copy h3')?.textContent).toBe('第二首歌')
-    expect(document.querySelector<HTMLInputElement>('.share-link-panel input')?.value).not.toContain('B'.repeat(43))
+    expect(document.querySelector<HTMLInputElement>('.share-link-panel input')?.value).toContain('B'.repeat(43))
+    expect(mocks.create).toHaveBeenCalledTimes(1)
   })
   it('invalidates an old poster after editing the selected lyric and never publishes stale render results', async () => {
     let finish!: (blob: Blob) => void
     mocks.poster.mockImplementationOnce(() => new Promise(r => { finish = r }))
+    mocks.get.mockResolvedValue(active())
     mount(); await flush(); button('制作音乐海报').click(); await flush()
     const select = document.querySelector<HTMLSelectElement>('.share-poster-options select')!
     select.value = 'Keep the light on'; select.dispatchEvent(new Event('change')); await flush()
@@ -101,10 +129,25 @@ describe('share panel state and poster lifecycle', () => {
   })
   it('revocation clears the card, link and generated poster', async () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true); mocks.revoke.mockResolvedValue(undefined)
+    mocks.get.mockResolvedValue(active())
     mount(); await flush(); button('制作音乐海报').click(); await flush()
+    mocks.get.mockResolvedValue({ ...privateState, status: 'REVOKED' })
     button('撤销本作品全部分享').click(); await flush()
     expect(mocks.revoke).toHaveBeenCalledWith('work-a')
     expect(document.querySelector('.share-song-card')).toBeNull(); expect(document.querySelector('.share-link-panel')).toBeNull()
     expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:poster')
+  })
+  it('revokes a single version and keeps it revoked when the panel is reopened', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    mocks.get.mockResolvedValueOnce(active()).mockResolvedValue({ ...privateState, status: 'REVOKED' })
+    const props = mount(); await flush()
+    button('撤销此版本分享').click(); await flush()
+    expect(mocks.revokeVersion).toHaveBeenCalledExactlyOnceWith('work-a','audio-a')
+    expect(mocks.revoke).not.toHaveBeenCalled()
+    props.open = false; await flush()
+    props.open = true; await flush()
+    expect(mocks.create).not.toHaveBeenCalled()
+    expect(document.body.textContent).toContain('已撤销公开试听')
+    expect(document.querySelector('.share-link-panel')).toBeNull()
   })
 })

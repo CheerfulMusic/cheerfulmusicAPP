@@ -544,6 +544,8 @@
       "mappingDeclarations": [
         "@RequestMapping(\"/api/app/works/{work}/shares\")",
         "@PostMapping",
+        "@GetMapping(\"/{asset}\")",
+        "@DeleteMapping(\"/{asset}\")",
         "@DeleteMapping"
       ],
       "mode": "tool",
@@ -838,6 +840,7 @@
         "@GetMapping(\"/api/songs/{id}/public\")",
         "@GetMapping(value=\"/song/{id}\", produces=\"text/html;charset=UTF-8\")",
         "@GetMapping(\"/api/songs/{id}/audio\")",
+        "@PostMapping(\"/api/songs/{id}/play\")",
         "@GetMapping(\"/api/songs/{id}/cover\")",
         "@GetMapping(value=\"/api/songs/{id}/thumbnail.png\",produces=\"image/png\")"
       ],
