@@ -5,6 +5,7 @@ import com.qingfeng.music.agent.api.AgentApplicationActions.*;
 import com.qingfeng.music.agent.api.AgentChatModel.Step;
 import com.qingfeng.music.agent.application.AgentChatPolicy;
 import com.qingfeng.music.agent.application.AgentLyricInput;
+import com.qingfeng.music.agent.application.AgentReadOnlyLookup;
 import com.qingfeng.music.agent.application.AgentToolDispatcher;
 import com.qingfeng.music.common.exception.DomainException;
 import com.qingfeng.music.common.concurrent.AgentRequestScope;
@@ -113,7 +114,9 @@ public final class AgentChatService {
                 } else {
                     var exact=com.qingfeng.music.agent.application.ExactLyricEdit.parse(text);
                     String fast=AgentChatPolicy.currentSocial(text);
+                    String lookup=AgentReadOnlyLookup.match(text,capabilities(),false);
                     if(exact!=null)plan=new AgentChatModel.Plan("replace_lyric_line",Map.of(),"");
+                    else if(lookup!=null)plan=new AgentChatModel.Plan(lookup,Map.of(),"");
                     else if(text.matches("(?:请)?(?:看|看看|查看|打开|切换到)上一版(?:的)?歌词[。！!]*")&&executor("select_version")!=null)
                         plan=new AgentChatModel.Plan("select_version",Map.of("relative","previous"),"");
                     else if(fast!=null)plan=new AgentChatModel.Plan(fast,Map.of(),"");
@@ -238,7 +241,8 @@ public final class AgentChatService {
                 }
                 // A query can resolve the IDs needed by the original instruction ('上一版').
                 // Replan once using only persisted tool results; original authorization never grows.
-                if(i+1==steps.size()&&(modelCalls==1||modelCalls==0&&"video_capabilities".equals(proposed))&&!confirmation&&!continuation&&"read".equals(capability.effect())) {
+                if(i+1==steps.size()&&(modelCalls==1||modelCalls==0&&"video_capabilities".equals(proposed))&&!confirmation&&!continuation&&"read".equals(capability.effect())
+                        &&!AgentChatPolicy.previousVideoPrice(originalIntent)&&!AgentChatPolicy.generalPriceOnly(originalIntent)) {
                     AgentRequestScope.check();
                     var observed=conversations.listRecentMessages(owner,conversation,80);var state=conversations.state(owner,conversation);
                     boolean storyboard="video_capabilities".equals(proposed)&&updated!=null&&updated.assetId()!=null
@@ -302,12 +306,14 @@ public final class AgentChatService {
     }
     private AgentChatModel.Plan ensureExecutable(AgentChatModel.Plan plan,String text,SongCard current) {
         String instruction=AgentLyricInput.parse(text).instruction();
+        if(AgentChatPolicy.previousVideoPrice(instruction)&&executor("video_capabilities")!=null)
+            return new AgentChatModel.Plan("video_capabilities",Map.of(),"");
+        if(AgentChatPolicy.generalPriceOnly(instruction)&&executor("get_credits")!=null)
+            return new AgentChatModel.Plan("get_credits",Map.of(),"");
         if(instruction.matches("(?:歌词呢|查看歌词|显示完整歌词|完整歌词|正在制作吗|生成好了吗)[？?。！!]*"))
             return new AgentChatModel.Plan("get_current_song",Map.of(),"");
         var open=java.util.regex.Pattern.compile("^(?:请|帮我)?打开作品\\s+([a-fA-F0-9-]{36})[。！!]*$").matcher(instruction);
         if(open.matches()&&executor("select_work")!=null)return new AgentChatModel.Plan("select_work",Map.of("workId",open.group(1)),"");
-        if(instruction.matches("(?:查看|列出|显示)我的作品[。！!]*")&&executor("list_works")!=null)
-            return new AgentChatModel.Plan("list_works",Map.of(),"");
         boolean chat=plan.orderedSteps().stream().allMatch(s->"chat".equals(s.action()));
         if(chat && plan.reply()!=null && plan.reply().startsWith("还没有执行「")
                 && instruction.matches("(?:请|请帮我|帮我)?(?:直接)?(?:开始)?(?:生成|写)歌词[。！!]?"))

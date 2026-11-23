@@ -23,6 +23,14 @@ public final class MusicVideoService {
         if(millis<2000||millis>3_600_000)throw invalid("MV 支持 2 秒至 60 分钟的完整歌曲。");
         int seconds=Math.toIntExact((millis+999)/1000);return new Quote(millis,seconds,Math.multiplyExact(seconds,rate),resolution);
     }
+    Optional<MediaApi.Asset> previousAudio(String owner,String work,String asset){
+        works.get(owner,work);
+        var selected=media.get(owner,work,asset);
+        if(selected.versionNumber()==null||selected.versionNumber()<2)return Optional.empty();
+        int previous=selected.versionNumber()-1;
+        return media.list(owner,work).stream().filter(a->Objects.equals(a.versionNumber(),previous)).findFirst();
+    }
+    long availableCredits(String owner){return credits.balance(owner);}
     public Plan prepare(String owner,String work,String asset,Plan requested){
         validate(requested);var plan=fit(requested,quote(owner,work,asset,requested.resolution()));
         for(var shot:plan.shots())if(shot.seconds()>shot.imageSeconds()&&shot.prompt().isBlank())throw invalid("请填写每段视频提示词，或使用 AI 一键分镜。");

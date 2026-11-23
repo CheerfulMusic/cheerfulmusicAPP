@@ -183,10 +183,10 @@ class AgentAdmissionTest {
         assertEquals(3,ledger.balance("o0"));
     }
     @Test void paidTurnRequiresConsentDebitsOnceAndReplaysWithoutAnotherCharge(){
-        var ledger=billing();var gate=paidGate(ledger);useFree(gate);String key=key();
-        assertEquals("AGENT_CHAT_PAYMENT_REQUIRED",assertThrows(DomainException.class,()->gate.acquire("o0","c0",key,"继续聊",null)).code());
-        assertEquals(3,ledger.balance("o0"));var t=gate.acquire("o0","c0",key,"继续聊",null,true);assertEquals(2,ledger.balance("o0"));
-        gate.start(t);gate.finish(t,true);assertTrue(gate.acquire("o0","c0",key,"继续聊",null).replay());assertEquals(2,ledger.balance("o0"));
+        var ledger=billing();var gate=paidGate(ledger);useFree(gate);String key=key(),text="我还有多少积分？";
+        assertEquals("AGENT_CHAT_PAYMENT_REQUIRED",assertThrows(DomainException.class,()->gate.acquire("o0","c0",key,text,null)).code());
+        assertEquals(3,ledger.balance("o0"));var t=gate.acquire("o0","c0",key,text,null,true);assertEquals(2,ledger.balance("o0"));
+        gate.start(t);gate.finish(t,true);assertTrue(gate.acquire("o0","c0",key,text,null).replay());assertEquals(2,ledger.balance("o0"));
     }
     @Test void rejectedBeforeExecutionRefundsOnceAndNeverReusesRefundedDebit(){
         var ledger=billing();var gate=paidGate(ledger);useFree(gate);String key=key();var t=gate.acquire("o0","c0",key,"继续",null,true);

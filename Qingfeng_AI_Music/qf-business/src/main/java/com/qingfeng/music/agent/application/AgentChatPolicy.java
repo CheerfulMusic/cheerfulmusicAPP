@@ -26,6 +26,12 @@ public final class AgentChatPolicy {
         // Capability questions without a requested task remain conversation only.
         return has(text,"能不能|可以吗")&&!has(surface(text),"(?:帮我|给我|为我|替我)(?:来|先|再|把这首歌|把当前作品)?(?:写|创作|生成|改|制作|分享|下载|播放|删除|润色|保存)");
     }
+    public static boolean previousVideoPrice(String text) {
+        return text!=null&&text.strip().matches("(?i)(?:请|帮我|请帮我)?(?:看看|查查|看一下|查一下|查询)?(?:我的?)?(?:积分|余额)(?:够不够|是否足够)(?:给|为)?(?:当前作品的?)?上一版(?:音频|歌曲)?(?:做|制作|生成)\\s*(?:MV|音乐视频)[。？?！!]*");
+    }
+    public static boolean generalPriceOnly(String text) {
+        return text!=null&&text.strip().matches("(?:(?:先别|先不|不要|暂不)生成(?:音乐|歌曲)?[，,。]\\s*)?(?:我)?只(?:想知道|想查|想问|查|看)(?:要|需要|会花|花)?多少积分[。？?！!]*");
+    }
     public static boolean musicRequested(String text) {
         return !lyricsOnly(text)&&requested(text,"(?:"+MUSIC+")(?!词)");
     }

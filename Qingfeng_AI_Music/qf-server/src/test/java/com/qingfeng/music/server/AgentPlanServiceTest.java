@@ -58,6 +58,29 @@ class AgentPlanServiceTest {
         restart();
     }
     void restart(){service=new AgentChatService(conversations,tools,model,store,social,List.of(library));}
+    @Test void simpleReadOnlyLookupsUseNoPlannerAndReplayTheSameReceipt(){
+        var works=mock(AgentApplicationActions.class);
+        when(works.capabilities()).thenReturn(List.of(new AgentApplicationActions.Capability("list_works","本人作品","{}","read")));
+        when(works.supports("list_works")).thenReturn(true);
+        when(works.prepare(anyString(),anyString(),eq("list_works"),anyMap(),any())).thenReturn(Map.of());
+        when(works.execute(anyString(),anyString(),eq("list_works"),anyMap(),anyString(),anyString(),any()))
+            .thenReturn(new AgentApplicationActions.Result("作品","works",List.of(),List.of(),"list_works"));
+        service=new AgentChatService(conversations,tools,model,store,social,List.of(library,works));
+        for(var sample:Map.of("我还有多少积分？","get_credits","列出我的作品。","list_works").entrySet()){
+            String request=key();
+            assertEquals(sample.getValue(),service.send("owner","conversation",sample.getKey(),request,"zh-CN").action());
+            assertEquals(sample.getValue(),service.send("owner","conversation",sample.getKey(),request,"zh-CN").action());
+        }
+        verifyNoInteractions(model);
+        assertEquals(1,library.creditQueries);
+        verify(works,times(1)).execute(eq("owner"),eq("conversation"),eq("list_works"),eq(Map.of()),anyString(),anyString(),any());
+    }
+    @Test void priceOnlyTurnCannotStartGenerationEvenWhenThePlannerProposesIt(){
+        when(model.respond(any())).thenReturn(plan(step("generate_song")));
+        assertEquals("get_credits",service.send("owner","conversation","先别生成，我只想知道要多少积分。",key(),"zh-CN").action());
+        verify(tools,never()).dispatch(eq(AgentTool.GENERATE_SONG),any(),anyString(),anyString());
+        assertEquals(1,library.creditQueries);
+    }
     @Test void exactReplacementBypassesPlannerAndReplaysWithoutRepeatingTheEdit(){
         var edits=mock(AgentApplicationActions.class);
         when(edits.capabilities()).thenReturn(List.of(new AgentApplicationActions.Capability("replace_lyric_line","精确替换","","write")));

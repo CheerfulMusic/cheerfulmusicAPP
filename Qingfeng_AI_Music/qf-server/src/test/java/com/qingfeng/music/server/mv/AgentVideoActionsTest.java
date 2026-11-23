@@ -5,6 +5,19 @@ import java.util.*;
 import static org.mockito.Mockito.*;
 import static org.junit.jupiter.api.Assertions.*;
 class AgentVideoActionsTest {
+ @Test void affordabilityUsesTheOwnedPreviousAudioWithoutSelectingItOrCreatingAVideo(){
+  var service=mock(MusicVideoService.class);
+  var previous=new com.qingfeng.music.media.api.MediaApi.Asset("a1","w","GENERATED","audio/mpeg",50,"hash",java.time.Instant.EPOCH,false,"task","",null,0,1);
+  when(service.previousAudio("owner","w","a2")).thenReturn(Optional.of(previous));
+  when(service.quote("owner","w","a1","480P")).thenReturn(new MusicVideoService.Quote(18000,18,18,"480P"));
+  when(service.availableCredits("owner")).thenReturn(21L);
+  var current=new com.qingfeng.music.agent.api.SongCard("w","歌","","","","SUCCEEDED",null,1,"r2","a2","task2");
+  var actions=new AgentVideoActions(service,mock(ConversationService.class));
+  var result=actions.execute("owner","c","video_capabilities",Map.of("assetId","wrong"),"看看我的积分够不够给上一版做 MV。","key",current);
+  assertTrue(result.reply().contains("V1"));assertTrue(result.items().get(0).subtitle().contains("积分足够"));
+  assertTrue(result.items().get(1).subtitle().contains("还差 15"));assertEquals("a1",result.items().get(2).data().get("assetId"));
+  verify(service,never()).create(anyString(),anyString(),anyString(),anyString(),any());
+ }
  @Test void previewWithoutResolutionShowsAllPricesAndDoesNotSubmit(){
   var service=mock(MusicVideoService.class);when(service.available()).thenReturn(true);
   when(service.prepare(anyString(),anyString(),anyString(),any())).thenAnswer(c->c.getArgument(3));
