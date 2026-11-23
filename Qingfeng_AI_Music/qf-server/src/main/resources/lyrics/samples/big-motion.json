@@ -1,0 +1,334 @@
+{
+  "sourceKey": "sample:big-motion:1736616a-3e27-3727-a9ba-d44e2c1986c2",
+  "audioSha256": "d6449a11e9c67a47e04abefb1bca691a63982bdd2d219807cb8f1dbf6438ed0d",
+  "recognition": "Qwen3 Forced Aligner and Whisper large-v3-turbo; timed against authored lyrics",
+  "duration": 144.76,
+  "warnings": [],
+  "words": [
+    {
+      "text": "Big motion\n",
+      "start": 4.06,
+      "end": 5.14
+    },
+    {
+      "text": "Ayy, look\n",
+      "start": 6.42,
+      "end": 6.82
+    },
+    {
+      "text": "Let's go\n",
+      "start": 12.58,
+      "end": 13.7
+    },
+    {
+      "text": "Big motion, I been on the move (Move)\n",
+      "start": 14.34,
+      "end": 15.38
+    },
+    {
+      "text": "New money, got nothing to prove (Nah)\n",
+      "start": 16.34,
+      "end": 17.78
+    },
+    {
+      "text": "Big plays, I ain't following rules (Rules)\n",
+      "start": 17.78,
+      "end": 19.46
+    },
+    {
+      "text": "Whole team eating, we ain't gonna lose (Yeah)\n",
+      "start": 19.46,
+      "end": 21.38
+    },
+    {
+      "text": "Big motion, watch the way I step (Step)\n",
+      "start": 21.38,
+      "end": 22.74
+    },
+    {
+      "text": "Big checks, I ain't finished yet (Nah)\n",
+      "start": 22.87,
+      "end": 24.39
+    },
+    {
+      "text": "Too much sauce, got 'em all upset (Woo)\n",
+      "start": 24.63,
+      "end": 26.55
+    },
+    {
+      "text": "Came from nothing, now they show respect (Let's go)\n",
+      "start": 26.55,
+      "end": 28.15
+    },
+    {
+      "text": "Walk in the room, got the whole place watching\n",
+      "start": 28.15,
+      "end": 29.67
+    },
+    {
+      "text": "Phone keep ringing, got too many options\n",
+      "start": 29.75,
+      "end": 31.43
+    },
+    {
+      "text": "Came with a plan, now the whole thing popping\n",
+      "start": 31.43,
+      "end": 33.19
+    },
+    {
+      "text": "They talk big, but the numbers ain't talking\n",
+      "start": 33.19,
+      "end": 34.79
+    },
+    {
+      "text": "Back in the day, I was down on my luck\n",
+      "start": 34.87,
+      "end": 36.15
+    },
+    {
+      "text": "Now I pull up and they know what's up\n",
+      "start": 36.58,
+      "end": 38.1
+    },
+    {
+      "text": "Never had much, had to build my trust\n",
+      "start": 38.34,
+      "end": 39.86
+    },
+    {
+      "text": "Put in that work, now the whole team up\n",
+      "start": 40.02,
+      "end": 41.62
+    },
+    {
+      "text": "I been running through the city with a different pace\n",
+      "start": 41.62,
+      "end": 43.3
+    },
+    {
+      "text": "Everybody wanna talk, but they never chase\n",
+      "start": 43.3,
+      "end": 44.74
+    },
+    {
+      "text": "I don't need another friend with a friendly face\n",
+      "start": 44.98,
+      "end": 46.5
+    },
+    {
+      "text": "I just need another win and a bigger place\n",
+      "start": 46.74,
+      "end": 48.18
+    },
+    {
+      "text": "New chain shining when the lights go low\n",
+      "start": 48.42,
+      "end": 49.94
+    },
+    {
+      "text": "Too many miles on a long road home\n",
+      "start": 50.3,
+      "end": 51.82
+    },
+    {
+      "text": "I was out here working when the world moved slow\n",
+      "start": 51.82,
+      "end": 53.5
+    },
+    {
+      "text": "Now they all wanna know how the whole thing goes\n",
+      "start": 53.58,
+      "end": 55.66
+    },
+    {
+      "text": "Big steps, big dreams\n",
+      "start": 55.66,
+      "end": 56.78
+    },
+    {
+      "text": "Whole squad, same team\n",
+      "start": 57.18,
+      "end": 58.46
+    },
+    {
+      "text": "No sleep, all week\n",
+      "start": 58.86,
+      "end": 60.14
+    },
+    {
+      "text": "Now we living what we dreamed\n",
+      "start": 60.62,
+      "end": 61.9
+    },
+    {
+      "text": "Big motion, I been on the move (Move)\n",
+      "start": 62.3,
+      "end": 63.82
+    },
+    {
+      "text": "New money, got nothing to prove (Nah)\n",
+      "start": 64.02,
+      "end": 65.86
+    },
+    {
+      "text": "Big plays, I ain't following rules (Rules)\n",
+      "start": 65.86,
+      "end": 67.46
+    },
+    {
+      "text": "Whole team eating, we ain't gonna lose (Yeah)\n",
+      "start": 67.46,
+      "end": 69.46
+    },
+    {
+      "text": "Big motion, watch the way I step (Step)\n",
+      "start": 69.46,
+      "end": 70.9
+    },
+    {
+      "text": "Big checks, I ain't finished yet (Nah)\n",
+      "start": 70.9,
+      "end": 72.34
+    },
+    {
+      "text": "Too much sauce, got 'em all upset (Woo)\n",
+      "start": 72.58,
+      "end": 74.1
+    },
+    {
+      "text": "Came from nothing, now they show respect (Let's go)\n",
+      "start": 74.34,
+      "end": 76.1
+    },
+    {
+      "text": "I don't do talking, I let it unfold\n",
+      "start": 76.1,
+      "end": 77.67
+    },
+    {
+      "text": "Too many stories that never got told\n",
+      "start": 77.67,
+      "end": 79.43
+    },
+    {
+      "text": "Started with nothing but dreams and a phone\n",
+      "start": 79.43,
+      "end": 81.19
+    },
+    {
+      "text": "Now every city got somebody I know\n",
+      "start": 81.19,
+      "end": 82.87
+    },
+    {
+      "text": "Running my race, I ain't checking the time\n",
+      "start": 82.95,
+      "end": 84.63
+    },
+    {
+      "text": "They looking back while I'm crossing the line\n",
+      "start": 84.63,
+      "end": 86.31
+    },
+    {
+      "text": "Had to go quiet and work on the grind\n",
+      "start": 86.31,
+      "end": 88.07
+    },
+    {
+      "text": "Now every move looking perfectly timed\n",
+      "start": 88.07,
+      "end": 89.59
+    },
+    {
+      "text": "Big plans, had to make 'em come true\n",
+      "start": 89.75,
+      "end": 91.19
+    },
+    {
+      "text": "New wave, had to make it brand new\n",
+      "start": 91.5,
+      "end": 92.94
+    },
+    {
+      "text": "They see the shine, never saw what I knew\n",
+      "start": 93.18,
+      "end": 94.7
+    },
+    {
+      "text": "I had to bet on myself and come through\n",
+      "start": 94.86,
+      "end": 96.38
+    },
+    {
+      "text": "Ayy, ayy\n",
+      "start": 96.62,
+      "end": 98.3
+    },
+    {
+      "text": "Big motion, no slowing\n",
+      "start": 98.3,
+      "end": 99.5
+    },
+    {
+      "text": "Whole team, we going\n",
+      "start": 100.06,
+      "end": 101.74
+    },
+    {
+      "text": "Big motion, keep rolling\n",
+      "start": 101.74,
+      "end": 103.02
+    },
+    {
+      "text": "Big motion, I been on the move (Move)\n",
+      "start": 103.5,
+      "end": 104.62
+    },
+    {
+      "text": "New money, got nothing to prove (Nah)\n",
+      "start": 104.72,
+      "end": 107.04
+    },
+    {
+      "text": "Big plays, I ain't following rules (Rules)\n",
+      "start": 107.04,
+      "end": 108.56
+    },
+    {
+      "text": "Whole team eating, we ain't gonna lose (Yeah)\n",
+      "start": 108.64,
+      "end": 110.64
+    },
+    {
+      "text": "Big motion, watch the way I step (Step)\n",
+      "start": 110.7,
+      "end": 112.0
+    },
+    {
+      "text": "Big checks, I ain't finished yet (Nah)\n",
+      "start": 112.08,
+      "end": 113.52
+    },
+    {
+      "text": "Too much sauce, got 'em all upset (Woo)\n",
+      "start": 113.76,
+      "end": 115.6
+    },
+    {
+      "text": "Came from nothing, now they show respect (Let's go)\n",
+      "start": 115.6,
+      "end": 117.36
+    },
+    {
+      "text": "Big motion\n",
+      "start": 118.88,
+      "end": 119.6
+    },
+    {
+      "text": "Big motion\n",
+      "start": 120.6,
+      "end": 121.4
+    }
+  ]
+}

@@ -69,7 +69,12 @@ public final class HotSongCreationReferences {
         entry("light-it-up", en("electronic", "Festival EDM with a rising build, big layered synths and energetic drops.", V1, P, I, V2, P, I)),
         entry("cant-stop-this-feeling", en("pop", "Uplifting dance-pop, buoyant pulse and a repeated sing-along chorus.", V1, P, C, V2, P, C, B, C)),
         entry("midnight-call", en("pop", "Late-night synth-pop, conversational verses and a recurring melodic hook.", V1, P, C, V2, C)),
-        entry("summer-on-repeat", en("pop", "Bright guitar-and-synth summer pop, energetic drums and an open sing-along hook.", V1, P, C, V2, B, C))
+        entry("summer-on-repeat", en("pop", "Bright guitar-and-synth summer pop, energetic drums and an open sing-along hook.", V1, P, C, V2, B, C)),
+        entry("golden-hour-love", en("rnb", "Warm soulful R&B with soft Rhodes, close lead vocals and layered gospel harmonies.", V1, P, C, V2, P, C, B, C)),
+        entry("no-reply", en("rnb", "Late-night electronic R&B with whispered phrases, a clipped vocal hook and sparse textures.", V1, P, C, V2, P, C, B, C)),
+        entry("too-close", en("rnb", "Intimate contemporary R&B with soft falsetto, layered harmonies and a recurring hook.", V1, P, C, V2, P, C, B, C)),
+        entry("big-motion", en("rap", "Confident hip-hop with a recurring chant hook, tightly phrased verses and vocal ad-libs.", C, V1, P, C, V2, B, C)),
+        entry("running-through-my-mind", en("rap", "Reflective melodic hip-hop with rhythmic verses and a sung chorus.", C, V1, P, C, V2, B, C))
     );
 
     public static Optional<Reference> find(String trackId) {

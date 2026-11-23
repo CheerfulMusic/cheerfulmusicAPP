@@ -1,0 +1,309 @@
+{
+  "sourceKey": "sample:golden-hour-love:3a916ea3-8d13-34d4-8733-58a1922079b6",
+  "audioSha256": "b4e20d8073b2353ea2841e9f78fc2f19ad370b52a7a35875b9f3f2e44d2b1fc8",
+  "recognition": "Qwen3 Forced Aligner and Whisper large-v3-turbo; timed against authored lyrics",
+  "duration": 266.72,
+  "warnings": [],
+  "words": [
+    {
+      "text": "Coffee on the table\n",
+      "start": 33.78,
+      "end": 36.58
+    },
+    {
+      "text": "Sunlight through the blinds\n",
+      "start": 38.02,
+      "end": 40.1
+    },
+    {
+      "text": "You were reading something\n",
+      "start": 42.42,
+      "end": 43.62
+    },
+    {
+      "text": "While I was losing track of time\n",
+      "start": 44.74,
+      "end": 47.62
+    },
+    {
+      "text": "There's a little music playing\n",
+      "start": 48.58,
+      "end": 51.62
+    },
+    {
+      "text": "From the record by the door\n",
+      "start": 52.1,
+      "end": 54.26
+    },
+    {
+      "text": "And I don't need a single thing\n",
+      "start": 54.26,
+      "end": 57.78
+    },
+    {
+      "text": "That I don't already have anymore\n",
+      "start": 58.26,
+      "end": 61.38
+    },
+    {
+      "text": "The world keeps turning faster\n",
+      "start": 62.44,
+      "end": 65.16
+    },
+    {
+      "text": "Everybody's chasing something new\n",
+      "start": 65.4,
+      "end": 68.36
+    },
+    {
+      "text": "But I found a little heaven\n",
+      "start": 70.68,
+      "end": 72.04
+    },
+    {
+      "text": "In an afternoon with you\n",
+      "start": 72.52,
+      "end": 76.84
+    },
+    {
+      "text": "You're my golden hour love\n",
+      "start": 76.84,
+      "end": 78.28
+    },
+    {
+      "text": "Like the sunlight from above\n",
+      "start": 78.28,
+      "end": 82.68
+    },
+    {
+      "text": "When the whole world gets too loud\n",
+      "start": 84.04,
+      "end": 86.2
+    },
+    {
+      "text": "You're the place where I slow down\n",
+      "start": 87.56,
+      "end": 90.2
+    },
+    {
+      "text": "You're my golden hour love\n",
+      "start": 90.26,
+      "end": 93.3
+    },
+    {
+      "text": "And I can't get enough\n",
+      "start": 93.3,
+      "end": 96.02
+    },
+    {
+      "text": "Every ordinary day\n",
+      "start": 98.18,
+      "end": 99.06
+    },
+    {
+      "text": "Feels extraordinary when you stay\n",
+      "start": 99.06,
+      "end": 106.74
+    },
+    {
+      "text": "We could drive out to the ocean\n",
+      "start": 107.7,
+      "end": 110.1
+    },
+    {
+      "text": "Take the long way through the hills\n",
+      "start": 111.22,
+      "end": 114.34
+    },
+    {
+      "text": "Talk about the things we're dreaming\n",
+      "start": 114.74,
+      "end": 117.22
+    },
+    {
+      "text": "Or just sit and keep it still\n",
+      "start": 117.22,
+      "end": 120.46
+    },
+    {
+      "text": "I don't need a fancy dinner\n",
+      "start": 120.46,
+      "end": 123.02
+    },
+    {
+      "text": "Or a view from way up high\n",
+      "start": 123.9,
+      "end": 126.94
+    },
+    {
+      "text": "Just your head upon my shoulder\n",
+      "start": 127.18,
+      "end": 130.06
+    },
+    {
+      "text": "Watching colors fill the sky\n",
+      "start": 130.3,
+      "end": 134.7
+    },
+    {
+      "text": "The world keeps turning faster\n",
+      "start": 134.78,
+      "end": 136.14
+    },
+    {
+      "text": "Everybody's chasing something new\n",
+      "start": 136.14,
+      "end": 141.58
+    },
+    {
+      "text": "But I found a little heaven\n",
+      "start": 141.58,
+      "end": 143.34
+    },
+    {
+      "text": "In an afternoon with you\n",
+      "start": 143.42,
+      "end": 146.22
+    },
+    {
+      "text": "You're my golden hour love\n",
+      "start": 146.54,
+      "end": 150.06
+    },
+    {
+      "text": "Like the sunlight from above\n",
+      "start": 150.06,
+      "end": 153.58
+    },
+    {
+      "text": "When the whole world gets too loud\n",
+      "start": 153.82,
+      "end": 157.74
+    },
+    {
+      "text": "You're the place where I slow down\n",
+      "start": 158.46,
+      "end": 161.58
+    },
+    {
+      "text": "You're my golden hour love\n",
+      "start": 161.58,
+      "end": 165.34
+    },
+    {
+      "text": "And I can't get enough\n",
+      "start": 165.34,
+      "end": 168.62
+    },
+    {
+      "text": "Every ordinary day\n",
+      "start": 169.1,
+      "end": 171.1
+    },
+    {
+      "text": "Feels extraordinary when you stay\n",
+      "start": 171.82,
+      "end": 174.7
+    },
+    {
+      "text": "Ooh, let the seasons change\n",
+      "start": 178.8,
+      "end": 180.32
+    },
+    {
+      "text": "Let the years roll by\n",
+      "start": 181.52,
+      "end": 184.0
+    },
+    {
+      "text": "I will find a thousand reasons\n",
+      "start": 184.0,
+      "end": 187.44
+    },
+    {
+      "text": "To keep you by my side\n",
+      "start": 187.52,
+      "end": 192.16
+    },
+    {
+      "text": "We don't need a perfect story\n",
+      "start": 192.16,
+      "end": 194.32
+    },
+    {
+      "text": "We don't need a perfect plan\n",
+      "start": 195.68,
+      "end": 197.84
+    },
+    {
+      "text": "Every little moment matters\n",
+      "start": 197.92,
+      "end": 201.36
+    },
+    {
+      "text": "When you're holding my hand\n",
+      "start": 201.6,
+      "end": 204.32
+    },
+    {
+      "text": "You're my golden hour love\n",
+      "start": 204.34,
+      "end": 206.74
+    },
+    {
+      "text": "Like the sunlight from above\n",
+      "start": 208.34,
+      "end": 210.26
+    },
+    {
+      "text": "When the whole world gets too loud\n",
+      "start": 210.58,
+      "end": 215.22
+    },
+    {
+      "text": "You're the place where I slow down\n",
+      "start": 215.22,
+      "end": 218.74
+    },
+    {
+      "text": "You're my golden hour love\n",
+      "start": 218.74,
+      "end": 220.02
+    },
+    {
+      "text": "And I can't get enough\n",
+      "start": 222.02,
+      "end": 224.5
+    },
+    {
+      "text": "Every ordinary day\n",
+      "start": 225.78,
+      "end": 227.06
+    },
+    {
+      "text": "Feels extraordinary when you stay\n",
+      "start": 228.5,
+      "end": 230.66
+    },
+    {
+      "text": "Golden hour love\n",
+      "start": 234.42,
+      "end": 238.42
+    },
+    {
+      "text": "Ooh, golden hour love\n",
+      "start": 238.42,
+      "end": 243.54
+    },
+    {
+      "text": "Every ordinary day\n",
+      "start": 243.54,
+      "end": 244.74
+    },
+    {
+      "text": "Feels extraordinary with you\n",
+      "start": 246.26,
+      "end": 248.5
+    }
+  ]
+}

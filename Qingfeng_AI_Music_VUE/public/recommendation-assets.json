@@ -745,6 +745,126 @@
       "key": "qingfeng/recommendation-samples/20261119/cover/00f6b6e417d8/explore-rock-v1.jpg",
       "bytes": 13640,
       "sha256": "00f6b6e417d8d0d04761cca37ba505c32fae697b7969176866c780d3d4f349b6"
+    },
+    {
+      "trackId": "golden-hour-love",
+      "kind": "audio",
+      "path": "/media/recommendations/golden-hour-love-b4e20d8073b2-preview-128.mp3",
+      "key": "qingfeng/recommendation-samples/20261123/audio/b4e20d8073b2/golden-hour-love-b4e20d8073b2-preview-128.mp3",
+      "bytes": 4268589,
+      "sha256": "b4e20d8073b2353ea2841e9f78fc2f19ad370b52a7a35875b9f3f2e44d2b1fc8"
+    },
+    {
+      "trackId": "golden-hour-love",
+      "kind": "cover",
+      "path": "/media/recommendations/golden-hour-love-2fb54a11171e-cover.jpg",
+      "key": "qingfeng/recommendation-samples/20261123/cover/2fb54a11171e/golden-hour-love-2fb54a11171e-cover.jpg",
+      "bytes": 10892,
+      "sha256": "2fb54a11171eacfcdfe8d8eca9be12e045a0cb87bec5bfea339f655271a1664f"
+    },
+    {
+      "trackId": "golden-hour-love",
+      "kind": "original",
+      "path": "/media/recommendations/golden-hour-love.mp3",
+      "key": "qingfeng/recommendation-samples/20261123/original/717b0dd89e40/golden-hour-love.mp3",
+      "bytes": 6608317,
+      "sha256": "717b0dd89e40b4ed6db6a366fefbc4f636d431dda77a0781e9f60dee46ece7bc"
+    },
+    {
+      "trackId": "no-reply",
+      "kind": "audio",
+      "path": "/media/recommendations/no-reply-42144aef3320-preview-128.mp3",
+      "key": "qingfeng/recommendation-samples/20261123/audio/42144aef3320/no-reply-42144aef3320-preview-128.mp3",
+      "bytes": 3078573,
+      "sha256": "42144aef3320dc03334d955dfd1933181554ba4a32dc2e86d0ab66fbcefdebb7"
+    },
+    {
+      "trackId": "no-reply",
+      "kind": "cover",
+      "path": "/media/recommendations/no-reply-549f59a34c11-cover.jpg",
+      "key": "qingfeng/recommendation-samples/20261123/cover/549f59a34c11/no-reply-549f59a34c11-cover.jpg",
+      "bytes": 10027,
+      "sha256": "549f59a34c114def6524fc8c621de4f2337b7900770a31a76733955d80a10324"
+    },
+    {
+      "trackId": "no-reply",
+      "kind": "original",
+      "path": "/media/recommendations/no-reply.mp3",
+      "key": "qingfeng/recommendation-samples/20261123/original/9af41bcbd7d8/no-reply.mp3",
+      "bytes": 4640665,
+      "sha256": "9af41bcbd7d859a8d78dfd47886cfb0868c936e4b66647673accd5a2b2312767"
+    },
+    {
+      "trackId": "too-close",
+      "kind": "audio",
+      "path": "/media/recommendations/too-close-6e798ee02c65-preview-128.mp3",
+      "key": "qingfeng/recommendation-samples/20261123/audio/6e798ee02c65/too-close-6e798ee02c65-preview-128.mp3",
+      "bytes": 3074733,
+      "sha256": "6e798ee02c650b21cbff57073659f3a858fcd7e6d4cad5192ecd1361a3b7089c"
+    },
+    {
+      "trackId": "too-close",
+      "kind": "cover",
+      "path": "/media/recommendations/too-close-f8d10981dcc0-cover.jpg",
+      "key": "qingfeng/recommendation-samples/20261123/cover/f8d10981dcc0/too-close-f8d10981dcc0-cover.jpg",
+      "bytes": 7946,
+      "sha256": "f8d10981dcc0360885d0c56ddf36deb022dbf3303d57bc15336dabae4495e9e5"
+    },
+    {
+      "trackId": "too-close",
+      "kind": "original",
+      "path": "/media/recommendations/too-close.mp3",
+      "key": "qingfeng/recommendation-samples/20261123/original/aa73b7da2ee3/too-close.mp3",
+      "bytes": 4472872,
+      "sha256": "aa73b7da2ee34a8c677b8b089eb2977fe333de60bd442db2e3d1418d407a1954"
+    },
+    {
+      "trackId": "big-motion",
+      "kind": "audio",
+      "path": "/media/recommendations/big-motion-d6449a11e9c6-preview-128.mp3",
+      "key": "qingfeng/recommendation-samples/20261123/audio/d6449a11e9c6/big-motion-d6449a11e9c6-preview-128.mp3",
+      "bytes": 2317101,
+      "sha256": "d6449a11e9c67a47e04abefb1bca691a63982bdd2d219807cb8f1dbf6438ed0d"
+    },
+    {
+      "trackId": "big-motion",
+      "kind": "cover",
+      "path": "/media/recommendations/big-motion-42ddce81c4a2-cover.jpg",
+      "key": "qingfeng/recommendation-samples/20261123/cover/42ddce81c4a2/big-motion-42ddce81c4a2-cover.jpg",
+      "bytes": 18030,
+      "sha256": "42ddce81c4a2dd02fdda684140772e20b7b4eea38dcf23723f0d7f956abf97a0"
+    },
+    {
+      "trackId": "big-motion",
+      "kind": "original",
+      "path": "/media/recommendations/big-motion.mp3",
+      "key": "qingfeng/recommendation-samples/20261123/original/c107f8e1d05b/big-motion.mp3",
+      "bytes": 3446786,
+      "sha256": "c107f8e1d05b714a4b1d7e99b7c68da16fafbf195e7c3c976ff6040f96d5e03e"
+    },
+    {
+      "trackId": "running-through-my-mind",
+      "kind": "audio",
+      "path": "/media/recommendations/running-through-my-mind-226bea4d3e2d-preview-128.mp3",
+      "key": "qingfeng/recommendation-samples/20261123/audio/226bea4d3e2d/running-through-my-mind-226bea4d3e2d-preview-128.mp3",
+      "bytes": 2784813,
+      "sha256": "226bea4d3e2d9cd941c7f6e2f519b6501220856e8bd8880483163cf2c7723bf1"
+    },
+    {
+      "trackId": "running-through-my-mind",
+      "kind": "cover",
+      "path": "/media/recommendations/running-through-my-mind-929b4cf02f9a-cover.jpg",
+      "key": "qingfeng/recommendation-samples/20261123/cover/929b4cf02f9a/running-through-my-mind-929b4cf02f9a-cover.jpg",
+      "bytes": 10648,
+      "sha256": "929b4cf02f9ab54fd03bab2469e85fb62e2ba34483e5888fcc2c3e1423d835b1"
+    },
+    {
+      "trackId": "running-through-my-mind",
+      "kind": "original",
+      "path": "/media/recommendations/running-through-my-mind.mp3",
+      "key": "qingfeng/recommendation-samples/20261123/original/b40b7c46edfe/running-through-my-mind.mp3",
+      "bytes": 3856830,
+      "sha256": "b40b7c46edfe74c5afe7fc76910d44e70382cfb8f7bf2768b6dbd8f5457b0f08"
     }
   ]
 }

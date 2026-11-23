@@ -2,6 +2,7 @@ package com.qingfeng.music.server;
 
 import com.qingfeng.music.lyrics.playback.*;
 import com.qingfeng.music.server.hotsong.RecommendationSamples;
+import com.qingfeng.music.server.hotsong.HotSongCreationReferences;
 import com.qingfeng.music.server.lyrics.LyricsPreparation;
 import com.qingfeng.music.server.web.publicapi.HotSongLyricsController;
 import org.junit.jupiter.api.Test;
@@ -24,6 +25,7 @@ class HotSongLyricsCatalogTest {
         var controller=new HotSongLyricsController(preparation);
         var mvc=MockMvcBuilders.standaloneSetup(controller).build();int ready=0,instrumental=0;
         for(var song:RecommendationSamples.SONGS){
+            assertTrue(HotSongCreationReferences.find(song.id()).isPresent(),song.id());
             String key=RecommendationSamples.objectKey(song.audio().substring("/media/".length())).orElseThrow();
             String hash=key.split("/")[4];
             var response=controller.lyrics(song.id(),hash);var value=response.getBody();
@@ -44,7 +46,7 @@ class HotSongLyricsCatalogTest {
                 ready++;
             }
         }
-        assertEquals(21,ready);assertEquals(1,instrumental);
+        assertEquals(26,ready);assertEquals(1,instrumental);
         verifyNoInteractions(db,tx,repository,original,transcription);
     }
     @Test void staleAudioVersionsAndUnknownSongsNeverReturnTheCurrentTimeline() throws Exception {
