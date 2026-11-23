@@ -7,6 +7,11 @@
   const status = byId('status'), manual = byId('manual')
   const guide = byId('wechat-guide'), qr = byId('wechat-qr')
   const instruction = byId('channel-instruction'), feedback = byId('wechat-feedback')
+  const handoff = window.cheerfulWechat
+  const desktopFriend = !wechat && handoff?.mode('friend') === 'desktop'
+  const launch = byId('open-desktop-wechat'), handoffStatus = byId('handoff-status'), handoffLink = byId('handoff-link')
+  byId('desktop-hint').hidden = !desktopFriend
+  handoffLink.onfocus = () => handoffLink.select()
   let selected = '', sdkState = 'loading', qrRequest = 0
   const artwork = document.getElementById('artwork') || document.querySelector('img')
   for (const img of [artwork, document.querySelector('.share-track img')].filter(Boolean)) {
@@ -33,8 +38,11 @@
     byId('timeline').setAttribute('aria-pressed', 'false')
     feedback.textContent = ''
     instruction.textContent = ''
+    handoffStatus.textContent = ''
+    handoffLink.hidden = true
+    launch.hidden = true
   }
-  async function choose(destination) {
+  async function choose(destination, userClicked) {
     resetDestination()
     const request = qrRequest
     selected = destination
@@ -50,6 +58,16 @@
       sdkFeedback()
       return
     }
+    launch.hidden = !(desktopFriend && destination === 'friend')
+    if (userClicked && handoff) {
+      const current = () => request === qrRequest && byId('share-sheet').hasAttribute('open')
+      const payload = { title, url, text: meta('description') }
+      void handoff.open(destination, payload, current).then(result => {
+        if (!result || !current()) return
+        handoffStatus.textContent = result.message
+        if (result.manual) { handoffLink.hidden = false; handoffLink.focus(); handoffLink.select() }
+      })
+    }
     instruction.textContent = '用微信扫一扫打开歌曲，再点右上角「…」选择「' + menuItem + '」。'
     feedback.textContent = '正在生成二维码…'
     try {
@@ -63,8 +81,9 @@
       if (request === qrRequest) feedback.textContent = '二维码暂时无法生成，可重新点选分享方式。'
     }
   }
-  byId('friend').onclick = () => choose('friend')
-  byId('timeline').onclick = () => choose('timeline')
+  // The player previews destinations from the URL hash with a synthetic click.
+  byId('friend').onclick = event => choose('friend', event.isTrusted)
+  byId('timeline').onclick = event => choose('timeline', event.isTrusted)
   byId('open-share').addEventListener('click', () => {
     resetDestination()
     byId('more-share').open = false

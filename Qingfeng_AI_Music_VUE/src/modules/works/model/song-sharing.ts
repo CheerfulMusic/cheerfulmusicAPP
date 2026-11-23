@@ -12,6 +12,16 @@ export function songShareUrl(token: string, origin: string): string {
   return new URL(`/song/${token}`, base.origin).href
 }
 export type WechatDestination = 'friend' | 'timeline'
+declare global {
+  interface Window {
+    cheerfulWechat?: {
+      mode(destination: WechatDestination): '' | 'desktop' | 'system'
+      open(destination: WechatDestination, data: ShareData & { url: string }, isCurrent: () => boolean):
+        Promise<{ message: string; manual?: boolean } | undefined>
+      desktopUrl: string
+    }
+  }
+}
 export function wechatShareEntry(link: string, destination: WechatDestination): string {
   const entry = new URL(link)
   entry.hash = 'share-' + destination

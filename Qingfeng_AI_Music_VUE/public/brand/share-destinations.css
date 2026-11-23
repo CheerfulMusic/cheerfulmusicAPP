@@ -73,6 +73,11 @@
 .destination-guide[hidden] { display: none; }
 .destination-guide > img { width: 8rem; height: 8rem; border-radius: .45rem; }
 .destination-guide > div { flex: 1 1 9rem; }
+.share-destinations small { font-size: .72rem; opacity: .8; }
+.destination-guide input { box-sizing: border-box; width: 100%; margin: .45rem 0; padding: .45rem; font: inherit; }
+.destination-guide .wechat-open { display: inline-block; margin: .4rem 0; color: inherit; font-weight: 650; text-decoration: underline; }
+.destination-guide .wechat-open[hidden] { display: none; }
+.destination-guide p:empty { display: none; }
 .destination-guide p { margin: 0; line-height: 1.55; font-size: .9rem; }
 .destination-guide p + p:not(:empty) { margin-top: .5rem; }
 .more-share { margin-top: 1rem; border-top: 1px solid var(--channel-line,#e8dcd5); }

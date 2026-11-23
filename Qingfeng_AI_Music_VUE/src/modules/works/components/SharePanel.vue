@@ -24,6 +24,9 @@ let generation = 0, posterGeneration = 0
 const insideWechat = /MicroMessenger/i.test(navigator.userAgent)
 const hasSystemShare = !insideWechat && typeof navigator.share === 'function'
 const destination = ref<WechatDestination>(), qr = ref(''), qrError = ref(false)
+const handoff = window.cheerfulWechat
+const desktopFriend = platform.kind === 'web' && handoff?.mode('friend') === 'desktop'
+const handoffMessage = ref(''), manualCopy = ref(false), manualLink = ref<HTMLInputElement>()
 let qrRequest = 0
 const importedRevisionId = computed(() => props.asset?.origin === 'IMPORTED' && props.revision?.confirmed ? props.revision.id : undefined)
 const canCreate = computed(() => !!props.asset && (props.asset.origin === 'GENERATED' || !!importedRevisionId.value))
@@ -47,6 +50,8 @@ function clearDestination() {
   destination.value = undefined
   qr.value = ''
   qrError.value = false
+  handoffMessage.value = ''
+  manualCopy.value = false
 }
 function reset() {
   generation++; busy.value = false; sharing.value = false; summary.value = undefined
@@ -140,6 +145,19 @@ async function choose(event: MouseEvent, target: WechatDestination) {
   posterOpen.value = false
   notice.value = ''
   if (more.value) more.value.open = false
+  if (event.isTrusted && song.value && handoff) {
+    const current = () => request === qrRequest && props.open && valid()
+    const payload = { title: song.value.title, text: t('听听我创作的这首歌 · Cheerful Music'), url: link.value }
+    void handoff.open(target, payload, current).then(async result => {
+      if (!result || !current()) return
+      handoffMessage.value = result.message
+      manualCopy.value = !!result.manual
+      if (manualCopy.value) {
+        await nextTick()
+        if (current()) { manualLink.value?.focus(); manualLink.value?.select() }
+      }
+    })
+  }
   try {
     const renderer = await import('../model/song-poster')
     const image = await renderer.wechatShareQr(link.value, target)
@@ -224,13 +242,16 @@ onBeforeUnmount(() => { generation++; clearDestination(); clearPoster(); dialog.
         </article>
         <h3 class="channel-heading">{{ t('分享到') }}</h3>
         <div class="share-destinations" role="group" :aria-label="t('分享到')">
-          <a ref="shareButton" :href="wechatShareEntry(link, 'friend')" :aria-current="destination === 'friend' || undefined" @click="choose($event,'friend')"><span class="destination-icon for-friend" aria-hidden="true"></span>{{ t('微信好友') }}</a>
+          <a ref="shareButton" :href="wechatShareEntry(link, 'friend')" :aria-current="destination === 'friend' || undefined" @click="choose($event,'friend')"><span class="destination-icon for-friend" aria-hidden="true"></span>{{ t('微信好友') }}<small v-if="desktopFriend">{{ t('复制链接并打开电脑微信') }}</small></a>
           <a :href="wechatShareEntry(link, 'timeline')" :aria-current="destination === 'timeline' || undefined" @click="choose($event,'timeline')"><span class="destination-icon for-timeline" aria-hidden="true"><i></i></span>{{ t('朋友圈') }}</a>
           <button type="button" :aria-expanded="posterOpen" @click="openPoster"><span class="destination-icon for-poster" aria-hidden="true"><i>♫</i></span>{{ t('音乐海报') }}</button>
         </div>
         <div v-if="destination" class="destination-guide" role="status">
           <img v-if="qr" :src="qr" width="144" height="144" :alt="t('在微信中打开歌曲的二维码')">
           <div>
+            <p v-if="handoffMessage">{{ t(handoffMessage) }}</p>
+            <input v-if="manualCopy" ref="manualLink" readonly :value="link" :aria-label="t('手动复制歌曲链接')" @focus="manualLink?.select()">
+            <a v-if="desktopFriend && destination === 'friend'" class="wechat-open" :href="handoff?.desktopUrl">{{ t('打开电脑微信') }}</a>
             <p>{{ t(destination === 'friend' ? '用微信扫一扫打开歌曲，再点右上角「…」选择「发送给朋友」。' : '用微信扫一扫打开歌曲，再点右上角「…」选择「分享到朋友圈」。') }}</p>
             <p>{{ t(qrError ? '二维码暂时无法生成，可重新点选分享方式。' : qr ? '同一部手机上可截图，再从微信扫一扫的相册打开。' : '正在生成二维码…') }}</p>
           </div>

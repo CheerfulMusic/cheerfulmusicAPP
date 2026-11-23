@@ -14,6 +14,7 @@
   <meta property="og:type" content="music.song">
   <link rel="stylesheet" href="/brand/song-player.css">
   <link rel="stylesheet" href="/brand/share-destinations.css">
+  <script defer src="/brand/wechat-handoff.js"></script>
   <script defer src="/brand/song-share.js"></script>
   <script defer src="/brand/song-player.js"></script>
   <script defer src="/brand/song-community.js"></script>
@@ -91,13 +92,18 @@
       <div class="sheet-heading"><h2 id="share-heading">分享到</h2><button id="close-share" class="close" type="button" aria-label="关闭分享">×</button></div>
       <div class="share-track"><img src="{{image}}" width="52" height="52" alt=""><div><strong>{{title}}</strong><span>{{creator}}</span></div></div>
       <div id="wechat-actions" class="share-destinations" role="group" aria-label="分享方式">
-        <button id="friend" type="button" aria-controls="wechat-guide" aria-pressed="false"><span class="destination-icon for-friend" aria-hidden="true"></span>微信好友</button>
+        <button id="friend" type="button" aria-controls="wechat-guide" aria-pressed="false"><span class="destination-icon for-friend" aria-hidden="true"></span>微信好友<small id="desktop-hint" hidden>复制链接并打开电脑微信</small></button>
         <button id="timeline" type="button" aria-controls="wechat-guide" aria-pressed="false"><span class="destination-icon for-timeline" aria-hidden="true"><i></i></span>朋友圈</button>
         <button id="poster" type="button"><span class="destination-icon for-poster" aria-hidden="true"><i>♫</i></span>音乐海报</button>
       </div>
       <div id="wechat-guide" class="destination-guide" hidden>
         <img id="wechat-qr" hidden width="144" height="144" alt="在微信中打开歌曲的二维码">
-        <div><p id="channel-instruction" role="status"></p><p id="wechat-feedback" role="status"></p></div>
+        <div>
+          <p id="handoff-status" role="status"></p>
+          <input id="handoff-link" type="text" hidden readonly aria-label="手动复制歌曲链接" value="{{url}}">
+          <a id="open-desktop-wechat" class="wechat-open" hidden href="weixin://">打开电脑微信</a>
+          <p id="channel-instruction" role="status"></p><p id="wechat-feedback" role="status"></p>
+        </div>
       </div>
       <p id="status" class="notice" role="status"></p>
       <div id="poster-preview" hidden>
