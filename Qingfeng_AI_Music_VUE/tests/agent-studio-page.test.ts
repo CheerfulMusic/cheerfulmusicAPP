@@ -75,6 +75,20 @@ describe('真实 Agent 对话与作品', () => {
     expect(wrapper.find('.agent-choice-panel').exists()).toBe(false)
     expect(input.element.value).toBe('')
   })
+  it('点击灵感标签会补充已选主题和手写草稿，按发送才提交', async () => {
+    const { wrapper } = await page()
+    const lyrics = wrapper.findAll('.creation-choices button').find(button => button.text().includes('歌词创作'))!
+    await lyrics.trigger('click')
+    await wrapper.get('.creation-choices button').trigger('click')
+    const input = wrapper.get<HTMLTextAreaElement>('.agent-composer-box textarea')
+    await input.setValue('写毕业旅行')
+    await wrapper.findAll('.inspiration-chips button').find(button => button.text() === '友情')!.trigger('click')
+    expect(input.element.value).toBe('写毕业旅行\n写给一路同行的朋友')
+    expect(wrapper.get('.creation-choices [aria-pressed="true"]').text()).toContain('欢快的夏天')
+    expect(api.send).not.toHaveBeenCalled()
+    await wrapper.get('.agent-composer-box').trigger('submit')
+    expect(api.send).toHaveBeenCalledExactlyOnceWith('c1', '帮我写一首歌词，主题是 欢快的夏天\n写毕业旅行\n写给一路同行的朋友', expect.any(String), 'zh-CN')
+  })
   it('在已有对话里切换工具或关闭选项能保留手写草稿，清除旧选择', async () => {
     const { wrapper } = await page(state({ messages: [message('上次写到这里')] }))
     const input = wrapper.get<HTMLTextAreaElement>('.agent-composer-box textarea')

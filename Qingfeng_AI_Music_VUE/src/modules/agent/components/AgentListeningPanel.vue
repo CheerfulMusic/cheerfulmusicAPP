@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import NavIcon from '../../../shared/ui/NavIcon.vue'
+import AgentPlayerControls from './AgentPlayerControls.vue'
 import InspirationGalaxy from './InspirationGalaxy.vue'
 import { computed, ref, watch } from 'vue'
 import { usePlayer } from '../../../shared/player/store'
@@ -81,36 +83,31 @@ async function download(){
 </script>
 <template>
   <section v-if="track" class="listening-panel">
-    <header>{{ tr('音乐播放','Music player') }}</header>
-    <div class="record-summary"><div class="agent-album"><div class="agent-record" :class="{'is-spinning':playing}" aria-hidden="true"><span/></div><div class="agent-album-art"><img :src="track.cover" alt=""/></div></div>
+    <header class="music-player-heading"><NavIcon name="headphones"/>{{ tr('音乐播放','Music player') }}<span class="player-meter" aria-hidden="true"/></header>
+    <div class="record-summary"><div class="agent-album"><div class="agent-album-art"><img :src="track.cover" alt=""/></div></div>
     <div class="record-copy"><h2>{{ track.title }}</h2><p class="listen-meta">{{ sample?.genre || sample?.category || tr('我的作品','My music') }} · {{ clock(duration) }}</p>
     <div class="listen-actions">
-      <button v-if="sample" :aria-label="tr('喜欢','Like')" :aria-pressed="isLiked(track.id)" @click="toggleReaction(track.id,'like')"><i aria-hidden="true">{{ isLiked(track.id)?'♥':'♡' }}</i>{{ hotStat(track.id).likes }}</button>
-      <button v-if="owner || sample" :disabled="sharing" @click="share"><i aria-hidden="true">♧</i>{{ tr('分享','Share') }}</button>
-      <button v-if="owner" @click="download"><i aria-hidden="true">↓</i>{{ tr('下载','Download') }}</button>
-      <button @click="owner ? emit('work',owner.work) : tab='story'"><i aria-hidden="true">···</i>{{ tr('详情','Details') }}</button>
+      <button v-if="sample" :aria-label="tr('喜欢','Like')" :aria-pressed="isLiked(track.id)" @click="toggleReaction(track.id,'like')"><NavIcon name="heart"/><span>{{ hotStat(track.id).likes || tr('喜欢','Like') }}</span></button>
+      <button v-if="owner || sample" :disabled="sharing" @click="share"><NavIcon name="share"/>{{ tr('分享','Share') }}</button>
+      <button v-if="owner" @click="download"><NavIcon name="download"/>{{ tr('下载','Download') }}</button>
+      <button @click="owner ? emit('work',owner.work) : tab='story'"><NavIcon name="more"/>{{ tr('详情','Details') }}</button>
     </div>
     </div></div><p v-if="sample && hotLoginHint" role="status">{{ hotLoginHint }}</p>
 
-    <input class="agent-preview-range" type="range" min="0" :max="duration||1" :value="player.time" :disabled="!player.duration" :aria-label="tr('播放进度','Playback position')" @input="player.seek(Number(($event.target as HTMLInputElement).value))"/>
-    <div class="agent-player-times"><span>{{ clock(player.time) }}</span><span>{{ clock(duration) }}</span></div>
-    <div class="agent-player-controls">
-      <button :aria-pressed="player.repeatOne" :aria-label="tr('单曲循环','Repeat one')" @click="player.toggleRepeat()">⇄</button>
-      <button :disabled="!player.hasQueue" :aria-label="tr('上一首','Previous')" @click="player.next(-1)">◀▏</button>
-      <button class="agent-preview-play" :aria-label="playing?tr('暂停','Pause'):tr('播放','Play')" @click="toggle">{{ playing?'Ⅱ':'▶' }}</button>
-      <button :disabled="!player.hasQueue" :aria-label="tr('下一首','Next')" @click="player.next()">▕▶</button>
-      <button :aria-label="tr('播放列表','Queue')" @click="tab='queue'">☷</button>
-    </div>
+    <AgentPlayerControls :position="player.time" :duration="duration" :playing="playing" playable active queue-available
+                         :seekable="!!player.duration" :queue-open="tab === 'queue'" @play="toggle" @queue="tab = tab === 'queue' ? 'lyrics' : 'queue'"/>
     <InspirationGalaxy :work-id="owner?.work" :asset-id="owner?.asset"/>
     <p v-if="player.error||notice" role="status">{{ player.error||notice }}</p>
     <input v-if="shareLink" readonly :value="shareLink" :aria-label="tr('分享链接','Share link')"/>
-    <div class="agent-preview-tabs" role="tablist"><button v-for="view in (['lyrics','story','similar'] as const)" :key="view" role="tab" :aria-selected="tab===view" @click="tab=view">{{ view==='lyrics'?tr('歌词','Lyrics'):view==='story'?tr('作品故事','Story'):tr('相似推荐','Similar songs') }}</button></div>
+    <div class="agent-preview-tabs" role="tablist"><button v-for="view in (['lyrics','story','similar'] as const)" :key="view" role="tab" :aria-selected="tab===view" @click="tab=view">{{ view==='lyrics'?tr('歌词','Lyrics'):view==='story'?tr('作品资料','Song info'):tr('相似推荐','Similar songs') }}</button></div>
     <div ref="lyricRows" class="listen-details" role="tabpanel">
-      <template v-if="tab==='lyrics'"><label v-if="owner || timedLines.length" class="producer-lyric-switch">{{ tr('歌词滚动播放','Follow lyrics') }}<input v-model="follow" type="checkbox"/></label><SyncedLyrics show-times :follow-enabled="follow" v-if="owner" :key="track.id" :work-id="owner.work" :asset-id="owner.asset" :player-track-id="track.id" :auto-sync-enabled="false" @seek="player.seek($event)"/><template v-else-if="timedLines.length"><button class="timed-line" v-for="line in timedLines" :key="line.start" :aria-current="player.time>=line.start&&player.time<line.end" @click="player.seek(line.start)"><time>{{ clock(line.start) }}</time> {{ line.text }}</button></template><p v-else>{{ publicLyrics||sample?.lyrics||tr('暂无歌词','No lyrics available') }}</p></template>
+      <template v-if="tab==='lyrics'"><label v-if="owner || timedLines.length" class="producer-lyric-switch">{{ tr('歌词滚动播放','Follow lyrics') }}<input v-model="follow" type="checkbox"/></label><SyncedLyrics show-times :follow-enabled="follow" v-if="owner" :key="track.id" :work-id="owner.work" :asset-id="owner.asset" :player-track-id="track.id" :auto-sync-enabled="false" @seek="player.seek($event)"/><template v-else-if="timedLines.length"><button class="timed-line" v-for="line in timedLines" :key="line.start" :aria-current="player.time>=line.start&&player.time<line.end" @click="player.seek(line.start)"><time>{{ clock(line.start) }}</time> {{ line.text }}</button></template><p v-else-if="publicLyrics || sample?.lyrics">{{ publicLyrics || sample?.lyrics }}</p>
+        <div v-else class="listen-lyrics-empty"><NavIcon name="music"/><span>{{ tr('这首歌暂无歌词', 'No lyrics available for this track') }}</span><button type="button" @click="tab = 'story'">{{ tr('查看作品资料', 'View song info') }} ›</button></div>
+      </template>
       <p v-else-if="tab==='story'">{{ story||sample?.description||tr('暂无作品故事','No story available') }}</p>
       <template v-else-if="tab==='similar'"><button v-for="row in similar" :key="row.id" @click="playSimilar(row)">▶ {{ row.title }}</button></template>
       <template v-else><button v-for="row in player.tracks" :key="row.id" :aria-current="row.id===track.id" @click="player.toggle(row)">{{ row.title }}</button><p v-if="!player.tracks.length">{{ tr('播放歌曲后会显示队列','Play a song to start the queue') }}</p></template>
     </div>
-    <footer class="listen-footer"><span v-if="!owner" class="preview-only">{{ tr('仅供试听','Preview only') }}</span><button v-if="owner"  @click="download">↓ {{ tr('下载 · 首次15积分','Download · 15 credits first time') }}</button><button v-if="owner || sample" :disabled="sharing" @click="share">{{ tr('分享','Share') }}</button><button @click="emit('remix',track.title)">＋ {{ tr('改编同款','Remix') }}</button></footer>
+    <footer class="listen-footer"><span v-if="!owner" class="preview-only"><NavIcon name="headphones"/>{{ tr('仅供试听','Preview only') }}</span><button v-if="owner" @click="download"><NavIcon name="download"/> {{ tr('下载 · 首次15积分','Download · 15 credits first time') }}</button><button v-if="owner || sample" :disabled="sharing" @click="share"><NavIcon name="share"/>{{ tr('分享','Share') }}</button><button @click="emit('remix',track.title)">＋ {{ tr('改编这首歌','Remix') }}</button></footer>
   </section>
 </template>

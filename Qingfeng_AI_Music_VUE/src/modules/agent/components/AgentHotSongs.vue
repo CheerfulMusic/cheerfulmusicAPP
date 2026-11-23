@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
+import PlaybackIcon from '../../../shared/ui/PlaybackIcon.vue'
 import { locale } from '../../../shared/i18n'
 import { usePlayer } from '../../../shared/player/store'
 import { usePreviewTracks, type PreviewTrack } from '../../home/model/tracks'
@@ -15,14 +16,14 @@ function duration(seconds: number) { return `${Math.floor(seconds/60)}:${String(
 </script>
 <template>
   <section class="agent-hot-songs" :aria-label="tr('热歌推荐榜','Popular songs')">
-    <header><h2>{{ tr('热歌推荐','Recommended songs') }}</h2></header>
+    <header><h2><span aria-hidden="true">🔥</span>{{ tr('热歌推荐','Recommended songs') }}</h2></header>
     <div v-if="songs[0]" class="hot-featured">
       <img :src="songs[0].cover" alt=""/><div class="hot-featured-shade"/>
-      <span class="hot-featured-label">{{ tr('热歌推荐','RECOMMENDED') }} / 01</span>
-      <div class="hot-featured-copy"><small>{{ songs[0].genre || songs[0].category }}</small><h3>{{ songs[0].title }}</h3></div>
-      <button type="button" :aria-label="(active(songs[0])?tr('暂停','Pause '):tr('试听','Play '))+songs[0].title" :aria-pressed="active(songs[0])" @click="play(songs[0])"><span aria-hidden="true">{{ active(songs[0]) ? 'Ⅱ' : '▶' }}</span></button>
+      <span class="hot-featured-label">{{ tr('热歌 TOP 1','TOP TRACK') }}</span>
+      <div class="hot-featured-copy"><h3>{{ songs[0].title }}</h3></div>
+      <button class="hot-song-play" type="button" :aria-label="(active(songs[0])?tr('暂停','Pause '):tr('试听','Play '))+songs[0].title" :aria-pressed="active(songs[0])" @click="play(songs[0])"><span><PlaybackIcon :playing="active(songs[0])"/></span></button>
     </div>
-    <ol><li v-for="(track,index) in songs" :key="track.id" :class="{'is-playing':active(track)}"><span class="hot-rank">{{ String(index+1).padStart(2,'0') }}</span><button class="hot-song-play" type="button" :aria-label="(active(track)?tr('暂停','Pause '):tr('试听','Play '))+track.title" :aria-pressed="active(track)" @click="play(track)"><img :src="track.cover" alt="" loading="lazy"/><span><strong>{{ track.title }}</strong><small>{{ track.genre || track.category }} · {{ duration(track.durationSeconds) }}</small></span><i aria-hidden="true">{{ active(track)?'Ⅱ':'▶' }}</i></button></li></ol>
+    <ol start="2"><li v-for="(track,index) in songs.slice(1)" :key="track.id" :class="{'is-playing':active(track)}"><span class="hot-rank">{{ String(index+2).padStart(2,'0') }}</span><button class="hot-song-play" type="button" :aria-label="(active(track)?tr('暂停','Pause '):tr('试听','Play '))+track.title" :aria-pressed="active(track)" @click="play(track)"><img :src="track.cover" alt="" loading="lazy"/><span><strong>{{ track.title }}</strong><small>{{ track.genre || track.category }} · {{ duration(track.durationSeconds) }}</small></span><i><PlaybackIcon :playing="active(track)"/></i></button></li></ol>
     <p v-if="player.error && songs.some(track => track.id===player.current?.id)" class="hot-chart-error" role="status">{{ player.error }}</p>
     <p v-if="hotFailure" class="hot-chart-error" role="status">{{ tr('热度暂未更新，先为你展示精选试听。','Showing curated songs while rankings are unavailable.') }} <button type="button" :disabled="hotLoading" @click="refresh">{{ tr('重试','Retry') }}</button></p>
     <p v-else-if="hotLoading" class="hot-chart-note" role="status">{{ tr('正在更新热度…','Updating ranking…') }}</p>

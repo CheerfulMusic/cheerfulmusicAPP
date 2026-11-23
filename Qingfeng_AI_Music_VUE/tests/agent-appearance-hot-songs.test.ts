@@ -25,7 +25,9 @@ it('updates existing conversation styles, persists and restores defaults',async(
 })
 it('scrolls the full set of ranked catalog tracks and plays a selected song directly',async()=>{
  const w=mount(AgentHotSongs);await flushPromises();expect(hot.load).toHaveBeenCalledOnce();expect(w.findAll('li').length).toBeGreaterThan(6);expect(w.find('header a').exists()).toBe(false)
- await w.findAll('.hot-song-play')[0].trigger('click');expect(hot.queue).toHaveBeenCalledOnce();expect(hot.toggle).toHaveBeenCalledOnce();expect(hot.record).not.toHaveBeenCalled();w.unmount()
+ expect(w.get('li .hot-rank').text()).toBe('02')
+ expect(w.findAll('li .hot-song-play strong').map(title=>title.text())).not.toContain(w.get('.hot-featured h3').text())
+ await w.get('.hot-featured .hot-song-play').trigger('click');expect(hot.queue).toHaveBeenCalledOnce();expect(hot.toggle).toHaveBeenCalledOnce();expect(hot.record).not.toHaveBeenCalled();w.unmount()
 })
 
 it.each([['generate_song','正在生成歌曲'],['generate_lyrics','正在生成歌词']])('renders the active %s until the server reports completion',async(action,title)=>{

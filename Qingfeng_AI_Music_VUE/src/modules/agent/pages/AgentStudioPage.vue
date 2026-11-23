@@ -1,6 +1,10 @@
 <script setup lang="ts">
 import '../playful.css'
 import '../producer.css'
+import producerMascot from '../assets/producer-mascot.webp'
+import NavIcon from '../../../shared/ui/NavIcon.vue'
+import PlaybackIcon from '../../../shared/ui/PlaybackIcon.vue'
+import AgentPlayerControls from '../components/AgentPlayerControls.vue'
 import SyncedLyrics from '../../works/components/SyncedLyrics.vue'
 import InspirationGalaxy from '../components/InspirationGalaxy.vue'
 import AgentListeningPanel from '../components/AgentListeningPanel.vue'
@@ -96,6 +100,7 @@ const activeTool = computed(() => creationTools.find(tool => tool.id === creatio
 const selectedChoice = ref<number | null>(null)
 const choicePanel = ref<HTMLElement>()
 const composerInput = ref<HTMLTextAreaElement>()
+const composerMore = ref<HTMLDetailsElement>()
 const messageDraft = computed(() => {
   const tool = activeTool.value
   const description = input.value.trim()
@@ -114,8 +119,13 @@ async function openCreationPanel(view: CreationView) {
   if (view !== creationView.value) setCreationView(view)
   await nextTick()
   choicePanel.value?.focus({ preventScroll: true })
-  const block = window.matchMedia('(max-width: 860px)').matches ? 'center' : 'nearest'
-  choicePanel.value?.scrollIntoView?.({ block })
+  if (chat.value) chat.value.scrollTop = chat.value.scrollHeight
+  choicePanel.value?.scrollIntoView?.({ block: 'nearest', behavior: 'instant' })
+}
+function closeComposerTools(restoreFocus = false) {
+  if (!composerMore.value) return
+  composerMore.value.open = false
+  if (restoreFocus) composerMore.value.querySelector('summary')?.focus()
 }
 function closeCreationPanel() {
   setCreationView(null)
@@ -127,6 +137,18 @@ function setChatDraft(text: string) {
 }
 function useConversationExample(prompt: string) {
   setChatDraft([prompt, input.value.trim()].filter(Boolean).join('\n'))
+  composerInput.value?.focus()
+}
+const inspirationChips = [
+  { icon: 'music', title: ['轻快流行', 'Upbeat pop'], idea: ['轻快流行的曲风', 'An upbeat pop sound'] },
+  { icon: 'sun', title: ['旅行主题', 'Travel'], idea: ['把路上的风景写进歌里', 'A song about the sights along a journey'] },
+  { icon: 'people', title: ['友情', 'Friendship'], idea: ['写给一路同行的朋友', 'For the friends who have been there along the way'] },
+  { icon: 'heart', title: ['正能量', 'Encouragement'], idea: ['写一首给自己打气的歌', 'A song to lift my spirits'] },
+  { icon: 'wave', title: ['电子舞曲', 'Dance'], idea: ['有律动感的电子舞曲', 'An electronic dance beat'] },
+] as const
+function addInspiration(idea: string) {
+  input.value = [input.value.trimEnd(), idea].filter(Boolean).join('\n')
+  if (creationView.value === 'menu') setCreationView(null)
   composerInput.value?.focus()
 }
 function openVideoEditor() {
@@ -158,7 +180,6 @@ const currentPlaying = computed(() => !!playable.value && player.current?.id ===
 const isPlaying = computed(() => currentPlaying.value && (player.playing || player.starting))
 const duration = computed(() => currentPlaying.value ? player.duration : 0)
 const playTime = computed(() => currentPlaying.value ? player.time : 0)
-const formatTime = (seconds: number) => `${Math.floor(seconds / 60).toString().padStart(2, '0')}:${Math.floor(seconds % 60).toString().padStart(2, '0')}`
 const statusText = computed(() => {
   if (taskRunning.value) return tr('音乐生成中，完成后会自动更新', 'Generating music. The result will appear here.')
   switch (songCard.value?.status) {
@@ -168,7 +189,11 @@ const statusText = computed(() => {
     default: return songCard.value?.lyrics ? tr('歌词已保存', 'Lyrics saved') : tr('创作草稿', 'Creative draft')
   }
 })
-async function scrollChat() { await nextTick(); chat.value?.scrollTo?.({ top: chat.value.scrollHeight, behavior: 'smooth' }) }
+async function scrollChat() {
+  await nextTick()
+  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  chat.value?.scrollTo?.({ top: chat.value.scrollHeight, behavior: creationView.value || reducedMotion ? 'instant' : 'smooth' })
+}
 function togglePlay() { if (playable.value) void player.toggle(playable.value) }
 const downloadUnlocked=ref(false)
 const downloadPath=computed(()=>songCard.value?.songId&&songCard.value.assetId?`app/works/${encodeURIComponent(songCard.value.songId)}/audio/${encodeURIComponent(songCard.value.assetId)}/download`:'')
@@ -329,35 +354,39 @@ onBeforeUnmount(() => { avatarDisposed = true; window.removeEventListener('qingf
 <template>
   <div class="agent-studio agent-playful agent-producer" :style="appearanceStyle">
     <Teleport :to="layerTarget"><div class="agent-click-sparks" aria-hidden="true"><i v-for="dot in trail" :key="dot.id" class="pointer-ribbon" :style="{left:dot.x+'px',top:dot.y+'px',width:dot.length+'px',transform:'rotate('+dot.angle+'rad)'}"/> <span v-for="spark in sparks" :key="spark.id" :style="{ left: `${spark.x}px`, top: `${spark.y}px` }"><i/><b/></span></div></Teleport>
-    <div class="agent-scenery" aria-hidden="true"><span/><span/><span/></div>
     <nav class="producer-tools" :aria-label="tr('创作助手','Creation assistant')">
       <h2><button type="button" class="creation-menu-trigger" aria-haspopup="dialog" :aria-expanded="creationView !== null" @click="openCreationPanel('menu')"><span aria-hidden="true">✦</span> {{ tr('创作助手','Creation assistant') }}</button></h2>
       <button v-for="tool in creationTools" :key="tool.id" type="button" :disabled="blocked"
               aria-haspopup="dialog" :aria-expanded="creationView === tool.id" @click="openCreationPanel(tool.id)">
-        <i aria-hidden="true">{{ tool.icon }}</i><span><strong>{{ tr(...tool.title) }}</strong><small>{{ tr(...tool.detail) }}</small></span>
+        <i aria-hidden="true"><NavIcon :name="tool.icon"/></i><span><strong>{{ tr(...tool.title) }}</strong><small>{{ tr(...tool.detail) }}</small></span>
       </button>
-      <button class="producer-library" type="button" @click="goToLibrary"><i>▥</i><span><strong>{{ tr('我的作品','My songs') }}</strong><small>{{ tr('继续你的音乐故事','Continue your musical story') }}</small></span><b>›</b></button>
-      <p>{{ tr('让音乐，连接更美好的你。','Let music bring out the best in you.') }}</p>
+      <button class="producer-library" type="button" @click="goToLibrary"><i aria-hidden="true"><NavIcon name="library"/></i><span><strong>{{ tr('我的作品','My songs') }}</strong><small>{{ tr('管理创作与成品','Manage your music') }}</small></span></button>
     </nav>
     <section class="agent-conversation" :aria-label="tr('音乐创作对话', 'Music conversation')">
       <header class="agent-conversation-head">
-        <button type="button" class="agent-conversation-pill creation-menu-trigger" aria-haspopup="dialog" :aria-expanded="creationView !== null" @click="openCreationPanel('menu')"><i class="studio-status-dot" aria-hidden="true"/> {{ tr('音乐创作助手', 'Music creation assistant') }} <span aria-hidden="true">⌄</span></button>
-        <p class="agent-conversation-sub">{{ tr('创作、作品、积分和账号，在这里接着聊、接着办。', 'Create music, manage songs, credits and your account in one conversation.') }}</p>
-        <ChatAppearance v-model="appearance" @reset="resetAppearance"/><button type="button" class="agent-reset-trigger" :disabled="loading || sending" @click="confirmingReset = !confirmingReset">{{ tr('重新开始', 'Start over') }}</button>
+        <button type="button" class="agent-conversation-pill creation-menu-trigger" aria-haspopup="dialog" :aria-expanded="creationView !== null" @click="openCreationPanel('menu')"><NavIcon name="create"/><span>{{ tr('有灵感？写词、编曲、制作 MV 都可以问我', 'Have an idea? Ask me about lyrics, music or videos') }}</span><span aria-hidden="true">⌄</span></button>
+        <ChatAppearance v-model="appearance" @reset="resetAppearance"/><button type="button" class="agent-reset-trigger" :disabled="loading || sending" @click="confirmingReset = !confirmingReset">{{ tr('清空对话', 'Clear chat') }}</button>
       </header>
       <div v-if="confirmingReset" class="agent-reset-confirm" role="alert">
         <p>{{ tr('这会清空聊天及当前作品关联，已保存的作品仍在「我的音乐」。已提交的音乐任务不会被取消；如需停止，请先查看当前任务。', 'This clears the chat and current song selection. Saved songs remain in My Music. Submitted music jobs keep running; review the current task first if you want to stop it.') }}</p>
         <button type="button" :disabled="loading || sending" @click="reset">{{ tr('确认清空聊天', 'Clear chat') }}</button>
         <button type="button" @click="confirmingReset = false">{{ tr('保留对话', 'Keep chat') }}</button>
       </div>
+      <div class="producer-welcome">
+        <img class="producer-mascot" :src="producerMascot" alt="" width="212" height="190"/>
+        <div><h1>{{ tr('你的 AI 专属音乐制作人', 'Your personal AI music producer') }}</h1><p>{{ tr('写歌词 · 创作旋律 · 制作歌曲 · 生成 MV', 'Lyrics · Melodies · Songs · Music videos') }} <span aria-hidden="true">♡</span></p></div>
+      </div>
       <div ref="chat" class="agent-chat" role="log" aria-live="polite">
         <button v-if="hasOlderMessages" class="agent-history-more" type="button" :disabled="loadingOlder || loading" @click="loadOlder">{{ loadingOlder ? tr('正在加载…', 'Loading…') : tr('查看更早的对话', 'Load earlier messages') }}</button>
         <p v-if="historyError" class="agent-upload-error" role="status">{{ historyError }}</p>
-        <div class="producer-welcome">
-          <div class="producer-mascot" aria-hidden="true"><span class="mascot-antenna"/><div class="mascot-head"><div class="mascot-face"><i/><i/></div></div><div class="mascot-body">♫</div><span class="mascot-note">♪</span></div>
-          <div><small>YOUR PERSONAL MUSIC PRODUCER</small><h1>{{ tr('你的 AI 专属音乐制作人', 'Your personal AI music producer') }}</h1><p>{{ tr('一句灵感 · 一首好歌 · 一场音乐之旅', 'One idea. One song. A musical journey.') }} <span>♡</span></p></div>
-        </div>
         <p v-if="loading" class="agent-typing" role="status">{{ tr('正在恢复对话…', 'Loading conversation…') }}</p>
+        <div v-if="!loading && !messages.length && !pending && !error && !refreshError" class="agent-message assistant studio-intro">
+          <div class="agent-bot-avatar" aria-hidden="true"><img :src="'/brand/logo-symbol.svg'" alt=""/></div>
+          <div class="agent-bubble">
+            <p>{{ tr('你好！我是 Cheerful Music 的 AI 音乐伙伴。', 'Hi! I’m your AI music partner at Cheerful Music.') }} <span aria-hidden="true">♫</span></p>
+            <p>{{ tr('告诉我一段故事、一种心情，或你喜欢的曲风，我们一起把它写成歌。', 'Tell me a story, a feeling or a style you love, and we can turn it into a song together.') }}</p>
+          </div>
+        </div>
         <div v-for="message in chatMessages" :key="message.id" class="agent-message" :class="message.role">
           <div v-if="message.role === 'assistant'" class="agent-bot-avatar" aria-hidden="true"><img :src="'/brand/logo-symbol.svg'" alt=""/></div>
           <div class="agent-message-content"><AgentProgressCard v-if="message.progress" :progress="message.progress"/><div v-else-if="messageText(message)" class="agent-bubble" :class="{ 'agent-message-failed': message.state === 'FAILED' }"><AgentMessageText :text="messageText(message)"/></div><AgentResultCard v-if="message.result" :result="message.result" :disabled="blocked" :current="message.id === lastAssistantId" @command="runCommand"/></div>
@@ -367,6 +396,7 @@ onBeforeUnmount(() => { avatarDisposed = true; window.removeEventListener('qingf
         <AgentGenerationWait v-if="taskRunning" kind="music" :cover="safeLink(songCard?.coverUrl) || defaultCover()"/><p v-else-if="sending" class="agent-typing" role="status"><span class="agent-typing-spinner" aria-hidden="true"/>{{ tr('正在处理你的请求…', 'Working on your request…') }}</p>
         <section v-if="creationView" ref="choicePanel" class="agent-choice-panel" role="dialog" tabindex="-1"
                  aria-labelledby="agent-choice-title" @keydown.esc.stop="closeCreationPanel">
+          <img class="choice-avatar" :src="'/brand/logo-symbol.svg'" alt=""/>
           <header>
             <button v-if="activeTool" type="button" class="choice-back" :aria-label="tr('返回创作方向', 'Back to creative tools')" @click="openCreationPanel('menu')">‹</button>
             <h2 id="agent-choice-title">{{ activeTool ? tr(...activeTool.question) : tr('想从哪一步开始？', 'Where would you like to start?') }}</h2>
@@ -376,13 +406,13 @@ onBeforeUnmount(() => { avatarDisposed = true; window.removeEventListener('qingf
             <button v-for="(choice, index) in activeTool.choices" :key="choice[0]" type="button"
                     :aria-pressed="selectedChoice === index" :disabled="blocked"
                     @click="selectedChoice = selectedChoice === index ? null : index">
-              <span v-if="selectedChoice === index" aria-hidden="true">✓</span> {{ tr(...choice) }}
+              {{ tr(...choice) }}
             </button>
             <button v-if="activeTool.id === 'mv' && songCard?.assetId" type="button" :disabled="blocked" @click="openVideoEditor">{{ tr('打开 MV 编辑器', 'Open video editor') }} ›</button>
           </div>
           <div v-else class="creation-choices" role="group" :aria-label="tr('创作方向', 'Creative tools')">
             <button v-for="tool in creationTools" :key="tool.id" type="button" :disabled="blocked" @click="openCreationPanel(tool.id)">
-              <span aria-hidden="true">{{ tool.icon }}</span> {{ tr(...tool.title) }}
+              <NavIcon :name="tool.icon"/> {{ tr(...tool.title) }}
             </button>
           </div>
           <button class="choice-write" type="button" @click="composerInput?.focus()">
@@ -395,7 +425,10 @@ onBeforeUnmount(() => { avatarDisposed = true; window.removeEventListener('qingf
         </section>
       </div>
       <div class="agent-composer">
-        <nav class="agent-capabilities" :aria-label="tr('对话功能', 'Conversation tools')"><button type="button" :disabled="blocked" @click="send('查看我的作品')">{{ tr('我的作品', 'My songs') }}</button><button type="button" :disabled="blocked" @click="send('查看当前作品版本')">{{ tr('作品版本', 'Versions') }}</button><button type="button" :disabled="blocked" @click="send('查看我的积分')">{{ tr('积分', 'Credits') }}</button><button type="button" :disabled="blocked" @click="send('我要充值')">{{ tr('充值', 'Recharge') }}</button><button type="button" :disabled="blocked" @click="send('查看所有功能')">{{ tr('所有功能', 'All tools') }}</button><button type="button" @click="avatarDialog = true">{{ tr('设置头像', 'Avatar') }}</button></nav>
+        <nav class="inspiration-chips" :aria-label="tr('创作灵感', 'Song ideas')">
+          <button v-for="chip in inspirationChips" :key="chip.icon" type="button" :disabled="blocked" @click="addInspiration(tr(chip.idea[0], chip.idea[1]))"><NavIcon :name="chip.icon"/>{{ tr(chip.title[0], chip.title[1]) }}</button>
+          <button type="button" :disabled="blocked" @click="openCreationPanel('music')"><NavIcon name="sliders"/>{{ tr('其他风格','More styles') }}</button>
+        </nav>
         <p v-if="error" class="agent-upload-error" role="alert">{{ error }} <button type="button" :disabled="sending || loading" @click="pending ? retry() : conversation.refresh()">{{ tr('重试', 'Retry') }}</button></p>
         <button v-if="pending?.rejected && !sending" type="button" @click="editRejected">{{ tr('修改未发送的内容', 'Edit rejected message') }}</button>
         <p v-else-if="pending && !sending" class="agent-section-hint">{{ tr('上次请求的结果尚未确认。重试会核对同一次请求。', 'The previous request is unconfirmed. Retry checks the same request.') }} <button type="button" @click="retry">{{ tr('重试原请求', 'Retry request') }}</button></p>
@@ -407,8 +440,12 @@ onBeforeUnmount(() => { avatarDisposed = true; window.removeEventListener('qingf
           <div class="agent-composer-row"><div class="agent-composer-tools">
             <button type="button" class="agent-composer-clip" :aria-label="tr('参考音乐', 'Reference audio')" @click="fileInput?.click()"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 11.5 12.5 20a5 5 0 0 1-7-7l8.5-8.5a3.3 3.3 0 0 1 4.7 4.7L10 17.6a1.7 1.7 0 0 1-2.4-2.4l7.8-7.8"/></svg></button>
             <button type="button" class="agent-composer-mic" :aria-label="tr('语音输入', 'Voice input')" @click="startVoice"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button>
+            <details ref="composerMore" class="composer-more" @keydown.esc.prevent="closeComposerTools(true)">
+              <summary :aria-label="tr('更多对话工具', 'More conversation tools')" :title="tr('更多对话工具', 'More conversation tools')"><NavIcon name="more"/></summary>
+              <nav class="agent-capabilities" @click="closeComposerTools()" :aria-label="tr('对话功能', 'Conversation tools')"><button type="button" :disabled="blocked" @click="send('查看我的作品')">{{ tr('我的作品', 'My songs') }}</button><button type="button" :disabled="blocked" @click="send('查看当前作品版本')">{{ tr('作品版本', 'Versions') }}</button><button type="button" :disabled="blocked" @click="send('查看我的积分')">{{ tr('积分', 'Credits') }}</button><button type="button" :disabled="blocked" @click="send('我要充值')">{{ tr('充值', 'Recharge') }}</button><button type="button" :disabled="blocked" @click="send('查看所有功能')">{{ tr('所有功能', 'All tools') }}</button><button type="button" @click="avatarDialog = true">{{ tr('设置头像', 'Avatar') }}</button></nav>
+            </details>
           </div></div>
-          <button type="submit" class="agent-composer-send" :class="{ 'is-busy': sending }" :disabled="!messageDraft || messageTooLong || blocked" :aria-busy="sending" :aria-label="tr('发送', 'Send')"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5m-6 6 6-6 6 6"/></svg></button>
+          <button type="submit" class="agent-composer-send" :class="{ 'is-busy': sending }" :disabled="!messageDraft || messageTooLong || blocked" :aria-busy="sending" :aria-label="tr('发送', 'Send')"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 10 18-7-6 18-3.5-8.5L3 10Zm8.5 2.5L21 3"/></svg></button>
         </form>
         <p v-if="messageTooLong" id="agent-message-limit" class="agent-upload-error" role="status">{{ tr('消息超过 4000 字，请缩短描述。', 'The message exceeds 4,000 characters. Shorten your description.') }}</p>
         <input ref="fileInput" type="file" accept="audio/*,.mp3,.wav,.m4a,.aac,.ogg,.flac" hidden @change="attach"/>
@@ -417,8 +454,11 @@ onBeforeUnmount(() => { avatarDisposed = true; window.removeEventListener('qingf
         <p v-if="referenceError" class="agent-upload-error" role="status">{{ referenceError }}</p>
         <p v-if="notice" class="agent-voice-hint" role="status">{{ notice }}</p>
         <p v-if="avatarGeneration.message.value" class="agent-section-hint" role="status">{{ avatarGeneration.message.value }}</p>
-        <p class="agent-section-hint">{{ tr('免费额度用完后，1 积分可聊 5 次；发送即按此规则计费，剩余次数跨会话保留。创作工具另计费，精确替换首句、末句免费。', 'After the free allowance, 1 credit covers 5 turns. Sending accepts this rate; unused turns carry over. Creative tools are billed separately; exact first/last line edits are free.') }}</p>
-        <p v-if="credits" class="agent-section-hint">{{ tr('当前', 'Balance') }} {{ credits.balance }} {{ tr('积分 · 整首歌词重写', 'credits · Full lyric rewrite') }} {{ credits.lyricsCost }} · {{ tr('生成音乐', 'Music') }} {{ credits.musicCost }}</p>
+        <details class="studio-pricing">
+          <summary>{{ tr('免费额度后 1 积分可聊 5 次', 'After the free allowance: 1 credit for 5 turns') }}<span v-if="credits"> · {{ tr('余额', 'Balance') }} {{ credits.balance }} {{ tr('积分','credits') }}</span></summary>
+          <p class="agent-section-hint">{{ tr('免费额度用完后，1 积分可聊 5 次；发送即按此规则计费，剩余次数跨会话保留。创作工具另计费，精确替换首句、末句免费。', 'After the free allowance, 1 credit covers 5 turns. Sending accepts this rate; unused turns carry over. Creative tools are billed separately; exact first/last line edits are free.') }}</p>
+          <p v-if="credits" class="agent-section-hint">{{ tr('整首歌词重写', 'Full lyric rewrite') }} {{ credits.lyricsCost }} {{ tr('积分', 'credits') }} · {{ tr('生成音乐', 'Music') }} {{ credits.musicCost }} {{ tr('积分', 'credits') }}</p>
+        </details>
       </div>
     </section>
     <Teleport to="body"><UserAvatarDialog v-if="avatarDialog" :busy="avatar.busy.value" :error="avatar.error.value" :disabled="blocked" :generation-available="avatarGeneration.available.value" @close="avatarDialog = false" @upload="uploadAvatar" @generate="generateAvatar"/></Teleport>
@@ -427,28 +467,22 @@ onBeforeUnmount(() => { avatarDisposed = true; window.removeEventListener('qingf
       <AgentWorkShelf @open="featurePanel={feature:'work',workId:$event}" :refresh-key="`${songCard?.songId}:${songCard?.revision}:${messages.length}`"/>
     </div>
     <aside class="agent-preview" :aria-label="songCard?.songId ? tr('当前作品', 'Current song') : tr('热歌推荐', 'Song recommendations')">
-      <template v-if="songCard?.songId && (!player.current || currentPlaying)"><header class="music-player-heading">{{ tr('音乐播放','Music player') }}</header>
+      <template v-if="songCard?.songId && (!player.current || currentPlaying)"><header class="music-player-heading"><NavIcon name="headphones"/>{{ tr('音乐播放','Music player') }}<span class="player-meter" aria-hidden="true"/></header>
         <div class="record-summary"><div class="agent-album">
-          <div class="agent-record" :class="{ 'is-spinning': isPlaying }" aria-hidden="true"><span/></div>
           <div class="agent-album-art"><span class="agent-album-badge">{{ taskRunning ? tr('创作中', 'Creating') : tr('我的作品', 'My song') }}</span><img :src="safeLink(songCard.coverUrl) || defaultCover()" :alt="tr('歌曲封面', 'Song artwork')"/>
-            <button v-if="playable" type="button" class="agent-cover-play" :aria-label="isPlaying ? tr('暂停这首歌', 'Pause this song') : tr('播放这首歌', 'Play this song')" @click="togglePlay">{{ isPlaying ? 'Ⅱ' : '▶' }}</button>
-            <button type="button" class="agent-album-like" :disabled="blocked" :aria-pressed="liked" :aria-label="liked ? tr('取消喜欢', 'Unlike') : tr('喜欢', 'Like')" @click="send(liked ? '取消点赞当前作品' : '给当前作品点赞')">{{ liked ? '♥' : '♡' }}</button>
+            <button v-if="playable" type="button" class="agent-cover-play" :aria-label="isPlaying ? tr('暂停这首歌', 'Pause this song') : tr('播放这首歌', 'Play this song')" @click="togglePlay"><PlaybackIcon :playing="isPlaying"/></button>
           </div>
         </div>
-        <div class="agent-preview-meta"><strong>{{ songCard.title || tr('未命名作品', 'Untitled song') }}</strong><span v-if="songCard.style">{{ songCard.style }}</span></div>
+        <div class="agent-preview-meta"><strong>{{ songCard.title || tr('未命名作品', 'Untitled song') }}</strong><span v-if="songCard.style">{{ songCard.style }}</span>
+          <div class="listen-actions"><button type="button" class="agent-album-like" :disabled="blocked" :aria-pressed="liked" :aria-label="liked ? tr('取消喜欢', 'Unlike') : tr('喜欢', 'Like')" @click="send(liked ? '取消点赞当前作品' : '给当前作品点赞')"><NavIcon name="heart"/>{{ tr('喜欢','Like') }}</button>
+            <button type="button" :disabled="blocked || !playable" @click="send('分享当前作品')"><NavIcon name="share"/>{{ tr('分享','Share') }}</button>
+            <button type="button" @click="previewTab = 'more'"><NavIcon name="more"/>{{ tr('更多','More') }}</button>
+          </div></div>
         </div><p class="agent-song-status" role="status">{{ statusText }}</p>
 
-        <div class="agent-player">
-          <input class="agent-preview-range" type="range" min="0" :max="duration || 1" :value="playTime" :disabled="!currentPlaying || !duration" :aria-label="tr('播放进度', 'Playback position')" @input="player.seek(Number(($event.target as HTMLInputElement).value))"/>
-          <div class="agent-player-times"><span>{{ formatTime(playTime) }}</span><span>{{ formatTime(duration) }}</span></div>
-          <div class="agent-player-controls">
-            <button type="button" :disabled="!currentPlaying" :aria-pressed="currentPlaying && player.repeatOne" :aria-label="tr('单曲循环', 'Repeat one')" @click="player.toggleRepeat()">⇄</button>
-            <button type="button" :disabled="!currentPlaying || !player.hasQueue" :aria-label="tr('上一首', 'Previous track')" @click="player.next(-1)">◀▏</button>
-            <button type="button" class="agent-preview-play" :disabled="!playable" :aria-label="isPlaying ? tr('暂停', 'Pause') : tr('播放', 'Play')" @click="togglePlay"><svg viewBox="0 0 24 24" aria-hidden="true"><path v-if="isPlaying" d="M9 6v12M15 6v12"/><path v-else d="m9 6 9 6-9 6V6Z"/></svg></button>
-            <button type="button" :disabled="!currentPlaying || !player.hasQueue" :aria-label="tr('下一首', 'Next track')" @click="player.next()">▕▶</button>
-            <button type="button" :disabled="!player.tracks.length" :aria-expanded="showQueue" :aria-label="tr('播放列表', 'Playback queue')" @click="showQueue = !showQueue">☷</button>
-          </div>
-        </div>
+        <AgentPlayerControls :position="playTime" :duration="duration" :playing="isPlaying" :playable="!!playable"
+                             :seekable="currentPlaying && !!duration" :active="currentPlaying" :queue-available="!!player.tracks.length" :queue-open="showQueue"
+                             @play="togglePlay" @queue="showQueue = !showQueue"/>
         <InspirationGalaxy :work-id="songCard.songId" :asset-id="songCard.assetId"/>
         <div v-if="showQueue && player.tracks.length" class="agent-play-queue" :aria-label="tr('播放列表', 'Playback queue')"><button v-for="track in player.tracks" :key="track.id" type="button" :aria-current="player.current?.id === track.id ? 'true' : undefined" @click="player.toggle(track)">{{ track.title }}</button></div>
         <p v-if="player.current && !currentPlaying" class="agent-player-other">{{ tr('播放器正在播放其他作品', 'The player is on another song') }}</p>
@@ -461,7 +495,7 @@ onBeforeUnmount(() => { avatarDisposed = true; window.removeEventListener('qingf
         <div v-else-if="previewTab === 'story'" class="agent-tab-content agent-story-empty" role="tabpanel"><p v-if="storyLoading">{{ tr('正在加载作品故事…', 'Loading story…') }}</p><p v-else-if="storyError">{{ tr('作品故事加载失败', 'Unable to load story') }} <button type="button" @click="fetchStory">{{ tr('重试', 'Retry') }}</button></p><p v-else>{{ story || tr('暂无作品故事', 'No story yet') }}</p></div>
         <div v-else class="agent-tab-content agent-song-actions" role="tabpanel"><button v-if="!taskRunning" type="button" class="agent-start-button" :disabled="blocked || !songCard.lyrics" @click="send('用当前歌词生成音乐')">{{ audioUrl ? tr('重新生成音乐', 'Generate another version') : tr('生成音乐', 'Generate music') }}</button><button v-else type="button" :disabled="blocked" @click="send('停止生成')">{{ tr('停止生成', 'Cancel generation') }}</button><button type="button" :disabled="blocked" @click="setChatDraft(tr('把副歌改得更温柔，保留其他部分', 'Make the chorus gentler and keep the rest'))">{{ tr('修改歌词', 'Revise lyrics') }}</button></div>
         <div v-if="publicLink" class="agent-share-link"><input readonly :value="publicLink" :aria-label="tr('分享链接','Share link')"/><button type="button" @click="copyShare">{{ tr('复制链接', 'Copy link') }}</button></div>
-        <div class="agent-preview-actions agent-bottom-actions"><button type="button" :disabled="blocked || !playable" @click="download">↓ {{ downloadUnlocked ? tr('免费下载', 'Free download') : tr('下载（首次15积分）', 'Download (15 credits first time)') }}</button><button type="button" :disabled="blocked || !playable" @click="send('分享当前作品')">♧ {{ tr('分享', 'Share') }}</button><button type="button" :disabled="blocked" @click="setChatDraft(tr('参考当前作品，帮我创作一首同风格的新歌', 'Create a new song inspired by the style of the current song'))">✦ {{ tr('改编同款', 'Create a version') }}</button></div>
+        <div class="agent-preview-actions agent-bottom-actions"><button type="button" :disabled="blocked || !playable" @click="download"><NavIcon name="download"/> {{ downloadUnlocked ? tr('免费下载', 'Free download') : tr('下载（首次15积分）', 'Download (15 credits first time)') }}</button><button type="button" :disabled="blocked || !playable" @click="send('分享当前作品')"><NavIcon name="share"/> {{ tr('分享', 'Share') }}</button><button type="button" :disabled="blocked" @click="setChatDraft(tr('参考当前作品，帮我创作一首同风格的新歌', 'Create a new song inspired by the style of the current song'))">＋ {{ tr('改编这首歌', 'Remix') }}</button></div>
       </template>
       <AgentListeningPanel v-else @remix="setChatDraft(tr('参考《'+$event+'》的风格，创作一首新歌','Create a new song inspired by '+$event))" @work="featurePanel={feature:'work',workId:$event}"/>
     </aside>
@@ -469,44 +503,3 @@ onBeforeUnmount(() => { avatarDisposed = true; window.removeEventListener('qingf
     <AgentNativeDialog v-if="nativePanel" :key="`${nativePanel.kind}:${nativePanel.workId || ''}`" :kind="nativePanel.kind" :work-id="nativePanel.workId" @close="nativePanel = null" @refresh="conversation.refresh()" @send="send"/>
   </div>
 </template>
-
-<style scoped>
-.agent-conversation-head{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;padding:0 4px 12px;color:#806a62}.agent-conversation-pill{font-size:12px;font-weight:700}.agent-conversation-sub{flex:1;margin:0;font-size:11px;color:#9b8278}.agent-preview-head{font-size:12px;color:#9b8278;margin-bottom:12px}.agent-preview-meta{display:grid;gap:5px;margin-top:14px}.agent-preview-meta strong{font-size:17px;color:#3d302c}.agent-preview-meta span{font-size:11px;color:#a0877d}.agent-quick-card{padding:14px;color:#9b8278;font-size:12px}.agent-quick-grid{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}.agent-quick-grid button{border:1px solid #efd9cc;border-radius:12px;padding:8px 12px;background:#fffaf7;color:#956d55;text-align:left}.agent-start-button{border:0;border-radius:14px;padding:12px;background:linear-gradient(120deg,#ff9257,#ff4d2d);color:#fff;font-weight:600}
-
-.agent-message-content{max-width:min(calc(100% - 49px),720px);min-width:0}.agent-message-content .agent-bubble{max-width:100%}.agent-capabilities{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}.agent-capabilities button{background:#fff8f3;border:1px solid #f0d9cb;color:#956d55;border-radius:18px;padding:6px 12px;font-size:12px;cursor:pointer}.agent-capabilities button:focus-visible{outline:3px solid #ffa279;outline-offset:2px}
-.agent-composer-box textarea { grid-area: input; width: 100%; flex: 1; min-width: 0; resize: vertical; max-height: 180px; border: 0; outline: 0; background: transparent; padding: 8px; color: #4a3b39; font: inherit; line-height: 1.6; }
-.agent-bubble p, .agent-real-lyrics p { white-space: pre-wrap; overflow-wrap: anywhere; }
-.agent-pending small { color: #fff; font-size: 11px; opacity: .8; }
-.agent-message-failed { border-color: #d77363; }
-.agent-preview { max-height: 100%; overflow-y: auto; }
-.agent-song-status { margin: 12px 0; color: #a06550; font-size: 12px; }
-.agent-song-actions { display: grid; gap: 10px; margin: 16px 0; }
-.agent-song-actions > button:not(.agent-start-button), .agent-share-link button { border: 1px solid #f1d7c9; border-radius: 14px; padding: 8px 12px; background: #fff9f5; color: #845f50; }
-.agent-real-lyrics { border-top: 1px solid #f4ded3; padding-top: 16px; }
-.agent-real-lyrics summary { cursor: pointer; font-weight: 700; }
-.agent-real-lyrics p { font-size: 13px; line-height: 1.9; color: #725f57; }
-.agent-empty-song { display: grid; gap: 20px; text-align: center; padding: 40px 12px; color: #8b7065; }
-.agent-empty-song > span { font-size: 52px; color: #ff714a; }
-.agent-empty-song p { margin: 0; font-size: 13px; line-height: 1.9; }
-.agent-share-link { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-top: 14px; font-size: 12px; }
-.agent-reset-trigger { align-self: flex-end; border: 0; background: transparent; color: #9b8278; font-size: 12px; }
-.agent-reset-confirm { margin-block: 10px; padding: 12px; border: 1px solid #f1d7c9; border-radius: 12px; background: #fff9f5; font-size: 12px; line-height: 1.7; color: #845f50; }
-.agent-reset-confirm button { margin-right: 12px; }
-
-.agent-preview { display:flex; flex-direction:column; height:100%; box-sizing:border-box; padding:24px; border-radius:24px; background:#fff9f6; box-shadow:0 12px 34px #ee9b8040; }
-.agent-album { position:relative; padding:4px 20% 0 0; margin:0 0 4px; }
-.agent-record { position:absolute; width:72%; aspect-ratio:1; right:0; top:7%; border-radius:50%; background:repeating-radial-gradient(circle,#171719 0 3px,#353537 4px 5px,#111 6px 9px); box-shadow:0 8px 24px #6b3d3a44; }
-.agent-album-art { position:relative; width:100%; aspect-ratio:1; border-radius:20px 0 0 20px; overflow:hidden; box-shadow:0 12px 24px #dc958245; }
-.agent-album-art img { display:block; width:100%; height:100%; object-fit:cover; }
-.agent-album-like { position:absolute; right:8px; top:8px; border:0; border-radius:18px; padding:2px 9px; background:#533e4980; color:#fff; font-size:22px; line-height:1; cursor:pointer; }
-.agent-album-like[aria-pressed="true"] { color:#ff4c37; }
-.agent-preview-meta strong { font-size:22px; }.agent-preview-meta span { font-size:13px; color:#6e625f; }
-.agent-song-status { margin:10px 0 16px; color:#8e7971; }
-.agent-player { display:grid; gap:7px; }.agent-player .agent-preview-range { width:100%; background:#e9d9d8; accent-color:#ff5134; }.agent-player-times { display:flex; justify-content:space-between; font-size:10px; color:#6a5b58; }
-.agent-player-controls { display:flex; justify-content:space-between; align-items:center; margin:8px 0 14px; }.agent-player-controls > button:not(.agent-preview-play) { border:0; background:transparent; color:#423b3a; font-size:19px; cursor:pointer; }.agent-player-controls .agent-preview-play { flex:0 0 48px; width:48px; height:48px; }.agent-player-controls button[aria-pressed="true"] { color:#ff5134; }.agent-play-queue { max-height:120px; overflow:auto; display:grid; gap:4px; }.agent-play-queue button { border:0; padding:7px; background:#fff5ef; color:#6e625f; text-align:left; }.agent-play-queue button[aria-current="true"] { color:#ef4a30; font-weight:700; }.agent-player-other { font-size:11px; color:#8b7d78; }
-.agent-preview-tabs { display:flex; border-bottom:1px solid #f1ded8; }.agent-preview-tabs button { flex:1; border:0; border-bottom:2px solid transparent; background:transparent; color:#8b7d78; padding:12px 4px; cursor:pointer; }.agent-preview-tabs button[aria-selected="true"] { color:#352e2c; border-color:#ff5134; font-weight:700; }
-.agent-tab-content { min-height:160px; max-height:240px; overflow:auto; }.agent-real-lyrics { padding-top:14px; border:0; }.agent-real-lyrics p { line-height:2; margin:8px 0; white-space:pre-wrap; }.agent-lyrics-title { color:#fa4d32; font-size:13px; }.agent-story-empty { padding:20px 0; color:#8b7d78; font-size:13px; white-space:pre-wrap; overflow-wrap:anywhere; }.agent-song-actions { align-content:start; }
-.agent-bottom-actions { margin-top:auto; padding-top:16px; }.agent-bottom-actions > button:last-child { color:#f04e32; }
-@media (max-width: 800px) { .agent-preview { height:auto; }.agent-album { max-width:350px; }.agent-tab-content { min-height:100px; } }
-button:disabled { opacity: .5; cursor: not-allowed; }
-</style>

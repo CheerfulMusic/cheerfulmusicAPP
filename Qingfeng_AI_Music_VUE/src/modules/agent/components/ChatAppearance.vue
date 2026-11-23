@@ -14,7 +14,7 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', outside))
 </script>
 <template>
   <details ref="panel" class="chat-appearance" @keydown.esc.stop.prevent="close">
-    <summary aria-label="字体与消息外观"><span aria-hidden="true">Aa</span> {{ tr('外观', 'Appearance') }}</summary>
+    <summary :aria-label="tr('字体与消息外观', 'Font and chat appearance')"><span aria-hidden="true">Aa</span> {{ tr('字体', 'Font') }}</summary>
     <div class="appearance-panel" :aria-label="tr('对话外观设置', 'Chat appearance')">
       <header><div><small>MAKE IT YOURS</small><h3>{{ tr('你的对话，你的风格', 'Make this space yours') }}</h3></div><button type="button" :aria-label="tr('关闭外观设置', 'Close appearance')" @click="close">×</button></header>
       <fieldset><legend>{{ tr('字体', 'Typeface') }}</legend><div class="appearance-fonts">
