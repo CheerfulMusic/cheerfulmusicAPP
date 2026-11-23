@@ -66,6 +66,29 @@ describe('conversation result cards', () => {
     expect(wrapper.emitted('command')).toEqual([[command]])
     wrapper.unmount()
   })
+  it('opens the saved lyric revision on a memory card from before version-specific commands', async () => {
+    const workId = '55555555-2222-4444-8888-111111111111'
+    const revisionId = '66666666-2222-4444-8888-111111111111'
+    const command = { kind: 'send', label: '打开「海边来信」', text: `打开作品 ${workId}` }
+    const result = assistantResult(message({ kind: 'memory', items: [{ id: workId, title: '海边来信', data: {
+      workId, revisionId, version: 0, sourceHash: 'original', excerpt: '海风替我说晚安', untrustedSource: true,
+    } }], commands: [command] }))!
+    const wrapper = mount(AgentResultCard, { props: { result, disabled: false, current: false } })
+    await wrapper.get('.agent-work-open').trigger('click')
+    expect(wrapper.emitted('command')).toEqual([[{ ...command, text: `打开作品 ${workId} 的歌词版本 ${revisionId}` }]])
+    expect(wrapper.find('.agent-result-commands button').exists()).toBe(false)
+    wrapper.unmount()
+  })
+  it('drops a legacy version button with inconsistent ids and keeps story-only work commands', () => {
+    const id = '55555555-2222-4444-8888-111111111111'
+    const command = { kind: 'send', text: `打开作品 ${id}`, label: '打开作品' }
+    const history = (data: Record<string, unknown>) => assistantResult(message({
+      kind: 'memory', items: [{ id, title: '原卡', data }], commands: [command],
+    }))!
+    expect(history({ workId: id, revisionId: '' }).commands).toEqual([command])
+    expect(history({ workId: id, revisionId: '一段原文' }).commands).toEqual([])
+    expect(history({ workId: 'different', revisionId: id }).commands).toEqual([])
+  })
   it('retains subtitles and actions on non-work result cards', async () => {
     const command = { kind: 'send', label: '选择版本', text: '选择第 1 版' }
     const result = assistantResult(message({ kind: 'versions', items: [{ id: 'r1', title: '歌词版本', subtitle: '已确认', data: {} }], commands: [command] }))!

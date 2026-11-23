@@ -5,6 +5,12 @@ export type MessageKind = 'TEXT' | 'TOOL_CARD' | 'PLACEHOLDER'
 export type MessageState = 'PENDING' | 'RUNNING' | 'DONE' | 'FAILED'
 export type ToolResultStatus = 'ok' | 'busy' | 'error' | 'clarify'
 
+export interface DisplayedContext {
+  workId: string | null
+  revisionId: string | null
+  workList?: { messageId: string; seq: number }
+}
+
 export interface SongCard {
   songId: string | null
   title: string

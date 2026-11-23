@@ -1,6 +1,6 @@
 /** W1 会话 REST 封装：复用既有 requestJson / ensureCreator，不新增网络层。 */
 import { ensureCreator, getJson, requestJson } from '../../../shared/http/api-client'
-import { isMessage, type ConversationView, type Message, type ConversationSnapshot, type ConversationHistory } from '../model/conversation'
+import { isMessage, type ConversationView, type Message, type ConversationSnapshot, type ConversationHistory, type DisplayedContext } from '../model/conversation'
 
 const base = 'app/agent/conversations'
 
@@ -15,10 +15,12 @@ export async function getConversationHistory(conversationId: string, beforeSeq: 
   return getJson<ConversationHistory>(`${base}/${encodeURIComponent(conversationId)}/history?beforeSeq=${beforeSeq}&limit=40`)
 }
 
-export async function sendMessage(conversationId: string, text: string, requestKey: string, locale: string): Promise<ConversationSnapshot> {
+export async function sendMessage(conversationId: string, text: string, requestKey: string, locale: string, displayedContext?: DisplayedContext): Promise<ConversationSnapshot> {
   await ensureCreator()
   // Sending accepts the inline price; the server owns allowance and idempotent billing.
-  return requestJson<ConversationSnapshot>(`${base}/${encodeURIComponent(conversationId)}/messages`, 'POST', { text, requestKey, locale, paidConfirmed: text.trim() !== '继续已安排的操作' }, 180000)
+  return requestJson<ConversationSnapshot>(`${base}/${encodeURIComponent(conversationId)}/messages`, 'POST', {
+    text, requestKey, locale, paidConfirmed: text.trim() !== '继续已安排的操作', displayedContext,
+  }, 180000)
 }
 
 export async function getCurrentConversation(): Promise<ConversationView> {

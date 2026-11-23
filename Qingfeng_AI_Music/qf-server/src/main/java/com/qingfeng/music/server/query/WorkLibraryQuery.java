@@ -30,7 +30,8 @@ public final class WorkLibraryQuery {
             FROM music_work w LEFT JOIN lyric_revision l ON l.id=(
               SELECT r.id FROM lyric_revision r WHERE r.work_id=w.id
               AND (LOWER(r.lyrics) LIKE ? ESCAPE '!' OR LOWER(r.title) LIKE ? ESCAPE '!')
-              ORDER BY CASE WHEN LOWER(r.lyrics) LIKE ? ESCAPE '!' THEN 0 ELSE 1 END,r.created_at DESC,r.id DESC LIMIT 1)
+              ORDER BY CASE WHEN LOWER(r.title)=? THEN 0 WHEN LOWER(r.lyrics) LIKE ? ESCAPE '!' THEN 1 ELSE 2 END,
+                r.created_at DESC,r.id DESC LIMIT 1)
             WHERE w.owner_id=? AND w.deleted_at IS NULL AND (l.id IS NOT NULL
               OR LOWER(w.title) LIKE ? ESCAPE '!' OR LOWER(w.story) LIKE ? ESCAPE '!' OR LOWER(w.message) LIKE ? ESCAPE '!')
             ORDER BY CASE WHEN LOWER(w.title)=? OR LOWER(l.title)=? THEN 0 WHEN l.id IS NOT NULL THEN 1 ELSE 2 END,
@@ -38,7 +39,7 @@ public final class WorkLibraryQuery {
             """,(rs,n)->new Match(rs.getString("id"),rs.getLong("version"),new WorkSearchEvidence.Material(
                 rs.getString("title"),rs.getString("story"),rs.getString("message"),rs.getString("lyric_title"),
                 rs.getString("lyrics"),rs.getString("revision_id"),rs.getInt("lyric_number")).literal(keyword)),
-            pattern,pattern,pattern,owner,pattern,pattern,pattern,exact,exact,Math.multiplyExact(page,20));
+            pattern,pattern,exact,pattern,owner,pattern,pattern,pattern,exact,exact,Math.multiplyExact(page,20));
         // Revalidate ownership after search, before exposing a projection.
         var owned=new ArrayList<WorkApi.Work>();
         var evidence=new HashMap<String,WorkSearchEvidence>();

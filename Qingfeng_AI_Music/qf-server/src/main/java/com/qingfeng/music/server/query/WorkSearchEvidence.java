@@ -4,11 +4,14 @@ import java.util.*;
 import java.util.regex.Pattern;
 
 /** An excerpt copied from an owned source. Vector scores rank documents, not individual lines. */
-public record WorkSearchEvidence(String source,String excerpt,String revisionId,int revisionNumber) {
+public record WorkSearchEvidence(String source,String excerpt,String revisionId,int revisionNumber,String revisionTitle) {
     private static final Pattern TERMS=Pattern.compile("[\\p{IsHan}]+|[\\p{L}\\p{N}]+");
 
     public record Material(String title,String story,String message,String lyricTitle,String lyrics,String revisionId,int revisionNumber) {
         public WorkSearchEvidence literal(String query){
+            if(query==null||query.isBlank())return null;
+            if(query.equalsIgnoreCase(lyricTitle))return evidence(field("lyricTitle",lyricTitle),0,lyricTitle.length());
+            if(query.equalsIgnoreCase(title))return evidence(field("title",title),0,title.length());
             for(var field:fields()){
                 int offset=indexOf(field.text(),query);
                 if(offset>=0)return evidence(field,offset,query.length());
@@ -57,7 +60,7 @@ public record WorkSearchEvidence(String source,String excerpt,String revisionId,
         private WorkSearchEvidence evidence(Field field,int offset,int length){
             boolean lyric=field.key().equals("lyrics")||field.key().equals("lyricTitle");
             return new WorkSearchEvidence(field.key(),excerptAt(field.text(),offset,length,field.key().equals("lyrics")),
-                lyric?revisionId:null,lyric?revisionNumber:0);
+                lyric?revisionId:null,lyric?revisionNumber:0,lyric?lyricTitle:null);
         }
     }
     private record Field(String key,String text){}

@@ -15,7 +15,7 @@ class AgentChatExecutorTest {
         var admission=mock(AgentAdmission.class);var chat=mock(AgentChatService.class);var entered=new CountDownLatch(1);var release=new CountDownLatch(1);
         var ticket=new AgentAdmission.Ticket("id","owner",false);when(admission.acquire(anyString(),anyString(),anyString(),anyString(),any())).thenReturn(ticket);
         var snapshot=new AgentChatService.Snapshot(List.of(),null,null,null,null,false,null);
-        when(chat.send(anyString(),anyString(),anyString(),anyString(),any(),any())).thenAnswer(call->{entered.countDown();release.await(5,TimeUnit.SECONDS);return snapshot;});
+        when(chat.send(anyString(),anyString(),anyString(),anyString(),any(),any(),any())).thenAnswer(call->{entered.countDown();release.await(5,TimeUnit.SECONDS);return snapshot;});
         try(var executor=new AgentChatExecutor(admission,chat,1,Duration.ofSeconds(10),65536)){
             var result=executor.submit("owner","conversation","你好","key",null);assertTrue(entered.await(1,TimeUnit.SECONDS));assertFalse(result.hasResult());
             assertEquals("AGENT_BUSY",assertThrows(DomainException.class,()->executor.submit("other","other","你好","key2",null)).code());
