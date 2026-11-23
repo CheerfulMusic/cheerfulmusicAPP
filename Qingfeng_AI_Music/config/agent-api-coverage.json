@@ -325,6 +325,7 @@
       "source": "com/qingfeng/music/server/web/app/GenerationController.java",
       "mappingDeclarations": [
         "@RequestMapping(\"/api/app/works/{work}/generations\")",
+        "@GetMapping(\"/audio-reference\")",
         "@PostMapping(\"/preflight\")",
         "@PostMapping",
         "@GetMapping",

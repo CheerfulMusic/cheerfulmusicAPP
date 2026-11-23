@@ -112,7 +112,7 @@ it.each([
     await restored.get('form').trigger('submit')
     await flushPromises()
     expect(saveWork).toHaveBeenCalledTimes(1)
-    expect(saveWork).toHaveBeenCalledWith(expect.objectContaining({ story, title: '', message: '' }), undefined, expect.any(String))
+    expect(saveWork).toHaveBeenCalledWith(expect.objectContaining({ story, title: '', message: '' }), undefined, expect.any(String), id)
     expect(saveMusicSettings).toHaveBeenCalledExactlyOnceWith(saved.id, 0, reference.preferences)
     expect(generateLyrics).toHaveBeenCalledExactlyOnceWith(saved.id, 1, expect.any(String), language, '', undefined, reference.structure)
     expect(router.currentRoute.value.query.revision).toBe('new-lyrics')

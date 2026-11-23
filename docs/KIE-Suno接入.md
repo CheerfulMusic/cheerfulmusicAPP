@@ -1,5 +1,19 @@
 # KIE Suno 接入
 
+## 热歌片段参考
+
+自定义创作会记录参考歌曲。歌词确认弹窗只有在原曲片段已配置时显示参考选项，默认关闭。用户勾选后，应用冻结私有 OSS 对象键和权重，实际提交前签发一小时有效的读取链接。歌曲仍沿用现有进度查询、积分扣退和归档流程。
+
+在应用完成数据库迁移 V51 后，在需要启用的环境配置以下属性。片段使用有授权的 MP3，文件名为内容哈希。只配置已审核的热歌曲目 ID。
+
+```properties
+qingfeng.generation.audio-reference.enabled=false
+qingfeng.generation.audio-reference.weight=0.30
+# qingfeng.generation.audio-reference.clips.body-language=qingfeng/generation-reference/body-language/<内容哈希>.mp3
+```
+
+KIE 会收到已确认的新歌词和片段链接。应用使用同一条任务状态查询；明确失败时由用户选择是否重新生成。 [KIE 音频翻唱接口](https://docs.kie.ai/suno-api/upload-and-cover-audio)
+
 2026-11-02：已完成代码接入，用户随后明确要求开启歌曲生成，实际local.properties中已启用。只读验证认证成功，账户曾返回80积分；未代用户提交付费任务或上传测试歌词。点击网页“生成歌曲”才会创建任务。真实模型权限、歌曲响应结构与实际CDN归档仍待实际生成确认。
 
 ## 接口与流程

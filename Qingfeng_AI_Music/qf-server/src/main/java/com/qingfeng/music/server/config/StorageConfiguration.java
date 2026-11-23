@@ -37,6 +37,19 @@ public class StorageConfiguration {
     @Bean @DependsOn("mediaFileStore") com.qingfeng.music.server.web.RecommendationOssRedirect recommendationOssRedirect(Environment env,com.qingfeng.music.server.web.MediaCdnSigner cdn){
         return new com.qingfeng.music.server.web.RecommendationOssRedirect(client,setting(env,"qingfeng.oss.bucket"),env.getProperty("qingfeng.recommendation-oss.enabled",Boolean.class,false),java.time.Clock.systemUTC(),cdn);
     }
+    @Bean @DependsOn("mediaFileStore")
+    com.qingfeng.music.generation.application.AudioReferenceClips audioReferenceClips(Environment env,org.springframework.jdbc.core.JdbcTemplate db){
+        var approved=new java.util.LinkedHashMap<String,com.qingfeng.music.generation.application.AudioReferenceClips.Clip>();
+        if(env.getProperty("qingfeng.generation.audio-reference.enabled",Boolean.class,false)){
+            double weight=env.getProperty("qingfeng.generation.audio-reference.weight",Double.class,0.3);
+            if(!Double.isFinite(weight)||weight<0||weight>1)throw new IllegalArgumentException("参考音频权重必须在 0 到 1 之间");
+            for(String id:com.qingfeng.music.server.hotsong.HotSongService.TRACKS){
+                String key=env.getProperty("qingfeng.generation.audio-reference.clips."+id,"").trim();
+                if(!key.isEmpty())approved.put(id,new com.qingfeng.music.generation.application.AudioReferenceClips.Clip(key,Math.round(weight*100)/100.0));
+            }
+        }
+        return new com.qingfeng.music.server.hotsong.OssAudioReferenceClips(db,approved,client,setting(env,"qingfeng.oss.bucket"),java.time.Clock.systemUTC());
+    }
     private String required(Environment env,String name){String value=setting(env,name);if(value.isBlank())throw new IllegalArgumentException("缺少存储配置项："+name);return value;}
     @jakarta.annotation.PreDestroy void close(){if(client!=null)client.shutdown();}
 }

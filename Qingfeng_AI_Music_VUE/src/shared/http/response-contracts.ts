@@ -169,6 +169,7 @@ export function validResponse(path:string,method:string,value:unknown):boolean{
  if(path==='app/music-settings/simplify')return obj(value)&&(method==='GET'?typeof value.available==='boolean':text(value.original)&&text(value.text)&&String(value.text).length<=300)
  if(path==='app/music-settings/preview'||/\/music-settings\/preview$/.test(path)||/\/generations\/[^/]+\/music-settings$/.test(path))return direction(value)
  if(/\/generations\/preflight$/.test(path))return method==='POST'&&obj(value)&&num(value.workVersion)&&text(value.revisionId)&&['styleCharacters','styleLimit','negativeCharacters','negativeLimit'].every(k=>num(value[k]))&&Number(value.styleCharacters)<=Number(value.styleLimit)&&Number(value.negativeCharacters)<=Number(value.negativeLimit)&&str(value.notice)
+ if(/\/generations\/audio-reference$/.test(path))return method==='GET'&&obj(value)&&typeof value.available==='boolean'
  if(/\/music-settings$/.test(path))return obj(value)&&work(value.work)&&(value.direction===null||direction(value.direction))
    &&(value.photoInspiration==null||obj(value.photoInspiration)&&text(value.photoInspiration.summary)&&text(value.photoInspiration.arrangement))
  if(path==='app/works')return method==='GET'?list(value,work):work(value)

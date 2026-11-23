@@ -1,6 +1,8 @@
 package com.qingfeng.music.server;
 
 import com.qingfeng.music.credits.CreditsLedger;
+import com.qingfeng.music.generation.application.AudioReferenceClips;
+import com.qingfeng.music.server.hotsong.OssAudioReferenceClips;
 import com.qingfeng.music.generation.application.port.MusicProvider;
 import com.qingfeng.music.lyrics.application.LyricsWriter;
 import com.qingfeng.music.server.hotsong.HotSongCreationReferences;
@@ -17,6 +19,8 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -36,12 +40,14 @@ import static org.junit.jupiter.api.Assertions.*;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = {
     "spring.datasource.url=jdbc:h2:mem:hot_song_creation;MODE=MySQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1",
+    "spring.flyway.target=51",
     "qingfeng.lyrics.enabled=true", "qingfeng.generation.enabled=true",
     "qingfeng.credits.enabled=true", "qingfeng.credits.lyrics-cost=5", "qingfeng.credits.music-cost=15",
     "qingfeng.generation.scheduler-enabled=false", "qingfeng.quick.scheduler-enabled=false"
 })
 @ActiveProfiles("test")
 @Import(HotSongCreationIntegrationTest.Providers.class)
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class HotSongCreationIntegrationTest {
     @LocalServerPort int port;
     @Autowired ObjectMapper json;
@@ -50,6 +56,14 @@ class HotSongCreationIntegrationTest {
     @Autowired CreditsLedger credits;
     @Autowired TestLyrics writer;
     @Autowired TestMusic provider;
+    @Autowired AudioReferenceClips clips;
+
+    private static final String CLIP_KEY = "qingfeng/generation-reference/body-language/0123456789ab.mp3";
+
+    @BeforeAll void applyReferenceMigrationInIsolatedH2() {
+        var migration = new org.springframework.core.io.ClassPathResource("db/migration/V51__generation_audio_reference.sql");
+        new org.springframework.jdbc.datasource.init.ResourceDatabasePopulator(migration).execute(db.getDataSource());
+    }
 
     @Test void allHomeSamplesHaveValidPreferencesAndUnknownIdsAreRejected() throws Exception {
         for (var id : HotSongService.TRACKS) {
@@ -130,6 +144,35 @@ class HotSongCreationIntegrationTest {
         assertEquals(beforeMusic - 15, credits.balance(owner));
     }
 
+    @Test void explicitAudioReferenceIsFrozenOnlyAfterConfirmationAndCannotChangeOnReplay() throws Exception {
+        var client = new Browser();
+        client.csrf = client.call("GET", "public/csrf", null, 200).get("token").asText();
+        var owner = client.call("POST", "public/session", Map.of(), 200).get("creatorId").asText();
+        credits.credit(owner, 50, "seed-" + owner);
+        var work = client.call("POST", "app/works", Map.of(
+            "recipient", "", "occasion", "", "story", "Two friends decide to play music again", "message", "",
+            "title", "", "style", "电子", "vocalGender", "AUTO", "draftKey", key(), "referenceTrackId", "body-language"), 200);
+        var root = "app/works/" + work.get("id").asText();
+        assertEquals("body-language", work.get("referenceTrackId").asText());
+        assertTrue(client.call("GET", root + "/generations/audio-reference", null, 200).get("available").asBoolean());
+        assertEquals(50, credits.balance(owner));
+        var revision = client.call("POST", root + "/lyrics", Map.of(
+            "workVersion", work.get("version").asLong(), "title", "The last train", "lyrics", "[Chorus]\nWe ride until the morning"), 200);
+        var revisionId = revision.get("id").asText();
+        var submission = Map.of("revisionId", revisionId, "requestKey", key(), "useAudioReference", true);
+        assertEquals("LYRICS_NOT_CONFIRMED", client.call("POST", root + "/generations", submission, 409).get("code").asText());
+        assertEquals(50, credits.balance(owner));
+        client.call("POST", root + "/lyrics/" + revisionId + "/confirm", Map.of(), 200);
+        var task = client.call("POST", root + "/generations", submission, 200);
+        var taskId = task.get("id").asText();
+        assertFalse(task.toString().contains(CLIP_KEY));
+        assertEquals(new AudioReferenceClips.Clip(CLIP_KEY,.30),clips.frozen(taskId).orElseThrow());
+        assertEquals(taskId,client.call("POST", root + "/generations", submission, 200).get("id").asText());
+        assertEquals("REQUEST_KEY_CONFLICT",client.call("POST",root + "/generations",
+            Map.of("revisionId",revisionId,"requestKey",submission.get("requestKey")),409).get("code").asText());
+        assertEquals(35,credits.balance(owner));
+    }
+
     private long count(String table) {
         return db.queryForObject("SELECT COUNT(*) FROM " + table, Long.class);
     }
@@ -158,6 +201,10 @@ class HotSongCreationIntegrationTest {
     static class Providers {
         @Bean @Primary @Qualifier("customLyricsWriter") TestLyrics testLyrics() { return new TestLyrics(); }
         @Bean @Primary TestMusic testMusic() { return new TestMusic(); }
+        @Bean @Primary AudioReferenceClips testClips(JdbcTemplate db) {
+            return new OssAudioReferenceClips(db,Map.of("body-language",new AudioReferenceClips.Clip(CLIP_KEY,.30)),
+                org.mockito.Mockito.mock(com.aliyun.oss.OSS.class),"test-bucket",java.time.Clock.systemUTC());
+        }
     }
 
     static class TestLyrics implements LyricsWriter {
@@ -180,6 +227,7 @@ class HotSongCreationIntegrationTest {
     static class TestMusic implements MusicProvider {
         volatile Request validated;
         public boolean isConfigured() { return true; }
+        public boolean supportsAudioReference() { return true; }
         public String name() { return "local-reference-test"; }
         public void validate(Request request) { validated = request; }
         public Submission submit(Request request, String key) { throw new AssertionError("Scheduling is disabled"); }

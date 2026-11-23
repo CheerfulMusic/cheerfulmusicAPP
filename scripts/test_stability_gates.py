@@ -310,6 +310,9 @@ class GateTests(unittest.TestCase):
             (ROOT / "Qingfeng_AI_Music/qf-infrastructure/src/main/resources/db/migration").glob("V*__*.sql")}
         self.assertEqual("49", gate.verify_migration_set(migrations)["lyricsPreparationVersion"])
         self.assertEqual("50", gate.verify_migration_set(migrations)["discoverShelvesVersion"])
+        reference_name = "V51__generation_audio_reference.sql"
+        self.assertEqual("51", gate.verify_migration_set(migrations)["generationAudioReferenceVersion"])
+        with self.assertRaises(gate.GateError): gate.verify_migration_set({**migrations, reference_name: "0" * 64})
         missing = dict(migrations); missing.pop("V47__music_video_projects.sql")
         with self.assertRaises(gate.GateError): gate.verify_migration_set(missing)
         modified = dict(migrations); modified["V49__lyrics_preparation.sql"] = "0" * 64
@@ -317,7 +320,7 @@ class GateTests(unittest.TestCase):
         discover_name = "V50__discover_daily_plays_and_vocal_approval.sql"
         modified = {**migrations, discover_name: "0" * 64}
         with self.assertRaises(gate.GateError): gate.verify_migration_set(modified)
-        pre_discover = {k: v for k, v in migrations.items() if k != discover_name}
+        pre_discover = {k: v for k, v in migrations.items() if k not in {discover_name, reference_name}}
         self.assertEqual("49", gate.verify_migration_set(pre_discover)["lyricsPreparationVersion"])
         pre_lyrics = {k: v for k, v in pre_discover.items() if k != "V49__lyrics_preparation.sql"}
         self.assertEqual("48", gate.verify_migration_set(pre_lyrics)["phoneBindingVersion"])

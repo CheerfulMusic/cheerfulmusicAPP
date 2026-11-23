@@ -106,6 +106,15 @@ public final class KieSunoMusicProvider implements MusicProvider {
             throw new DomainException("INVALID_MUSIC_INPUT","生成歌曲需要标题不超过80字、歌词不超过5000字、风格不超过1000字，请修改后重试");
     }
     public Submission submit(Request request, String idempotencyKey) {
+        return submitSong(request,"ai-music-api/generate",null,0);
+    }
+    @Override public boolean supportsAudioReference() { return true; }
+    @Override public Submission submitWithReference(Request request,String idempotencyKey,URI uploadUrl,double weight) {
+        if(uploadUrl==null||!"https".equalsIgnoreCase(uploadUrl.getScheme())||uploadUrl.getHost()==null
+            ||!Double.isFinite(weight)||weight<0||weight>1) throw new NotSubmitted("AUDIO_REFERENCE_UNAVAILABLE");
+        return submitSong(request,"ai-music-api/upload-and-cover-audio",uploadUrl,weight);
+    }
+    private Submission submitSong(Request request,String operation,URI uploadUrl,double weight) {
         validate(request);
         // KIE未承诺幂等提交。站内请求键由数据库去重，绝不以网络重试模拟供应商幂等。
         var input=new HashMap<String,Object>(Map.of("custom_mode",true,"instrumental",false,"model",model,
@@ -115,7 +124,12 @@ public final class KieSunoMusicProvider implements MusicProvider {
         input.put("variety",tuning.variety());
         if(!request.vocalGender().equals("AUTO"))input.put("vocal_gender",request.vocalGender().equals("MALE")?"m":"f");
         if(!request.negativeTags().isBlank())input.put("negative_tags",request.negativeTags());
-        var response=send("/api/v1/jobs/createTask",json.writeValueAsString(Map.of("model","ai-music-api/generate","input",input)),true);
+        if(uploadUrl!=null){
+            input.remove("custom_mode");
+            input.put("upload_url",uploadUrl.toASCIIString());
+            input.put("audio_weight",weight);
+        }
+        var response=send("/api/v1/jobs/createTask",json.writeValueAsString(Map.of("model",operation,"input",input)),true);
         String task=response.path("data").path("taskId").asText("");
         if(task.isBlank()||task.length()>255)throw new IllegalStateException("KIE提交响应缺少任务编号，禁止自动重试");
         return new Submission(task);

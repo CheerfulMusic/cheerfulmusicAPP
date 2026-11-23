@@ -23,11 +23,12 @@ public class GiftConfiguration {
          com.qingfeng.music.generation.application.ExecutionRepository execution,
          com.qingfeng.music.usage.UsageBudget budget,com.qingfeng.music.settings.MusicSettings settings,
          com.qingfeng.music.events.DurableEvents events,
+         com.qingfeng.music.generation.application.AudioReferenceClips audioReferences,
          org.springframework.beans.factory.ObjectProvider<com.qingfeng.music.infrastructure.persistence.cover.JdbcAutomaticCoverJobs> coverJobs,
          @Value("${qingfeng.generation.enabled:false}")boolean enabled){
   var service=new com.qingfeng.music.generation.application.GenerationService(works,lyrics,provider,
           new com.qingfeng.music.infrastructure.persistence.generation.MyBatisTaskRepository(mapper),execution,enabled,budget)
-          .withSettings(settings).withEvents(events);
+          .withSettings(settings).withEvents(events).withAudioReferences(audioReferences);
   coverJobs.ifAvailable(jobs->service.withAutomaticCover(jobs::enqueue));
   return service;
  }

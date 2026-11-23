@@ -14,6 +14,20 @@ import tools.jackson.databind.ObjectMapper;
 import static org.junit.jupiter.api.Assertions.*;
 
 class KieSunoProviderTest {
+    @Test void sendsPrivateClipWithNewLyricsUsingCoverOperation(){
+        response="{\"code\":200,\"data\":{\"taskId\":\"cover-task\"}}";
+        var clip=URI.create("https://bucket.oss-cn-shenzhen.aliyuncs.com/clip.mp3?signature=test");
+        assertEquals("cover-task",provider.submitWithReference(request,"local-key",clip,.30).providerTaskId());
+        var sent=new ObjectMapper().readTree(body);
+        assertEquals("ai-music-api/upload-and-cover-audio",sent.path("model").asText());
+        var input=sent.path("input");
+        assertEquals(clip.toString(),input.path("upload_url").asText());
+        assertEquals(.30,input.path("audio_weight").asDouble());
+        assertEquals(request.confirmedLyrics(),input.path("lyrics").asText());
+        assertFalse(input.has("prompt"));
+        assertFalse(input.has("custom_mode"));
+        assertEquals(1,calls.get());
+    }
     @Test void inspirationBriefsSendTheirServerPromptsAndExplicitVoicesWithoutChangingLyrics(){
         response="{\"code\":200,\"data\":{\"taskId\":\"inspiration\"}}";
         for(var preset:com.qingfeng.music.settings.InspirationMusicPresets.all()){

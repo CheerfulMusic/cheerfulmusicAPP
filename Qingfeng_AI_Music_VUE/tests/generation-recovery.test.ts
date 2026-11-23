@@ -7,12 +7,13 @@ it('keeps checking unknown submissions and lost HTTP responses without requiring
 })
 it('restores an ambiguous request after reload and isolates creators and works',()=>{
  const data=new Map<string,string>(),storage={getItem:(key:string)=>data.get(key)||null,setItem:(key:string,value:string)=>{data.set(key,value)},removeItem:(key:string)=>{data.delete(key)}}
- const pending={workId:'work',revisionId:'original-revision',requestKey:'12345678-1234-1234-1234-123456789abc',createdAt:100}
+ const pending={workId:'work',revisionId:'original-revision',requestKey:'12345678-1234-1234-1234-123456789abc',createdAt:100,useAudioReference:true}
  expect(rememberGeneration('owner',pending,storage)).toBe(true)
  expect(recoverGeneration('owner','work',storage)).toEqual(pending)
  expect(recoverGeneration('other-owner','work',storage)).toBeUndefined()
  expect(recoverGeneration('owner','other-work',storage)).toBeUndefined()
  expect([...data.values()][0]).not.toContain('lyrics')
+ expect([...data.values()][0]).not.toContain('upload_url')
  forgetGeneration('owner','work',storage);expect(recoverGeneration('owner','work',storage)).toBeUndefined()
 })
 it('storage failures and malformed entries do not invent another request key',()=>{
@@ -29,6 +30,7 @@ it('a coded server error is still ambiguous after POST while an explicit input r
  expect(uncertainSubmission({})).toBe(true)
  expect(uncertainSubmission({status:503,code:'MUSIC_PROVIDER_COOLDOWN_UNAVAILABLE'})).toBe(false)
  expect(uncertainSubmission({status:503,code:'MUSIC_PROVIDER_UNAVAILABLE'})).toBe(false)
+ expect(uncertainSubmission({status:503,code:'AUDIO_REFERENCE_UNAVAILABLE'})).toBe(false)
  expect(generationProblem('AUDIO_ARCHIVE_FAILED')).toContain('无需重新生成')
  expect(generationProblem('QUERY_REVIEW_REQUIRED')).toContain('原任务')
  expect(generationProblem('PROVIDER_DISPATCH_UNAVAILABLE')).toContain('尚未提交')

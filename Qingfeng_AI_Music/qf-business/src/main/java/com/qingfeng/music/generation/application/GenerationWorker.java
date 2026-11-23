@@ -21,6 +21,8 @@ public final class GenerationWorker {
     private final Duration lease;
     private final int maxArchiveAttempts;
     private SectionEditRepository edits;
+    private AudioReferenceClips references=AudioReferenceClips.NONE;
+    public GenerationWorker withAudioReferences(AudioReferenceClips clips){references=java.util.Objects.requireNonNull(clips);return this;}
     private AudioCandidates candidates;
     private Duration queryReviewAfter=Duration.ofMinutes(30);
     private int maxQueryFailures=6;
@@ -88,11 +90,14 @@ public final class GenerationWorker {
                 throw new IllegalStateException("调整唱法任务缺少片段或唱法快照");
             }
             provider.validate(request);
+            var clip=references.frozen(task.id()).orElse(null);
+            var referenceUrl=clip==null?null:references.sign(clip);
             repository.finishAttempt(attempt,"COMPLETED",null,now());
             if (!repository.startSubmission(task.id(),token,now())) return;
             attempt=repository.attempt(task.id(),"SUBMIT",now());
             invoking=true;
-            var accepted=edit.isPresent()?provider.replace(request,edit.get().replacement(adjustment),task.id()):provider.submit(request,task.id());
+            var accepted=edit.isPresent()?provider.replace(request,edit.get().replacement(adjustment),task.id())
+                : clip==null?provider.submit(request,task.id()):provider.submitWithReference(request,task.id(),referenceUrl,clip.weight());
             if (accepted==null || accepted.providerTaskId()==null || accepted.providerTaskId().isBlank()
                 || accepted.providerTaskId().length()>255) throw new IllegalStateException("缺少供应商任务标识");
             externalId=accepted.providerTaskId();

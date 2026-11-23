@@ -5,7 +5,7 @@ export function needsGenerationRefresh(tasks: readonly {status:string}[], awaiti
 export type PublicationScope = 'public' | 'private'
 export interface GenerationPublication { scope: PublicationScope; stageName?: string }
 /** 恢复原提交时沿用同一个公开范围与艺名。 */
-export interface PendingGeneration {workId:string;revisionId:string;requestKey:string;createdAt:number;publication?:GenerationPublication}
+export interface PendingGeneration {workId:string;revisionId:string;requestKey:string;createdAt:number;publication?:GenerationPublication;useAudioReference?:boolean}
 
 const scopeKey = (owner: string) => 'qingfeng.generation-scope:' + owner
 export function previousPublicationScope(owner: string): PublicationScope {
@@ -23,16 +23,18 @@ export function rememberGeneration(owner:string,pending:PendingGeneration,storag
 export function recoverGeneration(owner:string,work:string,storage?:Pick<Storage,'getItem'>):PendingGeneration|undefined{
   try{const value=JSON.parse((storage??localStorage).getItem(key(owner,work))||'null');if(value&&value.workId===work&&typeof value.revisionId==='string'&&value.revisionId&&typeof value.requestKey==='string'&&/^[0-9a-f-]{36}$/i.test(value.requestKey)&&Number.isFinite(value.createdAt)){
     if(value.publication?.scope!=='public'&&value.publication?.scope!=='private')delete value.publication
+    if(value.useAudioReference!==true)delete value.useAudioReference
     return value
   }}catch{}
 }
 export function forgetGeneration(owner:string,work:string,storage?:Pick<Storage,'removeItem'>){try{(storage??localStorage).removeItem(key(owner,work))}catch{}}
 export function uncertainSubmission(error:{status?:number;code?:string}){
-  if(['MUSIC_PROVIDER_UNAVAILABLE','MUSIC_PROVIDER_COOLDOWN_UNAVAILABLE'].includes(error.code||''))return false
+  if(['MUSIC_PROVIDER_UNAVAILABLE','MUSIC_PROVIDER_COOLDOWN_UNAVAILABLE','AUDIO_REFERENCE_UNAVAILABLE'].includes(error.code||''))return false
   return error.status===undefined||error.status===0||error.status===408||error.status>=500
 }
 export function generationProblem(code:string|null|undefined){
   switch(code){
+    case 'AUDIO_REFERENCE_UNAVAILABLE':return '参考片段暂不可用，尚未提交音乐服务。可以取消勾选后重新确认生成。'
     case 'LOCAL_PREPARATION_FAILED':case 'PROVIDER_CONNECT_FAILED':case 'PROVIDER_COOLDOWN':case 'PROVIDER_DISPATCH_UNAVAILABLE':return '本次尚未提交音乐服务，内容已保留，可以稍后重试。'
     case 'PROVIDER_AUTH_FAILED':case 'PROVIDER_BALANCE_LOW':case 'PROVIDER_ENDPOINT_UNAVAILABLE':return '音乐生成服务暂不可用，内容已保留，已有歌曲仍可试听和分享。'
     case 'PROVIDER_RATE_LIMITED':return '音乐服务当前繁忙，请稍后再试，避免连续点击。'

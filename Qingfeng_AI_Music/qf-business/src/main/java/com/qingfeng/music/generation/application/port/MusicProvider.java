@@ -7,6 +7,10 @@ public interface MusicProvider {
     String name();
     boolean isConfigured();
     Submission submit(Request request, String idempotencyKey);
+    default boolean supportsAudioReference() { return false; }
+    default Submission submitWithReference(Request request, String idempotencyKey, java.net.URI uploadUrl, double weight) {
+        throw new NotSubmitted("AUDIO_REFERENCE_UNAVAILABLE");
+    }
     Result query(String providerTaskId);
     default void validate(Request request) { }
     /** 纯本地展开描述，不能发起网络调用或改变歌词。 */

@@ -290,10 +290,11 @@ function persist():Promise<Work|undefined> {
   if (!ready.value || !valid.value || conflict.value) return Promise.resolve(existing.value)
   if (existing.value && !dirty.value) return Promise.resolve(existing.value)
   const submitted=snapshot(),targetWork=existing.value,requestDraftKey=draftKey,turn=initSequence
+  const referenceTrackId=songReference.value?songReferenceId(route.query.reference):undefined
   saving.value=true
   inflight=(async()=>{
     try {
-      const saved=await saveWork(submitted,targetWork,requestDraftKey)
+      const saved=await saveWork(submitted,targetWork,requestDraftKey,referenceTrackId)
       if(!alive||turn!==initSequence)return saved
       existing.value=saved;baseline.value=JSON.stringify(asDraft(saved));error.value=''
       // 新建向导保留同一个draft地址，浏览器后退不会误变成另一份新草稿。
