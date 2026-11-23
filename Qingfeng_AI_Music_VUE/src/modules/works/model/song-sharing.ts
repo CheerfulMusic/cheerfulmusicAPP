@@ -1,4 +1,10 @@
-export interface SharedSong { title: string; lyrics: string; hasCover?: boolean; expiresAt: string }
+export interface SharedSong { songId: string; title: string; lyrics: string; hasCover: boolean; expiresAt: string }
+export interface SongShareStatus {
+  status: 'PRIVATE' | 'SHAREABLE' | 'REVOKED' | 'EXPIRED'
+  card: SharedSong | null
+  views: number
+  plays: number
+}
 export function songShareUrl(token: string, origin: string): string {
   if (!/^[A-Za-z0-9_-]{43}$/.test(token)) throw new Error('分享链接暂时无法创建，请重试。')
   const base = new URL(origin)

@@ -79,6 +79,75 @@ class GiftWorkflowIntegrationTest {
   assertEquals(404,call(null,"GET",songApi+"/thumbnail.png",null).statusCode());
   assertEquals(404,call(null,"GET","/gift/"+token,null).statusCode());assertFalse(text(call(null,"GET","/gift/"+token,null)).contains("og:title"));
  }
+
+ private tools.jackson.databind.JsonNode json(HttpResponse<byte[]> response, int status) {
+  assertEquals(status, response.statusCode(), text(response));
+  return new tools.jackson.databind.ObjectMapper().readTree(response.body());
+ }
+
+ @Test void songVersionSharingRequiresOptInAndCountsActualPlayback() throws Exception {
+  var owner = session();
+  var other = session();
+  String work = work(owner);
+  String revision = lyrics(owner, work, "在这里听见");
+  String api = "/api/app/works/" + work;
+  assertEquals(200, call(owner, "POST", api + "/lyrics/" + revision + "/confirm", "{}").statusCode());
+  byte[] first = wav(), second = wav();
+  second[44] = 1;
+  String assetA = field(text(upload(owner, work, first)), "id");
+  String assetB = field(text(upload(owner, work, second)), "id");
+  String stateA = api + "/shares/" + assetA, stateB = api + "/shares/" + assetB;
+  assertEquals("PRIVATE", json(call(owner, "GET", stateA, null), 200).path("status").asString());
+  assertEquals(401, call(null, "GET", stateA, null).statusCode());
+  assertEquals(404, call(other, "GET", stateA, null).statusCode());
+
+  String consentA = "{\"assetId\":\"" + assetA + "\",\"revisionId\":\"" + revision + "\",\"publicSong\":true}";
+  String consentB = consentA.replace(assetA, assetB);
+  var giftOnly = json(call(owner, "POST", api + "/shares", consentA.replace("true", "false")), 200);
+  String giftPage = "/gift/" + giftOnly.path("token").asString();
+  assertEquals("PRIVATE", json(call(owner, "GET", stateA, null), 200).path("status").asString());
+  var grantA = json(call(owner, "POST", api + "/shares", consentA), 200);
+  String idA = grantA.path("songId").asString();
+  assertEquals("PRIVATE", json(call(owner, "GET", stateB, null), 200).path("status").asString());
+  String idB = json(call(owner, "POST", api + "/shares", consentB), 200).path("songId").asString();
+  assertNotEquals(idA, idB);
+  String publicA = "/api/songs/" + idA;
+  assertEquals(200, call(null, "HEAD", "/song/" + idA, null).statusCode());
+  assertEquals(200, call(null, "GET", "/song/" + idA, null).statusCode());
+  for (String range : java.util.List.of("bytes=0-1", "bytes=0-15", "bytes=16-")) {
+   var read = HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + publicA + "/audio")).header("Range",range).build();
+   assertEquals(206, owner.client().send(read,HttpResponse.BodyHandlers.discarding()).statusCode());
+  }
+  var beforePlay = json(call(owner, "GET", stateA, null), 200);
+  assertEquals("SHAREABLE", beforePlay.path("status").asString());
+  assertEquals(idA, beforePlay.path("card").path("songId").asString());
+  assertEquals(1, beforePlay.path("views").asLong());
+  assertEquals(0, beforePlay.path("plays").asLong());
+  assertEquals(204, call(null, "POST", publicA + "/play", null).statusCode());
+  assertEquals(idA, json(call(owner, "POST", api + "/shares", consentA), 200).path("songId").asString());
+  assertEquals(1, json(call(owner, "GET", stateA, null), 200).path("plays").asLong());
+
+  assertEquals(404, call(other, "DELETE", stateA, null).statusCode());
+  assertEquals(200, call(owner, "DELETE", stateA, null).statusCode());
+  var revoked = json(call(owner, "GET", stateA, null), 200);
+  assertEquals("REVOKED", revoked.path("status").asString());
+  assertTrue(revoked.path("card").isNull());
+  assertEquals(200, call(null, "GET", giftPage, null).statusCode());
+  assertEquals(404, call(null, "GET", "/song/" + idA, null).statusCode());
+  for (String path : java.util.List.of("/public", "/audio", "/cover", "/thumbnail.png"))
+   assertEquals(404, call(null, "GET", publicA + path, null).statusCode(), path);
+  assertEquals(404, call(null, "POST", publicA + "/play", null).statusCode());
+  assertArrayEquals(second, call(null, "GET", "/api/songs/" + idB + "/audio", null).body());
+
+  jdbc.update("UPDATE share_link SET expires_at=? WHERE public_song_id=?",java.sql.Timestamp.from(Instant.now().minusSeconds(5)),idB);
+  assertEquals("EXPIRED", json(call(owner, "GET", stateB, null), 200).path("status").asString());
+  assertEquals(404, call(null, "GET", "/api/songs/" + idB + "/audio", null).statusCode());
+  assertEquals(idB, json(call(owner, "POST", api + "/shares", consentB), 200).path("songId").asString());
+  assertEquals(200, call(owner, "DELETE", api + "?acknowledgeCompleted=true", null).statusCode());
+  assertEquals(404, call(null, "GET", "/song/" + idB, null).statusCode());
+  assertEquals(404, call(null, "GET", "/api/songs/" + idB + "/audio", null).statusCode());
+ }
+
  @Test void uploadedCoverRemainsPrivateUntilSharedAndGiftRevocationClosesItsRoute()throws Exception{
   var a=session();var other=session();String w=work(a),r=lyrics(a,w,"中文与 English");call(a,"POST","/api/app/works/"+w+"/lyrics/"+r+"/confirm","{}");String audio=field(text(upload(a,w,wav())),"id");
   var pixels=new java.awt.image.BufferedImage(48,48,java.awt.image.BufferedImage.TYPE_INT_RGB);var encoded=new java.io.ByteArrayOutputStream();javax.imageio.ImageIO.write(pixels,"png",encoded);

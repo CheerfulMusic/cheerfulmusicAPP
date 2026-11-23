@@ -1,16 +1,20 @@
 <script setup lang="ts">
 import { t, formatDate, defaultCover, locale } from '../../../shared/i18n/index'
 import { ref, watch, nextTick, onBeforeUnmount, computed } from 'vue'
-import { createShare, revokeShares, type Revision, type AudioAsset } from '../api/detail'
-import { requestJson, apiUrl } from '../../../shared/http/api-client'
-import { lyricQuotes, localShareAddress, posterFilename, shareCancelled, shareSongCard, songShareUrl, type SharedSong } from '../model/song-sharing'
+import { createShare, getSongShareStatus, revokeSongShare, revokeShares, type Revision, type AudioAsset } from '../api/detail'
+import { apiUrl } from '../../../shared/http/api-client'
+import { lyricQuotes, localShareAddress, posterFilename, shareCancelled, shareSongCard, songShareUrl, type SongShareStatus } from '../model/song-sharing'
 import { usePlayer } from '../../../shared/player/store'
 import PlaybackIcon from '../../../shared/ui/PlaybackIcon.vue'
 
 const props = defineProps<{ open: boolean; workId: string; revision: Revision | null; asset: AudioAsset | null; coverId?: string | null; workTitle?: string }>()
-const emit = defineEmits<{ created: []; close: [] }>()
+const emit = defineEmits<{ created: []; revoked: []; close: [] }>()
 const dialog = ref<HTMLDialogElement>(), shareButton = ref<HTMLButtonElement>()
-const link = ref(''), token = ref(''), expires = ref(''), song = ref<SharedSong>()
+const summary = ref<SongShareStatus>()
+const song = computed(() => summary.value?.card)
+const expires = computed(() => song.value?.expiresAt ?? '')
+const link = computed(() => song.value ? songShareUrl(song.value.songId, location.origin) : '')
+const stateLabel = { PRIVATE: '未启用歌曲分享页', SHAREABLE: '已启用公开试听', REVOKED: '已撤销公开试听', EXPIRED: '分享链接已过期' }
 const busy = ref(false), error = ref(''), notice = ref(''), sharing = ref(false)
 const posterOpen = ref(false), posterBusy = ref(false), posterUrl = ref(''), posterBlob = ref<Blob>(), posterError = ref('')
 const signature = ref(''), quote = ref(''), artworkFailed = ref(false), player = usePlayer()
@@ -20,10 +24,10 @@ const canCreate = computed(() => !!props.asset && (props.asset.origin === 'GENER
 const context = () => JSON.stringify([props.workId, importedRevisionId.value, props.asset?.id, props.coverId, props.workTitle])
 const quotes = computed(() => lyricQuotes(song.value?.lyrics || ''))
 const cover = computed(() => song.value?.hasCover && !artworkFailed.value
-  ? apiUrl(`public/gifts/${token.value}/cover?proxy=true`) : defaultCover())
-const track = computed(() => song.value && token.value ? {
-  id: `gift:${token.value}`, title: song.value.title, cover: cover.value,
-  audio: apiUrl(`public/gifts/${token.value}/audio`), provenance: props.asset?.origin,
+  ? apiUrl(`songs/${song.value.songId}/cover`) : defaultCover())
+const track = computed(() => song.value ? {
+  id: `song:${song.value.songId}`, title: song.value.title, cover: cover.value,
+  audio: apiUrl(`songs/${song.value.songId}/audio`), provenance: props.asset?.origin,
 } : undefined)
 const currentPlaying = computed(() => player.current?.id === track.value?.id && (player.playing || player.starting))
 const valid = () => !!link.value && Date.parse(expires.value) > Date.now()
@@ -33,44 +37,54 @@ function clearPoster() {
   posterUrl.value = ''; posterError.value = ''
 }
 function reset() {
-  generation++; busy.value = false; sharing.value = false; link.value = ''; token.value = ''; expires.value = ''
-  song.value = undefined; notice.value = ''; error.value = ''; posterOpen.value = false
+  generation++; busy.value = false; sharing.value = false; summary.value = undefined
+  notice.value = ''; error.value = ''; posterOpen.value = false
   quote.value = ''; signature.value = ''; artworkFailed.value = false; clearPoster()
 }
-watch(context, reset, { flush: 'sync' })
 watch([quote, signature, locale, cover], clearPoster, { flush: 'sync' })
 
-async function create() {
-  const asset = props.asset
-  if (busy.value || !props.open || !asset || !canCreate.value) return
-  if (song.value && valid()) return
-  const turn = ++generation, before = context()
+async function refresh(change?: () => Promise<unknown>, afterChange?: () => void) {
+  const asset = props.asset, work = props.workId
+  if (busy.value || !props.open || !asset) return
+  const turn = ++generation
   busy.value = true; error.value = ''; notice.value = ''; clearPoster()
   try {
-    // 卡片读取失败时保留已创建的令牌，重试只读取，避免不断创建分享。
-    if (!token.value || !valid()) {
-      const share = props.workTitle
-        ? await createShare(props.workId, asset.id, importedRevisionId.value, props.workTitle)
-        : await createShare(props.workId, asset.id, importedRevisionId.value)
-      if (turn !== generation || before !== context()) return
-      if (!Number.isFinite(Date.parse(share.expiresAt))) throw new Error(t('分享链接暂时无法创建，请重试。'))
-      link.value = songShareUrl(share.songId, location.origin); token.value = share.token
-      expires.value = share.expiresAt; emit('created')
+    if (change) {
+      await change()
+      if (turn !== generation) return
+      afterChange?.()
     }
-    const result = await requestJson<SharedSong>(`public/gifts/${token.value}`)
-    if (turn !== generation || before !== context()) return
-    song.value = result; quote.value = lyricQuotes(result.lyrics)[0] || ''
-    await nextTick(); if (props.open) shareButton.value?.focus({ preventScroll: true })
+    const result = await getSongShareStatus(work, asset.id)
+    if (turn !== generation) return
+    summary.value = result
+    quote.value = lyricQuotes(result.card?.lyrics || '')[0] || ''
+    if (change && result.card) {
+      await nextTick()
+      if (turn === generation) shareButton.value?.focus({ preventScroll: true })
+    }
   } catch (cause) {
-    if (turn === generation) error.value = cause instanceof Error ? cause.message : '创建分享失败'
+    if (turn !== generation) return
+    summary.value = undefined
+    error.value = cause instanceof Error ? cause.message : '分享状态暂时无法读取'
   } finally { if (turn === generation) busy.value = false }
 }
-watch([() => props.open, context], async () => {
+
+function create() {
+  const asset = props.asset
+  if (!asset || !canCreate.value || !summary.value) return
+  const work = props.workId, revision = importedRevisionId.value, title = props.workTitle
+  return refresh(() => createShare(work, asset.id, revision, title), () => emit('created'))
+}
+
+watch([() => props.open, context], async ([open]) => {
+  reset()
+  const turn = generation
   await nextTick()
-  if (!props.open) { dialog.value?.close(); clearPoster(); return }
+  if (turn !== generation) return
+  if (!open) { dialog.value?.close(); return }
   if (!dialog.value?.open) dialog.value?.showModal()
-  if (!song.value || !valid()) await create()
-}, { immediate: true })
+  await refresh()
+}, { immediate: true, flush: 'sync' })
 function checkLink() {
   if (valid()) return true
   error.value = '分享链接已过期，请重新创建分享。'; return false
@@ -126,17 +140,16 @@ async function sharePoster() {
   catch (cause) { if (turn === generation && !shareCancelled(cause)) notice.value = '当前应用无法直接分享，请复制链接或保存海报。' }
   finally { if (turn === generation) sharing.value = false }
 }
-async function revoke() {
-  if (busy.value || !window.confirm(t('将关闭这个作品创建过的所有礼物链接，是否继续？'))) return
-  const turn = ++generation, workId = props.workId, oldTrack = track.value?.id
-  busy.value = true; error.value = ''; clearPoster()
-  try {
-    await revokeShares(workId)
-    if (turn !== generation) return
-    reset(); if (player.current?.id === oldTrack) player.reset()
-    notice.value = '此作品的全部分享已撤销，已购买者仍可下载已购音频。'
-  } catch (cause) { if (turn === generation) error.value = cause instanceof Error ? cause.message : '撤销失败' }
-  finally { if (turn === generation) busy.value = false }
+function revoke(all: boolean) {
+  const asset = props.asset, work = props.workId, oldTrack = track.value?.id
+  const prompt = all ? '将关闭这个作品创建过的所有礼物链接，是否继续？' : '撤销这个歌曲版本的公开试听？'
+  if (!asset || busy.value || !window.confirm(t(prompt))) return
+  return refresh(() => all ? revokeShares(work) : revokeSongShare(work, asset.id), () => {
+    posterOpen.value = false
+    if (oldTrack && player.current?.id === oldTrack) player.reset()
+    notice.value = all ? '此作品的全部分享已撤销，已购买者仍可下载已购音频。' : '此版本的公开试听已撤销。'
+    emit('revoked')
+  })
 }
 onBeforeUnmount(() => { generation++; clearPoster(); dialog.value?.close() })
 </script>
@@ -147,6 +160,10 @@ onBeforeUnmount(() => { generation++; clearPoster(); dialog.value?.close() })
       <button class="song-share-close" type="button" :aria-label="t('关闭分享')" @click="emit('close')">×</button>
       <h2 id="song-share-title">{{ t('让你的歌被听见') }}</h2>
       <p class="share-intro">{{ t('分享给朋友，或把喜欢的一句做成音乐海报。') }}</p>
+      <p v-if="summary" class="save-info" role="status">
+        {{ t(stateLabel[summary.status]) }}
+        <template v-if="summary.status !== 'PRIVATE'"> · {{ t('{count} 次访问', { count: summary.views }) }} · {{ t('{count} 次播放', { count: summary.plays }) }}</template>
+      </p>
       <p v-if="busy" role="status">{{ t('正在准备歌曲卡片…') }}</p>
       <p v-else-if="!canCreate" role="status">{{ t('正在读取歌曲对应的歌词，请稍候…') }}</p>
       <p v-if="error" class="notice error" role="alert">{{ t(error) }}</p>
@@ -188,10 +205,17 @@ onBeforeUnmount(() => { generation++; clearPoster(); dialog.value?.close() })
         <p class="save-info">{{ t('收听链接有效期至') }} {{ formatDate(expires) }}</p>
         <p v-if="localShareAddress(link)" class="notice">{{ t('当前链接是本机或内网地址，朋友的设备需要能访问此地址才能收听。') }}</p>
       </template>
-      <button v-if="!busy && canCreate && (!song || error)" class="button" type="button" @click="create">{{ t(error ? '重试创建分享链接' : '创建歌曲分享链接') }}</button>
+      <button v-if="!busy && !summary && error" class="button" type="button" @click="refresh()">{{ t('重新读取分享状态') }}</button>
+      <button v-if="!busy && canCreate && summary && !song" class="button" type="button" @click="create">{{ t('启用公开试听') }}</button>
       <p v-if="notice" class="notice success" role="status">{{ t(notice) }}</p>
       <p class="song-share-note">{{ t('朋友无需登录即可收听，原始故事和编辑权限不会公开。') }}</p>
-      <details class="song-share-manage"><summary>{{ t('管理分享') }}</summary><p>{{ t('撤销后未购买者无法继续访问；已付费解锁者仍可下载已购买音频。') }}</p><button class="text-button" type="button" :disabled="busy" @click="revoke">{{ t('撤销本作品全部分享') }}</button></details>
+      <details class="song-share-manage">
+        <summary>{{ t('管理分享') }}</summary>
+        <p>{{ t('撤销后未购买者无法继续访问；已付费解锁者仍可下载已购买音频。') }}</p>
+        <button v-if="song" class="text-button" type="button" :disabled="busy || !canCreate" @click="create">{{ t('更新分享卡片') }}</button>
+        <button v-if="song" class="text-button" type="button" :disabled="busy" @click="revoke(false)">{{ t('撤销此版本分享') }}</button>
+        <button class="text-button" type="button" :disabled="busy" @click="revoke(true)">{{ t('撤销本作品全部分享') }}</button>
+      </details>
     </section>
   </dialog>
 </template>

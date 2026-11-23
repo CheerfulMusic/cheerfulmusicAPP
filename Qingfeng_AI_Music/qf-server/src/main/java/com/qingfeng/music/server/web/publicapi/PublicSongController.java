@@ -76,13 +76,22 @@ public class PublicSongController {
         return ResponseEntity.ok().cacheControl(CacheControl.noStore()).header("Referrer-Policy","no-referrer").body(page);
     }
     @GetMapping("/api/songs/{id}/audio")
-    public ResponseEntity<Resource> audio(@PathVariable String id,@RequestHeader(value="Range",required=false) String range,jakarta.servlet.http.HttpServletRequest request) {
+    public ResponseEntity<Resource> audio(@PathVariable String id,@RequestHeader(value="Range",required=false) String range) {
         var gift = grant(id);
-        var response = AudioResponse.from(media.content(gift.work(),gift.asset()), false, range);
-        if ("GET".equals(request.getMethod()) && response.getStatusCode().is2xxSuccessful() && (range==null || range.startsWith("bytes=0-")))
-            db.update("UPDATE share_link SET playback_starts=playback_starts+1 WHERE id=?",gift.id());
-        return response;
+        return AudioResponse.from(media.content(gift.work(),gift.asset()), false, range);
     }
+
+    @PostMapping("/api/songs/{id}/play")
+    public ResponseEntity<Void> play(@PathVariable String id) {
+        var gift = grant(id);
+        int updated = db.update("""
+                UPDATE share_link SET playback_starts=playback_starts+1
+                WHERE id=? AND active=TRUE AND expires_at>CURRENT_TIMESTAMP
+                """, gift.id());
+        if (updated == 0) throw missing();
+        return ResponseEntity.noContent().build();
+    }
+
     @GetMapping("/api/songs/{id}/cover")
     public ResponseEntity<Resource> cover(@PathVariable String id) {
         var gift = grant(id);

@@ -82,7 +82,7 @@ const analyticsSummaryBody=(v:unknown)=>{
 }
 const analyticsAccessBody=(v:unknown)=>obj(v)&&typeof v.allowed==='boolean'&&(v.allowed!==true||text(v.viewer))
 const quickCreation=(v:unknown)=>obj(v)&&text(v.id)&&text(v.workId)&&['QUEUED','WRITING','LYRICS_READY','SUBMITTING_MUSIC','MUSIC_QUEUED','SUBMITTING','RUNNING','SAVING','SUBMISSION_UNKNOWN','SUCCEEDED','FAILED','CANCELLED'].includes(String(v.status))&&['revisionId','taskId','errorCode'].every(k=>v[k]===null||text(v[k]))&&typeof v.canRetry==='boolean'&&text(v.createdAt)
-export const emptyResponseAllowed=(path:string,method:string)=>method==='DELETE'&&/^app\/works\/[^/]+\/shares$/.test(path)||method==='POST'&&(/^app\/works\/[^/]+\/generations\/[^/]+\/retry-archive$/.test(path)||/^public\/discover\/songs\/[^/]+\/\d+\/play$/.test(path))||method==='GET'&&(/^app\/works\/[^/]+\/generations\/[^/]+\/music-settings$/.test(path)||/^app\/works\/[^/]+\/quick-creations\/latest$/.test(path))
+export const emptyResponseAllowed=(path:string,method:string)=>method==='DELETE'&&/^app\/works\/[^/]+\/shares(?:\/[^/]+)?$/.test(path)||method==='POST'&&(/^app\/works\/[^/]+\/generations\/[^/]+\/retry-archive$/.test(path)||/^public\/discover\/songs\/[^/]+\/\d+\/play$/.test(path))||method==='GET'&&(/^app\/works\/[^/]+\/generations\/[^/]+\/music-settings$/.test(path)||/^app\/works\/[^/]+\/quick-creations\/latest$/.test(path))
 /** 校验应用实际依赖的字段。HTTP 200只代表传输成功，不代表业务结果完整。 */
 export function validResponse(path:string,method:string,value:unknown):boolean{
  const [endpoint,query]=path.split('?')
@@ -190,6 +190,15 @@ export function validResponse(path:string,method:string,value:unknown):boolean{
  if(/\/covers\/edits$/.test(path))return coverEdit(value)
  if(/\/covers\/selection$/.test(path))return cover(value)
  if(/\/covers$/.test(path))return method==='GET'?cover(value):coverAsset(value)
+ if (/^app\/works\/[^/]+\/shares\/[^/]+$/.test(path) && method === 'GET') {
+  if (!obj(value) || !Number.isSafeInteger(value.views) || Number(value.views) < 0 ||
+      !Number.isSafeInteger(value.plays) || Number(value.plays) < 0) return false
+  if (value.status !== 'SHAREABLE') return ['PRIVATE','REVOKED','EXPIRED'].includes(String(value.status)) && value.card === null
+  const card = value.card
+  return obj(card) && typeof card.songId === 'string' && /^[A-Za-z0-9_-]{43}$/.test(card.songId) &&
+    text(card.title) && str(card.lyrics) && typeof card.hasCover === 'boolean' &&
+    typeof card.expiresAt === 'string' && Number.isFinite(Date.parse(card.expiresAt))
+ }
  if(/\/shares$/.test(path))return obj(value)&&text(value.id)&&text(value.token)&&text(value.expiresAt)
  if(/\/download$/.test(path))return obj(value)&&typeof value.unlocked==='boolean'&&num(value.price)
  if(/^public\/gifts\//.test(path))return obj(value)&&str(value.title)&&str(value.lyrics)

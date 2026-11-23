@@ -575,7 +575,7 @@ async function backToStory(){
         </section>
         <p v-if="!modelReady&&!asset" class="notice">{{ t('音乐生成暂不可用，可以先编辑并保存歌词，稍后再试。') }}</p>
         <AudioPanel id="work-audio" tabindex="-1" :key="work.id+'-'+mediaRefresh" :work="work" :title="songTitle" :tasks="tasks" :cover="artwork" @selected="asset=$event" @selected-version="songVersion=$event" @load-state="mediaState=$event" @compare="sectionEditor?.compare($event)"/>
-        <SharePanel v-if="asset" :open="giftStage" :cover-id="covers?.currentCoverId" @close="giftStage=false" @created="shared=true" :work-id="work.id" :revision="giftRevision" :asset="asset" :work-title="generated ? sharedWorkTitle : undefined"/>
+        <SharePanel v-if="asset" :open="giftStage" :cover-id="covers?.currentCoverId" @close="giftStage=false" @created="shared=true" @revoked="shared=false" :work-id="work.id" :revision="giftRevision" :asset="asset" :work-title="generated ? sharedWorkTitle : undefined"/>
       </div>
       <CreationSettingsSummary v-if="draftReady" :work="work" :revision="lyricBase" :busy="submitting" @edit-music="backToStory"/>
       <aside v-else-if="asset" class="work-overview">
