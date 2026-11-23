@@ -40,8 +40,6 @@
   position:relative;
   isolation:isolate;
   width:calc(100% - 144px);
-  max-width:1280px;
-  /* Fill the visible first screen without spreading out the content rows. */
   min-height:calc(100svh - var(--home-header-height));
   min-height:calc(100dvh - var(--home-header-height));
   display:grid;
@@ -57,9 +55,6 @@
   border:0;
 }
 .home-light-shell .home-creator-hero .p-intro { width:100%; max-width:810px; margin:0; padding:0; z-index:2; position:relative; }
-@media(min-width:1101px) {
-  .home-light-shell .home-creator-hero .p-intro { left:-32px; }
-}
 .home-light-shell .home-creator-hero .p-intro h1 { font-size:56px; letter-spacing:-2px; font-weight:400; font-synthesis:none; line-height:1.25; margin:0; color:#202020; }
 .home-light-shell .creator-main-title { display:block; letter-spacing:.01em; }
 .home-light-shell .creator-title-art { display:block; height:1em; width:auto; max-width:100%; }
@@ -119,6 +114,29 @@
 .home-light-shell .q-player-step,.home-light-shell .q-player-close { color:#62534b; }
 .home-light-shell .q-player-toggle { color:#fff; }
 
+@media(min-width:701px) {
+  .home-light-shell .home-creator-hero {
+    /* Fill shorter windows and let recommendations rise into taller windows. */
+    min-height:min(720px,calc(100svh - var(--home-header-height)));
+    min-height:min(720px,calc(100dvh - var(--home-header-height)));
+    grid-template-rows:minmax(min-content,1fr) auto;
+    align-content:stretch;
+    padding-bottom:44px;
+  }
+}
+@media(min-width:1101px) {
+  .home-light-shell .home-creator-hero,
+  .home-light-shell .playlist-explore {
+    width:min(1400px,calc(100% - 88px));
+  }
+  .home-light-shell .home-creator-hero {
+    grid-template-columns:repeat(2,minmax(0,1fr));
+    column-gap:clamp(36px,5vw,100px);
+  }
+  .home-light-shell .home-creator-hero .p-intro h1 { font-size:clamp(56px,3.8vw,68px); }
+  .home-light-shell .home-creator-hero .description-translation { max-width:100%; }
+  .light-brand-scene { max-width:min(560px,calc(110svh - 270px)); justify-self:center; transform:scale(.96); }
+}
 @media(max-width:1100px) and (min-width:701px) {
   .home-light-shell .consumer-header-inner { width:calc(100% - 60px); gap:16px; }
   .home-light-shell .brand-logo-type strong { font-size:19px; }
