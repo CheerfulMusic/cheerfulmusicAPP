@@ -166,8 +166,8 @@
     status.textContent = '正在生成海报…'
     try {
       const result = await preparePoster()
-      if (turn === generation && result) reveal(result)
-    } catch { if (turn === generation) status.textContent = '海报暂时无法生成，可重试或复制链接。' }
+      if (turn === generation && result && byId('wechat-guide').hidden) reveal(result)
+    } catch { if (turn === generation && byId('wechat-guide').hidden) status.textContent = '海报暂时无法生成，请再试一次。' }
   }
   byId('send-poster').onclick = () => { if (prepared && canSend(prepared.file)) return sendImage(prepared) }
   function dismiss() {
@@ -190,7 +190,13 @@
     else { sheet.setAttribute('open', ''); document.body.classList.add('sheet-fallback') }
     document.body.classList.add('sharing')
     close.focus({ preventScroll: true })
-    preparePoster().catch(() => {})
+  }
+  // The author selected a destination on the work page, or scanned its QR code.
+  // The SDK shares the canonical listening URL, so recipients open the player directly.
+  const destination = { '#share-friend': 'friend', '#share-timeline': 'timeline' }[location.hash]
+  if (destination) {
+    trigger.click()
+    byId(destination).click()
   }
   close.onclick = dismiss
   sheet.addEventListener('cancel', event => { event.preventDefault(); dismiss() })
@@ -203,7 +209,7 @@
     if (!document.body.classList.contains('sheet-fallback')) return
     if (event.key === 'Escape') { event.preventDefault(); dismiss(); return }
     if (event.key !== 'Tab') return
-    const controls = Array.from(sheet.querySelectorAll('button, a[href], input')).filter(el => !el.closest('[hidden]') && !el.disabled)
+    const controls = Array.from(sheet.querySelectorAll('button, a[href], input, summary')).filter(el => el.getClientRects().length > 0 && !el.disabled)
     const first = controls[0], last = controls[controls.length - 1]
     if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus() }
     else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus() }

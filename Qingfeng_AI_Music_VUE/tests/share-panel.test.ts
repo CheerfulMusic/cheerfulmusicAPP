@@ -4,11 +4,11 @@ import { createApp, h, nextTick, reactive, type App } from 'vue'
 import SharePanel from '../src/modules/works/components/SharePanel.vue'
 import type { Revision, AudioAsset } from '../src/modules/works/api/detail'
 
-const mocks = vi.hoisted(() => ({ create: vi.fn(), get: vi.fn(), revoke: vi.fn(), revokeVersion: vi.fn(), poster: vi.fn() }))
+const mocks = vi.hoisted(() => ({ create: vi.fn(), get: vi.fn(), revoke: vi.fn(), revokeVersion: vi.fn(), poster: vi.fn(), qr: vi.fn() }))
 vi.mock('../src/modules/works/api/detail', () => ({ createShare: mocks.create, getSongShareStatus: mocks.get, revokeShares: mocks.revoke, revokeSongShare: mocks.revokeVersion }))
 vi.mock('../src/shared/http/api-client', () => ({ apiUrl: (s: string) => '/api/' + s }))
 vi.mock('../src/shared/player/store', () => ({ usePlayer: () => ({ current: null, playing: false, starting: false, toggle: vi.fn(), reset: vi.fn() }) }))
-vi.mock('../src/modules/works/model/song-poster', () => ({ renderSongPoster: mocks.poster }))
+vi.mock('../src/modules/works/model/song-poster', () => ({ renderSongPoster: mocks.poster, wechatShareQr: mocks.qr }))
 let app: App | undefined
 const flush = async () => { for (let i = 0; i < 5; i++) { await nextTick(); await new Promise(r => setTimeout(r, 0)) } }
 const token = 'A'.repeat(43)
@@ -25,7 +25,14 @@ function mount(origin: AudioAsset['origin'] = 'GENERATED') {
   app = createApp({ setup: () => () => h(SharePanel, props) }); app.mount(document.body.appendChild(document.createElement('div')))
   return props
 }
-function button(text: string) { return [...document.querySelectorAll('button')].find(b => b.textContent?.trim() === text)! }
+function button(text: string) {
+  return [...document.querySelectorAll('button')].find(b => {
+    const copy = b.cloneNode(true) as HTMLButtonElement
+    copy.querySelectorAll('[aria-hidden=true]').forEach(icon => icon.remove())
+    return copy.textContent?.trim() === text
+  })!
+}
+function channel(target: string) { return document.querySelector<HTMLAnchorElement>('.share-destinations a[href$="#share-' + target + '"]')! }
 beforeEach(() => {
   vi.clearAllMocks()
   Object.defineProperty(HTMLDialogElement.prototype, 'showModal', { configurable: true, value() { this.open = true } })
@@ -35,6 +42,7 @@ beforeEach(() => {
   mocks.create.mockResolvedValue(undefined)
   mocks.get.mockResolvedValue(privateState)
   mocks.poster.mockResolvedValue(new Blob(['image'], { type: 'image/png' }))
+  mocks.qr.mockResolvedValue('data:image/png;base64,fixture')
 })
 afterEach(() => { app?.unmount(); app = undefined; document.body.innerHTML = ''; vi.unstubAllGlobals(); vi.restoreAllMocks() })
 describe('share panel state and poster lifecycle', () => {
@@ -66,7 +74,7 @@ describe('share panel state and poster lifecycle', () => {
     button('启用公开试听').click(); await flush()
     expect(mocks.create).toHaveBeenCalledExactlyOnceWith('work-a', 'audio-a', 'revision-import', undefined)
   })
-  it('offers direct access to copy the public URL alongside the card and poster', async () => {
+  it('offers friends, Moments and a poster first and copies only on an explicit secondary action', async () => {
     const writeText = vi.fn().mockResolvedValue(undefined)
     vi.stubGlobal('navigator', { clipboard: { writeText } })
     mocks.get.mockResolvedValue(active())
@@ -74,22 +82,48 @@ describe('share panel state and poster lifecycle', () => {
     expect(mocks.create).not.toHaveBeenCalled()
     expect(document.body.textContent).toContain('5 次访问')
     expect(document.querySelector('.share-card-copy h3')?.textContent).toBe('我的歌')
-    expect(button('分享歌曲卡片')).toBeTruthy(); expect(button('制作音乐海报')).toBeTruthy()
+    expect(channel('friend').textContent).toBe('微信好友')
+    expect(channel('timeline').textContent).toBe('朋友圈')
+    expect(button('音乐海报')).toBeTruthy()
     const copy = button('复制分享链接')
     const url = document.querySelector<HTMLInputElement>('.share-link-panel input')?.value
     expect(url).toContain('/song/' + token)
-    expect(copy.closest('details')).toBeNull()
+    expect(copy.closest('details')?.open).toBe(false)
+    let finish!: (data: string) => void
+    mocks.qr.mockImplementationOnce(() => new Promise<string>(resolve => { finish = resolve }))
+    channel('friend').click(); await flush()
+    expect(mocks.qr).toHaveBeenCalledWith(url, 'friend')
+    channel('timeline').click(); await flush()
+    expect(mocks.qr).toHaveBeenLastCalledWith(url, 'timeline')
+    expect(document.querySelector('.destination-guide')?.textContent).toContain('分享到朋友圈')
+    finish('data:image/png;base64,stale'); await flush()
+    expect(document.querySelector('.destination-guide img')?.getAttribute('src')).toBe('data:image/png;base64,fixture')
+    expect(writeText).not.toHaveBeenCalled()
+    copy.closest('details')!.open = true
     copy.click(); await flush()
     expect(writeText).toHaveBeenCalledExactlyOnceWith(url)
-    button('复制链接到微信').click(); await flush()
-    expect(writeText).toHaveBeenLastCalledWith(url)
-    expect(document.body.textContent).toContain('链接已复制，在微信聊天中粘贴即可发送。')
     writeText.mockRejectedValueOnce(new Error('denied'))
-    button('复制链接到微信').click(); await flush()
+    copy.click(); await flush()
     const input = document.querySelector<HTMLInputElement>('#song-share-link')!
     expect(input.selectionEnd! - input.selectionStart!).toBe(input.value.length)
     expect(document.body.textContent).toContain('请选中链接手动复制。')
     expect(document.querySelector('.share-card-art img')?.getAttribute('src')).toContain('/songs/' + token + '/cover')
+  })
+  it('navigates within WeChat to the signed public song with the selected destination', async () => {
+    const writeText = vi.fn()
+    vi.stubGlobal('navigator', { userAgent: 'MicroMessenger', clipboard: { writeText } })
+    mocks.get.mockResolvedValue(active())
+    mount(); await flush()
+    for (const target of ['friend', 'timeline']) {
+      const anchor = channel(target)
+      expect(anchor.pathname).toBe('/song/' + token)
+      let navigates = false
+      anchor.addEventListener('click', event => { navigates = !event.defaultPrevented; event.preventDefault() }, { once: true })
+      anchor.click(); await flush()
+      expect(navigates).toBe(true)
+    }
+    expect(mocks.qr).not.toHaveBeenCalled()
+    expect(writeText).not.toHaveBeenCalled()
   })
   it('retries only the status read after a confirmed change', async () => {
     mount(); await flush()
@@ -117,7 +151,7 @@ describe('share panel state and poster lifecycle', () => {
     let finish!: (blob: Blob) => void
     mocks.poster.mockImplementationOnce(() => new Promise(r => { finish = r }))
     mocks.get.mockResolvedValue(active())
-    mount(); await flush(); button('制作音乐海报').click(); await flush()
+    mount(); await flush(); button('音乐海报').click(); await flush()
     const select = document.querySelector<HTMLSelectElement>('.share-poster-options select')!
     select.value = 'Keep the light on'; select.dispatchEvent(new Event('change')); await flush()
     finish(new Blob(['stale'], { type: 'image/png' })); await flush()
@@ -130,7 +164,7 @@ describe('share panel state and poster lifecycle', () => {
   it('revocation clears the card, link and generated poster', async () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true); mocks.revoke.mockResolvedValue(undefined)
     mocks.get.mockResolvedValue(active())
-    mount(); await flush(); button('制作音乐海报').click(); await flush()
+    mount(); await flush(); button('音乐海报').click(); await flush()
     mocks.get.mockResolvedValue({ ...privateState, status: 'REVOKED' })
     button('撤销本作品全部分享').click(); await flush()
     expect(mocks.revoke).toHaveBeenCalledWith('work-a')

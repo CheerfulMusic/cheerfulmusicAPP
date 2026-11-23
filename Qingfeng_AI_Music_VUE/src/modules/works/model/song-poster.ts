@@ -1,5 +1,9 @@
 import QRCode from 'qrcode'
+import { wechatShareEntry, type WechatDestination } from './song-sharing'
 export { lyricQuotes, posterFilename } from './song-sharing'
+export function wechatShareQr(link: string, destination: WechatDestination): Promise<string> {
+  return QRCode.toDataURL(wechatShareEntry(link, destination), { width: 288, margin: 4, errorCorrectionLevel: 'M' })
+}
 export interface PosterInput {
   title: string; cover: string; link: string; quote: string; signature: string
   tagline: string; scanLabel: string; expiresLabel: string

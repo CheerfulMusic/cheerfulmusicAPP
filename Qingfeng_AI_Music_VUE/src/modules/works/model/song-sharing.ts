@@ -11,6 +11,12 @@ export function songShareUrl(token: string, origin: string): string {
   if (!['https:', 'http:'].includes(base.protocol) || base.username || base.password) throw new Error('分享地址无效')
   return new URL(`/song/${token}`, base.origin).href
 }
+export type WechatDestination = 'friend' | 'timeline'
+export function wechatShareEntry(link: string, destination: WechatDestination): string {
+  const entry = new URL(link)
+  entry.hash = 'share-' + destination
+  return entry.href
+}
 export function lyricQuotes(lyrics: string): string[] {
   return [...new Set(lyrics.split(/\r?\n/).map(line => line.trim().replace(/^(\*\*|__)(.+)\1$/, '$2')).filter(line =>
     !!line && !/^#{1,6}\s/.test(line) && !/^\[.*\]$/.test(line) && !/^【.*】$/.test(line)))].slice(0, 100)
