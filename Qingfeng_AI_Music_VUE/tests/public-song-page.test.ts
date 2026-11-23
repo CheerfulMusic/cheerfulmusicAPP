@@ -4,10 +4,11 @@ import { runInNewContext } from 'node:vm'
 import { describe, expect, it, vi } from 'vitest'
 
 const script = readFileSync('public/brand/song-share.js', 'utf8')
+const handoff = readFileSync('public/brand/wechat-handoff.js', 'utf8')
 const template = readFileSync('../Qingfeng_AI_Music/qf-server/src/main/resources/song.html', 'utf8')
 const description = '我在 Cheerful Music 创作了一首歌曲，邀请你来听听'
 
-function openSong(id: string, inWechat = false) {
+function openSong(id: string, inWechat = false, agent = 'WebTest') {
   const site = 'https://cheerfulmusic.com'
   const url = site + '/song/' + id
   const api = site + '/api/songs/' + id
@@ -23,17 +24,75 @@ function openSong(id: string, inWechat = false) {
   const config = { appId: 'fixture', timestamp: 9, nonceStr: 'nonce', signature: 'signature' }
   const fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => config })
   const navigator = {
-    userAgent: inWechat ? 'MicroMessenger/test' : 'WebTest',
+    userAgent: inWechat ? 'MicroMessenger/test' : agent,
     clipboard: { writeText: vi.fn().mockResolvedValue(undefined) }, share: vi.fn().mockResolvedValue(undefined),
   }
   const wx = { ready: vi.fn(), error: vi.fn(), config: vi.fn(), updateAppMessageShareData: vi.fn(), updateTimelineShareData: vi.fn() }
-  runInNewContext(script, { document, navigator, location, URL, fetch, wx, console: { warn: vi.fn() } })
-  return { fields, api, navigator, location, config, fetch, wx }
+  const assign = vi.fn()
+  const globals = { window: {}, document, navigator, location: Object.assign(location, { assign }), URL, fetch, wx, console: { warn: vi.fn() } }
+  runInNewContext(handoff, globals)
+  runInNewContext(script, globals)
+  return { fields, api, navigator, location, assign, config, fetch, wx }
 }
 
 const button = (id: string) => document.getElementById(id) as HTMLButtonElement
 
 describe('public song listener page', () => {
+  function clickDestination(id: string) {
+    document.getElementById('share-sheet')!.setAttribute('open', '')
+    const target = button(id)
+    target.onclick!.call(target, { isTrusted: true } as PointerEvent)
+  }
+
+  it('copies the song and opens desktop WeChat on a Windows friend click, never on a preview or for Moments', async () => {
+    const { fields, navigator, assign } = openSong('song-w', false, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)')
+    button('friend').click()
+    clickDestination('timeline')
+    expect(navigator.clipboard.writeText).not.toHaveBeenCalled()
+    expect(assign).not.toHaveBeenCalled()
+    clickDestination('friend')
+    expect(navigator.clipboard.writeText).toHaveBeenCalledExactlyOnceWith(fields.url)
+    await vi.waitFor(() => expect(assign).toHaveBeenCalledExactlyOnceWith('weixin://'))
+    expect(document.getElementById('open-desktop-wechat')?.hidden).toBe(false)
+    expect(document.getElementById('handoff-status')?.textContent).toContain('粘贴并发送')
+  })
+
+  it('keeps a manual copy and launch available if the desktop browser denies clipboard access', async () => {
+    const { fields, navigator, assign } = openSong('song-w2', false, 'Windows NT 10.0')
+    navigator.clipboard.writeText.mockRejectedValueOnce(new Error('denied'))
+    clickDestination('friend')
+    const input = document.getElementById('handoff-link') as HTMLInputElement
+    await vi.waitFor(() => expect(input.hidden).toBe(false))
+    expect(input.value).toBe(fields.url)
+    expect(input.selectionEnd).toBe(fields.url.length)
+    expect(document.getElementById('open-desktop-wechat')?.getAttribute('href')).toBe('weixin://')
+    expect(assign).not.toHaveBeenCalled()
+  })
+
+  it('does not launch after a delayed clipboard permission when the listener has switched to Moments', async () => {
+    const { navigator, assign } = openSong('song-w3', false, 'Windows NT 10.0')
+    let permit!: () => void
+    navigator.clipboard.writeText.mockImplementationOnce(() => new Promise<void>(resolve => { permit = resolve }))
+    clickDestination('friend')
+    clickDestination('timeline')
+    permit()
+    await Promise.resolve()
+    expect(assign).not.toHaveBeenCalled()
+    expect(document.getElementById('open-desktop-wechat')?.hidden).toBe(true)
+  })
+
+  it('hands the canonical URL to the mobile system picker, retaining QR access after cancellation', async () => {
+    const { fields, navigator, assign } = openSong('song-m', false, 'Mozilla/5.0 (Linux; Android 14) Mobile')
+    navigator.share.mockRejectedValueOnce(new DOMException('dismissed', 'AbortError'))
+    clickDestination('friend')
+    expect(navigator.share).toHaveBeenCalledExactlyOnceWith({ title: fields.title + ' · ' + fields.creator, url: fields.url, text: description })
+    clickDestination('timeline')
+    expect(navigator.share).toHaveBeenCalledTimes(2)
+    expect(assign).not.toHaveBeenCalled()
+    expect(navigator.clipboard.writeText).not.toHaveBeenCalled()
+    expect(document.getElementById('wechat-guide')?.hidden).toBe(false)
+  })
+
   it('records a started listen once across preloading, seeking and resuming, then counts a replay after the end', () => {
     const { fetch, api } = openSong('song-a')
     const audio = document.querySelector('audio')!
