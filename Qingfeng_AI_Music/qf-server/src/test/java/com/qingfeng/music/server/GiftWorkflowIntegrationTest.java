@@ -23,7 +23,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 @SpringBootTest(webEnvironment=SpringBootTest.WebEnvironment.RANDOM_PORT)
 @ActiveProfiles("test")
-@org.springframework.test.context.jdbc.Sql(scripts="classpath:db/migration/V54__song_share_statistics.sql", executionPhase=org.springframework.test.context.jdbc.Sql.ExecutionPhase.BEFORE_TEST_CLASS)
+@org.springframework.test.context.jdbc.Sql(scripts={"classpath:db/migration/V54__song_share_statistics.sql","classpath:db/optional/public_song_listening.sql"}, executionPhase=org.springframework.test.context.jdbc.Sql.ExecutionPhase.BEFORE_TEST_CLASS)
 class GiftWorkflowIntegrationTest {
  @Value("${local.server.port}")int port;
  @Autowired TaskMapper tasks;
@@ -40,7 +40,10 @@ class GiftWorkflowIntegrationTest {
  Session session()throws Exception{var client=HttpClient.newBuilder().cookieHandler(new CookieManager(null,CookiePolicy.ACCEPT_ALL)).build();var s=new Session(client,null);String csrf=field(text(call(s,"GET","/api/public/csrf",null)),"token");s=new Session(client,csrf);assertEquals(200,call(s,"POST","/api/public/session","{}").statusCode());return s;}
  final String draft="{\"recipient\":\"小雨\",\"occasion\":\"恋爱纪念\",\"story\":\"secret-only-story\",\"message\":\"原始祝福\",\"style\":\"民谣\",\"title\":\"故事\"}";
  String work(Session s)throws Exception{return field(text(call(s,"POST","/api/app/works",draft)),"id");}
- String lyrics(Session s,String w,String value)throws Exception{return field(text(call(s,"POST","/api/app/works/"+w+"/lyrics","{\"workVersion\":0,\"title\":\"给你的歌\",\"lyrics\":\""+value+"\"}")),"id");}
+ String lyrics(Session s,String w,String value)throws Exception{
+  String body = new tools.jackson.databind.ObjectMapper().writeValueAsString(java.util.Map.of("workVersion",0,"title","给你的歌","lyrics",value));
+  return field(text(call(s,"POST","/api/app/works/"+w+"/lyrics",body)),"id");
+ }
  byte[] wav(){var b=ByteBuffer.allocate(48).order(ByteOrder.LITTLE_ENDIAN);b.put("RIFF".getBytes()).putInt(40).put("WAVEfmt ".getBytes()).putInt(16).putShort((short)1).putShort((short)1).putInt(8000).putInt(16000).putShort((short)2).putShort((short)16).put("data".getBytes()).putInt(4).putInt(0);return b.array();}
  HttpResponse<byte[]> upload(Session s,String w,byte[] data)throws Exception{
   String boundary="QingfengBoundary";var prefix=("--"+boundary+"\r\nContent-Disposition: form-data; name=\"file\"; filename=\"../../secret.html\"\r\nContent-Type: audio/wav\r\n\r\n").getBytes(StandardCharsets.UTF_8);var suffix=("\r\n--"+boundary+"--\r\n").getBytes();
@@ -78,6 +81,147 @@ class GiftWorkflowIntegrationTest {
   assertEquals(404,call(null,"GET",songApi+"/audio",null).statusCode());
   assertEquals(404,call(null,"GET",songApi+"/thumbnail.png",null).statusCode());
   assertEquals(404,call(null,"GET","/gift/"+token,null).statusCode());assertFalse(text(call(null,"GET","/gift/"+token,null)).contains("og:title"));
+ }
+
+ @Test void listeningPageUsesOnlyPublishedStoryAndAssetLyricsAndIsolatesInteractions() throws Exception {
+  var owner = session();
+  var listener = session();
+  String snapshot = "# 《给你的歌》\n**[Verse 1]**\n窗外的 <海> & 风";
+  String work = work(owner), listenerWork = work(listener), revision = lyrics(owner,work,snapshot);
+  String api = "/api/app/works/" + work;
+  assertEquals(200,call(owner,"POST",api+"/lyrics/"+revision+"/confirm","{}").statusCode());
+  String asset = field(text(upload(owner,work,wav())),"id");
+  String id = json(call(owner,"POST",api+"/shares","{\"assetId\":\""+asset+"\",\"revisionId\":\""+revision+"\",\"publicSong\":true}"),200).path("songId").asString();
+  String pub = "/api/songs/"+id, write = "/api/app/song-listening/"+id;
+  String page = text(call(null,"GET","/song/"+id,null));
+  assertTrue(page.contains("窗外的 &lt;海&gt; &amp; 风"));
+  assertFalse(page.contains("[Verse 1]"));
+  assertFalse(page.contains("# 《给你的歌》"));
+  assertFalse(page.contains("secret-only-story"));
+  assertFalse(page.contains("data-start="));
+  assertEquals(snapshot,json(call(null,"GET",pub+"/public",null),200).path("lyrics").asString());
+  jdbc.update("INSERT INTO media_lyrics_timeline(asset_id,work_id,state,words_json,updated_at) VALUES(?,?,'READY',?,CURRENT_TIMESTAMP)",asset,work,
+          "[{\"text\":\"听 <见>\",\"start\":2.5,\"end\":4.0}]");
+  page = text(call(null,"GET","/song/"+id,null));
+  assertTrue(page.contains("data-start=\"2.5\" data-end=\"4.0\"") && page.contains("听 &lt;见&gt;"));
+  var empty = json(call(null,"GET",pub+"/community",null),200);
+  assertEquals("",empty.path("story").asString());
+  assertEquals(0,empty.path("commentCount").asLong());
+  assertEquals(404,call(listener,"PUT",write+"/story","{\"text\":\"越权\"}").statusCode());
+  assertEquals(200,call(owner,"PUT",write+"/story","{\"text\":\"只公开这一段\"}").statusCode());
+  assertEquals("只公开这一段",json(call(null,"GET",pub+"/community",null),200).path("story").asString());
+  assertEquals(403,call(listener,"PUT",write+"/reactions/like","{\"active\":true}").statusCode());
+  String listenerId = jdbc.queryForObject("SELECT owner_id FROM music_work WHERE id=?",String.class,listenerWork);
+  jdbc.update("INSERT INTO creator_oidc_identity(subject_hash,creator_id,created_at,updated_at) VALUES(?,?,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)",
+          UUID.randomUUID().toString().replace("-","").repeat(2),listenerId);
+  String ownerId = jdbc.queryForObject("SELECT owner_id FROM music_work WHERE id=?",String.class,work);
+  String artist = UUID.randomUUID().toString();
+  jdbc.update("INSERT INTO artist_profile(creator_id,public_id,stage_name,tagline,published) VALUES(?,?,?,'',TRUE)",ownerId,artist,"公开艺名");
+  assertEquals(artist,json(call(null,"GET",pub+"/public",null),200).path("artistId").asString());
+  String comment = "/comments/"+UUID.randomUUID(), commentText="{\"text\":\"喜欢这首歌\"}", active="{\"active\":true}";
+  for (int repeat=0; repeat<2; repeat++) {
+   for (String kind : java.util.List.of("like","favorite","follow")) assertEquals(204,call(listener,"PUT",write+"/reactions/"+kind,active).statusCode());
+   assertEquals(204,call(listener,"PUT",write+comment,commentText).statusCode());
+   assertEquals(204,call(listener,"PUT",write+comment+"/like",active).statusCode());
+  }
+  var heard = json(call(listener,"GET",pub+"/community?sort=hot",null),200);
+  for (String count : java.util.List.of("likes","favorites","followers","commentCount")) assertEquals(1,heard.path(count).asLong(),count);
+  assertTrue(heard.path("liked").asBoolean());
+  var first=heard.path("comments").get(0);
+  assertEquals(1,first.path("likes").asLong());
+  assertTrue(first.path("removable").asBoolean());
+  var anonymous=json(call(null,"GET",pub+"/community?sort=new",null),200);
+  assertFalse(anonymous.path("liked").asBoolean());
+  assertFalse(anonymous.path("comments").get(0).path("removable").asBoolean());
+  assertEquals(409,call(listener,"PUT",write+comment,"{\"text\":\"另一段\"}").statusCode());
+  assertEquals(204,call(owner,"DELETE",write+comment,null).statusCode());
+  assertEquals(404,call(listener,"PUT",write+comment+"/like",active).statusCode());
+  assertEquals(200,call(owner,"PUT",write+"/story","{\"text\":\"\"}").statusCode());
+  assertEquals("",json(call(null,"GET",pub+"/community",null),200).path("story").asString());
+  assertEquals(200,call(owner,"DELETE",api+"/shares/"+asset,null).statusCode());
+  assertEquals(404,call(null,"GET",pub+"/community",null).statusCode());
+  assertEquals(404,call(listener,"PUT",write+comment,commentText).statusCode());
+ }
+
+private String albumRelease(Session s,String work,String title)throws Exception {
+  String asset=field(text(upload(s,work,wav())),"id"), id=UUID.randomUUID().toString();
+  jdbc.update("""
+      INSERT INTO artist_song_release(id,creator_id,work_id,asset_id,title,version,show_on_profile,published_at)
+      SELECT ?,owner_id,id,?,?,1,TRUE,CURRENT_TIMESTAMP FROM music_work WHERE id=?
+      """,id,asset,title,work);
+  return id;
+ }
+ private String albumArtist(String work,String name) {
+  String owner=jdbc.queryForObject("SELECT owner_id FROM music_work WHERE id=?",String.class,work), artist=UUID.randomUUID().toString();
+  jdbc.update("INSERT INTO creator_oidc_identity(subject_hash,creator_id,created_at,updated_at) VALUES(?,?,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)",
+          UUID.randomUUID().toString().replace("-","").repeat(2),owner);
+  jdbc.update("INSERT INTO artist_profile(creator_id,public_id,stage_name,tagline,published) VALUES(?,?,?,'',TRUE)",owner,artist,name);
+  return artist;
+ }
+ private HttpResponse<byte[]> albumForm(Session session,String path,long version,boolean published,java.util.List<String> releases,byte[] cover)throws Exception {
+  String boundary="AlbumFixture"+UUID.randomUUID();
+  var body=new java.io.ByteArrayOutputStream();
+  var fields=new java.util.ArrayList<java.util.Map.Entry<String,String>>();
+  fields.add(java.util.Map.entry("version",String.valueOf(version)));fields.add(java.util.Map.entry("published",String.valueOf(published)));
+  fields.add(java.util.Map.entry("title","我的首张专辑"));fields.add(java.util.Map.entry("description","公开的专辑简介"));
+  for(String song:releases)fields.add(java.util.Map.entry("tracks",song));
+  for(var field:fields)body.write(("--"+boundary+"\r\nContent-Disposition: form-data; name=\""+field.getKey()+"\"\r\n\r\n"+field.getValue()+"\r\n").getBytes(StandardCharsets.UTF_8));
+  if(cover!=null){
+   body.write(("--"+boundary+"\r\nContent-Disposition: form-data; name=\"cover\"; filename=\"cover.png\"\r\nContent-Type: image/png\r\n\r\n").getBytes(StandardCharsets.UTF_8));
+   body.write(cover);body.write("\r\n".getBytes(StandardCharsets.UTF_8));
+  }
+  body.write(("--"+boundary+"--\r\n").getBytes(StandardCharsets.UTF_8));
+  return session.client().send(HttpRequest.newBuilder(URI.create("http://127.0.0.1:"+port+path))
+      .header("X-XSRF-TOKEN",session.csrf()).header("Content-Type","multipart/form-data; boundary="+boundary)
+      .POST(HttpRequest.BodyPublishers.ofByteArray(body.toByteArray())).build(),HttpResponse.BodyHandlers.ofByteArray());
+ }
+
+ @Test void albumsAreOrderedOwnedAndRequirePublishedVersionsForEveryPublicRead()throws Exception {
+  var owner=session();var other=session();
+  String wa=work(owner),wb=work(owner),wx=work(other);
+  String artist=albumArtist(wa,"风的声音"), foreignArtist=albumArtist(wx,"另一位作者");
+  String first=albumRelease(owner,wa,"第一首"), second=albumRelease(owner,wb,"第二首"), foreign=albumRelease(other,wx,"别人的歌");
+  var both=java.util.List.of(first,second);var reorder=java.util.List.of(second,first);
+  String id=UUID.randomUUID().toString(),write="/api/app/artist-albums/"+id;
+  String catalog="/api/public/artists/"+artist+"/albums",direct=catalog+"/"+id;
+  var bytes=new java.io.ByteArrayOutputStream();
+  javax.imageio.ImageIO.write(new java.awt.image.BufferedImage(24,16,java.awt.image.BufferedImage.TYPE_INT_RGB),"png",bytes);
+  var draft=json(albumForm(owner,write,0,false,both,bytes.toByteArray()),200);
+  String key=draft.path("coverKey").asString();
+  assertEquals(1,draft.path("version").asLong());
+  assertEquals(0,json(call(null,"GET",catalog,null),200).size());
+  assertEquals(404,call(null,"GET",direct,null).statusCode());
+  assertEquals(404,call(null,"GET",direct+"/cover/"+key,null).statusCode());
+  assertEquals(200,call(owner,"GET",write+"/cover/"+key,null).statusCode());
+  assertEquals(404,call(other,"GET",write+"/cover/"+key,null).statusCode());
+  assertEquals(400,albumForm(owner,write,1,true,java.util.List.of(first,foreign),null).statusCode());
+  assertEquals(400,albumForm(owner,write,1,true,java.util.List.of(first,first),null).statusCode());
+  assertEquals(404,albumForm(other,write,1,true,java.util.List.of(foreign),null).statusCode());
+  assertEquals(200,albumForm(owner,write,1,true,reorder,null).statusCode());
+  assertEquals(409,albumForm(owner,write,1,false,both,null).statusCode());
+  assertEquals(1,json(call(null,"GET",catalog,null),200).size());
+  var published=json(call(null,"GET",direct,null),200);
+  assertEquals("第二首",published.path("tracks").get(0).path("title").asString());
+  assertEquals(first,published.path("tracks").get(1).path("id").asString());
+  var picture=call(null,"GET",direct+"/cover/"+key,null);
+  assertEquals(200,picture.statusCode());
+  assertEquals(800,javax.imageio.ImageIO.read(new ByteArrayInputStream(picture.body())).getWidth());
+  assertEquals(404,call(null,"GET","/api/public/artists/"+foreignArtist+"/albums/"+id,null).statusCode());
+  assertEquals(200,call(null,"GET","/artist/"+artist+"/albums/"+id,null).statusCode());
+  jdbc.update("UPDATE artist_profile SET published=FALSE WHERE public_id=?",artist);
+  assertEquals(404,call(null,"GET",direct+"/cover/"+key,null).statusCode());
+  jdbc.update("UPDATE artist_profile SET published=TRUE WHERE public_id=?",artist);
+  var different=wav();different[44]=1;
+  String replacement=field(text(upload(owner,wa,different)),"id");
+  jdbc.update("UPDATE artist_song_release SET asset_id=?,version=version+1 WHERE id=?",replacement,first);
+  assertEquals(1,json(call(null,"GET",direct,null),200).path("tracks").size());
+  jdbc.update("UPDATE artist_song_release SET show_on_profile=FALSE WHERE id=?",second);
+  assertEquals(404,call(null,"GET",direct,null).statusCode());
+  assertEquals(404,call(null,"GET",direct+"/cover/"+key,null).statusCode());
+  assertEquals(200,albumForm(owner,write,2,false,java.util.List.of(first),null).statusCode());
+  assertEquals(409,call(owner,"DELETE",write+"?version=2",null).statusCode());
+  assertEquals(204,call(owner,"DELETE",write+"?version=3",null).statusCode());
+  assertEquals(0,json(call(owner,"GET","/api/app/artist-albums",null),200).size());
  }
 
  private tools.jackson.databind.JsonNode json(HttpResponse<byte[]> response, int status) {

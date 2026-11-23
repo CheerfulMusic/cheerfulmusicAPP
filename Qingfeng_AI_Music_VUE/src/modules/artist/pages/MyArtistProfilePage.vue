@@ -14,6 +14,7 @@ import ArtistHome from '../components/ArtistHome.vue'
 import ProfileAccount from '../components/ProfileAccount.vue'
 import ProfileImageCropDialog from '../components/ProfileImageCropDialog.vue'
 import ProfileWorks from '../components/ProfileWorks.vue'
+import AlbumManager from '../components/AlbumManager.vue'
 import PublishSongDialog from '../components/PublishSongDialog.vue'
 
 interface ImageDraft { file: File; url: string; source: File | string; position: CropPosition }
@@ -404,6 +405,7 @@ onBeforeUnmount(clearImageDrafts)
       </div>
       <ProfileWorks :songs="profile.songs" :published="profile.published" :busy="busy"
         @publish="discoverRelease = $event" @remove="remove" @withdraw="withdraw" @library-count="workCount = $event" />
+      <AlbumManager :profile="profile" />
       <PublishSongDialog v-if="discoverRelease" :source="discoverRelease" :cover="discoverCover" discover
         @published-to-discover="updateDiscoverRelease" @close="discoverRelease = undefined" />
       <ProfileImageCropDialog v-if="imageEditor" :kind="imageEditor.kind" :source="imageEditor.source" :initial-position="imageEditor.position"

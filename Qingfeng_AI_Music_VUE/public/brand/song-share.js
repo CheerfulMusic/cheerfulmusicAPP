@@ -5,13 +5,21 @@
   const wechat = /MicroMessenger/i.test(navigator.userAgent)
   const status = document.getElementById('status')
   const manual = document.getElementById('manual')
-  document.querySelector('img').addEventListener('error', event => { event.target.src = '/brand/share-default-cover.png' }, { once: true })
+  const artwork = document.getElementById('artwork') || document.querySelector('img')
+  for (const img of [artwork, document.querySelector('.share-track img')].filter(Boolean)) {
+    img.addEventListener('error', () => { img.src = '/brand/share-default-cover.png' }, { once: true })
+  }
+  const system = document.getElementById('system-share')
+  if (system) { system.hidden = wechat || !navigator.share; system.onclick = () => share(false) }
+  const wechatActions = document.getElementById('wechat-actions')
+  if (wechatActions) wechatActions.hidden = !wechat
   async function copy() {
     try {
       await navigator.clipboard.writeText(url)
       status.textContent = '链接已复制，可粘贴到微信中打开。'
     } catch {
       manual.hidden = false
+      manual.focus()
       manual.select()
       status.textContent = '请复制选中的歌曲链接，在微信中打开。'
     }

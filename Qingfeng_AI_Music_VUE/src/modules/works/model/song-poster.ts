@@ -1,4 +1,5 @@
 import QRCode from 'qrcode'
+export { lyricQuotes, posterFilename } from './song-sharing'
 export interface PosterInput {
   title: string; cover: string; link: string; quote: string; signature: string
   tagline: string; scanLabel: string; expiresLabel: string
@@ -34,7 +35,10 @@ export async function renderSongPoster(input: PosterInput): Promise<Blob> {
   c.fillStyle = '#fffaf8'; c.fillRect(0, 0, 1080, 1800)
   c.drawImage(mark, 72, 59, 60, 60)
   c.fillStyle = '#222223'; c.font = `700 35px ${font}`; c.fillText('Cheerful Music', 150, 100)
-  c.save(); c.beginPath(); c.roundRect(72, 160, 936, 936, 36); c.clip()
+  c.save(); c.beginPath()
+  if (typeof c.roundRect === 'function') c.roundRect(72, 160, 936, 936, 36)
+  else c.rect(72, 160, 936, 936)
+  c.clip()
   const side = Math.min(cover.naturalWidth, cover.naturalHeight)
   c.drawImage(cover, (cover.naturalWidth - side) / 2, (cover.naturalHeight - side) / 2, side, side, 72, 160, 936, 936)
   c.restore()

@@ -5,6 +5,7 @@ import { ApiError } from '../../../shared/http/api-client'
 import { t } from '../../../shared/i18n'
 import { artistHomeUrl, getPublicArtist, publicArtistCoverUrl, publicAvatarUrl, publicTrack, type PublicArtist } from '../api/artist'
 import ArtistHome from '../components/ArtistHome.vue'
+import AlbumShelf from '../components/AlbumShelf.vue'
 import ArtistShareButton from '../components/ArtistShareButton.vue'
 
 const route = useRoute()
@@ -50,4 +51,5 @@ watch(id, load, { immediate: true })
     <button v-if="!missing" type="button" class="button secondary" @click="load">{{ t('重试') }}</button>
     <RouterLink v-else class="button secondary" to="/">{{ t('返回首页') }}</RouterLink>
   </section>
+  <AlbumShelf v-if="artist" :artist="id" />
 </template>

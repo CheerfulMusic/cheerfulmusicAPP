@@ -12,7 +12,7 @@ describe('public song sharing', () => {
     expect(() => songShareUrl(token, 'javascript:alert(1)')).toThrow()
   })
   it('keeps original lyrics but omits section labels, empty lines and duplicate quotes', () => {
-    expect(lyricQuotes('[Verse 1]\r\n窗台那盆薄荷\n\n【副歌】\nKeep the light on 🌙\n窗台那盆薄荷'))
+    expect(lyricQuotes('# 《薄荷》\n**[Verse 1]**\r\n窗台那盆薄荷\n\n【副歌】\nKeep the light on 🌙\n窗台那盆薄荷'))
       .toEqual(['窗台那盆薄荷', 'Keep the light on 🌙'])
   })
   it('does not silently replace a local share with a production URL whose token would be invalid', () => {

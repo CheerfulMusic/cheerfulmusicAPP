@@ -13,6 +13,7 @@ function openSong(id: string, inWechat = false) {
   const api = site + '/api/songs/' + id
   const fields: Record<string, string> = {
     title: '歌曲 ' + id, creator: '青风', url, image: api + '/cover',
+    lyricLines: '<p>第一句</p>', duration: '', durationLabel: '–:––', artistId: '',
     thumbnail: api + '/thumbnail.png', audio: api + '/audio', description,
   }
   const page = new DOMParser().parseFromString(template.replace(/\{\{(\w+)}}/g, (_, key) => fields[key]), 'text/html')
@@ -77,9 +78,9 @@ describe('public song listener page', () => {
   it('offers system sharing and copying outside WeChat, with a manual fallback', async () => {
     const { fields, navigator } = openSong('song-c')
     expect(document.querySelector('script[src*="jweixin"]')).toBeNull()
-    button('timeline').click()
+    expect(document.getElementById('wechat-actions')?.hidden).toBe(true)
+    button('system-share').click()
     expect(navigator.share).toHaveBeenCalledWith({ title: fields.title + ' · ' + fields.creator, url: fields.url, text: description })
-    expect(document.getElementById('status')?.textContent).toContain('在微信中打开')
     button('copy').click()
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith(fields.url)
     navigator.clipboard.writeText.mockRejectedValueOnce(new Error('clipboard unavailable'))
