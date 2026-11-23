@@ -17,7 +17,11 @@ export const router = createRouter({
       props: { path },
       meta: { publicGuide: true },
     })) : []),
-    { path: '/', name: 'home', alias: platform.kind === 'web' ? homeSeo.en.path : undefined, component: () => import('../../modules/home/pages/PremiumHomePage.vue') },
+    ...(platform.kind === 'web' ? [] : [
+      { path: '/', redirect: { name: 'native-listen' } },
+      { path: '/listen/:token?', name: 'native-listen', component: () => import('../../platform/native/NativeListeningPage.vue') },
+    ]),
+    { path: platform.kind === 'web' ? '/' : '/home', name: 'home', alias: platform.kind === 'web' ? homeSeo.en.path : undefined, component: () => import('../../modules/home/pages/PremiumHomePage.vue') },
     { path: '/create', name: 'studio', component: () => import('../../modules/studio/pages/DraftStudioPage.vue') },
     { path: '/create/photo', name: 'photo-studio', component: () => import('../../modules/studio/pages/PhotoStudioPage.vue') },
     { path: '/agent', name: 'agent', component: () => import('../../modules/agent/pages/AgentStudioPage.vue') },
@@ -39,3 +43,14 @@ export const router = createRouter({
 })
 
 installCreationLoginGate(router)
+
+if (platform.kind !== 'web') {
+  const handleOpen = async () => {
+    if (document.hidden) return
+    const { receiveOpenedSong } = await import('../../platform/native/wechat-music')
+    await receiveOpenedSong(token => { void router.push({ name: 'native-listen', params: { token } }) })
+  }
+  void router.isReady().then(handleOpen)
+  document.addEventListener('visibilitychange', handleOpen)
+  window.addEventListener('focus', handleOpen)
+}

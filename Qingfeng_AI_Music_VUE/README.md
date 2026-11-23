@@ -32,7 +32,7 @@ AI 歌词和歌曲生成由后端能力接口控制。写词可通过后端私�
 
 ## 结构
 
-app组织路由/布局/样式；modules按home/studio/works/gift/identity分业务；shared提供UI、HTTP、全站播放器；platform预留Web与原生桥。Native/App暂缓，Capacitor预备配置保留。
+app组织路由/布局/样式；modules按home/studio/works/gift/identity分业务；shared提供UI、HTTP、全站播放器；platform适配网页与 Capacitor 客户端。Android 和 iOS 包含微信原生音乐分享入口，应用登记材料、构建配置与实机验收见[移动应用接入说明](../docs/微信移动应用与音乐权限/申请材料.md)。
 
 主题入口为app/styles/theme-base.css、home.css、workspace.css、work-detail.css、consumer.css及i18n.css；BrandLogo/NavIcon位于shared/ui，品牌图形在public/brand，默认封面在public/media。旧prototype-base.css/premium.css不再由正式入口导入。视觉说明见上级docs/UI设计更新.md。
 

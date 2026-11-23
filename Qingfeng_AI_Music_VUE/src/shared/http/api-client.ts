@@ -9,7 +9,7 @@ export const currentCreatorId = () => creatorId
 export function lastKnownCreatorId() { try { return sessionStorage.getItem('qingfeng.lastCreator') || '' } catch { return '' } }
 export function resetCreatorSession() { sessionPromise = undefined; creatorId = ''; associatedGuest = ''; try {sessionStorage.removeItem('qingfeng.lastCreator')} catch {/* 恢复身份不依赖存储。 */} }
 function endpoint(path: string) {
-  const base = import.meta.env.VITE_API_BASE_URL || '/api'
+  const base = import.meta.env.VITE_API_BASE_URL || (import.meta.env.MODE === 'native' ? 'https://cheerfulmusic.com/api' : '/api')
   if (platform.kind !== 'web' && !base.startsWith('https://')) throw new Error('App需要配置HTTPS API地址')
   return `${base.replace(/\/$/, '')}/${path.replace(/^\//, '')}`
 }
