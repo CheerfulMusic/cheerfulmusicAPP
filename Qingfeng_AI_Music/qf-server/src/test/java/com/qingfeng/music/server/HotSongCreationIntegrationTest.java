@@ -23,6 +23,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -58,7 +59,7 @@ class HotSongCreationIntegrationTest {
     @Autowired TestMusic provider;
     @Autowired AudioReferenceClips clips;
 
-    private static final String CLIP_KEY = "qingfeng/generation-reference/body-language/0123456789ab.mp3";
+    private static final String HOUSE_TRACK_ID = "0485811c-0297-4513-9fb1-75f981af8707";
 
     @BeforeAll void applyReferenceMigrationInIsolatedH2() {
         var migration = new org.springframework.core.io.ClassPathResource("db/migration/V55__generation_audio_reference.sql");
@@ -73,7 +74,7 @@ class HotSongCreationIntegrationTest {
         }
         var client = new Browser();
         client.call("GET", "public/hot-songs/unknown-track/creation-reference", null, 404);
-        client.call("GET", "public/hot-songs/0485811c-0297-4513-9fb1-75f981af8707/creation-reference", null, 404);
+        client.call("GET", "public/hot-songs/" + HOUSE_TRACK_ID + "/creation-reference", null, 404);
     }
 
     @ParameterizedTest
@@ -144,16 +145,18 @@ class HotSongCreationIntegrationTest {
         assertEquals(beforeMusic - 15, credits.balance(owner));
     }
 
-    @Test void explicitAudioReferenceIsFrozenOnlyAfterConfirmationAndCannotChangeOnReplay() throws Exception {
+    @ParameterizedTest
+    @ValueSource(strings = {"body-language", HOUSE_TRACK_ID})
+    void explicitAudioReferenceIsFrozenOnlyAfterConfirmationAndCannotChangeOnReplay(String trackId) throws Exception {
         var client = new Browser();
         client.csrf = client.call("GET", "public/csrf", null, 200).get("token").asText();
         var owner = client.call("POST", "public/session", Map.of(), 200).get("creatorId").asText();
         credits.credit(owner, 50, "seed-" + owner);
         var work = client.call("POST", "app/works", Map.of(
             "recipient", "", "occasion", "", "story", "Two friends decide to play music again", "message", "",
-            "title", "", "style", "电子", "vocalGender", "AUTO", "draftKey", key(), "referenceTrackId", "body-language"), 200);
+            "title", "", "style", "电子", "vocalGender", "AUTO", "draftKey", key(), "referenceTrackId", trackId), 200);
         var root = "app/works/" + work.get("id").asText();
-        assertEquals("body-language", work.get("referenceTrackId").asText());
+        assertEquals(trackId, work.get("referenceTrackId").asText());
         assertTrue(client.call("GET", root + "/generations/audio-reference", null, 200).get("available").asBoolean());
         assertEquals(50, credits.balance(owner));
         var revision = client.call("POST", root + "/lyrics", Map.of(
@@ -165,8 +168,8 @@ class HotSongCreationIntegrationTest {
         client.call("POST", root + "/lyrics/" + revisionId + "/confirm", Map.of(), 200);
         var task = client.call("POST", root + "/generations", submission, 200);
         var taskId = task.get("id").asText();
-        assertFalse(task.toString().contains(CLIP_KEY));
-        assertEquals(new AudioReferenceClips.Clip(CLIP_KEY,.30),clips.frozen(taskId).orElseThrow());
+        assertFalse(task.toString().contains(clip(trackId).objectKey()));
+        assertEquals(clip(trackId),clips.frozen(taskId).orElseThrow());
         assertEquals(taskId,client.call("POST", root + "/generations", submission, 200).get("id").asText());
         assertEquals("REQUEST_KEY_CONFLICT",client.call("POST",root + "/generations",
             Map.of("revisionId",revisionId,"requestKey",submission.get("requestKey")),409).get("code").asText());
@@ -178,6 +181,10 @@ class HotSongCreationIntegrationTest {
     }
 
     private static String key() { return UUID.randomUUID().toString(); }
+
+    private static AudioReferenceClips.Clip clip(String trackId) {
+        return new AudioReferenceClips.Clip("qingfeng/generation-reference/" + trackId + "/0123456789ab.mp3", .30);
+    }
 
     private class Browser {
         final HttpClient http = HttpClient.newBuilder().cookieHandler(new CookieManager()).build();
@@ -202,7 +209,7 @@ class HotSongCreationIntegrationTest {
         @Bean @Primary @Qualifier("customLyricsWriter") TestLyrics testLyrics() { return new TestLyrics(); }
         @Bean @Primary TestMusic testMusic() { return new TestMusic(); }
         @Bean @Primary AudioReferenceClips testClips(JdbcTemplate db) {
-            return new OssAudioReferenceClips(db,Map.of("body-language",new AudioReferenceClips.Clip(CLIP_KEY,.30)),
+            return new OssAudioReferenceClips(db,Map.of("body-language",clip("body-language"),HOUSE_TRACK_ID,clip(HOUSE_TRACK_ID)),
                 org.mockito.Mockito.mock(com.aliyun.oss.OSS.class),"test-bucket",java.time.Clock.systemUTC());
         }
     }

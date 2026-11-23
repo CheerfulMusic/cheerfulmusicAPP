@@ -30,8 +30,7 @@ public class WorkController {
     }
     @PostMapping public WorkApi.Work create(@AuthenticationPrincipal CreatorPrincipal creator,@RequestBody @Valid DraftRequest request) {
         if(request.referenceTrackId()==null)return request.draftKey()==null?works.create(creator.id(),request.draft()):works.create(creator.id(),request.draft(),request.draftKey());
-        if(request.draftKey()==null||(!HotSongCreationReferences.isPublishedSelection(request.referenceTrackId())
-                && HotSongCreationReferences.find(request.referenceTrackId()).isEmpty()))
+        if(request.draftKey()==null||!HotSongCreationReferences.trackIds().contains(request.referenceTrackId()))
             throw new com.qingfeng.music.common.exception.DomainException("INVALID_REFERENCE_TRACK","参考歌曲暂不可用，请重新选择。");
         return works.create(creator.id(),request.draft(),request.draftKey(),request.referenceTrackId());
     }

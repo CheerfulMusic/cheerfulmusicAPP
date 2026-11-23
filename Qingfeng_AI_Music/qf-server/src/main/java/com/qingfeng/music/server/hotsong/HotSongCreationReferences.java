@@ -5,11 +5,13 @@ import com.qingfeng.music.settings.MusicSettings;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static java.util.Map.entry;
 
-/** Editorial directions for the recommendation samples. The response contains no source lyric or audio. */
+/** Editorial directions for the recommendation tracks. The response contains no source lyric or audio. */
 public final class HotSongCreationReferences {
     private HotSongCreationReferences() {}
 
@@ -76,6 +78,13 @@ public final class HotSongCreationReferences {
         entry("big-motion", en("rap", "Confident hip-hop with a recurring chant hook, tightly phrased verses and vocal ad-libs.", C, V1, P, C, V2, B, C)),
         entry("running-through-my-mind", en("rap", "Reflective melodic hip-hop with rhythmic verses and a sung chorus.", C, V1, P, C, V2, B, C))
     );
+
+    private static final Set<String> TRACK_IDS = Stream.concat(DIRECTIONS.keySet().stream(), HOUSE_DIRECTIONS.keySet().stream())
+        .collect(Collectors.toUnmodifiableSet());
+
+    public static Set<String> trackIds() {
+        return TRACK_IDS;
+    }
 
     public static Optional<Reference> find(String trackId) {
         var direction = DIRECTIONS.get(trackId);

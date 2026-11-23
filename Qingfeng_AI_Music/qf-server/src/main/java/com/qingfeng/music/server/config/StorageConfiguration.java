@@ -7,6 +7,7 @@ import com.aliyun.oss.common.auth.DefaultCredentialProvider;
 import com.aliyun.oss.common.comm.SignVersion;
 import com.qingfeng.music.media.application.MediaFileStore;
 import com.qingfeng.music.infrastructure.storage.*;
+import com.qingfeng.music.server.hotsong.HotSongCreationReferences;
 import java.nio.file.*;
 import java.io.IOException;
 import org.springframework.context.annotation.*;
@@ -43,7 +44,7 @@ public class StorageConfiguration {
         if(env.getProperty("qingfeng.generation.audio-reference.enabled",Boolean.class,false)){
             double weight=env.getProperty("qingfeng.generation.audio-reference.weight",Double.class,0.3);
             if(!Double.isFinite(weight)||weight<0||weight>1)throw new IllegalArgumentException("参考音频权重必须在 0 到 1 之间");
-            for(String id:com.qingfeng.music.server.hotsong.HotSongService.TRACKS){
+            for(String id:HotSongCreationReferences.trackIds()){
                 String key=env.getProperty("qingfeng.generation.audio-reference.clips."+id,"").trim();
                 if(!key.isEmpty())approved.put(id,new com.qingfeng.music.generation.application.AudioReferenceClips.Clip(key,Math.round(weight*100)/100.0));
             }

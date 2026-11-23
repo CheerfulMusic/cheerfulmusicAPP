@@ -24,7 +24,7 @@ public final class OssAudioReferenceClips implements AudioReferenceClips {
 
     public OssAudioReferenceClips(JdbcTemplate db, Map<String, Clip> approved, OSS oss, String bucket, Clock clock) {
         approved.forEach((id, clip) -> {
-            if (HotSongCreationReferences.find(id).isEmpty()
+            if (!HotSongCreationReferences.trackIds().contains(id)
                 || !clip.objectKey().matches(PREFIX + id + "/[a-f0-9]{12,64}\\.mp3")
                 || !Double.isFinite(clip.weight()) || clip.weight() < 0 || clip.weight() > 1)
                 throw new IllegalArgumentException("参考片段配置无效：" + id);
