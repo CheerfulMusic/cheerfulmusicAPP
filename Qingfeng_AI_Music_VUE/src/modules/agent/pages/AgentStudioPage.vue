@@ -16,6 +16,7 @@ import { useCredits } from '../../../shared/credits/useCredits'
 import { accountState } from '../../../shared/identity/account-state'
 import { logtoState } from '../../../shared/identity/logto-state'
 import { useAgentConversation } from '../composables/useAgentConversation'
+import { creationTools, type CreationTool } from '../model/creation-tools'
 import { displayTurnText, messageText, type ConversationSnapshot } from '../model/conversation'
 import { analyzeAudioFile, cancelAnalysis, forgetAnalysis, MAX_REFERENCE_BYTES } from '../model/audio-analysis'
 import { BPM_CONFIDENCE_THRESHOLD } from '../model/audio-features'
@@ -89,6 +90,49 @@ const pendingAlreadySaved = computed(() => !!pending.value && messages.value.som
 const blocked = computed(() => loading.value || sending.value || !!pending.value)
 const english = computed(() => locale.value === 'en')
 const tr = (zh: string, en: string) => english.value ? en : zh
+type CreationView = 'menu' | CreationTool['id']
+const creationView = ref<CreationView | null>('menu')
+const activeTool = computed(() => creationTools.find(tool => tool.id === creationView.value))
+const selectedChoice = ref<number | null>(null)
+const choicePanel = ref<HTMLElement>()
+const composerInput = ref<HTMLTextAreaElement>()
+const messageDraft = computed(() => {
+  const tool = activeTool.value
+  const description = input.value.trim()
+  if (!tool) return description
+  const choice = selectedChoice.value === null ? undefined : tool.choices[selectedChoice.value]
+  const brief = [choice && tr(...choice), description].filter(Boolean).join('\n')
+  return brief ? `${tr(...tool.prompt)} ${brief}` : ''
+})
+const messageTooLong = computed(() => messageDraft.value.length > 4000)
+
+function setCreationView(view: CreationView | null) {
+  creationView.value = view
+  selectedChoice.value = null
+}
+async function openCreationPanel(view: CreationView) {
+  if (view !== creationView.value) setCreationView(view)
+  await nextTick()
+  choicePanel.value?.focus({ preventScroll: true })
+  const block = window.matchMedia('(max-width: 860px)').matches ? 'center' : 'nearest'
+  choicePanel.value?.scrollIntoView?.({ block })
+}
+function closeCreationPanel() {
+  setCreationView(null)
+  composerInput.value?.focus({ preventScroll: true })
+}
+function setChatDraft(text: string) {
+  setCreationView(null)
+  input.value = text
+}
+function useConversationExample(prompt: string) {
+  setChatDraft([prompt, input.value.trim()].filter(Boolean).join('\n'))
+  composerInput.value?.focus()
+}
+function openVideoEditor() {
+  const card = songCard.value
+  if (card?.songId && card.assetId) featurePanel.value = { feature: 'mv', workId: card.songId, assetId: card.assetId }
+}
 const prompts = computed(() => [
   tr('你好，你可以帮我做什么？', 'Hi, what can you help me with?'),
   tr('帮我写一首关于旅行的歌词', 'Write lyrics about travelling'),
@@ -160,32 +204,18 @@ async function handleResult(result?: ConversationSnapshot) {
 }
 async function send(extra?: string) {
   if (blocked.value) return
-  const text = (extra ?? input.value).trim()
+  if (extra === undefined && messageTooLong.value) return
+  const text = (extra ?? messageDraft.value).trim()
   if (!text) return
   notice.value = ''
   const draft = input.value
   const result = await conversation.send(text, locale.value, () => {
-    if (extra === undefined && input.value === draft) input.value = ''
+    if (extra === undefined && input.value === draft && messageDraft.value === text) {
+      input.value = ''
+      setCreationView(null)
+    } else if (creationView.value === 'menu') setCreationView(null)
   })
   await handleResult(result)
-}
-type CreationTool={title:string;prompt:string;en:string}
-const activeTool=ref<CreationTool|null>(null), toolBrief=ref(''), vocal=ref('女声')
-function chooseTool(tool:CreationTool){
-  if(tool.title==='MV 制作' && songCard.value?.songId && songCard.value.assetId){
-    featurePanel.value={feature:'mv',workId:songCard.value.songId,assetId:songCard.value.assetId};return
-  }
-  activeTool.value=tool;toolBrief.value=''
-  void nextTick(()=>document.querySelector<HTMLTextAreaElement>('.tool-brief textarea')?.focus())
-}
-function startTool(){
-  const tool=activeTool.value
-  if(!tool || blocked.value)return
-  const direction=toolBrief.value.trim()
-  const prompt=tool.title==='声音合成'?'请用'+vocal.value+'演唱，为当前歌词生成音乐。':tool.prompt
-  if(!direction && tool.title!=='声音合成')return
-  activeTool.value=null
-  void send(prompt+' '+direction)
 }
 function goToLibrary(){ const shelf=document.getElementById('agent-library'); shelf?.focus(); shelf?.scrollIntoView?.({block:'nearest'}) }
 function runCommand(command: AgentCommand) {
@@ -204,9 +234,9 @@ function onEnter(event: KeyboardEvent) {
   event.preventDefault(); void send()
 }
 async function retry() { await handleResult(await conversation.retry()) }
-function editRejected() { const text = conversation.editRejected(); if (text !== undefined) input.value = text }
+function editRejected() { const text = conversation.editRejected(); if (text !== undefined) setChatDraft(text) }
 async function reset() {
-  if (await conversation.reset()) { confirmingReset.value = false; input.value = ''; notice.value = '' }
+  if (await conversation.reset()) { confirmingReset.value = false; input.value = ''; notice.value = ''; setCreationView('menu') }
 }
 async function copyShare() {
   if (!publicLink.value) return
@@ -289,7 +319,7 @@ function avatarIdentityChanged() {
 watch(() => JSON.stringify([accountState.value.authenticated, accountState.value.email, accountState.value.name, logtoState.value.authenticated, logtoState.value.email, logtoState.value.phoneMasked, logtoState.value.name]), () => {
   avatarIdentityChanged()
   storyVersion++; story.value = ''; storyError.value = false; storyLoading.value = false; previewTab.value = 'lyrics'; showQueue.value = false
-  activeTool.value=null;toolBrief.value='';input.value = ''; notice.value = ''; confirmingReset.value = false; nativePanel.value = null; featurePanel.value = null
+  setCreationView('menu'); input.value = ''; notice.value = ''; confirmingReset.value = false; nativePanel.value = null; featurePanel.value = null
   clearReference(); void conversation.changeIdentity()
 })
 onMounted(() => { window.addEventListener('qingfeng:identity-changed', avatarIdentityChanged); void avatar.refresh(); void profileAvatar.refresh(); avatarGeneration.start(); void conversation.refresh(); void refreshCredits().catch(() => undefined) })
@@ -301,20 +331,17 @@ onBeforeUnmount(() => { avatarDisposed = true; window.removeEventListener('qingf
     <Teleport :to="layerTarget"><div class="agent-click-sparks" aria-hidden="true"><i v-for="dot in trail" :key="dot.id" class="pointer-ribbon" :style="{left:dot.x+'px',top:dot.y+'px',width:dot.length+'px',transform:'rotate('+dot.angle+'rad)'}"/> <span v-for="spark in sparks" :key="spark.id" :style="{ left: `${spark.x}px`, top: `${spark.y}px` }"><i/><b/></span></div></Teleport>
     <div class="agent-scenery" aria-hidden="true"><span/><span/><span/></div>
     <nav class="producer-tools" :aria-label="tr('创作助手','Creation assistant')">
-      <h2>✦ {{ tr('创作助手','Creation assistant') }}</h2>
-      <button v-for="tool in [{icon:'✧',title:'灵感策划',en:'Inspiration',detail:'发现创作灵感',detailEn:'Find your inspiration',prompt:'帮我构思一首歌，先聊聊创作灵感'}, {icon:'✎',title:'歌词创作',en:'Write lyrics',detail:'写出打动人心的歌词',detailEn:'Words that move you',prompt:'帮我写一首歌词，主题是'}, {icon:'♫',title:'音乐制作',en:'Make music',detail:'定制专属曲风',detailEn:'Find your sound',prompt:'帮我生成音乐，我想要的曲风是'}, {icon:'♬',title:'声音合成',en:'Vocals',detail:'选择 AI 演唱声音',detailEn:'Choose a singing voice',prompt:'请用当前歌词生成演唱版本，人声选择：'}, {icon:'✣',title:'歌曲精修',en:'Refine your song',detail:'让作品更动人',detailEn:'Make every line yours',prompt:'帮我修改当前作品的歌词，我想改的是'}, {icon:'▶',title:'MV 制作',en:'Create a music video',detail:'剧情分镜与动态镜头',detailEn:'Bring your song to life',prompt:'根据当前歌曲帮我设计剧情 MV，先给我分镜方案和费用，再确认生成'}, {icon:'▧',title:'封面创作',en:'Cover artwork',detail:'为音乐描绘画面',detailEn:'Give your song a face',prompt:'帮我为当前作品设计封面，画面是'}]" :key="tool.title" type="button" :disabled="blocked" @click="chooseTool(tool)"><i>{{ tool.icon }}</i><span><strong>{{ tr(tool.title,tool.en) }}</strong><small>{{ tr(tool.detail,tool.detailEn) }}</small></span></button>
-      <form v-if="activeTool" class="tool-brief" @submit.prevent="startTool">
-        <header><strong>{{ tr(activeTool.title,activeTool.en) }}</strong><button type="button" :aria-label="tr('关闭','Close')" @click="activeTool=null">×</button></header>
-        <label v-if="activeTool.title==='声音合成'">{{ tr('演唱声音','Singing voice') }}<select v-model="vocal"><option v-for="(voice,i) in ['男声','女声','男女对唱']" :key="voice" :value="voice">{{ tr(voice,['Male','Female','Duet'][i]!) }}</option></select></label>
-        <label>{{ tr('创作要求','Creative brief') }}<textarea v-model="toolBrief" rows="3" :required="activeTool.title!=='声音合成'"/></label>
-        <button class="tool-start" :disabled="blocked || (!toolBrief.trim() && activeTool.title!=='声音合成')">{{ tr('发送创作要求','Send brief') }}</button>
-      </form>
+      <h2><button type="button" class="creation-menu-trigger" aria-haspopup="dialog" :aria-expanded="creationView !== null" @click="openCreationPanel('menu')"><span aria-hidden="true">✦</span> {{ tr('创作助手','Creation assistant') }}</button></h2>
+      <button v-for="tool in creationTools" :key="tool.id" type="button" :disabled="blocked"
+              aria-haspopup="dialog" :aria-expanded="creationView === tool.id" @click="openCreationPanel(tool.id)">
+        <i aria-hidden="true">{{ tool.icon }}</i><span><strong>{{ tr(...tool.title) }}</strong><small>{{ tr(...tool.detail) }}</small></span>
+      </button>
       <button class="producer-library" type="button" @click="goToLibrary"><i>▥</i><span><strong>{{ tr('我的作品','My songs') }}</strong><small>{{ tr('继续你的音乐故事','Continue your musical story') }}</small></span><b>›</b></button>
       <p>{{ tr('让音乐，连接更美好的你。','Let music bring out the best in you.') }}</p>
     </nav>
     <section class="agent-conversation" :aria-label="tr('音乐创作对话', 'Music conversation')">
       <header class="agent-conversation-head">
-        <span class="agent-conversation-pill"><i class="studio-status-dot" aria-hidden="true"/> {{ tr('音乐创作助手', 'Music creation assistant') }}</span>
+        <button type="button" class="agent-conversation-pill creation-menu-trigger" aria-haspopup="dialog" :aria-expanded="creationView !== null" @click="openCreationPanel('menu')"><i class="studio-status-dot" aria-hidden="true"/> {{ tr('音乐创作助手', 'Music creation assistant') }} <span aria-hidden="true">⌄</span></button>
         <p class="agent-conversation-sub">{{ tr('创作、作品、积分和账号，在这里接着聊、接着办。', 'Create music, manage songs, credits and your account in one conversation.') }}</p>
         <ChatAppearance v-model="appearance" @reset="resetAppearance"/><button type="button" class="agent-reset-trigger" :disabled="loading || sending" @click="confirmingReset = !confirmingReset">{{ tr('重新开始', 'Start over') }}</button>
       </header>
@@ -331,9 +358,6 @@ onBeforeUnmount(() => { avatarDisposed = true; window.removeEventListener('qingf
           <div><small>YOUR PERSONAL MUSIC PRODUCER</small><h1>{{ tr('你的 AI 专属音乐制作人', 'Your personal AI music producer') }}</h1><p>{{ tr('一句灵感 · 一首好歌 · 一场音乐之旅', 'One idea. One song. A musical journey.') }} <span>♡</span></p></div>
         </div>
         <p v-if="loading" class="agent-typing" role="status">{{ tr('正在恢复对话…', 'Loading conversation…') }}</p>
-        <div v-if="!messages.length && !loading && !error" class="agent-message assistant">
-          <div class="agent-bubble"><p>{{ tr('你好！告诉我你想做什么：聊灵感、写歌、找作品、选版本、换封面、分享，或查积分和订单。需要选择时，我会把选项放在对话里。', 'Hi! Ask for ideas, write a song, find your music, compare versions, change artwork, share, or check credits and orders. I will show any choices right here.') }}</p></div>
-        </div>
         <div v-for="message in chatMessages" :key="message.id" class="agent-message" :class="message.role">
           <div v-if="message.role === 'assistant'" class="agent-bot-avatar" aria-hidden="true"><img :src="'/brand/logo-symbol.svg'" alt=""/></div>
           <div class="agent-message-content"><AgentProgressCard v-if="message.progress" :progress="message.progress"/><div v-else-if="messageText(message)" class="agent-bubble" :class="{ 'agent-message-failed': message.state === 'FAILED' }"><AgentMessageText :text="messageText(message)"/></div><AgentResultCard v-if="message.result" :result="message.result" :disabled="blocked" :current="message.id === lastAssistantId" @command="runCommand"/></div>
@@ -341,7 +365,34 @@ onBeforeUnmount(() => { avatarDisposed = true; window.removeEventListener('qingf
         </div>
         <div v-if="pending && !pendingAlreadySaved" class="agent-message user agent-pending"><div class="agent-bubble"><p>{{ displayTurnText(pending.text) }}</p><small>{{ sending ? tr('发送中…', 'Sending…') : tr('结果待确认', 'Awaiting confirmation') }}</small></div></div>
         <AgentGenerationWait v-if="taskRunning" kind="music" :cover="safeLink(songCard?.coverUrl) || defaultCover()"/><p v-else-if="sending" class="agent-typing" role="status"><span class="agent-typing-spinner" aria-hidden="true"/>{{ tr('正在处理你的请求…', 'Working on your request…') }}</p>
-        <div v-if="!messages.length && !loading" class="agent-quick-card"><strong>{{ tr('试着说', 'Try saying') }}</strong><div class="agent-quick-grid"><button v-for="prompt in prompts" :key="prompt" type="button" :disabled="blocked" @click="send(prompt)"><span>{{ prompt }}</span></button></div></div>
+        <section v-if="creationView" ref="choicePanel" class="agent-choice-panel" role="dialog" tabindex="-1"
+                 aria-labelledby="agent-choice-title" @keydown.esc.stop="closeCreationPanel">
+          <header>
+            <button v-if="activeTool" type="button" class="choice-back" :aria-label="tr('返回创作方向', 'Back to creative tools')" @click="openCreationPanel('menu')">‹</button>
+            <h2 id="agent-choice-title">{{ activeTool ? tr(...activeTool.question) : tr('想从哪一步开始？', 'Where would you like to start?') }}</h2>
+            <button type="button" class="choice-close" :aria-label="tr('关闭创作选项', 'Close creative options')" @click="closeCreationPanel">×</button>
+          </header>
+          <div v-if="activeTool" class="creation-choices" role="group" :aria-label="tr(...activeTool.title)">
+            <button v-for="(choice, index) in activeTool.choices" :key="choice[0]" type="button"
+                    :aria-pressed="selectedChoice === index" :disabled="blocked"
+                    @click="selectedChoice = selectedChoice === index ? null : index">
+              <span v-if="selectedChoice === index" aria-hidden="true">✓</span> {{ tr(...choice) }}
+            </button>
+            <button v-if="activeTool.id === 'mv' && songCard?.assetId" type="button" :disabled="blocked" @click="openVideoEditor">{{ tr('打开 MV 编辑器', 'Open video editor') }} ›</button>
+          </div>
+          <div v-else class="creation-choices" role="group" :aria-label="tr('创作方向', 'Creative tools')">
+            <button v-for="tool in creationTools" :key="tool.id" type="button" :disabled="blocked" @click="openCreationPanel(tool.id)">
+              <span aria-hidden="true">{{ tool.icon }}</span> {{ tr(...tool.title) }}
+            </button>
+          </div>
+          <button class="choice-write" type="button" @click="composerInput?.focus()">
+            {{ selectedChoice === null ? tr('自己打字描述', 'Describe your own idea') : tr('补充描述', 'Add details') }}
+          </button>
+          <details v-if="!activeTool && !messages.length && !loading" class="creation-examples">
+            <summary>{{ tr('更多对话示例', 'More conversation starters') }}</summary>
+            <div class="agent-quick-grid"><button v-for="prompt in prompts" :key="prompt" type="button" :disabled="blocked" @click="useConversationExample(prompt)">{{ prompt }}</button></div>
+          </details>
+        </section>
       </div>
       <div class="agent-composer">
         <nav class="agent-capabilities" :aria-label="tr('对话功能', 'Conversation tools')"><button type="button" :disabled="blocked" @click="send('查看我的作品')">{{ tr('我的作品', 'My songs') }}</button><button type="button" :disabled="blocked" @click="send('查看当前作品版本')">{{ tr('作品版本', 'Versions') }}</button><button type="button" :disabled="blocked" @click="send('查看我的积分')">{{ tr('积分', 'Credits') }}</button><button type="button" :disabled="blocked" @click="send('我要充值')">{{ tr('充值', 'Recharge') }}</button><button type="button" :disabled="blocked" @click="send('查看所有功能')">{{ tr('所有功能', 'All tools') }}</button><button type="button" @click="avatarDialog = true">{{ tr('设置头像', 'Avatar') }}</button></nav>
@@ -350,13 +401,16 @@ onBeforeUnmount(() => { avatarDisposed = true; window.removeEventListener('qingf
         <p v-else-if="pending && !sending" class="agent-section-hint">{{ tr('上次请求的结果尚未确认。重试会核对同一次请求。', 'The previous request is unconfirmed. Retry checks the same request.') }} <button type="button" @click="retry">{{ tr('重试原请求', 'Retry request') }}</button></p>
         <p v-if="refreshError" class="agent-upload-error" role="status">{{ refreshError }}</p>
         <form class="agent-composer-box" @submit.prevent="send()">
-          <textarea v-model="input" rows="2" maxlength="4000" :placeholder="tr('告诉我你想做什么，比如「找出上次的歌，换个封面」…', 'Tell me what to do, e.g. “find my last song and change its artwork”…')" :aria-label="tr('创作消息', 'Message')" @keydown.enter.exact="onEnter"/>
+          <textarea ref="composerInput" v-model="input" rows="2" maxlength="4000"
+                    :placeholder="selectedChoice !== null ? tr('还可以补充细节（选填）…', 'Add any details (optional)…') : tr('也可以直接打字，描述你的想法…', 'Or type your idea here…')"
+                    :aria-label="tr('创作消息', 'Message')" :aria-invalid="messageTooLong" :aria-describedby="messageTooLong ? 'agent-message-limit' : undefined" @keydown.enter.exact="onEnter"/>
           <div class="agent-composer-row"><div class="agent-composer-tools">
             <button type="button" class="agent-composer-clip" :aria-label="tr('参考音乐', 'Reference audio')" @click="fileInput?.click()"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 11.5 12.5 20a5 5 0 0 1-7-7l8.5-8.5a3.3 3.3 0 0 1 4.7 4.7L10 17.6a1.7 1.7 0 0 1-2.4-2.4l7.8-7.8"/></svg></button>
             <button type="button" class="agent-composer-mic" :aria-label="tr('语音输入', 'Voice input')" @click="startVoice"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button>
           </div></div>
-          <button type="submit" class="agent-composer-send" :class="{ 'is-busy': sending }" :disabled="!input.trim() || blocked" :aria-busy="sending" :aria-label="tr('发送', 'Send')"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5m-6 6 6-6 6 6"/></svg></button>
+          <button type="submit" class="agent-composer-send" :class="{ 'is-busy': sending }" :disabled="!messageDraft || messageTooLong || blocked" :aria-busy="sending" :aria-label="tr('发送', 'Send')"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5m-6 6 6-6 6 6"/></svg></button>
         </form>
+        <p v-if="messageTooLong" id="agent-message-limit" class="agent-upload-error" role="status">{{ tr('消息超过 4000 字，请缩短描述。', 'The message exceeds 4,000 characters. Shorten your description.') }}</p>
         <input ref="fileInput" type="file" accept="audio/*,.mp3,.wav,.m4a,.aac,.ogg,.flac" hidden @change="attach"/>
         <p v-if="reference" class="agent-upload-file"><span>{{ reference.name }}</span><button type="button" @click="playReference">{{ tr('试听', 'Listen') }}</button><button v-if="reference.summary && !analyzing" type="button" @click="useReference">{{ tr('将特征加入输入', 'Use audio features') }}</button><button type="button" :aria-label="tr('移除参考', 'Remove reference')" @click="clearReference">×</button></p>
         <p v-if="reference" class="agent-section-hint">{{ analyzing ? tr('正在分析参考音乐…', 'Analysing audio…') : reference.summary || tr('音频仅供本机试听。', 'Audio stays on this device.') }}</p>
@@ -405,11 +459,11 @@ onBeforeUnmount(() => { avatarDisposed = true; window.removeEventListener('qingf
         <label v-if="songCard.assetId && previewTab==='lyrics'" class="producer-lyric-switch"><span>♫ {{ tr('歌词滚动播放','Follow lyrics') }}</span><input v-model="lyricFollow" type="checkbox" role="switch" :aria-label="tr('歌词滚动播放','Follow lyrics')"/></label>
         <div v-if="previewTab === 'lyrics'" class="agent-tab-content agent-real-lyrics" role="tabpanel"><strong v-if="songCard.lyrics" class="agent-lyrics-title">♫ {{ songCard.title }}</strong><SyncedLyrics show-times v-if="songCard.assetId" :key="songCard.assetId" :work-id="songCard.songId" :asset-id="songCard.assetId" :player-track-id="playable?.id" :lyrics="songCard.lyrics" :auto-sync-enabled="false" :follow-enabled="lyricFollow" :refresh-key="lyricRefresh" @seek="player.seek($event)"/><p v-else>{{ songCard.lyrics || tr('还没有歌词，可以在对话中让我写。', 'No lyrics yet. Ask me to write them.') }}</p></div>
         <div v-else-if="previewTab === 'story'" class="agent-tab-content agent-story-empty" role="tabpanel"><p v-if="storyLoading">{{ tr('正在加载作品故事…', 'Loading story…') }}</p><p v-else-if="storyError">{{ tr('作品故事加载失败', 'Unable to load story') }} <button type="button" @click="fetchStory">{{ tr('重试', 'Retry') }}</button></p><p v-else>{{ story || tr('暂无作品故事', 'No story yet') }}</p></div>
-        <div v-else class="agent-tab-content agent-song-actions" role="tabpanel"><button v-if="!taskRunning" type="button" class="agent-start-button" :disabled="blocked || !songCard.lyrics" @click="send('用当前歌词生成音乐')">{{ audioUrl ? tr('重新生成音乐', 'Generate another version') : tr('生成音乐', 'Generate music') }}</button><button v-else type="button" :disabled="blocked" @click="send('停止生成')">{{ tr('停止生成', 'Cancel generation') }}</button><button type="button" :disabled="blocked" @click="input = tr('把副歌改得更温柔，保留其他部分', 'Make the chorus gentler and keep the rest')">{{ tr('修改歌词', 'Revise lyrics') }}</button></div>
+        <div v-else class="agent-tab-content agent-song-actions" role="tabpanel"><button v-if="!taskRunning" type="button" class="agent-start-button" :disabled="blocked || !songCard.lyrics" @click="send('用当前歌词生成音乐')">{{ audioUrl ? tr('重新生成音乐', 'Generate another version') : tr('生成音乐', 'Generate music') }}</button><button v-else type="button" :disabled="blocked" @click="send('停止生成')">{{ tr('停止生成', 'Cancel generation') }}</button><button type="button" :disabled="blocked" @click="setChatDraft(tr('把副歌改得更温柔，保留其他部分', 'Make the chorus gentler and keep the rest'))">{{ tr('修改歌词', 'Revise lyrics') }}</button></div>
         <div v-if="publicLink" class="agent-share-link"><input readonly :value="publicLink" :aria-label="tr('分享链接','Share link')"/><button type="button" @click="copyShare">{{ tr('复制链接', 'Copy link') }}</button></div>
-        <div class="agent-preview-actions agent-bottom-actions"><button type="button" :disabled="blocked || !playable" @click="download">↓ {{ downloadUnlocked ? tr('免费下载', 'Free download') : tr('下载（首次15积分）', 'Download (15 credits first time)') }}</button><button type="button" :disabled="blocked || !playable" @click="send('分享当前作品')">♧ {{ tr('分享', 'Share') }}</button><button type="button" :disabled="blocked" @click="input = tr('参考当前作品，帮我创作一首同风格的新歌', 'Create a new song inspired by the style of the current song')">✦ {{ tr('改编同款', 'Create a version') }}</button></div>
+        <div class="agent-preview-actions agent-bottom-actions"><button type="button" :disabled="blocked || !playable" @click="download">↓ {{ downloadUnlocked ? tr('免费下载', 'Free download') : tr('下载（首次15积分）', 'Download (15 credits first time)') }}</button><button type="button" :disabled="blocked || !playable" @click="send('分享当前作品')">♧ {{ tr('分享', 'Share') }}</button><button type="button" :disabled="blocked" @click="setChatDraft(tr('参考当前作品，帮我创作一首同风格的新歌', 'Create a new song inspired by the style of the current song'))">✦ {{ tr('改编同款', 'Create a version') }}</button></div>
       </template>
-      <AgentListeningPanel v-else @remix="input=tr('参考《'+$event+'》的风格，创作一首新歌','Create a new song inspired by '+$event)" @work="featurePanel={feature:'work',workId:$event}"/>
+      <AgentListeningPanel v-else @remix="setChatDraft(tr('参考《'+$event+'》的风格，创作一首新歌','Create a new song inspired by '+$event))" @work="featurePanel={feature:'work',workId:$event}"/>
     </aside>
     <AgentFeatureDialog v-if="featurePanel" :key="JSON.stringify(featurePanel)" :target="featurePanel" @close="featurePanel = null" @refresh="conversation.refresh()" @send="send"/>
     <AgentNativeDialog v-if="nativePanel" :key="`${nativePanel.kind}:${nativePanel.workId || ''}`" :kind="nativePanel.kind" :work-id="nativePanel.workId" @close="nativePanel = null" @refresh="conversation.refresh()" @send="send"/>
