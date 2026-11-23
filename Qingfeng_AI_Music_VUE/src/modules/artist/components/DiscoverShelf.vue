@@ -132,7 +132,10 @@ a.track-artist:is(:hover, :focus-visible) { text-decoration: underline; }
   opacity: 0;
 }
 .track-play svg, .track-count svg { width: 12px; height: 12px; }
-.shelf-track:is(:hover, :focus-within, .is-playing) .track-play, .shelf-wide .track-play { opacity: 1; }
+.shelf-track:hover .track-play, .shelf-track-play:focus-visible + .track-art .track-play { opacity: 1; }
+@media (hover: none) {
+  .shelf-wide .track-play, .shelf-track.is-playing .track-play { opacity: 1; }
+}
 .track-text { display: block; margin-top: 7px; }
 .track-title, .track-artist { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .track-title { font-size: 14px; font-weight: 500; line-height: 1.4; }
