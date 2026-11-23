@@ -32,13 +32,18 @@ public class PaymentInbox {
         acceptVerified(provider,LEGACY_SCOPE,LEGACY_SCOPE,eventId,type,payload);
     }
     public void acceptVerified(String provider,String merchant,String environment,String eventId,String type,String payload){
+        acceptVerified(provider,merchant,environment,eventId,type,payload,0);
+    }
+
+    void acceptVerified(String provider,String merchant,String environment,String eventId,String type,String payload,int initialDelaySeconds){
+        if(initialDelaySeconds<0 || initialDelaySeconds>300)throw new IllegalArgumentException("Initial payment check delay must be 0..300 seconds");
         requireScoped();
         identity(provider,merchant,environment,eventId);
         if(type==null||!type.matches("[A-Za-z0-9_.]{1,96}")||payload==null||payload.length()>30000)throw new IllegalArgumentException("Invalid payment event");
         String fingerprint=hash(payload);
         try{
             tx.executeWithoutResult(t->{
-                db.update("INSERT INTO payment_webhook_inbox(provider,merchant_scope,env_scope,event_id,event_type,payload,payload_hash,status,attempts,next_attempt_at,created_at,updated_at) VALUES(?,?,?,?,?,?,?,'PENDING',0,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)",provider,merchant,environment,eventId,type,payload,fingerprint);
+                db.update("INSERT INTO payment_webhook_inbox(provider,merchant_scope,env_scope,event_id,event_type,payload,payload_hash,status,attempts,next_attempt_at,created_at,updated_at) VALUES(?,?,?,?,?,?,?,'PENDING',0,TIMESTAMPADD(SECOND,?,CURRENT_TIMESTAMP),CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)",provider,merchant,environment,eventId,type,payload,fingerprint,initialDelaySeconds);
                 String id=UUID.nameUUIDFromBytes((provider+"\0"+merchant+"\0"+environment+"\0"+eventId).getBytes(StandardCharsets.UTF_8)).toString();
                 events.publish("payment.inbox",id,id);
             });
@@ -47,12 +52,48 @@ public class PaymentInbox {
             if(!type.equals(prior.get("event_type"))||!fingerprint.equals(prior.get("payload_hash")))throw new IllegalStateException("Conflicting payment event identity");
         }
     }
+    private record Scope(String provider, String merchant, String environment) {}
+    // A batch contains hints only. Lease ownership is always decided by the conditional UPDATE.
+    private final Map<Scope,ArrayDeque<String>> candidates = new LinkedHashMap<>(16, .75f, true) {
+        @Override protected boolean removeEldestEntry(Map.Entry<Scope,ArrayDeque<String>> eldest) {
+            return size() > 32;
+        }
+    };
+
+    private String nextCandidate(Scope scope) {
+        ArrayDeque<String> batch;
+        synchronized (candidates) {
+            batch = candidates.computeIfAbsent(scope, ignored -> new ArrayDeque<>());
+        }
+        synchronized (batch) {
+            if (batch.isEmpty()) {
+                // One ordered range per status on idx_payment_inbox_due. Only the two
+                // bounded result sets need to be merged to include expired leases fairly.
+                String range = """
+                        SELECT event_id,next_attempt_at FROM payment_webhook_inbox
+                        WHERE provider=? AND merchant_scope=? AND env_scope=? AND status=?
+                          AND next_attempt_at<=CURRENT_TIMESTAMP
+                          AND (lease_until IS NULL OR lease_until<=CURRENT_TIMESTAMP)
+                        ORDER BY next_attempt_at,lease_until,event_id LIMIT 32
+                        """;
+                String sql = "SELECT event_id FROM ((" + range + ") UNION ALL (" + range
+                        + ")) due ORDER BY next_attempt_at,event_id LIMIT 32";
+                batch.addAll(db.query(sql, (rs,n) -> rs.getString(1),
+                        scope.provider(),scope.merchant(),scope.environment(),"PENDING",
+                        scope.provider(),scope.merchant(),scope.environment(),"PROCESSING"));
+            }
+            return batch.pollFirst();
+        }
+    }
+
     public Optional<Delivery> claim(String provider){return layout()==Layout.LEGACY?claimLegacy(provider):claim(provider,LEGACY_SCOPE,LEGACY_SCOPE);}
     public Optional<Delivery> claim(String provider,String merchant,String environment){
         requireScoped();
         identity(provider,merchant,environment,"claim");
-        var ids=db.query("SELECT event_id FROM payment_webhook_inbox WHERE provider=? AND merchant_scope=? AND env_scope=? AND status IN ('PENDING','PROCESSING') AND next_attempt_at<=CURRENT_TIMESTAMP AND (lease_until IS NULL OR lease_until<=CURRENT_TIMESTAMP) ORDER BY next_attempt_at,created_at,event_id LIMIT 20",(rs,n)->rs.getString(1),provider,merchant,environment);
-        for(String id:ids){
+        Scope scope = new Scope(provider,merchant,environment);
+        for (int attempt = 0; attempt < 32; attempt++) {
+            String id = nextCandidate(scope);
+            if (id == null) break;
             String token=UUID.randomUUID().toString();
             int changed=db.update("UPDATE payment_webhook_inbox SET status='PROCESSING',lease_token=?,lease_until=TIMESTAMPADD(SECOND,180,CURRENT_TIMESTAMP),attempts=attempts+1,updated_at=CURRENT_TIMESTAMP WHERE provider=? AND merchant_scope=? AND env_scope=? AND event_id=? AND status IN ('PENDING','PROCESSING') AND next_attempt_at<=CURRENT_TIMESTAMP AND (lease_until IS NULL OR lease_until<=CURRENT_TIMESTAMP)",token,provider,merchant,environment,id);
             if(changed==1){
@@ -159,8 +200,34 @@ public class PaymentInbox {
             db.update("UPDATE payment_webhook_inbox SET status='PENDING',attempts=0,lease_token=NULL,lease_until=NULL,next_attempt_at=CURRENT_TIMESTAMP,last_error=NULL,updated_at=CURRENT_TIMESTAMP WHERE provider=? AND merchant_scope=? AND env_scope=? AND event_id=? AND status='MANUAL'",provider,merchant,environment,eventId);
         });
     }
+    /** Called in the settlement transaction, after locking the owner and verifying the paid order. */
+    void completeScheduledRecovery(String provider, String merchant, String environment, String eventId,
+                                   String type, String originalPayload, String evidence) {
+        tx.executeWithoutResult(status -> {
+            int updated = db.update("""
+                    UPDATE payment_webhook_inbox SET status='DONE',updated_at=CURRENT_TIMESTAMP
+                    WHERE provider=? AND merchant_scope=? AND env_scope=? AND event_id=? AND event_type=?
+                      AND status='PENDING' AND attempts=0 AND last_error IS NULL
+                      AND lease_token IS NULL AND lease_until IS NULL AND next_attempt_at>CURRENT_TIMESTAMP
+                      AND payload_hash=? AND CAST(payload AS BINARY)=CAST(? AS BINARY)
+                    """, provider, merchant, environment, eventId, type, hash(originalPayload), originalPayload);
+            if (updated == 1) {
+                // No worker lease was taken. Attempt zero records which paid callback supplied the evidence.
+                insertAttempt(provider, merchant, environment, eventId, 0, "DONE", evidence);
+            }
+        });
+    }
+
+    private void insertAttempt(String provider, String merchant, String environment, String eventId,
+                               int attempt, String result, String evidence) {
+        db.update("""
+                INSERT INTO payment_inbox_attempt(id,provider,merchant_scope,env_scope,event_id,attempt,result,evidence_id,created_at)
+                VALUES(?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)
+                """,UUID.randomUUID().toString(),provider,merchant,environment,eventId,attempt,result,evidence);
+    }
+
     private void audit(Delivery d,String result,String evidence){
-        db.update("INSERT INTO payment_inbox_attempt(id,provider,merchant_scope,env_scope,event_id,attempt,result,evidence_id,created_at) VALUES(?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)",UUID.randomUUID().toString(),d.provider(),d.merchant(),d.environment(),d.eventId(),Math.max(0,d.attempt()),result,evidence);
+        insertAttempt(d.provider(), d.merchant(), d.environment(), d.eventId(), Math.max(0,d.attempt()), result, evidence);
         if("MANUAL".equals(result)){
             // Emit only after durable quarantine commits. No payload, secret or raw exception message.
             org.springframework.transaction.support.TransactionSynchronizationManager.registerSynchronization(new org.springframework.transaction.support.TransactionSynchronization(){

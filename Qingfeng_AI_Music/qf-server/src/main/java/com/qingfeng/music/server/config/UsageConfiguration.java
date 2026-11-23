@@ -58,10 +58,11 @@ public class UsageConfiguration {
             env.getProperty("qingfeng.inspiration.rewrite.concurrent-per-creator",Integer.class,1));
     }
     @Bean JdbcUsageBudget usageBudget(JdbcTemplate jdbc, PlatformTransactionManager manager, Environment env, com.qingfeng.music.credits.CreditsLedger credits, com.qingfeng.music.credits.CreditConsumptions consumptions, com.qingfeng.music.credits.CreditsPricing pricing,com.qingfeng.music.credits.LyricFreeAllowance lyricFreeAllowance) {
-        return new JdbcUsageBudget(jdbc,new TransactionTemplate(manager),Map.of(
+        var budget=new JdbcUsageBudget(jdbc,new TransactionTemplate(manager),Map.of(
             Kind.MUSIC,limits(env,"music"),
             Kind.LYRICS,limits(env,"lyrics"),
             Kind.TIMING,limits(env,"timing"),Kind.COVER,limits(env,"cover")),Clock.systemUTC(),ZoneId.of(env.getRequiredProperty("qingfeng.usage.zone"))).withCredits(credits,consumptions,pricing).withLyricFreeAllowance(lyricFreeAllowance);
+        return env.getProperty("qingfeng.usage.music.permits-enabled",Boolean.class,false)?budget.enableMusicPermits():budget;
     }
     private Limits limits(Environment env,String kind) {
         String prefix="qingfeng.usage."+kind+".";

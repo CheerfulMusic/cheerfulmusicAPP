@@ -1,22 +1,45 @@
+// @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { globSync, readFileSync } from 'node:fs'
 import { english } from '../src/shared/i18n/en'
+import { siteOrigin } from '../src/shared/i18n/home-seo'
 
-beforeEach(() => { vi.resetModules() })
+beforeEach(() => {
+  localStorage.clear()
+  document.head.replaceChildren()
+  document.documentElement.removeAttribute('lang')
+  vi.resetModules()
+})
 afterEach(() => { vi.unstubAllGlobals() })
 
 describe('Chinese and English interface', () => {
-  it('starts in English and restores a saved Chinese preference after reload', async () => {
-    const storage = new Map<string, string>()
-    vi.stubGlobal('localStorage', { getItem: (key: string) => storage.get(key), setItem: (key: string, value: string) => storage.set(key, value) })
+  it('starts in English on the root with an empty preference', async () => {
+    document.documentElement.lang = 'zh-CN'
+    const canonical = document.createElement('link')
+    canonical.rel = 'canonical'
+    canonical.href = siteOrigin + '/'
+    canonical.setAttribute('data-site-seo', '')
+    document.head.append(canonical)
+
+    const { locale, t, updatePageLocale } = await import('../src/shared/i18n')
+    updatePageLocale('/')
+
+    expect(locale.value).toBe('en')
+    expect(document.documentElement.lang).toBe('en')
+    expect(t('保存草稿')).toBe('Save draft')
+  })
+
+  it.each(['en', 'zh-CN'] as const)('restores a manually selected %s preference after reload', async language => {
     const first = await import('../src/shared/i18n')
-    expect(first.locale.value).toBe('en')
-    expect(first.t('保存草稿')).toBe('Save draft')
-    first.setLocale('zh-CN')
+    first.setLocale(language === 'en' ? 'zh-CN' : 'en')
+    first.setLocale(language)
+    expect(localStorage.getItem(first.localeStorageKey)).toBe(language)
+
     vi.resetModules()
     const restored = await import('../src/shared/i18n')
-    expect(restored.locale.value).toBe('zh-CN')
-    expect(restored.t('保存草稿')).toBe('保存草稿')
+    restored.updatePageLocale('/')
+    expect(restored.locale.value).toBe(language)
+    expect(document.documentElement.lang).toBe(language)
   })
 
   it('still switches when browser storage is blocked and keeps inserted user text intact', async () => {

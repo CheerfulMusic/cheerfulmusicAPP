@@ -31,7 +31,7 @@ let memoryVid = '', memorySid = ''
 let memoryDecision: boolean | null = null
 // 当前页面的路径在进入时就固定下来：离开事件必须算在「离开的那一页」上，
 // 不能等到路由切换后再从 location 取，那时已经是新页面的地址了。
-let pageEnteredAt = 0, pageVisibleMs = 0, currentRoute = '', currentPath = '', leaveReported = false
+let pageEnteredAt = 0, pageVisibleMs = 0, currentRoute = '', currentPath = '', leaveReported = true
 
 function local(key: string): string {
   try { return localStorage.getItem(key) || '' } catch { return '' }
@@ -115,9 +115,15 @@ export function analyticsEnabled(): boolean {
  * 未明确同意前（未决定）不要调用，或调用即视为已做出选择；绝不在用户无操作时默认开启。
  */
 export function setAnalyticsEnabled(value: boolean): void {
+  const wasEnabled = analyticsEnabled()
   memoryDecision = value
-  if (!value) { setLocal(OPT_OUT_KEY, '1'); return }
-  try { setLocal(OPT_OUT_KEY, '0') } catch { /* 忽略；退回内存兜底。 */ }
+  setLocal(OPT_OUT_KEY, value ? '0' : '1')
+  if (!value) {
+    leaveReported = true
+    pageEnteredAt = pageVisibleMs = 0
+  } else if (!wasEnabled) {
+    startCurrentPage()
+  }
 }
 
 export function track(event: AnalyticsEvent | string, payload?: AnalyticsPayload, pagePath?: string): void {
@@ -161,14 +167,24 @@ export function reportPageLeave(): void {
   track('page_leave', { route: currentRoute, durationMs }, currentPath)
 }
 
+function startCurrentPage(): void {
+  pageEnteredAt = pageVisibleMs = 0
+  leaveReported = !currentPath || !analyticsEnabled()
+  if (leaveReported) return
+  if (typeof document !== 'undefined' && document.visibilityState !== 'hidden') pageEnteredAt = Date.now()
+  track('pageview', { route: currentRoute }, currentPath)
+}
+
 export function trackPageView(route: string): void {
   reportPageLeave()
   currentRoute = route
   currentPath = sanitizePagePath(location.pathname)
-  pageEnteredAt = Date.now()
-  pageVisibleMs = 0
-  leaveReported = false
-  track('pageview', { route }, currentPath)
+  startCurrentPage()
+}
+
+/** 站内登录可在当前页面完成。从新会话开始计时，避免把登录前的停留记到账号。 */
+export function startSignedInPageTracking(): void {
+  startCurrentPage()
 }
 
 /** 页面隐藏 / 关闭时用 sendBeacon 补发停留时长；存储或事件 API 不可用时不抛错。 */
@@ -187,5 +203,8 @@ export function installPageLeaveTracking(): void {
       }
     })
     window.addEventListener('pagehide', () => { reportPageLeave() })
+    window.addEventListener('pageshow', event => {
+      if (event.persisted) startCurrentPage()
+    })
   } catch { /* 无 DOM 环境（测试 / 预渲染）不安装。 */ }
 }

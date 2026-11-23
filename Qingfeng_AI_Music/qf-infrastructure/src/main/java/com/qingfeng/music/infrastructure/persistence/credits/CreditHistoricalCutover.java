@@ -34,9 +34,6 @@ public final class CreditHistoricalCutover {
     private static final String OPTIONAL_V49 = "V49__lyrics_preparation.sql";
     private static final String OPTIONAL_V49_SHA256 = "c0cde3e30b4e2bac3b3690c70dfd1125abced7045f1163ec9ee33a5c214616b4";
     private static final int OPTIONAL_V49_CHECKSUM = -1886072734;
-    private static final String OPTIONAL_V50 = "V50__discover_daily_plays_and_vocal_approval.sql";
-    private static final String OPTIONAL_V50_SHA256 = "bcedc1392b8623d7d31516f01c101f17aa170ae105ac6866f7a7ef71b77f510a";
-    private static final int OPTIONAL_V50_CHECKSUM = -2123351923;
     private static final Set<String> EMPTY_FINANCIAL_TABLES = Set.of(
         "p0_credit_allocation", "p0_credit_payment_binding", "p0_credit_refund", "p0_credit_dispute",
         "p0_credit_return", "p0_credit_financial_audit", "p0_credit_recovery", "p0_credit_recovery_audit",
@@ -471,7 +468,7 @@ public final class CreditHistoricalCutover {
             for (var resource : resources) {
                 String name = Objects.requireNonNull(resource.getFilename());
                 int version = Integer.parseInt(name.substring(1, name.indexOf("__")));
-                require(version >= 1 && version <= 50, "HISTORY_UNAPPROVED_RESOURCE_EXTENSION");
+                require(version >= 1 && version <= 54, "HISTORY_UNAPPROVED_RESOURCE_EXTENSION");
                 CRC32 crc = new CRC32();
                 String text;
                 try (var input = resource.getInputStream()) { text = new String(input.readAllBytes(), StandardCharsets.UTF_8); }
@@ -503,8 +500,32 @@ public final class CreditHistoricalCutover {
                 }
                 if (version == 50) {
                     String normalized = text.replace("\r\n", "\n").replace('\r', '\n');
-                    require(OPTIONAL_V50.equals(name) && (int) crc.getValue() == OPTIONAL_V50_CHECKSUM
-                            && OPTIONAL_V50_SHA256.equals(digest(normalized.getBytes(StandardCharsets.UTF_8))),
+                    require("V50__discover_daily_plays_and_vocal_approval.sql".equals(name) && (int) crc.getValue() == -2123351923
+                            && "bcedc1392b8623d7d31516f01c101f17aa170ae105ac6866f7a7ef71b77f510a".equals(digest(normalized.getBytes(StandardCharsets.UTF_8))),
+                            "HISTORY_UNAPPROVED_RESOURCE_EXTENSION");
+                }
+                if (version == 54) {
+                    String normalized = text.replace("\r\n", "\n").replace('\r', '\n');
+                    require("V54__song_share_statistics.sql".equals(name) && (int) crc.getValue() == 570458891
+                            && "9d837e8c53171c274f2367d1ff99ead74eb706659b0a612b6f5aa2aec0b9f633".equals(digest(normalized.getBytes(StandardCharsets.UTF_8))),
+                            "HISTORY_UNAPPROVED_RESOURCE_EXTENSION");
+                }
+                if (version == 53) {
+                    String normalized = text.replace("\r\n", "\n").replace('\r', '\n');
+                    require("V53__agent_admission_version.sql".equals(name) && (int) crc.getValue() == -1976084986
+                            && "83af90babf7a7a299177d08d0b3e1eb79bcabf7cc0454cbd4d6025ae074e5591".equals(digest(normalized.getBytes(StandardCharsets.UTF_8))),
+                            "HISTORY_UNAPPROVED_RESOURCE_EXTENSION");
+                }
+                if (version == 51) {
+                    String normalized = text.replace("\r\n", "\n").replace('\r', '\n');
+                    require("V51__payment_reconciliation_cursor.sql".equals(name) && (int) crc.getValue() == 1186757330
+                            && "7030c4fba4bc5009ca921fb59f931ebef952f6f93d67efd77889c298cd2ee045".equals(digest(normalized.getBytes(StandardCharsets.UTF_8))),
+                            "HISTORY_UNAPPROVED_RESOURCE_EXTENSION");
+                }
+                if (version == 52) {
+                    String normalized = text.replace("\r\n", "\n").replace('\r', '\n');
+                    require("V52__gift_daily_budget.sql".equals(name) && (int) crc.getValue() == -938954138
+                            && "898c2e8a1b47009f68b21554dd8d5e46614eb29ed77475d108e5ea568bf1ad07".equals(digest(normalized.getBytes(StandardCharsets.UTF_8))),
                             "HISTORY_UNAPPROVED_RESOURCE_EXTENSION");
                 }
                 require(expected.put(version, new History(version, name, (int) crc.getValue())) == null, "DUPLICATE_CLASSPATH_MIGRATION");

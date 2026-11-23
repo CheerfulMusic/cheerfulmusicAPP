@@ -2,12 +2,20 @@
 # API and worker instances share the SAME approved main DB in real use.
 # Tests use a completely isolated DB and sandbox credentials.
 qingfeng.payment.inbox.scheduler-enabled=true
-qingfeng.payment.inbox.worker-concurrency=4
-qingfeng.payment.inbox.scan-ms=1000
+# Per lane, at most this many processing attempts per scan. Empty channels stop early.
+# Increase on the payment worker after checking DB headroom and gateway read quotas.
+# qingfeng.payment.inbox.batch-size=128
+qingfeng.payment.inbox.worker-concurrency=16
+qingfeng.payment.inbox.scan-ms=100
+# Reuse a successful structural inspection for up to one second per DB and writer epoch.
+# The ACTIVE gate and opposite-mode order check still run on each call.
+qingfeng.stripe.reuse-schema-check=true
+# Apply on checkout/API instances. Webhooks remain immediately eligible.
+qingfeng.stripe.initial-reconcile-delay-seconds=120
 qingfeng.payment.reconcile.scan-ms=60000
 # Budget total connections across ALL API/worker instances against MySQL capacity.
 # Example pool capacity, not a production sizing guarantee:
-spring.datasource.hikari.maximum-pool-size=16
+spring.datasource.hikari.maximum-pool-size=32
 # Preserve any existing init SQL; merge these assignments rather than overwriting it.
 spring.datasource.hikari.connection-init-sql=SET SESSION time_zone='+00:00', innodb_lock_wait_timeout=5
 # Financial writer protocol, authoritative verification and startup DB integrity checks stay enabled.
@@ -17,3 +25,8 @@ spring.datasource.hikari.connection-init-sql=SET SESSION time_zone='+00:00', inn
 # include duplicate deliveries and retries when sizing. Shared Redis buckets apply cluster-wide;
 # local buckets apply per API instance. This is an ingress budget, not measured sustainable TPS.
 qingfeng.payment.webhook.rate-limit-per-minute=12000
+
+# Enable on a V51 worker after confirming Stripe read permissions and PayPal reporting/disputes access.
+qingfeng.payment.discovery.enabled=true
+qingfeng.payment.discovery.history-days=7
+qingfeng.payment.discovery.scan-ms=15000

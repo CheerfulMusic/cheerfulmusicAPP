@@ -85,6 +85,7 @@ public class ArtistProfileService {
                 (r.discover_published_at IS NOT NULL) AS on_discover FROM artist_song_release r
             JOIN music_work w ON w.id=r.work_id AND w.owner_id=r.creator_id AND w.deleted_at IS NULL
             WHERE r.creator_id=? AND r.show_on_profile=TRUE
+              AND NOT EXISTS (SELECT 1 FROM media_asset_annotation v WHERE v.asset_id=r.asset_id AND v.deleted_at IS NOT NULL)
             """;
     private static final String DISCOVER_JOINS = """
             FROM artist_song_release r
@@ -585,6 +586,7 @@ public class ArtistProfileService {
                 JOIN artist_profile p ON p.creator_id=r.creator_id
                 JOIN music_work w ON w.id=r.work_id AND w.owner_id=r.creator_id AND w.deleted_at IS NULL
                 WHERE p.public_id=? AND p.published=TRUE AND r.id=? AND r.version=? AND r.show_on_profile=TRUE
+                  AND NOT EXISTS (SELECT 1 FROM media_asset_annotation v WHERE v.asset_id=r.asset_id AND v.deleted_at IS NOT NULL)
                 """, RELEASE_ROW, publicId, song, version).stream().findFirst()
                 .orElseThrow(ArtistProfileService::missing);
     }

@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#151846">
+  <title>{{title}} · {{creator}}</title>
+  <meta name="description" content="{{description}}">
+  <meta name="robots" content="noindex,nofollow">
+  <meta property="og:title" content="{{title}} · {{creator}}">
+  <meta property="og:description" content="{{description}}">
+  <meta property="og:image" content="{{thumbnail}}">
+  <meta property="og:url" content="{{url}}">
+  <meta property="og:type" content="music.song">
+  <link rel="stylesheet" href="/brand/song-player.css">
+  <link rel="stylesheet" href="/brand/share-destinations.css">
+  <script defer src="/brand/song-share.js"></script>
+  <script defer src="/brand/song-player.js"></script>
+  <script defer src="/brand/song-community.js"></script>
+</head>
+<body data-artist="{{artistId}}">
+  <header class="masthead">
+    <span class="wordmark"><span class="brand-note" aria-hidden="true">♫</span>Cheerful Music</span>
+    <a class="create-link" href="/create">我也要创作一首 <span aria-hidden="true">↗</span></a>
+  </header>
+  <main>
+    <div class="record" id="record">
+      <div class="record-sleeve">
+        <img id="artwork" width="600" height="600" src="{{image}}" alt="《{{title}}》歌曲封面">
+      </div>
+      <div class="record-body">
+        <h1>{{title}}</h1>
+        <div class="byline"><span id="artist">{{creator}}</span><button type="button" id="open-artist" class="artist-link" aria-label="查看音乐人主页" hidden>音乐人主页 ›</button></div>
+        <audio id="audio" controls playsinline preload="metadata" data-duration="{{duration}}" src="{{audio}}"></audio>
+        <div id="transport" hidden>
+          <label class="sr-only" for="seek">播放进度</label>
+          <input id="seek" type="range" min="0" max="100" step="0.1" value="0" disabled>
+          <div class="times"><span id="elapsed">0:00</span><span id="duration">{{durationLabel}}</span></div>
+          <div class="controls">
+            <button type="button" id="repeat" class="side-control" aria-label="单曲循环" aria-pressed="false"><span aria-hidden="true">↻</span><small>循环</small></button>
+            <button type="button" id="lyrics-toggle" class="side-control" aria-expanded="false" aria-controls="lyrics"><span class="lyric-icon" aria-hidden="true">词</span><small>歌词</small></button>
+            <button type="button" id="play" class="play-control" aria-label="播放"><i aria-hidden="true"></i></button>
+            <button type="button" id="open-story" class="side-control" aria-controls="story"><span class="comment-icon" aria-hidden="true"></span><small>乐评</small></button>
+            <button type="button" id="open-share" class="side-control" aria-haspopup="dialog"><span aria-hidden="true">↗</span><small>分享</small></button>
+          </div>
+          <div class="record-actions" aria-label="歌曲互动">
+            <button id="like" type="button" aria-pressed="false">喜欢 <span id="like-count"></span></button>
+            <button id="favorite" type="button" aria-pressed="false">收藏 <span id="favorite-count"></span></button>
+            <a href="/discover">发现更多音乐 <span aria-hidden="true">↗</span></a>
+          </div>
+          <button id="lyric-preview" type="button" aria-label="查看完整歌词" hidden><span>歌词 ›</span><strong id="lyric-peek"></strong></button>
+        </div>
+        <noscript><p>在微信右上角菜单中选择「发送给朋友」或「分享到朋友圈」。</p><a href="{{url}}">歌曲分享链接</a></noscript>
+      </div>
+    </div>
+    <div class="subpage">
+      <header id="mini-player" hidden>
+        <button type="button" id="back-record" aria-label="返回歌曲">‹</button>
+        <img src="{{image}}" width="46" height="46" alt="">
+        <div><strong>{{title}}</strong><span>{{creator}}</span></div>
+        <button type="button" class="play-control mini-play" id="mini-play" aria-label="播放"><i aria-hidden="true"></i></button>
+      </header>
+      <section id="lyrics" class="panel lyric-panel" aria-label="歌词">
+        <h2 tabindex="-1">歌词</h2><div id="lyric-lines" tabindex="0" aria-label="歌曲歌词">{{lyricLines}}</div>
+      </section>
+      <section id="story" class="panel paper" hidden>
+        <h2 tabindex="-1">音乐故事</h2>
+        <p id="public-story"></p>
+        <div class="stats"><span id="plays"></span><span id="discussion-count"></span></div>
+        <div class="section-title"><h3>乐评</h3><div id="comment-sort"><button type="button" data-sort="hot" aria-pressed="true">热门</button><button type="button" data-sort="new" aria-pressed="false">最新</button></div></div>
+        <ul id="comment-list" class="comment-list"></ul>
+        <div class="pager" id="comment-pages" hidden><button id="prev-comments" type="button">上一页</button><button id="next-comments" type="button">下一页</button></div>
+        <form id="comment-form"><label class="sr-only" for="comment-text">写乐评</label><textarea id="comment-text" rows="2" maxlength="400" required placeholder="写下你的听后感…"></textarea><button type="submit">发表</button></form>
+      </section>
+      <section id="artist-panel" class="panel paper" hidden>
+        <div class="artist-banner">
+          <img id="artist-avatar" alt="" hidden width="64" height="64">
+          <h2 tabindex="-1">{{creator}}</h2><p id="artist-intro"></p>
+          <div id="artist-stats"></div>
+          <div class="artist-actions"><button id="artist-play-all" type="button" hidden>▶ 播放全部</button><button id="follow" aria-pressed="false" type="button" hidden>＋ 关注</button><a id="artist-home" hidden>音乐人主页 ↗</a></div>
+        </div>
+        <div id="artist-playback" hidden><span id="artist-listening"></span><audio id="artist-audio" controls playsinline preload="none"></audio><button id="track-prev" type="button">上一首</button> <button id="track-next" type="button">下一首</button></div>
+        <h3>公开作品</h3><ol id="artist-tracks" class="track-list"></ol>
+        <h3>专辑</h3><div id="artist-albums" class="album-covers"></div>
+      </section>
+    </div>
+    <div class="feedback"><p id="audio-status" class="notice" role="status"></p><p id="community-notice" class="notice" role="status"></p><a id="account-link" href="/account" target="_blank" rel="noopener" hidden>登录音乐账号 ↗</a></div>
+  </main>
+  <dialog id="share-sheet" aria-labelledby="share-heading">
+    <div class="sheet-body">
+      <div class="sheet-heading"><h2 id="share-heading">分享到</h2><button id="close-share" class="close" type="button" aria-label="关闭分享">×</button></div>
+      <div class="share-track"><img src="{{image}}" width="52" height="52" alt=""><div><strong>{{title}}</strong><span>{{creator}}</span></div></div>
+      <div id="wechat-actions" class="share-destinations" role="group" aria-label="分享方式">
+        <button id="friend" type="button" aria-controls="wechat-guide" aria-pressed="false"><span class="destination-icon for-friend" aria-hidden="true"></span>微信好友</button>
+        <button id="timeline" type="button" aria-controls="wechat-guide" aria-pressed="false"><span class="destination-icon for-timeline" aria-hidden="true"><i></i></span>朋友圈</button>
+        <button id="poster" type="button"><span class="destination-icon for-poster" aria-hidden="true"><i>♫</i></span>音乐海报</button>
+      </div>
+      <div id="wechat-guide" class="destination-guide" hidden>
+        <img id="wechat-qr" hidden width="144" height="144" alt="在微信中打开歌曲的二维码">
+        <div><p id="channel-instruction" role="status"></p><p id="wechat-feedback" role="status"></p></div>
+      </div>
+      <p id="status" class="notice" role="status"></p>
+      <div id="poster-preview" hidden>
+        <img id="poster-image" alt="含歌曲封面、署名和收听二维码的海报">
+        <div class="poster-actions"><a id="save-poster" download>保存海报</a><button id="send-poster" type="button" hidden>发送海报图片</button></div>
+      </div>
+      <details id="more-share" class="more-share">
+        <summary>更多分享方式</summary>
+        <div class="share-actions"><button id="system-share" type="button" hidden>系统分享</button><button id="copy" type="button">复制链接</button></div>
+        <input id="manual" hidden readonly aria-label="歌曲分享链接" value="{{url}}">
+      </details>
+    </div>
+  </dialog>
+</body>
+</html>

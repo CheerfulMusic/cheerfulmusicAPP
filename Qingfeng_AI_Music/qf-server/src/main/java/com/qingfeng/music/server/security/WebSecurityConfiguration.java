@@ -23,12 +23,14 @@ public class WebSecurityConfiguration {
             "/zh-CN", "/zh-CN/", "/zh-CN/index.html",
             "/en", "/en/", "/en/index.html",
             "/discover", "/discover/", "/discover/index.html",
-            "/help", "/help/", "/help/index.html"
+            "/help", "/help/", "/help/index.html",
+            "/guide/*", "/guide/*/", "/guide/*/index.html",
+            "/en/guide/*", "/en/guide/*/", "/en/guide/*/index.html"
     };
 
     private static final String[] SPA_PAGES = {
             "/", "/index.html", "/create", "/create/photo", "/works", "/works/*",
-            "/account", "/profile", "/artist/*", "/recharge", "/analytics", "/agent"
+            "/account", "/profile", "/artist/*", "/artist/*/albums/*", "/recharge", "/analytics", "/agent"
     };
 
     @Bean UserDetailsService unavailableIdentity() {
@@ -49,7 +51,7 @@ public class WebSecurityConfiguration {
                     response.setHeader("X-Robots-Tag", "noindex");
                 }
             }))
-            .csrf(csrf -> csrf.ignoringRequestMatchers("/api/public/payments/airwallex/webhook", "/api/public/paypal/webhook", "/api/public/events", "/api/public/hot-songs/*/play", "/api/public/discover/songs/*/*/play")
+            .csrf(csrf -> csrf.ignoringRequestMatchers("/api/public/payments/airwallex/webhook", "/api/public/paypal/webhook", "/api/public/events", "/api/wechat/jssdk-error", "/api/songs/*/play", "/api/public/hot-songs/*/play", "/api/public/discover/songs/*/*/play")
             .ignoringRequestMatchers(request->"POST".equals(request.getMethod())&&java.util.Set.of("/api/public/auth/sms/deliver","/api/public/stripe/webhook").contains(request.getServletPath()))
             .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse()).csrfTokenRequestHandler(new CsrfTokenRequestAttributeHandler()))
             .authorizeHttpRequests(auth -> auth
@@ -60,16 +62,16 @@ public class WebSecurityConfiguration {
                 .requestMatchers(HttpMethod.HEAD, SPA_PAGES).permitAll()
                 .requestMatchers(HttpMethod.GET, SEO_PAGES).permitAll()
                 .requestMatchers(HttpMethod.HEAD, SEO_PAGES).permitAll()
-                .requestMatchers(HttpMethod.GET,"/assets/**","/brand/**","/media/**","/gift/*","/legal/**").permitAll()
-                .requestMatchers(HttpMethod.HEAD,"/gift/*","/brand/share-default-cover.png").permitAll()
+                .requestMatchers(HttpMethod.GET,"/assets/**","/brand/**","/media/**","/gift/*","/song/*","/api/songs/*/public","/api/songs/*/community","/api/songs/*/audio","/api/songs/*/cover","/api/songs/*/thumbnail.png","/api/wechat/jssdk-config","/legal/**").permitAll()
+                .requestMatchers(HttpMethod.HEAD,"/gift/*","/song/*","/api/songs/*/public","/api/songs/*/community","/api/songs/*/audio","/api/songs/*/cover","/api/songs/*/thumbnail.png","/brand/share-default-cover.png","/brand/logo-mark.svg").permitAll()
                 .requestMatchers(request -> "HEAD".equals(request.getMethod()) && com.qingfeng.music.server.web.RecommendationOssRedirect.isSamplePath(request.getServletPath())).permitAll()
                 .requestMatchers("/api/public/system/info", "/api/public/csrf", "/api/public/session", "/api/public/session/recover", "/actuator/health").permitAll()
-                .requestMatchers(org.springframework.http.HttpMethod.POST,"/api/public/events").permitAll()
+                .requestMatchers(org.springframework.http.HttpMethod.POST,"/api/public/events","/api/wechat/jssdk-error").permitAll()
                 .requestMatchers(org.springframework.http.HttpMethod.GET,"/api/public/hot-songs","/api/public/hot-songs/*/lyrics","/api/public/hot-songs/*/creation-reference").permitAll()
                 .requestMatchers(org.springframework.http.HttpMethod.GET,"/api/public/discover").permitAll()
                 .requestMatchers(org.springframework.http.HttpMethod.HEAD,"/api/public/discover").permitAll()
                 .requestMatchers(org.springframework.http.HttpMethod.POST,"/api/public/discover/songs/*/*/play").permitAll()
-                .requestMatchers(org.springframework.http.HttpMethod.POST,"/api/public/hot-songs/*/play").permitAll()
+                .requestMatchers(org.springframework.http.HttpMethod.POST,"/api/public/hot-songs/*/play","/api/songs/*/play").permitAll()
                 .requestMatchers(org.springframework.http.HttpMethod.GET,"/api/public/auth/google/status",GoogleOAuthFlow.CALLBACK).permitAll()
                 .requestMatchers(org.springframework.http.HttpMethod.POST,"/api/public/auth/google/start","/api/public/session/logout").permitAll()
                 .requestMatchers(org.springframework.http.HttpMethod.GET,"/api/public/auth/logto/status").permitAll()
@@ -83,8 +85,8 @@ public class WebSecurityConfiguration {
                 .requestMatchers(CreatorSessionFilter::isGiftDownload).hasRole("CREATOR")
                 .requestMatchers(org.springframework.http.HttpMethod.GET,"/api/public/gifts/*","/api/public/gifts/*/audio","/api/public/gifts/*/cover").permitAll()
                 .requestMatchers(org.springframework.http.HttpMethod.HEAD,"/api/public/gifts/*","/api/public/gifts/*/audio","/api/public/gifts/*/cover").permitAll()
-                .requestMatchers(org.springframework.http.HttpMethod.GET,"/api/public/artists/*","/api/public/artists/*/avatar/*","/api/public/artists/*/cover/*","/api/public/artists/*/songs/*/*/audio","/api/public/artists/*/songs/*/*/cover","/api/public/artists/*/songs/*/*/lyrics").permitAll()
-                .requestMatchers(org.springframework.http.HttpMethod.HEAD,"/api/public/artists/*","/api/public/artists/*/avatar/*","/api/public/artists/*/cover/*","/api/public/artists/*/songs/*/*/audio","/api/public/artists/*/songs/*/*/cover").permitAll()
+                .requestMatchers(org.springframework.http.HttpMethod.GET,"/api/public/artists/*","/api/public/artists/*/albums","/api/public/artists/*/albums/*","/api/public/artists/*/albums/*/cover/*","/api/public/artists/*/avatar/*","/api/public/artists/*/cover/*","/api/public/artists/*/songs/*/*/audio","/api/public/artists/*/songs/*/*/cover","/api/public/artists/*/songs/*/*/lyrics").permitAll()
+                .requestMatchers(org.springframework.http.HttpMethod.HEAD,"/api/public/artists/*","/api/public/artists/*/albums","/api/public/artists/*/albums/*","/api/public/artists/*/albums/*/cover/*","/api/public/artists/*/avatar/*","/api/public/artists/*/cover/*","/api/public/artists/*/songs/*/*/audio","/api/public/artists/*/songs/*/*/cover").permitAll()
                 .requestMatchers("/api/app/**").hasRole("CREATOR")
                 .anyRequest().denyAll())
             .exceptionHandling(errors -> errors.authenticationEntryPoint((request,response,error)->{

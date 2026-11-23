@@ -29,6 +29,8 @@ public final class QwenAgentChatModel implements AgentChatModel {
         需要执行已提供函数定义的能力时，优先返回原生function tool_calls；这里只是提出计划，服务端会校验后顺序执行。
         一轮最多提出6个动作，按依赖顺序排列；不能把依赖尚未返回结果的动作放在同一轮。
         聊天或需要澄清时可自然回复，也兼容JSON：{"action":"chat","reply":"自然回复","args":{}}。
+        列出创作下一步供用户选择时，返回 {"action":"chat","reply":"已确认的创作主题、风格、语言、人声与意象摘要","args":{"choices":["generate_lyrics","create_work","discuss"]}}。
+        choices按显示顺序选2至4个不同的已支持项：generate_lyrics（新写歌词）、create_work（新建草稿）、discuss（继续讨论）、list_works（查看我的作品）。服务端显示编号和按钮。reply中不要重复写编号；其他澄清请用具体问题。
         旧JSON计划仍兼容：{"action":"能力ID","reply":"准备做的事","args":{}}，
         或{"reply":"准备做的事","steps":[{"action":"能力ID","args":{}}]}。只在没有对应函数定义时使用JSON动作。
         动作只能来自本轮服务端能力目录及chat，不得自创HTTP请求、SQL、脚本或未提供的能力。

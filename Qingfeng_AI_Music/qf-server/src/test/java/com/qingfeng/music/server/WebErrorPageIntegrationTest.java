@@ -67,7 +67,7 @@ class WebErrorPageIntegrationTest {
     }
 
     @Test void searchEntryUrlsAreReadableWithoutAuthentication() throws Exception {
-        for (String path : List.of("/", "/en/", "/discover", "/help")) {
+        for (String path : List.of("/", "/en/", "/discover", "/help", "/guide/create-song", "/en/guide/create-song")) {
             var response = get(path, "text/html");
             assertEquals(200, response.statusCode(), path);
             assertTrue(response.body().contains("id=\"app\""), path);
@@ -83,13 +83,17 @@ class WebErrorPageIntegrationTest {
             assertEquals(200, request(document.getKey(), "*/*", "HEAD").statusCode(), document.getKey());
         }
         assertEquals(403, get("/home.html", "text/html").statusCode());
+        assertEquals(200, request("/brand/logo-mark.svg", "image/svg+xml", "HEAD").statusCode());
     }
 
     @Test void duplicateSearchEntryUrlsRedirectPermanentlyWithoutChangingTheQuery() throws Exception {
-        var routes = Map.of("/zh-CN", "/", "/zh-CN/", "/", "/zh-CN/index.html", "/",
-                "/en", "/en/", "/en/index.html", "/en/",
-                "/discover/", "/discover", "/discover/index.html", "/discover",
-                "/help/", "/help", "/help/index.html", "/help");
+        var routes = Map.ofEntries(
+                Map.entry("/zh-CN", "/"), Map.entry("/zh-CN/", "/"), Map.entry("/zh-CN/index.html", "/"),
+                Map.entry("/en", "/en/"), Map.entry("/en/index.html", "/en/"),
+                Map.entry("/discover/", "/discover"), Map.entry("/discover/index.html", "/discover"),
+                Map.entry("/help/", "/help"), Map.entry("/help/index.html", "/help"),
+                Map.entry("/guide/create-song/", "/guide/create-song"),
+                Map.entry("/en/guide/edit-lyrics/index.html", "/en/guide/edit-lyrics"));
         String query = "?q=%E9%9F%B3%E4%B9%90&ref=a%2Fb";
         for (var route : routes.entrySet()) {
             for (String method : List.of("GET", "HEAD")) {

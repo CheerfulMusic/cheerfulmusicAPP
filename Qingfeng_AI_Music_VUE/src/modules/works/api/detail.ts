@@ -1,3 +1,4 @@
+import type { SongShareStatus } from '../model/song-sharing'
 import type { GenerationPublication } from '../model/generation-recovery'
 import type {LyricsStructure, LyricsTemplateId} from '../model/lyrics-structure'
 import { ensureCreator, requestJson, apiUrl, uploadForm } from '../../../shared/http/api-client'
@@ -88,7 +89,13 @@ export const audioUrl = (work: string, asset: string, download = false, download
   if (downloadName) query.set('downloadName', downloadName)
   return apiUrl(`${path}?${query}`)
 }
-export const createShare = (work: string, assetId: string, revisionId?: string, workTitle?: string) => call<{ id: string; token: string; expiresAt: string }>(`app/works/${work}/shares`, 'POST', { assetId, revisionId, workTitle })
+export const createShare = (work: string, assetId: string, revisionId?: string, workTitle?: string) => call<{ id: string; token: string; songId: string; expiresAt: string }>(`app/works/${work}/shares`, 'POST', { assetId, revisionId, workTitle, publicSong: true })
+const versionSharesPath = (work: string, asset: string) => `app/works/${encodeURIComponent(work)}/shares/${encodeURIComponent(asset)}`
+export const getSongShareStatus = (work: string, asset: string) => call<SongShareStatus>(versionSharesPath(work, asset))
+const publicStoryPath = (id: string) => 'app/song-listening/' + encodeURIComponent(id) + '/story'
+export const getPublicStory = (id: string) => call<{text: string}>(publicStoryPath(id))
+export const savePublicStory = (id: string, text: string) => call<{text: string}>(publicStoryPath(id), 'PUT', { text })
+export const revokeSongShare = (work: string, asset: string) => call<void>(versionSharesPath(work, asset), 'DELETE')
 export const revokeShares = (work: string) => call<void>(`app/works/${work}/shares`, 'DELETE')
 
 export const cancelTask=(work:string,task:string)=>call<GenerationTask>(`app/works/${work}/generations/${task}/cancel`,'POST',{})

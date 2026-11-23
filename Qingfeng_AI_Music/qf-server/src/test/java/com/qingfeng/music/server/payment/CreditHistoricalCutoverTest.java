@@ -142,7 +142,7 @@ class CreditHistoricalCutoverTest {
         assertEquals("HISTORY_SCRIPT_OR_CHECKSUM_MISMATCH", assertThrows(IllegalStateException.class, () -> verifyHistory(reordered, resources)).getMessage());
     }
     @Test void approvedExtensionsMayCoexistWithoutChangingHistoricalSourceVersions() throws Exception {
-        var resources = classpathMigrations(); assertEquals(50, resources.size());
+        var resources = classpathMigrations(); assertEquals(54, resources.size());
         var optional = resources.stream().filter(item -> V47.equals(item.getFilename())).findFirst().orElseThrow();
         try (var stream = optional.getInputStream()) { assertEquals(-48314744, checksum(stream.readAllBytes())); }
         for (int limit : List.of(44, 45)) {

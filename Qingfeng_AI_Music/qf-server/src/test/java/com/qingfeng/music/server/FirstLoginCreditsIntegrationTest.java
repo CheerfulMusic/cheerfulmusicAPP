@@ -34,6 +34,38 @@ class FirstLoginCreditsIntegrationTest {
     @Autowired JdbcTemplate db;
     @Autowired PlatformTransactionManager transactions;
 
+    @org.springframework.test.context.jdbc.Sql("classpath:db/migration/V52__gift_daily_budget.sql")
+    @Test void giftBudgetsAreIndependentAndReplaysSpendOnlyOnce() throws Exception {
+        var gifts = new com.qingfeng.music.server.config.GiftBudget(db, new TransactionTemplate(transactions),
+                credits, 38, 19, "Asia/Shanghai");
+        String first = identity.create().creatorId();
+        String second = identity.create().creatorId();
+        gifts.welcome(first, 19, "first-login:" + first);
+        gifts.welcome(first, 19, "first-login:" + first);
+        gifts.welcome(second, 19, "first-login:" + second);
+        String third = identity.create().creatorId();
+        gifts.welcome(third, 19, "first-login:" + third);
+        gifts.referral(first, 19, "invite:" + second);
+        gifts.referral(second, 19, "invite:" + third);
+        assertEquals(38, credits.balance(first));
+        assertEquals(19, credits.balance(second));
+        assertEquals(0, credits.balance(third));
+        // Only one of the concurrent grants can use the additional 19 credits.
+        var raised = new com.qingfeng.music.server.config.GiftBudget(db, new TransactionTemplate(transactions),
+                credits, 57, 19, "Asia/Shanghai");
+        var pool = Executors.newFixedThreadPool(3);
+        try {
+            var owners = java.util.stream.IntStream.range(0, 6).mapToObj(n -> identity.create().creatorId()).toList();
+            var results = owners.stream().map(owner -> pool.submit(() ->
+                    raised.welcome(owner, 19, "first-login:" + owner))).toList();
+            for (var result : results) result.get(20, TimeUnit.SECONDS);
+            assertEquals(19, owners.stream().mapToLong(credits::balance).sum());
+        } finally {
+            pool.shutdownNow();
+        }
+
+    }
+
     @Test void anonymousSessionAndRecoveryDoNotGrantCredits() {
         var guest = identity.create();
         identity.recover(identity.issueRecoveryCode(guest.creatorId()));

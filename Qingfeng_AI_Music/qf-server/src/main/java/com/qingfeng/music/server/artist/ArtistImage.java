@@ -18,7 +18,8 @@ final class ArtistImage {
 
     enum Kind {
         AVATAR("avatar", "头像", "INVALID_ARTIST_AVATAR", 192, 192),
-        COVER("cover", "封面", "INVALID_ARTIST_COVER", 1600, 900);
+        COVER("cover", "封面", "INVALID_ARTIST_COVER", 1600, 900),
+        ALBUM("cover", "专辑封面", "INVALID_ALBUM_COVER", 800, 800);
 
         final String column;
         private final String label;
@@ -65,7 +66,7 @@ final class ArtistImage {
                 var region = new Rectangle(width, height);
                 int targetWidth = kind.maxWidth;
                 int targetHeight = kind.maxHeight;
-                if (kind == Kind.AVATAR) {
+                if (kind == Kind.AVATAR || kind == Kind.ALBUM) {
                     int side = Math.min(width, height);
                     region.setBounds((width - side) / 2, (height - side) / 2, side, side);
                 } else {

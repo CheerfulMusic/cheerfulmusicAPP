@@ -95,7 +95,8 @@ public class GenerationService implements GenerationApi {
   if(!execution.closeChecking(work,id,Instant.now()))throw new DomainException("CHECKING_CLOSE_CONFLICT","目前不能结束等待：请至少等待3分钟；已取得平台任务编号的任务会继续自动查询。请刷新状态。");
   return repository.findRequest(work,task.requestKey()).orElseThrow();
  }
- public void retryArchive(String owner,String work,String task){works.get(owner,work);if(!execution.retryArchive(work,task,Instant.now()))throw new DomainException("ARCHIVE_RETRY_CONFLICT","该任务不支持仅重试音频保存，请刷新状态");}
+ @Transactional(isolation = org.springframework.transaction.annotation.Isolation.READ_COMMITTED)
+ public void retryArchive(String owner,String work,String task){works.get(owner,work);budget.reserveArchiveRetry();if(!execution.retryArchive(work,task,Instant.now()))throw new DomainException("ARCHIVE_RETRY_CONFLICT","该任务不支持仅重试音频保存，请刷新状态");}
  public Task cancel(String owner,String work,String id){
   works.get(owner,work);
   var task=repository.list(work).stream().filter(t->t.id().equals(id)).findFirst().orElseThrow(()->new DomainException("TASK_NOT_FOUND","生成任务不存在"));

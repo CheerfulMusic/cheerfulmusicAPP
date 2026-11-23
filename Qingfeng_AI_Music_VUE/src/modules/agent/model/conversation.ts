@@ -52,11 +52,15 @@ export interface ConversationHistory {
   historyEpoch: number
 }
 
+export function displayTurnText(text: string): string {
+  return /^#choice:[0-9a-f-]{36}:([1-9])$/.exec(text)?.[1] ?? text
+}
+
 /** Never display tool payload JSON as a reply. */
 export function messageText(message: Message): string {
   try {
     const body = JSON.parse(message.contentJson || '{}') as Record<string, unknown>
-    if (typeof body.text === 'string') return body.text
+    if (typeof body.text === 'string') return message.role === 'user' ? displayTurnText(body.text) : body.text
     if (typeof body.progress === 'string') return body.progress
   } catch { /* A malformed older message must not break the rest of the conversation. */ }
   return message.state === 'FAILED' ? '这一步没有完成，请重新说明你的需求。' : ''

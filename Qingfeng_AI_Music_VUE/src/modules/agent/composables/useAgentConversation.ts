@@ -176,6 +176,12 @@ export function useAgentConversation(onContinuation?: (snapshot: ConversationSna
     } catch (cause) {
       if (!disposed && version === refreshVersion) {
         error.value = cause instanceof Error ? cause.message : '发送未确认，请重试原请求。'
+        if (cause instanceof ApiError && cause.code === 'REQUEST_KEY_CONFLICT') {
+          pending.value = null
+          remember()
+          await poll()
+          return
+        }
         // A rejected HTTP 400 has not begun a turn; transport errors must keep the original key.
         if (cause instanceof ApiError && cause.status === 400 && pending.value) { pending.value.rejected = true; remember() }
       }
@@ -211,11 +217,12 @@ export function useAgentConversation(onContinuation?: (snapshot: ConversationSna
     loading.value = false; sending.value = false
     await refresh()
   }
-  async function send(text: string, locale: string): Promise<ConversationSnapshot | undefined> {
+  async function send(text: string, locale: string, onQueued?: () => void): Promise<ConversationSnapshot | undefined> {
     if (!text.trim() || sending.value || loading.value || pending.value) return
     if (!conversationId.value) { await refresh(); if (!conversationId.value || error.value || pending.value) return }
     pending.value = { text: text.trim(), locale, requestKey: crypto.randomUUID(), historyEpoch }
     remember()
+    onQueued?.()
     return deliver()
   }
   onScopeDispose(() => { disposed = true; refreshVersion++; clearTimeout(timer); stopObservation() })

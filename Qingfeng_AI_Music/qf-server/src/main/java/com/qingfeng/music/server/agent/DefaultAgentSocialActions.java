@@ -34,6 +34,7 @@ public class DefaultAgentSocialActions implements AgentSocialActions {
     }
 
     @Override
+    @org.springframework.transaction.annotation.Transactional
     public Result execute(String creatorId, String conversationId, String action, String text, String requestKey, SongCard current) {
         if (current == null || current.songId() == null || current.songId().isBlank()) {
             return new Result("还没有选定作品。先写一首歌词或创作一首歌，再继续这个操作。", null, null, current);
@@ -52,7 +53,7 @@ public class DefaultAgentSocialActions implements AgentSocialActions {
                 var created = work!=null&&current.title()!=null&&current.title().equals(work.title())&&!"智能创作".equals(work.title())
                         ? shares.createWithWorkTitle(creatorId,current.songId(),current.revisionId(),current.assetId(),work.title())
                         : shares.create(creatorId, current.songId(), current.revisionId(), current.assetId());
-                yield new Result("分享链接已创建，有效期为 7 天。持有链接的人可以查看作品标题、歌词、封面与寄语并试听。", "share", "/gift/" + created.token(), current);
+                yield new Result("分享链接已创建，有效期为 7 天。持有链接的人可以查看歌曲标题、创作者及封面并试听。", "share", "/song/" + shares.enablePublicSong(created,current.assetId()), current);
             }
             case "revoke_share" -> {
                 shares.revokeAll(creatorId, current.songId());

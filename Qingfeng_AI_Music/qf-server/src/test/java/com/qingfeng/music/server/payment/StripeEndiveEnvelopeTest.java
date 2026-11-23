@@ -88,7 +88,7 @@ class StripeEndiveEnvelopeTest {
     private Resolution reconcile(JsonNode event,JsonNode authoritative){
         String resource=event.path("data").path("object").path("id").asString();
         doReturn(authoritative).when(gateway).retrieveSession(resource);
-        return ReflectionTestUtils.invokeMethod(service,"reconcileSession",event.path("type").asString(),resource);
+        return ReflectionTestUtils.invokeMethod(service,"reconcileSession",event.path("type").asString(),resource,event.path("id").asString());
     }
     private void assertAcceptedKind(String kind) throws Exception {
         JsonNode event=signed(body(kind,SESSION,false,null));

@@ -66,4 +66,11 @@ qingfeng.agent.retrieval.scheduler-enabled=false
 # Complete embedding/Qdrant settings are documented in docs/agent-retrieval.md.
 # 与存储侧保持一致；音频对象名不含 prefix，封面对象名已含 cover-prefix。
 # qingfeng.oss.prefix=qingfeng/audio/
+# Set wav after installing FFmpeg to store new OSS songs as WAV.
+# qingfeng.oss.audio-format=wav
+# qingfeng.oss.audio-ffmpeg=/usr/bin/ffmpeg
 # qingfeng.oss.cover-prefix=qingfeng/covers/
+
+# Official account used for WeChat webpage sharing. Supply the values in server-private configuration.
+# qingfeng.wechat.official.app-id=
+# qingfeng.wechat.official.app-secret=

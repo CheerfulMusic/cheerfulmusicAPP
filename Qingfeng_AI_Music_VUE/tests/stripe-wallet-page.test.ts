@@ -1,10 +1,12 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createApp, defineComponent, h, nextTick, type App } from 'vue'
+import { createMemoryHistory, createRouter, RouterView } from 'vue-router'
 import RechargePage from '../src/modules/identity/pages/RechargePage.vue'
 import CreditsPanel from '../src/modules/identity/components/CreditsPanel.vue'
 import { resetCreatorSession } from '../src/shared/http/api-client'
 import { readPendingOrders } from '../src/modules/identity/model/payment-orders'
+import { locale, setLocale } from '../src/shared/i18n'
 import type { StripePaymentMethod } from '../src/modules/identity/model/stripe-payment-methods'
 
 vi.mock('../src/shared/identity/account-state',async()=>({accountState:(await import('vue')).ref({authenticated:true}),refreshAccountState:vi.fn(async()=>{})}))
@@ -15,6 +17,7 @@ vi.mock('../src/shared/identity/credit-balance',()=>({announceCreditsChanged:vi.
 const tiers=[100,300,700]
 const usd=tiers.map((credits,i)=>({id:['starter','standard','plus'][i]+'-USD',title:credits+' Credits',amount:[9.9,25.9,49.9][i]!,currency:'USD',credits}))
 const cny=tiers.map((credits,i)=>({id:['starter','standard','plus'][i]+'-CNY-wechat_pay',title:credits+' Credits',amount:[68.8,178.8,338.8][i]!,currency:'CNY',credits,paymentMethod:'wechat_pay' as const}))
+const mini = { id: 'mini-CNY-wechat_pay', title: '35 Credits', amount: 29.9, currency: 'CNY', credits: 35, paymentMethod: 'wechat_pay' as const }
 const orderId='33333333-3333-4333-8333-333333333333'
 let app: App|undefined
 let catalog: {enabled:boolean;packages:typeof usd;paymentMethods?:StripePaymentMethod[]}
@@ -82,6 +85,25 @@ describe('wallet choices in the actual recharge component',()=>{
     expect(readPendingOrders(localStorage,'wallet-owner','stripe')).toEqual([orderId])
     expect(pay.disabled).toBe(true)
   })
+  it('shows the 35-credit offer only for WeChat CNY and submits its server offer ID', async () => {
+    catalog.paymentMethods![2]!.packages = [mini, ...cny]
+    const root = await mount()
+    await choose(root, 'wechat_pay')
+    expect([...root.querySelectorAll('.plan-price')].map(node => node.textContent))
+      .toEqual(['¥29.90', '¥68.80', '¥178.80', '¥338.80'])
+    root.querySelector<HTMLButtonElement>('.plan')!.click()
+    await nextTick()
+    expect(root.querySelector('.summary-total')?.textContent).toContain('¥29.90')
+    await choose(root, 'card')
+    expect(root.querySelector('.summary-total')?.textContent).toContain('$25.90')
+    expect(root.querySelectorAll('.plan')).toHaveLength(3)
+    await choose(root, 'wechat_pay')
+    root.querySelector<HTMLButtonElement>('.plan')!.click()
+    await nextTick()
+    root.querySelector<HTMLButtonElement>('button.pay-button')!.click()
+    await drain()
+    expect(submitted).toEqual([{ packageId: 'mini-CNY-wechat_pay', paymentMethod: 'wechat_pay' }])
+  })
   it('offers Apple Pay honestly as a hosted card wallet and sends the choice',async()=>{
     const root=await mount();await choose(root,'apple_pay')
     expect(root.querySelector('[data-testid="apple-pay-compatibility"]')?.textContent).toContain('仅在兼容设备且钱包可用时显示')
@@ -125,7 +147,44 @@ describe('wallet choices in the actual recharge component',()=>{
     const root=await mount(CreditsPanel)
     expect(root.querySelector('.history .order-amount')?.textContent).toContain('CNY ¥178.80')
     expect(root.querySelector('.history .order-amount')?.textContent).toContain('微信支付')
-    expect(root.querySelector('.wallet-entry a')?.getAttribute('href')).toBe('/recharge')
+    expect(root.querySelector('.recharge-link')?.getAttribute('href')).toBe('/recharge')
     expect(submitted).toEqual([])
+  })
+
+  it('opens the actual recharge page from the account without loading packages or creating an order there', async () => {
+    const previousLocale = locale.value
+    setLocale('zh-CN')
+    try {
+      const router = createRouter({
+        history: createMemoryHistory(),
+        routes: [{ path: '/account', component: CreditsPanel }, { path: '/recharge', component: RechargePage }],
+      })
+      await router.push('/account')
+      const root = document.createElement('div')
+      app = createApp({ render: () => h(RouterView) }).use(router)
+      app.mount(root)
+      await drain()
+
+      const link = root.querySelector<HTMLAnchorElement>('a.recharge-link')!
+      expect(link.textContent?.trim()).toBe('充值积分')
+      setLocale('en')
+      await nextTick()
+      expect(link.textContent?.trim()).toBe('Recharge credits')
+      setLocale('zh-CN')
+      await nextTick()
+      expect(root.querySelector('.packages')).toBeNull()
+      expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).endsWith('/catalog'))).toBe(false)
+
+      link.click()
+      await drain()
+      expect(router.currentRoute.value.path).toBe('/recharge')
+      expect(root.querySelector('h1')?.textContent).toBe('充值创作积分')
+      expect(root.querySelector('[data-method="card"]')).not.toBeNull()
+      expect(vi.mocked(fetch).mock.calls.some(([url, options]) =>
+        String(url).endsWith('/orders') && options?.method === 'POST')).toBe(false)
+      expect(submitted).toEqual([])
+    } finally {
+      setLocale(previousLocale)
+    }
   })
 })

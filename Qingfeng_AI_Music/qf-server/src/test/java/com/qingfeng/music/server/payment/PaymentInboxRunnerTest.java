@@ -45,6 +45,19 @@ class PaymentInboxRunnerTest {
         assertThrows(IllegalArgumentException.class,()->new PaymentInboxRunner(mock(PayPalPaymentService.class),List.of(),0));
         assertThrows(IllegalArgumentException.class,()->new PaymentInboxRunner(mock(PayPalPaymentService.class),List.of(),33));
     }
+    @Test void capacityBatchHonorsItsBoundAndSkipsIdleChannels(){
+        var calls=new ArrayList<String>();
+        var idle=processor("IDLE",calls,false);
+        var busy=processor("BUSY",calls,true);
+        var runner=new PaymentInboxRunner(mock(PayPalPaymentService.class),List.of(idle,busy),1,128);
+        try{
+            runner.pollBatch();
+            assertEquals(128,calls.size());
+            assertEquals(1,calls.stream().filter("IDLE"::equals).count());
+        }finally{runner.stop();}
+        assertThrows(IllegalArgumentException.class,()->new PaymentInboxRunner(null,List.of(),1,0));
+        assertThrows(IllegalArgumentException.class,()->new PaymentInboxRunner(null,List.of(),1,257));
+    }
     @Test void pollingIsBoundedAndRotatesAcrossIndependentProviders(){
         var calls=new ArrayList<String>();
         var first=processor("FIRST",calls,true);var second=processor("SECOND",calls,true);

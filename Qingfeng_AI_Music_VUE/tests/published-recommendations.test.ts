@@ -33,7 +33,7 @@ afterEach(() => { wrappers.splice(0).forEach(wrapper => wrapper.unmount()) })
 it('merges House previews and current public releases into the home Electronic playlist', async () => {
   const playlists = await open()
   expect(mocks.profile).toHaveBeenCalledExactlyOnceWith(houseSelections[0].artistId)
-  expect(playlists.value.map(playlist => playlist.tracks.length)).toEqual([14, 14, 6, 0])
+  expect(playlists.value.map(playlist => playlist.tracks.length)).toEqual([14, 14, 6, 6])
   const electronic = playlists.value.find(playlist => playlist.id === 'electronic')!
   expect(electronic.tracks.slice(-6).map(track => track.title)).toEqual(['Body Language', 'Into the Sun', 'One More Night', 'Gravity', 'Static Bloom', 'Let The Rhythm'])
   for (const track of electronic.tracks.filter(track => track.publication)) {
@@ -45,7 +45,7 @@ it('merges House previews and current public releases into the home Electronic p
   }
   expect(filterPlaylists(playlists.value, 'house').flatMap(playlist => playlist.tracks)).toHaveLength(6)
   expect(filterPlaylists(playlists.value, 'electronic').flatMap(playlist => playlist.tracks)).toHaveLength(14)
-  expect(tracks).toHaveLength(31) // Public releases are not copied into the demo catalogue.
+  expect(tracks).toHaveLength(37) // Public releases are not copied into the demo catalogue.
 })
 
 it('stops recommending withdrawn releases and uses updated cover versions on refresh', async () => {

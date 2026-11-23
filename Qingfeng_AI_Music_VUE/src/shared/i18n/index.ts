@@ -32,6 +32,7 @@ function updateDocument() {
       .forEach(element => element.remove())
   }
   const page = sitePage(pagePath, selected.value)
+  if (page?.guide) document.documentElement.lang = page.language
   document.title = page?.title ?? '青风音乐'
   document.querySelector('meta[name="description"]')?.setAttribute(
     'content', page?.description ?? t('把你的故事唱成歌，送给重要的人。用青风音乐记录回忆，制作专属音乐礼物。'),

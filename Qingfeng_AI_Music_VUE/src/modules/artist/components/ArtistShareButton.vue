@@ -3,7 +3,7 @@ import { nextTick, ref } from 'vue'
 import { t } from '../../../shared/i18n'
 import { shareSongCard } from '../../works/model/song-sharing'
 
-const props = defineProps<{ url: string; name: string }>()
+const props = defineProps<{ url: string; name: string; album?: boolean }>()
 const sharing = ref(false)
 const copied = ref(false)
 const manual = ref(false)
@@ -29,10 +29,10 @@ async function share() {
 
 <template>
   <div class="artist-share">
-    <button type="button" class="artist-action" :disabled="sharing" @click="share">{{ t('分享主页') }}</button>
-    <p v-if="copied" class="artist-share-status" role="status">{{ t('主页链接已复制。') }}</p>
+    <button type="button" class="artist-action" :disabled="sharing" @click="share">{{ t(album?'分享专辑':'分享主页') }}</button>
+    <p v-if="copied" class="artist-share-status" role="status">{{ t(album?'专辑链接已复制。':'主页链接已复制。') }}</p>
     <label v-if="manual" class="artist-share-manual">
-      {{ t('请手动复制主页链接') }}
+      {{ t(album?'请手动复制专辑链接':'请手动复制主页链接') }}
       <input ref="manualInput" type="text" readonly :value="url" @focus="manualInput?.select()">
     </label>
   </div>

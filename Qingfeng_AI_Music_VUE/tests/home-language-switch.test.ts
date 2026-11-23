@@ -40,6 +40,7 @@ it('switches both ways on the root without changing the URL or tab title', async
 
 it('returns visitors from the English search landing page to the root when they choose Chinese', async () => {
   const router = createTestRouter()
+  setLocale('zh-CN')
   await router.push('/en/?utm_source=search#how')
   const wrapper = mount(LanguageSwitcher, { global: { plugins: [router] } })
   try {

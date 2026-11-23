@@ -28,7 +28,8 @@ import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 /** Real HTTP, persistence and business services; only external model providers are offline doubles. */
-@org.springframework.test.context.jdbc.Sql(scripts="classpath:db/migration/V47__music_video_projects.sql", executionPhase=org.springframework.test.context.jdbc.Sql.ExecutionPhase.BEFORE_TEST_CLASS)
+@org.springframework.test.context.jdbc.Sql(scripts={"classpath:db/migration/V46__agent_chat_allowance.sql",
+        "classpath:db/migration/V47__music_video_projects.sql","classpath:db/migration/V53__agent_admission_version.sql","classpath:db/migration/V54__song_share_statistics.sql"}, executionPhase=org.springframework.test.context.jdbc.Sql.ExecutionPhase.BEFORE_TEST_CLASS)
 @SpringBootTest(webEnvironment=SpringBootTest.WebEnvironment.RANDOM_PORT, properties={
         "spring.datasource.url=jdbc:h2:mem:agent_chat_flow;MODE=MySQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1",
         "qingfeng.agent.chat.enabled=true", "qingfeng.lyrics.enabled=true", "qingfeng.generation.enabled=true",
@@ -42,6 +43,8 @@ class AgentChatFlowIntegrationTest {
         @Bean @Primary AgentChatModel conversationModel() {
             return context -> {
                 String text = context.text();
+                if (text.equals("方向定好了")) return new AgentChatModel.Plan("chat",
+                        Map.of("choices",List.of("generate_lyrics","create_work","discuss")), "中文、空灵、梦想与星光");
                 if (text.equals("查看我的作品")) return new AgentChatModel.Plan("list_works",Map.of(),"查看作品。");
                 if (text.equals("选择第二首")) return new AgentChatModel.Plan("select_work",Map.of("index",2),"选择第二首。");
                 if (text.equals("把当前作品改名为夏天")) return new AgentChatModel.Plan("rename_work",Map.of("title","夏天"),"修改标题。");
@@ -107,6 +110,32 @@ class AgentChatFlowIntegrationTest {
     private JsonNode say(Browser browser, String text) throws Exception { return say(browser,text,UUID.randomUUID().toString()); }
     private JsonNode state(Browser browser) throws Exception { return ok(request(browser.http(),"GET","/api/app/agent/conversations/"+browser.conversation()+"/state",null,null)); }
 
+    @Autowired com.qingfeng.music.server.agent.AgentAdmission admission;
+
+    @Test void archivedInterruptedRequestReturnsCurrentStateWithoutRestarting() throws Exception {
+        Browser user = browser();
+        String key = UUID.randomUUID().toString(), text = "查看我的作品";
+        var ticket = admission.acquire(user.creator(),user.conversation(),key,text,null);
+        admission.startTurn(ticket,user.conversation(),() -> turns.claim(user.creator(),user.conversation(),key,text));
+        admission.finish(ticket,false);
+        db.update("UPDATE agent_message SET created_at=? WHERE conversation_id=?",
+                java.sql.Timestamp.from(java.time.Instant.now().minusSeconds(601)),user.conversation());
+        ok(request(user.http(),"POST","/api/app/agent/conversations/"+user.conversation()+"/reset",Map.of(),user.csrf()));
+        assertEquals(0,say(user,text,key).path("messages").size());
+        assertEquals(1,db.queryForObject("SELECT COUNT(*) FROM agent_message WHERE conversation_id=? AND role='system' AND state='FAILED'",
+                Integer.class,user.conversation()));
+        assertEquals(1,db.queryForObject("SELECT COUNT(*) FROM agent_request_admission WHERE conversation_id=?",Integer.class,user.conversation()));
+    }
+
+    @Test void creativeMenuSelectionProducesRealLyricsOverHttp() throws Exception {
+        Browser user=browser();
+        var offered=say(user,"方向定好了");
+        assertTrue(offered.path("messages").toString().contains("choice_menu"));
+        var selected=say(user,"1");
+        assertEquals("generate_lyrics",selected.path("action").asText());
+        assertTrue(selected.path("songCard").path("lyrics").asText().contains("一起走过校园"));
+    }
+
     @Test void conversationCreatesRevisesGeneratesAndSharesTheSameRealWork() throws Exception {
         Browser browser = browser();
         db.update("INSERT INTO creator_oidc_identity(subject_hash,creator_id,created_at,updated_at) VALUES(?,?,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)", "a".repeat(64),browser.creator());
@@ -151,7 +180,7 @@ class AgentChatFlowIntegrationTest {
         assertTrue(state(browser).path("liked").asBoolean());
         assertFalse(say(browser,"取消点赞当前作品").path("liked").asBoolean());
         JsonNode shared=say(browser,"分享当前作品");
-        assertTrue(shared.path("shareUrl").asText().startsWith("/gift/"),shared.toString());
+        assertTrue(shared.path("shareUrl").asText().startsWith("/song/"),shared.toString());
         assertEquals(shared.path("shareUrl").asText(),state(browser).path("shareUrl").asText());
         assertTrue(say(browser,"撤销分享").path("shareUrl").isNull());
 
@@ -218,7 +247,7 @@ class AgentChatFlowIntegrationTest {
         assertEquals("继续已安排的操作",next.path("text").asText(),ready.toString());
         String key=next.path("requestKey").asText();UUID.fromString(key);
         var shared=say(browser,next.path("text").asText(),key);
-        assertTrue(shared.path("shareUrl").asText().startsWith("/gift/"),shared.toString());
+        assertTrue(shared.path("shareUrl").asText().startsWith("/song/"),shared.toString());
         assertTrue(shared.path("continuation").isNull());
         assertEquals(shared.path("shareUrl").asText(),say(browser,next.path("text").asText(),key).path("shareUrl").asText());
         assertEquals(1,db.queryForObject("SELECT COUNT(*) FROM share_link WHERE work_id=?",Integer.class,work));

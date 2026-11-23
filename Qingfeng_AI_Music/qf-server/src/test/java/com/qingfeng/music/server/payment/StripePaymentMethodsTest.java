@@ -62,11 +62,27 @@ class StripePaymentMethodsTest {
         var methods = methods(wechat("GB"));
         assertEquals(List.of(new BigDecimal("9.90"), new BigDecimal("25.90"), new BigDecimal("49.90")),
             methods.legacyPackages().stream().map(PaymentCatalog.Package::amount).toList());
-        assertEquals(List.of(new BigDecimal("68.80"), new BigDecimal("178.80"), new BigDecimal("338.80")),
+        assertEquals(List.of(new BigDecimal("29.90"), new BigDecimal("68.80"), new BigDecimal("178.80"), new BigDecimal("338.80")),
             packages(entry(methods, true, "wechat_pay")).stream().filter(pack -> "CNY".equals(pack.get("currency"))).map(pack -> (BigDecimal) pack.get("amount")).toList());
-        assertEquals(List.of(100L, 300L, 700L),
+        assertEquals(List.of(35L, 100L, 300L, 700L),
             packages(entry(methods, true, "wechat_pay")).stream().filter(pack -> "CNY".equals(pack.get("currency"))).map(pack -> (Long) pack.get("credits")).toList());
         assertEquals("starter-CNY-wechat_pay", methods.select("starter-CNY-wechat_pay", "wechat_pay").id());
+    }
+
+    @Test void miniOfferIsOnlyForWeChatCnyAndKeepsItsStoredRoute() {
+        var methods = methods(wechat("GB"));
+        var offer = methods.select("mini-CNY-wechat_pay", null);
+        assertEquals(new BigDecimal("29.90"), offer.amount());
+        assertEquals("CNY", offer.currency());
+        assertEquals(35, offer.credits());
+        assertEquals("wechat_pay", offer.paymentMethod());
+        assertEquals("wechat_pay", StripePaymentMethods.checkoutMethodForStoredOffer(offer.id()));
+        for (String method : List.of("card", "apple_pay")) {
+            rejected(HttpStatus.BAD_REQUEST, "INVALID_PAYMENT_PACKAGE", () -> methods.select(offer.id(), method));
+        }
+        assertThrows(IllegalArgumentException.class,
+            () -> StripePaymentMethods.checkoutMethodForStoredOffer("mini-GBP-wechat_pay"));
+        assertTrue(methods.legacyPackages().stream().noneMatch(pack -> pack.credits() == 35));
     }
 
     @Test void gbWechatOnlyOffersCnyAndExplainsUnavailableUsd() {
@@ -87,7 +103,7 @@ class StripePaymentMethodsTest {
         var methods = methods(environment);
         var method = entry(methods, true, "wechat_pay");
         assertEquals(List.of("USD", "CNY"), method.get("currencies"));
-        assertEquals(6, packages(method).size());
+        assertEquals(7, packages(method).size());
         assertEquals(new BigDecimal("10.25"), methods.select("starter-USD", "card").amount());
         assertEquals(new BigDecimal("10.25"), methods.select("starter-USD-wechat_pay", "wechat_pay").amount());
         assertEquals(new BigDecimal("68.80"), methods.select("starter-CNY-wechat_pay", "wechat_pay").amount());
@@ -112,7 +128,7 @@ class StripePaymentMethodsTest {
         for (var method : methods.catalog(false)) {
             assertEquals(false, method.get("enabled"));
             assertEquals("PAYMENTS_CLOSED", method.get("reason"));
-            assertEquals("wechat_pay".equals(method.get("id")) ? 6 : 3, packages(method).size());
+            assertEquals("wechat_pay".equals(method.get("id")) ? 7 : 3, packages(method).size());
         }
         // Country support is not confused with the global purchase gate.
         assertEquals(true, currency(entry(methods, false, "wechat_pay"), "CNY").get("enabled"));
@@ -124,7 +140,7 @@ class StripePaymentMethodsTest {
         var method = entry(methods, true, "wechat_pay");
         assertEquals(false, method.get("enabled"));
         assertEquals("METHOD_DISABLED", method.get("reason"));
-        assertEquals(new BigDecimal("68.80"), packages(method).get(0).get("amount"));
+        assertEquals(new BigDecimal("29.90"), packages(method).get(0).get("amount"));
         rejected(HttpStatus.SERVICE_UNAVAILABLE, "METHOD_DISABLED",
             () -> methods.select("starter-CNY-wechat_pay", "wechat_pay"));
     }

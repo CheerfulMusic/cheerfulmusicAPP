@@ -1,5 +1,7 @@
 package com.qingfeng.music.server.agent;
 
+import com.qingfeng.music.agent.api.AgentTurnStore.Claim;
+import java.util.function.Supplier;
 import com.qingfeng.music.common.exception.DomainException;
 import java.util.List;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -37,6 +39,9 @@ public final class RedisAgentAdmission implements AgentAdmission {
         try{Long allowed=redis.execute(ACQUIRE,keys(ticket),ticket.id(),Long.toString(limits.lease().toMillis()),Integer.toString(limits.globalConcurrent()),Integer.toString(limits.userConcurrent()),Integer.toString(limits.globalRpm()),Integer.toString(limits.userRpm()));
             if(!Long.valueOf(1).equals(allowed))throw new DomainException("AGENT_BUSY","当前对话请求较多，请稍后再试；本次尚未开始执行。");return ticket;
         }catch(RuntimeException e){durable.abandon(ticket);if(e instanceof DomainException d)throw d;throw unavailable();}
+    }
+    @Override public Claim startTurn(Ticket ticket,String conversation,Supplier<Claim> claim){
+        return durable.startTurn(ticket,conversation,claim);
     }
     @Override public void start(Ticket ticket){durable.start(ticket);}
     @Override public void heartbeat(Ticket ticket){if(ticket.replay())return;try{if(!Long.valueOf(1).equals(redis.execute(RENEW,keys(ticket).subList(0,2),ticket.id(),Long.toString(limits.lease().toMillis()))))throw unavailable();durable.heartbeat(ticket);}catch(RuntimeException e){throw unavailable();}}

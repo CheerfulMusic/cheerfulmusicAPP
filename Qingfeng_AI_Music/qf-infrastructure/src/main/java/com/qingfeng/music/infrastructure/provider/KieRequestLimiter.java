@@ -46,11 +46,21 @@ public final class KieRequestLimiter {
         this.transactions.setTimeout(5);
     }
 
+    private java.util.function.LongConsumer createWait = ignored -> {};
+    private java.util.function.LongConsumer readWait = ignored -> {};
+
+    public KieRequestLimiter recordWaitTimes(java.util.function.LongConsumer creates, java.util.function.LongConsumer reads) {
+        createWait = Objects.requireNonNull(creates);
+        readWait = Objects.requireNonNull(reads);
+        return this;
+    }
+
     public void beforeCreate() { await(Kind.CREATE); }
     public void beforeRead() { await(Kind.READ); }
 
     private void await(Kind kind) {
-        long deadline = System.nanoTime() + waitNanos;
+        long started = System.nanoTime();
+        long deadline = started + waitNanos;
         try {
             while (!Thread.currentThread().isInterrupted()) {
                 long remaining = deadline - System.nanoTime();
@@ -64,6 +74,8 @@ public final class KieRequestLimiter {
         } catch (RuntimeException error) {
             // 不透出数据库异常、配置或供应商信息；调用方可明确区分“未发送”。
             throw new Unavailable();
+        } finally {
+            (kind == Kind.CREATE ? createWait : readWait).accept(System.nanoTime() - started);
         }
         throw new Unavailable();
     }

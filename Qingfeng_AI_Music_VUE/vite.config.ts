@@ -2,8 +2,11 @@
 import { defineConfig, loadEnv } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import legacy from '@vitejs/plugin-legacy'
+import { fileURLToPath } from 'node:url'
 import {previewMediaPlugin} from './build/preview-media'
 import { siteSeoPlugin } from './build/site-seo'
+
+const posterModule = fileURLToPath(new URL('./src/modules/works/model/song-poster.ts', import.meta.url))
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
@@ -31,6 +34,14 @@ export default defineConfig(({ mode }) => {
       }),
     ],
     base: '/',
+    resolve: { alias: { '/brand/song-poster.js': posterModule } },
+    build: {
+      rolldownOptions: {
+        input: { index: fileURLToPath(new URL('./index.html', import.meta.url)), 'song-poster': posterModule },
+        preserveEntrySignatures: 'exports-only',
+        output: { entryFileNames: chunk => chunk.name === 'song-poster' ? 'brand/song-poster.js' : 'assets/[name]-[hash].js' },
+      },
+    },
     test: { setupFiles: ['./tests/setup-locale.ts'] },
     server: {
       port: 5173,
@@ -40,6 +51,7 @@ export default defineConfig(({ mode }) => {
           target: env.VITE_API_PROXY_TARGET || 'http://127.0.0.1:8080',
           changeOrigin: true,
         },
+        '/song/': { target: env.VITE_API_PROXY_TARGET || 'http://127.0.0.1:8080', changeOrigin: true },
         '/api': { target: env.VITE_API_PROXY_TARGET || 'http://127.0.0.1:8080', changeOrigin: true },
       },
     },

@@ -1,13 +1,25 @@
-export interface SharedSong { title: string; lyrics: string; hasCover?: boolean; expiresAt: string }
+export interface SharedSong { songId: string; title: string; lyrics: string; hasCover: boolean; expiresAt: string }
+export interface SongShareStatus {
+  status: 'PRIVATE' | 'SHAREABLE' | 'REVOKED' | 'EXPIRED'
+  card: SharedSong | null
+  views: number
+  plays: number
+}
 export function songShareUrl(token: string, origin: string): string {
   if (!/^[A-Za-z0-9_-]{43}$/.test(token)) throw new Error('分享链接暂时无法创建，请重试。')
   const base = new URL(origin)
   if (!['https:', 'http:'].includes(base.protocol) || base.username || base.password) throw new Error('分享地址无效')
-  return new URL(`/gift/${token}`, base.origin).href
+  return new URL(`/song/${token}`, base.origin).href
+}
+export type WechatDestination = 'friend' | 'timeline'
+export function wechatShareEntry(link: string, destination: WechatDestination): string {
+  const entry = new URL(link)
+  entry.hash = 'share-' + destination
+  return entry.href
 }
 export function lyricQuotes(lyrics: string): string[] {
-  return [...new Set(lyrics.split(/\r?\n/).map(line => line.trim()).filter(line =>
-    !!line && !/^\[.*\]$/.test(line) && !/^【.*】$/.test(line)))].slice(0, 100)
+  return [...new Set(lyrics.split(/\r?\n/).map(line => line.trim().replace(/^(\*\*|__)(.+)\1$/, '$2')).filter(line =>
+    !!line && !/^#{1,6}\s/.test(line) && !/^\[.*\]$/.test(line) && !/^【.*】$/.test(line)))].slice(0, 100)
 }
 export function localShareAddress(link: string): boolean {
   const host = new URL(link).hostname

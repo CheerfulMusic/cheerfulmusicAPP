@@ -37,6 +37,7 @@ import {closeTaskChecking} from '../api/detail'
 import {needsGenerationRefresh,rememberGeneration,recoverGeneration,forgetGeneration,uncertainSubmission,audioArchiveMessage,generationProblem,previousPublicationScope,rememberPublicationScope,type GenerationPublication,type PendingGeneration,type PublicationScope} from '../model/generation-recovery'
 import {creditGap,isCreditShortfall,type Credits} from '../model/credit-shortfall'
 const props = defineProps<{ embeddedWorkId?: string }>()
+const emit=defineEmits<{ openWithinAgent:[path:string] }>()
 const route = useRoute(), work = ref<Work>(), revision = ref<Revision | null>(null), asset = ref<AudioAsset | null>(null), tasks = ref<GenerationTask[]>([]), error = ref(''), loading = ref(false), lyricDirty = ref(false), modelReady = ref(false), submitting = ref(false), requestKey = ref('')
 const lyricsPanel=ref<InstanceType<typeof LyricsPanel>>(), lyricsReady=ref(false), allowance=ref<Allowance>(), giftRevision=ref<Revision|null>(null), lyricBase=ref<Revision|null>(null)
 const saveGenerationDialog=ref<HTMLDialogElement>()
@@ -420,7 +421,7 @@ async function load() {
   void getSystemInfo().then(system=>{if(turn===sequence)modelReady.value=system.capabilities.musicGeneration}).catch(()=>{})
   void loadCovers(id).then(value=>{if(turn===sequence)updateCover(value)}).catch(()=>{/* 使用默认封面，保留歌曲试听。 */})
     .finally(()=>{if(turn===sequence)publicationCoverReady.value=true})
- }catch(e){if(turn===sequence)error.value=e instanceof ApiError&&[401,404].includes(e.status)?'这是私人作品编辑页。如果你是收到分享的朋友，请向作者索取“分享歌曲”中复制的收听链接。':e instanceof Error?e.message:'作品读取失败'}finally{if(turn===sequence)loading.value=false}
+ }catch(e){if(turn===sequence)error.value=e instanceof ApiError&&[401,404].includes(e.status)?'这是私人作品编辑页。请让创作者通过「分享歌曲」发给你一张收听卡片。':e instanceof Error?e.message:'作品读取失败'}finally{if(turn===sequence)loading.value=false}
 }
 watch(() => props.embeddedWorkId || route.params.id, load, { immediate: true })
 watch(() => revision.value?.id, () => { if (!submitting.value && !submissionUnknown.value) requestKey.value = '' })
@@ -524,12 +525,15 @@ async function cancelGeneration(){
 async function backToStory(){
  if(!work.value||submitting.value)return
  const workId=work.value.id
- try{await lyricsPanel.value?.preserveDraftForNavigation();if(work.value?.id===workId)await router.push({path:'/create',query:{work:workId,mode:'custom',part:'1',returnRevision:lyricBase.value?.id||giftRevision.value?.id||revision.value?.id}})}catch(e){error.value=e instanceof Error?e.message:'请先保存歌词'}
+ try{await lyricsPanel.value?.preserveDraftForNavigation();if(work.value?.id!==workId)return
+ const target={path:'/create',query:{work:workId,mode:'custom',part:'1',returnRevision:lyricBase.value?.id||giftRevision.value?.id||revision.value?.id}}
+ if(props.embeddedWorkId)emit('openWithinAgent',router.resolve(target).href)
+ else await router.push(target)}catch(e){error.value=e instanceof Error?e.message:'请先保存歌词'}
 }
 
 </script>
 <template>
-  <RouterLink v-if="!draftReady" class="detail-back" to="/works">{{ t('← 我的音乐') }}</RouterLink>
+  <RouterLink v-if="!draftReady && !embeddedWorkId" class="detail-back" to="/works">{{ t('← 我的音乐') }}</RouterLink>
   <div v-show="mediaState==='ready'&&(quickBusy||!asset&&quickChecked&&!quickReadIssue)" class="work-entry-progress" :class="{'has-song':!!asset}"><QuickCreationProgress v-if="work" ref="quickProgress" :key="work.id" :work-id="work.id" :title="work.title" :auto-open="false" :result-ready="!!asset" @busy="quickBusy=$event" @checked="checkedQuick" @resolved="resolveQuick" @updated="quickUpdated" @view="viewGeneratedMusic"/></div>
   <SongResultSkeleton v-if="entryLoading"/>
   <p v-if="!asset&&mediaState==='ready'&&quickReadIssue&&!quickBusy" class="notice" role="status">{{ t('进度暂时无法读取 请稍后刷新 原任务不会重复提交') }} <button class="text-button" @click="quickProgress?.refresh()">{{ t('刷新进度') }}</button></p>
@@ -577,7 +581,7 @@ async function backToStory(){
         </section>
         <p v-if="!modelReady&&!asset" class="notice">{{ t('音乐生成暂不可用，可以先编辑并保存歌词，稍后再试。') }}</p>
         <AudioPanel id="work-audio" tabindex="-1" :key="work.id+'-'+mediaRefresh" :work="work" :title="songTitle" :tasks="tasks" :cover="artwork" @selected="asset=$event" @selected-version="songVersion=$event" @load-state="mediaState=$event" @compare="sectionEditor?.compare($event)"/>
-        <SharePanel v-if="asset" :open="giftStage" :cover-id="covers?.currentCoverId" @close="giftStage=false" @created="shared=true" :work-id="work.id" :revision="giftRevision" :asset="asset" :work-title="generated ? sharedWorkTitle : undefined"/>
+        <SharePanel v-if="asset" :open="giftStage" :cover-id="covers?.currentCoverId" @close="giftStage=false" @created="shared=true" @revoked="shared=false" :work-id="work.id" :revision="giftRevision" :asset="asset" :work-title="generated ? sharedWorkTitle : undefined"/>
       </div>
       <CreationSettingsSummary v-if="draftReady" :work="work" :revision="lyricBase" :busy="submitting" @edit-music="backToStory"/>
       <aside v-else-if="asset" class="work-overview">

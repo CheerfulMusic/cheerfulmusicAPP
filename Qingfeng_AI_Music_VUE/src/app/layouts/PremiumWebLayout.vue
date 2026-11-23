@@ -129,9 +129,9 @@ onBeforeUnmount(() => {
     </template>
     <div class="music-shell-body">
       <main id="main-content" :class="{workspace:!isHome && !isDiscover, 'photo-workspace':isPhotoStudio}" tabindex="-1"><slot/></main>
-      <SiteFooter/>
+      <SiteFooter v-if="!isAgent"/>
     </div>
-    <GlobalPlayer/>
+    <GlobalPlayer v-if="!isAgent"/>
   </div>
 </template>
 

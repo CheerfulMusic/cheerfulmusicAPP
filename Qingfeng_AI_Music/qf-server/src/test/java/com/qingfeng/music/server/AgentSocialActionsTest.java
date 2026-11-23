@@ -29,11 +29,12 @@ class AgentSocialActionsTest {
 
     @Test void sharesTheExactVisibleAudioAndLyricRevision() {
         when(shares.create("owner", "work-1", "revision-2", "asset-2")).thenReturn(new SharingApi.Created("share-1", "opaque-token", Instant.now()));
+        when(shares.enablePublicSong(any(),eq("asset-2"))).thenReturn("song-id");
         var result = actions.execute("owner", "conversation", "share", "分享当前作品", "key", ready());
         verify(works).get("owner", "work-1");
         verify(media).get("owner", "work-1", "asset-2");
         verify(shares).create("owner", "work-1", "revision-2", "asset-2");
-        assertEquals("/gift/opaque-token", result.shareUrl());
+        assertEquals("/song/song-id", result.shareUrl());
         assertEquals("share", result.action());
     }
 

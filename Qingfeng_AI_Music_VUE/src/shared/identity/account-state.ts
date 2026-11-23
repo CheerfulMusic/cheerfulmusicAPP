@@ -54,8 +54,7 @@ export function logoutAccount(): Promise<void> {
     status.value = { enabled: status.value.enabled, authenticated: false }
     resetLogtoState()
     loaded = true
-    // Logout is already confirmed. A failed follow-up read must not restore stale account data.
-    await refreshAccountState().catch(() => undefined)
+    loading.value = false
   })().finally(() => { if (logoutPending === request) { logoutPending = undefined; loggingOut.value = false } })
   logoutPending = request
   return request

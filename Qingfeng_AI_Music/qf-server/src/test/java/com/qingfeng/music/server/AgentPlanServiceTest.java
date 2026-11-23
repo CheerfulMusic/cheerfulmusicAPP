@@ -139,6 +139,7 @@ class AgentPlanServiceTest {
         var protectedSocial=new com.qingfeng.music.server.agent.DefaultAgentSocialActions(works,shares,media,generation,reactions);
         when(works.get("owner","target")).thenReturn(new com.qingfeng.music.work.api.WorkApi.Work("target","","","","","民谣","作品",1,Instant.EPOCH,Instant.EPOCH,"AUTO"));
         when(shares.createWithWorkTitle("owner","target","target-revision","asset-1","作品")).thenReturn(new com.qingfeng.music.sharing.api.SharingApi.Created("share-id","target-token",Instant.now().plusSeconds(3600)));
+        when(shares.enablePublicSong(any(),eq("asset-1"))).thenReturn("target-song");
         var selector=new AgentApplicationActions(){
             public List<Capability> capabilities(){return List.of(new Capability("select_work","选择作品","workId","write"));}
             public Result execute(String owner,String conversation,String action,Map<String,Object> args,String text,String key,SongCard song){current.set(card("target","target-revision","target-task","SUCCEEDED"));return new Result("已选择第二首","text",List.of(),List.of(),action);}
@@ -146,7 +147,7 @@ class AgentPlanServiceTest {
         service=new AgentChatService(conversations,tools,model,store,protectedSocial,List.of(library,selector));
         when(model.respond(any())).thenReturn(plan(new Step("select_work",Map.of("workId","target")),step("share")));
         String request=key();var result=service.send("owner","conversation","分享第二首",request,"zh-CN");
-        assertEquals("share",result.action());assertEquals("/gift/target-token",result.shareUrl());
+        assertEquals("share",result.action());assertEquals("/song/target-song",result.shareUrl());
         service.send("owner","conversation","分享第二首",request,"zh-CN");
         verify(shares,times(1)).createWithWorkTitle("owner","target","target-revision","asset-1","作品");
         verify(media,times(1)).get("owner","target","asset-1");

@@ -18,7 +18,7 @@ import java.util.logging.Logger;
  */
 public final class GenerationDispatcher implements AutoCloseable {
     private static final Logger LOG = Logger.getLogger(GenerationDispatcher.class.getName());
-    private final Consumer<ExecutionRepository.Phase> scan;
+    private final java.util.function.Predicate<ExecutionRepository.Phase> scan;
     private final long scanMillis;
     private final int submissions, queries, archives;
     private final List<ScheduledThreadPoolExecutor> pools = new ArrayList<>();
@@ -28,6 +28,16 @@ public final class GenerationDispatcher implements AutoCloseable {
 
     public GenerationDispatcher(Consumer<ExecutionRepository.Phase> scan, Duration interval,
                                 int submissions, int queries, int archives) {
+        this(interval, submissions, queries, archives, asPredicate(scan));
+    }
+
+    private static java.util.function.Predicate<ExecutionRepository.Phase> asPredicate(Consumer<ExecutionRepository.Phase> scan) {
+        java.util.Objects.requireNonNull(scan);
+        return phase -> { scan.accept(phase); return true; };
+    }
+
+    public GenerationDispatcher(Duration interval, int submissions, int queries, int archives,
+                                java.util.function.Predicate<ExecutionRepository.Phase> scan) {
         this.scan = java.util.Objects.requireNonNull(scan);
         this.scanMillis = interval.toMillis();
         if (scanMillis < 1) throw new IllegalArgumentException("任务扫描间隔必须大于0");
@@ -66,7 +76,19 @@ public final class GenerationDispatcher implements AutoCloseable {
         pools.add(pool);
         phasePools.put(phase,pool);wakeups.put(phase,new AtomicBoolean());
         for (int i = 0; i < workers; i++) {
-            pool.scheduleWithFixedDelay(() -> scanOnce(phase), 0, scanMillis, TimeUnit.MILLISECONDS);
+            pool.execute(new Runnable() {
+                private long delay = scanMillis;
+                public void run() {
+                    boolean worked = scanOnce(phase);
+                    long ceiling = Math.max(scanMillis, 4000L);
+                    delay = worked ? scanMillis : delay >= ceiling / 2 ? ceiling : delay * 2;
+                    long jitter = worked ? 0 : java.util.concurrent.ThreadLocalRandom.current().nextLong(delay / 8 + 1);
+                    if (!pool.isShutdown()) {
+                        try { pool.schedule(this, delay - jitter, TimeUnit.MILLISECONDS); }
+                        catch (RejectedExecutionException stopping) { if (!pool.isShutdown()) throw stopping; }
+                    }
+                }
+            });
         }
     }
 
@@ -77,9 +99,10 @@ public final class GenerationDispatcher implements AutoCloseable {
         try{phasePools.get(phase).execute(()->{try{scanOnce(phase);}finally{pending.set(false);}});return true;}
         catch(RejectedExecutionException stopping){pending.set(false);return false;}
     }
-    private void scanOnce(ExecutionRepository.Phase phase){
-        try{scan.accept(phase);}catch(RuntimeException error){
+    private boolean scanOnce(ExecutionRepository.Phase phase){
+        try{return scan.test(phase);}catch(RuntimeException error){
             LOG.warning("music_scan_failed phase="+phase+" exception="+error.getClass().getSimpleName());
+            return false;
         }
     }
 

@@ -1,4 +1,3 @@
-import re
 import hashlib
 import importlib.util
 import io
@@ -323,7 +322,17 @@ class GateTests(unittest.TestCase):
         discover_name = "V50__discover_daily_plays_and_vocal_approval.sql"
         modified = {**migrations, discover_name: "0" * 64}
         with self.assertRaises(gate.GateError): gate.verify_migration_set(modified)
-        pre_discover = {k: v for k, v in migrations.items() if not re.match(r"^V5[0-5]__", k)}
+        migration = "V54__song_share_statistics.sql"
+        modified = {**prior, migration: "0" * 64}
+        with self.assertRaises(gate.GateError): gate.verify_migration_set(modified)
+        prior.pop(migration)
+        self.assertEqual("53", gate.verify_migration_set(prior)["agentAdmissionVersion"])
+        prior.pop("V53__agent_admission_version.sql")
+        self.assertEqual("52", gate.verify_migration_set(prior)["giftDailyBudgetVersion"])
+        prior.pop("V52__gift_daily_budget.sql")
+        self.assertEqual("51", gate.verify_migration_set(prior)["paymentReconciliationVersion"])
+        prior.pop("V51__payment_reconciliation_cursor.sql")
+        pre_discover = {k: v for k, v in prior.items() if k != discover_name}
         self.assertEqual("49", gate.verify_migration_set(pre_discover)["lyricsPreparationVersion"])
         pre_lyrics = {k: v for k, v in pre_discover.items() if k != "V49__lyrics_preparation.sql"}
         self.assertEqual("48", gate.verify_migration_set(pre_lyrics)["phoneBindingVersion"])

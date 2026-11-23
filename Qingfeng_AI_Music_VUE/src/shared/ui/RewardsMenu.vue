@@ -7,7 +7,7 @@ const route = useRoute()
 const items = [
   { title:'邀请有礼', detail:'邀请新用户首次登录，送19积分', to:'/account#invite-rewards', icon:'♧' },
   { title:'发布到广场', detail:'发布到广场送2积分', to:'/works', icon:'↗' },
-  { title:'改善建议', detail:'改善建议送10-100积分', to:'mailto:labelmanager@cheerfulmusic.co.uk?subject=Cheerful%20Music%20Feedback', icon:'✎' },
+  { title:'改善建议', detail:'改善建议送10-100积分', to:'/help#feedback', icon:'✎' },
 ]
 function close() { open.value = false }
 function outside(event: PointerEvent) { if (!root.value?.contains(event.target as Node)) close() }
@@ -20,9 +20,11 @@ watch(() => route.fullPath, close)
   <div ref="root" class="rewards-menu">
     <button ref="trigger" type="button" class="rewards-trigger" :aria-label="t('积分好礼')" :aria-expanded="open" aria-controls="rewards-panel" @click="open=!open"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M4 10h16v10H4zM3 6h18v4H3zM12 6v14"/><path d="M12 6C6 7 5 1 8 2c2 0 4 4 4 4Zm0 0c6 1 7-5 4-4-2 0-4 4-4 4Z"/></svg></button>
     <nav v-if="open" id="rewards-panel" class="rewards-panel" :aria-label="t('积分好礼')">
-      <template v-for="item in items" :key="item.title">
-        <component :is="item.to.startsWith('mailto:')?'a':RouterLink" v-bind="item.to.startsWith('mailto:') ? {href:item.to} : {to:item.to}" @click="close"><span class="reward-icon" aria-hidden="true">{{ item.icon }}</span><span><strong>{{ t(item.title) }}</strong><small>{{ t(item.detail) }}</small></span><span aria-hidden="true">›</span></component>
-      </template>
+      <RouterLink v-for="item in items" :key="item.title" :to="item.to" @click="close">
+        <span class="reward-icon" aria-hidden="true">{{ item.icon }}</span>
+        <span><strong>{{ t(item.title) }}</strong><small>{{ t(item.detail) }}</small></span>
+        <span aria-hidden="true">›</span>
+      </RouterLink>
     </nav>
   </div>
 </template>
