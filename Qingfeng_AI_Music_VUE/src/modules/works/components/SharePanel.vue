@@ -5,6 +5,7 @@ import { createShare, getSongShareStatus, revokeSongShare, revokeShares, type Re
 import { apiUrl } from '../../../shared/http/api-client'
 import { lyricQuotes, localShareAddress, posterFilename, shareCancelled, shareSongCard, songShareUrl, type SongShareStatus } from '../model/song-sharing'
 import { usePlayer } from '../../../shared/player/store'
+import PublicSongStory from './PublicSongStory.vue'
 import PlaybackIcon from '../../../shared/ui/PlaybackIcon.vue'
 
 const props = defineProps<{ open: boolean; workId: string; revision: Revision | null; asset: AudioAsset | null; coverId?: string | null; workTitle?: string }>()
@@ -179,6 +180,7 @@ onBeforeUnmount(() => { generation++; clearPoster(); dialog.value?.close() })
         </div>
         <p class="share-platform-note">{{ t('卡片展示由接收应用决定，点击后进入公开收听页。') }}</p>
       </template>
+      <PublicSongStory v-if="song" :key="song.songId" :song-id="song.songId" />
       <section v-if="link" class="share-link-panel" :aria-label="t('歌曲分享链接')">
         <div class="share-link-heading">
           <label for="song-share-link">{{ t('歌曲分享链接') }}</label>

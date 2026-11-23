@@ -22,7 +22,7 @@ public class WebPageController {
         return publicDocument("home.html");
     }
 
-    @GetMapping("/artist/{id}")
+    @GetMapping({"/artist/{id}","/artist/{id}/albums/{album}"})
     public String artistPage() {
         return "forward:/index.html";
     }

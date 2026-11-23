@@ -17,6 +17,8 @@ const paymentOrder=(v:unknown)=>obj(v)&&text(v.orderId)&&['CREATING','CREATION_U
  &&(v.amount===undefined&&v.currency===undefined||num(v.amount)&&Number(v.amount)>0&&text(v.currency))
  &&(v.packageId===undefined||text(v.packageId))&&(v.paymentMethod===undefined||isStripeMethod(v.paymentMethod))
 const list=(v:unknown,check:(v:unknown)=>boolean)=>Array.isArray(v)&&v.every(check)
+const album=(v:unknown)=>obj(v)&&text(v.id)&&text(v.title)&&str(v.description)&&num(v.version)&&typeof v.published==='boolean'
+ &&(v.coverKey===null||text(v.coverKey))&&list(v.tracks,t=>obj(t)&&text(t.id)&&text(t.title)&&num(t.version)&&typeof t.hasCover==='boolean')
 const work=(v:unknown)=>obj(v)&&text(v.id)&&num(v.version)&&['recipient','occasion','story','message','style','title','vocalGender'].every(k=>str(v[k]))
 const revision=(v:unknown)=>obj(v)&&text(v.id)&&text(v.workId)&&num(v.workVersion)&&str(v.title)&&str(v.lyrics)&&typeof v.confirmed==='boolean'
 const asset=(v:unknown)=>obj(v)&&text(v.id)&&text(v.workId)&&['IMPORTED','GENERATED'].includes(String(v.origin))&&num(v.byteSize)&&text(v.contentType)
@@ -82,7 +84,7 @@ const analyticsSummaryBody=(v:unknown)=>{
 }
 const analyticsAccessBody=(v:unknown)=>obj(v)&&typeof v.allowed==='boolean'&&(v.allowed!==true||text(v.viewer))
 const quickCreation=(v:unknown)=>obj(v)&&text(v.id)&&text(v.workId)&&['QUEUED','WRITING','LYRICS_READY','SUBMITTING_MUSIC','MUSIC_QUEUED','SUBMITTING','RUNNING','SAVING','SUBMISSION_UNKNOWN','SUCCEEDED','FAILED','CANCELLED'].includes(String(v.status))&&['revisionId','taskId','errorCode'].every(k=>v[k]===null||text(v[k]))&&typeof v.canRetry==='boolean'&&text(v.createdAt)
-export const emptyResponseAllowed=(path:string,method:string)=>method==='DELETE'&&/^app\/works\/[^/]+\/shares(?:\/[^/]+)?$/.test(path)||method==='POST'&&(/^app\/works\/[^/]+\/generations\/[^/]+\/retry-archive$/.test(path)||/^public\/discover\/songs\/[^/]+\/\d+\/play$/.test(path))||method==='GET'&&(/^app\/works\/[^/]+\/generations\/[^/]+\/music-settings$/.test(path)||/^app\/works\/[^/]+\/quick-creations\/latest$/.test(path))
+export const emptyResponseAllowed=(path:string,method:string)=>method==='DELETE'&&/^app\/artist-albums\/[\w-]+(?:\?version=\d+)?$/.test(path)||method==='DELETE'&&/^app\/works\/[^/]+\/shares(?:\/[^/]+)?$/.test(path)||method==='POST'&&(/^app\/works\/[^/]+\/generations\/[^/]+\/retry-archive$/.test(path)||/^public\/discover\/songs\/[^/]+\/\d+\/play$/.test(path))||method==='GET'&&(/^app\/works\/[^/]+\/generations\/[^/]+\/music-settings$/.test(path)||/^app\/works\/[^/]+\/quick-creations\/latest$/.test(path))
 /** 校验应用实际依赖的字段。HTTP 200只代表传输成功，不代表业务结果完整。 */
 export function validResponse(path:string,method:string,value:unknown):boolean{
  const [endpoint,query]=path.split('?')
@@ -145,6 +147,9 @@ export function validResponse(path:string,method:string,value:unknown):boolean{
  if(path==='app/analytics/access')return method==='GET'&&analyticsAccessBody(value)
  if(path==='app/analytics/summary')return method==='GET'&&analyticsSummaryBody(value)
  if(path==='app/analytics/user-pages')return method==='GET'&&obj(value)&&typeof value.allowed==='boolean'&&(value.allowed!==true||(num(value.days)&&text(value.creatorId)&&list(value.pages,u=>obj(u)&&text(u.pagePath)&&num(u.avgDurationMs)&&num(u.samples)&&Number(u.samples)>=0)))
+ if(path==='app/artist-albums'||/^public\/artists\/[^/]+\/albums$/.test(path))return method==='GET'&&list(value,album)
+ if(/^app\/artist-albums\/[^/?]+$|^public\/artists\/[^/]+\/albums\/[^/]+$/.test(path))return album(value)
+ if(/^app\/song-listening\/[A-Za-z0-9_-]{43}\/story$/.test(path))return ['GET','PUT'].includes(method)&&obj(value)&&str(value.text)
  if(path==='app/hot-songs/reactions')return method==='GET'&&obj(value)&&list(value.liked,text)&&list(value.favorited,text)
  if(/^app\/hot-songs\/[^/]+\/(?:like|favorite)$/.test(path))return ['POST','DELETE'].includes(method)&&obj(value)&&hotStat(value.stat)&&typeof value.liked==='boolean'&&typeof value.favorited==='boolean'
  if(path==='app/identity/recovery')return obj(value)&&(method==='GET'?typeof value.configured==='boolean':text(value.code))

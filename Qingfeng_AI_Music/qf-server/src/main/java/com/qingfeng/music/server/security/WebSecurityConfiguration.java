@@ -30,7 +30,7 @@ public class WebSecurityConfiguration {
 
     private static final String[] SPA_PAGES = {
             "/", "/index.html", "/create", "/create/photo", "/works", "/works/*",
-            "/account", "/profile", "/artist/*", "/recharge", "/analytics", "/agent"
+            "/account", "/profile", "/artist/*", "/artist/*/albums/*", "/recharge", "/analytics", "/agent"
     };
 
     @Bean UserDetailsService unavailableIdentity() {
@@ -62,8 +62,8 @@ public class WebSecurityConfiguration {
                 .requestMatchers(HttpMethod.HEAD, SPA_PAGES).permitAll()
                 .requestMatchers(HttpMethod.GET, SEO_PAGES).permitAll()
                 .requestMatchers(HttpMethod.HEAD, SEO_PAGES).permitAll()
-                .requestMatchers(HttpMethod.GET,"/assets/**","/brand/**","/media/**","/gift/*","/song/*","/api/songs/*/public","/api/songs/*/audio","/api/songs/*/cover","/api/songs/*/thumbnail.png","/api/wechat/jssdk-config","/legal/**").permitAll()
-                .requestMatchers(HttpMethod.HEAD,"/gift/*","/song/*","/api/songs/*/public","/api/songs/*/audio","/api/songs/*/cover","/api/songs/*/thumbnail.png","/brand/share-default-cover.png","/brand/logo-mark.svg").permitAll()
+                .requestMatchers(HttpMethod.GET,"/assets/**","/brand/**","/media/**","/gift/*","/song/*","/api/songs/*/public","/api/songs/*/community","/api/songs/*/audio","/api/songs/*/cover","/api/songs/*/thumbnail.png","/api/wechat/jssdk-config","/legal/**").permitAll()
+                .requestMatchers(HttpMethod.HEAD,"/gift/*","/song/*","/api/songs/*/public","/api/songs/*/community","/api/songs/*/audio","/api/songs/*/cover","/api/songs/*/thumbnail.png","/brand/share-default-cover.png","/brand/logo-mark.svg").permitAll()
                 .requestMatchers(request -> "HEAD".equals(request.getMethod()) && com.qingfeng.music.server.web.RecommendationOssRedirect.isSamplePath(request.getServletPath())).permitAll()
                 .requestMatchers("/api/public/system/info", "/api/public/csrf", "/api/public/session", "/api/public/session/recover", "/actuator/health").permitAll()
                 .requestMatchers(org.springframework.http.HttpMethod.POST,"/api/public/events","/api/wechat/jssdk-error").permitAll()
@@ -85,8 +85,8 @@ public class WebSecurityConfiguration {
                 .requestMatchers(CreatorSessionFilter::isGiftDownload).hasRole("CREATOR")
                 .requestMatchers(org.springframework.http.HttpMethod.GET,"/api/public/gifts/*","/api/public/gifts/*/audio","/api/public/gifts/*/cover").permitAll()
                 .requestMatchers(org.springframework.http.HttpMethod.HEAD,"/api/public/gifts/*","/api/public/gifts/*/audio","/api/public/gifts/*/cover").permitAll()
-                .requestMatchers(org.springframework.http.HttpMethod.GET,"/api/public/artists/*","/api/public/artists/*/avatar/*","/api/public/artists/*/cover/*","/api/public/artists/*/songs/*/*/audio","/api/public/artists/*/songs/*/*/cover","/api/public/artists/*/songs/*/*/lyrics").permitAll()
-                .requestMatchers(org.springframework.http.HttpMethod.HEAD,"/api/public/artists/*","/api/public/artists/*/avatar/*","/api/public/artists/*/cover/*","/api/public/artists/*/songs/*/*/audio","/api/public/artists/*/songs/*/*/cover").permitAll()
+                .requestMatchers(org.springframework.http.HttpMethod.GET,"/api/public/artists/*","/api/public/artists/*/albums","/api/public/artists/*/albums/*","/api/public/artists/*/albums/*/cover/*","/api/public/artists/*/avatar/*","/api/public/artists/*/cover/*","/api/public/artists/*/songs/*/*/audio","/api/public/artists/*/songs/*/*/cover","/api/public/artists/*/songs/*/*/lyrics").permitAll()
+                .requestMatchers(org.springframework.http.HttpMethod.HEAD,"/api/public/artists/*","/api/public/artists/*/albums","/api/public/artists/*/albums/*","/api/public/artists/*/albums/*/cover/*","/api/public/artists/*/avatar/*","/api/public/artists/*/cover/*","/api/public/artists/*/songs/*/*/audio","/api/public/artists/*/songs/*/*/cover").permitAll()
                 .requestMatchers("/api/app/**").hasRole("CREATOR")
                 .anyRequest().denyAll())
             .exceptionHandling(errors -> errors.authenticationEntryPoint((request,response,error)->{

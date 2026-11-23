@@ -22,7 +22,7 @@ public final class InviteGateFilter extends OncePerRequestFilter {
     private static final String GOOGLE_CALLBACK = "/api/public/auth/google/callback";
     private static final String PUBLIC_ID = "[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}";
     private static final Pattern ARTIST_READ = Pattern.compile("/api/public/artists/" + PUBLIC_ID
-            + "(?:/(?:avatar|cover)/" + PUBLIC_ID + "|/songs/" + PUBLIC_ID + "/[1-9][0-9]{0,18}/(?:audio|cover|lyrics))?");
+            + "(?:/(?:avatar|cover)/" + PUBLIC_ID + "|/songs/" + PUBLIC_ID + "/[1-9][0-9]{0,18}/(?:audio|cover|lyrics)|/albums(?:/" + PUBLIC_ID + "(?:/cover/" + PUBLIC_ID + ")?)?)?");
 
     private final InviteGateService gate;
 
@@ -37,7 +37,7 @@ public final class InviteGateFilter extends OncePerRequestFilter {
         boolean read = "GET".equals(request.getMethod()) || "HEAD".equals(request.getMethod());
         boolean publicGift = read && path.matches("/api/public/gifts/[A-Za-z0-9_-]{43}(?:/audio|/cover)?")
                 && !CreatorSessionFilter.isGiftDownload(request);
-        boolean publicSong = read && (path.matches("/api/songs/[A-Za-z0-9_-]{43}/(?:public|audio|cover|thumbnail[.]png)")
+        boolean publicSong = read && (path.matches("/api/songs/[A-Za-z0-9_-]{43}/(?:public|community|audio|cover|thumbnail[.]png)")
                 || path.equals("/api/wechat/jssdk-config"));
         boolean songPlay = "POST".equals(request.getMethod()) && path.matches("/api/songs/[A-Za-z0-9_-]{43}/play");
         boolean publicArtist = read && ARTIST_READ.matcher(path).matches();

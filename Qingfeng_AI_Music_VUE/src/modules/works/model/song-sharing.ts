@@ -12,8 +12,8 @@ export function songShareUrl(token: string, origin: string): string {
   return new URL(`/song/${token}`, base.origin).href
 }
 export function lyricQuotes(lyrics: string): string[] {
-  return [...new Set(lyrics.split(/\r?\n/).map(line => line.trim()).filter(line =>
-    !!line && !/^\[.*\]$/.test(line) && !/^【.*】$/.test(line)))].slice(0, 100)
+  return [...new Set(lyrics.split(/\r?\n/).map(line => line.trim().replace(/^(\*\*|__)(.+)\1$/, '$2')).filter(line =>
+    !!line && !/^#{1,6}\s/.test(line) && !/^\[.*\]$/.test(line) && !/^【.*】$/.test(line)))].slice(0, 100)
 }
 export function localShareAddress(link: string): boolean {
   const host = new URL(link).hostname

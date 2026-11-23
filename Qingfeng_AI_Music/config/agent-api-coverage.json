@@ -614,6 +614,23 @@
       ]
     },
     {
+      "controller": "ArtistAlbumController",
+      "source": "com/qingfeng/music/server/web/publicapi/ArtistAlbumController.java",
+      "mappingDeclarations": [
+        "@GetMapping(\"/api/app/artist-albums\")",
+        "@PostMapping(value=\"/api/app/artist-albums/{id}\",consumes=MediaType.MULTIPART_FORM_DATA_VALUE)",
+        "@DeleteMapping(\"/api/app/artist-albums/{id}\")",
+        "@GetMapping(\"/api/app/artist-albums/{id}/cover/{key}\")",
+        "@GetMapping(\"/api/public/artists/{artist}/albums\")",
+        "@GetMapping(\"/api/public/artists/{artist}/albums/{id}\")",
+        "@GetMapping(\"/api/public/artists/{artist}/albums/{id}/cover/{key}\")"
+      ],
+      "mode": "native",
+      "flows": [
+        "open_feature:artist"
+      ]
+    },
+    {
       "controller": "ArtistPageApiController",
       "source": "com/qingfeng/music/server/web/publicapi/ArtistPageApiController.java",
       "mappingDeclarations": [
@@ -801,7 +818,7 @@
       "source": "com/qingfeng/music/server/web/WebPageController.java",
       "mappingDeclarations": [
         "@GetMapping(\"/\")",
-        "@GetMapping(\"/artist/{id}\")",
+        "@GetMapping({\"/artist/{id}\",\"/artist/{id}/albums/{album}\"})",
         "@GetMapping({\"/create\",\"/create/photo\",\"/works\",\"/works/{id}\",\"/account\",\"/profile\",\"/recharge\",\"/analytics\",\"/agent\"})",
         "@GetMapping({\"/zh-CN\", \"/zh-CN/\", \"/zh-CN/index.html\"})",
         "@GetMapping(\"/en/\")",
@@ -843,6 +860,23 @@
         "@PostMapping(\"/api/songs/{id}/play\")",
         "@GetMapping(\"/api/songs/{id}/cover\")",
         "@GetMapping(value=\"/api/songs/{id}/thumbnail.png\",produces=\"image/png\")"
+      ],
+      "mode": "native",
+      "flows": [
+        "open_feature:gift"
+      ]
+    },
+    {
+      "controller": "SongCommunityController",
+      "source": "com/qingfeng/music/server/web/publicapi/SongCommunityController.java",
+      "mappingDeclarations": [
+        "@GetMapping(\"/api/songs/{id}/community\")",
+        "@GetMapping(\"/api/app/song-listening/{id}/story\")",
+        "@PutMapping(\"/api/app/song-listening/{id}/story\")",
+        "@PutMapping(\"/api/app/song-listening/{id}/reactions/{kind}\")",
+        "@PutMapping(\"/api/app/song-listening/{id}/comments/{commentId}\")",
+        "@PutMapping(\"/api/app/song-listening/{id}/comments/{commentId}/like\")",
+        "@DeleteMapping(\"/api/app/song-listening/{id}/comments/{commentId}\")"
       ],
       "mode": "native",
       "flows": [

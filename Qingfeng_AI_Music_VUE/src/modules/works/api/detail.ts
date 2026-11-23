@@ -91,6 +91,9 @@ export const audioUrl = (work: string, asset: string, download = false, download
 export const createShare = (work: string, assetId: string, revisionId?: string, workTitle?: string) => call<{ id: string; token: string; songId: string; expiresAt: string }>(`app/works/${work}/shares`, 'POST', { assetId, revisionId, workTitle, publicSong: true })
 const versionSharesPath = (work: string, asset: string) => `app/works/${encodeURIComponent(work)}/shares/${encodeURIComponent(asset)}`
 export const getSongShareStatus = (work: string, asset: string) => call<SongShareStatus>(versionSharesPath(work, asset))
+const publicStoryPath = (id: string) => 'app/song-listening/' + encodeURIComponent(id) + '/story'
+export const getPublicStory = (id: string) => call<{text: string}>(publicStoryPath(id))
+export const savePublicStory = (id: string, text: string) => call<{text: string}>(publicStoryPath(id), 'PUT', { text })
 export const revokeSongShare = (work: string, asset: string) => call<void>(versionSharesPath(work, asset), 'DELETE')
 export const revokeShares = (work: string) => call<void>(`app/works/${work}/shares`, 'DELETE')
 
