@@ -69,6 +69,18 @@ describe('public song listener page', () => {
     expect(assign).not.toHaveBeenCalled()
   })
 
+  it('does not launch after a delayed clipboard permission when the listener has switched to Moments', async () => {
+    const { navigator, assign } = openSong('song-w3', false, 'Windows NT 10.0')
+    let permit!: () => void
+    navigator.clipboard.writeText.mockImplementationOnce(() => new Promise<void>(resolve => { permit = resolve }))
+    clickDestination('friend')
+    clickDestination('timeline')
+    permit()
+    await Promise.resolve()
+    expect(assign).not.toHaveBeenCalled()
+    expect(document.getElementById('open-desktop-wechat')?.hidden).toBe(true)
+  })
+
   it('hands the canonical URL to the mobile system picker, retaining QR access after cancellation', async () => {
     const { fields, navigator, assign } = openSong('song-m', false, 'Mozilla/5.0 (Linux; Android 14) Mobile')
     navigator.share.mockRejectedValueOnce(new DOMException('dismissed', 'AbortError'))

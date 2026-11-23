@@ -7,11 +7,14 @@
   const status = byId('status'), manual = byId('manual')
   const guide = byId('wechat-guide'), qr = byId('wechat-qr')
   const instruction = byId('channel-instruction'), feedback = byId('wechat-feedback')
-  const handoff = window.cheerfulWechat
-  const desktopFriend = !wechat && handoff?.mode('friend') === 'desktop'
   const launch = byId('open-desktop-wechat'), handoffStatus = byId('handoff-status'), handoffLink = byId('handoff-link')
-  byId('desktop-hint').hidden = !desktopFriend
-  handoffLink.onfocus = () => handoffLink.select()
+  const hint = byId('desktop-hint')
+  const handoff = hint && launch && handoffStatus && handoffLink ? window.cheerfulWechat : undefined
+  const desktopFriend = !wechat && handoff?.mode('friend') === 'desktop'
+  if (handoff) {
+    hint.hidden = !desktopFriend
+    handoffLink.onfocus = () => handoffLink.select()
+  }
   let selected = '', sdkState = 'loading', qrRequest = 0
   const artwork = document.getElementById('artwork') || document.querySelector('img')
   for (const img of [artwork, document.querySelector('.share-track img')].filter(Boolean)) {
@@ -38,9 +41,11 @@
     byId('timeline').setAttribute('aria-pressed', 'false')
     feedback.textContent = ''
     instruction.textContent = ''
-    handoffStatus.textContent = ''
-    handoffLink.hidden = true
-    launch.hidden = true
+    if (handoff) {
+      handoffStatus.textContent = ''
+      handoffLink.hidden = true
+      launch.hidden = true
+    }
   }
   async function choose(destination, userClicked) {
     resetDestination()
@@ -58,7 +63,7 @@
       sdkFeedback()
       return
     }
-    launch.hidden = !(desktopFriend && destination === 'friend')
+    if (handoff) launch.hidden = !(desktopFriend && destination === 'friend')
     if (userClicked && handoff) {
       const current = () => request === qrRequest && byId('share-sheet').hasAttribute('open')
       const payload = { title, url, text: meta('description') }
