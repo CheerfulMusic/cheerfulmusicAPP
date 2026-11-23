@@ -35,9 +35,12 @@ public final class RecommendationSamples {
         new Song("no-reply", "NO REPLY", "R&B", "/media/recommendations/no-reply-42144aef3320-preview-128.mp3"),
         new Song("too-close", "TOO CLOSE", "R&B", "/media/recommendations/too-close-6e798ee02c65-preview-128.mp3"),
         new Song("big-motion", "BIG MOTION", "Hip-Hop", "/media/recommendations/big-motion-d6449a11e9c6-preview-128.mp3"),
-        new Song("running-through-my-mind", "RUNNING THROUGH MY MIND", "Hip-Hop", "/media/recommendations/running-through-my-mind-226bea4d3e2d-preview-128.mp3"));
+        new Song("running-through-my-mind", "RUNNING THROUGH MY MIND", "Hip-Hop", "/media/recommendations/running-through-my-mind-226bea4d3e2d-preview-128.mp3"),
+        new Song("westside-summer", "WESTSIDE SUMMER", "Hip-Hop", "/media/recommendations/westside-summer-d24a68d80b9e-preview-128.mp3"));
 
     private static final Map<String, String> OBJECTS = Map.ofEntries(
+        Map.entry("recommendations/westside-summer-d24a68d80b9e-preview-128.mp3", "qingfeng/recommendation-samples/20261123/audio/d24a68d80b9e/westside-summer-d24a68d80b9e-preview-128.mp3"),
+        Map.entry("recommendations/westside-summer-3b0b2556d9e1-cover.jpg", "qingfeng/recommendation-samples/20261123/cover/3b0b2556d9e1/westside-summer-3b0b2556d9e1-cover.jpg"),
         Map.entry("recommendations/golden-hour-love-b4e20d8073b2-preview-128.mp3", "qingfeng/recommendation-samples/20261123/audio/b4e20d8073b2/golden-hour-love-b4e20d8073b2-preview-128.mp3"),
         Map.entry("recommendations/golden-hour-love-2fb54a11171e-cover.jpg", "qingfeng/recommendation-samples/20261123/cover/2fb54a11171e/golden-hour-love-2fb54a11171e-cover.jpg"),
         Map.entry("recommendations/no-reply-42144aef3320-preview-128.mp3", "qingfeng/recommendation-samples/20261123/audio/42144aef3320/no-reply-42144aef3320-preview-128.mp3"),

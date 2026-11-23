@@ -46,7 +46,7 @@ class HotSongLyricsCatalogTest {
                 ready++;
             }
         }
-        assertEquals(26,ready);assertEquals(1,instrumental);
+        assertEquals(27,ready);assertEquals(1,instrumental);
         verifyNoInteractions(db,tx,repository,original,transcription);
     }
     @Test void staleAudioVersionsAndUnknownSongsNeverReturnTheCurrentTimeline() throws Exception {

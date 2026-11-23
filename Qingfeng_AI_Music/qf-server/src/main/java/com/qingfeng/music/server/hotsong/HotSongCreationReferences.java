@@ -76,7 +76,8 @@ public final class HotSongCreationReferences {
         entry("no-reply", en("rnb", "Late-night electronic R&B with whispered phrases, a clipped vocal hook and sparse textures.", V1, P, C, V2, P, C, B, C)),
         entry("too-close", en("rnb", "Intimate contemporary R&B with soft falsetto, layered harmonies and a recurring hook.", V1, P, C, V2, P, C, B, C)),
         entry("big-motion", en("rap", "Confident hip-hop with a recurring chant hook, tightly phrased verses and vocal ad-libs.", C, V1, P, C, V2, B, C)),
-        entry("running-through-my-mind", en("rap", "Reflective melodic hip-hop with rhythmic verses and a sung chorus.", C, V1, P, C, V2, B, C))
+        entry("running-through-my-mind", en("rap", "Reflective melodic hip-hop with rhythmic verses and a sung chorus.", C, V1, P, C, V2, B, C)),
+        entry("westside-summer", en("rap", "Upbeat West Coast hip-hop with cruising bass, relaxed rhythmic verses and a recurring summer chant hook.", C, V1, C, V2, B, C))
     );
 
     private static final Set<String> TRACK_IDS = Stream.concat(DIRECTIONS.keySet().stream(), HOUSE_DIRECTIONS.keySet().stream())

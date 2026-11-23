@@ -865,6 +865,30 @@
       "key": "qingfeng/recommendation-samples/20261123/original/b40b7c46edfe/running-through-my-mind.mp3",
       "bytes": 3856830,
       "sha256": "b40b7c46edfe74c5afe7fc76910d44e70382cfb8f7bf2768b6dbd8f5457b0f08"
+    },
+    {
+      "trackId": "westside-summer",
+      "kind": "original",
+      "path": "/media/recommendations/westside-summer-dace5a2783ec-original.mp3",
+      "key": "qingfeng/recommendation-samples/20261123/original/dace5a2783ec/westside-summer-dace5a2783ec-original.mp3",
+      "bytes": 3960578,
+      "sha256": "dace5a2783ec7873d64ed2402ac7f7bbee5db65b16f54259348d90c5636924bc"
+    },
+    {
+      "trackId": "westside-summer",
+      "kind": "audio",
+      "path": "/media/recommendations/westside-summer-d24a68d80b9e-preview-128.mp3",
+      "key": "qingfeng/recommendation-samples/20261123/audio/d24a68d80b9e/westside-summer-d24a68d80b9e-preview-128.mp3",
+      "bytes": 2767149,
+      "sha256": "d24a68d80b9ec633641050142493654506bc6471769ebe05a58890bc4e21dd0f"
+    },
+    {
+      "trackId": "westside-summer",
+      "kind": "cover",
+      "path": "/media/recommendations/westside-summer-3b0b2556d9e1-cover.jpg",
+      "key": "qingfeng/recommendation-samples/20261123/cover/3b0b2556d9e1/westside-summer-3b0b2556d9e1-cover.jpg",
+      "bytes": 14022,
+      "sha256": "3b0b2556d9e1a9add1793bddbb111b87daae82f6b2bc598708bd389f00ed2ea2"
     }
   ]
 }
