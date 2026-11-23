@@ -4,6 +4,7 @@ import java.util.Optional;
 public interface ShareRepository {
     void insert(Snapshot share);
     Optional<Snapshot> active(String hash,Instant now);
+    void publishSong(String id,String asset,String song);
     void revokeAll(String work);
     record Snapshot(String id,String workId,String tokenHash,String assetId,String title,String recipient,String message,String lyrics,String audioOrigin,boolean active,Instant createdAt,Instant expiresAt,String coverId) {}
 }

@@ -8,5 +8,8 @@ public class MyBatisShareRepository implements ShareRepository {
  public void insert(Snapshot s){var r=new ShareRow();r.id=s.id();r.workId=s.workId();r.tokenHash=s.tokenHash();r.assetId=s.assetId();r.title=s.title();r.recipient=s.recipient();r.message=s.message();r.lyrics=s.lyrics();r.audioOrigin=s.audioOrigin();r.active=s.active();r.createdAt=s.createdAt();r.expiresAt=s.expiresAt();r.coverId=s.coverId();mapper.insert(r);}
  private Snapshot snapshot(ShareRow r){return new Snapshot(r.id,r.workId,r.tokenHash,r.assetId,r.title,r.recipient,r.message,r.lyrics,r.audioOrigin,r.active,r.createdAt,r.expiresAt,r.coverId);}
  public Optional<Snapshot> active(String hash,Instant now){return Optional.ofNullable(mapper.active(hash,now)).map(this::snapshot);}
+ public void publishSong(String id,String asset,String song){
+     if(mapper.publishSong(id,asset,song)!=1) throw new IllegalStateException("Share is no longer active");
+ }
  public void revokeAll(String work){mapper.revokeAll(work);}
 }

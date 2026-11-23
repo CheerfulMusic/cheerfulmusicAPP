@@ -827,6 +827,33 @@
       "flows": [
         "open_feature:home"
       ]
+    },
+    {
+      "controller": "PublicSongController",
+      "source": "com/qingfeng/music/server/web/publicapi/PublicSongController.java",
+      "mappingDeclarations": [
+        "@GetMapping(\"/api/songs/{id}/public\")",
+        "@GetMapping(value=\"/song/{id}\", produces=\"text/html;charset=UTF-8\")",
+        "@GetMapping(\"/api/songs/{id}/audio\")",
+        "@GetMapping(\"/api/songs/{id}/cover\")",
+        "@GetMapping(value=\"/api/songs/{id}/thumbnail.png\",produces=\"image/png\")"
+      ],
+      "mode": "native",
+      "flows": [
+        "open_feature:gift"
+      ]
+    },
+    {
+      "controller": "WechatShareConfigController",
+      "source": "com/qingfeng/music/server/web/publicapi/WechatShareConfigController.java",
+      "mappingDeclarations": [
+        "@GetMapping(\"/api/wechat/jssdk-config\")",
+        "@PostMapping(\"/api/wechat/jssdk-error\")"
+      ],
+      "mode": "native",
+      "flows": [
+        "open_feature:gift"
+      ]
     }
   ]
 }

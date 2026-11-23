@@ -64,7 +64,7 @@ async function share(){
   sharing.value=true
   try{
     let link=shareLink.value
-    if(!link && owner.value){const result=await createShare(owner.value.work,owner.value.asset);link=songShareUrl(result.token,location.origin)}
+    if(!link && owner.value){const result=await createShare(owner.value.work,owner.value.asset);link=songShareUrl(result.songId,location.origin)}
     else if(!link && sample.value){const url=new URL('/agent',location.origin);url.searchParams.set('listen',selected.id);link=url.href}
     if(!link||track.value?.id!==selected.id)return
     shareLink.value=link

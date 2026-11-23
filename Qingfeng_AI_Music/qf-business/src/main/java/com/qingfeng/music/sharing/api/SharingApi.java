@@ -5,6 +5,7 @@ import java.time.Instant;
 public interface SharingApi {
     Created create(String owner,String work,String revision,String asset);
     default Created createWithWorkTitle(String owner,String work,String revision,String asset,String title) { return create(owner,work,revision,asset); }
+    String enablePublicSong(Created share,String asset);
     void revokeAll(String owner,String work);
     Gift get(String token);
     Content audio(String token);

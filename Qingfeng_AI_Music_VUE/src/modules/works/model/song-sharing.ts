@@ -3,7 +3,7 @@ export function songShareUrl(token: string, origin: string): string {
   if (!/^[A-Za-z0-9_-]{43}$/.test(token)) throw new Error('分享链接暂时无法创建，请重试。')
   const base = new URL(origin)
   if (!['https:', 'http:'].includes(base.protocol) || base.username || base.password) throw new Error('分享地址无效')
-  return new URL(`/gift/${token}`, base.origin).href
+  return new URL(`/song/${token}`, base.origin).href
 }
 export function lyricQuotes(lyrics: string): string[] {
   return [...new Set(lyrics.split(/\r?\n/).map(line => line.trim()).filter(line =>

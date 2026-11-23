@@ -54,7 +54,7 @@ async function create() {
         : await createShare(props.workId, asset.id, importedRevisionId.value)
       if (turn !== generation || before !== context()) return
       if (!Number.isFinite(Date.parse(share.expiresAt))) throw new Error(t('分享链接暂时无法创建，请重试。'))
-      link.value = songShareUrl(share.token, location.origin); token.value = share.token
+      link.value = songShareUrl(share.songId, location.origin); token.value = share.token
       expires.value = share.expiresAt; emit('created')
     }
     const result = await requestJson<SharedSong>(`public/gifts/${token.value}`)

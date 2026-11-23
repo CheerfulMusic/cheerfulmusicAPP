@@ -468,7 +468,7 @@ public final class CreditHistoricalCutover {
             for (var resource : resources) {
                 String name = Objects.requireNonNull(resource.getFilename());
                 int version = Integer.parseInt(name.substring(1, name.indexOf("__")));
-                require(version >= 1 && version <= 53, "HISTORY_UNAPPROVED_RESOURCE_EXTENSION");
+                require(version >= 1 && version <= 54, "HISTORY_UNAPPROVED_RESOURCE_EXTENSION");
                 CRC32 crc = new CRC32();
                 String text;
                 try (var input = resource.getInputStream()) { text = new String(input.readAllBytes(), StandardCharsets.UTF_8); }
@@ -502,6 +502,12 @@ public final class CreditHistoricalCutover {
                     String normalized = text.replace("\r\n", "\n").replace('\r', '\n');
                     require("V50__discover_daily_plays_and_vocal_approval.sql".equals(name) && (int) crc.getValue() == -2123351923
                             && "bcedc1392b8623d7d31516f01c101f17aa170ae105ac6866f7a7ef71b77f510a".equals(digest(normalized.getBytes(StandardCharsets.UTF_8))),
+                            "HISTORY_UNAPPROVED_RESOURCE_EXTENSION");
+                }
+                if (version == 54) {
+                    String normalized = text.replace("\r\n", "\n").replace('\r', '\n');
+                    require("V54__song_share_statistics.sql".equals(name) && (int) crc.getValue() == 570458891
+                            && "9d837e8c53171c274f2367d1ff99ead74eb706659b0a612b6f5aa2aec0b9f633".equals(digest(normalized.getBytes(StandardCharsets.UTF_8))),
                             "HISTORY_UNAPPROVED_RESOURCE_EXTENSION");
                 }
                 if (version == 53) {

@@ -1,0 +1,19 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{{title}} · {{creator}}</title>
+<meta name="description" content="{{description}}"><meta name="robots" content="noindex,nofollow">
+<meta property="og:title" content="{{title}} · {{creator}}"><meta property="og:description" content="{{description}}">
+<meta property="og:image" content="{{thumbnail}}"><meta property="og:url" content="{{url}}"><meta property="og:type" content="music.song">
+<style>
+*{box-sizing:border-box}body{margin:0;background:#fcf6f1;color:#30221e;font:16px/1.5 system-ui,sans-serif}
+main{max-width:30rem;margin:auto;padding:2rem 1.3rem}header{font-weight:700;margin-bottom:1.1rem}
+img{display:block;width:100%;aspect-ratio:1;object-fit:cover;border-radius:1rem}h1{font-size:2rem;margin:.8rem 0 0;overflow-wrap:anywhere}
+.byline{margin:.2rem 0 1rem}audio{width:100%}nav{display:flex;flex-wrap:wrap;gap:.6rem;margin:1.2rem 0}
+button,a{font:inherit;border:1px solid #aa4936;border-radius:1.5rem;padding:.5rem 1rem;background:white;color:#842b20}
+a{display:inline-block;text-decoration:none;background:#882c1f;color:white}input{width:100%;padding:.5rem}
+</style><script defer src="/brand/song-share.js"></script></head>
+<body><main><header>Cheerful Music</header><img src="{{image}}" alt="歌曲封面"><h1>{{title}}</h1><p class="byline">{{creator}}</p>
+<audio controls playsinline preload="none" src="{{audio}}"></audio>
+<nav><button id="friend">分享给好友</button><button id="timeline">分享到朋友圈</button><button id="copy">复制链接</button></nav>
+<p id="status" role="status"></p><input hidden id="manual" readonly aria-label="歌曲分享链接" value="{{url}}">
+<a href="/create">我也要创作一首</a></main></body></html>

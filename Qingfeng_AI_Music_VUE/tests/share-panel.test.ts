@@ -25,7 +25,7 @@ beforeEach(() => {
   Object.defineProperty(HTMLDialogElement.prototype, 'close', { configurable: true, value() { this.open = false } })
   Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: vi.fn(() => 'blob:poster') })
   Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: vi.fn() })
-  mocks.create.mockResolvedValue({ token, expiresAt: new Date(Date.now() + 86400000).toISOString() })
+  mocks.create.mockResolvedValue({ token, songId: token, expiresAt: new Date(Date.now() + 86400000).toISOString() })
   mocks.get.mockResolvedValue({ title: '我的歌', lyrics: '[Verse]\n窗台那盆薄荷\nKeep the light on', hasCover: true })
   mocks.poster.mockResolvedValue(new Blob(['image'], { type: 'image/png' }))
 })
@@ -35,12 +35,12 @@ describe('share panel state and poster lifecycle', () => {
     const props = mount(); await flush()
     expect(mocks.create).toHaveBeenLastCalledWith('work-a', 'audio-a', undefined)
     const secondToken = 'B'.repeat(43)
-    mocks.create.mockResolvedValueOnce({ token: secondToken, expiresAt: new Date(Date.now() + 86400000).toISOString() })
+    mocks.create.mockResolvedValueOnce({ token: secondToken, songId: secondToken, expiresAt: new Date(Date.now() + 86400000).toISOString() })
     props.asset = { ...props.asset, id: 'audio-b' }; props.revision = null
     await flush()
     expect(mocks.create).toHaveBeenLastCalledWith('work-a', 'audio-b', undefined)
     expect(mocks.get).toHaveBeenLastCalledWith(`public/gifts/${secondToken}`)
-    expect(document.querySelector<HTMLInputElement>('.share-link-panel input')?.value).toContain('/gift/' + secondToken)
+    expect(document.querySelector<HTMLInputElement>('.share-link-panel input')?.value).toContain('/song/' + secondToken)
     expect(button('复制分享链接')).toBeTruthy()
   })
   it('keeps the confirmed lyric requirement for imported audio', async () => {
@@ -57,7 +57,7 @@ describe('share panel state and poster lifecycle', () => {
     expect(button('分享歌曲卡片')).toBeTruthy(); expect(button('制作音乐海报')).toBeTruthy()
     const copy = button('复制分享链接')
     const url = document.querySelector<HTMLInputElement>('.share-link-panel input')?.value
-    expect(url).toContain('/gift/' + token)
+    expect(url).toContain('/song/' + token)
     expect(copy.closest('details')).toBeNull()
     copy.click(); await flush()
     expect(writeText).toHaveBeenCalledExactlyOnceWith(url)

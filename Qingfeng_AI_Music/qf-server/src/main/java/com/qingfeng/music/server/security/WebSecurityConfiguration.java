@@ -49,7 +49,7 @@ public class WebSecurityConfiguration {
                     response.setHeader("X-Robots-Tag", "noindex");
                 }
             }))
-            .csrf(csrf -> csrf.ignoringRequestMatchers("/api/public/payments/airwallex/webhook", "/api/public/paypal/webhook", "/api/public/events", "/api/public/hot-songs/*/play", "/api/public/discover/songs/*/*/play")
+            .csrf(csrf -> csrf.ignoringRequestMatchers("/api/public/payments/airwallex/webhook", "/api/public/paypal/webhook", "/api/public/events", "/api/wechat/jssdk-error", "/api/public/hot-songs/*/play", "/api/public/discover/songs/*/*/play")
             .ignoringRequestMatchers(request->"POST".equals(request.getMethod())&&java.util.Set.of("/api/public/auth/sms/deliver","/api/public/stripe/webhook").contains(request.getServletPath()))
             .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse()).csrfTokenRequestHandler(new CsrfTokenRequestAttributeHandler()))
             .authorizeHttpRequests(auth -> auth
@@ -60,11 +60,11 @@ public class WebSecurityConfiguration {
                 .requestMatchers(HttpMethod.HEAD, SPA_PAGES).permitAll()
                 .requestMatchers(HttpMethod.GET, SEO_PAGES).permitAll()
                 .requestMatchers(HttpMethod.HEAD, SEO_PAGES).permitAll()
-                .requestMatchers(HttpMethod.GET,"/assets/**","/brand/**","/media/**","/gift/*","/legal/**").permitAll()
-                .requestMatchers(HttpMethod.HEAD,"/gift/*","/brand/share-default-cover.png").permitAll()
+                .requestMatchers(HttpMethod.GET,"/assets/**","/brand/**","/media/**","/gift/*","/song/*","/api/songs/*/public","/api/songs/*/audio","/api/songs/*/cover","/api/songs/*/thumbnail.png","/api/wechat/jssdk-config","/legal/**").permitAll()
+                .requestMatchers(HttpMethod.HEAD,"/gift/*","/song/*","/api/songs/*/public","/api/songs/*/audio","/api/songs/*/cover","/api/songs/*/thumbnail.png","/brand/share-default-cover.png").permitAll()
                 .requestMatchers(request -> "HEAD".equals(request.getMethod()) && com.qingfeng.music.server.web.RecommendationOssRedirect.isSamplePath(request.getServletPath())).permitAll()
                 .requestMatchers("/api/public/system/info", "/api/public/csrf", "/api/public/session", "/api/public/session/recover", "/actuator/health").permitAll()
-                .requestMatchers(org.springframework.http.HttpMethod.POST,"/api/public/events").permitAll()
+                .requestMatchers(org.springframework.http.HttpMethod.POST,"/api/public/events","/api/wechat/jssdk-error").permitAll()
                 .requestMatchers(org.springframework.http.HttpMethod.GET,"/api/public/hot-songs","/api/public/hot-songs/*/lyrics").permitAll()
                 .requestMatchers(org.springframework.http.HttpMethod.GET,"/api/public/discover").permitAll()
                 .requestMatchers(org.springframework.http.HttpMethod.HEAD,"/api/public/discover").permitAll()

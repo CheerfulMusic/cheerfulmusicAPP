@@ -43,6 +43,14 @@ public class SharingService implements SharingApi {
         repository.insert(new ShareRepository.Snapshot(id,work,hash(token),assetId,workTitle==null?revision.title():workTitle,w.recipient(),w.message(),revision.lyrics(),asset.origin(),true,now,expires,covers.current(work)));
         return new Created(id,token,expires);
     }
+    public String enablePublicSong(Created share,String asset) {
+        try {
+            byte[] digest = MessageDigest.getInstance("SHA-256").digest(asset.getBytes(StandardCharsets.UTF_8));
+            String song = Base64.getUrlEncoder().withoutPadding().encodeToString(digest);
+            repository.publishSong(share.id(),asset,song);
+            return song;
+        } catch (NoSuchAlgorithmException e) { throw new IllegalStateException(e); }
+    }
     public void revokeAll(String owner,String work){works.get(owner,work);repository.revokeAll(work);}
     public Gift get(String token){var share=resolve(token);return new Gift(share.title(),share.recipient(),share.message(),share.lyrics(),share.audioOrigin(),share.createdAt(),share.expiresAt(),share.coverId()!=null);}
     public MediaApi.Content cover(String token){var share=resolve(token);if(share.coverId()==null)throw new DomainException("COVER_NOT_FOUND","礼物使用默认封面");return covers.content(share.workId(),share.coverId());}

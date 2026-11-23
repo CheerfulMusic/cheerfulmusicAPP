@@ -29,7 +29,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /** Real HTTP, persistence and business services; only external model providers are offline doubles. */
 @org.springframework.test.context.jdbc.Sql(scripts={"classpath:db/migration/V46__agent_chat_allowance.sql",
-        "classpath:db/migration/V47__music_video_projects.sql","classpath:db/migration/V53__agent_admission_version.sql"}, executionPhase=org.springframework.test.context.jdbc.Sql.ExecutionPhase.BEFORE_TEST_CLASS)
+        "classpath:db/migration/V47__music_video_projects.sql","classpath:db/migration/V53__agent_admission_version.sql","classpath:db/migration/V54__song_share_statistics.sql"}, executionPhase=org.springframework.test.context.jdbc.Sql.ExecutionPhase.BEFORE_TEST_CLASS)
 @SpringBootTest(webEnvironment=SpringBootTest.WebEnvironment.RANDOM_PORT, properties={
         "spring.datasource.url=jdbc:h2:mem:agent_chat_flow;MODE=MySQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1",
         "qingfeng.agent.chat.enabled=true", "qingfeng.lyrics.enabled=true", "qingfeng.generation.enabled=true",
@@ -180,7 +180,7 @@ class AgentChatFlowIntegrationTest {
         assertTrue(state(browser).path("liked").asBoolean());
         assertFalse(say(browser,"取消点赞当前作品").path("liked").asBoolean());
         JsonNode shared=say(browser,"分享当前作品");
-        assertTrue(shared.path("shareUrl").asText().startsWith("/gift/"),shared.toString());
+        assertTrue(shared.path("shareUrl").asText().startsWith("/song/"),shared.toString());
         assertEquals(shared.path("shareUrl").asText(),state(browser).path("shareUrl").asText());
         assertTrue(say(browser,"撤销分享").path("shareUrl").isNull());
 
@@ -247,7 +247,7 @@ class AgentChatFlowIntegrationTest {
         assertEquals("继续已安排的操作",next.path("text").asText(),ready.toString());
         String key=next.path("requestKey").asText();UUID.fromString(key);
         var shared=say(browser,next.path("text").asText(),key);
-        assertTrue(shared.path("shareUrl").asText().startsWith("/gift/"),shared.toString());
+        assertTrue(shared.path("shareUrl").asText().startsWith("/song/"),shared.toString());
         assertTrue(shared.path("continuation").isNull());
         assertEquals(shared.path("shareUrl").asText(),say(browser,next.path("text").asText(),key).path("shareUrl").asText());
         assertEquals(1,db.queryForObject("SELECT COUNT(*) FROM share_link WHERE work_id=?",Integer.class,work));

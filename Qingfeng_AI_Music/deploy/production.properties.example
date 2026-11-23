@@ -70,3 +70,7 @@ qingfeng.agent.retrieval.scheduler-enabled=false
 # qingfeng.oss.audio-format=wav
 # qingfeng.oss.audio-ffmpeg=/usr/bin/ffmpeg
 # qingfeng.oss.cover-prefix=qingfeng/covers/
+
+# Official account used for WeChat webpage sharing. Supply the values in server-private configuration.
+# qingfeng.wechat.official.app-id=
+# qingfeng.wechat.official.app-secret=

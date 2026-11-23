@@ -87,7 +87,7 @@ export const audioUrl = (work: string, asset: string, download = false, download
   if (downloadName) query.set('downloadName', downloadName)
   return apiUrl(`${path}?${query}`)
 }
-export const createShare = (work: string, assetId: string, revisionId?: string, workTitle?: string) => call<{ id: string; token: string; expiresAt: string }>(`app/works/${work}/shares`, 'POST', { assetId, revisionId, workTitle })
+export const createShare = (work: string, assetId: string, revisionId?: string, workTitle?: string) => call<{ id: string; token: string; songId: string; expiresAt: string }>(`app/works/${work}/shares`, 'POST', { assetId, revisionId, workTitle, publicSong: true })
 export const revokeShares = (work: string) => call<void>(`app/works/${work}/shares`, 'DELETE')
 
 export const cancelTask=(work:string,task:string)=>call<GenerationTask>(`app/works/${work}/generations/${task}/cancel`,'POST',{})
