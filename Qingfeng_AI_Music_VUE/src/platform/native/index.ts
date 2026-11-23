@@ -1,6 +1,6 @@
 import type { PlatformKind, PlatformServices } from '../contracts'
 
-/** 原生SDK和插件未就绪时明确不可用，后续在此接入原生分享与后台音频。 */
+/** 通用链接分享与后台音频独立于 WechatMusic 的原生音乐消息接口。 */
 export function createNativePlatform(kind: Exclude<PlatformKind, 'web'>): PlatformServices {
   return {
     kind, capabilities: { nativeShare: false, backgroundAudio: false },

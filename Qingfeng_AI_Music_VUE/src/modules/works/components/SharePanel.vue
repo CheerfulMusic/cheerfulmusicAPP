@@ -2,6 +2,7 @@
 import { t, formatDate, defaultCover, locale } from '../../../shared/i18n/index'
 import { ref, watch, nextTick, onBeforeUnmount, computed } from 'vue'
 import { createShare, getSongShareStatus, revokeSongShare, revokeShares, type Revision, type AudioAsset } from '../api/detail'
+import { platform } from '../../../platform'
 import { apiUrl } from '../../../shared/http/api-client'
 import { lyricQuotes, localShareAddress, posterFilename, shareCancelled, songShareUrl, wechatShareEntry, type SongShareStatus, type WechatDestination } from '../model/song-sharing'
 import { usePlayer } from '../../../shared/player/store'
@@ -14,7 +15,7 @@ const dialog = ref<HTMLDialogElement>(), shareButton = ref<HTMLAnchorElement>(),
 const summary = ref<SongShareStatus>()
 const song = computed(() => summary.value?.card)
 const expires = computed(() => song.value?.expiresAt ?? '')
-const link = computed(() => song.value ? songShareUrl(song.value.songId, location.origin) : '')
+const link = computed(() => song.value ? songShareUrl(song.value.songId, platform.kind === 'web' ? location.origin : new URL(apiUrl('songs')).origin) : '')
 const stateLabel = { PRIVATE: '未启用歌曲分享页', SHAREABLE: '已启用公开试听', REVOKED: '已撤销公开试听', EXPIRED: '分享链接已过期' }
 const busy = ref(false), error = ref(''), notice = ref(''), sharing = ref(false)
 const posterOpen = ref(false), posterBusy = ref(false), posterUrl = ref(''), posterBlob = ref<Blob>(), posterError = ref('')
@@ -116,6 +117,20 @@ async function copy() {
 }
 async function choose(event: MouseEvent, target: WechatDestination) {
   if (!checkLink()) { event.preventDefault(); return }
+  if (platform.kind !== 'web') {
+    event.preventDefault()
+    if (sharing.value || !song.value) return
+    const turn = generation, id = song.value.songId
+    sharing.value = true; error.value = ''; notice.value = ''
+    const current = () => turn === generation && props.open && valid() && id === song.value?.songId
+    try {
+      const { shareNativeMusic } = await import('../../../platform/native/wechat-music')
+      if (current() && await shareNativeMusic(id, target, current) && current()) notice.value = '已交给微信，请在微信中完成分享。'
+    } catch (cause) {
+      if (current()) error.value = cause instanceof Error ? cause.message : '暂时无法打开微信。'
+    } finally { if (turn === generation) sharing.value = false }
+    return
+  }
   // In WeChat the right-hand menu belongs to the current document. Open the signed public song first.
   if (insideWechat) return
   event.preventDefault()
