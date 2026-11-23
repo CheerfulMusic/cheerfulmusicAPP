@@ -1,7 +1,9 @@
 (() => {
   const meta = field => document.querySelector('meta[property="og:' + field + '"]').content
   const url = meta('url')
-  const title = meta('title')
+  const titleMeta = document.querySelector('meta[property="og:title"]')
+  const timelineTitle = titleMeta.content
+  const friendTitle = titleMeta.dataset.songCredit || timelineTitle
   const wechat = /MicroMessenger/i.test(navigator.userAgent)
   const byId = id => document.getElementById(id)
   const status = byId('status'), manual = byId('manual')
@@ -24,7 +26,7 @@
   system.hidden = wechat || !navigator.share
   system.onclick = async () => {
     status.textContent = ''
-    try { await navigator.share({ title, url, text: meta('description') }) }
+    try { await navigator.share({ title: timelineTitle, url, text: meta('description') }) }
     catch (error) { if (error.name !== 'AbortError') status.textContent = '系统分享暂不可用，可选择微信好友或朋友圈。' }
   }
   function sdkFeedback() {
@@ -66,7 +68,7 @@
     if (handoff) launch.hidden = !(desktopFriend && destination === 'friend')
     if (userClicked && handoff) {
       const current = () => request === qrRequest && byId('share-sheet').hasAttribute('open')
-      const payload = { title, url, text: meta('description') }
+      const payload = { title: destination === 'timeline' ? timelineTitle : friendTitle, url, text: meta('description') }
       void handoff.open(destination, payload, current).then(result => {
         if (!result || !current()) return
         handoffStatus.textContent = result.message
@@ -139,9 +141,9 @@
       wx.ready(() => {
         sdkState = 'ready'
         sdkFeedback()
-        const card = { title, link: url, imgUrl: meta('image'), fail: failure }
-        wx.updateAppMessageShareData({ ...card, desc: meta('description') })
-        wx.updateTimelineShareData(card)
+        const card = { link: url, imgUrl: meta('image'), fail: failure }
+        wx.updateAppMessageShareData({ ...card, title: friendTitle, desc: meta('description') })
+        wx.updateTimelineShareData({ ...card, title: timelineTitle })
       })
       wx.error(failure)
       wx.config({ ...config, debug: false, jsApiList: ['updateAppMessageShareData', 'updateTimelineShareData'] })

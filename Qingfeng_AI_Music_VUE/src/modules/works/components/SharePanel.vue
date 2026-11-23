@@ -4,7 +4,7 @@ import { ref, watch, nextTick, onBeforeUnmount, computed } from 'vue'
 import { createShare, getSongShareStatus, revokeSongShare, revokeShares, type Revision, type AudioAsset } from '../api/detail'
 import { platform } from '../../../platform'
 import { apiUrl } from '../../../shared/http/api-client'
-import { lyricQuotes, localShareAddress, posterFilename, shareCancelled, songShareUrl, wechatShareEntry, type SongShareStatus, type WechatDestination } from '../model/song-sharing'
+import { lyricQuotes, localShareAddress, posterFilename, shareCancelled, songShareUrl, songTimelineTitle, wechatShareEntry, type SongShareStatus, type WechatDestination } from '../model/song-sharing'
 import { usePlayer } from '../../../shared/player/store'
 import PublicSongStory from './PublicSongStory.vue'
 import PlaybackIcon from '../../../shared/ui/PlaybackIcon.vue'
@@ -147,7 +147,8 @@ async function choose(event: MouseEvent, target: WechatDestination) {
   if (more.value) more.value.open = false
   if (event.isTrusted && song.value && handoff) {
     const current = () => request === qrRequest && props.open && valid()
-    const payload = { title: song.value.title, text: t('听听我创作的这首歌 · Cheerful Music'), url: link.value }
+    const payload = { title: target === 'timeline' ? songTimelineTitle(song.value) : song.value.title,
+      text: t('听听我创作的这首歌 · Cheerful Music'), url: link.value }
     void handoff.open(target, payload, current).then(async result => {
       if (!result || !current()) return
       handoffMessage.value = result.message
@@ -168,7 +169,7 @@ async function systemShare() {
   if (sharing.value || !song.value || !checkLink()) return
   const turn = generation; sharing.value = true; error.value = ''; notice.value = ''
   try {
-    await navigator.share({ title: song.value.title, text: t('听听我创作的这首歌 · Cheerful Music'), url: link.value })
+    await navigator.share({ title: songTimelineTitle(song.value), text: t('听听我创作的这首歌 · Cheerful Music'), url: link.value })
   } catch (cause) { if (turn === generation && !shareCancelled(cause)) notice.value = '系统分享暂不可用，可选择微信好友或朋友圈。' }
   finally { if (turn === generation) sharing.value = false }
 }

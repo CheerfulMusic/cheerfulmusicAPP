@@ -14,6 +14,7 @@ function openSong(id: string, inWechat = false, agent = 'WebTest') {
   const api = site + '/api/songs/' + id
   const fields: Record<string, string> = {
     title: '歌曲 ' + id, creator: '青风', url, image: api + '/cover',
+    siteName: '青风音乐 Cheerful Music', timelineTitle: '青风音乐 Cheerful Music｜歌曲 ' + id + ' · 青风',
     lyricLines: '<p>第一句</p>', duration: '', durationLabel: '–:––', artistId: '',
     thumbnail: api + '/thumbnail.png', audio: api + '/audio', description,
   }
@@ -88,6 +89,7 @@ describe('public song listener page', () => {
     expect(navigator.share).toHaveBeenCalledExactlyOnceWith({ title: fields.title + ' · ' + fields.creator, url: fields.url, text: description })
     clickDestination('timeline')
     expect(navigator.share).toHaveBeenCalledTimes(2)
+    expect(navigator.share).toHaveBeenLastCalledWith({ title: fields.timelineTitle, url: fields.url, text: description })
     expect(assign).not.toHaveBeenCalled()
     expect(navigator.clipboard.writeText).not.toHaveBeenCalled()
     expect(document.getElementById('wechat-guide')?.hidden).toBe(false)
@@ -116,11 +118,15 @@ describe('public song listener page', () => {
       expect(fetch).toHaveBeenCalledWith('/api/wechat/jssdk-config?url=' + encodeURIComponent(location.href.split('#')[0]))
       expect(wx.config).toHaveBeenCalledWith({ ...config, debug: false, jsApiList: ['updateAppMessageShareData', 'updateTimelineShareData'] })
       wx.ready.mock.calls[0][0]()
-      const common = { title: fields.title + ' · ' + fields.creator, link: fields.url, imgUrl: fields.thumbnail }
+      expect(document.title).toBe(fields.timelineTitle)
+      expect(document.querySelector<HTMLMetaElement>('meta[property="og:site_name"]')?.content).toBe(fields.siteName)
+      expect(document.querySelector<HTMLMetaElement>('meta[property="og:title"]')?.content).toBe(fields.timelineTitle)
+      expect(document.querySelector('h1')?.textContent).toBe(fields.title)
+      const common = { link: fields.url, imgUrl: fields.thumbnail }
       const friend = wx.updateAppMessageShareData.mock.calls[0][0]
       const timeline = wx.updateTimelineShareData.mock.calls[0][0]
-      expect(friend).toMatchObject({ ...common, desc: description })
-      expect(timeline).toMatchObject(common)
+      expect(friend).toMatchObject({ ...common, title: fields.title + ' · ' + fields.creator, desc: description })
+      expect(timeline).toMatchObject({ ...common, title: fields.timelineTitle })
       expect(timeline).not.toHaveProperty('desc')
       button('friend').click()
       expect(document.getElementById('channel-instruction')?.textContent).toContain('发送给朋友')
@@ -148,7 +154,7 @@ describe('public song listener page', () => {
     expect(navigator.share).not.toHaveBeenCalled()
     button('copy').closest('details')!.open = true
     button('system-share').click()
-    expect(navigator.share).toHaveBeenCalledWith({ title: fields.title + ' · ' + fields.creator, url: fields.url, text: description })
+    expect(navigator.share).toHaveBeenCalledWith({ title: fields.timelineTitle, url: fields.url, text: description })
     button('copy').click()
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith(fields.url)
     navigator.clipboard.writeText.mockRejectedValueOnce(new Error('clipboard unavailable'))

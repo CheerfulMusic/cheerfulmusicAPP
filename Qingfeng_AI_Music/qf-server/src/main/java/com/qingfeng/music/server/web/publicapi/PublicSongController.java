@@ -7,7 +7,9 @@ import com.qingfeng.music.lyrics.playback.PlaybackLyrics;
 import com.qingfeng.music.lyrics.playback.PlaybackLyricsRepository;
 import com.qingfeng.music.server.web.AudioResponse;
 import com.qingfeng.music.server.web.publicapi.PublicSongAccess.Grant;
+import com.qingfeng.music.server.web.util.SongShareTitle;
 import static com.qingfeng.music.server.web.publicapi.PublicSongAccess.missing;
+import static java.util.Map.entry;
 import java.awt.image.BufferedImage;
 import java.io.*;
 import java.nio.charset.StandardCharsets;
@@ -68,10 +70,15 @@ public class PublicSongController {
         String page = template.getContentAsString(StandardCharsets.UTF_8);
         Double duration = song.durationSeconds();
         boolean knownDuration = duration != null && Double.isFinite(duration) && duration > 0;
-        var fields = java.util.Map.of("title",song.title(),"creator",song.creator(),"url",song.url(),
-                "image",song.image().substring(origin.length()),"thumbnail",song.thumbnail(),"audio",song.audio().substring(origin.length()),
-                "artistId",song.artistId()==null ? "" : song.artistId(),"description",DESCRIPTION,"duration",knownDuration ? duration.toString() : "",
-                "durationLabel",knownDuration ? timeLabel(duration.longValue()) : "–:––");
+        var fields = java.util.Map.ofEntries(
+                entry("title", song.title()), entry("creator", song.creator()),
+                entry("siteName", SongShareTitle.SITE_NAME),
+                entry("timelineTitle", SongShareTitle.forTimeline(song.title(), song.creator())),
+                entry("url", song.url()), entry("image", song.image().substring(origin.length())),
+                entry("thumbnail", song.thumbnail()), entry("audio", song.audio().substring(origin.length())),
+                entry("artistId", song.artistId() == null ? "" : song.artistId()), entry("description", DESCRIPTION),
+                entry("duration", knownDuration ? duration.toString() : ""),
+                entry("durationLabel", knownDuration ? timeLabel(duration.longValue()) : "–:––"));
         String lyrics = lyricMarkup(gift,song.lyrics());
         var slots = java.util.regex.Pattern.compile("\\{\\{(\\w+)}}").matcher(page);
         page = slots.replaceAll(m -> java.util.regex.Matcher.quoteReplacement("lyricLines".equals(m.group(1))
