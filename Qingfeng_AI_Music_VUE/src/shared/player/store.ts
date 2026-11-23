@@ -2,7 +2,17 @@ import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 import { NativeAudioPool } from './audio-cache'
 import type { LyricLine } from '../../modules/works/api/detail'
-export interface PlayableTrack { id: string; title: string; titleKey?: string; cover: string; audio: string; provenance?: 'SAMPLE' | 'IMPORTED' | 'GENERATED'; lyricLines?: readonly LyricLine[] }
+import type { DiscoverSong } from '../../modules/artist/api/artist'
+export interface PlayableTrack {
+  id: string
+  title: string
+  titleKey?: string
+  cover: string
+  audio: string
+  provenance?: 'SAMPLE' | 'IMPORTED' | 'GENERATED'
+  lyricLines?: readonly LyricLine[]
+  publication?: Pick<DiscoverSong, 'artistId' | 'stageName' | 'song'>
+}
 export type RepeatMode = 'default' | 'one' | 'list'
 export const usePlayer = defineStore('player', () => {
   const current=ref<PlayableTrack|null>(null),playing=ref(false),starting=ref(false),buffering=ref(false),time=ref(0),duration=ref(0),error=ref(''),queue=ref<PlayableTrack[]>([])

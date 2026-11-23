@@ -5,6 +5,10 @@ import { defineComponent, nextTick } from 'vue'
 import { appearanceKey, defaults, sanitizeAppearance, useChatAppearance } from '../src/modules/agent/composables/useChatAppearance'
 import ChatAppearance from '../src/modules/agent/components/ChatAppearance.vue'
 const hot = vi.hoisted(() => ({load:vi.fn(),record:vi.fn(),toggle:vi.fn(),queue:vi.fn()}))
+vi.mock('../src/modules/artist/api/artist', async original => ({
+ ...await original<typeof import('../src/modules/artist/api/artist')>(),
+ listDiscoverSongs: async () => ({songs:[],hasMore:false}),
+}))
 vi.mock('../src/modules/home/model/hot-songs', async () => { const {ref}=await import('vue'); return {loadHotSongs:hot.load,recordPlay:hot.record,sortByHeat:(tracks:any[])=>[...tracks].reverse(),hotFailure:ref(''),hotLoading:ref(false)} })
 vi.mock('../src/shared/player/store', () => ({usePlayer:()=>({setQueue:hot.queue,toggle:hot.toggle,current:null,playing:false,starting:false,error:''})}))
 import AgentProgressCard from '../src/modules/agent/components/AgentProgressCard.vue'

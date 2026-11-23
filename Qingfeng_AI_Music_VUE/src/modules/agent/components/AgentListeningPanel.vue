@@ -21,7 +21,7 @@ const follow=ref(true), sharing=ref(false), shareLink=ref('')
 const player=usePlayer(), catalog=usePreviewTracks()
 const tr=(zh:string,en:string)=>locale.value==='en'?en:zh
 const track=computed(()=>player.current??catalog.value.find(row=>row.id===requested)??sortByHeat(catalog.value)[0])
-const sample=computed(()=>catalog.value.find(item=>item.id===track.value?.id))
+const sample=computed(()=>catalog.value.find(item=>item.audio===track.value?.audio))
 const source=computed(()=>lyricsSource(track.value?.audio??''))
 const owner=computed(()=>source.value?.kind==='owner'?source.value:undefined)
 const playing=computed(()=>!!player.current&&(player.playing||player.starting))
@@ -85,7 +85,7 @@ async function download(){
   <section v-if="track" class="listening-panel">
     <header class="music-player-heading"><NavIcon name="headphones"/>{{ tr('音乐播放','Music player') }}<span class="player-meter" aria-hidden="true"/></header>
     <div class="record-summary"><div class="agent-album"><div class="agent-album-art"><img :src="track.cover" alt=""/></div></div>
-    <div class="record-copy"><h2>{{ track.title }}</h2><p class="listen-meta">{{ sample?.genre || sample?.category || tr('我的作品','My music') }} · {{ clock(duration) }}</p>
+    <div class="record-copy"><h2>{{ track.title }}</h2><p class="listen-meta">{{ track.publication?.stageName || sample?.genre || sample?.category || tr('我的作品','My music') }} · {{ clock(duration) }}</p>
     <div class="listen-actions">
       <button v-if="sample" :aria-label="tr('喜欢','Like')" :aria-pressed="isLiked(track.id)" @click="toggleReaction(track.id,'like')"><NavIcon name="heart"/><span>{{ hotStat(track.id).likes || tr('喜欢','Like') }}</span></button>
       <button v-if="owner || sample" :disabled="sharing" @click="share"><NavIcon name="share"/>{{ tr('分享','Share') }}</button>

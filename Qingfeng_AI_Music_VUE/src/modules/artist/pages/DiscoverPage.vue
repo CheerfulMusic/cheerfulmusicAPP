@@ -11,7 +11,7 @@ import DiscoverShelf from '../components/DiscoverShelf.vue'
 import { withDiscoverEditorialCover } from '../model/discover-editorial-artwork'
 import { discoverSongArtwork, type HeroArtwork } from '../model/discover-hero-artwork'
 import {
-  christmasSongId, discoverGenres, discoverReleaseCover, withDiscoverPreviewCover,
+  christmasSongId, discoverGenres, publicDiscoverTrack, withDiscoverPreviewCover,
   type DiscoverShelfTrack, type PublishedShelfTrack,
 } from '../model/discover-shelves'
 import { vocalPerformanceRows } from '../model/vocal-performances'
@@ -21,7 +21,7 @@ import { usePreviewTracks, type PreviewTrack } from '../../home/model/tracks'
 import { accountState } from '../../../shared/identity/account-state'
 import { logtoState } from '../../../shared/identity/logto-state'
 import {
-  getDiscoverShelves, getPublicArtist, listDiscoverSongs, publicAvatarUrl, publicTrack, recordDiscoverPlay,
+  getDiscoverShelves, getPublicArtist, listDiscoverSongs, publicAvatarUrl, recordDiscoverPlay,
   type DiscoverArtist, type DiscoverShelves, type DiscoverSong,
 } from '../api/artist'
 import walkedFar from '../../../assets/discover/carousel-walked-far.webp'
@@ -92,14 +92,9 @@ let motionQuery: MediaQueryList | undefined
 
 const count = computed(() => new Intl.NumberFormat(locale.value))
 const signedIn = computed(() => accountState.value.authenticated || logtoState.value.authenticated)
-function publicDiscoverTrack(artistId: string, song: DiscoverSong['song']) {
-  const track = publicTrack(artistId, song)
-  track.cover = discoverReleaseCover(song, track.cover)
-  return track
-}
 function withTracks(items: DiscoverSong[], useEditorialCover = false): PublishedShelfTrack[] {
   return items.map(item => {
-    const track = publicDiscoverTrack(item.artistId, item.song)
+    const track = publicDiscoverTrack(item)
     return { ...item, track: useEditorialCover ? withDiscoverEditorialCover(track) : track }
   })
 }
@@ -173,7 +168,7 @@ const heroSlides = computed(() => {
     ?? popularSongs.value.find(item => item.song.id === christmasSongId)
     ?? christmasTracks.value[0]?.publication
   if (release) {
-    const track = publicDiscoverTrack(release.artistId, release.song)
+    const track = publicDiscoverTrack(release)
     slides.push({ row: { ...release, track }, artwork: { desktop: christmasSky, compact: christmasSky, position: '67% center' } })
   }
   return slides
@@ -221,11 +216,10 @@ async function loadChristmasPlaylist() {
     const song = artist.songs.find(item => item.id === christmasSongId)
     if (disposed || !song) return
     christmasTracks.value = [{
-      ...publicDiscoverTrack(christmasArtistId, song), authoredTitle: true,
+      ...publicDiscoverTrack({ artistId: christmasArtistId, stageName: artist.stageName, song }), authoredTitle: true,
       recipient: '', subtitle: artist.stageName, category: t('圣诞'), filters: ['christmas'],
       tags: [t('圣诞')], style: 'Christmas', occasion: '',
       durationSeconds: 0, description: '', quote: '',
-      publication: { artistId: christmasArtistId, stageName: artist.stageName, song },
     }]
   } catch {
     // Keep the playlist available if its public release cannot be loaded.

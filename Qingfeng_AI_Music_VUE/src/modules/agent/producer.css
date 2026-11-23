@@ -178,10 +178,24 @@
   display: flex; gap: 7px; align-items: center; text-align: left; margin: 0; font-size: 15px; font-weight: 700; letter-spacing: 0; line-height: 1.45; color: var(--studio-ink);
 }
 .producer-collection header h2 svg, .music-player-heading > svg { width: 17px; height: 17px; color: #42346e; stroke-width: 2.2; }
-.producer-collection .hot-featured { position: relative; flex: none; aspect-ratio: 2.04; border-radius: 13px; }
+.hot-carousel { flex: none; min-width: 0; }
+.hot-carousel header { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.hot-carousel-controls { display: flex; flex: none; align-items: center; gap: 5px; }
+.hot-carousel-controls button {
+  display: grid; place-items: center; width: 28px; height: 28px; padding: 0;
+  border: 1px solid #ded4f1; border-radius: 50%; background: #faf8ff; color: #624797;
+  box-shadow: 0 2px 5px #51406f18; font: 24px/1 Arial, sans-serif; cursor: pointer;
+}
+.hot-carousel-controls button span { transform: translateY(-1px); }
+.hot-carousel-controls button:hover:not([aria-disabled="true"]) { border-color: #b297df; background: #ede4ff; color: #502598; }
+.hot-carousel-controls button:focus-visible { outline: 2px solid #7850bf; outline-offset: 2px; }
+.hot-carousel-controls button[aria-disabled="true"] { opacity: .45; cursor: default; }
+.producer-collection .hot-featured { position: relative; flex: none; aspect-ratio: 2.04; border-radius: 13px; touch-action: pan-y pinch-zoom; }
 .producer-collection .hot-featured-label { top: 9px; left: 10px; padding: 3px 8px; color: white; background: #25203779; border-color: #ffffff50; font-size: 10px; letter-spacing: 0; }
 .producer-collection .hot-featured-copy { left: 12px; bottom: 12px; right: 40px; }
 .producer-collection .hot-featured-copy h3 { margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: white; font-size: 16px; font-weight: 650; }
+.producer-collection .hot-featured-copy small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hot-featured:focus-within { outline: 2px solid #7850bf; outline-offset: 2px; }
 .producer-collection .hot-featured > button { position: absolute; inset: 0; width: 100%; height: 100%; padding: 0; border: 0; border-radius: inherit; background: transparent; backdrop-filter: none; }
 .hot-featured > button > span { position: absolute; right: 10px; bottom: 10px; display: grid; place-items: center; width: 29px; height: 29px; border-radius: 50%; border: 1px solid #fff9; background: #ffffff42; color: white; backdrop-filter: blur(5px); }
 .hot-featured > button svg { width: 16px; height: 16px; }
@@ -326,6 +340,7 @@
   .producer-welcome { height: clamp(112px, 16vh, 155px); }
 }
 @media (max-width: 860px) {
+  .hot-carousel-controls button { width: 36px; height: 36px; }
   .consumer-shell.agent-shell { --studio-nav: 54px; }
   .agent-shell .consumer-header-inner { width: calc(100% - 22px); gap: 6px; }
   .agent-shell .consumer-brand { min-width: 0; flex-shrink: 1; }

@@ -43,7 +43,7 @@ export function useHouseRecommendations() {
 }
 
 const played = new Set<string>()
-export async function recordPreviewPlay(track: PreviewTrack): Promise<void> {
+export async function recordPreviewPlay(track: Pick<PreviewTrack, 'id' | 'publication'>): Promise<void> {
   if (!track.publication) { recordPlay(track.id); return }
   const { artistId, song } = track.publication
   const key = `${artistId}/${song.id}/${song.version}`
