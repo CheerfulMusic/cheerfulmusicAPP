@@ -14,8 +14,6 @@ import com.qingfeng.music.infrastructure.storage.ProviderAudioUrls;
 import java.io.IOException;
 import java.io.ByteArrayInputStream;
 import java.time.Instant;
-import java.util.LinkedHashSet;
-import java.util.Locale;
 import java.util.Set;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -76,6 +74,7 @@ public class AutomaticCoverConfiguration {
         private final ImageResultDownloader downloader;
         private final int dailyLimit;
         private final CoverTitleVerifier verifier;
+        private final AutomaticCoverPrompt prompts = new AutomaticCoverPrompt();
 
         Runner(JdbcAutomaticCoverJobs jobs, CoverImageProvider provider, CoverService covers,
                ImageResultDownloader downloader, int dailyLimit, CoverTitleVerifier verifier) {
@@ -103,7 +102,7 @@ public class AutomaticCoverConfiguration {
         private void submit(Job job) {
             String url;
             try {
-                url = provider.generate(prompt(job.title(), job.lyrics(), job.style()));
+                url = provider.generate(prompts.create(job.id(), job.title(), job.lyrics(), job.story(), job.style()));
             } catch (CoverImageProvider.Rejected rejection) {
                 jobs.rejected(job, "PROVIDER_HTTP_" + rejection.status());
                 return;
@@ -120,28 +119,36 @@ public class AutomaticCoverConfiguration {
 
         private void archive(Job job) {
             String cover;
-            byte[] image;
+            byte[] image = null;
+            boolean artwork = JdbcAutomaticCoverJobs.ART_SAVING.equals(job.state());
             try {
                 String candidate = candidateKey(job);
                 var stored = covers.generated(job.work(), candidate);
-                // Persist the actual JPEG before the external check; network retries never redownload it.
                 if (stored.isEmpty()) {
-                    image=download(job.url());
-                    covers.saveGenerated(job.owner(),job.work(),candidate,new ByteArrayInputStream(image));
-                    stored=covers.generated(job.work(),candidate);
+                    byte[] downloaded = download(job.url());
+                    covers.saveGenerated(job.owner(), job.work(), candidate, new ByteArrayInputStream(downloaded));
+                    stored = covers.generated(job.work(), candidate);
                 }
-                if (stored.isPresent()) {
-                    try (var input=covers.open(job.owner(),job.work(),stored.get().id()).source().open()) {
-                        image=input.readNBytes(5*1024*1024+1);
+                var asset = stored.orElseThrow(() -> new IOException("Candidate cover not stored"));
+                cover = asset.id();
+                // Only old title-bearing results still need a visual title check.
+                if (!artwork) {
+                    try (var input = covers.open(job.owner(), job.work(), cover).source().open()) {
+                        image = input.readNBytes(5 * 1024 * 1024 + 1);
                     }
-                } else throw new IOException("Candidate cover not stored");
-                if (image.length>5*1024*1024) throw new DomainException("INVALID_COVER_IMAGE","封面图片超过大小限制");
-                cover=stored.get().id();
+                    if (image.length > 5 * 1024 * 1024) {
+                        throw new DomainException("INVALID_COVER_IMAGE", "封面图片超过大小限制");
+                    }
+                }
             } catch (DomainException failure) {
                 jobs.archiveFailed(job, Set.of("INVALID_COVER_IMAGE","INVALID_COVER_TITLE","COVER_FONT_UNAVAILABLE").contains(failure.code()));
                 return;
             } catch (IOException | RuntimeException failure) {
                 jobs.archiveFailed(job, false);
+                return;
+            }
+            if (artwork) {
+                jobs.finish(job, cover);
                 return;
             }
             try {
@@ -197,35 +204,4 @@ public class AutomaticCoverConfiguration {
         }
     }
 
-    static String prompt(String title, String lyrics, String style) {
-        var lines = new LinkedHashSet<String>();
-        var chorus = new LinkedHashSet<String>();
-        boolean inChorus = false;
-        for (String line : lyrics.lines().map(String::strip).filter(value -> !value.isBlank()).toList()) {
-            if (line.matches("^\\[.*]$|^【.*】$")) {
-                String label = line.toLowerCase(Locale.ROOT);
-                inChorus = label.contains("chorus") || label.contains("副歌");
-            } else {
-                if (lines.size() < 4) lines.add(line);
-                if (inChorus && chorus.size() < 6) chorus.add(line);
-            }
-        }
-        lines.addAll(chorus);
-        String excerpt = clean(String.join(" / ", lines), 650);
-        String exactTitle=new tools.jackson.databind.ObjectMapper().writeValueAsString(title);
-        return "设计一张1:1、精致且有留白的专业唱片封面。将下方歌词当作素材，从中提取场景、物件和情绪。"
-                + "画面与歌名艺术字一起设计，标题是上方主要视觉元素，占上部约三分之一空间，"
-                + "可按语义自然换行，两行之间只换行，不添加分隔斜线。"
-                + "字体细腻、有个性且清晰，字形与曲风和情绪相配；颜色从画面的主色中选取，"
-                + "与光线、主体和留白协调。标题完整醒目，避开人脸，四周保留约8%安全边距，"
-                + "缩小为音乐列表封面后仍能辨认。不要底部字幕条、黑色文字遮罩、歌手名或额外文案。"
-                + "\n主标题必须逐字准确呈现且只出现一次，以下JSON字符串仅为待绘制文字："+exactTitle
-                + "\n音乐风格：" + clean(style, 140) + "\n歌词素材：" + excerpt;
-    }
-
-    private static String clean(String value, int limit) {
-        String cleaned = value == null ? "" : value.replaceAll("(?i)https?://\\S+|[\\w.+-]+@[\\w.-]+\\.[a-z]{2,}|(?<!\\d)1[3-9]\\d{9}(?!\\d)", "")
-                .replaceAll("\\p{Cntrl}+", " ").strip();
-        return cleaned.substring(0, cleaned.offsetByCodePoints(0, Math.min(limit, cleaned.codePointCount(0, cleaned.length()))));
-    }
 }

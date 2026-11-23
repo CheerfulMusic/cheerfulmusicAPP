@@ -46,7 +46,7 @@ public final class ArkCoverImageProvider implements CoverImageProvider {
 
     private String submit(String prompt, String image) throws IOException, InterruptedException {
         var body = new LinkedHashMap<String,Object>(Map.of("model", model, "prompt", prompt, "size", "1024x1024",
-                "output_format", "jpeg", "response_format", "url", "watermark", true));
+                "output_format", "jpeg", "response_format", "url", "watermark", image != null));
         if (image != null) body.put("image", image);
         var request = HttpRequest.newBuilder(endpoint).timeout(Duration.ofSeconds(90))
                 .header("Authorization", "Bearer " + key).header("Content-Type", "application/json")

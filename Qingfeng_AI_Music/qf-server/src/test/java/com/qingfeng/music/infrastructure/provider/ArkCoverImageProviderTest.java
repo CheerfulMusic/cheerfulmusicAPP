@@ -37,11 +37,12 @@ class ArkCoverImageProviderTest {
             assertEquals("1024x1024", json.path("size").asText());
             assertEquals("jpeg", json.path("output_format").asText());
             assertEquals("雨夜的车站", json.path("prompt").asText());
-            assertTrue(json.path("watermark").asBoolean());
+            assertEquals(false, json.path("watermark").booleanValue());
             assertFalse(json.has("sequential_image_generation"));
             assertEquals("https://test.example/image.jpg", provider.edit(new byte[]{1,2,3}, "只修正歌名"));
             var edit = new ObjectMapper().readTree(payload.get());
             assertEquals("只修正歌名", edit.path("prompt").asText());
+            assertTrue(edit.path("watermark").asBoolean());
             assertEquals("data:image/jpeg;base64,AQID", edit.path("image").asText());
             code.set(429);
             assertEquals(429, assertThrows(CoverImageProvider.Rejected.class, () -> provider.generate("封面")).status());
