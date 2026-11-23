@@ -810,12 +810,15 @@
         "@GetMapping({\"/discover/\",\"/discover/index.html\"})",
         "@GetMapping(\"/help\")",
         "@GetMapping({\"/help/\",\"/help/index.html\"})",
+        "@GetMapping({GUIDE, \"/en\" + GUIDE})",
+        "@GetMapping({GUIDE + \"/\", GUIDE + \"/index.html\", \"/en\" + GUIDE + \"/\", \"/en\" + GUIDE + \"/index.html\"})",
         "@GetMapping(\"/legal/terms\")",
         "@GetMapping(\"/legal/privacy\")"
       ],
       "mode": "protocol",
       "flows": [
-        "SPA document"
+        "SPA document",
+        "Public bilingual guide documents and canonical redirects"
       ]
     },
     {

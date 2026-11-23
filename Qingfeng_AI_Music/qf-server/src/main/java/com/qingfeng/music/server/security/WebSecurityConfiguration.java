@@ -23,7 +23,9 @@ public class WebSecurityConfiguration {
             "/zh-CN", "/zh-CN/", "/zh-CN/index.html",
             "/en", "/en/", "/en/index.html",
             "/discover", "/discover/", "/discover/index.html",
-            "/help", "/help/", "/help/index.html"
+            "/help", "/help/", "/help/index.html",
+            "/guide/*", "/guide/*/", "/guide/*/index.html",
+            "/en/guide/*", "/en/guide/*/", "/en/guide/*/index.html"
     };
 
     private static final String[] SPA_PAGES = {
@@ -61,7 +63,7 @@ public class WebSecurityConfiguration {
                 .requestMatchers(HttpMethod.GET, SEO_PAGES).permitAll()
                 .requestMatchers(HttpMethod.HEAD, SEO_PAGES).permitAll()
                 .requestMatchers(HttpMethod.GET,"/assets/**","/brand/**","/media/**","/gift/*","/song/*","/api/songs/*/public","/api/songs/*/audio","/api/songs/*/cover","/api/songs/*/thumbnail.png","/api/wechat/jssdk-config","/legal/**").permitAll()
-                .requestMatchers(HttpMethod.HEAD,"/gift/*","/song/*","/api/songs/*/public","/api/songs/*/audio","/api/songs/*/cover","/api/songs/*/thumbnail.png","/brand/share-default-cover.png").permitAll()
+                .requestMatchers(HttpMethod.HEAD,"/gift/*","/song/*","/api/songs/*/public","/api/songs/*/audio","/api/songs/*/cover","/api/songs/*/thumbnail.png","/brand/share-default-cover.png","/brand/logo-mark.svg").permitAll()
                 .requestMatchers(request -> "HEAD".equals(request.getMethod()) && com.qingfeng.music.server.web.RecommendationOssRedirect.isSamplePath(request.getServletPath())).permitAll()
                 .requestMatchers("/api/public/system/info", "/api/public/csrf", "/api/public/session", "/api/public/session/recover", "/actuator/health").permitAll()
                 .requestMatchers(org.springframework.http.HttpMethod.POST,"/api/public/events","/api/wechat/jssdk-error").permitAll()

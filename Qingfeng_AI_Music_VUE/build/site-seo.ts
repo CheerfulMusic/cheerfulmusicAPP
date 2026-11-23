@@ -1,7 +1,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import type { Connect, Plugin } from 'vite'
-import { homeLocale, siteOrigin } from '../src/shared/i18n/home-seo'
+import { homeLocale, homeSeo, siteName, siteOrigin } from '../src/shared/i18n/home-seo'
 import { landingLinks, sitePage, sitePagePaths, socialMetadata, websiteSchema } from '../src/shared/i18n/site-seo'
 
 type SitePage = NonNullable<ReturnType<typeof sitePage>>
@@ -28,9 +28,22 @@ export function renderSitePage(html: string, page: SitePage) {
   const links = landingLinks(page.language).map(({ href, text, lang }) =>
     `<a href="${href}"${lang ? ` lang="${lang}" hreflang="${lang}"` : ''}>${escapeHtml(text)}</a>`,
   ).join(' ')
-  const landing = `<main class="seo-landing"><h1>${escapeHtml(page.heading)}</h1><p>${escapeHtml(page.description)}</p><nav>${links}</nav><footer><a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer" lang="zh-CN">粤ICP备2023023949号</a></footer></main>`
-  const inviteEntry = page.path === '/discover' || page.path === '/' || homeLocale(page.path)
-  const initialContent = inviteEntry ? `<noscript>${landing}</noscript>` : landing
+  const guide = page.guide
+  const guideContent = guide ? `<nav><a href="${guide.translations['zh-CN']}" lang="zh-CN" hreflang="zh-CN">简体中文</a> <a href="${guide.translations.en}" lang="en" hreflang="en">English</a></nav>`
+    + guide.sections.map(([heading, body]) => `<section><h2>${escapeHtml(heading)}</h2><p>${escapeHtml(body)}</p></section>`).join('')
+    + `<p><a href="${guide.appPath}">${escapeHtml(guide.cta)}</a></p>` : ''
+  const heading = `<h1>${escapeHtml(page.heading)}</h1>`
+  const filing = '<a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer" lang="zh-CN">粤ICP备2023023949号</a>'
+  const landing = `<main class="seo-landing">${heading}<p>${escapeHtml(page.description)}</p>${guideContent}<nav>${links}</nav><footer>${filing}</footer></main>`
+  let initialContent = page.path === '/discover' ? `<noscript>${landing}</noscript>` : landing
+  if (page.path === '/' || homeLocale(page.path)) {
+    initialContent = `<main class="beta-access-entry"><section class="beta-access-dialog beta-access-card">
+      <img class="beta-access-logo" src="/brand/logo-symbol.svg" alt="" width="56" height="56">
+      <p class="beta-access-brand">${escapeHtml(siteName)}</p>${heading}
+      <p class="beta-access-intro">${escapeHtml(homeSeo[page.language].inviteDescription)}</p>
+      <nav class="beta-access-guides">${links}</nav><footer class="beta-access-filing">${filing}</footer>
+    </section></main>`
+  }
   return html
     .replace(/<html lang="[^"]*">/, `<html lang="${page.language}">`)
     .replace(/<title>[^<]*<\/title>/, `<title>${escapeHtml(page.title)}</title>`)

@@ -20,7 +20,7 @@ const standalonePreview = computed(() => import.meta.env.DEV && route.name === '
 const publicPreview = computed(() => platform.kind === 'web' && route.name === 'help')
 </script>
 <template>
-  <RouterView v-if="standalonePreview" />
+  <RouterView v-if="standalonePreview || route.meta.publicGuide" />
   <BetaAccessGate v-else :public-access="publicListening" :public-preview="publicPreview" :home-entry="route.name === 'home'">
     <template #public-preview="{ openInvite }">
       <SeoLanding :path="route.path">
