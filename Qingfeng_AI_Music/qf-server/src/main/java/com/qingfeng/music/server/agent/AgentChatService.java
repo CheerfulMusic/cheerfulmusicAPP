@@ -16,6 +16,8 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
+import java.util.function.Function;
+import java.util.function.Supplier;
 
 /** Bounded durable plans: model proposals never grant execution authority. */
 public final class AgentChatService {
@@ -30,7 +32,7 @@ public final class AgentChatService {
                            String taskId,String continuationKey,Instant createdAt,boolean workResolved,boolean versionResolved) {
         boolean automatic(){return continuationKey!=null;}
     }
-    private static final String CONTINUE="继续已安排的操作";
+    static final String CONTINUE="继续已安排的操作";
     private static final Set<String> SOCIAL=Set.of("share","revoke_share","like","unlike","play","download","cancel");
     private static final Set<String> CLIENT_MEDIA=Set.of("play","download");
     private static final Set<String> ACTIVE=Set.of("QUEUED","SUBMITTING","RUNNING","SAVING","SUBMISSION_UNKNOWN");
@@ -53,12 +55,17 @@ public final class AgentChatService {
     public Snapshot state(String owner,String conversation){return snapshot(owner,conversation,null);}
     public Snapshot state(String owner,String conversation,Long afterSeq,Long historyEpoch){return snapshot(owner,conversation,null,null,afterSeq,historyEpoch);}
     public Snapshot send(String owner,String conversation,String text,String key,String locale) {
+        return send(owner,conversation,text,key,locale,Supplier::get);
+    }
+    Snapshot send(String owner,String conversation,String text,String key,String locale,
+                  Function<Supplier<AgentTurnStore.Claim>,AgentTurnStore.Claim> begin) {
         if(text==null||text.isBlank()||text.length()>4000)throw new DomainException("INVALID_AGENT_MESSAGE","请输入 1–4000 字的消息。");
         try{UUID.fromString(key);}catch(Exception ignored){throw new DomainException("INVALID_REQUEST_KEY","缺少有效的消息请求标识。");}
         text=text.trim();
         AgentRequestScope.check();
         var history=conversations.listRecentMessages(owner,conversation,80);
-        var claim=turns.claim(owner,conversation,key,text);
+        String message=text;
+        var claim=begin.apply(()->turns.claim(owner,conversation,key,message));
         if(!claim.fresh()) {
             var previous=json.readValue(claim.resultJson(),Outcome.class);
             return snapshot(owner,conversation,previous.action(),previous);
@@ -68,13 +75,19 @@ public final class AgentChatService {
             SongCard current=current(owner);
             Pending pending=pending(history);
             boolean confirmation=AgentChatPolicy.confirmed(text)&&pending!=null&&!pending.automatic();
-            boolean continuation=CONTINUE.equals(text)&&pending!=null&&pending.automatic();
+            boolean continuation=CONTINUE.equals(text);
+            if(continuation && (pending==null || !pending.automatic() || !key.equals(pending.continuationKey())))
+                throw new DomainException("AGENT_PLAN_STALE","之前的操作计划已停止，请重新说明要执行的操作。");
             String authorizedText=text;
             if(pending==null&&text.matches("(?:需要|好的|可以|继续)[。！!]*")&&recentStoryboardRequest(history))
                 authorizedText="查看当前作品的 MV 分镜方案和费用";
             AgentChatModel.Plan plan;
             int modelCalls=0;
-            if(pending!=null&&Set.of("取消操作","取消确认","算了","不用了","停止后续操作").contains(text)) {
+            var selection=AgentChoiceMenu.select(text,history,locale);
+            if(selection!=null){
+                authorizedText=selection.intent();
+                plan=selection.plan();
+            } else if(pending!=null&&Set.of("取消操作","取消确认","算了","不用了","停止后续操作").contains(text)) {
                 plan=new AgentChatModel.Plan("chat",Map.of(),"已停止后续操作。已经完成的操作和已提交的生成任务会保留。");
             } else if(confirmation||continuation) {
                 if(!pendingValid(pending,current,continuation)||continuation&&!key.equals(pending.continuationKey()))
@@ -126,7 +139,7 @@ public final class AgentChatService {
                 Map<String,Object> args=new LinkedHashMap<>(step.args());
                 boolean explicitlyConfirmed=confirmation&&i==0;
                 boolean requested=AgentChatPolicy.actionRequested(proposed,authorizedText);
-                if("chat".equals(proposed)){append(owner,conversation,Map.of("text",safeReply(plan.reply())));break;}
+                if("chat".equals(proposed)){append(owner,conversation,AgentChoiceMenu.reply(plan,safeReply(plan.reply()),locale));break;}
                 var capability=capability(proposed);
                 if(!requested&&!explicitlyConfirmed&&!"read".equals(capability.effect())) {
                     if(AgentChatPolicy.paidMusicAction(proposed)&&!AgentChatPolicy.chatOnly(authorizedText)&&!AgentChatPolicy.deniesAction(authorizedText)){
@@ -292,6 +305,9 @@ public final class AgentChatService {
         if(instruction.matches("(?:查看|列出|显示)我的作品[。！!]*")&&executor("list_works")!=null)
             return new AgentChatModel.Plan("list_works",Map.of(),"");
         boolean chat=plan.orderedSteps().stream().allMatch(s->"chat".equals(s.action()));
+        if(chat && plan.reply()!=null && plan.reply().startsWith("还没有执行「")
+                && instruction.matches("(?:请|请帮我|帮我)?(?:直接)?(?:开始)?(?:生成|写)歌词[。！!]?"))
+            return new AgentChatModel.Plan("generate_lyrics",Map.of("text",instruction),"");
         // Parser rejections and genuine clarification must never be upgraded to paid work.
         if(chat&&plan.reply()!=null&&plan.reply().matches("(?s).*(?:尚未|还没有|不能|无法|请先|请选择|需要确认|不支持|未执行).*"))return plan;
         boolean blockedDraft=plan.orderedSteps().stream().anyMatch(s->"create_work".equals(s.action()))&&!AgentChatPolicy.actionRequested("create_work",text);

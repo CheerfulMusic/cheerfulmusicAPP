@@ -18,7 +18,7 @@ export async function getConversationHistory(conversationId: string, beforeSeq: 
 export async function sendMessage(conversationId: string, text: string, requestKey: string, locale: string): Promise<ConversationSnapshot> {
   await ensureCreator()
   // Sending accepts the inline price; the server owns allowance and idempotent billing.
-  return requestJson<ConversationSnapshot>(`${base}/${encodeURIComponent(conversationId)}/messages`, 'POST', { text, requestKey, locale, paidConfirmed: true }, 180000)
+  return requestJson<ConversationSnapshot>(`${base}/${encodeURIComponent(conversationId)}/messages`, 'POST', { text, requestKey, locale, paidConfirmed: text.trim() !== '继续已安排的操作' }, 180000)
 }
 
 export async function getCurrentConversation(): Promise<ConversationView> {

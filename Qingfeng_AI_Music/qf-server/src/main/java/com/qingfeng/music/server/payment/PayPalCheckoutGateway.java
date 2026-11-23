@@ -79,6 +79,14 @@ public final class PayPalCheckoutGateway {
     public JsonNode retrieveDispute(String disputeId){if(disputeId==null||!disputeId.matches("[A-Za-z0-9-]{1,128}"))throw new IllegalArgumentException("Invalid dispute ID");return transport.send("GET","/v1/customer/disputes/"+disputeId,Map.of(),null);}
     /** Uses this gateway's authenticated merchant/environment; a webhook cannot supply a destination URL. */
     public JsonNode financialReport(java.time.Instant start,java.time.Instant end){return reporting().read(start,end);}
+    JsonNode refundReport(java.time.Instant start,java.time.Instant end){return reporting().refunds(start,end);}
+    JsonNode disputeUpdates(long start,long end,String token){
+        var format=new java.time.format.DateTimeFormatterBuilder().appendInstant(3).toFormatter();
+        String query="?page_size=50&update_time_after="+format.format(java.time.Instant.ofEpochSecond(start))
+                +"&update_time_before="+format.format(java.time.Instant.ofEpochSecond(end));
+        if(!token.isEmpty())query+="&next_page_token="+java.net.URLEncoder.encode(token,java.nio.charset.StandardCharsets.UTF_8);
+        return transport.send("GET","/v1/customer/disputes"+query,Map.of(),null);
+    }
     public JsonNode disputesForCapture(String capture){requireOrderId(capture);return reporting().disputes(capture);}
     private PayPalReportingGateway reporting(){return new PayPalReportingGateway(merchantId,path->transport.send("GET",path,Map.of(),null));}
     public CheckoutView retrieveCheckout(String orderId) {

@@ -605,6 +605,15 @@ public class PayPalPaymentService implements VerifiedPaymentProcessor {
         for(var entry:expected.events().entrySet())risks.resolveCase(entry.getKey(),entry.getValue(),"RELEASE","paypal-authoritative-reporting","Verified PayPal native funds proof sha256:"+proof);
         if(isReview(id))fenced.releasePaymentReview("PAYPAL",merchantId,environment,owner,id,capture,currency,refunds,losses,expected.events(),proof);
     }
+    boolean discoveryReady(){return ready() && inboxEnabled && inbox!=null && ledger instanceof com.qingfeng.music.infrastructure.persistence.credits.JdbcFencedCreditsLedger;}
+    String discoveryMerchant(){return merchantId;}
+    String discoveryEnvironment(){return environment;}
+    void recordDiscovered(String id,String type,String resource){
+        var pointer=new TreeMap<String,String>();
+        pointer.put("resourceId",resource);
+        pointer.put("orderId","");
+        inbox.acceptVerified(provider(),merchantId,environment,id,type,new tools.jackson.databind.ObjectMapper().writeValueAsString(pointer));
+    }
     /** Bounded, read-only provider reconciliation for existing linked orders; never captures or recreates. */
     public void reconcileOrders(){
         if(!ready())return;

@@ -15,6 +15,10 @@ it('sends once with inline pricing accepted and never opens a payment dialog', a
   expect(api.request).toHaveBeenCalledTimes(1)
   expect(api.request.mock.calls[0][2]).toEqual({ text: '继续', requestKey: 'same-key', locale: 'zh-CN', paidConfirmed: true })
 })
+it('never authorizes a purchase for an automatic continuation', async () => {
+  await sendMessage('c', '继续已安排的操作', 'continuation-key', 'zh-CN')
+  expect(api.request.mock.calls[0][2].paidConfirmed).toBe(false)
+})
 it('surfaces insufficient balance without retry or dialog', async () => {
   api.request.mockRejectedValueOnce(new ApiError('积分不足', 400, 'INSUFFICIENT_CREDITS'))
   await expect(sendMessage('c', '继续', 'key', 'zh-CN')).rejects.toMatchObject({ code: 'INSUFFICIENT_CREDITS' })

@@ -7,6 +7,7 @@ import java.util.*;
 public final class MyBatisExecutionRepository implements ExecutionRepository {
     private final ExecutionMapper mapper;
     public MyBatisExecutionRepository(ExecutionMapper mapper) { this.mapper=mapper; }
+    private boolean mysql;
     private org.springframework.jdbc.core.JdbcTemplate jdbc;
     private org.springframework.transaction.support.TransactionTemplate transactions;
     private org.springframework.transaction.support.TransactionTemplate claimTransactions;
@@ -14,6 +15,8 @@ public final class MyBatisExecutionRepository implements ExecutionRepository {
     private com.qingfeng.music.credits.LyricFreeAllowance lyricFreeAllowance;
     private java.util.function.Consumer<String> automaticCover = task -> {};
     public MyBatisExecutionRepository withCredits(org.springframework.jdbc.core.JdbcTemplate jdbc, org.springframework.transaction.support.TransactionTemplate transactions, com.qingfeng.music.credits.CreditsLedger credits){
+        mysql=Boolean.TRUE.equals(jdbc.execute((org.springframework.jdbc.core.ConnectionCallback<Boolean>) connection ->
+                "MySQL".equals(connection.getMetaData().getDatabaseProductName())));
         this.jdbc=jdbc;this.transactions=transactions;this.credits=credits;
         this.claimTransactions=new org.springframework.transaction.support.TransactionTemplate(transactions.getTransactionManager());
         this.claimTransactions.setPropagationBehavior(org.springframework.transaction.TransactionDefinition.PROPAGATION_REQUIRES_NEW);
@@ -33,10 +36,20 @@ public final class MyBatisExecutionRepository implements ExecutionRepository {
         if(maxInFlight<0)throw new IllegalArgumentException("音乐在途并发上限不能为负数");
         if(claimTransactions==null)throw new IllegalStateException("任务领取必须配置独立短事务");
         return claimTransactions.execute(tx->{
-            mapper.ensureProvider(provider);
-            if(mapper.claimGate(provider,token,now)==null)return Optional.empty();
-            boolean allowSubmission=mapper.inFlight(provider,now)<maxInFlight;
-            for(String id:mapper.candidates(provider,now,phase.name(),allowSubmission)) if(mapper.claim(id,token,now,until)==1) {
+            var candidates=mapper.candidates(provider,now,phase.name(),true);
+            if(candidates.isEmpty())return Optional.empty();
+            boolean submitting=phase==Phase.SUBMIT || phase==Phase.ANY;
+            // Readers share the legacy lease gate. Only new submissions serialize capacity decisions.
+            boolean shared=mysql && !submitting;
+            String gate=shared ? mapper.sharedGate(provider,token,now) : mapper.claimGate(provider,token,now);
+            if(gate==null){
+                mapper.ensureProvider(provider);
+                if(mapper.claimGate(provider,token,now)==null)return Optional.empty();
+            }
+            boolean allowSubmission=submitting && mapper.inFlight(provider,now)<maxInFlight;
+            if(!allowSubmission && phase==Phase.SUBMIT)return Optional.empty();
+            if(!allowSubmission && phase==Phase.ANY)candidates=mapper.candidates(provider,now,phase.name(),false);
+            for(String id:candidates) if(mapper.claim(id,provider,phase.name(),allowSubmission,token,now,until)==1) {
                 var row=mapper.find(id);
                 return Optional.of(new Execution(MyBatisTaskRepository.toTask(row),row.providerTaskId,row.audioUrl,row.submitAttempts,row.archiveAttempts,row.queryFailures,token));
             }
@@ -46,7 +59,21 @@ public final class MyBatisExecutionRepository implements ExecutionRepository {
     public void release(String task,String token) { mapper.release(task,token); }
     public boolean renew(String provider,String task,String token,Instant now,Instant until){return mapper.renewTask(task,token,now,until)==1;}
     public boolean startSubmission(String task,String token,Instant now) { return mapper.start(task,token,now)==1; }
-    public void accepted(String task,String external,Instant now,Instant next) { mapper.accepted(task,external,now,next); }
+    private Runnable resetMusicPermits = () -> {};
+    public MyBatisExecutionRepository withPermitReset(Runnable reset) {
+        resetMusicPermits=reset;
+        return this;
+    }
+    public void accepted(String task,String external,Instant now,Instant next) {
+        if(mapper.accepted(task,external,now,next)==1)return;
+        // A paid provider can acknowledge after the user closed checking. Persist that receipt
+        // and force other writers to recount capacity before the next new admission.
+        if(transactions==null){mapper.acceptedAfterClose(task,external,now,next);return;}
+        transactions.executeWithoutResult(tx->{
+            resetMusicPermits.run();
+            mapper.acceptedAfterClose(task,external,now,next);
+        });
+    }
     public void unknown(String task,String token,String code,Instant now) { if(mapper.unknown(task,token,code,now)==1)mapper.interrupted(task,now); }
     public void running(String task,String token,int failures,String code,Instant now,Instant next) { mapper.running(task,token,failures,code,now,next); }
     public void review(String task,String token,String code,Instant now,Instant next){mapper.review(task,token,code,now,next);}

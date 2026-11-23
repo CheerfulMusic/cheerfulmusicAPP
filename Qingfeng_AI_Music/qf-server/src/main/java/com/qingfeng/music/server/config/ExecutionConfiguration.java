@@ -17,12 +17,25 @@ public class ExecutionConfiguration {
     @Bean ExecutionRepository executionRepository(ExecutionMapper mapper, org.springframework.jdbc.core.JdbcTemplate jdbc,
             org.springframework.transaction.PlatformTransactionManager manager, com.qingfeng.music.credits.CreditsLedger credits,
             com.qingfeng.music.credits.LyricFreeAllowance lyricFreeAllowance,
+            com.qingfeng.music.infrastructure.persistence.usage.JdbcUsageBudget budget,
             org.springframework.beans.factory.ObjectProvider<com.qingfeng.music.infrastructure.persistence.cover.JdbcAutomaticCoverJobs> coverJobs){
         var repository = new MyBatisExecutionRepository(mapper)
                 .withCredits(jdbc,new org.springframework.transaction.support.TransactionTemplate(manager),credits)
-                .withLyricFreeAllowance(lyricFreeAllowance);
+                .withLyricFreeAllowance(lyricFreeAllowance).withPermitReset(budget::resetMusicPermits);
         coverJobs.ifAvailable(jobs -> repository.withAutomaticCover(jobs::enqueue));
         return repository;
+    }
+    @Bean io.micrometer.core.instrument.binder.MeterBinder generationCapacityMetrics(
+            ExecutionMapper mapper, MusicProvider provider) {
+        return registry -> {
+            io.micrometer.core.instrument.Gauge.builder("qingfeng.generation.inflight", mapper,
+                    value -> value.inFlight(provider.name(), Instant.now())).register(registry);
+            io.micrometer.core.instrument.Gauge.builder("qingfeng.generation.oldest.ready.seconds", mapper, value -> {
+                Instant now = Instant.now();
+                Instant oldest = value.oldestReadySubmission(provider.name(), now);
+                return oldest == null ? 0 : Duration.between(oldest, now).toMillis() / 1000.0;
+            }).register(registry);
+        };
     }
     @Bean AudioDownloader audioDownloader(@Value("${qingfeng.generation.audio-hosts:}")String hosts,ProviderAudioUrls audioUrls){return new AllowlistedAudioDownloader(Arrays.stream(hosts.split(",")).map(String::trim).map(String::toLowerCase).filter(s->!s.isEmpty()).collect(Collectors.toSet()),audioUrls);}
     @Bean AudioCandidates audioCandidates(org.springframework.jdbc.core.JdbcTemplate jdbc){return new JdbcAudioCandidates(jdbc);}
@@ -34,12 +47,12 @@ public class ExecutionConfiguration {
             @Value("${qingfeng.generation.submit-workers:2}")int submitWorkers,
             @Value("${qingfeng.generation.query-workers:4}")int queryWorkers,
             @Value("${qingfeng.generation.archive-workers:2}")int archiveWorkers){
-        return new GenerationDispatcher(worker::runOnce,Duration.ofMillis(scanMillis),submitWorkers,queryWorkers,archiveWorkers);
+        return new GenerationDispatcher(Duration.ofMillis(scanMillis),submitWorkers,queryWorkers,archiveWorkers,worker::runOnce);
     }
     @Bean(destroyMethod="close")
     @ConditionalOnProperty(name={"qingfeng.generation.enabled","qingfeng.generation.vocal-adjustment-worker-enabled"},havingValue="true")
     GenerationDispatcher vocalAdjustmentRunner(GenerationWorker worker){
-        return new GenerationDispatcher(worker::runVocalAdjustment,Duration.ofSeconds(2),1,1,1);
+        return new GenerationDispatcher(Duration.ofSeconds(2),1,1,1,worker::runVocalAdjustment);
     }
     @Bean
     org.springframework.context.ApplicationListener<org.springframework.boot.context.event.ApplicationReadyEvent> generationRunnerStartup(

@@ -1,5 +1,13 @@
 /** Chinese source copy is the stable message key; business option values stay unchanged. */
 export const english: Record<string, string> = {
+  '请在系统浏览器下载歌曲': 'Download in your system browser',
+  '微信内置浏览器可能限制文件下载。请通过页面右上角菜单选择「在浏览器打开」，然后再次点击下载。': 'WeChat may restrict file downloads. Use the top-right page menu to choose “Open in browser”, then select Download again.',
+  '电脑和手机均可复制当前页面链接，用 Edge、Chrome 或 Safari 打开。若需要登录，请使用同一账号；已解锁的作品不会重复扣费。': 'On desktop or mobile, you can copy this page link and open it in Edge, Chrome or Safari. Sign in with the same account if needed; unlocked works will not be charged again.',
+  '本次操作未发起解锁或扣费。': 'This action has not unlocked the song or charged any credits.',
+  '当前页面链接': 'Current page link',
+  '链接已复制': 'Link copied',
+  '复制页面链接': 'Copy page link',
+
   '昵称、账号或手机号后四位': 'Name, account, or last four phone digits',
   '正在按手机号尾号查找账号…': 'Searching by the last four phone digits…',
   '手机号尾号查询失败。': 'Could not search by phone digits.',

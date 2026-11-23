@@ -134,6 +134,18 @@ class PaymentInboxScopeTest {
         assertEquals(1,db.queryForObject("SELECT COUNT(*) FROM payment_inbox_attempt WHERE result='WAITING'",Integer.class));
         assertEquals(1,db.queryForObject("SELECT COUNT(*) FROM payment_inbox_attempt WHERE result='DONE'",Integer.class));
     }
+    @Test void prefetchedCandidatesAreRecheckedWhenAnotherWorkerClaimsThem() {
+        for (int i = 0; i < 4; i++) accept("evt_batch_" + i);
+        var otherWorker = new PaymentInbox(db,tx);
+        var claimed = new HashSet<String>();
+        for (var worker : List.of(inbox,otherWorker,inbox,otherWorker)) {
+            var delivery = worker.claim(PROVIDER,MERCHANT,ENV).orElseThrow();
+            assertTrue(claimed.add(delivery.eventId()));
+        }
+        assertTrue(inbox.claim(PROVIDER,MERCHANT,ENV).isEmpty());
+        assertTrue(otherWorker.claim(PROVIDER,MERCHANT,ENV).isEmpty());
+    }
+
     @Test void simultaneousClaimsProduceOneActiveTokenAndOneFinancialMutation() throws Exception {
         accept("evt_concurrent");var pool=Executors.newFixedThreadPool(2);var start=new CountDownLatch(1);var claims=new ArrayList<Future<Optional<PaymentInbox.Delivery>>>();
         try{

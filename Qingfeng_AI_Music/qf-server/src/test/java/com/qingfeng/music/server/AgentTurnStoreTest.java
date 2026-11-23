@@ -53,7 +53,7 @@ class AgentTurnStoreTest {
     @Test void expiredInterruptedTurnCannotResumeAfterExplicitRecovery(){
         store.claim("owner","conversation",key,"生成音乐");
         jdbc.update("UPDATE agent_message SET role='system',kind='REQUEST',state='FAILED'");
-        assertEquals("REQUEST_KEY_CONFLICT",assertThrows(DomainException.class,()->store.claim("owner","conversation",key,"生成音乐")).code());
+        assertFalse(store.claim("owner","conversation",key,"生成音乐").fresh());
         assertEquals("AGENT_TURN_RESET_CONFLICT",assertThrows(DomainException.class,()->store.complete("owner","conversation",key,"{}")).code());
     }
 }

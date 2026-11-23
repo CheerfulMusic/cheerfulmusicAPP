@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 const api=vi.hoisted(()=>({ensure:vi.fn(),request:vi.fn(),login:vi.fn()}))
 vi.mock('../src/shared/http/api-client',()=>({ensureCreator:api.ensure,requestJson:api.request,ApiError:class ApiError extends Error {constructor(message:string,public status:number,public code?:string){super(message)}}}))
 vi.mock('../src/shared/identity/login-dialog',()=>({showLoginDialog:api.login}))
@@ -7,6 +7,20 @@ vi.mock('../src/shared/identity/credit-balance',()=>({loadCredits:vi.fn(async()=
 import { downloadSong } from '../src/modules/works/api/download'
 import { ApiError } from '../src/shared/http/api-client'
 describe('download unlock',()=>{
+ afterEach(()=>vi.unstubAllGlobals())
+ it.each(['Mozilla/5.0 (Linux; Android 14) MicroMessenger/8.0', 'Mozilla/5.0 (iPhone; CPU iPhone OS 18) MicroMessenger/8.0',
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) MicroMessenger/7.0.20 WindowsWechat/3.9.12',
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) MicroMessenger/6.8.0 MacWechat/3.8.9',
+  'Mozilla/5.0 (Windows NT 10.0) WindowsWechat/4.0',
+  'Mozilla/5.0 (Macintosh) WeChat/4.0'])('guides desktop and mobile WeChat before authentication or charging: %s',async userAgent=>{
+  vi.stubGlobal('navigator',{userAgent})
+  const {browserDownloadOpen,closeBrowserDownloadHelp}=await import('../src/shared/browser-download')
+  const click=vi.spyOn(HTMLAnchorElement.prototype,'click').mockImplementation(()=>{})
+  expect(await downloadSong('app/works/w/audio/a/download','/song?download=true','song.mp3')).toBe(false)
+  expect(browserDownloadOpen.value).toBe(true)
+  expect(api.ensure).not.toHaveBeenCalled();expect(api.request).not.toHaveBeenCalled();expect(click).not.toHaveBeenCalled()
+  closeBrowserDownloadHelp()
+ })
  beforeEach(()=>{vi.restoreAllMocks();vi.resetAllMocks();api.ensure.mockResolvedValue(undefined);Object.defineProperty(window,'confirm',{value:vi.fn(),configurable:true});Object.defineProperty(window,'alert',{value:vi.fn(),configurable:true})})
  it('confirms first charge and starts download after unlock',async()=>{
   api.request.mockResolvedValueOnce({unlocked:false,price:15}).mockResolvedValueOnce({unlocked:true,price:15})

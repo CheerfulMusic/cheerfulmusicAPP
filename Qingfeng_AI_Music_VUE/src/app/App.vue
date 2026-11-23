@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import BrowserDownloadHelp from '../shared/BrowserDownloadHelp.vue'
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { platform } from '../platform'
@@ -30,4 +31,5 @@ const publicPreview = computed(() => platform.kind === 'web' && route.name === '
     <template v-if="!community"><LoginModal /><WelcomeModal /><QuickCompletionNotice /></template>
   </BetaAccessGate>
   <AnalyticsConsentBanner />
+  <BrowserDownloadHelp />
 </template>

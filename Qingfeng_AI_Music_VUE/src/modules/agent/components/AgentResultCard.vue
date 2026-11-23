@@ -11,7 +11,7 @@ function downloadLyrics(item:AgentResultItem){
  const link=document.createElement('a');link.href=url;link.download=(item.title.replace(/[\\/:*?"<>|]/g,'_').slice(0,80)||'歌词')+'.txt';document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),1000)
 }
 const en = computed(() => locale.value === 'en')
-const stale = computed(() => props.result.kind === 'confirmation' && !props.current)
+const stale = computed(() => ['confirmation','choice_menu'].includes(props.result.kind) && !props.current)
 const media = (value: unknown, type: 'audio' | 'image' | 'video') => resultMediaUrl(value, type, window.location.origin)
 const inviteUrl = (value: unknown) => resultInviteUrl(value, window.location.origin)
 const sampleTimers = new Map<HTMLAudioElement, ReturnType<typeof setTimeout>>()

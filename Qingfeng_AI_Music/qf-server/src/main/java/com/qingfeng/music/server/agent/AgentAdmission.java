@@ -1,5 +1,7 @@
 package com.qingfeng.music.server.agent;
 
+import com.qingfeng.music.agent.api.AgentTurnStore.Claim;
+import java.util.function.Supplier;
 import java.time.Duration;
 
 public interface AgentAdmission {
@@ -10,6 +12,8 @@ public interface AgentAdmission {
     record Ticket(String id,String owner,boolean replay) {}
     Ticket acquire(String owner,String conversation,String key,String text,String locale);
     default Ticket acquire(String owner,String conversation,String key,String text,String locale,boolean paidConfirmed){return acquire(owner,conversation,key,text,locale);}
+    Claim startTurn(Ticket ticket, String conversation,
+        Supplier<Claim> claim);
     void start(Ticket ticket);
     void heartbeat(Ticket ticket);
     void finish(Ticket ticket,boolean completed);

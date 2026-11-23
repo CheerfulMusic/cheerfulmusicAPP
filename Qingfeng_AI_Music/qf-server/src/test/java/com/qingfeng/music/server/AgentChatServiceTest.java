@@ -51,6 +51,61 @@ class AgentChatServiceTest {
         AgentTurnStore store=new AgentTurnStore(){public Claim claim(String o,String c,String k,String t){return new Claim(!results.containsKey(k),results.get(k));}public void complete(String o,String c,String k,String r){results.put(k,r);}};
         service=new AgentChatService(conversations,tools,model,store,social,List.of(app));return app;
     }
+    @Test void numberedCreativeMenuKeepsBriefAndRunsSelectedToolOnce() {
+        when(model.respond(any())).thenReturn(new AgentChatModel.Plan("chat",
+                Map.of("choices", List.of("discuss","generate_lyrics","create_work")), "梦想、星光、中文男声"));
+        var menu=service.send("owner","conversation","下一步呢？",key(),"zh-CN");
+        assertTrue(menu.messages().get(0).contentJson().contains("2. 直接开始生成歌词"));
+        String request=key();
+        service.send("owner","conversation","2",request,"zh-CN");
+        service.send("owner","conversation","2",request,"zh-CN");
+        var args=ArgumentCaptor.forClass(Object.class);
+        verify(tools).dispatch(eq(AgentTool.GENERATE_LYRICS),args.capture(),eq("owner"),anyString());
+        assertEquals("梦想、星光、中文男声",((AgentTool.GenerateLyricsArgs)args.getValue()).text());
+        verify(model,times(1)).respond(any());
+    }
+
+    @Test void legacyMarkdownMenuBindsFirstOptionAndRetainsCreativeDirection(){
+        messages.add(new AgentMessage("menu","conversation",1,"assistant","TEXT","DONE",new ObjectMapper().writeValueAsString(Map.of(
+                "text","主题：梦想，空灵男声\n1. **直接开始生成歌词** —— 按这个方向写一版。\n2. **先建一个作品草稿** —— 保存设置。\n3. **继续聊聊细节** —— 深入讨论。")),null,Instant.now()));
+        service.send("owner","conversation","1",key(),"zh-CN");
+        var args=ArgumentCaptor.forClass(Object.class);
+        verify(tools).dispatch(eq(AgentTool.GENERATE_LYRICS),args.capture(),eq("owner"),anyString());
+        assertTrue(((AgentTool.GenerateLyricsArgs)args.getValue()).text().contains("空灵男声"));
+        verifyNoInteractions(model);
+    }
+
+    @Test void explicitRetryRetainsTheMenuBriefAfterFailedNumericSelection(){
+        var json=new ObjectMapper();
+        for(var row:List.of(Map.of("text","方向：梦与星光\n1. 直接开始生成歌词\n2. 继续聊聊细节"),
+                Map.of("text","1"), Map.of("kind","progress","text","正在理解"),
+                Map.of("text","还没有执行「新建草稿」。","errorCode","AGENT_INTENT_UNRESOLVED"))) {
+            String role="1".equals(row.get("text"))?"user":"assistant";
+            messages.add(new AgentMessage(key(),"conversation",messages.size()+1,role,"TEXT","DONE",json.writeValueAsString(row),null,Instant.now()));
+        }
+        service.send("owner","conversation","直接开始生成歌词",key(),"zh-CN");
+        var args=ArgumentCaptor.forClass(Object.class);
+        verify(tools).dispatch(eq(AgentTool.GENERATE_LYRICS),args.capture(),eq("owner"),anyString());
+        assertTrue(((AgentTool.GenerateLyricsArgs)args.getValue()).text().contains("梦与星光"));
+        verifyNoInteractions(model);
+    }
+
+    @Test void staleMenuButtonCannotSelectTheSamePositionFromANewerMenu(){
+        when(model.respond(any())).thenReturn(new AgentChatModel.Plan("chat",Map.of("choices",List.of("generate_lyrics","discuss")),"梦想"));
+        service.send("owner","conversation","有哪些选项？",key(),"zh-CN");
+        String old=new ObjectMapper().readTree(messages.get(0).contentJson()).path("commands").get(0).path("text").asText();
+        service.send("owner","conversation","另一个方向呢？",key(),"zh-CN");
+        service.send("owner","conversation",old,key(),"zh-CN");
+        verify(tools,never()).dispatch(eq(AgentTool.GENERATE_LYRICS),any(),anyString(),anyString());
+        assertTrue(messages.get(messages.size()-1).contentJson().contains("无法把这个编号"));
+    }
+
+    @Test void explicitLyricRequestRecoversFromEchoedIntentError(){
+        when(model.respond(any())).thenReturn(new AgentChatModel.Plan("chat",Map.of(),"还没有执行「新写或改写歌词」。这一步与本条指令未能对应。"));
+        service.send("owner","conversation","直接开始生成歌词",key(),"zh-CN");
+        verify(tools).dispatch(eq(AgentTool.GENERATE_LYRICS),any(),eq("owner"),anyString());
+        verify(tools,never()).dispatch(eq(AgentTool.GENERATE_SONG),any(),anyString(),anyString());
+    }
     @Test void explicitMusicRequestExecutesEvenWhenModelOnlyPromises(){
         when(model.respond(any())).thenReturn(new AgentChatModel.Plan("chat",Map.of(),"我来创作一首热血歌曲。"));
         service.send("owner","conversation","帮我生成音乐，我想要的曲风是热血",key(),"zh-CN");

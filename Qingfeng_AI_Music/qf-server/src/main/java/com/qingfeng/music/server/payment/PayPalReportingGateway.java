@@ -26,7 +26,9 @@ final class PayPalReportingGateway {
         if(merchant==null||merchant.isBlank()||get==null)throw new IllegalArgumentException("Authenticated reporting scope required");
         this.merchant=merchant;this.get=get;
     }
-    JsonNode read(Instant start, Instant end) {
+    JsonNode read(Instant start, Instant end) { return read(start,end,false); }
+    JsonNode refunds(Instant start,Instant end) { return read(start,end,true); }
+    private JsonNode read(Instant start, Instant end,boolean refundsOnly) {
         require(start!=null&&end!=null&&start.isBefore(end)
             &&Duration.between(start,end).compareTo(Duration.ofDays(186))<=0,"REPORT_WINDOW_UNSUPPORTED");
         start=start.truncatedTo(ChronoUnit.SECONDS);end=end.truncatedTo(ChronoUnit.SECONDS);
@@ -40,7 +42,7 @@ final class PayPalReportingGateway {
             for(int page=1;page<=pages;page++) {
                 require(++pagesRead<=100,"REPORT_PAGE_BUDGET_EXCEEDED");
                 String path="/v1/reporting/transactions?start_date="+encode(start.toString())+"&end_date="+encode(windowEnd.toString())
-                    +"&fields=transaction_info&balance_affecting_records_only=Y&page_size=500&page="+page;
+                    +(refundsOnly?"&transaction_type=T1107":"")+"&fields=transaction_info&balance_affecting_records_only=Y&page_size=500&page="+page;
                 JsonNode response=read(path);
                 require(response!=null&&response.isObject()&&merchant.equals(text(response.path("account_number"))),"REPORT_MERCHANT_MISMATCH");
                 require(integer(response.path("page"))==page,"REPORT_PAGE_MISMATCH");

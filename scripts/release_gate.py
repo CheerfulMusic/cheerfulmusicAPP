@@ -73,6 +73,9 @@ AGENT_ALLOWANCE_MIGRATION_SHA256 = '8ce991cea50af971ca6d748c1a37b304a8ee11d7969f
 
 
 FEATURE_MIGRATION_SHA256 = {
+    "V51__payment_reconciliation_cursor.sql": "7030c4fba4bc5009ca921fb59f931ebef952f6f93d67efd77889c298cd2ee045",
+    "V52__gift_daily_budget.sql": "898c2e8a1b47009f68b21554dd8d5e46614eb29ed77475d108e5ea568bf1ad07",
+    "V53__agent_admission_version.sql": "83af90babf7a7a299177d08d0b3e1eb79bcabf7cc0454cbd4d6025ae074e5591",
     "V47__music_video_projects.sql": "b4a25044d77906e891d56632f037a68a1ba5dad2073a129188b11b8bcba8a08a",
     "V48__phone_binding.sql": "09aeadab869727486bac96ac9200ad47310132763ad49020c0abe7844b359ca3",
     "V49__lyrics_preparation.sql": "c0cde3e30b4e2bac3b3690c70dfd1125abced7045f1163ec9ee33a5c214616b4",
@@ -157,9 +160,20 @@ def verify_migration_set(normalized):
     discover_expected = {**lyrics_expected, discover_name: FEATURE_MIGRATION_SHA256[discover_name]}
     lyrics_extensions = {"agentAllowanceVersion": "46", "musicVideoVersion": "47",
                          "phoneBindingVersion": "48", "lyricsPreparationVersion": "49"}
-    if set(normalized) == set(discover_expected):
-        expected = discover_expected
-        extension = {**lyrics_extensions, "discoverShelvesVersion": "50"}
+    feature_expected = discover_expected.copy()
+    feature_versions = {**lyrics_extensions, "discoverShelvesVersion": "50"}
+    for name, key in (
+        ("V51__payment_reconciliation_cursor.sql", "paymentReconciliationVersion"),
+        ("V52__gift_daily_budget.sql", "giftDailyBudgetVersion"),
+        ("V53__agent_admission_version.sql", "agentAdmissionVersion"),
+    ):
+        if name not in normalized:
+            break
+        feature_expected[name] = FEATURE_MIGRATION_SHA256[name]
+        feature_versions[key] = name[1:3]
+    if set(normalized) == set(feature_expected):
+        expected = feature_expected
+        extension = feature_versions
     elif set(normalized) == set(lyrics_expected):
         expected = lyrics_expected
         extension = lyrics_extensions
@@ -176,7 +190,7 @@ def verify_migration_set(normalized):
         expected = rollback_expected
         extension = {}
     else:
-        raise GateError("Canonical migration chain must contain core V1..V45 followed by consecutive approved extensions through V50")
+        raise GateError("Canonical migration chain must contain core V1..V45 followed by consecutive approved extensions through V53")
     for name, digest in expected.items():
         if normalized[name] != digest:
             raise GateError("Canonical migration source changed: " + name)

@@ -25,7 +25,16 @@ public class StorageConfiguration {
             if(!endpoint.matches("https://oss-[a-z0-9-]+\\.aliyuncs\\.com"))throw new IllegalArgumentException("OSS必须使用HTTPS官方地域Endpoint");
             var configuration=new ClientBuilderConfiguration();configuration.setSignatureVersion(SignVersion.V4);configuration.setConnectionTimeout(5000);configuration.setSocketTimeout(20000);configuration.setMaxErrorRetry(0);
             client=OSSClientBuilder.create().endpoint(endpoint).region(region).credentialsProvider(new DefaultCredentialProvider(required(env,"qingfeng.oss.access-key-id"),required(env,"qingfeng.oss.access-key-secret"))).clientConfiguration(configuration).build();
-            oss=new OssMediaFileStore(client,required(env,"qingfeng.oss.bucket"),env.getProperty("qingfeng.oss.prefix","qingfeng/audio/"),new LocalMediaFileStore(Path.of(env.getProperty("qingfeng.media.staging-directory","./data/staging"))));
+            String archiveFormat = env.getProperty("qingfeng.oss.audio-format", "original");
+            if (!archiveFormat.equals("original") && !archiveFormat.equals("wav")) {
+                throw new IllegalArgumentException("OSS 音频归档格式必须为 original 或 wav");
+            }
+            String encoder = archiveFormat.equals("wav") ? env.getProperty("qingfeng.oss.audio-ffmpeg",
+                    env.getProperty("qingfeng.video.ffmpeg", "ffmpeg")) : null;
+            var staging = new LocalMediaFileStore(
+                    Path.of(env.getProperty("qingfeng.media.staging-directory", "./data/staging")), encoder);
+            oss = new OssMediaFileStore(client, required(env,"qingfeng.oss.bucket"),
+                    env.getProperty("qingfeng.oss.prefix","qingfeng/audio/"), staging);
         }
         return new RoutingMediaFileStore(local,oss,mode.equals("oss"));
     }

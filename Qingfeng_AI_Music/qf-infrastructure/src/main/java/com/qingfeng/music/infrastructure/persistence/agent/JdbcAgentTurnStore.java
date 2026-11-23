@@ -26,10 +26,11 @@ public final class JdbcAgentTurnStore implements AgentTurnStore {
     @Override public Claim claim(String owner,String conversation,String key,String text) {
         return tx.execute(status -> {
             lock(owner,conversation);
-            var prior=jdbc.queryForList("SELECT state,content_json FROM agent_message WHERE id=? AND conversation_id=?",id(conversation,key),conversation);
+            var prior=jdbc.queryForList("SELECT state,role,content_json FROM agent_message WHERE id=? AND conversation_id=?",id(conversation,key),conversation);
             if(!prior.isEmpty()) {
                 var row=prior.get(0);var content=json.readTree(row.get("content_json").toString());
                 if(!text.equals(content.path("text").asText()))throw new DomainException("REQUEST_KEY_CONFLICT","同一请求标识不能用于另一条消息。");
+                if ("system".equals(row.get("role"))) return new Claim(false,"{}");
                 if("FAILED".equals(row.get("state")))throw new DomainException("REQUEST_KEY_CONFLICT","这条请求已在恢复会话时结束，不能用旧标识再次执行。请先查看已有作品和任务。");
                 if(!"DONE".equals(row.get("state")))throw new DomainException("AGENT_TURN_IN_PROGRESS","这条请求仍在处理或等待恢复。请刷新查看作品和任务，勿重复生成；如持续未恢复，确认现有结果后可重置会话再继续。");
                 return new Claim(false,content.path("result").asText("{}"));
