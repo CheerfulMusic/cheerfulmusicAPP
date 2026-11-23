@@ -13,6 +13,7 @@
   <meta property="og:url" content="{{url}}">
   <meta property="og:type" content="music.song">
   <link rel="stylesheet" href="/brand/song-player.css">
+  <link rel="stylesheet" href="/brand/share-destinations.css">
   <script defer src="/brand/song-share.js"></script>
   <script defer src="/brand/song-player.js"></script>
   <script defer src="/brand/song-community.js"></script>
@@ -87,16 +88,27 @@
   </main>
   <dialog id="share-sheet" aria-labelledby="share-heading">
     <div class="sheet-body">
-      <div class="sheet-heading"><h2 id="share-heading">分享歌曲</h2><button id="close-share" class="close" type="button" aria-label="关闭分享">×</button></div>
+      <div class="sheet-heading"><h2 id="share-heading">分享到</h2><button id="close-share" class="close" type="button" aria-label="关闭分享">×</button></div>
       <div class="share-track"><img src="{{image}}" width="52" height="52" alt=""><div><strong>{{title}}</strong><span>{{creator}}</span></div></div>
-      <div class="share-actions"><button id="copy" type="button">复制链接</button><button id="poster" type="button">分享海报</button><button id="system-share" type="button" hidden>系统分享</button></div>
-      <div id="wechat-actions" class="wechat-actions"><button id="friend" type="button">分享给好友</button><button id="timeline" type="button">分享到朋友圈</button></div>
+      <div id="wechat-actions" class="share-destinations" role="group" aria-label="分享方式">
+        <button id="friend" type="button" aria-controls="wechat-guide" aria-pressed="false"><span class="destination-icon for-friend" aria-hidden="true"></span>微信好友</button>
+        <button id="timeline" type="button" aria-controls="wechat-guide" aria-pressed="false"><span class="destination-icon for-timeline" aria-hidden="true"><i></i></span>朋友圈</button>
+        <button id="poster" type="button"><span class="destination-icon for-poster" aria-hidden="true"><i>♫</i></span>音乐海报</button>
+      </div>
+      <div id="wechat-guide" class="destination-guide" hidden>
+        <img id="wechat-qr" hidden width="144" height="144" alt="在微信中打开歌曲的二维码">
+        <div><p id="channel-instruction" role="status"></p><p id="wechat-feedback" role="status"></p></div>
+      </div>
       <p id="status" class="notice" role="status"></p>
-      <input id="manual" hidden readonly aria-label="歌曲分享链接" value="{{url}}">
       <div id="poster-preview" hidden>
         <img id="poster-image" alt="含歌曲封面、署名和收听二维码的海报">
         <div class="poster-actions"><a id="save-poster" download>保存海报</a><button id="send-poster" type="button" hidden>发送海报图片</button></div>
       </div>
+      <details id="more-share" class="more-share">
+        <summary>更多分享方式</summary>
+        <div class="share-actions"><button id="system-share" type="button" hidden>系统分享</button><button id="copy" type="button">复制链接</button></div>
+        <input id="manual" hidden readonly aria-label="歌曲分享链接" value="{{url}}">
+      </details>
     </div>
   </dialog>
 </body>

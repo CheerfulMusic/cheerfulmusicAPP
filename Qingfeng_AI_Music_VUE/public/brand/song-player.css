@@ -118,17 +118,17 @@ body.sheet-fallback .masthead,body.sheet-fallback main { filter: brightness(.45)
 #share-sheet { position: fixed; inset: 0; margin: auto; width: min(27rem,calc(100% - 2rem)); max-height: 88vh; max-height: 88dvh; height: fit-content; overflow: auto; overscroll-behavior: contain; padding: 0; color: var(--ink); background: #28264e; border: 1px solid #b6addb59; border-radius: 1.35rem; z-index: 4; }
 #share-sheet::backdrop { background: #0d0d27ae; }
 .sheet-body { padding: 1.15rem 1.3rem 1.4rem; }
-.sheet-heading,.share-track,.share-actions,.wechat-actions,.poster-actions { display: flex; align-items: center; gap: .7rem; }
+.sheet-heading,.share-track,.share-actions,.poster-actions { display: flex; align-items: center; gap: .7rem; }
 .sheet-heading { justify-content: space-between; }.sheet-heading h2 { font-size: 1.22rem; }
 .close { width: 2.75rem; height: 2.75rem; border: 0; font-size: 1.6rem; }
 .share-track { margin: .65rem 0 1.2rem; }.share-track img { object-fit: cover; border-radius: .55rem; }
 .share-track strong,.share-track span { display: block; overflow-wrap: anywhere; }
 .share-track span { color: var(--muted); font-size: .8rem; }
-.share-actions,.wechat-actions,.poster-actions { flex-wrap: wrap; }
+.share-actions,.poster-actions { flex-wrap: wrap; }
 .share-actions button,.poster-actions button,.poster-actions a { flex: 1 1 auto; text-align: center; min-height: 2.8rem; padding: .6rem .75rem; border: 1px solid var(--line); border-radius: .7rem; background: #414069; font-size: .9rem; font-weight: 600; }
-#poster { color: #292345; background: #d9c5ff; }
-.wechat-actions { margin-top: .75rem; border-top: 1px solid var(--line); }
-.wechat-actions button { min-height: 2.7rem; border: 0; padding: .45rem .3rem; font-size: .83rem; }
+#share-sheet { --channel-surface: #353359; --channel-line: var(--line); --channel-accent: #d4bfff; }
+#wechat-feedback { color: var(--muted); font-size: .79rem; }
+#share-sheet .more-share { color: var(--muted); }
 #manual { width: 100%; padding: .55rem; border: 1px solid var(--line); color: white; background: #171832; }
 #poster-preview { border-top: 1px solid var(--line); margin-top: 1rem; padding-top: 1rem; }
 #poster-image { display: block; max-width: 85%; max-height: 31vh; margin: 0 auto .7rem; -webkit-touch-callout: default; }
