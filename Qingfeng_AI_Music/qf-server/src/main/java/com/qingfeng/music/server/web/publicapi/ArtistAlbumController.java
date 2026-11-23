@@ -25,9 +25,10 @@ public class ArtistAlbumController {
     public Album save(@AuthenticationPrincipal CreatorPrincipal owner, @PathVariable UUID id,
             @RequestParam long version, @RequestParam String title, @RequestParam(defaultValue="") String description,
             @RequestParam boolean published, @RequestParam(required=false) List<String> tracks,
+            @RequestParam(required=false) List<Long> versions,
             @RequestParam(defaultValue="false") boolean removeCover, @RequestParam(required=false) MultipartFile cover) {
         return albums.save(owner.id(),id.toString(),new ArtistAlbumService.Edit(version,title,description,published,
-                tracks==null?List.of():tracks,removeCover,cover));
+                tracks==null?List.of():tracks,versions==null?List.of():versions,removeCover,cover));
     }
     @DeleteMapping("/api/app/artist-albums/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)

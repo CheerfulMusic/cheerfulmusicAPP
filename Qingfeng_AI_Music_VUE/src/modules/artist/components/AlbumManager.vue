@@ -10,6 +10,7 @@ const albums=ref<Album[]>([]), loaded=ref(false), busy=ref(false), notice=ref(''
 const editing=ref<Album>(), title=ref(''), description=ref(''), selected=ref<string[]>([])
 const cover=ref<File>(), preview=ref(''), removeCover=ref(false)
 const releases=computed(() => new Map(props.profile.songs.map(song=>[song.id,song])))
+let selectedVersions = new Map<string,number>()
 const canPublish=computed(() => props.profile.published && !!selected.value.length && !!title.value.trim())
 const displayedCover=computed(() => preview.value || (!removeCover.value && editing.value?.coverKey ? ownerAlbumCover(editing.value) : ''))
 function clearPreview() {
@@ -36,6 +37,7 @@ function edit(album?: Album) {
   const entry=album ?? {id:crypto.randomUUID(), title:'', description:'', version:0, published:false, tracks:[], coverKey:null}
   editing.value=entry; title.value=entry.title; description.value=entry.description
   selected.value=entry.tracks.map(track=>track.id); clearPreview(); removeCover.value=false; notice.value=''; error.value=''
+  selectedVersions = new Map([...props.profile.songs,...entry.tracks].map(track=>[track.id,track.version]))
 }
 function move(index: number, delta: number) {
   const destination=index+delta
@@ -51,7 +53,10 @@ async function save(published: boolean) {
   const body=new FormData()
   for (const [key,value] of Object.entries({title:title.value.trim(),description:description.value.trim(),
       version:String(entry.version),published:String(published),removeCover:String(removeCover.value)})) body.set(key,value)
-  selected.value.forEach(id=>body.append('tracks',id))
+  selected.value.forEach(id=>{
+    body.append('tracks',id)
+    body.append('versions',String(selectedVersions.get(id) ?? releases.value.get(id)?.version))
+  })
   if (cover.value) body.set('cover',cover.value)
   try {
     const updated=await saveAlbum(entry.id,body)
