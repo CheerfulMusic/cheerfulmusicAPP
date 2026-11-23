@@ -45,7 +45,8 @@ function clock(seconds: number) {
           :aria-label="t(isPlaying(row) ? '暂停 {title}' : '试听 {title}', { title: row.track.title })"
           @click="emit('play', row)"></button>
         <span class="track-art">
-          <img :src="row.track.cover" alt="" loading="lazy" decoding="async">
+          <img :src="row.track.cover" alt="" loading="lazy" decoding="async"
+            :style="variant === 'wide' && row.wideCoverPosition ? { objectPosition: row.wideCoverPosition } : undefined">
           <span class="track-play" aria-hidden="true"><PlaybackIcon :playing="isPlaying(row)" /></span>
         </span>
         <span class="track-text">
