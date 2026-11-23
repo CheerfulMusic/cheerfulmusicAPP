@@ -10,10 +10,13 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 
 /** 由同一个进程提供 Vue 和 API，公开入口使用各自的静态 HTML。 */
 @Controller
 public class WebPageController {
+    private static final String GUIDE = "/guide/{topic:create-song|edit-lyrics|my-music|credits}";
+
     @GetMapping("/")
     public ResponseEntity<Resource> home() {
         return publicDocument("home.html");
@@ -65,6 +68,16 @@ public class WebPageController {
         return permanentRedirect(request, "/help");
     }
 
+    @GetMapping({GUIDE, "/en" + GUIDE})
+    public ResponseEntity<Resource> guide(HttpServletRequest request, @PathVariable("topic") String topic) {
+        return publicDocument(guidePath(request, topic).substring(1) + "/index.html");
+    }
+
+    @GetMapping({GUIDE + "/", GUIDE + "/index.html", "/en" + GUIDE + "/", "/en" + GUIDE + "/index.html"})
+    public ResponseEntity<Void> redirectGuide(HttpServletRequest request, @PathVariable("topic") String topic) {
+        return permanentRedirect(request, guidePath(request, topic));
+    }
+
     @GetMapping("/legal/terms") public String legacyTerms(){return "redirect:/legal/terms.html";}
     @GetMapping("/legal/privacy") public String legacyPrivacy(){return "redirect:/legal/privacy.html";}
 
@@ -72,6 +85,11 @@ public class WebPageController {
         Resource document = new ClassPathResource("static/" + filename);
         if (!document.exists()) return ResponseEntity.notFound().build();
         return ResponseEntity.ok().contentType(MediaType.parseMediaType("text/html;charset=UTF-8")).body(document);
+    }
+
+    private static String guidePath(HttpServletRequest request, String topic) {
+        String localePrefix = request.getRequestURI().startsWith(request.getContextPath() + "/en/") ? "/en" : "";
+        return localePrefix + "/guide/" + topic;
     }
 
     private static ResponseEntity<Void> permanentRedirect(HttpServletRequest request, String target) {

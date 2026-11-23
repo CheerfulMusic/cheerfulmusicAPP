@@ -3,6 +3,8 @@ import FilingLink from "../../shared/ui/FilingLink.vue"
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { locale, t } from '../../shared/i18n'
 import { homeSeo, siteName } from '../../shared/i18n/home-seo'
+import { siteGuideLinks } from '../../shared/i18n/site-guides'
+import { platform } from '../../platform'
 import LanguageSwitcher from '../../shared/i18n/LanguageSwitcher.vue'
 import { enterInvite, InviteError, readInviteStatus, type InviteStatus } from './api'
 
@@ -14,6 +16,7 @@ const busy = computed(() => checking.value || submitting.value)
 const actionRequiresInvite = ref(false)
 const accessible = computed(() => admitted.value || (props.publicAccess && !actionRequiresInvite.value))
 const showPreview = computed(() => props.publicPreview && !accessible.value)
+const guideLinks = computed(() => siteGuideLinks(locale.value))
 let disposed = false, lastCheck = 0, expiryTimer: ReturnType<typeof setTimeout> | undefined
 
 async function show() {
@@ -89,6 +92,9 @@ onBeforeUnmount(() => { disposed = true; clearTimeout(expiryTimer); window.remov
       </form>
       <div v-else-if="error"><p class="beta-access-error" role="alert">{{ t(error) }}</p><button class="beta-access-primary" type="button" @click="check">{{ t('重新验证') }}</button></div>
       <p class="beta-access-note">{{ t('邀请码由内测邀请人提供。') }}</p>
+      <nav v-if="homeEntry && platform.kind === 'web'" class="beta-access-guides" :aria-label="locale === 'en' ? 'Music guides' : '音乐使用指南'">
+        <a v-for="link in guideLinks" :key="link.href" :href="link.href">{{ link.text }}</a>
+      </nav>
       <button v-if="publicPreview" type="button" class="button secondary" @click="cancelInvite">{{ t('关闭') }}</button>
       <footer class="beta-access-filing"><FilingLink /></footer>
     </section>
@@ -118,6 +124,8 @@ onBeforeUnmount(() => { disposed = true; clearTimeout(expiryTimer); window.remov
 .beta-access-error { color:#b53725; font-size:13px; line-height:1.7; margin:12px 0 0; }
 .beta-access-checking { font-size:14px; color:#7e6b60; padding:12px 0; }
 .beta-access-note { color:#958173; text-align:center; font-size:12px; margin:24px 0 0; }
+.beta-access-guides { display:flex; flex-wrap:wrap; justify-content:center; gap:8px 14px; margin-top:14px; font-size:13px; }
+.beta-access-guides a { color:#914030; text-underline-offset:3px; }
 .beta-access-top :deep(.language-switch button),.beta-access-top :deep(.language-switch a) { color:#645249; }
 .beta-access-top :deep(.language-switch > span) { color:#a39185; }
 @media(max-width:480px) { .beta-access-card { padding:22px 24px 25px; } .beta-access-card h1 { font-size:24px; } }

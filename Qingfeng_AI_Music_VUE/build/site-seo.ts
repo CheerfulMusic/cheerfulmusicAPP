@@ -28,7 +28,11 @@ export function renderSitePage(html: string, page: SitePage) {
   const links = landingLinks(page.language).map(({ href, text, lang }) =>
     `<a href="${href}"${lang ? ` lang="${lang}" hreflang="${lang}"` : ''}>${escapeHtml(text)}</a>`,
   ).join(' ')
-  const landing = `<main class="seo-landing"><h1>${escapeHtml(page.heading)}</h1><p>${escapeHtml(page.description)}</p><nav>${links}</nav><footer><a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer" lang="zh-CN">粤ICP备2023023949号</a></footer></main>`
+  const guide = page.guide
+  const guideContent = guide ? `<nav><a href="${guide.translations['zh-CN']}" lang="zh-CN" hreflang="zh-CN">简体中文</a> <a href="${guide.translations.en}" lang="en" hreflang="en">English</a></nav>`
+    + guide.sections.map(([heading, body]) => `<section><h2>${escapeHtml(heading)}</h2><p>${escapeHtml(body)}</p></section>`).join('')
+    + `<p><a href="${guide.appPath}">${escapeHtml(guide.cta)}</a></p>` : ''
+  const landing = `<main class="seo-landing"><h1>${escapeHtml(page.heading)}</h1><p>${escapeHtml(page.description)}</p>${guideContent}<nav>${links}</nav><footer><a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer" lang="zh-CN">粤ICP备2023023949号</a></footer></main>`
   const inviteEntry = page.path === '/discover' || page.path === '/' || homeLocale(page.path)
   const initialContent = inviteEntry ? `<noscript>${landing}</noscript>` : landing
   return html

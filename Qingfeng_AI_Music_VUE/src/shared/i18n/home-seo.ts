@@ -4,12 +4,14 @@ export const homeSeo = {
   'zh-CN': {
     path: '/',
     heading: '青风音乐 AI 音乐创作平台',
-    description: '青风音乐 AI 音乐创作平台。无需音乐基础，简单几步即可生成专属歌曲，发布作品，分享音乐，让人人都能成为歌手。',
+    searchTitle: 'Cheerful Music 青风音乐 - 做自己的歌',
+    description: 'Cheerful Music 青风音乐是 AI 音乐创作平台。无需音乐基础，写下灵感、选择风格、生成歌曲、修改歌词，再保存或分享。',
   },
   en: {
     path: '/en/',
     heading: 'Everyone Can Be a Singer',
     title: 'Everyone Can Be a Singer | AI Music Maker – Cheerful Music',
+    searchTitle: 'Cheerful Music - Everyone Can Be a Singer',
     description: 'Create your own songs with AI in just a few clicks. No music skills needed. Create, share and discover music with Cheerful Music.',
   },
 } as const

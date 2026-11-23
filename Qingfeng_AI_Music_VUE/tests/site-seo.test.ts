@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest'
 import { renderSitePage } from '../build/site-seo'
 import { siteOrigin } from '../src/shared/i18n/home-seo'
 import { sitePage, sitePagePaths } from '../src/shared/i18n/site-seo'
+import { siteGuidePaths } from '../src/shared/i18n/site-guides'
 import { setLocale, updatePageLocale } from '../src/shared/i18n'
 
 const shell = readFileSync('index.html', 'utf8')
@@ -35,6 +36,8 @@ describe('crawlable site pages', () => {
   it('publishes the Chinese search entry at the root and keeps the separate English search title', () => {
     expect(parsePage('/').documentElement.lang).toBe('zh-CN')
     expect(parsePage('/').querySelector('h1')?.textContent).toBe('青风音乐 AI 音乐创作平台')
+    expect(parsePage('/').querySelector('meta[property="og:title"]')?.getAttribute('content')).toBe('Cheerful Music 青风音乐 - 做自己的歌')
+    expect(parsePage('/').querySelector('link[rel="icon"]')?.getAttribute('href')).toBe('/brand/logo-mark.svg')
     expect(parsePage('/en/').title).toBe('Everyone Can Be a Singer | AI Music Maker – Cheerful Music')
     expect(sitePage('/zh-CN/')).toBeUndefined()
   })
@@ -43,6 +46,20 @@ describe('crawlable site pages', () => {
     expect(shell).not.toContain('data-site-seo')
     expect(sitePage('/account')).toBeUndefined()
     expect(sitePage('/gift/example')).toBeUndefined()
+    expect(sitePage('/works')).toBeUndefined()
+    expect(sitePage('/recharge')).toBeUndefined()
+  })
+
+  it.each(siteGuidePaths)('publishes a readable guide with its paired translation at %s', path => {
+    const guide = sitePage(path)!.guide!
+    const page = parsePage(path)
+    expect(page.documentElement.lang).toBe(guide.language)
+    expect(page.querySelectorAll('main section h2')).toHaveLength(3)
+    expect(page.querySelector(`main a[href="${guide.appPath}"]`)?.textContent).toBe(guide.cta)
+    expect(page.querySelector('link[hreflang="zh-CN"]')?.getAttribute('href')).toBe(siteOrigin + guide.translations['zh-CN'])
+    expect(page.querySelector('link[hreflang="en"]')?.getAttribute('href')).toBe(siteOrigin + guide.translations.en)
+    const home = guide.language === 'en' ? '/en/' : '/'
+    expect(parsePage(home).querySelector(`a[href="${path}"]`)?.textContent).toBe(guide.label)
   })
 
   it('uses a distinct title and description at every canonical URL', () => {

@@ -1,10 +1,13 @@
 <script setup lang="ts">
 import FilingLink from "../../shared/ui/FilingLink.vue"
-import { defineAsyncComponent, ref } from 'vue'
-import { t } from '../../shared/i18n'
+import { computed, defineAsyncComponent, ref } from 'vue'
+import { locale, t } from '../../shared/i18n'
+import { siteGuideLinks } from '../../shared/i18n/site-guides'
+import { platform } from '../../platform'
 
 const PremiumStudioDialog = defineAsyncComponent(() => import('../../modules/works/components/PremiumStudioDialog.vue'))
 const premiumOpen = ref(false)
+const guideLinks = computed(() => platform.kind === 'web' ? siteGuideLinks(locale.value) : [])
 
 /** Links without a shipped destination stay as plain text; no dead links or unbacked claims. */
 const products = [
@@ -76,6 +79,7 @@ const legal = [
           <nav class="footer-column" :aria-label="t('帮助与支持')">
             <h2>{{ t('帮助与支持') }}</h2>
             <RouterLink v-for="item in support" :key="item.label" class="footer-link" :to="item.to">{{ t(item.label) }}</RouterLink>
+            <RouterLink v-for="link in guideLinks" :key="link.href" class="footer-link" :to="link.href">{{ link.text }}</RouterLink>
           </nav>
 
           <nav class="footer-column" :aria-label="t('法律与政策')">
