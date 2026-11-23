@@ -317,6 +317,11 @@ class GateTests(unittest.TestCase):
         discover_name = "V50__discover_daily_plays_and_vocal_approval.sql"
         modified = {**migrations, discover_name: "0" * 64}
         with self.assertRaises(gate.GateError): gate.verify_migration_set(modified)
+        migration = "V54__song_share_statistics.sql"
+        self.assertEqual("54", gate.verify_migration_set(migrations)["songShareStatisticsVersion"])
+        modified = {**migrations, migration: "0" * 64}
+        with self.assertRaises(gate.GateError): gate.verify_migration_set(modified)
+        migrations.pop(migration)
         self.assertEqual("53", gate.verify_migration_set(migrations)["agentAdmissionVersion"])
         migrations.pop("V53__agent_admission_version.sql")
         self.assertEqual("52", gate.verify_migration_set(migrations)["giftDailyBudgetVersion"])
