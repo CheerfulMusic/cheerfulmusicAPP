@@ -121,6 +121,7 @@ const PAGE_NAMES: Record<string, string> = {
   '/analytics': '数据看板',
   '/agent': 'AI 工作台',
   '/discover': '广场',
+  '/en/discover': '广场',
   '/profile': '个人资料',
   '/create/photo': '照片创作',
   '/help': '创作帮助',

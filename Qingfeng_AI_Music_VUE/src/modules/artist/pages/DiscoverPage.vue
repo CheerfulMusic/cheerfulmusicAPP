@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { locale, t } from '../../../shared/i18n'
+import { discoverHref, locale, t } from '../../../shared/i18n'
+import LanguageSwitcher from '../../../shared/i18n/LanguageSwitcher.vue'
+import { discoverSeo } from '../../../shared/i18n/site-seo'
 import { usePlayer, type PlayableTrack } from '../../../shared/player/store'
 import BrandLogo from '../../../shared/ui/BrandLogo.vue'
 import NavIcon from '../../../shared/ui/NavIcon.vue'
@@ -420,7 +422,7 @@ onBeforeUnmount(() => {
         <RouterLink class="discover-brand" to="/" :aria-label="t('Cheerful Music 青风音乐首页')"><BrandLogo standalone /></RouterLink>
         <nav class="discover-nav" :aria-label="t('主导航')">
           <RouterLink to="/">{{ t('首页') }}</RouterLink>
-          <RouterLink to="/discover" aria-current="page">{{ t('广场') }}</RouterLink>
+          <RouterLink :to="discoverHref" aria-current="page">{{ t('广场') }}</RouterLink>
           <a href="#discover-artists">{{ t('歌手') }}</a>
           <a href="#discover-playlists">{{ t('歌单') }}</a>
         </nav>
@@ -430,6 +432,7 @@ onBeforeUnmount(() => {
             :aria-label="t('搜索歌曲、歌手或歌单')" @search="!search && query && submitSearch">
         </form>
         <div class="discover-header-actions">
+          <LanguageSwitcher />
           <RouterLink class="discover-create" to="/create">{{ t('开始创作') }}</RouterLink>
           <RouterLink class="discover-login" :to="signedIn ? '/profile' : '/account'">{{ t(signedIn ? '我的资料' : '登录/注册') }}</RouterLink>
         </div>
@@ -437,7 +440,7 @@ onBeforeUnmount(() => {
     </header>
 
     <div class="discover-width">
-      <div class="discover-page-heading"><h1>{{ t('音乐广场') }}</h1></div>
+      <div class="discover-page-heading"><h1>{{ discoverSeo[locale].heading }}</h1></div>
       <section class="discover-hero" :aria-label="t('广场推荐')" :aria-roledescription="t('轮播')"
         @mouseenter="heroHovered = true" @mouseleave="heroHovered = false" @focusin="heroFocused = true" @focusout="heroFocusOut">
         <div v-if="heroSlideCount > 1" class="discover-hero-preview discover-hero-preview-before">

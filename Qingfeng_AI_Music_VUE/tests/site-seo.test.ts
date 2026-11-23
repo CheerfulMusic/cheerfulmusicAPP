@@ -21,8 +21,9 @@ describe('crawlable site pages', () => {
     expect(page.querySelector('meta[property="og:url"]')?.getAttribute('content')).toBe(siteOrigin + path)
     expect(page.querySelector('meta[name="twitter:card"]')?.getAttribute('content')).toBe('summary_large_image')
     expect(page.querySelector('h1')?.textContent).toBe(metadata.heading)
-    expect(page.querySelector('a[href="/"]')?.getAttribute('hreflang')).toBe('zh-CN')
-    expect(page.querySelector('a[href="/en/"]')?.getAttribute('hreflang')).toBe('en')
+    const discover = path === '/discover' || path === '/en/discover'
+    expect(page.querySelector(`a[href="${discover ? '/discover' : '/'}"][hreflang="zh-CN"]`)).not.toBeNull()
+    expect(page.querySelector(`a[href="${discover ? '/en/discover' : '/en/'}"][hreflang="en"]`)).not.toBeNull()
     expect(page.querySelectorAll('script[type="application/ld+json"]')).toHaveLength(path === '/' ? 1 : 0)
   })
 
@@ -46,10 +47,27 @@ describe('crawlable site pages', () => {
   it('publishes the Chinese search entry at the root and keeps the separate English search title', () => {
     expect(parsePage('/').documentElement.lang).toBe('zh-CN')
     expect(parsePage('/').querySelector('h1')?.textContent).toBe('青风音乐 AI 音乐创作平台')
-    expect(parsePage('/').querySelector('meta[property="og:title"]')?.getAttribute('content')).toBe('Cheerful Music 青风音乐 - 做自己的歌')
-    expect(parsePage('/').querySelector('link[rel="icon"]')?.getAttribute('href')).toBe('/brand/logo-mark.svg')
+    expect(parsePage('/').querySelector('meta[property="og:title"]')?.getAttribute('content')).toBe('Cheerful Music 青风音乐｜做自己的歌')
+    expect(parsePage('/').querySelector('link[rel="icon"][sizes="96x96"]')?.getAttribute('href')).toBe('/brand/favicon-96.png')
     expect(parsePage('/en/').title).toBe('Everyone Can Be a Singer | AI Music Maker – Cheerful Music')
     expect(sitePage('/zh-CN/')).toBeUndefined()
+  })
+
+  it.each([
+    ['/discover', 'zh-CN', '青风音乐原创歌曲广场｜Cheerful Music', '/'],
+    ['/en/discover', 'en', 'Discover Original AI Songs | Cheerful Music', '/en/'],
+  ] as const)('serves the linked music community in its URL language at %s', (path, language, title, home) => {
+    const page = parsePage(path)
+    page.querySelectorAll('noscript').forEach(node => node.remove())
+    expect(page.documentElement.lang).toBe(language)
+    expect(page.title).toBe(title)
+    expect(page.querySelector('main h1')?.textContent).toBe(sitePage(path)!.heading)
+    expect(page.querySelector('main p.beta-access-intro')?.textContent).toBe(sitePage(path)!.description)
+    expect(parsePage(home).querySelector(`nav a[href="${path}"]`)).not.toBeNull()
+    expect(Object.fromEntries(Array.from(page.querySelectorAll('link[hreflang]'), link =>
+      [link.getAttribute('hreflang'), link.getAttribute('href')]))).toEqual({
+      en: siteOrigin + '/en/discover', 'zh-CN': siteOrigin + '/discover', 'x-default': siteOrigin + '/discover',
+    })
   })
 
   it('leaves the shared account and gift shell free of site metadata', () => {

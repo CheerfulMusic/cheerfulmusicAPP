@@ -1,43 +1,41 @@
-import { homeLocale, homeSeo, homeSeoLinks, siteName, siteOrigin, type Locale } from './home-seo'
+import { homeLocale, homePaths, homeSeo, localizedSeoLinks, siteName, siteOrigin, type Locale } from './home-seo'
 import { siteGuide, siteGuideLinks, siteGuidePaths } from './site-guides'
 
-const defaultHome = {
+export const discoverPaths = { 'zh-CN': '/discover', en: '/en/discover' } as const
+
+export const discoverSeo = {
+  'zh-CN': {
+    heading: '青风音乐原创歌曲广场',
+    title: '青风音乐原创歌曲广场｜Cheerful Music',
+    description: '在青风音乐试听创作者分享的 AI 原创歌曲，发现喜欢的曲风和歌手，走进音乐人的作品主页。',
+  },
   en: {
-    heading: siteName,
-    searchTitle: homeSeo.en.searchTitle,
-    description: 'Make a song from your ideas with Cheerful Music. Explore songs from other creators and choose the English or Simplified Chinese site.',
-  },
-  'zh-CN': homeSeo['zh-CN'],
-} as const
-
-const sections = {
-  '/discover': {
-    en: {
-      heading: 'Discover Music',
-      title: 'Discover Music | Cheerful Music',
-      description: 'Listen to songs shared by the Cheerful Music community. Explore featured tracks, popular songs and public artist profiles.',
-    },
-    'zh-CN': {
-      heading: '音乐广场',
-      title: '音乐广场 | 青风音乐',
-      description: '在青风音乐广场聆听创作者公开发布的歌曲，探索精选作品、热门音乐和创作者主页。',
-    },
-  },
-  '/help': {
-    en: {
-      heading: 'Help & Support',
-      title: 'Help & Support | Cheerful Music',
-      description: 'Learn how to create, listen to and share songs with Cheerful Music, find answers to common questions, and contact support.',
-    },
-    'zh-CN': {
-      heading: '帮助与支持',
-      title: '帮助与支持 | 青风音乐',
-      description: '了解如何用青风音乐创作、试听和分享歌曲，查找常见问题的解答，并联系支持团队。',
-    },
+    heading: 'Discover Original AI Songs',
+    title: 'Discover Original AI Songs | Cheerful Music',
+    description: 'Listen to original AI songs from the Cheerful Music community. Explore featured tracks and meet the artists behind the music.',
   },
 } as const
 
-export const sitePagePaths = [homeSeo['zh-CN'].path, homeSeo.en.path, '/discover', '/help', ...siteGuidePaths] as const
+export function discoverLocale(path: string): Locale | undefined {
+  const canonical = path.replace(/\/$/, '')
+  if (canonical === discoverPaths['zh-CN']) return 'zh-CN'
+  if (canonical === discoverPaths.en) return 'en'
+}
+
+const helpSeo = {
+  en: {
+    heading: 'Help & Support',
+    title: 'Help & Support | Cheerful Music',
+    description: 'Learn how to create, listen to and share songs with Cheerful Music, find answers to common questions, and contact support.',
+  },
+  'zh-CN': {
+    heading: '帮助与支持',
+    title: '帮助与支持 | 青风音乐',
+    description: '了解如何用青风音乐创作、试听和分享歌曲，查找常见问题的解答，并联系支持团队。',
+  },
+} as const
+
+export const sitePagePaths = [homeSeo['zh-CN'].path, homeSeo.en.path, ...Object.values(discoverPaths), '/help', ...siteGuidePaths] as const
 
 export function sitePage(path: string, preferredLocale?: Locale) {
   const guide = siteGuide(path)
@@ -49,20 +47,14 @@ export function sitePage(path: string, preferredLocale?: Locale) {
       title: guide.title,
       description: guide.description,
       guide,
-      links: [
-        { rel: 'canonical', href: siteOrigin + guide.path, hreflang: undefined },
-        ...Object.entries(guide.translations).map(([hreflang, href]) => ({
-          rel: 'alternate', href: siteOrigin + href, hreflang,
-        })),
-        { rel: 'alternate', href: siteOrigin + guide.translations['zh-CN'], hreflang: 'x-default' },
-      ],
+      links: localizedSeoLinks(guide.path, guide.translations),
     }
   }
   const localized = homeLocale(path)
   const language = localized ?? preferredLocale ?? (path === '/' ? 'zh-CN' : 'en')
   if (path === '/' || localized) {
     const canonical = localized ? homeSeo[localized].path : '/'
-    const copy = localized ? homeSeo.en : defaultHome[language]
+    const copy = homeSeo[language]
     return {
       path: canonical,
       language,
@@ -70,25 +62,38 @@ export function sitePage(path: string, preferredLocale?: Locale) {
       title: localized ? homeSeo.en.title : siteName,
       searchTitle: copy.searchTitle,
       description: copy.description,
-      links: homeSeoLinks(canonical),
+      links: localizedSeoLinks(canonical, homePaths),
     }
   }
   const canonical = path.replace(/\/$/, '')
-  if (canonical !== '/discover' && canonical !== '/help') return
+  const discoverLanguage = discoverLocale(path)
+  if (discoverLanguage) {
+    return {
+      ...discoverSeo[discoverLanguage],
+      path: discoverPaths[discoverLanguage],
+      language: discoverLanguage,
+      links: localizedSeoLinks(canonical, discoverPaths),
+    }
+  }
+  if (canonical !== '/help') return
   return {
-    ...sections[canonical][language],
+    ...helpSeo[language],
     path: canonical,
     language,
     links: [{ rel: 'canonical', href: siteOrigin + canonical, hreflang: undefined }],
   }
 }
 
-export function landingLinks(language: Locale): { href: string; text: string; lang?: Locale }[] {
+export function landingLinks(language: Locale, path = '/'): { href: string; text: string; lang?: Locale }[] {
+  const onDiscover = discoverLocale(path) !== undefined
+  const translations = onDiscover ? discoverPaths : homePaths
   return [
-    { href: homeSeo.en.path, text: 'English', lang: 'en' },
-    { href: homeSeo['zh-CN'].path, text: '简体中文', lang: 'zh-CN' },
-    { href: '/discover', text: sections['/discover'][language].heading },
-    { href: '/help', text: sections['/help'][language].heading },
+    { href: translations.en, text: 'English', lang: 'en' },
+    { href: translations['zh-CN'], text: '简体中文', lang: 'zh-CN' },
+    onDiscover
+      ? { href: homeSeo[language].path, text: language === 'en' ? 'Cheerful Music Home' : '青风音乐首页' }
+      : { href: discoverPaths[language], text: discoverSeo[language].heading },
+    { href: '/help', text: helpSeo[language].heading },
     ...siteGuideLinks(language),
   ]
 }

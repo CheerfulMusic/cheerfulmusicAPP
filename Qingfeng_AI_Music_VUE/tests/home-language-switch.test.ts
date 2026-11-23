@@ -11,6 +11,7 @@ function createTestRouter() {
     history: createMemoryHistory(),
     routes: [
       { path: '/', name: 'home', alias: '/en/', component },
+      { path: '/discover', name: 'discover', alias: '/en/discover', component },
       { path: '/works', name: 'works', component },
     ],
   })
@@ -50,6 +51,25 @@ it('returns visitors from the English search landing page to the root when they 
     expect(router.currentRoute.value.fullPath).toBe('/?utm_source=search#how')
     expect(locale.value).toBe('zh-CN')
     expect(document.title).toBe('Cheerful Music')
+  } finally {
+    wrapper.unmount()
+  }
+})
+
+it('uses the selected music community URL and preserves a search query and fragment', async () => {
+  const router = createTestRouter()
+  setLocale('zh-CN')
+  await router.push('/en/discover?q=rock#discover-tracks')
+  const wrapper = mount(LanguageSwitcher, { global: { plugins: [router] } })
+  try {
+    expect(locale.value).toBe('en')
+    for (const [language, path] of [['zh-CN', '/discover'], ['en', '/en/discover']] as const) {
+      await wrapper.get(`button[lang="${language}"]`).trigger('click')
+      await flushPromises()
+      expect(router.currentRoute.value.fullPath).toBe(path + '?q=rock#discover-tracks')
+      expect(document.documentElement.lang).toBe(language)
+      expect(document.querySelector('link[rel="canonical"]')?.getAttribute('href')).toBe('https://cheerfulmusic.com' + path)
+    }
   } finally {
     wrapper.unmount()
   }
