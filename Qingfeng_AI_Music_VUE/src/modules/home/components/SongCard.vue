@@ -4,6 +4,7 @@ import PlaybackIcon from '../../../shared/ui/PlaybackIcon.vue'
 import { t } from '../../../shared/i18n/index'
 import type { PreviewTrack } from '../model/tracks'
 import { usePlayer } from '../../../shared/player/store'
+import { songCreationRoute } from '../../studio/model/song-reference'
 
 const props = defineProps<{ track: PreviewTrack }>()
 const player = usePlayer()
@@ -30,6 +31,6 @@ const duration = computed(() => {
         </button>
       </li>
     </ul>
-    <RouterLink class="style-create" :to="{ path: '/create', query: { occasion: track.occasion, style: track.style } }">{{ t('用这个风格创作') }} <span aria-hidden="true">↗</span></RouterLink>
+    <RouterLink class="style-create" :to="songCreationRoute(track)">{{ t('用这个风格创作') }} <span aria-hidden="true">↗</span></RouterLink>
   </article>
 </template>
