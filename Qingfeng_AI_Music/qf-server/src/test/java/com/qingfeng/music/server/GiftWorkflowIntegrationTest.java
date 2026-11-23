@@ -164,7 +164,10 @@ private String albumRelease(Session s,String work,String title)throws Exception 
   var fields=new java.util.ArrayList<java.util.Map.Entry<String,String>>();
   fields.add(java.util.Map.entry("version",String.valueOf(version)));fields.add(java.util.Map.entry("published",String.valueOf(published)));
   fields.add(java.util.Map.entry("title","我的首张专辑"));fields.add(java.util.Map.entry("description","公开的专辑简介"));
-  for(String song:releases)fields.add(java.util.Map.entry("tracks",song));
+  for(String song:releases){
+   fields.add(java.util.Map.entry("tracks",song));
+   fields.add(java.util.Map.entry("versions",String.valueOf(jdbc.queryForObject("SELECT version FROM artist_song_release WHERE id=?",Long.class,song))));
+  }
   for(var field:fields)body.write(("--"+boundary+"\r\nContent-Disposition: form-data; name=\""+field.getKey()+"\"\r\n\r\n"+field.getValue()+"\r\n").getBytes(StandardCharsets.UTF_8));
   if(cover!=null){
    body.write(("--"+boundary+"\r\nContent-Disposition: form-data; name=\"cover\"; filename=\"cover.png\"\r\nContent-Type: image/png\r\n\r\n").getBytes(StandardCharsets.UTF_8));
@@ -211,6 +214,11 @@ private String albumRelease(Session s,String work,String title)throws Exception 
   jdbc.update("UPDATE artist_profile SET published=FALSE WHERE public_id=?",artist);
   assertEquals(404,call(null,"GET",direct+"/cover/"+key,null).statusCode());
   jdbc.update("UPDATE artist_profile SET published=TRUE WHERE public_id=?",artist);
+  String firstAsset=jdbc.queryForObject("SELECT asset_id FROM artist_song_release WHERE id=?",String.class,first);
+  jdbc.update("INSERT INTO media_asset_annotation(asset_id,deleted_at) VALUES (?,CURRENT_TIMESTAMP) ON DUPLICATE KEY UPDATE deleted_at=CURRENT_TIMESTAMP",firstAsset);
+  assertEquals(1,json(call(null,"GET",direct,null),200).path("tracks").size());
+  assertEquals(404,call(null,"GET","/api/public/artists/"+artist+"/songs/"+first+"/1/audio",null).statusCode());
+  jdbc.update("UPDATE media_asset_annotation SET deleted_at=NULL WHERE asset_id=?",firstAsset);
   var different=wav();different[44]=1;
   String replacement=field(text(upload(owner,wa,different)),"id");
   jdbc.update("UPDATE artist_song_release SET asset_id=?,version=version+1 WHERE id=?",replacement,first);

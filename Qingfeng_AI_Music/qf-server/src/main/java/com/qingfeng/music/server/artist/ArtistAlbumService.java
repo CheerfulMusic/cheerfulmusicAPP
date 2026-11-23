@@ -21,8 +21,8 @@ public class ArtistAlbumService {
     public record Album(String id, String title, String description, String coverKey, long version,
                         boolean published, List<Track> tracks) {}
     public record Edit(long version, String title, String description, boolean published, List<String> releases,
-                       boolean removeCover, MultipartFile cover) {}
-    private record Assets(String release, String asset) {}
+                       List<Long> versions, boolean removeCover, MultipartFile cover) {}
+    private record Assets(String release, String asset, long version) {}
     private final JdbcTemplate db;
     private final ArtistProfileService profiles;
 
@@ -79,7 +79,8 @@ public class ArtistAlbumService {
         String title=edit.title().strip(), description=edit.description().strip();
         List<String> ids=edit.releases();
         if (title.isEmpty() || title.length()>100 || description.length()>1200 || edit.version()<0 ||
-                ids.size()>100 || new HashSet<>(ids).size()!=ids.size() || (edit.cover()!=null && edit.removeCover()))
+                ids.size()>100 || edit.versions().size()!=ids.size() || edit.versions().stream().anyMatch(v -> v==null || v<1)
+                || new HashSet<>(ids).size()!=ids.size() || (edit.cover()!=null && edit.removeCover()))
             throw bad("请检查专辑名称、封面和曲目。");
         byte[] cover=edit.cover()==null ? null : ArtistImage.jpeg(edit.cover(), ArtistImage.Kind.ALBUM);
         lockOwner(owner);
@@ -93,10 +94,11 @@ public class ArtistAlbumService {
 
         var available = new LinkedHashMap<String,Assets>();
         if (!ids.isEmpty()) {
-            db.query("SELECT r.id,r.asset_id " + VISIBLE_RELEASES + " AND r.creator_id=?",
+            db.query("SELECT r.id,r.asset_id,r.version " + VISIBLE_RELEASES + " AND r.creator_id=?",
                 (org.springframework.jdbc.core.RowCallbackHandler) row -> available.put(row.getString(1),
-                        new Assets(row.getString(1),row.getString(2))), owner);
+                        new Assets(row.getString(1),row.getString(2),row.getLong(3))), owner);
             if (!available.keySet().containsAll(ids)) throw bad("有曲目已下架或不属于你的主页，请重新选曲。");
+            for (int i=0;i<ids.size();i++) if (available.get(ids.get(i)).version()!=edit.versions().get(i)) throw conflict();
         }
         if (versions.isEmpty()) {
             try {
