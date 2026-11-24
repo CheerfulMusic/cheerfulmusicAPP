@@ -1566,6 +1566,7 @@ export const english: Record<string, string> = {
   '撤销后不能继续获取新内容；已经下载的音频无法远程收回。': 'Revoking a link stops future access. Audio that has already been downloaded cannot be recalled.',
   '← 我的音乐': '← My music',
   '正在读取作品…': 'Loading your music…',
+  '暂无已完成作品': 'No completed songs yet',
   '专属音乐礼物': 'Your personal music gift',
   '写给{p0}的一首歌': 'A song for {p0}',
   '写给{recipient}的歌': 'A song for {recipient}',

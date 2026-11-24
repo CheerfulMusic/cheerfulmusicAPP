@@ -21,15 +21,7 @@ const error = ref(false)
 let request = 0
 
 const PAGE_SIZE = 20
-const PREVIEW_SIZE = 3
-const statusLabels: Record<LibraryItem['status'], string> = {
-  LYRICS_DRAFT: '待完善歌词',
-  READY_TO_GENERATE: '待生成歌曲',
-  GENERATING: '生成中',
-  CHECKING: '结果待核对',
-  COMPLETED: '已完成',
-  GENERATION_FAILED: '生成失败',
-}
+const PREVIEW_SIZE = 5
 interface WorkRow {
   id: string
   workId: string
@@ -41,7 +33,7 @@ interface WorkRow {
   release?: ArtistRelease
 }
 
-const libraryRows = computed<WorkRow[]>(() => works.value.slice(0, PREVIEW_SIZE).map(item => {
+const libraryRows = computed<WorkRow[]>(() => works.value.map(item => {
   const { id, updatedAt } = item.work
   const songTitle = librarySongTitle(item)
   const cover = coverUrl(id, item.coverId)
@@ -50,7 +42,7 @@ const libraryRows = computed<WorkRow[]>(() => works.value.slice(0, PREVIEW_SIZE)
     : undefined
   const release = props.songs.find(song => song.workId === id)
   return { id, workId: id, title: songTitle, cover, track, updatedAt, release,
-    label: item.status === 'COMPLETED' ? publicationLabel(release) : statusLabels[item.status] }
+    label: publicationLabel(release) }
 }))
 const publishedRows = computed<WorkRow[]>(() => props.songs.map(song => {
   const track = ownerTrack(song)
@@ -70,10 +62,22 @@ async function load() {
   loading.value = true
   error.value = false
   try {
-    const items = await listWorks(0)
-    if (attempt !== request) return
-    works.value = items
-    count.value = items.length < PAGE_SIZE ? items.length : null
+    const completed = new Map<string, LibraryItem>()
+    let total: number | null = null
+    for (let page = 0; completed.size < PREVIEW_SIZE; page++) {
+      const items = await listWorks(page)
+      if (attempt !== request) return
+      for (const item of items) {
+        if (item.status === 'COMPLETED') completed.set(item.work.id, item)
+        if (completed.size === PREVIEW_SIZE) break
+      }
+      if (items.length < PAGE_SIZE) {
+        if (page === 0) total = items.length
+        break
+      }
+    }
+    works.value = [...completed.values()]
+    count.value = total
     emit('library-count', count.value)
   } catch {
     if (attempt !== request) return
@@ -126,7 +130,7 @@ onBeforeUnmount(() => {
       <button type="button" class="text-button" @click="load">{{ t('重试') }}</button>
     </div>
     <div v-else-if="!rows.length" class="profile-works-message">
-      <p>{{ t(tab === 'published' ? '打开一首已完成的歌曲，选择「发布到广场」。' : '第一首歌，从你的故事开始。') }}</p>
+      <p>{{ t(tab === 'published' ? '打开一首已完成的歌曲，选择「发布到广场」。' : '暂无已完成作品') }}</p>
       <button v-if="tab === 'published'" type="button" class="text-button" @click="tab = 'library'">{{ t('我的作品') }}</button>
       <RouterLink v-else to="/create" class="text-button">{{ t('开始创作') }}</RouterLink>
     </div>
