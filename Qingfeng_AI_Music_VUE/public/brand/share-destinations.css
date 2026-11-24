@@ -120,7 +120,9 @@
 .destination-guide > img { width: 8rem; height: 8rem; border-radius: .45rem; }
 .destination-guide > div { flex: 1 1 9rem; }
 .share-destinations small { font-size: .72rem; opacity: .8; }
-.destination-guide input { box-sizing: border-box; width: 100%; margin: .45rem 0; padding: .45rem; font: inherit; }
+.destination-guide textarea { display: block; box-sizing: border-box; width: 100%; min-height: 4.5em; margin: .3rem 0; padding: .5rem; border: 1px solid var(--channel-line,#d6cdc6); border-radius: .4rem; font: inherit; line-height: 1.4; resize: vertical; }
+.destination-guide label { font-weight: 600; }
+.destination-guide button.wechat-open { padding: 0; margin-inline-end: .85rem; background: transparent; border: 0; font: inherit; font-weight: 650; cursor: pointer; }
 .destination-guide .wechat-open { display: inline-block; margin: .4rem 0; color: inherit; font-weight: 650; text-decoration: underline; }
 .destination-guide .wechat-open[hidden] { display: none; }
 .destination-guide p:empty { display: none; }

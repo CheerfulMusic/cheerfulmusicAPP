@@ -16,12 +16,16 @@ export function songShareUrl(token: string, origin: string): string {
   return new URL(`/song/${token}`, base.origin).href
 }
 export type WechatDestination = 'friend' | 'timeline'
+export type WechatSongData = ShareData & { url: string }
+export type WechatShareFeedback = { message: string; clipboard?: 'copied' | 'manual' }
 declare global {
   interface Window {
     cheerfulWechat?: {
       mode(destination: WechatDestination): '' | 'desktop' | 'system'
-      open(destination: WechatDestination, data: ShareData & { url: string }, isCurrent: () => boolean):
-        Promise<{ message: string; manual?: boolean } | undefined>
+      canShare(data: WechatSongData): boolean
+      draft(data: WechatSongData): string
+      copyDraft(data: WechatSongData): Promise<WechatShareFeedback>
+      open(destination: WechatDestination, data: WechatSongData): Promise<WechatShareFeedback | undefined>
       desktopUrl: string
     }
   }

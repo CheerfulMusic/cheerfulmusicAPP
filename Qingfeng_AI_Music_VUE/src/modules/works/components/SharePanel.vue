@@ -4,7 +4,7 @@ import { ref, watch, nextTick, onBeforeUnmount, computed } from 'vue'
 import { createShare, getSongShareStatus, revokeSongShare, revokeShares, type Revision, type AudioAsset } from '../api/detail'
 import { platform } from '../../../platform'
 import { apiUrl } from '../../../shared/http/api-client'
-import { lyricQuotes, localShareAddress, posterFilename, shareCancelled, songShareUrl, songTimelineTitle, wechatShareEntry, type SongShareStatus, type WechatDestination } from '../model/song-sharing'
+import { lyricQuotes, localShareAddress, posterFilename, shareCancelled, songShareUrl, songTimelineTitle, wechatShareEntry, type SongShareStatus, type WechatDestination, type WechatShareFeedback } from '../model/song-sharing'
 import { usePlayer } from '../../../shared/player/store'
 import PublicSongStory from './PublicSongStory.vue'
 import PlaybackIcon from '../../../shared/ui/PlaybackIcon.vue'
@@ -24,9 +24,17 @@ let generation = 0, posterGeneration = 0
 const insideWechat = /MicroMessenger/i.test(navigator.userAgent)
 const hasSystemShare = !insideWechat && typeof navigator.share === 'function'
 const destination = ref<WechatDestination>(), qr = ref(''), qrError = ref(false)
-const handoff = window.cheerfulWechat
+const handoff = typeof window.cheerfulWechat?.draft === 'function' ? window.cheerfulWechat : undefined
 const desktopFriend = platform.kind === 'web' && handoff?.mode('friend') === 'desktop'
-const handoffMessage = ref(''), manualCopy = ref(false), manualLink = ref<HTMLInputElement>()
+const friendData = computed(() => ({ title: [song.value?.title, song.value?.creator].filter(Boolean).join(' · '),
+  text: t('听听我创作的这首歌 · Cheerful Music'), url: link.value }))
+const systemFriend = computed(() => desktopFriend && handoff?.canShare(friendData.value))
+const friendHint = computed(() => {
+  if (desktopFriend) return systemFriend.value ? '打开系统分享' : '复制后到微信粘贴'
+  return insideWechat ? '右上角菜单发送' : '发歌曲卡片'
+})
+const showDraft = computed(() => desktopFriend && destination.value === 'friend')
+const handoffMessage = ref(''), showLaunch = ref(false), manualLink = ref<HTMLTextAreaElement>()
 let qrRequest = 0
 const importedRevisionId = computed(() => props.asset?.origin === 'IMPORTED' && props.revision?.confirmed ? props.revision.id : undefined)
 const canCreate = computed(() => !!props.asset && (props.asset.origin === 'GENERATED' || !!importedRevisionId.value))
@@ -51,7 +59,7 @@ function clearDestination() {
   qr.value = ''
   qrError.value = false
   handoffMessage.value = ''
-  manualCopy.value = false
+  showLaunch.value = false
 }
 function reset() {
   generation++; busy.value = false; sharing.value = false; summary.value = undefined
@@ -120,6 +128,20 @@ async function copy() {
     notice.value = '请选中链接手动复制。'
   }
 }
+async function showFeedback(result: WechatShareFeedback | undefined, request: number) {
+  if (!result || request !== qrRequest || !props.open || !valid()) return
+  handoffMessage.value = result.message
+  if (result.clipboard) showLaunch.value = true
+  if (result.clipboard === 'manual') {
+    await nextTick()
+    if (request === qrRequest && props.open) { manualLink.value?.focus(); manualLink.value?.select() }
+  }
+}
+async function copyFriendDraft() {
+  if (!handoff || !showDraft.value || !checkLink()) return
+  const request = qrRequest
+  await showFeedback(await handoff.copyDraft(friendData.value), request)
+}
 async function choose(event: MouseEvent, target: WechatDestination) {
   if (!checkLink()) { event.preventDefault(); return }
   if (platform.kind !== 'web') {
@@ -145,19 +167,10 @@ async function choose(event: MouseEvent, target: WechatDestination) {
   posterOpen.value = false
   notice.value = ''
   if (more.value) more.value.open = false
+  if (showDraft.value && systemFriend.value) handoffMessage.value = '在系统分享窗口选择微信。列表中没有微信时，可复制待发送内容。'
   if (event.isTrusted && song.value && handoff) {
-    const current = () => request === qrRequest && props.open && valid()
-    const payload = { title: target === 'timeline' ? songTimelineTitle(song.value) : song.value.title,
-      text: t('听听我创作的这首歌 · Cheerful Music'), url: link.value }
-    void handoff.open(target, payload, current).then(async result => {
-      if (!result || !current()) return
-      handoffMessage.value = result.message
-      manualCopy.value = !!result.manual
-      if (manualCopy.value) {
-        await nextTick()
-        if (current()) { manualLink.value?.focus(); manualLink.value?.select() }
-      }
-    })
+    const payload = target === 'friend' ? friendData.value : { ...friendData.value, title: songTimelineTitle(song.value) }
+    void handoff.open(target, payload).then(result => showFeedback(result, request))
   }
   try {
     const renderer = await import('../model/song-poster')
@@ -257,18 +270,23 @@ onBeforeUnmount(() => { generation++; clearDestination(); clearPoster(); dialog.
         </article>
         <h3 class="channel-heading">{{ t('分享到') }}</h3>
         <div class="share-destinations" role="group" :aria-label="t('分享到')">
-          <a ref="shareButton" :href="wechatShareEntry(link, 'friend')" :aria-current="destination === 'friend' || undefined" @click="choose($event,'friend')"><span class="destination-icon for-friend" aria-hidden="true"></span>{{ t('微信好友') }}<small>{{ t(desktopFriend ? '复制链接并打开电脑微信' : '发歌曲卡片') }}</small></a>
-          <a :href="wechatShareEntry(link, 'timeline')" :aria-current="destination === 'timeline' || undefined" @click="choose($event,'timeline')"><span class="destination-icon for-timeline" aria-hidden="true"><i></i></span>{{ t('朋友圈') }}</a>
+          <a ref="shareButton" :href="wechatShareEntry(link, 'friend')" :aria-current="destination === 'friend' || undefined" @click="choose($event,'friend')"><span class="destination-icon for-friend" aria-hidden="true"></span>{{ t('微信好友') }}<small>{{ t(friendHint) }}</small></a>
+          <a :href="wechatShareEntry(link, 'timeline')" :aria-current="destination === 'timeline' || undefined" @click="choose($event,'timeline')"><span class="destination-icon for-timeline" aria-hidden="true"><i></i></span>{{ t('朋友圈') }}<small v-if="insideWechat">{{ t('右上角菜单发表') }}</small></a>
           <button type="button" :aria-expanded="posterOpen" @click="openPoster"><span class="destination-icon for-poster" aria-hidden="true"><i>♫</i></span>{{ t('音乐海报') }}<small>{{ t('发大封面图片') }}</small></button>
         </div>
         <div v-if="destination" class="destination-guide" role="status">
           <img v-if="qr" :src="qr" width="144" height="144" :alt="t('在微信中打开歌曲的二维码')">
           <div>
+            <template v-if="showDraft">
+              <label for="creator-share-draft">{{ t('待发送内容') }}</label>
+              <textarea id="creator-share-draft" ref="manualLink" readonly rows="3" :value="handoff?.draft(friendData)" @focus="manualLink?.select()"></textarea>
+              <button type="button" class="wechat-open" @click="copyFriendDraft">{{ t('复制发送内容') }}</button>
+              <a v-if="showLaunch" class="wechat-open" :href="handoff?.desktopUrl">{{ t('打开电脑微信') }}</a>
+            </template>
             <p v-if="handoffMessage">{{ t(handoffMessage) }}</p>
-            <input v-if="manualCopy" ref="manualLink" readonly :value="link" :aria-label="t('手动复制歌曲链接')" @focus="manualLink?.select()">
-            <a v-if="desktopFriend && destination === 'friend'" class="wechat-open" :href="handoff?.desktopUrl">{{ t('打开电脑微信') }}</a>
-            <p>{{ t(destination === 'friend' ? '用微信扫一扫打开歌曲，再点右上角「…」选择「发送给朋友」。' : '用微信扫一扫打开歌曲，再点右上角「…」选择「分享到朋友圈」。') }}</p>
-            <p>{{ t(qrError ? '二维码暂时无法生成，可重新点选分享方式。' : qr ? '同一部手机上可截图，再从微信扫一扫的相册打开。' : '正在生成二维码…') }}</p>
+            <p v-if="showDraft">{{ t('也可用手机微信扫码发送歌曲卡片。') }}</p>
+            <p v-else>{{ t(destination === 'friend' ? '用微信扫一扫打开歌曲，再点右上角「…」选择「发送给朋友」。' : '用微信扫一扫打开歌曲，再点右上角「…」选择「分享到朋友圈」。') }}</p>
+            <p v-if="!showDraft || !qr">{{ t(qrError ? '二维码暂时无法生成，可重新点选分享方式。' : qr ? '同一部手机上可截图，再从微信扫一扫的相册打开。' : '正在生成二维码…') }}</p>
           </div>
         </div>
       </template>
