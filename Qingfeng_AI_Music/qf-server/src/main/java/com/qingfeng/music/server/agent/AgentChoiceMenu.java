@@ -64,6 +64,7 @@ final class AgentChoiceMenu {
         return choices.size()<2?null:new Menu(brief,choices);
     }
     static Map<String,Object> reply(Plan plan,String text,String locale){
+        if (plan.plannerUnavailable()) return Map.of("text", text, "errorCode", "AGENT_CHAT_UNAVAILABLE");
         var choices=new ArrayList<Choice>();
         if(plan.args().get("choices") instanceof List<?> ids && ids.size()>=2 && ids.size()<=Choice.values().length){
             for(var id:ids){

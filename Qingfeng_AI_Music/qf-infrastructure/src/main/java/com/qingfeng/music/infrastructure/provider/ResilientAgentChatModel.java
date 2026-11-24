@@ -119,7 +119,7 @@ public final class ResilientAgentChatModel implements AgentChatModel {
                 :"对话理解暂时不可用，我会查询"+target+"。";
             return new Plan(action,Map.of(),reply);
         }
-        return new Plan("chat", Map.of(), english(context)
+        return Plan.unavailable(english(context)
                 ? "The music assistant is temporarily unavailable. This step has not started any new business operation. Please try again later."
                 : "对话理解暂时不可用，这一步没有发起新的业务操作。请稍后再试。");
     }

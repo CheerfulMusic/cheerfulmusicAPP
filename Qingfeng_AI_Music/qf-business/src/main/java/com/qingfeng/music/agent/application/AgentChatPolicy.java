@@ -24,7 +24,7 @@ public final class AgentChatPolicy {
         return has(surface(text),"当前(?:作品|歌曲|歌词|音频)|这(?:首(?:作品|歌)|版歌词)|\\b(?:this|the current|the selected) (?:work|song|lyrics|track)\\b");
     }
     public static boolean lyricsOnly(String text) {
-        if(newLyricsRequested(text))return true;
+        if(newLyricsRequested(text)||LyricPolishRequest.parse(text)!=null)return true;
         String surface=surface(text);
         if(has(surface,"(?:只|仅)(?:要|帮我|给我)?(?:写|生成|创作|改|改写)?(?:一(?:首|段|版)|这首|这段)?歌词|lyrics only|only (?:write|generate).*lyrics"))return true;
         return has(surface,"先(?:帮我|给我)?(?:写|生成|创作|改|改写)?(?:一(?:首|段|版)|这首|这段)?歌词")
@@ -52,7 +52,7 @@ public final class AgentChatPolicy {
         return !lyricsOnly(text)&&requested(text,"(?:"+MUSIC+")(?!词)");
     }
     public static boolean lyricsRequested(String text) {
-        if(newLyricsRequested(text))return true;
+        if(newLyricsRequested(text)||LyricPolishRequest.parse(text)!=null)return true;
         return requested(text,"(?:写|创作|生成|编|改|修改|改写|重写|优化|润色|续写).{0,12}(?:歌词|词|段|一句)|(?:写|创作)(?:一|这)?首歌|(?:主歌|副歌).{0,10}(?:改|短|长|温柔|力量)|(?:write|rewrite|change|edit|generate).{0,15}(?:lyrics|chorus|verse)|write.{0,10}song");
     }
     public static boolean settingsRequested(String text) {

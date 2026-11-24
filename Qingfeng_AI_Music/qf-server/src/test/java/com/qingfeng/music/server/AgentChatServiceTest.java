@@ -76,6 +76,56 @@ class AgentChatServiceTest {
         verifyNoInteractions(model);
     }
 
+    @Test void aRetryOfTheReportedFailureUsesOnlyTheUsersBrainstormAsMaterial() {
+        String command = "你先打磨一版歌词";
+        var json = new ObjectMapper();
+        for (var turn : List.of(
+                List.of("user", "帮我构思一首歌，先聊聊这个灵感。 平凡的一天"),
+                List.of("assistant", "可以聊聊清晨或夜晚，再决定歌词的方向。"),
+                List.of("user", command),
+                List.of("assistant", "对话理解暂时不可用，这一步没有发起新的业务操作。请稍后再试。"))) {
+            conversations.appendMessage("owner","conversation",turn.get(0),"TEXT","DONE",json.writeValueAsString(Map.of("text",turn.get(1))),null);
+        }
+        service.send("owner", "conversation", command, key(), "zh-CN");
+        var args = ArgumentCaptor.forClass(Object.class);
+        verify(tools).dispatch(eq(AgentTool.GENERATE_LYRICS),args.capture(),eq("owner"),anyString());
+        var submitted = (AgentTool.GenerateLyricsArgs)args.getValue();
+        assertEquals("平凡的一天", submitted.text());
+        assertEquals("new", submitted.mode());
+        assertNull(submitted.revisionId());
+        verifyNoInteractions(model);
+    }
+
+    @Test void polishingDoesNotUseAnOlderTopicAfterAnUnrelatedTurn() {
+        when(tools.dispatch(eq(AgentTool.GET_CURRENT_SONG),any(),eq("owner"),anyString())).thenReturn(ToolResult.ok("m",null));
+        var json = new ObjectMapper();
+        for (var text : List.of("Help me brainstorm song ideas around this. An ordinary day", "查看积分"))
+            conversations.appendMessage("owner","conversation","user","TEXT","DONE",json.writeValueAsString(Map.of("text",text)),null);
+        var result = service.send("owner","conversation","你先打磨一版歌词",key(),"zh-CN");
+        assertTrue(result.messages().get(result.messages().size()-1).contentJson().contains("打开想润色的歌词版本"));
+        verify(tools,never()).dispatch(eq(AgentTool.GENERATE_LYRICS),any(),anyString(),anyString());
+        verifyNoInteractions(model);
+    }
+
+    @Test void explicitlySelectedLyricsArePolishedEvenAfterBrainstormingAnotherIdea() {
+        conversations.appendMessage("owner","conversation","user","TEXT","DONE",
+                new ObjectMapper().writeValueAsString(Map.of("text","Help me brainstorm song ideas around this. A different song")),null);
+        service.send("owner","conversation","Please polish the current lyrics.",key(),"en");
+        var args = ArgumentCaptor.forClass(Object.class);
+        verify(tools).dispatch(eq(AgentTool.GENERATE_LYRICS),args.capture(),eq("owner"),anyString());
+        var submitted = (AgentTool.GenerateLyricsArgs)args.getValue();
+        assertEquals("rewrite", submitted.mode());
+        assertEquals(song.revisionId(), submitted.revisionId());
+        verifyNoInteractions(model);
+    }
+
+    @Test void aPlannerOutageDoesNotTurnItsChatReplyIntoAnAudioSubmission() {
+        when(model.respond(any())).thenReturn(AgentChatModel.Plan.unavailable("对话理解暂时不可用。"));
+        var result = service.send("owner","conversation","帮我生成一首毕业歌曲",key(),"zh-CN");
+        assertTrue(result.messages().get(result.messages().size()-1).contentJson().contains("AGENT_CHAT_UNAVAILABLE"));
+        verify(tools,never()).dispatch(eq(AgentTool.GENERATE_SONG),any(),anyString(),anyString());
+    }
+
     @Test void explicitRetryRetainsTheMenuBriefAfterFailedNumericSelection(){
         var json=new ObjectMapper();
         for(var row:List.of(Map.of("text","方向：梦与星光\n1. 直接开始生成歌词\n2. 继续聊聊细节"),

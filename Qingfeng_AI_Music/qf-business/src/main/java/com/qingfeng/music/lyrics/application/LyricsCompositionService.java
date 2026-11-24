@@ -107,9 +107,9 @@ public final class LyricsCompositionService {
         if(!photoRequest&&(!enabled||!selectedWriter.isConfigured()))throw new DomainException("LYRICS_PROVIDER_UNAVAILABLE","歌词生成暂不可用，请稍后再试或手动填写");
         var photoPlan=!photoRequest&&plans!=null?plans.find(work,com.qingfeng.music.settings.CreativePlan.sourceHash(snapshot))
             .filter(plan->!plan.photoSummary().isBlank()).orElse(null):null;
-        if(!photoRequest&&rewriteSource==null&&photoPlan==null&&snapshot.story().isBlank()&&snapshot.message().isBlank())throw new DomainException("INVALID_LYRICS_REQUEST","请先在故事中填写一段回忆或祝福，再生成歌词");
         String baseLyrics=baseRevisionId==null?"":lyrics.get(owner,work,baseRevisionId).lyrics();
         String previous=rewriteSource==null?baseLyrics:rewriteSource;
+        if(!photoRequest&&photoPlan==null&&previous.isBlank()&&snapshot.story().isBlank()&&snapshot.message().isBlank())throw new DomainException("INVALID_LYRICS_REQUEST","请先在故事中填写一段回忆或祝福，再生成歌词");
         if(structure.customSections()!=null)revisions.requireCustomSectionsStorage();
         if(!requests.claim(owner,work,key,hash))throw new DomainException("LYRICS_REQUEST_PENDING","这次歌词请求已处理或仍在确认中，请先刷新歌词版本，避免重复提交");
         try(var ignored=LyricsRequestBudget.enter(Duration.ofSeconds(110))){

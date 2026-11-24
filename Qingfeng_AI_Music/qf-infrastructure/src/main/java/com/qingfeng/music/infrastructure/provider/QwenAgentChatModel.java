@@ -14,6 +14,7 @@ import java.util.concurrent.TimeoutException;
 
 /** Real conversation, with the current owned work and recent turns; credentials remain server-side. */
 public final class QwenAgentChatModel implements AgentChatModel {
+    private static final System.Logger LOG = System.getLogger(QwenAgentChatModel.class.getName());
     private static final int MAX_RESPONSE_BYTES=256*1024;
     private static final String SYSTEM = """
         你是 Cheerful Music 的统一对话助手，可以自然聊天，使用服务端提供的能力目录帮助用户完成站内功能。
@@ -76,6 +77,7 @@ public final class QwenAgentChatModel implements AgentChatModel {
     }
     @Override public Plan respond(Context context) {
         if(!enabled||key.isBlank())throw new DomainException("AGENT_CHAT_UNAVAILABLE","对话模型暂未启用或尚未配置。你的消息已保留，本次没有启动创作工具。");
+        int httpStatus = 0;
         try {
             var definitions=AgentToolSchemaCatalog.tools(context);
             List<Map<String,String>> messages=new ArrayList<>();
@@ -108,7 +110,8 @@ public final class QwenAgentChatModel implements AgentChatModel {
             var request=HttpRequest.newBuilder(endpoint).timeout(com.qingfeng.music.common.concurrent.AgentRequestScope.timeout(responseTimeout)).header("Authorization","Bearer "+key).header("Content-Type","application/json")
                     .POST(HttpRequest.BodyPublishers.ofString(encoded)).build();
             var response=readResponse(request);
-            if(response.statusCode()/100!=2)throw new IllegalStateException("provider response");
+            httpStatus = response.statusCode();
+            if(httpStatus/100!=2)throw new IllegalStateException("provider response");
             com.qingfeng.music.common.concurrent.AgentRequestScope.check();
             var choice=json.readTree(response.body()).path("choices").path(0);
             if(Set.of("length","content_filter").contains(choice.path("finish_reason").asText("")))throw new IllegalArgumentException("Incomplete agent response");
@@ -119,6 +122,9 @@ public final class QwenAgentChatModel implements AgentChatModel {
             throw new DomainException("AGENT_CHAT_UNAVAILABLE","对话模型请求已中断，后续步骤已停止。请查看已有作品和任务状态。");
         } catch(Exception error) {
             com.qingfeng.music.common.concurrent.AgentRequestScope.check();
+            var cause = error instanceof ExecutionException && error.getCause() != null ? error.getCause() : error;
+            LOG.log(System.Logger.Level.WARNING, "Agent planner failed (HTTP status {0}, exception type {1})",
+                    httpStatus == 0 ? "unavailable" : Integer.toString(httpStatus), cause.getClass().getSimpleName());
             throw new DomainException("AGENT_CHAT_UNAVAILABLE","对话模型暂时没有返回有效结果，后续步骤已停止。请查看已有作品和任务状态。");
         }
     }

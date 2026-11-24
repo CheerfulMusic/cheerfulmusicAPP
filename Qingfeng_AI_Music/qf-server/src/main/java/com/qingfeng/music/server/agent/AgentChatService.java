@@ -5,6 +5,7 @@ import com.qingfeng.music.agent.api.AgentApplicationActions.*;
 import com.qingfeng.music.agent.api.AgentChatModel.Step;
 import com.qingfeng.music.agent.application.AgentChatPolicy;
 import com.qingfeng.music.agent.application.AgentLyricInput;
+import com.qingfeng.music.agent.application.LyricPolishRequest;
 import com.qingfeng.music.agent.application.AgentReadOnlyLookup;
 import com.qingfeng.music.agent.application.AgentToolDispatcher;
 import com.qingfeng.music.common.exception.DomainException;
@@ -104,6 +105,7 @@ public final class AgentChatService {
             AgentChatModel.Plan plan;
             Step librarySelection=null;
             int modelCalls=0;
+            var polish = LyricPolishRequest.parse(text);
             var selection=AgentChoiceMenu.select(text,history,locale);
             if(selection!=null){
                 authorizedText=selection.intent();
@@ -115,6 +117,18 @@ public final class AgentChatService {
                     throw new DomainException("AGENT_PLAN_STALE","作品或任务状态已变化，之前的操作计划已停止。请重新说明要执行的操作。");
                 authorizedText=pending.authorizedText();
                 plan=new AgentChatModel.Plan(null,Map.of(),"",pending.steps());
+            } else if (polish != null) {
+                String topic = polish == LyricPolishRequest.FROM_CONTEXT ? recentInspirationTopic(history, text) : "";
+                if (!topic.isEmpty()) {
+                    plan = new AgentChatModel.Plan("generate_lyrics", Map.of("mode", "new", "text", topic), "");
+                } else if (current != null && current.revisionId() != null && current.lyrics() != null && !current.lyrics().isBlank()) {
+                    plan = new AgentChatModel.Plan("generate_lyrics", Map.of("mode", "rewrite", "revisionId", current.revisionId(), "text", text), "");
+                } else {
+                    String reply = locale != null && locale.startsWith("en")
+                            ? "Open the lyric version you want to polish, or say “Write lyrics about …” with a topic for a first draft."
+                            : "请先打开想润色的歌词版本。要从头写一版，可以直接说「帮我写一首歌词，主题是……」。";
+                    plan = new AgentChatModel.Plan("chat", Map.of(), reply);
+                }
             } else if(com.qingfeng.music.agent.application.ExactLyricEdit.needsReplacement(text)) {
                 plan=new AgentChatModel.Plan("chat",Map.of(),"想把这句改成什么？请把新句写在「改成」后面，我会只替换你指定的那一行。");
             } else {
@@ -166,7 +180,7 @@ public final class AgentChatService {
             // Confirmations/continuations already carry a server-frozen object binding.
             boolean resolvedWork=(confirmation||continuation)&&pending.workResolved(),resolvedVersion=(confirmation||continuation)&&pending.versionResolved();
             SongCard resolvedTarget=resolvedWork||resolvedVersion?current:null;
-            DisplayedContext expected=confirmation||continuation?DisplayedContext.forCard(current):displayedContext;
+            DisplayedContext expected=confirmation||continuation||(polish!=null&&displayedContext==null)?DisplayedContext.forCard(current):displayedContext;
             for(int i=0;i<steps.size();i++) {
                 AgentRequestScope.check();
                 turns.assertActive(owner,conversation,key);
@@ -402,6 +416,27 @@ public final class AgentChatService {
         }
         return "";
     }
+    private String recentInspirationTopic(List<AgentMessage> history, String command) {
+        // Only the preceding user brief can supply material. Repeating the same unexecuted
+        // request after a planner outage still refers to that brief.
+        for (int i = history.size() - 1; i >= 0; i--) {
+            var row = history.get(i);
+            if (!AgentMessage.KIND_TEXT.equals(row.kind()) || !AgentMessage.STATE_DONE.equals(row.state())) break;
+            var body = json.readTree(row.contentJson());
+            String text = body.path("text").asText("");
+            if ("user".equals(row.role())) {
+                if (command.equals(text)) continue;
+                return LyricPolishRequest.topicFromBrief(text);
+            }
+            if (!"assistant".equals(row.role())) break;
+            String kind = body.path("kind").asText("");
+            if ("progress".equals(kind) && "planning".equals(body.path("stage").asText())) continue;
+            if ((!kind.isEmpty() && !"choice_menu".equals(kind)) || body.hasNonNull("action")
+                    || (body.hasNonNull("errorCode") && !"AGENT_CHAT_UNAVAILABLE".equals(body.path("errorCode").asText()))) break;
+        }
+        return "";
+    }
+
     private boolean recentStoryboardRequest(List<AgentMessage> history) {
         int users=0;
         for(int i=history.size()-1;i>=0&&users<3;i--) {
@@ -420,6 +455,7 @@ public final class AgentChatService {
             return new AgentChatModel.Plan("get_credits",Map.of(),"");
         if(instruction.matches("(?:歌词呢|查看歌词|显示完整歌词|完整歌词|正在制作吗|生成好了吗)[？?。！!]*"))
             return new AgentChatModel.Plan("get_current_song",Map.of(),"");
+        if (plan.plannerUnavailable()) return plan;
         boolean chat=plan.orderedSteps().stream().allMatch(s->"chat".equals(s.action()));
         if(chat && plan.reply()!=null && plan.reply().startsWith("还没有执行「")
                 && instruction.matches("(?:请|请帮我|帮我)?(?:直接)?(?:开始)?(?:生成|写)歌词[。！!]?"))

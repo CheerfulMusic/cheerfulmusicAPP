@@ -41,8 +41,12 @@ class AgentChatFlowIntegrationTest {
     @TestConfiguration(proxyBeanMethods=false)
     static class Offline {
         @Bean @Primary AgentChatModel conversationModel() {
+            var unavailable = new com.qingfeng.music.infrastructure.provider.ResilientAgentChatModel(context -> {
+                throw new com.qingfeng.music.common.exception.DomainException("AGENT_CHAT_UNAVAILABLE", "offline planner");
+            }, 1, java.time.Duration.ofSeconds(10));
             return context -> {
                 String text = context.text();
+                if (text.equals("你先打磨一版歌词")) return unavailable.respond(context);
                 if (text.equals("方向定好了")) return new AgentChatModel.Plan("chat",
                         Map.of("choices",List.of("generate_lyrics","create_work","discuss")), "中文、空灵、梦想与星光");
                 if (text.equals("查看我的作品")) return new AgentChatModel.Plan("list_works",Map.of(),"查看作品。");
@@ -219,6 +223,47 @@ class AgentChatFlowIntegrationTest {
         var saved=say(user,"确认执行").path("songCard");
         assertEquals(body,saved.path("lyrics").asText());
         assertEquals(0,db.queryForObject("SELECT COUNT(*) FROM generation_task WHERE work_id=?",Integer.class,saved.path("songId").asText()));
+    }
+
+    @Test void polishAfterBrainstormWritesTheUsersTopicOnceWhileThePlannerIsUnavailable() throws Exception {
+        var user = browser();
+        say(user, "帮我构思一首歌，先聊聊这个灵感。 平凡的一天");
+        String key = UUID.randomUUID().toString(), command = "你先打磨一版歌词";
+        var result = say(user, command, key);
+        assertEquals("generate_lyrics", result.path("action").asText(), lastText(result).path("text").asText());
+        var card = result.path("songCard");
+        String work = card.path("songId").asText();
+        assertEquals("平凡的一天", works.get(user.creator(), work).story());
+        assertFalse(card.path("lyrics").asText().isBlank());
+        assertEquals(card, say(user, command, key).path("songCard"));
+        assertEquals(1, works.list(user.creator(), 0).size());
+        assertEquals(1, lyrics.list(user.creator(), work).size());
+        assertEquals(0, db.queryForObject("SELECT COUNT(*) FROM generation_task WHERE work_id=?", Integer.class, work));
+    }
+
+    @Test void polishingUsesTheDisplayedRevisionAndRejectsAStaleTab() throws Exception {
+        var user = browser();
+        var work = works.create(user.creator(), new WorkApi.Draft("", "", "", "", "", "校园"));
+        var first = lyrics.save(user.creator(), work.id(), 0, "旧版", "旧版的校园\n明天继续向前");
+        var latest = lyrics.save(user.creator(), work.id(), 0, "新版", "新版的校园\n明天继续向前");
+        String open = "打开作品 " + work.id() + " 的歌词版本 ";
+        var tabA = say(user, open + first.id()).path("songCard");
+        var tabB = say(user, open + latest.id()).path("songCard");
+        String command = "你先打磨一版歌词";
+        var stale = edit(user, command, UUID.randomUUID().toString(), tabA);
+        assertEquals("AGENT_LYRIC_TARGET_CHANGED", lastText(stale).path("errorCode").asText());
+        assertEquals(tabB, stale.path("songCard"));
+        var selected = say(user, open + first.id()).path("songCard");
+        String key = UUID.randomUUID().toString();
+        var result = edit(user, command, key, selected);
+        assertEquals("generate_lyrics", result.path("action").asText(), lastText(result).path("text").asText());
+        var edited = result.path("songCard");
+        assertEquals("旧版的校园\n愿你勇敢向前", edited.path("lyrics").asText());
+        assertEquals(edited, edit(user, command, key, selected).path("songCard"));
+        assertEquals(3, lyrics.list(user.creator(), work.id()).size());
+        assertEquals(first.lyrics(), lyrics.get(user.creator(), work.id(), first.id()).lyrics());
+        assertEquals(latest.lyrics(), lyrics.get(user.creator(), work.id(), latest.id()).lyrics());
+        assertEquals(0, db.queryForObject("SELECT COUNT(*) FROM generation_task WHERE work_id=?", Integer.class, work.id()));
     }
 
     @Test void startingLyricsFromTheStudioDoesNotRewriteAnAlreadyOpenedSong() throws Exception {
