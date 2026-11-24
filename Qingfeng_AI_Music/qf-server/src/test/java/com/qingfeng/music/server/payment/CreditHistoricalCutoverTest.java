@@ -142,13 +142,26 @@ class CreditHistoricalCutoverTest {
         assertEquals("HISTORY_SCRIPT_OR_CHECKSUM_MISMATCH", assertThrows(IllegalStateException.class, () -> verifyHistory(reordered, resources)).getMessage());
     }
     @Test void approvedExtensionsMayCoexistWithoutChangingHistoricalSourceVersions() throws Exception {
-        var resources = classpathMigrations(); assertEquals(54, resources.size());
+        var resources = classpathMigrations(); assertEquals(55, resources.size());
         var optional = resources.stream().filter(item -> V47.equals(item.getFilename())).findFirst().orElseThrow();
         try (var stream = optional.getInputStream()) { assertEquals(-48314744, checksum(stream.readAllBytes())); }
         for (int limit : List.of(44, 45)) {
             var actual = history(resources, limit); assertEquals(limit, actual.size());
             assertDoesNotThrow(() -> verifyHistory(actual, resources));
         }
+    }
+    @Test void audioReferenceResourceRejectsChangesWithTheSameFlywayChecksum() throws Exception {
+        var resources = classpathMigrations();
+        var actual = history(resources, 45);
+        var reference = resources.stream().filter(r -> version(r) == 55).findFirst().orElseThrow();
+        byte[] original = reference.getContentAsByteArray();
+        byte[] changed = Arrays.copyOf(original, original.length + 1);
+        changed[original.length] = '\n';
+        assertEquals(checksum(original), checksum(changed));
+        resources.remove(reference);
+        resources.add(resource(reference.getFilename(), changed));
+        assertEquals("HISTORY_UNAPPROVED_RESOURCE_EXTENSION",
+                assertThrows(IllegalStateException.class, () -> verifyHistory(actual, resources)).getMessage());
     }
     @Test void mainV47MustKeepItsOriginalNameAndBothContentPins() throws Exception {
         var original = classpathMigrations(); var actual = history(original, 44);
