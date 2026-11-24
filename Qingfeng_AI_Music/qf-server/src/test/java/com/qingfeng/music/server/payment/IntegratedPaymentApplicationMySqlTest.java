@@ -433,8 +433,13 @@ class IntegratedPaymentApplicationMySqlTest {
     }
     @Test @Order(12) void paypalUnresolvedReversalHoldsOnlyItsOrderWithoutPermanentDeductionOrBlockingTheOtherBatch() throws Exception {
         var owner=owner();var created=business(owner,"/api/app/paypal/orders","POST","{\"packageId\":\"starter-USD\"}");assertEquals(200,created.statusCode(),created.body());String a=JSON.readTree(created.body()).path("orderId").asString();assertEquals(200,business(owner,"/api/app/paypal/orders/"+a+"/capture","POST","{}").statusCode());assertEquals(100,ledger.balance(owner.creatorId()));ledger.debit(owner.creatorId(),80,"paypal-used:"+unique());var b=paid(owner);
-        String remote=db.queryForObject("SELECT provider_link_id FROM payment_order WHERE id=?",String.class,a),capture=PAYPAL_ORDERS.get(remote).captureId(),event="WH-"+unique();var gateway=application.getBean(PayPalCheckoutGateway.class);
-        doReturn(JSON.valueToTree(Map.of("id",capture,"status","REVERSED","amount",Map.of("currency_code","USD","value","9.90"),"supplementary_data",Map.of("related_ids",Map.of("order_id",remote))))).when(gateway).retrieveCapture(capture);
+        String remote = db.queryForObject("SELECT provider_link_id FROM payment_order WHERE id=?", String.class, a);
+        String capture = PAYPAL_ORDERS.get(remote).captureId(), event = "WH-" + unique();
+        // The pending reversal can be retried after the application context restarts.
+        PAYPAL_CAPTURES.put(capture, JSON.valueToTree(Map.of(
+                "id", capture, "status", "REVERSED",
+                "amount", Map.of("currency_code", "USD", "value", "9.90"),
+                "supplementary_data", Map.of("related_ids", Map.of("order_id", remote)))));
         String body=JSON.writeValueAsString(Map.of("id",event,"event_type","PAYMENT.CAPTURE.REVERSED","resource",Map.of("id",capture,"supplementary_data",Map.of("related_ids",Map.of("order_id",remote)))));assertEquals(200,request("/api/public/paypal/webhook","POST",body,null,null).statusCode());drain();
         assertEquals(120,ledger.balance(owner.creatorId()));assertEquals(20,number("SELECT held FROM p0_credit_batch WHERE reference=?","payment:"+a));assertEquals("REVIEW",db.queryForObject("SELECT status FROM p0_credit_batch WHERE reference=?",String.class,"payment:"+a));assertEquals(0,held(b));assertEquals(0,number("SELECT adjusted FROM p0_credit_batch WHERE reference=?","payment:"+a));assertEquals(0,number("SELECT payment_risk_frozen FROM creator WHERE id=?",owner.creatorId()));
         assertEquals("PENDING",db.queryForObject("SELECT status FROM payment_webhook_inbox WHERE event_id=?",String.class,event));assertEquals(0,number("SELECT attempts FROM payment_webhook_inbox WHERE event_id=?",event));assertEquals("WAITING",db.queryForObject("SELECT result FROM payment_inbox_attempt WHERE event_id=?",String.class,event));ledger.debit(owner.creatorId(),100,"paypal-other-batch:"+unique());assertEquals(20,ledger.balance(owner.creatorId()));assertThrows(DomainException.class,()->ledger.debit(owner.creatorId(),1,"paypal-held:"+unique()));
