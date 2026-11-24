@@ -86,6 +86,7 @@ FEATURE_MIGRATION_SHA256 = {
     "V53__agent_admission_version.sql": "83af90babf7a7a299177d08d0b3e1eb79bcabf7cc0454cbd4d6025ae074e5591",
     "V54__song_share_statistics.sql": "9d837e8c53171c274f2367d1ff99ead74eb706659b0a612b6f5aa2aec0b9f633",
     "V55__generation_audio_reference.sql": "c629d909975214990cd9d02561d364e3cd5274e1ede43c57ed1ef9971450c4d0",
+    "V56__discover_song_community.sql": "3f3a64d35e5b57b508f51823ef90f5732e304cbfe080d026845bd41bdc6e056a",
 }
 
 class GateError(ValueError):
@@ -174,6 +175,7 @@ def verify_migration_set(normalized):
         ("V53__agent_admission_version.sql", "agentAdmissionVersion"),
         ("V54__song_share_statistics.sql", "songShareStatisticsVersion"),
         ("V55__generation_audio_reference.sql", "generationAudioReferenceVersion"),
+        ("V56__discover_song_community.sql", "discoverSongCommunityVersion"),
     ):
         if name not in normalized:
             break
@@ -198,7 +200,7 @@ def verify_migration_set(normalized):
         expected = rollback_expected
         extension = {}
     else:
-        raise GateError("Canonical migration chain must contain core V1..V45 followed by consecutive approved extensions through V55")
+        raise GateError("Canonical migration chain must contain core V1..V45 followed by consecutive approved extensions through V56")
     for name, digest in expected.items():
         if normalized[name] != digest:
             raise GateError("Canonical migration source changed: " + name)

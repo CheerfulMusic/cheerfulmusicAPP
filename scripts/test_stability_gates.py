@@ -311,6 +311,15 @@ class GateTests(unittest.TestCase):
         self.assertEqual("49", gate.verify_migration_set(migrations)["lyricsPreparationVersion"])
         self.assertEqual("50", gate.verify_migration_set(migrations)["discoverShelvesVersion"])
         reference_name = "V55__generation_audio_reference.sql"
+        community_name = "V56__discover_song_community.sql"
+        self.assertEqual("56", gate.verify_migration_set(migrations)["discoverSongCommunityVersion"])
+        with self.assertRaises(gate.GateError):
+            gate.verify_migration_set({**migrations, community_name: "0" * 64})
+        with self.assertRaises(gate.GateError):
+            gate.verify_migration_set({k: v for k, v in migrations.items() if k != reference_name})
+        with self.assertRaises(gate.GateError):
+            gate.verify_migration_set({**migrations, "V57__unapproved.sql": migrations[community_name]})
+        migrations.pop(community_name)
         self.assertEqual("55", gate.verify_migration_set(migrations)["generationAudioReferenceVersion"])
         prior = {k: v for k, v in migrations.items() if k != reference_name}
         self.assertEqual("54", gate.verify_migration_set(prior)["songShareStatisticsVersion"])

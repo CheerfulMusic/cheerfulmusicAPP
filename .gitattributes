@@ -1,5 +1,6 @@
 * text=auto
 *.sh text eol=lf
+Qingfeng_AI_Music/qf-infrastructure/src/main/resources/db/migration/V56__discover_song_community.sql text eol=lf
 *.png binary
 *.jpg binary
 *.jpeg binary
