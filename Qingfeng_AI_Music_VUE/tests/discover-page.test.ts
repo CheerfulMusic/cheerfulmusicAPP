@@ -50,6 +50,7 @@ beforeEach(() => {
   mocks.profile.mockResolvedValue({
     stageName: 'SergioBeats',
     songs: [
+      { id: '752fa2d9-ec96-47c3-87a5-a1d49d0135af', version: 1, title: 'Snow on the Floor', hasCover: true },
       { id: 'd4b1ec5a-e68f-43e6-8624-226981ecef5c', version: 1, title: 'Christmas Sky', hasCover: true },
       { id: '0485811c-0297-4513-9fb1-75f981af8707', version: 1, title: 'Gravity', hasCover: true },
     ],
@@ -173,7 +174,7 @@ describe('Discover editorial layout with real content', () => {
     const tiles = wrapper.findAll('.discover-playlist-tiles button')
     expect(tiles.map(tile => tile.get('strong').text())).toEqual(['华语流行', '电子', '欧美流行', 'Hip-Hop&R&B', '圣诞'])
     expect(tiles.map(tile => tile.get('.discover-playlist-title > span').text())).toEqual([
-      '14 首作品', '12 首作品', '6 首作品', '6 首作品', '1 首作品',
+      '14 首作品', '12 首作品', '6 首作品', '6 首作品', '2 首作品',
     ])
     expect(tiles.map(tile => tile.get('img').attributes('src')?.split('/').at(-1))).toEqual([
       'mandopop.webp', 'electronic.webp', 'global-pop.webp', 'house.webp', 'christmas.webp',
@@ -186,8 +187,20 @@ describe('Discover editorial layout with real content', () => {
     expect(wrapper.findAll('.test-playlist span')).toHaveLength(6)
     expect(wrapper.get('.test-playlist').text()).toContain('WESTSIDE SUMMER')
     await tiles[4]!.trigger('click')
-    expect(wrapper.get('.test-playlist').text()).toContain('Christmas Sky')
-    expect(wrapper.get('.test-playlist').text()).not.toContain('Gravity')
+    expect(wrapper.findAll('.test-playlist span').map(track => track.text())).toEqual(['Christmas Sky', 'Snow on the Floor'])
+  })
+
+  it('adds the two supplied recordings to jazz without displacing existing songs', async () => {
+    const publishedJazz = Array.from({ length: 7 }, (_, index) => song(`jazz-${index + 1}`))
+    mocks.shelves.mockResolvedValue({ ...shelfData([]), genres: { 'jazz-soul': publishedJazz } })
+    const wrapper = await open()
+    const jazz = wrapper.get('#discover-jazz-soul .shelf-square')
+    expect(jazz.findAll('.track-title').map(track => track.text())).toEqual([
+      'CHRISTMAS FEELS LIKE HOME', 'Prayer Beneath the Stars', ...publishedJazz.map(track => track.song.title),
+    ])
+    await jazz.get('[aria-label="试听 Prayer Beneath the Stars"]').trigger('click')
+    expect(mocks.toggle).toHaveBeenCalledWith(expect.objectContaining({ id: 'prayer-beneath-the-stars' }))
+    expect(mocks.record).not.toHaveBeenCalled()
   })
 
   it('keeps the Christmas playlist visible when its public artist lookup is unavailable', async () => {

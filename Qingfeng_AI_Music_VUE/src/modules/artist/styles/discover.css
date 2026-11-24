@@ -37,8 +37,8 @@
 .discover-create { padding: 7px 14px; border: 1px solid #e7c1ba; border-radius: 20px; color: var(--discover-accent); font-weight: 600; }
 .discover-create:hover { background: #fff5f3; }
 
-.discover-page-heading { padding-block: 35px 22px; }
-.discover-page-heading h1 { margin: 0; color: inherit; font: inherit; font-size: 31px; font-weight: 700; line-height: 1.2; letter-spacing: -.8px; }
+.discover-body { padding-block-start: 22px; }
+.discover-page-heading { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
 .discover-hero { position: relative; display: grid; grid-template-columns: 1fr 3fr 1fr; grid-template-rows: 286px 31px; column-gap: 8px; color: white; }
 .discover-hero-main, .discover-hero-preview { position: relative; isolation: isolate; overflow: hidden; background: #28413d; }
 .discover-hero-preview-before { border-radius: 6px 0 0 6px; }

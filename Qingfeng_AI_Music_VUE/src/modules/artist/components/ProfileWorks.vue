@@ -14,6 +14,7 @@ const props = defineProps<{ songs: ArtistRelease[]; busy: boolean; published: bo
 const emit = defineEmits<{ publish: [song: ArtistRelease]; remove: [song: ArtistRelease]; withdraw: [song: ArtistRelease]; 'library-count': [count: number | null] }>()
 const player = usePlayer()
 const tab = ref<'library' | 'published'>('library')
+const allPublishedVisible = ref(false)
 const works = ref<LibraryItem[]>([])
 const count = ref<number | null>(null)
 const loading = ref(true)
@@ -21,15 +22,8 @@ const error = ref(false)
 let request = 0
 
 const PAGE_SIZE = 20
-const PREVIEW_SIZE = 3
-const statusLabels: Record<LibraryItem['status'], string> = {
-  LYRICS_DRAFT: '待完善歌词',
-  READY_TO_GENERATE: '待生成歌曲',
-  GENERATING: '生成中',
-  CHECKING: '结果待核对',
-  COMPLETED: '已完成',
-  GENERATION_FAILED: '生成失败',
-}
+const PREVIEW_SIZE = 5
+const PUBLISHED_PREVIEW_SIZE = 15
 interface WorkRow {
   id: string
   workId: string
@@ -41,7 +35,7 @@ interface WorkRow {
   release?: ArtistRelease
 }
 
-const libraryRows = computed<WorkRow[]>(() => works.value.slice(0, PREVIEW_SIZE).map(item => {
+const libraryRows = computed<WorkRow[]>(() => works.value.map(item => {
   const { id, updatedAt } = item.work
   const songTitle = librarySongTitle(item)
   const cover = coverUrl(id, item.coverId)
@@ -50,7 +44,7 @@ const libraryRows = computed<WorkRow[]>(() => works.value.slice(0, PREVIEW_SIZE)
     : undefined
   const release = props.songs.find(song => song.workId === id)
   return { id, workId: id, title: songTitle, cover, track, updatedAt, release,
-    label: item.status === 'COMPLETED' ? publicationLabel(release) : statusLabels[item.status] }
+    label: publicationLabel(release) }
 }))
 const publishedRows = computed<WorkRow[]>(() => props.songs.map(song => {
   const track = ownerTrack(song)
@@ -58,6 +52,8 @@ const publishedRows = computed<WorkRow[]>(() => props.songs.map(song => {
     label: publicationLabel(song) }
 }))
 const rows = computed(() => tab.value === 'library' ? libraryRows.value : publishedRows.value)
+const visibleRows = computed(() => tab.value === 'published' && !allPublishedVisible.value
+  ? rows.value.slice(0, PUBLISHED_PREVIEW_SIZE) : rows.value)
 
 function publicationLabel(song?: ArtistRelease) {
   if (!song) return '仅自己可见'
@@ -70,10 +66,22 @@ async function load() {
   loading.value = true
   error.value = false
   try {
-    const items = await listWorks(0)
-    if (attempt !== request) return
-    works.value = items
-    count.value = items.length < PAGE_SIZE ? items.length : null
+    const completed = new Map<string, LibraryItem>()
+    let total: number | null = null
+    for (let page = 0; completed.size < PREVIEW_SIZE; page++) {
+      const items = await listWorks(page)
+      if (attempt !== request) return
+      for (const item of items) {
+        if (item.status === 'COMPLETED') completed.set(item.work.id, item)
+        if (completed.size === PREVIEW_SIZE) break
+      }
+      if (items.length < PAGE_SIZE) {
+        if (page === 0) total = items.length
+        break
+      }
+    }
+    works.value = [...completed.values()]
+    count.value = total
     emit('library-count', count.value)
   } catch {
     if (attempt !== request) return
@@ -86,6 +94,7 @@ function refreshIdentity() {
   works.value = []
   count.value = null
   tab.value = 'library'
+  allPublishedVisible.value = false
   emit('library-count', null)
   void load()
 }
@@ -117,7 +126,13 @@ onBeforeUnmount(() => {
           <NavIcon name="account" />{{ t('主页作品') }}<span>({{ songs.length }})</span>
         </button>
       </div>
-      <RouterLink to="/works" class="profile-works-all">{{ t('全部作品') }}</RouterLink>
+      <div class="profile-works-controls">
+        <button v-if="tab === 'published' && songs.length > PUBLISHED_PREVIEW_SIZE" type="button" class="text-button"
+          aria-controls="profile-works-list" :aria-expanded="allPublishedVisible" @click="allPublishedVisible = !allPublishedVisible">
+          {{ t(allPublishedVisible ? '收起' : '更多') }}
+        </button>
+        <RouterLink to="/works" class="profile-works-all">{{ t('全部作品') }}</RouterLink>
+      </div>
     </header>
 
     <p v-if="tab === 'library' && loading" class="profile-works-message" role="status">{{ t('正在读取作品…') }}</p>
@@ -126,12 +141,12 @@ onBeforeUnmount(() => {
       <button type="button" class="text-button" @click="load">{{ t('重试') }}</button>
     </div>
     <div v-else-if="!rows.length" class="profile-works-message">
-      <p>{{ t(tab === 'published' ? '打开一首已完成的歌曲，选择「发布到广场」。' : '第一首歌，从你的故事开始。') }}</p>
+      <p>{{ t(tab === 'published' ? '打开一首已完成的歌曲，选择「发布到广场」。' : '暂无已完成作品') }}</p>
       <button v-if="tab === 'published'" type="button" class="text-button" @click="tab = 'library'">{{ t('我的作品') }}</button>
       <RouterLink v-else to="/create" class="text-button">{{ t('开始创作') }}</RouterLink>
     </div>
-    <ul v-else class="profile-works-list">
-      <li v-for="row in rows" :key="row.id" class="profile-work-row">
+    <ul v-else id="profile-works-list" class="profile-works-list">
+      <li v-for="row in visibleRows" :key="row.id" class="profile-work-row">
         <button v-if="row.track" type="button" class="profile-work-cover"
           :aria-label="t(playing(row.track) ? '暂停 {title}' : '试听 {title}', { title: row.title })" @click="play(row.track)">
           <img :src="row.cover" alt="" loading="lazy">
@@ -205,6 +220,7 @@ onBeforeUnmount(() => {
   border-bottom-color: var(--accent);
 }
 .profile-works-switch svg { width: 15px; height: 15px; }
+.profile-works-controls { display: flex; align-items: center; gap: 12px; }
 .profile-works-all {
   display: inline-flex;
   align-items: center;

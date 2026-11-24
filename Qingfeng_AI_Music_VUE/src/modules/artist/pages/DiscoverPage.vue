@@ -13,6 +13,7 @@ import DiscoverSongCard from '../components/DiscoverSongCard.vue'
 import DiscoverShelf from '../components/DiscoverShelf.vue'
 import { withDiscoverEditorialCover } from '../model/discover-editorial-artwork'
 import { discoverSongArtwork, type HeroArtwork } from '../model/discover-hero-artwork'
+import { discoverJazzRows } from '../model/discover-jazz-tracks'
 import {
   christmasSongId, discoverGenres, globalPopWideCoverPositions, publicDiscoverTrack, withDiscoverPreviewCover,
   type DiscoverShelfTrack, type PublishedShelfTrack,
@@ -49,6 +50,7 @@ const replacedHeroSongId = 'acfaa9d5-ce74-477f-9db8-d3700311a26c'
 const invincibleSongId = '57bb7310-c64c-4873-b239-f2a268a7dedd'
 const micangshanSongId = '09aaf684-2b68-438f-aa17-8730a352bf74'
 const christmasArtistId = '308036ef-8bef-486f-88cc-8266e5797768'
+const christmasPlaylistSongIds = [christmasSongId, '752fa2d9-ec96-47c3-87a5-a1d49d0135af']
 const player = usePlayer()
 const previewPlaylists = usePreviewPlaylists()
 const previewTracks = usePreviewTracks()
@@ -139,8 +141,9 @@ const genreShelves = computed(() => discoverGenres.map(section => {
       }
     })
   const tracks = [...publicRows, ...examples]
+  const square = tracks.slice(0, 7)
   const wide = section.hasWideRow ? [...tracks.slice(7), ...tracks.slice(0, 7)].slice(0, 4) : []
-  return { ...section, square: tracks.slice(0, 7), wide }
+  return { ...section, square: section.id === 'jazz-soul' ? [...discoverJazzRows, ...square] : square, wide }
 }))
 const walkedFarRow = vocalPerformanceRows.find(row => row.track.id === 'vocal-zou-le-na-me-yuan')!
 const heroSlides = computed(() => {
@@ -164,7 +167,7 @@ const heroSlides = computed(() => {
   ]
   const release = latestSongs.value.find(item => item.song.id === christmasSongId)
     ?? popularSongs.value.find(item => item.song.id === christmasSongId)
-    ?? christmasTracks.value[0]?.publication
+    ?? christmasTracks.value.find(track => track.id === christmasSongId)?.publication
   if (release) {
     const track = publicDiscoverTrack(release)
     slides.push({ row: { ...release, track }, artwork: { desktop: christmasSky, compact: christmasSky, position: '67% center' } })
@@ -207,14 +210,17 @@ const playlistDetails = computed(() => playlists.value.find(playlist => playlist
 async function loadChristmasPlaylist() {
   try {
     const artist = await getPublicArtist(christmasArtistId)
-    const song = artist.songs.find(item => item.id === christmasSongId)
-    if (disposed || !song) return
-    christmasTracks.value = [{
-      ...publicDiscoverTrack({ artistId: christmasArtistId, stageName: artist.stageName, song }), authoredTitle: true,
-      recipient: '', subtitle: artist.stageName, category: t('圣诞'), filters: ['christmas'],
-      tags: [t('圣诞')], style: 'Christmas', occasion: '',
-      durationSeconds: 0, description: '', quote: '',
-    }]
+    if (disposed) return
+    christmasTracks.value = christmasPlaylistSongIds.flatMap(id => {
+      const song = artist.songs.find(item => item.id === id)
+      if (!song) return []
+      return [{
+        ...publicDiscoverTrack({ artistId: christmasArtistId, stageName: artist.stageName, song }), authoredTitle: true,
+        recipient: '', subtitle: artist.stageName, category: t('圣诞'), filters: ['christmas'],
+        tags: [t('圣诞')], style: 'Christmas', occasion: '',
+        durationSeconds: 0, description: '', quote: '',
+      }]
+    })
   } catch {
     // Keep the playlist available if its public release cannot be loaded.
   }
@@ -426,8 +432,8 @@ onBeforeUnmount(() => {
       </div>
     </header>
 
-    <div class="discover-width">
-      <div class="discover-page-heading"><h1>{{ discoverSeo[locale].heading }}</h1></div>
+    <div class="discover-width discover-body">
+      <h1 class="discover-page-heading">{{ discoverSeo[locale].heading }}</h1>
       <section class="discover-hero" :aria-label="t('广场推荐')" :aria-roledescription="t('轮播')"
         @mouseenter="heroHovered = true" @mouseleave="heroHovered = false" @focusin="heroFocused = true" @focusout="heroFocusOut">
         <div v-if="heroSlideCount > 1" class="discover-hero-preview discover-hero-preview-before">
