@@ -3,10 +3,11 @@ import { computed, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { ApiError } from '../../../shared/http/api-client'
 import { t } from '../../../shared/i18n'
-import { artistHomeUrl, getPublicArtist, publicArtistCoverUrl, publicAvatarUrl, publicTrack, type PublicArtist } from '../api/artist'
+import { artistHomeUrl, getPublicArtist, publicArtistCoverUrl, publicAvatarUrl, type PublicArtist } from '../api/artist'
 import ArtistHome from '../components/ArtistHome.vue'
 import AlbumShelf from '../components/AlbumShelf.vue'
 import ArtistShareButton from '../components/ArtistShareButton.vue'
+import { publicTrackWithDiscoverCover } from '../model/discover-shelves'
 
 const route = useRoute()
 const id = computed(() => String(route.params.id || ''))
@@ -16,7 +17,7 @@ const missing = ref(false)
 const error = ref('')
 const avatar = computed(() => artist.value?.avatarKey ? publicAvatarUrl(id.value, artist.value.avatarKey) : undefined)
 const cover = computed(() => artist.value?.coverKey ? publicArtistCoverUrl(id.value, artist.value.coverKey) : undefined)
-const tracks = computed(() => artist.value?.songs.map(song => publicTrack(id.value, song)) || [])
+const tracks = computed(() => artist.value?.songs.map(song => publicTrackWithDiscoverCover(id.value, song)) || [])
 let turn = 0
 
 async function load() {

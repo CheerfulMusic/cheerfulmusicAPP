@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import AgentVideoProgress from '../../agent/components/AgentVideoProgress.vue'
+import { getArtistProfile, type ArtistRelease } from '../../artist/api/artist'
+import { ownerDiscoverCover } from '../../artist/model/discover-shelves'
 import PlaybackIcon from '../../../shared/ui/PlaybackIcon.vue'
 import { t, formatDate, locale } from '../../../shared/i18n'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
@@ -14,6 +16,7 @@ interface SharedDownload { id:string; title:string; workId:string; assetId:strin
 const purchased=ref<SharedDownload[]>([]), purchasedError=ref(''), purchasedLoading=ref(false)
 async function loadPurchased(){const epoch=identityEpoch;purchasedLoading.value=true;purchasedError.value='';try{await ensureCreator();const rows=await requestJson<SharedDownload[]>('app/shared-downloads');if(epoch===identityEpoch)purchased.value=rows}catch(e){if(epoch===identityEpoch){purchased.value=[];if(e instanceof ApiError&&e.code==='DOWNLOAD_LOGIN_REQUIRED')showLoginDialog();else purchasedError.value=e instanceof Error?e.message:'读取已购音频失败'}}finally{if(epoch===identityEpoch)purchasedLoading.value=false}}
 const works=ref<LibraryItem[]>([]),error=ref(''),loading=ref(false),page=ref(0),filter=ref('all'),player=usePlayer()
+const discoverReleases = ref(new Map<string, ArtistRelease>())
 const deleteTarget=ref<LibraryItem|null>(null),deleteDialog=ref<HTMLDialogElement>(),deleting=ref(false),deleteError=ref(''),completedWarning=ref(false),notice=ref('')
 const videoTarget=ref<LibraryItem|null>(null),videoDialog=ref<HTMLDialogElement>()
 async function openVideo(item:LibraryItem){player.stopSegment(true);videoTarget.value=item;await nextTick();videoDialog.value?.showModal()}
@@ -22,7 +25,36 @@ const removed=new Set<string>();let identityEpoch=0
 const labels:Record<string,string>={LYRICS_DRAFT:'待完善歌词',READY_TO_GENERATE:'待生成歌曲',GENERATING:'生成中',CHECKING:'结果待核对',COMPLETED:'已完成',GENERATION_FAILED:'生成失败'}
 const shown=computed(()=>works.value.filter(w=>filter.value==='all'||(filter.value==='completed'?w.status==='COMPLETED':['GENERATING','CHECKING'].includes(w.status))))
 let alive=true,sequence=0
-async function load(target=page.value,quiet=false){const turn=++sequence;if(!quiet)loading.value=true;error.value='';try{const found=await listWorks(target);if(alive&&turn===sequence){works.value=found.filter(item=>!removed.has(item.work.id));page.value=target}}catch(e){if(alive&&turn===sequence)error.value=e instanceof Error?e.message:'读取作品失败'}finally{if(turn===sequence)loading.value=false}}
+async function load(target = page.value, quiet = false) {
+  const turn = ++sequence
+  if (!quiet) loading.value = true
+  error.value = ''
+  try {
+    const found = await listWorks(target)
+    if (!alive || turn !== sequence) return
+    works.value = found.filter(item => !removed.has(item.work.id))
+    page.value = target
+    if (works.value.some(item => item.audioId)) void refreshDiscoverCovers(turn)
+  } catch (cause) {
+    if (alive && turn === sequence) error.value = cause instanceof Error ? cause.message : '读取作品失败'
+  } finally {
+    if (turn === sequence) loading.value = false
+  }
+}
+
+async function refreshDiscoverCovers(turn: number) {
+  const profile = await getArtistProfile().catch(() => undefined)
+  if (!alive || turn !== sequence) return
+  const previous = discoverReleases.value
+  const published = profile?.published ? profile.songs.filter(song => song.onDiscover) : []
+  discoverReleases.value = new Map(published.map(song => [song.workId, song]))
+  for (const item of works.value) {
+    const { audioId, work } = item
+    if (audioId && (previous.get(work.id)?.assetId === audioId || discoverReleases.value.get(work.id)?.assetId === audioId)) {
+      player.updateCover(audioId, libraryCover(item))
+    }
+  }
+}
 async function askDelete(item:LibraryItem){deleteTarget.value=item;completedWarning.value=!!item.audioId||item.status==='COMPLETED';deleteError.value='';await nextTick();deleteDialog.value?.showModal()}
 function closeDelete(){if(deleting.value)return;deleteDialog.value?.close();deleteTarget.value=null;deleteError.value=''}
 async function confirmDelete(){
@@ -52,14 +84,16 @@ async function confirmDelete(){
  }finally{if(epoch===identityEpoch)deleting.value=false}
 }
 function libraryCover(item: LibraryItem) {
+  const release = discoverReleases.value.get(item.work.id)
+  if (release && release.assetId === item.audioId) return ownerDiscoverCover(release)
   if (item.coverId) return coverUrl(item.work.id, item.coverId)
   return locale.value === 'en' ? '/media/library-cover-en.svg' : '/media/library-cover.svg'
 }
-function track(r:LibraryItem){return {id:r.audioId!,title:librarySongTitle(r),cover:coverUrl(r.work.id,r.coverId),audio:audioUrl(r.work.id,r.audioId!),provenance:r.audioOrigin!}}
+function track(r:LibraryItem){return {id:r.audioId!,title:librarySongTitle(r),cover:libraryCover(r),audio:audioUrl(r.work.id,r.audioId!),provenance:r.audioOrigin!}}
 function play(item:LibraryItem){if(!item.audioId)return;player.setQueue(works.value.filter(w=>w.audioId).map(track));void player.toggle(track(item))}
 const timer=window.setInterval(()=>{if(document.visibilityState==='visible'&&!loading.value&&works.value.some(w=>(['GENERATING','CHECKING'].includes(w.status)||['QUEUED','RUNNING','ASSEMBLING','UNCERTAIN'].includes(w.videoState||''))))void load(page.value,true)},8000)
 const visible=()=>{if(document.visibilityState==='visible')void load(page.value,true)}
-const identityChanged=()=>{identityEpoch++;closeVideo();purchased.value=[];purchasedError.value='';purchasedLoading.value=false;removed.clear();deleting.value=false;deleteDialog.value?.close();deleteTarget.value=null;notice.value='';works.value=[];filter.value='all';void load(0)}
+const identityChanged=()=>{identityEpoch++;closeVideo();purchased.value=[];purchasedError.value='';purchasedLoading.value=false;removed.clear();deleting.value=false;deleteDialog.value?.close();deleteTarget.value=null;notice.value='';works.value=[];discoverReleases.value.clear();filter.value='all';void load(0)}
 onMounted(()=>{window.addEventListener('qingfeng:identity-changed',identityChanged);void load();document.addEventListener('visibilitychange',visible)})
 onBeforeUnmount(()=>{window.removeEventListener('qingfeng:identity-changed',identityChanged);alive=false;sequence++;window.clearInterval(timer);document.removeEventListener('visibilitychange',visible)})
 </script>

@@ -187,10 +187,12 @@ export const publicAvatarUrl = (id: string, key: string) => apiUrl(`${publicArti
 export const ownerArtistCoverUrl = (key: string) => apiUrl(`${mine}/cover/${encodeURIComponent(key)}`)
 export const publicArtistCoverUrl = (id: string, key: string) => apiUrl(`${publicArtist(id)}/cover/${encodeURIComponent(key)}`)
 
+export const publicSongPlaceholder = '/brand/share-default-cover.png'
+
 export function publicTrack(id: string, song: PublishedSong) {
   const path = `${publicArtist(id)}/songs/${encodeURIComponent(song.id)}/${song.version}`
   const coverQuery = song.coverVersion ? `?cover=${encodeURIComponent(song.coverVersion)}` : ''
-  return { id: song.id, title: song.title, cover: song.hasCover ? apiUrl(`${path}/cover${coverQuery}`) : '/brand/share-default-cover.png',
+  return { id: song.id, title: song.title, cover: song.hasCover ? apiUrl(`${path}/cover${coverQuery}`) : publicSongPlaceholder,
     audio: apiUrl(`${path}/audio`) }
 }
 

@@ -4,7 +4,7 @@ import {createApp,h,nextTick,type App} from 'vue'
 import WorkLibraryPage from '../src/modules/works/pages/WorkLibraryPage.vue'
 import {deleteWork} from '../src/modules/works/api/works'
 import {requestJson,resetCreatorSession} from '../src/shared/http/api-client'
-const player=vi.hoisted(()=>({current:null as null|{audio:string},stopSegment:vi.fn(),reset:vi.fn(),setQueue:vi.fn(),toggle:vi.fn(),playing:false}))
+const player=vi.hoisted(()=>({current:null as null|{audio:string},stopSegment:vi.fn(),reset:vi.fn(),setQueue:vi.fn(),toggle:vi.fn(),updateCover:vi.fn(),playing:false}))
 vi.mock('../src/shared/player/store',()=>({usePlayer:()=>player}))
 const work={id:'11111111-1111-4111-8111-111111111111',version:0,recipient:'',occasion:'',story:'晚风里的故事',message:'',style:'民谣',title:'我的歌',vocalGender:'AUTO',createdAt:'2026-11-10T00:00:00Z',updatedAt:'2026-11-10T00:00:00Z'}
 const row={work,status:'LYRICS_DRAFT',audioId:null,audioOrigin:null,songTitle:null,coverId:null}
@@ -85,4 +85,28 @@ it('offers progress rather than playback for unfinished MV tasks',async()=>{
  list=[{...row,videoId:'12345678-1234-1234-1234-123456789012',videoState:'RUNNING'}]
  mount();await flush();expect(button('查看 MV 进度')).toBeTruthy()
  expect([...document.querySelectorAll('button')].some(b=>b.textContent==='播放 MV')).toBe(false)
+})
+
+it('uses the Discover cover for the matching published audio and restores the work cover after withdrawal',async()=>{
+ const published={id:'0485811c-0297-4513-9fb1-75f981af8707',version:1,title:'Gravity',workId:work.id,assetId:'audio-a',coverId:'release-cover',onDiscover:true}
+ const profile={publicId:'artist',stageName:'Artist',tagline:'',avatarKey:null,coverKey:null,featuredReleaseId:null,published:true,songs:[published]}
+ list=[{...row,status:'COMPLETED',audioId:'audio-a',audioOrigin:'GENERATED',coverId:'work-cover'}]
+ const original=vi.mocked(fetch).getMockImplementation()!
+ vi.mocked(fetch).mockImplementation(async(input,options)=>String(input).endsWith('/app/artist-profile')?reply(profile):original(input,options))
+ const cover=()=>document.querySelector('.library-art img')?.getAttribute('src')
+ mount();await flush()
+ expect(cover()).toContain('cover-23.webp')
+ document.querySelector<HTMLButtonElement>('.library-play')!.click()
+ expect(player.toggle).toHaveBeenLastCalledWith(expect.objectContaining({id:'audio-a',cover:cover()}))
+ published.assetId='older-audio'
+ button('刷新作品').click();await flush()
+ expect(cover()).toContain('/covers/work-cover')
+ published.assetId='audio-a'
+ published.id='release-without-editorial-art'
+ button('刷新作品').click();await flush()
+ expect(cover()).toContain('/covers/release-cover')
+ published.onDiscover=false
+ button('刷新作品').click();await flush()
+ expect(cover()).toContain('/covers/work-cover')
+ expect(player.updateCover).toHaveBeenLastCalledWith('audio-a',cover())
 })
