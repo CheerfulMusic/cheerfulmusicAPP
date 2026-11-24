@@ -8,7 +8,7 @@ const handoff = readFileSync('public/brand/wechat-handoff.js', 'utf8')
 const template = readFileSync('../Qingfeng_AI_Music/qf-server/src/main/resources/song.html', 'utf8')
 const description = '我在 Cheerful Music 创作了一首歌曲，邀请你来听听'
 
-function openSong(id: string, inWechat = false, agent = 'WebTest') {
+function openSong(id: string, inWechat = false, agent = 'WebTest', canShare = true) {
   const site = 'https://cheerfulmusic.com'
   const url = site + '/song/' + id
   const api = site + '/api/songs/' + id
@@ -27,6 +27,7 @@ function openSong(id: string, inWechat = false, agent = 'WebTest') {
   const navigator = {
     userAgent: inWechat ? 'MicroMessenger/test' : agent,
     clipboard: { writeText: vi.fn().mockResolvedValue(undefined) }, share: vi.fn().mockResolvedValue(undefined),
+    canShare: vi.fn().mockReturnValue(canShare),
   }
   const wx = { ready: vi.fn(), error: vi.fn(), config: vi.fn(), updateAppMessageShareData: vi.fn(), updateTimelineShareData: vi.fn() }
   const assign = vi.fn()
@@ -45,33 +46,45 @@ describe('public song listener page', () => {
     target.onclick!.call(target, { isTrusted: true } as PointerEvent)
   }
 
-  it('copies the song and opens desktop WeChat on a Windows friend click, never on a preview or for Moments', async () => {
+  it('hands the selected song to the Windows picker on a real click and keeps the draft after cancellation', async () => {
     const { fields, navigator, assign } = openSong('song-w', false, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)')
+    const title = fields.title + ' · ' + fields.creator
+    const draft = title + '\n' + fields.url
     button('friend').click()
-    clickDestination('timeline')
-    expect(navigator.clipboard.writeText).not.toHaveBeenCalled()
-    expect(assign).not.toHaveBeenCalled()
+    expect(navigator.share).not.toHaveBeenCalled()
+    navigator.share.mockRejectedValueOnce(new DOMException('dismissed', 'AbortError'))
     clickDestination('friend')
-    expect(navigator.clipboard.writeText).toHaveBeenCalledExactlyOnceWith(fields.url)
-    await vi.waitFor(() => expect(assign).toHaveBeenCalledExactlyOnceWith('weixin://'))
-    expect(document.getElementById('open-desktop-wechat')?.hidden).toBe(false)
-    expect(document.getElementById('handoff-status')?.textContent).toContain('粘贴并发送')
+    expect(navigator.share).toHaveBeenCalledExactlyOnceWith({ title, url: fields.url, text: description })
+    await Promise.resolve()
+    expect(document.getElementById('desktop-draft')?.hidden).toBe(false)
+    expect((document.getElementById('handoff-link') as HTMLTextAreaElement).value).toBe(draft)
+    expect(navigator.clipboard.writeText).not.toHaveBeenCalled()
+    expect(document.getElementById('open-desktop-wechat')?.hidden).toBe(true)
+    button('copy-draft').click()
+    expect(navigator.clipboard.writeText).toHaveBeenCalledExactlyOnceWith(draft)
+    await vi.waitFor(() => expect(document.getElementById('open-desktop-wechat')?.hidden).toBe(false))
+    clickDestination('timeline')
+    expect(navigator.share).toHaveBeenLastCalledWith({ title: fields.timelineTitle, url: fields.url, text: description })
+    expect(document.getElementById('desktop-draft')?.hidden).toBe(true)
+    expect(assign).not.toHaveBeenCalled()
   })
 
   it('keeps a manual copy and launch available if the desktop browser denies clipboard access', async () => {
-    const { fields, navigator, assign } = openSong('song-w2', false, 'Windows NT 10.0')
+    const { fields, navigator, assign } = openSong('song-w2', false, 'Windows NT 10.0', false)
     navigator.clipboard.writeText.mockRejectedValueOnce(new Error('denied'))
     clickDestination('friend')
-    const input = document.getElementById('handoff-link') as HTMLInputElement
-    await vi.waitFor(() => expect(input.hidden).toBe(false))
-    expect(input.value).toBe(fields.url)
-    expect(input.selectionEnd).toBe(fields.url.length)
+    const input = document.getElementById('handoff-link') as HTMLTextAreaElement
+    await vi.waitFor(() => expect(document.activeElement).toBe(input))
+    expect(input.value).toBe(fields.title + ' · ' + fields.creator + '\n' + fields.url)
+    expect(input.selectionEnd).toBe(input.value.length)
+    expect(document.getElementById('handoff-status')?.textContent).toContain('Ctrl+C')
+    expect(navigator.share).not.toHaveBeenCalled()
     expect(document.getElementById('open-desktop-wechat')?.getAttribute('href')).toBe('weixin://')
     expect(assign).not.toHaveBeenCalled()
   })
 
   it('does not launch after a delayed clipboard permission when the listener has switched to Moments', async () => {
-    const { navigator, assign } = openSong('song-w3', false, 'Windows NT 10.0')
+    const { navigator, assign } = openSong('song-w3', false, 'Windows NT 10.0', false)
     let permit!: () => void
     navigator.clipboard.writeText.mockImplementationOnce(() => new Promise<void>(resolve => { permit = resolve }))
     clickDestination('friend')
@@ -112,7 +125,7 @@ describe('public song listener page', () => {
 
   it('signs the current URL and supplies separate friend and timeline cards for each song', async () => {
     for (const id of ['song-a', 'song-b']) {
-      const { fields, location, wx, fetch, config } = openSong(id, true)
+      const { fields, location, wx, fetch, config, navigator, assign } = openSong(id, true)
       const sdk = document.querySelector<HTMLScriptElement>('script[src*="jweixin"]')!
       await sdk.onload?.call(sdk, new Event('load'))
       expect(fetch).toHaveBeenCalledWith('/api/wechat/jssdk-config?url=' + encodeURIComponent(location.href.split('#')[0]))
@@ -122,16 +135,22 @@ describe('public song listener page', () => {
       expect(document.querySelector<HTMLMetaElement>('meta[property="og:site_name"]')?.content).toBe(fields.siteName)
       expect(document.querySelector<HTMLMetaElement>('meta[property="og:title"]')?.content).toBe(fields.timelineTitle)
       expect(document.querySelector('h1')?.textContent).toBe(fields.title)
+      expect(document.querySelector('.wordmark img')?.getAttribute('src')).toBe('/brand/logo-symbol.svg')
       const common = { link: fields.url, imgUrl: fields.thumbnail }
       const friend = wx.updateAppMessageShareData.mock.calls[0][0]
       const timeline = wx.updateTimelineShareData.mock.calls[0][0]
       expect(friend).toMatchObject({ ...common, title: fields.title + ' · ' + fields.creator, desc: description })
       expect(timeline).toMatchObject({ ...common, title: fields.timelineTitle })
       expect(timeline).not.toHaveProperty('desc')
-      button('friend').click()
+      expect(button('friend').textContent).toContain('右上角菜单发送')
+      clickDestination('friend')
       expect(document.getElementById('channel-instruction')?.textContent).toContain('发送给朋友')
-      button('timeline').click()
+      expect(document.getElementById('timeline-menu-hint')?.hidden).toBe(false)
+      clickDestination('timeline')
       expect(document.getElementById('channel-instruction')?.textContent).toContain('分享到朋友圈')
+      expect(navigator.share).not.toHaveBeenCalled()
+      expect(navigator.clipboard.writeText).not.toHaveBeenCalled()
+      expect(assign).not.toHaveBeenCalled()
       expect(button('timeline').getAttribute('aria-pressed')).toBe('true')
       expect(button('friend').getAttribute('aria-pressed')).toBe('false')
       expect((document.getElementById('more-share') as HTMLDetailsElement).open).toBe(false)
