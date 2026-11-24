@@ -42,27 +42,30 @@ describe('crawlable site pages', () => {
     expect(card?.querySelector('h1')?.textContent).toBe(sitePage(path)!.heading)
     const productCopy = card?.querySelector('.beta-access-intro')
     expect(productCopy?.textContent).toBe(sitePage(path)!.description)
-    expect(productCopy?.textContent).toContain('青风音乐')
     expect(productCopy?.textContent).toContain('Cheerful Music')
+    if (path === '/') expect(productCopy?.textContent).toContain('青风音乐')
+    else expect(productCopy?.textContent).not.toMatch(/\p{Script=Han}/u)
     expect(productCopy?.closest('[data-nosnippet]')).toBeNull()
     expect(card?.querySelector('[data-nosnippet]')?.textContent).toMatch(/邀请码|invitation code/)
     expect(page.querySelectorAll('h1')).toHaveLength(1)
     expect(card?.querySelectorAll('nav a[href*="/guide/"]')).toHaveLength(4)
+    expect(card?.querySelector('nav')?.closest('[data-nosnippet]')).not.toBeNull()
+    expect(card?.querySelector('footer')?.closest('[data-nosnippet]')).not.toBeNull()
     expect(card?.querySelector('form')).toBeNull()
   })
 
   it('publishes the Chinese search entry at the root and keeps the separate English search title', () => {
     expect(parsePage('/').documentElement.lang).toBe('zh-CN')
-    expect(parsePage('/').querySelector('h1')?.textContent).toBe('青风音乐 AI 音乐创作平台')
-    expect(parsePage('/').querySelector('meta[property="og:title"]')?.getAttribute('content')).toBe('Cheerful Music 青风音乐｜做自己的歌')
+    expect(parsePage('/').querySelector('h1')?.textContent).toBe('青风音乐｜把你的歌词做成歌')
+    expect(parsePage('/').querySelector('meta[property="og:title"]')?.getAttribute('content')).toBe(parsePage('/').querySelector('h1')?.textContent)
     expect(parsePage('/').querySelector('link[rel="icon"][sizes="96x96"]')?.getAttribute('href')).toBe('/brand/favicon-96.png')
-    expect(parsePage('/en/').title).toBe('Everyone Can Be a Creator | AI Music Maker – Cheerful Music')
+    expect(parsePage('/en/').title).toBe('Cheerful Music | Turn Your Lyrics into a Song with AI')
     expect(sitePage('/zh-CN/')).toBeUndefined()
   })
 
   it.each([
-    ['/discover', 'zh-CN', '青风音乐原创歌曲广场｜Cheerful Music', '/'],
-    ['/en/discover', 'en', 'Discover Original AI Songs | Cheerful Music', '/en/'],
+    ['/discover', 'zh-CN', '青风音乐｜原创歌曲广场', '/'],
+    ['/en/discover', 'en', 'Cheerful Music | Discover Original AI Songs', '/en/'],
   ] as const)('serves the linked music community in its URL language at %s', (path, language, title, home) => {
     const page = parsePage(path)
     page.querySelectorAll('noscript').forEach(node => node.remove())
@@ -130,8 +133,8 @@ describe('crawlable site pages', () => {
     expect(document.documentElement.lang).toBe(language)
     expect(document.title).toBe(page.title)
     const description = document.querySelector('meta[name="description"]')?.getAttribute('content')
-    expect(description).toContain('青风音乐')
-    expect(description).not.toBe(sitePage('/en/')!.description)
+    expect(description).toBe(sitePage(language === 'en' ? '/en/' : '/')!.description)
+    expect(page.querySelector('main .beta-access-intro')?.textContent).toBe(description)
   })
 
   it('replaces metadata on client navigation and clears it on private destinations', () => {
