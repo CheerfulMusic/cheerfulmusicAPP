@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.qingfeng.music.infrastructure.persistence.work.WorkLibraryMapper">
+  <resultMap id="searchRow" type="com.qingfeng.music.infrastructure.persistence.work.WorkLibraryMapper$SearchRow">
+    <constructor>
+      <idArg column="id" javaType="string"/>
+      <arg column="version" javaType="_long"/>
+      <arg column="title" javaType="string"/>
+      <arg column="story" javaType="string"/>
+      <arg column="message" javaType="string"/>
+      <arg column="lyric_title" javaType="string"/>
+      <arg column="lyrics" javaType="string"/>
+      <arg column="revision_id" javaType="string"/>
+      <arg column="lyric_number" javaType="_int"/>
+    </constructor>
+  </resultMap>
+
+  <resultMap id="projectionRow" type="com.qingfeng.music.infrastructure.persistence.work.WorkLibraryMapper$ProjectionRow">
+    <constructor>
+      <idArg column="id" javaType="string"/>
+      <arg column="quick_status" javaType="string"/>
+      <arg column="task_status" javaType="string"/>
+      <arg column="active_tasks" javaType="_int"/>
+      <arg column="unknown_tasks" javaType="_int"/>
+      <arg column="lyric_count" javaType="_int"/>
+      <arg column="audio_id" javaType="string"/>
+      <arg column="audio_origin" javaType="string"/>
+      <arg column="song_title" javaType="string"/>
+      <arg column="cover_id" javaType="string"/>
+      <arg column="video_id" javaType="string"/>
+      <arg column="video_state" javaType="string"/>
+    </constructor>
+  </resultMap>
+
+  <!-- Read fresh results even when the surrounding transaction also uses JdbcTemplate. -->
+  <select id="search" resultMap="searchRow" flushCache="true">
+    SELECT w.id,w.version,w.title,w.story,w.message,l.id AS revision_id,l.title AS lyric_title,l.lyrics,
+      (SELECT COUNT(*) FROM lyric_revision v WHERE v.work_id=l.work_id
+       AND (v.created_at&lt;l.created_at OR (v.created_at=l.created_at AND v.id&lt;=l.id))) AS lyric_number
+    FROM music_work w LEFT JOIN lyric_revision l ON l.id=(
+      SELECT r.id FROM lyric_revision r WHERE r.work_id=w.id
+      AND (LOWER(r.lyrics) LIKE #{pattern} ESCAPE '!' OR LOWER(r.title) LIKE #{pattern} ESCAPE '!')
+      ORDER BY CASE WHEN LOWER(r.title)=#{exact} THEN 0 WHEN LOWER(r.lyrics) LIKE #{pattern} ESCAPE '!' THEN 1 ELSE 2 END,
+        r.created_at DESC,r.id DESC LIMIT 1)
+    WHERE w.owner_id=#{owner} AND w.deleted_at IS NULL AND (l.id IS NOT NULL
+      OR LOWER(w.title) LIKE #{pattern} ESCAPE '!' OR LOWER(w.story) LIKE #{pattern} ESCAPE '!' OR LOWER(w.message) LIKE #{pattern} ESCAPE '!')
+    ORDER BY CASE WHEN LOWER(w.title)=#{exact} OR LOWER(l.title)=#{exact} THEN 0 WHEN l.id IS NOT NULL THEN 1 ELSE 2 END,
+      w.updated_at DESC,w.id DESC LIMIT 20 OFFSET #{offset}
+  </select>
+
+  <select id="selectProjection" resultMap="projectionRow" flushCache="true">
+    SELECT w.id,
+      (SELECT v.id FROM music_video_project v
+       WHERE v.work_id=w.id AND v.creator_id=w.owner_id
+         AND v.state IN ('READY','QUEUED','RUNNING','ASSEMBLING','UNCERTAIN')
+       ORDER BY CASE WHEN v.state='READY' THEN 0 ELSE 1 END,v.created_at DESC,v.id DESC LIMIT 1) AS video_id,
+      (SELECT v.state FROM music_video_project v
+       WHERE v.work_id=w.id AND v.creator_id=w.owner_id
+         AND v.state IN ('READY','QUEUED','RUNNING','ASSEMBLING','UNCERTAIN')
+       ORDER BY CASE WHEN v.state='READY' THEN 0 ELSE 1 END,v.created_at DESC,v.id DESC LIMIT 1) AS video_state,
+      (SELECT CASE WHEN q.error_code='LYRICS_SUBMISSION_UNKNOWN' THEN 'FAILED' ELSE q.status END
+       FROM quick_creation q WHERE q.work_id=w.id
+       ORDER BY q.created_at DESC,q.id DESC LIMIT 1) AS quick_status,
+      (SELECT t.status FROM generation_task t WHERE t.work_id=w.id
+       ORDER BY t.created_at DESC,t.id DESC LIMIT 1) AS task_status,
+      (SELECT COUNT(*) FROM generation_task t WHERE t.work_id=w.id
+         AND t.status IN ('QUEUED','SUBMITTING','RUNNING','SAVING')) AS active_tasks,
+      (SELECT COUNT(*) FROM generation_task t WHERE t.work_id=w.id
+         AND t.status='SUBMISSION_UNKNOWN') AS unknown_tasks,
+      (SELECT COUNT(*) FROM lyric_revision l WHERE l.work_id=w.id AND l.work_version=w.version) AS lyric_count,
+      c.cover_id,m.id AS audio_id,m.origin AS audio_origin,
+      COALESCE(t.title,NULLIF(w.title,''),
+        (SELECT l.title FROM lyric_revision l WHERE l.work_id=w.id
+         ORDER BY l.created_at DESC,l.id DESC LIMIT 1)) AS song_title
+    FROM music_work w
+    LEFT JOIN work_cover c ON c.work_id=w.id
+    LEFT JOIN media_asset m ON m.id=COALESCE(
+      (SELECT s.asset_id FROM work_audio_selection s WHERE s.work_id=w.id),
+      (SELECT a.id FROM media_asset a WHERE a.work_id=w.id
+         AND NOT EXISTS(SELECT 1 FROM section_edit e WHERE e.task_id=a.generation_task_id)
+       ORDER BY a.created_at DESC,a.id DESC LIMIT 1))
+    LEFT JOIN generation_task t ON t.id=m.generation_task_id
+    WHERE w.owner_id=#{owner} AND w.deleted_at IS NULL AND w.id IN
+    <foreach collection="workIds" item="workId" open="(" separator="," close=")">
+      #{workId}
+    </foreach>
+  </select>
+</mapper>

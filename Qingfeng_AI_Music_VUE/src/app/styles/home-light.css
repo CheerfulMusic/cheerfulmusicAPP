@@ -60,10 +60,7 @@
 .home-light-shell .creator-main-title { display:block; letter-spacing:.01em; }
 .home-light-shell .creator-title-art { display:block; height:1em; width:auto; max-width:100%; }
 .home-light-shell .creator-title-text { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }
-.home-light-shell .home-creator-hero .creator-singer-tagline { display:block; margin-top:22px; color:#f93822; font-size:36px; line-height:1.4; letter-spacing:.015em; font-weight:400; }
-.home-light-shell .creator-singer-tagline > span { display:inline; }
-.home-light-shell .creator-singer-tagline strong { font-weight:650; }
-.home-light-shell .home-creator-hero .creator-singer-english { display:block; font-size:22px; line-height:1.4; font-weight:400; color:#f93822; letter-spacing:0; margin-top:8px; }
+.home-light-shell .home-creator-hero .creator-tagline { display:block; font-size:22px; line-height:1.4; font-weight:400; color:#f93822; letter-spacing:0; margin-top:22px; }
 .home-light-shell .home-creator-hero .bilingual-description { font-size:16px; line-height:1.85; max-width:690px; margin:22px 0 0; color:#615652; }
 .home-light-shell .bilingual-description .description-translation { font-size:16px; line-height:1.7; color:#796b65; margin-top:10px; width:520px; max-width:calc(100vw - 40px); }
 .home-light-shell .description-translation > span { display:inline-block; white-space:nowrap; }
@@ -138,7 +135,7 @@
   .home-light-shell .consumer-create { min-width:0; }
   .home-light-shell .home-creator-hero { width:calc(100% - 80px); grid-template-columns:minmax(0,360px) minmax(0,min(500px,calc(110svh - 270px))); }
   .home-light-shell .home-creator-hero .p-intro h1 { font-size:46px; }
-  .home-light-shell .home-creator-hero .creator-singer-tagline { font-size:30px; margin-top:18px; }
+  .home-light-shell .home-creator-hero .creator-tagline { margin-top:18px; }
   .home-light-shell .home-creator-hero .bilingual-description { font-size:14px; }
   .home-light-shell .home-creator-hero .p-button { min-width:215px; }
   .hero-capabilities li { font-size:14px; gap:12px; }
@@ -156,8 +153,7 @@
   .home-light-shell .home-creator-hero { width:calc(100% - 40px); grid-template-columns:minmax(0,1fr); gap:0; padding:28px 0; }
   .home-light-shell .home-creator-hero .p-intro { max-width:none; }
   .home-light-shell .home-creator-hero .p-intro h1 { font-size:35px; letter-spacing:-1px; }
-  .home-light-shell .home-creator-hero .creator-singer-tagline { font-size:24px; margin-top:18px; }
-  .home-light-shell .home-creator-hero .creator-singer-english { font-size:18px; margin-top:7px; }
+  .home-light-shell .home-creator-hero .creator-tagline { font-size:18px; margin-top:18px; }
   .home-light-shell .home-creator-hero .bilingual-description { font-size:12px; margin-top:20px; line-height:1.9; }
   .home-light-shell .bilingual-description .description-translation { font-size:13px; line-height:1.75; width:auto; max-width:340px; margin-top:9px; }
   .home-light-shell .home-creator-hero .p-hero-actions { gap:12px; margin-top:22px; }

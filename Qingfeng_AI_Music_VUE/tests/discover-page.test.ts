@@ -168,10 +168,20 @@ describe('Discover editorial layout with real content', () => {
     expect(wrapper.get('#discover-featured header').text()).toContain('编辑精选')
     expect(wrapper.get('#discover-today header').text()).toContain('按当日播放量排序')
     const tiles = wrapper.findAll('.discover-playlist-tiles button')
-    expect(tiles.map(tile => tile.get('strong').text())).toEqual(['华语流行', '电子', '欧美流行', 'Disco', '圣诞'])
-    expect(tiles.map(tile => tile.get('img').attributes('src')?.split('/').at(-1))).toEqual([
-      'mandopop.webp', 'electronic.webp', 'global-pop.webp', 'disco.webp', 'christmas.webp',
+    expect(tiles.map(tile => tile.get('strong').text())).toEqual(['华语流行', '电子', '欧美流行', 'Hip-Hop&R&B', '圣诞'])
+    expect(tiles.map(tile => tile.get('.discover-playlist-title > span').text())).toEqual([
+      '14 首作品', '12 首作品', '6 首作品', '6 首作品', '1 首作品',
     ])
+    expect(tiles.map(tile => tile.get('img').attributes('src')?.split('/').at(-1))).toEqual([
+      'mandopop.webp', 'electronic.webp', 'global-pop.webp', 'house.webp', 'christmas.webp',
+    ])
+    await tiles[1]!.trigger('click')
+    expect(wrapper.findAll('.test-playlist span').slice(-4).map(track => track.text())).toEqual([
+      'Body Language', 'Into the Sun', 'One More Night', 'Gravity',
+    ])
+    await tiles[3]!.trigger('click')
+    expect(wrapper.findAll('.test-playlist span')).toHaveLength(6)
+    expect(wrapper.get('.test-playlist').text()).toContain('WESTSIDE SUMMER')
     await tiles[4]!.trigger('click')
     expect(wrapper.get('.test-playlist').text()).toContain('Christmas Sky')
     expect(wrapper.get('.test-playlist').text()).not.toContain('Gravity')

@@ -906,7 +906,7 @@ export const english: Record<string, string> = {
   '为你推荐': 'Recommended for you',
   '发现下一首灵感。': 'Find your next inspiration.',
   '让每一个想法 都有自己的旋律': 'Give every idea a melody of its own',
-  '写下灵感 选择风格 唱出属于你的声音': 'Start with an idea Choose your style Create your own sound',
+  '写下灵感 选择风格 创作出属于你的音乐': 'Start with an idea Choose your style Create your own music',
   '人人都是歌手': 'Everyone Can Be a Singer',
   '无需音乐基础 简单几步 创作属于你的歌曲': 'Create your own song in just a few clicks. No music skills needed',
   '开始创作': 'Start creating',

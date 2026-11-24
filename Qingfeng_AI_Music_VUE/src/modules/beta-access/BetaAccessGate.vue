@@ -18,10 +18,7 @@ const accessible = computed(() => admitted.value || (props.publicAccess && !acti
 const showPreview = computed(() => props.publicPreview && !accessible.value)
 const entryCopy = computed(() => {
   if (props.discoverEntry) return discoverSeo[locale.value]
-  if (props.homeEntry) {
-    const home = homeSeo[locale.value]
-    return { heading: home.heading, description: home.inviteDescription }
-  }
+  if (props.homeEntry) return homeSeo[locale.value]
 })
 const entryLinks = computed(() => landingLinks(locale.value, props.discoverEntry ? discoverPaths[locale.value] : '/')
   .filter(link => !link.lang))
@@ -91,15 +88,18 @@ onBeforeUnmount(() => { disposed = true; clearTimeout(expiryTimer); window.remov
       <p class="beta-access-brand">{{ siteName }}</p>
       <h1 id="beta-access-title">{{ entryCopy?.heading ?? t('让灵感，先在这里发声。') }}</h1>
       <p id="beta-access-description" class="beta-access-intro">{{ entryCopy?.description ?? t('青风音乐正在内测，输入邀请码即可开始体验。') }}</p>
-      <p v-if="checking" class="beta-access-checking" role="status">{{ t('正在验证内测资格…') }}</p>
-      <form v-else-if="status" @submit.prevent="submit">
-        <label for="beta-invite-code">{{ t('内测邀请码') }}</label>
-        <input id="beta-invite-code" ref="input" v-model="code" type="text" maxlength="128" autocomplete="off" autocapitalize="characters" spellcheck="false" :placeholder="t('请输入邀请码')" :disabled="submitting" :aria-invalid="!!error || undefined" :aria-describedby="error ? 'beta-access-error' : undefined">
-        <p v-if="error" id="beta-access-error" class="beta-access-error" role="alert">{{ t(error) }}</p>
-        <button class="beta-access-primary" type="submit" :disabled="submitting">{{ t(submitting ? '正在验证…' : '开启我的音乐之旅') }}<span v-if="!submitting" aria-hidden="true">↗</span></button>
-      </form>
-      <div v-else-if="error"><p class="beta-access-error" role="alert">{{ t(error) }}</p><button class="beta-access-primary" type="button" @click="check">{{ t('重新验证') }}</button></div>
-      <p class="beta-access-note">{{ t('邀请码由内测邀请人提供。') }}</p>
+      <div data-nosnippet>
+        <p v-if="homeEntry" class="beta-access-prompt">{{ homeSeo[locale].invitePrompt }}</p>
+        <p v-if="checking" class="beta-access-checking" role="status">{{ t('正在验证内测资格…') }}</p>
+        <form v-else-if="status" @submit.prevent="submit">
+          <label for="beta-invite-code">{{ t('内测邀请码') }}</label>
+          <input id="beta-invite-code" ref="input" v-model="code" type="text" maxlength="128" autocomplete="off" autocapitalize="characters" spellcheck="false" :placeholder="t('请输入邀请码')" :disabled="submitting" :aria-invalid="!!error || undefined" :aria-describedby="error ? 'beta-access-error' : undefined">
+          <p v-if="error" id="beta-access-error" class="beta-access-error" role="alert">{{ t(error) }}</p>
+          <button class="beta-access-primary" type="submit" :disabled="submitting">{{ t(submitting ? '正在验证…' : '开启我的音乐之旅') }}<span v-if="!submitting" aria-hidden="true">↗</span></button>
+        </form>
+        <div v-else-if="error"><p class="beta-access-error" role="alert">{{ t(error) }}</p><button class="beta-access-primary" type="button" @click="check">{{ t('重新验证') }}</button></div>
+        <p class="beta-access-note">{{ t('邀请码由内测邀请人提供。') }}</p>
+      </div>
       <nav v-if="entryCopy && platform.kind === 'web'" class="beta-access-guides" :aria-label="locale === 'en' ? 'Music guides' : '音乐使用指南'">
         <a v-for="link in entryLinks" :key="link.href" :href="link.href">{{ link.text }}</a>
       </nav>
@@ -124,6 +124,7 @@ onBeforeUnmount(() => { disposed = true; clearTimeout(expiryTimer); window.remov
 .beta-access-brand { font-size:16px; font-weight:750; margin:0 0 26px; }
 .beta-access-card h1 { font-size:27px; line-height:1.4; letter-spacing:-.6px; margin:0 0 14px; }
 .beta-access-intro { font-size:14px; line-height:1.8; color:#7e6b60; margin:0 0 28px; }
+.beta-access-prompt { font-size:14px; margin:0 0 12px; }
 .beta-access-card label { display:block; font-size:13px; color:#51443c; margin-bottom:8px; }
 .beta-access-card input { display:block; width:100%; min-height:52px; padding:13px 15px; border:1px solid #e4d5cb; border-radius:12px; background:white; color:#282320; font-size:16px; }
 .beta-access-card input:focus { outline:2px solid #ff9f8b; outline-offset:2px; }

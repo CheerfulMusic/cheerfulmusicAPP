@@ -2,6 +2,7 @@
 import FilingLink from "../../shared/ui/FilingLink.vue"
 import { computed, defineAsyncComponent, ref } from 'vue'
 import { locale, t } from '../../shared/i18n'
+import { homeSeo } from '../../shared/i18n/home-seo'
 import { siteGuideLinks } from '../../shared/i18n/site-guides'
 import { platform } from '../../platform'
 
@@ -46,7 +47,7 @@ const legal = [
               <img src="/brand/logo-symbol.svg" alt="" width="42" height="42">
               <strong lang="en">Cheerful Music</strong>
             </RouterLink>
-            <p class="footer-tagline-en" lang="en">Everyone Can Be a Singer.</p>
+            <p class="footer-tagline-en" lang="en">{{ homeSeo.en.heading }}.</p>
             <p class="footer-tagline-zh">{{ t('让每个人都能创作和发布自己的音乐。') }}</p>
             <div class="footer-social" aria-label="Social media">
               <span class="footer-social-icon" title="TikTok / 抖音" aria-label="TikTok / Douyin" role="img">

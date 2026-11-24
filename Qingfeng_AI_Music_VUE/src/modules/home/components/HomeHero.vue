@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { t, locale } from '../../../shared/i18n'
+import { homeSeo } from '../../../shared/i18n/home-seo'
 import HomeBrandScene from './HomeBrandScene.vue'
 </script>
 
@@ -9,10 +10,9 @@ import HomeBrandScene from './HomeBrandScene.vue'
       <h1 id="home-hero-title" class="bilingual-headline" :class="{ 'chinese-creator-headline': locale !== 'en' }">
         <template v-if="locale !== 'en'">
           <span class="creator-main-title" lang="zh-CN"><img class="creator-title-art" src="/brand/headline-own-song-regular.svg" alt="" aria-hidden="true"><span class="creator-title-text">做自己的歌</span></span>
-          <span class="creator-singer-tagline" lang="zh-CN"><span>人人</span><strong>都是歌手</strong></span>
-          <span class="creator-singer-english" lang="en">Everyone Can Be a Singer</span>
+          <span class="creator-tagline" lang="en">{{ homeSeo.en.heading }}</span>
         </template>
-        <span v-else lang="en">Everyone Can Be a Singer</span>
+        <span v-else lang="en">{{ homeSeo.en.heading }}</span>
       </h1>
       <p class="p-intro-description bilingual-description">
         <span v-if="locale !== 'en'" lang="zh-CN">无需音乐基础 简单几步 让你的想法变成一首完整的歌</span>
@@ -22,7 +22,7 @@ import HomeBrandScene from './HomeBrandScene.vue'
       <div class="p-hero-actions">
         <RouterLink class="p-button" to="/create">{{ t('立即生成我的歌') }} <span aria-hidden="true">↗</span></RouterLink>
       </div>
-      <p class="p-reassurance">{{ t('写下灵感 选择风格 唱出属于你的声音') }}</p>
+      <p class="p-reassurance">{{ t('写下灵感 选择风格 创作出属于你的音乐') }}</p>
     </div>
     <HomeBrandScene/>
     <ul class="hero-capabilities">
