@@ -4,6 +4,7 @@ import { flushPromises } from '@vue/test-utils'
 import { expect, it, vi } from 'vitest'
 import Gate from '../src/modules/beta-access/BetaAccessGate.vue'
 import { locale, setLocale } from '../src/shared/i18n'
+import { sitePage } from '../src/shared/i18n/site-seo'
 vi.mock('../src/modules/beta-access/api', () => ({
  readInviteStatus: vi.fn(async () => ({ enabled: true, admitted: false, csrfToken: 'test', expiresAt: '' })),
  enterInvite: vi.fn(), InviteError: class extends Error {}
@@ -32,13 +33,14 @@ it('automatically opens the homepage invite with the localized product name', as
  try {
   await nextTick()
   expect(show).toHaveBeenCalled()
-  expect(host.querySelector('h1')?.textContent).toBe('青风音乐 AI 音乐创作平台')
+  expect(host.querySelector('h1')?.textContent).toBe('青风音乐｜把你的歌词做成歌')
   expect(host.querySelector('.beta-access-intro')?.textContent).toContain('青风音乐（Cheerful Music）')
   setLocale('en')
   await nextTick()
   expect(host.querySelector('h1')?.textContent).toBe('Everyone Can Be a Creator')
   expect(host.querySelector('.beta-access-brand')?.textContent).toBe('Cheerful Music')
-  expect(host.querySelector('.beta-access-intro')?.textContent).toContain('Cheerful Music (青风音乐)')
+  expect(host.querySelector('.beta-access-intro')?.textContent).toBe(sitePage('/en/')!.description)
+  expect(host.querySelector('.beta-access-intro')?.closest('[data-nosnippet]')).toBeNull()
   await flushPromises()
   expect(host.querySelector('[data-nosnippet] #beta-invite-code')).not.toBeNull()
  } finally { app.unmount(); host.remove(); setLocale(previous); vi.restoreAllMocks() }

@@ -83,7 +83,7 @@ onBeforeUnmount(() => { disposed = true; clearTimeout(expiryTimer); window.remov
   <slot v-if="showPreview" name="public-preview" :open-invite="openInvite" />
   <dialog ref="dialog" class="beta-access-dialog" aria-labelledby="beta-access-title" aria-describedby="beta-access-description" @cancel.prevent="cancelInvite" @close="!accessible && show()">
     <section class="beta-access-card" :aria-busy="busy">
-      <div class="beta-access-top"><span class="beta-access-label">{{ t('内测体验') }}</span><LanguageSwitcher/></div>
+      <div class="beta-access-top" :data-nosnippet="entryCopy ? '' : undefined"><span class="beta-access-label">{{ t('内测体验') }}</span><LanguageSwitcher/></div>
       <img class="beta-access-logo" src="/brand/logo-symbol.svg" alt="" width="56" height="56">
       <p class="beta-access-brand">{{ siteName }}</p>
       <h1 id="beta-access-title">{{ entryCopy?.heading ?? t('让灵感，先在这里发声。') }}</h1>
@@ -100,11 +100,13 @@ onBeforeUnmount(() => { disposed = true; clearTimeout(expiryTimer); window.remov
         <div v-else-if="error"><p class="beta-access-error" role="alert">{{ t(error) }}</p><button class="beta-access-primary" type="button" @click="check">{{ t('重新验证') }}</button></div>
         <p class="beta-access-note">{{ t('邀请码由内测邀请人提供。') }}</p>
       </div>
-      <nav v-if="entryCopy && platform.kind === 'web'" class="beta-access-guides" :aria-label="locale === 'en' ? 'Music guides' : '音乐使用指南'">
-        <a v-for="link in entryLinks" :key="link.href" :href="link.href">{{ link.text }}</a>
-      </nav>
-      <button v-if="publicPreview" type="button" class="button secondary" @click="cancelInvite">{{ t('关闭') }}</button>
-      <footer class="beta-access-filing"><FilingLink /></footer>
+      <div :data-nosnippet="entryCopy ? '' : undefined">
+        <nav v-if="entryCopy && platform.kind === 'web'" class="beta-access-guides" :aria-label="locale === 'en' ? 'Music guides' : '音乐使用指南'">
+          <a v-for="link in entryLinks" :key="link.href" :href="link.href">{{ link.text }}</a>
+        </nav>
+        <button v-if="publicPreview" type="button" class="button secondary" @click="cancelInvite">{{ t('关闭') }}</button>
+        <footer class="beta-access-filing"><FilingLink /></footer>
+      </div>
     </section>
   </dialog>
 </template>
