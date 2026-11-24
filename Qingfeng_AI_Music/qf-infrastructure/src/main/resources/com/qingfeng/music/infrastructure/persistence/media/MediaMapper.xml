@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.qingfeng.music.infrastructure.persistence.media.MediaMapper">
+  <sql id="audioVersionProjection">
+    SELECT m.*,
+      COALESCE(v.note, '') AS note,
+      COALESCE(v.note_version, 0) AS note_version,
+      v.deleted_at,
+      CASE WHEN m.origin='GENERATED' THEN (
+        SELECT COUNT(*)
+        FROM media_asset older
+        WHERE older.work_id=m.work_id
+          AND older.origin='GENERATED'
+          AND (older.created_at&lt;m.created_at OR (older.created_at=m.created_at AND older.id&lt;=m.id))
+      ) ELSE NULL END AS version_number,
+      EXISTS(SELECT 1 FROM section_edit e WHERE e.task_id=m.generation_task_id) AS section_edit
+    FROM media_asset m
+    LEFT JOIN media_asset_annotation v ON v.asset_id=m.id
+  </sql>
+
+  <select id="find" resultType="com.qingfeng.music.infrastructure.persistence.media.MediaRow">
+    <include refid="audioVersionProjection"/>
+    WHERE m.work_id=#{work} AND m.id=#{id}
+  </select>
+
+  <select id="list" resultType="com.qingfeng.music.infrastructure.persistence.media.MediaRow">
+    <include refid="audioVersionProjection"/>
+    WHERE m.work_id=#{work} AND v.deleted_at IS NULL
+    ORDER BY m.created_at DESC, m.id DESC
+    LIMIT 100
+  </select>
+</mapper>
