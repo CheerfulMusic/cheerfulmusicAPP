@@ -97,7 +97,7 @@ describe('Discover editorial layout with real content', () => {
     expect(covers('Midnight Call')[0]).toContain('midnight-call.webp')
   })
 
-  it('keeps editorial artwork stable across scoped shelves and preserves the original in other sections', async () => {
+  it('keeps the selected cover across shelves, rankings and search', async () => {
     const gravity = song('0485811c-0297-4513-9fb1-75f981af8707')
     gravity.song.title = 'Gravity'
     const streetlight = song('0f831f4b-1f3f-4d14-b6cf-b33534863622')
@@ -112,12 +112,15 @@ describe('Discover editorial layout with real content', () => {
     const cover = (section: string, title: string) => wrapper.findAll(section + ' .shelf-track')
       .find(card => card.get('.track-title').text() === title)?.get('img').attributes('src')
 
-    for (const section of ['#discover-featured', '#discover-latest', '#discover-today', '#discover-electronic']) {
+    for (const section of ['#discover-featured', '#discover-latest', '#discover-today', '#discover-electronic', '#discover-folk']) {
       expect(cover(section, 'Gravity')).toContain('cover-23.webp')
     }
     expect(cover('#discover-today', 'Streetlight')).toContain('cover-14.webp')
-    expect(cover('#discover-folk', 'Gravity')).toContain('/1/cover')
-    expect(wrapper.get('.discover-ranking img').attributes('src')).toContain('/1/cover')
+    expect(wrapper.get('.discover-ranking img').attributes('src')).toContain('cover-23.webp')
+    await wrapper.get('input[type="search"]').setValue('Gravity')
+    await wrapper.get('.discover-search').trigger('submit')
+    await flushPromises()
+    expect(wrapper.get('.discover-song img').attributes('src')).toContain('cover-23.webp')
   })
 
   it('plays the four distinct vocal recordings and keeps the upcoming entry out of the queue and carousel logic', async () => {
@@ -450,7 +453,7 @@ describe('Discover editorial layout with real content', () => {
       '#discover-today .track-artist',
       '#discover-global-pop .shelf-square .track-artist',
       '#discover-global-pop .shelf-wide .track-artist',
-      '.discover-ranking-info a',
+      '.discover-ranking-info a:not(.discover-song-title-link)',
     ]) {
       const link = wrapper.get(selector)
       expect(link.attributes('href')).toBe(expectedUrl)
@@ -461,6 +464,13 @@ describe('Discover editorial layout with real content', () => {
     expect(router.currentRoute.value).toMatchObject({ name: 'artist-home', params: { id: release.artistId } })
     expect(mocks.toggle).not.toHaveBeenCalled()
     expect(mocks.record).not.toHaveBeenCalled()
+
+    const songLink = wrapper.get('#discover-latest .track-title')
+    expect(songLink.attributes('href')).toBe('/discover/songs/' + encodeURIComponent(release.song.id) + '/1')
+    await songLink.trigger('click')
+    await flushPromises()
+    expect(router.currentRoute.value.fullPath).toBe(songLink.attributes('href'))
+    expect(mocks.toggle).not.toHaveBeenCalled()
 
     await wrapper.get('#discover-latest .shelf-track-play').trigger('click')
     expect(mocks.toggle.mock.lastCall![0].id).toBe(release.song.id)

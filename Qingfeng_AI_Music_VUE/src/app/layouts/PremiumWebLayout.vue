@@ -20,14 +20,15 @@ const route = useRoute(), player = usePlayer()
 const screen = window.matchMedia('(max-width: 1200px)')
 const mobile = ref(screen.matches), menuOpen = ref(false)
 const menuButton = ref<HTMLButtonElement>(), menu = ref<HTMLElement>()
-const publicListening = computed(() => route.name === 'gift' || route.name === 'artist-home' || route.name === 'discover')
+const isDiscoverSong = computed(() => route.name === 'discover-song')
+const publicListening = computed(() => route.name === 'gift' || route.name === 'artist-home' || route.name === 'discover' || isDiscoverSong.value)
 const isHome = computed(() => route.name === 'home')
 const homePath = computed(() => {
   const language = homeLocale(route.path)
   return language ? homeSeo[language].path : '/'
 })
 const isAgent = computed(() => route.name === 'agent')
-const isDiscover = computed(() => route.name === 'discover')
+const isDiscover = computed(() => route.name === 'discover' || isDiscoverSong.value)
 const isPhotoStudio = computed(() => route.name === 'photo-studio')
 const authenticated = computed(() => accountState.value.authenticated || logtoState.value.authenticated)
 const navigation = computed(() => [
@@ -87,7 +88,7 @@ onBeforeUnmount(() => {
 })
 </script>
 <template>
-  <div class="music-shell consumer-shell" :class="{'gift-shell':publicListening, 'home-light-shell':isHome, 'agent-shell':isAgent, 'discover-shell':isDiscover}">
+  <div class="music-shell consumer-shell" :class="{'gift-shell':publicListening, 'home-light-shell':isHome, 'agent-shell':isAgent, 'discover-shell':isDiscover, 'discover-song-shell':isDiscoverSong}">
     <a class="skip-link" href="#main-content">{{ t('跳到主要内容') }}</a>
     <header v-if="!isDiscover" class="consumer-header">
       <div class="consumer-header-inner">
@@ -129,9 +130,9 @@ onBeforeUnmount(() => {
     </template>
     <div class="music-shell-body">
       <main id="main-content" :class="{workspace:!isHome && !isDiscover, 'photo-workspace':isPhotoStudio}" tabindex="-1"><slot/></main>
-      <SiteFooter v-if="!isAgent"/>
+      <SiteFooter v-if="!isAgent && !isDiscoverSong"/>
     </div>
-    <GlobalPlayer v-if="!isAgent"/>
+    <GlobalPlayer v-if="!isAgent" :show-subtitle="isDiscoverSong"/>
   </div>
 </template>
 
@@ -143,9 +144,15 @@ onBeforeUnmount(() => {
 .discover-shell :deep(.q-player-info > strong) { font-weight:600; }
 .discover-shell :deep(.q-player-info > span) { color:#767680; }
 .discover-shell :deep(.q-player-toggle) { border:0; background:#ff4438; color:#fff; }
+.discover-song-shell :deep(.q-player-toggle) { background:#202020; }
+.discover-song-shell, .discover-song-shell .music-shell-body { background:#fcfcfc; }
 @media (max-width:700px) {
   .discover-shell :deep(.q-player) { gap:10px; padding:10px 16px; }
   .discover-shell :deep(.q-player-info) { flex:1; width:auto; max-width:none; }
+  .discover-song-shell :deep(.q-player) { min-height:0; gap:5px 10px; padding:8px 16px; }
+  .discover-song-shell :deep(.q-player > .q-player-lyric),
+  .discover-song-shell :deep(.q-player .q-player-volume) { display:none; }
+  .discover-song-shell :deep(.q-player-navigation) { order:2; }
 }
 </style>
 

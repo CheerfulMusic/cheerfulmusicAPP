@@ -3,6 +3,7 @@ import { t, locale } from '../../../shared/i18n'
 import NavIcon from '../../../shared/ui/NavIcon.vue'
 import PlaybackIcon from '../../../shared/ui/PlaybackIcon.vue'
 import type { DiscoverSong } from '../api/artist'
+import { discoverSongHref } from '../api/discover-song'
 
 withDefaults(defineProps<{
   song: DiscoverSong
@@ -25,7 +26,7 @@ defineEmits<{ play: [] }>()
       </button>
     </div>
     <div class="discover-song-heading">
-      <h3>{{ song.song.title }}</h3>
+      <h3><RouterLink :to="discoverSongHref(song.song)">{{ song.song.title }}</RouterLink></h3>
       <span v-if="genre" class="discover-song-genre">{{ genre }}</span>
     </div>
     <div class="discover-song-meta">
@@ -48,6 +49,8 @@ defineEmits<{ play: [] }>()
 .discover-duration { position: absolute; inset: auto auto 12px 10px; padding: 2px 6px; border-radius: 4px; color: #fff; background: #18232bbf; font-size: .75rem; font-variant-numeric: tabular-nums; }
 .discover-song-heading { display: flex; align-items: baseline; gap: 8px; margin-top: 10px; }
 .discover-song-heading h3 { overflow: hidden; margin: 0; font: inherit; font-size: .98rem; font-weight: 650; line-height: 1.5; text-overflow: ellipsis; white-space: nowrap; }
+.discover-song-heading a { color: inherit; }
+.discover-song-heading a:hover { color: #ca3025; text-decoration: underline; }
 .discover-song-genre { flex: none; color: #8a8a93; font-size: .7rem; }
 .discover-song-meta { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 2px; color: #73737e; font-size: .8rem; line-height: 1.6; }
 .discover-song-meta a { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

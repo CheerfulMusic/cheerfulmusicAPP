@@ -5,6 +5,7 @@ import { t, localizedCover } from '../i18n/index'
 import { usePlayer } from './store'
 import { useCurrentLyrics } from './current-lyrics'
 import { ref, watch, onBeforeUnmount } from 'vue'
+defineProps<{ showSubtitle?: boolean }>()
 const player = usePlayer()
 const { line } = useCurrentLyrics()
 const element=ref<HTMLElement>()
@@ -27,7 +28,7 @@ function status(){
 <template>
   <aside ref="element" v-if="player.current" class="q-player" :aria-label="t('试听播放器')">
     <img :src="localizedCover(player.current.cover)" :alt="t('歌曲封面')">
-    <div class="q-player-info"><strong>{{ player.current.titleKey ? t(player.current.titleKey) : player.current.title }}</strong></div>
+    <div class="q-player-info"><strong>{{ player.current.titleKey ? t(player.current.titleKey) : player.current.title }}</strong><span v-if="showSubtitle && player.current.publication">{{ player.current.publication.stageName }}</span></div>
     <span class="q-player-lyric" :title="status()">{{ status() }}</span>
     <button class="q-player-toggle" :aria-label="(player.playing || player.starting) ? t('暂停') : t('播放')" @click="player.toggle(player.current)"><PlaybackIcon :playing="player.playing||player.starting"/></button>
     <div class="q-player-navigation">

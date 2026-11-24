@@ -61,7 +61,8 @@ export function setLocale(value: Locale) {
 }
 export function updatePageLocale(path: string) {
   pagePath = path
-  const routeLanguage = homeLocale(path) ?? discoverLocale(path)
+  const songLocale = /^(?:\/en)?\/discover\/songs\/[^/]+\/\d+\/?$/.test(path) ? (path.startsWith('/en/') ? 'en' : 'zh-CN') : undefined
+  const routeLanguage = homeLocale(path) ?? discoverLocale(path) ?? songLocale
   if (routeLanguage) setLocale(routeLanguage)
   else updateDocument()
 }

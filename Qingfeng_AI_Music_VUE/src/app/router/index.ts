@@ -34,6 +34,7 @@ export const router = createRouter({
     { path: '/artist/:id', name: 'artist-home', component: () => import('../../modules/artist/pages/PublicArtistPage.vue') },
     { path: '/artist/:id/albums/:album', name: 'artist-album', component: () => import('../../modules/artist/pages/PublicAlbumPage.vue') },
     { path: '/discover', name: 'discover', alias: platform.kind === 'web' ? discoverPaths.en : undefined, component: () => import('../../modules/artist/pages/DiscoverPage.vue') },
+    { path: '/discover/songs/:id/:version', name: 'discover-song', alias: platform.kind === 'web' ? '/en/discover/songs/:id/:version' : undefined, component: () => import('../../modules/artist/pages/DiscoverSongPage.vue') },
     { path: '/legal/terms', component: { render: () => null }, beforeEnter: () => { window.location.replace('/legal/terms.html'); return false } },
     { path: '/legal/privacy', component: { render: () => null }, beforeEnter: () => { window.location.replace('/legal/privacy.html'); return false } },
     { path: '/recharge', name: 'recharge', component: () => import('../../modules/identity/pages/RechargePage.vue') },

@@ -13,9 +13,10 @@ import AnalyticsConsentBanner from '../modules/analytics/components/AnalyticsCon
 import SeoLanding from './layouts/SeoLanding.vue'
 import { t } from '../shared/i18n'
 const route = useRoute()
-const community = computed(() => route.name === 'artist-home' || route.name === 'discover')
+const discoverSong = computed(() => route.name === 'discover-song')
+const community = computed(() => route.name === 'artist-home' || route.name === 'discover' || discoverSong.value)
 const layout = computed(() => platform.kind === 'web' || community.value ? WebLayout : AppLayout)
-const publicListening = computed(() => route.name === 'gift' || route.name === 'artist-home')
+const publicListening = computed(() => route.name === 'gift' || route.name === 'artist-home' || discoverSong.value)
 const standalonePreview = computed(() => import.meta.env.DEV && route.name === 'payment-preview')
 const publicPreview = computed(() => platform.kind === 'web' && route.name === 'help')
 </script>
@@ -27,8 +28,13 @@ const publicPreview = computed(() => platform.kind === 'web' && route.name === '
         <button type="button" class="button" @click="openInvite">{{ t('请输入邀请码') }}</button>
       </SeoLanding>
     </template>
-    <component :is="layout"><RouterView /></component>
-    <template v-if="!community"><LoginModal /><WelcomeModal /><QuickCompletionNotice /></template>
+    <component :is="layout">
+      <RouterView v-slot="{ Component }">
+        <KeepAlive :include="route.name === 'discover' || discoverSong ? 'DiscoverPage' : []"><component :is="Component" /></KeepAlive>
+      </RouterView>
+    </component>
+    <LoginModal v-if="!community || discoverSong" />
+    <template v-if="!community"><WelcomeModal /><QuickCompletionNotice /></template>
   </BetaAccessGate>
   <AnalyticsConsentBanner />
   <BrowserDownloadHelp />

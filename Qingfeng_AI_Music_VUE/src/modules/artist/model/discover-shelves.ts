@@ -1,6 +1,8 @@
 import type { PlayableTrack } from '../../../shared/player/store'
-import { publicTrack, type DiscoverSong, type PublishedSong } from '../api/artist'
+import { publicSongPlaceholder, publicTrack, type ArtistRelease, type DiscoverSong, type PublishedSong } from '../api/artist'
 import type { PreviewTrack } from '../../home/model/tracks'
+import { coverUrl } from '../../works/api/covers'
+import { discoverEditorialCover } from './discover-editorial-artwork'
 import christmasSkyCover from '../../../assets/discover/christmas-sky-cover.webp'
 import afterMidnight from '../../../assets/discover/song-covers/after-midnight.webp'
 import ifYouWannaFeelMe from '../../../assets/discover/song-covers/if-you-wanna-feel-me.webp'
@@ -34,6 +36,7 @@ export interface DiscoverShelfTrack {
   plays?: number
   durationSeconds?: number
   wideCoverPosition?: string
+  publishedAt?: string
 }
 
 export type PublishedShelfTrack = DiscoverSong & { track: PlayableTrack }
@@ -67,14 +70,23 @@ export const globalPopWideCoverPositions: Partial<Record<string, string>> = {
   'summer-on-repeat': 'center 17%',
 }
 
-export function discoverReleaseCover(song: PublishedSong, original: string) {
+export function discoverReleaseCover(song: Pick<PublishedSong, 'id' | 'hasCover'>, original: string) {
   if (song.id === christmasSongId) return christmasSkyCover
-  return song.hasCover ? original : releaseCoverFallbacks[song.id] ?? original
+  return discoverEditorialCover(song.id) ?? (song.hasCover ? original : releaseCoverFallbacks[song.id] ?? original)
+}
+
+export function ownerDiscoverCover(release: ArtistRelease) {
+  const { id, workId, coverId } = release
+  return discoverReleaseCover({ id, hasCover: !!coverId }, coverId ? coverUrl(workId, coverId) : publicSongPlaceholder)
+}
+
+export function publicTrackWithDiscoverCover(artistId: string, song: PublishedSong) {
+  const track = publicTrack(artistId, song)
+  return { ...track, cover: discoverReleaseCover(song, track.cover) }
 }
 
 export function publicDiscoverTrack({ artistId, stageName, song }: NonNullable<PlayableTrack['publication']>) {
-  const track = publicTrack(artistId, song)
-  return { ...track, cover: discoverReleaseCover(song, track.cover), publication: { artistId, stageName, song } }
+  return { ...publicTrackWithDiscoverCover(artistId, song), publication: { artistId, stageName, song } }
 }
 
 export function withDiscoverPreviewCover(track: PreviewTrack): PreviewTrack {

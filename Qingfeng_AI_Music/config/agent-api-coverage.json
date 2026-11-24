@@ -664,6 +664,22 @@
       ]
     },
     {
+      "controller": "DiscoverSongController",
+      "source": "com/qingfeng/music/server/web/publicapi/DiscoverSongController.java",
+      "mappingDeclarations": [
+        "@GetMapping(PUBLIC)",
+        "@GetMapping(PUBLIC + \"/comments\")",
+        "@PutMapping(ACCOUNT + \"/like\")",
+        "@PutMapping(ACCOUNT + \"/comments/{comment}\")",
+        "@DeleteMapping(ACCOUNT + \"/comments/{comment}\")",
+        "@PutMapping(ACCOUNT + \"/description\")"
+      ],
+      "mode": "native",
+      "flows": [
+        "open_feature:discover"
+      ]
+    },
+    {
       "controller": "GiftController",
       "source": "com/qingfeng/music/server/web/publicapi/GiftController.java",
       "mappingDeclarations": [
@@ -821,7 +837,7 @@
       "source": "com/qingfeng/music/server/web/WebPageController.java",
       "mappingDeclarations": [
         "@GetMapping(\"/\")",
-        "@GetMapping({\"/artist/{id}\",\"/artist/{id}/albums/{album}\"})",
+        "@GetMapping({\"/artist/{id}\",\"/artist/{id}/albums/{album}\",\"/discover/songs/{song}/{version}\",\"/en/discover/songs/{song}/{version}\"})",
         "@GetMapping({\"/create\",\"/create/photo\",\"/works\",\"/works/{id}\",\"/account\",\"/profile\",\"/recharge\",\"/analytics\",\"/agent\"})",
         "@GetMapping({\"/zh-CN\", \"/zh-CN/\", \"/zh-CN/index.html\"})",
         "@GetMapping(\"/en/\")",

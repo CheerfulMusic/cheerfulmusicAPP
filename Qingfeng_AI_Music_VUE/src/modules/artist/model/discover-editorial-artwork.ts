@@ -31,7 +31,7 @@ import likeSecondHeart from '../../../assets/discover/editorial/cover-21.webp'
 import dropItLow from '../../../assets/discover/editorial/cover-22.webp'
 import gravity from '../../../assets/discover/editorial/cover-23.webp'
 import staticBloom from '../../../assets/discover/editorial/cover-24.webp'
-import onlyRoute from '../../../assets/discover/editorial/cover-04.webp'
+import onlyRoute from '../../../assets/discover/responsive/carousel-sea-stacks-960.webp'
 import oldMansTerritory from '../../../assets/discover/song-covers/old-mans-territory.webp'
 import micangshan from '../../../assets/discover/editorial/cover-18.webp'
 import invincibleSong from '../../../assets/discover/editorial/cover-27.webp'
@@ -104,7 +104,11 @@ const coversBySong = new Map<string, string>([
   ['body-language', bodyLanguage],
 ])
 
+export function discoverEditorialCover(songId: string) {
+  return coversBySong.get(songId)
+}
+
 export function withDiscoverEditorialCover<T extends PlayableTrack>(track: T): T {
-  const cover = coversBySong.get(track.id)
+  const cover = discoverEditorialCover(track.id)
   return cover ? { ...track, cover } : track
 }

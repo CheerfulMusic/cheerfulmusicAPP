@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, watch } from 'vue'
 import { discoverHref, locale, t } from '../../../shared/i18n'
 import LanguageSwitcher from '../../../shared/i18n/LanguageSwitcher.vue'
 import { discoverSeo } from '../../../shared/i18n/site-seo'
@@ -7,6 +7,7 @@ import { usePlayer, type PlayableTrack } from '../../../shared/player/store'
 import BrandLogo from '../../../shared/ui/BrandLogo.vue'
 import NavIcon from '../../../shared/ui/NavIcon.vue'
 import PlaybackIcon from '../../../shared/ui/PlaybackIcon.vue'
+import { discoverSongHref } from '../api/discover-song'
 import ArtistAvatar from '../components/ArtistAvatar.vue'
 import DiscoverSongCard from '../components/DiscoverSongCard.vue'
 import DiscoverShelf from '../components/DiscoverShelf.vue'
@@ -85,6 +86,7 @@ const played = new Set<string>()
 let request = 0
 let offset = 0
 let disposed = false
+let inactive = false
 let editorialRequest = 0
 let shelvesRequest = 0
 let heroTimer: ReturnType<typeof setInterval> | undefined
@@ -92,14 +94,11 @@ let motionQuery: MediaQueryList | undefined
 
 const count = computed(() => new Intl.NumberFormat(locale.value))
 const signedIn = computed(() => accountState.value.authenticated || logtoState.value.authenticated)
-function withTracks(items: DiscoverSong[], useEditorialCover = false): PublishedShelfTrack[] {
-  return items.map(item => {
-    const track = publicDiscoverTrack(item)
-    return { ...item, track: useEditorialCover ? withDiscoverEditorialCover(track) : track }
-  })
+function withTracks(items: DiscoverSong[]): PublishedShelfTrack[] {
+  return items.map(item => ({ ...item, track: publicDiscoverTrack(item) }))
 }
 const rows = computed(() => withTracks(songs.value))
-const latestRows = computed(() => withTracks(latestSongs.value, true))
+const latestRows = computed(() => withTracks(latestSongs.value))
 const latestRecommendations = computed(() => {
   if (editorialLoading.value || featuredFailed.value || featuredSongs.value.length) return []
 
@@ -112,20 +111,18 @@ const latestRecommendations = computed(() => {
 })
 const featuredRows = computed(() => withTracks(
   (latestRecommendations.value.length ? latestRecommendations.value : featuredSongs.value).slice(0, 7),
-  true,
 ))
 const dailySongs = computed(() => shelves.value?.today ?? [])
 const cumulativeHotSongs = computed(() => dailySongs.value.length || editorialLoading.value
   ? [] : popularSongs.value.filter(item => (item.plays ?? 0) > 0).slice(0, 10))
 const rankedSongs = computed(() => cumulativeHotSongs.value.length ? cumulativeHotSongs.value : dailySongs.value)
-const todayRows = computed(() => withTracks(rankedSongs.value, true))
 const rankingRows = computed(() => withTracks(rankedSongs.value))
 const vocalRows = computed(() => [...vocalPerformanceRows, ...withTracks(shelves.value?.vocal ?? [])])
 const upcomingVocal = { title: '唯一的航线', cover: discoverSongArtwork[0].compact }
 const ranking = computed(() => rankingRows.value.slice(0, 5))
 const genreShelves = computed(() => discoverGenres.map(section => {
   const useEditorialCover = section.id === 'electronic' || section.id === 'rock' || section.id === 'jazz-soul'
-  const publicRows = withTracks(shelves.value?.genres[section.id] ?? [], useEditorialCover)
+  const publicRows = withTracks(shelves.value?.genres[section.id] ?? [])
   const publishedIds = new Set(publicRows.map(row => row.song.id))
   const examples = previewTracks.value
     .filter(track => section.samples.some(genre => track.filters.includes(genre))
@@ -133,7 +130,7 @@ const genreShelves = computed(() => discoverGenres.map(section => {
     .map((preview): DiscoverShelfTrack => {
       const track = withDiscoverPreviewCover(preview)
       return {
-        track: useEditorialCover ? withDiscoverEditorialCover(track) : track,
+        track: useEditorialCover && !track.publication ? withDiscoverEditorialCover(track) : track,
         stageName: track.publication?.stageName ?? '',
         durationSeconds: track.durationSeconds,
         song: track.publication?.song,
@@ -278,7 +275,7 @@ function changeHero(direction: number) {
 function restartHeroRotation() {
   clearInterval(heroTimer)
   heroTimer = undefined
-  if (disposed || heroSlideCount.value < 2 || heroPaused.value || heroHovered.value || heroFocused.value
+  if (disposed || inactive || heroSlideCount.value < 2 || heroPaused.value || heroHovered.value || heroFocused.value
     || !pageVisible.value || reducedMotion.value || player.playing || player.starting) return
   heroTimer = setInterval(() => changeHero(1), heroRotationMs)
 }
@@ -395,6 +392,8 @@ async function play(row: DiscoverShelfTrack, queue: DiscoverShelfTrack[] = rows.
 }
 
 onMounted(() => { initializeHeroRotation(); void loadEditorial(); void loadChristmasPlaylist() })
+onActivated(() => { inactive = false; restartHeroRotation() })
+onDeactivated(() => { inactive = true; heroHovered.value = false; heroFocused.value = false; restartHeroRotation() })
 onBeforeUnmount(() => {
   disposed = true; ++request; ++editorialRequest; ++shelvesRequest
   clearInterval(heroTimer)
@@ -444,7 +443,7 @@ onBeforeUnmount(() => {
               :style="{ objectPosition: heroBackground.position }" alt="" width="1536" height="512" fetchpriority="high">
           </picture>
           <div class="discover-hero-content">
-            <h2 :class="{ 'is-long-title': heroTitleLength > 10, 'is-very-long-title': heroTitleLength > 32 }" :title="hero.track.title">{{ hero.track.title }}</h2>
+            <h2 :class="{ 'is-long-title': heroTitleLength > 10, 'is-very-long-title': heroTitleLength > 32 }" :title="hero.track.title"><RouterLink v-if="hero.song && hero.publishedAt" class="discover-song-title-link" :to="discoverSongHref(hero.song)">{{ hero.track.title }}</RouterLink><template v-else>{{ hero.track.title }}</template></h2>
             <RouterLink v-if="hero.artistId && hero.stageName" class="discover-hero-artist" :to="{ name: 'artist-home', params: { id: hero.artistId } }">{{ hero.stageName }}</RouterLink>
             <button type="button" class="discover-hero-listen" :aria-label="t(playing(hero.track) ? '暂停 {title}' : '试听 {title}', { title: hero.track.title })" @click="play(hero, heroRows)"><PlaybackIcon :playing="playing(hero.track)" />{{ t(playing(hero.track) ? '暂停' : '立即聆听') }}</button>
           </div>
@@ -547,12 +546,12 @@ onBeforeUnmount(() => {
           <section id="discover-today" class="discover-shelf">
             <header class="discover-section-heading">
               <div class="discover-shelf-heading"><h2>{{ t('今日热歌') }}</h2><p>{{ t(cumulativeHotSongs.length ? '暂按累计播放量排序' : '按当日播放量排序') }}</p></div>
-              <button v-if="todayRows.length" type="button" :aria-expanded="expanded === 'today'"
+              <button v-if="rankingRows.length" type="button" :aria-expanded="expanded === 'today'"
                 @click="expanded = expanded === 'today' ? undefined : 'today'">{{ t(expanded === 'today' ? '收起' : '查看全部') }} ›</button>
             </header>
-            <DiscoverShelf :label="t('今日热歌')" :rows="todayRows" variant="square" :loading="editorialLoading" :failed="shelvesFailed"
+            <DiscoverShelf :label="t('今日热歌')" :rows="rankingRows" variant="square" :loading="editorialLoading" :failed="shelvesFailed"
               :empty="t(shelves?.listeningDataAvailable ? '今天还没有播放记录。' : '今日播放排行暂不可用。')"
-              :expanded="expanded === 'today'" show-plays @retry="loadShelves" @play="play($event, todayRows)" />
+              :expanded="expanded === 'today'" show-plays @retry="loadShelves" @play="play($event, rankingRows)" />
           </section>
           <section v-for="section in genreShelves" :id="'discover-' + section.id" :key="section.id" class="discover-shelf">
             <header class="discover-section-heading">
@@ -610,7 +609,7 @@ onBeforeUnmount(() => {
                 <span class="discover-rank" aria-hidden="true">{{ String(index + 1).padStart(2, '0') }}</span>
                 <span v-if="index === 0" class="discover-ranking-cover"><img :src="row.track.cover" alt="" width="42" height="42" loading="lazy"></span>
                 <span class="discover-ranking-info">
-                  <strong>{{ row.song.title }}</strong>
+                  <strong><RouterLink class="discover-song-title-link" :to="discoverSongHref(row.song)">{{ row.song.title }}</RouterLink></strong>
                   <RouterLink v-if="row.artistId && row.stageName" :to="{ name: 'artist-home', params: { id: row.artistId } }">{{ row.stageName }}</RouterLink>
                   <span v-else-if="row.stageName">{{ row.stageName }}</span>
                 </span>
