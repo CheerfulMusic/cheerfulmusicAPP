@@ -42,9 +42,9 @@ export function renderSitePage(html: string, page: SitePage) {
     initialContent = `<main class="beta-access-entry"><section class="beta-access-dialog beta-access-card">
       <img class="beta-access-logo" src="/brand/logo-symbol.svg" alt="" width="56" height="56">
       <p class="beta-access-brand">${escapeHtml(siteName)}</p>${heading}
-      <p class="beta-access-intro">${escapeHtml(home ? homeSeo[page.language].description : page.description)}</p>
+      <p class="beta-access-intro">${escapeHtml(page.description)}</p>
       ${home ? `<div data-nosnippet><p class="beta-access-prompt">${escapeHtml(homeSeo[page.language].invitePrompt)}</p></div>` : ''}
-      <nav class="beta-access-guides">${links}</nav><footer class="beta-access-filing">${filing}</footer>
+      <div data-nosnippet><nav class="beta-access-guides">${links}</nav><footer class="beta-access-filing">${filing}</footer></div>
     </section></main>`
   }
   return html

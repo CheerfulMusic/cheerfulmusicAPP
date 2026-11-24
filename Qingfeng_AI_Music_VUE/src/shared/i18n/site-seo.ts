@@ -1,24 +1,18 @@
 import { homeLocale, homePaths, homeSeo, localizedSeoLinks, siteName, siteOrigin, type Locale } from './home-seo'
 import { siteGuide, siteGuideLinks, siteGuidePaths } from './site-guides'
 
-const englishRootSeo = {
-  ...homeSeo.en,
-  searchTitle: 'Cheerful Music (青风音乐) | Make Your Own Song',
-  description: 'Cheerful Music (青风音乐) turns a song idea into original music with AI. Choose a style, edit the lyrics and share your song.',
-}
-
 export const discoverPaths = { 'zh-CN': '/discover', en: '/en/discover' } as const
 
 export const discoverSeo = {
   'zh-CN': {
     heading: '青风音乐原创歌曲广场',
-    title: '青风音乐原创歌曲广场｜Cheerful Music',
-    description: '在青风音乐试听创作者分享的 AI 原创歌曲，发现喜欢的曲风和歌手，走进音乐人的作品主页。',
+    title: '青风音乐｜原创歌曲广场',
+    description: '在青风音乐广场试听创作者发布的 AI 原创歌曲。遇到喜欢的声音，点进歌手主页，听听对方的其他作品。',
   },
   en: {
     heading: 'Discover Original AI Songs',
-    title: 'Discover Original AI Songs | Cheerful Music',
-    description: 'Listen to original AI songs from the Cheerful Music community. Explore featured tracks and meet the artists behind the music.',
+    title: 'Cheerful Music | Discover Original AI Songs',
+    description: 'Listen to original AI songs from the Cheerful Music community. Find a track you like, then visit the artist’s page to hear more of their music.',
   },
 } as const
 
@@ -60,7 +54,7 @@ export function sitePage(path: string, preferredLocale?: Locale) {
   const language = localized ?? preferredLocale ?? (path === '/' ? 'zh-CN' : 'en')
   if (path === '/' || localized) {
     const canonical = localized ? homeSeo[localized].path : '/'
-    const copy = !localized && language === 'en' ? englishRootSeo : homeSeo[language]
+    const copy = homeSeo[language]
     return {
       path: canonical,
       language,
