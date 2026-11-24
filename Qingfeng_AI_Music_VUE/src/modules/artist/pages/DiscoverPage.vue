@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, watch } from 'vue'
 import { discoverHref, locale, t } from '../../../shared/i18n'
 import LanguageSwitcher from '../../../shared/i18n/LanguageSwitcher.vue'
 import { discoverSeo } from '../../../shared/i18n/site-seo'
@@ -7,6 +7,7 @@ import { usePlayer, type PlayableTrack } from '../../../shared/player/store'
 import BrandLogo from '../../../shared/ui/BrandLogo.vue'
 import NavIcon from '../../../shared/ui/NavIcon.vue'
 import PlaybackIcon from '../../../shared/ui/PlaybackIcon.vue'
+import { discoverSongHref } from '../api/discover-song'
 import ArtistAvatar from '../components/ArtistAvatar.vue'
 import DiscoverSongCard from '../components/DiscoverSongCard.vue'
 import DiscoverShelf from '../components/DiscoverShelf.vue'
@@ -85,6 +86,7 @@ const played = new Set<string>()
 let request = 0
 let offset = 0
 let disposed = false
+let inactive = false
 let editorialRequest = 0
 let shelvesRequest = 0
 let heroTimer: ReturnType<typeof setInterval> | undefined
@@ -278,7 +280,7 @@ function changeHero(direction: number) {
 function restartHeroRotation() {
   clearInterval(heroTimer)
   heroTimer = undefined
-  if (disposed || heroSlideCount.value < 2 || heroPaused.value || heroHovered.value || heroFocused.value
+  if (disposed || inactive || heroSlideCount.value < 2 || heroPaused.value || heroHovered.value || heroFocused.value
     || !pageVisible.value || reducedMotion.value || player.playing || player.starting) return
   heroTimer = setInterval(() => changeHero(1), heroRotationMs)
 }
@@ -395,6 +397,8 @@ async function play(row: DiscoverShelfTrack, queue: DiscoverShelfTrack[] = rows.
 }
 
 onMounted(() => { initializeHeroRotation(); void loadEditorial(); void loadChristmasPlaylist() })
+onActivated(() => { inactive = false; restartHeroRotation() })
+onDeactivated(() => { inactive = true; heroHovered.value = false; heroFocused.value = false; restartHeroRotation() })
 onBeforeUnmount(() => {
   disposed = true; ++request; ++editorialRequest; ++shelvesRequest
   clearInterval(heroTimer)
@@ -444,7 +448,7 @@ onBeforeUnmount(() => {
               :style="{ objectPosition: heroBackground.position }" alt="" width="1536" height="512" fetchpriority="high">
           </picture>
           <div class="discover-hero-content">
-            <h2 :class="{ 'is-long-title': heroTitleLength > 10, 'is-very-long-title': heroTitleLength > 32 }" :title="hero.track.title">{{ hero.track.title }}</h2>
+            <h2 :class="{ 'is-long-title': heroTitleLength > 10, 'is-very-long-title': heroTitleLength > 32 }" :title="hero.track.title"><RouterLink v-if="hero.song && hero.publishedAt" class="discover-song-title-link" :to="discoverSongHref(hero.song)">{{ hero.track.title }}</RouterLink><template v-else>{{ hero.track.title }}</template></h2>
             <RouterLink v-if="hero.artistId && hero.stageName" class="discover-hero-artist" :to="{ name: 'artist-home', params: { id: hero.artistId } }">{{ hero.stageName }}</RouterLink>
             <button type="button" class="discover-hero-listen" :aria-label="t(playing(hero.track) ? '暂停 {title}' : '试听 {title}', { title: hero.track.title })" @click="play(hero, heroRows)"><PlaybackIcon :playing="playing(hero.track)" />{{ t(playing(hero.track) ? '暂停' : '立即聆听') }}</button>
           </div>
@@ -610,7 +614,7 @@ onBeforeUnmount(() => {
                 <span class="discover-rank" aria-hidden="true">{{ String(index + 1).padStart(2, '0') }}</span>
                 <span v-if="index === 0" class="discover-ranking-cover"><img :src="row.track.cover" alt="" width="42" height="42" loading="lazy"></span>
                 <span class="discover-ranking-info">
-                  <strong>{{ row.song.title }}</strong>
+                  <strong><RouterLink class="discover-song-title-link" :to="discoverSongHref(row.song)">{{ row.song.title }}</RouterLink></strong>
                   <RouterLink v-if="row.artistId && row.stageName" :to="{ name: 'artist-home', params: { id: row.artistId } }">{{ row.stageName }}</RouterLink>
                   <span v-else-if="row.stageName">{{ row.stageName }}</span>
                 </span>

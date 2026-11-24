@@ -22,8 +22,8 @@ public class WebPageController {
         return publicDocument("home.html");
     }
 
-    @GetMapping({"/artist/{id}","/artist/{id}/albums/{album}"})
-    public String artistPage() {
+    @GetMapping({"/artist/{id}","/artist/{id}/albums/{album}","/discover/songs/{song}/{version}","/en/discover/songs/{song}/{version}"})
+    public String publicAppPage() {
         return "forward:/index.html";
     }
 

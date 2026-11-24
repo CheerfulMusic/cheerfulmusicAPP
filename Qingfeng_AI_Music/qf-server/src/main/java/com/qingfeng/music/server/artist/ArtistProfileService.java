@@ -487,6 +487,38 @@ public class ArtistProfileService {
                 (rs, row) -> rs.getString(1), song, version).isEmpty();
     }
 
+    record DiscoverRecording(DiscoverSong release, String owner, String asset, String generatedLyrics,
+                             Double durationSeconds) {}
+
+    DiscoverRecording discoverRecording(String song, long version) {
+        return db.query("""
+                SELECT p.public_id,p.stage_name,r.id,r.version,r.title,r.cover_id,r.discover_published_at,
+                       r.creator_id,r.asset_id,a.duration_s,g.lyrics,
+                       COALESCE(m.plays,0) AS plays,
+                """ + DISCOVER_GENRE + " AS genre " + DISCOVER_JOINS + """
+                JOIN media_asset a ON a.id=r.asset_id AND a.work_id=r.work_id
+                LEFT JOIN generation_task g ON g.id=a.generation_task_id AND g.work_id=r.work_id
+                """ + DISCOVER_VISIBLE + """
+                AND r.id=? AND r.version=?
+                AND NOT EXISTS (SELECT 1 FROM media_asset_annotation v WHERE v.asset_id=r.asset_id AND v.deleted_at IS NOT NULL)
+                """,
+                (rs, row) -> new DiscoverRecording(DISCOVER_SONG_ROW.mapRow(rs, row), rs.getString("creator_id"),
+                        rs.getString("asset_id"), rs.getString("lyrics"),
+                        rs.getObject("duration_s", Double.class)), song, version)
+                .stream().findFirst().orElseThrow(ArtistProfileService::missing);
+    }
+
+    String discoverLyrics(DiscoverRecording recording) {
+        var lines = playbackLyrics.find(recording.asset()).filter(s -> "READY".equals(s.status()))
+                .map(s -> com.qingfeng.music.lyrics.playback.PlaybackLyrics.lines(s.words())).orElse(List.of());
+        if (!lines.isEmpty()) {
+            return lines.stream().map(com.qingfeng.music.lyrics.playback.PlaybackLyrics.Line::text)
+                    .collect(java.util.stream.Collectors.joining("\n"));
+        }
+        return recording.generatedLyrics() == null ? ""
+                : com.qingfeng.music.lyrics.application.LyricsFormatting.unwrap(recording.generatedLyrics());
+    }
+
     @Transactional
     public void recordDiscoverPlay(String song, long version) {
         if (!isDiscoverRelease(song, version)) throw missing();

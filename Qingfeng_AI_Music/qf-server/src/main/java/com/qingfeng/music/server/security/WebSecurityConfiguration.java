@@ -31,7 +31,8 @@ public class WebSecurityConfiguration {
 
     private static final String[] SPA_PAGES = {
             "/", "/index.html", "/create", "/create/photo", "/works", "/works/*",
-            "/account", "/profile", "/artist/*", "/artist/*/albums/*", "/recharge", "/analytics", "/agent"
+            "/account", "/profile", "/artist/*", "/artist/*/albums/*", "/discover/songs/*/*", "/en/discover/songs/*/*",
+            "/recharge", "/analytics", "/agent"
     };
 
     @Bean UserDetailsService unavailableIdentity() {
@@ -71,6 +72,8 @@ public class WebSecurityConfiguration {
                 .requestMatchers(org.springframework.http.HttpMethod.GET,"/api/public/hot-songs","/api/public/hot-songs/*/lyrics","/api/public/hot-songs/*/creation-reference").permitAll()
                 .requestMatchers(org.springframework.http.HttpMethod.GET,"/api/public/discover").permitAll()
                 .requestMatchers(org.springframework.http.HttpMethod.HEAD,"/api/public/discover").permitAll()
+                .requestMatchers(HttpMethod.GET,"/api/public/discover/songs/*/*","/api/public/discover/songs/*/*/comments").permitAll()
+                .requestMatchers(HttpMethod.HEAD,"/api/public/discover/songs/*/*","/api/public/discover/songs/*/*/comments").permitAll()
                 .requestMatchers(org.springframework.http.HttpMethod.POST,"/api/public/discover/songs/*/*/play").permitAll()
                 .requestMatchers(org.springframework.http.HttpMethod.POST,"/api/public/hot-songs/*/play","/api/songs/*/play").permitAll()
                 .requestMatchers(org.springframework.http.HttpMethod.GET,"/api/public/auth/google/status",GoogleOAuthFlow.CALLBACK).permitAll()

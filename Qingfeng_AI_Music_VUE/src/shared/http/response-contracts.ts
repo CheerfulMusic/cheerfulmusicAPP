@@ -58,6 +58,10 @@ const lyricRhyme=(v:unknown)=>{
   return ['ALREADY_RHYMES','NO_MATCH'].includes(String(v.status))&&v.candidates.length===0
 }
 const discoverSong=(v:unknown)=>obj(v)&&text(v.artistId)&&text(v.stageName)&&publicArtistSong(v.song)&&text(v.publishedAt)
+const count=(v:unknown)=>num(v)&&Number.isSafeInteger(v)&&Number(v)>=0
+const discoverLikes=(v:unknown)=>obj(v)&&count(v.count)&&typeof v.liked==='boolean'
+const discoverComment=(v:unknown)=>obj(v)&&text(v.id)&&str(v.author)&&text(v.text)&&text(v.createdAt)&&typeof v.removable==='boolean'
+const discoverComments=(v:unknown)=>obj(v)&&list(v.items,discoverComment)&&(v.nextCursor===null||text(v.nextCursor))
 const discoverShelves=(v:unknown)=>obj(v)&&typeof v.listeningDataAvailable==='boolean'
  &&list(v.today,discoverSong)&&list(v.vocal,discoverSong)&&obj(v.genres)
  &&Object.values(v.genres).every(rows=>list(rows,discoverSong))
@@ -96,6 +100,15 @@ export function validResponse(path:string,method:string,value:unknown):boolean{
  if(value==null)return method==='GET'&&/^app\/works\/[^/]+\/quick-creations\/latest$/.test(path)||emptyResponseAllowed(path,method)
  if(/^app\/works\/[^/]+\/quick-creations(?:\/[^/]+(?:\/retry)?)?$/.test(path))return quickCreation(value)
  if(path==='public/csrf')return obj(value)&&text(value.token)
+ if(/^public\/discover\/songs\/[^/]+\/\d+$/.test(path))return method==='GET'&&obj(value)&&discoverSong(value.release)
+   &&(value.durationSeconds===null||num(value.durationSeconds))&&str(value.lyrics)&&str(value.description)
+   &&typeof value.signedIn==='boolean'&&typeof value.canEditDescription==='boolean'&&discoverLikes(value.likes)
+   &&count(value.commentCount)&&discoverComments(value.comments)
+ if(/^public\/discover\/songs\/[^/]+\/\d+\/comments$/.test(path))return method==='GET'&&discoverComments(value)
+ if(/^app\/discover\/songs\/[^/]+\/\d+\/like$/.test(path))return method==='PUT'&&discoverLikes(value)
+ if(/^app\/discover\/songs\/[^/]+\/\d+\/comments\/[^/]+$/.test(path))return obj(value)&&count(value.count)
+   &&(method==='DELETE'||method==='PUT'&&discoverComment(value.comment))
+ if(/^app\/discover\/songs\/[^/]+\/\d+\/description$/.test(path))return method==='PUT'&&obj(value)&&str(value.text)
  if(path==='app/avatar')return ['GET','POST'].includes(method)&&obj(value)&&((value.imageUrl===null&&value.version===null)||(value.imageUrl==='/api/app/avatar/image'&&text(value.version)))
  if(path==='app/avatar/generation/latest')return method==='GET'&&obj(value)&&typeof value.available==='boolean'&&['NONE','SUBMITTING','RUNNING','SUCCEEDED','FAILED','UNKNOWN','SUPERSEDED'].includes(String(value.status))&&(value.status==='NONE'?value.id===null:text(value.id))
  if(path==='public/invite/status')return method==='GET'&&obj(value)&&typeof value.enabled==='boolean'&&typeof value.admitted==='boolean'&&str(value.csrfToken)&&str(value.expiresAt)

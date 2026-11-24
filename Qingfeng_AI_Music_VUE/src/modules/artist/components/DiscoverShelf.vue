@@ -4,6 +4,7 @@ import { locale, t } from '../../../shared/i18n'
 import { usePlayer } from '../../../shared/player/store'
 import PlaybackIcon from '../../../shared/ui/PlaybackIcon.vue'
 import NavIcon from '../../../shared/ui/NavIcon.vue'
+import { discoverSongHref } from '../api/discover-song'
 import type { DiscoverShelfTrack } from '../model/discover-shelves'
 
 const props = defineProps<{
@@ -50,7 +51,8 @@ function clock(seconds: number) {
           <span class="track-play" aria-hidden="true"><PlaybackIcon :playing="isPlaying(row)" /></span>
         </span>
         <span class="track-text">
-          <span class="track-title" :title="row.track.title">{{ row.track.title }}</span>
+          <RouterLink v-if="row.song && row.publishedAt" class="track-title" :to="discoverSongHref(row.song)" :title="row.track.title">{{ row.track.title }}</RouterLink>
+          <span v-else class="track-title" :title="row.track.title">{{ row.track.title }}</span>
           <span v-if="row.stageName || (showPlays && row.plays !== undefined)" class="track-meta">
             <RouterLink v-if="row.stageName && row.artistId" class="track-artist"
               :to="{ name: 'artist-home', params: { id: row.artistId } }">{{ row.stageName }}</RouterLink>
@@ -114,8 +116,8 @@ function clock(seconds: number) {
   text-align: start;
 }
 .shelf-track-play { position: absolute; z-index: 1; inset: 0; width: 100%; padding: 0; border: 0; border-radius: inherit; background: transparent; }
-a.track-artist { position: relative; z-index: 2; color: inherit; }
-a.track-artist:is(:hover, :focus-visible) { text-decoration: underline; }
+a.track-artist, a.track-title { position: relative; z-index: 2; color: inherit; }
+a.track-artist:is(:hover, :focus-visible), a.track-title:is(:hover, :focus-visible) { text-decoration: underline; }
 .track-art { position: relative; display: block; overflow: hidden; border-radius: 4px; background: #eef0ed; }
 .track-art img { display: block; width: 100%; height: 100%; object-fit: cover; }
 .shelf-square .track-art { aspect-ratio: 1; }

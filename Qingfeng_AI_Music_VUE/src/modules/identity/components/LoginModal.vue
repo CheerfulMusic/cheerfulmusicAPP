@@ -4,6 +4,7 @@ import { useRoute } from 'vue-router'
 import { locale, t } from '../../../shared/i18n'
 import { ApiError, ensureCreator, resetCreatorSession } from '../../../shared/http/api-client'
 import { hideLoginDialog, loginDialogOpen } from '../../../shared/identity/login-dialog'
+import { rememberDiscoverSongGoogleReturn } from '../../../shared/identity/creation-login-gate'
 import { refreshAccountState } from '../../../shared/identity/account-state'
 import { refreshLogtoState, resetLogtoState } from '../../../shared/identity/logto-state'
 import { beginGoogleLogin } from '../api/google-login'
@@ -176,7 +177,10 @@ async function continueWithGoogle() {
   const version = epoch
   try {
     const url = await beginGoogleLogin()
-    if (version === epoch && loginDialogOpen.value) window.location.assign(url)
+    if (version === epoch && loginDialogOpen.value) {
+      if (route.name === 'discover-song') rememberDiscoverSongGoogleReturn(route.fullPath)
+      window.location.assign(url)
+    }
   } catch { if (version === epoch && loginDialogOpen.value) error.value = '暂时无法开始 Google 登录，请稍后重试。' }
   finally { openingGoogle.value = false }
 }

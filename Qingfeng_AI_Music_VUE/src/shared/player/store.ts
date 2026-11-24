@@ -202,6 +202,13 @@ export const usePlayer = defineStore('player', () => {
     if (starting.value) waitForAudio()
     return true
   }
+  function selectIfEmpty(track: PlayableTrack, knownDuration: number | null) {
+    if (current.value) return
+    audio = undefined
+    current.value = track
+    duration.value = knownDuration && Number.isFinite(knownDuration) && knownDuration > 0 ? knownDuration : 0
+    setQueue([track], false)
+  }
   async function toggle(track:PlayableTrack,fromBeginning=false){
     cancelReauth()
     const turn=++operation
@@ -263,5 +270,5 @@ export const usePlayer = defineStore('player', () => {
   function close(){cancelReauth();operation++;segment.value=null;setRepeatMode('default');audio?.pause();if(audio)audio.preload='metadata';current.value=null;queue.value=[];time.value=0;duration.value=0;error.value='';starting.value=false;stopWaiting();playing.value=false}
   /** 身份切换和分享失效彻底释放，与普通收起播放器分开。 */
   function reset(){close();audio=undefined;pool.clear()}
-  return {volume,muted,setVolume,toggleMute,current,playing,starting,buffering,time,duration,error,hasQueue,tracks,repeatMode,setRepeatMode,repeatOne,toggleRepeat,seekVersion,adoptGiftPreview,toggle,seek,close,reset,setQueue,next,updateCover,updateTitles,segment,playSegment,stopSegment}
+  return {volume,muted,setVolume,toggleMute,current,playing,starting,buffering,time,duration,error,hasQueue,tracks,repeatMode,setRepeatMode,repeatOne,toggleRepeat,seekVersion,adoptGiftPreview,selectIfEmpty,toggle,seek,close,reset,setQueue,next,updateCover,updateTitles,segment,playSegment,stopSegment}
 })

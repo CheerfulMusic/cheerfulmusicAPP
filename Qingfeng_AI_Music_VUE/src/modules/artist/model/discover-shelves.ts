@@ -34,6 +34,7 @@ export interface DiscoverShelfTrack {
   plays?: number
   durationSeconds?: number
   wideCoverPosition?: string
+  publishedAt?: string
 }
 
 export type PublishedShelfTrack = DiscoverSong & { track: PlayableTrack }

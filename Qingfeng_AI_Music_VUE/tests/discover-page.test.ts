@@ -450,7 +450,7 @@ describe('Discover editorial layout with real content', () => {
       '#discover-today .track-artist',
       '#discover-global-pop .shelf-square .track-artist',
       '#discover-global-pop .shelf-wide .track-artist',
-      '.discover-ranking-info a',
+      '.discover-ranking-info a:not(.discover-song-title-link)',
     ]) {
       const link = wrapper.get(selector)
       expect(link.attributes('href')).toBe(expectedUrl)
@@ -461,6 +461,13 @@ describe('Discover editorial layout with real content', () => {
     expect(router.currentRoute.value).toMatchObject({ name: 'artist-home', params: { id: release.artistId } })
     expect(mocks.toggle).not.toHaveBeenCalled()
     expect(mocks.record).not.toHaveBeenCalled()
+
+    const songLink = wrapper.get('#discover-latest .track-title')
+    expect(songLink.attributes('href')).toBe('/discover/songs/' + encodeURIComponent(release.song.id) + '/1')
+    await songLink.trigger('click')
+    await flushPromises()
+    expect(router.currentRoute.value.fullPath).toBe(songLink.attributes('href'))
+    expect(mocks.toggle).not.toHaveBeenCalled()
 
     await wrapper.get('#discover-latest .shelf-track-play').trigger('click')
     expect(mocks.toggle.mock.lastCall![0].id).toBe(release.song.id)

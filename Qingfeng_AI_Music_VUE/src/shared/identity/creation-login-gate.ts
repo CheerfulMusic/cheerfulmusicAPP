@@ -7,13 +7,19 @@ import { loginDialogOpen, showLoginDialog } from './login-dialog'
 const destinationKey = 'qingfeng:creation-login-destination'
 const signedIn = () => accountState.value.authenticated || logtoState.value.authenticated
 const loginRequired = (name: unknown) => name === 'studio' || name === 'photo-studio' || name === 'artist-profile'
+const discoverSongPath = /^\/(?:en\/)?discover\/songs\/[\da-f-]{36}\/[1-9]\d*(?:[?#]|$)/i
+
+export function rememberDiscoverSongGoogleReturn(path: string) {
+  if (!discoverSongPath.test(path)) return
+  try { sessionStorage.setItem(destinationKey, path) } catch { /* OAuth can still complete without client storage. */ }
+}
 
 /** Preserve the intended destination across native sign-in and OAuth redirects. */
 export function installCreationLoginGate(router: Router) {
   let destination = ''
   try {
     const saved = sessionStorage.getItem(destinationKey)
-    if (saved && /^\/(?:create(?:\/photo)?|profile)(?:[?#]|$)/.test(saved)) destination = saved
+    if (saved && (/^\/(?:create(?:\/photo)?|profile)(?:[?#]|$)/.test(saved) || discoverSongPath.test(saved))) destination = saved
   } catch { /* In-memory continuation still works without browser storage. */ }
   function remember(value: string) {
     destination = value

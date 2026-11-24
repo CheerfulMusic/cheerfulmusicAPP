@@ -24,6 +24,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.jdbc.Sql;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -124,6 +125,68 @@ class SongPublicationIntegrationTest {
         assertNull(profiles.completePublication(song.owner(), song.work()).song());
         assertFalse(profiles.discover(false, false, "", song.task().title(), 0).songs().stream()
                 .anyMatch(entry -> entry.song().id().equals(published.song().id())));
+    }
+
+    @Test
+    @Sql("classpath:db/migration/V56__discover_song_community.sql")
+    void discoverDetailSupportsPublicReadsAndVersionScopedAccountInteractions() throws Exception {
+        var owner = generate(false);
+        var listener = generate(false);
+        var guest = identity.create();
+        String asset = archive(owner);
+        var release = profiles.publishEverywhere(owner.owner(), owner.work(), asset, null, "Published song", "Publication Artist").song();
+        String path = "/discover/songs/" + release.id() + "/" + release.version();
+        String publicApi = "/api/public" + path;
+        String accountApi = "/api/app" + path;
+        var http = HttpClient.newHttpClient();
+
+        var detail = interact(http, "GET", publicApi, null, true, null);
+        assertEquals(200, detail.statusCode(), detail.body());
+        assertTrue(detail.body().contains("Summer night"));
+        assertTrue(detail.body().contains("\"signedIn\":false"));
+        assertFalse(detail.body().contains(owner.owner()));
+
+        assertEquals(401, interact(http, "PUT", accountApi + "/like", guest.token(), true, "{\"active\":true}").statusCode());
+        assertEquals(403, interact(http, "PUT", accountApi + "/like", listener.session(), false, "{\"active\":true}").statusCode());
+        for (int attempt = 0; attempt < 2; attempt++) {
+            var liked = interact(http, "PUT", accountApi + "/like", listener.session(), true, "{\"active\":true}");
+            assertEquals(200, liked.statusCode(), liked.body());
+            assertTrue(liked.body().contains("\"count\":1"));
+        }
+        assertTrue(interact(http, "GET", publicApi, listener.session(), true, null).body().contains("\"liked\":true"));
+        assertTrue(interact(http, "PUT", accountApi + "/like", listener.session(), true, "{\"active\":false}").body().contains("\"count\":0"));
+
+        String comment = accountApi + "/comments/" + UUID.randomUUID();
+        for (int attempt = 0; attempt < 2; attempt++) {
+            var result = interact(http, "PUT", comment, listener.session(), true, "{\"text\":\"I love the intro\"}");
+            assertEquals(200, result.statusCode(), result.body());
+            assertTrue(result.body().contains("\"count\":1"));
+        }
+        assertEquals(409, interact(http, "PUT", comment, listener.session(), true, "{\"text\":\"Different text\"}").statusCode());
+        assertTrue(interact(http, "GET", publicApi + "/comments", null, true, null).body().contains("I love the intro"));
+        assertEquals(200, interact(http, "DELETE", comment, owner.session(), true, null).statusCode());
+
+        assertEquals(403, interact(http, "PUT", accountApi + "/description", listener.session(), true, "{\"text\":\"Public description\"}").statusCode());
+        assertEquals(200, interact(http, "PUT", accountApi + "/description", owner.session(), true, "{\"text\":\"Public description\"}").statusCode());
+        assertTrue(interact(http, "GET", publicApi, null, true, null).body().contains("Public description"));
+
+        var newer = profiles.publishEverywhere(owner.owner(), owner.work(), asset, null, "New version", null).song();
+        assertEquals(release.id(), newer.id());
+        assertNotEquals(release.version(), newer.version());
+        assertEquals(404, interact(http, "GET", publicApi, null, true, null).statusCode());
+        assertEquals(404, interact(http, "PUT", accountApi + "/like", listener.session(), true, "{\"active\":true}").statusCode());
+        var newerDetail = interact(http, "GET", "/api/public/discover/songs/" + newer.id() + "/" + newer.version(), null, true, null);
+        assertEquals(200, newerDetail.statusCode(), newerDetail.body());
+        assertFalse(newerDetail.body().contains("Public description"));
+    }
+
+    private HttpResponse<String> interact(HttpClient http, String method, String path, String cookie, boolean csrf, String body) throws Exception {
+        var request = HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + path));
+        if (cookie != null) request.header("Cookie", "QF_SESSION=" + cookie + "; XSRF-TOKEN=discover-fixture");
+        if (csrf) request.header("X-XSRF-TOKEN", "discover-fixture");
+        if (body != null) request.header("Content-Type", "application/json");
+        return http.send(request.method(method, body == null ? HttpRequest.BodyPublishers.noBody() : HttpRequest.BodyPublishers.ofString(body)).build(),
+                HttpResponse.BodyHandlers.ofString());
     }
 
     private HttpResponse<String> complete(HttpClient http, Song viewer, Song target, boolean csrf) throws Exception {
