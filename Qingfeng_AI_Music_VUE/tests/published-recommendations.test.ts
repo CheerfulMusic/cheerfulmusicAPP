@@ -23,7 +23,7 @@ function profile(): PublicArtist {
 }
 async function open() {
   let playlists!: ReturnType<typeof usePreviewPlaylists>
-  wrappers.push(mount(defineComponent({ setup() { playlists = usePreviewPlaylists({forHome:true}); return () => null } })))
+  wrappers.push(mount(defineComponent({ setup() { playlists = usePreviewPlaylists(); return () => null } })))
   await flushPromises()
   return playlists
 }

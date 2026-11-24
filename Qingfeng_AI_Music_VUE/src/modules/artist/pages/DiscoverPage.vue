@@ -26,7 +26,6 @@ import {
 } from '../api/artist'
 import walkedFar from '../../../assets/discover/carousel-walked-far.webp'
 import christmasSky from '../../../assets/discover/carousel-christmas-sky.webp'
-import discoCover from '../../../assets/discover/playlists/disco.webp'
 import christmasCover from '../../../assets/discover/playlists/christmas.webp'
 
 const tabs = [
@@ -47,7 +46,6 @@ const replacedHeroSongId = 'acfaa9d5-ce74-477f-9db8-d3700311a26c'
 const invincibleSongId = '57bb7310-c64c-4873-b239-f2a268a7dedd'
 const micangshanSongId = '09aaf684-2b68-438f-aa17-8730a352bf74'
 const christmasArtistId = '308036ef-8bef-486f-88cc-8266e5797768'
-const discoverPreviewPlaylistIds = new Set(['mandopop', 'electronic', 'global-pop'])
 const player = usePlayer()
 const previewPlaylists = usePreviewPlaylists()
 const previewTracks = usePreviewTracks()
@@ -197,13 +195,9 @@ const visibleArtists = computed(() => {
   return showAllArtists.value ? found : found.slice(0, 3)
 })
 const playlists = computed<PreviewPlaylist[]>(() => [
-  ...previewPlaylists.value.filter(playlist => discoverPreviewPlaylistIds.has(playlist.id)).map(playlist => ({
+  ...previewPlaylists.value.map(playlist => ({
     ...playlist, tracks: playlist.tracks.map(withDiscoverPreviewCover),
   })),
-  {
-    id: 'disco', title: t('Disco'), subtitle: 'DISCO', cover: discoCover,
-    tracks: previewTracks.value.filter(track => track.filters.includes('disco')).map(withDiscoverPreviewCover),
-  },
   {
     id: 'christmas', title: t('圣诞'), subtitle: 'CHRISTMAS', cover: christmasCover,
     tracks: christmasTracks.value,
@@ -487,7 +481,7 @@ onBeforeUnmount(() => {
           </header>
           <ul v-if="visiblePlaylists.length" class="discover-playlist-tiles">
             <li v-for="playlist in visiblePlaylists" :key="playlist.id"><button type="button"
-              :class="{ 'discover-playlist-disco': playlist.id === 'disco', 'discover-playlist-christmas': playlist.id === 'christmas' }"
+              :class="{ 'discover-playlist-christmas': playlist.id === 'christmas' }"
               @click="selectedPlaylist = playlist.id">
               <img :src="playlist.cover" alt="" loading="lazy">
               <span class="discover-playlist-title"><strong>{{ playlist.title }}</strong><span>{{ t('{count} 首作品', { count: playlist.tracks.length }) }}</span></span>
