@@ -24,6 +24,10 @@ public final class ResilientMusicProvider implements MusicProvider {
         delegate.checkAdmission();
     }
     public Submission submit(Request request,String key){return send(()->delegate.submit(request,key));}
+    public boolean supportsAudioReference(){return delegate.supportsAudioReference();}
+    public Submission submitWithReference(Request request,String key,java.net.URI uploadUrl,double weight){
+        return send(()->delegate.submitWithReference(request,key,uploadUrl,weight));
+    }
     public Submission replace(Request request,Replacement edit,String key){return send(()->delegate.replace(request,edit,key));}
     private Submission send(java.util.function.Supplier<Submission> call){
         try{checkAdmission();}catch(DomainException e){throw new NotSubmitted("PROVIDER_COOLDOWN");}

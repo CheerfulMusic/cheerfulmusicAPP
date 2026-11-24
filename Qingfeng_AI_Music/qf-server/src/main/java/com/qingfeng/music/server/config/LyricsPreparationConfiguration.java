@@ -22,30 +22,36 @@ public class LyricsPreparationConfiguration {
             PlaybackLyricsRepository timelines,LyricsTimingProvider original,AudioTranscriptionProvider transcription,Environment env) {
         var tx=new TransactionTemplate(manager);tx.setIsolationLevel(org.springframework.transaction.TransactionDefinition.ISOLATION_READ_COMMITTED);
         return new LyricsPreparation(db,tx,timelines,original,transcription,
-                env.getProperty("qingfeng.lyrics.preparation.daily-limit",Integer.class,40));
+                env.getProperty("qingfeng.lyrics.preparation.daily-limit",Integer.class,40),
+                env.getProperty("qingfeng.lyrics.preparation.transcription-fallback-enabled",Boolean.class,true));
     }
     @Bean
+    @Profile("!sg-reader")
     @ConditionalOnProperty(name={"qingfeng.lyrics.preparation.enabled","qingfeng.lyrics.preparation.scheduler-enabled"},havingValue="true")
     PreparationScheduler lyricsPreparationScheduler(LyricsPreparation preparation,Environment env) {
         return new PreparationScheduler(preparation,
                 env.getProperty("qingfeng.lyrics.preparation.delay-ms",Long.class,5000L),
-                env.getProperty("qingfeng.lyrics.preparation.initial-delay-ms",Long.class,30000L));
+                env.getProperty("qingfeng.lyrics.preparation.initial-delay-ms",Long.class,30000L),
+                env.getProperty("qingfeng.lyrics.preparation.backfill-published",Boolean.class,true),
+                env.getProperty("qingfeng.lyrics.timing.enabled",Boolean.class,true));
     }
     /** A private executor avoids becoming the default scheduler of music/payment workers. */
     static final class PreparationScheduler implements org.springframework.context.SmartLifecycle {
         private final LyricsPreparation worker;
         private final long delay,initialDelay;
+        private final boolean backfillPublished,enabled;
         private java.util.concurrent.ScheduledExecutorService executor;
         private volatile boolean running;
-        PreparationScheduler(LyricsPreparation worker,long delay,long initialDelay){
+        PreparationScheduler(LyricsPreparation worker,long delay,long initialDelay,boolean backfillPublished,boolean enabled){
             this.worker=worker;this.delay=Math.max(1000,delay);this.initialDelay=Math.max(1000,initialDelay);
+            this.backfillPublished=backfillPublished;this.enabled=enabled;
         }
         public synchronized void start(){
             if(running)return;
             executor=java.util.concurrent.Executors.newSingleThreadScheduledExecutor(r->{var thread=new Thread(r,"lyrics-preparation");thread.setDaemon(true);return thread;});
             running=true;
             executor.scheduleWithFixedDelay(()->{
-                try{worker.enqueueNewAndPublished(25);worker.processOnce();}
+                try{if(enabled&&worker.schemaAvailable()){worker.enqueueNew(25,backfillPublished);worker.processOnce();}}
                 catch(RuntimeException error){org.slf4j.LoggerFactory.getLogger(PreparationScheduler.class).warn("Lyrics preparation scan failed: {}",error.getClass().getSimpleName());}
             },initialDelay,delay,java.util.concurrent.TimeUnit.MILLISECONDS);
         }

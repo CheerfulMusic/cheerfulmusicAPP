@@ -325,6 +325,7 @@
       "source": "com/qingfeng/music/server/web/app/GenerationController.java",
       "mappingDeclarations": [
         "@RequestMapping(\"/api/app/works/{work}/generations\")",
+        "@GetMapping(\"/audio-reference\")",
         "@PostMapping(\"/preflight\")",
         "@PostMapping",
         "@GetMapping",
@@ -709,11 +710,13 @@
       "mappingDeclarations": [
         "@RequestMapping(\"/api/public/hot-songs\")",
         "@GetMapping",
+        "@GetMapping(\"/{trackId}/creation-reference\")",
         "@PostMapping(\"/{trackId}/play\")"
       ],
       "mode": "tool+native",
       "flows": [
-        "discover_music"
+        "discover_music",
+        "create_work"
       ]
     },
     {

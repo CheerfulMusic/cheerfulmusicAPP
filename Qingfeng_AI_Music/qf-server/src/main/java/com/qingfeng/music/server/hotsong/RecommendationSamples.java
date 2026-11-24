@@ -30,9 +30,27 @@ public final class RecommendationSamples {
         new Song("light-it-up", "LIGHT IT UP", "电子", "/media/recommendations/light-it-up-14f42b2a754b-preview-128.mp3"),
         new Song("cant-stop-this-feeling", "Can't Stop This Feeling", "欧美流行", "/media/recommendations/cant-stop-this-feeling-34244d3c6efc-preview-128.mp3"),
         new Song("midnight-call", "Midnight Call", "欧美流行", "/media/recommendations/midnight-call-8a6cdb33c69e-preview-128.mp3"),
-        new Song("summer-on-repeat", "Summer on Repeat", "欧美流行", "/media/recommendations/summer-on-repeat-68e4b531c543-preview-128.mp3"));
+        new Song("summer-on-repeat", "Summer on Repeat", "欧美流行", "/media/recommendations/summer-on-repeat-68e4b531c543-preview-128.mp3"),
+        new Song("golden-hour-love", "GOLDEN HOUR LOVE", "R&B", "/media/recommendations/golden-hour-love-b4e20d8073b2-preview-128.mp3"),
+        new Song("no-reply", "NO REPLY", "R&B", "/media/recommendations/no-reply-42144aef3320-preview-128.mp3"),
+        new Song("too-close", "TOO CLOSE", "R&B", "/media/recommendations/too-close-6e798ee02c65-preview-128.mp3"),
+        new Song("big-motion", "BIG MOTION", "Hip-Hop", "/media/recommendations/big-motion-d6449a11e9c6-preview-128.mp3"),
+        new Song("running-through-my-mind", "RUNNING THROUGH MY MIND", "Hip-Hop", "/media/recommendations/running-through-my-mind-226bea4d3e2d-preview-128.mp3"),
+        new Song("westside-summer", "WESTSIDE SUMMER", "Hip-Hop", "/media/recommendations/westside-summer-d24a68d80b9e-preview-128.mp3"));
 
     private static final Map<String, String> OBJECTS = Map.ofEntries(
+        Map.entry("recommendations/westside-summer-d24a68d80b9e-preview-128.mp3", "qingfeng/recommendation-samples/20261123/audio/d24a68d80b9e/westside-summer-d24a68d80b9e-preview-128.mp3"),
+        Map.entry("recommendations/westside-summer-3b0b2556d9e1-cover.jpg", "qingfeng/recommendation-samples/20261123/cover/3b0b2556d9e1/westside-summer-3b0b2556d9e1-cover.jpg"),
+        Map.entry("recommendations/golden-hour-love-b4e20d8073b2-preview-128.mp3", "qingfeng/recommendation-samples/20261123/audio/b4e20d8073b2/golden-hour-love-b4e20d8073b2-preview-128.mp3"),
+        Map.entry("recommendations/golden-hour-love-2fb54a11171e-cover.jpg", "qingfeng/recommendation-samples/20261123/cover/2fb54a11171e/golden-hour-love-2fb54a11171e-cover.jpg"),
+        Map.entry("recommendations/no-reply-42144aef3320-preview-128.mp3", "qingfeng/recommendation-samples/20261123/audio/42144aef3320/no-reply-42144aef3320-preview-128.mp3"),
+        Map.entry("recommendations/no-reply-549f59a34c11-cover.jpg", "qingfeng/recommendation-samples/20261123/cover/549f59a34c11/no-reply-549f59a34c11-cover.jpg"),
+        Map.entry("recommendations/too-close-6e798ee02c65-preview-128.mp3", "qingfeng/recommendation-samples/20261123/audio/6e798ee02c65/too-close-6e798ee02c65-preview-128.mp3"),
+        Map.entry("recommendations/too-close-f8d10981dcc0-cover.jpg", "qingfeng/recommendation-samples/20261123/cover/f8d10981dcc0/too-close-f8d10981dcc0-cover.jpg"),
+        Map.entry("recommendations/big-motion-d6449a11e9c6-preview-128.mp3", "qingfeng/recommendation-samples/20261123/audio/d6449a11e9c6/big-motion-d6449a11e9c6-preview-128.mp3"),
+        Map.entry("recommendations/big-motion-42ddce81c4a2-cover.jpg", "qingfeng/recommendation-samples/20261123/cover/42ddce81c4a2/big-motion-42ddce81c4a2-cover.jpg"),
+        Map.entry("recommendations/running-through-my-mind-226bea4d3e2d-preview-128.mp3", "qingfeng/recommendation-samples/20261123/audio/226bea4d3e2d/running-through-my-mind-226bea4d3e2d-preview-128.mp3"),
+        Map.entry("recommendations/running-through-my-mind-929b4cf02f9a-cover.jpg", "qingfeng/recommendation-samples/20261123/cover/929b4cf02f9a/running-through-my-mind-929b4cf02f9a-cover.jpg"),
         Map.entry("recommendations/vocal-hu-ran-xia-qi-yu-b6f3f97e3182-preview-128.mp3", "qingfeng/recommendation-samples/20261120/audio/b6f3f97e3182/vocal-hu-ran-xia-qi-yu-b6f3f97e3182-preview-128.mp3"),
         Map.entry("recommendations/vocal-hu-ran-xia-qi-yu-8f41f4f0460a-cover.jpg", "qingfeng/recommendation-samples/20261120/cover/8f41f4f0460a/vocal-hu-ran-xia-qi-yu-8f41f4f0460a-cover.jpg"),
         Map.entry("recommendations/vocal-liu-lang-shi-ren-58376af9823c-preview-128.mp3", "qingfeng/recommendation-samples/20261120/audio/58376af9823c/vocal-liu-lang-shi-ren-58376af9823c-preview-128.mp3"),

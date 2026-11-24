@@ -310,6 +310,11 @@ class GateTests(unittest.TestCase):
             (ROOT / "Qingfeng_AI_Music/qf-infrastructure/src/main/resources/db/migration").glob("V*__*.sql")}
         self.assertEqual("49", gate.verify_migration_set(migrations)["lyricsPreparationVersion"])
         self.assertEqual("50", gate.verify_migration_set(migrations)["discoverShelvesVersion"])
+        reference_name = "V55__generation_audio_reference.sql"
+        self.assertEqual("55", gate.verify_migration_set(migrations)["generationAudioReferenceVersion"])
+        prior = {k: v for k, v in migrations.items() if k != reference_name}
+        self.assertEqual("54", gate.verify_migration_set(prior)["songShareStatisticsVersion"])
+        with self.assertRaises(gate.GateError): gate.verify_migration_set({**migrations, reference_name: "0" * 64})
         missing = dict(migrations); missing.pop("V47__music_video_projects.sql")
         with self.assertRaises(gate.GateError): gate.verify_migration_set(missing)
         modified = dict(migrations); modified["V49__lyrics_preparation.sql"] = "0" * 64
@@ -318,17 +323,16 @@ class GateTests(unittest.TestCase):
         modified = {**migrations, discover_name: "0" * 64}
         with self.assertRaises(gate.GateError): gate.verify_migration_set(modified)
         migration = "V54__song_share_statistics.sql"
-        self.assertEqual("54", gate.verify_migration_set(migrations)["songShareStatisticsVersion"])
-        modified = {**migrations, migration: "0" * 64}
+        modified = {**prior, migration: "0" * 64}
         with self.assertRaises(gate.GateError): gate.verify_migration_set(modified)
-        migrations.pop(migration)
-        self.assertEqual("53", gate.verify_migration_set(migrations)["agentAdmissionVersion"])
-        migrations.pop("V53__agent_admission_version.sql")
-        self.assertEqual("52", gate.verify_migration_set(migrations)["giftDailyBudgetVersion"])
-        migrations.pop("V52__gift_daily_budget.sql")
-        self.assertEqual("51", gate.verify_migration_set(migrations)["paymentReconciliationVersion"])
-        migrations.pop("V51__payment_reconciliation_cursor.sql")
-        pre_discover = {k: v for k, v in migrations.items() if k != discover_name}
+        prior.pop(migration)
+        self.assertEqual("53", gate.verify_migration_set(prior)["agentAdmissionVersion"])
+        prior.pop("V53__agent_admission_version.sql")
+        self.assertEqual("52", gate.verify_migration_set(prior)["giftDailyBudgetVersion"])
+        prior.pop("V52__gift_daily_budget.sql")
+        self.assertEqual("51", gate.verify_migration_set(prior)["paymentReconciliationVersion"])
+        prior.pop("V51__payment_reconciliation_cursor.sql")
+        pre_discover = {k: v for k, v in prior.items() if k != discover_name}
         self.assertEqual("49", gate.verify_migration_set(pre_discover)["lyricsPreparationVersion"])
         pre_lyrics = {k: v for k, v in pre_discover.items() if k != "V49__lyrics_preparation.sql"}
         self.assertEqual("48", gate.verify_migration_set(pre_lyrics)["phoneBindingVersion"])

@@ -53,6 +53,23 @@ class PlaybackLyricsIntegrationTest {
         var f=fixture();String second=asset(f.owner,f.work,f.revision);timing.entered=new CountDownLatch(1);timing.release=new CountDownLatch(1);var pool=Executors.newSingleThreadExecutor();
         try{var first=pool.submit(()->service.sync(f.owner,f.work,f.asset,UUID.randomUUID().toString()));assertTrue(timing.entered.await(3,TimeUnit.SECONDS));assertEquals("PERSONAL_GENERATION_BUSY",assertThrows(DomainException.class,()->service.sync(f.owner,f.work,second,UUID.randomUUID().toString())).code());assertEquals(1,timing.calls.get());timing.release.countDown();first.get(5,TimeUnit.SECONDS);}finally{timing.release.countDown();pool.shutdownNow();}
     }
+    @Test void unknownTimelineDoesNotBlockAnotherVersionOrResubmitTheFirst() {
+        var f=fixture();
+        var next=asset(f.owner(),f.work(),f.revision());
+        timing.mode="UNKNOWN";
+        assertEquals("UNKNOWN",service.sync(f.owner(),f.work(),f.asset(),UUID.randomUUID().toString()).status());
+        timing.mode="READY";
+        assertEquals("READY",service.sync(f.owner(),f.work(),next,UUID.randomUUID().toString()).status());
+        assertEquals("UNKNOWN",service.sync(f.owner(),f.work(),f.asset(),UUID.randomUUID().toString()).status());
+        assertEquals(2,timing.calls.get());
+    }
+    @Test void expiredLegacyFetchDoesNotBlockADifferentVersionWithoutBeingOpened() {
+        var f=fixture();
+        var next=asset(f.owner(),f.work(),f.revision());
+        jdbc.update("INSERT INTO media_lyrics_timeline(asset_id,work_id,state,updated_at) VALUES(?,?,'FETCHING',TIMESTAMP '2000-01-01 00:00:00')",f.asset(),f.work());
+        assertEquals("READY",service.sync(f.owner(),f.work(),next,UUID.randomUUID().toString()).status());
+        assertEquals(1,timing.calls.get());
+    }
 
     @Autowired com.qingfeng.music.server.artist.ArtistProfileService profiles;
     String[] publish(Fixture f){

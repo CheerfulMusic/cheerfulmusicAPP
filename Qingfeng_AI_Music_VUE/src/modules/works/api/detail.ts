@@ -77,7 +77,8 @@ export const saveAudioNote = (work:string,asset:string,note:string,version:numbe
 export const deleteAudioVersion = (work:string,asset:string) => call<{deleted:true;assetId:string}>(`app/works/${encodeURIComponent(work)}/audio/${encodeURIComponent(asset)}`,'DELETE')
 export const listAudio = (work: string) => call<AudioAsset[]>(`app/works/${work}/audio`)
 export const listTasks = (work: string) => call<GenerationTask[]>(`app/works/${work}/generations`)
-export const submitTask = (work: string, revisionId: string, requestKey: string, publication?: GenerationPublication) => call<GenerationTask>(`app/works/${work}/generations`, 'POST', { revisionId, requestKey, ...(publication?.scope === 'public' ? { publishToDiscover: true, stageName: publication.stageName } : {}) })
+export const submitTask = (work: string, revisionId: string, requestKey: string, publication?: GenerationPublication, useAudioReference?: boolean) => call<GenerationTask>(`app/works/${work}/generations`, 'POST', { revisionId, requestKey, ...(publication?.scope === 'public' ? { publishToDiscover: true, stageName: publication.stageName } : {}), ...(useAudioReference ? { useAudioReference: true } : {}) })
+export const audioReferenceAvailable = (work:string) => call<{available:boolean}>(`app/works/${work}/generations/audio-reference`).then(result=>result.available)
 export interface GenerationPreflight {workVersion:number;revisionId:string;styleCharacters:number;styleLimit:number;negativeCharacters:number;negativeLimit:number;notice:string}
 export const preflightGeneration=(work:string,revisionId:string)=>call<GenerationPreflight>(`app/works/${work}/generations/preflight`,'POST',{revisionId})
 export const retryTaskArchive = (work: string, task: string) => call<void>(`app/works/${work}/generations/${task}/retry-archive`, 'POST', {})

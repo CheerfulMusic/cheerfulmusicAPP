@@ -12,7 +12,7 @@ import type {MusicPreferences} from '../api/music-settings'
 import type {EditHint} from '../model/section-edit'
 import {useRouter} from 'vue-router'
 import { getSystemInfo } from '../../../shared/http/system'
-import { listTasks, submitTask, preflightGeneration, saveRevision, confirmRevision, retryTaskArchive, cancelTask, getRevision, getUsage, type Allowance, type Revision, type AudioAsset, type GenerationTask } from '../api/detail'
+import { listTasks, submitTask, audioReferenceAvailable, preflightGeneration, saveRevision, confirmRevision, retryTaskArchive, cancelTask, getRevision, getUsage, type Allowance, type Revision, type AudioAsset, type GenerationTask } from '../api/detail'
 import CreationSteps from '../../../shared/ui/CreationSteps.vue'
 import SongResult from '../components/SongResult.vue'
 import SongResultSkeleton from '../components/SongResultSkeleton.vue'
@@ -45,6 +45,7 @@ const scopeChoice=ref<PublicationScope>('private')
 const scopeProfile=ref<Awaited<ReturnType<typeof getSongPublication>>>()
 const scopeLoading=ref(false)
 const scopeStageName=ref('')
+const referenceAvailable=ref(false), referenceSelected=ref(false)
 const canChoosePublic=computed(()=>typeof scopeProfile.value?.publicationPending==='boolean' && !scopeProfile.value.song)
 const saveLyricsOnConfirmation=computed(()=>!!lyricsPanel.value?.needsSave)
 
@@ -56,15 +57,20 @@ async function openGenerationConfirmation() {
   scopeChoice.value='private'
   scopeStageName.value=''
   scopeProfile.value=undefined
+  referenceAvailable.value=false
+  referenceSelected.value=false
   scopeLoading.value=true
   saveGenerationDialog.value?.showModal()
   try {
-    const state=await getSongPublication(id)
+    const [state, available]=await Promise.all([
+      getSongPublication(id).catch(()=>undefined),
+      work.value?.referenceTrackId?audioReferenceAvailable(id).catch(()=>false):false,
+    ])
     if (turn!==sequence) return
+    referenceAvailable.value=available
     scopeProfile.value=state
     if (canChoosePublic.value) scopeChoice.value=previousPublicationScope(owner)
-  } catch { /* Private generation remains available without a public profile. */ }
-  finally { if (turn===sequence) scopeLoading.value=false }
+  } finally { if (turn===sequence) scopeLoading.value=false }
 }
 function confirmGeneration() {
   if (scopeLoading.value || scopeChoice.value==='public' && (!canChoosePublic.value || !scopeProfile.value?.profileReady && !scopeStageName.value.trim())) return
@@ -72,7 +78,7 @@ function confirmGeneration() {
     ? { scope:'public', stageName:scopeStageName.value.trim() || undefined }
     : { scope:'private' }
   saveGenerationDialog.value?.close()
-  void generate(true,undefined,publication)
+  void generate(true,undefined,publication,referenceAvailable.value&&referenceSelected.value)
 }
 const quickBusy=ref(false),quickRevision=ref('')
 const mediaState = ref<'loading'|'ready'|'failed'>('loading')
@@ -424,7 +430,7 @@ defineExpose({ canClose: permitLeave })
 onBeforeRouteLeave(permitLeave); onBeforeRouteUpdate(to=>to.params.id===route.params.id||permitLeave())
 const beforeUnload = (event: BeforeUnloadEvent) => { if (lyricDirty.value&&!lyricRecoverable.value||pendingIntent.value&&!requestRecoverable.value) { event.preventDefault(); event.returnValue = '' } }
 window.addEventListener('beforeunload', beforeUnload); onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
-async function generate(saveConfirmed=false, adjustment?:RemakeInput, publication?:GenerationPublication) {
+async function generate(saveConfirmed=false, adjustment?:RemakeInput, publication?:GenerationPublication, useAudioReference?:boolean) {
   if(quickBusy.value||!tasksReady.value||taskReadIssue.value||!quickChecked.value||quickReadIssue.value||mediaState.value!=='ready')return
   if (pendingTask.value) { showProgress(); return }
   if(submissionUnknown.value){await refreshTasks();generationOpen.value=true;return}
@@ -474,9 +480,9 @@ async function generate(saveConfirmed=false, adjustment?:RemakeInput, publicatio
     if(adjustment&&pendingIntent.value?.revisionId!==confirmed.id)requestKey.value=''
     requestKey.value ||= crypto.randomUUID()
     const owner=currentCreatorId()
-    intentOwner.value=owner;pendingIntent.value={workId,revisionId:confirmed.id,requestKey:requestKey.value,createdAt:Date.now(),publication}
+    intentOwner.value=owner;pendingIntent.value={workId,revisionId:confirmed.id,requestKey:requestKey.value,createdAt:Date.now(),publication,...(useAudioReference?{useAudioReference:true}:{})}
     requestRecoverable.value=rememberGeneration(intentOwner.value,pendingIntent.value);posted=true
-    const accepted = await submitTask(workId, confirmed.id, requestKey.value, publication)
+    const accepted = await submitTask(workId, confirmed.id, requestKey.value, publication, useAudioReference)
     rememberPublicationScope(owner,publication)
     if (turn !== sequence) return
     tasks.value = [accepted, ...tasks.value.filter(task => task.id !== accepted.id)]
@@ -502,7 +508,7 @@ async function resumeOriginalRequest(){
  try{
   // 重放本站相同幂等请求；不产生新的请求键，不调用新的歌词版本。
   const owner=intentOwner.value
-  const accepted=await submitTask(saved.workId,saved.revisionId,saved.requestKey,saved.publication)
+  const accepted=await submitTask(saved.workId,saved.revisionId,saved.requestKey,saved.publication,saved.useAudioReference)
   rememberPublicationScope(owner,saved.publication)
   if(turn!==sequence)return
   tasks.value=[accepted,...tasks.value.filter(task=>task.id!==accepted.id)];trackedTaskId.value=accepted.id;submissionUnknown.value=false;submissionIssue.value='';clearIntent(saved.workId);generationOpen.value=true
@@ -604,6 +610,11 @@ async function backToStory(){
           <label v-if="scopeChoice === 'public' && !scopeProfile?.profileReady" class="publication-name">
             {{ t('艺名') }} <input v-model="scopeStageName" required maxlength="30">
           </label>
+          <fieldset v-if="referenceAvailable">
+            <legend>{{ t('音乐参考') }}</legend>
+            <label><input v-model="referenceSelected" type="checkbox" aria-describedby="audio-reference-note"> {{ t('使用原曲片段参考') }}</label>
+            <p id="audio-reference-note">{{ t('生成时会把原曲片段和你确认的歌词交给音乐模型。成曲可能保留部分原旋律。') }}</p>
+          </fieldset>
           <div class="actions">
             <button type="button" class="button secondary" autofocus @click="saveGenerationDialog?.close()">{{ t('取消') }}</button>
             <button type="submit" class="button primary" :disabled="scopeLoading || scopeChoice === 'public' && !scopeProfile?.profileReady && !scopeStageName.trim()">{{ t(scopeChoice === 'public' ? '生成并发布到广场' : '私密生成') }}</button>

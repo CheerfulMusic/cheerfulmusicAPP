@@ -33,4 +33,22 @@ class ResilientMusicProviderTest {
         var fake=new Fake();var guarded=new ResilientMusicProvider(fake,new Time());fake.failure=new Rejected("PROVIDER_INPUT_REJECTED");
         assertThrows(Rejected.class,()->guarded.submit(request,"1"));guarded.checkAdmission();fake.failure=null;guarded.submit(request,"2");assertEquals(2,fake.submits);
     }
+    @Test void referenceSubmissionSharesAdmissionAndPreservesTheInput(){
+        var clip=java.net.URI.create("https://storage.example/reference.mp3");
+        var fake=new Fake(){
+            @Override public boolean supportsAudioReference(){return true;}
+            @Override public Submission submitWithReference(Request r,String key,java.net.URI url,double weight){
+                assertSame(clip,url);
+                assertEquals(.30,weight);
+                return submit(r,key);
+            }
+        };
+        var guarded=new ResilientMusicProvider(fake,new Time());
+        assertTrue(guarded.supportsAudioReference());
+        assertEquals("accepted",guarded.submitWithReference(request,"first",clip,.30).providerTaskId());
+        fake.failure=new Rejected("PROVIDER_RATE_LIMITED");
+        assertThrows(Rejected.class,()->guarded.submitWithReference(request,"second",clip,.30));
+        assertThrows(NotSubmitted.class,()->guarded.submitWithReference(request,"second",clip,.30));
+        assertEquals(2,fake.submits);
+    }
 }

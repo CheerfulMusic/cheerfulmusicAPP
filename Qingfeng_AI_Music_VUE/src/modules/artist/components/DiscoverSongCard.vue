@@ -42,6 +42,9 @@ defineEmits<{ play: [] }>()
 .discover-art { position: relative; overflow: hidden; aspect-ratio: 1; border-radius: 8px; background: #f1f2f4; }
 .discover-art > img { display: block; width: 100%; height: 100%; object-fit: cover; }
 .discover-play { position: absolute; inset: auto 10px 10px auto; padding: 0; }
+@media (hover: hover) {
+  .discover-song:not(:hover) .discover-play:not(:focus-visible) { opacity: 0; pointer-events: none; }
+}
 .discover-duration { position: absolute; inset: auto auto 12px 10px; padding: 2px 6px; border-radius: 4px; color: #fff; background: #18232bbf; font-size: .75rem; font-variant-numeric: tabular-nums; }
 .discover-song-heading { display: flex; align-items: baseline; gap: 8px; margin-top: 10px; }
 .discover-song-heading h3 { overflow: hidden; margin: 0; font: inherit; font-size: .98rem; font-weight: 650; line-height: 1.5; text-overflow: ellipsis; white-space: nowrap; }

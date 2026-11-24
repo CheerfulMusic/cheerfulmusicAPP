@@ -16,12 +16,16 @@ public class WorkService implements WorkApi {
     }
     @org.springframework.transaction.annotation.Transactional
     public Work create(String owner,Draft draft,String draftKey) {
+        return create(owner,draft,draftKey,null);
+    }
+    @org.springframework.transaction.annotation.Transactional
+    public Work create(String owner,Draft draft,String draftKey,String referenceTrackId) {
         if(draftKey==null||!draftKey.matches("[0-9a-fA-F-]{36}"))throw new DomainException("INVALID_DRAFT","草稿标识无效，请刷新后重试");
         validate(draft);
         if(!repository.lockActiveOwner(owner))throw new DomainException("CREATOR_SESSION_CHANGED","登录身份已改变，请刷新后重试；本机草稿已保留");
         Instant now = Instant.now();
         var existing=repository.find(owner,draftKey);if(existing.isPresent())return existing.get();
-        Work work = new Work(draftKey, draft.recipient().trim(), draft.occasion(), draft.story(), draft.message(), draft.style(), draft.title(), 0, now, now,draft.vocalGender());
+        Work work = new Work(draftKey, draft.recipient().trim(), draft.occasion(), draft.story(), draft.message(), draft.style(), draft.title(), 0, now, now,draft.vocalGender(),referenceTrackId);
         repository.insert(owner, work); index.changed(owner,work.id()); return get(owner, work.id());
     }
     @org.springframework.transaction.annotation.Transactional

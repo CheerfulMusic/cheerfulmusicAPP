@@ -45,7 +45,8 @@ function clock(seconds: number) {
           :aria-label="t(isPlaying(row) ? '暂停 {title}' : '试听 {title}', { title: row.track.title })"
           @click="emit('play', row)"></button>
         <span class="track-art">
-          <img :src="row.track.cover" alt="" loading="lazy" decoding="async">
+          <img :src="row.track.cover" alt="" loading="lazy" decoding="async"
+            :style="variant === 'wide' && row.wideCoverPosition ? { objectPosition: row.wideCoverPosition } : undefined">
           <span class="track-play" aria-hidden="true"><PlaybackIcon :playing="isPlaying(row)" /></span>
         </span>
         <span class="track-text">
@@ -131,7 +132,10 @@ a.track-artist:is(:hover, :focus-visible) { text-decoration: underline; }
   opacity: 0;
 }
 .track-play svg, .track-count svg { width: 12px; height: 12px; }
-.shelf-track:is(:hover, :focus-within, .is-playing) .track-play, .shelf-wide .track-play { opacity: 1; }
+.shelf-track:hover .track-play, .shelf-track-play:focus-visible + .track-art .track-play { opacity: 1; }
+@media (hover: none) {
+  .shelf-wide .track-play, .shelf-track.is-playing .track-play { opacity: 1; }
+}
 .track-text { display: block; margin-top: 7px; }
 .track-title, .track-artist { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .track-title { font-size: 14px; font-weight: 500; line-height: 1.4; }

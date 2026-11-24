@@ -1,5 +1,6 @@
 import { isAgentContinuation } from '../../modules/agent/model/conversation'
 import { isStripeMethod, validCreditPack, validStripeMethods } from '../../modules/identity/model/stripe-payment-methods'
+import { validCustomLyricSections } from '../../modules/works/model/lyrics-structure'
 type Row=Record<string,unknown>
 const obj=(v:unknown):v is Row=>!!v&&typeof v==='object'&&!Array.isArray(v)
 const str=(v:unknown)=>typeof v==='string'
@@ -30,6 +31,9 @@ const coverEdit=(v:unknown)=>obj(v)&&text(v.id)&&text(v.sourceId)&&text(v.status
 const cover=(v:unknown)=>obj(v)&&num(v.version)&&(v.currentCoverId===null||text(v.currentCoverId))&&list(v.assets,coverAsset)&&list(v.edits,coverEdit)&&typeof v.aiAvailable==='boolean'
 const choices=(v:unknown)=>obj(v)&&Object.values(v).every(values=>list(values,text))
 const preferences=(v:unknown)=>obj(v)&&v.version===1&&(v.recipeId===null||text(v.recipeId))&&choices(v.choices)&&['AUTO','MALE','FEMALE'].includes(String(v.vocalGender))&&str(v.freeText)&&str(v.negativeText)
+export const songReferenceResponse=(v:unknown)=>obj(v)&&text(v.title)&&['zh-CN','en','mixed'].includes(String(v.language))&&preferences(v.preferences)
+ &&obj(v.structure)&&v.structure.chorusFirst===false
+ &&(v.structure.templateId==='AUTO'||v.structure.templateId==='CUSTOM'&&validCustomLyricSections(v.structure.customSections))
 const direction=(v:unknown)=>obj(v)&&preferences(v.preferences)&&num(v.catalogVersion)&&str(v.style)&&str(v.negativeTags)&&str(v.summaryZh)&&str(v.summaryEn)
 const hotStat=(v:unknown)=>obj(v)&&text(v.trackId)&&['plays','likes','favorites','comments'].every(k=>num(v[k])&&Number(v[k])>=0)
 const nullableText=(v:unknown)=>v===null||str(v)
@@ -136,6 +140,7 @@ export function validResponse(path:string,method:string,value:unknown):boolean{
  if(/^app\/artist-profile\/releases\/[^/]+\/discover$/.test(path))
   return method==='DELETE'?myArtist(value):method==='PUT'&&artistRelease(value)&&obj(value)&&value.onDiscover===true
  if(/^public\/hot-songs\/[^/]+\/play$/.test(path))return method==='POST'&&hotStat(value)
+ if(/^public\/hot-songs\/[^/]+\/creation-reference$/.test(path))return method==='GET'&&songReferenceResponse(value)
  if(path==='app/analytics/phone-users')return method==='GET'&&obj(value)&&typeof value.allowed==='boolean'&&
   (!value.allowed||(value.error==='QUERY_FAILED'&&value.users===undefined)||list(value.users,u=>obj(u)&&
    text(u.creatorId)&&text(u.accountType)&&(u.name===null||str(u.name))&&str(u.phoneMasked)&&/^\*{4}[0-9]{4}$/.test(u.phoneMasked)))
@@ -169,6 +174,7 @@ export function validResponse(path:string,method:string,value:unknown):boolean{
  if(path==='app/music-settings/simplify')return obj(value)&&(method==='GET'?typeof value.available==='boolean':text(value.original)&&text(value.text)&&String(value.text).length<=300)
  if(path==='app/music-settings/preview'||/\/music-settings\/preview$/.test(path)||/\/generations\/[^/]+\/music-settings$/.test(path))return direction(value)
  if(/\/generations\/preflight$/.test(path))return method==='POST'&&obj(value)&&num(value.workVersion)&&text(value.revisionId)&&['styleCharacters','styleLimit','negativeCharacters','negativeLimit'].every(k=>num(value[k]))&&Number(value.styleCharacters)<=Number(value.styleLimit)&&Number(value.negativeCharacters)<=Number(value.negativeLimit)&&str(value.notice)
+ if(/\/generations\/audio-reference$/.test(path))return method==='GET'&&obj(value)&&typeof value.available==='boolean'
  if(/\/music-settings$/.test(path))return obj(value)&&work(value.work)&&(value.direction===null||direction(value.direction))
    &&(value.photoInspiration==null||obj(value.photoInspiration)&&text(value.photoInspiration.summary)&&text(value.photoInspiration.arrangement))
  if(path==='app/works')return method==='GET'?list(value,work):work(value)

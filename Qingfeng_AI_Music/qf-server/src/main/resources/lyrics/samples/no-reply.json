@@ -1,0 +1,324 @@
+{
+  "sourceKey": "sample:no-reply:eb853a7c-c69b-3d5e-8262-cea83536e49e",
+  "audioSha256": "42144aef3320dc03334d955dfd1933181554ba4a32dc2e86d0ab66fbcefdebb7",
+  "recognition": "Qwen3 Forced Aligner and Whisper large-v3-turbo; timed against authored lyrics",
+  "duration": 192.36,
+  "warnings": [],
+  "words": [
+    {
+      "text": "Blue light on my ceiling\n",
+      "start": 19.68,
+      "end": 22.0
+    },
+    {
+      "text": "Three dots, then they disappear\n",
+      "start": 22.96,
+      "end": 24.96
+    },
+    {
+      "text": "I don't know what you're feeling\n",
+      "start": 25.2,
+      "end": 26.56
+    },
+    {
+      "text": "But I know you're not here\n",
+      "start": 26.56,
+      "end": 28.64
+    },
+    {
+      "text": "You left without a warning\n",
+      "start": 28.64,
+      "end": 31.04
+    },
+    {
+      "text": "Like a ghost inside my phone\n",
+      "start": 32.08,
+      "end": 34.08
+    },
+    {
+      "text": "I've been up until the morning\n",
+      "start": 34.08,
+      "end": 35.6
+    },
+    {
+      "text": "Talking to a dial tone\n",
+      "start": 36.32,
+      "end": 37.36
+    },
+    {
+      "text": "I don't wanna chase you\n",
+      "start": 37.76,
+      "end": 39.36
+    },
+    {
+      "text": "I don't wanna wait\n",
+      "start": 39.36,
+      "end": 41.44
+    },
+    {
+      "text": "But every time the screen lights up\n",
+      "start": 41.84,
+      "end": 44.0
+    },
+    {
+      "text": "I still look for your name\n",
+      "start": 44.0,
+      "end": 45.92
+    },
+    {
+      "text": "No reply, no reply\n",
+      "start": 46.88,
+      "end": 47.52
+    },
+    {
+      "text": "You keep leaving me online\n",
+      "start": 47.52,
+      "end": 51.2
+    },
+    {
+      "text": "I can see you on the other side\n",
+      "start": 51.2,
+      "end": 53.92
+    },
+    {
+      "text": "But you never tell me why\n",
+      "start": 53.92,
+      "end": 55.68
+    },
+    {
+      "text": "No reply, no reply\n",
+      "start": 55.94,
+      "end": 58.22
+    },
+    {
+      "text": "Every message stays behind\n",
+      "start": 58.22,
+      "end": 60.5
+    },
+    {
+      "text": "I keep trying to read between the lines\n",
+      "start": 60.5,
+      "end": 62.94
+    },
+    {
+      "text": "But there's nothing left to find\n",
+      "start": 62.94,
+      "end": 66.26
+    },
+    {
+      "text": "No-no-no reply\n",
+      "start": 66.26,
+      "end": 70.02
+    },
+    {
+      "text": "No-no-no reply\n",
+      "start": 70.02,
+      "end": 72.32
+    },
+    {
+      "text": "I keep looking for a sign\n",
+      "start": 72.84,
+      "end": 74.9
+    },
+    {
+      "text": "No-no-no reply\n",
+      "start": 74.9,
+      "end": 79.22
+    },
+    {
+      "text": "I deleted all our pictures\n",
+      "start": 81.66,
+      "end": 84.54
+    },
+    {
+      "text": "But they're living in my head\n",
+      "start": 85.26,
+      "end": 87.42
+    },
+    {
+      "text": "Every little conversation\n",
+      "start": 87.82,
+      "end": 89.18
+    },
+    {
+      "text": "Every word we never said\n",
+      "start": 90.06,
+      "end": 92.06
+    },
+    {
+      "text": "Got a hundred notifications\n",
+      "start": 92.46,
+      "end": 94.46
+    },
+    {
+      "text": "But none of them are you\n",
+      "start": 94.46,
+      "end": 95.9
+    },
+    {
+      "text": "Funny how a crowded city\n",
+      "start": 96.86,
+      "end": 98.46
+    },
+    {
+      "text": "Can feel like an empty room\n",
+      "start": 98.46,
+      "end": 100.46
+    },
+    {
+      "text": "I don't wanna chase you\n",
+      "start": 101.22,
+      "end": 103.22
+    },
+    {
+      "text": "I don't wanna wait\n",
+      "start": 103.22,
+      "end": 105.04
+    },
+    {
+      "text": "But every time the screen lights up\n",
+      "start": 105.38,
+      "end": 107.58
+    },
+    {
+      "text": "I still look for your name\n",
+      "start": 107.58,
+      "end": 109.58
+    },
+    {
+      "text": "No reply, no reply\n",
+      "start": 109.58,
+      "end": 112.68
+    },
+    {
+      "text": "You keep leaving me online\n",
+      "start": 112.68,
+      "end": 114.94
+    },
+    {
+      "text": "I can see you on the other side\n",
+      "start": 114.94,
+      "end": 117.42
+    },
+    {
+      "text": "But you never tell me why\n",
+      "start": 117.42,
+      "end": 119.6
+    },
+    {
+      "text": "No reply, no reply\n",
+      "start": 120.16,
+      "end": 121.36
+    },
+    {
+      "text": "Every message stays behind\n",
+      "start": 122.64,
+      "end": 124.08
+    },
+    {
+      "text": "I keep trying to read between the lines\n",
+      "start": 124.4,
+      "end": 125.36
+    },
+    {
+      "text": "But there's nothing left to find\n",
+      "start": 126.64,
+      "end": 130.48
+    },
+    {
+      "text": "Maybe silence is the answer\n",
+      "start": 130.48,
+      "end": 132.56
+    },
+    {
+      "text": "Maybe I should let it be\n",
+      "start": 132.56,
+      "end": 134.64
+    },
+    {
+      "text": "Maybe all the things I'm asking\n",
+      "start": 135.2,
+      "end": 136.96
+    },
+    {
+      "text": "Aren't the things you wanna give\n",
+      "start": 136.96,
+      "end": 138.72
+    },
+    {
+      "text": "And I know the night is ending\n",
+      "start": 139.5,
+      "end": 141.34
+    },
+    {
+      "text": "When the sky turns into blue\n",
+      "start": 141.34,
+      "end": 143.74
+    },
+    {
+      "text": "So I'm putting down my phone\n",
+      "start": 143.98,
+      "end": 146.06
+    },
+    {
+      "text": "And I'm letting go of you\n",
+      "start": 146.06,
+      "end": 147.74
+    },
+    {
+      "text": "No reply, no reply\n",
+      "start": 155.96,
+      "end": 158.22
+    },
+    {
+      "text": "You keep leaving me online\n",
+      "start": 158.22,
+      "end": 160.5
+    },
+    {
+      "text": "I can see you on the other side\n",
+      "start": 160.5,
+      "end": 162.94
+    },
+    {
+      "text": "But you never tell me why\n",
+      "start": 162.94,
+      "end": 165.14
+    },
+    {
+      "text": "No reply, no reply\n",
+      "start": 165.14,
+      "end": 167.34
+    },
+    {
+      "text": "Every message stays behind\n",
+      "start": 167.34,
+      "end": 169.74
+    },
+    {
+      "text": "I keep trying to read between the lines\n",
+      "start": 169.74,
+      "end": 172.12
+    },
+    {
+      "text": "But there's nothing left to find\n",
+      "start": 172.12,
+      "end": 175.44
+    },
+    {
+      "text": "No-no-no reply\n",
+      "start": 175.44,
+      "end": 179.3
+    },
+    {
+      "text": "No-no-no reply\n",
+      "start": 179.3,
+      "end": 181.64
+    },
+    {
+      "text": "Nothing left to find\n",
+      "start": 181.64,
+      "end": 184.68
+    }
+  ]
+}

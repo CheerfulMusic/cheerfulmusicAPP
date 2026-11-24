@@ -5,6 +5,9 @@ qingfeng:
     scheduler-enabled: false
   generation:
     scheduler-enabled: false
+  lyrics:
+    preparation:
+      scheduler-enabled: false
   cover:
     ai:
       scheduler-enabled: false

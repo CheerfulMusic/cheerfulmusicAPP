@@ -108,12 +108,16 @@ public final class JdbcUsageBudget implements UsageBudget {
     }
     private int active(Kind kind, String owner) {
         String table=switch(kind){case MUSIC->"generation_task";case LYRICS->"lyrics_composition_request";case TIMING->"media_lyrics_timeline";case COVER->"cover_edit_task";};
-        String states=switch(kind){case MUSIC,COVER->"'QUEUED','SUBMITTING','RUNNING','SAVING','SUBMISSION_UNKNOWN'";case LYRICS->"'PENDING'";case TIMING->"'FETCHING','UNKNOWN'";};
+        String states=switch(kind){case MUSIC,COVER->"'QUEUED','SUBMITTING','RUNNING','SAVING','SUBMISSION_UNKNOWN'";case LYRICS->"'PENDING'";case TIMING->"'FETCHING'";};
         String column=kind==Kind.TIMING?"state":"status";
         if (kind==Kind.MUSIC && owner==null) return count("SELECT COUNT(*) FROM generation_task WHERE status IN ("+states+")");
         String sql="SELECT COUNT(*) FROM "+table+" r JOIN music_work w ON w.id=r.work_id WHERE r."+column+" IN ("+states+")";
         if (kind==Kind.LYRICS) {
             sql+=" AND w.deleted_at IS NULL AND r.created_at>TIMESTAMPADD(SECOND,-"+CompositionRequests.PENDING_TIMEOUT_SECONDS+",CURRENT_TIMESTAMP)";
+        }
+        if (kind==Kind.TIMING) {
+            sql+=" AND w.deleted_at IS NULL AND r.updated_at>=TIMESTAMPADD(SECOND,-"
+                +com.qingfeng.music.lyrics.playback.PlaybackLyricsRepository.FETCH_TIMEOUT_SECONDS+",CURRENT_TIMESTAMP)";
         }
         return owner==null?count(sql):count(sql+" AND w.owner_id=?",owner);
     }

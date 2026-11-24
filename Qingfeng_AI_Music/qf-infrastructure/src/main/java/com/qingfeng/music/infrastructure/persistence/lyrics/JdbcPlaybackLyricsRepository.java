@@ -20,13 +20,14 @@ public final class JdbcPlaybackLyricsRepository implements PlaybackLyricsReposit
     private List<PlaybackLyrics.Word> decode(String raw){return raw==null?List.of():List.of(json.readValue(raw,PlaybackLyrics.Word[].class));}
     public boolean claim(String owner,Source source,String key){
         return Boolean.TRUE.equals(transactions.execute(tx->{
-            // Keep the same lock order as background preparation and usage admission.
+            // Usage admission locks creator before timing. Background claims only take the timing lock.
+            jdbc.queryForList("SELECT id FROM creator WHERE id=? FOR UPDATE",owner);
             jdbc.queryForObject("SELECT kind FROM model_usage_lock WHERE kind='TIMING' FOR UPDATE",String.class);
             jdbc.update("INSERT INTO media_lyrics_timeline(asset_id,work_id,state,updated_at) VALUES(?,?,'NOT_REQUESTED',CURRENT_TIMESTAMP) ON DUPLICATE KEY UPDATE asset_id=asset_id",source.assetId(),source.workId());
             jdbc.queryForObject("SELECT asset_id FROM media_lyrics_timeline WHERE asset_id=? FOR UPDATE",String.class,source.assetId());
             var existing=find(source.assetId()).orElseThrow();
             if(!Set.of("NOT_REQUESTED","FAILED").contains(existing.status())||key.equals(existing.requestKey()))return false;
-            String reservation=UUID.nameUUIDFromBytes((source.assetId()+":"+key).getBytes(java.nio.charset.StandardCharsets.UTF_8)).toString();
+            String reservation=PlaybackLyricsRepository.reservationKey(source.assetId(),key);
             budget.reserve(owner,source.workId(),reservation,UsageBudget.Kind.TIMING);
             jdbc.update("UPDATE media_lyrics_timeline SET state='FETCHING',request_key=?,words_json=NULL,attempts=attempts+1,updated_at=CURRENT_TIMESTAMP WHERE asset_id=?",key,source.assetId());return true;
         }));

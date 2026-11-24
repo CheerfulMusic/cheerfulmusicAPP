@@ -10,12 +10,14 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 /** Cover jobs use private outbox states so the general event dispatcher cannot send them. */
 public final class JdbcAutomaticCoverJobs {
+    public static final String ART_SAVING = "COVER_ART_SAVING";
+
     private static final String TOPIC = "music.cover";
     private static final int MAX_ARCHIVE_ATTEMPTS = 4;
     private final JdbcTemplate db;
     private final TransactionTemplate tx;
 
-    public record Job(String id, String task, String work, String owner, String title, String lyrics, String style,
+    public record Job(String id, String task, String work, String owner, String title, String lyrics, String story, String style,
                       String state, String url, int attempts, String token) {}
 
     public JdbcAutomaticCoverJobs(JdbcTemplate db, TransactionTemplate transactions) {
@@ -33,7 +35,8 @@ public final class JdbcAutomaticCoverJobs {
                 FROM generation_task t JOIN music_work w ON w.id=t.work_id
                 LEFT JOIN work_cover c ON c.work_id=w.id
                 WHERE t.id=? AND t.status IN ('QUEUED','SUBMITTING','RUNNING','SUBMISSION_UNKNOWN','SAVING','SUCCEEDED')
-                  AND w.deleted_at IS NULL AND c.cover_id IS NULL AND COALESCE(c.version,0)=0 AND TRIM(t.lyrics)<>''
+                  AND w.deleted_at IS NULL AND c.cover_id IS NULL AND COALESCE(c.version,0)=0
+                  AND (TRIM(t.lyrics)<>'' OR TRIM(t.title)<>'' OR TRIM(w.story)<>'')
                   AND NOT EXISTS (SELECT 1 FROM section_edit s WHERE s.task_id=t.id)
                 ON DUPLICATE KEY UPDATE id=task_event_outbox.id
                 """, UUID.randomUUID().toString(), TOPIC, task);
@@ -43,7 +46,7 @@ public final class JdbcAutomaticCoverJobs {
         return !db.queryForList("""
                 SELECT 1 FROM task_event_outbox e JOIN generation_task t ON t.id=e.event_key
                 WHERE t.work_id=? AND e.topic=? AND e.state IN ('COVER_WAIT','COVER_QUEUED','COVER_SUBMIT','COVER_SAVING',
-                    'COVER_REPAIR','COVER_FIXING','COVER_RESAVE')
+                    'COVER_REPAIR','COVER_FIXING','COVER_RESAVE','COVER_ART_SAVING')
                   AND t.status IN ('QUEUED','SUBMITTING','RUNNING','SUBMISSION_UNKNOWN','SAVING','SUCCEEDED')
                 LIMIT 1
                 """, Integer.class, work, TOPIC).isEmpty();
@@ -75,16 +78,16 @@ public final class JdbcAutomaticCoverJobs {
                     WHERE topic=? AND state IN ('COVER_SUBMIT','COVER_FIXING') AND lease_until<=CURRENT_TIMESTAMP
                     """, TOPIC);
             var jobs = db.query("""
-                    SELECT e.id,t.id,t.work_id,w.owner_id,t.title,t.lyrics,t.style,e.state,e.payload,e.attempts
+                    SELECT e.id,t.id,t.work_id,w.owner_id,t.title,t.lyrics,w.story,t.style,e.state,e.payload,e.attempts
                     FROM task_event_outbox e JOIN generation_task t ON t.id=e.event_key
                     JOIN music_work w ON w.id=t.work_id
-                    WHERE e.topic=? AND e.state IN ('COVER_QUEUED','COVER_SAVING','COVER_REPAIR','COVER_RESAVE')
+                    WHERE e.topic=? AND e.state IN ('COVER_QUEUED','COVER_SAVING','COVER_REPAIR','COVER_RESAVE','COVER_ART_SAVING')
                       AND e.next_attempt_at<=CURRENT_TIMESTAMP
                       AND (e.lease_until IS NULL OR e.lease_until<=CURRENT_TIMESTAMP)
                     ORDER BY e.next_attempt_at,e.id LIMIT 1
                     """, (row, index) -> new Job(row.getString(1), row.getString(2), row.getString(3),
                     row.getString(4), row.getString(5), row.getString(6), row.getString(7),
-                    row.getString(8), row.getString(9), row.getInt(10), UUID.randomUUID().toString()),
+                    row.getString(8), row.getString(9), row.getString(10), row.getInt(11), UUID.randomUUID().toString()),
                     TOPIC);
             if (jobs.isEmpty()) return Optional.empty();
             var job = jobs.get(0);
@@ -139,7 +142,7 @@ public final class JdbcAutomaticCoverJobs {
     }
 
     public void accepted(Job job, String url) {
-        update(job, "COVER_SUBMIT", "COVER_SAVING", null, url, 0, 0);
+        update(job, "COVER_SUBMIT", ART_SAVING, null, url, 0, 0);
     }
 
     public void rejected(Job job, String reason) {
@@ -195,7 +198,7 @@ public final class JdbcAutomaticCoverJobs {
             db.queryForList("SELECT id FROM music_work WHERE id=? FOR UPDATE", job.work());
             if (db.queryForList("""
                     SELECT id FROM task_event_outbox
-                    WHERE id=? AND state IN ('COVER_SAVING','COVER_RESAVE') AND lease_token=? FOR UPDATE
+                    WHERE id=? AND state IN ('COVER_SAVING','COVER_RESAVE','COVER_ART_SAVING') AND lease_token=? FOR UPDATE
                     """, job.id(), job.token()).isEmpty()) return;
             if (eligible(job)) {
                 db.update("""

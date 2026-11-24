@@ -44,7 +44,7 @@ public final class InviteGateFilter extends OncePerRequestFilter {
         boolean analytics = ANALYTICS.contains(path) || ("POST".equals(request.getMethod()) && path.equals("/api/wechat/jssdk-error"));
         // 热歌推荐是首页公开展示，播放计次也不含个人信息；内测门禁不应让它变成 0。
         boolean hotSong = ("GET".equals(request.getMethod()) && "/api/public/hot-songs".equals(path))
-                || ("GET".equals(request.getMethod()) && path.matches("/api/public/hot-songs/[a-z0-9-]{1,64}/lyrics"))
+                || ("GET".equals(request.getMethod()) && path.matches("/api/public/hot-songs/[a-z0-9-]{1,64}/(?:lyrics|creation-reference)"))
                 || ("POST".equals(request.getMethod()) && path.matches("/api/public/hot-songs/[A-Za-z0-9_-]{1,64}/play"));
         if (!gate.settings().enabled() || !apiLike || publicSong || songPlay || publicGift || publicArtist || ENTRANCES.contains(path) || analytics || hotSong || webhook
                 || gate.expiresAt(request) > 0) {

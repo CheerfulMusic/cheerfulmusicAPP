@@ -33,6 +33,7 @@ export interface DiscoverShelfTrack {
   stageName: string
   plays?: number
   durationSeconds?: number
+  wideCoverPosition?: string
 }
 
 export type PublishedShelfTrack = DiscoverSong & { track: PlayableTrack }
@@ -56,6 +57,14 @@ const sampleCovers: Partial<Record<string, string>> = {
   'cant-stop-this-feeling': cantStopThisFeeling,
   'midnight-call': midnightCall,
   'summer-on-repeat': summerOnRepeat,
+}
+
+export const globalPopWideCoverPositions: Partial<Record<string, string>> = {
+  'after-midnight': 'center 26%',
+  'where-the-wind-goes': 'center 17%',
+  'cant-stop-this-feeling': 'center 15%',
+  'midnight-call': 'center 26%',
+  'summer-on-repeat': 'center 17%',
 }
 
 export function discoverReleaseCover(song: PublishedSong, original: string) {

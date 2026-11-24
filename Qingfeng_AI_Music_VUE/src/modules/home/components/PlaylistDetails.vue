@@ -6,6 +6,7 @@ import type {PreviewPlaylist} from '../model/playlists'
 import {recordPreviewPlay} from '../model/published-recommendations'
 import PlaybackModeButton from '../../../shared/player/PlaybackModeButton.vue'
 import PreviewTrackRow from './PreviewTrackRow.vue'
+import {songCreationRoute} from '../../studio/model/song-reference'
 
 const props=defineProps<{playlist:PreviewPlaylist}>(),emit=defineEmits<{close:[]}>()
 const dialog=ref<HTMLDialogElement>(),player=usePlayer()
@@ -42,7 +43,7 @@ function backdrop(event:MouseEvent){if(event.target!==dialog.value)return;const 
         <PreviewTrackRow :track="track" :queue="playlist.tracks"/>
         <p class="playlist-track-description">{{ track.description }}</p>
         <details v-if="track.lyrics" class="playlist-track-lyrics"><summary>{{ t('歌词') }}</summary><p>{{ track.lyrics }}</p></details>
-        <div class="playlist-track-actions"><span class="playlist-track-labels"><span v-for="tag in track.tags" :key="tag">{{ tag }}</span></span><RouterLink :to="{path:'/create',query:{occasion:track.occasion,style:track.style}}" @click="emit('close')">{{ t('用这个风格创作') }} <span aria-hidden="true">↗</span></RouterLink></div>
+        <div class="playlist-track-actions"><span class="playlist-track-labels"><span v-for="tag in track.tags" :key="tag">{{ tag }}</span></span><RouterLink :to="songCreationRoute(track)" @click="emit('close')">{{ t('用这个风格创作') }} <span aria-hidden="true">↗</span></RouterLink></div>
       </li></ul>
       <p v-else>{{ t('这里还没有公开作品。') }}</p>
     </dialog>

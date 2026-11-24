@@ -6,15 +6,26 @@ import java.time.*;
 import java.util.List;
 
 public final class PlaybackLyricsService {
+    @FunctionalInterface
+    public interface Queue {
+        /** True when the queue handled the request, including an existing or settled job. */
+        boolean handle(String owner,PlaybackLyricsRepository.Source source,String key);
+    }
     private final MediaApi media;
     private final PlaybackLyricsRepository repository;
     private final LyricsTimingProvider provider;
     private final boolean enabled;
-    public PlaybackLyricsService(MediaApi media,PlaybackLyricsRepository repository,LyricsTimingProvider provider,boolean enabled){this.media=media;this.repository=repository;this.provider=provider;this.enabled=enabled;}
+    private final Queue queue;
+    public PlaybackLyricsService(MediaApi media,PlaybackLyricsRepository repository,LyricsTimingProvider provider,boolean enabled){
+        this(media,repository,provider,enabled,(owner,source,key)->false);
+    }
+    public PlaybackLyricsService(MediaApi media,PlaybackLyricsRepository repository,LyricsTimingProvider provider,boolean enabled,Queue queue){
+        this.media=media;this.repository=repository;this.provider=provider;this.enabled=enabled;this.queue=queue;
+    }
     public PlaybackLyrics.Snapshot get(String owner,String work,String asset){
         media.get(owner,work,asset);
         var source=repository.source(work,asset).orElseThrow(()->new DomainException("MEDIA_NOT_FOUND","音频不存在"));
-        repository.expire(asset,Instant.now().minusSeconds(180));
+        repository.expire(asset,Instant.now().minusSeconds(PlaybackLyricsRepository.FETCH_TIMEOUT_SECONDS));
         var stored=repository.find(asset);
         String state=stored.map(PlaybackLyricsRepository.Stored::status).orElse("NOT_REQUESTED");
         var lines=stored.filter(s->s.status().equals("READY")).map(s->PlaybackLyrics.lines(s.words())).orElse(List.of());
@@ -28,6 +39,7 @@ public final class PlaybackLyricsService {
         if(snapshot.status().equals("READY"))return snapshot;
         if(!snapshot.canSync())throw new DomainException("LYRICS_TIMING_UNAVAILABLE","这首音频暂不支持获取同步歌词");
         var source=repository.source(work,asset).orElseThrow();
+        if(queue.handle(owner,source,key))return get(owner,work,asset);
         if(!repository.claim(owner,source,key))return get(owner,work,asset);
         try{
             var words=provider.fetch(source.providerTaskId(),source.audioUrl());

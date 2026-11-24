@@ -18,7 +18,7 @@ export const playlistDefinitions=[
   ...sharedPlaylists.map(playlist=>playlist.id==='electronic'
     ? {...playlist,trackIds:[...playlist.trackIds,'body-language','into-the-sun','one-more-night']}
     : playlist),
-  {id:'hip-hop-rnb',title:'Hip-Hop&R&B',subtitle:'RAP & SOUL',cover:houseCover,trackIds:[]},
+  {id:'hip-hop-rnb',title:'Hip-Hop&R&B',subtitle:'RAP & SOUL',cover:houseCover,trackIds:['golden-hour-love','no-reply','too-close','big-motion','running-through-my-mind','westside-summer']},
 ]
 
 export function filterPlaylists(playlists:readonly PreviewPlaylist[],filter:string):PreviewPlaylist[]{

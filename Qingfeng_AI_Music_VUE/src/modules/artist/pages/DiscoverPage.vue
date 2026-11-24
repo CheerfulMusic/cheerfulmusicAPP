@@ -13,7 +13,7 @@ import DiscoverShelf from '../components/DiscoverShelf.vue'
 import { withDiscoverEditorialCover } from '../model/discover-editorial-artwork'
 import { discoverSongArtwork, type HeroArtwork } from '../model/discover-hero-artwork'
 import {
-  christmasSongId, discoverGenres, publicDiscoverTrack, withDiscoverPreviewCover,
+  christmasSongId, discoverGenres, globalPopWideCoverPositions, publicDiscoverTrack, withDiscoverPreviewCover,
   type DiscoverShelfTrack, type PublishedShelfTrack,
 } from '../model/discover-shelves'
 import { vocalPerformanceRows } from '../model/vocal-performances'
@@ -140,6 +140,7 @@ const genreShelves = computed(() => discoverGenres.map(section => {
         durationSeconds: track.durationSeconds,
         song: track.publication?.song,
         artistId: track.publication?.artistId,
+        wideCoverPosition: section.id === 'global-pop' ? globalPopWideCoverPositions[track.id] : undefined,
       }
     })
   const tracks = [...publicRows, ...examples]

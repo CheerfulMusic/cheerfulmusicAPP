@@ -16,6 +16,8 @@ public class GenerationService implements GenerationApi {
  public GenerationService(WorkApi works,LyricsApi lyrics,MusicProvider provider,TaskRepository repository,ExecutionRepository execution,boolean enabled){this(works,lyrics,provider,repository,execution,enabled,(o,w,k,t)->{});}
  public GenerationService(WorkApi works,LyricsApi lyrics,MusicProvider provider,TaskRepository repository,ExecutionRepository execution,boolean enabled,com.qingfeng.music.usage.UsageBudget budget){this.works=works;this.lyrics=lyrics;this.provider=provider;this.repository=repository;this.execution=execution;this.enabled=enabled;this.budget=budget;}
  private com.qingfeng.music.settings.MusicSettings settings;
+ private AudioReferenceClips references=AudioReferenceClips.NONE;
+ public GenerationService withAudioReferences(AudioReferenceClips clips){references=Objects.requireNonNull(clips);return this;}
  public GenerationService withSettings(com.qingfeng.music.settings.MusicSettings value){settings=value;return this;}
  private com.qingfeng.music.events.DurableEvents events=(topic,key,payload)->{};
  public GenerationService withEvents(com.qingfeng.music.events.DurableEvents value){events=Objects.requireNonNull(value);return this;}
@@ -46,13 +48,23 @@ public class GenerationService implements GenerationApi {
  }
  @Transactional(isolation = org.springframework.transaction.annotation.Isolation.READ_COMMITTED)
  public Task submit(String owner,String work,String revisionId,String key,java.util.function.Consumer<Task> onCreated){
+  return submit(owner,work,revisionId,key,false,onCreated);
+ }
+ public boolean audioReferenceAvailable(String owner,String work){
+  var item=works.get(owner,work);
+  return enabled&&provider.isConfigured()&&provider.supportsAudioReference()&&references.selected(item.referenceTrackId()).isPresent();
+ }
+ @Transactional(isolation = org.springframework.transaction.annotation.Isolation.READ_COMMITTED)
+ public Task submit(String owner,String work,String revisionId,String key,boolean useReference,java.util.function.Consumer<Task> onCreated){
   var w=works.get(owner,work);
   if(key==null||!key.matches("[0-9a-fA-F-]{36}"))throw new DomainException("INVALID_REQUEST_KEY","请提供有效的请求标识");
-  var existing=repository.findRequest(work,key);if(existing.isPresent())return checked(existing.get(),revisionId);
+  var existing=repository.findRequest(work,key);if(existing.isPresent())return checkedReference(checked(existing.get(),revisionId),useReference);
   var revision=lyrics.get(owner,work,revisionId);
   if(!revision.confirmed())throw new DomainException("LYRICS_NOT_CONFIRMED","请先确认歌词");
   if(revision.workVersion()!=w.version())throw new DomainException("WORK_VERSION_CONFLICT","作品已修改，请保存并确认当前版本歌词");
   available();
+  var clip=useReference?(provider.supportsAudioReference()?references.selected(w.referenceTrackId()):Optional.<AudioReferenceClips.Clip>empty())
+   .orElseThrow(()->new DomainException("AUDIO_REFERENCE_UNAVAILABLE","这首歌的参考片段暂不可用，可以取消勾选后重新确认生成。")):null;
   // 与局部编辑保持准入锁→作品锁顺序；后续校验失败会随整个事务回滚占额。
   budget.reserve(owner,work,key,com.qingfeng.music.usage.UsageBudget.Kind.MUSIC);
   var direction=settings==null?null:settings.forGeneration(owner,w);
@@ -61,11 +73,17 @@ public class GenerationService implements GenerationApi {
   Instant now=Instant.now();
   String id=UUID.randomUUID().toString();var task=checked(repository.insertOrRead(new Task(id,work,revisionId,w.version(),key,revision.title(),revision.lyrics(),w.style(),provider.name(),GenerationStatus.QUEUED,now,null,null,now,now.plusSeconds(5),voice)),revisionId);
   if(task.id().equals(id)){
+   if(clip!=null)references.freeze(id,clip);
    if(settings!=null)settings.snapshot(id,direction);
    automaticCover.accept(id);
    onCreated.accept(task);
    events.publish("music.ready",id,id);
   }
+  return checkedReference(task,useReference);
+ }
+ private Task checkedReference(Task task,boolean useReference){
+  if(references.frozen(task.id()).isPresent()!=useReference)
+   throw new DomainException("REQUEST_KEY_CONFLICT","该请求标识已用于另一种参考设置，请核对原任务。");
   return task;
  }
  public List<Task> list(String owner,String work){works.get(owner,work);return repository.list(work);}

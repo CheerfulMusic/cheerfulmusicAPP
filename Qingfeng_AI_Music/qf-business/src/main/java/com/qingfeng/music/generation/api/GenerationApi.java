@@ -9,6 +9,11 @@ public interface GenerationApi {
  default Task submit(String owner,String work,String revision,String requestKey,java.util.function.Consumer<Task> onCreated){
   throw new UnsupportedOperationException();
  }
+ default boolean audioReferenceAvailable(String owner,String work){return false;}
+ default Task submit(String owner,String work,String revision,String requestKey,boolean useReference,java.util.function.Consumer<Task> onCreated){
+  if(useReference)throw new UnsupportedOperationException();
+  return submit(owner,work,revision,requestKey,onCreated);
+ }
  List<Task> list(String owner,String work);
  void retryArchive(String owner,String work,String task);
  Task cancel(String owner,String work,String task);

@@ -1,0 +1,329 @@
+{
+  "sourceKey": "sample:too-close:e9885f9a-552f-3611-b8e4-972f8e113292",
+  "audioSha256": "6e798ee02c650b21cbff57073659f3a858fcd7e6d4cad5192ecd1361a3b7089c",
+  "recognition": "Qwen3 Forced Aligner and Whisper large-v3-turbo; timed against authored lyrics",
+  "duration": 192.12,
+  "warnings": [],
+  "words": [
+    {
+      "text": "Ooh, yeah\n",
+      "start": 2.14,
+      "end": 3.26
+    },
+    {
+      "text": "A little too close\n",
+      "start": 4.5,
+      "end": 9.34
+    },
+    {
+      "text": "Too close to you\n",
+      "start": 9.36,
+      "end": 14.6
+    },
+    {
+      "text": "You left your perfume on my sweater\n",
+      "start": 15.34,
+      "end": 17.5
+    },
+    {
+      "text": "Said we shouldn't be together\n",
+      "start": 17.5,
+      "end": 19.5
+    },
+    {
+      "text": "But you're calling after midnight\n",
+      "start": 19.5,
+      "end": 21.98
+    },
+    {
+      "text": "Asking if I'm doing alright\n",
+      "start": 23.42,
+      "end": 26.86
+    },
+    {
+      "text": "I can hear it in your breathing\n",
+      "start": 27.58,
+      "end": 28.78
+    },
+    {
+      "text": "There's a reason you're not leaving\n",
+      "start": 29.25,
+      "end": 31.33
+    },
+    {
+      "text": "Every time we say it's over\n",
+      "start": 31.33,
+      "end": 34.69
+    },
+    {
+      "text": "We just end up getting closer\n",
+      "start": 35.17,
+      "end": 37.65
+    },
+    {
+      "text": "And we both know where this goes\n",
+      "start": 37.65,
+      "end": 40.85
+    },
+    {
+      "text": "But neither one of us says no\n",
+      "start": 40.85,
+      "end": 42.69
+    },
+    {
+      "text": "You put your hands around my waist\n",
+      "start": 42.77,
+      "end": 44.85
+    },
+    {
+      "text": "And all the words just fade away\n",
+      "start": 44.85,
+      "end": 46.85
+    },
+    {
+      "text": "We're getting too close\n",
+      "start": 46.93,
+      "end": 47.49
+    },
+    {
+      "text": "Too close to let go\n",
+      "start": 47.95,
+      "end": 49.79
+    },
+    {
+      "text": "Every time you touch me\n",
+      "start": 50.35,
+      "end": 51.87
+    },
+    {
+      "text": "I forget what I know\n",
+      "start": 51.87,
+      "end": 54.19
+    },
+    {
+      "text": "We're getting too close\n",
+      "start": 54.75,
+      "end": 55.95
+    },
+    {
+      "text": "But I don't wanna go\n",
+      "start": 55.95,
+      "end": 57.63
+    },
+    {
+      "text": "If this is a mistake\n",
+      "start": 57.95,
+      "end": 59.87
+    },
+    {
+      "text": "Then take it nice and slow\n",
+      "start": 59.87,
+      "end": 64.03
+    },
+    {
+      "text": "Ooh, don't let go\n",
+      "start": 64.03,
+      "end": 67.95
+    },
+    {
+      "text": "Take it nice and slow\n",
+      "start": 72.22,
+      "end": 79.18
+    },
+    {
+      "text": "There's a shadow on the ceiling\n",
+      "start": 79.18,
+      "end": 83.1
+    },
+    {
+      "text": "And a thousand little feelings\n",
+      "start": 83.1,
+      "end": 86.54
+    },
+    {
+      "text": "We don't talk about tomorrow\n",
+      "start": 86.54,
+      "end": 89.42
+    },
+    {
+      "text": "Like there's nothing left to follow\n",
+      "start": 89.42,
+      "end": 93.34
+    },
+    {
+      "text": "You keep tracing little circles\n",
+      "start": 93.34,
+      "end": 95.1
+    },
+    {
+      "text": "On my skin beneath the covers\n",
+      "start": 95.82,
+      "end": 97.74
+    },
+    {
+      "text": "I could tell you that I love you\n",
+      "start": 97.74,
+      "end": 99.58
+    },
+    {
+      "text": "But you know it like no other\n",
+      "start": 99.64,
+      "end": 101.4
+    },
+    {
+      "text": "And we both know where this goes\n",
+      "start": 101.4,
+      "end": 103.32
+    },
+    {
+      "text": "But neither one of us says no\n",
+      "start": 103.32,
+      "end": 105.32
+    },
+    {
+      "text": "You put your hands around my waist\n",
+      "start": 105.32,
+      "end": 107.4
+    },
+    {
+      "text": "And all the words just fade away\n",
+      "start": 107.4,
+      "end": 108.92
+    },
+    {
+      "text": "We're getting too close\n",
+      "start": 108.92,
+      "end": 110.68
+    },
+    {
+      "text": "Too close to let go\n",
+      "start": 110.68,
+      "end": 112.36
+    },
+    {
+      "text": "Every time you touch me\n",
+      "start": 112.92,
+      "end": 114.2
+    },
+    {
+      "text": "I forget what I know\n",
+      "start": 114.27,
+      "end": 116.75
+    },
+    {
+      "text": "We're getting too close\n",
+      "start": 116.99,
+      "end": 118.43
+    },
+    {
+      "text": "But I don't wanna go\n",
+      "start": 118.43,
+      "end": 120.19
+    },
+    {
+      "text": "If this is a mistake\n",
+      "start": 120.51,
+      "end": 122.35
+    },
+    {
+      "text": "Then take it nice and slow\n",
+      "start": 122.35,
+      "end": 126.03
+    },
+    {
+      "text": "Maybe we don't need forever\n",
+      "start": 126.03,
+      "end": 127.87
+    },
+    {
+      "text": "Maybe we just need tonight\n",
+      "start": 127.87,
+      "end": 129.95
+    },
+    {
+      "text": "We can leave the questions waiting\n",
+      "start": 129.95,
+      "end": 131.7
+    },
+    {
+      "text": "Till the morning brings the light\n",
+      "start": 131.7,
+      "end": 133.62
+    },
+    {
+      "text": "And if you tell me that you're leaving\n",
+      "start": 133.62,
+      "end": 135.86
+    },
+    {
+      "text": "I won't ask you to explain\n",
+      "start": 135.86,
+      "end": 137.94
+    },
+    {
+      "text": "But until the sun comes rising\n",
+      "start": 137.94,
+      "end": 139.86
+    },
+    {
+      "text": "Can we stay here in this place?\n",
+      "start": 139.86,
+      "end": 142.9
+    },
+    {
+      "text": "We're getting too close\n",
+      "start": 144.34,
+      "end": 145.86
+    },
+    {
+      "text": "Too close to let go\n",
+      "start": 145.86,
+      "end": 147.54
+    },
+    {
+      "text": "Every time you touch me\n",
+      "start": 148.02,
+      "end": 149.38
+    },
+    {
+      "text": "I forget what I know\n",
+      "start": 149.43,
+      "end": 151.43
+    },
+    {
+      "text": "We're getting too close\n",
+      "start": 152.15,
+      "end": 153.59
+    },
+    {
+      "text": "But I don't wanna go\n",
+      "start": 153.59,
+      "end": 155.35
+    },
+    {
+      "text": "If this is a mistake\n",
+      "start": 155.59,
+      "end": 157.51
+    },
+    {
+      "text": "Then take it nice and slow\n",
+      "start": 157.51,
+      "end": 161.67
+    },
+    {
+      "text": "Ooh, too close\n",
+      "start": 161.75,
+      "end": 165.11
+    },
+    {
+      "text": "Ooh, don't let go\n",
+      "start": 165.11,
+      "end": 165.59
+    },
+    {
+      "text": "Too close to you\n",
+      "start": 167.75,
+      "end": 169.51
+    }
+  ]
+}

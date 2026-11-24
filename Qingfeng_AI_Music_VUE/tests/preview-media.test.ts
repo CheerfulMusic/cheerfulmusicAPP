@@ -33,7 +33,7 @@ function fixture(audio:Buffer|null){
 it('verifies all local and CDN preview assets and produces byte/hash metadata',()=>{
  const manifest=previewMediaManifest(fileURLToPath(new URL('..',import.meta.url)))
  expect(manifest.assets).toEqual([])
- expect(manifest.remoteAssets).toHaveLength(61)
+ expect(manifest.remoteAssets).toHaveLength(73)
  const legacy=manifest.remoteAssets.filter(a=>a.key.startsWith('qingfeng/recommendation-samples/preview-128-v1/'))
  expect(legacy).toHaveLength(9)
  expect(legacy.every(a=>a.key.endsWith(a.path.split('/').pop()!))).toBe(true)
