@@ -40,12 +40,17 @@ import static org.junit.jupiter.api.Assertions.*;
 class AgentChatFlowIntegrationTest {
     @TestConfiguration(proxyBeanMethods=false)
     static class Offline {
+        @Bean @Primary com.qingfeng.music.server.mv.AudioDuration previewDuration() {
+            return (owner,work,asset) -> 61_000L;
+        }
         @Bean @Primary AgentChatModel conversationModel() {
             var unavailable = new com.qingfeng.music.infrastructure.provider.ResilientAgentChatModel(context -> {
                 throw new com.qingfeng.music.common.exception.DomainException("AGENT_CHAT_UNAVAILABLE", "offline planner");
             }, 1, java.time.Duration.ofSeconds(10));
             return context -> {
                 String text = context.text();
+                if (text.startsWith("帮我设计当前歌曲的 MV")) return new AgentChatModel.Plan("generate_song", Map.of("mode","regenerate"), "");
+                if (text.equals("歌曲呢")) return new AgentChatModel.Plan("chat",Map.of(),"歌曲已提交。");
                 if (text.equals("你先打磨一版歌词")) return unavailable.respond(context);
                 if (text.equals("方向定好了")) return new AgentChatModel.Plan("chat",
                         Map.of("choices",List.of("generate_lyrics","create_work","discuss")), "中文、空灵、梦想与星光");
@@ -446,6 +451,28 @@ class AgentChatFlowIntegrationTest {
         assertEquals(1,db.queryForObject("SELECT COUNT(*) FROM agent_request_admission WHERE conversation_id=?",Integer.class,user.conversation()));
     }
 
+    @Test void waitingForMvApprovalCannotGenerateOrChargeForASongWithoutAudio() throws Exception {
+        var user=browser();
+        var card=say(user,"帮我写一首歌词，主题是平凡的一天").path("songCard");
+        String work=card.path("songId").asText(), key=UUID.randomUUID().toString();
+        long before=credits.balance(user.creator());
+        String request="帮我设计当前歌曲的 MV，先给我分镜方案和费用，等我确认后再生成。 剧情短片";
+        var preview=edit(user,request,key,card);
+        assertEquals(0,db.queryForObject("SELECT COUNT(*) FROM generation_task WHERE work_id=?",Integer.class,work));
+        assertEquals("video_capabilities",preview.path("action").asText());
+        assertTrue(lastText(preview).path("text").asText().contains("音频"),lastText(preview).toString());
+        assertEquals(3,lastText(preview).path("items").size());
+        assertTrue(lastText(preview).path("text").asText().contains("720P 2 积分"));
+        assertEquals(card,edit(user,request,key,card).path("songCard"));
+        assertEquals("video_capabilities",say(user,"确认生成").path("action").asText());
+        var status=say(user,"歌曲呢");
+        assertEquals("get_current_song",status.path("action").asText());
+        assertTrue(lastText(status).path("text").asText().contains("歌词"));
+        assertEquals(0,db.queryForObject("SELECT COUNT(*) FROM generation_task WHERE work_id=?",Integer.class,work));
+        assertEquals(0,db.queryForObject("SELECT COUNT(*) FROM music_video_project WHERE work_id=?",Integer.class,work));
+        assertEquals(before,credits.balance(user.creator()));
+    }
+
     @Test void creativeMenuSelectionProducesRealLyricsOverHttp() throws Exception {
         Browser user=browser();
         var offered=say(user,"方向定好了");
@@ -487,6 +514,9 @@ class AgentChatFlowIntegrationTest {
         assertEquals(task,say(browser,"用当前歌词生成音乐",musicKey).path("taskId").asText());
         assertEquals(1,db.queryForObject("SELECT COUNT(*) FROM generation_task WHERE work_id=?",Integer.class,work));
         assertEquals(task,state(browser).path("taskId").asText());
+        var waiting=say(browser,"歌曲呢");
+        assertEquals("get_current_song",waiting.path("action").asText());
+        assertTrue(lastText(waiting).path("text").asText().contains("排队"));
 
         var wav=ByteBuffer.allocate(48).order(ByteOrder.LITTLE_ENDIAN);
         wav.put("RIFF".getBytes()).putInt(40).put("WAVEfmt ".getBytes()).putInt(16).putShort((short)1).putShort((short)1).putInt(8000).putInt(16000).putShort((short)2).putShort((short)16).put("data".getBytes()).putInt(4).putInt(0);
@@ -503,6 +533,23 @@ class AgentChatFlowIntegrationTest {
             assertTrue(rejected.path("shareUrl").isNull());
         }
         assertEquals("/api/app/works/"+work+"/audio/"+asset,ready.path("songCard").path("audioUrl").asText());
+        var playable=say(browser,"歌曲呢");
+        assertEquals(ready.path("songCard").path("audioUrl"),lastText(playable).path("items").path(0).path("data").path("audioUrl"));
+        long beforePreview=credits.balance(browser.creator());
+        String previewRequest="帮我设计当前歌曲的 MV，先给我分镜方案和费用，等我确认后再生成。 剧情短片";
+        String previewKey=UUID.randomUUID().toString();
+        var preview=lastText(say(browser,previewRequest,previewKey));
+        assertEquals("video_plan",preview.path("kind").asText(),preview.toString());
+        for(String part:List.of("基础分镜","0–30","30–60","60–61","720P 122 积分"))
+            assertTrue(preview.path("text").asText().contains(part),preview::toString);
+        var prepared=preview.path("items").path(0).path("data");
+        assertEquals(work,prepared.path("workId").asText());
+        assertEquals(asset,prepared.path("assetId").asText());
+        assertTrue(preview.path("commands").isEmpty());
+        assertEquals(preview,lastText(say(browser,previewRequest,previewKey)));
+        assertEquals(0,db.queryForObject("SELECT COUNT(*) FROM music_video_project WHERE work_id=?",Integer.class,work));
+        assertEquals(beforePreview,credits.balance(browser.creator()));
+        assertEquals(1,db.queryForObject("SELECT COUNT(*) FROM generation_task WHERE work_id=?",Integer.class,work));
         assertTrue(say(browser,"给当前作品点赞").path("liked").asBoolean());
         assertTrue(state(browser).path("liked").asBoolean());
         assertFalse(say(browser,"取消点赞当前作品").path("liked").asBoolean());

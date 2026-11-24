@@ -76,16 +76,24 @@ async function fetchStory() {
 const nativePanel = ref<{ kind: 'recharge' | 'account' | 'privacy' | 'photo' | 'upload_cover' | 'upload_audio'; workId?: string } | null>(null)
 const lastAssistantId = computed(() => latestAssistantTurn(messages.value)?.id)
 const chatMessages = computed(() => {
-  const rows=messages.value.map(message=>({...message,progress:agentProgress(message)}))
+  const rows=messages.value.map(message=>{
+    const progress=agentProgress(message)
+    return {...message,progress,text:messageText(message),result:progress?null:assistantResult(message)}
+  })
   const lastStep=new Map<string,number>()
   for(const row of rows)if(row.progress)lastStep.set(row.progress.requestKey,row.seq)
   let turnState=''
-  return rows.filter(row=>{
+  return rows.filter((row,index)=>{
     if(row.role==='user')turnState=row.state
+    if(!row.progress&&!row.text&&!row.result)return false
+    if(row.progress?.stage==='tool_finished'){
+      const next=rows[index+1]
+      if(next?.role==='assistant'&&!next.progress&&(next.text||next.result))return false
+    }
     if(!row.progress || !['planning','tool_started'].includes(row.progress.stage))return true
     return !['DONE','FAILED'].includes(turnState) && lastStep.get(row.progress.requestKey)===row.seq
       && !(row.progress.action==='generate_song' && taskRunning.value)
-  }).map(row=>({...row,result:row.progress?null:assistantResult(row)}))
+  })
 })
 const pendingAlreadySaved = computed(() => !!pending.value && messages.value.some(message => {
   if (message.role !== 'user') return false
@@ -394,7 +402,7 @@ onBeforeUnmount(() => { avatarDisposed = true; window.removeEventListener('qingf
         </div>
         <div v-for="message in chatMessages" :key="message.id" class="agent-message" :class="message.role">
           <div v-if="message.role === 'assistant'" class="agent-bot-avatar" aria-hidden="true"><img :src="'/brand/logo-symbol.svg'" alt=""/></div>
-          <div class="agent-message-content"><AgentProgressCard v-if="message.progress" :progress="message.progress"/><div v-else-if="messageText(message)" class="agent-bubble" :class="{ 'agent-message-failed': message.state === 'FAILED' }"><AgentMessageText :text="messageText(message)"/></div><AgentResultCard v-if="message.result" :result="message.result" :disabled="blocked" :current="message.id === lastAssistantId" @command="runCommand"/></div>
+          <div class="agent-message-content"><AgentProgressCard v-if="message.progress" :progress="message.progress"/><div v-else-if="message.text" class="agent-bubble" :class="{ 'agent-message-failed': message.state === 'FAILED' }"><AgentMessageText :text="message.text"/></div><AgentResultCard v-if="message.result" :result="message.result" :disabled="blocked" :current="message.id === lastAssistantId" @command="runCommand"/></div>
           <button v-if="message.role === 'user'" type="button" class="agent-user-avatar" @click="avatarDialog = true" :aria-label="tr('我的资料，修改头像', 'My profile, change avatar')" :title="tr('我的资料 · 点击修改头像', 'My profile · Change avatar')"><img :src="avatar.avatarUrl.value || profileAvatar.imageUrl.value || '/brand/music-person.svg'" :alt="tr('我的头像', 'My avatar')" @error="avatarImageFailed"/></button>
         </div>
         <div v-if="pending && !pendingAlreadySaved" class="agent-message user agent-pending"><div class="agent-bubble"><p>{{ displayTurnText(pending.text) }}</p><small>{{ sending ? tr('发送中…', 'Sending…') : tr('结果待确认', 'Awaiting confirmation') }}</small></div></div>

@@ -49,7 +49,20 @@ public final class AgentChatPolicy {
         return text!=null&&text.strip().matches("(?:(?:先别|先不|不要|暂不)生成(?:音乐|歌曲)?[，,。]\\s*)?(?:我)?只(?:想知道|想查|想问|查|看)(?:要|需要|会花|花)?多少积分[。？?！!]*");
     }
     public static boolean musicRequested(String text) {
-        return !lyricsOnly(text)&&requested(text,"(?:"+MUSIC+")(?!词)");
+        String audio=surface(text).replaceAll("(?i)(?:生成|制作|开始做|做成)(?:当前|这首|该|选中的?)?(?:音乐|歌曲?|作品|音频)\\s*的?\\s*(?:MV|音乐视频|视频)"," ");
+        return !lyricsOnly(text)&&!videoPreviewOnly(text)&&requested(audio,"(?:"+MUSIC+")(?!词)");
+    }
+    /** An explicit storyboard/quote before approval grants no generation authority. */
+    public static boolean videoPreviewOnly(String text) {
+        String s=surface(text);
+        if (!has(s,"MV|音乐视频|music video|分镜|storyboard")) return false;
+        boolean asks=has(s,"(?:先|只|仅|设计|预览|想看|查看|给我|展示|准备|规划|看看|提供)[^。.!！\\n]{0,65}(?:分镜|报价|费用|预算)|(?:plan|show|preview|design|give me)[^.?!\\n]{0,70}(?:storyboard|quote|cost)");
+        boolean defers=has(s,"(?:等|待|让我|经我|再|我)(?:我)?确认(?:后|再|才|生成|制作|$)|先别生成|不要生成|暂不生成|wait for (?:my )?(?:approval|confirmation)|before (?:generating|creating)|preview only");
+        boolean quotes=has(s,"分镜[^。.!！\\n]{0,24}(?:方案|费用|报价|预算)|storyboard[^.?!\\n]{0,24}(?:cost|quote|price)");
+        return asks&&(defers||quotes)&&!has(s,"(?:不需要|不用|不要|跳过)(?:看|给我)?(?:分镜|报价)|(?:先生成|先制作)(?:当前|这首)?(?:歌曲|音乐|音频)[，,。]");
+    }
+    public static boolean songStatusRequested(String text) {
+        return text!=null && text.strip().matches("(?i)(?:(?:我的|这首|当前的?)?(?:歌曲|歌|音乐|音频)(?:呢|在哪(?:里|儿)?|(?:生成|制作|做好|完成)(?:好了吗|了吗|了没|没|吗))|正在制作吗|生成好了吗|where(?:'s| is) (?:my|the) song|is (?:my|the) song ready|(?:my |current )?song status)[？?。.!！]*");
     }
     public static boolean lyricsRequested(String text) {
         if(newLyricsRequested(text)||LyricPolishRequest.parse(text)!=null)return true;
@@ -107,7 +120,7 @@ public final class AgentChatPolicy {
     }
     /** A denial only blocks the action it names; '不要分享，生成音乐' still permits generation. */
     private static boolean requested(String text,String expression) {
-        String value=surface(text);
+        String value=surface(text).replaceAll("(?i)((?:等|待)(?:我|用户)?(?:确认|同意|批准)(?:之?后)?|(?:我|用户)(?:确认|同意|批准)之?后|(?:after|once) (?:i|we) (?:confirm|approve))[，,]\\s*","$1 ");
         if(discussion(value))return false;
         boolean positive=false;
         for(String clause:value.split("[，。；,;\\n]|(?:然后|接着)")) {
@@ -115,6 +128,8 @@ public final class AgentChatPolicy {
             while(matcher.find()) {
                 String prefix=clause.substring(0,matcher.start());
                 if(has(prefix,"(?:不|别|禁止|没有|未要求|已经|刚才)[^，。；,;]{0,18}$|(?:don.t|do not|never|not to|already)[^,;.]{0,24}$"))return false;
+                if(has(prefix,"(?:(?:等|待)(?:我|用户)?(?:确认|同意|批准)(?:之?后)?|(?:我|用户)?(?:确认|同意|批准)之?后)\\s*(?:再|才|方可|才能)?\\s*$|(?:after|once) (?:i|we) (?:confirm|approve)\\s*(?:then\\s*)?$")
+                        ||has(clause.substring(matcher.end()),"^\\s*(?:only\\s+)?(?:after|once) (?:i|we) (?:confirm|approve)"))continue;
                 positive=true;
             }
         }

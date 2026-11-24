@@ -6,6 +6,22 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class AgentChatPolicyTest {
+    @Test void aFutureMvGenerationIsNotAnAudioRequest() {
+        for(String text:java.util.List.of(
+                "帮我设计当前歌曲的 MV，先给我分镜方案和费用，等我确认后再生成。 剧情短片",
+                "Plan a music video for my current song. Show me the storyboard and cost and wait for my approval before generating the video. A travel film",
+                "按这首歌先给我 MV 分镜和报价，我确认后再生成。")){
+            assertTrue(AgentChatPolicy.videoPreviewOnly(text),text);
+            assertFalse(AgentChatPolicy.actionRequested("generate_song",text),text);
+        }
+        assertTrue(AgentChatPolicy.musicRequested("先生成歌曲，再给我 MV 分镜和报价"));
+        for(String deferred:java.util.List.of("等我确认后再生成","我确认后，再生成歌曲","after I approve, generate music",
+                "generate music only after I confirm","生成当前歌曲的 MV","帮我制作这首歌的视频"))
+            assertFalse(AgentChatPolicy.musicRequested(deferred),deferred);
+        assertFalse(AgentChatPolicy.videoPreviewOnly("用当前歌词生成音乐"));
+        assertTrue(AgentChatPolicy.songStatusRequested("歌曲呢？"));assertTrue(AgentChatPolicy.songStatusRequested("Where is my song?"));
+        assertFalse(AgentChatPolicy.songStatusRequested("歌曲呢？再生成一首"));
+    }
     @Test void onlyStandaloneLyricPolishingCanBypassThePlanner() {
         for (String command : java.util.List.of("你先打磨一版歌词", "请先润色歌词。", "先把歌词打磨一下",
                 "先别生成音乐，打磨一版歌词", "打磨一版歌词，先别生成音乐", "Please polish the lyrics.")) {

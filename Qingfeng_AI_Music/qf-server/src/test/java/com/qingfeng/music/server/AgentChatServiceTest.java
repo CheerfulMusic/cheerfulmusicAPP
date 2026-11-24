@@ -251,11 +251,57 @@ class AgentChatServiceTest {
     }
     @Test void mvQuoteContinuesIntoActualStoryboardPreviewWithoutSubmittingVideo(){
         var app=app("video_capabilities","preview_music_video");
-        when(model.respond(any())).thenReturn(new AgentChatModel.Plan("video_capabilities",Map.of(),""),new AgentChatModel.Plan("preview_music_video",Map.of("shots",List.of(Map.of("prompt","故事开场"))),""));
+        when(model.respond(any())).thenReturn(new AgentChatModel.Plan("preview_music_video",Map.of("shots",List.of(Map.of("prompt","故事开场"))),""));
         service.send("owner","conversation","根据当前歌曲帮我设计剧情 MV，先给我分镜方案和费用，再确认生成",key(),"zh-CN");
         verify(app).execute(eq("owner"),eq("conversation"),eq("preview_music_video"),anyMap(),anyString(),anyString(),any());
-        var contexts=ArgumentCaptor.forClass(AgentChatModel.Context.class);verify(model,times(2)).respond(contexts.capture());
+        var contexts=ArgumentCaptor.forClass(AgentChatModel.Context.class);verify(model).respond(contexts.capture());
         assertEquals(List.of("preview_music_video"),contexts.getValue().capabilities().stream().map(AgentApplicationActions.Capability::id).toList());
+    }
+    @Test void storyboardPlannerCannotStartAnotherOperationOrChangeTheQuotedAudio() {
+        String preview="帮我设计当前歌曲的 MV，先给我分镜方案和费用，等我确认后再生成。 剧情短片";
+        var video=app("video_capabilities","preview_music_video","create_music_video");
+        when(model.respond(any())).thenReturn(new AgentChatModel.Plan(null,Map.of(),"",List.of(
+                new AgentChatModel.Step("preview_music_video",Map.of("assetId","other")),
+                new AgentChatModel.Step("generate_song",Map.of()),new AgentChatModel.Step("create_music_video",Map.of()))));
+        String key=key();
+        service.send("owner","conversation",preview,key,"zh-CN");
+        service.send("owner","conversation",preview,key,"zh-CN");
+        var args=ArgumentCaptor.forClass(Map.class);
+        verify(video).execute(eq("owner"),eq("conversation"),eq("preview_music_video"),args.capture(),eq(preview),anyString(),any());
+        assertEquals(song.songId(),args.getValue().get("workId"));assertEquals(song.assetId(),args.getValue().get("assetId"));
+        assertEquals(preview,args.getValue().get("starterBrief"));
+        verify(model).respond(any());
+        verify(video,never()).execute(anyString(),anyString(),eq("create_music_video"),anyMap(),anyString(),anyString(),any());
+        verify(tools,never()).dispatch(eq(AgentTool.GENERATE_SONG),any(),anyString(),anyString());
+    }
+    @Test void resolutionChoiceBindsTheShownStoryboardAndRequiresOneSeparateConfirmation(){
+        var video=app("video_capabilities","preview_music_video","create_music_video");
+        String work=key(),asset=key();
+        var current=new SongCard(work,"歌曲","风格","歌词","/audio","SUCCEEDED",null,1,"revision",asset,null);
+        when(tools.dispatch(eq(AgentTool.GET_CURRENT_SONG),any(),eq("owner"),anyString())).thenReturn(ToolResult.ok("m",current));
+        var shots=List.of(Map.of("prompt","镜头从车窗移向海边","seconds",30));
+        var data=Map.of("workId",work,"assetId",asset,"plan",Map.of("title","海边","ratio","9:16","shots",shots));
+        var card=Map.of("kind","video_plan","action","preview_music_video","items",List.of(Map.of("data",data)));
+        messages.add(new AgentMessage(key(),"conversation",1,"assistant","TEXT","DONE",new ObjectMapper().writeValueAsString(card),null,Instant.now()));
+        String button=new AgentVideoResolution("720P",work,asset).command();
+        var prompt=service.send("owner","conversation",button,key(),"zh-CN");
+        var pending=new ObjectMapper().readTree(prompt.messages().get(prompt.messages().size()-1).contentJson());
+        assertEquals("confirmation",pending.path("kind").asText(),pending::toString);
+        var step=pending.path("pendingSteps").path(0);
+        assertEquals("create_music_video",step.path("action").asText());
+        assertEquals("720P",step.path("args").path("resolution").asText());
+        assertEquals("9:16",step.path("args").path("ratio").asText());
+        assertEquals("镜头从车窗移向海边",step.path("args").path("shots").path(0).path("prompt").asText());
+        verify(video,never()).execute(anyString(),anyString(),anyString(),anyMap(),anyString(),anyString(),any());
+        String receipt=key();
+        service.send("owner","conversation","确认执行",receipt,"zh-CN");
+        service.send("owner","conversation","确认执行",receipt,"zh-CN");
+        verify(video).execute(anyString(),anyString(),eq("create_music_video"),argThat(args->work.equals(args.get("workId"))&&asset.equals(args.get("assetId"))&&shots.equals(args.get("shots"))),eq(button),anyString(),any());
+        var stale=new AgentVideoResolution("1080P",work,key()).command();
+        var rejected=service.send("owner","conversation",stale,key(),"zh-CN");
+        assertTrue(rejected.messages().get(rejected.messages().size()-1).contentJson().contains("音频版本已切换"));
+        verifyNoInteractions(model);
+        verify(tools,never()).dispatch(eq(AgentTool.GENERATE_SONG),any(),anyString(),anyString());
     }
     @Test void shortReadOnlyContinuationAfterSelectingWorkKeepsStoryboardRequest(){
         var app=app("video_capabilities","preview_music_video");

@@ -5,6 +5,21 @@ import java.util.*;
 import static org.mockito.Mockito.*;
 import static org.junit.jupiter.api.Assertions.*;
 class AgentVideoActionsTest {
+ @Test void previewUsesOwnedAudioAndCanReturnAStarterStoryboardWhenGenerationIsOffline(){
+  var service=mock(MusicVideoService.class);
+  when(service.quote("owner","w","a","480P")).thenReturn(new MusicVideoService.Quote(45000,45,45,"480P"));
+  when(service.prepare(eq("owner"),eq("w"),eq("a"),any())).thenAnswer(c->
+      MusicVideoService.fit(c.getArgument(3),new MusicVideoService.Quote(45000,45,45,"480P")));
+  var video=new AgentVideoActions(service,mock(ConversationService.class));
+  var card=new com.qingfeng.music.agent.api.SongCard("w","旅行","","","","READY",null,1,"r","a",null);
+  var quote=video.execute("owner","c","video_capabilities",Map.of(),"先看分镜和报价","k",card);
+  assertEquals(3,quote.items().size());assertTrue(quote.items().get(2).subtitle().contains("135 积分"));
+  assertTrue(quote.commands().isEmpty());
+  var result=video.execute("owner","c","preview_music_video",Map.of("starterBrief","旅行影像"),"先看分镜和报价","k",card);
+  assertTrue(result.reply().contains("基础分镜"));assertTrue(result.reply().contains("列车"));assertTrue(result.reply().contains("30–45 秒"));
+  assertTrue(result.reply().contains("720P 90 积分"));
+  verify(service,never()).create(anyString(),anyString(),anyString(),anyString(),any());
+ }
  @Test void affordabilityUsesTheOwnedPreviousAudioWithoutSelectingItOrCreatingAVideo(){
   var service=mock(MusicVideoService.class);
   var previous=new com.qingfeng.music.media.api.MediaApi.Asset("a1","w","GENERATED","audio/mpeg",50,"hash",java.time.Instant.EPOCH,false,"task","",null,0,1);

@@ -54,7 +54,7 @@ public final class MusicVideoService {
     private final VideoProvider provider;private final CreditsLedger credits;private final AudioDuration duration;private final VideoImages images;private final ObjectMapper json=new ObjectMapper();
     public MusicVideoService(JdbcTemplate db,TransactionTemplate tx,WorkApi works,MediaApi media,VideoProvider provider,CreditsLedger credits,AudioDuration duration){this(db,tx,works,media,provider,credits,duration,null);}
     public MusicVideoService(JdbcTemplate db,TransactionTemplate tx,WorkApi works,MediaApi media,VideoProvider provider,CreditsLedger credits,AudioDuration duration,VideoImages images){this.db=db;this.tx=tx;this.works=works;this.media=media;this.provider=provider;this.credits=credits;this.duration=duration;this.images=images;}
-    public boolean available(){return provider.available();}
+    public boolean available(){return provider!=null&&provider.available();}
     public static void validate(Plan plan){
         if(plan==null||plan.title()==null||plan.title().isBlank()||plan.title().length()>100||plan.ratio()==null||!Set.of("16:9","9:16","1:1").contains(plan.ratio())||plan.shots()==null||plan.shots().isEmpty()||plan.shots().size()>120)throw invalid("需要标题、画幅和剧情分镜。");
         rate(plan.resolution());

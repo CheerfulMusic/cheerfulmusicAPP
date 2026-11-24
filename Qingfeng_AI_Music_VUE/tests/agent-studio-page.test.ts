@@ -121,6 +121,16 @@ describe('真实 Agent 对话与作品', () => {
     await wrapper.get('.agent-composer-box').trigger('submit')
     expect(api.send).toHaveBeenCalledExactlyOnceWith('c1', '帮我写一首歌词，主题是 欢快的夏天\n写毕业旅行\n写给一路同行的朋友', expect.any(String), 'zh-CN', emptyLyricTarget)
   })
+  it('歌曲状态只显示有内容的回复，成功时能在对话中播放', async () => {
+    const saved = { ...message('', 2), kind: 'TOOL_CARD' as const, contentJson: JSON.stringify(song) }
+    const done = { ...message('', 3), contentJson: JSON.stringify({ kind:'progress', stage:'tool_finished', text:'本步骤已返回结果', requestKey:'lookup' }) }
+    const answer = { ...message('', 4), contentJson: JSON.stringify({ text:'音频已就绪', kind:'song_status', items:[{ id:song.assetId,title:song.title,data:{audioUrl:song.audioUrl} }] }) }
+    const { wrapper } = await page(state({ messages:[message('歌曲呢', 1, 'user'), saved, done, answer], songCard:song }))
+    const chat = wrapper.get('.agent-chat')
+    expect(chat.findAll('.agent-message.assistant')).toHaveLength(1)
+    expect(chat.text()).toContain('音频已就绪')
+    expect(chat.get('audio').attributes('src')).toContain(song.audioUrl!)
+  })
   it('在已有对话里切换工具或关闭选项能保留手写草稿，清除旧选择', async () => {
     const { wrapper } = await page(state({ messages: [message('上次写到这里')] }))
     const input = wrapper.get<HTMLTextAreaElement>('.agent-composer-box textarea')
