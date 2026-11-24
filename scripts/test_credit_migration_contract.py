@@ -43,11 +43,12 @@ class CreditMigrationContractTests(unittest.TestCase):
             items[name] = output.getvalue()
         return self.rewrite_jar(path, apply)
 
-    def test_core_44_v45_and_v46_are_one_exact_contract(self):
+    def test_current_chain_keeps_the_exact_historical_contract(self):
         actual = {p.name: gate.normalized_migration_sha(p.read_bytes()) for p in SQL.glob("V*__*.sql")}
         contract = gate.verify_migration_set(actual)
         self.assertEqual("e6c351f21ece6fb096ff425ca4b690232632de21", contract["coreSourceCommit"])
-        self.assertEqual(49, len(actual))
+        self.assertEqual(56, len(actual))
+        self.assertEqual("56", contract["discoverSongCommunityVersion"])
         self.assertEqual("49", contract["lyricsPreparationVersion"])
         self.assertEqual(44, len(gate.CORE_MIGRATION_SHA256))
         self.assertEqual(gate.AGENT_ALLOWANCE_MIGRATION_SHA256,
@@ -107,7 +108,8 @@ class CreditMigrationContractTests(unittest.TestCase):
 
     def test_complete_packaged_chain_is_verified(self):
         actual = gate.inspect_artifact(self.fixture.jar())
-        self.assertEqual(46, len(actual["migrations"]))
+        self.assertEqual(56, len(actual["migrations"]))
+        self.assertEqual("56", actual["migrationContract"]["discoverSongCommunityVersion"])
         self.assertEqual("45", actual["migrationContract"]["integrationVersion"])
         self.assertEqual("46", actual["migrationContract"]["agentAllowanceVersion"])
 
@@ -135,7 +137,10 @@ class CreditMigrationContractTests(unittest.TestCase):
             gate.inspect_artifact(jar)
 
     def test_v45_rollback_chain_retains_its_original_contract(self):
-        jar = self.nested_change(self.fixture.jar(), lambda items: items.pop("db/migration/" + gate.AGENT_ALLOWANCE_MIGRATION))
+        def keep_historical_prefix(items):
+            for name in (*gate.FEATURE_MIGRATION_SHA256, gate.AGENT_ALLOWANCE_MIGRATION):
+                items.pop("db/migration/" + name)
+        jar = self.nested_change(self.fixture.jar(), keep_historical_prefix)
         contract = gate.inspect_artifact(jar)["migrationContract"]
         self.assertEqual(45, len(contract["normalizedSha256"]))
         self.assertEqual("45", contract["integrationVersion"])
@@ -151,11 +156,13 @@ class CreditMigrationContractTests(unittest.TestCase):
         for include_v46 in (True, False):
             with self.subTest(include_v46=include_v46):
                 def append(items):
+                    for name in gate.FEATURE_MIGRATION_SHA256:
+                        items.pop("db/migration/" + name)
                     if not include_v46:
                         items.pop("db/migration/" + gate.AGENT_ALLOWANCE_MIGRATION)
                     items["db/migration/V47__unreviewed.sql"] = b"SELECT 1;"
                 jar = self.nested_change(self.fixture.jar(), append)
-                reason = "exactly core V1..V44" if include_v46 else "Missing or noncontiguous migration chain"
+                reason = "Canonical migration chain" if include_v46 else "Missing or noncontiguous migration chain"
                 with self.assertRaisesRegex(gate.GateError, reason):
                     gate.inspect_artifact(jar)
 
@@ -174,7 +181,7 @@ class CreditMigrationContractTests(unittest.TestCase):
                         items.pop("db/migration/" + gate.AGENT_ALLOWANCE_MIGRATION)
                     items["db/migration/V46__different_meaning.sql"] = data
                 jar = self.nested_change(self.fixture.jar(), change)
-                reason = "Duplicate migration version" if duplicate else "exactly core V1..V44"
+                reason = "Duplicate migration version" if duplicate else "Canonical migration chain"
                 with self.assertRaisesRegex(gate.GateError, reason):
                     gate.inspect_artifact(jar)
 
