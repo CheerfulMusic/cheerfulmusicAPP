@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, expect, it, vi } from 'vitest'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
+import ArtistHome from '../src/modules/artist/components/ArtistHome.vue'
 import ProfileWorks from '../src/modules/artist/components/ProfileWorks.vue'
 import type { ArtistRelease } from '../src/modules/artist/api/artist'
 import { listWorks, type LibraryItem } from '../src/modules/works/api/works'
@@ -29,9 +30,9 @@ function completed(id: string) {
   return item(id, 'COMPLETED', `audio-${id}`)
 }
 
-async function open() {
+async function open(songs = [published]) {
   const profile = mount(ProfileWorks, {
-    props: { songs: [published], busy: false, published: true },
+    props: { songs, busy: false, published: true },
     global: { stubs: { RouterLink: { template: '<a><slot /></a>' } } },
   })
   wrapper = profile
@@ -78,4 +79,44 @@ it('shows the completed-works empty state when the library contains only drafts'
 
   expect(profile.find('.profile-work-row').exists()).toBe(false)
   expect(profile.get('.profile-works-message').text()).toContain('暂无已完成作品')
+})
+
+it('limits the published profile tab to 15 works until expanded', async () => {
+  const songs = Array.from({ length: 17 }, (_, index) => ({
+    ...published, id: `release-${index}`, workId: `work-${index}`,
+    assetId: `audio-${index}`, title: `主页作品 ${index + 1}`,
+  }))
+  vi.mocked(listWorks).mockResolvedValueOnce([completed('已完成歌曲')])
+  const profile = await open(songs)
+  const control = () => profile.find('button[aria-controls="profile-works-list"]')
+
+  expect(control().exists()).toBe(false)
+  expect(profile.findAll('.profile-work-row')).toHaveLength(1)
+
+  await profile.findAll('.profile-works-switch button')[1]!.trigger('click')
+  expect(profile.findAll('.profile-work-row')).toHaveLength(15)
+  expect(control().text()).toBe('更多')
+  await control().trigger('click')
+  expect(profile.findAll('.profile-work-copy strong').map(title => title.text())).toEqual(songs.map(song => song.title))
+  expect(control().attributes('aria-expanded')).toBe('true')
+  await control().trigger('click')
+  expect(profile.findAll('.profile-work-row')).toHaveLength(15)
+})
+
+it('reveals all artist tracks in order and hides More when there are only 15 tracks', async () => {
+  const tracks = Array.from({ length: 18 }, (_, index) => ({
+    id: `track-${index}`, title: `公开作品 ${index + 1}`, cover: '/cover.webp', audio: `/audio/${index}`,
+  }))
+  const artist = mount(ArtistHome, { props: { name: '歌手', tagline: '', tracks } })
+  wrapper = artist
+  const control = () => artist.find('button[aria-controls="artist-track-list"]')
+
+  expect(artist.findAll('.artist-track')).toHaveLength(15)
+  expect(artist.get('#artist-tracks').text()).toContain('(18)')
+  await control().trigger('click')
+  expect(artist.findAll('.artist-track-title').map(title => title.text())).toEqual(tracks.map(track => track.title))
+  expect(artist.findAll('.artist-track-order').at(-1)?.text()).toBe('18')
+  await artist.setProps({ tracks: tracks.slice(0, 15) })
+  expect(artist.findAll('.artist-track')).toHaveLength(15)
+  expect(control().exists()).toBe(false)
 })

@@ -14,6 +14,9 @@ const props = defineProps<{
   featuredTrackId?: string | null
 }>()
 const player = usePlayer()
+const WORKS_PREVIEW_SIZE = 15
+const allWorksVisible = ref(false)
+const visibleTracks = computed(() => allWorksVisible.value ? props.tracks : props.tracks.slice(0, WORKS_PREVIEW_SIZE))
 const failedCover = ref<string>()
 const customCover = computed(() => props.cover === failedCover.value ? undefined : props.cover)
 const pinnedTrack = computed(() => props.tracks.find(track => track.id === props.featuredTrackId))
@@ -71,10 +74,16 @@ function play(track: PlayableTrack) {
             <progress v-if="featureTime" class="artist-feature-progress" :aria-label="t('播放进度')" :value="featureTime.position" :max="featureTime.duration" />
           </div>
         </article>
-        <h2 id="artist-tracks">{{ t('全部作品') }} <span>({{ tracks.length }})</span></h2>
+        <div class="artist-track-heading">
+          <h2 id="artist-tracks">{{ t('全部作品') }} <span>({{ tracks.length }})</span></h2>
+          <button v-if="tracks.length > WORKS_PREVIEW_SIZE" type="button" class="text-button"
+            aria-controls="artist-track-list" :aria-expanded="allWorksVisible" @click="allWorksVisible = !allWorksVisible">
+            {{ t(allWorksVisible ? '收起' : '更多') }}
+          </button>
+        </div>
         <p v-if="!tracks.length" class="artist-empty">{{ t('这里还没有公开作品。') }}</p>
-        <ul v-else class="artist-track-list">
-          <li v-for="(track, index) in tracks" :key="track.audio">
+        <ul v-else id="artist-track-list" class="artist-track-list">
+          <li v-for="(track, index) in visibleTracks" :key="track.audio">
             <button type="button" class="artist-track" :aria-label="t(active(track) ? '暂停 {title}' : '试听 {title}', { title: track.title })" @click="play(track)">
               <span class="artist-track-order" aria-hidden="true">{{ String(index + 1).padStart(2, '0') }}</span>
               <img :src="track.cover" alt="" loading="lazy">
@@ -213,8 +222,10 @@ function play(track: PlayableTrack) {
 .artist-feature-label { display: inline-flex; padding: 2px 8px; border: 1px solid #f4cfcb; border-radius: 20px; color: var(--artist-accent); font-size: .78rem; }
 .artist-feature-copy h2 { margin: 8px 0 0; font-size: clamp(19px, 3vw, 26px); line-height: 1.3; overflow-wrap: anywhere; }
 .artist-feature-progress { display: block; width: min(100%, 460px); height: 8px; margin-top: 17px; accent-color: var(--artist-accent); }
-.artist-track-section > h2, .artist-about h2 { margin: 0 0 10px; color: var(--ink); font-size: 1.18rem; line-height: 1.45; }
-.artist-track-section > h2 span { margin-inline-start: 4px; font-weight: 500; }
+.artist-track-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+.artist-track-heading h2, .artist-about h2 { margin: 0; color: var(--ink); font-size: 1.18rem; line-height: 1.45; }
+.artist-track-heading h2 span { margin-inline-start: 4px; font-weight: 500; }
+.artist-about h2 { margin-bottom: 10px; }
 .artist-track-list, .artist-about, .artist-empty { border: 1px solid var(--artist-line); border-radius: 17px; background: var(--artist-surface); }
 .artist-empty, .artist-about { margin: 0; padding: 16px 19px; color: var(--muted); }
 .artist-about p { margin: 0; line-height: 1.65; white-space: pre-wrap; overflow-wrap: anywhere; }

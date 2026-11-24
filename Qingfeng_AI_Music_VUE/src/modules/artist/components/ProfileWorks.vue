@@ -14,6 +14,7 @@ const props = defineProps<{ songs: ArtistRelease[]; busy: boolean; published: bo
 const emit = defineEmits<{ publish: [song: ArtistRelease]; remove: [song: ArtistRelease]; withdraw: [song: ArtistRelease]; 'library-count': [count: number | null] }>()
 const player = usePlayer()
 const tab = ref<'library' | 'published'>('library')
+const allPublishedVisible = ref(false)
 const works = ref<LibraryItem[]>([])
 const count = ref<number | null>(null)
 const loading = ref(true)
@@ -22,6 +23,7 @@ let request = 0
 
 const PAGE_SIZE = 20
 const PREVIEW_SIZE = 5
+const PUBLISHED_PREVIEW_SIZE = 15
 interface WorkRow {
   id: string
   workId: string
@@ -50,6 +52,8 @@ const publishedRows = computed<WorkRow[]>(() => props.songs.map(song => {
     label: publicationLabel(song) }
 }))
 const rows = computed(() => tab.value === 'library' ? libraryRows.value : publishedRows.value)
+const visibleRows = computed(() => tab.value === 'published' && !allPublishedVisible.value
+  ? rows.value.slice(0, PUBLISHED_PREVIEW_SIZE) : rows.value)
 
 function publicationLabel(song?: ArtistRelease) {
   if (!song) return '仅自己可见'
@@ -90,6 +94,7 @@ function refreshIdentity() {
   works.value = []
   count.value = null
   tab.value = 'library'
+  allPublishedVisible.value = false
   emit('library-count', null)
   void load()
 }
@@ -121,7 +126,13 @@ onBeforeUnmount(() => {
           <NavIcon name="account" />{{ t('主页作品') }}<span>({{ songs.length }})</span>
         </button>
       </div>
-      <RouterLink to="/works" class="profile-works-all">{{ t('全部作品') }}</RouterLink>
+      <div class="profile-works-controls">
+        <button v-if="tab === 'published' && songs.length > PUBLISHED_PREVIEW_SIZE" type="button" class="text-button"
+          aria-controls="profile-works-list" :aria-expanded="allPublishedVisible" @click="allPublishedVisible = !allPublishedVisible">
+          {{ t(allPublishedVisible ? '收起' : '更多') }}
+        </button>
+        <RouterLink to="/works" class="profile-works-all">{{ t('全部作品') }}</RouterLink>
+      </div>
     </header>
 
     <p v-if="tab === 'library' && loading" class="profile-works-message" role="status">{{ t('正在读取作品…') }}</p>
@@ -134,8 +145,8 @@ onBeforeUnmount(() => {
       <button v-if="tab === 'published'" type="button" class="text-button" @click="tab = 'library'">{{ t('我的作品') }}</button>
       <RouterLink v-else to="/create" class="text-button">{{ t('开始创作') }}</RouterLink>
     </div>
-    <ul v-else class="profile-works-list">
-      <li v-for="row in rows" :key="row.id" class="profile-work-row">
+    <ul v-else id="profile-works-list" class="profile-works-list">
+      <li v-for="row in visibleRows" :key="row.id" class="profile-work-row">
         <button v-if="row.track" type="button" class="profile-work-cover"
           :aria-label="t(playing(row.track) ? '暂停 {title}' : '试听 {title}', { title: row.title })" @click="play(row.track)">
           <img :src="row.cover" alt="" loading="lazy">
@@ -209,6 +220,7 @@ onBeforeUnmount(() => {
   border-bottom-color: var(--accent);
 }
 .profile-works-switch svg { width: 15px; height: 15px; }
+.profile-works-controls { display: flex; align-items: center; gap: 12px; }
 .profile-works-all {
   display: inline-flex;
   align-items: center;
