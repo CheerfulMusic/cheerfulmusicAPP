@@ -36,7 +36,7 @@ public class ShareController {
      return new Result(share.id(),share.token(),share.expiresAt(),songId);
  }
 
- public record Card(String songId, String title, String lyrics, boolean hasCover, Instant expiresAt, String timelineTitle) {}
+ public record Card(String songId, String title, String lyrics, boolean hasCover, Instant expiresAt, String timelineTitle, String creator) {}
  public record ShareStatus(String status, Card card, long views, long plays) {}
 
  @GetMapping("/{asset}")
@@ -57,7 +57,7 @@ public class ShareController {
              String status = row.getString("share_status");
              Card card = "SHAREABLE".equals(status) ? new Card(row.getString("public_song_id"), row.getString("title"),
                      row.getString("lyrics"), row.getString("cover_id") != null, row.getTimestamp("expires_at").toInstant(),
-                     SongShareTitle.forTimeline(row.getString("title"), row.getString("public_artist"))) : null;
+                     SongShareTitle.forTimeline(row.getString("title"), row.getString("public_artist")), row.getString("public_artist")) : null;
              return new ShareStatus(status, card, row.getLong("total_views"), row.getLong("total_plays"));
          }, creator.id(), work, asset);
      return ResponseEntity.ok().cacheControl(CacheControl.noStore())

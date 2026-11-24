@@ -1,4 +1,4 @@
-export interface SharedSong { songId: string; title: string; lyrics: string; hasCover: boolean; expiresAt: string; timelineTitle?: string }
+export interface SharedSong { songId: string; title: string; creator?: string; lyrics: string; hasCover: boolean; expiresAt: string; timelineTitle?: string }
 
 export function songTimelineTitle(song: SharedSong): string {
   return song.timelineTitle || `青风音乐 Cheerful Music｜${song.title}`

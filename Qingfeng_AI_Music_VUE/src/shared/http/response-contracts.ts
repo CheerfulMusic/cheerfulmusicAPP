@@ -201,7 +201,8 @@ export function validResponse(path:string,method:string,value:unknown):boolean{
   if (value.status !== 'SHAREABLE') return ['PRIVATE','REVOKED','EXPIRED'].includes(String(value.status)) && value.card === null
   const card = value.card
   return obj(card) && typeof card.songId === 'string' && /^[A-Za-z0-9_-]{43}$/.test(card.songId) &&
-    text(card.title) && (card.timelineTitle === undefined || text(card.timelineTitle)) && str(card.lyrics) && typeof card.hasCover === 'boolean' &&
+    text(card.title) && (card.creator === undefined || str(card.creator)) && (card.timelineTitle === undefined || text(card.timelineTitle)) &&
+    str(card.lyrics) && typeof card.hasCover === 'boolean' &&
     typeof card.expiresAt === 'string' && Number.isFinite(Date.parse(card.expiresAt))
  }
  if(/\/shares$/.test(path))return obj(value)&&text(value.id)&&text(value.token)&&text(value.expiresAt)

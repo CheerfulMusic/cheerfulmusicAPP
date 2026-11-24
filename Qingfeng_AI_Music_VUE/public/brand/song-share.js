@@ -15,11 +15,13 @@
   const desktopFriend = !wechat && handoff?.mode('friend') === 'desktop'
   if (handoff) {
     hint.hidden = !desktopFriend
+    const format = byId('friend-format')
+    if (format) format.hidden = desktopFriend
     handoffLink.onfocus = () => handoffLink.select()
   }
   let selected = '', sdkState = 'loading', qrRequest = 0
   const artwork = document.getElementById('artwork') || document.querySelector('img')
-  for (const img of [artwork, document.querySelector('.share-track img')].filter(Boolean)) {
+  for (const img of [artwork, document.querySelector('.share-card-art img, .share-track img')].filter(Boolean)) {
     img.addEventListener('error', () => { img.src = '/brand/share-default-cover.png' }, { once: true })
   }
   const system = byId('system-share')
