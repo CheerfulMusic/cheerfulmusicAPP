@@ -17,6 +17,25 @@ const track=(id:string):PlayableTrack=>({id,title:id,cover:'/cover.svg',audio:'/
 beforeEach(()=>{setActivePinia(createPinia());FakeAudio.instances=[];FakeAudio.nextPlay=undefined;vi.stubGlobal('Audio',FakeAudio);vi.stubGlobal('fetch',vi.fn(()=>new Promise(()=>{})))})
 afterEach(()=>{usePlayer().reset();vi.useRealTimers();vi.restoreAllMocks();vi.unstubAllGlobals()})
 describe('分段起播与重复试听',()=>{
+ it('resumes a stalled public song at its saved position and retries only once', async () => {
+  vi.useFakeTimers()
+  const player = usePlayer()
+  const song = { ...track('one'), audio: '/api/public/artists/artist/songs/song/1/audio' }
+  await player.toggle(song)
+  const audio = FakeAudio.current
+  audio.currentTime = 9
+  audio.dispatchEvent(new Event('waiting'))
+  await vi.advanceTimersByTimeAsync(15000)
+  expect(audio.src).toContain(song.audio + '?reauth=')
+  audio.currentTime = 0
+  audio.dispatchEvent(new Event('loadedmetadata'))
+  expect(audio.currentTime).toBe(9)
+  expect(audio.paused).toBe(false)
+  audio.dispatchEvent(new Event('waiting'))
+  await vi.advanceTimersByTimeAsync(15000)
+  expect(audio.paused).toBe(true)
+  expect(player.error).toBeTruthy()
+ })
  it('点击内同步play，完全不等待fetch整首，更不要求第二次点击',async()=>{const player=usePlayer(),pending=player.toggle(track('one'));expect(FakeAudio.current.play).toHaveBeenCalledTimes(1);expect(FakeAudio.current.src).toBe('/api/audio/one');expect(fetch).not.toHaveBeenCalled();await pending;expect(player.playing).toBe(true)})
  it('自然结束后重播同一实例，不重置媒体源或重新load',async()=>{const player=usePlayer();await player.toggle(track('one'));const a=FakeAudio.current;a.currentTime=18;a.ended=true;a.paused=true;a.dispatchEvent(new Event('ended'));await player.toggle(track('one'));expect(FakeAudio.instances).toHaveLength(1);expect(a.currentTime).toBe(0);expect(a.load).not.toHaveBeenCalled();expect(fetch).not.toHaveBeenCalled()})
  it('关闭再打开保留当前缓冲，身份reset才释放',async()=>{const player=usePlayer();await player.toggle(track('one'));const a=FakeAudio.current;a.currentTime=8;player.close();expect(player.current).toBeNull();expect(a.paused).toBe(true);expect(a.src).toBe('/api/audio/one');await player.toggle(track('one'));expect(FakeAudio.instances).toHaveLength(1);expect(a.currentTime).toBe(8);expect(a.load).not.toHaveBeenCalled();player.reset();expect(a.src).toBe('');await player.toggle(track('one'));expect(FakeAudio.instances).toHaveLength(2)})

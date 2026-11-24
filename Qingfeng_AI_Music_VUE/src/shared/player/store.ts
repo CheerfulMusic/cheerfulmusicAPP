@@ -42,9 +42,16 @@ export const usePlayer = defineStore('player', () => {
   function stopWaiting(){clearTimeout(waitingTimer);buffering.value=false}
   function readDuration(){duration.value=audio&&Number.isFinite(audio.duration)?audio.duration:0}
   function isSample(){return /^\/media\/(?:sample-[a-z0-9-]+\.mp3|recommendations\/[a-z0-9-]+-[a-f0-9]{12}-preview-128\.mp3)$/.test(current.value?.audio||'')}
+  function isPublicArtistAudio(){
+    const url = current.value?.audio ?? ''
+    return /^(?:https:\/\/cheerfulmusic\.com)?\/api\/public\/artists\/[^/?#]+\/songs\/[^/?#]+\/\d+\/audio(?:[?#]|$)/.test(url)
+  }
   function waitForAudio(){
     stopWaiting();buffering.value=true
-    waitingTimer=setTimeout(()=>{if(isSample()&&reauthorize(false,true))return;operation++;starting.value=false;audio?.pause();stopWaiting();error.value='播放等待时间较长，请点击重试。'},15000)
+    waitingTimer=setTimeout(()=>{
+      if ((isSample() || isPublicArtistAudio()) && reauthorize(false,true)) return
+      operation++;starting.value=false;audio?.pause();stopWaiting();error.value='播放等待时间较长，请点击重试。'
+    },15000)
   }
   /** 重定向后 currentSrc 可能保留同源地址；推荐音频还通过受限的媒体路径识别。 */
   function cdnSigned(element:HTMLAudioElement){try{return element.currentSrc.includes('auth_key=')||(isSample()&&/[?&]x-oss-signature=/i.test(element.currentSrc))}catch{return false}}
@@ -76,13 +83,13 @@ export const usePlayer = defineStore('player', () => {
     else{if(used>=1)return false;autoRetries.set(key,used+1)}
     const snapshot:RestoreState={
       time:Number.isFinite(element.currentTime)?element.currentTime:time.value,
-      paused:element.paused&&(!isSample()||!starting.value),
+      paused:element.paused && !(starting.value && (isSample() || isPublicArtistAudio())),
       playbackRate:Number.isFinite(element.playbackRate)?element.playbackRate:1,
       segment:segment.value?{...segment.value}:null,
       playing:playing.value,starting:starting.value,buffering:buffering.value,
       duration:duration.value,queue:[...queue.value],autoAdvance
     }
-    restoreOperation=operation
+    restoreOperation=++operation
     reauthPending=true;pendingRestore=true
     error.value='';stopWaiting();playing.value=false;starting.value=!snapshot.paused
     const onReady=()=>{
