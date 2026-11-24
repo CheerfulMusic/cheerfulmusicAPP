@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
 import { createApp, h, nextTick } from 'vue'
+import { flushPromises } from '@vue/test-utils'
 import { expect, it, vi } from 'vitest'
 import Gate from '../src/modules/beta-access/BetaAccessGate.vue'
 import { locale, setLocale } from '../src/shared/i18n'
@@ -32,10 +33,14 @@ it('automatically opens the homepage invite with the localized product name', as
   await nextTick()
   expect(show).toHaveBeenCalled()
   expect(host.querySelector('h1')?.textContent).toBe('青风音乐 AI 音乐创作平台')
+  expect(host.querySelector('.beta-access-intro')?.textContent).toContain('青风音乐（Cheerful Music）')
   setLocale('en')
   await nextTick()
-  expect(host.querySelector('h1')?.textContent).toBe('Everyone Can Be a Singer')
+  expect(host.querySelector('h1')?.textContent).toBe('Everyone Can Be a Creator')
   expect(host.querySelector('.beta-access-brand')?.textContent).toBe('Cheerful Music')
+  expect(host.querySelector('.beta-access-intro')?.textContent).toContain('Cheerful Music (青风音乐)')
+  await flushPromises()
+  expect(host.querySelector('[data-nosnippet] #beta-invite-code')).not.toBeNull()
  } finally { app.unmount(); host.remove(); setLocale(previous); vi.restoreAllMocks() }
 })
 

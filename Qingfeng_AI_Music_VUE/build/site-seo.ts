@@ -29,8 +29,9 @@ export function renderSitePage(html: string, page: SitePage) {
     `<a href="${href}"${lang ? ` lang="${lang}" hreflang="${lang}"` : ''}>${escapeHtml(text)}</a>`,
   ).join(' ')
   const guide = page.guide
-  const guideContent = guide ? `<nav><a href="${guide.translations['zh-CN']}" lang="zh-CN" hreflang="zh-CN">简体中文</a> <a href="${guide.translations.en}" lang="en" hreflang="en">English</a></nav>`
-    + guide.sections.map(([heading, body]) => `<section><h2>${escapeHtml(heading)}</h2><p>${escapeHtml(body)}</p></section>`).join('')
+  const guideContent = guide ? guide.sections.map(([heading, body]) =>
+    `<section><h2>${escapeHtml(heading)}</h2><p>${escapeHtml(body)}</p></section>`,
+  ).join('')
     + `<p><a href="${guide.appPath}">${escapeHtml(guide.cta)}</a></p>` : ''
   const heading = `<h1>${escapeHtml(page.heading)}</h1>`
   const filing = '<a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer" lang="zh-CN">粤ICP备2023023949号</a>'
@@ -41,7 +42,8 @@ export function renderSitePage(html: string, page: SitePage) {
     initialContent = `<main class="beta-access-entry"><section class="beta-access-dialog beta-access-card">
       <img class="beta-access-logo" src="/brand/logo-symbol.svg" alt="" width="56" height="56">
       <p class="beta-access-brand">${escapeHtml(siteName)}</p>${heading}
-      <p class="beta-access-intro">${escapeHtml(home ? homeSeo[page.language].inviteDescription : page.description)}</p>
+      <p class="beta-access-intro">${escapeHtml(home ? homeSeo[page.language].description : page.description)}</p>
+      ${home ? `<div data-nosnippet><p class="beta-access-prompt">${escapeHtml(homeSeo[page.language].invitePrompt)}</p></div>` : ''}
       <nav class="beta-access-guides">${links}</nav><footer class="beta-access-filing">${filing}</footer>
     </section></main>`
   }

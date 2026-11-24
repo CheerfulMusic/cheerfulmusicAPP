@@ -91,16 +91,20 @@ export function sitePage(path: string, preferredLocale?: Locale) {
 }
 
 export function landingLinks(language: Locale, path = '/'): { href: string; text: string; lang?: Locale }[] {
+  const guide = siteGuide(path)
   const onDiscover = discoverLocale(path) !== undefined
-  const translations = onDiscover ? discoverPaths : homePaths
-  return [
-    { href: translations.en, text: 'English', lang: 'en' },
-    { href: translations['zh-CN'], text: '简体中文', lang: 'zh-CN' },
-    onDiscover
-      ? { href: homeSeo[language].path, text: language === 'en' ? 'Cheerful Music Home' : '青风音乐首页' }
-      : { href: discoverPaths[language], text: discoverSeo[language].heading },
+  const translations = guide?.translations ?? (onDiscover ? discoverPaths : homePaths)
+  const homeLabels = { en: 'Cheerful Music Home', 'zh-CN': '青风音乐（Cheerful Music）首页' }
+  const topics: { href: string; text: string }[] = [
+    { href: discoverPaths[language], text: discoverSeo[language].heading },
     { href: '/help', text: helpSeo[language].heading },
     ...siteGuideLinks(language),
+  ].filter(link => link.href !== path)
+  if (guide || onDiscover) topics.unshift({ href: homePaths[language], text: homeLabels[language] })
+  return [
+    { href: translations.en, text: path === '/help' ? homeLabels.en : 'English', lang: 'en' },
+    { href: translations['zh-CN'], text: path === '/help' ? homeLabels['zh-CN'] : '简体中文', lang: 'zh-CN' },
+    ...topics,
   ]
 }
 
@@ -129,6 +133,6 @@ export const websiteSchema = {
   '@context': 'https://schema.org',
   '@type': 'WebSite',
   name: siteName,
-  alternateName: ['青风音乐', 'CheerfulMusic', '人人是歌手'],
+  alternateName: ['青风音乐', 'CheerfulMusic'],
   url: siteOrigin + '/',
 }
