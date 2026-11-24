@@ -90,8 +90,12 @@ public class LyricsCompositionConfiguration {
     @Bean @Profile({"mysql","test"}) LyricsCompositionService lyricsCompositionService(WorkApi works,LyricsApi lyrics,LyricsMapper mapper,LyricsWriter writer,
             @Qualifier("customLyricsWriter") LyricsWriter customWriter,CompositionRequests requests,Environment env,
             com.qingfeng.music.settings.MusicSettings settings,com.qingfeng.music.settings.CreativePlan.Repository plans,
-            org.springframework.beans.factory.ObjectProvider<PhotoLyricsWriter> photos){
-        return new LyricsCompositionService(works,lyrics,new MyBatisLyricsRepository(mapper),writer,customWriter,requests,env.getProperty("qingfeng.lyrics.enabled",Boolean.class,false))
+            org.springframework.beans.factory.ObjectProvider<PhotoLyricsWriter> photos,
+            org.springframework.beans.factory.ObjectProvider<com.qingfeng.music.server.ai.LyricsCapacityHandler> queue){
+        var service = new LyricsCompositionService(works,lyrics,new MyBatisLyricsRepository(mapper),writer,customWriter,requests,env.getProperty("qingfeng.lyrics.enabled",Boolean.class,false))
             .withCreativePlans(settings,plans).withPhotoWriter(photos.getIfAvailable());
+        if (env.getProperty("qingfeng.ai.capacity.enabled", Boolean.class, false))
+            service.withQueue((owner, work, key, command, images) -> queue.getObject().compose(owner, work, key, command, images));
+        return service;
     }
 }

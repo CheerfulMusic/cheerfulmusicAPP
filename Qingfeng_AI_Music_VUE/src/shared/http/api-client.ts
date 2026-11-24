@@ -13,11 +13,11 @@ function endpoint(path: string) {
   if (platform.kind !== 'web' && !base.startsWith('https://')) throw new Error('App需要配置HTTPS API地址')
   return `${base.replace(/\/$/, '')}/${path.replace(/^\//, '')}`
 }
-export async function requestJson<T>(path: string, method = 'GET', body?: unknown, timeoutMs = 10000): Promise<T> {
+export async function requestJson<T>(path: string, method = 'GET', body?: unknown, timeoutMs = 10000, preferAsync = false): Promise<T> {
   const controller = new AbortController(), timer = setTimeout(() => controller.abort(), timeoutMs)
   try {
     const response = await fetch(endpoint(path), { method, credentials: platform.kind === 'web' ? 'same-origin' : 'include', signal: controller.signal,
-      headers: { Accept: 'application/json', ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}), ...(method !== 'GET' && csrf ? { 'X-XSRF-TOKEN': csrf } : {}) }, body: body !== undefined ? JSON.stringify(body) : undefined })
+      headers: { Accept: 'application/json', ...(preferAsync ? { Prefer: 'respond-async' } : {}), ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}), ...(method !== 'GET' && csrf ? { 'X-XSRF-TOKEN': csrf } : {}) }, body: body !== undefined ? JSON.stringify(body) : undefined })
     return await decodeResponse<T>(response,path,method)
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') throw new ApiError('请求超时，请检查网络后重试；不要连续重复提交。', 408)
@@ -45,14 +45,14 @@ async function decodeResponse<T>(response:Response,path:string,method:string):Pr
     if(code==='INVITE_REQUIRED'&&typeof window!=='undefined')window.dispatchEvent(new Event('qingfeng:invite-required'))
     throw new ApiError(typeof failure.message==='string'?failure.message:`请求失败（${response.status}），请检查服务状态`,response.status,code,retryAfterSeconds(response.headers.get('Retry-After')))
   }
-  if(!raw.trim()&&!emptyResponseAllowed(path,method)||!validResponse(path,method,data))throw invalidResponse()
+  if(!raw.trim()&&!emptyResponseAllowed(path,method)||!validResponse(path,method,data,response.status))throw invalidResponse()
   return data as T
 }
 function invalidResponse(){return new ApiError('服务响应不完整，操作结果尚未确认，请先刷新核对，不要重复提交。',0,'INVALID_RESPONSE')}
-export async function uploadForm<T>(path: string, body: FormData): Promise<T> {
+export async function uploadForm<T>(path: string, body: FormData, preferAsync = false): Promise<T> {
   await ensureCreator()
   try{
-    const response = await fetch(endpoint(path), { method: 'POST', credentials: platform.kind === 'web' ? 'same-origin' : 'include', body, headers: { 'X-XSRF-TOKEN': csrf }, signal: AbortSignal.timeout(120000) })
+    const response = await fetch(endpoint(path), { method: 'POST', credentials: platform.kind === 'web' ? 'same-origin' : 'include', body, headers: { 'X-XSRF-TOKEN': csrf, ...(preferAsync ? { Prefer: 'respond-async' } : {}) }, signal: AbortSignal.timeout(120000) })
     return await decodeResponse<T>(response,path,'POST')
   }catch(error){
     if(error instanceof Error&&['AbortError','TimeoutError'].includes(error.name))throw new ApiError('请求超时，请检查网络后重试；不要连续重复提交。',408)

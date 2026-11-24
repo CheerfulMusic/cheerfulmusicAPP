@@ -319,6 +319,10 @@ class GateTests(unittest.TestCase):
             gate.verify_migration_set({k: v for k, v in migrations.items() if k != reference_name})
         with self.assertRaises(gate.GateError):
             gate.verify_migration_set({**migrations, "V57__unapproved.sql": migrations[community_name]})
+        self.assertEqual("57", gate.verify_migration_set(migrations)["aiCapacityVersion"])
+        with self.assertRaises(gate.GateError):
+            gate.verify_migration_set({**migrations, "V57__ai_capacity_queue.sql": "0" * 64})
+        migrations.pop("V57__ai_capacity_queue.sql")
         migrations.pop(community_name)
         self.assertEqual("55", gate.verify_migration_set(migrations)["generationAudioReferenceVersion"])
         prior = {k: v for k, v in migrations.items() if k != reference_name}

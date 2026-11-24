@@ -12,6 +12,15 @@ import org.springframework.transaction.annotation.Transactional;
 /** 封面和音乐独立版本，复用同一图片校验和存储流程。 */
 public class CoverService implements CoverApi,SharedCoverAccess {
  private final WorkApi works;private final CoverRepository repo;private final CoverFileStore files;private final MediaCapacity capacity;
+ @FunctionalInterface
+ public interface EditQueue {
+  void submit(String owner, String work, String requestKey, String source, String prompt, Runnable insert);
+ }
+ private EditQueue editQueue;
+ public CoverService withEditQueue(EditQueue queue) {
+  this.editQueue = queue;
+  return this;
+ }
  private final ImageEditProvider provider;private final UsageBudget budget;private final ImageResultDownloader downloader;private final long limit;
  public CoverService(WorkApi works,CoverRepository repo,CoverFileStore files,MediaCapacity capacity,ImageEditProvider provider,UsageBudget budget,ImageResultDownloader downloader,long limit){this.works=works;this.repo=repo;this.files=files;this.capacity=capacity;this.provider=provider;this.budget=budget;this.downloader=downloader;this.limit=limit;}
  public State state(String owner,String work){works.get(owner,work);var selected=repo.selection(work);return new State(selected.id(),selected.version(),repo.list(work),repo.edits(work),provider.configured(),selected.version()==0&&repo.automaticPending(work));}
@@ -46,21 +55,74 @@ public class CoverService implements CoverApi,SharedCoverAccess {
   var existing=repo.request(work,key);
   if(existing.isPresent()){var old=existing.get();if(!old.edit().sourceId().equals(source)||!old.edit().prompt().equals(prompt.trim()))throw new DomainException("REQUEST_KEY_CONFLICT","该请求标识已经用于其他封面要求");return old.edit();}
   if(!provider.configured())throw new DomainException("COVER_PROVIDER_UNAVAILABLE","AI封面暂不可用，可以先使用上传的图片");
-  budget.reserve(owner,work,key,UsageBudget.Kind.COVER);
-  var result=repo.insertJob(work,source,prompt.trim(),key,provider.model()).edit();
+  String direction = prompt.trim();
+  Edit result;
+  if (editQueue == null) {
+   budget.reserve(owner, work, key, UsageBudget.Kind.COVER);
+   result = repo.insertJob(work, source, direction, key, provider.model()).edit();
+  } else {
+   editQueue.submit(owner, work, key, source, direction, () -> {
+    budget.reserveQueued(owner, work, key, UsageBudget.Kind.COVER);
+    repo.insertJob(work, source, direction, key, provider.model());
+   });
+   result = repo.request(work, key).orElseThrow().edit();
+  }
   if(!result.sourceId().equals(source)||!result.prompt().equals(prompt.trim()))throw new DomainException("REQUEST_KEY_CONFLICT","该请求标识已经用于其他封面要求");return result;
  }
  /** 一次只执行一个阶段；提交结果未知不重试，查询/本地归档可重试。 */
  public synchronized void runOnce(){
   if(!provider.configured())return;
-  var claimed=repo.claim();if(claimed.isEmpty())return;var job=claimed.get();
+  repo.claim().ifPresent(job -> advance(job, null));
+ }
+
+ private java.util.function.BiFunction<String, String, java.net.URI> callback;
+ public CoverService withQueueCallback(java.util.function.BiFunction<String, String, java.net.URI> callback) {
+  this.callback = callback;
+  return this;
+ }
+
+ public Edit runQueued(String owner, String work, String requestKey) {
+  works.get(owner, work);
+  if (!provider.configured())
+   throw new DomainException("COVER_PROVIDER_UNAVAILABLE", "AI封面暂不可用。");
+  repo.claim(work, requestKey).ifPresent(job -> advance(job, callback == null ? null : callback.apply(work, requestKey)));
+  return repo.request(work, requestKey).orElseThrow().edit();
+ }
+
+ private void advance(CoverRepository.Job job, java.net.URI notification) {
   try{switch(job.edit().status()){
-   case "QUEUED"->{try(var input=files.open(find(job.work(),job.edit().sourceId()).key())){String external=provider.submit(input.readNBytes(5*1024*1024+1),job.edit().prompt(),job.model());repo.accepted(job,external);}catch(ImageEditProvider.Rejected e){repo.result(job,"FAILED",null,null,"PROVIDER_REJECTED");}catch(Exception e){repo.result(job,"SUBMISSION_UNKNOWN",null,null,"SUBMISSION_UNKNOWN");}}
+   case "QUEUED" -> submit(job, notification);
    case "SUBMITTING"->repo.result(job,"SUBMISSION_UNKNOWN",null,null,"WORKER_INTERRUPTED");
    case "RUNNING"->{var result=provider.query(job.externalId(),job.model());repo.result(job,result.status(),result.url(),null,"FAILED".equals(result.status())?"PROVIDER_FAILED":null);}
-   case "SAVING"->{var latest=provider.query(job.externalId(),job.model());if(latest.url()==null)throw new IllegalStateException("封面结果暂不可用");try(var image=downloader.open(latest.url())){var stored=save(job.work(),image,"AI",job.edit().id());repo.result(job,"SUCCEEDED",null,stored.asset().id(),null);}}
+   case "SAVING" -> {
+    var saved = repo.findGenerated(job.work(), job.edit().id());
+    if (saved.isPresent()) {
+     repo.result(job, "SUCCEEDED", null, saved.get().asset().id(), null);
+     break;
+    }
+    String resultUrl = provider.query(job.externalId(), job.model()).url();
+    if (resultUrl == null) throw new IllegalStateException("封面结果暂不可用");
+    try (var image = downloader.open(resultUrl)) {
+     var stored = save(job.work(), image, "AI", job.edit().id());
+     repo.result(job, "SUCCEEDED", null, stored.asset().id(), null);
+    }
+   }
    default->{}
   }}catch(DomainException e){if(e.code().startsWith("INVALID_"))repo.result(job,"FAILED",null,null,"INVALID_IMAGE_RESULT");}
   catch(Exception e){/* 保持阶段，只查询或归档重试，绝不重复付费提交。 */}finally{repo.release(job);}
  }
+ private void submit(CoverRepository.Job job, java.net.URI notification) {
+  try (var input = files.open(find(job.work(), job.edit().sourceId()).key())) {
+   byte[] jpeg = input.readNBytes(5 * 1024 * 1024 + 1);
+   String external = notification == null
+       ? provider.submit(jpeg, job.edit().prompt(), job.model())
+       : provider.submit(jpeg, job.edit().prompt(), job.model(), notification);
+   repo.accepted(job, external);
+  } catch (ImageEditProvider.Rejected e) {
+   repo.result(job, "FAILED", null, null, "PROVIDER_REJECTED");
+  } catch (Exception e) {
+   repo.result(job, "SUBMISSION_UNKNOWN", null, null, "SUBMISSION_UNKNOWN");
+  }
+ }
+
 }

@@ -31,12 +31,33 @@ public final class JdbcCoverRepository implements CoverRepository {
  public List<Edit> edits(String work){return jdbc.query("SELECT * FROM cover_edit_task WHERE work_id=? ORDER BY created_at DESC,id DESC LIMIT 20",this::job,work).stream().map(Job::edit).toList();}
  public Optional<Job> request(String work,String key){return jdbc.query("SELECT * FROM cover_edit_task WHERE work_id=? AND request_key=?",this::job,work,key).stream().findFirst();}
  public Job insertJob(String work,String source,String prompt,String key,String model){String id=UUID.randomUUID().toString();var now=Timestamp.from(Instant.now());jdbc.update("INSERT INTO cover_edit_task(id,work_id,source_id,prompt,request_key,model,status,created_at,updated_at,next_attempt_at) VALUES(?,?,?,?,?,?,'QUEUED',?,?,?) ON DUPLICATE KEY UPDATE request_key=request_key",id,work,source,prompt,key,model,now,now,now);return request(work,key).orElseThrow();}
- public Optional<Job> claim(){return tx.execute(t->{
-  var now=Timestamp.from(Instant.now());var jobs=jdbc.query("SELECT * FROM cover_edit_task WHERE status IN ('QUEUED','SUBMITTING','RUNNING','SAVING') AND next_attempt_at<=? AND (lease_until IS NULL OR lease_until<=?) ORDER BY next_attempt_at,id LIMIT 1 FOR UPDATE",this::job,now,now);
+ public Optional<Job> claim() {
+  return claim(null, null);
+ }
+
+ public Optional<Job> claim(String work, String requestKey) { return tx.execute(t -> {
+  var now = Timestamp.from(Instant.now());
+  String conditions = """
+       SELECT * FROM cover_edit_task WHERE status IN ('QUEUED','SUBMITTING','RUNNING','SAVING')
+       AND (lease_until IS NULL OR lease_until<=?)
+       """;
+  var jobs = work == null
+    ? jdbc.query(conditions + " AND next_attempt_at<=? ORDER BY next_attempt_at,id LIMIT 1 FOR UPDATE", this::job, now, now)
+    : jdbc.query(conditions + " AND work_id=? AND request_key=? FOR UPDATE SKIP LOCKED", this::job, now, work, requestKey);
   if(jobs.isEmpty())return Optional.empty();var job=jobs.get(0);String token=UUID.randomUUID().toString();
   jdbc.update("UPDATE cover_edit_task SET status=?,lease_token=?,lease_until=?,updated_at=? WHERE id=?",job.edit().status().equals("QUEUED")?"SUBMITTING":job.edit().status(),token,Timestamp.from(Instant.now().plusSeconds(180)),now,job.edit().id());
   return Optional.of(new Job(job.edit(),job.work(),job.requestKey(),job.model(),job.externalId(),job.resultUrl(),token));
  });}
+ public void expireUnstarted(String work, String requestKey) {
+  tx.executeWithoutResult(status -> {
+   int changed = jdbc.update("""
+      UPDATE cover_edit_task SET status='FAILED',error_code='AI_QUEUE_EXPIRED',updated_at=CURRENT_TIMESTAMP
+      WHERE work_id=? AND request_key=? AND status='QUEUED'
+      """, work, requestKey);
+   if (changed == 1)
+    jdbc.update("DELETE FROM model_usage_reservation WHERE kind='COVER' AND work_id=? AND request_key=?", work, requestKey);
+  });
+ }
  public void accepted(Job job,String external){jdbc.update("UPDATE cover_edit_task SET status='RUNNING',provider_task_id=?,updated_at=?,next_attempt_at=? WHERE id=? AND provider_task_id IS NULL AND status IN ('SUBMITTING','SUBMISSION_UNKNOWN')",external,Timestamp.from(Instant.now()),Timestamp.from(Instant.now().plusSeconds(10)),job.edit().id());}
  public void result(Job job,String state,String url,String cover,String error){jdbc.update("UPDATE cover_edit_task SET status=?,result_url=COALESCE(?,result_url),cover_id=COALESCE(?,cover_id),error_code=?,updated_at=?,next_attempt_at=? WHERE id=? AND lease_token=? AND status IN ('SUBMITTING','RUNNING','SAVING')",state,url,cover,error,Timestamp.from(Instant.now()),Timestamp.from(Instant.now().plusSeconds(10)),job.edit().id(),job.token());}
  public void release(Job job){jdbc.update("UPDATE cover_edit_task SET lease_token=NULL,lease_until=NULL,next_attempt_at=CASE WHEN next_attempt_at<CURRENT_TIMESTAMP THEN ? ELSE next_attempt_at END WHERE id=? AND lease_token=?",Timestamp.from(Instant.now().plusSeconds(30)),job.edit().id(),job.token());}

@@ -455,13 +455,13 @@ async function continueMaking() {
           await router.push({path:`/works/${work.id}`,query:{revision:legacy.revisionId,language:language.value,...lyricsStructureQuery(previousStructure)}})
           return
         }
-        if(legacy.status==='PENDING')throw new Error('歌词仍在编写中，可以稍后刷新编写状态。')
+        if((legacy.status==='PENDING'||legacy.status==='QUEUED'))throw new Error('歌词仍在编写中，可以稍后刷新编写状态。')
       }
     }
     let key=continuationRequestKey(prepared.id,prepared.version,language.value,structureKey)
     const previous=await getLyricsRequest(prepared.id,key)
     if(previous.status==='SUCCEEDED'&&previous.revisionId){if(alive&&turn===initSequence)await router.push({path:`/works/${work.id}`,query:{revision:previous.revisionId,language:language.value,...lyricsStructureQuery(chosenStructure)}});return}
-    if(previous.status==='PENDING')throw new Error('歌词仍在编写中，可以稍后刷新编写状态。')
+    if((previous.status==='PENDING'||previous.status==='QUEUED'))throw new Error('歌词仍在编写中，可以稍后刷新编写状态。')
     if(previous.status==='FAILED'||previous.status==='UNKNOWN'){retireContinuationRequestKey(prepared.id,prepared.version,language.value,structureKey);key=continuationRequestKey(prepared.id,prepared.version,language.value,structureKey)}
     await refreshCredits()
     if(!alive||turn!==initSequence||await blockedByCredits()||!alive||turn!==initSequence)return

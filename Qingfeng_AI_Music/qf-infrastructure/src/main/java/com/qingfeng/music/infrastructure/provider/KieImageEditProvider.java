@@ -16,12 +16,19 @@ public final class KieImageEditProvider implements ImageEditProvider {
  public boolean configured(){return enabled&&!key.isBlank();}
  public String model(){return "google/nano-banana-edit";}
  public String submit(byte[] jpeg,String prompt,String model){
+  return submit(jpeg, prompt, model, null);
+ }
+ @Override public String submit(byte[] jpeg, String prompt, String model, URI callback) {
   if(!model().equals(model)||jpeg.length>5*1024*1024||jpeg.length<3||jpeg[0]!=(byte)0xff||jpeg[1]!=(byte)0xd8||prompt==null||prompt.isBlank()||prompt.length()>1000)throw new IllegalArgumentException("图片编辑参数无效");
   var file=send(upload,json.writeValueAsString(Map.of("base64Data","data:image/jpeg;base64,"+Base64.getEncoder().encodeToString(jpeg),"uploadPath","qingfeng/covers","fileName",UUID.randomUUID()+".jpg")),true);
   if(!file.path("success").asBoolean())throw new IllegalStateException("封面上传未完成");
   String url=file.path("data").path("downloadUrl").asText();https(url);
   String direction="Edit this supplied photo into a square music album cover. Preserve the identity of any people. Do not add text, logos or watermarks. User artistic direction: "+prompt;
-  var result=send(base.resolve("/api/v1/jobs/createTask"),json.writeValueAsString(Map.of("model",model,"input",Map.of("prompt",direction,"image_urls",List.of(url),"output_format","png","aspect_ratio","1:1"))),true);
+  var request = new LinkedHashMap<String, Object>();
+  request.put("model", model);
+  request.put("input", Map.of("prompt", direction, "image_urls", List.of(url), "output_format", "png", "aspect_ratio", "1:1"));
+  if (callback != null) request.put("callBackUrl", callback.toASCIIString());
+  var result=send(base.resolve("/api/v1/jobs/createTask"),json.writeValueAsString(request),true);
   String task=result.path("data").path("taskId").asText();if(task.isBlank()||task.length()>255)throw new IllegalStateException("封面任务编号未知");return task;
  }
  public Result query(String task,String model){
@@ -38,6 +45,6 @@ public final class KieImageEditProvider implements ImageEditProvider {
   else if(!submitting)readGate.run();
   try{
   var request=HttpRequest.newBuilder(uri).header("Authorization","Bearer "+key).header("Accept","application/json").timeout(Duration.ofSeconds(45));if(body!=null)request.header("Content-Type","application/json").POST(HttpRequest.BodyPublishers.ofString(body));
-  var response=http.send(request.build(),HttpResponse.BodyHandlers.ofString());int status=response.statusCode();if(submitting&&Set.of(400,401,402,403,404,422,429).contains(status))throw new Rejected();if(status!=200)throw new IllegalStateException("图片服务HTTP响应异常");var parsed=json.readTree(response.body());int code=parsed.path("code").asInt(-1);if(submitting&&Set.of(400,401,402,403,404,422,429).contains(code))throw new Rejected();if(code!=200)throw new IllegalStateException("图片服务响应异常");return parsed;
+  var response=ProviderHttp.read(http,request.build(),System.nanoTime()+Duration.ofSeconds(45).toNanos());int status=response.statusCode();if(submitting&&Set.of(400,401,402,403,404,422,429).contains(status))throw new Rejected();if(status!=200)throw new IllegalStateException("图片服务HTTP响应异常");var parsed=json.readTree(response.body());int code=parsed.path("code").asInt(-1);if(submitting&&Set.of(400,401,402,403,404,422,429).contains(code))throw new Rejected();if(code!=200)throw new IllegalStateException("图片服务响应异常");return parsed;
  }catch(InterruptedException e){Thread.currentThread().interrupt();throw new IllegalStateException("封面提交中断");}catch(java.io.IOException e){throw new IllegalStateException("封面连接异常，禁止自动重提");}}
 }

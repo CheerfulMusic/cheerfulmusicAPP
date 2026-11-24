@@ -17,6 +17,8 @@ public interface CoverRepository {
  Optional<Job> request(String work,String key);
  Job insertJob(String work,String source,String prompt,String key,String model);
  Optional<Job> claim();
+ default Optional<Job> claim(String work, String requestKey) { throw new UnsupportedOperationException(); }
+ default void expireUnstarted(String work, String requestKey) { throw new UnsupportedOperationException(); }
  void accepted(Job job,String external);
  void result(Job job,String state,String url,String cover,String error);
  void release(Job job);

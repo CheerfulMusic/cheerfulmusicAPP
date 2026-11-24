@@ -26,17 +26,22 @@ public final class KieRequestLimiter {
 
     public KieRequestLimiter(JdbcTemplate jdbc, TransactionTemplate template, String scope,
                              int createsPerTenSeconds, int readsPerSecond, Duration maxWait) {
+        this(jdbc, template, scope, createsPerTenSeconds, readsPerSecond, maxWait, false);
+    }
+
+    public KieRequestLimiter(JdbcTemplate jdbc, TransactionTemplate template, String scope,
+                             int createsPerTenSeconds, int readsPerSecond, Duration maxWait, boolean dedicatedAccount) {
         this.jdbc = Objects.requireNonNull(jdbc);
         if (scope == null || !scope.matches("[A-Za-z0-9:_-]{1,40}"))
             throw new IllegalArgumentException("KIE限流账号标识无效");
-        if (createsPerTenSeconds < 1 || createsPerTenSeconds > 20)
-            throw new IllegalArgumentException("KIE新建请求须设置为每10秒1到20次");
-        if (readsPerSecond < 1 || readsPerSecond > 10)
-            throw new IllegalArgumentException("KIE查询须设置为每秒1到10次");
+        if (createsPerTenSeconds < 1 || createsPerTenSeconds > (dedicatedAccount ? 10000 : 20))
+            throw new IllegalArgumentException("KIE新建请求速率无效");
+        if (readsPerSecond < 1 || readsPerSecond > (dedicatedAccount ? 1000 : 10))
+            throw new IllegalArgumentException("KIE查询速率无效");
         if (maxWait.isZero() || maxWait.isNegative() || maxWait.compareTo(Duration.ofSeconds(60)) > 0)
             throw new IllegalArgumentException("KIE请求排队超时须大于0且不超过60秒");
         this.scope = scope;
-        // 比整除间隔多1ms，避免恰好落在供应商窗口边界产生额外请求。
+        // Keep a millisecond of margin at the provider window boundary.
         this.createSpacingMillis = 10_000L / createsPerTenSeconds + 1;
         this.readSpacingMillis = 1_000L / readsPerSecond + 1;
         this.waitNanos = maxWait.toNanos();

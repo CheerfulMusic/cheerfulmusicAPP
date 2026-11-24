@@ -4,6 +4,10 @@ package com.qingfeng.music.usage;
 public interface UsageBudget {
     enum Kind { MUSIC, LYRICS, TIMING, COVER }
     void reserve(String owner, String work, String requestKey, Kind kind);
+    /** The caller holds a durable queue permit in the same transaction as this reservation. */
+    default void reserveQueued(String owner, String work, String requestKey, Kind kind) {
+        reserve(owner, work, requestKey, kind);
+    }
     /** A failed archive becomes active again without a new payment or daily reservation. */
     default void reserveArchiveRetry() {}
     /** 必须先锁准入行，再原子撤销尚未提交的任务；避免与生成准入形成逆向锁序。 */

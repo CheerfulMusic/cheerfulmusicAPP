@@ -6,6 +6,10 @@ import com.qingfeng.music.lyrics.application.LyricLineRewriteService;
 import com.qingfeng.music.lyrics.application.LyricRhymePreview;
 import com.qingfeng.music.lyrics.application.LyricSelectionRewriteService;
 import com.qingfeng.music.server.security.CreatorPrincipal;
+import com.qingfeng.music.server.ai.LyricsCapacityHandler;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.context.request.async.DeferredResult;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.*;
 import java.util.List;
@@ -20,6 +24,8 @@ import org.springframework.web.multipart.MultipartFile;
 public class LyricsController {
  private final LyricsApi lyrics;
  private final LyricsCompositionService composer;
+ @Autowired(required=false) private LyricsCapacityHandler capacity;
+ @Autowired(required=false) private AiLegacyResults legacyResults;
  private final LyricLineRewriteService lineRewrite;
  private final LyricSelectionRewriteService selectionRewrite;
  public LyricsController(LyricsApi lyrics,LyricsCompositionService composer,LyricLineRewriteService lineRewrite,LyricSelectionRewriteService selectionRewrite){this.lyrics=lyrics;this.composer=composer;this.lineRewrite=lineRewrite;this.selectionRewrite=selectionRewrite;}
@@ -56,7 +62,7 @@ public class LyricsController {
      @NotBlank @Pattern(regexp="[0-9a-fA-F-]{36}") String requestKey,
      @NotBlank @Pattern(regexp="zh-CN|en|mixed") String language,
      @Size(max=1000) String instructions, @Pattern(regexp="[0-9a-fA-F-]{36}") String baseRevisionId,
-     @Pattern(regexp="AUTO|AAB|ABB|ABC|ABCD|CUSTOM") String templateId, boolean chorusFirst,
+     @Pattern(regexp="AUTO|AAB|ABB|ABC|ABCD|CUSTOM") String templateId, Boolean chorusFirst,
      @Size(max=LyricsStructure.MAX_CUSTOM_SECTIONS) List<String> customSections,
      Boolean rewriteAll, @Size(max=LyricsCompositionService.MAX_REWRITE_SOURCE_LENGTH) String sourceLyrics){
      public ComposeRequest(Long workVersion,String requestKey,String language,String instructions,String baseRevisionId,
@@ -69,17 +75,43 @@ public class LyricsController {
      }
  }
  @PostMapping("/generate")
- public LyricsApi.Revision compose(@AuthenticationPrincipal CreatorPrincipal creator,@PathVariable String work,@Valid @RequestBody ComposeRequest request){
+ public Object compose(@AuthenticationPrincipal CreatorPrincipal creator,@PathVariable String work,
+     @Valid @RequestBody ComposeRequest request, @RequestHeader(value="Prefer",required=false) String prefer) {
+     if (capacity != null) {
+         var command = composer.customCommand(request.workVersion(), request.language(), request.instructions(),
+             request.baseRevisionId(), request.templateId(), Boolean.TRUE.equals(request.chorusFirst()), request.customSections(),
+             Boolean.TRUE.equals(request.rewriteAll()), request.sourceLyrics());
+         return queuedResponse(capacity.submit(creator.id(), work, request.requestKey(), command, List.of()), prefer);
+     }
+     return ResponseEntity.ok(compose(creator,work,request));
+ }
+ public LyricsApi.Revision compose(CreatorPrincipal creator,String work,ComposeRequest request) {
      return composer.composeCustom(creator.id(),work,request.workVersion(),request.requestKey(),request.language(),
-         request.instructions(),request.baseRevisionId(),request.templateId(),request.chorusFirst(),request.customSections(),
+         request.instructions(),request.baseRevisionId(),request.templateId(),Boolean.TRUE.equals(request.chorusFirst()),request.customSections(),
          Boolean.TRUE.equals(request.rewriteAll()),request.sourceLyrics());
  }
  @PostMapping(value="/generate-photo", consumes="multipart/form-data")
- public LyricsApi.Revision composePhoto(@AuthenticationPrincipal CreatorPrincipal creator, @PathVariable String work,
+ public Object composePhoto(@AuthenticationPrincipal CreatorPrincipal creator, @PathVariable String work,
      @RequestParam @PositiveOrZero long workVersion, @RequestParam UUID requestKey,
      @RequestParam @Pattern(regexp="zh-CN|en|mixed") String language,
      @RequestParam(name="photo", required=false) List<MultipartFile> photo,
-     @RequestParam(name="photos", required=false) List<MultipartFile> photos) {
+     @RequestParam(name="photos", required=false) List<MultipartFile> photos,
+     @RequestHeader(value="Prefer",required=false) String prefer) {
+     var images = PhotoLyricsImage.jpegs(photo,photos);
+     if (capacity != null)
+         return queuedResponse(capacity.submit(creator.id(), work, requestKey.toString(),
+             composer.photoCommand(workVersion, language), images), prefer);
+     return ResponseEntity.ok(composer.composePhoto(creator.id(),work,workVersion,requestKey.toString(),language,images));
+ }
+ private DeferredResult<ResponseEntity<?>> queuedResponse(LyricsCapacityHandler.Submission submission, String prefer) {
+     if ("respond-async".equalsIgnoreCase(prefer))
+         return AiLegacyResults.immediate(ResponseEntity.accepted().body(submission.state()));
+     var job = submission.job();
+     if (job.state().terminal()) return AiLegacyResults.immediate(ResponseEntity.ok(capacity.completed(job)));
+     return legacyResults.observe(job, finished -> ResponseEntity.ok(capacity.completed(finished)));
+ }
+ public LyricsApi.Revision composePhoto(CreatorPrincipal creator,String work,long workVersion,UUID requestKey,String language,
+        List<MultipartFile> photo,List<MultipartFile> photos) {
      return composer.composePhoto(creator.id(),work,workVersion,requestKey.toString(),language,PhotoLyricsImage.jpegs(photo,photos));
  }
  @GetMapping("/requests/{key}") public LyricsCompositionService.RequestState requestState(@AuthenticationPrincipal CreatorPrincipal creator,@PathVariable String work,@PathVariable String key){return composer.requestState(creator.id(),work,key);}

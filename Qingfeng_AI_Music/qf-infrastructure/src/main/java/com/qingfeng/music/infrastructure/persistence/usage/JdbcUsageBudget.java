@@ -58,6 +58,15 @@ public final class JdbcUsageBudget implements UsageBudget {
         if(consumptions!=null&&kind==Kind.LYRICS)consumptions.reserved(owner,work,key,com.qingfeng.music.credits.CreditConsumptions.TYPE_LYRICS,cost);
     }
     public void reserve(String owner, String work, String key, Kind kind) {
+        reserve(owner, work, key, kind, false);
+    }
+
+    @Override public void reserveQueued(String owner, String work, String key, Kind kind) {
+        if (kind != Kind.LYRICS && kind != Kind.COVER) throw new IllegalArgumentException("Invalid queued usage kind");
+        reserve(owner, work, key, kind, true);
+    }
+
+    private void reserve(String owner, String work, String key, Kind kind, boolean queued) {
         transactions.executeWithoutResult(tx -> {
             // Serialize with guest migration before charging or creating an owner-scoped reservation.
             if(jdbc.queryForList("SELECT id FROM creator WHERE id=? FOR UPDATE",owner).isEmpty()
@@ -66,16 +75,18 @@ public final class JdbcUsageBudget implements UsageBudget {
             var owners=jdbc.query("SELECT owner_id FROM music_work WHERE id=? AND deleted_at IS NULL",(rs,n)->rs.getString(1),work);
             if(owners.isEmpty()||!owner.equals(owners.get(0)))throw new DomainException("CREATOR_SESSION_CHANGED","作品归属已改变，请刷新后重试");
             boolean usePermits=kind==Kind.MUSIC && musicPermits!=null;
-            if (!usePermits) jdbc.queryForObject("SELECT kind FROM model_usage_lock WHERE kind=? FOR UPDATE", String.class, kind.name());
+            var cap=limits.get(kind);
+            if (!usePermits && (!queued || cap.dailyGlobal()>=0)) jdbc.queryForObject("SELECT kind FROM model_usage_lock WHERE kind=? FOR UPDATE", String.class, kind.name());
             if (count("SELECT COUNT(*) FROM model_usage_reservation WHERE kind=? AND work_id=? AND request_key=?", kind.name(),work,key)>0) return;
-            var cap=limits.get(kind);var day=LocalDate.now(clock.withZone(zone));
+            var day=LocalDate.now(clock.withZone(zone));
             if (cap.dailyPerCreator()>=0 && count("SELECT COUNT(*) FROM model_usage_reservation WHERE kind=? AND usage_day=? AND owner_id=?",kind.name(),java.sql.Date.valueOf(day),owner)>=cap.dailyPerCreator())
                 throw new DomainException("PERSONAL_DAILY_QUOTA_EXCEEDED","今日创作次数已用完，请明天再来；已保存的内容不会丢失。");
             if (cap.dailyGlobal()>=0 && count("SELECT COUNT(*) FROM model_usage_reservation WHERE kind=? AND usage_day=?",kind.name(),java.sql.Date.valueOf(day))>=cap.dailyGlobal())
                 throw new DomainException("GLOBAL_DAILY_QUOTA_EXCEEDED","今日创作名额已满，请明天再来。");
             if (cap.concurrentPerCreator()>=0 && active(kind,owner)>=cap.concurrentPerCreator())
                 throw new DomainException("PERSONAL_GENERATION_BUSY","你已有创作正在处理或核对中，请完成后再试。");
-            if (usePermits ? !musicPermits.take(cap.concurrentGlobal(),()->active(kind,null)) : cap.concurrentGlobal()>=0 && active(kind,null)>=cap.concurrentGlobal())
+            if (!queued && (usePermits ? !musicPermits.take(cap.concurrentGlobal(),()->active(kind,null))
+                    : cap.concurrentGlobal()>=0 && active(kind,null)>=cap.concurrentGlobal()))
                 throw new DomainException("GLOBAL_GENERATION_BUSY","当前创作人数较多，请稍后再试。");
             charge(owner,work,key,kind);
             jdbc.update("INSERT INTO model_usage_reservation(kind,work_id,request_key,owner_id,usage_day,created_at) VALUES(?,?,?,?,?,?)",kind.name(),work,key,owner,java.sql.Date.valueOf(day),Timestamp.from(clock.instant()));
@@ -108,12 +119,12 @@ public final class JdbcUsageBudget implements UsageBudget {
     }
     private int active(Kind kind, String owner) {
         String table=switch(kind){case MUSIC->"generation_task";case LYRICS->"lyrics_composition_request";case TIMING->"media_lyrics_timeline";case COVER->"cover_edit_task";};
-        String states=switch(kind){case MUSIC,COVER->"'QUEUED','SUBMITTING','RUNNING','SAVING','SUBMISSION_UNKNOWN'";case LYRICS->"'PENDING'";case TIMING->"'FETCHING'";};
+        String states=switch(kind){case MUSIC,COVER->"'QUEUED','SUBMITTING','RUNNING','SAVING','SUBMISSION_UNKNOWN'";case LYRICS->"'PENDING','QUEUED'";case TIMING->"'FETCHING'";};
         String column=kind==Kind.TIMING?"state":"status";
         if (kind==Kind.MUSIC && owner==null) return count("SELECT COUNT(*) FROM generation_task WHERE status IN ("+states+")");
         String sql="SELECT COUNT(*) FROM "+table+" r JOIN music_work w ON w.id=r.work_id WHERE r."+column+" IN ("+states+")";
         if (kind==Kind.LYRICS) {
-            sql+=" AND w.deleted_at IS NULL AND r.created_at>TIMESTAMPADD(SECOND,-"+CompositionRequests.PENDING_TIMEOUT_SECONDS+",CURRENT_TIMESTAMP)";
+            sql+=" AND w.deleted_at IS NULL AND (r.status='QUEUED' OR r.created_at>TIMESTAMPADD(SECOND,-"+CompositionRequests.PENDING_TIMEOUT_SECONDS+",CURRENT_TIMESTAMP))";
         }
         if (kind==Kind.TIMING) {
             sql+=" AND w.deleted_at IS NULL AND r.updated_at>=TIMESTAMPADD(SECOND,-"

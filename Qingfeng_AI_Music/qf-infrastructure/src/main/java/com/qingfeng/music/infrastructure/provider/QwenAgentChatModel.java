@@ -109,7 +109,9 @@ public final class QwenAgentChatModel implements AgentChatModel {
             if(encoded.getBytes(java.nio.charset.StandardCharsets.UTF_8).length>com.qingfeng.music.common.concurrent.AgentRequestScope.maxPromptBytes())throw new DomainException("AGENT_CONTEXT_TOO_LARGE","当前对话内容过长，请缩短本次要求或开始新的会话。");
             var request=HttpRequest.newBuilder(endpoint).timeout(com.qingfeng.music.common.concurrent.AgentRequestScope.timeout(responseTimeout)).header("Authorization","Bearer "+key).header("Content-Type","application/json")
                     .POST(HttpRequest.BodyPublishers.ofString(encoded)).build();
+            var tokens = AiModelUsage.before("qwen", endpoint, encoded);
             var response=readResponse(request);
+            if (response.statusCode() / 100 == 2) AiModelUsage.reported(tokens, response.body());
             httpStatus = response.statusCode();
             if(httpStatus/100!=2)throw new IllegalStateException("provider response");
             com.qingfeng.music.common.concurrent.AgentRequestScope.check();

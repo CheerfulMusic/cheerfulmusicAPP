@@ -122,11 +122,23 @@
       ]
     },
     {
+      "controller": "CoverCapacityCallbackController",
+      "source": "com/qingfeng/music/server/web/publicapi/CoverCapacityCallbackController.java",
+      "mappingDeclarations": [
+        "@PostMapping(CoverCapacityCallbacks.PATH)"
+      ],
+      "mode": "excluded",
+      "flows": [
+        "authenticated provider notification wakes a cover poll"
+      ]
+    },
+    {
       "controller": "AgentChatController",
       "source": "com/qingfeng/music/server/web/app/AgentChatController.java",
       "mappingDeclarations": [
         "@RequestMapping(\"/api/app/agent/conversations/{id}\")",
         "@PostMapping(\"/messages\")",
+        "@GetMapping(\"/messages/{requestKey}/result\")",
         "@GetMapping(\"/state\")"
       ],
       "mode": "protocol",

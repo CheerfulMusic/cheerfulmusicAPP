@@ -29,20 +29,36 @@ public final class JdbcCompositionRequests implements CompositionRequests {
         return jdbc.query("SELECT status,revision_id,request_hash,error_code FROM lyrics_composition_request WHERE work_id=? AND request_key=?",(row,n)->new Entry(row.getString(1),row.getString(2),row.getString(3),row.getString(4)),work,key).stream().findFirst();
     }
     public boolean claim(String work,String key){try{jdbc.update("INSERT INTO lyrics_composition_request(work_id,request_key,status,created_at) VALUES(?,?,'PENDING',CURRENT_TIMESTAMP)",work,key);return true;}catch(DuplicateKeyException duplicate){return false;}}
-    public boolean claim(String owner,String work,String key,String hash){
+    public boolean claim(String owner,String work,String key,String hash) {
+        return claim(owner, work, key, hash, false);
+    }
+    @Override public boolean claimQueued(String owner, String work, String key, String hash) {
+        return claim(owner, work, key, hash, true);
+    }
+    private boolean claim(String owner,String work,String key,String hash,boolean queued){
         return Boolean.TRUE.equals(transactions.execute(tx->{
             lockOwner(owner);
             // Claim must not acquire an empty request range before the common usage lock.
             // Otherwise another owner holds usage and waits to INSERT into that range.
-            jdbc.queryForObject("SELECT kind FROM model_usage_lock WHERE kind='LYRICS' FOR UPDATE",String.class);
+            if (!queued)
+                jdbc.queryForObject("SELECT kind FROM model_usage_lock WHERE kind='LYRICS' FOR UPDATE",String.class);
             if (!jdbc.queryForList("""
                 SELECT request_key FROM lyrics_composition_request
-                WHERE work_id=? AND (request_key=? OR
+                WHERE work_id=? AND (request_key=? OR status='QUEUED' OR
                     (status='PENDING' AND created_at>TIMESTAMPADD(SECOND,-?,CURRENT_TIMESTAMP)))
                 FOR UPDATE
                 """, String.class, work, key, PENDING_TIMEOUT_SECONDS).isEmpty()) return false;
-            budget.reserve(owner,work,key,UsageBudget.Kind.LYRICS);
-            if (!claim(work,key)) throw new DomainException("LYRICS_REQUEST_PENDING","这次歌词请求已提交，请先查看原请求进度。");
+            if (queued) {
+                budget.reserveQueued(owner, work, key, UsageBudget.Kind.LYRICS);
+                jdbc.update("""
+                    INSERT INTO lyrics_composition_request(work_id,request_key,status,created_at,request_hash)
+                    VALUES(?,?,'QUEUED',CURRENT_TIMESTAMP,?)
+                    """, work, key, hash);
+            } else {
+                budget.reserve(owner,work,key,UsageBudget.Kind.LYRICS);
+                if (!claim(work,key))
+                    throw new DomainException("LYRICS_REQUEST_PENDING","这次歌词请求已提交，请先查看原请求进度。");
+            }
             // Settle stale pending requests as unresolved before fencing their late results.
             var staleKeys = jdbc.queryForList("SELECT request_key FROM lyrics_composition_request WHERE work_id=? AND request_key<>? AND status='PENDING'",
                 String.class,work,key);
@@ -51,9 +67,28 @@ public final class JdbcCompositionRequests implements CompositionRequests {
                 UPDATE lyrics_composition_request SET status='UNKNOWN',error_code=?,finished_at=COALESCE(finished_at,CURRENT_TIMESTAMP)
                 WHERE work_id=? AND request_key<>? AND status='UNKNOWN' AND (error_code IS NULL OR error_code<>?)
                 """,SUPERSEDED,work,key,SUPERSEDED);
-            jdbc.update("UPDATE lyrics_composition_request SET request_hash=? WHERE work_id=? AND request_key=?",hash,work,key);
+            if (!queued) jdbc.update("UPDATE lyrics_composition_request SET request_hash=? WHERE work_id=? AND request_key=?",hash,work,key);
             return true;
         }));
+    }
+    @Override public boolean startQueued(String work, String key) {
+        return jdbc.update("""
+            UPDATE lyrics_composition_request SET status='PENDING',created_at=CURRENT_TIMESTAMP
+            WHERE work_id=? AND request_key=? AND status='QUEUED'
+            """, work, key) == 1;
+    }
+
+    @Override public void failQueued(String work, String key, String error) {
+        transactions.executeWithoutResult(status -> {
+            String owner = chargedOwner(work, key);
+            lockOwner(owner);
+            if (jdbc.update("""
+                UPDATE lyrics_composition_request SET status='FAILED',error_code=?,finished_at=CURRENT_TIMESTAMP
+                WHERE work_id=? AND request_key=? AND status='QUEUED'
+                """, error, work, key) == 1) {
+                settle(work,key,owner,CreditConsumptions.STATUS_FAILED,true);
+            }
+        });
     }
     public void complete(String work,String key,String revision){
         transactions.executeWithoutResult(tx->{

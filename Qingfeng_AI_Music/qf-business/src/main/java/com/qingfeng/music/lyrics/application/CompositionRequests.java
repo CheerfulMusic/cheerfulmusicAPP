@@ -9,6 +9,9 @@ public interface CompositionRequests {
     Optional<Entry> find(String work,String key);
     boolean claim(String work,String key);
     default boolean claim(String owner,String work,String key,String hash){return claim(work,key);}
+    default boolean claimQueued(String owner, String work, String key, String hash) { throw new UnsupportedOperationException(); }
+    default boolean startQueued(String work, String key) { throw new UnsupportedOperationException(); }
+    default void failQueued(String work, String key, String error) { throw new UnsupportedOperationException(); }
     void complete(String work,String key,String revision);
     default void completeWithRevision(String work,String key,String revision,Runnable save){save.run();complete(work,key,revision);}
     void failed(String work,String key);

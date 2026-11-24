@@ -82,7 +82,9 @@ public final class QwenReferenceAnalyst implements ReferenceAnalyst {
             HttpRequest http = HttpRequest.newBuilder(endpoint).timeout(timeout)
                 .header("Authorization", "Bearer " + key).header("Content-Type", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(body)).build();
+            var tokens = AiModelUsage.before("qwen", endpoint, body);
             HttpResponse<String> response = client.send(http, HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() / 100 == 2) AiModelUsage.reported(tokens, response.body());
             if (response.statusCode() == 401 || response.statusCode() == 403) throw unavailable("AI 参考分析服务认证失败，请检查后端千问配置。");
             if (response.statusCode() == 402) throw unavailable("千问余额不足，请充值后重试。");
             if (response.statusCode() != 200) throw unavailable("AI 参考分析服务暂时繁忙，请稍后再试。");

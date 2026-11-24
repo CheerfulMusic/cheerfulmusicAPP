@@ -1,9 +1,9 @@
 import type { SongShareStatus } from '../model/song-sharing'
 import type { GenerationPublication } from '../model/generation-recovery'
 import type {LyricsStructure, LyricsTemplateId} from '../model/lyrics-structure'
-import { ensureCreator, requestJson, apiUrl, uploadForm } from '../../../shared/http/api-client'
+import { ApiError, currentCreatorId, ensureCreator, requestJson, apiUrl, uploadForm } from '../../../shared/http/api-client'
 export interface Revision { id: string; workId: string; workVersion: number; title: string; lyrics: string; source: string; confirmed: boolean; createdAt: string; language?: string|null; templateId?: LyricsTemplateId|null; chorusFirst?: boolean|null; customSections?: string[]|null }
-export interface LyricsRequestState {status:'NOT_FOUND'|'PENDING'|'FAILED'|'SUCCEEDED'|'UNKNOWN';revisionId:string|null;errorCode:string|null}
+export interface LyricsRequestState {status:'NOT_FOUND'|'QUEUED'|'PENDING'|'FAILED'|'SUCCEEDED'|'UNKNOWN';revisionId:string|null;errorCode:string|null}
 export const getLyricsRequest = (work:string,key:string) => call<LyricsRequestState>(`app/works/${work}/lyrics/requests/${encodeURIComponent(key)}`)
 export interface AudioAsset { id: string; workId: string; origin: 'IMPORTED' | 'GENERATED'; contentType: string; byteSize: number; createdAt: string; sectionEdit?: boolean; generationTaskId?: string | null; note?: string; noteVersion?: number; versionNumber?: number | null }
 export interface GenerationTask { id: string; revisionId: string; requestKey?:string; status: string; title: string; style?:string; vocalGender?:string; createdAt: string; assetId: string | null; previewAssetId?: string | null; errorCode: string | null; updatedAt: string; nextAttemptAt: string }
@@ -12,17 +12,37 @@ async function call<T>(path: string, method = 'GET', body?: unknown) { await ens
 export const listRevisions = (work: string) => call<Revision[]>(`app/works/${work}/lyrics`)
 export async function generateLyrics(work: string, workVersion: number, requestKey: string, language: string, instructions = '', baseRevisionId?: string, structure?: LyricsStructure, rewriteSource?: string) {
   await ensureCreator()
+  const owner = currentCreatorId()
   const rewrite = rewriteSource === undefined ? {} : { rewriteAll: true, sourceLyrics: rewriteSource }
-  return requestJson<Revision>(`app/works/${work}/lyrics/generate`, 'POST', {workVersion, requestKey, language, instructions, baseRevisionId, ...structure, ...rewrite}, 120000)
+  const initial = await requestJson<Revision | LyricsRequestState>(`app/works/${work}/lyrics/generate`, 'POST', {workVersion, requestKey, language, instructions, baseRevisionId, ...structure, ...rewrite}, 120000, true)
+  return finishLyrics(owner, work, requestKey, initial)
 }
-export function generatePhotoLyrics(work: string, version: number, key: string, language: string, photos: readonly File[]) {
+export async function generatePhotoLyrics(work: string, version: number, key: string, language: string, photos: readonly File[]) {
+  await ensureCreator()
+  const owner = currentCreatorId()
   const form = new FormData()
   const partName = photos.length === 1 ? 'photo' : 'photos'
   for (const photo of photos) form.append(partName, photo)
   form.set('workVersion', String(version))
   form.set('requestKey', key)
   form.set('language', language)
-  return uploadForm<Revision>(`app/works/${encodeURIComponent(work)}/lyrics/generate-photo`, form)
+  const initial = await uploadForm<Revision | LyricsRequestState>(`app/works/${encodeURIComponent(work)}/lyrics/generate-photo`, form, true)
+  return finishLyrics(owner, work, key, initial)
+}
+async function finishLyrics(owner: string, work: string, key: string, initial: Revision | LyricsRequestState): Promise<Revision> {
+  if (owner !== currentCreatorId()) throw new ApiError('账号已切换。', 409, 'LYRICS_REQUEST_PENDING')
+  if (!('status' in initial)) return initial
+  const deadline = Date.now() + 240_000
+  let state = initial
+  while (owner === currentCreatorId() && Date.now() < deadline) {
+    if (state.status === 'SUCCEEDED' && state.revisionId) return getRevision(work, state.revisionId)
+    if (state.status === 'FAILED') throw new ApiError('编写未完成，请查看本次状态。', 409, state.errorCode ?? 'LYRICS_REQUEST_FAILED')
+    if (state.status === 'UNKNOWN' || state.status === 'NOT_FOUND') break
+    await new Promise(resolve => setTimeout(resolve, 2_000 + Math.random() * 1_000))
+    if (owner !== currentCreatorId()) break
+    state = await getLyricsRequest(work, key)
+  }
+  throw new ApiError('歌词请求已受理，请刷新查看本次编写状态。', 409, 'LYRICS_REQUEST_PENDING')
 }
 export const getRevision = (work: string, revision: string) => call<Revision>(`app/works/${work}/lyrics/${revision}`)
 export interface Allowance {dailyLimit:number;dailyRemaining:number;concurrentLimit:number;active:number;resetsAt:string;dailyUnlimited?:boolean;concurrentUnlimited?:boolean}

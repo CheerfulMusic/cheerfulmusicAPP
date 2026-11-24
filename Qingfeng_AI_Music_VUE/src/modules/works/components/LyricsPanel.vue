@@ -205,7 +205,7 @@ async function recoverRequest(){
   try{
     const state=await getLyricsRequest(props.work.id,key)
     if(!alive||key!==requestKey.value)return
-    requestWaiting.value=state.status==='PENDING'
+    requestWaiting.value=(state.status==='PENDING'||state.status==='QUEUED')
     retryReleased.value=state.status==='UNKNOWN'
     if(state.status==='NOT_FOUND'){
       notice.value=''

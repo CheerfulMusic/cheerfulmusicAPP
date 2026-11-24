@@ -76,6 +76,25 @@ public final class AgentChatService {
     }
     public Snapshot state(String owner,String conversation){return snapshot(owner,conversation,null);}
     public Snapshot state(String owner,String conversation,Long afterSeq,Long historyEpoch){return snapshot(owner,conversation,null,null,afterSeq,historyEpoch);}
+    boolean hasCompleted(String owner, String conversation, String requestKey) {
+        return turns.completedResult(owner, conversation, requestKey).isPresent();
+    }
+
+    boolean reconcileLyrics(String owner, String conversation, String key, String work) {
+        if (!turns.lockIfActive(owner, conversation, key)) return false;
+        append(owner, conversation, Map.of("text", "歌词已生成并保存到作品。请查看歌词结果，重新确认需要继续的步骤。",
+            "songId", work, "action", "generate_lyrics"));
+        turns.complete(owner, conversation, key, json.writeValueAsString(new Outcome("generate_lyrics", null, work, null, null)));
+        return true;
+    }
+
+    public Optional<Snapshot> completed(String owner, String conversation, String requestKey) {
+        return turns.completedResult(owner, conversation, requestKey).map(result -> {
+            var outcome = json.readValue(result, Outcome.class);
+            return snapshot(owner, conversation, outcome.action(), outcome);
+        });
+    }
+
     public Snapshot send(String owner,String conversation,String text,String key,String locale) {
         return send(owner,conversation,text,key,locale,null,Supplier::get);
     }

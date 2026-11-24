@@ -15,7 +15,7 @@ import tools.jackson.databind.ObjectMapper;
 
 /** MySQL is authoritative in both DB and Redis modes; no network calls inside these transactions. */
 public final class JdbcAgentAdmission implements AgentAdmission {
-    private final JdbcTemplate jdbc;private final TransactionTemplate tx;private final Limits limits;private final ZoneId zone;
+    private final JdbcTemplate jdbc;private final TransactionTemplate tx;private final TransactionTemplate joined;private final Limits limits;private final ZoneId zone;
     private com.qingfeng.music.credits.CreditsLedger credits;
     public JdbcAgentAdmission withCredits(com.qingfeng.music.credits.CreditsLedger credits){this.credits=credits;return this;}
     private static String debitReference(String id){return "agent-chat:"+id;}
@@ -23,17 +23,29 @@ public final class JdbcAgentAdmission implements AgentAdmission {
     public JdbcAgentAdmission(JdbcTemplate jdbc,TransactionTemplate source,Limits limits,ZoneId zone){
         this.jdbc=jdbc;this.limits=limits;this.zone=zone;this.tx=new TransactionTemplate(source.getTransactionManager());
         tx.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);tx.setIsolationLevel(TransactionDefinition.ISOLATION_READ_COMMITTED);tx.setTimeout(5);
+        joined = new TransactionTemplate(source.getTransactionManager());
     }
     @Override public Ticket acquire(String owner,String conversation,String key,String text,String locale){
         return acquire(owner,conversation,key,text,locale,false);
     }
     @Override public Ticket acquire(String owner,String conversation,String key,String text,String locale,boolean paidConfirmed){
+        return acquire(owner, conversation, key, text, locale, paidConfirmed, null);
+    }
+
+    public Ticket acquireQueued(String owner, String conversation, String key, String text, String locale,
+                                boolean paidConfirmed, Instant queueUntil) {
+        return acquire(owner, conversation, key, text, locale, paidConfirmed, Objects.requireNonNull(queueUntil));
+    }
+
+    private Ticket acquire(String owner, String conversation, String key, String text, String locale,
+                           boolean paidConfirmed, Instant queueUntil) {
         if(text==null||text.isBlank()||text.length()>4000)throw new DomainException("INVALID_AGENT_MESSAGE","请输入 1–4000 字的消息。");
         try{UUID.fromString(key);}catch(Exception e){throw new DomainException("INVALID_REQUEST_KEY","缺少有效的消息请求标识。");}
         String payload=json.writeValueAsString(Map.of("text",text.trim(),"locale",locale==null?"zh-CN":locale));
         String id=hash(conversation+":"+key),fingerprint=hash(payload);
-        return tx.execute(status->{
-            jdbc.queryForObject("SELECT id FROM agent_admission_lock WHERE id=1 FOR UPDATE",Integer.class);
+        boolean queued = queueUntil != null;
+        return (queued ? joined : tx).execute(status->{
+            if (queued) lockCreator(owner); else lockAdmission();
             var versions=jdbc.queryForList("SELECT history_epoch FROM agent_conversation WHERE id=? AND creator_id=? FOR UPDATE",Long.class,conversation,owner);
             if(versions.isEmpty())throw new DomainException("AGENT_CONVERSATION_NOT_FOUND","会话不存在或不属于当前用户。");
             Instant now=jdbc.queryForObject("SELECT CURRENT_TIMESTAMP",Timestamp.class).toInstant();
@@ -59,9 +71,9 @@ public final class JdbcAgentAdmission implements AgentAdmission {
             if(count("SELECT COUNT(*) FROM agent_message WHERE conversation_id=? AND role='user' AND state='RUNNING'",conversation)>0
                 ||count("SELECT COUNT(*) FROM agent_request_admission WHERE conversation_id=? AND state IN ('RESERVED','RUNNING') AND lease_until>?",conversation,Timestamp.from(now))>0)throw denied("AGENT_TURN_IN_PROGRESS","上一条消息仍在处理或等待核对，请先查看原请求结果。");
             var day=java.sql.Date.valueOf(LocalDate.ofInstant(now,zone));
-            if(count("SELECT COUNT(*) FROM agent_request_admission WHERE state IN ('RESERVED','RUNNING') AND lease_until>?",Timestamp.from(now))>=limits.globalConcurrent()
+            if(!queued && count("SELECT COUNT(*) FROM agent_request_admission WHERE state IN ('RESERVED','RUNNING') AND lease_until>?",Timestamp.from(now))>=limits.globalConcurrent()
                 ||count("SELECT COUNT(*) FROM agent_request_admission WHERE creator_id=? AND state IN ('RESERVED','RUNNING') AND lease_until>?",owner,Timestamp.from(now))>=limits.userConcurrent())throw denied("AGENT_BUSY","当前对话请求较多，请稍后再试；本次尚未开始执行。");
-            if(count("SELECT COUNT(*) FROM agent_request_admission WHERE created_at>?",Timestamp.from(now.minusSeconds(60)))>=limits.globalRpm()
+            if(!queued && count("SELECT COUNT(*) FROM agent_request_admission WHERE created_at>?",Timestamp.from(now.minusSeconds(60)))>=limits.globalRpm()
                 ||count("SELECT COUNT(*) FROM agent_request_admission WHERE creator_id=? AND created_at>?",owner,Timestamp.from(now.minusSeconds(60)))>=limits.userRpm())throw denied("AGENT_RATE_LIMITED","对话请求较频繁，请稍后再试；本次尚未开始执行。");
             boolean continuation = AgentChatService.CONTINUE.equals(text.trim());
             if (continuation) {
@@ -73,7 +85,7 @@ public final class JdbcAgentAdmission implements AgentAdmission {
                     throw denied("AGENT_PLAN_STALE","续办计划已失效。");
             }
             long reservation=continuation || com.qingfeng.music.agent.application.ExactLyricEdit.parse(text)!=null?0:limits.reservationTokens();
-            if(reservation>0&&count("SELECT COALESCE(SUM(reserved_tokens),0) FROM agent_request_admission WHERE usage_day=?",day)>limits.globalDailyTokens()-reservation)
+            if(!queued && reservation>0&&count("SELECT COALESCE(SUM(reserved_tokens),0) FROM agent_request_admission WHERE usage_day=?",day)>limits.globalDailyTokens()-reservation)
                 throw denied("AGENT_TOKEN_BUDGET_EXCEEDED","平台今日对话容量已满，请稍后再试；本次未扣积分。");
             boolean paidTurn=false, purchasedPack=false;
             if(reservation>0&&count("SELECT COALESCE(SUM(reserved_tokens),0) FROM agent_request_admission WHERE creator_id=? AND usage_day=?",owner,day)>limits.userDailyTokens()-reservation){
@@ -89,19 +101,27 @@ public final class JdbcAgentAdmission implements AgentAdmission {
                 }
                 jdbc.update("UPDATE agent_chat_allowance SET remaining_turns=remaining_turns-1 WHERE creator_id=?",owner);
             }
-            jdbc.update("INSERT INTO agent_request_admission(id,creator_id,conversation_id,request_key,fingerprint,conversation_version,state,usage_day,reserved_tokens,lease_until,created_at,updated_at) VALUES(?,?,?,?,?,?,'RESERVED',?,?,?,?,?)",id,owner,conversation,key,fingerprint,versions.get(0),day,reservation,Timestamp.from(now.plus(limits.lease())),Timestamp.from(now),Timestamp.from(now));
+            jdbc.update("INSERT INTO agent_request_admission(id,creator_id,conversation_id,request_key,fingerprint,conversation_version,state,usage_day,reserved_tokens,lease_until,created_at,updated_at) VALUES(?,?,?,?,?,?,'RESERVED',?,?,?,?,?)",id,owner,conversation,key,fingerprint,versions.get(0),day,reservation,Timestamp.from((queued ? queueUntil : now).plus(limits.lease())),Timestamp.from(now),Timestamp.from(now));
             if(paidTurn)jdbc.update("UPDATE agent_request_admission SET paid_turn=1,purchased_pack=? WHERE id=?",purchasedPack?1:0,id);
             return new Ticket(id,owner,false);
         });
     }
     @Override public Claim startTurn(Ticket ticket, String conversation, Supplier<Claim> claim) {
+        return startTurn(ticket, conversation, claim, false);
+    }
+
+    public Claim startQueuedTurn(Ticket ticket, String conversation, Supplier<Claim> claim) {
+        return startTurn(ticket, conversation, claim, true);
+    }
+
+    private Claim startTurn(Ticket ticket, String conversation, Supplier<Claim> claim, boolean queued) {
         if (ticket.replay()) return tx.execute(status -> {
             Claim existing = claim.get();
             if (existing.fresh()) throw denied("REQUEST_KEY_CONFLICT","原请求结果不可用，请刷新会话。");
             return existing;
         });
         Claim result = tx.execute(status -> {
-            lockAdmission();
+            if (queued) lockCreator(ticket.owner()); else lockAdmission();
             var version = jdbc.queryForObject("SELECT history_epoch FROM agent_conversation WHERE id=? AND creator_id=? FOR UPDATE",
                     Long.class, conversation, ticket.owner());
             var rows = jdbc.queryForList("SELECT conversation_version FROM agent_request_admission WHERE id=? AND conversation_id=? AND state='RESERVED' FOR UPDATE",
@@ -125,6 +145,23 @@ public final class JdbcAgentAdmission implements AgentAdmission {
         lockAdmission();
         refundReservation(ticket, "ABANDONED", true);
     });}
+
+    public String queuedState(Ticket ticket) {
+        return jdbc.queryForList("SELECT state FROM agent_request_admission WHERE id=? AND creator_id=?",
+            String.class, ticket.id(), ticket.owner()).stream().findFirst().orElse("ABANDONED");
+    }
+
+    public void abandonQueued(Ticket ticket) {
+        joined.executeWithoutResult(status -> {
+            lockCreator(ticket.owner());
+            refundReservation(ticket, "ABANDONED", false);
+        });
+    }
+
+    private void lockCreator(String owner) {
+        if (jdbc.queryForList("SELECT id FROM creator WHERE id=? FOR UPDATE", String.class, owner).isEmpty())
+            throw denied("AGENT_CONVERSATION_NOT_FOUND", "会话不存在或不属于当前用户。");
+    }
 
     private void lockAdmission() {
         jdbc.queryForObject("SELECT id FROM agent_admission_lock WHERE id=1 FOR UPDATE", Integer.class);

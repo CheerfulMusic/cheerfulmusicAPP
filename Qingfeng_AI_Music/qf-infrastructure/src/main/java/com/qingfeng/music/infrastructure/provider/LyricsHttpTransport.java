@@ -52,7 +52,12 @@ final class LyricsHttpTransport {
                 .POST(body);
             if (userAgent != null) request.header("User-Agent", userAgent);
             try {
-                return client.send(request.build(), HttpResponse.BodyHandlers.ofString());
+                var tokens = AiModelUsage.before(endpoint, json);
+                var outgoing = request.build();
+                var response = AiModelUsage.active() ? ProviderHttp.read(client, outgoing, deadline)
+                    : client.send(outgoing, HttpResponse.BodyHandlers.ofString());
+                if (response.statusCode() / 100 == 2) AiModelUsage.reported(tokens, response.body());
+                return response;
             } catch (ConnectException | HttpConnectTimeoutException | UnknownHostException connectionFailure) {
                 logFailure(endpoint, attempt, bodyStarted.get(), connectionFailure);
                 // Once the transport has requested the body, acceptance is uncertain even if reconnecting failed.

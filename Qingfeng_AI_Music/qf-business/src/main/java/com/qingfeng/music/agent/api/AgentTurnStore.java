@@ -10,6 +10,12 @@ public interface AgentTurnStore {
     }
     /** Called under the conversation lock only for a fresh turn, before writing the user message. */
     Claim claim(String creatorId,String conversationId,String requestKey,String text,Runnable beforeInsert);
+    default java.util.Optional<String> completedResult(String owner, String conversation, String key) {
+        return java.util.Optional.empty();
+    }
+    default boolean lockIfActive(String owner, String conversation, String key) {
+        return false;
+    }
     void complete(String creatorId, String conversationId, String requestKey, String resultJson);
     /** Verify the durable turn is still live and renew its reset-protection lease. */
     default void assertActive(String creatorId,String conversationId,String requestKey) {}

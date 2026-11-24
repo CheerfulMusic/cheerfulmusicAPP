@@ -71,6 +71,8 @@ const discoverArtist=(v:unknown)=>obj(v)&&text(v.artistId)&&text(v.stageName)&&n
 const artistFields=(v:unknown):v is Row=>obj(v)&&str(v.stageName)&&str(v.tagline)&&nullableText(v.avatarKey)
   &&nullableText(v.coverKey)&&nullableText(v.featuredReleaseId)
 const myArtist=(v:unknown)=>artistFields(v)&&nullableText(v.publicId)&&typeof v.published==='boolean'&&list(v.songs,artistRelease)
+const agentReceipt=(v:unknown)=>obj(v)&&text(v.requestKey)&&['QUEUED','RUNNING','WAITING','SUSPENDED'].includes(String(v.status))
+const lyricReceipt=(v:unknown)=>obj(v)&&['QUEUED','PENDING','SUCCEEDED','FAILED','UNKNOWN'].includes(String(v.status))&&(v.status!=='SUCCEEDED'||text(v.revisionId))
 const agentMessage=(v:unknown)=>obj(v)&&text(v.id)&&text(v.conversationId)&&Number.isInteger(v.seq)&&Number(v.seq)>0&&['user','assistant'].includes(String(v.role))&&['TEXT','TOOL_CARD','PLACEHOLDER'].includes(String(v.kind))&&['PENDING','RUNNING','DONE','FAILED'].includes(String(v.state))&&nullableText(v.contentJson)&&nullableText(v.taskId)&&str(v.createdAt)
 const agentCard=(v:unknown)=>obj(v)&&nullableText(v.songId)&&['title','style','lyrics','audioUrl','status'].every(k=>str(v[k]))&&nullableText(v.coverUrl)&&num(v.revision)&&['revisionId','assetId','taskId'].every(k=>v[k]===undefined||nullableText(v[k]))
 const agentSnapshot=(v:unknown)=>obj(v)&&(v.continuation===undefined||v.continuation===null||isAgentContinuation(v.continuation))&&list(v.messages,agentMessage)&&(v.songCard===null||agentCard(v.songCard))&&nullableText(v.taskId)&&nullableText(v.action)&&(v.shareUrl===null||typeof v.shareUrl==='string'&&/^\/(?:gift|song)\/[A-Za-z0-9_-]+$/.test(v.shareUrl))&&typeof v.liked==='boolean'
@@ -94,7 +96,7 @@ const analyticsAccessBody=(v:unknown)=>obj(v)&&typeof v.allowed==='boolean'&&(v.
 const quickCreation=(v:unknown)=>obj(v)&&text(v.id)&&text(v.workId)&&['QUEUED','WRITING','LYRICS_READY','SUBMITTING_MUSIC','MUSIC_QUEUED','SUBMITTING','RUNNING','SAVING','SUBMISSION_UNKNOWN','SUCCEEDED','FAILED','CANCELLED'].includes(String(v.status))&&['revisionId','taskId','errorCode'].every(k=>v[k]===null||text(v[k]))&&typeof v.canRetry==='boolean'&&text(v.createdAt)
 export const emptyResponseAllowed=(path:string,method:string)=>method==='DELETE'&&/^app\/artist-albums\/[\w-]+(?:\?version=\d+)?$/.test(path)||method==='DELETE'&&/^app\/works\/[^/]+\/shares(?:\/[^/]+)?$/.test(path)||method==='POST'&&(/^app\/works\/[^/]+\/generations\/[^/]+\/retry-archive$/.test(path)||/^public\/discover\/songs\/[^/]+\/\d+\/play$/.test(path))||method==='GET'&&(/^app\/works\/[^/]+\/generations\/[^/]+\/music-settings$/.test(path)||/^app\/works\/[^/]+\/quick-creations\/latest$/.test(path))
 /** 校验应用实际依赖的字段。HTTP 200只代表传输成功，不代表业务结果完整。 */
-export function validResponse(path:string,method:string,value:unknown):boolean{
+export function validResponse(path:string,method:string,value:unknown,httpStatus?:number):boolean{
  const [endpoint,query]=path.split('?')
  path=endpoint!
  if(value==null)return method==='GET'&&/^app\/works\/[^/]+\/quick-creations\/latest$/.test(path)||emptyResponseAllowed(path,method)
@@ -118,7 +120,8 @@ export function validResponse(path:string,method:string,value:unknown):boolean{
  if(path==='app/agent/reference')return method==='POST'&&obj(value)&&text(value.style)&&str(value.mood)&&num(value.tempo)&&Number(value.tempo)>=0&&typeof value.tempoVerified==='boolean'&&list(value.inferredInstrumentation,text)&&list(value.negativeTags,text)&&text(value.summary)&&['AI','RULE'].includes(String(value.source))
  if(path==='app/agent/conversations/current')return method==='GET'&&obj(value)&&text(value.id)&&nullableText(value.currentWorkId)
  if(/^app\/agent\/conversations\/[^/]+\/state$/.test(path))return method==='GET'&&agentSnapshot(value)
- if(/^app\/agent\/conversations\/[^/]+\/messages$/.test(path))return method==='GET'?list(value,agentMessage):method==='POST'&&agentSnapshot(value)
+ if(/^app\/agent\/conversations\/[^/]+\/messages$/.test(path))return method==='GET'?list(value,agentMessage):method==='POST'&&(httpStatus===202?agentReceipt(value):agentSnapshot(value))
+ if(/^app\/agent\/conversations\/[^/]+\/messages\/[^/]+\/result$/.test(path))return method==='GET'&&(httpStatus===202?agentReceipt(value):agentSnapshot(value))
  if(/^app\/agent\/conversations\/[^/]+(?:\/reset)?$/.test(path))return ['POST','DELETE'].includes(method)&&obj(value)&&value.cleared===true
  if(path==='app/welcome')return obj(value)&&typeof value.show==='boolean'&&Number.isSafeInteger(value.amount)&&(value.show?Number(value.amount)>0:value.amount===0)
  if(path==='public/session'||path==='public/session/recover')return obj(value)&&text(value.creatorId)&&(value.associatedGuestCreatorId===undefined||text(value.associatedGuestCreatorId))
@@ -201,11 +204,12 @@ export function validResponse(path:string,method:string,value:unknown):boolean{
  }
  if(/\/section-context$/.test(path))return obj(value)&&typeof value.available==='boolean'&&Array.isArray(value.lines)&&(!value.available||str(value.lyrics)&&num(value.duration))
  if(/\/section-edits$/.test(path))return method==='GET'?list(value,v=>obj(v)&&text(v.taskId)&&text(v.status)&&str(v.replacementLyrics)):task(value)
- if(/\/lyrics\/requests\//.test(path))return obj(value)&&['NOT_FOUND','PENDING','FAILED','SUCCEEDED','UNKNOWN'].includes(String(value.status))&&(value.status!=='SUCCEEDED'||text(value.revisionId))
+ if(/\/lyrics\/requests\//.test(path))return obj(value)&&['NOT_FOUND','QUEUED','PENDING','FAILED','SUCCEEDED','UNKNOWN'].includes(String(value.status))&&(value.status!=='SUCCEEDED'||text(value.revisionId))
  if(/\/lyrics\/rewrite-line$/.test(path))return method==='POST'&&obj(value)&&text(value.text)&&String(value.text).length<=160&&!/[\r\n\u2028\u2029]/.test(String(value.text))
  if(/^app\/works\/[^/]+\/lyrics\/rhyme-line$/.test(path))return method==='POST'&&lyricRhyme(value)
  if(/\/lyrics\/rewrite-selection$/.test(path))return method==='POST'&&obj(value)&&text(value.lyrics)&&String(value.lyrics).length<=12000
  if(/^public\/hot-songs\/[a-z0-9-]+\/lyrics$/.test(path)||/\/audio\/[^/]+\/lyrics(?:\/sync)?$/.test(path)||/^public\/artists\/[^/]+\/songs\/[^/]+\/\d+\/lyrics$/.test(path))return obj(value)&&text(value.status)&&str(value.text)&&list(value.lines,v=>obj(v)&&str(v.text)&&num(v.start)&&num(v.end))&&typeof value.canSync==='boolean'
+ if(/\/lyrics\/generate(?:-photo)?$/.test(path)&&method==='POST')return httpStatus===202?lyricReceipt(value):revision(value)
  if(/\/lyrics(?:\/[^/]+(?:\/confirm)?)?$/.test(path)||/\/lyrics\/generate$/.test(path))return method==='GET'&&path.endsWith('/lyrics')?list(value,revision):revision(value)
  if(/\/audio\/[^/]+\/note$/.test(path))return method==='PUT'&&asset(value)&&obj(value)&&str(value.note)&&num(value.noteVersion)&&value.id===path.split('/').at(-2)
  if(/^app\/works\/[^/]+\/audio\/[^/]+$/.test(path)&&method==='DELETE')return obj(value)&&value.deleted===true&&value.assetId===path.split('/').at(-1)

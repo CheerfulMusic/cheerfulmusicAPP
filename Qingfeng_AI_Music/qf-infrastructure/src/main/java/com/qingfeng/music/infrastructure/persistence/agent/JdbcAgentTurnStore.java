@@ -44,6 +44,24 @@ public final class JdbcAgentTurnStore implements AgentTurnStore {
             return new Claim(true,null,seq);
         });
     }
+    @Override public java.util.Optional<String> completedResult(String owner, String conversation, String key) {
+        return jdbc.query("""
+            SELECT m.content_json FROM agent_message m JOIN agent_conversation c ON c.id=m.conversation_id
+            WHERE c.creator_id=? AND c.id=? AND m.id=? AND m.state='DONE'
+            """, (row, index) -> json.readTree(row.getString(1)).path("result").asText("{}"),
+            owner, conversation, id(conversation,key)).stream().findFirst();
+    }
+
+    @Override public boolean lockIfActive(String owner, String conversation, String key) {
+        return Boolean.TRUE.equals(tx.execute(status -> {
+            if (jdbc.queryForList("SELECT id FROM agent_conversation WHERE id=? AND creator_id=? FOR UPDATE",
+                    String.class, conversation, owner).isEmpty()) return false;
+            return jdbc.queryForObject("""
+                SELECT COUNT(*) FROM agent_message WHERE id=? AND conversation_id=? AND role='user' AND state='RUNNING'
+                """, Integer.class, id(conversation, key), conversation) == 1;
+        }));
+    }
+
     @Override public void complete(String owner,String conversation,String key,String result) {
         tx.executeWithoutResult(status -> {
             lock(owner,conversation);

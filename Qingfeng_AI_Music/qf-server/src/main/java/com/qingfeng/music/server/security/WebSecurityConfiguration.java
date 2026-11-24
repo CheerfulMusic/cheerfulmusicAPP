@@ -48,6 +48,8 @@ public class WebSecurityConfiguration {
         var samples = recommendationOss.getIfAvailable();
         if (samples != null) http.addFilterAfter(new com.qingfeng.music.server.web.RecommendationOssFilter(samples), org.springframework.security.web.access.intercept.AuthorizationFilter.class);
         if (filter!=null) http.addFilterAfter(new ApiRateLimitFilter(java.time.Clock.systemUTC(),env.getProperty("qingfeng.redis.enabled",Boolean.class,false)&&env.getProperty("qingfeng.redis.api-rate-limit-enabled",Boolean.class,true)?new RedisApiRateGate(redis.getObject()):null,env.getProperty("qingfeng.payment.webhook.rate-limit-per-minute",Integer.class,600)),CreatorSessionFilter.class);
+        var coverNotice = org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher.withDefaults()
+            .matcher(HttpMethod.POST, com.qingfeng.music.server.ai.CoverCapacityCallbacks.PATH);
         return http.headers(headers -> headers.addHeaderWriter((request, response) -> {
                 if (request.getDispatcherType() == DispatcherType.REQUEST && "/index.html".equals(request.getServletPath())) {
                     response.setHeader("X-Robots-Tag", "noindex");
@@ -55,6 +57,7 @@ public class WebSecurityConfiguration {
             }))
             .csrf(csrf -> csrf.ignoringRequestMatchers("/api/public/payments/airwallex/webhook", "/api/public/paypal/webhook", "/api/public/events", "/api/wechat/jssdk-error", "/api/songs/*/play", "/api/public/hot-songs/*/play", "/api/public/discover/songs/*/*/play")
             .ignoringRequestMatchers(request->"POST".equals(request.getMethod())&&java.util.Set.of("/api/public/auth/sms/deliver","/api/public/stripe/webhook").contains(request.getServletPath()))
+            .ignoringRequestMatchers(coverNotice)
             .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse()).csrfTokenRequestHandler(new CsrfTokenRequestAttributeHandler()))
             .authorizeHttpRequests(auth -> auth
                 .dispatcherTypeMatchers(DispatcherType.ERROR, DispatcherType.ASYNC).permitAll()
@@ -82,6 +85,7 @@ public class WebSecurityConfiguration {
                 .requestMatchers(org.springframework.http.HttpMethod.POST,"/api/public/auth/logto/start").permitAll()
                 .requestMatchers(org.springframework.http.HttpMethod.GET,"/api/public/auth/native/status").permitAll()
                 .requestMatchers(org.springframework.http.HttpMethod.POST,"/api/public/auth/native/password/sign-in","/api/public/auth/native/code","/api/public/auth/native/register","/api/public/auth/native/password/reset","/api/public/auth/native/phone/sign-in","/api/public/auth/native/email/sign-in").permitAll()
+                .requestMatchers(coverNotice).permitAll()
                 .requestMatchers(org.springframework.http.HttpMethod.POST,"/api/public/payments/airwallex/webhook").permitAll()
                 .requestMatchers(org.springframework.http.HttpMethod.POST,"/api/public/paypal/webhook").permitAll()
                 .requestMatchers(org.springframework.http.HttpMethod.POST,"/api/public/stripe/webhook").permitAll()

@@ -128,7 +128,9 @@ public final class QwenInspirationRewriter implements InspirationRewriter {
             var request = HttpRequest.newBuilder(endpoint).timeout(Duration.ofSeconds(timeoutSeconds))
                 .header("Authorization", "Bearer " + key).header("Content-Type", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(body)).build();
+            var tokens = AiModelUsage.before("qwen", endpoint, body);
             var response = client.send(request, HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() / 100 == 2) AiModelUsage.reported(tokens, response.body());
             if (response.statusCode() == 401 || response.statusCode() == 403)
                 throw new DomainException("REWRITE_PROVIDER_UNAVAILABLE", "AI改写服务认证失败，请检查后端模型配置与密钥。");
             if (response.statusCode() == 402)

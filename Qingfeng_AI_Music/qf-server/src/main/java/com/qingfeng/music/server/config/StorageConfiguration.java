@@ -44,6 +44,12 @@ public class StorageConfiguration {
         Path defaultRoot=Path.of(env.getProperty("qingfeng.media.directory","./data/audio")).resolveSibling("covers");
         return new CoverImageStore(Path.of(env.getProperty("qingfeng.cover.directory",defaultRoot.toString())),client,setting(env,"qingfeng.oss.bucket"),env.getProperty("qingfeng.oss.cover-prefix","qingfeng/covers/"),env.getProperty("qingfeng.media.storage","local").equals("oss"));
     }
+    @Bean @DependsOn("mediaFileStore")
+    @org.springframework.boot.autoconfigure.condition.ConditionalOnProperty(name="qingfeng.ai.capacity.enabled",havingValue="true")
+    com.qingfeng.music.server.ai.AiPhotoInputs aiPhotoInputs(Environment env) {
+        return new com.qingfeng.music.server.ai.AiPhotoInputs(client, setting(env,"qingfeng.oss.bucket"),
+            Path.of(env.getProperty("qingfeng.ai.capacity.photo-directory", "./data/ai-inputs")));
+    }
     @Bean @DependsOn("mediaFileStore") com.qingfeng.music.server.web.RecommendationOssRedirect recommendationOssRedirect(Environment env,com.qingfeng.music.server.web.MediaCdnSigner cdn){
         return new com.qingfeng.music.server.web.RecommendationOssRedirect(client,setting(env,"qingfeng.oss.bucket"),env.getProperty("qingfeng.recommendation-oss.enabled",Boolean.class,false),java.time.Clock.systemUTC(),cdn);
     }

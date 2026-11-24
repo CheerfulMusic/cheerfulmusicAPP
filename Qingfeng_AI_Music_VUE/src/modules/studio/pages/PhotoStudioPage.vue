@@ -149,7 +149,7 @@ async function checkOriginal() {
     if (!alive || currentCreatorId() !== owner) return
     if (state.status === 'SUCCEEDED' && state.revisionId) {
       await openLyrics(state.revisionId, draft.id, draft.language)
-    } else if (state.status === 'PENDING' || state.status === 'UNKNOWN') {
+    } else if ((state.status === 'PENDING' || state.status === 'QUEUED') || state.status === 'UNKNOWN') {
       outcomeUnknown.value = state.status === 'UNKNOWN'
       needsCheck.value = !outcomeUnknown.value
       error.value = outcomeUnknown.value ? lyricTimeoutMessage : '歌词结果还在确认中，请稍后核对进度。'
