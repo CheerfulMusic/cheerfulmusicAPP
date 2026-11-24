@@ -1,52 +1,42 @@
 // Loaded before the creator and public listening pages so sharing starts in the user's click.
 (() => {
-  const desktopUrl = 'weixin://'
+  const clientUrl = 'weixin://'
 
   function mode(destination) {
-    const agent = navigator.userAgent || ''
-    if (/MicroMessenger/i.test(agent)) return ''
-    const mobile = /Android|iPhone|iPad|iPod|Mobile/i.test(agent) ||
-      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
-    if (!mobile && /Windows NT/i.test(agent) && destination === 'friend') return 'desktop'
-    return typeof navigator.share === 'function' ? 'system' : ''
-  }
-
-  function canShare(data) {
-    try { return typeof navigator.share === 'function' && (!navigator.canShare || navigator.canShare(data)) }
-    catch { return false }
+    if (/MicroMessenger/i.test(navigator.userAgent) || !['friend', 'timeline'].includes(destination)) return ''
+    return 'client'
   }
 
   function draft(data) {
     return [data.title, data.url].filter(Boolean).join('\n')
   }
 
-  async function copyDraft(data) {
+  async function copyDraft(data, destination) {
     try {
       await navigator.clipboard.writeText(draft(data))
-      return { clipboard: 'copied', message: '歌曲和链接已复制。打开好友聊天框，按 Ctrl+V 粘贴后发送。' }
+      const message = destination === 'timeline'
+        ? '歌曲和链接已复制。可粘贴到朋友圈，要分享歌曲卡片请在微信内打开歌曲并使用右上角菜单。'
+        : '歌曲和链接已复制。到微信选择好友，粘贴后发送。'
+      return { clipboard: 'copied', message }
     } catch {
-      return { clipboard: 'manual', message: '请按 Ctrl+C 复制待发送内容，再到微信好友聊天框按 Ctrl+V 粘贴。' }
+      return { clipboard: 'manual', message: '请手动复制下方歌曲和链接。' }
     }
   }
 
   async function open(destination, data) {
-    const channel = mode(destination)
-    if (!channel) return
-    if (canShare(data)) {
-      try {
-        await navigator.share(data)
-        return
-      } catch (error) {
-        if (error?.name === 'AbortError') return
-      }
-    } else if (channel === 'desktop') {
-      return copyDraft(data)
+    if (!mode(destination)) return
+    // Both operations need the original click. Waiting for the clipboard may lose user activation.
+    const copying = copyDraft(data, destination)
+    try {
+      window.location.assign(clientUrl)
+    } catch {
+      const result = await copying
+      return { ...result, message: result.clipboard === 'copied'
+        ? '浏览器未能打开微信。歌曲和链接已复制，可手动打开微信粘贴。'
+        : '浏览器未能打开微信。请复制下方内容，再手动打开微信。' }
     }
-    if (channel === 'desktop') {
-      return { message: '复制下方内容后，可在微信好友聊天框按 Ctrl+V 粘贴。' }
-    }
-    return { message: '系统分享暂不可用，可用微信扫描二维码。' }
+    return copying
   }
 
-  window.cheerfulWechat = { mode, canShare, draft, copyDraft, open, desktopUrl }
+  window.cheerfulWechat = { mode, draft, copyDraft, open, clientUrl }
 })()

@@ -21,12 +21,11 @@ export type WechatShareFeedback = { message: string; clipboard?: 'copied' | 'man
 declare global {
   interface Window {
     cheerfulWechat?: {
-      mode(destination: WechatDestination): '' | 'desktop' | 'system'
-      canShare(data: WechatSongData): boolean
+      mode(destination: WechatDestination): '' | 'client'
       draft(data: WechatSongData): string
-      copyDraft(data: WechatSongData): Promise<WechatShareFeedback>
+      copyDraft(data: WechatSongData, destination: WechatDestination): Promise<WechatShareFeedback>
       open(destination: WechatDestination, data: WechatSongData): Promise<WechatShareFeedback | undefined>
-      desktopUrl: string
+      clientUrl: string
     }
   }
 }

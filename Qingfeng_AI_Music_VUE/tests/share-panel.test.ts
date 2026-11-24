@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+import { readFileSync } from 'node:fs'
+import { runInNewContext } from 'node:vm'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createApp, h, nextTick, reactive, type App } from 'vue'
 import SharePanel from '../src/modules/works/components/SharePanel.vue'
@@ -74,7 +76,7 @@ describe('share panel state and poster lifecycle', () => {
     button('启用公开试听').click(); await flush()
     expect(mocks.create).toHaveBeenCalledExactlyOnceWith('work-a', 'audio-a', 'revision-import', undefined)
   })
-  it('offers friends, Moments and a poster first and copies only on an explicit secondary action', async () => {
+  it('offers QR codes for both destinations when the WeChat helper is unavailable', async () => {
     const writeText = vi.fn().mockResolvedValue(undefined)
     vi.stubGlobal('navigator', { clipboard: { writeText } })
     mocks.get.mockResolvedValue(active())
@@ -82,8 +84,8 @@ describe('share panel state and poster lifecycle', () => {
     expect(mocks.create).not.toHaveBeenCalled()
     expect(document.body.textContent).toContain('5 次访问')
     expect(document.querySelector('.share-card-copy h3')?.textContent).toBe('我的歌')
-    expect(channel('friend').textContent).toContain('发歌曲卡片')
-    expect(channel('timeline').textContent).toBe('朋友圈')
+    expect(channel('friend').textContent).toContain('微信好友用微信扫码')
+    expect(channel('timeline').textContent).toContain('朋友圈用微信扫码')
     expect(button('音乐海报')).toBeTruthy()
     expect(button('音乐海报').textContent).toContain('发大封面图片')
     expect(document.querySelector('.share-card-artist')?.textContent).toBe('公开艺名')
@@ -112,6 +114,45 @@ describe('share panel state and poster lifecycle', () => {
     expect(input.selectionEnd! - input.selectionStart!).toBe(input.value.length)
     expect(document.body.textContent).toContain('请选中链接手动复制。')
     expect(document.querySelector('.share-card-art img')?.getAttribute('src')).toContain('/songs/' + token + '/cover')
+  })
+  it.each(['friend', 'timeline'])('opens WeChat directly with the creator’s %s draft', async target => {
+    const share = vi.fn()
+    const assign = vi.fn()
+    let deny!: (error: Error) => void
+    const writeText = vi.fn(() => new Promise<void>((_, reject) => { deny = reject }))
+    vi.stubGlobal('navigator', { userAgent: 'Windows NT 10.0', share, canShare: () => true, clipboard: { writeText } })
+    const clientWindow = { location: { assign }, cheerfulWechat: undefined }
+    runInNewContext(readFileSync('public/brand/wechat-handoff.js', 'utf8'), {
+      navigator, window: clientWindow, location: clientWindow.location,
+    })
+    vi.stubGlobal('cheerfulWechat', clientWindow.cheerfulWechat)
+    const listeners = vi.spyOn(HTMLAnchorElement.prototype, 'addEventListener')
+    mocks.get.mockResolvedValue(active())
+    mount(); await flush()
+    const anchor = channel(target)
+    expect(anchor.textContent).toContain('打开微信')
+    const url = new URL('/song/' + token, location.origin).href
+    anchor.click()
+    expect(assign).not.toHaveBeenCalled()
+    expect(writeText).not.toHaveBeenCalled()
+
+    // jsdom dispatches synthetic clicks. Invoke the registered click handler with the browser's trusted-click flag.
+    const index = listeners.mock.calls.findIndex(([type], index) => type === 'click' && listeners.mock.contexts[index] === anchor)
+    const listener = listeners.mock.calls[index]?.[1] as EventListener
+    expect(listener).toBeTypeOf('function')
+    listener.call(anchor, { isTrusted: true, preventDefault: vi.fn(), timeStamp: Date.now() } as unknown as MouseEvent)
+    const title = target === 'friend' ? '我的歌 · 公开艺名' : '青风音乐 Cheerful Music｜我的歌'
+    expect(assign).toHaveBeenCalledExactlyOnceWith('weixin://')
+    expect(share).not.toHaveBeenCalled()
+    expect(writeText).toHaveBeenCalledExactlyOnceWith(title + '\n' + url)
+    deny(new Error('permission denied'))
+    await flush()
+    const input = document.querySelector<HTMLTextAreaElement>('#creator-share-draft')!
+    expect(document.activeElement).toBe(input)
+    expect(input.value).toBe(title + '\n' + url)
+    expect(input.selectionEnd - input.selectionStart).toBe(input.value.length)
+    expect(document.querySelector('.destination-guide a[href="weixin://"]')).not.toBeNull()
+    expect(assign).toHaveBeenCalledTimes(1)
   })
   it('navigates within WeChat to the signed public song with the selected destination', async () => {
     const writeText = vi.fn()

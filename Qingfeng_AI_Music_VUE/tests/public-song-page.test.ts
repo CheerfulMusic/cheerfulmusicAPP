@@ -31,7 +31,8 @@ function openSong(id: string, inWechat = false, agent = 'WebTest', canShare = tr
   }
   const wx = { ready: vi.fn(), error: vi.fn(), config: vi.fn(), updateAppMessageShareData: vi.fn(), updateTimelineShareData: vi.fn() }
   const assign = vi.fn()
-  const globals = { window: {}, document, navigator, location: Object.assign(location, { assign }), URL, fetch, wx, console: { warn: vi.fn() } }
+  const browserLocation = Object.assign(location, { assign })
+  const globals = { window: { location: browserLocation }, document, navigator, location: browserLocation, URL, fetch, wx, console: { warn: vi.fn() } }
   runInNewContext(handoff, globals)
   runInNewContext(script, globals)
   return { fields, api, navigator, location, assign, config, fetch, wx }
@@ -46,66 +47,72 @@ describe('public song listener page', () => {
     target.onclick!.call(target, { isTrusted: true } as PointerEvent)
   }
 
-  it('hands the selected song to the Windows picker on a real click and keeps the draft after cancellation', async () => {
-    const { fields, navigator, assign } = openSong('song-w', false, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)')
-    const title = fields.title + ' · ' + fields.creator
-    const draft = title + '\n' + fields.url
-    button('friend').click()
-    expect(navigator.share).not.toHaveBeenCalled()
-    navigator.share.mockRejectedValueOnce(new DOMException('dismissed', 'AbortError'))
-    clickDestination('friend')
-    expect(navigator.share).toHaveBeenCalledExactlyOnceWith({ title, url: fields.url, text: description })
-    await Promise.resolve()
-    expect(document.getElementById('desktop-draft')?.hidden).toBe(false)
-    expect((document.getElementById('handoff-link') as HTMLTextAreaElement).value).toBe(draft)
-    expect(navigator.clipboard.writeText).not.toHaveBeenCalled()
-    expect(document.getElementById('open-desktop-wechat')?.hidden).toBe(true)
-    button('copy-draft').click()
-    expect(navigator.clipboard.writeText).toHaveBeenCalledExactlyOnceWith(draft)
-    await vi.waitFor(() => expect(document.getElementById('open-desktop-wechat')?.hidden).toBe(false))
-    clickDestination('timeline')
-    expect(navigator.share).toHaveBeenLastCalledWith({ title: fields.timelineTitle, url: fields.url, text: description })
-    expect(document.getElementById('desktop-draft')?.hidden).toBe(true)
-    expect(assign).not.toHaveBeenCalled()
+  it.each([
+    'Windows NT 10.0',
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X)',
+    'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0)',
+    'Mozilla/5.0 (Linux; Android 14) Mobile',
+  ])('opens WeChat immediately for either destination even with a system picker available on %s', async agent => {
+    const { fields, navigator, assign } = openSong('song-direct', false, agent)
+    for (const target of ['friend', 'timeline']) {
+      assign.mockClear()
+      navigator.clipboard.writeText.mockClear()
+      let permit!: () => void
+      navigator.clipboard.writeText.mockImplementationOnce(() => new Promise<void>(resolve => { permit = resolve }))
+      button(target).click()
+      expect(assign).not.toHaveBeenCalled()
+      expect(navigator.clipboard.writeText).not.toHaveBeenCalled()
+
+      clickDestination(target)
+      const title = target === 'friend' ? fields.title + ' · ' + fields.creator : fields.timelineTitle
+      expect(assign).toHaveBeenCalledExactlyOnceWith('weixin://')
+      expect(navigator.clipboard.writeText).toHaveBeenCalledExactlyOnceWith(title + '\n' + fields.url)
+      expect(navigator.share).not.toHaveBeenCalled()
+      permit()
+      await Promise.resolve()
+      expect(assign).toHaveBeenCalledTimes(1)
+    }
   })
 
-  it('keeps a manual copy and launch available if the desktop browser denies clipboard access', async () => {
+  it.each(['friend', 'timeline'])('keeps a selectable %s draft and a retry if clipboard access is denied', async target => {
     const { fields, navigator, assign } = openSong('song-w2', false, 'Windows NT 10.0', false)
     navigator.clipboard.writeText.mockRejectedValueOnce(new Error('denied'))
-    clickDestination('friend')
-    const input = document.getElementById('handoff-link') as HTMLTextAreaElement
+    clickDestination(target)
+    expect(assign).toHaveBeenCalledExactlyOnceWith('weixin://')
+    const input = document.querySelector<HTMLTextAreaElement>('.destination-guide textarea')!
     await vi.waitFor(() => expect(document.activeElement).toBe(input))
-    expect(input.value).toBe(fields.title + ' · ' + fields.creator + '\n' + fields.url)
-    expect(input.selectionEnd).toBe(input.value.length)
-    expect(document.getElementById('handoff-status')?.textContent).toContain('Ctrl+C')
+    const title = target === 'friend' ? fields.title + ' · ' + fields.creator : fields.timelineTitle
+    expect(input.value).toBe(title + '\n' + fields.url)
+    expect(input.selectionEnd - input.selectionStart).toBe(input.value.length)
+    expect(input.closest('[hidden]')).toBeNull()
+    expect(document.querySelector<HTMLAnchorElement>('.destination-guide a[href="weixin://"]')?.closest('[hidden]')).toBeNull()
     expect(navigator.share).not.toHaveBeenCalled()
-    expect(document.getElementById('open-desktop-wechat')?.getAttribute('href')).toBe('weixin://')
-    expect(assign).not.toHaveBeenCalled()
   })
 
-  it('does not launch after a delayed clipboard permission when the listener has switched to Moments', async () => {
-    const { navigator, assign } = openSong('song-w3', false, 'Windows NT 10.0', false)
-    let permit!: () => void
-    navigator.clipboard.writeText.mockImplementationOnce(() => new Promise<void>(resolve => { permit = resolve }))
-    clickDestination('friend')
+  it('keeps the draft when the browser blocks opening the WeChat app', async () => {
+    const { fields, navigator, assign } = openSong('song-blocked')
+    assign.mockImplementationOnce(() => { throw new DOMException('blocked', 'SecurityError') })
     clickDestination('timeline')
-    permit()
-    await Promise.resolve()
-    expect(assign).not.toHaveBeenCalled()
-    expect(document.getElementById('open-desktop-wechat')?.hidden).toBe(true)
+    const draft = fields.timelineTitle + '\n' + fields.url
+    expect(navigator.clipboard.writeText).toHaveBeenCalledExactlyOnceWith(draft)
+    await vi.waitFor(() => expect(document.getElementById('handoff-status')?.textContent).toContain('浏览器未能打开微信'))
+    expect(document.querySelector<HTMLTextAreaElement>('.destination-guide textarea')?.value).toBe(draft)
+    expect(navigator.share).not.toHaveBeenCalled()
   })
 
-  it('hands the canonical URL to the mobile system picker, retaining QR access after cancellation', async () => {
-    const { fields, navigator, assign } = openSong('song-m', false, 'Mozilla/5.0 (Linux; Android 14) Mobile')
-    navigator.share.mockRejectedValueOnce(new DOMException('dismissed', 'AbortError'))
+  it('ignores stale clipboard feedback when the listener changes destinations', async () => {
+    const { fields, navigator, assign } = openSong('song-race', false, 'Windows NT 10.0')
+    let deny!: (reason: Error) => void
+    navigator.clipboard.writeText.mockImplementationOnce(() => new Promise<void>((_, reject) => { deny = reject }))
     clickDestination('friend')
-    expect(navigator.share).toHaveBeenCalledExactlyOnceWith({ title: fields.title + ' · ' + fields.creator, url: fields.url, text: description })
     clickDestination('timeline')
-    expect(navigator.share).toHaveBeenCalledTimes(2)
-    expect(navigator.share).toHaveBeenLastCalledWith({ title: fields.timelineTitle, url: fields.url, text: description })
-    expect(assign).not.toHaveBeenCalled()
-    expect(navigator.clipboard.writeText).not.toHaveBeenCalled()
-    expect(document.getElementById('wechat-guide')?.hidden).toBe(false)
+    const input = document.querySelector<HTMLTextAreaElement>('.destination-guide textarea')!
+    expect(input.value).toBe(fields.timelineTitle + '\n' + fields.url)
+    deny(new Error('old request'))
+    await new Promise(resolve => setTimeout(resolve, 0))
+    expect(document.activeElement).not.toBe(input)
+    expect(button('timeline').getAttribute('aria-pressed')).toBe('true')
+    expect(assign).toHaveBeenCalledTimes(2)
   })
 
   it('records a started listen once across preloading, seeking and resuming, then counts a replay after the end', () => {

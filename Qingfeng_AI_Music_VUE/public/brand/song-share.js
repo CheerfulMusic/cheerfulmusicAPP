@@ -12,16 +12,21 @@
   const launch = byId('open-desktop-wechat'), handoffStatus = byId('handoff-status'), handoffLink = byId('handoff-link')
   const desktopDraft = byId('desktop-draft'), copyDraft = byId('copy-draft'), format = byId('friend-format')
   const handoff = desktopDraft && typeof window.cheerfulWechat?.draft === 'function' ? window.cheerfulWechat : undefined
-  const desktopFriend = !wechat && handoff?.mode('friend') === 'desktop'
   const friendData = { title: friendTitle, url, text: meta('description') }
-  if (desktopFriend) {
-    format.textContent = handoff.canShare(friendData) ? '打开系统分享' : '复制后到微信粘贴'
-    handoffLink.value = handoff.draft(friendData)
+  const timelineData = { ...friendData, title: timelineTitle }
+  const clientMode = destination => !wechat && handoff?.mode(destination) === 'client'
+  const timelineHint = byId('timeline-menu-hint')
+  if (clientMode('friend')) {
+    format.textContent = '打开微信'
     handoffLink.onfocus = () => handoffLink.select()
   }
-  if (wechat && byId('timeline-menu-hint')) {
+  if (clientMode('timeline') && timelineHint) {
+    timelineHint.textContent = '打开微信'
+    timelineHint.hidden = false
+  }
+  if (wechat && timelineHint) {
     format.textContent = '右上角菜单发送'
-    byId('timeline-menu-hint').hidden = false
+    timelineHint.hidden = false
   }
   let selected = '', sdkState = 'loading', qrRequest = 0
   const artwork = document.getElementById('artwork') || document.querySelector('img')
@@ -58,12 +63,13 @@
   function showFeedback(result, request) {
     if (!result || request !== qrRequest || !byId('share-sheet').hasAttribute('open')) return
     handoffStatus.textContent = result.message
-    if (result.clipboard) launch.hidden = false
     if (result.clipboard === 'manual') { handoffLink.focus(); handoffLink.select() }
   }
-  if (desktopFriend) copyDraft.onclick = () => {
+  if (copyDraft) copyDraft.onclick = () => {
+    if (!clientMode(selected)) return
     const request = qrRequest
-    void handoff.copyDraft(friendData).then(result => showFeedback(result, request))
+    const data = selected === 'friend' ? friendData : timelineData
+    void handoff.copyDraft(data, selected).then(result => showFeedback(result, request))
   }
   async function choose(destination, userClicked) {
     resetDestination()
@@ -81,17 +87,14 @@
       sdkFeedback()
       return
     }
-    const showDraft = desktopFriend && destination === 'friend'
-    if (showDraft) {
+    if (clientMode(destination)) {
+      const data = destination === 'friend' ? friendData : timelineData
+      handoffLink.value = handoff.draft(data)
       desktopDraft.hidden = false
-      if (handoff.canShare(friendData)) handoffStatus.textContent = '在系统分享窗口选择微信。列表中没有微信时，可复制待发送内容。'
+      launch.hidden = false
+      if (userClicked) void handoff.open(destination, data).then(result => showFeedback(result, request))
     }
-    if (userClicked && handoff) {
-      const payload = destination === 'friend' ? friendData : { ...friendData, title: timelineTitle }
-      void handoff.open(destination, payload).then(result => showFeedback(result, request))
-    }
-    instruction.textContent = showDraft ? '也可用手机微信扫码发送歌曲卡片。' :
-      '用微信扫一扫打开歌曲，再点右上角「…」选择「' + menuItem + '」。'
+    instruction.textContent = '用微信扫一扫打开歌曲，再点右上角「…」选择「' + menuItem + '」即可分享歌曲卡片。'
     feedback.textContent = '正在生成二维码…'
     try {
       const renderer = await import('/brand/song-poster.js')
@@ -99,7 +102,7 @@
       if (request !== qrRequest) return
       qr.src = data
       qr.hidden = false
-      feedback.textContent = showDraft ? '' : '同一部手机上可截图，再从微信扫一扫的相册打开。'
+      feedback.textContent = '同一部手机上可截图，再从微信扫一扫的相册打开。'
     } catch {
       if (request === qrRequest) feedback.textContent = '二维码暂时无法生成，可重新点选分享方式。'
     }
