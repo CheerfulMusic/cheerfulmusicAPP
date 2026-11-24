@@ -103,6 +103,7 @@ export function validResponse(path:string,method:string,value:unknown):boolean{
  if(/^public\/discover\/songs\/[^/]+\/\d+$/.test(path))return method==='GET'&&obj(value)&&discoverSong(value.release)
    &&(value.durationSeconds===null||num(value.durationSeconds))&&str(value.lyrics)&&str(value.description)
    &&typeof value.signedIn==='boolean'&&typeof value.canEditDescription==='boolean'&&discoverLikes(value.likes)
+   &&(value.communityAvailable===undefined||typeof value.communityAvailable==='boolean')
    &&count(value.commentCount)&&discoverComments(value.comments)
  if(/^public\/discover\/songs\/[^/]+\/\d+\/comments$/.test(path))return method==='GET'&&discoverComments(value)
  if(/^app\/discover\/songs\/[^/]+\/\d+\/like$/.test(path))return method==='PUT'&&discoverLikes(value)

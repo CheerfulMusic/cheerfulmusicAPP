@@ -47,6 +47,7 @@ const numberFormat = computed(() => new Intl.NumberFormat(locale.value))
 const shareUrl = computed(() => detail.value ? new URL(discoverSongHref(detail.value.release.song),
   platform.kind === 'web' ? window.location.origin : siteOrigin).href : '')
 const busy = computed(() => Boolean(pending.value) || loadingMore.value)
+const communityAvailable = computed(() => detail.value?.communityAvailable !== false)
 
 async function load() {
   const request = ++epoch
@@ -109,7 +110,7 @@ function jumpToComments() {
 
 async function mutate(action: 'like' | 'comment' | 'delete' | 'description', operation: (value: DiscoverSongDetail) => Promise<void>) {
   const value = detail.value
-  if (!value || busy.value) return
+  if (!value || busy.value || !communityAvailable.value) return
   if (!value.signedIn) { showLoginDialog(); return }
   const request = epoch
   pending.value = action
@@ -226,8 +227,8 @@ function saveDescription() {
             </dl>
             <div class="song-detail-actions">
               <button type="button" class="song-detail-primary" :aria-pressed="playing" @click="play"><PlaybackIcon :playing="playing" />{{ t(playing ? '暂停' : '播放') }}</button>
-              <button type="button" class="song-detail-action song-detail-like" :aria-pressed="detail.likes.liked" :disabled="busy" @click="toggleLike"><NavIcon name="heart" />{{ t('点赞') }} <span>{{ numberFormat.format(detail.likes.count) }}</span></button>
-              <button type="button" class="song-detail-action" aria-controls="discover-song-comments" @click="jumpToComments"><NavIcon name="comment" />{{ t('评论') }} <span>{{ numberFormat.format(detail.commentCount) }}</span></button>
+              <button type="button" class="song-detail-action song-detail-like" :aria-pressed="detail.likes.liked" :disabled="busy || !communityAvailable" @click="toggleLike"><NavIcon name="heart" />{{ t('点赞') }} <span v-if="communityAvailable">{{ numberFormat.format(detail.likes.count) }}</span></button>
+              <button type="button" class="song-detail-action" aria-controls="discover-song-comments" @click="jumpToComments"><NavIcon name="comment" />{{ t('评论') }} <span v-if="communityAvailable">{{ numberFormat.format(detail.commentCount) }}</span></button>
               <ArtistShareButton :key="shareUrl" song :url="shareUrl" :name="track.title" />
             </div>
           </div>
@@ -241,7 +242,7 @@ function saveDescription() {
             <p v-else class="song-detail-muted">{{ t('暂无歌词') }}</p>
             <button v-if="lyricLines.length > 3" type="button" class="song-detail-text-action" :aria-expanded="expanded" aria-controls="discover-song-words" @click="expanded = !expanded">{{ t(expanded ? '收起歌词' : '展开歌词') }} <span aria-hidden="true">{{ expanded ? '⌃' : '⌄' }}</span></button>
           </section>
-          <section class="song-detail-about" aria-labelledby="discover-song-about">
+          <section v-if="communityAvailable" class="song-detail-about" aria-labelledby="discover-song-about">
             <div class="song-detail-section-heading">
               <h2 id="discover-song-about">{{ t('简介') }}</h2>
               <button v-if="detail.canEditDescription && !editingDescription" type="button" class="song-detail-text-action" @click="editDescription">{{ t('编辑简介') }}</button>
@@ -259,25 +260,28 @@ function saveDescription() {
         <section id="discover-song-comments" ref="commentSection" class="song-detail-comments" tabindex="-1" aria-labelledby="discover-song-comment-title">
           <div class="song-detail-section-heading">
             <h2 id="discover-song-comment-title">{{ t('评论') }}</h2>
-            <span class="song-detail-muted">{{ t('{count} 条评论', { count: numberFormat.format(detail.commentCount) }) }}</span>
+            <span v-if="communityAvailable" class="song-detail-muted">{{ t('{count} 条评论', { count: numberFormat.format(detail.commentCount) }) }}</span>
           </div>
-          <form class="song-detail-comment-form" @submit.prevent="submitComment">
-            <textarea v-model="commentText" rows="1" maxlength="400" :disabled="pending === 'comment'" :aria-label="t('写评论')" :placeholder="t('写下你的听后感…')" />
-            <button type="submit" class="song-detail-primary" :disabled="busy || !commentText.trim()">{{ t('发表') }}</button>
-          </form>
-          <p v-if="feedback && feedbackArea === 'comments'" class="song-detail-feedback" role="alert">{{ t(feedback) }}</p>
-          <p v-if="!detail.comments.items.length" class="song-detail-muted song-detail-comment-empty">{{ t('还没有评论。') }}</p>
-          <ul v-else class="song-detail-comment-list">
-            <li v-for="item in detail.comments.items" :key="item.id">
-              <span class="song-detail-comment-avatar" aria-hidden="true">{{ Array.from(item.author || t('听众'))[0] }}</span>
-              <div class="song-detail-comment-body">
-                <div class="song-detail-comment-byline"><strong>{{ item.author || t('听众') }}</strong><time :datetime="item.createdAt">{{ formatDate(item.createdAt) }}</time></div>
-                <p>{{ item.text }}</p>
-              </div>
-              <button v-if="item.removable" type="button" class="song-detail-text-action song-detail-delete" :disabled="busy" @click="deleteComment(item)">{{ t('删除') }}</button>
-            </li>
-          </ul>
-          <button v-if="detail.comments.nextCursor" type="button" class="song-detail-text-action" :disabled="busy" @click="loadMore">{{ t(loadingMore ? '加载中…' : '加载更多评论') }}</button>
+          <p v-if="!communityAvailable" class="song-detail-muted song-detail-comment-empty">{{ t('点赞和评论暂未开放。') }}</p>
+          <template v-else>
+            <form class="song-detail-comment-form" @submit.prevent="submitComment">
+              <textarea v-model="commentText" rows="1" maxlength="400" :disabled="pending === 'comment'" :aria-label="t('写评论')" :placeholder="t('写下你的听后感…')" />
+              <button type="submit" class="song-detail-primary" :disabled="busy || !commentText.trim()">{{ t('发表') }}</button>
+            </form>
+            <p v-if="feedback && feedbackArea === 'comments'" class="song-detail-feedback" role="alert">{{ t(feedback) }}</p>
+            <p v-if="!detail.comments.items.length" class="song-detail-muted song-detail-comment-empty">{{ t('还没有评论。') }}</p>
+            <ul v-else class="song-detail-comment-list">
+              <li v-for="item in detail.comments.items" :key="item.id">
+                <span class="song-detail-comment-avatar" aria-hidden="true">{{ Array.from(item.author || t('听众'))[0] }}</span>
+                <div class="song-detail-comment-body">
+                  <div class="song-detail-comment-byline"><strong>{{ item.author || t('听众') }}</strong><time :datetime="item.createdAt">{{ formatDate(item.createdAt) }}</time></div>
+                  <p>{{ item.text }}</p>
+                </div>
+                <button v-if="item.removable" type="button" class="song-detail-text-action song-detail-delete" :disabled="busy" @click="deleteComment(item)">{{ t('删除') }}</button>
+              </li>
+            </ul>
+            <button v-if="detail.comments.nextCursor" type="button" class="song-detail-text-action" :disabled="busy" @click="loadMore">{{ t(loadingMore ? '加载中…' : '加载更多评论') }}</button>
+          </template>
         </section>
       </article>
     </div>

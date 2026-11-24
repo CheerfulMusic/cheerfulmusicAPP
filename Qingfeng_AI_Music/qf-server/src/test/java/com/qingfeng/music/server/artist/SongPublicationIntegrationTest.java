@@ -22,9 +22,10 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.datasource.init.ResourceDatabasePopulator;
 import org.springframework.test.context.ActiveProfiles;
-import org.springframework.test.context.jdbc.Sql;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -128,7 +129,6 @@ class SongPublicationIntegrationTest {
     }
 
     @Test
-    @Sql("classpath:db/migration/V56__discover_song_community.sql")
     void discoverDetailSupportsPublicReadsAndVersionScopedAccountInteractions() throws Exception {
         var owner = generate(false);
         var listener = generate(false);
@@ -140,9 +140,20 @@ class SongPublicationIntegrationTest {
         String accountApi = "/api/app" + path;
         var http = HttpClient.newHttpClient();
 
+        var beforeMigration = interact(http, "GET", publicApi, null, true, null);
+        assertEquals(200, beforeMigration.statusCode(), beforeMigration.body());
+        assertTrue(beforeMigration.body().contains("Published song"));
+        assertTrue(beforeMigration.body().contains("Summer night"));
+        assertTrue(beforeMigration.body().contains("\"communityAvailable\":false"));
+        assertEquals(503, interact(http, "GET", publicApi + "/comments", null, true, null).statusCode());
+        assertEquals(503, interact(http, "PUT", accountApi + "/like", listener.session(), true, "{\"active\":true}").statusCode());
+
+        new ResourceDatabasePopulator(new ClassPathResource("db/migration/V56__discover_song_community.sql"))
+                .execute(java.util.Objects.requireNonNull(jdbc.getDataSource()));
         var detail = interact(http, "GET", publicApi, null, true, null);
         assertEquals(200, detail.statusCode(), detail.body());
         assertTrue(detail.body().contains("Summer night"));
+        assertTrue(detail.body().contains("\"communityAvailable\":true"));
         assertTrue(detail.body().contains("\"signedIn\":false"));
         assertFalse(detail.body().contains(owner.owner()));
 

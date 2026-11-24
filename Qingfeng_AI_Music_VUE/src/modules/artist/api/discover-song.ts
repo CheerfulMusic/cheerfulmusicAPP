@@ -11,6 +11,7 @@ export interface DiscoverSongDetail {
   lyrics: string
   description: string
   signedIn: boolean
+  communityAvailable?: boolean
   canEditDescription: boolean
   likes: DiscoverLikes
   commentCount: number

@@ -1322,6 +1322,7 @@ export const english: Record<string, string> = {
   '写评论': 'Write a comment',
   '写下你的听后感…': 'Share what you thought of the song…',
   '还没有评论。': 'No comments yet.',
+  '点赞和评论暂未开放。': 'Likes and comments are not available yet.',
   '加载更多评论': 'Load more comments',
   '这首歌已下架或不可用。': 'This song is no longer available.',
   '暂时无法加载这首歌，请重试。': 'Could not load this song. Try again.',

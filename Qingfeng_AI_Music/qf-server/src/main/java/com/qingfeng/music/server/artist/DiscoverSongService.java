@@ -11,6 +11,7 @@ import java.util.UUID;
 import org.springframework.context.annotation.Profile;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.HttpStatus;
+import org.springframework.jdbc.BadSqlGrammarException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
@@ -23,6 +24,7 @@ public class DiscoverSongService {
     private static final int PAGE_SIZE = 20;
     private final ArtistProfileService profiles;
     private final JdbcTemplate db;
+    private volatile boolean communityReady;
 
     public DiscoverSongService(ArtistProfileService profiles, JdbcTemplate db) {
         this.profiles = profiles;
@@ -36,7 +38,8 @@ public class DiscoverSongService {
     public record PostedComment(Comment comment, long count) {}
     public record Description(String text) {}
     public record Detail(ArtistProfileService.DiscoverSong release, Double durationSeconds, String lyrics, String description,
-                         boolean signedIn, boolean canEditDescription, Likes likes, long commentCount, Comments comments) {}
+                         boolean signedIn, boolean communityAvailable, boolean canEditDescription,
+                         Likes likes, long commentCount, Comments comments) {}
 
     private record CommentRow(String id, String creator, String text, Instant createdAt) {}
     private record Cursor(Instant createdAt, String id) {
@@ -56,16 +59,22 @@ public class DiscoverSongService {
     public Detail detail(String song, long version, String viewer) {
         var recording = profiles.discoverRecording(song, version);
         boolean signedIn = viewer != null && profiles.hasAccount(viewer);
+        String lyrics = profiles.discoverLyrics(recording);
+        if (!communityAvailable()) {
+            return new Detail(recording.release(), recording.durationSeconds(), lyrics, "", signedIn, false, false,
+                    new Likes(0, false), 0, new Comments(List.of(), null));
+        }
         String description = db.query("SELECT body FROM discover_song_description WHERE release_id=? AND release_version=?",
                 (rs, row) -> rs.getString(1), song, version).stream().findFirst().orElse("");
-        return new Detail(recording.release(), recording.durationSeconds(), profiles.discoverLyrics(recording), description,
-                signedIn, signedIn && recording.owner().equals(viewer), likes(song, version, viewer), commentCount(song, version),
+        return new Detail(recording.release(), recording.durationSeconds(), lyrics, description,
+                signedIn, true, signedIn && recording.owner().equals(viewer), likes(song, version, viewer), commentCount(song, version),
                 readComments(song, version, viewer, recording.owner(), null));
     }
 
     @Transactional(readOnly = true)
     public Comments comments(String song, long version, String viewer, String after) {
         var recording = profiles.discoverRecording(song, version);
+        requireCommunity();
         return readComments(song, version, viewer, recording.owner(), Cursor.parse(after));
     }
 
@@ -135,7 +144,28 @@ public class DiscoverSongService {
     private ArtistProfileService.DiscoverRecording lockRecording(String song, long version, String viewer) {
         if (viewer == null || !profiles.hasAccount(viewer)) throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
         db.queryForList("SELECT id FROM artist_song_release WHERE id=? FOR UPDATE", song);
-        return profiles.discoverRecording(song, version);
+        var recording = profiles.discoverRecording(song, version);
+        requireCommunity();
+        return recording;
+    }
+
+    private void requireCommunity() {
+        if (!communityAvailable()) throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE);
+    }
+
+    private boolean communityAvailable() {
+        if (communityReady) return true;
+        try {
+            db.queryForObject("""
+                    SELECT COUNT(*) FROM discover_song_description,discover_song_like,discover_song_comment WHERE 1=0
+                    """, Long.class);
+        } catch (BadSqlGrammarException failure) {
+            String state = failure.getSQLException().getSQLState();
+            if ("42S02".equals(state) || "42S04".equals(state)) return false;
+            throw failure;
+        }
+        communityReady = true;
+        return true;
     }
 
     private Likes likes(String song, long version, String viewer) {

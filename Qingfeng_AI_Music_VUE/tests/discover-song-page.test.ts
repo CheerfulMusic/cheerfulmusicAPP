@@ -43,6 +43,17 @@ beforeEach(() => { vi.resetAllMocks(); setLocale('zh-CN'); mocks.detail.mockReso
 afterEach(() => { wrapper?.unmount(); wrapper = undefined })
 
 describe('Discover song detail', () => {
+  it('shows the song and playback while community storage is unavailable', async () => {
+    mocks.detail.mockResolvedValue({ ...detail(), communityAvailable: false })
+    const view = await open()
+    expect(view.get('h1').text()).toBe(song.title)
+    expect(view.get('.song-detail-words').text()).toContain('第一行')
+    expect(view.get('.song-detail-primary').text()).toBe('播放')
+    expect(view.get('.song-detail-like').attributes('disabled')).toBeDefined()
+    expect(view.find('.song-detail-comment-form').exists()).toBe(false)
+    expect(view.get('#discover-song-comments').text()).toContain('点赞和评论暂未开放。')
+  })
+
   it('opens the comment section and keeps guest actions read-only until login', async () => {
     mocks.detail.mockResolvedValue(detail(false))
     const view = await open()
