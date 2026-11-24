@@ -1,4 +1,5 @@
 export const siteName = 'Cheerful Music'
+const creatorHeadline = 'Everyone Can Be a Creator'
 
 export const homeSeo = {
   'zh-CN': {
@@ -10,10 +11,10 @@ export const homeSeo = {
   },
   en: {
     path: '/en/',
-    heading: 'Everyone Can Be a Singer',
+    heading: creatorHeadline,
     inviteDescription: 'Turn your ideas into lyrics and create your own song with AI. Enter your invitation code to get started.',
-    title: 'Everyone Can Be a Singer | AI Music Maker – Cheerful Music',
-    searchTitle: 'Cheerful Music - Everyone Can Be a Singer',
+    title: `${creatorHeadline} | AI Music Maker – Cheerful Music`,
+    searchTitle: `Cheerful Music - ${creatorHeadline}`,
     description: 'Create your own songs with AI in just a few clicks. No music skills needed. Create, share and discover music with Cheerful Music.',
   },
 } as const

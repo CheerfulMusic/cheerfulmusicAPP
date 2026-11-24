@@ -1,9 +1,12 @@
 // @vitest-environment happy-dom
 import { flushPromises, mount } from '@vue/test-utils'
 import { createMemoryHistory, createRouter } from 'vue-router'
-import { expect, it } from 'vitest'
+import { expect, it, vi } from 'vitest'
+import HomeHero from '../src/modules/home/components/HomeHero.vue'
 import LanguageSwitcher from '../src/shared/i18n/LanguageSwitcher.vue'
 import { locale, setLocale, updatePageLocale } from '../src/shared/i18n'
+
+vi.mock('/brand/headline-own-song-regular.svg', () => ({ default: '/brand/headline-own-song-regular.svg' }))
 
 function createTestRouter() {
   const component = { template: '<main />' }
@@ -23,6 +26,7 @@ it('switches both ways on the root without changing the URL or tab title', async
   setLocale('zh-CN')
   await router.push('/?utm_source=search#how')
   const wrapper = mount(LanguageSwitcher, { global: { plugins: [router] } })
+  const hero = mount(HomeHero, { global: { stubs: { RouterLink: true } } })
   try {
     for (const language of ['en', 'zh-CN']) {
       const button = wrapper.get(`button[lang="${language}"]`)
@@ -32,8 +36,15 @@ it('switches both ways on the root without changing the URL or tab title', async
       expect(document.title).toBe('Cheerful Music')
       expect(document.querySelector('meta[property="og:site_name"]')?.getAttribute('content')).toBe('Cheerful Music')
       expect(button.attributes('aria-pressed')).toBe('true')
+      expect(hero.findAll('h1 > span').map(line => line.text())).toEqual(language === 'en'
+        ? ['Everyone Can Be a Creator']
+        : ['做自己的歌', 'Everyone Can Be a Creator'])
+      expect(hero.get('.p-reassurance').text()).toBe(language === 'en'
+        ? 'Start with an idea Choose your style Create your own music'
+        : '写下灵感 选择风格 创作出属于你的音乐')
     }
   } finally {
+    hero.unmount()
     wrapper.unmount()
   }
 })

@@ -118,6 +118,6 @@ export const websiteSchema = {
   '@context': 'https://schema.org',
   '@type': 'WebSite',
   name: siteName,
-  alternateName: ['青风音乐', 'CheerfulMusic', '人人是歌手'],
+  alternateName: ['青风音乐', 'CheerfulMusic'],
   url: siteOrigin + '/',
 }

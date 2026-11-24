@@ -34,7 +34,7 @@ it('automatically opens the homepage invite with the localized product name', as
   expect(host.querySelector('h1')?.textContent).toBe('青风音乐 AI 音乐创作平台')
   setLocale('en')
   await nextTick()
-  expect(host.querySelector('h1')?.textContent).toBe('Everyone Can Be a Singer')
+  expect(host.querySelector('h1')?.textContent).toBe('Everyone Can Be a Creator')
   expect(host.querySelector('.beta-access-brand')?.textContent).toBe('Cheerful Music')
  } finally { app.unmount(); host.remove(); setLocale(previous); vi.restoreAllMocks() }
 })

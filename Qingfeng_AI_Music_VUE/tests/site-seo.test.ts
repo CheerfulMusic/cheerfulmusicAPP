@@ -48,7 +48,7 @@ describe('crawlable site pages', () => {
     expect(parsePage('/').querySelector('h1')?.textContent).toBe('青风音乐 AI 音乐创作平台')
     expect(parsePage('/').querySelector('meta[property="og:title"]')?.getAttribute('content')).toBe('Cheerful Music 青风音乐 - 做自己的歌')
     expect(parsePage('/').querySelector('link[rel="icon"]')?.getAttribute('href')).toBe('/brand/logo-mark.svg')
-    expect(parsePage('/en/').title).toBe('Everyone Can Be a Singer | AI Music Maker – Cheerful Music')
+    expect(parsePage('/en/').title).toBe('Everyone Can Be a Creator | AI Music Maker – Cheerful Music')
     expect(sitePage('/zh-CN/')).toBeUndefined()
   })
 
