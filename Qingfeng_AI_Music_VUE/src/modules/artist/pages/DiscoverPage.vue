@@ -432,8 +432,8 @@ onBeforeUnmount(() => {
       </div>
     </header>
 
-    <div class="discover-width">
-      <div class="discover-page-heading"><h1>{{ discoverSeo[locale].heading }}</h1></div>
+    <div class="discover-width discover-body">
+      <h1 class="discover-page-heading">{{ discoverSeo[locale].heading }}</h1>
       <section class="discover-hero" :aria-label="t('广场推荐')" :aria-roledescription="t('轮播')"
         @mouseenter="heroHovered = true" @mouseleave="heroHovered = false" @focusin="heroFocused = true" @focusout="heroFocusOut">
         <div v-if="heroSlideCount > 1" class="discover-hero-preview discover-hero-preview-before">
