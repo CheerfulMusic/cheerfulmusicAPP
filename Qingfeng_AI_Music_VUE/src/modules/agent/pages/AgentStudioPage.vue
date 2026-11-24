@@ -19,15 +19,15 @@ import { usePlayer, type PlayableTrack } from '../../../shared/player/store'
 import { useCredits } from '../../../shared/credits/useCredits'
 import { accountState } from '../../../shared/identity/account-state'
 import { logtoState } from '../../../shared/identity/logto-state'
-import { useAgentConversation } from '../composables/useAgentConversation'
+import { useAgentConversation, type DeliveredTurn } from '../composables/useAgentConversation'
 import { creationTools, type CreationTool } from '../model/creation-tools'
-import { displayTurnText, messageText, type ConversationSnapshot } from '../model/conversation'
+import { displayTurnText, messageText } from '../model/conversation'
 import { analyzeAudioFile, cancelAnalysis, forgetAnalysis, MAX_REFERENCE_BYTES } from '../model/audio-analysis'
 import { BPM_CONFIDENCE_THRESHOLD } from '../model/audio-features'
 import { requestReferenceAnalysis } from '../api/reference'
 import { showLoginDialog } from '../../../shared/identity/login-dialog'
 import { loadWork } from '../../studio/api/works'
-import { assistantResult, uploadTarget, featureTarget, type AgentFeatureTarget, type AgentCommand } from '../model/assistant-result'
+import { assistantResult, latestAssistantTurn, uploadTarget, featureTarget, type AgentFeatureTarget, type AgentCommand } from '../model/assistant-result'
 import AgentResultCard from '../components/AgentResultCard.vue'
 import AgentProgressCard from '../components/AgentProgressCard.vue'
 import AgentMessageText from '../components/AgentMessageText.vue'
@@ -74,7 +74,7 @@ async function fetchStory() {
   finally { if (version === storyVersion) storyLoading.value = false }
 }
 const nativePanel = ref<{ kind: 'recharge' | 'account' | 'privacy' | 'photo' | 'upload_cover' | 'upload_audio'; workId?: string } | null>(null)
-const lastAssistantId = computed(() => [...messages.value].reverse().find(message => message.role === 'assistant' && !agentProgress(message))?.id)
+const lastAssistantId = computed(() => latestAssistantTurn(messages.value)?.id)
 const chatMessages = computed(() => {
   const rows=messages.value.map(message=>({...message,progress:agentProgress(message)}))
   const lastStep=new Map<string,number>()
@@ -204,13 +204,12 @@ async function download() {
   if(await downloadSong(downloadPath.value,url.href,`${songCard.value.title || 'song'}.mp3`)){downloadUnlocked.value=true;void refreshCredits()}
 }
 const lyricFollow=ref(true),lyricRefresh=ref(0)
-const handledPlayerResults=new Set<string>()
-async function handleResult(result?: ConversationSnapshot) {
+const handledActions = new Set<string>()
+async function handleResult(result?: DeliveredTurn) {
   if (!result) return
-  const resultKey=`${result.messages.at(-1)?.id}:${result.action}`
-  if (!handledPlayerResults.has(resultKey)) {
-    handledPlayerResults.add(resultKey)
-    if(handledPlayerResults.size>100)handledPlayerResults.delete(handledPlayerResults.values().next().value!)
+  if (result.action && !handledActions.has(result.requestKey)) {
+    handledActions.add(result.requestKey)
+    if (handledActions.size > 100) handledActions.delete(handledActions.values().next().value!)
     if(result.action==='pause_playback' && player.current && (player.playing||player.starting))void player.toggle(player.current)
     if(result.action==='next_track')player.next()
     if(result.action==='previous_track')player.next(-1)
@@ -218,12 +217,12 @@ async function handleResult(result?: ConversationSnapshot) {
     if(result.action==='enable_lyric_follow')lyricFollow.value=true
     if(result.action==='disable_lyric_follow')lyricFollow.value=false
     if(result.action==='sync_playback_lyrics')lyricRefresh.value++
+    if(result.action==='generate_avatar')avatarGeneration.start()
+    if(result.action==='play'&&!isPlaying.value)togglePlay()
+    if(result.action==='download')await download()
+    if(result.action==='login')showLoginDialog()
+    if(result.action==='recharge'||result.action==='account'||result.action==='privacy'||result.action==='photo')nativePanel.value={kind:result.action}
   }
-  if (result.action === 'generate_avatar') avatarGeneration.start()
-  if (result.action === 'play' && !isPlaying.value) togglePlay()
-  if (result.action === 'download') await download()
-  if (result.action === 'login') showLoginDialog()
-  if (result.action === 'recharge' || result.action === 'account' || result.action === 'privacy' || result.action === 'photo') nativePanel.value = { kind: result.action }
   void refreshCredits().catch(() => undefined)
   await scrollChat()
 }

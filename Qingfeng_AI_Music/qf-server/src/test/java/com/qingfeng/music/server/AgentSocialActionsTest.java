@@ -3,6 +3,7 @@ package com.qingfeng.music.server;
 import com.qingfeng.music.agent.api.SongCard;
 import com.qingfeng.music.common.exception.DomainException;
 import com.qingfeng.music.generation.api.GenerationApi;
+import com.qingfeng.music.generation.domain.GenerationStatus;
 import com.qingfeng.music.media.api.MediaApi;
 import com.qingfeng.music.server.agent.AgentWorkReactions;
 import com.qingfeng.music.server.agent.DefaultAgentSocialActions;
@@ -59,5 +60,18 @@ class AgentSocialActionsTest {
         assertEquals("unlike", actions.execute("owner", "c", "unlike", "取消点赞", "key2", ready()).action());
         verify(likes).setLiked("owner", "work-1", true);
         verify(likes).setLiked("owner", "work-1", false);
+    }
+
+    @Test void cancelOnlyTouchesTheTaskShownEvenWhenANewerTaskExists(){
+        var shown=new GenerationApi.Task("task-2","work-1","revision-2",0,"key-1","歌名","歌词","民谣","test",GenerationStatus.QUEUED,Instant.EPOCH);
+        var later=new GenerationApi.Task("task-3","work-1","revision-3",0,"key-2","歌名","另一版歌词","民谣","test",GenerationStatus.QUEUED,Instant.EPOCH.plusSeconds(10));
+        when(generation.list("owner","work-1")).thenReturn(java.util.List.of(shown,later));
+        when(generation.cancel("owner","work-1","task-2")).thenReturn(shown);
+        when(generation.cancel("owner","work-1","task-3")).thenReturn(later);
+        actions.execute("owner","c","cancel","取消当前任务","key",ready());
+        verify(generation).cancel("owner","work-1","task-2");
+        when(generation.list("owner","work-1")).thenReturn(java.util.List.of(later));
+        assertNull(actions.execute("owner","c","cancel","取消当前任务","other-key",ready()).action());
+        verify(generation,never()).cancel("owner","work-1","task-3");
     }
 }

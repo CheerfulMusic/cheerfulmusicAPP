@@ -34,7 +34,7 @@ import static org.junit.jupiter.api.Assertions.*;
         "spring.datasource.url=jdbc:h2:mem:agent_chat_flow;MODE=MySQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1",
         "qingfeng.agent.chat.enabled=true", "qingfeng.lyrics.enabled=true", "qingfeng.generation.enabled=true",
         "qingfeng.generation.scheduler-enabled=false", "qingfeng.cover.ai.scheduler-enabled=false",
-        "qingfeng.agent.admission.user-rpm=60", "qingfeng.agent.admission.user-daily-tokens=10000000"})
+        "qingfeng.agent.admission.global-rpm=600", "qingfeng.agent.admission.user-rpm=60", "qingfeng.agent.admission.user-daily-tokens=10000000"})
 @ActiveProfiles("test")
 @Import(AgentChatFlowIntegrationTest.Offline.class)
 class AgentChatFlowIntegrationTest {
@@ -86,6 +86,7 @@ class AgentChatFlowIntegrationTest {
     @Autowired com.qingfeng.music.settings.MusicSettings settings;
     @Autowired com.qingfeng.music.agent.api.AgentTurnStore turns;
     @Autowired WorkApi works;
+    @Autowired com.qingfeng.music.credits.CreditsLedger credits;
     @Autowired com.qingfeng.music.lyrics.api.LyricsApi lyrics;
     private final ObjectMapper json = new ObjectMapper();
     private record Browser(HttpClient http, String csrf, String creator, String conversation) {}
@@ -120,6 +121,117 @@ class AgentChatFlowIntegrationTest {
     private JsonNode state(Browser browser) throws Exception { return ok(request(browser.http(),"GET","/api/app/agent/conversations/"+browser.conversation()+"/state",null,null)); }
 
     @Autowired com.qingfeng.music.server.agent.AgentAdmission admission;
+
+    private HttpResponse<String> fromTab(Browser user,String text,String key,Object displayed) throws Exception {
+        return request(user.http(),"POST","/api/app/agent/conversations/"+user.conversation()+"/messages",
+            Map.of("text",text,"requestKey",key,"displayedContext",displayed),user.csrf());
+    }
+
+    private String lastMessageId(JsonNode snapshot){
+        var rows=snapshot.path("messages");
+        return rows.get(rows.size()-1).path("id").asText();
+    }
+
+    @Test void onlyTheDisplayedPromptCanBeConfirmedAndRejectingAnOldCardPreservesTheNewOne() throws Exception {
+        var user=browser();
+        var first=say(user,"[Verse]\n春日第一稿");
+        var second=say(user,"[Verse]\n冬日第二稿");
+        assertEquals("confirmation",lastText(second).path("kind").asText());
+        var wrong=fromTab(user,"确认执行",UUID.randomUUID().toString(),Map.of("promptId",lastMessageId(first)));
+        assertEquals(409,wrong.statusCode(),wrong.body());
+        assertEquals("AGENT_PROMPT_CONFLICT",json.readTree(wrong.body()).path("code").asText());
+        assertEquals(lastMessageId(second),lastMessageId(state(user)));
+        var visible=Map.of("promptId",lastMessageId(second));
+        assertEquals(409,fromTab(user,"确认删除",UUID.randomUUID().toString(),visible).statusCode());
+        assertTrue(works.list(user.creator(),0).isEmpty());
+        String key=UUID.randomUUID().toString();
+        var saved=ok(fromTab(user,"确认执行",key,visible));
+        assertEquals("[Verse]\n冬日第二稿",saved.path("songCard").path("lyrics").asText());
+        ok(fromTab(user,"确认执行",key,visible));
+        assertEquals(1,works.list(user.creator(),0).size());
+        assertEquals(0,db.queryForObject("SELECT COUNT(*) FROM agent_request_admission WHERE creator_id=? AND state IN ('RESERVED','RUNNING')",Integer.class,user.creator()));
+    }
+
+    @Test void aRequestNeverDeliveredBeforeResetCannotRepopulateTheClearedConversation() throws Exception {
+        var user=browser();
+        long epoch=state(user).path("historyEpoch").asLong();
+        ok(request(user.http(),"POST","/api/app/agent/conversations/"+user.conversation()+"/reset",Map.of(),user.csrf()));
+        var rejected=fromTab(user,"列出我的作品。",UUID.randomUUID().toString(),Map.of("historyEpoch",epoch));
+        assertEquals(409,rejected.statusCode());
+        assertEquals("AGENT_HISTORY_CONFLICT",json.readTree(rejected.body()).path("code").asText());
+        assertTrue(state(user).path("messages").isEmpty());
+        assertEquals(0,db.queryForObject("SELECT COUNT(*) FROM agent_request_admission WHERE creator_id=? AND state='RESERVED'",Integer.class,user.creator()));
+    }
+
+    @Test void stalePaidConfirmationReturnsTheCreditAndLeavesNoPurchasedTurnsOrWork() throws Exception {
+        var user=browser();
+        var older=say(user,"[Verse]\n春天");
+        String second=UUID.randomUUID().toString();
+        var newer=say(user,"[Verse]\n秋天",second);
+        db.update("UPDATE agent_request_admission SET reserved_tokens=10000000 WHERE creator_id=? AND request_key=?",user.creator(),second);
+        credits.credit(user.creator(),3,"audit-"+second);
+        long before=credits.balance(user.creator());
+        var body=Map.of("text","确认执行","requestKey",UUID.randomUUID().toString(),"paidConfirmed",true,"displayedContext",Map.of("promptId",lastMessageId(older)));
+        var path="/api/app/agent/conversations/"+user.conversation()+"/messages";
+        assertEquals("AGENT_PROMPT_CONFLICT",json.readTree(request(user.http(),"POST",path,body,user.csrf()).body()).path("code").asText());
+        assertEquals(before,credits.balance(user.creator()));
+        assertEquals(0,db.queryForObject("SELECT remaining_turns FROM agent_chat_allowance WHERE creator_id=?",Integer.class,user.creator()));
+        assertEquals(1,db.queryForObject("SELECT COUNT(*) FROM agent_request_admission WHERE creator_id=? AND paid_turn=1 AND state='ABANDONED' AND reserved_tokens=0",Integer.class,user.creator()));
+        assertEquals("AGENT_REQUEST_ABANDONED",json.readTree(request(user.http(),"POST",path,body,user.csrf()).body()).path("code").asText());
+        assertEquals(before,credits.balance(user.creator()));
+        assertTrue(works.list(user.creator(),0).isEmpty());
+        assertEquals(lastMessageId(newer),lastMessageId(state(user)));
+    }
+
+    @Test void typingANumberCanOnlySelectFromTheMenuTheUserSaw() throws Exception {
+        var user=browser();
+        var first=say(user,"方向定好了");
+        var second=say(user,"方向定好了");
+        var wrong=fromTab(user,"2",UUID.randomUUID().toString(),Map.of("promptId",lastMessageId(first)));
+        assertEquals(409,wrong.statusCode());
+        assertEquals("AGENT_PROMPT_CONFLICT",json.readTree(wrong.body()).path("code").asText());
+        assertEquals(lastMessageId(second),lastMessageId(state(user)));
+        assertTrue(works.list(user.creator(),0).isEmpty());
+        var result=ok(fromTab(user,"2",UUID.randomUUID().toString(),Map.of("promptId",lastMessageId(second))));
+        assertEquals("create_work",result.path("action").asText());
+        assertEquals(1,works.list(user.creator(),0).size());
+    }
+
+    @Test void aStaleTabCannotStartMusicOnNewerLyrics() throws Exception {
+        var user=browser();
+        var work=works.create(user.creator(),new WorkApi.Draft("","","","","","两版歌词"));
+        var a=lyrics.save(user.creator(),work.id(),0,"第一版","等风来");
+        var b=lyrics.save(user.creator(),work.id(),0,"第二版","看云走");
+        String open="打开作品 "+work.id()+" 的歌词版本 ";
+        var original=say(user,open+a.id()).path("songCard");
+        say(user,open+b.id());
+        var rejected=edit(user,"用当前歌词生成音乐",UUID.randomUUID().toString(),original);
+        assertEquals(0,db.queryForObject("SELECT COUNT(*) FROM generation_task WHERE work_id=?",Integer.class,work.id()));
+        assertEquals("AGENT_LYRIC_TARGET_CHANGED",lastText(rejected).path("errorCode").asText());
+        assertEquals(b.id(),rejected.path("songCard").path("revisionId").asText());
+    }
+
+    @Test void chineseSectionedLyricsAreOfferedForVerbatimSaveBeforeAnyMusicStarts() throws Exception {
+        var user=browser();String body="【主歌一】\n街灯亮起来\n[副歌]\n把回忆留给海";
+        var offered=say(user,"歌词如下：\n"+body);
+        assertEquals("confirmation",lastText(offered).path("kind").asText());
+        assertTrue(works.list(user.creator(),0).isEmpty());
+        var saved=say(user,"确认执行").path("songCard");
+        assertEquals(body,saved.path("lyrics").asText());
+        assertEquals(0,db.queryForObject("SELECT COUNT(*) FROM generation_task WHERE work_id=?",Integer.class,saved.path("songId").asText()));
+    }
+
+    @Test void startingLyricsFromTheStudioDoesNotRewriteAnAlreadyOpenedSong() throws Exception {
+        var user=browser();
+        var work=works.create(user.creator(),new WorkApi.Draft("","","","","","原作品"));
+        var old=lyrics.save(user.creator(),work.id(),0,"旧歌词","原来的词");
+        say(user,"打开作品 "+work.id()+" 的歌词版本 "+old.id());
+        var fresh=say(user,"帮我写一首歌词，主题是 欢快的歌曲").path("songCard");
+        assertNotEquals(work.id(),fresh.path("songId").asText());
+        assertFalse(fresh.path("revisionId").asText("").isBlank());
+        assertEquals(1,lyrics.list(user.creator(),work.id()).size());
+        assertTrue(fresh.path("taskId").isNull());
+    }
 
     @Test void lastLineUsesTheDisplayedWorksPreviousLyricsAfterRefreshAndRetry() throws Exception {
         var user=browser();
@@ -205,6 +317,10 @@ class AgentChatFlowIntegrationTest {
             db.update("UPDATE music_work SET updated_at=? WHERE id=?",String.format("2025-01-%02d",i),work.id());
         }
         works.create(user.creator(),new WorkApi.Draft("","","","","","另一个故事"));
+        var unfiltered=lastText(say(user,"列出我的作品。"));
+        assertEquals(20,unfiltered.path("items").size());
+        for(int i=0;i<20;i++)
+            assertEquals("打开作品 "+unfiltered.path("items").get(i).path("id").asText(),unfiltered.path("commands").get(i).path("text").asText());
         var first=lastText(say(user,"查询我的作品，关键词：毕业"));
         var commands=first.path("commands");
         var second=lastText(say(user,commands.get(commands.size()-1).path("text").asText()));
@@ -333,6 +449,14 @@ class AgentChatFlowIntegrationTest {
         db.update("UPDATE generation_task SET status='SUCCEEDED',asset_id=? WHERE id=?",asset,task);
         JsonNode ready=state(browser);
         assertEquals(asset,ready.path("songCard").path("assetId").asText());
+        var earlierAudio=Map.of("workId",work,"revisionId",ready.path("songCard").path("revisionId").asText(),
+            "media",Map.of("assetId",UUID.randomUUID().toString(),"taskId",task));
+        for(String command:List.of("播放当前作品","分享当前作品")){
+            var rejected=ok(fromTab(browser,command,UUID.randomUUID().toString(),earlierAudio));
+            assertEquals("AGENT_MEDIA_TARGET_CHANGED",lastText(rejected).path("errorCode").asText());
+            assertTrue(rejected.path("action").isNull());
+            assertTrue(rejected.path("shareUrl").isNull());
+        }
         assertEquals("/api/app/works/"+work+"/audio/"+asset,ready.path("songCard").path("audioUrl").asText());
         assertTrue(say(browser,"给当前作品点赞").path("liked").asBoolean());
         assertTrue(state(browser).path("liked").asBoolean());

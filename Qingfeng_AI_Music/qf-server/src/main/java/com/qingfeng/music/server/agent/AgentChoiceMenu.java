@@ -2,6 +2,7 @@ package com.qingfeng.music.server.agent;
 
 import com.qingfeng.music.agent.api.AgentApplicationActions.Command;
 import com.qingfeng.music.agent.api.AgentChatModel.Plan;
+import com.qingfeng.music.common.exception.DomainException;
 import com.qingfeng.music.conversation.api.AgentMessage;
 import tools.jackson.databind.ObjectMapper;
 import java.util.*;
@@ -34,6 +35,21 @@ final class AgentChoiceMenu {
     private record Menu(String brief,List<Choice> choices){}
     record Selection(String intent,Plan plan){}
     private static final Pattern ROW=Pattern.compile("(?m)^\\h*(\\d{1,2})[.、)）]\\h*([^\\r\\n]+)");
+    private static final Pattern NUMBER=Pattern.compile("^(?:选|选择|第)?([1-9][0-9]?)(?:项|个)?$");
+    static boolean numberedInput(String input){return input.startsWith("#choice:")||NUMBER.matcher(input).matches();}
+    static void validateDisplayedMenu(String input,List<AgentMessage> history,String displayedId){
+        String latestId=null,menuId=null;
+        for(int i=history.size()-1;i>=0;i--){
+            var row=history.get(i);
+            if(!AgentMessage.KIND_TEXT.equals(row.kind()))continue;
+            if(!"assistant".equals(row.role())||!AgentMessage.STATE_DONE.equals(row.state()))break;
+            var body=JSON.readTree(row.contentJson());
+            if("progress".equals(body.path("kind").asText()))continue;
+            latestId=row.id();menuId=body.path("menuId").asText(null);break;
+        }
+        if(!Objects.equals(latestId,displayedId)||input.startsWith("#choice:")&&(menuId==null||!input.startsWith("#choice:"+menuId+":")))
+            throw new DomainException("AGENT_PROMPT_CONFLICT","选项已更新，请核对最新菜单后再选择。");
+    }
     private static Menu legacy(String text){
         var rows=ROW.matcher(text);
         var choices=new ArrayList<Choice>();String brief="";
@@ -73,7 +89,7 @@ final class AgentChoiceMenu {
     }
     static Selection select(String input,List<AgentMessage> history,String locale){
         boolean button=input.startsWith("#choice:");
-        var number=Pattern.compile("^(?:选|选择|第)?([1-9][0-9]?)(?:项|个)?$").matcher(input);
+        var number=NUMBER.matcher(input);
         boolean numeric=number.matches();
         boolean direct=Choice.byLabel(input)==Choice.LYRICS;
         if(!button&&!numeric&&!direct)return null;

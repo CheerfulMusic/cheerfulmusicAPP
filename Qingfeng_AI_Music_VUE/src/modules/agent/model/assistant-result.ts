@@ -8,6 +8,20 @@ const object = (v: unknown): v is Record<string, unknown> => !!v && typeof v ===
 const kinds: AgentCommandKind[] = ['send', 'login', 'recharge', 'account', 'privacy', 'photo', 'upload', 'upload_cover', 'upload_audio', 'feature']
 const uuid = /^[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12}$/i
 
+export function latestAssistantTurn(messages: Message[]): { id: string; kind: string } | undefined {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const message = messages[i]!
+    if (message.kind !== 'TEXT') continue
+    if (message.role === 'user' || message.state !== 'DONE') return
+    try {
+      const body: unknown = JSON.parse(message.contentJson || '{}')
+      if (object(body) && body.kind === 'progress') continue
+      if (object(body)) return { id: message.id, kind: typeof body.kind === 'string' ? body.kind : 'text' }
+    } catch { /* An unreadable card cannot identify a pending decision. */ }
+    return
+  }
+}
+
 export function displayedWorkList(messages: Message[]): DisplayedContext['workList'] {
   for (let i = messages.length - 1; i >= 0; i--) {
     const message = messages[i]!

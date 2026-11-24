@@ -21,9 +21,18 @@ class AgentFeatureActionsTest {
  WorkApi works=mock(WorkApi.class);LyricsApi lyrics=mock(LyricsApi.class);ConversationService conversations=mock(ConversationService.class);
  ArtistProfileService profiles=mock(ArtistProfileService.class);SharedDownloadGrants downloads=mock(SharedDownloadGrants.class);
  @SuppressWarnings("unchecked") ObjectProvider<QuickCreationService> quick=mock(ObjectProvider.class);
- AgentFeatureActions actions=new AgentFeatureActions(works,lyrics,conversations,profiles,quick,mock(LyricSelectionRewriteService.class),mock(LyricLineRewriteService.class),mock(LyricsCompositionService.class),mock(MusicSettings.class),downloads,mock(CreditsPricing.class));
+  CreditsPricing pricing=mock(CreditsPricing.class);
+  AgentFeatureActions actions=new AgentFeatureActions(works,lyrics,conversations,profiles,quick,mock(LyricSelectionRewriteService.class),mock(LyricLineRewriteService.class),mock(LyricsCompositionService.class),mock(MusicSettings.class),downloads,pricing);
  WorkApi.Work work(long version){return new WorkApi.Work("w","","","故事","","民谣","歌曲",version,Instant.now(),Instant.now(),"AUTO");}
  ArtistProfileService.ReleaseSelection selection(long version){return new ArtistProfileService.ReleaseSelection(true,true,"public","艺名",new ArtistProfileService.Release("r",version,"歌曲","w","asset",null,false),false,false);}
+ @Test void quickCreationConfirmationShowsBothConfiguredPricesAndTheOwnedSongTitle(){
+  when(works.get("owner","w")).thenReturn(work(3));
+  when(pricing.cost(CreditsPricing.Kind.LYRICS)).thenReturn(2L);
+  when(pricing.cost(CreditsPricing.Kind.MUSIC)).thenReturn(9L);
+  String summary=actions.prepare("owner","c","start_quick_creation",Map.of("workId","w"),null).get("confirmationSummary").toString();
+  assertTrue(summary.contains("《歌曲》")&&summary.contains("歌词 2 积分")&&summary.contains("音乐 9 积分"));
+  verifyNoInteractions(quick);
+ }
  @Test void everyAddedToolHasNativeSchemaAndFinancialReviewRemainsUserOperated(){
   for(var cap:actions.capabilities())assertTrue(AgentToolSchemaCatalog.supports(cap.id()),cap.id());
   assertTrue(AgentToolSchemaCatalog.supports("generate_avatar"));

@@ -256,7 +256,7 @@ public final class AgentLibraryActions implements AgentApplicationActions {
             return new Item(w.work().id(),w.title(),w.status()+" · 作品版本 "+w.work().version(),data);
         }).toList();
         var commands=new ArrayList<Command>();
-        found.stream().limit(query.isBlank()?10:20).forEach(w->commands.add(send("打开「"+w.title()+"」",AgentLibraryCommand.open(w.work().id(),w.evidence()==null?null:w.evidence().revisionId()))));
+        found.forEach(w->commands.add(send("打开「"+w.title()+"」",AgentLibraryCommand.open(w.work().id(),w.evidence()==null?null:w.evidence().revisionId()))));
         if(found.size()==20&&page<10000) commands.add(send("下一页",AgentLibraryCommand.page(page+1,query)));
         return new Result(clarification!=null?clarification:found.isEmpty()?"没有找到符合条件的作品。":"这是你的作品。可以告诉我打开第几首，或按关键词查询。"+(query.isBlank()?"":"（匹配标题、故事和歌词文字，非语义搜索）"),"works",items,commands,clarification==null?"list_works":null);
     }

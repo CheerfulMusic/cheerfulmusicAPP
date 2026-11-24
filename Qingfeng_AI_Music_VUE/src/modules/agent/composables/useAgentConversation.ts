@@ -2,14 +2,15 @@ import { computed, onScopeDispose, ref } from 'vue'
 import { getConversationState, getConversationHistory, getCurrentConversation, resetConversation, sendMessage } from '../api/chat'
 import { observeConversation } from '../api/events'
 import { ApiError } from '../../../shared/http/api-client'
-import { displayedWorkList } from '../model/assistant-result'
+import { latestAssistantTurn, displayedWorkList } from '../model/assistant-result'
 import { isAgentContinuation, type AgentContinuation, type ConversationSnapshot, type DisplayedContext, type Message, type SongCard } from '../model/conversation'
 
 interface PendingTurn { text: string; requestKey: string; locale: string; displayedContext?: DisplayedContext; rejected?: boolean; historyEpoch?: number }
+export type DeliveredTurn = ConversationSnapshot & { requestKey: string }
 const recoveryKey = (id: string) => `qingfeng.agent.pending.${id}`
 
 /** Only unacknowledged requests are kept locally, so retry reuses the original idempotency key. */
-export function useAgentConversation(onContinuation?: (snapshot: ConversationSnapshot) => void) {
+export function useAgentConversation(onContinuation?: (snapshot: DeliveredTurn) => void) {
   const conversationId = ref(''), messages = ref<Message[]>([]), songCard = ref<SongCard | null>(null)
   const taskId = ref<string | null>(null), shareUrl = ref<string | null>(null), liked = ref(false)
   const loading = ref(false), sending = ref(false), error = ref(''), refreshError = ref('')
@@ -36,6 +37,7 @@ export function useAgentConversation(onContinuation?: (snapshot: ConversationSna
       if (value && typeof value.text === 'string' && typeof value.requestKey === 'string' && typeof value.locale === 'string') {
         // Old manual requests lack a displayed version. A retry must not adopt the current tab's new selection.
         if (!value.displayedContext && !isAgentContinuation(value)) value.displayedContext = { workId: null, revisionId: null }
+        if (value.displayedContext && value.historyEpoch !== undefined) value.displayedContext.historyEpoch ??= value.historyEpoch
         pending.value = value
       }
     } catch { /* Ignore a corrupt local hint; authoritative history still loads. */ }
@@ -166,7 +168,7 @@ export function useAgentConversation(onContinuation?: (snapshot: ConversationSna
       if (!disposed && version === refreshVersion) { loading.value = false; schedulePoll() }
     }
   }
-  async function deliver(): Promise<ConversationSnapshot | undefined> {
+  async function deliver(): Promise<DeliveredTurn | undefined> {
     if (!pending.value || sending.value || !conversationId.value) return
     sending.value = true; error.value = ''; const version = ++refreshVersion; clearTimeout(timer)
     const turn = pending.value
@@ -177,18 +179,20 @@ export function useAgentConversation(onContinuation?: (snapshot: ConversationSna
       if (disposed || version !== refreshVersion) return
       stopObservation()
       apply(snapshot); pending.value = null; remember(); refreshError.value = ''
-      return snapshot
+      return { ...snapshot, requestKey: turn.requestKey }
     } catch (cause) {
       if (!disposed && version === refreshVersion) {
         error.value = cause instanceof Error ? cause.message : '发送未确认，请重试原请求。'
-        if (cause instanceof ApiError && cause.code === 'REQUEST_KEY_CONFLICT') {
+        if (cause instanceof ApiError && ['REQUEST_KEY_CONFLICT', 'AGENT_PROMPT_CONFLICT', 'AGENT_HISTORY_CONFLICT', 'AGENT_REQUEST_ABANDONED', 'AGENT_PLAN_STALE'].includes(cause.code ?? '')) {
           pending.value = null
           remember()
           await poll()
           return
         }
-        // A rejected HTTP 400 has not begun a turn; transport errors must keep the original key.
-        if (cause instanceof ApiError && cause.status === 400 && pending.value) { pending.value.rejected = true; remember() }
+        // A definitive rejection can be edited. Ambiguous delivery must retain its original key.
+        if (cause instanceof ApiError && (cause.status === 400 || ['AGENT_BUSY', 'AGENT_RATE_LIMITED', 'AGENT_TOKEN_BUDGET_EXCEEDED'].includes(cause.code ?? '')) && pending.value) {
+          pending.value.rejected = true; remember()
+        }
       }
     } finally { if (!disposed && version === refreshVersion) { stopObservation(); sending.value = false; schedulePoll() } }
   }
@@ -222,12 +226,18 @@ export function useAgentConversation(onContinuation?: (snapshot: ConversationSna
     loading.value = false; sending.value = false
     await refresh()
   }
-  async function send(text: string, locale: string, onQueued?: () => void): Promise<ConversationSnapshot | undefined> {
+  async function send(text: string, locale: string, onQueued?: () => void): Promise<DeliveredTurn | undefined> {
     if (!text.trim() || sending.value || loading.value || pending.value) return
     const displayedContext: DisplayedContext = { workId: songCard.value?.songId ?? null, revisionId: songCard.value?.revisionId ?? null }
+    const card = songCard.value
+    if (card) displayedContext.media = { assetId: card.assetId ?? null, taskId: card.taskId ?? null }
+    const lastTurn = latestAssistantTurn(messages.value)
+    const numbered = /^(?:选|选择|第)?[1-9][0-9]?(?:项|个)?$|^#choice:/.test(text.trim())
+    if (lastTurn && (numbered || ['confirmation', 'waiting'].includes(lastTurn.kind))) displayedContext.promptId = lastTurn.id
     const list = displayedWorkList(messages.value)
     if (list) displayedContext.workList = list
     if (!conversationId.value) { await refresh(); if (!conversationId.value || error.value || pending.value) return }
+    if (historyEpoch !== undefined) displayedContext.historyEpoch = historyEpoch
     pending.value = { text: text.trim(), locale, requestKey: crypto.randomUUID(), historyEpoch, displayedContext }
     remember()
     onQueued?.()

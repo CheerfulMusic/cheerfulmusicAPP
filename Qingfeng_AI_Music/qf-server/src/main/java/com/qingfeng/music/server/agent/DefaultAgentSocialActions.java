@@ -11,7 +11,6 @@ import com.qingfeng.music.work.api.WorkApi;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
-import java.util.Comparator;
 import java.util.Set;
 
 /** Conversation actions delegate to the same ownership/version checks as the existing work page. */
@@ -64,9 +63,9 @@ public class DefaultAgentSocialActions implements AgentSocialActions {
                 yield new Result("play".equals(action) ? "为你播放当前作品。" : "当前作品的音频已准备好，可以下载。", action, null, current);
             }
             case "cancel" -> {
-                var task = generation.list(creatorId, current.songId()).stream()
-                        .filter(item -> !TERMINAL.contains(item.status()))
-                        .max(Comparator.comparing(GenerationApi.Task::createdAt)).orElse(null);
+                var task = current.taskId()==null?null:generation.list(creatorId, current.songId()).stream()
+                        .filter(item -> current.taskId().equals(item.id())&&!TERMINAL.contains(item.status()))
+                        .findFirst().orElse(null);
                 if (task == null) yield new Result("当前没有正在生成的任务。", null, null, current);
                 var cancelled = generation.cancel(creatorId, current.songId(), task.id());
                 yield new Result(cancelled.status() == GenerationStatus.CANCELLED ? "已取消当前生成任务。" : "取消请求已处理，任务当前状态：" + cancelled.status(), "cancel", null, current);

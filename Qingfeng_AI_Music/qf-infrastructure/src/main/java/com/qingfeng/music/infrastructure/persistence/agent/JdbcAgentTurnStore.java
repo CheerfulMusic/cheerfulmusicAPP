@@ -23,7 +23,7 @@ public final class JdbcAgentTurnStore implements AgentTurnStore {
         var ids=jdbc.queryForList("SELECT id FROM agent_conversation WHERE id=? AND creator_id=? FOR UPDATE",String.class,conversation,owner);
         if(ids.isEmpty())throw new DomainException("AGENT_CONVERSATION_NOT_FOUND","会话不存在或不属于当前用户。");
     }
-    @Override public Claim claim(String owner,String conversation,String key,String text) {
+    @Override public Claim claim(String owner,String conversation,String key,String text,Runnable beforeInsert) {
         return tx.execute(status -> {
             lock(owner,conversation);
             var prior=jdbc.queryForList("SELECT state,role,content_json FROM agent_message WHERE id=? AND conversation_id=?",id(conversation,key),conversation);
@@ -37,10 +37,11 @@ public final class JdbcAgentTurnStore implements AgentTurnStore {
             }
             Integer active=jdbc.queryForObject("SELECT COUNT(*) FROM agent_message WHERE conversation_id=? AND role='user' AND state='RUNNING'",Integer.class,conversation);
             if(active!=null&&active>0)throw new DomainException("AGENT_TURN_IN_PROGRESS","上一条消息仍在处理，请稍后查看结果。");
+            beforeInsert.run();
             Long seq=jdbc.queryForObject("SELECT COALESCE(MAX(seq),0)+1 FROM agent_message WHERE conversation_id=?",Long.class,conversation);
             jdbc.update("INSERT INTO agent_message(id,conversation_id,seq,role,kind,state,content_json,created_at) VALUES(?,?,?,'user','TEXT','RUNNING',?,?)",
                     id(conversation,key),conversation,seq,json.writeValueAsString(Map.of("text",text,"requestKey",key)),Timestamp.from(Instant.now()));
-            return new Claim(true,null);
+            return new Claim(true,null,seq);
         });
     }
     @Override public void complete(String owner,String conversation,String key,String result) {

@@ -9,7 +9,22 @@ public final class AgentChatPolicy {
     private static boolean has(String text, String pattern) {
         return Pattern.compile(pattern, Pattern.CASE_INSENSITIVE).matcher(text == null ? "" : text).find();
     }
+    /** A single new-lyrics instruction emitted by the studio. Compound requests still go to the planner. */
+    private static final Pattern NEW_LYRICS=Pattern.compile("(?i)(?:(?:请|帮我|请帮我)?(?:写|创作)一首(?:关于[^，,。；;！？!?\\n]{1,160}的)?歌词(?:[，,]\\s*主题是\\s*[^，,。；;！？!?\\n]{1,160})?|(?:please )?write lyrics about [^,.;!?\\n]{1,160})[。.!！]?");
+    public static boolean newLyricsRequested(String text) {
+        return text!=null&&NEW_LYRICS.matcher(text.strip()).matches()&&!has(text,"然后|并且|并生成|再生成|同时|接着|顺便|(?:and|then)\\s+(?:generate|make|create|share|publish)");
+    }
+    public static boolean newLyricBrief(String text){
+        return newLyricsRequested(text)&&has(text,"关于|主题是|lyrics about ");
+    }
+    public static boolean usesCurrentLyrics(String text){
+        return has(surface(text),"(?:用|按|基于|根据|沿用|使用)(?:我)?(?:当前|现有|这一?版|这首(?:歌)?)(?:的)?歌词|(?:using|with|from) (?:the |my )?(?:current|selected|existing) lyrics");
+    }
+    public static boolean currentWorkReference(String text){
+        return has(surface(text),"当前(?:作品|歌曲|歌词|音频)|这(?:首(?:作品|歌)|版歌词)|\\b(?:this|the current|the selected) (?:work|song|lyrics|track)\\b");
+    }
     public static boolean lyricsOnly(String text) {
+        if(newLyricsRequested(text))return true;
         String surface=surface(text);
         if(has(surface,"(?:只|仅)(?:要|帮我|给我)?(?:写|生成|创作|改|改写)?(?:一(?:首|段|版)|这首|这段)?歌词|lyrics only|only (?:write|generate).*lyrics"))return true;
         return has(surface,"先(?:帮我|给我)?(?:写|生成|创作|改|改写)?(?:一(?:首|段|版)|这首|这段)?歌词")
@@ -20,6 +35,7 @@ public final class AgentChatPolicy {
         return has(text, "(?:不要|别|禁止|不想|不需要|先不|暂不|不用)[^，。；,;]{0,10}(?:生成|写歌|写一首|创作|音乐|歌曲|歌词|改词|修改|改写|重写|风格|分享|公开|发布|点赞|下载|延长)|(?:don.t|do not|never)[^,;.]{0,18}(?:generat|creat|writ|edit|chang|shar|publish|like|extend)");
     }
     public static boolean chatOnly(String text) {
+        if(newLyricBrief(text))return false;
         text=AgentLyricInput.parse(text).instruction();
         if(has(text,"只想聊|只是聊|先聊|今天只想|什么是|你是什么|你是谁|你能.*做什么|如何|怎么|how (?:do|can)|what (?:is|are)|who are you"))return true;
         // Polite requests to act for the user may enter the concrete confirmation flow.
@@ -36,6 +52,7 @@ public final class AgentChatPolicy {
         return !lyricsOnly(text)&&requested(text,"(?:"+MUSIC+")(?!词)");
     }
     public static boolean lyricsRequested(String text) {
+        if(newLyricsRequested(text))return true;
         return requested(text,"(?:写|创作|生成|编|改|修改|改写|重写|优化|润色|续写).{0,12}(?:歌词|词|段|一句)|(?:写|创作)(?:一|这)?首歌|(?:主歌|副歌).{0,10}(?:改|短|长|温柔|力量)|(?:write|rewrite|change|edit|generate).{0,15}(?:lyrics|chorus|verse)|write.{0,10}song");
     }
     public static boolean settingsRequested(String text) {

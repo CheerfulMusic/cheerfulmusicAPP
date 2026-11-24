@@ -399,6 +399,17 @@ describe('真实 Agent 对话与作品', () => {
     await wrapper.findAll('.agent-preview-actions button')[0]!.trigger('click'); await flushPromises()
     expect(downloadApi.download).toHaveBeenCalledWith('app/works/work-real/audio/asset-real/download', expect.stringContaining('/work-real/audio/asset-real?download=true'), expect.any(String))
   })
+  it('uses the request receipt for playback even when two replies have the same history tail', async () => {
+    const { wrapper, player } = await page()
+    const next = vi.spyOn(player, 'next').mockResolvedValue()
+    api.send.mockResolvedValue(state({ action: 'next_track' }))
+    for (let i = 0; i < 2; i++) {
+      await wrapper.get('textarea').setValue('播放下一首')
+      await wrapper.get('form').trigger('submit'); await flushPromises()
+    }
+    expect(next).toHaveBeenCalledTimes(2)
+    expect(api.send.mock.calls[1]?.[2]).not.toBe(api.send.mock.calls[0]?.[2])
+  })
 })
 
 describe('会话恢复与任务生命周期', () => {

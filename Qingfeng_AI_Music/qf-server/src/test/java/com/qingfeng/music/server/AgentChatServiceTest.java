@@ -26,6 +26,7 @@ class AgentChatServiceTest {
     AgentChatService service;
     @BeforeEach void setup(){
         when(conversations.listRecentMessages(eq("owner"),eq("conversation"),anyInt())).thenAnswer(call->List.copyOf(messages));
+        when(conversations.listMessagesBefore(eq("owner"),eq("conversation"),anyLong(),anyInt())).thenAnswer(call->messages.stream().filter(m->m.seq()<call.<Long>getArgument(2)).toList());
         when(conversations.listRecentActionMessages(eq("owner"),eq("conversation"),anyInt())).thenAnswer(call->List.copyOf(messages));
         when(conversations.historyPage(eq("owner"),eq("conversation"),isNull(),anyInt())).thenAnswer(call->new ConversationService.MessagePage(List.copyOf(messages),false,messages.isEmpty()?0:1,messages.size(),0));
         when(conversations.appendMessage(anyString(),anyString(),anyString(),anyString(),anyString(),anyString(),nullable(String.class))).thenAnswer(call->{
@@ -36,7 +37,7 @@ class AgentChatServiceTest {
         when(tools.dispatch(eq(AgentTool.GENERATE_SONG),any(),eq("owner"),anyString())).thenReturn(ToolResult.ok("g",song));
         when(tools.dispatch(eq(AgentTool.GENERATE_LYRICS),any(),eq("owner"),anyString())).thenReturn(ToolResult.ok("l",song));
         AgentTurnStore store=new AgentTurnStore(){
-            public Claim claim(String owner,String conversation,String key,String text){return new Claim(!results.containsKey(key),results.get(key));}
+            public Claim claim(String owner,String conversation,String key,String text,Runnable beforeInsert){if(!results.containsKey(key))beforeInsert.run();return new Claim(!results.containsKey(key),results.get(key),messages.size()+1);}
             public void complete(String owner,String conversation,String key,String result){results.put(key,result);}
         };
         service=new AgentChatService(conversations,tools,model,store,social);
@@ -48,7 +49,7 @@ class AgentChatServiceTest {
         when(app.supports(anyString())).thenAnswer(c->Arrays.asList(names).contains(c.getArgument(0)));
         when(app.prepare(anyString(),anyString(),anyString(),anyMap(),any())).thenAnswer(c->c.getArgument(3));
         when(app.execute(anyString(),anyString(),anyString(),anyMap(),anyString(),anyString(),any())).thenAnswer(c->new AgentApplicationActions.Result("真实工具结果","result",List.of(),List.of(),c.getArgument(2)));
-        AgentTurnStore store=new AgentTurnStore(){public Claim claim(String o,String c,String k,String t){return new Claim(!results.containsKey(k),results.get(k));}public void complete(String o,String c,String k,String r){results.put(k,r);}};
+        AgentTurnStore store=new AgentTurnStore(){public Claim claim(String o,String c,String k,String t,Runnable beforeInsert){if(!results.containsKey(k))beforeInsert.run();return new Claim(!results.containsKey(k),results.get(k),messages.size()+1);}public void complete(String o,String c,String k,String r){results.put(k,r);}};
         service=new AgentChatService(conversations,tools,model,store,social,List.of(app));return app;
     }
     @Test void numberedCreativeMenuKeepsBriefAndRunsSelectedToolOnce() {
@@ -162,6 +163,36 @@ class AgentChatServiceTest {
         var app=app("select_work");when(model.respond(any())).thenReturn(new AgentChatModel.Plan("chat",Map.of(),"已打开作品"));
         String id=UUID.randomUUID().toString();service.send("owner","conversation","打开作品 "+id,key(),"zh-CN");
         verify(app).execute(eq("owner"),eq("conversation"),eq("select_work"),eq(Map.of("workId",id)),anyString(),anyString(),any());
+    }
+    @Test void ownedAudioCoverAndLyricSyncButtonsUseTheirExactTargetWithoutAPlanner(){
+        var library=app("select_audio","select_cover","sync_playback_lyrics");
+        String work=key(),asset=key(),cover=key();
+        when(model.respond(any())).thenReturn(new AgentChatModel.Plan("chat",Map.of(),"请告诉我你的要求。"));
+        service.send("owner","conversation","选择作品 "+work+" 的音频 "+asset,key(),"zh-CN");
+        service.send("owner","conversation","选择作品 "+work+" 的封面 "+cover,key(),"zh-CN");
+        service.send("owner","conversation","同步作品 "+work+" 音频 "+asset+" 的歌词时间轴",key(),"zh-CN");
+        verify(library).execute(eq("owner"),eq("conversation"),eq("select_audio"),eq(Map.of("workId",work,"assetId",asset)),anyString(),anyString(),any());
+        verify(library).execute(eq("owner"),eq("conversation"),eq("select_cover"),eq(Map.of("workId",work,"coverId",cover)),anyString(),anyString(),any());
+        verify(library).execute(eq("owner"),eq("conversation"),eq("sync_playback_lyrics"),eq(Map.of("workId",work,"assetId",asset)),anyString(),anyString(),any());
+        verifyNoInteractions(model);
+    }
+    @Test void aPlannerCannotUseAnotherOwnedIdForAnExplicitCurrentWorkEdit(){
+        var library=app("rename_work");
+        when(model.respond(any())).thenReturn(new AgentChatModel.Plan("rename_work",Map.of("workId","other","title","星星"),""));
+        var result=service.send("owner","conversation","把当前作品改名为星星",key(),"zh-CN");
+        verify(library,never()).execute(anyString(),anyString(),anyString(),anyMap(),anyString(),anyString(),any());
+        assertTrue(result.messages().get(result.messages().size()-1).contentJson().contains("AGENT_LYRIC_TARGET_CHANGED"));
+    }
+
+    @Test void quickCreationShowsThePreparedPriceBeforeAskingForConfirmation(){
+        var feature=app("start_quick_creation");
+        when(model.respond(any())).thenReturn(plan("start_quick_creation"));
+        when(feature.prepare(anyString(),anyString(),eq("start_quick_creation"),anyMap(),any()))
+            .thenReturn(Map.of("workId","work","expectedVersion",2,"confirmationSummary","《春日》：歌词 2 积分，音乐 9 积分。"));
+        var offer=service.send("owner","conversation","一键创作当前作品",key(),"zh-CN");
+        var body=new ObjectMapper().readTree(offer.messages().get(offer.messages().size()-1).contentJson());
+        assertTrue(body.path("text").asText().contains("歌词 2 积分，音乐 9 积分"));
+        verify(feature,never()).execute(anyString(),anyString(),anyString(),anyMap(),anyString(),anyString(),any());
     }
     @Test void coverRequestActuallySubmitsToExistingCoverService(){
         var app=app("edit_cover");when(model.respond(any())).thenReturn(new AgentChatModel.Plan("chat",Map.of(),"已按小猫准备生成封面"));

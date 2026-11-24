@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { effectScope } from 'vue'
 import { flushPromises, mount } from '@vue/test-utils'
 import { useAgentConversation } from '../src/modules/agent/composables/useAgentConversation'
+import { ApiError } from '../src/shared/http/api-client'
 import type { ConversationSnapshot, Message } from '../src/modules/agent/model/conversation'
 import { agentProgress } from '../src/modules/agent/model/progress'
 import { assistantResult } from '../src/modules/agent/model/assistant-result'
@@ -31,6 +32,43 @@ beforeEach(() => {
 afterEach(() => { scopes.splice(0).forEach(scope => scope.stop()); vi.useRealTimers() })
 
 describe('Agent progress observation preserves authoritative send/recovery', () => {
+  it('allows editing an unstarted rate-limited request while retaining unknown outcomes for retry', async () => {
+    const chat = await conversation()
+    api.send.mockRejectedValueOnce(new ApiError('请稍后再试', 429, 'AGENT_RATE_LIMITED'))
+    await chat.send('写一首歌词', 'zh-CN')
+    expect(chat.editRejected()).toBe('写一首歌词')
+    expect(chat.pending.value).toBeNull()
+    api.send.mockRejectedValueOnce(new ApiError('原请求正在处理', 409, 'AGENT_TURN_IN_PROGRESS'))
+    await chat.send('生成歌曲', 'zh-CN')
+    expect(chat.editRejected()).toBeUndefined()
+    expect(chat.pending.value?.requestKey).toBeTruthy()
+  })
+  it('sends a typed menu number with the ID of the menu above the progress indicator', async () => {
+    const menu = { ...message(3, ''), contentJson: JSON.stringify({ kind: 'choice_menu', text: '1. 写词\n2. 建草稿' }) }
+    const progress = { ...message(4, ''), contentJson: JSON.stringify({ kind: 'progress' }) }
+    api.state.mockResolvedValue(snapshot({ messages: [menu, progress], latestSeq: 4 }))
+    api.send.mockResolvedValue(snapshot())
+    const chat = await conversation()
+    await chat.send('选择2', 'zh-CN')
+    expect(api.send.mock.calls[0]?.[4]).toMatchObject({ promptId: menu.id, historyEpoch: 1 })
+  })
+  it('ties a typed confirmation to the visible prompt and recovers a rejected stale tab', async () => {
+    const prompt = (id: string, seq: number) => ({ ...message(seq, ''), id, contentJson: JSON.stringify({
+      kind: 'confirmation', text: '确认保存这版歌词？', commands: [{ kind: 'send', label: '确认', text: '确认执行' }],
+    }) })
+    api.state.mockResolvedValueOnce(snapshot({ messages: [prompt('first', 2)], latestSeq: 2 }))
+      .mockResolvedValue(snapshot({ messages: [prompt('second', 4)], latestSeq: 4 }))
+    const chat = await conversation()
+    api.send.mockRejectedValueOnce(new ApiError('确认卡已更新', 409, 'AGENT_PROMPT_CONFLICT'))
+    await chat.send('确认执行', 'zh-CN')
+    expect(api.send.mock.calls[0]?.[4]).toMatchObject({ promptId: 'first', historyEpoch: 1 })
+    expect(chat.pending.value).toBeNull()
+    expect(chat.messages.value.at(-1)?.id).toBe('second')
+    api.send.mockResolvedValue(snapshot())
+    await chat.send('确认执行', 'zh-CN')
+    expect(api.send.mock.calls[1]?.[4]).toMatchObject({ promptId: 'second' })
+    expect(api.send.mock.calls[1]?.[2]).not.toBe(api.send.mock.calls[0]?.[2])
+  })
   it('merges real progress while sending without executing an observed action or continuation', async () => {
     vi.useFakeTimers()
     const callback = vi.fn(), chat = await conversation(callback), pending = deferred<ConversationSnapshot>()
@@ -118,7 +156,7 @@ describe('Agent progress observation preserves authoritative send/recovery', () 
     const restored = await conversation()
     expect(restored.songCard.value?.revisionId).toBe('second')
     api.send.mockResolvedValue(snapshot()); await restored.retry()
-    const args = ['c1', '把最后一句改成“再见”', key, 'zh-CN', { workId: 'work', revisionId: 'first', workList: { messageId: 'm8', seq: 8 } }]
+    const args = ['c1', '把最后一句改成“再见”', key, 'zh-CN', { workId: 'work', revisionId: 'first', historyEpoch: 1, media: { assetId: null, taskId: null }, workList: { messageId: 'm8', seq: 8 } }]
     expect(api.send.mock.calls).toEqual([args, args])
   })
   it('retries an older saved manual request without adopting the song opened since then', async () => {
@@ -127,7 +165,7 @@ describe('Agent progress observation preserves authoritative send/recovery', () 
     api.state.mockResolvedValue(snapshot({ songCard: { songId: 'other', revisionId: 'new', title: '', style: '', lyrics: '', audioUrl: '', status: '', coverUrl: null, revision: 0 } }))
     const chat = await conversation()
     api.send.mockResolvedValue(snapshot()); await chat.retry()
-    expect(api.send).toHaveBeenCalledExactlyOnceWith('c1', '把最后一句改成“早安”', 'old-key', 'zh-CN', { workId: null, revisionId: null })
+    expect(api.send).toHaveBeenCalledExactlyOnceWith('c1', '把最后一句改成“早安”', 'old-key', 'zh-CN', { workId: null, revisionId: null, historyEpoch: 1 })
   })
   it('renders only explicit server progress as non-executable business steps', () => {
     const row = message(1, '')

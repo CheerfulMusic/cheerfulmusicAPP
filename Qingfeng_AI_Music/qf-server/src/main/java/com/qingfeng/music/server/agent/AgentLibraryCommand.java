@@ -8,6 +8,8 @@ import java.util.regex.Pattern;
 public final class AgentLibraryCommand {
     private static final String ID="([a-fA-F0-9]{8}(?:-[a-fA-F0-9]{4}){3}-[a-fA-F0-9]{12})";
     private static final Pattern OPEN=Pattern.compile("(?:请|帮我)?(?:打开|选择)作品\\s+"+ID+"(?:\\s+的歌词版本\\s+"+ID+")?[。！!]*");
+    private static final Pattern MEDIA=Pattern.compile("选择作品\\s+"+ID+"\\s+的(音频|封面)\\s+"+ID);
+    private static final Pattern SYNC=Pattern.compile("同步作品\\s+"+ID+"\\s+音频\\s+"+ID+"\\s+的歌词时间轴");
     private static final Pattern ORDINAL=Pattern.compile("(?:请)?(?:打开|选择)第\\s*([1-9][0-9]?|[一二三四五六七八九]|十[一二三四五六七八九]?|二十)\\s*首(?:作品|歌)?[。！!]*");
     private static final Pattern SEARCH=Pattern.compile("查询我的作品，关键词[：:](.{1,200})",Pattern.DOTALL);
     private static final Pattern PAGE=Pattern.compile("列出我的作品，第 ([1-9][0-9]{0,4}) 页（page=([0-9]{1,5})）(?:，关键词[：:](.{1,200}))?",Pattern.DOTALL);
@@ -26,6 +28,13 @@ public final class AgentLibraryCommand {
     static Plan parse(String text){
         var open=OPEN.matcher(text);
         if(open.matches())return select(open.group(1),open.group(2));
+        var media=MEDIA.matcher(text);
+        if(media.matches()){
+            boolean audio="音频".equals(media.group(2));
+            return new Plan(audio?"select_audio":"select_cover",Map.of("workId",media.group(1),audio?"assetId":"coverId",media.group(3)),"");
+        }
+        var sync=SYNC.matcher(text);
+        if(sync.matches())return new Plan("sync_playback_lyrics",Map.of("workId",sync.group(1),"assetId",sync.group(2)),"");
         var ordinal=ORDINAL.matcher(text);
         if(ordinal.matches()){
             String n=ordinal.group(1);

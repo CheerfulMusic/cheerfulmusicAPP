@@ -9,6 +9,9 @@ export interface DisplayedContext {
   workId: string | null
   revisionId: string | null
   workList?: { messageId: string; seq: number }
+  historyEpoch?: number
+  promptId?: string
+  media?: { assetId: string | null; taskId: string | null }
 }
 
 export interface SongCard {

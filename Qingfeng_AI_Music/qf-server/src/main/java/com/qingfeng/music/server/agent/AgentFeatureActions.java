@@ -54,7 +54,17 @@ public final class AgentFeatureActions implements AgentApplicationActions {
   var frozen=new LinkedHashMap<>(args);
   if(Set.of("update_artist_profile","set_artist_visibility").contains(action)){
    account(owner);frozen.put("expectedProfile",json.writeValueAsString(profiles.mine(owner)));
-   frozen.put("confirmationSummary","将修改本人艺人主页："+json.writeValueAsString(args)+"。已公开的主页可能立即展示这些修改。");
+   if(action.equals("set_artist_visibility")){
+    if(!(args.get("published") instanceof Boolean published))throw invalid("请选择公开或隐藏艺人主页。");
+    frozen.put("confirmationSummary",published?"艺人主页将对其他听众公开。":"艺人主页将设为隐藏。");
+   }else{
+    var changes=new ArrayList<String>();
+    if(args.get("stageName") instanceof String name)changes.add("艺名「"+name+"」");
+    if(args.get("tagline") instanceof String tagline)changes.add("简介「"+tagline+"」");
+    if(args.get("featuredReleaseId") instanceof String release)changes.add("主打作品 "+release);
+    if(changes.isEmpty())throw invalid("请提供要更新的艺名、简介或主打作品。");
+    frozen.put("confirmationSummary",String.join("，",changes)+"。公开主页会展示保存后的资料。");
+   }
   }
   if(Set.of("publish_artist_song","remove_artist_song","publish_to_discover","withdraw_from_discover","start_quick_creation","retry_quick_creation").contains(action)){
    String w=work(owner,args,current);var song=works.get(owner,w);frozen.put("workId",w);frozen.put("expectedVersion",song.version());
@@ -62,8 +72,14 @@ public final class AgentFeatureActions implements AgentApplicationActions {
     account(owner);var release=profiles.selection(owner,w);frozen.put("expectedRelease",json.writeValueAsString(release));
     if(action.equals("publish_to_discover")){if(release.song()==null)throw invalid("请先把该音频发布到艺人主页。");frozen.put("releaseVersion",release.song().version());}
    }
-   String summary="作品《"+song.title()+"》；操作 "+action+"；参数 "+json.writeValueAsString(args);
-   if(action.equals("start_quick_creation"))summary+="。将写词并谱曲，按现有免费额度及积分规则计费；未抵扣免费额度的标准价格：歌词 "+pricing.cost(CreditsPricing.Kind.LYRICS)+" 积分，音乐 "+pricing.cost(CreditsPricing.Kind.MUSIC)+" 积分。";
+   String summary=switch(action){
+    case "start_quick_creation" -> "将为《"+song.title()+"》写词并谱曲。标准价格为歌词 "+pricing.cost(CreditsPricing.Kind.LYRICS)+" 积分、音乐 "+pricing.cost(CreditsPricing.Kind.MUSIC)+" 积分，实际消耗按可用免费额度抵扣。";
+    case "retry_quick_creation" -> "将继续《"+song.title()+"》的一键创作任务 "+required(args,"creationId")+"。";
+    case "publish_artist_song" -> "艺人主页将展示《"+required(args,"title")+"》，音频 "+required(args,"assetId")+(args.get("coverId") instanceof String cover?"，封面 "+cover:"")+"。";
+    case "publish_to_discover" -> "发现页将公开《"+song.title()+"》的发布版本 "+frozen.get("releaseVersion")+"。";
+    case "remove_artist_song" -> "将从艺人主页移除《"+song.title()+"》。";
+    default -> "将从发现页撤下《"+song.title()+"》。";
+   };
    frozen.put("confirmationSummary",summary);
   }
   return frozen;

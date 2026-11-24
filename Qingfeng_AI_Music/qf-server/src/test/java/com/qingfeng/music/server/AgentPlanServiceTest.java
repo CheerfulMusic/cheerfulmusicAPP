@@ -32,6 +32,7 @@ class AgentPlanServiceTest {
     @BeforeEach void setup() {
         current.set(card("work","old-revision",null,"DRAFT"));
         when(conversations.listRecentMessages(eq("owner"),eq("conversation"),anyInt())).thenAnswer(c->List.copyOf(messages));
+        when(conversations.listMessagesBefore(eq("owner"),eq("conversation"),anyLong(),anyInt())).thenAnswer(c->messages.stream().filter(m->m.seq()<c.<Long>getArgument(2)).toList());
         when(conversations.listRecentActionMessages(eq("owner"),eq("conversation"),anyInt())).thenAnswer(c->List.copyOf(messages));
         when(conversations.historyPage(eq("owner"),eq("conversation"),isNull(),anyInt())).thenAnswer(c->new ConversationService.MessagePage(List.copyOf(messages),false,messages.isEmpty()?0:1,messages.size(),0));
         when(conversations.appendMessage(anyString(),anyString(),anyString(),anyString(),anyString(),anyString(),nullable(String.class))).thenAnswer(c->{
@@ -48,10 +49,11 @@ class AgentPlanServiceTest {
         when(social.execute(anyString(),anyString(),eq("play"),anyString(),anyString(),any())).thenReturn(new AgentSocialActions.Result("准备播放","play",null,null));
         when(social.execute(anyString(),anyString(),eq("download"),anyString(),anyString(),any())).thenReturn(new AgentSocialActions.Result("准备下载","download",null,null));
         store=new AgentTurnStore(){
-            public Claim claim(String owner,String conversation,String key,String text) {
+            public Claim claim(String owner,String conversation,String key,String text,Runnable beforeInsert) {
                 if(outcomes.containsKey(key))return new Claim(false,outcomes.get(key));
+                beforeInsert.run();
                 messages.add(new AgentMessage(UUID.randomUUID().toString(),conversation,messages.size()+1,"user","TEXT","DONE",json.writeValueAsString(Map.of("text",text)),null,Instant.now()));
-                return new Claim(true,null);
+                return new Claim(true,null,messages.size());
             }
             public void complete(String owner,String conversation,String key,String result){outcomes.put(key,result);}
         };

@@ -37,8 +37,8 @@ public final class AgentChatExecutor implements AutoCloseable {
     }
     private void execute(AgentAdmission.Ticket ticket,AgentRequestScope scope,DeferredResult<AgentChatService.Snapshot> result,String owner,String conversation,String text,String key,String locale,AgentChatService.DisplayedContext displayedContext){
         boolean completed=false;ScheduledFuture<?> renewal=null;
+        var started=new AtomicBoolean();
         try(var ignored=scope.enter()){
-            var started = new AtomicBoolean();
             renewal=heartbeat.scheduleWithFixedDelay(()->{try{if(started.get())admission.heartbeat(ticket);}catch(RuntimeException failure){scope.cancel();}},10,10,TimeUnit.SECONDS);
             AgentRequestScope.check();
             var snapshot=chat.send(owner,conversation,text,key,locale,displayedContext,claim -> {
@@ -48,8 +48,16 @@ public final class AgentChatExecutor implements AutoCloseable {
             });
             completed=true;
             admission.finish(ticket,true);result.setResult(snapshot);
-        }catch(Throwable failure){result.setErrorResult(failure);}
-        finally{if(renewal!=null)renewal.cancel(false);if(!completed)try{admission.finish(ticket,false);}catch(RuntimeException ignored){}slots.release();}
+        }catch(Throwable failure){
+            if(!completed)try{
+                if(started.get())admission.finish(ticket,false);
+                else admission.abandon(ticket);
+            }catch(RuntimeException cleanup){failure.addSuppressed(cleanup);}
+            result.setErrorResult(failure);
+        }finally{
+            if(renewal!=null)renewal.cancel(false);
+            slots.release();
+        }
     }
     @Override public void close(){workers.shutdown();try{if(!workers.awaitTermination(10,TimeUnit.SECONDS))workers.shutdownNow();}catch(InterruptedException e){Thread.currentThread().interrupt();workers.shutdownNow();}heartbeat.shutdownNow();}
 }

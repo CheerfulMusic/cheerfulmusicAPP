@@ -1,5 +1,6 @@
 package com.qingfeng.music.agent.application;
 
+import com.qingfeng.music.common.exception.DomainException;
 import java.util.regex.Pattern;
 
 /** Explicit replacement text is data, never another tool instruction. */
@@ -10,13 +11,15 @@ public record ExactLyricEdit(String position,String replacement) {
     private static final Pattern REQUEST=Pattern.compile(PREFIX+"(?:只)?(?:把|将|改)?"+LINE+"[，,]?"+REPLACE+"[：:，,]?\\s*(.{1,500})",Pattern.DOTALL);
     private static final String CONTROL="(?:(?:其他|其余)(?:歌词)?(?:保持不变|不变|不动)|(?:先别|先不|暂不|不要|别)(?:生成|制作)(?:音乐|歌曲|音频|视频|MV)?)";
     private static final Pattern TRAILING_CONTROLS=Pattern.compile("(?:[，,；;。]\\s*"+CONTROL+"\\s*)+[。.!！]?$");
-    private static final Pattern MISSING=Pattern.compile(PREFIX+"(?:(?:只)?(?:改|修改|改写|替换)(?:一下)?"+LINE+"|(?:把|将)?"+LINE+REPLACE+")[：:，,。.!！\\s]*");
+    private static final Pattern LEADING_CONTROLS=Pattern.compile("^(?:"+CONTROL+"\\s*[，,；;。]\\s*)+");
+    private static final Pattern MISSING=Pattern.compile(PREFIX+"(?:只)?(?:(?:改|修改|改写|替换)(?:一下)?"+LINE+"|(?:把|将)?"+LINE+REPLACE+")[：:，,\\s]*(?:“\\s*”|‘\\s*’|「\\s*」|『\\s*』|\"\\s*\"|'\\s*')?[。.!！\\s]*");
 
     public static boolean needsReplacement(String text) {
         return text!=null&&MISSING.matcher(withoutControls(text)).matches();
     }
     private static String withoutControls(String text) {
-        return TRAILING_CONTROLS.matcher(text.strip()).replaceFirst("").strip();
+        String instruction=LEADING_CONTROLS.matcher(text.strip()).replaceFirst("");
+        return TRAILING_CONTROLS.matcher(instruction).replaceFirst("").strip();
     }
     public static ExactLyricEdit parse(String text){
         if(text==null)return null;
@@ -40,7 +43,7 @@ public record ExactLyricEdit(String position,String replacement) {
             if(line.isEmpty()||line.matches("\\[.*]|【.*】|(?:结尾)?副歌|主歌|桥段|前奏|尾奏|间奏|(?i:chorus|verse|bridge|intro|outro)"))continue;
             start=matcher.start();end=matcher.end();if(position.equals("第一"))break;
         }
-        if(start<0)throw new IllegalArgumentException("没有可替换的歌词行");
+        if(start<0)throw new DomainException("NO_LYRICS","这版歌词只有段落标签，请先选择有歌词正文的版本。");
         return lyrics.substring(0,start)+replacement+lyrics.substring(end);
     }
 }

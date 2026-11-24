@@ -3,6 +3,12 @@ import com.qingfeng.music.agent.application.ExactLyricEdit;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 class ExactLyricEditTest {
+ @Test void precedingGenerationControlsAndEmptyReplacementsKeepTheirMeaning(){
+     assertEquals("留下来",ExactLyricEdit.parse("先别生成音乐，只把最后一句改成“留下来”。").replacement());
+     for(String text:new String[]{"先别生成，只改最后一句。","只把最后一句改成，其他不动","把最后一句改成“”","只把第一句换成「  」。"})
+         assertTrue(ExactLyricEdit.needsReplacement(text),text);
+     assertNull(ExactLyricEdit.parse("不要改歌词，只把最后一句改成留下来"));
+ }
  @Test void separatesInstructionsFromQuotedAndUnquotedLyrics(){
     for(String text:new String[]{"把最后一句改成“海风替我说晚安”，先别生成。","把最后一句改成海风替我说晚安，其他不动，先别生成音乐。","把最后一句改成「海风替我说晚安」。"})
         assertEquals("[副歌]\r\n原句\r\n海风替我说晚安\r\n",ExactLyricEdit.parse(text).apply("[副歌]\r\n原句\r\n旧句\r\n"));
