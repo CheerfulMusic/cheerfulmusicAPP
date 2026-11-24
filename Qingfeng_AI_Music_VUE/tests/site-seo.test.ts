@@ -21,9 +21,10 @@ describe('crawlable site pages', () => {
     expect(page.querySelector('meta[property="og:url"]')?.getAttribute('content')).toBe(siteOrigin + path)
     expect(page.querySelector('meta[name="twitter:card"]')?.getAttribute('content')).toBe('summary_large_image')
     expect(page.querySelector('h1')?.textContent).toBe(metadata.heading)
-    const discover = path === '/discover' || path === '/en/discover'
-    expect(page.querySelector(`a[href="${discover ? '/discover' : '/'}"][hreflang="zh-CN"]`)).not.toBeNull()
-    expect(page.querySelector(`a[href="${discover ? '/en/discover' : '/en/'}"][hreflang="en"]`)).not.toBeNull()
+    for (const alternate of page.querySelectorAll('link[hreflang="en"], link[hreflang="zh-CN"]')) {
+      const href = new URL(alternate.getAttribute('href')!).pathname
+      expect(page.querySelectorAll(`nav a[href="${href}"][hreflang="${alternate.getAttribute('hreflang')}"]`)).toHaveLength(1)
+    }
     expect(page.querySelectorAll('script[type="application/ld+json"]')).toHaveLength(path === '/' ? 1 : 0)
   })
 
@@ -39,6 +40,12 @@ describe('crawlable site pages', () => {
     page.querySelectorAll('noscript').forEach(node => node.remove())
     const card = page.querySelector('#app > main.beta-access-entry')
     expect(card?.querySelector('h1')?.textContent).toBe(sitePage(path)!.heading)
+    const productCopy = card?.querySelector('.beta-access-intro')
+    expect(productCopy?.textContent).toBe(sitePage(path)!.description)
+    expect(productCopy?.textContent).toContain('青风音乐')
+    expect(productCopy?.textContent).toContain('Cheerful Music')
+    expect(productCopy?.closest('[data-nosnippet]')).toBeNull()
+    expect(card?.querySelector('[data-nosnippet]')?.textContent).toMatch(/邀请码|invitation code/)
     expect(page.querySelectorAll('h1')).toHaveLength(1)
     expect(card?.querySelectorAll('nav a[href*="/guide/"]')).toHaveLength(4)
     expect(card?.querySelector('form')).toBeNull()
@@ -88,6 +95,22 @@ describe('crawlable site pages', () => {
     expect(page.querySelector('link[hreflang="en"]')?.getAttribute('href')).toBe(siteOrigin + guide.translations.en)
     const home = guide.language === 'en' ? '/en/' : '/'
     expect(parsePage(home).querySelector(`a[href="${path}"]`)?.textContent).toBe(guide.label)
+    expect(page.querySelectorAll('nav a[hreflang]')).toHaveLength(2)
+    expect(page.querySelector(`nav a[href="${path}"]:not([hreflang])`)).toBeNull()
+  })
+
+  it.each([...siteGuidePaths, '/discover', '/en/discover', '/help'])('links back to the brand homepage at %s', path => {
+    const page = parsePage(path)
+    const english = page.documentElement.lang === 'en'
+    const home = english ? '/en/' : '/'
+    const links = page.querySelectorAll(`nav a[href="${home}"]`)
+    expect(links).toHaveLength(1)
+    expect(links[0]?.textContent).toContain('Cheerful Music')
+    if (!english) expect(links[0]?.textContent).toContain('青风音乐')
+    if (path === '/help') {
+      expect(page.querySelector('nav a[href="/"]')?.textContent).toContain('青风音乐')
+      expect(page.querySelector('nav a[href="/help"]')).toBeNull()
+    }
   })
 
   it('uses a distinct title and description at every canonical URL', () => {

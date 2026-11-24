@@ -15,10 +15,6 @@ const page = computed(() => sitePage(props.path, locale.value))
     <h1>{{ page.heading }}</h1>
     <p>{{ page.description }}</p>
     <template v-if="page.guide">
-      <nav :aria-label="page.language === 'en' ? 'Page language' : '页面语言'">
-        <RouterLink :to="page.guide.translations['zh-CN']" lang="zh-CN" hreflang="zh-CN">简体中文</RouterLink>
-        <RouterLink :to="page.guide.translations.en" lang="en" hreflang="en">English</RouterLink>
-      </nav>
       <section v-for="[heading, body] in page.guide.sections" :key="heading">
         <h2>{{ heading }}</h2>
         <p>{{ body }}</p>
@@ -26,7 +22,7 @@ const page = computed(() => sitePage(props.path, locale.value))
       <p><a class="p-button" :href="page.guide.appPath">{{ page.guide.cta }}</a></p>
     </template>
     <nav>
-      <template v-for="link in landingLinks(page.language)" :key="link.href">
+      <template v-for="link in landingLinks(page.language, page.path)" :key="link.href">
         <RouterLink v-if="link.lang" :to="{ path: link.href, query: route.query, hash: route.hash, force: true }"
           :lang="link.lang" :hreflang="link.lang">{{ link.text }}</RouterLink>
         <RouterLink v-else :to="link.href">{{ link.text }}</RouterLink>
