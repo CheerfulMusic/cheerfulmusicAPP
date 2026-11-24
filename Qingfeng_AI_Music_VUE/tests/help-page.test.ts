@@ -1,18 +1,26 @@
 // @vitest-environment happy-dom
 import { mount } from '@vue/test-utils'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import SiteFooter from '../src/app/layouts/SiteFooter.vue'
 import HelpPage from '../src/app/pages/HelpPage.vue'
-import { readFileSync } from 'node:fs'
+import { t } from '../src/shared/i18n'
+
+vi.mock('/brand/logo-symbol.svg', () => ({ default: '/brand/logo-symbol.svg' }))
+
 const global = { stubs: { RouterLink: { props: ['to'], template: '<a :href="to"><slot /></a>' } } }
 afterEach(() => vi.restoreAllMocks())
 describe('help and support', () => {
-  it('connects every footer support link to an existing section', () => {
-    const footer = readFileSync('src/app/layouts/SiteFooter.vue', 'utf8')
+  it('links the footer support column to the four help sections', () => {
+    const footer = mount(SiteFooter, { global })
     const page = mount(HelpPage, { global })
-    for (const anchor of ['guide', 'faq', 'contact', 'feedback']) {
-      expect(footer).toContain(`/help#${anchor}`)
+    const anchors = ['guide', 'faq', 'contact', 'feedback']
+    const support = footer.get(`nav[aria-label="${t('帮助与支持')}"]`)
+    expect(support.findAll('a').map(link => link.attributes('href')))
+      .toEqual(anchors.map(anchor => `/help#${anchor}`))
+    for (const anchor of anchors) {
       expect(page.find(`#${anchor}`).exists()).toBe(true)
     }
+    footer.unmount()
     page.unmount()
   })
   it('opens an editable draft, preserves edits and explains email handoff', async () => {
