@@ -46,7 +46,8 @@ class AgentChatFlowIntegrationTest {
                 if (text.equals("方向定好了")) return new AgentChatModel.Plan("chat",
                         Map.of("choices",List.of("generate_lyrics","create_work","discuss")), "中文、空灵、梦想与星光");
                 if (text.equals("查看我的作品")) return new AgentChatModel.Plan("list_works",Map.of(),"查看作品。");
-                if (text.equals("选择第二首")) return new AgentChatModel.Plan("select_work",Map.of("index",2),"选择第二首。");
+                if (text.equals("哪首歌有“海风替我说晚安”这句歌词？")) return new AgentChatModel.Plan("list_works",Map.of("query","海风替我说晚安"),"");
+                if (text.equals("选择第二首") || text.equals("打开第二首")) return new AgentChatModel.Plan("select_work",Map.of("index",2),"选择第二首。");
                 if (text.equals("把当前作品改名为夏天")) return new AgentChatModel.Plan("rename_work",Map.of("title","夏天"),"修改标题。");
                 if (text.equals("删除当前作品")) return new AgentChatModel.Plan("delete_work",Map.of(),"删除选定作品。");
                 if (text.equals("查看我的积分")) return new AgentChatModel.Plan("get_credits",Map.of(),"查询积分。");
@@ -85,6 +86,7 @@ class AgentChatFlowIntegrationTest {
     @Autowired com.qingfeng.music.settings.MusicSettings settings;
     @Autowired com.qingfeng.music.agent.api.AgentTurnStore turns;
     @Autowired WorkApi works;
+    @Autowired com.qingfeng.music.lyrics.api.LyricsApi lyrics;
     private final ObjectMapper json = new ObjectMapper();
     private record Browser(HttpClient http, String csrf, String creator, String conversation) {}
     private HttpResponse<String> request(HttpClient client, String method, String path, Object body, String csrf) throws Exception {
@@ -108,10 +110,166 @@ class AgentChatFlowIntegrationTest {
         return ok(request(browser.http(),"POST","/api/app/agent/conversations/" + browser.conversation() + "/messages", Map.of("text",text,"requestKey",key),browser.csrf()));
     }
     private JsonNode say(Browser browser, String text) throws Exception { return say(browser,text,UUID.randomUUID().toString()); }
+    private JsonNode edit(Browser user,String text,String key,JsonNode displayed) throws Exception {
+        var target=json.createObjectNode();
+        target.set("workId",displayed.path("songId"));
+        target.set("revisionId",displayed.path("revisionId"));
+        return ok(request(user.http(),"POST","/api/app/agent/conversations/"+user.conversation()+"/messages",
+            Map.of("text",text,"requestKey",key,"displayedContext",target),user.csrf()));
+    }
     private JsonNode state(Browser browser) throws Exception { return ok(request(browser.http(),"GET","/api/app/agent/conversations/"+browser.conversation()+"/state",null,null)); }
 
     @Autowired com.qingfeng.music.server.agent.AgentAdmission admission;
 
+    @Test void lastLineUsesTheDisplayedWorksPreviousLyricsAfterRefreshAndRetry() throws Exception {
+        var user=browser();
+        var draft=new WorkApi.Draft("朋友","旅行","旧日海岸","","民谣","同名歌");
+        var work=works.create(user.creator(),draft);
+        String original="[副歌]\n旧版的第一句\n旧版的最后一句";
+        var old=lyrics.save(user.creator(),work.id(),work.version(),"海边初稿",original);
+        lyrics.confirm(user.creator(),work.id(),old.id());
+        var updated=works.update(user.creator(),work.id(),work.version(),draft);
+        var latest=lyrics.save(user.creator(),work.id(),updated.version(),"海边新稿","新版第一句\n新版末句");
+        lyrics.confirm(user.creator(),work.id(),latest.id());
+        works.create(user.creator(),draft);
+        db.update("UPDATE music_work SET updated_at='2025-01-01' WHERE id=?",work.id());
+        db.update("UPDATE lyric_revision SET created_at='2025-01-01' WHERE id=?",old.id());
+        var list=lastText(say(user,"列出我的作品。"));
+        assertEquals(work.id(),list.path("items").get(1).path("id").asText());
+        assertEquals(latest.id(),say(user,"打开第二首").path("songCard").path("revisionId").asText());
+        assertEquals(old.id(),say(user,"看上一版歌词").path("songCard").path("revisionId").asText());
+        assertEquals(old.id(),state(user).path("songCard").path("revisionId").asText());
+        assertTrue(lastText(say(user,"只改最后一句，先别生成。")).path("text").asText().contains("新句"));
+        String key=UUID.randomUUID().toString(),command="把最后一句改成“海风替我说晚安”，先别生成。";
+        var edited=say(user,command,key).path("songCard");
+        assertEquals(work.id(),edited.path("songId").asText());
+        assertEquals("[副歌]\n旧版的第一句\n海风替我说晚安",edited.path("lyrics").asText());
+        assertEquals(edited,say(user,command,key).path("songCard"));
+        assertEquals(3,lyrics.list(user.creator(),work.id()).size());
+        assertEquals(original,lyrics.get(user.creator(),work.id(),old.id()).lyrics());
+        assertEquals(latest.lyrics(),lyrics.get(user.creator(),work.id(),latest.id()).lyrics());
+        assertEquals(0,db.queryForObject("SELECT COUNT(*) FROM generation_task WHERE work_id=?",Integer.class,work.id()));
+        assertEquals(0,db.queryForObject("SELECT COUNT(*) FROM credit_ledger WHERE owner_id=? AND entry_type='DEBIT'",Integer.class,user.creator()));
+    }
+
+    @Test void staleTabCannotEditAnotherRevisionAndRetriesKeepTheOriginalTarget() throws Exception {
+        var user=browser();
+        var work=works.create(user.creator(),new WorkApi.Draft("","","","","","两版歌词"));
+        var first=lyrics.save(user.creator(),work.id(),0,"旧版","旧版开头\n旧版结尾");
+        var second=lyrics.save(user.creator(),work.id(),0,"新版","新版开头\n新版结尾");
+        String open="打开作品 "+work.id()+" 的歌词版本 ";
+        var tabA=say(user,open+first.id()).path("songCard");
+        var tabB=say(user,open+second.id()).path("songCard");
+        String edit="把最后一句改成“明天再见”，先别生成。", staleKey=UUID.randomUUID().toString();
+        var rejected=edit(user,edit,staleKey,tabA);
+        assertEquals(2,lyrics.list(user.creator(),work.id()).size(),"a stale tab must never write against the other tab's revision");
+        assertEquals("AGENT_LYRIC_TARGET_CHANGED",lastText(rejected).path("errorCode").asText());
+        assertEquals(second.id(),rejected.path("songCard").path("revisionId").asText());
+        var stalePrevious=edit(user,"看上一版歌词",UUID.randomUUID().toString(),tabA);
+        assertEquals("AGENT_LYRIC_TARGET_CHANGED",lastText(stalePrevious).path("errorCode").asText());
+        assertEquals(second.id(),stalePrevious.path("songCard").path("revisionId").asText());
+        String key=UUID.randomUUID().toString();
+        var saved=edit(user,edit,key,tabB).path("songCard");
+        assertEquals("新版开头\n明天再见",saved.path("lyrics").asText());
+        edit(user,edit,key,tabB);
+        say(user,open+first.id());
+        edit(user,edit,staleKey,tabA);
+        assertEquals(3,lyrics.list(user.creator(),work.id()).size());
+        assertEquals(first.lyrics(),lyrics.get(user.creator(),work.id(),first.id()).lyrics());
+        assertEquals(second.lyrics(),lyrics.get(user.creator(),work.id(),second.id()).lyrics());
+        assertEquals(0,db.queryForObject("SELECT COUNT(*) FROM generation_task WHERE work_id=?",Integer.class,work.id()));
+        assertEquals(0,db.queryForObject("SELECT COUNT(*) FROM credit_ledger WHERE owner_id=? AND entry_type='DEBIT'",Integer.class,user.creator()));
+    }
+
+    @Test void anExactHistoricalSongTitleWinsOverAnIncidentalLyricInANewerRevision() throws Exception {
+        var user=browser();
+        var work=works.create(user.creator(),new WorkApi.Draft("","","","","","智能创作"));
+        String title="海边来信";
+        var old=lyrics.save(user.creator(),work.id(),0,title,"今天收到海边来信\n落款是你");
+        db.update("UPDATE lyric_revision SET created_at='2024-01-01' WHERE id=?",old.id());
+        lyrics.save(user.creator(),work.id(),0,"给夏天的歌","那封海边来信\n夹着一片叶子");
+        var found=lastText(say(user,"查询我的作品，关键词："+title));
+        var hit=found.path("items").get(0);
+        assertEquals(old.id(),hit.path("data").path("revisionId").asText());
+        assertEquals(title,hit.path("title").asText());
+        assertEquals("lyricTitle",hit.path("data").path("matchSource").asText());
+        assertEquals(title,hit.path("data").path("excerpt").asText());
+        assertEquals(old.id(),say(user,found.path("commands").get(0).path("text").asText()).path("songCard").path("revisionId").asText());
+    }
+
+    @Test void nextPageOfFilteredWorksKeepsItsFilterAndItsDisplayedOrder() throws Exception {
+        var user=browser();
+        var draft=new WorkApi.Draft("","","","","","毕业那天");
+        for(int i=1;i<=22;i++){
+            var work=works.create(user.creator(),draft);
+            db.update("UPDATE music_work SET updated_at=? WHERE id=?",String.format("2025-01-%02d",i),work.id());
+        }
+        works.create(user.creator(),new WorkApi.Draft("","","","","","另一个故事"));
+        var first=lastText(say(user,"查询我的作品，关键词：毕业"));
+        var commands=first.path("commands");
+        var second=lastText(say(user,commands.get(commands.size()-1).path("text").asText()));
+        assertEquals(2,second.path("items").size());
+        var selected=second.path("items").get(1).path("id").asText();
+        assertEquals(selected,say(user,"打开第二首").path("songCard").path("songId").asText());
+    }
+
+    @Test void ordinalUsesTheListSeenByThatTabEvenAfterAnotherTabSearches() throws Exception {
+        var user=browser();
+        for(String title:List.of("给春天一","给春天二","给秋天一","给秋天二"))
+            works.create(user.creator(),new WorkApi.Draft("","","","","",title));
+        var firstTab=say(user,"查询我的作品，关键词：春天");
+        var list=lastText(firstTab);
+        String expected=list.path("items").get(1).path("id").asText();
+        var messages=firstTab.path("messages");
+        var row=messages.get(messages.size()-1);
+        assertEquals(list,json.readTree(row.path("contentJson").asText()));
+        var visible=Map.of("workList",Map.of("messageId",row.path("id").asText(),"seq",row.path("seq").asLong()));
+        say(user,"查询我的作品，关键词：秋天");
+        String path="/api/app/agent/conversations/"+user.conversation()+"/messages";
+        var opened=ok(request(user.http(),"POST",path,Map.of("text","打开第二首","requestKey",UUID.randomUUID().toString(),"displayedContext",visible),user.csrf()));
+        assertEquals(expected,opened.path("songCard").path("songId").asText());
+        ok(request(user.http(),"POST","/api/app/agent/conversations/"+user.conversation()+"/reset",Map.of(),user.csrf()));
+        say(user,"查询我的作品，关键词：秋天");
+        var expired=ok(request(user.http(),"POST",path,Map.of("text","打开第二首","requestKey",UUID.randomUUID().toString(),"displayedContext",visible),user.csrf()));
+        assertEquals("AGENT_WORK_LIST_CHANGED",lastText(expired).path("errorCode").asText());
+        assertTrue(expired.path("songCard").isNull());
+    }
+
+    @Test void lyricHitOpensTheSameOwnedRevisionByClickAndOrdinal() throws Exception {
+        var owner=browser();var other=browser();
+        var draft=new WorkApi.Draft("","","旧日故事。".repeat(120),"","","同名歌");
+        var work=works.create(owner.creator(),draft);
+        var sameName=works.create(owner.creator(),draft);
+        var foreign=works.create(other.creator(),draft);
+        var removed=works.create(owner.creator(),draft);
+        String text="海风替我说晚安";
+        String oldLyrics="[主歌]\n"+"打开窗看云走过\n".repeat(60)+"握住最后一束光\n"+text;
+        var old=lyrics.save(owner.creator(),work.id(),0,"旧版歌词",oldLyrics);
+        lyrics.confirm(owner.creator(),work.id(),old.id());
+        db.update("UPDATE lyric_revision SET created_at='2024-01-01' WHERE id=?",old.id());
+        var current=lyrics.save(owner.creator(),work.id(),0,"新版歌词","海风吹过树梢");
+        lyrics.confirm(owner.creator(),work.id(),current.id());
+        lyrics.save(owner.creator(),sameName.id(),0,"草稿","另一句");
+        lyrics.save(other.creator(),foreign.id(),0,"他人的版本",text);
+        lyrics.save(owner.creator(),removed.id(),0,"已删版本",text);
+        works.delete(owner.creator(),removed.id(),true);
+        var searched=lastText(say(owner,"哪首歌有“海风替我说晚安”这句歌词？"));
+        assertEquals(1,searched.path("items").size());
+        var evidence=searched.path("items").get(0).path("data");
+        assertEquals("握住最后一束光\n"+text,evidence.path("excerpt").asText());
+        assertEquals("lyrics",evidence.path("matchSource").asText());
+        assertEquals(1,evidence.path("lyricVersion").asInt());
+        assertEquals(old.id(),evidence.path("revisionId").asText());
+        assertEquals(old.id(),say(owner,"打开第一首").path("songCard").path("revisionId").asText());
+        String open=searched.path("commands").get(0).path("text").asText();
+        var opened=say(owner,open).path("songCard");
+        assertEquals(work.id(),opened.path("songId").asText());assertEquals(oldLyrics,opened.path("lyrics").asText());
+        var denied=say(other,open);
+        assertFalse(denied.path("messages").toString().contains("握住最后一束光"));
+        works.delete(owner.creator(),work.id(),true);
+        assertTrue(lastText(say(owner,"查询我的作品，关键词："+text)).path("items").isEmpty());
+        assertFalse(old.id().equals(say(owner,open).path("songCard").path("revisionId").asText()));
+    }
     @Test void archivedInterruptedRequestReturnsCurrentStateWithoutRestarting() throws Exception {
         Browser user = browser();
         String key = UUID.randomUUID().toString(), text = "查看我的作品";

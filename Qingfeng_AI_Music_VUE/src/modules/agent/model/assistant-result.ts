@@ -1,4 +1,4 @@
-import type { Message } from './conversation'
+import type { DisplayedContext, Message } from './conversation'
 
 export type AgentCommandKind = 'send' | 'login' | 'recharge' | 'account' | 'privacy' | 'photo' | 'upload' | 'upload_cover' | 'upload_audio' | 'feature'
 export interface AgentCommand { label: string; text: string; kind: AgentCommandKind }
@@ -6,6 +6,32 @@ export interface AgentResultItem { id: string; title: string; subtitle: string; 
 export interface AssistantResult { kind: string; items: AgentResultItem[]; commands: AgentCommand[] }
 const object = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v)
 const kinds: AgentCommandKind[] = ['send', 'login', 'recharge', 'account', 'privacy', 'photo', 'upload', 'upload_cover', 'upload_audio', 'feature']
+const uuid = /^[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12}$/i
+
+export function displayedWorkList(messages: Message[]): DisplayedContext['workList'] {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const message = messages[i]!
+    if (message.role !== 'assistant' || message.kind !== 'TEXT' || message.state !== 'DONE') continue
+    try {
+      const body: unknown = JSON.parse(message.contentJson || '{}')
+      if (!object(body) || !Array.isArray(body.items)) continue
+      if (body.kind === 'works' || body.kind === 'memory') return { messageId: message.id, seq: message.seq }
+      if (body.items.length) return undefined
+    } catch { /* Only persisted structured results can identify a list. */ }
+  }
+}
+
+// Older semantic cards stored the matched revision on the item and a work-only open command.
+function versionedMemoryCommands(commands: AgentCommand[], items: AgentResultItem[]): AgentCommand[] {
+  return commands.flatMap(command => {
+    if (command.kind !== 'send') return [command]
+    const item = items.find(row => command.text === `打开作品 ${row.id}`)
+    if (!item || !item.data.revisionId) return [command]
+    const revision = item.data.revisionId
+    if (item.data.workId !== item.id || !uuid.test(item.id) || typeof revision !== 'string' || !uuid.test(revision)) return []
+    return [{ ...command, text: `打开作品 ${item.id} 的歌词版本 ${revision}` }]
+  })
+}
 
 /** Render only typed server results. User text and unknown commands never become executable UI. */
 export function assistantResult(message: Message): AssistantResult | null {
@@ -21,7 +47,10 @@ export function assistantResult(message: Message): AssistantResult | null {
       typeof i.id === 'string' && typeof i.title === 'string').slice(0, body.kind === 'capabilities' ? 200 : 100).map(i => ({
         id: i.id as string, title: i.title as string, subtitle: typeof i.subtitle === 'string' ? i.subtitle : '', data: object(i.data) ? i.data : {},
       }))
-    return commands.length || items.length ? { kind: typeof body.kind === 'string' ? body.kind : 'result', items, commands } : null
+    return commands.length || items.length ? {
+      kind: typeof body.kind === 'string' ? body.kind : 'result', items,
+      commands: body.kind === 'memory' ? versionedMemoryCommands(commands, items) : commands,
+    } : null
   } catch { return null }
 }
 

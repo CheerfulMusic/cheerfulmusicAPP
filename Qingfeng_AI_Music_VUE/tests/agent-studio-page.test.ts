@@ -2,7 +2,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
-import { effectScope } from 'vue'
+import { effectScope, nextTick } from 'vue'
+import type { Window as HappyWindow } from 'happy-dom'
+import { readFileSync } from 'node:fs'
 const avatarRefs = vi.hoisted(() => ({ account: null as null | { value: string }, profile: null as null | { value: string } }))
 vi.mock('../src/modules/agent/api/events', () => ({ observeConversation: (_id: string, _seq: number, _epoch: number | undefined, _receive: unknown, signal: AbortSignal) => new Promise<void>(resolve => signal.addEventListener('abort', () => resolve(), { once: true })) }))
 vi.mock('../src/modules/agent/composables/useProfileAvatar', async () => {
@@ -17,6 +19,7 @@ vi.mock('../src/modules/agent/composables/useAvatarGeneration', async () => {
   const { ref } = await import('vue')
   return { useAvatarGeneration: () => ({ message: ref(''), available: ref(null), start: vi.fn(), stop: vi.fn() }) }
 })
+const emptyLyricTarget = { workId: null, revisionId: null }
 const api = vi.hoisted(() => ({ current: vi.fn(), state: vi.fn(), history: vi.fn(), send: vi.fn(), reset: vi.fn(), analyse: vi.fn(), cancel: vi.fn(), forget: vi.fn(), loadWork: vi.fn() }))
 const downloadApi = vi.hoisted(() => ({ status: vi.fn(async () => ({unlocked: true, price: 10})), download: vi.fn(async () => true) }))
 vi.mock('../src/modules/works/api/download', () => ({downloadStatus: downloadApi.status, downloadSong: downloadApi.download}))
@@ -55,6 +58,104 @@ beforeEach(() => {
 afterEach(() => { for (const wrapper of wrappers.splice(0)) wrapper.unmount(); vi.useRealTimers() })
 
 describe('真实 Agent 对话与作品', () => {
+  it.each(['no-preference', 'reduce'])('在 %s 模式下，点击页面显示星芒反馈', async motion => {
+    const device = (window as unknown as HappyWindow).happyDOM.settings.device
+    const originalMotion = device.prefersReducedMotion
+    const style = document.createElement('style')
+    device.prefersReducedMotion = motion
+    style.textContent = ['playful', 'producer'].map(name => readFileSync('src/modules/agent/' + name + '.css', 'utf8')).join('\n')
+    document.head.append(style)
+    try {
+      await page()
+      vi.useFakeTimers()
+      document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0, clientX: 51, clientY: 92 }))
+      await nextTick()
+      const layer = document.querySelector<HTMLElement>('.agent-click-sparks')!
+      const halo = layer.querySelector<HTMLElement>('.click-halo')!
+      expect(halo.textContent).toBe('✦')
+      expect([halo.style.left, halo.style.top]).toEqual(['51px', '92px'])
+      expect(getComputedStyle(layer).display).not.toBe('none')
+      expect(getComputedStyle(layer).pointerEvents).toBe('none')
+      const animation = getComputedStyle(halo).animation
+      if (motion === 'reduce') expect(animation).toBe('none')
+      else expect(animation).toContain('studio-click-halo')
+      await vi.advanceTimersByTimeAsync(750)
+      expect(layer.querySelector('.click-halo')).toBeNull()
+    } finally {
+      style.remove()
+      device.prefersReducedMotion = originalMotion
+    }
+  })
+
+  it('打开助手可在聊天里选择工具和主题，也可补充文字后一起发送', async () => {
+    const { wrapper } = await page()
+    const panel = wrapper.get('.agent-chat [role="dialog"]')
+    await panel.findAll('.creation-choices button').find(button => button.text().includes('歌词创作'))!.trigger('click')
+    expect(panel.get('h2').text()).toBe('想写什么主题的歌词？')
+    const options = panel.findAll('button[aria-pressed]')
+    expect(options.map(button => button.text())).toEqual(['欢快的夏天', '写给喜欢的人', '和朋友去旅行'])
+    await options[0]!.trigger('click')
+    expect(options[0]!.attributes('aria-pressed')).toBe('true')
+    const input = wrapper.get<HTMLTextAreaElement>('.agent-composer-box textarea')
+    await input.setValue('副歌里要有蝉鸣')
+    expect(api.send).not.toHaveBeenCalled()
+    await input.trigger('keydown', { key: 'Enter', isComposing: true })
+    expect(api.send).not.toHaveBeenCalled()
+    await wrapper.get('.agent-composer-box').trigger('submit')
+    await flushPromises()
+    expect(api.send).toHaveBeenCalledExactlyOnceWith('c1', '帮我写一首歌词，主题是 欢快的夏天\n副歌里要有蝉鸣', expect.any(String), 'zh-CN', emptyLyricTarget)
+    expect(wrapper.find('.agent-choice-panel').exists()).toBe(false)
+    expect(input.element.value).toBe('')
+  })
+  it('点击灵感标签会补充已选主题和手写草稿，按发送才提交', async () => {
+    const { wrapper } = await page()
+    const lyrics = wrapper.findAll('.creation-choices button').find(button => button.text().includes('歌词创作'))!
+    await lyrics.trigger('click')
+    await wrapper.get('.creation-choices button').trigger('click')
+    const input = wrapper.get<HTMLTextAreaElement>('.agent-composer-box textarea')
+    await input.setValue('写毕业旅行')
+    await wrapper.findAll('.inspiration-chips button').find(button => button.text() === '友情')!.trigger('click')
+    expect(input.element.value).toBe('写毕业旅行\n写给一路同行的朋友')
+    expect(wrapper.get('.creation-choices [aria-pressed="true"]').text()).toContain('欢快的夏天')
+    expect(api.send).not.toHaveBeenCalled()
+    await wrapper.get('.agent-composer-box').trigger('submit')
+    expect(api.send).toHaveBeenCalledExactlyOnceWith('c1', '帮我写一首歌词，主题是 欢快的夏天\n写毕业旅行\n写给一路同行的朋友', expect.any(String), 'zh-CN', emptyLyricTarget)
+  })
+  it('在已有对话里切换工具或关闭选项能保留手写草稿，清除旧选择', async () => {
+    const { wrapper } = await page(state({ messages: [message('上次写到这里')] }))
+    const input = wrapper.get<HTMLTextAreaElement>('.agent-composer-box textarea')
+    const tools = wrapper.findAll('.producer-tools > button')
+    await input.setValue('写给毕业那天的我们')
+    await tools.find(button => button.text().includes('音乐制作'))!.trigger('click')
+    await wrapper.get('.creation-choices button').trigger('click')
+    await tools.find(button => button.text().includes('歌词创作'))!.trigger('click')
+    expect(wrapper.find('.creation-choices button[aria-pressed="true"]').exists()).toBe(false)
+    expect(input.element.value).toBe('写给毕业那天的我们')
+    await wrapper.get('.choice-close').trigger('click')
+    await wrapper.get('.producer-tools h2 button').trigger('click')
+    expect(wrapper.get('.agent-choice-panel').text()).toContain('想从哪一步开始')
+    await tools.find(button => button.text().includes('歌词创作'))!.trigger('click')
+    await input.trigger('keydown', { key: 'Enter' })
+    await flushPromises()
+    expect(api.send).toHaveBeenCalledExactlyOnceWith('c1', '帮我写一首歌词，主题是 写给毕业那天的我们', expect.any(String), 'zh-CN', emptyLyricTarget)
+  })
+  it('英文界面可以只选一个声音发送，也可取消选择', async () => {
+    setLocale('en')
+    const { wrapper } = await page()
+    await wrapper.findAll('.producer-tools > button').find(button => button.text().includes('Vocals'))!.trigger('click')
+    const option = wrapper.get('.creation-choices button')
+    const submit = wrapper.get('.agent-composer-send')
+    expect(submit.attributes('disabled')).toBeDefined()
+    await option.trigger('click')
+    expect(submit.attributes('disabled')).toBeUndefined()
+    await option.trigger('click')
+    expect(submit.attributes('disabled')).toBeDefined()
+    await option.trigger('click')
+    expect(api.send).not.toHaveBeenCalled()
+    await wrapper.get('.agent-composer-box').trigger('submit')
+    await flushPromises()
+    expect(api.send).toHaveBeenCalledExactlyOnceWith('c1', 'Generate music from the current lyrics with these vocals. Female voice', expect.any(String), 'en', emptyLyricTarget)
+  })
   it('keeps a draft when conversation initialization fails twice', async () => {
     api.current.mockRejectedValue(new Error('offline'))
     const { wrapper } = await page()
@@ -168,7 +269,7 @@ describe('真实 Agent 对话与作品', () => {
     await input.trigger('keydown', { key: 'Enter', isComposing: true }); await flushPromises()
     expect(api.send).not.toHaveBeenCalled()
     await input.trigger('keydown', { key: 'Enter', isComposing: false }); await flushPromises()
-    expect(api.send).toHaveBeenCalledWith('c1', '给妈妈写一首歌', expect.any(String), 'zh-CN')
+    expect(api.send).toHaveBeenCalledWith('c1', '给妈妈写一首歌', expect.any(String), 'zh-CN', emptyLyricTarget)
   })
   it('我的作品直接装入播放队列，草稿可在页内打开',async()=>{
     const {listWorks}=await import('../src/modules/works/api/works')
@@ -190,7 +291,7 @@ describe('真实 Agent 对话与作品', () => {
     expect(wrapper.find('.listening-panel').exists()).toBe(true)
     await wrapper.find('textarea').setValue('你好')
     await wrapper.find('form').trigger('submit'); await flushPromises()
-    expect(api.send).toHaveBeenCalledWith('c1', '你好', expect.stringMatching(/^[\da-f-]{36}$/), 'zh-CN')
+    expect(api.send).toHaveBeenCalledWith('c1', '你好', expect.stringMatching(/^[\da-f-]{36}$/), 'zh-CN', emptyLyricTarget)
     expect(wrapper.text()).toContain('你好！我可以和你聊天、一起写歌。')
     expect(wrapper.find('.agent-brief-card').exists()).toBe(false)
     expect(wrapper.find('.listening-panel').exists()).toBe(true)
@@ -310,7 +411,7 @@ describe('会话恢复与任务生命周期', () => {
       .mockResolvedValue(state({ songCard: song, continuation }))
     api.send.mockResolvedValue(state({ songCard: song, continuation, action: 'share', shareUrl: '/gift/result' }))
     await conversation.refresh(); await vi.advanceTimersByTimeAsync(3100)
-    expect(api.send).toHaveBeenCalledWith('c1', continuation.text, continuation.requestKey, 'zh-CN')
+    expect(api.send).toHaveBeenCalledWith('c1', continuation.text, continuation.requestKey, 'zh-CN', undefined)
     expect(conversation.shareUrl.value).toBe('/gift/result')
     expect(callback).toHaveBeenCalledOnce()
     await vi.advanceTimersByTimeAsync(10000)

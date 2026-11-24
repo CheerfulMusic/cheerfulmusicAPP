@@ -67,7 +67,7 @@ class WebErrorPageIntegrationTest {
     }
 
     @Test void searchEntryUrlsAreReadableWithoutAuthentication() throws Exception {
-        for (String path : List.of("/", "/en/", "/discover", "/help", "/guide/create-song", "/en/guide/create-song")) {
+        for (String path : List.of("/", "/en/", "/discover", "/en/discover", "/help", "/guide/create-song", "/en/guide/create-song")) {
             var response = get(path, "text/html");
             assertEquals(200, response.statusCode(), path);
             assertTrue(response.body().contains("id=\"app\""), path);
@@ -84,6 +84,14 @@ class WebErrorPageIntegrationTest {
         }
         assertEquals(403, get("/home.html", "text/html").statusCode());
         assertEquals(200, request("/brand/logo-mark.svg", "image/svg+xml", "HEAD").statusCode());
+        for (String path : List.of("/favicon.ico", "/brand/favicon-96.png")) {
+            for (String method : List.of("GET", "HEAD")) {
+                var icon = request(path, "image/*", method);
+                assertEquals(200, icon.statusCode(), path);
+                assertTrue(icon.headers().firstValue("Content-Type").orElse("").startsWith("image/"), path);
+                assertEquals(method.equals("HEAD"), icon.body().isEmpty(), path);
+            }
+        }
     }
 
     @Test void duplicateSearchEntryUrlsRedirectPermanentlyWithoutChangingTheQuery() throws Exception {
@@ -91,6 +99,7 @@ class WebErrorPageIntegrationTest {
                 Map.entry("/zh-CN", "/"), Map.entry("/zh-CN/", "/"), Map.entry("/zh-CN/index.html", "/"),
                 Map.entry("/en", "/en/"), Map.entry("/en/index.html", "/en/"),
                 Map.entry("/discover/", "/discover"), Map.entry("/discover/index.html", "/discover"),
+                Map.entry("/en/discover/", "/en/discover"), Map.entry("/en/discover/index.html", "/en/discover"),
                 Map.entry("/help/", "/help"), Map.entry("/help/index.html", "/help"),
                 Map.entry("/guide/create-song/", "/guide/create-song"),
                 Map.entry("/en/guide/edit-lyrics/index.html", "/en/guide/edit-lyrics"));

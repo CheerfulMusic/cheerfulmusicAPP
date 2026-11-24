@@ -5,6 +5,7 @@ import com.qingfeng.music.agent.api.AgentApplicationActions.*;
 import com.qingfeng.music.agent.api.AgentChatModel.Step;
 import com.qingfeng.music.agent.application.AgentChatPolicy;
 import com.qingfeng.music.agent.application.AgentLyricInput;
+import com.qingfeng.music.agent.application.AgentReadOnlyLookup;
 import com.qingfeng.music.agent.application.AgentToolDispatcher;
 import com.qingfeng.music.common.exception.DomainException;
 import com.qingfeng.music.common.concurrent.AgentRequestScope;
@@ -22,6 +23,13 @@ import java.util.function.Supplier;
 /** Bounded durable plans: model proposals never grant execution authority. */
 public final class AgentChatService {
     public record Continuation(String requestKey,String text) {}
+    public record DisplayedList(String messageId,long seq) {}
+    public record DisplayedContext(String workId,String revisionId,DisplayedList workList) {
+        boolean matches(SongCard current) {
+            return Objects.equals(workId,current==null?null:current.songId())
+                && Objects.equals(revisionId,current==null?null:current.revisionId());
+        }
+    }
     public record Snapshot(List<MessageView> messages, SongCard songCard, String taskId,
                            String action, String shareUrl, boolean liked, Continuation continuation,
                            String messagesMode,boolean hasOlderMessages,long oldestSeq,long latestSeq,long historyEpoch,boolean hasNewerMessages) {
@@ -55,9 +63,9 @@ public final class AgentChatService {
     public Snapshot state(String owner,String conversation){return snapshot(owner,conversation,null);}
     public Snapshot state(String owner,String conversation,Long afterSeq,Long historyEpoch){return snapshot(owner,conversation,null,null,afterSeq,historyEpoch);}
     public Snapshot send(String owner,String conversation,String text,String key,String locale) {
-        return send(owner,conversation,text,key,locale,Supplier::get);
+        return send(owner,conversation,text,key,locale,null,Supplier::get);
     }
-    Snapshot send(String owner,String conversation,String text,String key,String locale,
+    Snapshot send(String owner,String conversation,String text,String key,String locale,DisplayedContext displayedContext,
                   Function<Supplier<AgentTurnStore.Claim>,AgentTurnStore.Claim> begin) {
         if(text==null||text.isBlank()||text.length()>4000)throw new DomainException("INVALID_AGENT_MESSAGE","请输入 1–4000 字的消息。");
         try{UUID.fromString(key);}catch(Exception ignored){throw new DomainException("INVALID_REQUEST_KEY","缺少有效的消息请求标识。");}
@@ -94,6 +102,8 @@ public final class AgentChatService {
                     throw new DomainException("AGENT_PLAN_STALE","作品或任务状态已变化，之前的操作计划已停止。请重新说明要执行的操作。");
                 authorizedText=pending.authorizedText();
                 plan=new AgentChatModel.Plan(null,Map.of(),"",pending.steps());
+            } else if(com.qingfeng.music.agent.application.ExactLyricEdit.needsReplacement(text)) {
+                plan=new AgentChatModel.Plan("chat",Map.of(),"想把这句改成什么？请把新句写在「改成」后面，我会只替换你指定的那一行。");
             } else {
                 var supplied=AgentLyricInput.parse(text);
                 if(!supplied.lyrics().isBlank()&&supplied.instruction().isBlank()) {
@@ -111,7 +121,13 @@ public final class AgentChatService {
                 } else {
                     var exact=com.qingfeng.music.agent.application.ExactLyricEdit.parse(text);
                     String fast=AgentChatPolicy.currentSocial(text);
+                    String lookup=AgentReadOnlyLookup.match(text,capabilities(),false);
+                    var libraryCommand=libraryPlan(owner,conversation,text,displayedContext);
                     if(exact!=null)plan=new AgentChatModel.Plan("replace_lyric_line",Map.of(),"");
+                    else if(lookup!=null)plan=new AgentChatModel.Plan(lookup,Map.of(),"");
+                    else if(libraryCommand!=null&&executor(libraryCommand.action())!=null)plan=libraryCommand;
+                    else if(text.matches("(?:请)?(?:看|看看|查看|打开|切换到)上一版(?:的)?歌词[。！!]*")&&executor("select_version")!=null)
+                        plan=new AgentChatModel.Plan("select_version",Map.of("relative","previous"),"");
                     else if(fast!=null)plan=new AgentChatModel.Plan(fast,Map.of(),"");
                     else if(text.matches("(?:查看|列出|显示)?(?:全部|所有|可用)(?:功能|能力)|能力清单"))plan=new AgentChatModel.Plan("list_capabilities",Map.of(),"");
                     else if(!authorizedText.equals(text)&&executor("video_capabilities")!=null)plan=new AgentChatModel.Plan("video_capabilities",Map.of(),"");
@@ -136,6 +152,10 @@ public final class AgentChatService {
                 turns.assertActive(owner,conversation,key);
                 current=current(owner);
                 Step step=steps.get(i);String proposed=step.action();
+                boolean needsDisplayedVersion="replace_lyric_line".equals(proposed)
+                    ||i==0&&"select_version".equals(proposed)&&"previous".equals(step.args().get("relative"));
+                if(needsDisplayedVersion&&displayedContext!=null&&!displayedContext.matches(current))
+                    throw new DomainException("AGENT_LYRIC_TARGET_CHANGED","当前作品或歌词版本已切换，请重新打开你要操作的那一版。");
                 Map<String,Object> args=new LinkedHashMap<>(step.args());
                 boolean explicitlyConfirmed=confirmation&&i==0;
                 boolean requested=AgentChatPolicy.actionRequested(proposed,authorizedText);
@@ -234,7 +254,8 @@ public final class AgentChatService {
                 }
                 // A query can resolve the IDs needed by the original instruction ('上一版').
                 // Replan once using only persisted tool results; original authorization never grows.
-                if(i+1==steps.size()&&(modelCalls==1||modelCalls==0&&"video_capabilities".equals(proposed))&&!confirmation&&!continuation&&"read".equals(capability.effect())) {
+                if(i+1==steps.size()&&(modelCalls==1||modelCalls==0&&"video_capabilities".equals(proposed))&&!confirmation&&!continuation&&"read".equals(capability.effect())
+                        &&!AgentChatPolicy.previousVideoPrice(originalIntent)&&!AgentChatPolicy.generalPriceOnly(originalIntent)) {
                     AgentRequestScope.check();
                     var observed=conversations.listRecentMessages(owner,conversation,80);var state=conversations.state(owner,conversation);
                     boolean storyboard="video_capabilities".equals(proposed)&&updated!=null&&updated.assetId()!=null
@@ -264,6 +285,26 @@ public final class AgentChatService {
         var outcome=new Outcome(action,shareUrl,outcomeCard==null?null:outcomeCard.songId(),outcomeCard==null?null:outcomeCard.revisionId(),outcomeCard==null?null:outcomeCard.assetId());
         turns.complete(owner,conversation,key,json.writeValueAsString(outcome));
         return snapshot(owner,conversation,action,outcome);
+    }
+    private AgentChatModel.Plan libraryPlan(String owner,String conversation,String text,DisplayedContext displayed){
+        var plan=AgentLibraryCommand.parse(text);
+        if(plan==null||displayed==null||!(plan.args().get("index") instanceof Integer index))return plan;
+        var ref=displayed.workList();
+        var stale=new DomainException("AGENT_WORK_LIST_CHANGED","这条序号没有对应的作品列表，请重新列出作品，或直接点击原结果卡中的歌。");
+        if(ref==null||ref.messageId()==null||ref.seq()<1||ref.seq()==Long.MAX_VALUE)throw stale;
+        var rows=conversations.listMessagesBefore(owner,conversation,ref.seq()+1,1);
+        if(rows.isEmpty())throw stale;
+        var row=rows.get(0);
+        if(row.seq()!=ref.seq()||!ref.messageId().equals(row.id())||!"assistant".equals(row.role())
+                ||!AgentMessage.KIND_TEXT.equals(row.kind())||!AgentMessage.STATE_DONE.equals(row.state()))throw stale;
+        var body=json.readTree(row.contentJson());
+        if(!Set.of("works","memory").contains(body.path("kind").asText(""))||!body.path("items").isArray())throw stale;
+        var item=body.path("items").path(index-1);
+        if(item.isMissingNode())throw new DomainException("AGENT_WORK_LIST_RANGE","这个作品列表没有第 "+index+" 首，请按卡片上的序号选择。");
+        var data=item.path("data");
+        String workId=data.path("workId").asText("");
+        if(workId.isBlank()||!workId.equals(item.path("id").asText()))throw stale;
+        return AgentLibraryCommand.select(workId,data.path("revisionId").asText(null));
     }
     private List<Step> normalizedSteps(List<Step> steps,String intent) {
         if(!AgentChatPolicy.lyricsOnly(intent))return steps;
@@ -298,12 +339,12 @@ public final class AgentChatService {
     }
     private AgentChatModel.Plan ensureExecutable(AgentChatModel.Plan plan,String text,SongCard current) {
         String instruction=AgentLyricInput.parse(text).instruction();
+        if(AgentChatPolicy.previousVideoPrice(instruction)&&executor("video_capabilities")!=null)
+            return new AgentChatModel.Plan("video_capabilities",Map.of(),"");
+        if(AgentChatPolicy.generalPriceOnly(instruction)&&executor("get_credits")!=null)
+            return new AgentChatModel.Plan("get_credits",Map.of(),"");
         if(instruction.matches("(?:歌词呢|查看歌词|显示完整歌词|完整歌词|正在制作吗|生成好了吗)[？?。！!]*"))
             return new AgentChatModel.Plan("get_current_song",Map.of(),"");
-        var open=java.util.regex.Pattern.compile("^(?:请|帮我)?打开作品\\s+([a-fA-F0-9-]{36})[。！!]*$").matcher(instruction);
-        if(open.matches()&&executor("select_work")!=null)return new AgentChatModel.Plan("select_work",Map.of("workId",open.group(1)),"");
-        if(instruction.matches("(?:查看|列出|显示)我的作品[。！!]*")&&executor("list_works")!=null)
-            return new AgentChatModel.Plan("list_works",Map.of(),"");
         boolean chat=plan.orderedSteps().stream().allMatch(s->"chat".equals(s.action()));
         if(chat && plan.reply()!=null && plan.reply().startsWith("还没有执行「")
                 && instruction.matches("(?:请|请帮我|帮我)?(?:直接)?(?:开始)?(?:生成|写)歌词[。！!]?"))
@@ -379,7 +420,16 @@ public final class AgentChatService {
         if(action!=null)body.put("action",action);
         append(owner,conversation,body);
     }
-    private SongCard current(String owner){var c=tools.dispatch(AgentTool.GET_CURRENT_SONG,new AgentTool.GetCurrentSongArgs(),owner,UUID.randomUUID().toString()).songCard();return c==null||c.songId()==null||c.songId().isBlank()?null:c;}
+    private SongCard current(String owner){
+        try{
+            var card=tools.dispatch(AgentTool.GET_CURRENT_SONG,new AgentTool.GetCurrentSongArgs(),owner,UUID.randomUUID().toString()).songCard();
+            return card==null||card.songId()==null||card.songId().isBlank()?null:card;
+        }catch(DomainException error){
+            // A work removed in another tab is no longer a current target for this conversation.
+            if("WORK_NOT_FOUND".equals(error.code()))return null;
+            throw error;
+        }
+    }
     private Snapshot snapshot(String owner,String conversation,String action) {
         return snapshot(owner,conversation,action,null);
     }
@@ -479,8 +529,34 @@ public final class AgentChatService {
     }
     private String results(List<AgentMessage> messages) {
         List<Map<String,Object>> values=new ArrayList<>();
-        for(int i=messages.size()-1;i>=0&&values.size()<6;i--){var m=messages.get(i);if(!"assistant".equals(m.role())||!AgentMessage.KIND_TEXT.equals(m.kind()))continue;var b=json.readTree(m.contentJson());if(!b.path("items").isArray()||b.path("items").isEmpty())continue;var v=new LinkedHashMap<String,Object>();v.put("kind",b.path("kind").asText());v.put("items",json.convertValue(b.path("items"),List.class));values.add(v);}
+        for(int i=messages.size()-1;i>=0&&values.size()<6;i--){
+            var m=messages.get(i);
+            if(!"assistant".equals(m.role())||!AgentMessage.KIND_TEXT.equals(m.kind()))continue;
+            var body=json.readTree(m.contentJson());
+            var items=body.path("items");
+            if(!items.isArray()||items.isEmpty())continue;
+            String kind=body.path("kind").asText("");
+            values.add(Map.of("kind",kind,"items",Set.of("works","memory").contains(kind)?modelWorkList(items):items));
+        }
         Collections.reverse(values);return json.writeValueAsString(values);
+    }
+    private tools.jackson.databind.JsonNode modelWorkList(tools.jackson.databind.JsonNode items){
+        var compact=json.createArrayNode();
+        for(var item:items){
+            var row=compact.addObject();
+            row.put("index",compact.size());
+            row.put("title",item.path("title").asText(""));
+            var data=item.path("data");
+            for(String key:List.of("workId","revisionId","version","lyricVersion","status","matchSource"))
+                if(data.hasNonNull(key))row.set(key,data.get(key));
+            String excerpt=data.path("excerpt").asText("");
+            if(!excerpt.isBlank()){
+                int characters=Math.min(320,excerpt.codePointCount(0,excerpt.length()));
+                row.put("excerpt",excerpt.substring(0,excerpt.offsetByCodePoints(0,characters)));
+                row.put("untrustedSource",true);
+            }
+        }
+        return compact;
     }
     private Object arguments(AgentTool tool,Map<String,Object> args,String text,SongCard current) {
         String instructions=string(args,"text");if(instructions==null||instructions.isBlank())instructions=text;

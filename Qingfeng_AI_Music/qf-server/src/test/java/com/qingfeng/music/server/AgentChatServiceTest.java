@@ -137,6 +137,27 @@ class AgentChatServiceTest {
         assertEquals(lyric,args.getValue().get("lyrics"));verify(tools,times(1)).dispatch(eq(AgentTool.GENERATE_SONG),any(),eq("owner"),anyString());
         verify(tools,never()).dispatch(eq(AgentTool.GENERATE_LYRICS),any(),anyString(),anyString());
     }
+    @Test void plannerReceivesOrderedWorkReferencesAndBoundedEvidenceWhileTheDisplayedCardStaysComplete(){
+        var json=new ObjectMapper();
+        String excerpt="原始歌词🎵".repeat(100);
+        var first=Map.of("id","work-b","title","同名歌","data",Map.of("workId","work-b","revisionId","r1","excerpt",excerpt,"sourceHash","full-hash"));
+        var second=Map.of("id","work-a","title","同名歌","data",Map.of("workId","work-a","revisionId","r2"));
+        String card=json.writeValueAsString(Map.of("kind","memory","items",List.of(first,second)));
+        messages.add(new AgentMessage("list","conversation",1,"assistant","TEXT","DONE",card,null,Instant.now()));
+        when(model.respond(any())).thenReturn(new AgentChatModel.Plan("chat",Map.of(),"记得。"));
+        var reply=service.send("owner","conversation","刚刚列出了什么？",key(),"zh-CN");
+        var context=ArgumentCaptor.forClass(AgentChatModel.Context.class);
+        verify(model).respond(context.capture());
+        var items=json.readTree(context.getValue().results()).get(0).path("items");
+        assertEquals("work-b",items.get(0).path("workId").asText());
+        assertEquals("r2",items.get(1).path("revisionId").asText());
+        assertEquals(2,items.get(1).path("index").asInt());
+        String snippet=items.get(0).path("excerpt").asText();
+        assertEquals(320,snippet.codePointCount(0,snippet.length()));
+        assertTrue(excerpt.startsWith(snippet));
+        assertFalse(context.getValue().results().contains("full-hash"));
+        assertEquals(card,reply.messages().get(0).contentJson());
+    }
     @Test void selectingExplicitWorkReallyExecutesInsteadOfTrustingChat(){
         var app=app("select_work");when(model.respond(any())).thenReturn(new AgentChatModel.Plan("chat",Map.of(),"已打开作品"));
         String id=UUID.randomUUID().toString();service.send("owner","conversation","打开作品 "+id,key(),"zh-CN");

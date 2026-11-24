@@ -48,16 +48,31 @@ onBeforeUnmount(() => { for (const element of sampleTimers.keys()) clearSampleTi
 // server-provided open command for an item; never infer an action from its title.
 const openCommands = computed(() => {
   const matches = new Map<string, { command: AgentCommand; index: number }>()
-  if (props.result.kind !== 'works') return matches
+  if (props.result.kind !== 'works' && props.result.kind !== 'memory') return matches
   for (const item of props.result.items) {
     const id = item.data.workId
     if (typeof id !== 'string' || !id) continue
-    const index = props.result.commands.findIndex(command => command.kind === 'send' && command.text === `打开作品 ${id}`)
+    const revision = item.data.revisionId
+    const target = typeof revision === 'string' && revision ? `打开作品 ${id} 的歌词版本 ${revision}` : `打开作品 ${id}`
+    const index = props.result.commands.findIndex(command => command.kind === 'send' && command.text === target)
     if (index >= 0) matches.set(id, { command: props.result.commands[index]!, index })
   }
   return matches
 })
 const openCommand = (item: AgentResultItem) => typeof item.data.workId === 'string' ? openCommands.value.get(item.data.workId)?.command : undefined
+function excerptLabel(item: AgentResultItem) {
+  const labels: Record<string, [string, string]> = {
+    lyrics: ['歌词', 'Lyrics'], lyricTitle: ['歌词标题', 'Lyric title'], title: ['歌名', 'Song title'],
+    story: ['创作故事', 'Story'], message: ['寄语', 'Dedication'],
+  }
+  const source = labels[String(item.data.matchSource)]?.[en.value ? 1 : 0]
+  if (!source) return en.value ? 'Source excerpt' : '来源摘要'
+  const version = item.data.lyricVersion
+  const semantic = props.result.kind === 'memory'
+  const label = en.value ? `${semantic ? 'Source' : 'Matched'} · ${source}` : (semantic ? `来源 · ${source}` : `命中${source}`)
+  if (typeof version !== 'number' || version < 1) return label
+  return item.data.matchSource === 'lyrics' ? `${label} V${version}` : `${label} · ${en.value ? 'Lyrics' : '歌词'} V${version}`
+}
 // New-work responses also use kind=works, but are not library listings.
 const isWorksList = computed(() => props.result.kind === 'works' && (openCommands.value.size > 0 || props.result.items.some(item => typeof item.data.status === 'string' && typeof item.data.createdAt === 'string')))
 const remainingCommands = computed(() => {
@@ -81,7 +96,7 @@ async function copyInvite(value: unknown) {
           <button v-if="result.kind==='lyrics_download' && typeof item.data.lyrics==='string'" type="button" :disabled="disabled" @click="downloadLyrics(item)">{{ en?'Download lyrics (TXT)':'下载歌词（TXT）' }}</button>
           <a v-if="sharedDownloadUrl(item.data.downloadUrl)" :href="sharedDownloadUrl(item.data.downloadUrl)" download>下载已解锁歌曲</a>
           <small v-if="item.data.current === true">{{ en ? 'Current selection' : '当前选择' }}</small>
-          <blockquote v-if="typeof item.data.excerpt === 'string'" class="agent-source-excerpt"><small>{{ en ? 'Source excerpt' : '来源摘要' }}</small><p>{{ item.data.excerpt }}</p></blockquote>
+          <blockquote v-if="typeof item.data.excerpt === 'string'" class="agent-source-excerpt"><small>{{ excerptLabel(item) }}</small><p>{{ item.data.excerpt }}</p></blockquote>
           <AgentVideoProgress v-if="result.kind==='video' && typeof item.data.projectId==='string'" :project-id="item.data.projectId"/>
           <audio v-if="media(item.data.audioUrl, 'audio')" :src="media(item.data.audioUrl, 'audio')" controls preload="none" :aria-label="item.title" @error="fallbackSample($event, item.data.audioUrl)" @waiting="waitForSample($event, item.data.audioUrl)" @playing="clearSample" @pause="clearSample"/>
           <div v-if="inviteUrl(item.data.invitePath)" class="agent-result-invite"><input readonly :value="inviteUrl(item.data.invitePath)" :aria-label="en ? 'Invitation link' : '邀请链接'" @focus="($event.target as HTMLInputElement).select()"/><button type="button" @click="copyInvite(item.data.invitePath)">{{ en ? 'Copy invitation' : '复制邀请链接' }}</button></div>

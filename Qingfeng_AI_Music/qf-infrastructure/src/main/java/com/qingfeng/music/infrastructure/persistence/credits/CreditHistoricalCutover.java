@@ -468,7 +468,7 @@ public final class CreditHistoricalCutover {
             for (var resource : resources) {
                 String name = Objects.requireNonNull(resource.getFilename());
                 int version = Integer.parseInt(name.substring(1, name.indexOf("__")));
-                require(version >= 1 && version <= 54, "HISTORY_UNAPPROVED_RESOURCE_EXTENSION");
+                require(version >= 1 && version <= 55, "HISTORY_UNAPPROVED_RESOURCE_EXTENSION");
                 CRC32 crc = new CRC32();
                 String text;
                 try (var input = resource.getInputStream()) { text = new String(input.readAllBytes(), StandardCharsets.UTF_8); }
@@ -526,6 +526,12 @@ public final class CreditHistoricalCutover {
                     String normalized = text.replace("\r\n", "\n").replace('\r', '\n');
                     require("V52__gift_daily_budget.sql".equals(name) && (int) crc.getValue() == -938954138
                             && "898c2e8a1b47009f68b21554dd8d5e46614eb29ed77475d108e5ea568bf1ad07".equals(digest(normalized.getBytes(StandardCharsets.UTF_8))),
+                            "HISTORY_UNAPPROVED_RESOURCE_EXTENSION");
+                }
+                if (version == 55) {
+                    String normalized = text.replace("\r\n", "\n").replace('\r', '\n');
+                    require("V55__generation_audio_reference.sql".equals(name) && (int) crc.getValue() == -2046873812
+                            && "c629d909975214990cd9d02561d364e3cd5274e1ede43c57ed1ef9971450c4d0".equals(digest(normalized.getBytes(StandardCharsets.UTF_8))),
                             "HISTORY_UNAPPROVED_RESOURCE_EXTENSION");
                 }
                 require(expected.put(version, new History(version, name, (int) crc.getValue())) == null, "DUPLICATE_CLASSPATH_MIGRATION");

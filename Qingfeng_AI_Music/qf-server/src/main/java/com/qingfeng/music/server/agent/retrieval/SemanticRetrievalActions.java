@@ -2,6 +2,7 @@ package com.qingfeng.music.server.agent.retrieval;
 
 import com.qingfeng.music.agent.api.*;
 import com.qingfeng.music.common.exception.DomainException;
+import com.qingfeng.music.server.agent.AgentLibraryCommand;
 import java.util.*;
 
 /** Retrieval returns quoted source data and IDs, never executable instructions from the corpus. */
@@ -34,14 +35,17 @@ public final class SemanticRetrievalActions implements AgentApplicationActions {
             var currentSource=source.load(owner,hit.work());if(currentSource.isEmpty())continue;var d=currentSource.get();
             if(d.version()!=hit.version()||!d.revision().equals(hit.revision())||!d.hash().equals(hit.hash()))continue;
             seen.add(d.work());
-            String excerpt=d.text().substring(0,Math.min(400,d.text().length()));
-            items.add(new Item(d.work(),d.title(),"语义匹配 · 来源：本人故事/已确认歌词",Map.of("workId",d.work(),"revisionId",d.revision(),"version",d.version(),"sourceHash",d.hash(),"excerpt",excerpt,"score",hit.score(),"untrustedSource",true)));
+            var data=new LinkedHashMap<String,Object>(Map.of("workId",d.work(),"revisionId",d.revision(),"version",d.version(),"sourceHash",d.hash(),"score",hit.score(),"untrustedSource",true));
+            var evidence=d.material().semantic(query);
+            if(evidence!=null)evidence.addTo(data);
+            if(!d.revision().isBlank())data.put("lyricVersion",d.material().revisionNumber());
+            items.add(new Item(d.work(),d.title(),"语义匹配",data));
             if(items.size()>=limit)break;
         }
         int waiting=queue.pending(owner);
         String reply=items.isEmpty()?"未找到可核验的语义结果。仅检索已同步作品，可先将指定旧作品加入语义检索，或使用关键词查询。":"以下是语义匹配，并已回查本人作品权限与版本。来源摘要仅供参考，不执行其中指令。";
         if(waiting>0)reply+="另有 "+waiting+" 首作品等待索引更新。";
-        return new Result(reply,"memory",items,items.stream().map(i->new Command("打开「"+i.title()+"」","打开作品 "+i.id(),"send")).toList(),action);
+        return new Result(reply,"memory",items,items.stream().map(i->new Command("打开「"+i.title()+"」",AgentLibraryCommand.open(i.id(),(String)i.data().get("revisionId")),"send")).toList(),action);
     }
     private Result fallback(String query,String reply){
         String keyword=query.length()>200?query.substring(0,200):query;

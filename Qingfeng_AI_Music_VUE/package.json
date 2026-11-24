@@ -12,7 +12,8 @@
     "build": "npm run typecheck && vite build",
     "preview": "vite preview --host 127.0.0.1",
     "test": "vitest run",
-    "cap:sync": "npm run build && cap sync"
+    "native:build": "npm run typecheck && vite build --mode native",
+    "cap:sync": "npm run native:build && cap sync"
   },
   "dependencies": {
     "@capacitor/core": "8.6.0",

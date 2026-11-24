@@ -2,8 +2,9 @@
 import { t, formatDate, defaultCover, locale } from '../../../shared/i18n/index'
 import { ref, watch, nextTick, onBeforeUnmount, computed } from 'vue'
 import { createShare, getSongShareStatus, revokeSongShare, revokeShares, type Revision, type AudioAsset } from '../api/detail'
+import { platform } from '../../../platform'
 import { apiUrl } from '../../../shared/http/api-client'
-import { lyricQuotes, localShareAddress, posterFilename, shareCancelled, songShareUrl, wechatShareEntry, type SongShareStatus, type WechatDestination } from '../model/song-sharing'
+import { lyricQuotes, localShareAddress, posterFilename, shareCancelled, songShareUrl, songTimelineTitle, wechatShareEntry, type SongShareStatus, type WechatDestination } from '../model/song-sharing'
 import { usePlayer } from '../../../shared/player/store'
 import PublicSongStory from './PublicSongStory.vue'
 import PlaybackIcon from '../../../shared/ui/PlaybackIcon.vue'
@@ -14,7 +15,7 @@ const dialog = ref<HTMLDialogElement>(), shareButton = ref<HTMLAnchorElement>(),
 const summary = ref<SongShareStatus>()
 const song = computed(() => summary.value?.card)
 const expires = computed(() => song.value?.expiresAt ?? '')
-const link = computed(() => song.value ? songShareUrl(song.value.songId, location.origin) : '')
+const link = computed(() => song.value ? songShareUrl(song.value.songId, platform.kind === 'web' ? location.origin : new URL(apiUrl('songs')).origin) : '')
 const stateLabel = { PRIVATE: '未启用歌曲分享页', SHAREABLE: '已启用公开试听', REVOKED: '已撤销公开试听', EXPIRED: '分享链接已过期' }
 const busy = ref(false), error = ref(''), notice = ref(''), sharing = ref(false)
 const posterOpen = ref(false), posterBusy = ref(false), posterUrl = ref(''), posterBlob = ref<Blob>(), posterError = ref('')
@@ -23,6 +24,9 @@ let generation = 0, posterGeneration = 0
 const insideWechat = /MicroMessenger/i.test(navigator.userAgent)
 const hasSystemShare = !insideWechat && typeof navigator.share === 'function'
 const destination = ref<WechatDestination>(), qr = ref(''), qrError = ref(false)
+const handoff = window.cheerfulWechat
+const desktopFriend = platform.kind === 'web' && handoff?.mode('friend') === 'desktop'
+const handoffMessage = ref(''), manualCopy = ref(false), manualLink = ref<HTMLInputElement>()
 let qrRequest = 0
 const importedRevisionId = computed(() => props.asset?.origin === 'IMPORTED' && props.revision?.confirmed ? props.revision.id : undefined)
 const canCreate = computed(() => !!props.asset && (props.asset.origin === 'GENERATED' || !!importedRevisionId.value))
@@ -46,6 +50,8 @@ function clearDestination() {
   destination.value = undefined
   qr.value = ''
   qrError.value = false
+  handoffMessage.value = ''
+  manualCopy.value = false
 }
 function reset() {
   generation++; busy.value = false; sharing.value = false; summary.value = undefined
@@ -70,7 +76,7 @@ async function refresh(change?: () => Promise<unknown>, afterChange?: () => void
     const result = await getSongShareStatus(work, asset.id)
     if (turn !== generation) return
     summary.value = result
-    quote.value = lyricQuotes(result.card?.lyrics || '')[0] || ''
+    quote.value = ''
     if (change && result.card) {
       busy.value = false
       await nextTick()
@@ -116,6 +122,20 @@ async function copy() {
 }
 async function choose(event: MouseEvent, target: WechatDestination) {
   if (!checkLink()) { event.preventDefault(); return }
+  if (platform.kind !== 'web') {
+    event.preventDefault()
+    if (sharing.value || !song.value) return
+    const turn = generation, id = song.value.songId
+    sharing.value = true; error.value = ''; notice.value = ''
+    const current = () => turn === generation && props.open && valid() && id === song.value?.songId
+    try {
+      const { shareNativeMusic } = await import('../../../platform/native/wechat-music')
+      if (current() && await shareNativeMusic(id, target, current) && current()) notice.value = '已交给微信，请在微信中完成分享。'
+    } catch (cause) {
+      if (current()) error.value = cause instanceof Error ? cause.message : '暂时无法打开微信。'
+    } finally { if (turn === generation) sharing.value = false }
+    return
+  }
   // In WeChat the right-hand menu belongs to the current document. Open the signed public song first.
   if (insideWechat) return
   event.preventDefault()
@@ -125,6 +145,20 @@ async function choose(event: MouseEvent, target: WechatDestination) {
   posterOpen.value = false
   notice.value = ''
   if (more.value) more.value.open = false
+  if (event.isTrusted && song.value && handoff) {
+    const current = () => request === qrRequest && props.open && valid()
+    const payload = { title: target === 'timeline' ? songTimelineTitle(song.value) : song.value.title,
+      text: t('听听我创作的这首歌 · Cheerful Music'), url: link.value }
+    void handoff.open(target, payload, current).then(async result => {
+      if (!result || !current()) return
+      handoffMessage.value = result.message
+      manualCopy.value = !!result.manual
+      if (manualCopy.value) {
+        await nextTick()
+        if (current()) { manualLink.value?.focus(); manualLink.value?.select() }
+      }
+    })
+  }
   try {
     const renderer = await import('../model/song-poster')
     const image = await renderer.wechatShareQr(link.value, target)
@@ -135,7 +169,7 @@ async function systemShare() {
   if (sharing.value || !song.value || !checkLink()) return
   const turn = generation; sharing.value = true; error.value = ''; notice.value = ''
   try {
-    await navigator.share({ title: song.value.title, text: t('听听我创作的这首歌 · Cheerful Music'), url: link.value })
+    await navigator.share({ title: songTimelineTitle(song.value), text: t('听听我创作的这首歌 · Cheerful Music'), url: link.value })
   } catch (cause) { if (turn === generation && !shareCancelled(cause)) notice.value = '系统分享暂不可用，可选择微信好友或朋友圈。' }
   finally { if (turn === generation) sharing.value = false }
 }
@@ -147,8 +181,8 @@ async function makePoster() {
   try {
     const { renderSongPoster } = await import('../model/song-poster')
     const blob = await renderSongPoster({ title: song.value.title, cover: cover.value, link: link.value,
-      quote: quote.value, signature: signature.value, tagline: t('人人都是歌手'),
-      scanLabel: t('扫码收听我的歌曲'), expiresLabel: `${t('公开试听有效期至')} ${formatDate(expires.value)}` })
+      quote: quote.value, signature: signature.value.trim() || song.value.creator || '', tagline: t('邀请你来听听'),
+      scanLabel: t('长按识别二维码试听'), expiresLabel: `${t('公开试听有效期至')} ${formatDate(expires.value)}` })
     if (turn !== posterGeneration || before !== generation || !props.open) return
     posterBlob.value = blob; posterUrl.value = URL.createObjectURL(blob)
   } catch (cause) { if (turn === posterGeneration) posterError.value = cause instanceof Error ? cause.message : '海报生成失败，请重试或复制链接。' }
@@ -168,6 +202,7 @@ function savePoster() {
 }
 async function sharePoster() {
   if (!posterBlob.value || !song.value || !checkLink() || sharing.value) return
+  if (typeof File !== 'function') { savePoster(); return }
   const file = new File([posterBlob.value], posterFilename(song.value.title), { type: 'image/png' })
   try { if (!navigator.canShare?.({ files: [file] }) || !navigator.share) { savePoster(); return } }
   catch { savePoster(); return }
@@ -203,19 +238,35 @@ onBeforeUnmount(() => { generation++; clearDestination(); clearPoster(); dialog.
       <p v-else-if="!canCreate" role="status">{{ t('正在读取歌曲对应的歌词，请稍候…') }}</p>
       <p v-if="error" class="notice error" role="alert">{{ t(error) }}</p>
       <template v-if="song && link && !busy">
-        <article class="share-song-card" :aria-label="t('歌曲分享卡片')">
-          <div class="share-card-art"><img :src="cover" :alt="t('歌曲封面')" @error="artworkFailed=true"><button type="button" :aria-label="currentPlaying ? t('暂停') : t('试听歌曲')" @click="track && player.toggle(track)"><PlaybackIcon :playing="currentPlaying"/></button></div>
-          <div class="share-card-copy"><span>Cheerful Music</span><h3>{{ song.title }}</h3><p>{{ t('我的原创，邀请你来听') }}</p></div>
+        <article class="share-song-card song-card-preview" :aria-label="t('歌曲分享卡片')">
+          <div class="share-card-main">
+            <div class="share-card-copy">
+              <div class="share-card-details">
+                <h3 class="share-card-title">{{ song.title }}</h3>
+                <span v-if="song.creator" class="share-card-artist">{{ song.creator }}</span>
+                <span class="share-card-invitation">{{ t('邀请你来听听') }}</span>
+              </div>
+              <span class="share-card-brand">青风音乐 Cheerful Music</span>
+            </div>
+            <div class="share-card-art"><img :src="cover" :alt="t('歌曲封面')" @error="artworkFailed=true"></div>
+          </div>
+          <button class="share-card-listen" type="button" @click="track && player.toggle(track)">
+            <span class="share-card-play-icon" aria-hidden="true"><PlaybackIcon :playing="currentPlaying"/></span>
+            {{ currentPlaying ? t('暂停') : t('试听歌曲') }}
+          </button>
         </article>
         <h3 class="channel-heading">{{ t('分享到') }}</h3>
         <div class="share-destinations" role="group" :aria-label="t('分享到')">
-          <a ref="shareButton" :href="wechatShareEntry(link, 'friend')" :aria-current="destination === 'friend' || undefined" @click="choose($event,'friend')"><span class="destination-icon for-friend" aria-hidden="true"></span>{{ t('微信好友') }}</a>
+          <a ref="shareButton" :href="wechatShareEntry(link, 'friend')" :aria-current="destination === 'friend' || undefined" @click="choose($event,'friend')"><span class="destination-icon for-friend" aria-hidden="true"></span>{{ t('微信好友') }}<small>{{ t(desktopFriend ? '复制链接并打开电脑微信' : '发歌曲卡片') }}</small></a>
           <a :href="wechatShareEntry(link, 'timeline')" :aria-current="destination === 'timeline' || undefined" @click="choose($event,'timeline')"><span class="destination-icon for-timeline" aria-hidden="true"><i></i></span>{{ t('朋友圈') }}</a>
-          <button type="button" :aria-expanded="posterOpen" @click="openPoster"><span class="destination-icon for-poster" aria-hidden="true"><i>♫</i></span>{{ t('音乐海报') }}</button>
+          <button type="button" :aria-expanded="posterOpen" @click="openPoster"><span class="destination-icon for-poster" aria-hidden="true"><i>♫</i></span>{{ t('音乐海报') }}<small>{{ t('发大封面图片') }}</small></button>
         </div>
         <div v-if="destination" class="destination-guide" role="status">
           <img v-if="qr" :src="qr" width="144" height="144" :alt="t('在微信中打开歌曲的二维码')">
           <div>
+            <p v-if="handoffMessage">{{ t(handoffMessage) }}</p>
+            <input v-if="manualCopy" ref="manualLink" readonly :value="link" :aria-label="t('手动复制歌曲链接')" @focus="manualLink?.select()">
+            <a v-if="desktopFriend && destination === 'friend'" class="wechat-open" :href="handoff?.desktopUrl">{{ t('打开电脑微信') }}</a>
             <p>{{ t(destination === 'friend' ? '用微信扫一扫打开歌曲，再点右上角「…」选择「发送给朋友」。' : '用微信扫一扫打开歌曲，再点右上角「…」选择「分享到朋友圈」。') }}</p>
             <p>{{ t(qrError ? '二维码暂时无法生成，可重新点选分享方式。' : qr ? '同一部手机上可截图，再从微信扫一扫的相册打开。' : '正在生成二维码…') }}</p>
           </div>
@@ -223,9 +274,10 @@ onBeforeUnmount(() => { generation++; clearDestination(); clearPoster(); dialog.
       </template>
       <section v-if="song && link && !busy && posterOpen" class="share-poster-workspace" :aria-label="t('音乐海报')">
           <div class="share-poster-options">
-            <h3>{{ t('把这一句，分享出去') }}</h3>
+            <h3>{{ t('大封面音乐海报') }}</h3>
+            <p>{{ t('发图给好友后，可长按右下角二维码试听。') }}</p>
             <label>{{ t('海报歌词') }}<select v-model="quote"><option value="">{{ t('不展示歌词') }}</option><option v-for="line in quotes" :key="line" :value="line">{{ line }}</option></select></label>
-            <label>{{ t('作者署名（选填）') }}<input v-model="signature" maxlength="24" :placeholder="t('写下你想展示的名字')"></label>
+            <label>{{ t('作者署名（选填）') }}<input v-model="signature" maxlength="24" :placeholder="song.creator || t('写下你想展示的名字')"></label>
             <button class="button secondary" type="button" :disabled="posterBusy" @click="makePoster">{{ t(posterBusy ? '正在制作海报…' : posterUrl ? '海报已更新' : '生成海报预览') }}</button>
             <p>{{ t('修改歌词或署名后，重新生成预览即可。') }}</p>
             <p v-if="posterError" class="notice error" role="alert">{{ t(posterError) }}</p>
@@ -274,10 +326,8 @@ onBeforeUnmount(() => { generation++; clearDestination(); clearPoster(); dialog.
 .song-share-dialog::backdrop{background:#38272b66;backdrop-filter:blur(7px)}
 .song-share-content{position:relative;padding:36px}.song-share-close{position:absolute;right:16px;top:16px;width:44px;height:44px;border:0;background:transparent;color:#796660;font-size:28px}
 .song-share-content h2{margin:4px 36px 10px 0;font-size:28px;font-weight:700;line-height:1.4;color:#222223}.song-share-content p{font-size:13px;line-height:1.7;color:#78645d}
-.share-song-card{display:flex;align-items:center;gap:24px;padding:20px;border:1px solid #edddd5;border-radius:18px;background:white}.share-card-art{position:relative;flex:0 0 142px;width:142px}.share-card-art img{display:block;width:100%;aspect-ratio:1;object-fit:cover;border-radius:12px}.share-card-art button{position:absolute;bottom:8px;right:8px;border:0;border-radius:50%;background:#f93822;color:white;width:42px;height:42px;display:grid;place-items:center}.share-card-art svg{width:20px;height:20px}
-.share-card-copy{min-width:0}.share-card-copy>span{font-size:12px;color:#8b7771}.share-card-copy h3{margin:12px 0;font-size:25px;font-weight:700;line-height:1.4;overflow-wrap:anywhere;color:#222223}.share-card-copy p{margin:0}
 .song-share-content .button{display:inline-flex;align-items:center;justify-content:center;min-height:50px;padding:12px 20px;border:1px solid #f93822;border-radius:999px;background:#f93822;color:white;font-weight:600;white-space:normal;text-align:center}.song-share-content .button.secondary{color:#d8311e;background:#fff0eb;border-color:#f9b4a6}
-.share-poster-workspace{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,240px);gap:24px;padding:22px 0;border-top:1px solid #edddd5}.share-poster-options h3{margin:0 0 18px;color:#222223;font-size:18px;font-weight:700}.share-poster-options label{display:block;margin:16px 0;font-size:13px;color:#64534d}.share-poster-options input,.share-poster-options select{display:block;width:100%;min-height:46px;margin-top:8px;background:white;border:1px solid #dfc6bd;border-radius:10px;padding:10px;color:#282320;font-size:16px}.share-poster-options .button{width:100%}.share-poster-downloads{display:grid;gap:15px;margin-top:20px}.share-poster-downloads .text-button{justify-content:center;min-height:44px;color:#ce3422}.share-poster-preview{background:#efe4df;border-radius:12px;min-height:230px;display:grid;place-items:center;padding:12px;align-self:start}.share-poster-preview img{display:block;width:100%;height:auto;border-radius:4px;box-shadow:0 8px 25px #48362a18}.share-poster-preview p{text-align:center;padding:16px}
+.share-poster-workspace{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,48%);gap:24px;padding:22px 0;border-top:1px solid #edddd5}.share-poster-options h3{margin:0 0 18px;color:#222223;font-size:18px;font-weight:700}.share-poster-options label{display:block;margin:16px 0;font-size:13px;color:#64534d}.share-poster-options input,.share-poster-options select{display:block;width:100%;min-height:46px;margin-top:8px;background:white;border:1px solid #dfc6bd;border-radius:10px;padding:10px;color:#282320;font-size:16px}.share-poster-options .button{width:100%}.share-poster-downloads{display:grid;gap:15px;margin-top:20px}.share-poster-downloads .text-button{justify-content:center;min-height:44px;color:#ce3422}.share-poster-preview{background:#efe4df;border-radius:12px;min-height:130px;display:grid;place-items:center;padding:12px;align-self:start}.share-poster-preview img{display:block;width:100%;height:auto;border-radius:4px;box-shadow:0 8px 25px #48362a18}.share-poster-preview p{text-align:center;padding:16px}
 .share-link-panel { margin:18px 0 14px; padding:13px 16px 16px; border:1px solid #f9b4a6; border-radius:16px; background:#fff0eb; }
 .share-link-heading { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:4px 12px; margin-bottom:8px; }
 .share-link-heading label { font-size:14px; font-weight:650; }
@@ -286,6 +336,6 @@ onBeforeUnmount(() => { generation++; clearDestination(); clearPoster(); dialog.
 .share-link-actions input { width:100%; min-width:0; min-height:46px; padding:9px 12px; border:1px solid #dfc6bd; border-radius:10px; background:white; color:#463830; font-size:16px; }
 .song-share-manage summary { cursor:pointer; min-height:36px; align-content:center; }
 .song-share-content .save-info{font-size:12px}.song-share-note{margin-top:20px}.song-share-manage{font-size:12px;color:#8c7268}.song-share-content button:focus-visible,.song-share-content a:focus-visible{outline:3px solid #ed8a76;outline-offset:3px}
-@media(max-width:560px){.song-share-content{padding:28px 20px}.song-share-content h2{font-size:24px}.share-song-card{gap:16px;padding:14px}.share-card-art{width:104px;flex-basis:104px}.share-card-copy h3{font-size:20px;margin:8px 0}.share-card-copy p{font-size:12px}.share-poster-workspace{grid-template-columns:1fr;gap:18px}.share-poster-preview{width:min(100%,220px);justify-self:center;grid-row:1}.song-share-dialog{inset:auto 0 0;width:100%;max-height:calc(100dvh - 12px);margin:0 auto;border-radius:22px 22px 0 0}.song-share-content{padding-bottom:max(24px,env(safe-area-inset-bottom))}}
+@media(max-width:560px){.song-share-content{padding:28px 20px}.song-share-content h2{font-size:24px}.share-poster-workspace{grid-template-columns:1fr;gap:18px}.share-poster-preview{width:100%;justify-self:center;grid-row:1}.song-share-dialog{inset:auto 0 0;width:100%;max-height:calc(100dvh - 12px);margin:0 auto;border-radius:22px 22px 0 0}.song-share-content{padding-bottom:max(24px,env(safe-area-inset-bottom))}}
 @media(max-width:480px) { .share-link-actions { grid-template-columns:1fr; } }
 </style>

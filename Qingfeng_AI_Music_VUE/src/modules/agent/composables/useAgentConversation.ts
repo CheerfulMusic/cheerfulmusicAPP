@@ -2,9 +2,10 @@ import { computed, onScopeDispose, ref } from 'vue'
 import { getConversationState, getConversationHistory, getCurrentConversation, resetConversation, sendMessage } from '../api/chat'
 import { observeConversation } from '../api/events'
 import { ApiError } from '../../../shared/http/api-client'
-import { isAgentContinuation, type AgentContinuation, type ConversationSnapshot, type Message, type SongCard } from '../model/conversation'
+import { displayedWorkList } from '../model/assistant-result'
+import { isAgentContinuation, type AgentContinuation, type ConversationSnapshot, type DisplayedContext, type Message, type SongCard } from '../model/conversation'
 
-interface PendingTurn { text: string; requestKey: string; locale: string; rejected?: boolean; historyEpoch?: number }
+interface PendingTurn { text: string; requestKey: string; locale: string; displayedContext?: DisplayedContext; rejected?: boolean; historyEpoch?: number }
 const recoveryKey = (id: string) => `qingfeng.agent.pending.${id}`
 
 /** Only unacknowledged requests are kept locally, so retry reuses the original idempotency key. */
@@ -32,7 +33,11 @@ export function useAgentConversation(onContinuation?: (snapshot: ConversationSna
     pending.value = null
     try {
       const value = JSON.parse(sessionStorage.getItem(recoveryKey(conversationId.value)) || 'null') as PendingTurn | null
-      if (value && typeof value.text === 'string' && typeof value.requestKey === 'string' && typeof value.locale === 'string') pending.value = value
+      if (value && typeof value.text === 'string' && typeof value.requestKey === 'string' && typeof value.locale === 'string') {
+        // Old manual requests lack a displayed version. A retry must not adopt the current tab's new selection.
+        if (!value.displayedContext && !isAgentContinuation(value)) value.displayedContext = { workId: null, revisionId: null }
+        pending.value = value
+      }
     } catch { /* Ignore a corrupt local hint; authoritative history still loads. */ }
   }
   function merge(rows: Message[]) {
@@ -168,7 +173,7 @@ export function useAgentConversation(onContinuation?: (snapshot: ConversationSna
     continuation.value = null
     startObservation(version)
     try {
-      const snapshot = await sendMessage(conversationId.value, turn.text, turn.requestKey, turn.locale)
+      const snapshot = await sendMessage(conversationId.value, turn.text, turn.requestKey, turn.locale, turn.displayedContext)
       if (disposed || version !== refreshVersion) return
       stopObservation()
       apply(snapshot); pending.value = null; remember(); refreshError.value = ''
@@ -219,8 +224,11 @@ export function useAgentConversation(onContinuation?: (snapshot: ConversationSna
   }
   async function send(text: string, locale: string, onQueued?: () => void): Promise<ConversationSnapshot | undefined> {
     if (!text.trim() || sending.value || loading.value || pending.value) return
+    const displayedContext: DisplayedContext = { workId: songCard.value?.songId ?? null, revisionId: songCard.value?.revisionId ?? null }
+    const list = displayedWorkList(messages.value)
+    if (list) displayedContext.workList = list
     if (!conversationId.value) { await refresh(); if (!conversationId.value || error.value || pending.value) return }
-    pending.value = { text: text.trim(), locale, requestKey: crypto.randomUUID(), historyEpoch }
+    pending.value = { text: text.trim(), locale, requestKey: crypto.randomUUID(), historyEpoch, displayedContext }
     remember()
     onQueued?.()
     return deliver()

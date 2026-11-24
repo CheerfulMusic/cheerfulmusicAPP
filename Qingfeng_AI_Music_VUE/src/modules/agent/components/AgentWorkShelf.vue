@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { ref, watch, onBeforeUnmount, onMounted } from 'vue'
+import NavIcon from '../../../shared/ui/NavIcon.vue'
+import PlaybackIcon from '../../../shared/ui/PlaybackIcon.vue'
 import { locale } from '../../../shared/i18n'
 import { listWorks, type LibraryItem } from '../../works/api/works'
 import { usePlayer } from '../../../shared/player/store'
@@ -46,20 +48,17 @@ onBeforeUnmount(()=>{disposed=true;sequence++;clearTimeout(timer);window.removeE
 </script>
 <template>
   <section id="agent-library" tabindex="-1" class="producer-shelf">
-    <header><h2>{{ tr('我的作品','My songs') }}</h2></header>
+    <header><h2><NavIcon name="headphones"/>{{ tr('我的作品','My songs') }}</h2></header>
     <p v-if="busy" role="status">{{ tr('正在加载…','Loading…') }}</p>
     <p v-if="error" role="status">{{ tr('作品加载失败','Could not load songs') }} <button @click="refresh">{{ tr('重试','Retry') }}</button></p>
-    <p v-else-if="!busy&&!items.length">{{ tr('还没有作品','No songs yet') }}</p>
+    <div v-else-if="!busy&&!items.length" class="shelf-empty"><NavIcon name="music"/><p>{{ tr('还没有作品','No songs yet') }}</p><small>{{ tr('完成创作后，你的歌曲会出现在这里。','Your songs will appear here as you create them.') }}</small></div>
     <div class="shelf-list" @scroll="scrolled">
       <button v-for="item in items" :key="item.work.id" type="button" class="shelf-song" :class="{'is-playing':active(item)}"
         :aria-pressed="item.audioId ? active(item) : undefined" @click="item.audioId ? play(item) : emit('open',item.work.id)">
         <img :src="coverUrl(item.work.id,item.coverId)" alt=""/><span><strong>{{ librarySongTitle(item) }}</strong>
         <small>{{ item.audioId ? item.work.updatedAt.slice(0,10) : tr('查看作品','Open work') }}</small></span>
-        <b>{{ item.audioId ? active(item)?'Ⅱ':'▶' : '›' }}</b>
+        <b><PlaybackIcon v-if="item.audioId" :playing="active(item)"/><NavIcon v-else name="arrow"/></b>
       </button>
     </div>
   </section>
 </template>
-<style scoped>
-.producer-shelf{padding:20px 12px;border:1px solid white;border-radius:24px;background:#ffffffa6;align-self:start}.producer-shelf h2{font-size:14px;color:#405748;margin:0 0 18px}.producer-shelf p{font-size:12px;color:#86a691;line-height:1.8}.shelf-song{display:flex;align-items:center;gap:9px;border:0;background:transparent;text-align:left;padding:10px 0;width:100%;cursor:pointer;color:#47604f}.shelf-song img{width:40px;height:40px;border-radius:9px;object-fit:cover}.shelf-song span{min-width:0}.shelf-song strong{display:block;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.shelf-song small{font-size:10px;color:#95b19f}.shelf-more{width:100%;margin-top:14px;padding:10px;border:0;border-radius:12px;color:#8eac98;background:#ebf0ed;cursor:pointer}
-</style>

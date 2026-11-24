@@ -36,7 +36,6 @@ onBeforeUnmount(()=>timers.forEach(clearTimeout))
   <div class="galaxy-scene">
     <img ref="art" :src="image" alt="" @load="loaded=true"/>
     <canvas ref="canvas" aria-hidden="true"/>
-    <strong>{{ en?'Inspiration galaxy':'灵感银河' }}</strong>
     <button class="tree-zone" type="button" :aria-label="en?'Shake leaves from the tree':'轻摇树枝，落下树叶'" @click="activate($event,'leaf')"/>
     <button class="orbit-zone" type="button" :aria-label="en?'Spin the galaxy faster':'加速银河旋转'" @pointerenter="fast=true" @pointerleave="fast=false" @focus="focused=($event.currentTarget as HTMLElement).matches(':focus-visible')" @blur="focused=false"/>
     <button class="water-zone" type="button" :aria-label="en?'Ripple the lake':'轻点湖面，泛起涟漪'" @click="activate($event,'ring')"/>
@@ -47,7 +46,6 @@ onBeforeUnmount(()=>timers.forEach(clearTimeout))
 .galaxy-scene{position:relative;isolation:isolate;aspect-ratio:1674/940;overflow:hidden;background:#1d2632}
 .galaxy-scene img,.galaxy-scene canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
 .galaxy-scene canvas{opacity:0;pointer-events:none}
-.galaxy-scene strong{position:absolute;z-index:1;left:12px;top:10px;color:white;font-size:15px;text-shadow:0 1px 4px #111;pointer-events:none}
 .galaxy-scene button{position:absolute;appearance:none;padding:0;border:0;background:transparent;cursor:pointer}
 .galaxy-scene button:focus-visible{outline:2px solid white;outline-offset:-3px}
 .tree-zone{left:0;top:0;width:30%;height:46%;border-radius:0 0 95% 0}

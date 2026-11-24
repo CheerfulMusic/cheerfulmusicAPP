@@ -6,8 +6,8 @@ export const homeSeo = {
     path: '/',
     heading: '青风音乐 AI 音乐创作平台',
     inviteDescription: '把灵感写成歌词，用 AI 生成专属歌曲。输入邀请码即可体验。',
-    searchTitle: 'Cheerful Music 青风音乐 - 做自己的歌',
-    description: 'Cheerful Music 青风音乐是 AI 音乐创作平台。无需音乐基础，写下灵感、选择风格、生成歌曲、修改歌词，再保存或分享。',
+    searchTitle: 'Cheerful Music 青风音乐｜做自己的歌',
+    description: '把一句灵感写成一首歌。在青风音乐选择曲风，用 AI 生成歌曲，编辑歌词，再保存并分享你的原创作品。',
   },
   en: {
     path: '/en/',
@@ -27,12 +27,14 @@ export function homeLocale(path: string): Locale | undefined {
   if (path === homeSeo.en.path || path === homeSeo.en.path.slice(0, -1)) return 'en'
 }
 
-export function homeSeoLinks(path: string): { rel: string; href: string; hreflang?: string }[] {
+export const homePaths = { 'zh-CN': homeSeo['zh-CN'].path, en: homeSeo.en.path }
+
+export function localizedSeoLinks(path: string, translations: Record<Locale, string>) {
   return [
-    { rel: 'canonical', href: siteOrigin + path },
-    ...Object.entries(homeSeo).map(([language, page]) => ({
-      rel: 'alternate', hreflang: language, href: siteOrigin + page.path,
+    { rel: 'canonical', href: siteOrigin + path, hreflang: undefined },
+    ...Object.entries(translations).map(([language, href]) => ({
+      rel: 'alternate', hreflang: language, href: siteOrigin + href,
     })),
-    { rel: 'alternate', hreflang: 'x-default', href: siteOrigin + '/' },
+    { rel: 'alternate', hreflang: 'x-default', href: siteOrigin + translations['zh-CN'] },
   ]
 }

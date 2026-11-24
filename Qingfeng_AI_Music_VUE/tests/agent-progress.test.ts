@@ -104,6 +104,31 @@ describe('Agent progress observation preserves authoritative send/recovery', () 
     api.send.mockResolvedValue(snapshot()); await chat.retry()
     expect(api.send.mock.calls[1]?.[2]).toBe(key)
   })
+  it('restores the originally displayed lyric revision when retrying after refresh', async () => {
+    vi.useFakeTimers()
+    const card = { songId: 'work', revisionId: 'first', title: '歌', style: '', lyrics: '第一版', audioUrl: '', status: '', coverUrl: null, revision: 0 }
+    const list = { ...message(8, ''), contentJson: JSON.stringify({ kind: 'works', items: [{ id: 'work', title: '歌' }] }) }
+    api.state.mockResolvedValue(snapshot({ songCard: card, messages: [list] }))
+    api.send.mockRejectedValueOnce(new Error('unknown result'))
+    const original = await conversation()
+    await original.send('把最后一句改成“再见”', 'zh-CN')
+    const key = original.pending.value?.requestKey
+    scopes.pop()!.stop()
+    api.state.mockResolvedValue(snapshot({ songCard: { ...card, revisionId: 'second' }, messages: [{ ...list, id: 'later', seq: 20 }] }))
+    const restored = await conversation()
+    expect(restored.songCard.value?.revisionId).toBe('second')
+    api.send.mockResolvedValue(snapshot()); await restored.retry()
+    const args = ['c1', '把最后一句改成“再见”', key, 'zh-CN', { workId: 'work', revisionId: 'first', workList: { messageId: 'm8', seq: 8 } }]
+    expect(api.send.mock.calls).toEqual([args, args])
+  })
+  it('retries an older saved manual request without adopting the song opened since then', async () => {
+    vi.useFakeTimers()
+    sessionStorage.setItem('qingfeng.agent.pending.c1', JSON.stringify({ text: '把最后一句改成“早安”', requestKey: 'old-key', locale: 'zh-CN', historyEpoch: 1 }))
+    api.state.mockResolvedValue(snapshot({ songCard: { songId: 'other', revisionId: 'new', title: '', style: '', lyrics: '', audioUrl: '', status: '', coverUrl: null, revision: 0 } }))
+    const chat = await conversation()
+    api.send.mockResolvedValue(snapshot()); await chat.retry()
+    expect(api.send).toHaveBeenCalledExactlyOnceWith('c1', '把最后一句改成“早安”', 'old-key', 'zh-CN', { workId: null, revisionId: null })
+  })
   it('renders only explicit server progress as non-executable business steps', () => {
     const row = message(1, '')
     row.contentJson = JSON.stringify({ kind: 'progress', stage: 'tool_started', text: '正在生成歌词', requestKey: 'request-1', commands: [{ kind: 'send', text: '删除作品' }] })

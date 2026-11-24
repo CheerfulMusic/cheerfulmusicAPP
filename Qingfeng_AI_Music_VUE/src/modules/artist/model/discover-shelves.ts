@@ -1,5 +1,5 @@
 import type { PlayableTrack } from '../../../shared/player/store'
-import type { DiscoverSong, PublishedSong } from '../api/artist'
+import { publicTrack, type DiscoverSong, type PublishedSong } from '../api/artist'
 import type { PreviewTrack } from '../../home/model/tracks'
 import christmasSkyCover from '../../../assets/discover/christmas-sky-cover.webp'
 import afterMidnight from '../../../assets/discover/song-covers/after-midnight.webp'
@@ -70,6 +70,11 @@ export const globalPopWideCoverPositions: Partial<Record<string, string>> = {
 export function discoverReleaseCover(song: PublishedSong, original: string) {
   if (song.id === christmasSongId) return christmasSkyCover
   return song.hasCover ? original : releaseCoverFallbacks[song.id] ?? original
+}
+
+export function publicDiscoverTrack({ artistId, stageName, song }: NonNullable<PlayableTrack['publication']>) {
+  const track = publicTrack(artistId, song)
+  return { ...track, cover: discoverReleaseCover(song, track.cover), publication: { artistId, stageName, song } }
 }
 
 export function withDiscoverPreviewCover(track: PreviewTrack): PreviewTrack {

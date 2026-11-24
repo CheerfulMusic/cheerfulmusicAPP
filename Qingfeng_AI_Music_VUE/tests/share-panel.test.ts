@@ -15,7 +15,7 @@ const token = 'A'.repeat(43)
 const privateState = { status: 'PRIVATE', card: null, views: 0, plays: 0 }
 function active(songId = token, title = '我的歌') {
   return { status: 'SHAREABLE', views: 5, plays: 2, card: {
-    songId, title, lyrics: '[Verse]\n窗台那盆薄荷\nKeep the light on', hasCover: true,
+    songId, title, creator: '公开艺名', lyrics: '[Verse]\n窗台那盆薄荷\nKeep the light on', hasCover: true,
     expiresAt: new Date(Date.now() + 86400000).toISOString(),
   } }
 }
@@ -28,7 +28,7 @@ function mount(origin: AudioAsset['origin'] = 'GENERATED') {
 function button(text: string) {
   return [...document.querySelectorAll('button')].find(b => {
     const copy = b.cloneNode(true) as HTMLButtonElement
-    copy.querySelectorAll('[aria-hidden=true]').forEach(icon => icon.remove())
+    copy.querySelectorAll('[aria-hidden=true], small').forEach(hint => hint.remove())
     return copy.textContent?.trim() === text
   })!
 }
@@ -82,9 +82,13 @@ describe('share panel state and poster lifecycle', () => {
     expect(mocks.create).not.toHaveBeenCalled()
     expect(document.body.textContent).toContain('5 次访问')
     expect(document.querySelector('.share-card-copy h3')?.textContent).toBe('我的歌')
-    expect(channel('friend').textContent).toBe('微信好友')
+    expect(channel('friend').textContent).toContain('发歌曲卡片')
     expect(channel('timeline').textContent).toBe('朋友圈')
     expect(button('音乐海报')).toBeTruthy()
+    expect(button('音乐海报').textContent).toContain('发大封面图片')
+    expect(document.querySelector('.share-card-artist')?.textContent).toBe('公开艺名')
+    expect(document.querySelector('.share-card-brand')?.textContent).toBe('青风音乐 Cheerful Music')
+    expect(button('试听歌曲')).toBeTruthy()
     const copy = button('复制分享链接')
     const url = document.querySelector<HTMLInputElement>('.share-link-panel input')?.value
     expect(url).toContain('/song/' + token)
@@ -125,6 +129,20 @@ describe('share panel state and poster lifecycle', () => {
     expect(mocks.qr).not.toHaveBeenCalled()
     expect(writeText).not.toHaveBeenCalled()
   })
+  it('uses the website name in system sharing, including for older song cards', async () => {
+    const share = vi.fn().mockResolvedValue(undefined)
+    vi.stubGlobal('navigator', { share })
+    const sample = active(token, '米仓山')
+    const named = '青风音乐 Cheerful Music｜米仓山 · SNOW'
+    mocks.get.mockResolvedValueOnce({ ...sample, card: { ...sample.card, timelineTitle: named } })
+    const props = mount(); await flush()
+    button('系统分享').click()
+    expect(share).toHaveBeenLastCalledWith(expect.objectContaining({ title: named }))
+    mocks.get.mockResolvedValueOnce(active('B'.repeat(43), '新曲'))
+    props.asset = { ...props.asset, id: 'other' }; await flush()
+    button('系统分享').click()
+    expect(share).toHaveBeenLastCalledWith(expect.objectContaining({ title: '青风音乐 Cheerful Music｜新曲' }))
+  })
   it('retries only the status read after a confirmed change', async () => {
     mount(); await flush()
     mocks.get.mockRejectedValueOnce(new Error('暂时无法读取'))
@@ -152,6 +170,10 @@ describe('share panel state and poster lifecycle', () => {
     mocks.poster.mockImplementationOnce(() => new Promise(r => { finish = r }))
     mocks.get.mockResolvedValue(active())
     mount(); await flush(); button('音乐海报').click(); await flush()
+    expect(mocks.poster.mock.calls[0]![0]).toMatchObject({
+      signature: '公开艺名', quote: '', tagline: '邀请你来听听', scanLabel: '长按识别二维码试听',
+      link: expect.stringContaining('/song/' + token),
+    })
     const select = document.querySelector<HTMLSelectElement>('.share-poster-options select')!
     select.value = 'Keep the light on'; select.dispatchEvent(new Event('change')); await flush()
     finish(new Blob(['stale'], { type: 'image/png' })); await flush()

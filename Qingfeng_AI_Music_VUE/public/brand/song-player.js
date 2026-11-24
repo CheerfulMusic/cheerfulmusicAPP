@@ -47,11 +47,16 @@
     dragging = false
     updateTime()
   })
+  const sharePlay = byId('share-play')
   function playbackState() {
     const playing = !audio.paused && !audio.ended
     for (const button of [play, byId('mini-play')]) {
       button.dataset.playing = String(playing)
       button.setAttribute('aria-label', playing ? '暂停' : '播放')
+    }
+    if (sharePlay) {
+      sharePlay.dataset.playing = String(playing)
+      byId('share-play-label').textContent = playing ? '暂停' : '试听歌曲'
     }
   }
   for (const name of ['play', 'pause', 'ended']) audio.addEventListener(name, playbackState)
@@ -64,6 +69,7 @@
     catch (error) { if (error.name !== 'AbortError') byId('audio-status').textContent = '暂时无法播放，请再试一次。' }
   }
   byId('mini-play').onclick = () => play.click()
+  if (sharePlay) sharePlay.onclick = () => play.click()
   byId('repeat').onclick = event => {
     audio.loop = !audio.loop
     event.currentTarget.setAttribute('aria-pressed', String(audio.loop))
@@ -119,11 +125,10 @@
     posterPromise = import('/brand/song-poster.js').then(async renderer => {
       const title = document.querySelector('h1').textContent
       const artwork = byId('artwork')
-      const lyrics = Array.from(lines.querySelectorAll('p:not(.empty-lyrics)'), line => line.textContent).join('\n')
       const blob = await renderer.renderSongPoster({
         title, cover: artwork.currentSrc || artwork.src, signature: byId('artist').textContent,
         link: document.querySelector('meta[property="og:url"]').content,
-        quote: renderer.lyricQuotes(lyrics)[0] || '', tagline: '扫码收听这首歌', scanLabel: '', expiresLabel: '',
+        quote: '', tagline: '邀请你来听听', scanLabel: '长按识别二维码试听', expiresLabel: '',
       })
       if (turn !== generation) return
       const name = renderer.posterFilename(title)
@@ -150,7 +155,7 @@
     save.href = result.imageUrl
     save.download = result.name
     byId('send-poster').hidden = !canSend(result.file)
-    status.textContent = '可保存海报，也可以在手机上长按图片。'
+    status.textContent = '把图片发给好友，对方可长按右下角二维码试听。'
   }
   async function sendImage(result) {
     try { await navigator.share({ files: [result.file] }) }

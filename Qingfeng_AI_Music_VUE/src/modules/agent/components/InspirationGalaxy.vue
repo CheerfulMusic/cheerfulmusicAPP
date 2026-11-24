@@ -33,9 +33,9 @@ function playVideo(){if(player.current && (player.playing || player.starting))vo
 watch(()=>player.playing,playing=>{if(playing)video.value?.pause()})
 </script>
 <template>
-  <section class="inspiration-galaxy" :aria-label="en?'Inspiration galaxy':'灵感银河'">
+  <section class="inspiration-galaxy" :aria-label="en?'Song visuals':'歌曲画面'">
     <template v-if="project">
-      <header><strong>{{ en?'Inspiration galaxy':'灵感银河' }}</strong><small>MV</small></header>
+      <header><small>MV</small></header>
       <video v-if="!failed" :key="content" ref="video" controls playsinline preload="metadata" :src="content" @play="playVideo" @error="failed=true"/>
       <button v-else type="button" @click="failed=false">{{ en?'Retry video playback':'重新加载 MV' }}</button>
     </template>
@@ -44,6 +44,6 @@ watch(()=>player.playing,playing=>{if(playing)video.value?.pause()})
 </template>
 <style scoped>
 .inspiration-galaxy{flex:none;overflow:hidden;border:1px solid #dce3d9;border-radius:14px;margin:8px 0 14px;background:#f8f8f1}
-.inspiration-galaxy header{display:flex;justify-content:space-between;padding:8px 12px;color:#415748}
+.inspiration-galaxy header{display:flex;justify-content:flex-end;padding:8px 12px;color:#415748}
 .inspiration-galaxy video{width:100%;display:block;max-height:38vh;background:#202723}
 </style>

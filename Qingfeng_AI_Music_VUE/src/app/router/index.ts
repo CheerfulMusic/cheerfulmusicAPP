@@ -3,6 +3,7 @@ import { createRouter, createWebHashHistory, createWebHistory } from 'vue-router
 import { platform } from '../../platform'
 import { scrollBehavior } from './scroll'
 import { homeSeo } from '../../shared/i18n/home-seo'
+import { discoverPaths } from '../../shared/i18n/site-seo'
 import { siteGuidePaths } from '../../shared/i18n/site-guides'
 import SeoLanding from '../layouts/SeoLanding.vue'
 
@@ -17,7 +18,11 @@ export const router = createRouter({
       props: { path },
       meta: { publicGuide: true },
     })) : []),
-    { path: '/', name: 'home', alias: platform.kind === 'web' ? homeSeo.en.path : undefined, component: () => import('../../modules/home/pages/PremiumHomePage.vue') },
+    ...(platform.kind === 'web' ? [] : [
+      { path: '/', redirect: { name: 'native-listen' } },
+      { path: '/listen/:token?', name: 'native-listen', component: () => import('../../platform/native/NativeListeningPage.vue') },
+    ]),
+    { path: platform.kind === 'web' ? '/' : '/home', name: 'home', alias: platform.kind === 'web' ? homeSeo.en.path : undefined, component: () => import('../../modules/home/pages/PremiumHomePage.vue') },
     { path: '/create', name: 'studio', component: () => import('../../modules/studio/pages/DraftStudioPage.vue') },
     { path: '/create/photo', name: 'photo-studio', component: () => import('../../modules/studio/pages/PhotoStudioPage.vue') },
     { path: '/agent', name: 'agent', component: () => import('../../modules/agent/pages/AgentStudioPage.vue') },
@@ -28,7 +33,7 @@ export const router = createRouter({
     { path: '/profile', name: 'artist-profile', component: () => import('../../modules/artist/pages/MyArtistProfilePage.vue') },
     { path: '/artist/:id', name: 'artist-home', component: () => import('../../modules/artist/pages/PublicArtistPage.vue') },
     { path: '/artist/:id/albums/:album', name: 'artist-album', component: () => import('../../modules/artist/pages/PublicAlbumPage.vue') },
-    { path: '/discover', name: 'discover', component: () => import('../../modules/artist/pages/DiscoverPage.vue') },
+    { path: '/discover', name: 'discover', alias: platform.kind === 'web' ? discoverPaths.en : undefined, component: () => import('../../modules/artist/pages/DiscoverPage.vue') },
     { path: '/legal/terms', component: { render: () => null }, beforeEnter: () => { window.location.replace('/legal/terms.html'); return false } },
     { path: '/legal/privacy', component: { render: () => null }, beforeEnter: () => { window.location.replace('/legal/privacy.html'); return false } },
     { path: '/recharge', name: 'recharge', component: () => import('../../modules/identity/pages/RechargePage.vue') },
@@ -39,3 +44,14 @@ export const router = createRouter({
 })
 
 installCreationLoginGate(router)
+
+if (platform.kind !== 'web') {
+  const handleOpen = async () => {
+    if (document.hidden) return
+    const { receiveOpenedSong } = await import('../../platform/native/wechat-music')
+    await receiveOpenedSong(token => { void router.push({ name: 'native-listen', params: { token } }) })
+  }
+  void router.isReady().then(handleOpen)
+  document.addEventListener('visibilitychange', handleOpen)
+  window.addEventListener('focus', handleOpen)
+}

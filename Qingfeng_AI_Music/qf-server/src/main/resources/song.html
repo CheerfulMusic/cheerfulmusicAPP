@@ -4,16 +4,18 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#151846">
-  <title>{{title}} · {{creator}}</title>
+  <title>{{timelineTitle}}</title>
   <meta name="description" content="{{description}}">
   <meta name="robots" content="noindex,nofollow">
-  <meta property="og:title" content="{{title}} · {{creator}}">
+  <meta property="og:site_name" content="{{siteName}}">
+  <meta property="og:title" content="{{timelineTitle}}" data-song-credit="{{title}} · {{creator}}">
   <meta property="og:description" content="{{description}}">
   <meta property="og:image" content="{{thumbnail}}">
   <meta property="og:url" content="{{url}}">
   <meta property="og:type" content="music.song">
   <link rel="stylesheet" href="/brand/song-player.css">
   <link rel="stylesheet" href="/brand/share-destinations.css">
+  <script defer src="/brand/wechat-handoff.js"></script>
   <script defer src="/brand/song-share.js"></script>
   <script defer src="/brand/song-player.js"></script>
   <script defer src="/brand/song-community.js"></script>
@@ -89,15 +91,36 @@
   <dialog id="share-sheet" aria-labelledby="share-heading">
     <div class="sheet-body">
       <div class="sheet-heading"><h2 id="share-heading">分享到</h2><button id="close-share" class="close" type="button" aria-label="关闭分享">×</button></div>
-      <div class="share-track"><img src="{{image}}" width="52" height="52" alt=""><div><strong>{{title}}</strong><span>{{creator}}</span></div></div>
+      <article class="song-card-preview" aria-label="歌曲分享卡片">
+        <div class="share-card-main">
+          <div class="share-card-copy">
+            <div class="share-card-details">
+              <h3 class="share-card-title">{{title}}</h3>
+              <span class="share-card-artist">{{creator}}</span>
+              <span class="share-card-invitation">邀请你来听听</span>
+            </div>
+            <span class="share-card-brand">{{siteName}}</span>
+          </div>
+          <div class="share-card-art"><img src="{{image}}" width="552" height="552" alt="《{{title}}》歌曲封面"></div>
+        </div>
+        <button id="share-play" class="share-card-listen" type="button">
+          <span class="share-card-play-icon" aria-hidden="true"><i></i></span>
+          <span id="share-play-label">试听歌曲</span>
+        </button>
+      </article>
       <div id="wechat-actions" class="share-destinations" role="group" aria-label="分享方式">
-        <button id="friend" type="button" aria-controls="wechat-guide" aria-pressed="false"><span class="destination-icon for-friend" aria-hidden="true"></span>微信好友</button>
+        <button id="friend" type="button" aria-controls="wechat-guide" aria-pressed="false"><span class="destination-icon for-friend" aria-hidden="true"></span>微信好友<small id="friend-format">发歌曲卡片</small><small id="desktop-hint" hidden>复制链接并打开电脑微信</small></button>
         <button id="timeline" type="button" aria-controls="wechat-guide" aria-pressed="false"><span class="destination-icon for-timeline" aria-hidden="true"><i></i></span>朋友圈</button>
-        <button id="poster" type="button"><span class="destination-icon for-poster" aria-hidden="true"><i>♫</i></span>音乐海报</button>
+        <button id="poster" type="button"><span class="destination-icon for-poster" aria-hidden="true"><i>♫</i></span>音乐海报<small>发大封面图片</small></button>
       </div>
       <div id="wechat-guide" class="destination-guide" hidden>
         <img id="wechat-qr" hidden width="144" height="144" alt="在微信中打开歌曲的二维码">
-        <div><p id="channel-instruction" role="status"></p><p id="wechat-feedback" role="status"></p></div>
+        <div>
+          <p id="handoff-status" role="status"></p>
+          <input id="handoff-link" type="text" hidden readonly aria-label="手动复制歌曲链接" value="{{url}}">
+          <a id="open-desktop-wechat" class="wechat-open" hidden href="weixin://">打开电脑微信</a>
+          <p id="channel-instruction" role="status"></p><p id="wechat-feedback" role="status"></p>
+        </div>
       </div>
       <p id="status" class="notice" role="status"></p>
       <div id="poster-preview" hidden>

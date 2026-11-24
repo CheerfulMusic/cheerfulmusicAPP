@@ -1,4 +1,8 @@
-export interface SharedSong { songId: string; title: string; lyrics: string; hasCover: boolean; expiresAt: string }
+export interface SharedSong { songId: string; title: string; creator?: string; lyrics: string; hasCover: boolean; expiresAt: string; timelineTitle?: string }
+
+export function songTimelineTitle(song: SharedSong): string {
+  return song.timelineTitle || `青风音乐 Cheerful Music｜${song.title}`
+}
 export interface SongShareStatus {
   status: 'PRIVATE' | 'SHAREABLE' | 'REVOKED' | 'EXPIRED'
   card: SharedSong | null
@@ -12,6 +16,16 @@ export function songShareUrl(token: string, origin: string): string {
   return new URL(`/song/${token}`, base.origin).href
 }
 export type WechatDestination = 'friend' | 'timeline'
+declare global {
+  interface Window {
+    cheerfulWechat?: {
+      mode(destination: WechatDestination): '' | 'desktop' | 'system'
+      open(destination: WechatDestination, data: ShareData & { url: string }, isCurrent: () => boolean):
+        Promise<{ message: string; manual?: boolean } | undefined>
+      desktopUrl: string
+    }
+  }
+}
 export function wechatShareEntry(link: string, destination: WechatDestination): string {
   const entry = new URL(link)
   entry.hash = 'share-' + destination

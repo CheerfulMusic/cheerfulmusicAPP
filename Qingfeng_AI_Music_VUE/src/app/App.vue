@@ -20,8 +20,8 @@ const standalonePreview = computed(() => import.meta.env.DEV && route.name === '
 const publicPreview = computed(() => platform.kind === 'web' && route.name === 'help')
 </script>
 <template>
-  <RouterView v-if="standalonePreview || route.meta.publicGuide" />
-  <BetaAccessGate v-else :public-access="publicListening" :public-preview="publicPreview" :home-entry="route.name === 'home'">
+  <RouterView v-if="standalonePreview || route.meta.publicGuide || route.name === 'native-listen'" />
+  <BetaAccessGate v-else :public-access="publicListening" :public-preview="publicPreview" :home-entry="route.name === 'home'" :discover-entry="route.name === 'discover'">
     <template #public-preview="{ openInvite }">
       <SeoLanding :path="route.path">
         <button type="button" class="button" @click="openInvite">{{ t('请输入邀请码') }}</button>

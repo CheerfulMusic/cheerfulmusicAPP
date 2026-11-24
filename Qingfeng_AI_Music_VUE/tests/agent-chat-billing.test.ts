@@ -19,6 +19,11 @@ it('never authorizes a purchase for an automatic continuation', async () => {
   await sendMessage('c', '继续已安排的操作', 'continuation-key', 'zh-CN')
   expect(api.request.mock.calls[0][2].paidConfirmed).toBe(false)
 })
+it('posts the displayed work and lyric revision with an exact edit', async () => {
+  const target = { workId: 'original-work', revisionId: 'original-revision' }
+  await sendMessage('c', '把最后一句改成“再见”', 'edit-key', 'zh-CN', target)
+  expect(api.request.mock.calls[0][2].displayedContext).toEqual(target)
+})
 it('surfaces insufficient balance without retry or dialog', async () => {
   api.request.mockRejectedValueOnce(new ApiError('积分不足', 400, 'INSUFFICIENT_CREDITS'))
   await expect(sendMessage('c', '继续', 'key', 'zh-CN')).rejects.toMatchObject({ code: 'INSUFFICIENT_CREDITS' })

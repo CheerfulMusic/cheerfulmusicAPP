@@ -21,6 +21,9 @@ public final class AgentChatExecutor implements AutoCloseable {
         return submit(owner,conversation,text,key,locale,false);
     }
     public DeferredResult<AgentChatService.Snapshot> submit(String owner,String conversation,String text,String key,String locale,boolean paidConfirmed){
+        return submit(owner,conversation,text,key,locale,paidConfirmed,null);
+    }
+    public DeferredResult<AgentChatService.Snapshot> submit(String owner,String conversation,String text,String key,String locale,boolean paidConfirmed,AgentChatService.DisplayedContext displayedContext){
         if(!slots.tryAcquire())throw new DomainException("AGENT_BUSY","当前对话请求较多，请稍后再试；本次尚未开始执行。");
         AgentAdmission.Ticket ticket;
         try{ticket=paidConfirmed?admission.acquire(owner,conversation,key,text,locale,true):admission.acquire(owner,conversation,key,text,locale);}catch(RuntimeException e){slots.release();throw e;}
@@ -28,17 +31,17 @@ public final class AgentChatExecutor implements AutoCloseable {
         var result=new DeferredResult<AgentChatService.Snapshot>(deadline.toMillis()+1000);
         result.onTimeout(()->{scope.cancel();result.setErrorResult(AgentRequestScope.expired());});
         result.onError(error->scope.cancel());
-        try{workers.execute(()->execute(ticket,scope,result,owner,conversation,text,key,locale));}
+        try{workers.execute(()->execute(ticket,scope,result,owner,conversation,text,key,locale,displayedContext));}
         catch(RejectedExecutionException e){try{admission.abandon(ticket);}finally{slots.release();}throw new DomainException("AGENT_BUSY","对话执行器暂不可用，本次尚未开始执行。");}
         return result;
     }
-    private void execute(AgentAdmission.Ticket ticket,AgentRequestScope scope,DeferredResult<AgentChatService.Snapshot> result,String owner,String conversation,String text,String key,String locale){
+    private void execute(AgentAdmission.Ticket ticket,AgentRequestScope scope,DeferredResult<AgentChatService.Snapshot> result,String owner,String conversation,String text,String key,String locale,AgentChatService.DisplayedContext displayedContext){
         boolean completed=false;ScheduledFuture<?> renewal=null;
         try(var ignored=scope.enter()){
             var started = new AtomicBoolean();
             renewal=heartbeat.scheduleWithFixedDelay(()->{try{if(started.get())admission.heartbeat(ticket);}catch(RuntimeException failure){scope.cancel();}},10,10,TimeUnit.SECONDS);
             AgentRequestScope.check();
-            var snapshot=chat.send(owner,conversation,text,key,locale,claim -> {
+            var snapshot=chat.send(owner,conversation,text,key,locale,displayedContext,claim -> {
                 var resultClaim = admission.startTurn(ticket,conversation,claim);
                 started.set(true);
                 return resultClaim;
