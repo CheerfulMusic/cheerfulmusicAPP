@@ -68,7 +68,12 @@ class GiftWorkflowIntegrationTest {
   String songId=field(text(grant),"songId");
   String songApi="/api/songs/"+songId;
   assertEquals(200,call(null,"GET",songApi+"/public",null).statusCode());
-  assertTrue(text(call(null,"GET","/song/"+songId,null)).contains("给你的歌 · 匿名创作者"));
+  String page = text(call(null,"GET","/song/"+songId,null));
+  String timelineTitle = "青风音乐 Cheerful Music｜给你的歌 · 匿名创作者";
+  assertTrue(page.contains("<title>" + timelineTitle + "</title>"));
+  assertTrue(page.contains("property=\"og:title\" content=\"" + timelineTitle + "\""));
+  assertTrue(page.contains("property=\"og:site_name\" content=\"青风音乐 Cheerful Music\""));
+  assertEquals(timelineTitle, json(call(a,"GET","/api/app/works/"+w+"/shares/"+asset,null),200).path("card").path("timelineTitle").asString());
   assertArrayEquals(wav(),call(null,"GET",songApi+"/audio",null).body());
   assertEquals(200,call(null,"GET",songApi+"/thumbnail.png",null).statusCode());
   var preview=call(null,"GET","/gift/"+token,null);assertEquals(200,preview.statusCode());assertTrue(text(preview).contains("property=\"og:title\" content=\"给你的歌\""));assertFalse(text(preview).contains("secret-only-story"));
@@ -117,6 +122,9 @@ class GiftWorkflowIntegrationTest {
   String ownerId = jdbc.queryForObject("SELECT owner_id FROM music_work WHERE id=?",String.class,work);
   String artist = UUID.randomUUID().toString();
   jdbc.update("INSERT INTO artist_profile(creator_id,public_id,stage_name,tagline,published) VALUES(?,?,?,'',TRUE)",ownerId,artist,"公开艺名");
+  String namedTitle = "青风音乐 Cheerful Music｜给你的歌 · 公开艺名";
+  assertTrue(text(call(null,"GET","/song/"+id,null)).contains("property=\"og:title\" content=\"" + namedTitle + "\""));
+  assertEquals(namedTitle, json(call(owner,"GET",api+"/shares/"+asset,null),200).path("card").path("timelineTitle").asString());
   assertEquals(artist,json(call(null,"GET",pub+"/public",null),200).path("artistId").asString());
   String comment = "/comments/"+UUID.randomUUID(), commentText="{\"text\":\"喜欢这首歌\"}", active="{\"active\":true}";
   for (int repeat=0; repeat<2; repeat++) {

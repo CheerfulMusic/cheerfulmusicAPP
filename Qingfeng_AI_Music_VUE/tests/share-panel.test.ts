@@ -125,6 +125,20 @@ describe('share panel state and poster lifecycle', () => {
     expect(mocks.qr).not.toHaveBeenCalled()
     expect(writeText).not.toHaveBeenCalled()
   })
+  it('uses the website name in system sharing, including for older song cards', async () => {
+    const share = vi.fn().mockResolvedValue(undefined)
+    vi.stubGlobal('navigator', { share })
+    const sample = active(token, '米仓山')
+    const named = '青风音乐 Cheerful Music｜米仓山 · SNOW'
+    mocks.get.mockResolvedValueOnce({ ...sample, card: { ...sample.card, timelineTitle: named } })
+    const props = mount(); await flush()
+    button('系统分享').click()
+    expect(share).toHaveBeenLastCalledWith(expect.objectContaining({ title: named }))
+    mocks.get.mockResolvedValueOnce(active('B'.repeat(43), '新曲'))
+    props.asset = { ...props.asset, id: 'other' }; await flush()
+    button('系统分享').click()
+    expect(share).toHaveBeenLastCalledWith(expect.objectContaining({ title: '青风音乐 Cheerful Music｜新曲' }))
+  })
   it('retries only the status read after a confirmed change', async () => {
     mount(); await flush()
     mocks.get.mockRejectedValueOnce(new Error('暂时无法读取'))
