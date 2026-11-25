@@ -2,13 +2,13 @@
 import FilingLink from "../../shared/ui/FilingLink.vue"
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { locale, t } from '../../shared/i18n'
-import { homeSeo, homeSearchTitle, siteName } from '../../shared/i18n/home-seo'
+import { homeSeo, siteName } from '../../shared/i18n/home-seo'
 import { discoverPaths, discoverSeo, landingLinks } from '../../shared/i18n/site-seo'
 import { platform } from '../../platform'
 import LanguageSwitcher from '../../shared/i18n/LanguageSwitcher.vue'
 import { enterInvite, InviteError, readInviteStatus, type InviteStatus } from './api'
 
-const props = defineProps<{ publicAccess?: boolean; publicPreview?: boolean; homeEntry?: boolean; discoverEntry?: boolean }>()
+const props = defineProps<{ publicAccess?: boolean; publicPreview?: boolean; homeBrand?: string; discoverEntry?: boolean }>()
 const dialog = ref<HTMLDialogElement>(), input = ref<HTMLInputElement>()
 const everAdmitted = ref(false), admitted = ref(false), checking = ref(true), submitting = ref(false)
 const status = ref<InviteStatus>(), code = ref(''), error = ref('')
@@ -18,7 +18,7 @@ const accessible = computed(() => admitted.value || (props.publicAccess && !acti
 const showPreview = computed(() => props.publicPreview && !accessible.value)
 const entryCopy = computed(() => {
   if (props.discoverEntry) return discoverSeo[locale.value]
-  if (props.homeEntry) return homeSeo[locale.value]
+  if (props.homeBrand) return homeSeo[locale.value]
 })
 const entryLinks = computed(() => landingLinks(locale.value, props.discoverEntry ? discoverPaths[locale.value] : '/')
   .filter(link => !link.lang))
@@ -85,11 +85,11 @@ onBeforeUnmount(() => { disposed = true; clearTimeout(expiryTimer); window.remov
     <section class="beta-access-card" :aria-busy="busy">
       <div class="beta-access-top" :data-nosnippet="entryCopy ? '' : undefined"><span class="beta-access-label">{{ t('内测体验') }}</span><LanguageSwitcher/></div>
       <img class="beta-access-logo" src="/brand/logo-symbol.svg" alt="" width="56" height="56">
-      <p class="beta-access-brand">{{ homeEntry ? homeSearchTitle : siteName }}</p>
+      <p class="beta-access-brand">{{ homeBrand ?? siteName }}</p>
       <h1 id="beta-access-title">{{ entryCopy?.heading ?? t('让灵感，先在这里发声。') }}</h1>
       <p id="beta-access-description" class="beta-access-intro">{{ entryCopy?.description ?? t('青风音乐正在内测，输入邀请码即可开始体验。') }}</p>
       <div data-nosnippet>
-        <p v-if="homeEntry" class="beta-access-prompt">{{ homeSeo[locale].invitePrompt }}</p>
+        <p v-if="homeBrand" class="beta-access-prompt">{{ homeSeo[locale].invitePrompt }}</p>
         <p v-if="checking" class="beta-access-checking" role="status">{{ t('正在验证内测资格…') }}</p>
         <form v-else-if="status" @submit.prevent="submit">
           <label for="beta-invite-code">{{ t('内测邀请码') }}</label>

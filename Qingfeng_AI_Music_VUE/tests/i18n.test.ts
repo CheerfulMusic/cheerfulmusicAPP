@@ -31,7 +31,7 @@ describe('Chinese and English interface', () => {
     expect(localStorage.getItem(localeStorageKey)).toBeNull()
     updatePageLocale('/en/')
     expect(document.documentElement.lang).toBe('en')
-    expect(document.title).toBe('青妙Ai')
+    expect(document.title).toBe('cheerfulmusic')
     updatePageLocale('/')
     expect(document.documentElement.lang).toBe('zh-CN')
   })

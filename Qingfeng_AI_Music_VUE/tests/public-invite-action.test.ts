@@ -29,7 +29,7 @@ it('automatically opens the homepage invite with the localized product name', as
  const host = document.createElement('div'); document.body.append(host)
  const previous = locale.value
  setLocale('zh-CN')
- const app = createApp(Gate, { homeEntry: true }); app.mount(host)
+ const app = createApp(Gate, { homeBrand: '青妙Ai' }); app.mount(host)
  try {
   await nextTick()
   expect(show).toHaveBeenCalled()

@@ -19,7 +19,7 @@ describe('crawlable site pages', () => {
     expect(page.querySelector('meta[name="description"]')?.getAttribute('content')).toBe(metadata.description)
     expect(page.querySelector('link[rel="canonical"]')?.getAttribute('href')).toBe(siteOrigin + path)
     expect(page.querySelector('meta[property="og:url"]')?.getAttribute('content')).toBe(siteOrigin + path)
-    expect(page.querySelector('meta[property="og:site_name"]')?.getAttribute('content')).toBe('青妙Ai')
+    expect(page.querySelector('meta[property="og:site_name"]')?.getAttribute('content')).toBe(path === '/en/' ? 'cheerfulmusic' : '青妙Ai')
     expect(page.querySelector('meta[name="twitter:card"]')?.getAttribute('content')).toBe('summary_large_image')
     expect(page.querySelector('h1')?.textContent).toBe(metadata.heading)
     for (const alternate of page.querySelectorAll('link[hreflang="en"], link[hreflang="zh-CN"]')) {
@@ -33,7 +33,7 @@ describe('crawlable site pages', () => {
     const page = parsePage(path)
     const alternates = Object.fromEntries(Array.from(page.querySelectorAll('link[hreflang]'),
       link => [link.getAttribute('hreflang'), link.getAttribute('href')]))
-    expect(alternates).toEqual({ en: siteOrigin + '/en/', 'zh-CN': siteOrigin + '/', 'x-default': siteOrigin + '/' })
+    expect(alternates).toEqual({ en: siteOrigin + '/en/', 'zh-CN': siteOrigin + '/', 'x-default': siteOrigin + '/en/' })
   })
 
   it.each(['/', '/en/'])('shows one heading and the guide links in the initial invitation card at %s', path => {
@@ -44,6 +44,7 @@ describe('crawlable site pages', () => {
     const productCopy = card?.querySelector('.beta-access-intro')
     expect(productCopy?.textContent).toBe(sitePage(path)!.description)
     expect(productCopy?.textContent).toContain('Cheerful Music')
+    expect(productCopy?.textContent).toContain('cheerfulmusic')
     expect(productCopy?.textContent).toContain('青风音乐')
     expect(productCopy?.textContent).toContain('青妙Ai')
     expect(productCopy?.closest('[data-nosnippet]')).toBeNull()
@@ -55,16 +56,23 @@ describe('crawlable site pages', () => {
     expect(card?.querySelector('form')).toBeNull()
   })
 
-  it('publishes the same brand title on the Chinese and English homepages', () => {
+  it('publishes one site entity and the regional brand on each homepage', () => {
     expect(parsePage('/').documentElement.lang).toBe('zh-CN')
     expect(parsePage('/').querySelector('h1')?.textContent).toBe('青妙Ai｜把你的歌词做成歌')
     expect(parsePage('/').querySelector('meta[property="og:title"]')?.getAttribute('content')).toBe('青妙Ai')
     const website = JSON.parse(parsePage('/').querySelector('script[type="application/ld+json"]')!.textContent!)
     expect(website.name).toBe('青妙Ai')
+    expect(website.url).toBe(siteOrigin + '/')
     expect(website.alternateName)
-      .toEqual(expect.arrayContaining(['青风音乐', 'CheerfulMusic', 'cheerfulmusicAI', 'cheerfulmusicai']))
+      .toEqual(expect.arrayContaining(['cheerfulmusic', 'Cheerful Music', '青风音乐', 'CheerfulMusic', 'cheerfulmusicAI', 'cheerfulmusicai']))
     expect(parsePage('/').querySelector('link[rel="icon"][sizes="96x96"]')?.getAttribute('href')).toBe('/brand/favicon-96.png')
-    expect(parsePage('/en/').title).toBe('青妙Ai')
+    for (const [path, brand] of [['/', '青妙Ai'], ['/en/', 'cheerfulmusic']] as const) {
+      const page = parsePage(path)
+      expect(page.title).toBe(brand)
+      expect(page.querySelector('.beta-access-brand')?.textContent).toBe(brand)
+      expect(page.querySelector('meta[property="og:title"]')?.getAttribute('content')).toBe(brand)
+      expect(page.querySelector('meta[name="twitter:title"]')?.getAttribute('content')).toBe(brand)
+    }
     expect(sitePage('/zh-CN/')).toBeUndefined()
   })
 
@@ -113,7 +121,7 @@ describe('crawlable site pages', () => {
     const home = english ? '/en/' : '/'
     const links = page.querySelectorAll(`nav a[href="${home}"]`)
     expect(links).toHaveLength(1)
-    expect(links[0]?.textContent).toContain('青妙Ai')
+    expect(links[0]?.textContent).toContain(english ? 'cheerfulmusic' : '青妙Ai')
     expect(links[0]?.textContent).toContain('Cheerful Music')
     if (!english) expect(links[0]?.textContent).toContain('青风音乐')
     if (path === '/help') {
@@ -122,11 +130,9 @@ describe('crawlable site pages', () => {
     }
   })
 
-  it('shares only the homepage title and keeps every page description distinct', () => {
+  it('gives every public page a distinct title and description', () => {
     const pages = sitePagePaths.map(path => sitePage(path)!)
-    expect(pages.filter(page => page.title === '青妙Ai').map(page => page.path)).toEqual(['/', '/en/'])
-    const innerPages = pages.filter(page => page.title !== '青妙Ai')
-    expect(new Set(innerPages.map(page => page.title)).size).toBe(innerPages.length)
+    expect(new Set(pages.map(page => page.title)).size).toBe(pages.length)
     expect(new Set(pages.map(page => page.description)).size).toBe(pages.length)
   })
 

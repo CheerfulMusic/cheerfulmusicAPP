@@ -2,6 +2,7 @@
 import { t, locale } from '../../../shared/i18n'
 import { homeSeo } from '../../../shared/i18n/home-seo'
 import HomeBrandScene from './HomeBrandScene.vue'
+defineProps<{ brand: string }>()
 </script>
 
 <template>
@@ -15,8 +16,8 @@ import HomeBrandScene from './HomeBrandScene.vue'
         <span v-else lang="en">{{ homeSeo.en.heading }}</span>
       </h1>
       <p class="p-intro-description bilingual-description">
-        <span v-if="locale !== 'en'" lang="zh-CN">无需音乐基础 简单几步 让你的想法变成一首完整的歌</span>
-        <span v-else lang="en">Create your own song in just a few clicks. No music skills needed</span>
+        <span v-if="locale !== 'en'" lang="zh-CN">用{{ brand }}把你的想法写成歌，无需音乐基础。</span>
+        <span v-else lang="en">Create your own song with {{ brand }}. No music skills needed.</span>
         <span v-if="locale !== 'en'" class="description-translation" lang="en"><span>Create your own song in just a few clicks.</span> <span>No music skills needed</span></span>
       </p>
       <div class="p-hero-actions">
