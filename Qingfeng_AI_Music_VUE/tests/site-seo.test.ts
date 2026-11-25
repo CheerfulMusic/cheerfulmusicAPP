@@ -14,7 +14,7 @@ describe('crawlable site pages', () => {
   it.each(sitePagePaths)('serves unique page metadata and readable content at %s', path => {
     const metadata = sitePage(path)!
     const page = parsePage(path)
-    expect(page.title).toBe(metadata.title)
+    expect(page.title).toBe(metadata.searchTitle ?? metadata.title)
     expect(page.querySelectorAll('meta[name="description"]')).toHaveLength(1)
     expect(page.querySelector('meta[name="description"]')?.getAttribute('content')).toBe(metadata.description)
     expect(page.querySelector('link[rel="canonical"]')?.getAttribute('href')).toBe(siteOrigin + path)
@@ -44,7 +44,7 @@ describe('crawlable site pages', () => {
     expect(productCopy?.textContent).toBe(sitePage(path)!.description)
     expect(productCopy?.textContent).toContain('Cheerful Music')
     if (path === '/') expect(productCopy?.textContent).toContain('青风音乐')
-    else expect(productCopy?.textContent).not.toMatch(/\p{Script=Han}/u)
+    else expect(productCopy?.textContent).toContain('青妙Ai (Cheerful Music)')
     expect(productCopy?.closest('[data-nosnippet]')).toBeNull()
     expect(card?.querySelector('[data-nosnippet]')?.textContent).toMatch(/邀请码|invitation code/)
     expect(page.querySelectorAll('h1')).toHaveLength(1)
@@ -56,12 +56,14 @@ describe('crawlable site pages', () => {
 
   it('publishes the Chinese search entry at the root and keeps the separate English search title', () => {
     expect(parsePage('/').documentElement.lang).toBe('zh-CN')
-    expect(parsePage('/').querySelector('h1')?.textContent).toBe('青风音乐｜把你的歌词做成歌')
-    expect(parsePage('/').querySelector('meta[property="og:title"]')?.getAttribute('content')).toBe('Cheerful Music Ai')
-    expect(JSON.parse(parsePage('/').querySelector('script[type="application/ld+json"]')!.textContent!).alternateName)
+    expect(parsePage('/').querySelector('h1')?.textContent).toBe('青妙Ai｜把你的歌词做成歌')
+    expect(parsePage('/').querySelector('meta[property="og:title"]')?.getAttribute('content')).toBe('青妙Ai')
+    const website = JSON.parse(parsePage('/').querySelector('script[type="application/ld+json"]')!.textContent!)
+    expect(website.name).toBe('青妙Ai')
+    expect(website.alternateName)
       .toEqual(expect.arrayContaining(['青风音乐', 'CheerfulMusic', 'cheerfulmusicAI', 'cheerfulmusicai']))
     expect(parsePage('/').querySelector('link[rel="icon"][sizes="96x96"]')?.getAttribute('href')).toBe('/brand/favicon-96.png')
-    expect(parsePage('/en/').title).toBe('Cheerful Music | Turn Your Lyrics into a Song with AI')
+    expect(parsePage('/en/').title).toBe('青妙Ai')
     expect(sitePage('/zh-CN/')).toBeUndefined()
   })
 
@@ -127,13 +129,13 @@ describe('crawlable site pages', () => {
   it.each(['en', 'zh-CN'] as const)('uses only the brand in the root homepage title for %s', language => {
     const html = renderSitePage(shell, sitePage('/', language)!)
     const page = new DOMParser().parseFromString(html, 'text/html')
-    expect(page.title).toBe('Cheerful Music')
+    expect(page.title).toBe('青妙Ai')
 
     document.head.innerHTML = parsePage('/').head.innerHTML
     setLocale(language)
     updatePageLocale('/')
     expect(document.documentElement.lang).toBe(language)
-    expect(document.title).toBe(page.title)
+    expect(document.title).toBe('Cheerful Music')
     const description = document.querySelector('meta[name="description"]')?.getAttribute('content')
     expect(description).toBe(sitePage(language === 'en' ? '/en/' : '/')!.description)
     expect(page.querySelector('main .beta-access-intro')?.textContent).toBe(description)

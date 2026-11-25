@@ -35,7 +35,7 @@ it('switches both ways on the root without changing the URL or tab title', async
       expect(router.currentRoute.value.fullPath).toBe('/?utm_source=search#how')
       expect(document.documentElement.lang).toBe(language)
       expect(document.title).toBe('Cheerful Music')
-      expect(document.querySelector('meta[property="og:site_name"]')?.getAttribute('content')).toBe('Cheerful Music')
+      expect(document.querySelector('meta[property="og:site_name"]')?.getAttribute('content')).toBe('青妙Ai')
       expect(button.attributes('aria-pressed')).toBe('true')
       expect(hero.findAll('h1 > span').map(line => line.text())).toEqual(language === 'en'
         ? ['Everyone Can Be a Creator']
