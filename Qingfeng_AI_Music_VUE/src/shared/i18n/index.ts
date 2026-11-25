@@ -6,11 +6,14 @@ import { discoverLocale, discoverPaths, sitePage, socialMetadata, websiteSchema 
 
 export type { Locale } from './home-seo'
 export const localeStorageKey = 'qingfeng.locale'
-function savedLocale(): Locale {
-  try { return localStorage.getItem(localeStorageKey) === 'zh-CN' ? 'zh-CN' : 'en' }
-  catch { return 'en' }
+function savedLocale(): Locale | undefined {
+  try {
+    const value = localStorage.getItem(localeStorageKey)
+    return value === 'en' || value === 'zh-CN' ? value : undefined
+  } catch { return undefined }
 }
-const selected = ref<Locale>(savedLocale())
+let preferredLocale = savedLocale()
+const selected = ref<Locale>(preferredLocale ?? 'en')
 export const locale = readonly(selected)
 export const discoverHref = computed(() => platform.kind === 'web' ? discoverPaths[selected.value] : '/discover')
 
@@ -55,6 +58,7 @@ function updateDocument() {
   if (page.path === '/') appendTag('script', { type: 'application/ld+json' }, JSON.stringify(websiteSchema))
 }
 export function setLocale(value: Locale) {
+  preferredLocale = value
   selected.value = value
   try { localStorage.setItem(localeStorageKey, value) } catch { /* Language switching still works without browser storage. */ }
   updateDocument()
@@ -63,8 +67,9 @@ export function updatePageLocale(path: string) {
   pagePath = path
   const songLocale = /^(?:\/en)?\/discover\/songs\/[^/]+\/\d+\/?$/.test(path) ? (path.startsWith('/en/') ? 'en' : 'zh-CN') : undefined
   const routeLanguage = homeLocale(path) ?? discoverLocale(path) ?? songLocale
-  if (routeLanguage) setLocale(routeLanguage)
-  else updateDocument()
+  if (routeLanguage) selected.value = routeLanguage
+  else if (path === '/') selected.value = preferredLocale ?? 'zh-CN'
+  updateDocument()
 }
 export function formatDate(value: string | number | Date): string {
   const date = new Date(value)

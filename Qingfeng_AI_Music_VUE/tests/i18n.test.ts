@@ -13,7 +13,7 @@ beforeEach(() => {
 afterEach(() => { vi.unstubAllGlobals() })
 
 describe('Chinese and English interface', () => {
-  it('starts in English on the root with an empty preference', async () => {
+  it('keeps the Chinese search homepage in Chinese for a first visit', async () => {
     document.documentElement.lang = 'zh-CN'
     const canonical = document.createElement('link')
     canonical.rel = 'canonical'
@@ -21,12 +21,29 @@ describe('Chinese and English interface', () => {
     canonical.setAttribute('data-site-seo', '')
     document.head.append(canonical)
 
-    const { locale, t, updatePageLocale } = await import('../src/shared/i18n')
+    const { locale, localeStorageKey, t, updatePageLocale } = await import('../src/shared/i18n')
     updatePageLocale('/')
 
-    expect(locale.value).toBe('en')
+    expect(locale.value).toBe('zh-CN')
+    expect(document.documentElement.lang).toBe('zh-CN')
+    expect(document.title).toBe('青妙Ai')
+    expect(t('保存草稿')).toBe('保存草稿')
+    expect(localStorage.getItem(localeStorageKey)).toBeNull()
+    updatePageLocale('/en/')
     expect(document.documentElement.lang).toBe('en')
-    expect(t('保存草稿')).toBe('Save draft')
+    expect(document.title).toBe('青妙Ai')
+    updatePageLocale('/')
+    expect(document.documentElement.lang).toBe('zh-CN')
+  })
+
+  it('keeps the manual homepage preference when visiting a localized search result', async () => {
+    const { localeStorageKey, setLocale, updatePageLocale } = await import('../src/shared/i18n')
+    setLocale('en')
+    updatePageLocale('/discover')
+    expect(document.documentElement.lang).toBe('zh-CN')
+    expect(localStorage.getItem(localeStorageKey)).toBe('en')
+    updatePageLocale('/')
+    expect(document.documentElement.lang).toBe('en')
   })
 
   it.each(['en', 'zh-CN'] as const)('restores a manually selected %s preference after reload', async language => {

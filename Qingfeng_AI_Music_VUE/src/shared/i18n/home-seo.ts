@@ -14,7 +14,7 @@ export const homeSeo = {
     path: '/en/',
     heading: creatorHeadline,
     invitePrompt: 'Enter your invitation code to start creating.',
-    description: 'Turn your lyrics or a story into a song with 青妙Ai (Cheerful Music). Choose a style and voice, then listen to your AI-generated track and share it with friends.',
+    description: 'Create a song with 青妙Ai, the AI music studio from Cheerful Music (青风音乐). Start with lyrics or a story, choose a style and voice, then listen and share.',
   },
 } as const
 
@@ -22,7 +22,7 @@ export type Locale = keyof typeof homeSeo
 export const siteOrigin = 'https://cheerfulmusic.com'
 
 export function homeLocale(path: string): Locale | undefined {
-  // The root follows the visitor's saved interface language.
+  // The root defaults to Chinese and allows visitors to switch in place.
   if (path === homeSeo.en.path || path === homeSeo.en.path.slice(0, -1)) return 'en'
 }
 
