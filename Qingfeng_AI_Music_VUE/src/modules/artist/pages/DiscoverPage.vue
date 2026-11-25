@@ -50,7 +50,12 @@ const replacedHeroSongId = 'acfaa9d5-ce74-477f-9db8-d3700311a26c'
 const invincibleSongId = '57bb7310-c64c-4873-b239-f2a268a7dedd'
 const micangshanSongId = '09aaf684-2b68-438f-aa17-8730a352bf74'
 const christmasArtistId = '308036ef-8bef-486f-88cc-8266e5797768'
-const christmasPlaylistSongIds = [christmasSongId, '752fa2d9-ec96-47c3-87a5-a1d49d0135af']
+const christmasPlaylistSongIds = [
+  christmasSongId,
+  '752fa2d9-ec96-47c3-87a5-a1d49d0135af', // Snow on the Floor
+  '1c5c325c-6a45-4607-a8e4-5baadabc2032', // Navidad
+  '1cf20b2d-76cd-46de-9666-77a7303588a8', // Nochebuena en la Mesa
+]
 const player = usePlayer()
 const previewPlaylists = usePreviewPlaylists()
 const previewTracks = usePreviewTracks()

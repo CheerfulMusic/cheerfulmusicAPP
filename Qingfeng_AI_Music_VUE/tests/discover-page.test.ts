@@ -50,8 +50,10 @@ beforeEach(() => {
   mocks.profile.mockResolvedValue({
     stageName: 'SergioBeats',
     songs: [
+      { id: '1cf20b2d-76cd-46de-9666-77a7303588a8', version: 1, title: 'Nochebuena en la Mesa', hasCover: true },
       { id: '752fa2d9-ec96-47c3-87a5-a1d49d0135af', version: 1, title: 'Snow on the Floor', hasCover: true },
       { id: 'd4b1ec5a-e68f-43e6-8624-226981ecef5c', version: 1, title: 'Christmas Sky', hasCover: true },
+      { id: '1c5c325c-6a45-4607-a8e4-5baadabc2032', version: 2, title: 'Navidad', hasCover: true },
       { id: '0485811c-0297-4513-9fb1-75f981af8707', version: 1, title: 'Gravity', hasCover: true },
     ],
   })
@@ -174,7 +176,7 @@ describe('Discover editorial layout with real content', () => {
     const tiles = wrapper.findAll('.discover-playlist-tiles button')
     expect(tiles.map(tile => tile.get('strong').text())).toEqual(['华语流行', '电子', '欧美流行', 'Hip-Hop&R&B', '圣诞'])
     expect(tiles.map(tile => tile.get('.discover-playlist-title > span').text())).toEqual([
-      '14 首作品', '12 首作品', '6 首作品', '6 首作品', '2 首作品',
+      '14 首作品', '12 首作品', '6 首作品', '6 首作品', '4 首作品',
     ])
     expect(tiles.map(tile => tile.get('img').attributes('src')?.split('/').at(-1))).toEqual([
       'mandopop.webp', 'electronic.webp', 'global-pop.webp', 'house.webp', 'christmas.webp',
@@ -187,7 +189,9 @@ describe('Discover editorial layout with real content', () => {
     expect(wrapper.findAll('.test-playlist span')).toHaveLength(6)
     expect(wrapper.get('.test-playlist').text()).toContain('WESTSIDE SUMMER')
     await tiles[4]!.trigger('click')
-    expect(wrapper.findAll('.test-playlist span').map(track => track.text())).toEqual(['Christmas Sky', 'Snow on the Floor'])
+    expect(wrapper.findAll('.test-playlist span').map(track => track.text())).toEqual([
+      'Christmas Sky', 'Snow on the Floor', 'Navidad', 'Nochebuena en la Mesa',
+    ])
   })
 
   it('adds the two supplied recordings to jazz without displacing existing songs', async () => {
