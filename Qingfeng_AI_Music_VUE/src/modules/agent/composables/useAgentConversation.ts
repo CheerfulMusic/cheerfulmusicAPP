@@ -226,9 +226,13 @@ export function useAgentConversation(onContinuation?: (snapshot: DeliveredTurn) 
     loading.value = false; sending.value = false
     await refresh()
   }
-  async function send(text: string, locale: string, onQueued?: () => void): Promise<DeliveredTurn | undefined> {
+  async function send(text: string, locale: string, onQueued?: () => void, creationAction?: DisplayedContext['creationAction'], creationChoice?: string): Promise<DeliveredTurn | undefined> {
     if (!text.trim() || sending.value || loading.value || pending.value) return
     const displayedContext: DisplayedContext = { workId: songCard.value?.songId ?? null, revisionId: songCard.value?.revisionId ?? null }
+    if (creationAction) {
+      displayedContext.creationAction = creationAction
+      if (creationChoice) displayedContext.creationChoice = creationChoice
+    }
     const card = songCard.value
     if (card) displayedContext.media = { assetId: card.assetId ?? null, taskId: card.taskId ?? null }
     const lastTurn = latestAssistantTurn(messages.value)
@@ -238,7 +242,10 @@ export function useAgentConversation(onContinuation?: (snapshot: DeliveredTurn) 
     if (list) displayedContext.workList = list
     if (!conversationId.value) { await refresh(); if (!conversationId.value || error.value || pending.value) return }
     if (historyEpoch !== undefined) displayedContext.historyEpoch = historyEpoch
-    pending.value = { text: text.trim(), locale, requestKey: crypto.randomUUID(), historyEpoch, displayedContext }
+    const typedApproval = !creationAction && lastTurn?.approval && /^(?:确认执行|确认生成|确认开始|确认|yes|confirm|go ahead)[。！! ]*$/i.test(text.trim())
+    const message = typedApproval ? '#approve:' + lastTurn!.approval : text.trim()
+    const approval = /^#approve:([0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})$/i.exec(message)?.[1]
+    pending.value = { text: message, locale, requestKey: approval ?? crypto.randomUUID(), historyEpoch, displayedContext }
     remember()
     onQueued?.()
     return deliver()

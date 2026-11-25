@@ -59,7 +59,12 @@ class AgentPlanServiceTest {
         };
         restart();
     }
-    void restart(){service=new AgentChatService(conversations,tools,model,store,social,List.of(library));}
+    AgentChatService withPrices(AgentChatService chat){return chat.withCreationPricing(mock(com.qingfeng.music.credits.CreditsPricing.class),mock(com.qingfeng.music.credits.LyricFreeAllowance.class));}
+    String acceptQuote(){
+        String id=json.readTree(last()).path("creationQuote").path("id").asText();UUID.fromString(id);
+        service.send("owner","conversation","#approve:"+id,id,"zh-CN");return id;
+    }
+    void restart(){service=withPrices(new AgentChatService(conversations,tools,model,store,social,List.of(library)));}
     @Test void simpleReadOnlyLookupsUseNoPlannerAndReplayTheSameReceipt(){
         var works=mock(AgentApplicationActions.class);
         when(works.capabilities()).thenReturn(List.of(new AgentApplicationActions.Capability("list_works","本人作品","{}","read")));
@@ -116,13 +121,15 @@ class AgentPlanServiceTest {
         var scope=new com.qingfeng.music.common.concurrent.AgentRequestScope(java.time.Duration.ofSeconds(10),65536);
         when(model.respond(any())).thenReturn(plan(step("generate_lyrics"),step("generate_song")));
         when(tools.dispatch(eq(AgentTool.GENERATE_LYRICS),any(),eq("owner"),anyString())).thenAnswer(c->{current.set(card("new-work","new-revision",null,"DRAFT"));scope.cancel();return ToolResult.ok("lyrics",current.get());});
-        try(var ignored=scope.enter()){service.send("owner","conversation","先写歌词再生成音乐",key(),"zh-CN");}
+        service.send("owner","conversation","先写歌词再生成音乐",key(),"zh-CN");
+        verify(tools,never()).dispatch(eq(AgentTool.GENERATE_LYRICS),any(),anyString(),anyString());
+        try(var ignored=scope.enter()){acceptQuote();}
         verify(tools,never()).dispatch(eq(AgentTool.GENERATE_SONG),any(),anyString(),anyString());assertEquals("new-revision",current.get().revisionId());assertTrue(last().contains("AGENT_DEADLINE_EXCEEDED"));
     }
 
     @Test void writeThenGenerateUsesTheNewRevisionAndDoesNotCreateASecondWork() {
         when(model.respond(any())).thenReturn(plan(new Step("generate_lyrics",Map.of("mode","new")),new Step("generate_song",Map.of("mode","new","revisionId","old-revision"))));
-        service.send("owner","conversation","先写歌词，再生成音乐",key(),"zh-CN");
+        service.send("owner","conversation","先写歌词，再生成音乐",key(),"zh-CN");acceptQuote();
         var args=org.mockito.ArgumentCaptor.forClass(Object.class);verify(tools).dispatch(eq(AgentTool.GENERATE_SONG),args.capture(),eq("owner"),anyString());
         var music=(AgentTool.GenerateSongArgs)args.getValue();assertEquals("regenerate",music.mode());assertEquals("new-revision",music.revisionId());
         assertEquals("new-work",current.get().songId());
@@ -195,16 +202,16 @@ class AgentPlanServiceTest {
             public List<Capability> capabilities(){return List.of(new Capability("select_work","选择作品","workId","write"));}
             public Result execute(String owner,String conversation,String action,Map<String,Object> args,String text,String key,SongCard song){current.set(card("target","target-revision",null,"DRAFT"));return new Result("已选择","text",List.of(),List.of(),action);}
         };
-        service=new AgentChatService(conversations,tools,model,store,social,List.of(library,selector));
+        service=withPrices(new AgentChatService(conversations,tools,model,store,social,List.of(library,selector)));
         when(model.respond(any())).thenReturn(plan(new Step("select_work",Map.of("workId","target")),step("generate_song"),step("share")));
-        service.send("owner","conversation","给第二首生成音乐，然后分享第二首",key(),"zh-CN");finishMusic();
+        service.send("owner","conversation","给第二首生成音乐，然后分享第二首",key(),"zh-CN");acceptQuote();finishMusic();
         var next=service.state("owner","conversation").continuation();assertNotNull(next);
-        service=new AgentChatService(conversations,tools,model,store,social,List.of(library,selector));
+        service=withPrices(new AgentChatService(conversations,tools,model,store,social,List.of(library,selector)));
         service.send("owner","conversation",next.text(),next.requestKey(),"zh-CN");
         verify(social,times(1)).execute(eq("owner"),eq("conversation"),eq("share"),anyString(),anyString(),argThat(card->"target".equals(card.songId())));
         clearInvocations(social);
         when(model.respond(any())).thenReturn(plan(step("generate_song"),step("share")));
-        service.send("owner","conversation","生成音乐，然后分享第二首",key(),"zh-CN");finishMusic();
+        service.send("owner","conversation","生成音乐，然后分享第二首",key(),"zh-CN");acceptQuote();finishMusic();
         next=service.state("owner","conversation").continuation();assertNotNull(next);
         service.send("owner","conversation",next.text(),next.requestKey(),"zh-CN");
         verify(social,never()).execute(anyString(),anyString(),eq("share"),anyString(),anyString(),any());assertTrue(last().contains("还没有确认"));
@@ -248,7 +255,7 @@ class AgentPlanServiceTest {
     }
     @Test void unrelatedNegativeDoesNotBlockRequestedMusicButCannotAuthorizeSharing() {
         when(model.respond(any())).thenReturn(plan(step("generate_song"),step("share")));
-        service.send("owner","conversation","不要分享，生成音乐",key(),"zh-CN");finishMusic();
+        service.send("owner","conversation","不要分享，生成音乐",key(),"zh-CN");acceptQuote();finishMusic();
         verify(tools).dispatch(eq(AgentTool.GENERATE_SONG),any(),anyString(),anyString());
         assertNull(service.state("owner","conversation").continuation());
         verify(social,never()).execute(anyString(),anyString(),eq("share"),anyString(),anyString(),any());
@@ -281,7 +288,7 @@ class AgentPlanServiceTest {
     }
     @Test void continuationSurvivesRestartAndExecutesOnlyOnce() {
         when(model.respond(any())).thenReturn(plan(step("generate_song"),step("share")));
-        service.send("owner","conversation","用当前歌词生成音乐，完成后分享",key(),"zh-CN");
+        service.send("owner","conversation","用当前歌词生成音乐，完成后分享",key(),"zh-CN");acceptQuote();
         verify(social,never()).execute(anyString(),anyString(),eq("share"),anyString(),anyString(),any());
         finishMusic();restart();var ready=service.state("owner","conversation").continuation();assertNotNull(ready);
         service.send("owner","conversation",ready.text(),ready.requestKey(),"zh-CN");
@@ -291,7 +298,7 @@ class AgentPlanServiceTest {
     }
     @Test void failureOrDifferentTaskCannotReleaseContinuation() {
         when(model.respond(any())).thenReturn(plan(step("generate_song"),step("share")));
-        service.send("owner","conversation","生成音乐，完成后分享",key(),"zh-CN");
+        service.send("owner","conversation","生成音乐，完成后分享",key(),"zh-CN");acceptQuote();
         current.set(card("work","old-revision","task-1","FAILED"));assertNull(service.state("owner","conversation").continuation());
         current.set(card("work","old-revision","different-task","SUCCEEDED"));assertNull(service.state("owner","conversation").continuation());
         current.set(card("other","old-revision","task-1","SUCCEEDED"));assertNull(service.state("owner","conversation").continuation());
@@ -299,7 +306,7 @@ class AgentPlanServiceTest {
     }
     @Test void newConversationTurnCancelsDeferredStepsAndForgedContinuationCannotExecute() {
         when(model.respond(any())).thenReturn(plan(step("generate_song"),step("share")));
-        service.send("owner","conversation","生成音乐，完成后分享",key(),"zh-CN");finishMusic();var ready=service.state("owner","conversation").continuation();
+        service.send("owner","conversation","生成音乐，完成后分享",key(),"zh-CN");acceptQuote();finishMusic();var ready=service.state("owner","conversation").continuation();
         when(model.respond(any())).thenReturn(new AgentChatModel.Plan("chat",Map.of(),"你好"));
         service.send("owner","conversation","你好",key(),"zh-CN");assertNull(service.state("owner","conversation").continuation());
         service.send("owner","conversation",ready.text(),ready.requestKey(),"zh-CN");
@@ -307,7 +314,7 @@ class AgentPlanServiceTest {
     }
     @Test void deferredStepCannotBeReleasedUsingAnArbitraryRequestKey() {
         when(model.respond(any())).thenReturn(plan(step("generate_song"),step("share")));
-        service.send("owner","conversation","生成音乐，完成后分享",key(),"zh-CN");finishMusic();
+        service.send("owner","conversation","生成音乐，完成后分享",key(),"zh-CN");acceptQuote();finishMusic();
         var ready=service.state("owner","conversation").continuation();assertNotNull(ready);
         service.send("owner","conversation",ready.text(),key(),"zh-CN");
         assertTrue(last().contains("AGENT_PLAN_STALE"));
@@ -341,8 +348,8 @@ class AgentPlanServiceTest {
         when(model.respond(any())).thenReturn(plan(step("generate_song")));
         service.send("owner","conversation","能不能帮我写首歌？",key(),"zh-CN");
         assertTrue(last().contains("pendingSteps"));verify(tools,never()).dispatch(eq(AgentTool.GENERATE_SONG),any(),anyString(),anyString());
-        String confirmed=key();service.send("owner","conversation","确认生成",confirmed,"zh-CN");
-        service.send("owner","conversation","确认生成",confirmed,"zh-CN");
+        String confirmed=acceptQuote();
+        service.send("owner","conversation","#approve:"+confirmed,confirmed,"zh-CN");
         verify(tools,times(1)).dispatch(eq(AgentTool.GENERATE_SONG),any(),anyString(),eq(confirmed));
     }
     @Test void readOnlyResultsDoNotSwallowPlaybackOrDownloadForTheSameMedia() {

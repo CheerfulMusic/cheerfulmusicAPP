@@ -58,8 +58,9 @@ public class AgentConversationChatConfiguration {
         return new com.qingfeng.music.server.agent.AgentFeatureActions(works,lyrics,conversations,profiles,quick,selection,lines,composer,settings,downloads,pricing);
     }
     @Bean AgentChatService agentChatService(ConversationService conversations,AgentToolDispatcher tools,AgentChatModel model,AgentTurnStore turns,
-            ObjectProvider<AgentSocialActions> social,ObjectProvider<AgentApplicationActions> applications,Environment env){
+            ObjectProvider<AgentSocialActions> social,ObjectProvider<AgentApplicationActions> applications,Environment env,
+            com.qingfeng.music.credits.CreditsPricing pricing,com.qingfeng.music.credits.LyricFreeAllowance allowance){
         return new AgentChatService(conversations,tools,model,turns,social.getIfAvailable(),applications.orderedStream().toList())
-                .withProgress(env.getProperty("qingfeng.agent.progress.enabled",Boolean.class,true));
+                .withCreationPricing(pricing,allowance).withProgress(env.getProperty("qingfeng.agent.progress.enabled",Boolean.class,true));
     }
 }

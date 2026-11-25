@@ -16,6 +16,10 @@ import com.qingfeng.music.conversation.application.ConversationService;
 import com.qingfeng.music.server.web.app.AgentConversationController.MessageView;
 import tools.jackson.databind.ObjectMapper;
 import java.nio.charset.StandardCharsets;
+import com.qingfeng.music.credits.ConfirmedCreation;
+import com.qingfeng.music.credits.CreditsPricing;
+import com.qingfeng.music.credits.LyricFreeAllowance;
+import com.qingfeng.music.usage.UsageBudget;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
@@ -27,7 +31,11 @@ public final class AgentChatService {
     public record Continuation(String requestKey,String text) {}
     public record DisplayedList(String messageId,long seq) {}
     public record DisplayedMedia(String assetId,String taskId) {}
-    public record DisplayedContext(String workId,String revisionId,DisplayedList workList,Long historyEpoch,String promptId,DisplayedMedia media) {
+    public record DisplayedContext(String workId,String revisionId,DisplayedList workList,Long historyEpoch,String promptId,DisplayedMedia media,@com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL) AgentCreationRequest.Action creationAction,
+                                   @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL) String creationChoice) {
+        public DisplayedContext(String workId,String revisionId,DisplayedList workList,Long historyEpoch,String promptId,DisplayedMedia media){
+            this(workId,revisionId,workList,historyEpoch,promptId,media,null,null);
+        }
         boolean matches(SongCard current) {
             return Objects.equals(workId,current==null?null:current.songId())
                 && Objects.equals(revisionId,current==null?null:current.revisionId());
@@ -43,8 +51,9 @@ public final class AgentChatService {
         public Snapshot(List<MessageView> messages,SongCard songCard,String taskId,String action,String shareUrl,boolean liked,Continuation continuation){this(messages,songCard,taskId,action,shareUrl,liked,continuation,"replace",false,0,0,0,false);}
     }
     private record Outcome(String action,String shareUrl,String songId,String revisionId,String assetId) {}
+    private record Quote(String id,String action,String workId,String revisionId,long workVersion,long credits) {}
     private record Pending(String messageId,List<Step> steps,String authorizedText,String songId,String revisionId,
-                           String taskId,String continuationKey,Instant createdAt,boolean workResolved,boolean versionResolved,DisplayedMedia media) {
+                           String taskId,String continuationKey,Instant createdAt,boolean workResolved,boolean versionResolved,DisplayedMedia media,Quote quote) {
         boolean automatic(){return continuationKey!=null;}
     }
     static final String CONTINUE="继续已安排的操作";
@@ -65,6 +74,11 @@ public final class AgentChatService {
     private final AgentSocialActions social;
     private final List<AgentApplicationActions> applications;
     private final ObjectMapper json=new ObjectMapper();
+    private CreditsPricing pricing;
+    private LyricFreeAllowance lyricAllowance;
+    public AgentChatService withCreationPricing(CreditsPricing pricing,LyricFreeAllowance allowance){
+        this.pricing=Objects.requireNonNull(pricing);this.lyricAllowance=Objects.requireNonNull(allowance);return this;
+    }
     private boolean progressEnabled;
     /** Observable execution uses the same durable turn; it never starts another model/tool loop. */
     public AgentChatService withProgress(boolean enabled){this.progressEnabled=enabled;return this;}
@@ -86,7 +100,10 @@ public final class AgentChatService {
         text=text.trim();
         AgentRequestScope.check();
         String message=text;
-        var claim=begin.apply(()->turns.claim(owner,conversation,key,message,()->validateDecision(owner,conversation,message,displayedContext)));
+        Runnable validate=()->validateDecision(owner,conversation,message,displayedContext);
+        var claim=begin.apply(()->displayedContext==null||displayedContext.creationAction()==null
+                ?turns.claim(owner,conversation,key,message,validate)
+                :turns.claim(owner,conversation,key,message,json.writeValueAsString(displayedContext),validate));
         if(!claim.fresh()) {
             var previous=json.readValue(claim.resultJson(),Outcome.class);
             return snapshot(owner,conversation,previous.action(),previous);
@@ -96,7 +113,19 @@ public final class AgentChatService {
             var history=conversations.listMessagesBefore(owner,conversation,claim.userSeq(),80);
             SongCard current=current(owner);
             Pending pending=pending(history);
-            boolean confirmation=AgentChatPolicy.confirmed(text)&&pending!=null&&!pending.automatic();
+            var entry=AgentCreationRequest.from(displayedContext==null?null:displayedContext.creationAction(),text,displayedContext==null?null:displayedContext.creationChoice());
+            if(entry!=null && entry.action()==AgentCreationRequest.Action.GENERATE_SONG
+                    && (displayedContext==null||displayedContext.creationAction()==null)
+                    && !AgentCreationRequest.priceOnly(entry.brief())&&!AgentCreationRequest.paused(entry.brief())
+                    && !recentSuppliedLyrics(history).isBlank())entry=null;
+            if(entry!=null && displayedContext!=null && !displayedContext.matches(current))
+                throw new DomainException("AGENT_LYRIC_TARGET_CHANGED","当前作品或歌词版本已切换，请重新选择作品。");
+            if(entry!=null && entry.action()==AgentCreationRequest.Action.PREVIEW_MV && displayedContext!=null
+                    && displayedContext.creationAction()!=null && current!=null && current.assetId()!=null
+                    &&(displayedContext.media()==null||!Objects.equals(current.assetId(),displayedContext.media().assetId())))
+                throw new DomainException("AGENT_MEDIA_TARGET_CHANGED","请先选定要预览的音频版本。");
+            boolean approvalCommand=text.startsWith("#approve:");
+            boolean confirmation=entry==null&&(AgentChatPolicy.confirmed(text)||approvalCommand)&&pending!=null&&!pending.automatic();
             boolean continuation=CONTINUE.equals(text);
             if(continuation && (pending==null || !pending.automatic() || !key.equals(pending.continuationKey())))
                 throw new DomainException("AGENT_PLAN_STALE","之前的操作计划已停止，请重新说明要执行的操作。");
@@ -119,7 +148,12 @@ public final class AgentChatService {
                     ||pending==null&&AgentChatPolicy.confirmed(text)&&lastVideo!=null);
             boolean songStatus=AgentChatPolicy.songStatusRequested(text);
             var selection=AgentChoiceMenu.select(text,history,locale);
-            if(selection!=null){
+            if(entry!=null){
+                authorizedText=entry.instruction();
+                songStatus=AgentChatPolicy.songStatusRequested(entry.brief());
+                plan=entry.plan(current,pricing,lyricAllowance,owner);
+                videoPreview=entry.action()==AgentCreationRequest.Action.PREVIEW_MV;
+            } else if(selection!=null){
                 authorizedText=selection.intent();
                 plan=selection.plan();
             } else if(pending!=null&&CANCEL_PLAN.contains(text)) {
@@ -140,10 +174,24 @@ public final class AgentChatService {
                 else if(!AgentChatPolicy.previousVideoPrice(text)&&text.matches("(?is).*(?:《[^》]+》|(?:上|下)一(?:首|版)|第[一二三四五六七八九十0-9]+首|(?:previous|next) (?:song|version)|workId|assetId|[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}).*"))
                     plan=new AgentChatModel.Plan("chat",Map.of(),"请先打开要设计 MV 的那首作品和音频版本，再查看它的分镜与报价。");
                 else plan=new AgentChatModel.Plan("video_capabilities",Map.of(),"");
+            } else if (AgentChatPolicy.generalPriceOnly(text)&&executor("get_credits")!=null) {
+                plan=new AgentChatModel.Plan("get_credits",Map.of(),"");
+            } else if (pending!=null&&pending.quote()!=null&&AgentCreationRequest.paused(text)&&!AgentCreationRequest.priceOnly(text)){
+                plan=AgentCreationRequest.reply("已取消这份报价。");
+            } else if ((AgentCreationRequest.priceOnly(text)||AgentCreationRequest.paused(text)) && polish==null
+                    &&com.qingfeng.music.agent.application.ExactLyricEdit.parse(text)==null
+                    &&!AgentChatPolicy.lyricsRequested(text)
+                    &&(AgentChatPolicy.musicRequested(text)||text.matches("(?is)(?:先别生成|只看价格)[。！!]*")||text.matches("(?is).*(?:生成音乐|生成歌曲|打磨歌词).*(?:只看|只想|报价).*"))) {
+                var kind=text.contains("打磨歌词")?AgentCreationRequest.Action.POLISH_LYRICS:AgentCreationRequest.Action.GENERATE_SONG;
+                plan=new AgentCreationRequest(kind,text).plan(current,pricing,lyricAllowance,owner);
+            } else if (text.matches("(?i)(?:用当前歌词生成音乐|生成歌曲|generate music from the current lyrics)[。.!！]*")) {
+                plan=new AgentCreationRequest(AgentCreationRequest.Action.GENERATE_SONG,text).plan(current,pricing,lyricAllowance,owner);
+            } else if (AgentChatPolicy.confirmed(text) && pending==null) {
+                plan=AgentCreationRequest.reply("目前没有待确认的创作报价，请先选择作品和操作。");
             } else if (polish != null) {
                 String topic = polish == LyricPolishRequest.FROM_CONTEXT ? recentInspirationTopic(history, text) : "";
                 if (!topic.isEmpty()) {
-                    plan = new AgentChatModel.Plan("generate_lyrics", Map.of("mode", "new", "text", topic), "");
+                    plan=AgentCreationRequest.reply("你想按「"+topic+"」写首稿，还是打磨已有歌词？写首稿可以说「帮我写一首歌词，主题是 "+topic+"」，打磨请先打开目标版本。");
                 } else if (current != null && current.revisionId() != null && current.lyrics() != null && !current.lyrics().isBlank()) {
                     plan = new AgentChatModel.Plan("generate_lyrics", Map.of("mode", "rewrite", "revisionId", current.revisionId(), "text", text), "");
                 } else {
@@ -218,11 +266,21 @@ public final class AgentChatService {
                         &&AgentChatPolicy.currentWorkReference(authorizedText)&&!AgentChatPolicy.newLyricsRequested(authorizedText))
                     bindCurrent(proposed,args,current);
                 boolean explicitlyConfirmed=confirmation&&i==0;
-                boolean requested=libraryButton||AgentChatPolicy.actionRequested(proposed,authorizedText);
+                boolean rewrite = "generate_lyrics".equals(proposed) && AgentCreationRequest.rewriteRequested(authorizedText);
+                boolean requested=libraryButton||entry!=null&&entry.action()==AgentCreationRequest.Action.POLISH_LYRICS&&"generate_lyrics".equals(proposed)
+                        ||rewrite&&!AgentCreationRequest.priceOnly(authorizedText)&&!AgentCreationRequest.paused(authorizedText)
+                        ||AgentChatPolicy.actionRequested(proposed,authorizedText);
+                boolean quotedAction="generate_song".equals(proposed)||"create_music_video".equals(proposed)
+                        ||("generate_lyrics".equals(proposed)&&!AgentChatPolicy.newLyricsRequested(authorizedText)
+                            &&(polish!=null||rewrite
+                                ||current!=null&&current.revisionId()!=null
+                                    &&(!"new".equals(args.get("mode"))||AgentChatPolicy.currentWorkReference(authorizedText))));
                 if("chat".equals(proposed)){append(owner,conversation,AgentChoiceMenu.reply(plan,safeReply(plan.reply()),locale));break;}
                 var capability=capability(proposed);
-                if(!requested&&!explicitlyConfirmed&&!"read".equals(capability.effect())) {
-                    if(AgentChatPolicy.paidMusicAction(proposed)&&!AgentChatPolicy.chatOnly(authorizedText)&&!AgentChatPolicy.deniesAction(authorizedText)){
+                boolean proposedQuote="generate_song".equals(proposed)&&!AgentChatPolicy.chatOnly(authorizedText)&&!AgentChatPolicy.deniesAction(authorizedText)
+                        && !AgentCreationRequest.priceOnly(authorizedText)&&!AgentCreationRequest.paused(authorizedText);
+                if(!requested&&!explicitlyConfirmed&&!proposedQuote&&!"read".equals(capability.effect())) {
+                    if(!quotedAction&&AgentChatPolicy.paidMusicAction(proposed)&&!AgentChatPolicy.chatOnly(authorizedText)&&!AgentChatPolicy.deniesAction(authorizedText)){
                         args.putIfAbsent("text",authorizedText);
                         ask(owner,conversation,replaceFirst(steps.subList(i,steps.size()),proposed,args),authorizedText,current,
                              "创作方向已准备好。生成音频会使用创作额度；确认后开始。",null,null,resolvedWork,resolvedVersion);
@@ -239,7 +297,38 @@ public final class AgentChatService {
                     args.remove("confirmationSummary");
                     if(executor!=null&&!"preview_music_video".equals(proposed))args=new LinkedHashMap<>(executor.prepare(owner,conversation,proposed,args,current));
                 }
-                if(("destructive".equals(capability.effect())||AgentChatPolicy.requiresConfirmation(proposed))&&!explicitlyConfirmed){
+                Quote approved=null;
+                if(quotedAction){
+                    boolean video="create_music_video".equals(proposed);
+                    if(current==null || (video?current.assetId()==null:current.revisionId()==null)){
+                        append(owner,conversation,Map.of("text","请先选择要处理的作品和版本，再查看报价。")); break;
+                    }
+                    if(args.get("workId")!=null&&!current.songId().equals(args.get("workId"))
+                            ||args.get("revisionId")!=null&&!Objects.equals(current.revisionId(),args.get("revisionId"))
+                            ||video&&args.get("assetId")!=null&&!Objects.equals(current.assetId(),args.get("assetId")))
+                        throw new DomainException("AGENT_QUOTE_STALE","作品或版本不匹配，请重新选择后报价。");
+                    if(!video){
+                        args.put("revisionId",current.revisionId());
+                        args.put("mode","generate_song".equals(proposed)?"regenerate":"rewrite");
+                    } else if(explicitlyConfirmed && pending.quote()==null){
+                        args=new LinkedHashMap<>(executor.prepare(owner,conversation,proposed,args,current));
+                    }
+                    if(video && !(args.get("quotedCredits") instanceof Number))
+                        throw new DomainException("AGENT_PRICE_UNAVAILABLE","请重新获取 MV 分镜和报价。");
+                    long amount=video?((Number)args.get("quotedCredits")).longValue():AgentCreationRequest.amount(pricing,lyricAllowance,owner,current,proposed);
+                    approved=explicitlyConfirmed?pending.quote():null;
+                    if(approved==null||!proposed.equals(approved.action())||!current.songId().equals(approved.workId())
+                            ||!Objects.equals(current.revisionId(),approved.revisionId())||current.revision()!=approved.workVersion()||amount!=approved.credits()){
+                        var quote=new Quote(UUID.randomUUID().toString(),proposed,current.songId(),current.revisionId(),current.revision(),amount);
+                        String label=video?"制作 MV":"generate_song".equals(proposed)?"生成歌曲":"打磨歌词";
+                        String brief=args.get("confirmationSummary") instanceof String summary?"\n"+summary:"";
+                        String description="《"+current.title()+"》"+(current.revisionId()==null?"":"（歌词版本 "+current.revisionId()+"）")
+                                +"，"+label+"将使用 "+amount+" 积分。请确认后继续。"+brief;
+                        ask(owner,conversation,replaceFirst(steps.subList(i,steps.size()),proposed,args),authorizedText,current,description,null,null,resolvedWork,resolvedVersion,quote);
+                        break;
+                    }
+                }
+                if(!quotedAction&&("destructive".equals(capability.effect())||AgentChatPolicy.requiresConfirmation(proposed))&&!explicitlyConfirmed){
                     String target=String.valueOf(args.getOrDefault("title",current==null?"当前账号":current.title()));
                     if(args.get("workId")!=null)target+="（作品 "+args.get("workId")+"，版本 "+args.getOrDefault("expectedVersion","当前")+"）";
                     ask(owner,conversation,replaceFirst(steps.subList(i,steps.size()),proposed,args),authorizedText,current,
@@ -250,7 +339,7 @@ public final class AgentChatService {
                             ||requiresWorkResolution(authorizedText)&&!resolvedWork)) {
                     append(owner,conversation,Map.of("text","还没有确认你指定的那首作品或版本，本次没有执行这项操作。请先从作品或版本列表选择目标，再继续。"));break;
                 }
-                String stepKey=steps.size()==1?key:derivedKey(key+":"+i+":"+proposed);
+                String stepKey=approved!=null?approved.id():steps.size()==1?key:derivedKey(key+":"+i+":"+proposed);
                 progress(owner,conversation,key,"tool_started",proposed,i+1,"正在处理："+capability.description());
                 if("list_capabilities".equals(proposed)){
                     var items=capabilities().stream().map(c->new Item(c.id(),c.description(),c.effect().equals("native")?"在对话内打开专用操作窗口":"可通过对话执行",Map.of())).toList();
@@ -278,7 +367,10 @@ public final class AgentChatService {
                         args.put("mode","regenerate");args.put("revisionId",current.revisionId());
                     }
                     AgentRequestScope.check();
-                    var result=tools.dispatch(tool,arguments(tool,args,authorizedText,current),owner,stepKey);
+                    var toolArgs=arguments(tool,args,authorizedText,current);
+                    var charge=approved==null?null:new ConfirmedCreation(owner,approved.workId(),approved.revisionId(),approved.workVersion(),
+                            tool==AgentTool.GENERATE_SONG?UsageBudget.Kind.MUSIC:UsageBudget.Kind.LYRICS,stepKey,approved.credits());
+                    var result=charge==null?tools.dispatch(tool,toolArgs,owner,stepKey):charge.dispatch(()->tools.dispatch(tool,toolArgs,owner,stepKey));
                     turns.assertActive(owner,conversation,key);
                     if(ToolResult.BUSY.equals(result.status())){append(owner,conversation,Map.of("text",result.progress()==null?"已有任务正在生成，请完成后再试。":result.progress()));break;}
                     if(!ToolResult.OK.equals(result.status())){append(owner,conversation,Map.of("text","这一步没有完成，后续操作已停止。请检查当前作品后重试。"));break;}
@@ -330,8 +422,15 @@ public final class AgentChatService {
                     if(videoQuote&&!storyboard)break;
                     if(storyboard&&!sameTarget(current,updated))throw new DomainException("AGENT_MEDIA_TARGET_CHANGED","歌曲或音频版本已切换，请重新查看分镜与报价。");
                     String followIntent=storyboard?originalIntent+"\n请调用 preview_music_video 交付完整分镜：依据真实时长每30秒一段，结合当前歌词与音乐风格，描述人物、场景、动作和镜头衔接。尚未选择分辨率时省略resolution，系统将返回三档报价。不要提交视频。":originalIntent;
-                    var next=model.respond(new AgentChatModel.Context(followIntent,locale==null?"zh-CN":locale,history(observed),updated,
-                        state==null?null:state.currentSongJson(),storyboard?List.of(capability("preview_music_video")):capabilities(),results(observed)).withExecution(new AgentChatModel.Execution(owner,conversation,key)));
+                    var context=new AgentChatModel.Context(followIntent,locale==null?"zh-CN":locale,history(observed),updated,
+                        state==null?null:state.currentSongJson(),storyboard?List.of(capability("preview_music_video")):capabilities(),results(observed)).withExecution(new AgentChatModel.Execution(owner,conversation,key));
+                    AgentChatModel.Plan next;
+                    try { next=model.respond(context); }
+                    catch(RuntimeException unavailable){
+                        if(!storyboard)throw unavailable;
+                        AgentRequestScope.check();
+                        next=AgentChatModel.Plan.unavailable("使用基础分镜");
+                    }
                     modelCalls=2;
                     if(storyboard)next=AgentVideoPreview.storyboard(next,updated,originalIntent);
                     else next=ensureExecutable(next,originalIntent,updated);
@@ -356,11 +455,40 @@ public final class AgentChatService {
         turns.complete(owner,conversation,key,json.writeValueAsString(outcome));
         return snapshot(owner,conversation,action,outcome);
     }
+    /** Older clients send the button label and a new transport key for the same displayed quote. */
+    String approvalMessage(String owner, String conversation, String text, DisplayedContext displayed) {
+        if (text == null || displayed == null || displayed.creationAction() != null || displayed.promptId() == null) return text;
+        String message = text.strip();
+        boolean token = message.startsWith("#approve:");
+        if (!token && (!AgentChatPolicy.confirmed(message) || message.startsWith("确认删除"))) return text;
+        var prompt = turns.displayedAssistantMessage(owner, conversation, displayed.promptId())
+                .map(json::readTree);
+        if (prompt.isEmpty() || !prompt.get().hasNonNull("creationQuote")) {
+            if (token) throw new DomainException("AGENT_PROMPT_CONFLICT", "请核对当前作品的报价后再确认。");
+            return text;
+        }
+        var card = prompt.get();
+        var quote = json.treeToValue(card.path("creationQuote"), Quote.class);
+        String command = "#approve:" + quote.id();
+        if (!Objects.equals(quote.workId(), displayed.workId()) || !Objects.equals(quote.revisionId(), displayed.revisionId())
+                || token && !command.equals(message)
+                || "create_music_video".equals(quote.action()) && displayed.media() != null
+                    && !Objects.equals(card.path("pendingMedia").path("assetId").asText(null), displayed.media().assetId())) {
+            throw new DomainException("AGENT_PROMPT_CONFLICT", "确认的作品、版本或报价已变化，请重新查看报价。");
+        }
+        return command;
+    }
+
     private void validateDecision(String owner,String conversation,String message,DisplayedContext displayed){
         if(displayed!=null&&displayed.historyEpoch()!=null&&displayed.historyEpoch()!=conversations.historyEpoch(owner,conversation))
             throw new DomainException("AGENT_HISTORY_CONFLICT","对话已清空，请在当前对话重新发送。");
+        boolean token=message.startsWith("#approve:");
+        if(displayed!=null && displayed.creationAction()!=null){
+            if(token)throw new DomainException("AGENT_PROMPT_CONFLICT","请使用原报价卡上的确认操作。");
+            return;
+        }
         boolean numbered=AgentChoiceMenu.numberedInput(message);
-        if(!AgentChatPolicy.confirmed(message)&&!CANCEL_PLAN.contains(message)&&!(numbered&&displayed!=null))return;
+        if(!token&&!AgentChatPolicy.confirmed(message)&&!CANCEL_PLAN.contains(message)&&!(numbered&&displayed!=null))return;
         var history=conversations.listRecentMessages(owner,conversation,80);
         if(numbered){
             AgentChoiceMenu.validateDisplayedMenu(message,history,displayed.promptId());
@@ -369,6 +497,14 @@ public final class AgentChatService {
         var prompt=pending(history);
         if(displayed!=null&&!Objects.equals(displayed.promptId(),prompt==null?null:prompt.messageId()))
             throw new DomainException("AGENT_PROMPT_CONFLICT","待确认的操作已变化，请核对最新卡片后再选择。");
+        if(token && (prompt==null||prompt.quote()==null||!message.equals("#approve:"+prompt.quote().id())))
+            throw new DomainException("AGENT_PROMPT_CONFLICT","这份报价已失效，请查看当前作品并重新报价。");
+        if(prompt!=null&&prompt.quote()!=null&&!token&&AgentChatPolicy.confirmed(message)
+                &&(displayed==null||!Objects.equals(prompt.messageId(),displayed.promptId())))
+            throw new DomainException("AGENT_PROMPT_CONFLICT","请使用这份报价上的确认按钮，或先重新获取报价。");
+        if((token||AgentChatPolicy.confirmed(message))&&prompt!=null&&prompt.quote()!=null&&displayed!=null
+                &&(!Objects.equals(displayed.workId(),prompt.songId())||!Objects.equals(displayed.revisionId(),prompt.revisionId())))
+            throw new DomainException("AGENT_PROMPT_CONFLICT","确认的作品或歌词版本有变，请重新获取报价。");
         if(prompt==null||!AgentChatPolicy.confirmed(message))return;
         String action=prompt.steps().get(0).action();
         boolean wrongDelete=message.startsWith("确认删除")&&!Set.of("delete_work","erase_analytics","remove_artist_song").contains(action);
@@ -532,12 +668,17 @@ public final class AgentChatService {
         if(audio>1||lyrics>1)throw new DomainException("INVALID_AGENT_PLAN","一次请求最多生成一组音乐和一版歌词。请先完成当前版本，再继续创作。");
     }
     private void ask(String owner,String conversation,List<Step> steps,String authorizedText,SongCard current,String text,String taskId,String continuationKey,boolean workResolved,boolean versionResolved) {
-        var body=new LinkedHashMap<String,Object>();body.put("text",text);body.put("kind",continuationKey==null?"confirmation":"waiting");
+        ask(owner,conversation,steps,authorizedText,current,text,taskId,continuationKey,workResolved,versionResolved,null);
+    }
+    private void ask(String owner,String conversation,List<Step> steps,String authorizedText,SongCard current,String text,String taskId,String continuationKey,boolean workResolved,boolean versionResolved,Quote quote) {
+        var body=new LinkedHashMap<String,Object>();
+        if(quote!=null)body.put("creationQuote",quote);
+        body.put("text",text);body.put("kind",continuationKey==null?"confirmation":"waiting");
         body.put("pendingSteps",steps);body.put("authorizedText",authorizedText);body.put("pendingSongId",current==null?null:current.songId());
         body.put("pendingRevisionId",current==null?null:current.revisionId());body.put("pendingTaskId",taskId);body.put("continuationKey",continuationKey);
         body.put("pendingWorkResolved",workResolved);body.put("pendingVersionResolved",versionResolved);
         if(current!=null)body.put("pendingMedia",new DisplayedMedia(current.assetId(),current.taskId()));
-        body.put("commands",continuationKey==null?List.of(new Command("确认执行","确认执行","send"),new Command("取消","取消操作","send")):List.of(new Command("停止后续操作","停止后续操作","send")));append(owner,conversation,body);
+        body.put("commands",continuationKey==null?List.of(new Command("确认执行",quote==null?"确认执行":"#approve:"+quote.id(),"send"),new Command("取消","取消操作","send")):List.of(new Command("停止后续操作","停止后续操作","send")));append(owner,conversation,body);
     }
     private Pending pending(List<AgentMessage> history) {
         for(int i=history.size()-1;i>=0;i--){
@@ -550,7 +691,7 @@ public final class AgentChatService {
             if(steps.isEmpty())return null;
             var media=b.path("pendingMedia");
             return new Pending(m.id(),steps,b.path("authorizedText").asText(""),b.path("pendingSongId").asText(null),b.path("pendingRevisionId").asText(null),b.path("pendingTaskId").asText(null),b.path("continuationKey").asText(null),m.createdAt(),b.path("pendingWorkResolved").asBoolean(false),b.path("pendingVersionResolved").asBoolean(false),
-                media.isObject()?new DisplayedMedia(media.path("assetId").asText(null),media.path("taskId").asText(null)):null);
+                media.isObject()?new DisplayedMedia(media.path("assetId").asText(null),media.path("taskId").asText(null)):null,b.hasNonNull("creationQuote")?json.treeToValue(b.path("creationQuote"),Quote.class):null);
         }return null;
     }
     private boolean pendingValid(Pending p,SongCard current,boolean automatic) {

@@ -27,6 +27,9 @@ public class GenerateSongHandler implements AgentToolHandler {
         var a=(AgentTool.GenerateSongArgs) args;
         String owner=ctx.creatorId();
         boolean newWork="new".equals(a.mode()) || ctx.current().currentWorkId()==null || ctx.current().currentWorkId().isBlank();
+        var approval=com.qingfeng.music.credits.ConfirmedCreation.current();
+        if(approval!=null && (newWork || !approval.work().equals(ctx.current().currentWorkId())))
+            throw new com.qingfeng.music.common.exception.DomainException("AGENT_QUOTE_STALE","请重新选择要生成的作品并确认报价。");
         String snapshot=newWork && ctx.current().currentWorkId()!=null ? null : AgentCreationSupport.snapshot(ctx);
         var work=newWork ? works.create(owner,new WorkApi.Draft("","",a.text()==null || a.text().isBlank()?"今天的心情":a.text(),"",
                 StyleCatalog.safe(a.style()==null?AgentCreationSupport.value(snapshot,"style"):a.style()),"智能创作",AgentCreationSupport.vocal(a.vocal(),AgentCreationSupport.vocal(AgentCreationSupport.value(snapshot,"vocal"),"AUTO"))),ctx.requestKey()) : works.get(owner,ctx.current().currentWorkId());
@@ -34,26 +37,30 @@ public class GenerateSongHandler implements AgentToolHandler {
         var existing=generation.list(owner,work.id()).stream().filter(t->ctx.requestKey().equals(t.requestKey())).findFirst();
         if(existing.isPresent()) return result(ctx,work.id(),snapshot,existing.get());
         var revision=newWork ? null : AgentCreationSupport.selected(lyrics,owner,work.id(),a.revisionId(),snapshot);
+        if(approval!=null)approval.checkTarget(owner,work.id(),revision==null?null:revision.id(),work.version());
         String language=AgentCreationSupport.language(a.language(),snapshot,revision);
         // Regeneration used to discard the user's textual music direction entirely.
         String mood=null;
         var direction=java.util.regex.Pattern.compile("(?:曲风|风格|情绪|编曲)(?:是|为|要|：|:)?\\s*([^，。；\\n]{1,120})")
                 .matcher(com.qingfeng.music.agent.application.AgentLyricInput.parse(a.text()).instruction());
         if(direction.find())mood=direction.group(1).strip();
+        String prefix="用当前歌词生成音乐，曲风是";
+        if(approval!=null && a.text()!=null && a.text().startsWith(prefix))mood=a.text().substring(prefix.length()).strip();
         snapshot=SongCardProjector.mergeSnapshot(snapshot,a.style(),mood,a.bpm(),language,a.instruments());
         var applied=AgentCreationSupport.apply(settings,works,owner,work,snapshot,a.vocal());
         work=applied.work(); snapshot=applied.snapshot();
         if(revision==null) {
             revision=composer.compose(owner,work.id(),work.version(),ctx.requestKey(),mapLanguage(language),
                     AgentCreationSupport.instructions("",language),null);
-        } else if(revision.workVersion()!=work.version()) {
+        } else if(approval==null && revision.workVersion()!=work.version()) {
             // Preserve selected words and language when only music settings changed.
             revision=lyrics.save(owner,work.id(),work.version(),revision.title(),revision.lyrics(),revision.id());
         }
         revision=lyrics.confirm(owner,work.id(),revision.id());
         // A long lyric call may have exhausted the Agent turn's shared lease/deadline.
         com.qingfeng.music.common.concurrent.AgentRequestScope.check();
-        var task=generation.submit(owner,work.id(),revision.id(),ctx.requestKey());
+        var task=applied.direction()==null?generation.submit(owner,work.id(),revision.id(),ctx.requestKey())
+                :generation.submitArrangement(owner,work.id(),revision.id(),ctx.requestKey(),applied.direction());
         return result(ctx,work.id(),snapshot,task);
     }
     private AgentToolResult result(ToolContext ctx,String workId,String snapshot,GenerationApi.Task task) {

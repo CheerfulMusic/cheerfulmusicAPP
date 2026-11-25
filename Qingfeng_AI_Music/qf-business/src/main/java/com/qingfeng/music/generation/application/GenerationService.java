@@ -56,19 +56,28 @@ public class GenerationService implements GenerationApi {
  }
  @Transactional(isolation = org.springframework.transaction.annotation.Isolation.READ_COMMITTED)
  public Task submit(String owner,String work,String revisionId,String key,boolean useReference,java.util.function.Consumer<Task> onCreated){
+  return submitInternal(owner,work,revisionId,key,useReference,onCreated,null);
+ }
+ @Transactional(isolation = org.springframework.transaction.annotation.Isolation.READ_COMMITTED)
+ public Task submitArrangement(String owner,String work,String revisionId,String key,com.qingfeng.music.settings.MusicSettings.Direction direction){
+  return submitInternal(owner,work,revisionId,key,false,task->{},Objects.requireNonNull(direction));
+ }
+ private Task submitInternal(String owner,String work,String revisionId,String key,boolean useReference,java.util.function.Consumer<Task> onCreated,com.qingfeng.music.settings.MusicSettings.Direction arrangement){
   var w=works.get(owner,work);
   if(key==null||!key.matches("[0-9a-fA-F-]{36}"))throw new DomainException("INVALID_REQUEST_KEY","请提供有效的请求标识");
   var existing=repository.findRequest(work,key);if(existing.isPresent())return checkedReference(checked(existing.get(),revisionId),useReference);
   var revision=lyrics.get(owner,work,revisionId);
+  var approval=com.qingfeng.music.credits.ConfirmedCreation.current();
+  if(approval!=null)approval.checkTarget(owner,work,revisionId,w.version());
   if(!revision.confirmed())throw new DomainException("LYRICS_NOT_CONFIRMED","请先确认歌词");
-  if(revision.workVersion()!=w.version())throw new DomainException("WORK_VERSION_CONFLICT","作品已修改，请保存并确认当前版本歌词");
+  if((approval==null||arrangement==null)&&revision.workVersion()!=w.version())throw new DomainException("WORK_VERSION_CONFLICT","作品已修改，请保存并确认当前版本歌词");
   available();
   var clip=useReference?(provider.supportsAudioReference()?references.selected(w.referenceTrackId()):Optional.<AudioReferenceClips.Clip>empty())
    .orElseThrow(()->new DomainException("AUDIO_REFERENCE_UNAVAILABLE","这首歌的参考片段暂不可用，可以取消勾选后重新确认生成。")):null;
   // 与局部编辑保持准入锁→作品锁顺序；后续校验失败会随整个事务回滚占额。
   budget.reserve(owner,work,key,com.qingfeng.music.usage.UsageBudget.Kind.MUSIC);
-  var direction=settings==null?null:settings.forGeneration(owner,w);
-  String voice=direction==null?w.vocalGender():direction.effectiveVoice(w.vocalGender());
+  var direction=arrangement!=null?arrangement:settings==null?null:settings.forGeneration(owner,w);
+  String voice=direction==null?w.vocalGender():direction.effectiveVoice(arrangement==null?w.vocalGender():arrangement.preferences().vocalGender());
   provider.validate(direction==null?new MusicProvider.Request(revision.title(),revision.lyrics(),w.style(),voice):new MusicProvider.Request(revision.title(),revision.lyrics(),direction.style(),voice,direction.negativeTags(),true));
   Instant now=Instant.now();
   String id=UUID.randomUUID().toString();var task=checked(repository.insertOrRead(new Task(id,work,revisionId,w.version(),key,revision.title(),revision.lyrics(),w.style(),provider.name(),GenerationStatus.QUEUED,now,null,null,now,now.plusSeconds(5),voice)),revisionId);

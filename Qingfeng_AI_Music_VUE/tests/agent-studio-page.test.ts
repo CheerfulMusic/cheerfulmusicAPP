@@ -58,6 +58,35 @@ beforeEach(() => {
 afterEach(() => { for (const wrapper of wrappers.splice(0)) wrapper.unmount(); vi.useRealTimers() })
 
 describe('真实 Agent 对话与作品', () => {
+  it.each([
+    ['歌曲精修', 'POLISH_LYRICS'], ['音乐制作', 'GENERATE_SONG'], ['MV 制作', 'PREVIEW_MV'],
+  ])('从%s发送时分别保留动作、目标版本与手写限制', async (label, action) => {
+    const { wrapper } = await page(state({ songCard: song }))
+    await wrapper.findAll('.producer-tools > button').find(button => button.text().includes(label))!.trigger('click')
+    const choice = wrapper.get('.creation-choices button')
+    const selected = choice.text()
+    await choice.trigger('click')
+    await wrapper.get('.agent-composer-box textarea').setValue('先只看价格')
+    await wrapper.get('.agent-composer-box').trigger('submit')
+    await flushPromises()
+    expect(api.send).toHaveBeenCalledExactlyOnceWith('c1', '先只看价格', expect.any(String), 'zh-CN',
+      expect.objectContaining({ workId: song.songId, revisionId: song.revisionId, creationAction: action, creationChoice: selected }))
+  })
+  it('两次打开同一份报价并确认使用同一个请求键', async () => {
+    const id = '77887788-2233-4455-8877-aabbccddeeff'
+    const quoted = { ...message(''), contentJson: JSON.stringify({ kind: 'confirmation', creationQuote: { id }, text: '生成歌曲将使用 5 积分' }) }
+    api.state.mockResolvedValue(state({ messages: [quoted], songCard: song }))
+    for (const command of ['确认执行', '#approve:' + id]) {
+      const scope = effectScope()
+      const conversation = scope.run(() => useAgentConversation())!
+      await conversation.refresh()
+      await conversation.send(command, 'zh-CN')
+      scope.stop()
+    }
+    expect(api.send.mock.calls.map(call => [call[1], call[2], call[4].promptId])).toEqual([
+      ['#approve:' + id, id, quoted.id], ['#approve:' + id, id, quoted.id],
+    ])
+  })
   it.each(['no-preference', 'reduce'])('在 %s 模式下，点击页面显示星芒反馈', async motion => {
     const device = (window as unknown as HappyWindow).happyDOM.settings.device
     const originalMotion = device.prefersReducedMotion
