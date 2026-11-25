@@ -7,15 +7,6 @@ export interface GenerationPublication { scope: PublicationScope; stageName?: st
 /** 恢复原提交时沿用同一个公开范围与艺名。 */
 export interface PendingGeneration {workId:string;revisionId:string;requestKey:string;createdAt:number;publication?:GenerationPublication;useAudioReference?:boolean}
 
-const scopeKey = (owner: string) => 'qingfeng.generation-scope:' + owner
-export function previousPublicationScope(owner: string): PublicationScope {
-  try { return owner && localStorage.getItem(scopeKey(owner)) === 'public' ? 'public' : 'private' }
-  catch { return 'private' }
-}
-export function rememberPublicationScope(owner: string, publication?: GenerationPublication) {
-  if (!owner || !publication) return
-  try { localStorage.setItem(scopeKey(owner), publication.scope) } catch { /* Storage is optional. */ }
-}
 const key=(owner:string,work:string)=>`qingfeng.pending-music:${owner}:${work}`
 export function rememberGeneration(owner:string,pending:PendingGeneration,storage?:Pick<Storage,'setItem'>){
   try{(storage??localStorage).setItem(key(owner,pending.workId),JSON.stringify(pending));return true}catch{return false}

@@ -2630,6 +2630,7 @@ export const english: Record<string, string> = {
   "已在主页展示": "On artist page",
   "主页未公开": "Artist page is private",
   "仅自己可见": "Only you",
+  "已保存到我的音乐 · 仅自己可见": "Saved to My Music · Only you",
   "更新主页版本": "Update artist page version",
   "发布范围": "Visibility",
   "私密": "Private",

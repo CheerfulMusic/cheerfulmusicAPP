@@ -34,52 +34,12 @@ import {restoreRemakeSettings} from '../model/remake-settings'
 import { ApiError,currentCreatorId,requestJson } from '../../../shared/http/api-client'
 import GenerationRecovery from '../components/GenerationRecovery.vue'
 import {closeTaskChecking} from '../api/detail'
-import {needsGenerationRefresh,rememberGeneration,recoverGeneration,forgetGeneration,uncertainSubmission,audioArchiveMessage,generationProblem,previousPublicationScope,rememberPublicationScope,type GenerationPublication,type PendingGeneration,type PublicationScope} from '../model/generation-recovery'
+import {needsGenerationRefresh,rememberGeneration,recoverGeneration,forgetGeneration,uncertainSubmission,audioArchiveMessage,generationProblem,type GenerationPublication,type PendingGeneration} from '../model/generation-recovery'
 import {creditGap,isCreditShortfall,type Credits} from '../model/credit-shortfall'
 const props = defineProps<{ embeddedWorkId?: string }>()
 const emit=defineEmits<{ openWithinAgent:[path:string] }>()
 const route = useRoute(), work = ref<Work>(), revision = ref<Revision | null>(null), asset = ref<AudioAsset | null>(null), tasks = ref<GenerationTask[]>([]), error = ref(''), loading = ref(false), lyricDirty = ref(false), modelReady = ref(false), submitting = ref(false), requestKey = ref('')
 const lyricsPanel=ref<InstanceType<typeof LyricsPanel>>(), lyricsReady=ref(false), allowance=ref<Allowance>(), giftRevision=ref<Revision|null>(null), lyricBase=ref<Revision|null>(null)
-const saveGenerationDialog=ref<HTMLDialogElement>()
-const scopeChoice=ref<PublicationScope>('private')
-const scopeProfile=ref<Awaited<ReturnType<typeof getSongPublication>>>()
-const scopeLoading=ref(false)
-const scopeStageName=ref('')
-const referenceAvailable=ref(false), referenceSelected=ref(false)
-const canChoosePublic=computed(()=>typeof scopeProfile.value?.publicationPending==='boolean' && !scopeProfile.value.song)
-const saveLyricsOnConfirmation=computed(()=>!!lyricsPanel.value?.needsSave)
-
-async function openGenerationConfirmation() {
-  const id=work.value?.id
-  if (!id || scopeLoading.value || saveGenerationDialog.value?.open) return
-  const turn=sequence
-  const owner=currentCreatorId()
-  scopeChoice.value='private'
-  scopeStageName.value=''
-  scopeProfile.value=undefined
-  referenceAvailable.value=false
-  referenceSelected.value=false
-  scopeLoading.value=true
-  saveGenerationDialog.value?.showModal()
-  try {
-    const [state, available]=await Promise.all([
-      getSongPublication(id).catch(()=>undefined),
-      work.value?.referenceTrackId?audioReferenceAvailable(id).catch(()=>false):false,
-    ])
-    if (turn!==sequence) return
-    referenceAvailable.value=available
-    scopeProfile.value=state
-    if (canChoosePublic.value) scopeChoice.value=previousPublicationScope(owner)
-  } finally { if (turn===sequence) scopeLoading.value=false }
-}
-function confirmGeneration() {
-  if (scopeLoading.value || scopeChoice.value==='public' && (!canChoosePublic.value || !scopeProfile.value?.profileReady && !scopeStageName.value.trim())) return
-  const publication:GenerationPublication = scopeChoice.value==='public'
-    ? { scope:'public', stageName:scopeStageName.value.trim() || undefined }
-    : { scope:'private' }
-  saveGenerationDialog.value?.close()
-  void generate(true,undefined,publication,referenceAvailable.value&&referenceSelected.value)
-}
 const quickBusy=ref(false),quickRevision=ref('')
 const mediaState = ref<'loading'|'ready'|'failed'>('loading')
 const tasksReady = ref(false), taskReadIssue = ref(false)
@@ -88,6 +48,16 @@ const quickProgress = ref<InstanceType<typeof QuickCreationProgress>>()
 const draftOpened = ref(false)
 const entryReady = computed(() => mediaState.value === 'ready' && tasksReady.value && quickChecked.value)
 const draftReady = computed(() => entryReady.value && !asset.value && !pendingTask.value && !quickBusy.value && !quickJourney.value)
+const referenceAvailable = ref(false), referenceSelected = ref(false)
+watch([draftReady, () => work.value?.id, () => work.value?.referenceTrackId], async ([ready, id, reference], _, onCleanup) => {
+  referenceAvailable.value = false
+  referenceSelected.value = false
+  if (!ready || !id || !reference) return
+  let active = true
+  onCleanup(() => { active = false })
+  const available = await audioReferenceAvailable(id).catch(() => false)
+  if (active) referenceAvailable.value = available
+})
 const entryLoading = computed(() => !asset.value && (loading.value || !!work.value && (
   mediaState.value === 'loading' || mediaState.value === 'ready' && !entryReady.value && !pendingTask.value && !quickBusy.value && !taskReadIssue.value && !quickReadIssue.value
 )))
@@ -174,7 +144,7 @@ const publicationMatches = computed(() => {
 })
 const publicationLabel = computed(() => {
   if (publicationState.value?.publicationPending) return '正在自动发布到广场'
-  if (!visibleRelease.value) return publicationState.value ? '私密' : undefined
+  if (!visibleRelease.value) return publicationState.value ? '已保存到我的音乐 · 仅自己可见' : undefined
   if (!publicationMatches.value) return '旧版本已公开'
   return visibleRelease.value.onDiscover ? '已公开 · 广场和歌手主页' : '已在主页展示'
 })
@@ -182,7 +152,7 @@ const publicationAction = computed(() => visibleRelease.value || publicationStat
   ? '设为私密' : '发布到广场')
 const canReplacePublication = computed(() => !!visibleRelease.value && (!visibleRelease.value.onDiscover || !publicationMatches.value))
 
-async function openSongPublication(intent: 'private' | 'publish' | 'prepare') {
+async function openSongPublication(intent: 'private' | 'publish') {
   const currentWork = work.value?.id
   const currentAsset = asset.value?.id
   if (!currentWork || !currentAsset || publicationBusy.value) return
@@ -199,20 +169,16 @@ async function openSongPublication(intent: 'private' | 'publish' | 'prepare') {
     }
     const state=await getSongPublication(currentWork)
     if (!current()) return
-    const source={workId:currentWork,assetId:currentAsset,coverId:covers.value?.currentCoverId || null,title:songTitle.value}
     if (intent==='private') {
       const updated=await makeSongPrivate(currentWork)
       if (current()) updatePublicationState(updated)
-    } else if (intent==='prepare' || !state.profileReady || state.reopensSongs) {
-      updatePublicationState(state)
-      publication.value=source
-      stageName.value=''
-      await nextTick()
-      if (current()) publicationDialog.value?.showModal()
-    } else {
-      const updated=await publishSongEverywhere(source)
-      if (current()) updatePublicationState(updated)
+      return
     }
+    updatePublicationState(state)
+    publication.value={workId:currentWork,assetId:currentAsset,coverId:covers.value?.currentCoverId || null,title:songTitle.value}
+    stageName.value=''
+    await nextTick()
+    if (current()) publicationDialog.value?.showModal()
   } catch (cause) {
     if (current()) error.value=cause instanceof Error?cause.message:'暂时无法更新歌曲发布状态，请重试。'
   } finally { publicationBusy.value=false }
@@ -220,7 +186,7 @@ async function openSongPublication(intent: 'private' | 'publish' | 'prepare') {
 
 async function confirmPublication() {
   const source=publication.value
-  if (!source || publicationBusy.value || !publicationState.value?.profileReady && !stageName.value.trim()) return
+  if (!source || source.assetId!==asset.value?.id || publicationBusy.value || !publicationState.value?.profileReady && !stageName.value.trim()) return
   publicationBusy.value=true
   try {
     const updated=await publishSongEverywhere({...source,stageName:stageName.value.trim() || undefined})
@@ -263,8 +229,11 @@ function updatePublicationState(state: Awaited<ReturnType<typeof getSongPublicat
 watch([resumePublication, () => asset.value?.id, publicationCoverReady, tasksReady], ([resume, ready]) => {
   if (!resume || !ready || !tasksReady.value || !publicationCoverReady.value) return
   const { show, ...query } = route.query
-  if (!publication.value) void openSongPublication('prepare')
+  if (!publication.value) void openSongPublication('publish')
   void router.replace({ query, hash: route.hash })
+})
+watch(() => asset.value?.id, () => {
+  if (publicationDialog.value?.open) publicationDialog.value.close()
 })
 const displayedStyle=computed(()=>!asset.value?t(work.value?.style||''):asset.value.origin==='IMPORTED'?t('导入音频'):t(playingSettings.value?.style||'风格记录暂不可用'))
 watch([()=>asset.value?.id,()=>covers.value?.currentCoverId,songTitle],()=>{shared.value=false})
@@ -305,7 +274,7 @@ function restoreIntent(workId:string,history:GenerationTask[]){
   intentOwner.value=currentCreatorId();pendingIntent.value=recoverGeneration(intentOwner.value,workId)
   if(!pendingIntent.value)return
   const accepted=history.find(task=>task.requestKey===pendingIntent.value?.requestKey)
-  if(accepted){rememberPublicationScope(intentOwner.value,pendingIntent.value.publication);trackedTaskId.value=accepted.id;clearIntent(workId);return}
+  if(accepted){trackedTaskId.value=accepted.id;clearIntent(workId);return}
   requestKey.value=pendingIntent.value.requestKey;submissionUnknown.value=true;submissionIssue.value='正在核对上次提交，暂不发起新的音乐创作。'
 }
 const inProgress = (task: GenerationTask) => ['QUEUED','SUBMITTING','RUNNING','SAVING'].includes(task.status)
@@ -358,7 +327,6 @@ async function readTasks(replaceRead:boolean) {
     }
     const recovered = submissionUnknown.value && requestKey.value && latest.find(task => task.requestKey === requestKey.value)
     if (recovered) {
-      rememberPublicationScope(intentOwner.value,pendingIntent.value?.publication)
       trackedTaskId.value = recovered.id
       submissionUnknown.value = false
       submissionIssue.value = ''
@@ -409,7 +377,7 @@ async function closeChecking(task:GenerationTask){
   finally{submitting.value=false}
 }
 async function load() {
- publicationCoverReady.value=false;scopeLoading.value=false;saveGenerationDialog.value?.close();publicationDialog.value?.close()
+ publicationCoverReady.value=false;publicationDialog.value?.close()
  quickBusy.value=false;quickRevision.value='';mediaState.value='loading';tasksReady.value=false;taskReadIssue.value=false;quickChecked.value=false;quickReadIssue.value=false;modelReady.value=false;draftOpened.value=false;listenAfterLoad.value=false;quickFlow.value=null;dismissedDirection.value=false;lyricBase.value=null;lyricsReady.value=false
  const turn=++sequence;polling=false;premiumOpen.value=false;giftStage.value=false;shared.value=false;coverOpen.value=false;covers.value=undefined;publication.value=undefined
  generationOpen.value=false;trackedTaskId.value='';submissionIssue.value='';submissionUnknown.value=false;progressIssue.value=false;submitting.value=false;loading.value=true;error.value='';revision.value=null;asset.value=null;tasks.value=[];giftRevision.value=null;work.value=undefined;lyricDirty.value=false;requestKey.value='';pendingIntent.value=undefined;generationNotice.value='';inputIssue.value=false;creditIssue.value=false;credits.value=undefined
@@ -430,7 +398,7 @@ defineExpose({ canClose: permitLeave })
 onBeforeRouteLeave(permitLeave); onBeforeRouteUpdate(to=>to.params.id===route.params.id||permitLeave())
 const beforeUnload = (event: BeforeUnloadEvent) => { if (lyricDirty.value&&!lyricRecoverable.value||pendingIntent.value&&!requestRecoverable.value) { event.preventDefault(); event.returnValue = '' } }
 window.addEventListener('beforeunload', beforeUnload); onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
-async function generate(saveConfirmed=false, adjustment?:RemakeInput, publication?:GenerationPublication, useAudioReference?:boolean) {
+async function generate(adjustment?:RemakeInput) {
   if(quickBusy.value||!tasksReady.value||taskReadIssue.value||!quickChecked.value||quickReadIssue.value||mediaState.value!=='ready')return
   if (pendingTask.value) { showProgress(); return }
   if(submissionUnknown.value){await refreshTasks();generationOpen.value=true;return}
@@ -440,7 +408,8 @@ async function generate(saveConfirmed=false, adjustment?:RemakeInput, publicatio
     return
   }
   const saveChanges=!generated.value&&!!lyricsPanel.value?.needsSave
-  if((!asset.value||saveChanges)&&!saveConfirmed){void openGenerationConfirmation();return}
+  const publication:GenerationPublication={scope:'private'}
+  const useAudioReference=draftReady.value&&referenceAvailable.value&&referenceSelected.value
   const workId = work.value.id, turn = sequence, sourceAssetId=generated.value?asset.value!.id:undefined
   const current=()=>turn===sequence&&(!sourceAssetId||asset.value?.id===sourceAssetId)
   submitting.value = true; error.value = ''; remakeError.value=''; submissionIssue.value = ''; submissionUnknown.value = false;inputIssue.value=false;generationNotice.value='';creditIssue.value=false
@@ -483,7 +452,6 @@ async function generate(saveConfirmed=false, adjustment?:RemakeInput, publicatio
     intentOwner.value=owner;pendingIntent.value={workId,revisionId:confirmed.id,requestKey:requestKey.value,createdAt:Date.now(),publication,...(useAudioReference?{useAudioReference:true}:{})}
     requestRecoverable.value=rememberGeneration(intentOwner.value,pendingIntent.value);posted=true
     const accepted = await submitTask(workId, confirmed.id, requestKey.value, publication, useAudioReference)
-    rememberPublicationScope(owner,publication)
     if (turn !== sequence) return
     tasks.value = [accepted, ...tasks.value.filter(task => task.id !== accepted.id)]
     trackedTaskId.value = accepted.id;clearIntent(workId);remake.value=undefined;generationOpen.value=true
@@ -507,9 +475,7 @@ async function resumeOriginalRequest(){
  const turn=sequence;submitting.value=true;error.value=''
  try{
   // 重放本站相同幂等请求；不产生新的请求键，不调用新的歌词版本。
-  const owner=intentOwner.value
   const accepted=await submitTask(saved.workId,saved.revisionId,saved.requestKey,saved.publication,saved.useAudioReference)
-  rememberPublicationScope(owner,saved.publication)
   if(turn!==sequence)return
   tasks.value=[accepted,...tasks.value.filter(task=>task.id!==accepted.id)];trackedTaskId.value=accepted.id;submissionUnknown.value=false;submissionIssue.value='';clearIntent(saved.workId);generationOpen.value=true
  }catch(e){if(turn!==sequence)return;if(isCreditShortfall(e)){error.value='';submissionUnknown.value=false;submissionIssue.value='';clearIntent(saved.workId);showCreditIssue();return}error.value=e instanceof Error?e.message:'暂时无法核对原请求';if(!uncertainSubmission(e instanceof ApiError?e:{})){submissionUnknown.value=false;submissionIssue.value='';clearIntent(saved.workId)}}
@@ -562,7 +528,7 @@ async function backToStory(){
     <p v-if="coverNotice" class="save-info" role="status">{{ t(coverNotice) }}</p>
     <MusicSettingsSnapshot v-if="playingSettings" :work-id="work.id" :task-id="playingSettings.id"/>
     <SectionEditor v-if="asset" ref="sectionEditor" :key="work.id" :work="work" :asset="asset" :title="playbackTitle" :cover="artwork" :tasks="tasks" :open="sectionOpen" :hint="sectionHint" @close="sectionOpen=false" @refresh="refreshTasks" @adopted="sectionAdopted"/>
-    <MusicSettingsPanel v-if="remake" :work="work" :remake="remake" :busy="submitting" :submit-error="remakeError" @apply="generate(false,$event)" @close="remake=undefined"/>
+    <MusicSettingsPanel v-if="remake" :work="work" :remake="remake" :busy="submitting" :submit-error="remakeError" @apply="generate($event)" @close="remake=undefined"/>
     <div v-if="draftReady&&musicDirectionChanged" class="notice" role="status"><p>{{ t('创作设置已更新，可用「AI 重新生成全部歌词」应用新设置。') }}</p><div class="actions"><button type="button" class="button secondary" @click="dismissedDirection=true">{{ t('保留当前歌词') }}</button></div></div>
     <div v-show="!!asset||draftReady" class="work-detail-layout" :class="{'lyric-studio-layout':draftReady}">
       <div>
@@ -592,41 +558,20 @@ async function backToStory(){
         </div>
       </aside>
     </div>
+    <div v-if="draftReady && referenceAvailable" class="generation-reference">
+      <label><input v-model="referenceSelected" type="checkbox" :disabled="submitting" aria-describedby="audio-reference-note"> {{ t('使用原曲片段参考') }}</label>
+      <p id="audio-reference-note">{{ t('生成时会把原曲片段和你确认的歌词交给音乐模型。成曲可能保留部分原旋律。') }}</p>
+    </div>
     <div v-if="draftReady" class="lyric-studio-actions">
       <button class="button secondary lyric-studio-save" type="button" :disabled="submitting||!lyricsPanel?.canSave" @click="lyricsPanel?.save()"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4h12v16l-6-4-6 4V4Z"/></svg>{{ lyricsPanel?.saving?t('正在保存…'):t('保存歌词') }}</button>
       <button class="button creation-primary" type="button" :disabled="submitting||(!submissionUnknown&&(!modelReady||!lyricsReady))" @click="generate()">{{ submitting?t('正在准备歌曲…'):submissionUnknown?t('核对生成进度'):modelReady?t('生成歌曲'):t('歌曲生成暂未开放') }} <span aria-hidden="true">→</span></button>
-      <dialog ref="saveGenerationDialog" class="save-generation-dialog" aria-labelledby="save-generation-heading">
-        <h2 id="save-generation-heading">{{ t(saveLyricsOnConfirmation ? '保存当前歌词并生成歌曲？' : '生成歌曲') }}</h2>
-        <form @submit.prevent="confirmGeneration">
-          <fieldset :disabled="scopeLoading">
-            <legend>{{ t('发布范围') }}</legend>
-            <label><input v-model="scopeChoice" type="radio" name="generation-scope" value="public" :disabled="!canChoosePublic"> {{ t('发布到广场') }}</label>
-            <label><input v-model="scopeChoice" type="radio" name="generation-scope" value="private"> {{ t('私密') }}</label>
-          </fieldset>
-          <p v-if="scopeLoading" role="status">{{ t('正在读取发布状态…') }}</p>
-          <p v-else-if="scopeChoice === 'public'">{{ t('成歌后，访客可在广场和歌手主页试听。') }}</p>
-          <p v-else-if="!canChoosePublic">{{ t('成歌后，可以在试听页发布到广场。') }}</p>
-          <p v-if="scopeChoice === 'public' && scopeProfile?.reopensSongs">{{ t('公开主页后，此前展示在主页上的歌曲也会恢复可见。') }}</p>
-          <label v-if="scopeChoice === 'public' && !scopeProfile?.profileReady" class="publication-name">
-            {{ t('艺名') }} <input v-model="scopeStageName" required maxlength="30">
-          </label>
-          <fieldset v-if="referenceAvailable">
-            <legend>{{ t('音乐参考') }}</legend>
-            <label><input v-model="referenceSelected" type="checkbox" aria-describedby="audio-reference-note"> {{ t('使用原曲片段参考') }}</label>
-            <p id="audio-reference-note">{{ t('生成时会把原曲片段和你确认的歌词交给音乐模型。成曲可能保留部分原旋律。') }}</p>
-          </fieldset>
-          <div class="actions">
-            <button type="button" class="button secondary" autofocus @click="saveGenerationDialog?.close()">{{ t('取消') }}</button>
-            <button type="submit" class="button primary" :disabled="scopeLoading || scopeChoice === 'public' && !scopeProfile?.profileReady && !scopeStageName.trim()">{{ t(scopeChoice === 'public' ? '生成并发布到广场' : '私密生成') }}</button>
-          </div>
-        </form>
-      </dialog>
     </div>
   </template>
   <CoverEditor v-if="work&&coverOpen" :key="work.id" :work-id="work.id" :state="covers" :published="!!visibleRelease" @saved="coverSaved" @updated="updateCover" @close="coverOpen=false"/>
   <PremiumStudioDialog v-if="work&&asset&&premiumOpen" :open="premiumOpen" :work-id="work.id" :asset="asset" :title="songTitle" :cover="artwork" @close="premiumOpen=false"/>
-  <dialog v-if="publication" ref="publicationDialog" class="save-generation-dialog" aria-labelledby="publish-song-heading" @close="publication=undefined">
+  <dialog v-if="publication" ref="publicationDialog" class="song-publication-dialog" aria-labelledby="publish-song-heading" @close="publication=undefined">
     <h2 id="publish-song-heading">{{ t('发布到广场') }}</h2>
+    <p><strong>{{ songVersionTitle(publication.title, songVersion) }}</strong></p>
     <p>{{ t('发布后，访客可在广场和歌手主页试听。') }}</p>
     <p v-if="publicationState?.reopensSongs">{{ t('公开主页后，此前展示在主页上的歌曲也会恢复可见。') }}</p>
     <form @submit.prevent="confirmPublication">
@@ -634,7 +579,7 @@ async function backToStory(){
       <p v-if="error" role="alert">{{ t(error) }}</p>
       <div class="actions">
         <button type="button" class="button secondary" :disabled="publicationBusy" @click="publicationDialog?.close()">{{ t('取消') }}</button>
-        <button type="submit" class="button primary" :disabled="publicationBusy || !publicationState?.profileReady && !stageName.trim()">{{ t('发布到广场') }}</button>
+        <button type="submit" class="button primary" :disabled="publicationBusy || !publicationState?.profileReady && !stageName.trim()">{{ t('确认发布到广场') }}</button>
       </div>
     </form>
   </dialog>
@@ -653,20 +598,19 @@ async function backToStory(){
 .lyric-studio-layout { grid-template-columns:minmax(0,2.22fr) minmax(255px,1fr); align-items:stretch; gap:clamp(18px,1.7vw,28px); }
 .lyric-studio-layout .lyrics-editor-fold { border:0; margin:0; }
 .lyric-studio-layout .lyrics-editor-fold :deep(.detail-panel) { margin:0; }
+.generation-reference { margin-top:16px; color:var(--muted); }
+.generation-reference p { margin:4px 0 0; font-size:14px; }
 .lyric-studio-actions { display:flex; justify-content:flex-end; gap:16px; margin-top:16px; }
 .lyric-studio-actions > .button { min-height:52px; border-radius:999px; font-size:16px; }
 .lyric-studio-actions > .creation-primary { min-width:clamp(165px,13vw,216px); }
 .lyric-studio-actions > .lyric-studio-save { min-width:clamp(140px,11.5vw,190px); gap:8px; }
 .lyric-studio-save svg { width:18px; height:18px; fill:none; stroke:currentColor; stroke-width:1.8; stroke-linejoin:round; }
-.save-generation-dialog { width:min(420px,calc(100% - 32px)); padding:22px; border:1px solid var(--line); border-radius:18px; color:var(--ink); background:#fffafa; box-shadow:0 22px 66px #39212638; }
-.save-generation-dialog::backdrop { background:#39272e66; }
-.save-generation-dialog h2 { margin:0 0 8px; font-size:20px; }
-.save-generation-dialog p { margin:0 0 16px; color:var(--muted); }
-.save-generation-dialog .actions { justify-content:flex-end; gap:10px; margin:0; }
-.save-generation-dialog .actions button { min-width:0; width:auto; }
-.save-generation-dialog fieldset { border:0; padding:0; margin:0 0 12px; display:flex; gap:16px; flex-wrap:wrap; }
-.save-generation-dialog legend { font-weight:700; margin-bottom:8px; }
-.save-generation-dialog fieldset label { display:flex; align-items:center; gap:5px; }
+.song-publication-dialog { width:min(420px,calc(100% - 32px)); padding:22px; border:1px solid var(--line); border-radius:18px; color:var(--ink); background:#fffafa; box-shadow:0 22px 66px #39212638; }
+.song-publication-dialog::backdrop { background:#39272e66; }
+.song-publication-dialog h2 { margin:0 0 8px; font-size:20px; }
+.song-publication-dialog p { margin:0 0 16px; color:var(--muted); }
+.song-publication-dialog .actions { justify-content:flex-end; gap:10px; margin:0; }
+.song-publication-dialog .actions button { min-width:0; width:auto; }
 .publication-name { display:grid; gap:6px; margin-bottom:14px; }
 .publication-name input { width:100%; padding:10px; border:1px solid var(--line); border-radius:8px; font:inherit; }
 @media(max-width:760px) {
@@ -677,7 +621,7 @@ async function backToStory(){
  .lyric-studio-actions { position:sticky; bottom:0; z-index:2; gap:8px; margin-top:10px; padding:10px 0 calc(8px + env(safe-area-inset-bottom)); background:var(--page,#fcf6f6); }
  .lyric-studio-actions > .button { width:auto; min-width:0; min-height:46px; font-size:14px; flex:1 1 auto; }
  :global(.has-preview .lyric-studio-actions) { bottom:calc(86px + env(safe-area-inset-bottom)); }
- .lyric-studio-layout:has(:deep(textarea:focus)) + .lyric-studio-actions { position:static; }
+ .lyric-studio-layout:has(:deep(textarea:focus)) ~ .lyric-studio-actions { position:static; }
 }
 .work-entry-progress.has-song :deep(.quick-progress){align-items:center;gap:12px;margin:12px 0;padding:12px 18px;border-radius:14px}
 .work-entry-progress.has-song :deep(.quick-progress-icon),.work-entry-progress.has-song :deep(.quick-progress-copy>p:not([role="alert"])){display:none}
