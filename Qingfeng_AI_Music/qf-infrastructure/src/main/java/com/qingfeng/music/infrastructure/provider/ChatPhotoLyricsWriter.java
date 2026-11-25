@@ -22,6 +22,7 @@ public final class ChatPhotoLyricsWriter implements PhotoLyricsWriter {
     public static final String DOUBAO_MODEL = "doubao-seed-2-0-mini-260428";
     public static final String QWEN_MODEL = "qwen3.8-flash";
     private static final URI ARK_CHAT = URI.create("https://ark.cn-beijing.volces.com/api/v3/chat/completions");
+    private static final String USER_AGENT = "qingfeng-music-photo-lyrics/1";
     private static final Set<Integer> REJECTED = Set.of(401, 402, 403, 404, 429);
     private static final System.Logger LOG = System.getLogger(ChatPhotoLyricsWriter.class.getName());
     private static final String PHOTO_BRIEF = """
@@ -72,6 +73,7 @@ public final class ChatPhotoLyricsWriter implements PhotoLyricsWriter {
 
     @Override
     public LyricsWriter.Draft write(WorkApi.Work work, String language, List<byte[]> photos, LyricsWriter.Direction direction) {
+        long deadline = LyricsQualityReview.deadline();
         var material = Map.of("recipient", work.recipient(), "occasion", work.occasion(), "story", work.story(),
             "message", work.message(), "style", work.style(), "musicDirection", direction.style(),
             "musicExclusions", direction.exclusions(), "vocalGender", direction.vocalGender(), "lyricsLanguage", language);
@@ -83,8 +85,8 @@ public final class ChatPhotoLyricsWriter implements PhotoLyricsWriter {
         }
         String prompt = LyricsWritingPrompt.system(language) + PHOTO_BRIEF + DEFAULT_STRUCTURE.instruction();
         try {
-            var response = LyricsHttpTransport.post(client, endpoint, key, requestBody(prompt, content, 3800),
-                Duration.ofSeconds(50), "qingfeng-music-photo-lyrics/1");
+            var response = LyricsHttpTransport.post(client, endpoint, key, requestBody(prompt, content, 3800, true),
+                LyricsQualityReview.remaining(deadline, Duration.ofSeconds(50)), USER_AGENT);
             int status = response.statusCode();
             if (status != 200) {
                 LOG.log(System.Logger.Level.WARNING, "Photo lyrics HTTP failure: provider={0}, status={1}", source, status);
@@ -94,7 +96,8 @@ public final class ChatPhotoLyricsWriter implements PhotoLyricsWriter {
                     throw new DomainException("LYRICS_PROVIDER_REJECTED", "照片歌词服务暂时无法接受请求，请稍后再试。");
                 throw new DomainException("LYRICS_PROVIDER_UNAVAILABLE", "照片歌词服务无法处理这次请求，请调整素材后再试。");
             }
-            return OpenAiLyricsWriter.parseSong(LyricsWritingPrompt.jsonObject(outputText(response.body())), true, source);
+            var draft = OpenAiLyricsWriter.parseSong(LyricsWritingPrompt.jsonObject(outputText(response.body())), true, source);
+            return refine(draft, language, material, deadline);
         } catch (HttpTimeoutException timeout) {
             throw new DomainException("LYRICS_PROVIDER_TIMEOUT", "等待照片歌词结果超时，请先查看原请求进度。");
         } catch (IOException network) {
@@ -107,20 +110,44 @@ public final class ChatPhotoLyricsWriter implements PhotoLyricsWriter {
         }
     }
 
+    private LyricsWriter.Draft refine(LyricsWriter.Draft draft, String language, Map<String, String> material, long deadline)
+            throws IOException, InterruptedException {
+        var originalMaterial = new LinkedHashMap<>(material);
+        originalMaterial.put("photoSummary", draft.plan().photoSummary());
+        originalMaterial.put("revisionInstructions", DEFAULT_STRUCTURE.instruction());
+        String context = json.writeValueAsString(Map.of(
+            "originalMaterial", originalMaterial, "candidate", LyricsQualityReview.candidate(draft)));
+        String body = requestBody(LyricsWritingPrompt.refinement(language), context, 4000, false);
+        try {
+            var response = LyricsHttpTransport.post(client, endpoint, key, body, LyricsQualityReview.remaining(deadline), USER_AGENT);
+            int status = response.statusCode();
+            if (status == 408 || status == 504) throw new HttpTimeoutException("Photo lyrics refinement timed out");
+            if (status != 200) {
+                LOG.log(System.Logger.Level.WARNING, "Photo lyrics refinement HTTP failure: provider={0}, status={1}", source, status);
+                throw LyricsQualityReview.unverified();
+            }
+            return LyricsWritingPrompt.refined(draft, outputText(response.body()));
+        } catch (DomainException | JacksonException invalid) {
+            // An unsuccessful refinement must not deliver the first draft or restart photo generation.
+            throw LyricsQualityReview.unverified();
+        }
+    }
+
     @Override
     public Map<Integer, String> repairSections(LyricsWriter.SectionRepair request) {
         var material = new LinkedHashMap<String, Object>(LyricsSectionRepair.material(request));
         material.put("photoSummary", request.draft().plan().photoSummary());
         String prompt = LyricsSectionRepair.instructions(request.language())
             + "\nphotoSummary 是已识别的画面素材。沿用可见细节和用户提供的事实，避免推断人物身份、关系或经历。";
-        String body = requestBody(prompt, json.writeValueAsString(material), 4000);
+        String body = requestBody(prompt, json.writeValueAsString(material), 4000, true);
         return LyricsSectionRepair.post(client, endpoint, key, body, request, this::outputText);
     }
 
-    private String requestBody(String prompt, Object content, int maxTokens) {
+    private String requestBody(String prompt, Object content, int maxTokens, boolean structured) {
         var input = new LinkedHashMap<String, Object>(Map.of("model", model, "messages", List.of(
             Map.of("role", "system", "content", prompt), Map.of("role", "user", "content", content)),
-            "response_format", Map.of("type", "json_object"), "max_tokens", maxTokens, "stream", false));
+            "max_tokens", maxTokens, "stream", false));
+        if (structured) input.put("response_format", Map.of("type", "json_object"));
         if ("DOUBAO".equals(source)) input.put("thinking", Map.of("type", "disabled"));
         else input.put("enable_thinking", false);
         return json.writeValueAsString(input);
