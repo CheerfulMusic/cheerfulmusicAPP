@@ -1,21 +1,73 @@
 package com.qingfeng.music.server.web.publicapi;
 
 import java.net.http.*;
+import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.HexFormat;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Flow;
 import org.junit.jupiter.api.Test;
-import org.springframework.test.util.ReflectionTestUtils;
+import org.mockito.ArgumentCaptor;
 import org.springframework.web.server.ResponseStatusException;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
+import tools.jackson.databind.ObjectMapper;
 
 class WechatShareConfigTest {
+    @Test void sendsOfficialNewsAndReusesTheSigningAccessToken() throws Exception {
+        var http = mock(HttpClient.class);
+        var client = new WechatOfficialClient("official-account", "server-only", http);
+        @SuppressWarnings("unchecked") HttpResponse<String> token = mock(HttpResponse.class), ticket = mock(HttpResponse.class),
+            sent = mock(HttpResponse.class);
+        when(token.statusCode()).thenReturn(200);
+        when(ticket.statusCode()).thenReturn(200);
+        when(sent.statusCode()).thenReturn(200);
+        when(token.body()).thenReturn("{\"access_token\":\"token\",\"expires_in\":7200}");
+        when(ticket.body()).thenReturn("{\"ticket\":\"ticket\",\"expires_in\":7200}");
+        when(sent.body()).thenReturn("{\"errcode\":0}");
+        when(http.send(any(), org.mockito.ArgumentMatchers.<HttpResponse.BodyHandler<String>>any()))
+                .thenReturn(token, ticket, sent);
+        assertEquals("ticket", client.jsapiTicket());
+        var article = new WechatOfficialClient.News("歌名", "介绍", "https://cheerfulmusic.com/song/example",
+                "https://cheerfulmusic.com/cover.png");
+        assertEquals(WechatOfficialClient.Delivery.SENT, client.sendNews("bound-open-id", article));
+        var requests = ArgumentCaptor.forClass(HttpRequest.class);
+        verify(http, times(3)).send(requests.capture(), any());
+        assertEquals("/cgi-bin/stable_token", requests.getAllValues().get(0).uri().getPath());
+        var request = requests.getAllValues().get(2);
+        assertEquals("/cgi-bin/message/custom/send", request.uri().getPath());
+        assertEquals("access_token=token", request.uri().getQuery());
+        var payload = new ObjectMapper().readTree(body(request));
+        assertEquals("bound-open-id", payload.path("touser").asString());
+        assertEquals("news", payload.path("msgtype").asString());
+        var entry = payload.path("news").path("articles").path(0);
+        assertEquals(article.title(), entry.path("title").asString());
+        assertEquals(article.description(), entry.path("description").asString());
+        assertEquals(article.url(), entry.path("url").asString());
+        assertEquals(article.picurl(), entry.path("picurl").asString());
+    }
+
+    private static byte[] body(HttpRequest request) {
+        var result = new CompletableFuture<byte[]>();
+        var bytes = new java.io.ByteArrayOutputStream();
+        request.bodyPublisher().orElseThrow().subscribe(new Flow.Subscriber<ByteBuffer>() {
+            @Override public void onSubscribe(Flow.Subscription subscription) { subscription.request(Long.MAX_VALUE); }
+            @Override public void onNext(ByteBuffer buffer) {
+                byte[] next = new byte[buffer.remaining()];
+                buffer.get(next);
+                bytes.writeBytes(next);
+            }
+            @Override public void onError(Throwable failure) { result.completeExceptionally(failure); }
+            @Override public void onComplete() { result.complete(bytes.toByteArray()); }
+        });
+        return result.join();
+    }
+
     @Test void signsTheExactUrlAndCachesTheTicketAcrossSongs() throws Exception {
         String origin = "https://cheerfulmusic.com";
-        var signer = new WechatShareConfigController("official-account", "server-only", origin);
         var client = mock(HttpClient.class);
-        ReflectionTestUtils.setField(signer, "client", client);
+        var signer = new WechatShareConfigController(new WechatOfficialClient("official-account", "server-only", client), origin);
         @SuppressWarnings("unchecked") HttpResponse<String> token = mock(HttpResponse.class), ticket = mock(HttpResponse.class);
         when(token.statusCode()).thenReturn(200);
         when(ticket.statusCode()).thenReturn(200);

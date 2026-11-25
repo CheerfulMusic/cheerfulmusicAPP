@@ -919,6 +919,24 @@
       ]
     },
     {
+      "controller": "WechatSelfCardController",
+      "source": "com/qingfeng/music/server/web/publicapi/WechatSelfCardController.java",
+      "mappingDeclarations": [
+        "@GetMapping(AVAILABILITY)",
+        "@GetMapping(APP + \"/binding\")",
+        "@PostMapping(APP + \"/binding\")",
+        "@DeleteMapping(APP + \"/binding\")",
+        "@PostMapping(APP + \"/send\")",
+        "@GetMapping(value = CALLBACK, produces = MediaType.TEXT_PLAIN_VALUE)",
+        "@PostMapping(value = CALLBACK, produces = MediaType.TEXT_PLAIN_VALUE)"
+      ],
+      "mode": "excluded",
+      "flows": [
+        "Website user sends a public song card to their own linked WeChat account",
+        "Verified official-account callback"
+      ]
+    },
+    {
       "controller": "WechatShareConfigController",
       "source": "com/qingfeng/music/server/web/publicapi/WechatShareConfigController.java",
       "mappingDeclarations": [

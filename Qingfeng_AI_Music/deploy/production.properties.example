@@ -82,3 +82,8 @@ qingfeng.agent.retrieval.scheduler-enabled=false
 # Official account used for WeChat webpage sharing. Supply the values in server-private configuration.
 # qingfeng.wechat.official.app-id=
 # qingfeng.wechat.official.app-secret=
+# Official-account news card delivery. Enable alongside the encrypted JSON callback.
+# qingfeng.wechat.official.self-card.enabled=false
+# qingfeng.wechat.official.self-card.account-name=
+# qingfeng.wechat.official.self-card.callback-token=
+# qingfeng.wechat.official.self-card.encoding-aes-key=

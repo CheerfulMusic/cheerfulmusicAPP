@@ -33,6 +33,13 @@ server:
     enabled: true
     mime-types: text/html,text/css,application/javascript,application/json,image/svg+xml
 qingfeng:
+  wechat:
+    official:
+      self-card:
+        enabled: ${WECHAT_SELF_CARD_ENABLED:false}
+        account-name: ${WECHAT_SELF_CARD_ACCOUNT_NAME:}
+        callback-token: ${WECHAT_SELF_CARD_CALLBACK_TOKEN:}
+        encoding-aes-key: ${WECHAT_SELF_CARD_ENCODING_AES_KEY:}
   payment:
     inbox:
       scheduler-enabled: true

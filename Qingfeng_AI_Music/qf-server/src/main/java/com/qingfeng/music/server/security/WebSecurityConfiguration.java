@@ -1,6 +1,7 @@
 package com.qingfeng.music.server.security;
 
 import com.qingfeng.music.server.invite.InviteGateFilter;
+import com.qingfeng.music.server.web.publicapi.WechatSelfCardController;
 import jakarta.servlet.DispatcherType;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -56,7 +57,7 @@ public class WebSecurityConfiguration {
                 }
             }))
             .csrf(csrf -> csrf.ignoringRequestMatchers("/api/public/payments/airwallex/webhook", "/api/public/paypal/webhook", "/api/public/events", "/api/wechat/jssdk-error", "/api/songs/*/play", "/api/public/hot-songs/*/play", "/api/public/discover/songs/*/*/play")
-            .ignoringRequestMatchers(request->"POST".equals(request.getMethod())&&java.util.Set.of("/api/public/auth/sms/deliver","/api/public/stripe/webhook").contains(request.getServletPath()))
+            .ignoringRequestMatchers(request->"POST".equals(request.getMethod())&&java.util.Set.of("/api/public/auth/sms/deliver","/api/public/stripe/webhook",WechatSelfCardController.CALLBACK).contains(request.getServletPath()))
             .ignoringRequestMatchers(coverNotice)
             .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse()).csrfTokenRequestHandler(new CsrfTokenRequestAttributeHandler()))
             .authorizeHttpRequests(auth -> auth
@@ -72,6 +73,8 @@ public class WebSecurityConfiguration {
                 .requestMatchers(request -> "HEAD".equals(request.getMethod()) && com.qingfeng.music.server.web.RecommendationOssRedirect.isSamplePath(request.getServletPath())).permitAll()
                 .requestMatchers("/api/public/system/info", "/api/public/csrf", "/api/public/session", "/api/public/session/recover", "/actuator/health").permitAll()
                 .requestMatchers(org.springframework.http.HttpMethod.POST,"/api/public/events","/api/wechat/jssdk-error").permitAll()
+                .requestMatchers(HttpMethod.GET, WechatSelfCardController.AVAILABILITY, WechatSelfCardController.CALLBACK).permitAll()
+                .requestMatchers(HttpMethod.POST, WechatSelfCardController.CALLBACK).permitAll()
                 .requestMatchers(org.springframework.http.HttpMethod.GET,"/api/public/hot-songs","/api/public/hot-songs/*/lyrics","/api/public/hot-songs/*/creation-reference").permitAll()
                 .requestMatchers(org.springframework.http.HttpMethod.GET,"/api/public/discover").permitAll()
                 .requestMatchers(org.springframework.http.HttpMethod.HEAD,"/api/public/discover").permitAll()

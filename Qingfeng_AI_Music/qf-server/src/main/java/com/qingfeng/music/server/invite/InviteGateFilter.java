@@ -1,5 +1,7 @@
 package com.qingfeng.music.server.invite;
 
+import com.qingfeng.music.server.web.publicapi.WechatSelfCardController;
+
 import com.qingfeng.music.server.security.CreatorSessionFilter;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -16,7 +18,8 @@ public final class InviteGateFilter extends OncePerRequestFilter {
     private static final Set<String> ENTRANCES = Set.of(
             "/api/public/invite/status", "/api/public/invite/enter");
     private static final Set<String> WEBHOOKS = Set.of(
-            "/api/public/payments/airwallex/webhook", "/api/public/paypal/webhook", "/api/public/stripe/webhook", "/api/public/auth/sms/deliver");
+            "/api/public/payments/airwallex/webhook", "/api/public/paypal/webhook", "/api/public/stripe/webhook", "/api/public/auth/sms/deliver",
+            WechatSelfCardController.CALLBACK);
     private static final Set<String> ANALYTICS = Set.of(
             "/api/public/events", "/api/app/analytics/access", "/api/app/analytics/summary");
     private static final String GOOGLE_CALLBACK = "/api/public/auth/google/callback";
@@ -40,7 +43,8 @@ public final class InviteGateFilter extends OncePerRequestFilter {
         boolean publicGift = read && path.matches("/api/public/gifts/[A-Za-z0-9_-]{43}(?:/audio|/cover)?")
                 && !CreatorSessionFilter.isGiftDownload(request);
         boolean publicSong = read && (path.matches("/api/songs/[A-Za-z0-9_-]{43}/(?:public|community|audio|cover|thumbnail[.]png)")
-                || path.equals("/api/wechat/jssdk-config"));
+                || path.equals("/api/wechat/jssdk-config") || path.equals(WechatSelfCardController.AVAILABILITY)
+                || path.equals(WechatSelfCardController.CALLBACK));
         boolean songPlay = "POST".equals(request.getMethod()) && path.matches("/api/songs/[A-Za-z0-9_-]{43}/play");
         boolean publicArtist = read && ARTIST_READ.matcher(path).matches();
         boolean publicDiscoverSong = read && ("/api/public/discover".equals(path) || DISCOVER_SONG_READ.matcher(path).matches());

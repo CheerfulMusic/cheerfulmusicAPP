@@ -7,6 +7,7 @@ import {previewMediaPlugin} from './build/preview-media'
 import { siteSeoPlugin } from './build/site-seo'
 
 const posterModule = fileURLToPath(new URL('./src/modules/works/model/song-poster.ts', import.meta.url))
+const wechatCardModule = fileURLToPath(new URL('./src/modules/works/components/wechat-self-card-embed.ts', import.meta.url))
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
@@ -34,12 +35,12 @@ export default defineConfig(({ mode }) => {
       }),
     ],
     base: '/',
-    resolve: { alias: { '/brand/song-poster.js': posterModule } },
+    resolve: { alias: { '/brand/song-poster.js': posterModule, '/brand/wechat-self-card.js': wechatCardModule } },
     build: {
       rolldownOptions: {
-        input: { index: fileURLToPath(new URL('./index.html', import.meta.url)), 'song-poster': posterModule },
+        input: { index: fileURLToPath(new URL('./index.html', import.meta.url)), 'song-poster': posterModule, 'wechat-self-card': wechatCardModule },
         preserveEntrySignatures: 'exports-only',
-        output: { entryFileNames: chunk => chunk.name === 'song-poster' ? 'brand/song-poster.js' : 'assets/[name]-[hash].js' },
+        output: { entryFileNames: chunk => ['song-poster', 'wechat-self-card'].includes(chunk.name) ? 'brand/[name].js' : 'assets/[name]-[hash].js' },
       },
     },
     test: { setupFiles: ['./tests/setup-locale.ts'] },

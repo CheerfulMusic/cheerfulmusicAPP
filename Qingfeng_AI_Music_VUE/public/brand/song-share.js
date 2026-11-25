@@ -136,6 +136,13 @@
     resetDestination()
     byId('more-share').open = false
   })
+  const cardHost = byId('wechat-self-card')
+  if (!wechat && cardHost) byId('open-share').addEventListener('click', async () => {
+    try {
+      const { mountWechatSelfCard } = await import('/brand/wechat-self-card.js')
+      mountWechatSelfCard(cardHost, new URL(url).pathname)
+    } catch { /* Other share methods remain available while the optional module is unavailable. */ }
+  }, { once: true })
   byId('poster').addEventListener('click', resetDestination)
   byId('more-share').addEventListener('toggle', () => { if (byId('more-share').open) resetDestination() })
   async function copy() {

@@ -7,6 +7,7 @@ import { apiUrl } from '../../../shared/http/api-client'
 import { lyricQuotes, localShareAddress, posterFilename, shareCancelled, songShareUrl, songTimelineTitle, wechatShareEntry, type SongShareStatus, type WechatDestination, type WechatShareFeedback } from '../model/song-sharing'
 import { usePlayer } from '../../../shared/player/store'
 import PublicSongStory from './PublicSongStory.vue'
+import WechatSelfCard from './WechatSelfCard.vue'
 import PlaybackIcon from '../../../shared/ui/PlaybackIcon.vue'
 
 const props = defineProps<{ open: boolean; workId: string; revision: Revision | null; asset: AudioAsset | null; coverId?: string | null; workTitle?: string }>()
@@ -274,6 +275,7 @@ onBeforeUnmount(() => { generation++; clearDestination(); clearPoster(); dialog.
           </button>
         </article>
         <h3 class="channel-heading">{{ t('分享到') }}</h3>
+        <WechatSelfCard :key="song.songId" :path="'/song/' + song.songId" />
         <div class="share-destinations" role="group" :aria-label="t('分享到')">
           <a ref="shareButton" :href="wechatShareEntry(link, 'friend')" :aria-current="destination === 'friend' || undefined" @click="choose($event,'friend')"><span class="destination-icon for-friend" aria-hidden="true"></span>{{ t('微信好友') }}<small>{{ t(destinationHint('friend')) }}</small></a>
           <a :href="wechatShareEntry(link, 'timeline')" :aria-current="destination === 'timeline' || undefined" @click="choose($event,'timeline')"><span class="destination-icon for-timeline" aria-hidden="true"><i></i></span>{{ t('朋友圈') }}<small>{{ t(destinationHint('timeline')) }}</small></a>

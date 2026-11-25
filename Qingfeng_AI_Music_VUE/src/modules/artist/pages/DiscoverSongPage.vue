@@ -14,6 +14,7 @@ import {
   setDiscoverDescription, setDiscoverLike, type DiscoverComment, type DiscoverSongDetail,
 } from '../api/discover-song'
 import ArtistShareButton from '../components/ArtistShareButton.vue'
+import WechatSelfCard from '../../works/components/WechatSelfCard.vue'
 import { publicDiscoverTrack } from '../model/discover-shelves'
 
 const route = useRoute(), router = useRouter(), player = usePlayer()
@@ -46,6 +47,7 @@ const shownLyrics = computed(() => (expanded.value ? lyricLines.value : lyricLin
 const numberFormat = computed(() => new Intl.NumberFormat(locale.value))
 const shareUrl = computed(() => detail.value ? new URL(discoverSongHref(detail.value.release.song),
   platform.kind === 'web' ? window.location.origin : siteOrigin).href : '')
+const sharePath = computed(() => shareUrl.value ? new URL(shareUrl.value).pathname : '')
 const busy = computed(() => Boolean(pending.value) || loadingMore.value)
 const communityAvailable = computed(() => detail.value?.communityAvailable !== false)
 
@@ -237,6 +239,7 @@ function saveDescription() {
               <button type="button" class="song-detail-action song-detail-like" :aria-pressed="detail.likes.liked" :disabled="busy || !communityAvailable" @click="toggleLike"><NavIcon name="heart" />{{ t('点赞') }} <span v-if="communityAvailable">{{ numberFormat.format(detail.likes.count) }}</span></button>
               <button type="button" class="song-detail-action" aria-controls="discover-song-comments" @click="jumpToComments"><NavIcon name="comment" />{{ t('评论') }} <span v-if="communityAvailable">{{ numberFormat.format(detail.commentCount) }}</span></button>
               <ArtistShareButton :key="shareUrl" song :url="shareUrl" :name="track.title" />
+              <WechatSelfCard v-if="sharePath" :key="sharePath" :path="sharePath" />
             </div>
           </div>
         </div>
