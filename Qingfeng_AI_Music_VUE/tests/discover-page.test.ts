@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import type { DiscoverSong } from '../src/modules/artist/api/artist'
+import { prayerHeroArtwork } from '../src/modules/artist/model/discover-hero-artwork'
 import discoverMedia from '../src/modules/artist/model/discover-media.json'
 import { setLocale } from '../src/shared/i18n'
 import type { PlayableTrack } from '../src/shared/player/store'
@@ -382,6 +383,18 @@ describe('Discover editorial layout with real content', () => {
     }
     expect(wrapper.findAll('.discover-ranking-info strong').map(title => title.text()))
       .toEqual(popular.slice(0, 5).map(item => item.song.title))
+  })
+
+  it('uses the same backup image in the side preview and the active slide when the CDN route fails', async () => {
+    const wrapper = await open()
+    await wrapper.get('[aria-label="查看推荐：歌曲popular"]').trigger('click')
+    const preview = wrapper.get('.discover-hero-preview-after')
+    expect(preview.get('source').attributes('srcset')).toBe(prayerHeroArtwork.compact)
+    await preview.get('img').trigger('error')
+    expect(preview.get('source').attributes('srcset')).toBe(prayerHeroArtwork.fallback)
+    await wrapper.get('[aria-label="查看推荐：Prayer Beneath the Stars"]').trigger('click')
+    expect(wrapper.get('.discover-hero-background').attributes('src')).toBe(prayerHeroArtwork.fallback)
+    expect(wrapper.get('.discover-hero-main source').attributes('srcset')).toBe(prayerHeroArtwork.fallback)
   })
 
   it('keeps the main songs usable when recommendations fail and recovers the side feed on retry', async () => {

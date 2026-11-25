@@ -84,6 +84,7 @@ const mascotRelease = ref<DiscoverSong>()
 const velvetHours = ref<PublishedShelfTrack>()
 const editorialLoading = ref(true)
 const selectedHeroTrackId = ref('')
+const unavailableHeroImages = ref(new Set<string>())
 const heroPaused = ref(false)
 const heroHovered = ref(false)
 const heroFocused = ref(false)
@@ -198,12 +199,20 @@ const heroSlideCount = computed(() => heroSlides.value.length)
 const heroIndex = computed(() => Math.max(0, heroSlides.value.findIndex(slide => slide.row.track.id === selectedHeroTrackId.value)))
 const hero = computed(() => heroSlides.value[heroIndex.value]!.row)
 const heroRows = computed(() => heroSlides.value.map(slide => slide.row))
-const heroBackground = computed(() => heroSlides.value[heroIndex.value]!.artwork)
+function displayedHeroArtwork(artwork: HeroArtwork): HeroArtwork {
+  const { desktop, fallback } = artwork
+  if (!fallback || !unavailableHeroImages.value.has(desktop)) return artwork
+  return { desktop: fallback, compact: fallback, position: artwork.position }
+}
+function useHeroImageFallback(artwork: HeroArtwork) {
+  if (artwork.fallback) unavailableHeroImages.value.add(artwork.desktop)
+}
+const heroBackground = computed(() => displayedHeroArtwork(heroSlides.value[heroIndex.value]!.artwork))
 function heroIndexAt(step: number) {
   return (heroIndex.value + step + heroSlideCount.value) % heroSlideCount.value
 }
-const heroBefore = computed(() => heroSlides.value[heroIndexAt(-1)]!.artwork)
-const heroAfter = computed(() => heroSlides.value[heroIndexAt(1)]!.artwork)
+const heroBefore = computed(() => displayedHeroArtwork(heroSlides.value[heroIndexAt(-1)]!.artwork))
+const heroAfter = computed(() => displayedHeroArtwork(heroSlides.value[heroIndexAt(1)]!.artwork))
 const heroTitleLength = computed(() => Array.from(hero.value.track.title).length)
 const visibleArtists = computed(() => {
   const found = artists.value ?? Array.from(new Map(latestSongs.value.map(song => [song.artistId, {
@@ -467,14 +476,16 @@ onBeforeUnmount(() => {
         <div v-if="heroSlideCount > 1" class="discover-hero-preview discover-hero-preview-before">
           <picture>
             <source media="(min-width: 521px)" :srcset="heroBefore.compact">
-            <img :style="{ objectPosition: heroBefore.position }" alt="" loading="lazy" decoding="async" fetchpriority="low">
+            <img :style="{ objectPosition: heroBefore.position }" alt="" loading="lazy" decoding="async" fetchpriority="low"
+              @error="useHeroImageFallback(heroBefore)">
           </picture>
         </div>
         <div class="discover-hero-main" :class="{ 'is-single': heroSlideCount === 1, 'has-portrait': hero.track.id === mascotSongId }">
           <picture>
             <source media="(max-width: 760px)" :srcset="heroBackground.compact">
             <img class="discover-hero-background" :src="heroBackground.desktop"
-              :style="{ objectPosition: heroBackground.position }" alt="" width="1536" height="512" fetchpriority="high">
+              :style="{ objectPosition: heroBackground.position }" alt="" width="1536" height="512" fetchpriority="high"
+              @error="useHeroImageFallback(heroBackground)">
           </picture>
           <div class="discover-hero-content">
             <h2 :class="{ 'is-long-title': heroTitleLength > 10, 'is-very-long-title': heroTitleLength > 32 }" :title="hero.track.title"><RouterLink v-if="hero.song && hero.publishedAt" class="discover-song-title-link" :to="discoverSongHref(hero.song)">{{ hero.track.title }}</RouterLink><template v-else>{{ hero.track.title }}</template></h2>
@@ -485,7 +496,8 @@ onBeforeUnmount(() => {
         <div v-if="heroSlideCount > 1" class="discover-hero-preview discover-hero-preview-after">
           <picture>
             <source media="(min-width: 521px)" :srcset="heroAfter.compact">
-            <img :style="{ objectPosition: heroAfter.position }" alt="" loading="lazy" decoding="async" fetchpriority="low">
+            <img :style="{ objectPosition: heroAfter.position }" alt="" loading="lazy" decoding="async" fetchpriority="low"
+              @error="useHeroImageFallback(heroAfter)">
           </picture>
         </div>
         <template v-if="heroSlideCount > 1">
