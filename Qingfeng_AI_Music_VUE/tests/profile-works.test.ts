@@ -81,6 +81,20 @@ it('shows the completed-works empty state when the library contains only drafts'
   expect(profile.get('.profile-works-message').text()).toContain('暂无已完成作品')
 })
 
+it('uses the Discover artwork on both owner tabs for the published recording', async () => {
+  const work = completed('Navidad')
+  const release = {
+    ...published, id: '1c5c325c-6a45-4607-a8e4-5baadabc2032', title: 'Navidad',
+    workId: work.work.id, assetId: work.audioId!, onDiscover: true, coverId: 'old-cover',
+  }
+  vi.mocked(listWorks).mockResolvedValueOnce([{ ...work, coverId: 'old-cover' }])
+  const profile = await open([release])
+
+  expect(profile.get('.profile-work-cover img').attributes('src')).toContain('navidad.webp')
+  await profile.findAll('.profile-works-switch button')[1]!.trigger('click')
+  expect(profile.get('.profile-work-cover img').attributes('src')).toContain('navidad.webp')
+})
+
 it('limits the published profile tab to 15 works until expanded', async () => {
   const songs = Array.from({ length: 17 }, (_, index) => ({
     ...published, id: `release-${index}`, workId: `work-${index}`,

@@ -9,6 +9,7 @@ import { audioUrl } from '../../works/api/detail'
 import { listWorks, type LibraryItem } from '../../works/api/works'
 import { librarySongTitle } from '../../works/model/song-title'
 import { ownerTrack, type ArtistRelease } from '../api/artist'
+import { discoverReleaseCover } from '../model/discover-shelves'
 
 const props = defineProps<{ songs: ArtistRelease[]; busy: boolean; published: boolean }>()
 const emit = defineEmits<{ publish: [song: ArtistRelease]; remove: [song: ArtistRelease]; withdraw: [song: ArtistRelease]; 'library-count': [count: number | null] }>()
@@ -38,16 +39,21 @@ interface WorkRow {
 const libraryRows = computed<WorkRow[]>(() => works.value.map(item => {
   const { id, updatedAt } = item.work
   const songTitle = librarySongTitle(item)
-  const cover = coverUrl(id, item.coverId)
+  const release = props.songs.find(song => song.workId === id)
+  const originalCover = coverUrl(id, item.coverId)
+  const cover = props.published && release?.onDiscover && release.assetId === item.audioId
+    ? discoverReleaseCover({ id: release.id, hasCover: !!item.coverId }, originalCover) : originalCover
   const track = item.audioId
     ? { id: item.audioId, title: songTitle, cover, audio: audioUrl(id, item.audioId), provenance: item.audioOrigin ?? undefined }
     : undefined
-  const release = props.songs.find(song => song.workId === id)
   return { id, workId: id, title: songTitle, cover, track, updatedAt, release,
     label: publicationLabel(release) }
 }))
 const publishedRows = computed<WorkRow[]>(() => props.songs.map(song => {
   const track = ownerTrack(song)
+  if (props.published && song.onDiscover) {
+    track.cover = discoverReleaseCover({ id: song.id, hasCover: !!song.coverId }, track.cover)
+  }
   return { id: song.id, workId: song.workId, title: song.title, cover: track.cover, track, release: song,
     label: publicationLabel(song) }
 }))

@@ -49,6 +49,8 @@ import tomorrowRock from '../../../assets/discover/editorial/cover-08.webp'
 import hometownElectronic from '../../../assets/discover/song-covers/hometown-electronic.webp'
 import dreamWings from '../../../assets/discover/song-covers/dream-wings.webp'
 import bodyLanguage from '../../../assets/discover/song-covers/body-language.webp'
+import letTheLightTakeItsTime from '../../../assets/discover/song-covers/let-the-light-take-its-time.webp'
+import navidad from '../../../assets/discover/song-covers/navidad.webp'
 
 // Editorial shelves share song-specific artwork even when a song changes rank.
 const coversBySong = new Map<string, string>([
@@ -97,6 +99,8 @@ const coversBySong = new Map<string, string>([
   ['aac14834-1b00-4016-936b-576fb73fb651', nextWave],
   ['cb0df61f-7814-440e-991e-fb29ab9905a2', airTastesSweet],
   ['6ce51e3c-7ff6-485d-9f82-bacb1a89e0c6', ninetyNine],
+  ['13165085-71ba-4bf9-bece-a5f0cc59d4b5', letTheLightTakeItsTime],
+  ['1c5c325c-6a45-4607-a8e4-5baadabc2032', navidad],
   ['rain-disco', rainDisco],
   ['tomorrow-rock', tomorrowRock],
   ['hometown-electronic', hometownElectronic],
