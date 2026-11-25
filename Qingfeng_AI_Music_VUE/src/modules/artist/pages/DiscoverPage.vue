@@ -13,7 +13,7 @@ import DiscoverSongCard from '../components/DiscoverSongCard.vue'
 import DiscoverShelf from '../components/DiscoverShelf.vue'
 import { withDiscoverEditorialCover } from '../model/discover-editorial-artwork'
 import { discoverSongArtwork, type HeroArtwork } from '../model/discover-hero-artwork'
-import { cardboardCornersRow, discoverJazzRows } from '../model/discover-genre-tracks'
+import { discoverJazzRows, discoverRockRows } from '../model/discover-genre-tracks'
 import {
   christmasSongId, discoverGenres, globalPopWideCoverPositions, publicDiscoverTrack, withDiscoverPreviewCover,
   type DiscoverShelfTrack, type PublishedShelfTrack,
@@ -151,7 +151,7 @@ const genreShelves = computed(() => discoverGenres.map(section => {
     ? publicRows.find(row => row.song.id === velvetHoursSongId) ?? velvetHours.value
     : undefined
   const curated = section.id === 'jazz-soul' ? [...(jazzRelease ? [jazzRelease] : []), ...discoverJazzRows]
-    : section.id === 'rock' ? [cardboardCornersRow] : []
+    : section.id === 'rock' ? discoverRockRows : []
   const tracks = [...publicRows.filter(row => row.song.id !== jazzRelease?.song.id), ...examples]
   const square = [...curated, ...tracks.slice(0, 7)]
   const wide = section.hasWideRow ? [...tracks.slice(7), ...tracks.slice(0, 7)].slice(0, 4) : []

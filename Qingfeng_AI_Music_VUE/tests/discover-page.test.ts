@@ -208,12 +208,20 @@ describe('Discover editorial layout with real content', () => {
     const wrapper = await open()
     const jazz = wrapper.get('#discover-jazz-soul .shelf-square')
     expect(jazz.findAll('.track-title').map(track => track.text())).toEqual([
-      'Velvet Hours', 'CHRISTMAS FEELS LIKE HOME', 'Prayer Beneath the Stars', ...publishedJazz.map(track => track.song.title),
+      'Velvet Hours', 'CHRISTMAS FEELS LIKE HOME', 'Prayer Beneath the Stars', '醉花 Jazz', ...publishedJazz.map(track => track.song.title),
     ])
     const rock = wrapper.get('#discover-rock .shelf-square')
-    expect(rock.findAll('.track-title').slice(0, 2).map(track => track.text())).toEqual(['Cardboard Corners', publishedRock.song.title])
-    await rock.get('[aria-label="试听 Cardboard Corners"]').trigger('click')
-    expect(mocks.toggle).toHaveBeenCalledWith(expect.objectContaining({ id: 'cardboard-corners' }))
+    expect(rock.findAll('.track-title').slice(0, 4).map(track => track.text())).toEqual([
+      'Cardboard Corners', 'NOTHING LEFT TO LOSE', 'Your Side of the Tape', publishedRock.song.title,
+    ])
+    await jazz.get('[aria-label="试听 醉花 Jazz"]').trigger('click')
+    expect(mocks.toggle).toHaveBeenCalledWith(expect.objectContaining({
+      id: 'zui-hua-jazz', audio: expect.stringMatching(/^\/media\/recommendations\/zui-hua-jazz-/),
+    }))
+    await rock.get('[aria-label="试听 Your Side of the Tape"]').trigger('click')
+    expect(mocks.toggle).toHaveBeenCalledWith(expect.objectContaining({
+      id: 'your-side-of-the-tape', audio: expect.stringMatching(/^\/media\/recommendations\/your-side-of-the-tape-/),
+    }))
     expect(mocks.record).not.toHaveBeenCalled()
   })
 

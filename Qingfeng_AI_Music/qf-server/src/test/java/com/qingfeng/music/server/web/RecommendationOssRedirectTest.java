@@ -50,7 +50,12 @@ class RecommendationOssRedirectTest {
     @Test void curatedAudioAndCoversUseCdnWithoutAnOssProbeAndRenewExpiredUrls() {
         var cdn = new MediaCdnSigner(true, "https://cdn.example.com", "test-key", "", 600, "0", "qingfeng/audio/", "qingfeng/covers/");
         var redirect = new RecommendationOssRedirect(null, "", false, Clock.systemUTC(), cdn);
-        for (String file : new String[]{"sample-feng-ye-xing-v1-preview-128.mp3", "sample-feng-ye-xing-v1-cover.jpg"}) {
+        for (String file : new String[]{
+            "sample-feng-ye-xing-v1-preview-128.mp3", "sample-feng-ye-xing-v1-cover.jpg",
+            "recommendations/zui-hua-jazz-40bfdd86480a-preview-128.mp3", "recommendations/zui-hua-jazz-104265deb8d9-cover.jpg",
+            "recommendations/nothing-left-to-lose-d4bfb6848fe8-preview-128.mp3", "recommendations/nothing-left-to-lose-9421622df894-cover.jpg",
+            "recommendations/your-side-of-the-tape-746cee268a24-preview-128.mp3", "recommendations/your-side-of-the-tape-3c8c5d8da93c-cover.jpg"
+        }) {
             String object = com.qingfeng.music.server.hotsong.RecommendationSamples.objectKey(file).orElseThrow();
             assertTrue(RecommendationOssRedirect.isSamplePath("/media/" + file));
             var initial = redirect.destination("/media/" + file, "GET", false).orElseThrow();

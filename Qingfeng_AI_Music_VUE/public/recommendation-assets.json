@@ -953,6 +953,54 @@
       "key": "qingfeng/recommendation-samples/20261125/cover/f76ea270de14/navidad-f76ea270de14-cover.jpg",
       "bytes": 239660,
       "sha256": "f76ea270de14bbce078b7b58482a5540487a943b44ed250b1cc0d1421c9d2ffd"
+    },
+    {
+      "trackId": "zui-hua-jazz",
+      "kind": "audio",
+      "path": "/media/recommendations/zui-hua-jazz-40bfdd86480a-preview-128.mp3",
+      "key": "qingfeng/recommendation-samples/20261125/audio/40bfdd86480a/zui-hua-jazz-40bfdd86480a-preview-128.mp3",
+      "bytes": 3802029,
+      "sha256": "40bfdd86480a716730a0ecb766860a1779ed02dd118d27b4e3e688e4cc3cf110"
+    },
+    {
+      "trackId": "zui-hua-jazz",
+      "kind": "cover",
+      "path": "/media/recommendations/zui-hua-jazz-104265deb8d9-cover.jpg",
+      "key": "qingfeng/recommendation-samples/20261125/cover/104265deb8d9/zui-hua-jazz-104265deb8d9-cover.jpg",
+      "bytes": 74667,
+      "sha256": "104265deb8d9ed9a06801d2595f6458f0e5cf51490ea72c83e867d35fbcb4cd7"
+    },
+    {
+      "trackId": "nothing-left-to-lose",
+      "kind": "audio",
+      "path": "/media/recommendations/nothing-left-to-lose-d4bfb6848fe8-preview-128.mp3",
+      "key": "qingfeng/recommendation-samples/20261125/audio/d4bfb6848fe8/nothing-left-to-lose-d4bfb6848fe8-preview-128.mp3",
+      "bytes": 2156973,
+      "sha256": "d4bfb6848fe8a7c04c2e741623ed6a01a9b184df12e8a7672bc4eb334107fd49"
+    },
+    {
+      "trackId": "nothing-left-to-lose",
+      "kind": "cover",
+      "path": "/media/recommendations/nothing-left-to-lose-9421622df894-cover.jpg",
+      "key": "qingfeng/recommendation-samples/20261125/cover/9421622df894/nothing-left-to-lose-9421622df894-cover.jpg",
+      "bytes": 66139,
+      "sha256": "9421622df89413889b5494fb3f826d85ac1bb022d5054d618e0ec32dc8ff2204"
+    },
+    {
+      "trackId": "your-side-of-the-tape",
+      "kind": "audio",
+      "path": "/media/recommendations/your-side-of-the-tape-746cee268a24-preview-128.mp3",
+      "key": "qingfeng/recommendation-samples/20261125/audio/746cee268a24/your-side-of-the-tape-746cee268a24-preview-128.mp3",
+      "bytes": 2324013,
+      "sha256": "746cee268a2403d87f05669fb6b4f663307fcd771830b7236ce1ba5586ddacc0"
+    },
+    {
+      "trackId": "your-side-of-the-tape",
+      "kind": "cover",
+      "path": "/media/recommendations/your-side-of-the-tape-3c8c5d8da93c-cover.jpg",
+      "key": "qingfeng/recommendation-samples/20261125/cover/3c8c5d8da93c/your-side-of-the-tape-3c8c5d8da93c-cover.jpg",
+      "bytes": 101392,
+      "sha256": "3c8c5d8da93ca9497a99f8818966aefbf16267804915a1b0acee33f36fa954ac"
     }
   ]
 }

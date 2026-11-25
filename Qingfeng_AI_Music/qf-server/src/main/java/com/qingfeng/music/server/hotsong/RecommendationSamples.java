@@ -39,6 +39,12 @@ public final class RecommendationSamples {
         new Song("westside-summer", "WESTSIDE SUMMER", "Hip-Hop", "/media/recommendations/westside-summer-d24a68d80b9e-preview-128.mp3"));
 
     private static final Map<String, String> OBJECTS = Map.ofEntries(
+        Map.entry("recommendations/zui-hua-jazz-40bfdd86480a-preview-128.mp3", "qingfeng/recommendation-samples/20261125/audio/40bfdd86480a/zui-hua-jazz-40bfdd86480a-preview-128.mp3"),
+        Map.entry("recommendations/zui-hua-jazz-104265deb8d9-cover.jpg", "qingfeng/recommendation-samples/20261125/cover/104265deb8d9/zui-hua-jazz-104265deb8d9-cover.jpg"),
+        Map.entry("recommendations/nothing-left-to-lose-d4bfb6848fe8-preview-128.mp3", "qingfeng/recommendation-samples/20261125/audio/d4bfb6848fe8/nothing-left-to-lose-d4bfb6848fe8-preview-128.mp3"),
+        Map.entry("recommendations/nothing-left-to-lose-9421622df894-cover.jpg", "qingfeng/recommendation-samples/20261125/cover/9421622df894/nothing-left-to-lose-9421622df894-cover.jpg"),
+        Map.entry("recommendations/your-side-of-the-tape-746cee268a24-preview-128.mp3", "qingfeng/recommendation-samples/20261125/audio/746cee268a24/your-side-of-the-tape-746cee268a24-preview-128.mp3"),
+        Map.entry("recommendations/your-side-of-the-tape-3c8c5d8da93c-cover.jpg", "qingfeng/recommendation-samples/20261125/cover/3c8c5d8da93c/your-side-of-the-tape-3c8c5d8da93c-cover.jpg"),
         Map.entry("recommendations/christmas-feels-like-home-757a61943433-preview-128.mp3", "qingfeng/recommendation-samples/20261125/audio/757a61943433/christmas-feels-like-home-757a61943433-preview-128.mp3"),
         Map.entry("recommendations/prayer-beneath-the-stars-419248e9a652-preview-128.mp3", "qingfeng/recommendation-samples/20261125/audio/419248e9a652/prayer-beneath-the-stars-419248e9a652-preview-128.mp3"),
         Map.entry("recommendations/cardboard-corners-468267313021-preview-128.mp3", "qingfeng/recommendation-samples/20261125/audio/468267313021/cardboard-corners-468267313021-preview-128.mp3"),

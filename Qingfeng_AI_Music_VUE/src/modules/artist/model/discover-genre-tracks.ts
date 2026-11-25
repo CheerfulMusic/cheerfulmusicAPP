@@ -22,15 +22,47 @@ export const discoverJazzRows: DiscoverShelfTrack[] = [
     stageName: 'aug1566',
     durationSeconds: 178.22325,
   },
+  {
+    track: {
+      id: 'zui-hua-jazz',
+      title: '醉花 Jazz',
+      ...discoverMedia['zui-hua-jazz'],
+      provenance: 'IMPORTED',
+    },
+    stageName: 'aug1566',
+    durationSeconds: 237.56,
+  },
 ]
 
-export const cardboardCornersRow: DiscoverShelfTrack = {
-  track: {
-    id: 'cardboard-corners',
-    title: 'Cardboard Corners',
-    ...discoverMedia['cardboard-corners'],
-    provenance: 'IMPORTED',
+export const discoverRockRows: DiscoverShelfTrack[] = [
+  {
+    track: {
+      id: 'cardboard-corners',
+      title: 'Cardboard Corners',
+      ...discoverMedia['cardboard-corners'],
+      provenance: 'IMPORTED',
+    },
+    stageName: 'Ace007',
+    durationSeconds: 171.998667,
   },
-  stageName: 'Ace007',
-  durationSeconds: 171.998667,
-}
+  {
+    track: {
+      id: 'nothing-left-to-lose',
+      title: 'NOTHING LEFT TO LOSE',
+      ...discoverMedia['nothing-left-to-lose'],
+      provenance: 'IMPORTED',
+    },
+    stageName: 'newlawsmaker',
+    durationSeconds: 134.76,
+  },
+  {
+    track: {
+      id: 'your-side-of-the-tape',
+      title: 'Your Side of the Tape',
+      ...discoverMedia['your-side-of-the-tape'],
+      provenance: 'IMPORTED',
+    },
+    stageName: 'newlawsmaker',
+    durationSeconds: 145.2,
+  },
+]

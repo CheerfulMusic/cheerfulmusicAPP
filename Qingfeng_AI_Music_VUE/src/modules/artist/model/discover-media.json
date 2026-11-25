@@ -16,5 +16,17 @@
   },
   "navidad": {
     "cover": "/media/recommendations/navidad-f76ea270de14-cover.jpg"
+  },
+  "zui-hua-jazz": {
+    "audio": "/media/recommendations/zui-hua-jazz-40bfdd86480a-preview-128.mp3",
+    "cover": "/media/recommendations/zui-hua-jazz-104265deb8d9-cover.jpg"
+  },
+  "nothing-left-to-lose": {
+    "audio": "/media/recommendations/nothing-left-to-lose-d4bfb6848fe8-preview-128.mp3",
+    "cover": "/media/recommendations/nothing-left-to-lose-9421622df894-cover.jpg"
+  },
+  "your-side-of-the-tape": {
+    "audio": "/media/recommendations/your-side-of-the-tape-746cee268a24-preview-128.mp3",
+    "cover": "/media/recommendations/your-side-of-the-tape-3c8c5d8da93c-cover.jpg"
   }
 }
