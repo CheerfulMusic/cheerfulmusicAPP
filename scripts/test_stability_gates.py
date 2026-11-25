@@ -322,6 +322,11 @@ class GateTests(unittest.TestCase):
         self.assertEqual("57", gate.verify_migration_set(migrations)["aiCapacityVersion"])
         with self.assertRaises(gate.GateError):
             gate.verify_migration_set({**migrations, "V57__ai_capacity_queue.sql": "0" * 64})
+        card = "V58__wechat_self_card.sql"
+        self.assertEqual("58", gate.verify_migration_set(migrations)["wechatSelfCardVersion"])
+        with self.assertRaises(gate.GateError):
+            gate.verify_migration_set({**migrations, card: "0" * 64})
+        migrations.pop(card)
         migrations.pop("V57__ai_capacity_queue.sql")
         migrations.pop(community_name)
         self.assertEqual("55", gate.verify_migration_set(migrations)["generationAudioReferenceVersion"])
