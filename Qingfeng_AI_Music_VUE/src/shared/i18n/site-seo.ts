@@ -1,4 +1,4 @@
-import { homeBrand, homeLocale, homePaths, homeSeo, localizedSeoLinks, siteName, siteOrigin, type Locale } from './home-seo'
+import { homeLocale, homePaths, homeSeo, localizedSeoLinks, siteOrigin, type Locale } from './home-seo'
 import { siteGuide, siteGuideLinks, siteGuidePaths } from './site-guides'
 
 export const discoverPaths = { 'zh-CN': '/discover', en: '/en/discover' } as const
@@ -55,14 +55,15 @@ export function sitePage(path: string, preferredLocale?: Locale) {
   if (path === '/' || localized) {
     const canonical = localized ? homeSeo[localized].path : '/'
     const copy = homeSeo[language]
-    const brand = homeBrand(canonical)
+    const canonicalCopy = homeSeo[localized ?? 'zh-CN']
     return {
       path: canonical,
       language,
       heading: copy.heading,
-      title: brand,
-      siteName: brand,
-      description: copy.description,
+      title: canonicalCopy.title,
+      siteName: canonicalCopy.searchName,
+      description: 'searchDescription' in copy ? copy.searchDescription : copy.description,
+      intro: copy.description,
       links: localizedSeoLinks(canonical, homePaths, 'en'),
     }
   }
@@ -137,6 +138,6 @@ export const websiteSchema = {
   '@context': 'https://schema.org',
   '@type': 'WebSite',
   name: homeSeo['zh-CN'].brand,
-  alternateName: [homeSeo.en.brand, siteName, '青风音乐', 'CheerfulMusic', 'Cheerful Music Ai', 'cheerfulmusicAI', 'cheerfulmusicai'],
+  alternateName: [homeSeo.en.searchName, homeSeo.en.brand, ...homeSeo['zh-CN'].aliases, ...homeSeo.en.aliases],
   url: siteOrigin + '/',
 }

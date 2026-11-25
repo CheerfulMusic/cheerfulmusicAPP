@@ -4,7 +4,7 @@ import { flushPromises } from '@vue/test-utils'
 import { expect, it, vi } from 'vitest'
 import Gate from '../src/modules/beta-access/BetaAccessGate.vue'
 import { locale, setLocale } from '../src/shared/i18n'
-import { sitePage } from '../src/shared/i18n/site-seo'
+import { homeSeo } from '../src/shared/i18n/home-seo'
 vi.mock('../src/modules/artist/api/artist', async importOriginal => ({
  ...await importOriginal<typeof import('../src/modules/artist/api/artist')>(),
  listDiscoverSongs: vi.fn(async () => ({ songs: [
@@ -50,7 +50,7 @@ it('automatically opens the homepage invite with the localized product name', as
   await nextTick()
   expect(host.querySelector('h1')?.textContent).toBe('Everyone Can Be a Creator')
   expect(host.querySelector('.beta-access-brand')?.textContent).toBe('青妙Ai')
-  expect(host.querySelector('.beta-access-intro')?.textContent).toBe(sitePage('/en/')!.description)
+  expect(host.querySelector('.beta-access-intro')?.textContent).toBe(homeSeo.en.description)
   expect(host.querySelector('.beta-access-intro')?.closest('[data-nosnippet]')).toBeNull()
   await flushPromises()
   expect(host.querySelector('[data-nosnippet] #beta-invite-code')).not.toBeNull()

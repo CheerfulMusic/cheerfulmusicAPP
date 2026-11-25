@@ -1,11 +1,23 @@
 export const siteName = 'Cheerful Music'
 const creatorHeadline = 'Everyone Can Be a Creator'
+const chineseBrand = '青妙Ai'
+const englishSearchName = 'cheerfulmusic Ai'
+
+export const siteFavicon = {
+  path: '/brand/favicon-symbol-96.png',
+  type: 'image/png',
+  sizes: '96x96',
+} as const
 
 export const homeSeo = {
   'zh-CN': {
     path: '/',
-    brand: '青妙Ai',
-    heading: '青妙Ai',
+    brand: chineseBrand,
+    searchName: chineseBrand,
+    title: chineseBrand,
+    aliases: ['青风音乐'],
+    lastModified: '2026-11-25',
+    heading: chineseBrand,
     tagline: '把你的歌词做成歌',
     invitePrompt: '输入邀请码即可开始创作。',
     description: '青妙Ai 是青风音乐（Cheerful Music）推出的 AI 音乐创作平台，英文名是 cheerfulmusic。写下歌词或故事，选好曲风和人声，就能创作、试听和分享自己的歌。',
@@ -13,6 +25,11 @@ export const homeSeo = {
   en: {
     path: '/en/',
     brand: 'cheerfulmusic',
+    searchName: englishSearchName,
+    title: englishSearchName + ' | ' + creatorHeadline,
+    searchDescription: 'Create your own song in just a few clicks. No music skills needed.',
+    aliases: [siteName, 'CheerfulMusic', 'Cheerful Music Ai', 'cheerfulmusicAI', 'cheerfulmusicai'],
+    lastModified: '2026-11-25',
     heading: creatorHeadline,
     tagline: creatorHeadline,
     invitePrompt: 'Enter your invitation code to start creating.',

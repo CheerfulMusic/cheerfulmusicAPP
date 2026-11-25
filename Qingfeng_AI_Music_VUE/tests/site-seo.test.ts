@@ -1,8 +1,9 @@
 // @vitest-environment happy-dom
+import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { renderSitePage } from '../build/site-seo'
-import { siteOrigin } from '../src/shared/i18n/home-seo'
+import { renderSitePage, seoReleaseManifest } from '../build/site-seo'
+import { homeSeo, siteFavicon, siteOrigin } from '../src/shared/i18n/home-seo'
 import { sitePage, sitePagePaths } from '../src/shared/i18n/site-seo'
 import { siteGuidePaths } from '../src/shared/i18n/site-guides'
 import { setLocale, updatePageLocale } from '../src/shared/i18n'
@@ -19,7 +20,7 @@ describe('crawlable site pages', () => {
     expect(page.querySelector('meta[name="description"]')?.getAttribute('content')).toBe(metadata.description)
     expect(page.querySelector('link[rel="canonical"]')?.getAttribute('href')).toBe(siteOrigin + path)
     expect(page.querySelector('meta[property="og:url"]')?.getAttribute('content')).toBe(siteOrigin + path)
-    expect(page.querySelector('meta[property="og:site_name"]')?.getAttribute('content')).toBe(path === '/en/' ? 'cheerfulmusic' : '青妙Ai')
+    expect(page.querySelector('meta[property="og:site_name"]')?.getAttribute('content')).toBe(path === '/en/' ? 'cheerfulmusic Ai' : '青妙Ai')
     expect(page.querySelector('meta[name="twitter:card"]')?.getAttribute('content')).toBe('summary_large_image')
     expect(page.querySelector('h1')?.textContent).toBe(metadata.heading)
     for (const alternate of page.querySelectorAll('link[hreflang="en"], link[hreflang="zh-CN"]')) {
@@ -42,7 +43,7 @@ describe('crawlable site pages', () => {
     const card = page.querySelector('#app > main.beta-access-entry')
     expect(card?.querySelector('h1')?.textContent).toBe(sitePage(path)!.heading)
     const productCopy = card?.querySelector('.beta-access-intro')
-    expect(productCopy?.textContent).toBe(sitePage(path)!.description)
+    expect(productCopy?.textContent).toBe(homeSeo[path === '/en/' ? 'en' : 'zh-CN'].description)
     expect(productCopy?.textContent).toContain('Cheerful Music')
     expect(productCopy?.textContent).toContain('cheerfulmusic')
     expect(productCopy?.textContent).toContain('青风音乐')
@@ -70,16 +71,40 @@ describe('crawlable site pages', () => {
     expect(website.name).toBe('青妙Ai')
     expect(website.url).toBe(siteOrigin + '/')
     expect(website.alternateName)
-      .toEqual(expect.arrayContaining(['cheerfulmusic', 'Cheerful Music', '青风音乐', 'CheerfulMusic', 'cheerfulmusicAI', 'cheerfulmusicai']))
-    expect(parsePage('/').querySelector('link[rel="icon"][sizes="96x96"]')?.getAttribute('href')).toBe('/brand/favicon-96.png')
-    for (const [path, brand] of [['/', '青妙Ai'], ['/en/', 'cheerfulmusic']] as const) {
-      const page = parsePage(path)
-      expect(page.title).toBe(brand)
-      expect(page.querySelector('.beta-access-brand')?.textContent).toBe(brand)
-      expect(page.querySelector('meta[property="og:title"]')?.getAttribute('content')).toBe(brand)
-      expect(page.querySelector('meta[name="twitter:title"]')?.getAttribute('content')).toBe(brand)
-    }
+      .toEqual(expect.arrayContaining(['cheerfulmusic Ai', 'cheerfulmusic', 'Cheerful Music', '青风音乐', 'CheerfulMusic', 'cheerfulmusicAI', 'cheerfulmusicai']))
+    const english = parsePage('/en/')
+    const title = 'cheerfulmusic Ai | Everyone Can Be a Creator'
+    const description = 'Create your own song in just a few clicks. No music skills needed.'
+    expect(english.title).toBe(title)
+    expect(english.querySelector('.beta-access-brand')?.textContent).toBe('cheerfulmusic')
+    expect(english.querySelector('meta[property="og:site_name"]')?.getAttribute('content')).toBe('cheerfulmusic Ai')
+    expect(english.querySelector('meta[property="og:title"]')?.getAttribute('content')).toBe(title)
+    expect(english.querySelector('meta[name="twitter:title"]')?.getAttribute('content')).toBe(title)
+    expect(english.querySelector('meta[name="description"]')?.getAttribute('content')).toBe(description)
+    expect(english.querySelector('meta[property="og:description"]')?.getAttribute('content')).toBe(description)
     expect(sitePage('/zh-CN/')).toBeUndefined()
+  })
+
+  it('builds a release manifest consistent with the two initial homepage documents', () => {
+    const icon = readFileSync('public' + siteFavicon.path)
+    const manifest = seoReleaseManifest(icon)
+    expect(manifest.icon).toEqual({
+      path: '/brand/favicon-symbol-96.png',
+      sha256: createHash('sha256').update(icon).digest('hex'),
+    })
+    expect(icon.readUInt32BE(16)).toBe(96)
+    expect(icon.readUInt32BE(20)).toBe(96)
+    expect(manifest.pages.map(page => page.path)).toEqual(['/', '/en/'])
+    for (const record of manifest.pages) {
+      const html = parsePage(record.path)
+      expect(record.language).toBe(html.documentElement.lang)
+      expect(record.title).toBe(html.title)
+      expect(record.brand).toBe(html.querySelector('meta[property="og:site_name"]')?.getAttribute('content'))
+      expect(record.description).toBe(html.querySelector('meta[name="description"]')?.getAttribute('content'))
+    }
+    expect(manifest.pages[0]?.aliases)
+      .toEqual(JSON.parse(parsePage('/').querySelector('script[type="application/ld+json"]')!.textContent!).alternateName)
+    expect(manifest.pages[1]?.lastModified).toBe(homeSeo.en.lastModified)
   })
 
   it.each([
@@ -154,7 +179,7 @@ describe('crawlable site pages', () => {
     expect(document.title).toBe(page.title)
     const description = document.querySelector('meta[name="description"]')?.getAttribute('content')
     expect(description).toBe(sitePage(language === 'en' ? '/en/' : '/')!.description)
-    expect(page.querySelector('main .beta-access-intro')?.textContent).toBe(description)
+    expect(page.querySelector('main .beta-access-intro')?.textContent).toBe(homeSeo[language].description)
   })
 
   it('replaces metadata on client navigation and clears it on private destinations', () => {

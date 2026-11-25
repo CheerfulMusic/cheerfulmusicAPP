@@ -1,7 +1,8 @@
-import { mkdirSync, writeFileSync } from 'node:fs'
+import { createHash } from 'node:crypto'
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import type { Connect, Plugin } from 'vite'
-import { homeLocale, homePublicInfo, homeSeo, siteName, siteOrigin, type Locale } from '../src/shared/i18n/home-seo'
+import { homeLocale, homePublicInfo, homeSeo, siteFavicon, siteName, siteOrigin, type Locale } from '../src/shared/i18n/home-seo'
 import { discoverLocale, landingLinks, sitePage, sitePagePaths, socialMetadata, websiteSchema } from '../src/shared/i18n/site-seo'
 
 type SitePage = NonNullable<ReturnType<typeof sitePage>>
@@ -51,13 +52,15 @@ export function renderSitePage(html: string, page: SitePage) {
   let initialContent = landing
   const home = page.path === '/' || homeLocale(page.path) !== undefined
   if (home || discoverLocale(page.path)) {
+    const intro = page.intro ?? page.description
+    const visibleBrand = home ? homeSeo[homeLocale(page.path) ?? 'zh-CN'].brand : siteName
     const introHeading = home && page.language === 'zh-CN'
-      ? `<h1 class="beta-access-brand">${escapeHtml(page.siteName!)}</h1><p class="beta-access-headline">${escapeHtml(homeSeo[page.language].tagline)}</p>`
-      : `<p class="beta-access-brand">${escapeHtml(page.siteName ?? siteName)}</p>${heading}`
+      ? `<h1 class="beta-access-brand">${escapeHtml(visibleBrand)}</h1><p class="beta-access-headline">${escapeHtml(homeSeo[page.language].tagline)}</p>`
+      : `<p class="beta-access-brand">${escapeHtml(visibleBrand)}</p>${heading}`
     initialContent = `<main class="beta-access-entry"><section class="beta-access-dialog beta-access-card">
       <img class="beta-access-logo" src="/brand/logo-symbol.svg" alt="" width="56" height="56">
       ${introHeading}
-      <p class="beta-access-intro">${escapeHtml(page.description)}</p>
+      <p class="beta-access-intro">${escapeHtml(intro)}</p>
       ${home ? `<div data-nosnippet><p class="beta-access-prompt">${escapeHtml(homeSeo[page.language].invitePrompt)}</p></div>` : ''}
       ${home ? publicHomeDetails(page.language) : '<!--public-discover-links-->'}
       <div data-nosnippet><nav class="beta-access-guides">${links}</nav><footer class="beta-access-filing">${filing}</footer></div>
@@ -69,6 +72,29 @@ export function renderSitePage(html: string, page: SitePage) {
     .replace(/<meta name="description" content="[^"]*">/, `<meta name="description" content="${escapeHtml(page.description)}">`)
     .replace('</head>', `${metadata.join('\n')}\n</head>`)
     .replace('<div id="app"></div>', `<div id="app">${initialContent}</div>`)
+}
+
+const homeReleasePages = (Object.keys(homeSeo) as Locale[]).map(language => {
+  const copy = homeSeo[language]
+  const page = sitePage(copy.path)!
+  return {
+    path: page.path,
+    language,
+    title: page.title,
+    description: page.description,
+    brand: copy.searchName,
+    ...('lastModified' in copy ? { lastModified: copy.lastModified } : {}),
+    ...(language === 'zh-CN' ? { aliases: websiteSchema.alternateName } : {}),
+  }
+})
+
+export function seoReleaseManifest(icon: Uint8Array) {
+  return {
+    version: 1,
+    origin: siteOrigin,
+    icon: { path: siteFavicon.path, sha256: createHash('sha256').update(icon).digest('hex') },
+    pages: homeReleasePages,
+  }
 }
 
 const crawlFiles = {
@@ -88,7 +114,10 @@ const crawlFiles = {
   '/sitemap.xml': {
     type: 'application/xml',
     content: `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n`
-      + sitePagePaths.map(path => `  <url><loc>${siteOrigin}${path}</loc></url>`).join('\n')
+      + sitePagePaths.map(path => {
+        const lastModified = homeReleasePages.find(page => page.path === path)?.lastModified
+        return `  <url><loc>${siteOrigin}${path}</loc>${lastModified ? `<lastmod>${lastModified}</lastmod>` : ''}</url>`
+      }).join('\n')
       + '\n</urlset>\n',
   },
 } as const
@@ -131,7 +160,10 @@ export function siteSeoPlugin(): Plugin {
     },
     transformIndexHtml(html, { server, originalUrl }) {
       const page = server && sitePage(originalUrl?.split('?')[0] ?? '')
-      return page ? renderSitePage(html, page) : html
+      return {
+        html: page ? renderSitePage(html, page) : html,
+        tags: [{ tag: 'link', attrs: { rel: 'icon', type: siteFavicon.type, sizes: siteFavicon.sizes, href: siteFavicon.path }, injectTo: 'head' }],
+      }
     },
     writeBundle({ dir }, bundle) {
       const index = bundle['index.html']
@@ -151,6 +183,8 @@ export function siteSeoPlugin(): Plugin {
         }
         writeFileSync(filename, renderSitePage(shell, page))
       }
+      const icon = readFileSync(resolve(dir, `.${siteFavicon.path}`))
+      writeFileSync(resolve(dir, 'seo-release.json'), JSON.stringify(seoReleaseManifest(icon), null, 2) + '\n')
       for (const [path, file] of Object.entries(crawlFiles)) {
         writeFileSync(resolve(dir, `.${path}`), file.content)
       }

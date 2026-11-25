@@ -60,7 +60,7 @@ it('returns visitors from the English search landing page to the root when they 
   const wrapper = mount(LanguageSwitcher, { global: { plugins: [router] } })
   try {
     expect(locale.value).toBe('en')
-    expect(document.title).toBe('cheerfulmusic')
+    expect(document.title).toBe('cheerfulmusic Ai | Everyone Can Be a Creator')
     await wrapper.get('button[lang="zh-CN"]').trigger('click')
     await flushPromises()
     expect(router.currentRoute.value.fullPath).toBe('/?utm_source=search#how')
