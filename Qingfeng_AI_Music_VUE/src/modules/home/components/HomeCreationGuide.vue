@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { t, locale } from '../../../shared/i18n'
+import { homeSeo } from '../../../shared/i18n/home-seo'
 </script>
 
 <template>
   <section id="how" class="simple-third p-width" aria-labelledby="creation-guide-title">
     <div class="simple-third-content">
       <h2 id="creation-guide-title">{{ t('你的第一首歌，只需三步。') }}</h2>
-      <p class="simple-third-description">{{ t('从一个想法开始，听见属于你的创作。') }}</p>
+      <p class="simple-third-description">{{ homeSeo[locale].description }}</p>
       <ol class="simple-third-steps">
         <li>
           <span aria-hidden="true">01</span>

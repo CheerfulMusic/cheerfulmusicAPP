@@ -41,7 +41,7 @@ export function renderSitePage(html: string, page: SitePage) {
   if (home || discoverLocale(page.path)) {
     initialContent = `<main class="beta-access-entry"><section class="beta-access-dialog beta-access-card">
       <img class="beta-access-logo" src="/brand/logo-symbol.svg" alt="" width="56" height="56">
-      <p class="beta-access-brand">${escapeHtml(page.searchTitle ?? siteName)}</p>${heading}
+      <p class="beta-access-brand">${escapeHtml(page.siteName ?? siteName)}</p>${heading}
       <p class="beta-access-intro">${escapeHtml(page.description)}</p>
       ${home ? `<div data-nosnippet><p class="beta-access-prompt">${escapeHtml(homeSeo[page.language].invitePrompt)}</p></div>` : ''}
       <div data-nosnippet><nav class="beta-access-guides">${links}</nav><footer class="beta-access-filing">${filing}</footer></div>
@@ -49,7 +49,7 @@ export function renderSitePage(html: string, page: SitePage) {
   }
   return html
     .replace(/<html lang="[^"]*">/, `<html lang="${page.language}">`)
-    .replace(/<title>[^<]*<\/title>/, `<title>${escapeHtml(page.searchTitle ?? page.title)}</title>`)
+    .replace(/<title>[^<]*<\/title>/, `<title>${escapeHtml(page.title)}</title>`)
     .replace(/<meta name="description" content="[^"]*">/, `<meta name="description" content="${escapeHtml(page.description)}">`)
     .replace('</head>', `${metadata.join('\n')}\n</head>`)
     .replace('<div id="app"></div>', `<div id="app">${initialContent}</div>`)
