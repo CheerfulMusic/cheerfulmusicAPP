@@ -7,7 +7,6 @@
   background:radial-gradient(ellipse at 10% 22%,#fff1f6 0,transparent 45%),radial-gradient(ellipse at 100% 64%,#fff0ec 0,transparent 40%),#fffafb;
 }
 .consumer-shell:has(.inspiration-studio) .consumer-header { background:#fffafbf2; border-color:var(--line); }
-.consumer-shell:has(.inspiration-studio) .brand-logo>img { content:url('/brand/logo-symbol.svg'); }
 .consumer-shell:has(.inspiration-studio) .brand-logo-type strong { color:#252121; font-size:22px; }
 .consumer-shell:has(.inspiration-studio) .brand-logo-type small { color:var(--muted); }
 .consumer-shell:has(.inspiration-studio) .consumer-navigation a,
