@@ -1,4 +1,5 @@
 export const siteName = 'Cheerful Music'
+export const homeSearchTitle = 'Cheerful Music Ai'
 const creatorHeadline = 'Everyone Can Be a Creator'
 const chineseHomeHeadline = '青风音乐｜把你的歌词做成歌'
 const englishHomeTitle = 'Cheerful Music | Turn Your Lyrics into a Song with AI'
@@ -8,7 +9,7 @@ export const homeSeo = {
     path: '/',
     heading: chineseHomeHeadline,
     invitePrompt: '输入邀请码即可开始创作。',
-    searchTitle: chineseHomeHeadline,
+    searchTitle: homeSearchTitle,
     description: '青风音乐（Cheerful Music）是 AI 音乐创作平台。写下歌词或故事，选好曲风和人声，就能生成、试听和分享自己的歌。',
   },
   en: {
@@ -16,7 +17,7 @@ export const homeSeo = {
     heading: creatorHeadline,
     invitePrompt: 'Enter your invitation code to start creating.',
     title: englishHomeTitle,
-    searchTitle: englishHomeTitle,
+    searchTitle: homeSearchTitle,
     description: 'Turn your lyrics or a story into a song with Cheerful Music. Choose a style and voice, then listen to your AI-generated track and share it with friends.',
   },
 } as const
