@@ -69,7 +69,7 @@ onBeforeUnmount(()=>timers.forEach(clearTimeout))
 .orbit-zone{left:51%;top:4%;width:47%;height:47%;border-radius:50%;transform:rotate(-14deg)}
 .water-zone{left:20%;bottom:0;width:80%;height:26%}
 .falling-leaf,.water-ring{position:absolute;pointer-events:none;opacity:0}
-.falling-leaf{width:9px;height:5px;background:#f4c1aa;border-radius:90% 0 85% 0;animation:fall 1.9s ease-in both}
+.falling-leaf{width:9px;height:5px;background:#fff;border-radius:90% 0 85% 0;animation:fall 1.9s ease-in both}
 .water-ring{width:15px;height:7px;border:1.5px solid #fff7dc;border-radius:50%;box-shadow:0 0 4px #cbdfe9;animation:ripple 1.35s ease-out both}
 @keyframes fall{0%{opacity:0}10%{opacity:1}65%{opacity:1;transform:translate(var(--drift),32px) rotate(110deg)}100%{opacity:0;transform:translate(calc(var(--drift) + 10px),65px) rotate(240deg)}}
 @keyframes ripple{0%{opacity:0;transform:translate(-50%,-50%) scale(.3)}10%{opacity:1}100%{opacity:0;transform:translate(-50%,-50%) scale(6)}}
