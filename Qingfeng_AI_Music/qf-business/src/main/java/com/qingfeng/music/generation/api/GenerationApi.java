@@ -9,6 +9,7 @@ public interface GenerationApi {
  default Task submit(String owner,String work,String revision,String requestKey,java.util.function.Consumer<Task> onCreated){
   throw new UnsupportedOperationException();
  }
+ default Task submitArrangement(String owner,String work,String revision,String requestKey,com.qingfeng.music.settings.MusicSettings.Direction direction){throw new UnsupportedOperationException();}
  default boolean audioReferenceAvailable(String owner,String work){return false;}
  default Task submit(String owner,String work,String revision,String requestKey,boolean useReference,java.util.function.Consumer<Task> onCreated){
   if(useReference)throw new UnsupportedOperationException();

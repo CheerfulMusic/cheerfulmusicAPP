@@ -42,6 +42,13 @@ public final class SongCardProjector {
         boolean imported = chosenAsset != null && "IMPORTED".equals(chosenAsset.origin());
         // Imported audio carries lyrics only after the user explicitly associates a confirmed revision.
         var revision = imported && revisionId == null ? null : revisionId == null ? latest(lyrics.list(creatorId, workId)) : lyrics.get(creatorId, workId, revisionId);
+        // A task can commit before the conversation saves its pointer. Use only this work and lyric revision.
+        boolean selectedAudioMatches = revision != null && (task == null || !revision.id().equals(task.revisionId()))
+                && selection != null && selection.assetId() != null
+                && media.matchesGenerationRevision(creatorId, workId, selection.assetId(), revision.id());
+        if (taskId == null && task == null && chosenAssetId == null && revision != null && !selectedAudioMatches) {
+            task = tasks.stream().filter(candidate -> revision.id().equals(candidate.revisionId())).findFirst().orElse(null);
+        }
         String audioUrl = "", assetId = null;
         String status = revision == null ? "DRAFT" : "LYRICS_READY";
         if (chosenAsset != null && (imported || revision != null && media.matchesGenerationRevision(creatorId, workId, chosenAssetId, revision.id()))) {
@@ -55,8 +62,7 @@ public final class SongCardProjector {
                     if(selectedAudio!=null&&task.id().equals(selectedAudio.generationTaskId())&&media.matchesGenerationRevision(creatorId,workId,selection.assetId(),revision.id()))assetId=selection.assetId();
                 }
             }
-        } else if (revision != null && selection != null && selection.assetId() != null
-                && media.matchesGenerationRevision(creatorId, workId, selection.assetId(), revision.id())) {
+        } else if (selectedAudioMatches) {
             assetId = selection.assetId(); status = "READY";
         }
         String audioOrigin = null;

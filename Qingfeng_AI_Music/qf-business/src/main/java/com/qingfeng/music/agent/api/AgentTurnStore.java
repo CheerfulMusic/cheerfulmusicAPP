@@ -10,6 +10,9 @@ public interface AgentTurnStore {
     }
     /** Called under the conversation lock only for a fresh turn, before writing the user message. */
     Claim claim(String creatorId,String conversationId,String requestKey,String text,Runnable beforeInsert);
+    default Claim claim(String owner,String conversation,String key,String text,String creationTarget,Runnable beforeInsert){
+        return claim(owner,conversation,key,text,beforeInsert);
+    }
     default java.util.Optional<String> completedResult(String owner, String conversation, String key) {
         return java.util.Optional.empty();
     }

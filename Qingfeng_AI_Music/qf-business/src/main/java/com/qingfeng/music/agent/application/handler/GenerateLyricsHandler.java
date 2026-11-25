@@ -21,14 +21,20 @@ public class GenerateLyricsHandler implements AgentToolHandler {
     public AgentToolResult execute(ToolContext ctx,Object args) {
         var a=(AgentTool.GenerateLyricsArgs)args;
         boolean newWork="new".equals(a.mode()) || ctx.current().currentWorkId()==null || ctx.current().currentWorkId().isBlank();
+        var approval=com.qingfeng.music.credits.ConfirmedCreation.current();
+        if(approval!=null && (newWork || !approval.work().equals(ctx.current().currentWorkId())))
+            throw new DomainException("AGENT_QUOTE_STALE","请重新选择要打磨的歌词版本并确认报价。");
         if(newWork && "rewrite".equals(a.mode())) throw new DomainException("NO_LYRICS","请先创作歌词，再指定修改要求。");
         String owner=ctx.creatorId(),snapshot=newWork && ctx.current().currentWorkId()!=null?null:AgentCreationSupport.snapshot(ctx);
         var work=newWork ? works.create(owner,new WorkApi.Draft("","",a.text()==null||a.text().isBlank()?"今天的心情":a.text(),"","","智能创作","AUTO"),ctx.requestKey()) : works.get(owner,ctx.current().currentWorkId());
         var previous=newWork?null:AgentCreationSupport.selected(lyrics,owner,work.id(),a.revisionId(),snapshot);
         if("rewrite".equals(a.mode()) && previous==null) throw new DomainException("NO_LYRICS","请先创作歌词，再指定修改要求。");
+        if(approval!=null)approval.checkTarget(owner,work.id(),previous==null?null:previous.id(),work.version());
         String language=AgentCreationSupport.language(a.language(),snapshot,previous);
         snapshot=SongCardProjector.mergeSnapshot(snapshot,null,null,null,language,null);
-        var applied=AgentCreationSupport.apply(settings,works,owner,work,snapshot,null);work=applied.work();snapshot=applied.snapshot();
+        if(approval==null){
+            var applied=AgentCreationSupport.apply(settings,works,owner,work,snapshot,null);work=applied.work();snapshot=applied.snapshot();
+        }
         var revision=composer.compose(owner,work.id(),work.version(),ctx.requestKey(),GenerateSongHandler.mapLanguage(language),
                 AgentCreationSupport.instructions(newWork?"":a.text(),language),previous==null?null:previous.id());
         revision=lyrics.confirm(owner,work.id(),revision.id());

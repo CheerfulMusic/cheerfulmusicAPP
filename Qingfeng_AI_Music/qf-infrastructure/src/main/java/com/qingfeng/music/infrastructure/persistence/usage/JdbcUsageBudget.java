@@ -48,11 +48,17 @@ public final class JdbcUsageBudget implements UsageBudget {
     private String reference(Kind kind,String work,String key){return com.qingfeng.music.credits.CreditReferences.of(kind.name(),work,key);}
     /** 只有音乐和歌词是计费创作；价格来自统一定价服务，扣费与额度预留在同一事务内提交。 */
     private void charge(String owner,String work,String key,Kind kind){
-        if(credits==null||pricing==null||!pricing.enabled())return;
+        var approval=com.qingfeng.music.credits.ConfirmedCreation.current();
+        if(credits==null||pricing==null||!pricing.enabled()){
+            if(approval!=null)approval.checkCharge(owner,work,key,kind,0);
+            return;
+        }
         var priced=kind==Kind.MUSIC?com.qingfeng.music.credits.CreditsPricing.Kind.MUSIC:kind==Kind.LYRICS?com.qingfeng.music.credits.CreditsPricing.Kind.LYRICS:null;
         if(priced==null)return;
-        if(kind==Kind.LYRICS&&lyricFreeAllowance!=null&&lyricFreeAllowance.reserve(owner,work,key))return;
-        long cost=pricing.cost(priced);
+        boolean free=kind==Kind.LYRICS&&lyricFreeAllowance!=null&&lyricFreeAllowance.reserve(owner,work,key);
+        long cost=free?0:pricing.cost(priced);
+        if(approval!=null)approval.checkCharge(owner,work,key,kind,cost);
+        if(free)return;
         credits.debit(owner,cost,reference(kind,work,key));
         // 消费流水目前只覆盖歌词生成；歌曲生成沿用原有记账口径，不在本次改动范围内。
         if(consumptions!=null&&kind==Kind.LYRICS)consumptions.reserved(owner,work,key,com.qingfeng.music.credits.CreditConsumptions.TYPE_LYRICS,cost);
@@ -88,6 +94,11 @@ public final class JdbcUsageBudget implements UsageBudget {
             if (!queued && (usePermits ? !musicPermits.take(cap.concurrentGlobal(),()->active(kind,null))
                     : cap.concurrentGlobal()>=0 && active(kind,null)>=cap.concurrentGlobal()))
                 throw new DomainException("GLOBAL_GENERATION_BUSY","当前创作人数较多，请稍后再试。");
+            var approval=com.qingfeng.music.credits.ConfirmedCreation.current();
+            if(approval!=null){
+                var version=jdbc.queryForObject("SELECT version FROM music_work WHERE owner_id=? AND id=? AND deleted_at IS NULL FOR UPDATE",Long.class,owner,work);
+                approval.checkWork(owner,work,version);
+            }
             charge(owner,work,key,kind);
             jdbc.update("INSERT INTO model_usage_reservation(kind,work_id,request_key,owner_id,usage_day,created_at) VALUES(?,?,?,?,?,?)",kind.name(),work,key,owner,java.sql.Date.valueOf(day),Timestamp.from(clock.instant()));
         });

@@ -40,9 +40,15 @@ class AgentChatServiceTest {
             public Claim claim(String owner,String conversation,String key,String text,Runnable beforeInsert){if(!results.containsKey(key))beforeInsert.run();return new Claim(!results.containsKey(key),results.get(key),messages.size()+1);}
             public void complete(String owner,String conversation,String key,String result){results.put(key,result);}
         };
-        service=new AgentChatService(conversations,tools,model,store,social);
+        service=new AgentChatService(conversations,tools,model,store,social).withCreationPricing(mock(com.qingfeng.music.credits.CreditsPricing.class),mock(com.qingfeng.music.credits.LyricFreeAllowance.class));
     }
     String key(){return UUID.randomUUID().toString();}
+    String approval(){
+        String id=new ObjectMapper().readTree(messages.get(messages.size()-1).contentJson()).path("creationQuote").path("id").asText();
+        UUID.fromString(id);
+        return id;
+    }
+    void acceptQuote(){String id=approval();service.send("owner","conversation","#approve:"+id,id,"zh-CN");}
     AgentApplicationActions app(String... names){
         var app=mock(AgentApplicationActions.class);
         when(app.capabilities()).thenReturn(Arrays.stream(names).map(n->new AgentApplicationActions.Capability(n,n,"",n.startsWith("list_")||n.startsWith("preview_")||n.equals("video_capabilities")?"read":"write")).toList());
@@ -50,7 +56,7 @@ class AgentChatServiceTest {
         when(app.prepare(anyString(),anyString(),anyString(),anyMap(),any())).thenAnswer(c->c.getArgument(3));
         when(app.execute(anyString(),anyString(),anyString(),anyMap(),anyString(),anyString(),any())).thenAnswer(c->new AgentApplicationActions.Result("真实工具结果","result",List.of(),List.of(),c.getArgument(2)));
         AgentTurnStore store=new AgentTurnStore(){public Claim claim(String o,String c,String k,String t,Runnable beforeInsert){if(!results.containsKey(k))beforeInsert.run();return new Claim(!results.containsKey(k),results.get(k),messages.size()+1);}public void complete(String o,String c,String k,String r){results.put(k,r);}};
-        service=new AgentChatService(conversations,tools,model,store,social,List.of(app));return app;
+        service=new AgentChatService(conversations,tools,model,store,social,List.of(app)).withCreationPricing(mock(com.qingfeng.music.credits.CreditsPricing.class),mock(com.qingfeng.music.credits.LyricFreeAllowance.class));return app;
     }
     @Test void numberedCreativeMenuKeepsBriefAndRunsSelectedToolOnce() {
         when(model.respond(any())).thenReturn(new AgentChatModel.Plan("chat",
@@ -76,7 +82,7 @@ class AgentChatServiceTest {
         verifyNoInteractions(model);
     }
 
-    @Test void aRetryOfTheReportedFailureUsesOnlyTheUsersBrainstormAsMaterial() {
+    @Test void ambiguousPolishAfterBrainstormKeepsTheTopicAndAsksForTheTarget() {
         String command = "你先打磨一版歌词";
         var json = new ObjectMapper();
         for (var turn : List.of(
@@ -87,12 +93,8 @@ class AgentChatServiceTest {
             conversations.appendMessage("owner","conversation",turn.get(0),"TEXT","DONE",json.writeValueAsString(Map.of("text",turn.get(1))),null);
         }
         service.send("owner", "conversation", command, key(), "zh-CN");
-        var args = ArgumentCaptor.forClass(Object.class);
-        verify(tools).dispatch(eq(AgentTool.GENERATE_LYRICS),args.capture(),eq("owner"),anyString());
-        var submitted = (AgentTool.GenerateLyricsArgs)args.getValue();
-        assertEquals("平凡的一天", submitted.text());
-        assertEquals("new", submitted.mode());
-        assertNull(submitted.revisionId());
+        verify(tools,never()).dispatch(eq(AgentTool.GENERATE_LYRICS),any(),eq("owner"),anyString());
+        assertTrue(messages.get(messages.size()-1).contentJson().contains("平凡的一天"));
         verifyNoInteractions(model);
     }
 
@@ -111,6 +113,7 @@ class AgentChatServiceTest {
         conversations.appendMessage("owner","conversation","user","TEXT","DONE",
                 new ObjectMapper().writeValueAsString(Map.of("text","Help me brainstorm song ideas around this. A different song")),null);
         service.send("owner","conversation","Please polish the current lyrics.",key(),"en");
+        acceptQuote();
         var args = ArgumentCaptor.forClass(Object.class);
         verify(tools).dispatch(eq(AgentTool.GENERATE_LYRICS),args.capture(),eq("owner"),anyString());
         var submitted = (AgentTool.GenerateLyricsArgs)args.getValue();
@@ -154,12 +157,15 @@ class AgentChatServiceTest {
     @Test void explicitLyricRequestRecoversFromEchoedIntentError(){
         when(model.respond(any())).thenReturn(new AgentChatModel.Plan("chat",Map.of(),"还没有执行「新写或改写歌词」。这一步与本条指令未能对应。"));
         service.send("owner","conversation","直接开始生成歌词",key(),"zh-CN");
+        verify(tools,never()).dispatch(eq(AgentTool.GENERATE_LYRICS),any(),anyString(),anyString());
+        acceptQuote();
         verify(tools).dispatch(eq(AgentTool.GENERATE_LYRICS),any(),eq("owner"),anyString());
         verify(tools,never()).dispatch(eq(AgentTool.GENERATE_SONG),any(),anyString(),anyString());
     }
     @Test void explicitMusicRequestExecutesEvenWhenModelOnlyPromises(){
         when(model.respond(any())).thenReturn(new AgentChatModel.Plan("chat",Map.of(),"我来创作一首热血歌曲。"));
         service.send("owner","conversation","帮我生成音乐，我想要的曲风是热血",key(),"zh-CN");
+        acceptQuote();
         var args=ArgumentCaptor.forClass(Object.class);verify(tools).dispatch(eq(AgentTool.GENERATE_SONG),args.capture(),eq("owner"),anyString());
         assertTrue(((AgentTool.GenerateSongArgs)args.getValue()).text().contains("热血"));
     }
@@ -184,6 +190,7 @@ class AgentChatServiceTest {
         messages.add(new AgentMessage("u","conversation",1,"user","TEXT","DONE",new ObjectMapper().writeValueAsString(Map.of("text",lyric)),null,Instant.now()));
         String request=key();service.send("owner","conversation","帮我生成音乐，我想要的曲风是热血",request,"zh-CN");
         service.send("owner","conversation","帮我生成音乐，我想要的曲风是热血",request,"zh-CN");
+        acceptQuote();
         var args=ArgumentCaptor.forClass(Map.class);verify(app,times(1)).execute(eq("owner"),eq("conversation"),eq("save_lyrics"),args.capture(),anyString(),anyString(),any());
         assertEquals(lyric,args.getValue().get("lyrics"));verify(tools,times(1)).dispatch(eq(AgentTool.GENERATE_SONG),any(),eq("owner"),anyString());
         verify(tools,never()).dispatch(eq(AgentTool.GENERATE_LYRICS),any(),anyString(),anyString());
@@ -283,6 +290,7 @@ class AgentChatServiceTest {
         var data=Map.of("workId",work,"assetId",asset,"plan",Map.of("title","海边","ratio","9:16","shots",shots));
         var card=Map.of("kind","video_plan","action","preview_music_video","items",List.of(Map.of("data",data)));
         messages.add(new AgentMessage(key(),"conversation",1,"assistant","TEXT","DONE",new ObjectMapper().writeValueAsString(card),null,Instant.now()));
+        when(video.prepare(anyString(),anyString(),eq("create_music_video"),anyMap(),any())).thenAnswer(call->{var args=new HashMap<String,Object>(call.<Map<String,Object>>getArgument(3));args.put("quotedCredits",60);return args;});
         String button=new AgentVideoResolution("720P",work,asset).command();
         var prompt=service.send("owner","conversation",button,key(),"zh-CN");
         var pending=new ObjectMapper().readTree(prompt.messages().get(prompt.messages().size()-1).contentJson());
@@ -293,9 +301,9 @@ class AgentChatServiceTest {
         assertEquals("9:16",step.path("args").path("ratio").asText());
         assertEquals("镜头从车窗移向海边",step.path("args").path("shots").path(0).path("prompt").asText());
         verify(video,never()).execute(anyString(),anyString(),anyString(),anyMap(),anyString(),anyString(),any());
-        String receipt=key();
-        service.send("owner","conversation","确认执行",receipt,"zh-CN");
-        service.send("owner","conversation","确认执行",receipt,"zh-CN");
+        String receipt=approval();
+        service.send("owner","conversation","#approve:"+receipt,receipt,"zh-CN");
+        service.send("owner","conversation","#approve:"+receipt,receipt,"zh-CN");
         verify(video).execute(anyString(),anyString(),eq("create_music_video"),argThat(args->work.equals(args.get("workId"))&&asset.equals(args.get("assetId"))&&shots.equals(args.get("shots"))),eq(button),anyString(),any());
         var stale=new AgentVideoResolution("1080P",work,key()).command();
         var rejected=service.send("owner","conversation",stale,key(),"zh-CN");
@@ -346,7 +354,7 @@ class AgentChatServiceTest {
         service.send("owner","conversation","帮妈妈准备一份生日惊喜",key(),"zh-CN");
         verify(tools,never()).dispatch(eq(AgentTool.GENERATE_SONG),any(),anyString(),anyString());
         when(tools.dispatch(eq(AgentTool.GENERATE_SONG),any(),anyString(),anyString())).thenThrow(new com.qingfeng.music.common.exception.DomainException("GENERATION_FAILED","生成暂不可用"));
-        service.send("owner","conversation","确认生成",key(),"zh-CN");
+        acceptQuote();
         assertTrue(messages.stream().anyMatch(m->m.contentJson().contains("tool_started")));
         assertFalse(messages.stream().anyMatch(m->m.contentJson().contains("tool_finished")));
         assertTrue(messages.get(messages.size()-1).contentJson().contains("GENERATION_FAILED"));
@@ -386,6 +394,8 @@ class AgentChatServiceTest {
     @Test void lyricsOnlyNeverCallsMusicAndPassesCurrentRevision(){
         when(model.respond(any())).thenReturn(plan("generate_song"));
         service.send("owner","conversation","只写一首歌词，不要生成音乐",key(),"zh-CN");
+        verify(tools,never()).dispatch(eq(AgentTool.GENERATE_LYRICS),any(),anyString(),anyString());
+        acceptQuote();
         var args=ArgumentCaptor.forClass(Object.class);verify(tools).dispatch(eq(AgentTool.GENERATE_LYRICS),args.capture(),eq("owner"),anyString());
         assertEquals("lyrics",((AgentTool.GenerateLyricsArgs)args.getValue()).revisionId());
         verify(tools,never()).dispatch(eq(AgentTool.GENERATE_SONG),any(),anyString(),anyString());
@@ -394,14 +404,16 @@ class AgentChatServiceTest {
         when(model.respond(any())).thenReturn(plan("generate_song"));
         service.send("owner","conversation","帮妈妈准备一份生日惊喜",key(),"zh-CN");
         verify(tools,never()).dispatch(eq(AgentTool.GENERATE_SONG),any(),anyString(),anyString());
-        String request=key();service.send("owner","conversation","确认生成",request,"zh-CN");
-        service.send("owner","conversation","确认生成",request,"zh-CN");
+        String request=approval();service.send("owner","conversation","#approve:"+request,request,"zh-CN");
+        service.send("owner","conversation","#approve:"+request,request,"zh-CN");
         verify(tools,times(1)).dispatch(eq(AgentTool.GENERATE_SONG),any(),eq("owner"),eq(request));
         verify(model,times(1)).respond(any());
     }
-    @Test void explicitMusicExecutesWithoutExtraConfirmation(){
+    @Test void explicitMusicExecutesAfterTheQuotedConfirmation(){
         when(model.respond(any())).thenReturn(plan("generate_song"));
         service.send("owner","conversation","用当前歌词生成音乐",key(),"zh-CN");
+        verify(tools,never()).dispatch(eq(AgentTool.GENERATE_SONG),any(),anyString(),anyString());
+        acceptQuote();
         verify(tools).dispatch(eq(AgentTool.GENERATE_SONG),any(),eq("owner"),anyString());
     }
     @Test void modelCannotPublishOrShareWithoutExplicitUserInstruction(){
@@ -436,6 +448,7 @@ class AgentChatServiceTest {
     @Test void omittedSettingsRemainUnspecifiedAndShareSurvivesPolling(){
         when(model.respond(any())).thenReturn(new AgentChatModel.Plan("generate_song",Map.of("mode","regenerate"),"开始生成"));
         service.send("owner","conversation","用当前歌词生成音乐，其他不变",key(),"zh-CN");
+        acceptQuote();
         var args=ArgumentCaptor.forClass(Object.class);verify(tools).dispatch(eq(AgentTool.GENERATE_SONG),args.capture(),eq("owner"),anyString());
         var request=(AgentTool.GenerateSongArgs)args.getValue();assertNull(request.language());assertNull(request.instruments());assertNull(request.vocal());
         when(social.execute(eq("owner"),eq("conversation"),eq("share"),anyString(),anyString(),eq(song)))

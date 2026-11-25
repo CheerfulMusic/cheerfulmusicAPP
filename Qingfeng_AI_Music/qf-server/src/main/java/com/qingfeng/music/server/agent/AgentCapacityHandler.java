@@ -58,8 +58,9 @@ public final class AgentCapacityHandler implements AiCapacityWorker.Handler {
         var normalized = new Input(input.text().trim(), input.locale() == null ? "zh-CN" : input.locale(),
             input.paidConfirmed(), input.displayedContext());
         String payload = json.writeValueAsString(normalized);
-        return queue.submit(lane(), owner, conversation, requestKey, payload, capacity.limits(lane()),
-            job -> admission.acquireQueued(owner, conversation, requestKey, normalized.text(), normalized.locale(),
+        String turnKey = AgentCreationRequest.turnKey(normalized.text(), requestKey);
+        return queue.submit(lane(), owner, conversation, turnKey, payload, capacity.limits(lane()),
+            job -> admission.acquireQueued(owner, conversation, turnKey, normalized.text(), normalized.locale(),
                 input.paidConfirmed(), job.queueUntil()));
     }
 

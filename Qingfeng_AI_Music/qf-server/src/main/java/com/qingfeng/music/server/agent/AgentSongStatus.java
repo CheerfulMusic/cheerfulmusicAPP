@@ -32,6 +32,9 @@ final class AgentSongStatus {
             case "DRAFT" -> en ? "is still a draft." : "仍是草稿，还没有音频。";
             default -> en ? "has no playable audio for this version yet." : "这一版暂时没有可播放的音频。";
         };
-        return new Result(en ? title + " " + detail : "《" + title + "》" + detail, "song_status", List.of(), List.of(), "get_current_song");
+        var next=card.revisionId()!=null && List.of("LYRICS_READY","CANCELLED","FAILED").contains(card.status()==null?"":card.status())
+                ?List.of(new Command(en?"Check generation price":"查看生成报价","生成歌曲，只看价格","send")):List.<Command>of();
+        if("DRAFT".equals(card.status()))detail+=en?" Add a theme to start a lyric draft.":"可以先描述主题，写一版歌词。";
+        return new Result(en ? title + " " + detail : "《" + title + "》" + detail, "song_status", List.of(), next, "get_current_song");
     }
 }
