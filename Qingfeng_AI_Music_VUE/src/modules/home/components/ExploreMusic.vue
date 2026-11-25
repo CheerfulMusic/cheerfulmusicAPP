@@ -7,6 +7,7 @@ import {hotFailure,hotLoginHint,loadHotSongs,loadMyReactions,signedIn,sortByHeat
 import PlaylistCard from './PlaylistCard.vue'
 import PlaylistDetails from './PlaylistDetails.vue'
 const playlists=usePreviewPlaylists(),filter=ref('all'),more=ref(false),gallery=ref<HTMLElement>(),selectedPlaylist=ref('')
+const englishHeading = 'Creation Inspiration'
 const moreToggle=ref<HTMLButtonElement>()
 const primaryFilters=previewFilters.slice(0,8),extraFilters=previewFilters.slice(8)
 const selectedExtra=computed(()=>extraFilters.find(option=>option.id===filter.value))
@@ -27,7 +28,13 @@ onMounted(async()=>{await loadHotSongs();freezeRanking();void loadMyReactions()}
 watch(()=>signedIn(),()=>{void loadMyReactions()})
 </script>
 <template><section id="inspiration" class="p-width explore-music playlist-explore">
-  <header class="explore-heading"><div><h2>{{t('热歌推荐')}}</h2><p v-if="locale!=='en'" class="explore-heading-en" lang="en">Trending Songs</p></div><RouterLink class="explore-discover" :to="discoverHref">{{t('发现更多')}} <span aria-hidden="true">↗</span></RouterLink></header>
+  <header class="explore-heading">
+    <div>
+      <h2>{{ locale === 'en' ? englishHeading : '创作灵感' }}</h2>
+      <p v-if="locale !== 'en'" class="explore-heading-en" lang="en">{{ englishHeading }}</p>
+    </div>
+    <RouterLink class="explore-discover" :to="discoverHref">{{t('发现更多')}} <span aria-hidden="true">↗</span></RouterLink>
+  </header>
   <p v-if="hotLoginHint" class="hot-notice" role="status">{{t(hotLoginHint)}}</p>
   <p v-if="hotFailure" class="hot-notice error" role="status">{{t(hotFailure)}}</p>
   <div class="explore-toolbar"><nav class="genre-tabs" :aria-label="t('筛选试听作品')"><button type="button" :class="{selected:filter==='all'}" :aria-pressed="filter==='all'" @click="choose('all')">{{t('全部')}}</button><button v-for="option in primaryFilters" :key="option.id" type="button" :class="{selected:filter===option.id}" :aria-pressed="filter===option.id" @click="choose(option.id)">{{t(option.label)}}</button><button ref="moreToggle" type="button" :class="{selected:!!selectedExtra}" :aria-expanded="more" aria-controls="explore-style-filters" @click="more=!more">{{selectedExtra?t(selectedExtra.label):t(more?'收起风格':'更多风格')}} <span aria-hidden="true">{{more?'−':'+'}}</span></button></nav><p class="swipe-hint">{{t('左右滑动，探索更多作品')}} <span aria-hidden="true">↔</span></p></div>
