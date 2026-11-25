@@ -369,13 +369,14 @@ describe('Discover editorial layout with real content', () => {
       '查看推荐：走了那么远', '查看推荐：歌曲航线', '查看推荐：Streetlight', '查看推荐：吉祥物 （短剧插曲）',
       '查看推荐：Prayer Beneath the Stars', '查看推荐：歌曲雨夜', '查看推荐：Christmas Sky',
     ])
-    for (const [dot, title, cover, audio] of [
-      [dots[3]!, mascot.song.title, `${mascotMedia}/cover`, `${mascotMedia}/audio`],
-      [dots[4]!, 'Prayer Beneath the Stars', prayerMedia.cover, prayerMedia.audio],
+    for (const [dot, title, banner, cover, audio] of [
+      [dots[3]!, mascot.song.title, discoverMedia['jixiangwu-hero'].cover, `${mascotMedia}/cover`, `${mascotMedia}/audio`],
+      [dots[4]!, 'Prayer Beneath the Stars', discoverMedia['prayer-beneath-the-stars-hero'].cover, prayerMedia.cover, prayerMedia.audio],
     ] as const) {
       await dot.trigger('click')
       expect(wrapper.get('.discover-hero h2').text()).toBe(title)
-      expect(wrapper.get('.discover-hero-background').attributes('src')).toBe(cover)
+      expect(wrapper.get('.discover-hero-background').attributes('src')).toBe(banner)
+      expect(wrapper.get('.discover-hero-main source').attributes('srcset')).toBe(banner)
       await wrapper.get('.discover-hero-listen').trigger('click')
       expect(mocks.toggle.mock.lastCall![0]).toMatchObject({ title, cover, audio })
     }

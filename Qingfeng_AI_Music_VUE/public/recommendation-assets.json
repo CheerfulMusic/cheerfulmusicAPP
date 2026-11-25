@@ -1001,6 +1001,22 @@
       "key": "qingfeng/recommendation-samples/20261125/cover/3c8c5d8da93c/your-side-of-the-tape-3c8c5d8da93c-cover.jpg",
       "bytes": 101392,
       "sha256": "3c8c5d8da93ca9497a99f8818966aefbf16267804915a1b0acee33f36fa954ac"
+    },
+    {
+      "trackId": "jixiangwu-hero",
+      "kind": "cover",
+      "path": "/media/recommendations/jixiangwu-hero-361167958fda-cover.jpg",
+      "key": "qingfeng/recommendation-samples/20261125/cover/361167958fda/jixiangwu-hero-361167958fda-cover.jpg",
+      "bytes": 222221,
+      "sha256": "361167958fdaf2cf7453b50e2db81983df36f0555bb331cd8c76a2ec7ee19257"
+    },
+    {
+      "trackId": "prayer-beneath-the-stars-hero",
+      "kind": "cover",
+      "path": "/media/recommendations/prayer-beneath-the-stars-hero-7761229f5dee-cover.jpg",
+      "key": "qingfeng/recommendation-samples/20261125/cover/7761229f5dee/prayer-beneath-the-stars-hero-7761229f5dee-cover.jpg",
+      "bytes": 264251,
+      "sha256": "7761229f5deeecc708dc7925122ff12761d70bc8618c9c6b134cc54b3849aac3"
     }
   ]
 }

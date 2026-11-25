@@ -28,5 +28,11 @@
   "your-side-of-the-tape": {
     "audio": "/media/recommendations/your-side-of-the-tape-746cee268a24-preview-128.mp3",
     "cover": "/media/recommendations/your-side-of-the-tape-3c8c5d8da93c-cover.jpg"
+  },
+  "jixiangwu-hero": {
+    "cover": "/media/recommendations/jixiangwu-hero-361167958fda-cover.jpg"
+  },
+  "prayer-beneath-the-stars-hero": {
+    "cover": "/media/recommendations/prayer-beneath-the-stars-hero-7761229f5dee-cover.jpg"
   }
 }

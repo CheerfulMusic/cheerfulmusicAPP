@@ -12,7 +12,7 @@ import ArtistAvatar from '../components/ArtistAvatar.vue'
 import DiscoverSongCard from '../components/DiscoverSongCard.vue'
 import DiscoverShelf from '../components/DiscoverShelf.vue'
 import { withDiscoverEditorialCover } from '../model/discover-editorial-artwork'
-import { discoverSongArtwork, type HeroArtwork } from '../model/discover-hero-artwork'
+import { discoverSongArtwork, jixiangwuHeroArtwork, prayerHeroArtwork, type HeroArtwork } from '../model/discover-hero-artwork'
 import { discoverJazzRows, discoverRockRows, prayerBeneathTheStarsRow } from '../model/discover-genre-tracks'
 import {
   christmasSongId, discoverGenres, globalPopWideCoverPositions, publicDiscoverTrack, withDiscoverPreviewCover,
@@ -179,9 +179,8 @@ const heroSlides = computed(() => {
   const slides: { row: DiscoverShelfTrack; artwork: HeroArtwork }[] = [
     { row: walkedFarRow, artwork: { desktop: walkedFar, compact: walkedFar, position: '68% center' } },
     ...ordered.map((row, index) => {
-      const cover = row.track.cover
-      const artwork = row.track.id === mascotSongId ? { desktop: cover, compact: cover, position: 'center 36%' }
-        : row === prayerBeneathTheStarsRow ? { desktop: cover, compact: cover, position: 'center 47%' }
+      const artwork = row.track.id === mascotSongId ? jixiangwuHeroArtwork
+        : row === prayerBeneathTheStarsRow ? prayerHeroArtwork
           : discoverSongArtwork[index]!
       return { row, artwork }
     }),

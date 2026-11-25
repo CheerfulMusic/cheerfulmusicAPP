@@ -10,6 +10,7 @@ import countryside from '../../../assets/discover/responsive/carousel-countrysid
 import compactCountryside from '../../../assets/discover/responsive/carousel-countryside-960.webp'
 import mistyGarden from '../../../assets/discover/responsive/carousel-misty-garden-1536.webp'
 import compactMistyGarden from '../../../assets/discover/responsive/carousel-misty-garden-960.webp'
+import discoverMedia from './discover-media.json'
 
 export interface HeroArtwork {
   desktop: string
@@ -18,6 +19,12 @@ export interface HeroArtwork {
 }
 
 export const discoverIntroArtwork: HeroArtwork = { desktop: coast, compact: compactCoast }
+
+const jixiangwuHero = discoverMedia['jixiangwu-hero'].cover
+const prayerHero = discoverMedia['prayer-beneath-the-stars-hero'].cover
+export const jixiangwuHeroArtwork: HeroArtwork = { desktop: jixiangwuHero, compact: jixiangwuHero, position: '70% center' }
+export const prayerHeroArtwork: HeroArtwork = { desktop: prayerHero, compact: prayerHero, position: '70% center' }
+
 export const discoverSongArtwork = [
   { desktop: seaStacks, compact: compactSeaStacks, position: '58% center' },
   { desktop: cactus, compact: compactCactus, position: '65% top' },
