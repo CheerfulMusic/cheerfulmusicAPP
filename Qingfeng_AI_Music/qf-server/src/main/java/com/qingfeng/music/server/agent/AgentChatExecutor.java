@@ -23,7 +23,8 @@ public final class AgentChatExecutor implements AutoCloseable {
     public DeferredResult<AgentChatService.Snapshot> submit(String owner,String conversation,String text,String key,String locale,boolean paidConfirmed){
         return submit(owner,conversation,text,key,locale,paidConfirmed,null);
     }
-    public DeferredResult<AgentChatService.Snapshot> submit(String owner,String conversation,String text,String key,String locale,boolean paidConfirmed,AgentChatService.DisplayedContext displayedContext){
+    public DeferredResult<AgentChatService.Snapshot> submit(String owner,String conversation,String text,String transportKey,String locale,boolean paidConfirmed,AgentChatService.DisplayedContext displayedContext){
+        String key=AgentCreationRequest.turnKey(text,transportKey);
         if(!slots.tryAcquire())throw new DomainException("AGENT_BUSY","当前对话请求较多，请稍后再试；本次尚未开始执行。");
         AgentAdmission.Ticket ticket;
         try{ticket=paidConfirmed?admission.acquire(owner,conversation,key,text,locale,true):admission.acquire(owner,conversation,key,text,locale);}catch(RuntimeException e){slots.release();throw e;}

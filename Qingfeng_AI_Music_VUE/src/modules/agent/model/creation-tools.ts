@@ -1,3 +1,4 @@
+import type { CreationAction } from './conversation'
 type BilingualText = readonly [zh: string, en: string]
 
 export interface CreationTool {
@@ -8,6 +9,10 @@ export interface CreationTool {
   question: BilingualText
   prompt: BilingualText
   choices: readonly BilingualText[]
+}
+
+export const creationAction: Partial<Record<CreationTool['id'], CreationAction>> = {
+  refine: 'POLISH_LYRICS', music: 'GENERATE_SONG', mv: 'PREVIEW_MV',
 }
 
 export const creationTools: readonly CreationTool[] = [

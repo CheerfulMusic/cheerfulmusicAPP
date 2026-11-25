@@ -144,6 +144,35 @@ class AiCapacityHttpTest {
         assertThat(send(chatter, messages + "/" + key + "/result", null).path("action").asText()).isEqualTo("generate_lyrics");
     }
 
+    @Autowired com.qingfeng.music.lyrics.api.LyricsApi lyricRevisions;
+
+    @Test void queuedStudioTurnsKeepTheirActionVersionAndQuoteAcrossPolling() throws Exception {
+        var user=creator();
+        var revision=lyricRevisions.save(user.id(),user.work(),0,"合成歌词","[副歌]\n离线的合成样本");
+        String conversation=send(user,"/api/app/agent/conversations/current",null).path("id").asText();
+        String path="/api/app/agent/conversations/"+conversation+"/messages";
+        send(user,path,Map.of("requestKey",key(),"text","打开作品 "+user.work()+" 的歌词版本 "+revision.id()));
+        var target=Map.of("workId",user.work(),"revisionId",revision.id(),"creationAction","POLISH_LYRICS");
+        String request=key();
+        var input=Map.of("requestKey",request,"text","加强副歌","displayedContext",target);
+        assertThat(raw(user,path,input,true).statusCode()).isIn(200,202);
+        eventually(()->raw(user,path+"/"+request+"/result",null,false).statusCode()==200);
+        var messages=send(user,path+"/"+request+"/result",null).path("messages");
+        var quote=json.readTree(messages.path(messages.size()-1).path("contentJson").asText()).path("creationQuote");
+        assertThat(quote.path("action").asText()).isEqualTo("generate_lyrics");
+        assertThat(quote.path("revisionId").asText()).isEqualTo(revision.id());
+        assertThat(lyricRevisions.list(user.id(),user.work())).hasSize(1);
+        String id=quote.path("id").asText();
+        var confirm=Map.of("requestKey",id,"text","#approve:"+id);
+        var oldClient=Map.of("requestKey",key(),"text","#approve:"+id);
+        assertThat(raw(user,path,oldClient,true).statusCode()).isEqualTo(200);
+        assertThat(raw(user,path,confirm,true).statusCode()).isIn(200,202);
+        eventually(()->raw(user,path+"/"+id+"/result",null,false).statusCode()==200);
+        assertThat(send(user,path,confirm).path("action").asText()).isEqualTo("generate_lyrics");
+        assertThat(lyricRevisions.list(user.id(),user.work())).hasSize(2);
+        assertThat(credits.balance(user.id())).isEqualTo(100);
+    }
+
     private Creator creator() {
         var session = identity.create();
         String owner = session.creatorId();

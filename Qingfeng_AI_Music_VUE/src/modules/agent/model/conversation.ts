@@ -5,7 +5,10 @@ export type MessageKind = 'TEXT' | 'TOOL_CARD' | 'PLACEHOLDER'
 export type MessageState = 'PENDING' | 'RUNNING' | 'DONE' | 'FAILED'
 export type ToolResultStatus = 'ok' | 'busy' | 'error' | 'clarify'
 
+export type CreationAction = 'POLISH_LYRICS' | 'GENERATE_SONG' | 'PREVIEW_MV'
 export interface DisplayedContext {
+  creationAction?: CreationAction
+  creationChoice?: string
   workId: string | null
   revisionId: string | null
   workList?: { messageId: string; seq: number }
@@ -62,6 +65,7 @@ export interface ConversationHistory {
 }
 
 export function displayTurnText(text: string): string {
+  if (/^#approve:[0-9a-f-]{36}$/.test(text)) return '确认执行'
   return /^#choice:[0-9a-f-]{36}:([1-9])$/.exec(text)?.[1] ?? text
 }
 

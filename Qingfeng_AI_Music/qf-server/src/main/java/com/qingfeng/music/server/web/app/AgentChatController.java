@@ -38,7 +38,9 @@ public class AgentChatController {
             paid, request.displayedContext());
         Job job = capacity.submit(creator.id(), id, request.requestKey(),
             new AgentCapacityHandler.Input(request.text(), request.locale(), paid, request.displayedContext()));
-        if (!"respond-async".equalsIgnoreCase(prefer) && !job.state().terminal())
+        // Older clients poll only their own transport key. Deliver their canonical approval result inline.
+        boolean pollable = "respond-async".equalsIgnoreCase(prefer) && job.requestKey().equals(request.requestKey());
+        if (!pollable && !job.state().terminal())
             return legacyResults.observe(job, this::response);
         return AiLegacyResults.immediate(response(job));
     }

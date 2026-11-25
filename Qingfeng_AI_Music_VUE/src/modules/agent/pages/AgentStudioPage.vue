@@ -20,7 +20,7 @@ import { useCredits } from '../../../shared/credits/useCredits'
 import { accountState } from '../../../shared/identity/account-state'
 import { logtoState } from '../../../shared/identity/logto-state'
 import { useAgentConversation, type DeliveredTurn } from '../composables/useAgentConversation'
-import { creationTools, type CreationTool } from '../model/creation-tools'
+import { creationAction, creationTools, type CreationTool } from '../model/creation-tools'
 import { displayTurnText, messageText } from '../model/conversation'
 import { analyzeAudioFile, cancelAnalysis, forgetAnalysis, MAX_REFERENCE_BYTES } from '../model/audio-analysis'
 import { BPM_CONFIDENCE_THRESHOLD } from '../model/audio-features'
@@ -115,6 +115,7 @@ const messageDraft = computed(() => {
   if (!tool) return description
   const choice = selectedChoice.value === null ? undefined : tool.choices[selectedChoice.value]
   const brief = [choice && tr(...choice), description].filter(Boolean).join('\n')
+  if (creationAction[tool.id]) return description || (choice ? tr(...choice) : '')
   return brief ? `${tr(...tool.prompt)} ${brief}` : ''
 })
 const messageTooLong = computed(() => messageDraft.value.length > 4000)
@@ -234,19 +235,21 @@ async function handleResult(result?: DeliveredTurn) {
   void refreshCredits().catch(() => undefined)
   await scrollChat()
 }
-async function send(extra?: string) {
+async function send(extra?: string, action?: import('../model/conversation').CreationAction) {
   if (blocked.value) return
   if (extra === undefined && messageTooLong.value) return
   const text = (extra ?? messageDraft.value).trim()
   if (!text) return
   notice.value = ''
   const draft = input.value
+  const selected = extra === undefined && activeTool.value ? creationAction[activeTool.value.id] : action
+  const option = selected && extra === undefined && selectedChoice.value !== null ? activeTool.value?.choices[selectedChoice.value] : undefined
   const result = await conversation.send(text, locale.value, () => {
     if (extra === undefined && input.value === draft && messageDraft.value === text) {
       input.value = ''
       setCreationView(null)
     } else if (creationView.value === 'menu') setCreationView(null)
-  })
+  }, selected, option && tr(...option))
   await handleResult(result)
 }
 function goToLibrary(){ const shelf=document.getElementById('agent-library'); shelf?.focus(); shelf?.scrollIntoView?.({block:'nearest'}) }
@@ -506,7 +509,7 @@ onBeforeUnmount(() => { avatarDisposed = true; window.removeEventListener('qingf
         <label v-if="songCard.assetId && previewTab==='lyrics'" class="producer-lyric-switch"><span>♫ {{ tr('歌词滚动播放','Follow lyrics') }}</span><input v-model="lyricFollow" type="checkbox" role="switch" :aria-label="tr('歌词滚动播放','Follow lyrics')"/></label>
         <div v-if="previewTab === 'lyrics'" class="agent-tab-content agent-real-lyrics" role="tabpanel"><strong v-if="songCard.lyrics" class="agent-lyrics-title">♫ {{ songCard.title }}</strong><SyncedLyrics show-times v-if="songCard.assetId" :key="songCard.assetId" :work-id="songCard.songId" :asset-id="songCard.assetId" :player-track-id="playable?.id" :lyrics="songCard.lyrics" :auto-sync-enabled="false" :follow-enabled="lyricFollow" :refresh-key="lyricRefresh" @seek="player.seek($event)"/><p v-else>{{ songCard.lyrics || tr('还没有歌词，可以在对话中让我写。', 'No lyrics yet. Ask me to write them.') }}</p></div>
         <div v-else-if="previewTab === 'story'" class="agent-tab-content agent-story-empty" role="tabpanel"><p v-if="storyLoading">{{ tr('正在加载作品故事…', 'Loading story…') }}</p><p v-else-if="storyError">{{ tr('作品故事加载失败', 'Unable to load story') }} <button type="button" @click="fetchStory">{{ tr('重试', 'Retry') }}</button></p><p v-else>{{ story || tr('暂无作品故事', 'No story yet') }}</p></div>
-        <div v-else class="agent-tab-content agent-song-actions" role="tabpanel"><button v-if="!taskRunning" type="button" class="agent-start-button" :disabled="blocked || !songCard.lyrics" @click="send('用当前歌词生成音乐')">{{ audioUrl ? tr('重新生成音乐', 'Generate another version') : tr('生成音乐', 'Generate music') }}</button><button v-else type="button" :disabled="blocked" @click="send('停止生成')">{{ tr('停止生成', 'Cancel generation') }}</button><button type="button" :disabled="blocked" @click="setChatDraft(tr('把副歌改得更温柔，保留其他部分', 'Make the chorus gentler and keep the rest'))">{{ tr('修改歌词', 'Revise lyrics') }}</button></div>
+        <div v-else class="agent-tab-content agent-song-actions" role="tabpanel"><button v-if="!taskRunning" type="button" class="agent-start-button" :disabled="blocked || !songCard.lyrics" @click="send('用当前歌词生成音乐', 'GENERATE_SONG')">{{ audioUrl ? tr('重新生成音乐', 'Generate another version') : tr('生成音乐', 'Generate music') }}</button><button v-else type="button" :disabled="blocked" @click="send('停止生成')">{{ tr('停止生成', 'Cancel generation') }}</button><button type="button" :disabled="blocked" @click="setChatDraft(tr('把副歌改得更温柔，保留其他部分', 'Make the chorus gentler and keep the rest'))">{{ tr('修改歌词', 'Revise lyrics') }}</button></div>
         <div v-if="publicLink" class="agent-share-link"><input readonly :value="publicLink" :aria-label="tr('分享链接','Share link')"/><button type="button" @click="copyShare">{{ tr('复制链接', 'Copy link') }}</button></div>
         <div class="agent-preview-actions agent-bottom-actions"><button type="button" :disabled="blocked || !playable" @click="download"><NavIcon name="download"/> {{ downloadUnlocked ? tr('免费下载', 'Free download') : tr('下载（首次15积分）', 'Download (15 credits first time)') }}</button><button type="button" :disabled="blocked || !playable" @click="send('分享当前作品')"><NavIcon name="share"/> {{ tr('分享', 'Share') }}</button><button type="button" :disabled="blocked" @click="setChatDraft(tr('参考当前作品，帮我创作一首同风格的新歌', 'Create a new song inspired by the style of the current song'))">＋ {{ tr('改编这首歌', 'Remix') }}</button></div>
       </template>

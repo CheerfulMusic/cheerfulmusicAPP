@@ -32,7 +32,7 @@ import static org.junit.jupiter.api.Assertions.*;
         "classpath:db/migration/V47__music_video_projects.sql","classpath:db/migration/V53__agent_admission_version.sql","classpath:db/migration/V54__song_share_statistics.sql"}, executionPhase=org.springframework.test.context.jdbc.Sql.ExecutionPhase.BEFORE_TEST_CLASS)
 @SpringBootTest(webEnvironment=SpringBootTest.WebEnvironment.RANDOM_PORT, properties={
         "spring.datasource.url=jdbc:h2:mem:agent_chat_flow;MODE=MySQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1",
-        "qingfeng.agent.chat.enabled=true", "qingfeng.lyrics.enabled=true", "qingfeng.generation.enabled=true",
+        "qingfeng.agent.chat.enabled=true", "qingfeng.credits.enabled=true", "qingfeng.lyrics.enabled=true", "qingfeng.generation.enabled=true",
         "qingfeng.generation.scheduler-enabled=false", "qingfeng.cover.ai.scheduler-enabled=false",
         "qingfeng.agent.admission.global-rpm=600", "qingfeng.agent.admission.user-rpm=60", "qingfeng.agent.admission.user-daily-tokens=10000000"})
 @ActiveProfiles("test")
@@ -49,6 +49,7 @@ class AgentChatFlowIntegrationTest {
             }, 1, java.time.Duration.ofSeconds(10));
             return context -> {
                 String text = context.text();
+                if (text.contains("模拟规划离线")) throw new com.qingfeng.music.common.exception.DomainException("AGENT_CHAT_UNAVAILABLE","synthetic outage");
                 if (text.startsWith("帮我设计当前歌曲的 MV")) return new AgentChatModel.Plan("generate_song", Map.of("mode","regenerate"), "");
                 if (text.equals("歌曲呢")) return new AgentChatModel.Plan("chat",Map.of(),"歌曲已提交。");
                 if (text.equals("你先打磨一版歌词")) return unavailable.respond(context);
@@ -64,6 +65,8 @@ class AgentChatFlowIntegrationTest {
                     new AgentChatModel.Step("generate_song",Map.of("mode","regenerate")),new AgentChatModel.Step("share",Map.of())));
                 if (text.equals("你好")) return new AgentChatModel.Plan("chat", Map.of(), "你好，今天想聊些什么？");
                 if (text.contains("先写歌词")) return new AgentChatModel.Plan("generate_lyrics", Map.of("text", text, "mode", "new", "language", "yue"), "我来写歌词。");
+                if (text.equals("请润色副歌，让语气更温柔")) return new AgentChatModel.Plan("generate_lyrics",Map.of("mode","new","text",text),"");
+                if (text.equals("请改写当前作品的歌词，让副歌更温柔")) return new AgentChatModel.Plan("generate_lyrics",Map.of("text",text),"");
                 if (text.contains("副歌")) return new AgentChatModel.Plan("generate_lyrics", Map.of("text", text, "mode", "rewrite", "revisionId", context.song().revisionId()), "我来改副歌。");
                 if (text.contains("女声")) return new AgentChatModel.Plan("set_style", Map.of("vocal", "FEMALE", "bpm", 90), "调整演唱设置。");
                 if (text.contains("生成音乐")) return new AgentChatModel.Plan("generate_song", Map.of("text", text, "mode", "regenerate", "revisionId", context.song().revisionId()), "开始生成。");
@@ -114,10 +117,16 @@ class AgentChatFlowIntegrationTest {
         String csrf = ok(request(client,"GET","/api/public/csrf",null,null)).path("token").asText();
         String owner = ok(request(client,"POST","/api/public/session",Map.of(),csrf)).path("creatorId").asText();
         String conversation = ok(request(client,"GET","/api/app/agent/conversations/current",null,null)).path("id").asText();
+        credits.credit(owner,80,"synthetic-agent-"+owner);
         return new Browser(client, csrf, owner, conversation);
     }
     private JsonNode say(Browser browser, String text, String key) throws Exception {
         return ok(request(browser.http(),"POST","/api/app/agent/conversations/" + browser.conversation() + "/messages", Map.of("text",text,"requestKey",key),browser.csrf()));
+    }
+    private JsonNode approve(Browser user,JsonNode snapshot) throws Exception {
+        String id=lastText(snapshot).path("creationQuote").path("id").asText();
+        UUID.fromString(id);
+        return say(user,"#approve:"+id,id);
     }
     private JsonNode say(Browser browser, String text) throws Exception { return say(browser,text,UUID.randomUUID().toString()); }
     private JsonNode edit(Browser user,String text,String key,JsonNode displayed) throws Exception {
@@ -230,20 +239,18 @@ class AgentChatFlowIntegrationTest {
         assertEquals(0,db.queryForObject("SELECT COUNT(*) FROM generation_task WHERE work_id=?",Integer.class,saved.path("songId").asText()));
     }
 
-    @Test void polishAfterBrainstormWritesTheUsersTopicOnceWhileThePlannerIsUnavailable() throws Exception {
+    @Test void polishAfterBrainstormClarifiesTheMissingRevisionAndKeepsTheTopic() throws Exception {
         var user = browser();
         say(user, "帮我构思一首歌，先聊聊这个灵感。 平凡的一天");
         String key = UUID.randomUUID().toString(), command = "你先打磨一版歌词";
         var result = say(user, command, key);
-        assertEquals("generate_lyrics", result.path("action").asText(), lastText(result).path("text").asText());
-        var card = result.path("songCard");
-        String work = card.path("songId").asText();
-        assertEquals("平凡的一天", works.get(user.creator(), work).story());
-        assertFalse(card.path("lyrics").asText().isBlank());
-        assertEquals(card, say(user, command, key).path("songCard"));
-        assertEquals(1, works.list(user.creator(), 0).size());
-        assertEquals(1, lyrics.list(user.creator(), work).size());
-        assertEquals(0, db.queryForObject("SELECT COUNT(*) FROM generation_task WHERE work_id=?", Integer.class, work));
+        assertTrue(lastText(result).path("text").asText().contains("平凡的一天"));
+        assertTrue(result.path("songCard").isNull());
+        assertEquals(lastText(result),lastText(say(user,command,key)));
+        assertTrue(works.list(user.creator(),0).isEmpty());
+        evidence("polish-without-target",user,0,0,0,0,0,0);
+        var draft=say(user,"帮我写一首歌词，主题是 平凡的一天");
+        assertEquals("generate_lyrics",draft.path("action").asText());
     }
 
     @Test void polishingUsesTheDisplayedRevisionAndRejectsAStaleTab() throws Exception {
@@ -260,7 +267,7 @@ class AgentChatFlowIntegrationTest {
         assertEquals(tabB, stale.path("songCard"));
         var selected = say(user, open + first.id()).path("songCard");
         String key = UUID.randomUUID().toString();
-        var result = edit(user, command, key, selected);
+        var result = approve(user,edit(user, command, key, selected));
         assertEquals("generate_lyrics", result.path("action").asText(), lastText(result).path("text").asText());
         var edited = result.path("songCard");
         assertEquals("旧版的校园\n愿你勇敢向前", edited.path("lyrics").asText());
@@ -496,14 +503,14 @@ class AgentChatFlowIntegrationTest {
         assertEquals("LYRICS_READY", first.path("songCard").path("status").asText());
         assertEquals(0, db.queryForObject("SELECT COUNT(*) FROM generation_task WHERE work_id=?",Integer.class,work));
 
-        JsonNode revised = say(browser,"把副歌改得更有力量，其他不变");
+        JsonNode revised = approve(browser,say(browser,"把副歌改得更有力量，其他不变"));
         assertEquals(work,revised.path("songCard").path("songId").asText());
         assertNotEquals(firstRevision,revised.path("songCard").path("revisionId").asText());
         assertTrue(revised.path("songCard").path("lyrics").asText().contains("一起走过校园"));
         assertTrue(revised.path("songCard").path("lyrics").asText().contains("愿你勇敢向前"));
         say(browser,"改成女声，90 BPM，其他不变");
         String musicKey=UUID.randomUUID().toString();
-        JsonNode queued=say(browser,"用当前歌词生成音乐",musicKey);
+        JsonNode queued=approve(browser,say(browser,"用当前歌词生成音乐",musicKey));
         String task=queued.path("taskId").asText();
         assertFalse(task.isBlank(),queued.toString());
         assertEquals("QUEUED",queued.path("songCard").path("status").asText());
@@ -599,6 +606,192 @@ class AgentChatFlowIntegrationTest {
         var credit=say(browser,"查看我的积分");assertEquals("credits",lastText(credit).path("kind").asText());
         assertEquals(4,lastText(credit).path("items").size());
     }
+    private JsonNode fixtureCard(Browser user) throws Exception {
+        var work=works.create(user.creator(),new WorkApi.Draft("","","合成故事","","","合成作品"));
+        var revision=lyrics.save(user.creator(),work.id(),work.version(),"合成作品","[副歌]\n校园里的合成歌词");
+        return say(user,"打开作品 "+work.id()+" 的歌词版本 "+revision.id()).path("songCard");
+    }
+
+    private Map<String,Object> entry(JsonNode card,String action) {
+        return Map.of("workId",card.path("songId").asText(),"revisionId",card.path("revisionId").asText(),"creationAction",action);
+    }
+
+    private int count(String sql,Object... args){return db.queryForObject(sql,Integer.class,args);}
+
+    private void evidence(String label,Browser user,int tasks,int lyricRequests,int videos,int debits,int amount,int refunds) {
+        evidence(label,user,tasks,lyricRequests,videos,debits,amount,refunds,0);
+    }
+
+    private void evidence(String label,Browser user,int tasks,int lyricRequests,int videos,int debits,int amount,int refunds,int chatDebits) {
+        String owner=user.creator();
+        int songs=count("SELECT COUNT(*) FROM generation_task t JOIN music_work w ON w.id=t.work_id WHERE w.owner_id=?",owner);
+        int lyrics=count("SELECT COUNT(*) FROM lyrics_composition_request r JOIN music_work w ON w.id=r.work_id WHERE w.owner_id=?",owner);
+        int mv=count("SELECT COUNT(*) FROM music_video_project p JOIN music_work w ON w.id=p.work_id WHERE w.owner_id=?",owner);
+        String ledger=" FROM credit_ledger WHERE owner_id=? AND reference_id NOT LIKE 'agent-chat:%' AND entry_type=?";
+        int paid=count("SELECT COUNT(*)"+ledger,owner,"DEBIT");
+        int signed=count("SELECT COALESCE(SUM(amount),0)"+ledger,owner,"DEBIT");
+        int returned=count("SELECT COUNT(*)"+ledger,owner,"REFUND");
+        int returnedAmount=count("SELECT COALESCE(SUM(amount),0)"+ledger,owner,"REFUND");
+        int chat=count("SELECT COUNT(*) FROM credit_ledger WHERE owner_id=? AND entry_type='DEBIT' AND reference_id LIKE 'agent-chat:%'",owner);
+        int turns=count("SELECT COUNT(*) FROM agent_request_admission WHERE creator_id=? AND state='DONE'",owner);
+        assertEquals(List.of(tasks,lyricRequests,videos,debits,amount,refunds,refunds==0?0:-amount,chatDebits),
+                List.of(songs,lyrics,mv,paid,signed,returned,returnedAmount,chat),label);
+        System.out.printf("PHASE1 %s songs=%d lyrics=%d mv=%d debits=%d signed=%d refunds=%d returned=%d chatDebits=%d chatTurns=%d%n",
+                label,songs,lyrics,mv,paid,signed,returned,returnedAmount,chat,turns);
+    }
+
+    @Test void structuredEntriesCannotSpendOnAPriceCancellationMissingTargetOrForeignVersion() throws Exception {
+        var user=browser();var card=fixtureCard(user);var foreign=fixtureCard(browser());
+        var music=entry(card,"GENERATE_SONG");
+        var price=ok(fromTab(user,"轻快流行\n改口，只看价格，先别生成",UUID.randomUUID().toString(),music));
+        assertTrue(lastText(price).path("text").asText().contains("5 积分"),lastText(price)::toString);
+        String collision=UUID.randomUUID().toString();
+        ok(fromTab(user,"先别生成",collision,music));
+        assertEquals(409,fromTab(user,"先别生成",collision,entry(card,"PREVIEW_MV")).statusCode());
+        var mv=ok(fromTab(user,"剧情短片，只要分镜和报价",UUID.randomUUID().toString(),entry(card,"PREVIEW_MV")));
+        assertEquals("video_capabilities",mv.path("action").asText());
+        var draft=say(user,"歌曲呢？");assertTrue(lastText(draft).path("text").asText().contains("音频"));
+        var missing=ok(fromTab(user,"快一点",UUID.randomUUID().toString(),Map.of("creationAction","GENERATE_SONG")));
+        assertEquals("AGENT_LYRIC_TARGET_CHANGED",lastText(missing).path("errorCode").asText());
+        var denied=ok(fromTab(user,"加强副歌",UUID.randomUUID().toString(),entry(foreign,"POLISH_LYRICS")));
+        assertEquals("AGENT_LYRIC_TARGET_CHANGED",lastText(denied).path("errorCode").asText());
+        var quote=ok(fromTab(user,"轻快流行",UUID.randomUUID().toString(),music));
+        var id=lastText(quote).path("creationQuote").path("id").asText();
+        assertEquals(409,request(user.http(),"POST","/api/app/agent/conversations/"+user.conversation()+"/messages",
+                Map.of("text","确认执行","requestKey",UUID.randomUUID().toString(),"paidConfirmed",true),user.csrf()).statusCode());
+        say(user,"算了，取消");
+        assertEquals(409,fromTab(user,"#approve:"+id,id,Map.of()).statusCode());
+        evidence("read-only-and-rejected",user,0,0,0,0,0,0);
+    }
+
+    @Test void exhaustedChatAllowanceOnlyPurchasesOneChatPackForRepeatedPriceQuery() throws Exception {
+        var user=browser();var card=fixtureCard(user);
+        db.update("UPDATE agent_request_admission SET reserved_tokens=10000000 WHERE creator_id=? AND state='DONE'",user.creator());
+        var body=Map.of("text","只看价格，先别生成","requestKey",UUID.randomUUID().toString(),"paidConfirmed",true,
+                "displayedContext",entry(card,"GENERATE_SONG"));
+        String path="/api/app/agent/conversations/"+user.conversation()+"/messages";
+        assertTrue(lastText(ok(request(user.http(),"POST",path,body,user.csrf()))).path("text").asText().contains("5 积分"));
+        ok(request(user.http(),"POST",path,body,user.csrf()));
+        assertEquals(4,count("SELECT remaining_turns FROM agent_chat_allowance WHERE creator_id=?",user.creator()));
+        assertEquals(-1,count("SELECT SUM(amount) FROM credit_ledger WHERE owner_id=? AND reference_id LIKE 'agent-chat:%'",user.creator()));
+        evidence("read-only-paid-chat",user,0,0,0,0,0,0,1);
+    }
+
+    @Test void plannerCannotSkipRewriteQuoteByOmittingMode() throws Exception {
+        var user=browser();var selected=fixtureCard(user);
+        var result=lastText(say(user,"请改写当前作品的歌词，让副歌更温柔"));
+        assertEquals("generate_lyrics",result.path("creationQuote").path("action").asText(),result::toString);
+        assertEquals(selected.path("revisionId"),result.path("creationQuote").path("revisionId"));
+        var wrongMode=lastText(say(user,"请润色副歌，让语气更温柔"));
+        assertEquals(selected.path("revisionId"),wrongMode.path("creationQuote").path("revisionId"),wrongMode::toString);
+        assertEquals(1,works.list(user.creator(),0).size());
+        evidence("planner-omitted-mode",user,0,0,0,0,0,0);
+    }
+
+    @Test void polishingChecksTheActualFreeAllowanceAndReplaysThePaidRevision() throws Exception {
+        var user=browser();
+        var original=fixtureCard(user);
+        var free=ok(fromTab(user,"让副歌更温柔",UUID.randomUUID().toString(),entry(original,"POLISH_LYRICS")));
+        assertEquals(0,lastText(free).path("creationQuote").path("credits").asInt(-1));
+        var second=approve(user,free).path("songCard");
+        assertNotEquals(original.path("revisionId"),second.path("revisionId"));
+        var paid=ok(fromTab(user,"加强副歌",UUID.randomUUID().toString(),entry(second,"POLISH_LYRICS")));
+        assertEquals(2,lastText(paid).path("creationQuote").path("credits").asInt(-1));
+        var result=approve(user,paid);
+        assertNotEquals(second.path("revisionId"),result.path("songCard").path("revisionId"));
+        assertEquals(result.path("songCard"),approve(user,paid).path("songCard"));
+        evidence("polish-free-then-paid",user,0,2,0,1,-2,0);
+    }
+
+    @Autowired com.qingfeng.music.server.agent.AgentLibraryActions library;
+
+    @Test void storyboardFromImportedAudioSurvivesPlannerOutageWithoutAnyGeneration() throws Exception {
+        var user=browser();var card=fixtureCard(user);
+        String work=card.path("songId").asText(),revision=card.path("revisionId").asText();
+        lyrics.confirm(user.creator(),work,revision);
+        var wave=ByteBuffer.allocate(48).order(ByteOrder.LITTLE_ENDIAN);
+        wave.put("RIFF".getBytes()).putInt(40).put("WAVEfmt ".getBytes()).putInt(16).putShort((short)1).putShort((short)1)
+            .putInt(8000).putInt(16000).putShort((short)2).putShort((short)16).put("data".getBytes()).putInt(4).putInt(0);
+        var audio=media.importAudio(user.creator(),work,new ByteArrayInputStream(wave.array()));
+        library.execute(user.creator(),user.conversation(),"select_audio",Map.of("workId",work,"assetId",audio.id(),"revisionId",revision),
+                "选择该音频",UUID.randomUUID().toString(),null);
+        var displayed=Map.of("creationAction","PREVIEW_MV","workId",work,"revisionId",revision,"media",Map.of("assetId",audio.id()));
+        String key=UUID.randomUUID().toString();
+        var preview=lastText(ok(fromTab(user,"模拟规划离线，给我分镜和费用",key,displayed)));
+        assertEquals("video_plan",preview.path("kind").asText(),preview::toString);
+        assertTrue(preview.path("text").asText().contains("720P 122 积分"),preview::toString);
+        assertEquals(preview,lastText(ok(fromTab(user,"模拟规划离线，给我分镜和费用",key,displayed))));
+        assertFalse(lastText(say(user,"歌曲呢？")).path("items").path(0).path("data").path("audioUrl").asText().isBlank());
+        evidence("mv-preview-offline",user,0,0,0,0,0,0);
+    }
+
+    @Autowired org.springframework.core.env.ConfigurableEnvironment environment;
+    @Autowired com.qingfeng.music.generation.application.ExecutionRepository execution;
+
+    @Test void changedPriceRevisionAndExpiredQuoteRequireFreshApproval() throws Exception {
+        var user=browser();var card=fixtureCard(user);
+        var first=ok(fromTab(user,"木吉他民谣",UUID.randomUUID().toString(),entry(card,"GENERATE_SONG")));
+        var overrides=new org.springframework.core.env.MapPropertySource("phase1-synthetic-price",Map.of("qingfeng.credits.music-cost","7"));
+        environment.getPropertySources().addFirst(overrides);
+        try {
+            var refreshed=approve(user,first);
+            var q=lastText(refreshed).path("creationQuote");
+            assertEquals(7,q.path("credits").asLong());assertNotEquals(lastText(first).path("creationQuote").path("id"),q.path("id"));
+            db.update("UPDATE agent_message SET created_at=DATEADD('HOUR',-2,CURRENT_TIMESTAMP) WHERE id=?",lastMessageId(refreshed));
+            var expired=approve(user,refreshed);
+            assertEquals("AGENT_PLAN_STALE",lastText(expired).path("errorCode").asText());
+            var next=ok(fromTab(user,"加强副歌",UUID.randomUUID().toString(),entry(card,"POLISH_LYRICS")));
+            var work=card.path("songId").asText();
+            var revision=lyrics.save(user.creator(),work,works.get(user.creator(),work).version(),"新稿","不同的歌词");
+            say(user,"打开作品 "+work+" 的歌词版本 "+revision.id());
+            String stale=lastText(next).path("creationQuote").path("id").asText();
+            assertEquals(409,fromTab(user,"#approve:"+stale,stale,Map.of()).statusCode());
+        } finally { environment.getPropertySources().remove(overrides.getName()); }
+        evidence("changed-or-expired-quote",user,0,0,0,0,0,0);
+    }
+
+    @Test void concurrentConfirmationReconnectAndDuplicateFailureUseOneBusinessKey() throws Exception {
+        var user=browser();var card=fixtureCard(user);
+        var initial=ok(fromTab(user,"轻快流行",UUID.randomUUID().toString(),entry(card,"GENERATE_SONG")));
+        var quote=lastText(initial).path("creationQuote");
+        String id=quote.path("id").asText(), work=card.path("songId").asText();
+        assertEquals(card.path("revisionId"),quote.path("revisionId"));assertEquals(5,quote.path("credits").asInt());
+        var payload=Map.of("text","#approve:"+id,"requestKey",id);
+        String endpoint="/api/app/agent/conversations/"+user.conversation()+"/messages";
+        var pool=java.util.concurrent.Executors.newFixedThreadPool(2);
+        var gate=new java.util.concurrent.CyclicBarrier(2);
+        try {
+            java.util.concurrent.Callable<Integer> click=()->{gate.await();return request(user.http(),"POST",endpoint,payload,user.csrf()).statusCode();};
+            var left=pool.submit(click);var right=pool.submit(click);
+            var codes=List.of(left.get(),right.get());
+            assertTrue(codes.contains(200)&&codes.stream().allMatch(code->code==200||code==409),codes::toString);
+        } finally { pool.shutdownNow(); }
+        String task=ok(request(user.http(),"POST",endpoint,payload,user.csrf())).path("taskId").asText();
+        assertFalse(task.isBlank());
+        var legacyReplay=ok(request(user.http(),"POST",endpoint,Map.of("text","#approve:"+id,"requestKey",UUID.randomUUID().toString()),user.csrf()));
+        assertEquals(task,legacyReplay.path("taskId").asText());
+        assertEquals(card.path("revisionId").asText(),db.queryForObject("SELECT revision_id FROM generation_task WHERE request_key=? AND work_id=?",String.class,id,work));
+        assertEquals(-5,count("SELECT amount FROM credit_ledger WHERE owner_id=? AND entry_type='DEBIT' AND reference_id=?",user.creator(),"music:"+work+":"+id));
+        // Simulate losing the conversation's task pointer after the business transaction committed.
+        db.update("UPDATE agent_conversation_state SET current_song_json=? WHERE conversation_id=?",
+                json.writeValueAsString(Map.of("revisionId",card.path("revisionId").asText())),user.conversation());
+        var status=say(user,"歌曲呢？");
+        assertEquals(task,status.path("songCard").path("taskId").asText());
+        assertTrue(lastText(status).path("text").asText().contains("排队"));
+        evidence("confirmed-and-replayed",user,1,0,0,1,-5,0);
+        String lease=UUID.randomUUID().toString();
+        db.update("UPDATE generation_task SET status='SUBMITTING',lease_token=? WHERE id=?",lease,task);
+        execution.failed(task,lease,"PROVIDER_REJECTED",java.time.Instant.now());
+        execution.failed(task,lease,"PROVIDER_REJECTED",java.time.Instant.now());
+        ok(request(user.http(),"POST",endpoint,payload,user.csrf()));
+        assertEquals("FAILED",db.queryForObject("SELECT status FROM generation_task WHERE id=?",String.class,task));
+        assertEquals(List.of(-5,5),db.queryForList("SELECT amount FROM credit_ledger WHERE owner_id=? AND reference_id=? ORDER BY amount",
+                Integer.class,user.creator(),"music:"+work+":"+id));
+        assertEquals(0,count("SELECT COUNT(*) FROM model_usage_reservation WHERE kind='MUSIC' AND work_id=? AND request_key=?",work,id));
+        assertTrue(lastText(say(user,"歌曲呢？")).path("text").asText().contains("失败"));
+        evidence("duplicate-failure",user,1,0,0,1,-5,1);
+    }
+
     private JsonNode lastText(JsonNode snapshot) {
         var messages=snapshot.path("messages");
         for(int i=messages.size()-1;i>=0;i--)if("assistant".equals(messages.get(i).path("role").asText())&&"TEXT".equals(messages.get(i).path("kind").asText()))return json.readTree(messages.get(i).path("contentJson").asText());
@@ -608,7 +801,7 @@ class AgentChatFlowIntegrationTest {
     @Test void successfulTaskResumesOnlyThePersistedAuthorizedShareOnce() throws Exception {
         Browser browser=browser();
         say(browser,"先写歌词，不生成音乐");
-        var started=say(browser,"用当前歌词生成音乐然后分享");
+        var started=approve(browser,say(browser,"用当前歌词生成音乐然后分享"));
         String work=started.path("songCard").path("songId").asText(),task=started.path("taskId").asText();
         assertFalse(task.isBlank(),started.toString());assertEquals("waiting",lastText(started).path("kind").asText());
         assertTrue(started.path("continuation").isNull());

@@ -118,7 +118,7 @@ class ModelTimeoutFallbackIntegrationTest {
             Integer.class, work.id(), key));
     }
 
-    @Test void fallbackAfterAToolResultContinuesTheAgentTurnAndQueuesAndChargesOnce() throws Exception {
+    @Test void fallbackAfterAToolResultQuotesThenQueuesAndChargesOnceOnConfirmation() throws Exception {
         String owner = identity.create().creatorId();
         var work = works.create(owner, new WorkApi.Draft("妈妈", "生日", "门口的小碗", "", "民谣", "门口的小碗"));
         var revision = lyrics.save(owner, work.id(), work.version(), "门口的小碗", LYRICS);
@@ -129,7 +129,7 @@ class ModelTimeoutFallbackIntegrationTest {
             owner.replace("-", "").repeat(2), owner);
         credits.credit(owner, 30, "seed-" + owner);
         String key = UUID.randomUUID().toString();
-        String text = "用当前歌词生成音乐";
+        String text = "先核对当前作品的歌词，再用它生成音乐";
         MODELS.reply(QWEN_LYRICS, 200, function("get_current_song", Map.of()));
         try (var qwen = MODELS.stall(QWEN_LYRICS, 200, chat("迟到的千问计划"))) {
             MODELS.reply(ARK, 200, function("generate_song", Map.of("mode", "regenerate", "revisionId", revision.id())));
@@ -137,11 +137,21 @@ class ModelTimeoutFallbackIntegrationTest {
             assertEquals(0, qwen.headers.getCount());
             qwen.close();
             assertTrue(qwen.finished.await(4, TimeUnit.SECONDS));
-            assertEquals("generate_song", first.action());
-            assertNotNull(first.taskId());
-            assertEquals("QUEUED", first.songCard().status());
-            var repeated = await(executor.submit(owner, conversation.id(), text, key, "zh-CN"));
-            assertEquals(first.taskId(), repeated.taskId());
+            var quote = first.messages().stream().map(message -> JSON.readTree(message.contentJson()).path("creationQuote"))
+                .filter(value -> value.hasNonNull("id")).findFirst().orElseThrow();
+            assertEquals(revision.id(), quote.path("revisionId").asText());
+            assertEquals(15, quote.path("credits").asInt());
+            assertEquals(0, db.queryForObject("SELECT COUNT(*) FROM generation_task WHERE work_id=?", Integer.class, work.id()));
+            assertEquals(30, credits.balance(owner));
+            assertNull(await(executor.submit(owner, conversation.id(), text, key, "zh-CN")).taskId());
+            String approval = quote.path("id").asText();
+            String command = "#approve:" + approval;
+            var confirmed = await(executor.submit(owner, conversation.id(), command, approval, "zh-CN"));
+            assertEquals("generate_song", confirmed.action());
+            assertNotNull(confirmed.taskId());
+            assertEquals("QUEUED", confirmed.songCard().status());
+            var repeated = await(executor.submit(owner, conversation.id(), command, UUID.randomUUID().toString(), "zh-CN"));
+            assertEquals(confirmed.taskId(), repeated.taskId());
             assertEquals(1, repeated.messages().stream().map(message -> JSON.readTree(message.contentJson()))
                 .filter(content -> "tool_started".equals(content.path("stage").asText())
                     && "get_current_song".equals(content.path("action").asText())).count());

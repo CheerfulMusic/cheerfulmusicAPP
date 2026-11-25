@@ -31,7 +31,7 @@ final class AgentCreationSupport {
         String id = requested == null || requested.isBlank() ? value(snapshot, "revisionId") : requested;
         return id == null || id.isBlank() ? SongCardProjector.latest(lyrics.list(owner, work)) : lyrics.get(owner, work, id);
     }
-    record Applied(WorkApi.Work work, String snapshot) {}
+    record Applied(WorkApi.Work work, String snapshot, MusicSettings.Direction direction) {}
     static Applied apply(MusicSettings settings, WorkApi works, String owner, WorkApi.Work work, String snapshot, String voice) {
         if (settings == null) throw new DomainException("MUSIC_SETTINGS_UNAVAILABLE", "音乐设置暂不可用，尚未提交生成。");
         Map<String,Object> state = snapshot == null ? new LinkedHashMap<>() : new LinkedHashMap<>(AgentJson.read(snapshot));
@@ -62,11 +62,14 @@ final class AgentCreationSupport {
         if (state.containsKey("instruments")) choices.put("instruments", List.of());
         var requested = new MusicSettings.Preferences(1, null, choices, vocal(voice, vocal(Objects.toString(state.get("vocal"), null), work.vocalGender())),
                 (base.isBlank() ? "" : base + "\n") + "Agent: " + String.join("; ", directions), prior == null ? "" : prior.negativeText());
+        // A quoted arrangement belongs to this task. Saving it onto the work would create another lyric revision.
+        if (com.qingfeng.music.credits.ConfirmedCreation.current() != null)
+            return new Applied(work, AgentJson.write(state), settings.previewForWork(owner, work.id(), requested));
         // Normalize before comparing so retries do not increment workVersion again.
         var normalized = settings.preview(requested).preferences();
         if (!Objects.equals(prior, normalized)) work = settings.save(owner, work.id(), work.version(), normalized).work();
         state.put("vocal", work.vocalGender());
-        return new Applied(work, AgentJson.write(state));
+        return new Applied(work, AgentJson.write(state), null);
     }
     private static void add(List<String> result, Map<String,Object> state, String key, String label) {
         String value = Objects.toString(state.get(key), ""); if (!value.isBlank()) result.add(label + value);
