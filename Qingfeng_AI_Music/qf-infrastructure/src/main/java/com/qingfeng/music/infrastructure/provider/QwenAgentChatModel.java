@@ -2,20 +2,21 @@ package com.qingfeng.music.infrastructure.provider;
 
 import com.qingfeng.music.agent.api.AgentChatModel;
 import com.qingfeng.music.agent.model.StyleCatalog;
+import com.qingfeng.music.common.concurrent.AgentRequestScope;
 import com.qingfeng.music.common.exception.DomainException;
 import tools.jackson.databind.ObjectMapper;
+import java.io.IOException;
 import java.net.URI;
-import java.net.http.*;
+import java.net.http.HttpClient;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.*;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 
 /** Real conversation, with the current owned work and recent turns; credentials remain server-side. */
 public final class QwenAgentChatModel implements AgentChatModel {
     private static final System.Logger LOG = System.getLogger(QwenAgentChatModel.class.getName());
-    private static final int MAX_RESPONSE_BYTES=256*1024;
+    private static final Duration DEFAULT_RESPONSE_TIMEOUT = Duration.ofSeconds(45);
     private static final String SYSTEM = """
         你是 Cheerful Music 的统一对话助手，可以自然聊天，使用服务端提供的能力目录帮助用户完成站内功能。
         认真区分聊天/知识问答/歌词创作/音乐生成，尊重否定和“只写歌词”。不要把问候变成歌曲。
@@ -59,25 +60,44 @@ public final class QwenAgentChatModel implements AgentChatModel {
     private final HttpClient http;
     private final URI endpoint;
     private final Duration responseTimeout;
+    private final ArkTextFallback fallback;
+    private final Duration qwenTimeout, modelBudget;
     private final ObjectMapper json=new ObjectMapper();
     public QwenAgentChatModel(String key,String model,boolean enabled) {
         this(key,model,enabled,URI.create(QwenInspirationRewriter.QWEN_ENDPOINT));
     }
     public QwenAgentChatModel(String key,String model,boolean enabled,URI endpoint) {
-        this(key,model,enabled,endpoint,HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).followRedirects(HttpClient.Redirect.NEVER).build());
+        this(key,model,enabled,endpoint,client());
     }
     public QwenAgentChatModel(String key,String model,boolean enabled,URI endpoint,HttpClient http) {
-        this(key,model,enabled,endpoint,http,Duration.ofSeconds(45));
+        this(key,model,enabled,endpoint,http,DEFAULT_RESPONSE_TIMEOUT);
     }
     /** A shorter response deadline is injectable for offline transport tests; production keeps 45 seconds. */
     public QwenAgentChatModel(String key,String model,boolean enabled,URI endpoint,HttpClient http,Duration responseTimeout) {
-        if(responseTimeout==null||responseTimeout.isNegative()||responseTimeout.isZero()||responseTimeout.compareTo(Duration.ofSeconds(45))>0)
+        this(key,model,enabled,endpoint,http,responseTimeout,null,responseTimeout,responseTimeout);
+    }
+    public QwenAgentChatModel(String key, String model, boolean enabled, URI endpoint, ArkTextFallback fallback,
+                              Duration qwenTimeout, Duration modelBudget) {
+        this(key,model,enabled,endpoint,client(),DEFAULT_RESPONSE_TIMEOUT,fallback,qwenTimeout,modelBudget);
+    }
+    private QwenAgentChatModel(String key, String model, boolean enabled, URI endpoint, HttpClient http,
+                               Duration responseTimeout, ArkTextFallback fallback, Duration qwenTimeout, Duration modelBudget) {
+        if(responseTimeout==null||responseTimeout.isNegative()||responseTimeout.isZero()||responseTimeout.compareTo(DEFAULT_RESPONSE_TIMEOUT)>0
+                ||qwenTimeout.isNegative()||qwenTimeout.isZero()||qwenTimeout.compareTo(DEFAULT_RESPONSE_TIMEOUT)>0
+                ||modelBudget.isNegative()||modelBudget.isZero()||modelBudget.compareTo(Duration.ofSeconds(150))>0)
             throw new IllegalArgumentException("Invalid agent response deadline");
         this.key=key==null?"":key.trim();this.model=model==null||model.isBlank()?QwenInspirationRewriter.QWEN_MODEL:model.trim();this.enabled=enabled;this.endpoint=endpoint;this.http=http;this.responseTimeout=responseTimeout;
+        this.fallback = fallback;
+        this.qwenTimeout = qwenTimeout;
+        this.modelBudget = modelBudget;
+    }
+    private static HttpClient client() {
+        return HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).followRedirects(HttpClient.Redirect.NEVER).build();
     }
     @Override public Plan respond(Context context) {
         if(!enabled||key.isBlank())throw new DomainException("AGENT_CHAT_UNAVAILABLE","对话模型暂未启用或尚未配置。你的消息已保留，本次没有启动创作工具。");
-        int httpStatus = 0;
+        long started = System.nanoTime();
+        String responseModel = model;
         try {
             var definitions=AgentToolSchemaCatalog.tools(context);
             List<Map<String,String>> messages=new ArrayList<>();
@@ -102,72 +122,57 @@ public final class QwenAgentChatModel implements AgentChatModel {
             body.put("model",model);body.put("messages",messages);body.put("stream",false);body.put("max_tokens",2600);body.put("enable_thinking",false);
             if(definitions.isEmpty())body.put("response_format",Map.of("type","json_object"));
             else {body.put("tools",definitions);body.put("tool_choice",context.capabilities().size()==1?"required":"auto");}
-            String encoded=json.writeValueAsString(body);
-            while(historyCount>0&&encoded.getBytes(java.nio.charset.StandardCharsets.UTF_8).length>com.qingfeng.music.common.concurrent.AgentRequestScope.maxPromptBytes()){
-                messages.remove(firstHistory);historyCount--;encoded=json.writeValueAsString(body);
+            var route = fallback == null || context.execution() == null ? null : context.execution().models();
+            String encoded = encode(body, messages, firstHistory, historyCount);
+            long deadline = route == null ? System.nanoTime() + responseTimeout.toNanos() : route.deadline(modelBudget);
+            String response;
+            try {
+                long qwenDeadline = route == null ? deadline : Math.min(deadline, System.nanoTime() + qwenTimeout.toNanos());
+                response = TextModelTransport.post(http, endpoint, key, "qwen", encoded, qwenDeadline);
+            } catch (TextModelTransport.SentTimeout timeout) {
+                if (route == null) throw timeout;
+                ProviderHttp.remaining(deadline);
+                if (!route.claimFallback()) throw timeout;
+                // Same planner input and tool schemas. The conversation service only executes the accepted plan.
+                String arkBody = encode(fallback.requestBody(body), messages, firstHistory, messages.size() - firstHistory - 1);
+                responseModel = fallback.model();
+                response = fallback.complete(http, arkBody, deadline, model, started);
             }
-            if(encoded.getBytes(java.nio.charset.StandardCharsets.UTF_8).length>com.qingfeng.music.common.concurrent.AgentRequestScope.maxPromptBytes())throw new DomainException("AGENT_CONTEXT_TOO_LARGE","当前对话内容过长，请缩短本次要求或开始新的会话。");
-            var request=HttpRequest.newBuilder(endpoint).timeout(com.qingfeng.music.common.concurrent.AgentRequestScope.timeout(responseTimeout)).header("Authorization","Bearer "+key).header("Content-Type","application/json")
-                    .POST(HttpRequest.BodyPublishers.ofString(encoded)).build();
-            var tokens = AiModelUsage.before("qwen", endpoint, encoded);
-            var response=readResponse(request);
-            if (response.statusCode() / 100 == 2) AiModelUsage.reported(tokens, response.body());
-            httpStatus = response.statusCode();
-            if(httpStatus/100!=2)throw new IllegalStateException("provider response");
-            com.qingfeng.music.common.concurrent.AgentRequestScope.check();
-            var choice=json.readTree(response.body()).path("choices").path(0);
-            if(Set.of("length","content_filter").contains(choice.path("finish_reason").asText("")))throw new IllegalArgumentException("Incomplete agent response");
-            return AgentPlanCodec.parseMessage(json.writeValueAsString(choice.path("message")),context);
+            Plan plan = parse(response, context);
+            ProviderHttp.remaining(deadline);
+            return plan;
         } catch(DomainException error) {throw error;
         } catch(InterruptedException error) {
-            Thread.currentThread().interrupt();com.qingfeng.music.common.concurrent.AgentRequestScope.check();
+            Thread.currentThread().interrupt();AgentRequestScope.check();
             throw new DomainException("AGENT_CHAT_UNAVAILABLE","对话模型请求已中断，后续步骤已停止。请查看已有作品和任务状态。");
-        } catch(Exception error) {
-            com.qingfeng.music.common.concurrent.AgentRequestScope.check();
-            var cause = error instanceof ExecutionException && error.getCause() != null ? error.getCause() : error;
-            LOG.log(System.Logger.Level.WARNING, "Agent planner failed (HTTP status {0}, exception type {1})",
-                    httpStatus == 0 ? "unavailable" : Integer.toString(httpStatus), cause.getClass().getSimpleName());
+        } catch(IOException | RuntimeException error) {
+            AgentRequestScope.check();
+            String reason = error instanceof TextModelTransport.HttpFailure http ? "HTTP_" + http.status : error.getClass().getSimpleName();
+            LOG.log(System.Logger.Level.WARNING, "Agent model failed: model={0}, elapsedMs={1}, reason={2}",
+                responseModel, TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started), reason);
             throw new DomainException("AGENT_CHAT_UNAVAILABLE","对话模型暂时没有返回有效结果，后续步骤已停止。请查看已有作品和任务状态。");
         }
     }
 
-    /** HttpRequest.timeout in Java 17 ends at response headers, so also bound complete body delivery. */
-    private HttpResponse<String> readResponse(HttpRequest request) throws InterruptedException,ExecutionException,HttpTimeoutException {
-        long deadline=System.nanoTime()+request.timeout().orElse(responseTimeout).toNanos();
-        var response=http.sendAsync(request,ignored->boundedBody());
-        try {
-            while(true){
-                com.qingfeng.music.common.concurrent.AgentRequestScope.check();
-                long remaining=deadline-System.nanoTime();
-                if(remaining<=0)throw new HttpTimeoutException("Agent response deadline exceeded");
-                try{return response.get(Math.min(remaining,TimeUnit.MILLISECONDS.toNanos(250)),TimeUnit.NANOSECONDS);}
-                catch(TimeoutException pending){/* Recheck cooperative cancellation while waiting for the body. */}
-            }
-        } finally {
-            // Cancel the original HttpClient future, not a derived timeout stage: this aborts body reading.
-            if(!response.isDone())response.cancel(true);
+    private String encode(Map<String, Object> body, List<Map<String, String>> messages, int firstHistory, int historyCount) {
+        String encoded = json.writeValueAsString(body);
+        int maximum = AgentRequestScope.maxPromptBytes();
+        while (historyCount > 0 && encoded.getBytes(StandardCharsets.UTF_8).length > maximum) {
+            messages.remove(firstHistory);
+            historyCount--;
+            encoded = json.writeValueAsString(body);
         }
+        if (encoded.getBytes(StandardCharsets.UTF_8).length > maximum)
+            throw new DomainException("AGENT_CONTEXT_TOO_LARGE","当前对话内容过长，请缩短本次要求或开始新的会话。");
+        return encoded;
     }
 
-    /** Bound bytes before decoding JSON; the caller also enforces a complete-response deadline. */
-    private static HttpResponse.BodySubscriber<String> boundedBody() {
-        return new HttpResponse.BodySubscriber<>() {
-            private final HttpResponse.BodySubscriber<String> delegate=HttpResponse.BodySubscribers.ofString(java.nio.charset.StandardCharsets.UTF_8);
-            private java.util.concurrent.Flow.Subscription subscription;
-            private int received;
-            private boolean finished;
-            @Override public java.util.concurrent.CompletionStage<String> getBody(){return delegate.getBody();}
-            @Override public void onSubscribe(java.util.concurrent.Flow.Subscription value){subscription=value;delegate.onSubscribe(value);}
-            @Override public void onNext(List<java.nio.ByteBuffer> buffers){
-                if(finished)return;
-                long bytes=0;for(var buffer:buffers)bytes+=buffer.remaining();
-                if(bytes>MAX_RESPONSE_BYTES-received){
-                    finished=true;subscription.cancel();delegate.onError(new java.io.IOException("Agent response exceeds byte limit"));return;
-                }
-                received+=(int)bytes;delegate.onNext(buffers);
-            }
-            @Override public void onError(Throwable error){if(!finished){finished=true;delegate.onError(error);}}
-            @Override public void onComplete(){if(!finished){finished=true;delegate.onComplete();}}
-        };
+    private Plan parse(String body, Context context) {
+        var choice = json.readTree(body).path("choices").path(0);
+        var message = choice.path("message");
+        if (Set.of("length", "content_filter").contains(choice.path("finish_reason").asText(""))
+                || !message.path("refusal").asText("").isBlank())
+            throw new IllegalArgumentException("Incomplete agent response");
+        return AgentPlanCodec.parseMessage(json.writeValueAsString(message), context);
     }
 }

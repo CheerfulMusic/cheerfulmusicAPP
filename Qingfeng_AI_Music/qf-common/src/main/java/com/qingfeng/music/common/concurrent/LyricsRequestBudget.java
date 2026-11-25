@@ -6,16 +6,39 @@ import java.time.Duration;
 public final class LyricsRequestBudget implements AutoCloseable {
     private static final ThreadLocal<LyricsRequestBudget> CURRENT = new ThreadLocal<>();
     private final LyricsRequestBudget previous;
+    private final LyricsRequestBudget request;
     private final long deadline;
+    private final boolean boundResponseBody;
+    private boolean fallbackUsed;
     private boolean closed;
 
-    private LyricsRequestBudget(Duration maximum) {
+    private LyricsRequestBudget(Duration maximum, boolean boundResponseBody) {
         this.previous = CURRENT.get();
+        this.request = previous == null ? this : previous.request;
         this.deadline = deadline(maximum);
+        this.boundResponseBody = boundResponseBody || previous != null && previous.boundResponseBody;
         CURRENT.set(this);
     }
 
-    public static LyricsRequestBudget enter(Duration maximum) { return new LyricsRequestBudget(maximum); }
+    public static LyricsRequestBudget enter(Duration maximum) { return enter(maximum, false); }
+
+    public static LyricsRequestBudget enter(Duration maximum, boolean boundResponseBody) {
+        return new LyricsRequestBudget(maximum, boundResponseBody);
+    }
+
+    public static boolean boundsResponseBody() {
+        var current = CURRENT.get();
+        return current != null && current.boundResponseBody;
+    }
+
+    /** Share one fallback across generation, review and section repair within the synchronous request. */
+    public static boolean claimTimeoutFallback() {
+        var current = CURRENT.get();
+        if (current == null) return true;
+        if (current.request.fallbackUsed) return false;
+        current.request.fallbackUsed = true;
+        return true;
+    }
 
     public static boolean hasRemaining(Duration minimum) {
         var current = CURRENT.get();

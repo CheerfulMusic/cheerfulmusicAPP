@@ -10,7 +10,7 @@ import tools.jackson.databind.JsonNode;
 /** Validates an editor's bounded, cited selection. This is not an objective guarantee of artistic quality. */
 final class LyricsQualityReview {
     static final Duration GENERATION_TIMEOUT = Duration.ofSeconds(75);
-    private static final Duration TOTAL_TIMEOUT = Duration.ofSeconds(110);
+    static final Duration TOTAL_TIMEOUT = Duration.ofSeconds(110);
     private static final Set<String> DECISIONS = Set.of("KEEP", "REWRITE", "REJECT", "UNSURE");
     private static final Set<String> ISSUE_CODES = Set.of("FACT_OR_CONSTRAINT", "HOOK", "PROGRESSION", "NATURAL_LANGUAGE", "RHYTHM", "STYLE");
     private static final List<String> POSITIVE_QUOTES = List.of("hookQuote", "progressionQuote", "rhythmQuote");

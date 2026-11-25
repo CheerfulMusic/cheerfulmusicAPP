@@ -1,13 +1,27 @@
 package com.qingfeng.music.agent.api;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /** The model proposes a bounded plan; the application independently authorizes every step. */
 public interface AgentChatModel {
     record Turn(String role, String text) {}
     /** Server-authenticated execution identity; never accept these values from model output. */
-    record Execution(String owner, String conversation, String requestKey) {}
+    record Execution(String owner, String conversation, String requestKey, ModelRequest models) {
+        public Execution(String owner, String conversation, String requestKey) {
+            this(owner, conversation, requestKey, null);
+        }
+    }
+    /** Shared by the initial planner and any follow-up planner in this claimed turn. */
+    final class ModelRequest {
+        private final long started = System.nanoTime();
+        private final AtomicBoolean fallbackUsed = new AtomicBoolean();
+
+        public long deadline(Duration maximum) { return started + maximum.toNanos(); }
+        public boolean claimFallback() { return fallbackUsed.compareAndSet(false, true); }
+    }
     record Context(String text, String locale, List<Turn> history, SongCard song, String settings,
                    List<AgentApplicationActions.Capability> capabilities, String results, Execution execution) {
         public Context {

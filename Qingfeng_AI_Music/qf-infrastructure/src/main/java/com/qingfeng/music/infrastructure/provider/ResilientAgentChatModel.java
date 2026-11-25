@@ -14,7 +14,7 @@ import com.qingfeng.music.agent.application.AgentReadOnlyLookup;
 
 /**
  * Per-process circuit breaker around the planner, never around business execution.
- * There are no retries or alternate paid providers. Shared admission/budgets remain authoritative.
+ * The delegate owns provider selection. Shared admission and request budgets remain authoritative.
  */
 public final class ResilientAgentChatModel implements AgentChatModel {
     private enum State { CLOSED, OPEN, HALF_OPEN }

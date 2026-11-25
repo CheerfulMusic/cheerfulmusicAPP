@@ -21,6 +21,8 @@ import com.qingfeng.music.generation.application.SectionEditingService;
 import com.qingfeng.music.settings.MusicSettings;
 import com.qingfeng.music.settings.MusicBriefService;
 import com.qingfeng.music.server.hotsong.HotSongService;
+import java.net.URI;
+import java.time.Duration;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.*;
@@ -34,9 +36,15 @@ import org.springframework.transaction.support.TransactionTemplate;
 @ConditionalOnProperty(name="qingfeng.agent.chat.enabled",havingValue="true")
 public class AgentConversationChatConfiguration {
     @Bean AgentChatModel agentChatModel(Environment env){
-        var delegate=new QwenAgentChatModel(RewriteProviderSettings.key(env), RewriteProviderSettings.model(env),
-                env.getProperty("qingfeng.agent.intent.llm-enabled",Boolean.class,false),
-                java.net.URI.create(RewriteProviderSettings.endpoint(env)));
+        String key = RewriteProviderSettings.key(env);
+        String model = RewriteProviderSettings.model(env);
+        URI endpoint = URI.create(RewriteProviderSettings.endpoint(env));
+        boolean enabled = env.getProperty("qingfeng.agent.intent.llm-enabled",Boolean.class,false);
+        var fallback = enabled && !key.isBlank() ? ArkTextFallbackSettings.configured(env) : null;
+        var delegate = fallback == null ? new QwenAgentChatModel(key, model, enabled, endpoint)
+            : new QwenAgentChatModel(key, model, enabled, endpoint, fallback,
+                Duration.ofMillis(env.getProperty("qingfeng.agent.chat.qwen-timeout-ms", Long.class, 20_000L)),
+                Duration.ofMillis(env.getProperty("qingfeng.agent.chat.model-total-timeout-ms", Long.class, 60_000L)));
         return new ResilientAgentChatModel(delegate,
                 env.getProperty("qingfeng.agent.intent.circuit.failure-threshold",Integer.class,3),
                 java.time.Duration.ofSeconds(env.getProperty("qingfeng.agent.intent.circuit.cooldown-seconds",Long.class,30L)));

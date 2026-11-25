@@ -36,6 +36,22 @@ final class LyricsSectionRepair {
 
     static Map<Integer, String> post(HttpClient client, URI endpoint, String key, String body, SectionRepair request,
                                      Function<String, String> outputText) {
+        return repair(request, (deadline, timeout) -> {
+            var response = LyricsHttpTransport.post(client, endpoint, key, body, timeout);
+            int status = response.statusCode();
+            if (status == 408 || status == 504) throw timedOut();
+            if (status >= 500) throw unknownConnection();
+            if (status != 200) throw LyricsStructure.mismatch();
+            return outputText.apply(response.body());
+        });
+    }
+
+    @FunctionalInterface
+    interface Completion {
+        String read(long deadline, Duration timeout) throws IOException, InterruptedException;
+    }
+
+    static Map<Integer, String> repair(SectionRepair request, Completion completion) {
         long deadline = LyricsQualityReview.deadline();
         Duration timeout;
         try {
@@ -44,12 +60,7 @@ final class LyricsSectionRepair {
             throw LyricsStructure.mismatch();
         }
         try {
-            var response = LyricsHttpTransport.post(client, endpoint, key, body, timeout);
-            int status = response.statusCode();
-            if (status == 408 || status == 504) throw timedOut();
-            if (status >= 500) throw unknownConnection();
-            if (status != 200) throw LyricsStructure.mismatch();
-            var result = LyricsWritingPrompt.jsonObject(outputText.apply(response.body()));
+            var result = LyricsWritingPrompt.jsonObject(completion.read(deadline, timeout));
             if (result.size() != request.missing().size()) throw LyricsStructure.mismatch();
             var sections = new LinkedHashMap<Integer, String>();
             for (int index : request.missing().keySet()) {
@@ -58,6 +69,9 @@ final class LyricsSectionRepair {
                 sections.put(index, field.asText());
             }
             return sections;
+        } catch (TextModelTransport.HttpFailure error) {
+            if (error.status >= 500) throw unknownConnection();
+            throw LyricsStructure.mismatch();
         } catch (HttpTimeoutException error) {
             throw timedOut();
         } catch (IOException error) {
@@ -74,11 +88,11 @@ final class LyricsSectionRepair {
         }
     }
 
-    private static DomainException timedOut() {
+    static DomainException timedOut() {
         return new DomainException("LYRICS_PROVIDER_TIMEOUT", "等待歌词结果超时，请先查看原请求进度。");
     }
 
-    private static DomainException unknownConnection() {
+    static DomainException unknownConnection() {
         return new DomainException("LYRICS_PROVIDER_NETWORK_ERROR", "歌词服务连接中断，结果尚未确认，请先查看原请求进度。");
     }
 }

@@ -43,6 +43,14 @@ qingfeng.cover.directory=/var/lib/qingfeng-music/covers
 # Reliability components: opt-in after V34-V37 migrations and private infrastructure validation.
 qingfeng.redis.enabled=false
 qingfeng.agent.admission.mode=db
+# Qwen timeout fallback for text lyrics and Agent planning. Disable and reload the service to roll back.
+# The Ark API key comes from private qingfeng.providers.ark.api-key or ARK_API_KEY.
+# qingfeng.providers.ark.qwen-timeout-fallback-enabled=false
+# qingfeng.providers.ark.text-base-url=https://ark.cn-beijing.volces.com/api/v3
+# qingfeng.providers.ark.text-model=doubao-seed-2-1-pro-260915
+# qingfeng.lyrics.qwen-timeout-ms=25000
+# qingfeng.agent.chat.qwen-timeout-ms=20000
+# qingfeng.agent.chat.model-total-timeout-ms=60000
 # spring.data.redis.host=127.0.0.1
 # spring.data.redis.port=6379
 # spring.data.redis.password=SET_IN_PRIVATE_CONFIG

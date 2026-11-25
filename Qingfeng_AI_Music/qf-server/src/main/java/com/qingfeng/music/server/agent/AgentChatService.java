@@ -110,6 +110,7 @@ public final class AgentChatService {
             var previous=json.readValue(claim.resultJson(),Outcome.class);
             return snapshot(owner,conversation,previous.action(),previous);
         }
+        var execution = new AgentChatModel.Execution(owner, conversation, key, new AgentChatModel.ModelRequest());
         String action=null,shareUrl=null,clientAction=null;SongCard sharedCard=null,clientCard=null;
         try {
             var history=conversations.listMessagesBefore(owner,conversation,claim.userSeq(),80);
@@ -210,7 +211,7 @@ public final class AgentChatService {
                         var state=conversations.state(owner,conversation);
                         progress(owner,conversation,key,"planning",null,0,"正在理解你的要求。");
                         plan=model.respond(new AgentChatModel.Context(text,locale==null?"zh-CN":locale,history(history),current,
-                            state==null?null:state.currentSongJson(),capabilities(),results(history)).withExecution(new AgentChatModel.Execution(owner,conversation,key)));
+                            state==null?null:state.currentSongJson(),capabilities(),results(history)).withExecution(execution));
                         modelCalls++;
                     }
                     plan=ensureExecutable(plan,authorizedText,current);
@@ -350,7 +351,7 @@ public final class AgentChatService {
                     if(storyboard&&!sameTarget(current,updated))throw new DomainException("AGENT_MEDIA_TARGET_CHANGED","歌曲或音频版本已切换，请重新查看分镜与报价。");
                     String followIntent=storyboard?originalIntent+"\n请调用 preview_music_video 交付完整分镜：依据真实时长每30秒一段，结合当前歌词与音乐风格，描述人物、场景、动作和镜头衔接。尚未选择分辨率时省略resolution，系统将返回三档报价。不要提交视频。":originalIntent;
                     var next=model.respond(new AgentChatModel.Context(followIntent,locale==null?"zh-CN":locale,history(observed),updated,
-                        state==null?null:state.currentSongJson(),storyboard?List.of(capability("preview_music_video")):capabilities(),results(observed)).withExecution(new AgentChatModel.Execution(owner,conversation,key)));
+                        state==null?null:state.currentSongJson(),storyboard?List.of(capability("preview_music_video")):capabilities(),results(observed)).withExecution(execution));
                     modelCalls=2;
                     if(storyboard)next=AgentVideoPreview.storyboard(next,updated,originalIntent);
                     else next=ensureExecutable(next,originalIntent,updated);

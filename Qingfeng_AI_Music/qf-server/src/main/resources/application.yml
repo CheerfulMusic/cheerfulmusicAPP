@@ -122,6 +122,10 @@ qingfeng:
       model: qwen3.8-flash
       # 只配到 /v1 即可，代码会自动补齐 /chat/completions。
       base-url: https://maas.qianwenaiapi.com/compatible-mode/v1
+    ark:
+      qwen-timeout-fallback-enabled: ${ARK_QWEN_TIMEOUT_FALLBACK_ENABLED:false}
+      text-base-url: ${ARK_TEXT_BASE_URL:https://ark.cn-beijing.volces.com/api/v3}
+      text-model: ${ARK_TEXT_MODEL:doubao-seed-2-1-pro-260915}
     kie:
       # 初始调优值，实际听感需要付费对照试听验证。
       style-weight: 0.85
@@ -131,10 +135,15 @@ qingfeng:
   lyrics:
     provider: openai
     qwen-fallback-enabled: true
+    qwen-timeout-ms: ${LYRICS_QWEN_TIMEOUT_MS:25000}
     # 照片写歌优先使用既有火山方舟密钥。千问兜底沿用千问端点，也可为照片单独配置
     # qingfeng.lyrics.photo.qwen-endpoint 与配套的 qingfeng.lyrics.photo.qwen-api-key。
     timing:
       enabled: true
+  agent:
+    chat:
+      qwen-timeout-ms: ${AGENT_QWEN_TIMEOUT_MS:20000}
+      model-total-timeout-ms: ${AGENT_MODEL_TOTAL_TIMEOUT_MS:60000}
   generation:
     enabled: false
     section-editing-enabled: true

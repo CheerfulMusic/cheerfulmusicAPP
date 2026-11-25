@@ -7,6 +7,7 @@ import com.qingfeng.music.infrastructure.provider.OpenAiLyricsWriter;
 import com.qingfeng.music.infrastructure.provider.ChatPhotoLyricsWriter;
 import com.qingfeng.music.infrastructure.persistence.lyrics.*;
 import java.net.URI;
+import java.time.Duration;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.*;
 import org.springframework.core.env.Environment;
@@ -39,7 +40,7 @@ public class LyricsCompositionConfiguration {
                 var primary = openAiWriter(env);
                 var backup = qwenLyricsWriter(env);
                 yield env.getProperty("qingfeng.lyrics.qwen-fallback-enabled",Boolean.class,true) && backup.isConfigured()
-                    ? new FallbackLyricsWriter(primary,backup) : primary;
+                    ? new FallbackLyricsWriter(primary,backup,backup.hasTimeoutFallback()) : primary;
             }
             case "qwen" -> qwenLyricsWriter(env);
             default -> throw new IllegalArgumentException("Unsupported qingfeng.lyrics.provider; use openai or qwen");
@@ -47,7 +48,8 @@ public class LyricsCompositionConfiguration {
     }
     @Bean(defaultCandidate=false)
     LyricsWriter customLyricsWriter(Environment env){
-        return new FallbackLyricsWriter(openAiWriter(env),qwenLyricsWriter(env));
+        var backup = qwenLyricsWriter(env);
+        return new FallbackLyricsWriter(openAiWriter(env),backup,backup.hasTimeoutFallback());
     }
     private static String openAiKey(Environment env){
         return env.getProperty("qingfeng.providers.openai.api-key",env.getProperty("OPENAI_API_KEY",""));
@@ -83,8 +85,13 @@ public class LyricsCompositionConfiguration {
         return env.containsProperty("qingfeng.lyrics.photo.qwen-endpoint") ? "" : RewriteProviderSettings.key(env);
     }
     private QwenLyricsWriter qwenLyricsWriter(Environment env){
-        return new QwenLyricsWriter(RewriteProviderSettings.key(env), RewriteProviderSettings.model(env),
-            java.net.URI.create(RewriteProviderSettings.endpoint(env)));
+        String key = RewriteProviderSettings.key(env);
+        String model = RewriteProviderSettings.model(env);
+        URI endpoint = URI.create(RewriteProviderSettings.endpoint(env));
+        var fallback = key.isBlank() ? null : ArkTextFallbackSettings.configured(env);
+        return fallback == null ? new QwenLyricsWriter(key, model, endpoint)
+            : new QwenLyricsWriter(key, model, endpoint, fallback,
+                Duration.ofMillis(env.getProperty("qingfeng.lyrics.qwen-timeout-ms", Long.class, 25_000L)));
     }
     @Bean @Profile({"mysql","test"}) CompositionRequests compositionRequests(JdbcTemplate jdbc,com.qingfeng.music.usage.UsageBudget budget,org.springframework.transaction.PlatformTransactionManager manager,com.qingfeng.music.credits.CreditsLedger credits,com.qingfeng.music.credits.CreditConsumptions consumptions,com.qingfeng.music.credits.LyricFreeAllowance lyricFreeAllowance){return new JdbcCompositionRequests(jdbc,budget,new org.springframework.transaction.support.TransactionTemplate(manager),credits,consumptions,lyricFreeAllowance);}
     @Bean @Profile({"mysql","test"}) LyricsCompositionService lyricsCompositionService(WorkApi works,LyricsApi lyrics,LyricsMapper mapper,LyricsWriter writer,

@@ -1,6 +1,7 @@
 package com.qingfeng.music.infrastructure.provider;
 
 import com.qingfeng.music.common.exception.DomainException;
+import com.qingfeng.music.common.concurrent.LyricsRequestBudget;
 import java.io.IOException;
 import java.net.ConnectException;
 import java.net.URI;
@@ -13,6 +14,7 @@ import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.util.concurrent.Flow;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 final class LyricsHttpTransport {
@@ -32,7 +34,7 @@ final class LyricsHttpTransport {
     static HttpResponse<String> post(HttpClient client, URI endpoint, String key, String json, Duration maximum, String userAgent)
             throws IOException, InterruptedException {
         if (maximum.isZero() || maximum.isNegative()) throw new java.net.http.HttpTimeoutException("Lyrics transport budget exhausted");
-        long deadline = com.qingfeng.music.common.concurrent.LyricsRequestBudget.deadline(
+        long deadline = LyricsRequestBudget.deadline(
             com.qingfeng.music.common.concurrent.AgentRequestScope.timeout(maximum));
         for (int attempt = 0; ; attempt++) {
             com.qingfeng.music.common.concurrent.AgentRequestScope.check();
@@ -54,7 +56,7 @@ final class LyricsHttpTransport {
             try {
                 var tokens = AiModelUsage.before(endpoint, json);
                 var outgoing = request.build();
-                var response = AiModelUsage.active() ? ProviderHttp.read(client, outgoing, deadline)
+                var response = AiModelUsage.active() || LyricsRequestBudget.boundsResponseBody() ? ProviderHttp.read(client, outgoing, deadline)
                     : client.send(outgoing, HttpResponse.BodyHandlers.ofString());
                 if (response.statusCode() / 100 == 2) AiModelUsage.reported(tokens, response.body());
                 return response;
@@ -62,14 +64,22 @@ final class LyricsHttpTransport {
                 logFailure(endpoint, attempt, bodyStarted.get(), connectionFailure);
                 // Once the transport has requested the body, acceptance is uncertain even if reconnecting failed.
                 if (bodyStarted.get()) throw connectionFailure;
-                if (attempt != 0) throw new DomainException("LYRICS_PROVIDER_CONNECT_FAILED",
-                    "暂时连不上歌词服务，创作描述已保留，可以稍后重试。");
-                Thread.sleep(ThreadLocalRandom.current().nextInt(150, 351));
+                if (attempt != 0) throw connectFailed();
+                pauseBeforeRetry(deadline);
             } catch (IOException transportFailure) {
                 logFailure(endpoint, attempt, bodyStarted.get(), transportFailure);
                 throw transportFailure;
             }
         }
+    }
+
+    static void pauseBeforeRetry(long deadline) throws InterruptedException {
+        long pause = TimeUnit.MILLISECONDS.toNanos(ThreadLocalRandom.current().nextInt(150, 351));
+        TimeUnit.NANOSECONDS.sleep(Math.min(pause, deadline - System.nanoTime()));
+    }
+
+    static DomainException connectFailed() {
+        return new DomainException("LYRICS_PROVIDER_CONNECT_FAILED", "暂时连不上歌词服务，创作描述已保留，可以稍后重试。");
     }
 
     private static void logFailure(URI endpoint, int attempt, boolean bodyStarted, IOException failure) {

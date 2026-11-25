@@ -16,10 +16,16 @@ public final class FallbackLyricsWriter implements LyricsWriter {
     private static final Duration MINIMUM_BACKUP_TIME = Duration.ofSeconds(30);
     private final LyricsWriter primary;
     private final LyricsWriter backup;
+    private final boolean boundResponseBody;
 
     public FallbackLyricsWriter(LyricsWriter primary, LyricsWriter backup) {
+        this(primary, backup, false);
+    }
+
+    public FallbackLyricsWriter(LyricsWriter primary, LyricsWriter backup, boolean boundResponseBody) {
         this.primary = primary;
         this.backup = backup;
+        this.boundResponseBody = boundResponseBody;
     }
 
     @Override public boolean isConfigured() { return primary.isConfigured() || backup.isConfigured(); }
@@ -52,7 +58,7 @@ public final class FallbackLyricsWriter implements LyricsWriter {
     }
 
     private Draft attempt(Function<LyricsWriter, Draft> write) {
-        try (var ignored = LyricsRequestBudget.enter(Duration.ofSeconds(110))) {
+        try (var ignored = LyricsRequestBudget.enter(Duration.ofSeconds(110), boundResponseBody)) {
             if (backup.isConfigured() && !primary.isConfigured()) return writeWithSource(backup, write);
             try {
                 return writeWithSource(primary, write);
@@ -68,6 +74,8 @@ public final class FallbackLyricsWriter implements LyricsWriter {
 
     private Draft writeWithSource(LyricsWriter writer, Function<LyricsWriter, Draft> write) {
         var draft = write.apply(writer);
-        return new Draft(draft.title(), draft.lyrics(), draft.plan(), writer.source());
+        if (boundResponseBody && !LyricsRequestBudget.hasRemaining(Duration.ZERO))
+            throw new DomainException("LYRICS_PROVIDER_TIMEOUT", "等待歌词结果超时，请先查看原请求进度。");
+        return draft.source() == null ? new Draft(draft.title(), draft.lyrics(), draft.plan(), writer.source()) : draft;
     }
 }
