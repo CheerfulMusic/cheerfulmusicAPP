@@ -19,6 +19,7 @@ describe('crawlable site pages', () => {
     expect(page.querySelector('meta[name="description"]')?.getAttribute('content')).toBe(metadata.description)
     expect(page.querySelector('link[rel="canonical"]')?.getAttribute('href')).toBe(siteOrigin + path)
     expect(page.querySelector('meta[property="og:url"]')?.getAttribute('content')).toBe(siteOrigin + path)
+    expect(page.querySelector('meta[property="og:site_name"]')?.getAttribute('content')).toBe('青妙Ai')
     expect(page.querySelector('meta[name="twitter:card"]')?.getAttribute('content')).toBe('summary_large_image')
     expect(page.querySelector('h1')?.textContent).toBe(metadata.heading)
     for (const alternate of page.querySelectorAll('link[hreflang="en"], link[hreflang="zh-CN"]')) {
@@ -43,8 +44,8 @@ describe('crawlable site pages', () => {
     const productCopy = card?.querySelector('.beta-access-intro')
     expect(productCopy?.textContent).toBe(sitePage(path)!.description)
     expect(productCopy?.textContent).toContain('Cheerful Music')
-    if (path === '/') expect(productCopy?.textContent).toContain('青风音乐')
-    else expect(productCopy?.textContent).toContain('青妙Ai (Cheerful Music)')
+    expect(productCopy?.textContent).toContain('青风音乐')
+    expect(productCopy?.textContent).toContain('青妙Ai')
     expect(productCopy?.closest('[data-nosnippet]')).toBeNull()
     expect(card?.querySelector('[data-nosnippet]')?.textContent).toMatch(/邀请码|invitation code/)
     expect(page.querySelectorAll('h1')).toHaveLength(1)

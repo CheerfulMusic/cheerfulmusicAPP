@@ -107,7 +107,7 @@ export function landingLinks(language: Locale, path = '/'): { href: string; text
 
 export function socialMetadata(page: NonNullable<ReturnType<typeof sitePage>>) {
   const image = siteOrigin + '/brand/share-default-cover.png'
-  const brand = page.siteName ?? siteName
+  const brand = homeSearchTitle
   const title = page.title
   return [
     { property: 'og:type', content: 'website' },
