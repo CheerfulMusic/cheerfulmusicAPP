@@ -5,6 +5,12 @@ import { expect, it, vi } from 'vitest'
 import Gate from '../src/modules/beta-access/BetaAccessGate.vue'
 import { locale, setLocale } from '../src/shared/i18n'
 import { sitePage } from '../src/shared/i18n/site-seo'
+vi.mock('../src/modules/artist/api/artist', async importOriginal => ({
+ ...await importOriginal<typeof import('../src/modules/artist/api/artist')>(),
+ listDiscoverSongs: vi.fn(async () => ({ songs: [
+   { song: { id: 'test-release', version: 2, title: '示例作品' }, stageName: '测试歌手' },
+ ], hasMore: false })),
+}))
 vi.mock('../src/modules/beta-access/api', () => ({
  readInviteStatus: vi.fn(async () => ({ enabled: true, admitted: false, csrfToken: 'test', expiresAt: '' })),
  enterInvite: vi.fn(), InviteError: class extends Error {}
@@ -33,7 +39,12 @@ it('automatically opens the homepage invite with the localized product name', as
  try {
   await nextTick()
   expect(show).toHaveBeenCalled()
-  expect(host.querySelector('h1')?.textContent).toBe('青妙Ai｜把你的歌词做成歌')
+  expect(host.querySelector('h1')?.textContent).toBe('青妙Ai')
+  expect(host.querySelector('.beta-access-headline')?.textContent).toBe('把你的歌词做成歌')
+  expect(host.querySelector('.home-public-info ol')?.children.length).toBe(3)
+  expect(host.querySelectorAll('.home-public-info details')).toHaveLength(2)
+  await flushPromises()
+  expect(host.querySelector('a[href="/discover/songs/test-release/2"]')?.textContent).toBe('示例作品')
   expect(host.querySelector('.beta-access-intro')?.textContent).toContain('青风音乐（Cheerful Music）')
   setLocale('en')
   await nextTick()

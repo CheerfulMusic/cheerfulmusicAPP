@@ -43,7 +43,7 @@ public final class InviteGateFilter extends OncePerRequestFilter {
                 || path.equals("/api/wechat/jssdk-config"));
         boolean songPlay = "POST".equals(request.getMethod()) && path.matches("/api/songs/[A-Za-z0-9_-]{43}/play");
         boolean publicArtist = read && ARTIST_READ.matcher(path).matches();
-        boolean publicDiscoverSong = read && DISCOVER_SONG_READ.matcher(path).matches();
+        boolean publicDiscoverSong = read && ("/api/public/discover".equals(path) || DISCOVER_SONG_READ.matcher(path).matches());
         boolean analytics = ANALYTICS.contains(path) || ("POST".equals(request.getMethod()) && path.equals("/api/wechat/jssdk-error"));
         // 热歌推荐是首页公开展示，播放计次也不含个人信息；内测门禁不应让它变成 0。
         boolean hotSong = ("GET".equals(request.getMethod()) && "/api/public/hot-songs".equals(path))

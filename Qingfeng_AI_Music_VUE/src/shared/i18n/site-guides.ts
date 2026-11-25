@@ -7,7 +7,7 @@ const guides = {
       label: 'AI 创作歌曲',
       heading: '用 AI 做自己的歌',
       title: 'AI 创作歌曲 | Cheerful Music 青风音乐',
-      description: '从一句灵感开始，在青风音乐选择曲风和人声，修改歌词并生成自己的歌曲。',
+      description: '在青风音乐的青妙Ai里，用一段故事或自己的歌词开始创作。选择曲风和人声，修改歌词后生成歌曲。',
       cta: '打开创作工作台',
       sections: [
         ['写下灵感', '用一两句话描述想唱的故事、场景或情绪。已有歌词也可以直接填写。'],

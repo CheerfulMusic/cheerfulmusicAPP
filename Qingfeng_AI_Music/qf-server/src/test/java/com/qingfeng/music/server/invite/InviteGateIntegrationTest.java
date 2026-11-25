@@ -426,9 +426,9 @@ class InviteGateIntegrationTest {
         String version = "{\"version\":1}";
 
         for (String path : java.util.List.of(feed, feed + "?view=shelves")) {
-            var denied = send(visitor, "GET", path, null, null);
-            assertEquals(403, denied.statusCode());
-            assertTrue(denied.body().contains("INVITE_REQUIRED"));
+            assertEquals(200, send(visitor, "GET", path, null, null).statusCode());
+            assertEquals(200, send(visitor, "HEAD", path, null, null).statusCode());
+            assertFalse(send(visitor, "GET", path, null, null).body().contains(song.id()));
         }
         assertEquals(403, send(visitor, "POST", feed + "/songs/" + song.id() + "/1/play", null, null).statusCode());
         assertEquals(200, send(owner.http(), "GET", feed, null, null).statusCode());
@@ -447,7 +447,7 @@ class InviteGateIntegrationTest {
         var published = send(owner.http(), "PUT", publishPath, version, owner.csrf());
         assertEquals(200, published.statusCode(), published.body());
         assertTrue(published.body().contains("\"onDiscover\":true"));
-        var firstFeed = send(owner.http(), "GET", feed, null, null);
+        var firstFeed = send(visitor, "GET", feed, null, null);
         assertEquals("no-store", firstFeed.headers().firstValue("cache-control").orElseThrow());
         assertTrue(firstFeed.body().contains(song.id()));
         assertTrue(firstFeed.body().contains(artistId));
@@ -507,6 +507,68 @@ class InviteGateIntegrationTest {
         assertFalse(send(owner.http(), "GET", feed, null, null).body().contains(song.id()));
         assertEquals(404, readBytes(visitor, audio.replace("/1/", "/2/")).statusCode());
         assertNotNull(media.locate(owner.creator(), song.work(), replacement));
+    }
+
+    @Test void anonymousCatalogOnlyIndexesCurrentExplicitPublicationsAndSupportsRangeListening() throws Exception {
+        var owner = artistSession("Catalog artist");
+        var visitor = HttpClient.newHttpClient();
+        var release = releaseArtistSong(owner, "Fixture <Duet> & Song", 21);
+        String asset = jdbc.queryForObject("SELECT asset_id FROM artist_song_release WHERE id=?", String.class, release.id());
+        String artist = field(send(owner.http(), "GET", ARTIST_PROFILE, null, null).body(), "publicId");
+        String selection = ARTIST_PROFILE + "/releases/" + release.work() + "/discover";
+        String page = "/discover/songs/" + release.id() + "/1";
+        String audio = "/api/public/artists/" + artist + "/songs/" + release.id() + "/1/audio";
+        assertEquals(200, send(owner.http(), "PUT", ARTIST_PROFILE + "/visibility", "{\"published\":true}", owner.csrf()).statusCode());
+        var privatePage = send(visitor, "GET", page, null, null);
+        assertEquals(404, privatePage.statusCode());
+        assertEquals("noindex", privatePage.headers().firstValue("X-Robots-Tag").orElseThrow());
+        assertFalse(send(visitor, "GET", "/sitemap.xml", null, null).body().contains(release.id()));
+        assertEquals(200, send(owner.http(), "PUT", selection, "{\"version\":1}", owner.csrf()).statusCode());
+        artistProfiles.setDiscoverFeatured(release.id(), true);
+
+        for (String path : List.of(page, "/en" + page)) {
+            var rendered = send(visitor, "GET", path, null, null);
+            assertEquals(200, rendered.statusCode(), rendered.body());
+            String body = rendered.body();
+            assertTrue(body.contains("id=\"app\""));
+            assertTrue(body.contains("Fixture &lt;Duet&gt; &amp; Song"));
+            assertFalse(body.contains("<Duet>"));
+            assertTrue(body.contains("MusicRecording"));
+            assertTrue(body.contains("rel=\"canonical\" href=\"https://cheerfulmusic.com" + path + "\""));
+            assertTrue(body.contains("hreflang=\"en\""));
+            assertTrue(body.contains("hreflang=\"zh-CN\""));
+            assertFalse(body.contains(release.work()));
+            assertFalse(body.contains(owner.creator()));
+            assertFalse(body.contains(asset));
+            assertTrue(body.contains(audio));
+            assertTrue(send(visitor, "HEAD", path, null, null).body().isEmpty());
+        }
+        for (String listing : List.of("/", "/en/", "/discover", "/en/discover", "/sitemap.xml")) {
+            String body = send(visitor, "GET", listing, null, null).body();
+            assertTrue(body.contains(page), listing);
+            assertFalse(body.contains("/gift/") || body.contains("/song/"), listing);
+        }
+        var request = HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + audio))
+                .header("Range", "bytes=0-3").GET().build();
+        var range = visitor.send(request, HttpResponse.BodyHandlers.ofByteArray());
+        assertEquals(206, range.statusCode());
+        assertEquals(4, range.body().length);
+        assertTrue(range.headers().firstValue("Content-Range").orElseThrow().startsWith("bytes 0-3/"));
+        for (String invalid : List.of(page + "0", page + "/unknown", "/discover/songs/" + release.id(),
+                "/en/discover/songs/" + "a".repeat(43) + "/1", page.replace("/1", "/9999999999999999999"))) {
+            var miss = send(visitor, "GET", invalid, null, null);
+            assertEquals(404, miss.statusCode(), invalid);
+            assertEquals("noindex", miss.headers().firstValue("X-Robots-Tag").orElseThrow(), invalid);
+        }
+
+        jdbc.update("INSERT INTO media_asset_annotation(asset_id,deleted_at) VALUES (?,CURRENT_TIMESTAMP)", asset);
+        for (String listing : List.of("/", "/en/", "/discover", "/api/public/discover", "/api/public/discover?view=shelves",
+                "/sitemap.xml")) {
+            assertFalse(send(visitor, "GET", listing, null, null).body().contains(release.id()), listing);
+        }
+        for (String path : List.of(page, "/en" + page, "/api/public" + page, audio)) {
+            assertEquals(404, send(visitor, "GET", path, null, null).statusCode(), path);
+        }
     }
 
     private ArtistSession artistSession(String name) throws Exception {

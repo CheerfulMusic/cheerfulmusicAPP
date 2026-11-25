@@ -106,7 +106,13 @@ export function landingLinks(language: Locale, path = '/'): { href: string; text
   ]
 }
 
-export function socialMetadata(page: NonNullable<ReturnType<typeof sitePage>>) {
+export function socialMetadata(page: {
+  path: string
+  language: Locale
+  title: string
+  description: string
+  siteName?: string
+}) {
   const image = siteOrigin + '/brand/share-default-cover.png'
   const brand = page.siteName ?? homeSeo['zh-CN'].brand
   const title = page.title

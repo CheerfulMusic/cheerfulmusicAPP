@@ -7,13 +7,14 @@ import { setLocale } from '../src/shared/i18n'
 import type { PlayableTrack } from '../src/shared/player/store'
 
 const mocks = vi.hoisted(() => ({
-  list: vi.fn(), shelves: vi.fn(), profile: vi.fn(), record: vi.fn(), queue: vi.fn(), toggle: vi.fn(),
+  invite: vi.fn(), list: vi.fn(), shelves: vi.fn(), profile: vi.fn(), record: vi.fn(), queue: vi.fn(), toggle: vi.fn(),
   player: { current: null as PlayableTrack | null, playing: false, starting: false, duration: 0, time: 0 },
 }))
 vi.mock('../src/modules/artist/api/artist', async original => ({
   ...await original<typeof import('../src/modules/artist/api/artist')>(),
   listDiscoverSongs: mocks.list, getDiscoverShelves: mocks.shelves, getPublicArtist: mocks.profile, recordDiscoverPlay: mocks.record,
 }))
+vi.mock('../src/modules/beta-access/api', () => ({ readInviteStatus: mocks.invite }))
 vi.mock('../src/shared/player/store', () => ({
   usePlayer: () => Object.assign(mocks.player, { setQueue: mocks.queue, toggle: mocks.toggle }),
 }))
@@ -36,8 +37,8 @@ function deferred<T>() {
   const promise = new Promise<T>(yes => { resolve = yes })
   return { promise, resolve }
 }
-async function open() {
-  const wrapper = mount(DiscoverPage, { global: { stubs: { RouterLink: { template: '<a><slot /></a>' } } } })
+async function open(publicEntry = false) {
+  const wrapper = mount(DiscoverPage, { props: { publicEntry }, global: { stubs: { RouterLink: { template: '<a><slot /></a>' } } } })
   wrappers.push(wrapper)
   await flushPromises()
   return wrapper
@@ -66,6 +67,16 @@ afterEach(() => {
   setLocale('zh-CN')
   vi.useRealTimers()
   vi.restoreAllMocks()
+})
+
+it('browses published tracks without exposing the invited editorial catalog', async () => {
+  mocks.invite.mockResolvedValue({ enabled: true, admitted: false })
+  const wrapper = await open(true)
+  expect(wrapper.text()).toContain('歌曲featured')
+  expect(wrapper.text()).not.toContain('CHRISTMAS FEELS LIKE HOME')
+  expect(wrapper.text()).not.toContain('走了那么远')
+  expect(wrapper.find('#discover-playlists').exists()).toBe(false)
+  expect(mocks.invite).toHaveBeenCalledOnce()
 })
 
 describe('Discover editorial layout with real content', () => {

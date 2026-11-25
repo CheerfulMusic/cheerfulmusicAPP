@@ -15,13 +15,9 @@ import org.springframework.jdbc.datasource.init.ResourceDatabasePopulator;
 class DiscoverShelvesTest {
     @Test
     void countsOnlyTodayAndShowsOnlyApprovedPublicVersions() {
-        var source = new JdbcDataSource();
-        source.setURL("jdbc:h2:mem:discover-" + UUID.randomUUID() + ";MODE=MySQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1");
+        var source = discover44DataSource();
         var db = new JdbcTemplate(source);
-        migrate(source, "V1__creator_and_work.sql", "V2__lyrics_media_and_sharing.sql",
-                "V26__hot_song_engagement.sql", "V27__work_soft_delete.sql");
-        db.execute("CREATE TABLE cover_asset (id VARCHAR(36) PRIMARY KEY)");
-        migrate(source, "V40__artist_profiles_and_releases.sql", "V44__discover_song_publication.sql");
+        new ResourceDatabasePopulator(new ClassPathResource("db/test/audio_version_annotations.sql")).execute(source);
         // H2 exercises the service queries; MySQL V50 resolves the production column collation.
         db.execute("""
                 CREATE TABLE discover_daily_play (
@@ -69,6 +65,42 @@ class DiscoverShelvesTest {
         db.update("UPDATE artist_song_release SET version=2 WHERE id='jazz'");
         assertTrue(profiles.discoverShelves().vocal().isEmpty());
         assertEquals(List.of("pop"), profiles.discoverShelves().today().stream().map(row -> row.song().id()).toList());
+        db.update("INSERT INTO media_asset_annotation(asset_id,deleted_at) VALUES ('pop',CURRENT_TIMESTAMP)");
+        assertTrue(profiles.discoverShelves().today().isEmpty());
+        assertTrue(profiles.discoverShelves().genres().get("global-pop").isEmpty());
+    }
+
+    @Test
+    void bareCore44KeepsItsOriginalFeedButOnlyVerifiedRecordingsCanEnterSearch() {
+        var source = discover44DataSource();
+        var db = new JdbcTemplate(source);
+        db.execute("CREATE TABLE flyway_schema_history(installed_rank INT, version VARCHAR(20), script VARCHAR(200), success BOOLEAN)");
+        db.update("INSERT INTO flyway_schema_history VALUES (44,'44','V44__discover_song_publication.sql',TRUE)");
+        db.update("INSERT INTO creator VALUES ('owner',CURRENT_TIMESTAMP)");
+        db.update("INSERT INTO artist_profile(creator_id,public_id,stage_name,tagline,published) VALUES ('owner','artist','歌手','',TRUE)");
+        addSong(db, "legacy", "folk");
+        var profiles = new ArtistProfileService(db, null, null, null, null, null, null);
+        assertEquals(1, profiles.discover(false, false, "", "", 0).songs().size());
+        assertTrue(profiles.latestCatalogSongs(false, 24).isEmpty());
+        assertTrue(profiles.catalogSong("legacy", 1).isEmpty());
+        db.update("INSERT INTO flyway_schema_history VALUES (56,'56','V56__discover_song_community.sql',TRUE)");
+        assertThrows(org.springframework.jdbc.BadSqlGrammarException.class,
+                () -> profiles.discover(false, false, "", "", 0));
+        new ResourceDatabasePopulator(new ClassPathResource("db/test/audio_version_annotations.sql")).execute(source);
+        assertTrue(profiles.catalogSong("legacy", 1).isPresent());
+        db.update("INSERT INTO media_asset_annotation(asset_id,deleted_at) VALUES ('legacy',CURRENT_TIMESTAMP)");
+        assertTrue(profiles.catalogSong("legacy", 1).isEmpty());
+        assertTrue(profiles.discover(false, false, "", "", 0).songs().isEmpty());
+    }
+
+    private static JdbcDataSource discover44DataSource() {
+        var source = new JdbcDataSource();
+        source.setURL("jdbc:h2:mem:discover-" + UUID.randomUUID() + ";MODE=MySQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1");
+        migrate(source, "V1__creator_and_work.sql", "V2__lyrics_media_and_sharing.sql",
+                "V26__hot_song_engagement.sql", "V27__work_soft_delete.sql");
+        new JdbcTemplate(source).execute("CREATE TABLE cover_asset (id VARCHAR(36) PRIMARY KEY)");
+        migrate(source, "V40__artist_profiles_and_releases.sql", "V44__discover_song_publication.sql");
+        return source;
     }
 
     private static void migrate(JdbcDataSource source, String... names) {

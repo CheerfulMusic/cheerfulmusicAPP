@@ -31,7 +31,7 @@ public class WebSecurityConfiguration {
 
     private static final String[] SPA_PAGES = {
             "/", "/index.html", "/create", "/create/photo", "/works", "/works/*",
-            "/account", "/profile", "/artist/*", "/artist/*/albums/*", "/discover/songs/*/*", "/en/discover/songs/*/*",
+            "/account", "/profile", "/artist/*", "/artist/*/albums/*", "/discover/songs/**", "/en/discover/songs/**",
             "/recharge", "/analytics", "/agent"
     };
 
@@ -95,10 +95,11 @@ public class WebSecurityConfiguration {
                 .anyRequest().denyAll())
             .exceptionHandling(errors -> errors.authenticationEntryPoint((request,response,error)->{
                 if(request.getRequestURI().startsWith("/api/app/")){response.sendError(401);return;}
-                if(!isPageNavigation(request.getRequestURI())){response.sendError(403);return;}
-                // 页面级导航未列入白名单：交给 Vue 入口，未知路径由前端 catch-all 渲染。
-                // 直接 sendError 会落到 Spring Boot 默认白标错误页，把 Whitelabel 暴露给用户。
+                boolean read = "GET".equals(request.getMethod()) || "HEAD".equals(request.getMethod());
+                if(!read || !isPageNavigation(request.getRequestURI())){response.sendError(403);return;}
+                // Preserve Vue's friendly missing-page UI and return an actual 404 to crawlers.
                 response.setHeader("X-Robots-Tag", "noindex");
+                response.setStatus(404);
                 request.getRequestDispatcher("/index.html").forward(request,response);
             }))
             .httpBasic(AbstractHttpConfigurer::disable)

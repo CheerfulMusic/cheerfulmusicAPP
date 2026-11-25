@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { t, locale } from '../../../shared/i18n'
 import { homeSeo } from '../../../shared/i18n/home-seo'
+import HomePublicInfo from './HomePublicInfo.vue'
 </script>
 
 <template>
@@ -28,6 +29,7 @@ import { homeSeo } from '../../../shared/i18n/home-seo'
       <RouterLink class="p-button simple-third-create" to="/create">
         {{ t('立即生成我的歌') }} <span aria-hidden="true">↗</span>
       </RouterLink>
+      <HomePublicInfo />
     </div>
   </section>
 </template>

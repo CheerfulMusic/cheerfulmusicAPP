@@ -1,7 +1,7 @@
 import { computed, readonly, ref } from 'vue'
 import { platform } from '../../platform'
 import { english } from './en'
-import { homeLocale, type Locale } from './home-seo'
+import { homeBrand, homeLocale, localizedSeoLinks, siteOrigin, type Locale } from './home-seo'
 import { discoverLocale, discoverPaths, sitePage, socialMetadata, websiteSchema } from './site-seo'
 
 export type { Locale } from './home-seo'
@@ -27,22 +27,53 @@ export function t(message: string, params: Record<string, string | number> = {})
   return copy.replace(/\{(\w+)\}/g, (placeholder, key: string) => String(params[key] ?? placeholder))
 }
 let pagePath = ''
+type SongMetadata = { title: string; artist: string; description: string; image: string }
+let discoverSong: SongMetadata | null | undefined
+
+const discoverSongPath = /^(?:\/en)?\/discover\/songs\/([^/]+)\/(\d+)\/?$/
+
+export function updateDiscoverSongMetadata(path: string, metadata: SongMetadata | null) {
+  if (path !== pagePath || !discoverSongPath.test(path)) return
+  discoverSong = metadata
+  updateDocument()
+}
+
 function updateDocument() {
   if (typeof document === 'undefined') return
   document.documentElement.lang = selected.value
+  const songMatch = pagePath.match(discoverSongPath)
+  const matchingServerDocument = songMatch && discoverSong === undefined &&
+    document.head.querySelector('link[data-site-seo][rel="canonical"]')?.getAttribute('href') ===
+      siteOrigin + pagePath.replace(/\/$/, '')
+  if (matchingServerDocument) return
   document.head.querySelectorAll('[data-site-seo]').forEach(element => element.remove())
   if (document.head.querySelector('meta[property="og:type"][content="music.song"]')) {
     if (pagePath.startsWith('/gift/')) return
     document.head.querySelectorAll('meta[property^="og:"], meta[name^="twitter:"], meta[name="robots"]')
       .forEach(element => element.remove())
   }
-  const page = sitePage(pagePath, selected.value)
-  if (page?.guide) document.documentElement.lang = page.language
+  const songMetadata = songMatch ? discoverSong : undefined
+  const songLanguage: Locale = pagePath.startsWith('/en/') ? 'en' : 'zh-CN'
+  const songPage = songMetadata && songMatch ? {
+    path: pagePath.replace(/\/$/, ''),
+    language: songLanguage,
+    title: songMetadata.title + ' — ' + songMetadata.artist + ' | ' + homeBrand(songLanguage === 'en' ? '/en/' : '/'),
+    siteName: homeBrand(songLanguage === 'en' ? '/en/' : '/'),
+    heading: songMetadata.title,
+    description: songMetadata.description.trim() || (songLanguage === 'en'
+      ? 'Listen to “' + songMetadata.title + '” by ' + songMetadata.artist + ' on cheerfulmusic.'
+      : '在青妙Ai试听' + songMetadata.artist + '发布的《' + songMetadata.title + '》。'),
+    links: localizedSeoLinks(pagePath.replace(/\/$/, ''), {
+      'zh-CN': '/discover/songs/' + songMatch[1] + '/' + songMatch[2],
+      en: '/en/discover/songs/' + songMatch[1] + '/' + songMatch[2],
+    }),
+  } : undefined
+  const page = songPage ?? sitePage(pagePath, selected.value)
+  if (page && 'guide' in page && page.guide) document.documentElement.lang = page.language
   document.title = page?.title ?? '青风音乐'
   document.querySelector('meta[name="description"]')?.setAttribute(
     'content', page?.description ?? t('把你的故事唱成歌，送给重要的人。用青风音乐记录回忆，制作专属音乐礼物。'),
   )
-  if (!page) return
 
   function appendTag(tag: 'link' | 'meta' | 'script', attributes: Record<string, string | undefined>, content?: string) {
     const element = document.createElement(tag)
@@ -53,8 +84,28 @@ function updateDocument() {
     if (content) element.textContent = content
     document.head.append(element)
   }
+  if (songMatch && discoverSong === null) {
+    appendTag('meta', { name: 'robots', content: 'noindex' })
+  }
+  if (!page) return
   for (const attributes of page.links) appendTag('link', attributes)
-  for (const attributes of socialMetadata(page)) appendTag('meta', attributes)
+  for (const attributes of socialMetadata(page)) {
+    if (songMetadata) {
+      if (attributes.property === 'og:type') attributes.content = 'music.song'
+      if (attributes.property === 'og:image' || attributes.name === 'twitter:image') attributes.content = songMetadata.image
+      if (attributes.property === 'og:image:alt' || attributes.name === 'twitter:image:alt') attributes.content = songMetadata.title
+    }
+    appendTag('meta', attributes)
+  }
+  if (songPage && songMetadata) appendTag('script', { type: 'application/ld+json' }, JSON.stringify({
+    '@context': 'https://schema.org',
+    '@type': 'MusicRecording',
+    url: siteOrigin + songPage.path,
+    name: songMetadata.title,
+    description: songPage.description,
+    byArtist: { '@type': 'Person', name: songMetadata.artist },
+    image: songMetadata.image,
+  }))
   if (page.path === '/') appendTag('script', { type: 'application/ld+json' }, JSON.stringify(websiteSchema))
 }
 export function setLocale(value: Locale) {
@@ -64,8 +115,9 @@ export function setLocale(value: Locale) {
   updateDocument()
 }
 export function updatePageLocale(path: string) {
+  if (path !== pagePath) discoverSong = undefined
   pagePath = path
-  const songLocale = /^(?:\/en)?\/discover\/songs\/[^/]+\/\d+\/?$/.test(path) ? (path.startsWith('/en/') ? 'en' : 'zh-CN') : undefined
+  const songLocale = discoverSongPath.test(path) ? (path.startsWith('/en/') ? 'en' : 'zh-CN') : undefined
   const routeLanguage = homeLocale(path) ?? discoverLocale(path) ?? songLocale
   if (routeLanguage) selected.value = routeLanguage
   else if (path === '/') selected.value = preferredLocale ?? 'zh-CN'

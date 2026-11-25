@@ -57,6 +57,9 @@ public class ArtistProfileService {
                                String genre, long plays) {}
     public record DiscoverArtist(String artistId, String stageName, String avatarKey, long songs, long plays) {}
     public record DiscoverPage(List<DiscoverSong> songs, boolean hasMore, List<DiscoverArtist> artists) {}
+    /** Public page metadata, independent of the viewer's account and creation inputs. */
+    public record CatalogSong(String id, long version, String title, String artistId, String stageName,
+                              boolean hasCover, Instant publishedAt) {}
     public record DiscoverShelves(boolean listeningDataAvailable, List<DiscoverSong> today,
                                  List<DiscoverSong> vocal, Map<String, List<DiscoverSong>> genres) {}
     private record ProfileRow(String creatorId, String publicId, String stageName, String tagline,
@@ -91,10 +94,14 @@ public class ArtistProfileService {
             FROM artist_song_release r
             JOIN artist_profile p ON p.creator_id=r.creator_id AND p.published=TRUE
             JOIN music_work w ON w.id=r.work_id AND w.owner_id=r.creator_id AND w.deleted_at IS NULL
+            JOIN media_asset a ON a.id=r.asset_id AND a.work_id=r.work_id
             LEFT JOIN hot_song_metric m ON m.track_id=CONCAT('discover:',r.id)
             """;
-    private static final String DISCOVER_VISIBLE = """
+    private static final String DISCOVER_PUBLISHED = """
             WHERE r.show_on_profile=TRUE AND r.discover_published_at IS NOT NULL
+            """;
+    private static final String DISCOVER_VISIBLE = DISCOVER_PUBLISHED + """
+              AND NOT EXISTS (SELECT 1 FROM media_asset_annotation v WHERE v.asset_id=r.asset_id AND v.deleted_at IS NOT NULL)
             """;
     private static final String DISCOVER_RELEASES = DISCOVER_JOINS + DISCOVER_VISIBLE;
     // Publish only known genres. The original style text can contain private creation instructions.
@@ -115,6 +122,12 @@ public class ArtistProfileService {
             """;
     private static final ZoneId DISCOVER_DAY_ZONE = ZoneId.of("Asia/Shanghai");
     private static final String DISCOVER_ORDER_NEWEST = " ORDER BY r.discover_published_at DESC,r.id DESC";
+    private static final String CATALOG_SONGS = """
+            SELECT r.id,r.version,r.title,p.public_id,p.stage_name,r.cover_id,r.discover_published_at
+            """ + DISCOVER_RELEASES;
+    private static final RowMapper<CatalogSong> CATALOG_ROW = (rs, row) -> new CatalogSong(rs.getString("id"),
+            rs.getLong("version"), rs.getString("title"), rs.getString("public_id"), rs.getString("stage_name"),
+            rs.getString("cover_id") != null, rs.getTimestamp("discover_published_at").toInstant());
     private static final RowMapper<DiscoverSong> DISCOVER_SONG_ROW = (rs, row) ->
             new DiscoverSong(rs.getString("public_id"), rs.getString("stage_name"),
                     new PublicSong(rs.getString("id"), rs.getLong("version"), rs.getString("title"),
@@ -129,6 +142,7 @@ public class ArtistProfileService {
     private final SharedCoverAccess covers;
     private final com.qingfeng.music.lyrics.playback.PlaybackLyricsRepository playbackLyrics;
     private volatile Boolean discoverShelfStorageReady;
+    private volatile boolean audioAnnotationsReady;
 
     public ArtistProfileService(JdbcTemplate db, IdentityApi identity, LogtoIdentityService logto,
                                 MediaApi media, SharedMediaAccess audio, SharedCoverAccess covers,
@@ -427,7 +441,7 @@ public class ArtistProfileService {
                 keyword, keyword, genre, genre, pageSize + 1, offset);
         var artists = offset == 0 ? db.query("""
                 SELECT p.public_id,p.stage_name,p.avatar_key,COUNT(*) AS songs,COALESCE(SUM(m.plays),0) AS plays
-                """ + DISCOVER_RELEASES + """
+                """ + DISCOVER_JOINS + listingVisibility() + """
                 GROUP BY p.public_id,p.stage_name,p.avatar_key
                 ORDER BY plays DESC,songs DESC,p.public_id LIMIT 12
                 """, (rs, row) -> new DiscoverArtist(rs.getString("public_id"), rs.getString("stage_name"),
@@ -462,7 +476,7 @@ public class ArtistProfileService {
     private List<DiscoverSong> queryDiscoverSongs(String playExpression, String join, String tail, Object... args) {
         return db.query("""
                 SELECT p.public_id,p.stage_name,r.id,r.version,r.title,r.cover_id,r.discover_published_at,
-                """ + playExpression + " AS plays," + DISCOVER_GENRE + " AS genre " + DISCOVER_JOINS + join + DISCOVER_VISIBLE + tail,
+                """ + playExpression + " AS plays," + DISCOVER_GENRE + " AS genre " + DISCOVER_JOINS + join + listingVisibility() + tail,
                 DISCOVER_SONG_ROW, args);
     }
 
@@ -482,25 +496,65 @@ public class ArtistProfileService {
         return discoverShelfStorageReady;
     }
 
+    private boolean audioAnnotationsAvailable() {
+        if (audioAnnotationsReady) return true;
+        try {
+            db.queryForObject("SELECT COUNT(deleted_at) FROM media_asset_annotation WHERE 1=0", Long.class);
+            audioAnnotationsReady = true;
+            return true;
+        } catch (org.springframework.jdbc.BadSqlGrammarException failure) {
+            // This single-table probe permits only a missing table, never a missing column or a permission failure.
+            var sql = failure.getSQLException();
+            if (!"42S02".equals(sql.getSQLState()) && !"42S04".equals(sql.getSQLState())) throw failure;
+            var legacy = db.query("""
+                    SELECT version,script FROM flyway_schema_history WHERE success=TRUE AND version IS NOT NULL
+                    ORDER BY installed_rank DESC LIMIT 1
+                    """, (rs, row) -> "44".equals(rs.getString("version"))
+                            && "V44__discover_song_publication.sql".equals(rs.getString("script")));
+            if (!legacy.equals(List.of(true))) throw failure;
+            return false; // Optional annotations may still be installed while this process is running.
+        }
+    }
+
+    private String listingVisibility() {
+        if (audioAnnotationsAvailable()) return DISCOVER_VISIBLE;
+        // Only the original V44 list and play contract use this path. Close the race with an optional table install.
+        return DISCOVER_PUBLISHED + """
+                AND NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema=SCHEMA()
+                                AND LOWER(table_name)='media_asset_annotation')
+                """;
+    }
+
     private boolean isDiscoverRelease(String song, long version) {
-        return !db.query("SELECT r.id " + DISCOVER_RELEASES + " AND r.id=? AND r.version=?",
+        return !db.query("SELECT r.id " + DISCOVER_JOINS + listingVisibility() + " AND r.id=? AND r.version=?",
                 (rs, row) -> rs.getString(1), song, version).isEmpty();
+    }
+
+    public List<CatalogSong> latestCatalogSongs(boolean featured, int limit) {
+        if (!audioAnnotationsAvailable()) return List.of();
+        String filter = featured ? " AND r.discover_featured=TRUE" : "";
+        return db.query(CATALOG_SONGS + filter + DISCOVER_ORDER_NEWEST + " LIMIT ?", CATALOG_ROW, limit);
+    }
+
+    public Optional<CatalogSong> catalogSong(String id, long version) {
+        if (!audioAnnotationsAvailable()) return Optional.empty();
+        return db.query(CATALOG_SONGS + " AND r.id=? AND r.version=?", CATALOG_ROW, id, version)
+                .stream().findFirst();
     }
 
     record DiscoverRecording(DiscoverSong release, String owner, String asset, String generatedLyrics,
                              Double durationSeconds) {}
 
     DiscoverRecording discoverRecording(String song, long version) {
+        if (!audioAnnotationsAvailable()) throw missing();
         return db.query("""
                 SELECT p.public_id,p.stage_name,r.id,r.version,r.title,r.cover_id,r.discover_published_at,
                        r.creator_id,r.asset_id,a.duration_s,g.lyrics,
                        COALESCE(m.plays,0) AS plays,
                 """ + DISCOVER_GENRE + " AS genre " + DISCOVER_JOINS + """
-                JOIN media_asset a ON a.id=r.asset_id AND a.work_id=r.work_id
                 LEFT JOIN generation_task g ON g.id=a.generation_task_id AND g.work_id=r.work_id
                 """ + DISCOVER_VISIBLE + """
                 AND r.id=? AND r.version=?
-                AND NOT EXISTS (SELECT 1 FROM media_asset_annotation v WHERE v.asset_id=r.asset_id AND v.deleted_at IS NOT NULL)
                 """,
                 (rs, row) -> new DiscoverRecording(DISCOVER_SONG_ROW.mapRow(rs, row), rs.getString("creator_id"),
                         rs.getString("asset_id"), rs.getString("lyrics"),
