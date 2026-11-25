@@ -12,22 +12,24 @@
   const instruction = byId('channel-instruction'), feedback = byId('wechat-feedback')
   const launch = byId('open-desktop-wechat'), handoffStatus = byId('handoff-status'), handoffLink = byId('handoff-link')
   const desktopDraft = byId('desktop-draft'), copyDraft = byId('copy-draft'), format = byId('friend-format')
+  const handoffLabel = desktopDraft?.querySelector('label[for="handoff-link"]')
   const handoff = desktopDraft && typeof window.cheerfulWechat?.draft === 'function' ? window.cheerfulWechat : undefined
   const friendData = { title: friendTitle, url, text: meta('description') }
   const timelineData = { ...friendData, title: timelineTitle }
   const clientMode = destination => !wechat && handoff?.mode(destination) === 'client'
   const timelineHint = byId('timeline-menu-hint')
+  const clientHint = handoff?.isWindows ? '发网页卡片' : '打开微信'
   if (clientMode('friend')) {
-    format.textContent = '打开微信'
+    format.textContent = clientHint
     handoffLink.onfocus = () => handoffLink.select()
     if (handoff.isWindows) {
-      const linkLabel = desktopDraft.querySelector('label[for="handoff-link"]')
-      if (linkLabel) linkLabel.textContent = '歌曲分享链接'
-      if (copyDraft) copyDraft.textContent = '复制分享链接'
+      if (handoffLabel) handoffLabel.textContent = '歌曲页地址'
+      if (copyDraft) copyDraft.textContent = '复制到电脑微信打开'
+      if (launch) launch.textContent = '打开电脑微信'
     }
   }
   if (clientMode('timeline') && timelineHint) {
-    timelineHint.textContent = '打开微信'
+    timelineHint.textContent = clientHint
     timelineHint.hidden = false
   }
   if (wechat && timelineHint) {
@@ -68,9 +70,14 @@
       launch.hidden = true
     }
   }
+  function showHandoffAddress(visible) {
+    handoffLink.hidden = !visible
+    if (handoffLabel) handoffLabel.hidden = !visible
+  }
   function showFeedback(result, request) {
     if (!result || request !== qrRequest || !byId('share-sheet').hasAttribute('open')) return
     handoffStatus.textContent = result.message
+    if (handoff.isWindows && result.clipboard) showHandoffAddress(result.clipboard === 'manual')
     if (result.clipboard === 'manual') { handoffLink.focus(); handoffLink.select() }
   }
   if (copyDraft) copyDraft.onclick = () => {
@@ -93,7 +100,7 @@
     if (wechat) {
       const desktopMenuItem = destination === 'friend' ? '转发…' : menuItem
       instruction.textContent = windowsWechat
-        ? '打开微信浏览器的「…」菜单，选择「' + desktopMenuItem + '」。'
+        ? '在微信浏览器的「…」菜单选择「' + desktopMenuItem + '」，即可发送网页卡片。'
         : '点微信右上角「…」，选择「' + menuItem + '」。'
       sdkFeedback()
       return
@@ -103,6 +110,7 @@
     if (canOpenClient) {
       const data = destination === 'friend' ? friendData : timelineData
       handoffLink.value = handoff.draft(data, destination)
+      if (windowsHandoff) showHandoffAddress(false)
       desktopDraft.hidden = false
       launch.hidden = false
       if (userClicked) void handoff.open(destination, data).then(result => showFeedback(result, request))

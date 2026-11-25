@@ -34,6 +34,7 @@ const shareData = computed(() => ({
   text: t('听听我创作的这首歌 · Cheerful Music'), url: link.value,
 }))
 const handoffMessage = ref(''), manualLink = ref<HTMLTextAreaElement>()
+const manualAddressVisible = ref(false)
 let qrRequest = 0
 const importedRevisionId = computed(() => props.asset?.origin === 'IMPORTED' && props.revision?.confirmed ? props.revision.id : undefined)
 const canCreate = computed(() => !!props.asset && (props.asset.origin === 'GENERATED' || !!importedRevisionId.value))
@@ -58,6 +59,7 @@ function clearDestination() {
   qr.value = ''
   qrError.value = false
   handoffMessage.value = ''
+  manualAddressVisible.value = false
 }
 function reset() {
   generation++; busy.value = false; sharing.value = false; summary.value = undefined
@@ -129,6 +131,7 @@ async function copy() {
 async function showFeedback(result: WechatShareFeedback | undefined, request: number) {
   if (!result || request !== qrRequest || !props.open || !valid()) return
   handoffMessage.value = result.message
+  if (client?.isWindows && result.clipboard) manualAddressVisible.value = result.clipboard === 'manual'
   if (result.clipboard === 'manual') {
     await nextTick()
     if (request === qrRequest && props.open) { manualLink.value?.focus(); manualLink.value?.select() }
@@ -143,6 +146,7 @@ function destinationHint(target: WechatDestination) {
   if (platform.kind !== 'web') return '发歌曲卡片'
   if (windowsWechat) return target === 'friend' ? '微信菜单转发' : '微信菜单发表'
   if (insideWechat) return target === 'friend' ? '右上角菜单发送' : '右上角菜单发表'
+  if (client?.isWindows) return '发网页卡片'
   return client ? '打开微信' : '用微信扫码'
 }
 async function choose(event: MouseEvent, target: WechatDestination) {
@@ -279,10 +283,12 @@ onBeforeUnmount(() => { generation++; clearDestination(); clearPoster(); dialog.
           <img v-if="qr" :src="qr" width="144" height="144" :alt="t('在微信中打开歌曲的二维码')">
           <div>
             <template v-if="client">
-              <label for="creator-share-draft">{{ t(client.isWindows ? '歌曲分享链接' : '待发送内容') }}</label>
-              <textarea id="creator-share-draft" ref="manualLink" readonly rows="3" :value="client.draft(shareData, destination)" @focus="manualLink?.select()"></textarea>
-              <button type="button" class="wechat-open" @click="copyShareDraft">{{ t(client.isWindows ? '复制分享链接' : '复制发送内容') }}</button>
-              <a class="wechat-open" :href="client.clientUrl">{{ t('再次打开微信') }}</a>
+              <template v-if="!client.isWindows || manualAddressVisible">
+                <label for="creator-share-draft">{{ t(client.isWindows ? '歌曲页地址' : '待发送内容') }}</label>
+                <textarea id="creator-share-draft" ref="manualLink" readonly rows="3" :value="client.draft(shareData, destination)" @focus="manualLink?.select()"></textarea>
+              </template>
+              <button type="button" class="wechat-open" @click="copyShareDraft">{{ t(client.isWindows ? '复制到电脑微信打开' : '复制发送内容') }}</button>
+              <a class="wechat-open" :href="client.clientUrl">{{ t(client.isWindows ? '打开电脑微信' : '再次打开微信') }}</a>
             </template>
             <p v-if="handoffMessage">{{ t(handoffMessage) }}</p>
             <p v-if="client?.isWindows">{{ t(client.windowsInstruction) }}</p>

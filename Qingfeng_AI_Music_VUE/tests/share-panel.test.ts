@@ -115,7 +115,7 @@ describe('share panel state and poster lifecycle', () => {
     expect(document.body.textContent).toContain('请选中链接手动复制。')
     expect(document.querySelector('.share-card-art img')?.getAttribute('src')).toContain('/songs/' + token + '/cover')
   })
-  it.each(['friend', 'timeline'])('opens WeChat and copies the creator’s %s song link on Windows', async target => {
+  it.each(['friend', 'timeline'])('starts desktop card sharing to %s without copying automatically', async target => {
     const share = vi.fn()
     const assign = vi.fn()
     let deny!: (error: Error) => void
@@ -130,7 +130,7 @@ describe('share panel state and poster lifecycle', () => {
     mocks.get.mockResolvedValue(active())
     mount(); await flush()
     const anchor = channel(target)
-    expect(anchor.textContent).toContain('打开微信')
+    expect(anchor.textContent).toContain('发网页卡片')
     const url = new URL('/song/' + token + '#share-' + target, location.origin).href
     anchor.click()
     expect(assign).not.toHaveBeenCalled()
@@ -143,6 +143,10 @@ describe('share panel state and poster lifecycle', () => {
     listener.call(anchor, { isTrusted: true, preventDefault: vi.fn(), timeStamp: Date.now() } as unknown as MouseEvent)
     expect(assign).toHaveBeenCalledExactlyOnceWith('weixin://')
     expect(share).not.toHaveBeenCalled()
+    expect(writeText).not.toHaveBeenCalled()
+    await nextTick()
+    expect(document.querySelector('#creator-share-draft')).toBeNull()
+    button('复制到电脑微信打开').click()
     expect(writeText).toHaveBeenCalledExactlyOnceWith(url)
     deny(new Error('permission denied'))
     await flush()

@@ -52,7 +52,6 @@ describe('public song listener page', () => {
   }
 
   it.each([
-    'Windows NT 10.0',
     'Mozilla/5.0 (Macintosh; Intel Mac OS X)',
     'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0)',
     'Mozilla/5.0 (Linux; Android 14) Mobile',
@@ -69,9 +68,8 @@ describe('public song listener page', () => {
 
       clickDestination(target)
       const title = target === 'friend' ? fields.title + ' · ' + fields.creator : fields.timelineTitle
-      const draft = agent === 'Windows NT 10.0' ? fields.url + '#share-' + target : title + '\n' + fields.url
       expect(assign).toHaveBeenCalledExactlyOnceWith('weixin://')
-      expect(navigator.clipboard.writeText).toHaveBeenCalledExactlyOnceWith(draft)
+      expect(navigator.clipboard.writeText).toHaveBeenCalledExactlyOnceWith(title + '\n' + fields.url)
       expect(navigator.share).not.toHaveBeenCalled()
       permit()
       await Promise.resolve()
@@ -79,12 +77,19 @@ describe('public song listener page', () => {
     }
   })
 
-  it.each(['friend', 'timeline'])('keeps a selectable %s draft and a retry if clipboard access is denied', async target => {
+  it.each(['friend', 'timeline'])('opens Windows WeChat for %s and offers a separate address copy action', async target => {
     const { fields, navigator, assign } = openSong('song-w2', false, 'Windows NT 10.0', false)
     navigator.clipboard.writeText.mockRejectedValueOnce(new Error('denied'))
     clickDestination(target)
     expect(assign).toHaveBeenCalledExactlyOnceWith('weixin://')
+    expect(navigator.clipboard.writeText).not.toHaveBeenCalled()
+    expect(button(target).textContent).toContain('发网页卡片')
     const input = document.querySelector<HTMLTextAreaElement>('.destination-guide textarea')!
+    expect(input.hidden).toBe(true)
+    const copy = button('copy-draft')
+    expect(copy.textContent).toBe('复制到电脑微信打开')
+    copy.click()
+    expect(navigator.clipboard.writeText).toHaveBeenCalledExactlyOnceWith(fields.url + '#share-' + target)
     await vi.waitFor(() => expect(document.activeElement).toBe(input))
     expect(input.value).toBe(fields.url + '#share-' + target)
     expect(input.selectionEnd - input.selectionStart).toBe(input.value.length)
@@ -94,14 +99,18 @@ describe('public song listener page', () => {
     expect(navigator.share).not.toHaveBeenCalled()
   })
 
-  it('keeps the draft when the browser blocks opening the WeChat app', async () => {
+  it('keeps the song address available when opening Windows WeChat is blocked', async () => {
     const { fields, navigator, assign } = openSong('song-blocked', false, 'Windows NT 10.0')
     assign.mockImplementationOnce(() => { throw new DOMException('blocked', 'SecurityError') })
     clickDestination('timeline')
     const draft = fields.url + '#share-timeline'
-    expect(navigator.clipboard.writeText).toHaveBeenCalledExactlyOnceWith(draft)
+    expect(navigator.clipboard.writeText).not.toHaveBeenCalled()
     await vi.waitFor(() => expect(document.getElementById('handoff-status')?.textContent).toContain('浏览器未能打开微信'))
     expect(document.querySelector<HTMLTextAreaElement>('.destination-guide textarea')?.value).toBe(draft)
+    button('copy-draft').click()
+    expect(navigator.clipboard.writeText).toHaveBeenCalledExactlyOnceWith(draft)
+    await vi.waitFor(() => expect(document.getElementById('handoff-status')?.textContent).toContain('地址已复制'))
+    expect(document.querySelector<HTMLTextAreaElement>('.destination-guide textarea')?.hidden).toBe(true)
     expect(navigator.share).not.toHaveBeenCalled()
   })
 
@@ -110,6 +119,7 @@ describe('public song listener page', () => {
     let deny!: (reason: Error) => void
     navigator.clipboard.writeText.mockImplementationOnce(() => new Promise<void>((_, reject) => { deny = reject }))
     clickDestination('friend')
+    button('copy-draft').click()
     clickDestination('timeline')
     const input = document.querySelector<HTMLTextAreaElement>('.destination-guide textarea')!
     expect(input.value).toBe(fields.url + '#share-timeline')
@@ -126,6 +136,7 @@ describe('public song listener page', () => {
   ])('opens the selected %s guidance from the song link in Windows WeChat even when card setup fails', (target, menuItem, agent) => {
     const { fields, navigator } = openSong('song-' + target, false, 'Windows NT 10.0')
     clickDestination(target)
+    button('copy-draft').click()
     const [entry] = navigator.clipboard.writeText.mock.calls[0]
     const inside = openSong('song-' + target, true, agent)
     expect(new URL(entry).pathname).toBe(new URL(fields.url).pathname)
@@ -137,9 +148,10 @@ describe('public song listener page', () => {
     expect(history.replaceState).toHaveBeenCalledExactlyOnceWith(null, '', new URL(fields.url).pathname)
     expect(document.getElementById('share-sheet')?.hasAttribute('open')).toBe(true)
     expect(button(target).getAttribute('aria-pressed')).toBe('true')
-    expect(document.getElementById('channel-instruction')?.textContent).toBe('打开微信浏览器的「…」菜单，选择「' + menuItem + '」。')
+    expect(document.getElementById('channel-instruction')?.textContent).toBe('在微信浏览器的「…」菜单选择「' + menuItem + '」，即可发送网页卡片。')
     expect(document.getElementById('wechat-feedback')?.textContent).toBe('')
     expect(document.querySelector<HTMLMetaElement>('meta[property="og:url"]')?.content).toBe(fields.url)
+    expect(document.querySelector<HTMLMetaElement>('meta[property="og:title"]')?.content).toBe(fields.timelineTitle)
     expect(document.querySelector<HTMLMetaElement>('meta[property="og:image"]')?.content).toBe(fields.thumbnail)
     const sdk = document.querySelector<HTMLScriptElement>('script[src*="jweixin"]')!
     sdk.onerror?.call(sdk, new Event('error'))
