@@ -470,7 +470,7 @@ onBeforeUnmount(() => {
             <img :style="{ objectPosition: heroBefore.position }" alt="" loading="lazy" decoding="async" fetchpriority="low">
           </picture>
         </div>
-        <div class="discover-hero-main" :class="{ 'is-single': heroSlideCount === 1 }">
+        <div class="discover-hero-main" :class="{ 'is-single': heroSlideCount === 1, 'has-portrait': hero.track.id === mascotSongId }">
           <picture>
             <source media="(max-width: 760px)" :srcset="heroBackground.compact">
             <img class="discover-hero-background" :src="heroBackground.desktop"

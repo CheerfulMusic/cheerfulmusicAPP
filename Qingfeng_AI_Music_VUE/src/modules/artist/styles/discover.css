@@ -50,6 +50,7 @@
 .discover-hero h2 { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; margin: 0 0 12px; color: white; font: 400 clamp(38px, 4.4vw, 63px)/1.08 'Qingfeng Song Script', 'Microsoft YaHei', sans-serif; overflow-wrap: anywhere; }
 .discover-hero h2.is-long-title { font-size: clamp(26px, 3.1vw, 44px); }
 .discover-hero h2.is-very-long-title { font-size: clamp(22px, 2.3vw, 34px); }
+.discover-hero-main.has-portrait h2 { max-width: 68%; font-size: clamp(22px, 2.3vw, 33px); text-wrap: balance; }
 .discover-hero p, .discover-hero-artist { display: block; margin: 0; color: #f1f4eb; font-size: 14px; }
 .discover-hero-artist:hover { text-decoration: underline; }
 .discover-hero-listen { display: inline-flex; align-items: center; gap: 8px; margin-top: 20px; padding: 8px 15px; border: 0; border-radius: 24px; background: #fff; color: #252d28; font-size: 13px !important; font-weight: 600 !important; }
@@ -184,6 +185,7 @@
   .discover-hero-main { border-radius: 6px; }
   .discover-hero-preview { display: none; }
   .discover-hero-content { padding-inline: 42px; }
+  .discover-hero-main.has-portrait h2 { max-width: 62%; }
   .discover-hero-previous { left: 4px; }
   .discover-hero-next { right: 4px; }
   .discover-hero-previous, .discover-hero-next { width: 30px; height: 30px; }
