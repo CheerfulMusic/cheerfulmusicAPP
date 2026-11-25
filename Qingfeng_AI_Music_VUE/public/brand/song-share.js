@@ -4,7 +4,8 @@
   const titleMeta = document.querySelector('meta[property="og:title"]')
   const timelineTitle = titleMeta.content
   const friendTitle = titleMeta.dataset.songCredit || timelineTitle
-  const wechat = /MicroMessenger/i.test(navigator.userAgent)
+  const wechat = /MicroMessenger|WindowsWechat|MacWechat|\bWeChat\//i.test(navigator.userAgent)
+  const windowsWechat = wechat && /Windows NT|WindowsWechat/i.test(navigator.userAgent)
   const byId = id => document.getElementById(id)
   const status = byId('status'), manual = byId('manual')
   const guide = byId('wechat-guide'), qr = byId('wechat-qr')
@@ -19,13 +20,19 @@
   if (clientMode('friend')) {
     format.textContent = '打开微信'
     handoffLink.onfocus = () => handoffLink.select()
+    if (handoff.isWindows) {
+      const linkLabel = desktopDraft.querySelector('label[for="handoff-link"]')
+      if (linkLabel) linkLabel.textContent = '歌曲分享链接'
+      if (copyDraft) copyDraft.textContent = '复制分享链接'
+    }
   }
   if (clientMode('timeline') && timelineHint) {
     timelineHint.textContent = '打开微信'
     timelineHint.hidden = false
   }
   if (wechat && timelineHint) {
-    format.textContent = '右上角菜单发送'
+    format.textContent = windowsWechat ? '微信菜单转发' : '右上角菜单发送'
+    if (windowsWechat) timelineHint.textContent = '微信菜单发表'
     timelineHint.hidden = false
   }
   let selected = '', sdkState = 'loading', qrRequest = 0
@@ -41,7 +48,8 @@
     catch (error) { if (error.name !== 'AbortError') status.textContent = '系统分享暂不可用，可选择微信好友或朋友圈。' }
   }
   function sdkFeedback() {
-    if (wechat && selected) feedback.textContent = sdkState === 'failed' ? '歌曲卡片暂时无法准备，可稍后重试或使用音乐海报。' :
+    // Windows WeChat can build a card from the page metadata even if JS-SDK setup fails.
+    if (wechat && !windowsWechat && selected) feedback.textContent = sdkState === 'failed' ? '歌曲卡片暂时无法准备，可稍后重试或使用音乐海报。' :
       sdkState === 'loading' ? '正在准备歌曲卡片…' : ''
   }
   function resetDestination() {
@@ -83,18 +91,24 @@
     guide.hidden = false
     const menuItem = destination === 'friend' ? '发送给朋友' : '分享到朋友圈'
     if (wechat) {
-      instruction.textContent = '点微信右上角「…」，选择「' + menuItem + '」。'
+      const desktopMenuItem = destination === 'friend' ? '转发…' : menuItem
+      instruction.textContent = windowsWechat
+        ? '打开微信浏览器的「…」菜单，选择「' + desktopMenuItem + '」。'
+        : '点微信右上角「…」，选择「' + menuItem + '」。'
       sdkFeedback()
       return
     }
-    if (clientMode(destination)) {
+    const canOpenClient = clientMode(destination)
+    const windowsHandoff = canOpenClient && handoff.isWindows
+    if (canOpenClient) {
       const data = destination === 'friend' ? friendData : timelineData
-      handoffLink.value = handoff.draft(data)
+      handoffLink.value = handoff.draft(data, destination)
       desktopDraft.hidden = false
       launch.hidden = false
       if (userClicked) void handoff.open(destination, data).then(result => showFeedback(result, request))
     }
-    instruction.textContent = '用微信扫一扫打开歌曲，再点右上角「…」选择「' + menuItem + '」即可分享歌曲卡片。'
+    instruction.textContent = windowsHandoff ? handoff.windowsInstruction
+      : '用微信扫一扫打开歌曲，再点右上角「…」选择「' + menuItem + '」即可分享歌曲卡片。'
     feedback.textContent = '正在生成二维码…'
     try {
       const renderer = await import('/brand/song-poster.js')
@@ -102,7 +116,7 @@
       if (request !== qrRequest) return
       qr.src = data
       qr.hidden = false
-      feedback.textContent = '同一部手机上可截图，再从微信扫一扫的相册打开。'
+      feedback.textContent = windowsHandoff ? '也可用手机微信扫码打开歌曲。' : '同一部手机上可截图，再从微信扫一扫的相册打开。'
     } catch {
       if (request === qrRequest) feedback.textContent = '二维码暂时无法生成，可重新点选分享方式。'
     }

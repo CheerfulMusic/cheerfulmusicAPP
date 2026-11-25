@@ -115,7 +115,7 @@ describe('share panel state and poster lifecycle', () => {
     expect(document.body.textContent).toContain('请选中链接手动复制。')
     expect(document.querySelector('.share-card-art img')?.getAttribute('src')).toContain('/songs/' + token + '/cover')
   })
-  it.each(['friend', 'timeline'])('opens WeChat directly with the creator’s %s draft', async target => {
+  it.each(['friend', 'timeline'])('opens WeChat and copies the creator’s %s song link on Windows', async target => {
     const share = vi.fn()
     const assign = vi.fn()
     let deny!: (error: Error) => void
@@ -123,7 +123,7 @@ describe('share panel state and poster lifecycle', () => {
     vi.stubGlobal('navigator', { userAgent: 'Windows NT 10.0', share, canShare: () => true, clipboard: { writeText } })
     const clientWindow = { location: { assign }, cheerfulWechat: undefined }
     runInNewContext(readFileSync('public/brand/wechat-handoff.js', 'utf8'), {
-      navigator, window: clientWindow, location: clientWindow.location,
+      navigator, window: clientWindow, location: clientWindow.location, URL,
     })
     vi.stubGlobal('cheerfulWechat', clientWindow.cheerfulWechat)
     const listeners = vi.spyOn(HTMLAnchorElement.prototype, 'addEventListener')
@@ -131,7 +131,7 @@ describe('share panel state and poster lifecycle', () => {
     mount(); await flush()
     const anchor = channel(target)
     expect(anchor.textContent).toContain('打开微信')
-    const url = new URL('/song/' + token, location.origin).href
+    const url = new URL('/song/' + token + '#share-' + target, location.origin).href
     anchor.click()
     expect(assign).not.toHaveBeenCalled()
     expect(writeText).not.toHaveBeenCalled()
@@ -141,22 +141,22 @@ describe('share panel state and poster lifecycle', () => {
     const listener = listeners.mock.calls[index]?.[1] as EventListener
     expect(listener).toBeTypeOf('function')
     listener.call(anchor, { isTrusted: true, preventDefault: vi.fn(), timeStamp: Date.now() } as unknown as MouseEvent)
-    const title = target === 'friend' ? '我的歌 · 公开艺名' : '青风音乐 Cheerful Music｜我的歌'
     expect(assign).toHaveBeenCalledExactlyOnceWith('weixin://')
     expect(share).not.toHaveBeenCalled()
-    expect(writeText).toHaveBeenCalledExactlyOnceWith(title + '\n' + url)
+    expect(writeText).toHaveBeenCalledExactlyOnceWith(url)
     deny(new Error('permission denied'))
     await flush()
     const input = document.querySelector<HTMLTextAreaElement>('#creator-share-draft')!
     expect(document.activeElement).toBe(input)
-    expect(input.value).toBe(title + '\n' + url)
+    expect(input.value).toBe(url)
     expect(input.selectionEnd - input.selectionStart).toBe(input.value.length)
     expect(document.querySelector('.destination-guide a[href="weixin://"]')).not.toBeNull()
+    expect(document.querySelector('.destination-guide')?.textContent).toContain('文件传输助手')
     expect(assign).toHaveBeenCalledTimes(1)
   })
-  it('navigates within WeChat to the signed public song with the selected destination', async () => {
+  it.each(['MicroMessenger', 'WindowsWechat/test'])('navigates in %s to the signed public song with the selected destination', async userAgent => {
     const writeText = vi.fn()
-    vi.stubGlobal('navigator', { userAgent: 'MicroMessenger', clipboard: { writeText } })
+    vi.stubGlobal('navigator', { userAgent, clipboard: { writeText } })
     mocks.get.mockResolvedValue(active())
     mount(); await flush()
     for (const target of ['friend', 'timeline']) {

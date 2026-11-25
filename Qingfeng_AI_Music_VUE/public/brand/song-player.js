@@ -196,10 +196,10 @@
     document.body.classList.add('sharing')
     close.focus({ preventScroll: true })
   }
-  // The author selected a destination on the work page, or scanned its QR code.
-  // The SDK shares the canonical listening URL, so recipients open the player directly.
+  // Consume the handoff hint so native menu sharing also uses the listening URL.
   const destination = { '#share-friend': 'friend', '#share-timeline': 'timeline' }[location.hash]
   if (destination) {
+    history.replaceState(history.state, '', location.pathname + location.search)
     trigger.click()
     byId(destination).click()
   }

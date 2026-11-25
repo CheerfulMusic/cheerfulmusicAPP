@@ -1,25 +1,34 @@
 // Loaded before the creator and public listening pages so sharing starts in the user's click.
 (() => {
   const clientUrl = 'weixin://'
+  const wechat = /MicroMessenger|WindowsWechat|MacWechat|\bWeChat\//i.test(navigator.userAgent)
+  const isWindows = /Windows NT|WindowsWechat/i.test(navigator.userAgent)
+  const windowsInstruction = '把歌曲链接发到电脑微信的「文件传输助手」，再点开歌曲。'
 
   function mode(destination) {
-    if (/MicroMessenger/i.test(navigator.userAgent) || !['friend', 'timeline'].includes(destination)) return ''
+    if (wechat || !['friend', 'timeline'].includes(destination)) return ''
     return 'client'
   }
 
-  function draft(data) {
+  function draft(data, destination) {
+    if (isWindows && destination) {
+      const entry = new URL(data.url)
+      entry.hash = 'share-' + destination
+      return entry.href
+    }
     return [data.title, data.url].filter(Boolean).join('\n')
   }
 
   async function copyDraft(data, destination) {
     try {
-      await navigator.clipboard.writeText(draft(data))
+      await navigator.clipboard.writeText(draft(data, destination))
+      if (isWindows) return { clipboard: 'copied', message: '歌曲分享链接已复制。' }
       const message = destination === 'timeline'
         ? '歌曲和链接已复制。可粘贴到朋友圈，要分享歌曲卡片请在微信内打开歌曲并使用右上角菜单。'
         : '歌曲和链接已复制。到微信选择好友，粘贴后发送。'
       return { clipboard: 'copied', message }
     } catch {
-      return { clipboard: 'manual', message: '请手动复制下方歌曲和链接。' }
+      return { clipboard: 'manual', message: isWindows ? '请手动复制下方歌曲链接。' : '请手动复制下方歌曲和链接。' }
     }
   }
 
@@ -31,12 +40,14 @@
       window.location.assign(clientUrl)
     } catch {
       const result = await copying
-      return { ...result, message: result.clipboard === 'copied'
-        ? '浏览器未能打开微信。歌曲和链接已复制，可手动打开微信粘贴。'
-        : '浏览器未能打开微信。请复制下方内容，再手动打开微信。' }
+      if (result.clipboard === 'manual') {
+        return { ...result, message: '浏览器未能打开微信。请复制下方内容，再手动打开微信。' }
+      }
+      return { ...result, message: isWindows ? '浏览器未能打开微信。歌曲分享链接已复制。'
+        : '浏览器未能打开微信。歌曲和链接已复制，可手动打开微信粘贴。' }
     }
     return copying
   }
 
-  window.cheerfulWechat = { mode, draft, copyDraft, open, clientUrl }
+  window.cheerfulWechat = { mode, draft, copyDraft, open, clientUrl, isWindows, windowsInstruction }
 })()

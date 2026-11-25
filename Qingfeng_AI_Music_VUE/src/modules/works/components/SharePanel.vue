@@ -21,7 +21,8 @@ const busy = ref(false), error = ref(''), notice = ref(''), sharing = ref(false)
 const posterOpen = ref(false), posterBusy = ref(false), posterUrl = ref(''), posterBlob = ref<Blob>(), posterError = ref('')
 const signature = ref(''), quote = ref(''), artworkFailed = ref(false), player = usePlayer()
 let generation = 0, posterGeneration = 0
-const insideWechat = /MicroMessenger/i.test(navigator.userAgent)
+const insideWechat = /MicroMessenger|WindowsWechat|MacWechat|\bWeChat\//i.test(navigator.userAgent)
+const windowsWechat = insideWechat && /Windows NT|WindowsWechat/i.test(navigator.userAgent)
 const hasSystemShare = !insideWechat && typeof navigator.share === 'function'
 const destination = ref<WechatDestination>(), qr = ref(''), qrError = ref(false)
 const client = platform.kind === 'web' && window.cheerfulWechat?.mode('friend') === 'client'
@@ -140,6 +141,7 @@ async function copyShareDraft() {
 }
 function destinationHint(target: WechatDestination) {
   if (platform.kind !== 'web') return '发歌曲卡片'
+  if (windowsWechat) return target === 'friend' ? '微信菜单转发' : '微信菜单发表'
   if (insideWechat) return target === 'friend' ? '右上角菜单发送' : '右上角菜单发表'
   return client ? '打开微信' : '用微信扫码'
 }
@@ -159,7 +161,7 @@ async function choose(event: MouseEvent, target: WechatDestination) {
     } finally { if (turn === generation) sharing.value = false }
     return
   }
-  // In WeChat the right-hand menu belongs to the current document. Open the signed public song first.
+  // The WeChat menu shares the current document. Open the signed public song first.
   if (insideWechat) return
   event.preventDefault()
   clearDestination()
@@ -277,14 +279,17 @@ onBeforeUnmount(() => { generation++; clearDestination(); clearPoster(); dialog.
           <img v-if="qr" :src="qr" width="144" height="144" :alt="t('在微信中打开歌曲的二维码')">
           <div>
             <template v-if="client">
-              <label for="creator-share-draft">{{ t('待发送内容') }}</label>
-              <textarea id="creator-share-draft" ref="manualLink" readonly rows="3" :value="client.draft(shareData)" @focus="manualLink?.select()"></textarea>
-              <button type="button" class="wechat-open" @click="copyShareDraft">{{ t('复制发送内容') }}</button>
+              <label for="creator-share-draft">{{ t(client.isWindows ? '歌曲分享链接' : '待发送内容') }}</label>
+              <textarea id="creator-share-draft" ref="manualLink" readonly rows="3" :value="client.draft(shareData, destination)" @focus="manualLink?.select()"></textarea>
+              <button type="button" class="wechat-open" @click="copyShareDraft">{{ t(client.isWindows ? '复制分享链接' : '复制发送内容') }}</button>
               <a class="wechat-open" :href="client.clientUrl">{{ t('再次打开微信') }}</a>
             </template>
             <p v-if="handoffMessage">{{ t(handoffMessage) }}</p>
-            <p>{{ t(destination === 'friend' ? '用微信扫一扫打开歌曲，再点右上角「…」选择「发送给朋友」。' : '用微信扫一扫打开歌曲，再点右上角「…」选择「分享到朋友圈」。') }}</p>
-            <p>{{ t(qrError ? '二维码暂时无法生成，可重新点选分享方式。' : qr ? '同一部手机上可截图，再从微信扫一扫的相册打开。' : '正在生成二维码…') }}</p>
+            <p v-if="client?.isWindows">{{ t(client.windowsInstruction) }}</p>
+            <p v-else>{{ t(destination === 'friend' ? '用微信扫一扫打开歌曲，再点右上角「…」选择「发送给朋友」。' : '用微信扫一扫打开歌曲，再点右上角「…」选择「分享到朋友圈」。') }}</p>
+            <p v-if="qrError">{{ t('二维码暂时无法生成，可重新点选分享方式。') }}</p>
+            <p v-else-if="qr">{{ t(client?.isWindows ? '也可用手机微信扫码打开歌曲。' : '同一部手机上可截图，再从微信扫一扫的相册打开。') }}</p>
+            <p v-else>{{ t('正在生成二维码…') }}</p>
           </div>
         </div>
       </template>

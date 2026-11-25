@@ -22,10 +22,12 @@ declare global {
   interface Window {
     cheerfulWechat?: {
       mode(destination: WechatDestination): '' | 'client'
-      draft(data: WechatSongData): string
+      draft(data: WechatSongData, destination: WechatDestination): string
       copyDraft(data: WechatSongData, destination: WechatDestination): Promise<WechatShareFeedback>
       open(destination: WechatDestination, data: WechatSongData): Promise<WechatShareFeedback | undefined>
       clientUrl: string
+      isWindows: boolean
+      windowsInstruction: string
     }
   }
 }
