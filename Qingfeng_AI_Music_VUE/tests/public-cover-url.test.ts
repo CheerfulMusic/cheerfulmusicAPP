@@ -6,6 +6,7 @@ import { requestJson } from '../src/shared/http/api-client'
 import PublicArtistPage from '../src/modules/artist/pages/PublicArtistPage.vue'
 import { ownerDiscoverCover, publicDiscoverTrack } from '../src/modules/artist/model/discover-shelves'
 import { discoverSongArtwork } from '../src/modules/artist/model/discover-hero-artwork'
+import discoverMedia from '../src/modules/artist/model/discover-media.json'
 
 const player = vi.hoisted(() => ({ current: null, setQueue: vi.fn(), toggle: vi.fn() }))
 
@@ -33,7 +34,7 @@ it('accepts public song data returned before cover identifiers were included', (
 
 it.each([
   { id: '13165085-71ba-4bf9-bece-a5f0cc59d4b5', title: 'Let the Light Take Its Time', version: 1, coverId: null, filename: 'let-the-light-take-its-time.webp' },
-  { id: '1c5c325c-6a45-4607-a8e4-5baadabc2032', title: 'Navidad', version: 2, coverId: 'previous-cover', filename: 'navidad.webp' },
+  { id: '1c5c325c-6a45-4607-a8e4-5baadabc2032', title: 'Navidad', version: 2, coverId: 'previous-cover', filename: discoverMedia.navidad.cover },
 ])('uses the editorial cover for $title in Discover and the owner library', ({ filename, coverId, ...song }) => {
   const track = publicDiscoverTrack({ artistId: 'artist', stageName: '艺人', song: { ...song, hasCover: !!coverId } })
   const owner = ownerDiscoverCover({ ...song, coverId, workId: 'work', assetId: 'audio' })

@@ -4,6 +4,7 @@ import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import ArtistHome from '../src/modules/artist/components/ArtistHome.vue'
 import ProfileWorks from '../src/modules/artist/components/ProfileWorks.vue'
 import type { ArtistRelease } from '../src/modules/artist/api/artist'
+import discoverMedia from '../src/modules/artist/model/discover-media.json'
 import { listWorks, type LibraryItem } from '../src/modules/works/api/works'
 
 vi.mock('../src/modules/works/api/works', () => ({ listWorks: vi.fn() }))
@@ -90,9 +91,9 @@ it('uses the Discover artwork on both owner tabs for the published recording', a
   vi.mocked(listWorks).mockResolvedValueOnce([{ ...work, coverId: 'old-cover' }])
   const profile = await open([release])
 
-  expect(profile.get('.profile-work-cover img').attributes('src')).toContain('navidad.webp')
+  expect(profile.get('.profile-work-cover img').attributes('src')).toBe(discoverMedia.navidad.cover)
   await profile.findAll('.profile-works-switch button')[1]!.trigger('click')
-  expect(profile.get('.profile-work-cover img').attributes('src')).toContain('navidad.webp')
+  expect(profile.get('.profile-work-cover img').attributes('src')).toBe(discoverMedia.navidad.cover)
 })
 
 it('limits the published profile tab to 15 works until expanded', async () => {

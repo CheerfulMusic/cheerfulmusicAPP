@@ -39,6 +39,14 @@ public final class RecommendationSamples {
         new Song("westside-summer", "WESTSIDE SUMMER", "Hip-Hop", "/media/recommendations/westside-summer-d24a68d80b9e-preview-128.mp3"));
 
     private static final Map<String, String> OBJECTS = Map.ofEntries(
+        Map.entry("recommendations/christmas-feels-like-home-757a61943433-preview-128.mp3", "qingfeng/recommendation-samples/20261125/audio/757a61943433/christmas-feels-like-home-757a61943433-preview-128.mp3"),
+        Map.entry("recommendations/prayer-beneath-the-stars-419248e9a652-preview-128.mp3", "qingfeng/recommendation-samples/20261125/audio/419248e9a652/prayer-beneath-the-stars-419248e9a652-preview-128.mp3"),
+        Map.entry("recommendations/cardboard-corners-468267313021-preview-128.mp3", "qingfeng/recommendation-samples/20261125/audio/468267313021/cardboard-corners-468267313021-preview-128.mp3"),
+        Map.entry("recommendations/christmas-feels-like-home-8c41c0110196-cover.jpg", "qingfeng/recommendation-samples/20261125/cover/8c41c0110196/christmas-feels-like-home-8c41c0110196-cover.jpg"),
+        Map.entry("recommendations/prayer-beneath-the-stars-5ed3738cf46d-cover.jpg", "qingfeng/recommendation-samples/20261125/cover/5ed3738cf46d/prayer-beneath-the-stars-5ed3738cf46d-cover.jpg"),
+        Map.entry("recommendations/cardboard-corners-ef3e80c9a905-cover.jpg", "qingfeng/recommendation-samples/20261125/cover/ef3e80c9a905/cardboard-corners-ef3e80c9a905-cover.jpg"),
+        Map.entry("recommendations/snow-on-the-floor-7cc079e30cdf-cover.jpg", "qingfeng/recommendation-samples/20261125/cover/7cc079e30cdf/snow-on-the-floor-7cc079e30cdf-cover.jpg"),
+        Map.entry("recommendations/navidad-f76ea270de14-cover.jpg", "qingfeng/recommendation-samples/20261125/cover/f76ea270de14/navidad-f76ea270de14-cover.jpg"),
         Map.entry("recommendations/westside-summer-d24a68d80b9e-preview-128.mp3", "qingfeng/recommendation-samples/20261123/audio/d24a68d80b9e/westside-summer-d24a68d80b9e-preview-128.mp3"),
         Map.entry("recommendations/westside-summer-3b0b2556d9e1-cover.jpg", "qingfeng/recommendation-samples/20261123/cover/3b0b2556d9e1/westside-summer-3b0b2556d9e1-cover.jpg"),
         Map.entry("recommendations/golden-hour-love-b4e20d8073b2-preview-128.mp3", "qingfeng/recommendation-samples/20261123/audio/b4e20d8073b2/golden-hour-love-b4e20d8073b2-preview-128.mp3"),
