@@ -156,7 +156,7 @@ public class PublicSongController {
         return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(bytes==null?fallback.getContentAsByteArray():bytes);
     }
 
-    private static byte[] thumbnailBytes(InputStream stream) throws IOException {
+    static byte[] thumbnailBytes(InputStream stream) throws IOException {
         try (var input = ImageIO.createImageInputStream(stream)) {
             var readers = ImageIO.getImageReaders(input);
             if (!readers.hasNext()) return null;

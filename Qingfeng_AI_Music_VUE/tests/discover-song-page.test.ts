@@ -1,4 +1,5 @@
 // @vitest-environment happy-dom
+// @vitest-environment-options {"url": "https://cheerfulmusic.com/"}
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { createMemoryHistory, createRouter } from 'vue-router'
@@ -6,12 +7,13 @@ import DiscoverSongPage from '../src/modules/artist/pages/DiscoverSongPage.vue'
 import type { DiscoverSongDetail } from '../src/modules/artist/api/discover-song'
 import { setLocale } from '../src/shared/i18n'
 
-const mocks = vi.hoisted(() => ({ detail: vi.fn(), like: vi.fn(), comment: vi.fn(), login: vi.fn() }))
+const mocks = vi.hoisted(() => ({ detail: vi.fn(), like: vi.fn(), comment: vi.fn(), login: vi.fn(), qr: vi.fn() }))
 vi.mock('../src/modules/artist/api/discover-song', async original => ({
   ...await original<typeof import('../src/modules/artist/api/discover-song')>(),
   getDiscoverSong: mocks.detail, setDiscoverLike: mocks.like, postDiscoverComment: mocks.comment,
 }))
 vi.mock('../src/shared/identity/login-dialog', () => ({ showLoginDialog: mocks.login }))
+vi.mock('../src/modules/works/model/song-poster', () => ({ wechatShareQr: mocks.qr }))
 vi.mock('../src/shared/player/store', () => ({
   usePlayer: () => ({ current: null, playing: false, starting: false, time: 0, duration: 0, tracks: [], selectIfEmpty: vi.fn() }),
 }))
@@ -26,23 +28,83 @@ function detail(signedIn = true): DiscoverSongDetail {
 }
 
 let wrapper: VueWrapper | undefined
-async function open() {
+async function open(release = song) {
   const idle = { template: '<div />' }
   const router = createRouter({ history: createMemoryHistory(), routes: [
     { path: '/', component: idle }, { path: '/discover', component: idle },
     { path: '/discover/songs/:id/:version', name: 'discover-song', component: DiscoverSongPage },
     { path: '/artist/:id', name: 'artist-home', component: idle },
   ] })
-  await router.push(`/discover/songs/${song.id}/${song.version}`)
+  await router.push(`/discover/songs/${release.id}/${release.version}`)
   wrapper = mount(DiscoverSongPage, { global: { plugins: [router] }, attachTo: document.body })
   await flushPromises()
   return wrapper
 }
 
 beforeEach(() => { vi.resetAllMocks(); setLocale('zh-CN'); mocks.detail.mockResolvedValue(detail()) })
-afterEach(() => { wrapper?.unmount(); wrapper = undefined })
+afterEach(() => {
+  wrapper?.unmount()
+  wrapper = undefined
+  vi.restoreAllMocks()
+  delete window.cheerfulWechatCard
+  window.history.replaceState({}, '', '/')
+})
 
 describe('Discover song detail', () => {
+  const url = 'https://cheerfulmusic.com/discover/songs/' + song.id + '/' + song.version
+
+  it('lets guests scan the song for WeChat friends or Moments', async () => {
+    mocks.detail.mockResolvedValue(detail(false))
+    mocks.qr.mockResolvedValue('data:image/png;base64,dGVzdA==')
+    const view = await open()
+    await view.get('[aria-haspopup="dialog"]').trigger('click')
+    const panel = document.querySelector<HTMLDialogElement>('.discover-share-dialog')!
+    expect(panel.open).toBe(true)
+    expect(panel.textContent).toContain('晚风车站')
+    const buttons = panel.querySelectorAll<HTMLButtonElement>('.share-destinations button')
+    expect(buttons[0].textContent).toContain('微信好友')
+    buttons[0].click()
+    await flushPromises()
+    expect(mocks.qr).toHaveBeenLastCalledWith(url, 'friend')
+    expect(panel.querySelector('[role="status"]')?.textContent).toContain('发送给朋友')
+    buttons[1].click()
+    await flushPromises()
+    expect(mocks.qr).toHaveBeenLastCalledWith(url, 'timeline')
+    expect(panel.querySelector('[role="status"] img')?.getAttribute('src')).toBe('data:image/png;base64,dGVzdA==')
+    expect(panel.querySelector('[role="status"]')?.textContent).toContain('分享到朋友圈')
+    expect(mocks.login).not.toHaveBeenCalled()
+  })
+
+  it('prepares the public card and opens the chosen guide when reached from a WeChat QR code', async () => {
+    vi.spyOn(navigator, 'userAgent', 'get').mockReturnValue('MicroMessenger')
+    const releasedSong = { ...song, id: '1485ddee-9a1f-435b-bfc8-403cccb8c243', hasCover: true, coverVersion: 'stamp' }
+    const resolvedUrl = url.replace(song.id, releasedSong.id)
+    const entryUrl = resolvedUrl + '?from=timeline'
+    window.history.replaceState({}, '', entryUrl + '#share-timeline')
+    const cleanup = vi.fn()
+    const prepare = vi.fn<NonNullable<Window['cheerfulWechatCard']>['prepare']>((_card, update) => {
+      update('ready')
+      return cleanup
+    })
+    window.cheerfulWechatCard = { entryUrl, prepare }
+    const response = detail(false)
+    mocks.detail.mockResolvedValue({ ...response, release: { ...response.release, song: releasedSong } })
+    const view = await open(releasedSong)
+    expect(prepare).toHaveBeenCalledOnce()
+    expect(prepare.mock.calls[0][0]).toMatchObject({
+      link: resolvedUrl, friendTitle: '晚风车站 · 青风音乐',
+      timelineTitle: '青风音乐 Cheerful Music｜晚风车站 · 青风音乐',
+      imgUrl: 'https://cheerfulmusic.com/api/public/discover/songs/1485ddee-9a1f-435b-bfc8-403cccb8c243/2/thumbnail.png?v=stamp',
+    })
+    const panel = document.querySelector<HTMLDialogElement>('.discover-share-dialog')!
+    expect(panel.open).toBe(true)
+    expect(panel.querySelector('[role="status"]')?.textContent).toContain('点微信右上角「…」，选择「分享到朋友圈」。')
+    expect(mocks.qr).not.toHaveBeenCalled()
+    view.unmount()
+    wrapper = undefined
+    expect(cleanup).toHaveBeenCalledOnce()
+  })
+
   it('shows the song and playback while community storage is unavailable', async () => {
     mocks.detail.mockResolvedValue({ ...detail(), communityAvailable: false })
     const view = await open()

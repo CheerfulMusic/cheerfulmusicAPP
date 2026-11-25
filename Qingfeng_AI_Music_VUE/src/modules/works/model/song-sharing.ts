@@ -17,9 +17,21 @@ export function songShareUrl(token: string, origin: string): string {
 }
 export type WechatDestination = 'friend' | 'timeline'
 export type WechatSongData = ShareData & { url: string }
+export interface WechatCard {
+  link: string
+  imgUrl: string
+  friendTitle: string
+  timelineTitle: string
+  description: string
+}
+export type WechatCardState = 'loading' | 'ready' | 'failed'
 export type WechatShareFeedback = { message: string; clipboard?: 'copied' | 'manual' }
 declare global {
   interface Window {
+    cheerfulWechatCard?: {
+      entryUrl: string
+      prepare(card: WechatCard, update: (state: WechatCardState) => void): () => void
+    }
     cheerfulWechat?: {
       mode(destination: WechatDestination): '' | 'client'
       draft(data: WechatSongData): string

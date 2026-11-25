@@ -24,7 +24,7 @@ public final class InviteGateFilter extends OncePerRequestFilter {
     private static final Pattern ARTIST_READ = Pattern.compile("/api/public/artists/" + PUBLIC_ID
             + "(?:/(?:avatar|cover)/" + PUBLIC_ID + "|/songs/" + PUBLIC_ID + "/[1-9][0-9]{0,18}/(?:audio|cover|lyrics)|/albums(?:/" + PUBLIC_ID + "(?:/cover/" + PUBLIC_ID + ")?)?)?");
     private static final String DISCOVER_SONG = "/api/public/discover/songs/" + PUBLIC_ID + "/[1-9][0-9]{0,18}";
-    private static final Pattern DISCOVER_SONG_READ = Pattern.compile(DISCOVER_SONG + "(?:/comments)?");
+    private static final Pattern DISCOVER_SONG_READ = Pattern.compile(DISCOVER_SONG + "(?:/comments|/thumbnail[.]png)?");
 
     private final InviteGateService gate;
 

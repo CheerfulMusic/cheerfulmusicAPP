@@ -18,6 +18,9 @@ import tools.jackson.databind.*;
 @RestController
 @Profile({"mysql","test"})
 public class WechatShareConfigController {
+    private static final java.util.regex.Pattern SHARE_PATH = java.util.regex.Pattern.compile(
+            "/song/[A-Za-z0-9_-]{43}|(?:/en)?/discover/songs/"
+            + "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/[1-9][0-9]{0,18}");
     private final String appId, secret, origin;
     private final HttpClient client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(4)).build();
     private final ObjectMapper json = new ObjectMapper();
@@ -39,8 +42,8 @@ public class WechatShareConfigController {
         URI page;
         try { page = URI.create(url); }
         catch (IllegalArgumentException error) { throw new ResponseStatusException(HttpStatus.BAD_REQUEST); }
-        if (url.length() > 4096 || !url.startsWith(origin + "/song/") || page.getFragment() != null
-                || !page.getRawPath().matches("/song/[A-Za-z0-9_-]{43}"))
+        if (url.length() > 4096 || !url.startsWith(origin + "/") || page.getFragment() != null
+                || !SHARE_PATH.matcher(page.getRawPath()).matches())
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST);
         String nonce = UUID.randomUUID().toString();
         long now = Instant.now().getEpochSecond();

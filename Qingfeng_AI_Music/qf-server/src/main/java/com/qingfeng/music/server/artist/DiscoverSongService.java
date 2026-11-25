@@ -41,6 +41,11 @@ public class DiscoverSongService {
                          boolean signedIn, boolean communityAvailable, boolean canEditDescription,
                          Likes likes, long commentCount, Comments comments) {}
 
+    @Transactional(readOnly = true)
+    public ArtistProfileService.DiscoverSong sharingRelease(String song, long version) {
+        return profiles.discoverRecording(song, version).release();
+    }
+
     private record CommentRow(String id, String creator, String text, Instant createdAt) {}
     private record Cursor(Instant createdAt, String id) {
         static Cursor parse(String value) {

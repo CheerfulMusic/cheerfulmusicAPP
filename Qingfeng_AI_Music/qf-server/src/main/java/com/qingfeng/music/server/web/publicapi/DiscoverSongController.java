@@ -1,6 +1,8 @@
 package com.qingfeng.music.server.web.publicapi;
 
+import com.qingfeng.music.common.exception.DomainException;
 import com.qingfeng.music.identity.api.IdentityApi;
+import com.qingfeng.music.server.artist.ArtistProfileService;
 import com.qingfeng.music.server.artist.DiscoverSongService;
 import com.qingfeng.music.server.security.CreatorPrincipal;
 import com.qingfeng.music.server.security.CreatorSessionFilter;
@@ -9,8 +11,10 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
+import java.io.IOException;
 import java.util.UUID;
 import org.springframework.context.annotation.Profile;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.http.CacheControl;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -23,10 +27,12 @@ public class DiscoverSongController {
     private static final String ACCOUNT = "/api/app/discover/songs/{song}/{version}";
     private final DiscoverSongService songs;
     private final IdentityApi identity;
+    private final ArtistProfileService profiles;
 
-    public DiscoverSongController(DiscoverSongService songs, IdentityApi identity) {
+    public DiscoverSongController(DiscoverSongService songs, IdentityApi identity, ArtistProfileService profiles) {
         this.songs = songs;
         this.identity = identity;
+        this.profiles = profiles;
     }
 
     public record Like(@NotNull Boolean active) {}
@@ -37,6 +43,23 @@ public class DiscoverSongController {
     public ResponseEntity<DiscoverSongService.Detail> detail(@PathVariable UUID song, @PathVariable @Positive long version,
                                                             HttpServletRequest request) {
         return noStore(songs.detail(song.toString(), version, viewer(request)));
+    }
+
+    @GetMapping(value = PUBLIC + "/thumbnail.png", produces = "image/png")
+    public ResponseEntity<byte[]> thumbnail(@PathVariable UUID song, @PathVariable @Positive long version) throws IOException {
+        var release = songs.sharingRelease(song.toString(), version);
+        byte[] thumbnail = null;
+        if (release.song().hasCover()) {
+            try (var source = profiles.publicCover(release.artistId(), song.toString(), version).source().open(0)) {
+                thumbnail = PublicSongController.thumbnailBytes(source);
+            } catch (DomainException missing) {
+                if (!"COVER_NOT_FOUND".equals(missing.code()) && !"ARTIST_NOT_FOUND".equals(missing.code())) throw missing;
+            } catch (IOException unreadable) {
+                // Use the default artwork when the cover cannot be decoded.
+            }
+        }
+        if (thumbnail == null) thumbnail = new ClassPathResource("static/brand/share-default-cover.png").getContentAsByteArray();
+        return noStore(thumbnail);
     }
 
     @GetMapping(PUBLIC + "/comments")

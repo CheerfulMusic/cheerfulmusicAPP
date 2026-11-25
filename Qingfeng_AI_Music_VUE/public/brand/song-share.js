@@ -138,35 +138,11 @@
   })
   audio.addEventListener('ended', () => { playCounted = false })
   if (!wechat) return
-  const sdk = document.createElement('script')
-  sdk.src = 'https://res.wx.qq.com/open/js/jweixin-1.6.0.js'
-  const report = reason => {
-    sdkState = 'failed'
+  const cardShare = window.cheerfulWechatCard
+  if (!cardShare) { sdkState = 'failed'; sdkFeedback(); return }
+  cardShare.prepare({ link: url, imgUrl: meta('image'), friendTitle, timelineTitle,
+    description: meta('description') }, state => {
+    sdkState = state
     sdkFeedback()
-    fetch('/api/wechat/jssdk-error?reason=' + reason, { method: 'POST', keepalive: true }).catch(() => {})
-  }
-  sdk.onerror = () => report('SDK_LOAD')
-  sdk.onload = async () => {
-    try {
-      const response = await fetch('/api/wechat/jssdk-config?url=' + encodeURIComponent(location.href.split('#')[0]))
-      if (!response.ok) throw new Error('HTTP ' + response.status)
-      const config = await response.json()
-      const failure = error => {
-        const message = String(error?.errMsg || '')
-        console.warn('WeChat JS-SDK', message)
-        report(/invalid signature/i.test(message) ? 'INVALID_SIGNATURE' :
-          /permission|denied/i.test(message) ? 'PERMISSION_DENIED' : 'CONFIG_FAILED')
-      }
-      wx.ready(() => {
-        sdkState = 'ready'
-        sdkFeedback()
-        const card = { link: url, imgUrl: meta('image'), fail: failure }
-        wx.updateAppMessageShareData({ ...card, title: friendTitle, desc: meta('description') })
-        wx.updateTimelineShareData({ ...card, title: timelineTitle })
-      })
-      wx.error(failure)
-      wx.config({ ...config, debug: false, jsApiList: ['updateAppMessageShareData', 'updateTimelineShareData'] })
-    } catch (error) { report('CONFIG_FAILED'); console.warn('WeChat share configuration', error.message) }
-  }
-  document.head.appendChild(sdk)
+  })
 })()
