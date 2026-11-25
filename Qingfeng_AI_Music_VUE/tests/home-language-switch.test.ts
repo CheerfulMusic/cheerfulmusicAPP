@@ -34,7 +34,7 @@ it('switches both ways on the root without changing the URL or tab title', async
       await button.trigger('click')
       expect(router.currentRoute.value.fullPath).toBe('/?utm_source=search#how')
       expect(document.documentElement.lang).toBe(language)
-      expect(document.title).toBe('Cheerful Music')
+      expect(document.title).toBe('青妙Ai')
       expect(document.querySelector('meta[property="og:site_name"]')?.getAttribute('content')).toBe('青妙Ai')
       expect(button.attributes('aria-pressed')).toBe('true')
       expect(hero.findAll('h1 > span').map(line => line.text())).toEqual(language === 'en'
@@ -57,11 +57,12 @@ it('returns visitors from the English search landing page to the root when they 
   const wrapper = mount(LanguageSwitcher, { global: { plugins: [router] } })
   try {
     expect(locale.value).toBe('en')
+    expect(document.title).toBe('青妙Ai')
     await wrapper.get('button[lang="zh-CN"]').trigger('click')
     await flushPromises()
     expect(router.currentRoute.value.fullPath).toBe('/?utm_source=search#how')
     expect(locale.value).toBe('zh-CN')
-    expect(document.title).toBe('Cheerful Music')
+    expect(document.title).toBe('青妙Ai')
   } finally {
     wrapper.unmount()
   }

@@ -8,15 +8,12 @@ export const homeSeo = {
     path: '/',
     heading: chineseHomeHeadline,
     invitePrompt: '输入邀请码即可开始创作。',
-    searchTitle: homeSearchTitle,
     description: '青妙Ai 是青风音乐（Cheerful Music）的 AI 音乐创作平台。写下歌词或故事，选好曲风和人声，就能生成、试听和分享自己的歌。',
   },
   en: {
     path: '/en/',
     heading: creatorHeadline,
     invitePrompt: 'Enter your invitation code to start creating.',
-    title: homeSearchTitle,
-    searchTitle: homeSearchTitle,
     description: 'Turn your lyrics or a story into a song with 青妙Ai (Cheerful Music). Choose a style and voice, then listen to your AI-generated track and share it with friends.',
   },
 } as const
