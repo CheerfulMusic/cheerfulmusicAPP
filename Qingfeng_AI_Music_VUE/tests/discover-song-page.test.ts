@@ -77,7 +77,7 @@ describe('Discover song detail', () => {
 
   it('prepares the public card and opens the chosen guide when reached from a WeChat QR code', async () => {
     vi.spyOn(navigator, 'userAgent', 'get').mockReturnValue('MicroMessenger')
-    const releasedSong = { ...song, id: '1485ddee-9a1f-435b-bfc8-403cccb8c243', hasCover: true, coverVersion: 'stamp' }
+    const releasedSong = { ...song, id: '00000000-0000-4000-8000-000000000001', hasCover: true, coverVersion: 'stamp' }
     const resolvedUrl = url.replace(song.id, releasedSong.id)
     const entryUrl = resolvedUrl + '?from=timeline'
     window.history.replaceState({}, '', entryUrl + '#share-timeline')
@@ -94,7 +94,7 @@ describe('Discover song detail', () => {
     expect(prepare.mock.calls[0][0]).toMatchObject({
       link: resolvedUrl, friendTitle: '晚风车站 · 青风音乐',
       timelineTitle: '青风音乐 Cheerful Music｜晚风车站 · 青风音乐',
-      imgUrl: 'https://cheerfulmusic.com/api/public/discover/songs/1485ddee-9a1f-435b-bfc8-403cccb8c243/2/thumbnail.png?v=stamp',
+      imgUrl: `https://cheerfulmusic.com/api/public/discover/songs/${releasedSong.id}/${releasedSong.version}/thumbnail.png?v=stamp`,
     })
     const panel = document.querySelector<HTMLDialogElement>('.discover-share-dialog')!
     expect(panel.open).toBe(true)

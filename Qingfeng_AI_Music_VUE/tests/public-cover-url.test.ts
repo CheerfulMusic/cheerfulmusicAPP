@@ -33,6 +33,7 @@ it('accepts public song data returned before cover identifiers were included', (
 })
 
 it.each([
+  { id: '1485ddee-9a1f-435b-bfc8-403cccb8c243', title: '吉祥物 （短剧插曲）', version: 5, coverId: 'previous-cover', filename: 'jixiangwu.webp' },
   { id: '13165085-71ba-4bf9-bece-a5f0cc59d4b5', title: 'Let the Light Take Its Time', version: 1, coverId: null, filename: 'let-the-light-take-its-time.webp' },
   { id: '1c5c325c-6a45-4607-a8e4-5baadabc2032', title: 'Navidad', version: 2, coverId: 'previous-cover', filename: discoverMedia.navidad.cover },
 ])('uses the editorial cover for $title in Discover and the owner library', ({ filename, coverId, ...song }) => {

@@ -3,6 +3,7 @@ import discoverMedia from './discover-media.json'
 import sixEaredDebate from '../../../assets/discover/editorial/cover-17.webp'
 import awaitingDawn from '../../../assets/discover/editorial/cover-05.webp'
 import whenCitySleeps from '../../../assets/discover/song-covers/when-city-sleeps.webp'
+import jixiangwu from '../../../assets/discover/song-covers/jixiangwu.webp'
 import lookWhatYouDoToMe from '../../../assets/discover/song-covers/look-what-you-do-to-me.webp'
 import twoAmLosAngeles from '../../../assets/discover/editorial/cover-29.webp'
 import somethingAboutYou from '../../../assets/discover/editorial/cover-07.webp'
@@ -56,6 +57,7 @@ const coversBySong = new Map<string, string>([
   ['5ea96e39-113b-4ae9-9579-19d85dc4b063', sixEaredDebate],
   ['be7e4adc-e671-45fb-afd0-b87f1ab915bc', awaitingDawn],
   ['375e3bb7-c6fb-460f-916e-5e86442c7d1c', whenCitySleeps],
+  ['1485ddee-9a1f-435b-bfc8-403cccb8c243', jixiangwu],
   ['9e42f15b-d819-48d8-bb51-1920ba981692', lookWhatYouDoToMe],
   ['24bdb016-c5b5-471d-b25d-a53f0bed489c', twoAmLosAngeles],
   ['68d6506a-194d-4f81-be6a-94404b258d7f', somethingAboutYou],
