@@ -839,7 +839,7 @@ export const english: Record<string, string> = {
   '选好音乐风格和演唱声音，再让歌词成为一首歌。': 'Choose a music style and vocals, then bring your lyrics to life.',
   '旋律与声音': 'Music & voice',
   '生成歌词': 'Generate lyrics',
-  "从这一刻起，你也是歌手。": "From This Moment, You Are a Singer!",
+  "从这一刻起，你也是歌手。": "From This Moment, You are an artist",
   "用几句话表达你的灵感，AI 会为你写成歌词。": "Express your inspiration in a few words. AI will turn it into lyrics.",
   "写下创作灵感": "Write your inspiration",
   "写下你的故事、情绪、场景或主题……": "Write your story, emotions, scene, or theme…",
