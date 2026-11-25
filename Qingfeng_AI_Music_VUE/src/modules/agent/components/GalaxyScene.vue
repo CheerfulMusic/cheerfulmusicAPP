@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, useId, watch } from 'vue'
 import { locale } from '../../../shared/i18n'
 import image from '../assets/inspiration-galaxy.png'
 import { animateGalaxy } from '../model/galaxy-animation'
 
+const paletteId = `galaxy-palette-${useId()}`
 const en=computed(()=>locale.value==='en'), canvas=ref<HTMLCanvasElement>(), art=ref<HTMLImageElement>()
 const loaded=ref(false), fast=ref(false), focused=ref(false)
 const effects=ref<{id:number;kind:'leaf'|'ring';x:number;y:number;drift:number;delay:number}[]>([])
@@ -34,8 +35,22 @@ onBeforeUnmount(()=>timers.forEach(clearTimeout))
 </script>
 <template>
   <div class="galaxy-scene">
-    <img ref="art" :src="image" alt="" @load="loaded=true"/>
-    <canvas ref="canvas" aria-hidden="true"/>
+    <svg class="galaxy-palette" width="0" height="0" aria-hidden="true" focusable="false">
+      <defs>
+        <filter :id="paletteId" x="0" y="0" width="1" height="1" color-interpolation-filters="sRGB">
+          <feColorMatrix type="matrix" values="
+            1.015  0.47 -0.485 0 -0.008
+            0.60   0.09  0.325 0  0.015
+            0.423 -0.36  0.95  0  0.035
+            0      0     0     1  0
+          "/>
+        </filter>
+      </defs>
+    </svg>
+    <div class="galaxy-artwork" :style="{ filter: `url(#${paletteId})` }">
+      <img ref="art" :src="image" alt="" @load="loaded=true"/>
+      <canvas ref="canvas" aria-hidden="true"/>
+    </div>
     <button class="tree-zone" type="button" :aria-label="en?'Shake leaves from the tree':'轻摇树枝，落下树叶'" @click="activate($event,'leaf')"/>
     <button class="orbit-zone" type="button" :aria-label="en?'Spin the galaxy faster':'加速银河旋转'" @pointerenter="fast=true" @pointerleave="fast=false" @focus="focused=($event.currentTarget as HTMLElement).matches(':focus-visible')" @blur="focused=false"/>
     <button class="water-zone" type="button" :aria-label="en?'Ripple the lake':'轻点湖面，泛起涟漪'" @click="activate($event,'ring')"/>
@@ -43,7 +58,9 @@ onBeforeUnmount(()=>timers.forEach(clearTimeout))
   </div>
 </template>
 <style scoped>
-.galaxy-scene{position:relative;isolation:isolate;aspect-ratio:1674/940;overflow:hidden;background:#1d2632}
+.galaxy-scene{position:relative;isolation:isolate;aspect-ratio:1674/940;overflow:hidden;background:#061322}
+.galaxy-palette{position:absolute}
+.galaxy-artwork{position:absolute;inset:0;pointer-events:none}
 .galaxy-scene img,.galaxy-scene canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
 .galaxy-scene canvas{opacity:0;pointer-events:none}
 .galaxy-scene button{position:absolute;appearance:none;padding:0;border:0;background:transparent;cursor:pointer}
