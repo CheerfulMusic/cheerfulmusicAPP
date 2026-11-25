@@ -13,6 +13,7 @@
 | 模型回退与播放器联调基线 | `f3b99d76` | 纳入并行开发的 `bc1b0065` 模型超时回退和 `b64b127f` 播放器配色，在同一副本重跑回归 |
 | 功能提交的父提交 | `9da085fc` | 包含并行开发的公开作品与搜索页面更新 |
 | 合并功能时的本地 main | `aea02cc4` | 在 `9da085fc` 之上只修改了播放器动画 `GalaxyScene.vue` |
+| 已验证的功能提交及其本地合并 | `026881f3`、`a5ca7c59` | 合并时逐项核对了 main 原有的 24 项工作区改动 |
 
 候选提交的完整文件清单可用 `git show --name-status <候选提交>` 查看。日常服务、线上部署及账户账本均未用于验收。
 
@@ -75,7 +76,7 @@ credit_ledger.reference_id   = music:<作品 A>:<确认 Q>
 重复失败后 status = FAILED，MUSIC 预留记录剩余 0
 ```
 
-排队模式还从真实消息结果接口轮询同一报价，并验证旧客户端使用另一消息编号依然只增加一版歌词。模型回退测试用回环 HTTP 模拟主模型超时和备用模型提议生成，核实确认前任务数为零、确认后只创建一项任务。真实模型和音乐、视频供应商的生成效果未测。
+排队模式还从真实消息结果接口轮询同一报价，并验证旧客户端使用另一消息编号依然只增加一版歌词。模型回退测试用回环 HTTP 模拟主模型超时和备用模型提议生成，核实确认前任务数为零、确认后只创建一项任务。歌词队列的超时释放测试曾因两条合成请求同时就绪而偶发选中另一条请求。测试现将第一条请求的可领取时间提前一秒，仍同时验证排队过期与执行结果未知时的许可释放。真实模型和音乐、视频供应商的生成效果未测。
 
 ## 改动文件
 
@@ -86,8 +87,8 @@ credit_ledger.reference_id   = music:<作品 A>:<确认 Q>
 | qf-server 对话、队列和 HTTP | `agent/AgentCreationRequest.java`、`agent/AgentChatService.java`、`agent/AgentChatExecutor.java`、`agent/AgentCapacityHandler.java`、`agent/AgentSongStatus.java`、`config/AgentConversationChatConfiguration.java`、`web/app/AgentChatController.java` |
 | qf-business | `agent/api/AgentTurnStore.java`、`agent/application/SongCardProjector.java`、`agent/application/handler/AgentCreationSupport.java`、`GenerateLyricsHandler.java`、`GenerateSongHandler.java`、`credits/ConfirmedCreation.java`、`generation/api/GenerationApi.java`、`generation/application/GenerationService.java` |
 | qf-infrastructure | `persistence/agent/JdbcAgentTurnStore.java`、`persistence/usage/JdbcUsageBudget.java` |
-| 后端测试 | `AgentChatFlowIntegrationTest.java`、`AgentChatServiceTest.java`、`AgentPlanServiceTest.java`、`AiCapacityHttpTest.java`、`config/ModelTimeoutFallbackIntegrationTest.java` |
+| 后端测试 | `AgentChatFlowIntegrationTest.java`、`AgentChatServiceTest.java`、`AgentPlanServiceTest.java`、`AiCapacityHttpTest.java`、`config/ModelTimeoutFallbackIntegrationTest.java`、`AiCapacityQueueTest.java` |
 
 ## 回滚
 
-在本地 main 中运行 `git revert <本次功能提交>`，复跑专项测试。此改动使用既有表与索引，没有 SQL 迁移。已有账户流水继续由原有业务机制处理。再次切换日常运行版本或发版需要另行授权。
+在本地 main 中运行 `git revert 026881f3`，复跑专项测试。此改动使用既有表与索引，没有 SQL 迁移。已有账户流水继续由原有业务机制处理。再次切换日常运行版本或发版需要另行授权。

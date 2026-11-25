@@ -94,6 +94,8 @@ class AiCapacityQueueTest {
         String firstOwner = creator(db), secondOwner = creator(db);
         var first = queue.submit(Lane.LYRICS, firstOwner, firstOwner, firstOwner, "lyrics", SMALL, ignored -> {});
         var second = queue.submit(Lane.LYRICS, secondOwner, secondOwner, secondOwner, "lyrics", SMALL, ignored -> {});
+        // Equal due times are ordered by job id. Make the intended running request eligible first.
+        db.update("UPDATE ai_capacity_job SET next_attempt_at=DATEADD('SECOND',-1,next_attempt_at) WHERE id=?", first.id());
         var running = queue.claim(Lane.LYRICS, Stage.START, SMALL).orElseThrow();
         assertThat(running.id()).isEqualTo(first.id());
         assertThat(queue.claim(Lane.LYRICS, Stage.START, SMALL)).isEmpty();
