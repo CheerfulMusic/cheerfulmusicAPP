@@ -757,12 +757,18 @@ class AgentChatFlowIntegrationTest {
         String id=quote.path("id").asText(), work=card.path("songId").asText();
         assertEquals(card.path("revisionId"),quote.path("revisionId"));assertEquals(5,quote.path("credits").asInt());
         var payload=Map.of("text","#approve:"+id,"requestKey",id);
+        var shown = Map.of("promptId", lastMessageId(initial), "workId", work,
+                           "revisionId", card.path("revisionId").asText());
         String endpoint="/api/app/agent/conversations/"+user.conversation()+"/messages";
         var pool=java.util.concurrent.Executors.newFixedThreadPool(2);
         var gate=new java.util.concurrent.CyclicBarrier(2);
         try {
             java.util.concurrent.Callable<Integer> click=()->{gate.await();return request(user.http(),"POST",endpoint,payload,user.csrf()).statusCode();};
-            var left=pool.submit(click);var right=pool.submit(click);
+            java.util.concurrent.Callable<Integer> legacyClick=()->{
+                gate.await();
+                return fromTab(user,"确认执行",UUID.randomUUID().toString(),shown).statusCode();
+            };
+            var left=pool.submit(click);var right=pool.submit(legacyClick);
             var codes=List.of(left.get(),right.get());
             assertTrue(codes.contains(200)&&codes.stream().allMatch(code->code==200||code==409),codes::toString);
         } finally { pool.shutdownNow(); }
@@ -770,6 +776,11 @@ class AgentChatFlowIntegrationTest {
         assertFalse(task.isBlank());
         var legacyReplay=ok(request(user.http(),"POST",endpoint,Map.of("text","#approve:"+id,"requestKey",UUID.randomUUID().toString()),user.csrf()));
         assertEquals(task,legacyReplay.path("taskId").asText());
+        assertEquals(task,ok(fromTab(user,"确认生成",UUID.randomUUID().toString(),shown)).path("taskId").asText());
+        var changed = new HashMap<>(shown);
+        changed.put("revisionId", UUID.randomUUID().toString());
+        assertEquals(409,fromTab(user,"#approve:"+id,id,changed).statusCode());
+        assertEquals(1,count("SELECT COUNT(*) FROM agent_request_admission WHERE creator_id=? AND request_key=?",user.creator(),id));
         assertEquals(card.path("revisionId").asText(),db.queryForObject("SELECT revision_id FROM generation_task WHERE request_key=? AND work_id=?",String.class,id,work));
         assertEquals(-5,count("SELECT amount FROM credit_ledger WHERE owner_id=? AND entry_type='DEBIT' AND reference_id=?",user.creator(),"music:"+work+":"+id));
         // Simulate losing the conversation's task pointer after the business transaction committed.

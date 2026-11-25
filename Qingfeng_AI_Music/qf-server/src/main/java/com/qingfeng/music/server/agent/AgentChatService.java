@@ -475,6 +475,30 @@ public final class AgentChatService {
         turns.complete(owner,conversation,key,json.writeValueAsString(outcome));
         return snapshot(owner,conversation,action,outcome);
     }
+    /** Older clients send the button label and a new transport key for the same displayed quote. */
+    String approvalMessage(String owner, String conversation, String text, DisplayedContext displayed) {
+        if (text == null || displayed == null || displayed.creationAction() != null || displayed.promptId() == null) return text;
+        String message = text.strip();
+        boolean token = message.startsWith("#approve:");
+        if (!token && (!AgentChatPolicy.confirmed(message) || message.startsWith("确认删除"))) return text;
+        var prompt = turns.displayedAssistantMessage(owner, conversation, displayed.promptId())
+                .map(json::readTree);
+        if (prompt.isEmpty() || !prompt.get().hasNonNull("creationQuote")) {
+            if (token) throw new DomainException("AGENT_PROMPT_CONFLICT", "请核对当前作品的报价后再确认。");
+            return text;
+        }
+        var card = prompt.get();
+        var quote = json.treeToValue(card.path("creationQuote"), Quote.class);
+        String command = "#approve:" + quote.id();
+        if (!Objects.equals(quote.workId(), displayed.workId()) || !Objects.equals(quote.revisionId(), displayed.revisionId())
+                || token && !command.equals(message)
+                || "create_music_video".equals(quote.action()) && displayed.media() != null
+                    && !Objects.equals(card.path("pendingMedia").path("assetId").asText(null), displayed.media().assetId())) {
+            throw new DomainException("AGENT_PROMPT_CONFLICT", "确认的作品、版本或报价已变化，请重新查看报价。");
+        }
+        return command;
+    }
+
     private void validateDecision(String owner,String conversation,String message,DisplayedContext displayed){
         if(displayed!=null&&displayed.historyEpoch()!=null&&displayed.historyEpoch()!=conversations.historyEpoch(owner,conversation))
             throw new DomainException("AGENT_HISTORY_CONFLICT","对话已清空，请在当前对话重新发送。");

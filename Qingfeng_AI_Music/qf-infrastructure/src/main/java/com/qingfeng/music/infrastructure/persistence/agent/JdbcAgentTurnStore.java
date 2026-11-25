@@ -23,6 +23,13 @@ public final class JdbcAgentTurnStore implements AgentTurnStore {
         var ids=jdbc.queryForList("SELECT id FROM agent_conversation WHERE id=? AND creator_id=? FOR UPDATE",String.class,conversation,owner);
         if(ids.isEmpty())throw new DomainException("AGENT_CONVERSATION_NOT_FOUND","会话不存在或不属于当前用户。");
     }
+    @Override public java.util.Optional<String> displayedAssistantMessage(String owner, String conversation, String messageId) {
+        return jdbc.queryForList("""
+                SELECT m.content_json FROM agent_message m
+                JOIN agent_conversation c ON c.id=m.conversation_id
+                WHERE c.creator_id=? AND c.id=? AND m.id=? AND m.role='assistant' AND m.kind='TEXT'
+                """, String.class, owner, conversation, messageId).stream().findFirst();
+    }
     @Override public Claim claim(String owner,String conversation,String key,String text,Runnable beforeInsert) {
         return claim(owner,conversation,key,text,null,beforeInsert);
     }

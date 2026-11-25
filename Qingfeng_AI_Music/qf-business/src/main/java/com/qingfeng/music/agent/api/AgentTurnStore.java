@@ -13,6 +13,9 @@ public interface AgentTurnStore {
     default Claim claim(String owner,String conversation,String key,String text,String creationTarget,Runnable beforeInsert){
         return claim(owner,conversation,key,text,beforeInsert);
     }
+    default java.util.Optional<String> displayedAssistantMessage(String owner, String conversation, String messageId) {
+        return java.util.Optional.empty();
+    }
     default java.util.Optional<String> completedResult(String owner, String conversation, String key) {
         return java.util.Optional.empty();
     }
