@@ -194,16 +194,26 @@ describe('Discover editorial layout with real content', () => {
     ])
   })
 
-  it('adds the two supplied recordings to jazz without displacing existing songs', async () => {
+  it.each([false, true])('adds the curated jazz and rock titles without displacing existing songs (already in jazz: %s)', async (alreadyInJazz) => {
+    const velvet = song('0fef4b09-77a8-489f-be7a-f61490a9d848')
+    velvet.song.title = 'Velvet Hours'
     const publishedJazz = Array.from({ length: 7 }, (_, index) => song(`jazz-${index + 1}`))
-    mocks.shelves.mockResolvedValue({ ...shelfData([]), genres: { 'jazz-soul': publishedJazz } })
+    const publishedRock = song('rock')
+    mocks.shelves.mockResolvedValue({
+      ...shelfData([]),
+      genres: { 'jazz-soul': alreadyInJazz ? [...publishedJazz, velvet] : publishedJazz, rock: [publishedRock] },
+    })
+    mocks.list.mockImplementation(async (_tab: string, _offset: number, _genre: string, query: string) =>
+      page(query === 'Velvet Hours' ? [velvet] : []))
     const wrapper = await open()
     const jazz = wrapper.get('#discover-jazz-soul .shelf-square')
     expect(jazz.findAll('.track-title').map(track => track.text())).toEqual([
-      'CHRISTMAS FEELS LIKE HOME', 'Prayer Beneath the Stars', ...publishedJazz.map(track => track.song.title),
+      'Velvet Hours', 'CHRISTMAS FEELS LIKE HOME', 'Prayer Beneath the Stars', ...publishedJazz.map(track => track.song.title),
     ])
-    await jazz.get('[aria-label="试听 Prayer Beneath the Stars"]').trigger('click')
-    expect(mocks.toggle).toHaveBeenCalledWith(expect.objectContaining({ id: 'prayer-beneath-the-stars' }))
+    const rock = wrapper.get('#discover-rock .shelf-square')
+    expect(rock.findAll('.track-title').slice(0, 2).map(track => track.text())).toEqual(['Cardboard Corners', publishedRock.song.title])
+    await rock.get('[aria-label="试听 Cardboard Corners"]').trigger('click')
+    expect(mocks.toggle).toHaveBeenCalledWith(expect.objectContaining({ id: 'cardboard-corners' }))
     expect(mocks.record).not.toHaveBeenCalled()
   })
 
@@ -247,7 +257,8 @@ describe('Discover editorial layout with real content', () => {
     mocks.list.mockImplementation(async (tab: string) => page(tab === 'featured' ? [song('精选一')] : tab === 'popular' ? popular : [song(tab)]))
     const wrapper = await open()
     expect(mocks.list.mock.calls).toEqual([
-      ['latest', 0, '', ''], ['featured', 0, '', ''], ['popular', 0, '', ''], ['latest', 0, '', 'Streetlight'],
+      ['latest', 0, '', ''], ['featured', 0, '', ''], ['popular', 0, '', ''],
+      ['latest', 0, '', 'Velvet Hours'], ['latest', 0, '', 'Streetlight'],
     ])
     expect(wrapper.get('.discover-hero h2').text()).toBe('走了那么远')
     const walkedFarBackground = wrapper.get('.discover-hero-background').attributes('src')

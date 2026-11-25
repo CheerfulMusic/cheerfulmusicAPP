@@ -13,7 +13,7 @@ import DiscoverSongCard from '../components/DiscoverSongCard.vue'
 import DiscoverShelf from '../components/DiscoverShelf.vue'
 import { withDiscoverEditorialCover } from '../model/discover-editorial-artwork'
 import { discoverSongArtwork, type HeroArtwork } from '../model/discover-hero-artwork'
-import { discoverJazzRows } from '../model/discover-jazz-tracks'
+import { cardboardCornersRow, discoverJazzRows } from '../model/discover-genre-tracks'
 import {
   christmasSongId, discoverGenres, globalPopWideCoverPositions, publicDiscoverTrack, withDiscoverPreviewCover,
   type DiscoverShelfTrack, type PublishedShelfTrack,
@@ -49,6 +49,7 @@ const streetlightSongId = '0f831f4b-1f3f-4d14-b6cf-b33534863622'
 const replacedHeroSongId = 'acfaa9d5-ce74-477f-9db8-d3700311a26c'
 const invincibleSongId = '57bb7310-c64c-4873-b239-f2a268a7dedd'
 const micangshanSongId = '09aaf684-2b68-438f-aa17-8730a352bf74'
+const velvetHoursSongId = '0fef4b09-77a8-489f-be7a-f61490a9d848'
 const christmasArtistId = '308036ef-8bef-486f-88cc-8266e5797768'
 const christmasPlaylistSongIds = [
   christmasSongId,
@@ -75,6 +76,7 @@ const expanded = ref<'vocal' | 'today'>()
 const featuredSongs = ref<DiscoverSong[]>([])
 const popularSongs = ref<DiscoverSong[]>([])
 const supplementalHeroSong = ref<DiscoverSong>()
+const velvetHours = ref<PublishedShelfTrack>()
 const editorialLoading = ref(true)
 const selectedHeroTrackId = ref('')
 const heroPaused = ref(false)
@@ -145,10 +147,15 @@ const genreShelves = computed(() => discoverGenres.map(section => {
         wideCoverPosition: section.id === 'global-pop' ? globalPopWideCoverPositions[track.id] : undefined,
       }
     })
-  const tracks = [...publicRows, ...examples]
-  const square = tracks.slice(0, 7)
+  const jazzRelease = section.id === 'jazz-soul'
+    ? publicRows.find(row => row.song.id === velvetHoursSongId) ?? velvetHours.value
+    : undefined
+  const curated = section.id === 'jazz-soul' ? [...(jazzRelease ? [jazzRelease] : []), ...discoverJazzRows]
+    : section.id === 'rock' ? [cardboardCornersRow] : []
+  const tracks = [...publicRows.filter(row => row.song.id !== jazzRelease?.song.id), ...examples]
+  const square = [...curated, ...tracks.slice(0, 7)]
   const wide = section.hasWideRow ? [...tracks.slice(7), ...tracks.slice(0, 7)].slice(0, 4) : []
-  return { ...section, square: section.id === 'jazz-soul' ? [...discoverJazzRows, ...square] : square, wide }
+  return { ...section, square, wide }
 }))
 const walkedFarRow = vocalPerformanceRows.find(row => row.track.id === 'vocal-zou-le-na-me-yuan')!
 const heroSlides = computed(() => {
@@ -275,6 +282,11 @@ async function loadEditorial() {
         if (active()) supplementalHeroSong.value = result.songs.find(item => item.song.id === streetlightSongId)
       }
     }).catch(() => { /* Keep the previous carousel if its refresh fails. */ }),
+    listDiscoverSongs('latest', 0, '', 'Velvet Hours').then(page => {
+      if (!active()) return
+      const release = page.songs.find(item => item.song.id === velvetHoursSongId)
+      velvetHours.value = release ? { ...release, track: publicDiscoverTrack(release) } : undefined
+    }).catch(() => { /* The genre rows are still available if this lookup fails. */ }),
     loadShelves(),
   ])
   if (active()) editorialLoading.value = false
