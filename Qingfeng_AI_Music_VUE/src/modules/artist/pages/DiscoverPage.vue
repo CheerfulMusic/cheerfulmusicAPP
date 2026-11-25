@@ -13,7 +13,7 @@ import DiscoverSongCard from '../components/DiscoverSongCard.vue'
 import DiscoverShelf from '../components/DiscoverShelf.vue'
 import { withDiscoverEditorialCover } from '../model/discover-editorial-artwork'
 import { discoverSongArtwork, type HeroArtwork } from '../model/discover-hero-artwork'
-import { discoverJazzRows, discoverRockRows } from '../model/discover-genre-tracks'
+import { discoverJazzRows, discoverRockRows, prayerBeneathTheStarsRow } from '../model/discover-genre-tracks'
 import {
   christmasSongId, discoverGenres, globalPopWideCoverPositions, publicDiscoverTrack, withDiscoverPreviewCover,
   type DiscoverShelfTrack, type PublishedShelfTrack,
@@ -25,7 +25,7 @@ import { usePreviewTracks, type PreviewTrack } from '../../home/model/tracks'
 import { accountState } from '../../../shared/identity/account-state'
 import { logtoState } from '../../../shared/identity/logto-state'
 import {
-  getDiscoverShelves, getPublicArtist, listDiscoverSongs, publicAvatarUrl, recordDiscoverPlay,
+  getDiscoverShelves, getPublicArtist, listDiscoverSongs, publicAvatarUrl, publicTrack, recordDiscoverPlay,
   type DiscoverArtist, type DiscoverShelves, type DiscoverSong,
 } from '../api/artist'
 import walkedFar from '../../../assets/discover/carousel-walked-far.webp'
@@ -49,6 +49,10 @@ const streetlightSongId = '0f831f4b-1f3f-4d14-b6cf-b33534863622'
 const replacedHeroSongId = 'acfaa9d5-ce74-477f-9db8-d3700311a26c'
 const invincibleSongId = '57bb7310-c64c-4873-b239-f2a268a7dedd'
 const micangshanSongId = '09aaf684-2b68-438f-aa17-8730a352bf74'
+const mascotSongId = '1485ddee-9a1f-435b-bfc8-403cccb8c243'
+const excludedRankedHeroIds = new Set([
+  replacedHeroSongId, streetlightSongId, christmasSongId, invincibleSongId, micangshanSongId, mascotSongId,
+])
 const velvetHoursSongId = '0fef4b09-77a8-489f-be7a-f61490a9d848'
 const christmasArtistId = '308036ef-8bef-486f-88cc-8266e5797768'
 const christmasPlaylistSongIds = [
@@ -76,6 +80,7 @@ const expanded = ref<'vocal' | 'today'>()
 const featuredSongs = ref<DiscoverSong[]>([])
 const popularSongs = ref<DiscoverSong[]>([])
 const supplementalHeroSong = ref<DiscoverSong>()
+const mascotRelease = ref<DiscoverSong>()
 const velvetHours = ref<PublishedShelfTrack>()
 const editorialLoading = ref(true)
 const selectedHeroTrackId = ref('')
@@ -160,22 +165,26 @@ const genreShelves = computed(() => discoverGenres.map(section => {
 const walkedFarRow = vocalPerformanceRows.find(row => row.track.id === 'vocal-zou-le-na-me-yuan')!
 const heroSlides = computed(() => {
   const streetlight = popularSongs.value.find(item => item.song.id === streetlightSongId) ?? supplementalHeroSong.value
-  const candidates = popularSongs.value.filter(item =>
-    item.song.id !== replacedHeroSongId && item.song.id !== streetlightSongId && item.song.id !== christmasSongId)
+  const mascot = popularSongs.value.find(item => item.song.id === mascotSongId) ?? mascotRelease.value
+  const candidates = popularSongs.value.filter(item => !excludedRankedHeroIds.has(item.song.id))
   if (streetlight) candidates.splice(1, 0, streetlight)
-  const visible = candidates.slice(0, discoverSongArtwork.length)
-  const invincible = visible.find(item => item.song.id === invincibleSongId)
-  const micangshan = visible.find(item => item.song.id === micangshanSongId)
-  let ordered = visible
-  if (invincible && micangshan) {
-    // Match the airport guitar and countryside artwork slots, respectively.
-    ordered = visible.filter(item => item !== invincible && item !== micangshan)
-    ordered.splice(2, 0, invincible, micangshan)
+  const rankedSlots = discoverSongArtwork.length - (mascot ? 2 : 1)
+  const ordered: DiscoverShelfTrack[] = withTracks(candidates.slice(0, rankedSlots))
+  if (mascot) {
+    const track = publicTrack(mascot.artistId, mascot.song)
+    ordered.splice(2, 0, { ...mascot, track: { ...track, publication: mascot } })
   }
+  ordered.splice(3, 0, prayerBeneathTheStarsRow)
 
   const slides: { row: DiscoverShelfTrack; artwork: HeroArtwork }[] = [
     { row: walkedFarRow, artwork: { desktop: walkedFar, compact: walkedFar, position: '68% center' } },
-    ...withTracks(ordered).map((row, index) => ({ row, artwork: discoverSongArtwork[index]! })),
+    ...ordered.map((row, index) => {
+      const cover = row.track.cover
+      const artwork = row.track.id === mascotSongId ? { desktop: cover, compact: cover, position: 'center 36%' }
+        : row === prayerBeneathTheStarsRow ? { desktop: cover, compact: cover, position: 'center 47%' }
+          : discoverSongArtwork[index]!
+      return { row, artwork }
+    }),
   ]
   const release = latestSongs.value.find(item => item.song.id === christmasSongId)
     ?? popularSongs.value.find(item => item.song.id === christmasSongId)
@@ -282,6 +291,9 @@ async function loadEditorial() {
         if (active()) supplementalHeroSong.value = result.songs.find(item => item.song.id === streetlightSongId)
       }
     }).catch(() => { /* Keep the previous carousel if its refresh fails. */ }),
+    listDiscoverSongs('latest', 0, '', '吉祥物').then(page => {
+      if (active()) mascotRelease.value = page.songs.find(item => item.song.id === mascotSongId)
+    }).catch(() => { /* The ranked feed can still supply the release. */ }),
     listDiscoverSongs('latest', 0, '', 'Velvet Hours').then(page => {
       if (!active()) return
       const release = page.songs.find(item => item.song.id === velvetHoursSongId)

@@ -1,6 +1,17 @@
 import discoverMedia from './discover-media.json'
 import type { DiscoverShelfTrack } from './discover-shelves'
 
+export const prayerBeneathTheStarsRow: DiscoverShelfTrack = {
+  track: {
+    id: 'prayer-beneath-the-stars',
+    title: 'Prayer Beneath the Stars',
+    ...discoverMedia['prayer-beneath-the-stars'],
+    provenance: 'IMPORTED',
+  },
+  stageName: 'aug1566',
+  durationSeconds: 178.22325,
+}
+
 export const discoverJazzRows: DiscoverShelfTrack[] = [
   {
     track: {
@@ -12,16 +23,7 @@ export const discoverJazzRows: DiscoverShelfTrack[] = [
     stageName: 'newlawsmaker',
     durationSeconds: 208.4,
   },
-  {
-    track: {
-      id: 'prayer-beneath-the-stars',
-      title: 'Prayer Beneath the Stars',
-      ...discoverMedia['prayer-beneath-the-stars'],
-      provenance: 'IMPORTED',
-    },
-    stageName: 'aug1566',
-    durationSeconds: 178.22325,
-  },
+  prayerBeneathTheStarsRow,
   {
     track: {
       id: 'zui-hua-jazz',
