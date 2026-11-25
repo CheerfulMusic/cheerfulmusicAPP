@@ -1,0 +1,194 @@
+{
+  "sourceKey": "sample:bicycle-weather:51acd1b6-356a-313a-9e1b-d13f8319c889",
+  "audioSha256": "efad57f38eeb4be94d6e6a8c2039a4f902a24a9411633cec52389008103d7783",
+  "recognition": "Whisper large-v3-turbo and small; reviewed against the playback recording",
+  "duration": 197.7586875,
+  "warnings": [],
+  "words": [
+    {
+      "text": "Left my jumper on the radiator drying out\n",
+      "start": 14.0,
+      "end": 18.56
+    },
+    {
+      "text": "Rain stopped tapping on the windowpane about\n",
+      "start": 18.56,
+      "end": 21.4
+    },
+    {
+      "text": "Quarter past eleven, pavement steaming in the cold\n",
+      "start": 21.88,
+      "end": 25.04
+    },
+    {
+      "text": "Finding little wrappers from the corner shop\n",
+      "start": 25.04,
+      "end": 29.14
+    },
+    {
+      "text": "Pumped the tyres up by the garden shed\n",
+      "start": 29.14,
+      "end": 33.56
+    },
+    {
+      "text": "Chasing every notion floating around my head\n",
+      "start": 35.8,
+      "end": 40.48
+    },
+    {
+      "text": "Oh, it's bicycle weather down the avenue\n",
+      "start": 41.82,
+      "end": 46.44
+    },
+    {
+      "text": "Puddles like mirrors, showing sky of blue\n",
+      "start": 46.44,
+      "end": 50.16
+    },
+    {
+      "text": "Turning every corner just to catch the view\n",
+      "start": 50.16,
+      "end": 53.66
+    },
+    {
+      "text": "Nothing really changes but it feels so new\n",
+      "start": 53.66,
+      "end": 57.94
+    },
+    {
+      "text": "Yeah, it feels brand new\n",
+      "start": 60.0,
+      "end": 62.1
+    },
+    {
+      "text": "Saw the red brick terraces leaning in the sun\n",
+      "start": 65.06,
+      "end": 69.14
+    },
+    {
+      "text": "Postman on his round nodding to everyone\n",
+      "start": 69.14,
+      "end": 72.38
+    },
+    {
+      "text": "Took the scenic route across the railway bridge\n",
+      "start": 72.38,
+      "end": 75.6
+    },
+    {
+      "text": "Wondering if milk is still inside the fridge\n",
+      "start": 75.6,
+      "end": 79.0
+    },
+    {
+      "text": "You said you need me by the library\n",
+      "start": 79.0,
+      "end": 81.9
+    },
+    {
+      "text": "Steps at three\n",
+      "start": 81.9,
+      "end": 83.98
+    },
+    {
+      "text": "With a paper bag of pastries and a flask of tea\n",
+      "start": 85.6,
+      "end": 90.6
+    },
+    {
+      "text": "Oh, it's bicycle weather down the avenue\n",
+      "start": 92.2,
+      "end": 96.8
+    },
+    {
+      "text": "Puddles like mirrors, showing sky of blue\n",
+      "start": 96.8,
+      "end": 100.48
+    },
+    {
+      "text": "Turning every corner just to catch the view\n",
+      "start": 100.48,
+      "end": 104.06
+    },
+    {
+      "text": "Nothing really changes but it feels so new\n",
+      "start": 104.06,
+      "end": 108.4
+    },
+    {
+      "text": "Yeah, it feels brand new\n",
+      "start": 109.68,
+      "end": 112.26
+    },
+    {
+      "text": "And the years roll past like the spinning of a wheel\n",
+      "start": 114.44,
+      "end": 118.58
+    },
+    {
+      "text": "Can't quite explain the simple way it makes me feel\n",
+      "start": 118.58,
+      "end": 122.18
+    },
+    {
+      "text": "Just an afternoon that's slipping through our hands\n",
+      "start": 122.18,
+      "end": 126.0
+    },
+    {
+      "text": "Riding no ambitions, making zero plans\n",
+      "start": 126.0,
+      "end": 129.62
+    },
+    {
+      "text": "Oh, it's bicycle weather down the avenue\n",
+      "start": 142.56,
+      "end": 146.82
+    },
+    {
+      "text": "Puddles like mirrors, showing sky of blue\n",
+      "start": 147.16,
+      "end": 150.7
+    },
+    {
+      "text": "Turning every corner just to catch the view\n",
+      "start": 150.9,
+      "end": 154.24
+    },
+    {
+      "text": "Nothing really changes, but it feels so new\n",
+      "start": 154.68,
+      "end": 158.52
+    },
+    {
+      "text": "Yeah, it feels brand new\n",
+      "start": 158.52,
+      "end": 162.62
+    },
+    {
+      "text": "Down the avenue\n",
+      "start": 163.62,
+      "end": 165.56
+    },
+    {
+      "text": "Rolling home with you\n",
+      "start": 168.9,
+      "end": 170.3
+    },
+    {
+      "text": "Bicycle weather\n",
+      "start": 170.3,
+      "end": 172.82
+    },
+    {
+      "text": "Rolling home with you\n",
+      "start": 177.0,
+      "end": 180.26
+    },
+    {
+      "text": "Just rolling home\n",
+      "start": 180.36,
+      "end": 183.98
+    }
+  ]
+}

@@ -67,4 +67,34 @@ export const discoverRockRows: DiscoverShelfTrack[] = [
     stageName: 'newlawsmaker',
     durationSeconds: 145.2,
   },
+  {
+    track: {
+      id: 'bicycle-weather',
+      title: 'Bicycle Weather',
+      ...discoverMedia['bicycle-weather'],
+      provenance: 'IMPORTED',
+    },
+    stageName: 'Ace007',
+    durationSeconds: 197.758667,
+  },
+  {
+    track: {
+      id: 'southbank-under-rain',
+      title: 'Southbank Under Rain',
+      ...discoverMedia['southbank-under-rain'],
+      provenance: 'IMPORTED',
+    },
+    stageName: 'Ace007',
+    durationSeconds: 277.198667,
+  },
+  {
+    track: {
+      id: 'town-hall-steps',
+      title: 'Town Hall Steps',
+      ...discoverMedia['town-hall-steps'],
+      provenance: 'IMPORTED',
+    },
+    stageName: 'Ace007',
+    durationSeconds: 217.998667,
+  },
 ]

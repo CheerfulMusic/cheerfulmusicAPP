@@ -38,7 +38,26 @@ public final class RecommendationSamples {
         new Song("running-through-my-mind", "RUNNING THROUGH MY MIND", "Hip-Hop", "/media/recommendations/running-through-my-mind-226bea4d3e2d-preview-128.mp3"),
         new Song("westside-summer", "WESTSIDE SUMMER", "Hip-Hop", "/media/recommendations/westside-summer-d24a68d80b9e-preview-128.mp3"));
 
+    private static final List<Song> DISCOVER_ROCK = List.of(
+        new Song("bicycle-weather", "Bicycle Weather", "摇滚", "/media/recommendations/bicycle-weather-efad57f38eeb-preview-128.mp3"),
+        new Song("southbank-under-rain", "Southbank Under Rain", "摇滚", "/media/recommendations/southbank-under-rain-d3e9a13d8ce0-preview-128.mp3"),
+        new Song("town-hall-steps", "Town Hall Steps", "摇滚", "/media/recommendations/town-hall-steps-0cbb13d6a29b-preview-128.mp3"),
+        new Song("cardboard-corners", "Cardboard Corners", "摇滚", "/media/recommendations/cardboard-corners-468267313021-preview-128.mp3"),
+        new Song("nothing-left-to-lose", "NOTHING LEFT TO LOSE", "摇滚", "/media/recommendations/nothing-left-to-lose-d4bfb6848fe8-preview-128.mp3"),
+        new Song("your-side-of-the-tape", "Your Side of the Tape", "摇滚", "/media/recommendations/your-side-of-the-tape-746cee268a24-preview-128.mp3"));
+
+    public static Optional<Song> playbackSong(String id) {
+        return java.util.stream.Stream.concat(SONGS.stream(), DISCOVER_ROCK.stream())
+                .filter(song -> song.id().equals(id)).findFirst();
+    }
+
     private static final Map<String, String> OBJECTS = Map.ofEntries(
+        Map.entry("recommendations/bicycle-weather-efad57f38eeb-preview-128.mp3", "qingfeng/recommendation-samples/20261125/audio/efad57f38eeb/bicycle-weather-efad57f38eeb-preview-128.mp3"),
+        Map.entry("recommendations/bicycle-weather-3c00cac6dfa5-cover.jpg", "qingfeng/recommendation-samples/20261125/cover/3c00cac6dfa5/bicycle-weather-3c00cac6dfa5-cover.jpg"),
+        Map.entry("recommendations/southbank-under-rain-d3e9a13d8ce0-preview-128.mp3", "qingfeng/recommendation-samples/20261125/audio/d3e9a13d8ce0/southbank-under-rain-d3e9a13d8ce0-preview-128.mp3"),
+        Map.entry("recommendations/southbank-under-rain-6dfe4a29f8c1-cover.jpg", "qingfeng/recommendation-samples/20261125/cover/6dfe4a29f8c1/southbank-under-rain-6dfe4a29f8c1-cover.jpg"),
+        Map.entry("recommendations/town-hall-steps-0cbb13d6a29b-preview-128.mp3", "qingfeng/recommendation-samples/20261125/audio/0cbb13d6a29b/town-hall-steps-0cbb13d6a29b-preview-128.mp3"),
+        Map.entry("recommendations/town-hall-steps-f239be1445e2-cover.jpg", "qingfeng/recommendation-samples/20261125/cover/f239be1445e2/town-hall-steps-f239be1445e2-cover.jpg"),
         Map.entry("recommendations/jixiangwu-hero-361167958fda-cover.jpg", "qingfeng/recommendation-samples/20261125/cover/361167958fda/jixiangwu-hero-361167958fda-cover.jpg"),
         Map.entry("recommendations/prayer-beneath-the-stars-hero-7761229f5dee-cover.jpg", "qingfeng/recommendation-samples/20261125/cover/7761229f5dee/prayer-beneath-the-stars-hero-7761229f5dee-cover.jpg"),
         Map.entry("recommendations/zui-hua-jazz-40bfdd86480a-preview-128.mp3", "qingfeng/recommendation-samples/20261125/audio/40bfdd86480a/zui-hua-jazz-40bfdd86480a-preview-128.mp3"),

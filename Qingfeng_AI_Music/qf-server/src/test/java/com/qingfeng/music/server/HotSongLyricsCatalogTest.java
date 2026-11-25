@@ -10,6 +10,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import java.util.List;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -59,6 +60,28 @@ class HotSongLyricsCatalogTest {
         }
         assertEquals(404,assertThrows(ResponseStatusException.class,()->controller.lyrics("unknown",null)).getStatusCode().value());
         verifyNoInteractions(preparation);
+    }
+    @Test void discoverRockRecordingsHaveTheirOwnPackagedTimelines() throws Exception {
+        var db = mock(JdbcTemplate.class);
+        var preparation = new LyricsPreparation(db, mock(TransactionTemplate.class),
+                mock(PlaybackLyricsRepository.class), mock(LyricsTimingProvider.class),
+                mock(AudioTranscriptionProvider.class), 0);
+        var mvc = MockMvcBuilders.standaloneSetup(new HotSongLyricsController(preparation)).build();
+        for (String id : List.of("bicycle-weather", "southbank-under-rain", "town-hall-steps",
+                "cardboard-corners", "nothing-left-to-lose", "your-side-of-the-tape")) {
+            var song = RecommendationSamples.playbackSong(id).orElseThrow();
+            String audioHash = RecommendationSamples.objectKey(song.audio().substring("/media/".length()))
+                    .orElseThrow().split("/")[4];
+            String path = "/api/public/hot-songs/" + id + "/lyrics";
+            mvc.perform(get(path).queryParam("audioHash", audioHash))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.status").value("READY"))
+                    .andExpect(jsonPath("$.lines[0].text").isNotEmpty())
+                    .andExpect(jsonPath("$.canSync").value(false));
+            mvc.perform(get(path).queryParam("audioHash", "000000000000"))
+                    .andExpect(status().isNotFound());
+        }
+        verifyNoInteractions(db);
     }
     @Test void existingSampleClientsCanStillReadWithoutTheOptionalAudioHash() {
         var preparation=mock(LyricsPreparation.class);

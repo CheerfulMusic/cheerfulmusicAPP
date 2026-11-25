@@ -1017,6 +1017,54 @@
       "key": "qingfeng/recommendation-samples/20261125/cover/7761229f5dee/prayer-beneath-the-stars-hero-7761229f5dee-cover.jpg",
       "bytes": 264251,
       "sha256": "7761229f5deeecc708dc7925122ff12761d70bc8618c9c6b134cc54b3849aac3"
+    },
+    {
+      "trackId": "bicycle-weather",
+      "kind": "audio",
+      "path": "/media/recommendations/bicycle-weather-efad57f38eeb-preview-128.mp3",
+      "key": "qingfeng/recommendation-samples/20261125/audio/efad57f38eeb/bicycle-weather-efad57f38eeb-preview-128.mp3",
+      "bytes": 3164973,
+      "sha256": "efad57f38eeb4be94d6e6a8c2039a4f902a24a9411633cec52389008103d7783"
+    },
+    {
+      "trackId": "bicycle-weather",
+      "kind": "cover",
+      "path": "/media/recommendations/bicycle-weather-3c00cac6dfa5-cover.jpg",
+      "key": "qingfeng/recommendation-samples/20261125/cover/3c00cac6dfa5/bicycle-weather-3c00cac6dfa5-cover.jpg",
+      "bytes": 36496,
+      "sha256": "3c00cac6dfa5200b88324501e802b6420e58ad3726274546f84ee31710c9426c"
+    },
+    {
+      "trackId": "southbank-under-rain",
+      "kind": "audio",
+      "path": "/media/recommendations/southbank-under-rain-d3e9a13d8ce0-preview-128.mp3",
+      "key": "qingfeng/recommendation-samples/20261125/audio/d3e9a13d8ce0/southbank-under-rain-d3e9a13d8ce0-preview-128.mp3",
+      "bytes": 4436013,
+      "sha256": "d3e9a13d8ce0cf386c3c267a37655095dc55c9d7d9e0b824319930597470f903"
+    },
+    {
+      "trackId": "southbank-under-rain",
+      "kind": "cover",
+      "path": "/media/recommendations/southbank-under-rain-6dfe4a29f8c1-cover.jpg",
+      "key": "qingfeng/recommendation-samples/20261125/cover/6dfe4a29f8c1/southbank-under-rain-6dfe4a29f8c1-cover.jpg",
+      "bytes": 38403,
+      "sha256": "6dfe4a29f8c11d33a11f39cc669cfc0a0ae26bdec85fb7e0604c347c2f2c2ed3"
+    },
+    {
+      "trackId": "town-hall-steps",
+      "kind": "audio",
+      "path": "/media/recommendations/town-hall-steps-0cbb13d6a29b-preview-128.mp3",
+      "key": "qingfeng/recommendation-samples/20261125/audio/0cbb13d6a29b/town-hall-steps-0cbb13d6a29b-preview-128.mp3",
+      "bytes": 3489069,
+      "sha256": "0cbb13d6a29b361c53c10bae67ba2da63730757329f75cf0c4dab80bb316c90d"
+    },
+    {
+      "trackId": "town-hall-steps",
+      "kind": "cover",
+      "path": "/media/recommendations/town-hall-steps-f239be1445e2-cover.jpg",
+      "key": "qingfeng/recommendation-samples/20261125/cover/f239be1445e2/town-hall-steps-f239be1445e2-cover.jpg",
+      "bytes": 30217,
+      "sha256": "f239be1445e2ae979efefef3d63a50b039f4e8171fe584521a7f4a08719d75a6"
     }
   ]
 }

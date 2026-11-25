@@ -1,0 +1,209 @@
+{
+  "sourceKey": "sample:cardboard-corners:9fd70c5a-4825-3f1e-84b7-217dbcae74a8",
+  "audioSha256": "4682673130213616e2e91cac6ab85a628fe9f3b6cf17f44347598c3a63ec6665",
+  "recognition": "Whisper large-v3-turbo and small; reviewed against the playback recording",
+  "duration": 171.9986875,
+  "warnings": [],
+  "words": [
+    {
+      "text": "Four rolls of packing tape squealing against the grain\n",
+      "start": 11.62,
+      "end": 15.12
+    },
+    {
+      "text": "Sweat on the back of my neck from carrying the frame\n",
+      "start": 16.96,
+      "end": 20.74
+    },
+    {
+      "text": "Blue tack squares dried yellow on the drywall where the posters hung\n",
+      "start": 22.48,
+      "end": 26.7
+    },
+    {
+      "text": "My dad is on the front lawn, watering the lawn like nothing's being done\n",
+      "start": 26.7,
+      "end": 31.94
+    },
+    {
+      "text": "My chest is working double time, just trying to find the words\n",
+      "start": 33.14,
+      "end": 37.7
+    },
+    {
+      "text": "I count the stairs in seven beats, the carpet fiber's worn\n",
+      "start": 38.74,
+      "end": 43.18
+    },
+    {
+      "text": "Keys on the kitchen counter, by the unpaid bills\n",
+      "start": 44.94,
+      "end": 48.22
+    },
+    {
+      "text": "I took the winter coat from the hall closet, left the rest behind\n",
+      "start": 48.22,
+      "end": 51.16
+    },
+    {
+      "text": "Two suitcases wedged across the backseat of a beat-up Civic\n",
+      "start": 51.16,
+      "end": 54.3
+    },
+    {
+      "text": "I keep clearing my throat like I'm about to speak\n",
+      "start": 54.3,
+      "end": 57.12
+    },
+    {
+      "text": "And I'm 22 and shaking at the passenger door\n",
+      "start": 57.12,
+      "end": 60.32
+    },
+    {
+      "text": "Leaving every single measurement etched on the pantry floor\n",
+      "start": 61.88,
+      "end": 65.94
+    },
+    {
+      "text": "Tell me how do you fold a life into six brown boxes\n",
+      "start": 66.68,
+      "end": 70.2
+    },
+    {
+      "text": "Tell me why does breathing feel like running up the off-ramp\n",
+      "start": 70.2,
+      "end": 73.12
+    },
+    {
+      "text": "I'm moving out, I'm backing down the gravel driveway\n",
+      "start": 73.12,
+      "end": 77.5
+    },
+    {
+      "text": "Mom folded three wool sweaters into plastic grocery sacks\n",
+      "start": 78.48,
+      "end": 82.68
+    },
+    {
+      "text": "She didn't look up from the stove when I brought down the mattress pack\n",
+      "start": 83.4,
+      "end": 88.06
+    },
+    {
+      "text": "Just said, check your tyre pressure when you hit the interstate\n",
+      "start": 89.06,
+      "end": 92.3
+    },
+    {
+      "text": "My thumb is bleeding from a snag while pulling out a crate\n",
+      "start": 92.3,
+      "end": 95.14
+    },
+    {
+      "text": "I checked the rearview twice to see if anyone was waving back\n",
+      "start": 95.14,
+      "end": 98.3
+    },
+    {
+      "text": "Only the screen door rattling loose on its aluminium track\n",
+      "start": 98.3,
+      "end": 101.52
+    },
+    {
+      "text": "And I am 22 and shaking at the passenger door\n",
+      "start": 101.52,
+      "end": 104.92
+    },
+    {
+      "text": "Leaving every single measurement etched on the pantry floor\n",
+      "start": 106.62,
+      "end": 110.54
+    },
+    {
+      "text": "Tell me how do you fold a life into six brown boxes\n",
+      "start": 110.54,
+      "end": 114.82
+    },
+    {
+      "text": "Tell me why does breathing feel like running up the off-ramp\n",
+      "start": 114.82,
+      "end": 117.78
+    },
+    {
+      "text": "I'm moving out\n",
+      "start": 117.78,
+      "end": 119.44
+    },
+    {
+      "text": "I'm backing down the gravel driveway\n",
+      "start": 119.44,
+      "end": 122.08
+    },
+    {
+      "text": "Left the porch light buzzing\n",
+      "start": 123.84,
+      "end": 125.84
+    },
+    {
+      "text": "Left my bedroom window cracked\n",
+      "start": 126.6,
+      "end": 129.44
+    },
+    {
+      "text": "Left 20 years of clutter that I'm never coming back to claim\n",
+      "start": 129.44,
+      "end": 134.74
+    },
+    {
+      "text": "Ten miles past the county line\n",
+      "start": 134.74,
+      "end": 137.5
+    },
+    {
+      "text": "The dashboard clock says four\n",
+      "start": 137.5,
+      "end": 139.72
+    },
+    {
+      "text": "My lungs are raw, the pedal's down\n",
+      "start": 139.72,
+      "end": 143.06
+    },
+    {
+      "text": "My knuckles on the wheel\n",
+      "start": 143.06,
+      "end": 145.34
+    },
+    {
+      "text": "Four rolls of tape\n",
+      "start": 145.34,
+      "end": 148.28
+    },
+    {
+      "text": "Six brown boxes\n",
+      "start": 148.28,
+      "end": 150.7
+    },
+    {
+      "text": "Never coming back to the carpet stage\n",
+      "start": 150.7,
+      "end": 156.54
+    },
+    {
+      "text": "I'm out\n",
+      "start": 156.54,
+      "end": 157.72
+    },
+    {
+      "text": "I'm gone\n",
+      "start": 158.84,
+      "end": 160.54
+    },
+    {
+      "text": "I'm on the interstate\n",
+      "start": 161.7,
+      "end": 165.78
+    }
+  ]
+}

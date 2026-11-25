@@ -1,0 +1,169 @@
+{
+  "sourceKey": "sample:your-side-of-the-tape:84c6e38a-3ff8-3331-b56a-64f1a36eee88",
+  "audioSha256": "746cee268a2403d87f05669fb6b4f663307fcd771830b7236ce1ba5586ddacc0",
+  "recognition": "Whisper large-v3-turbo and small; reviewed against the playback recording",
+  "duration": 145.2,
+  "warnings": [],
+  "words": [
+    {
+      "text": "Found a tape behind the dresser\n",
+      "start": 13.0,
+      "end": 16.68
+    },
+    {
+      "text": "With your writing on the side\n",
+      "start": 16.68,
+      "end": 19.38
+    },
+    {
+      "text": "“Something good for Sunday mornings”\n",
+      "start": 19.38,
+      "end": 23.14
+    },
+    {
+      "text": "Sunday crossed out twice\n",
+      "start": 23.14,
+      "end": 26.0
+    },
+    {
+      "text": "I pressed play to hear the music\n",
+      "start": 26.0,
+      "end": 29.16
+    },
+    {
+      "text": "Got your bedroom fan instead\n",
+      "start": 29.16,
+      "end": 32.2
+    },
+    {
+      "text": "Then your voice said, “Are we rolling?”\n",
+      "start": 32.2,
+      "end": 35.5
+    },
+    {
+      "text": "And you counted us in again\n",
+      "start": 35.98,
+      "end": 38.24
+    },
+    {
+      "text": "Give me that half a song\n",
+      "start": 38.24,
+      "end": 40.74
+    },
+    {
+      "text": "The one we never got through\n",
+      "start": 40.74,
+      "end": 43.08
+    },
+    {
+      "text": "You came in on the wrong beat\n",
+      "start": 43.08,
+      "end": 46.72
+    },
+    {
+      "text": "And I came in laughing too\n",
+      "start": 46.72,
+      "end": 49.72
+    },
+    {
+      "text": "I used to skip that part\n",
+      "start": 50.66,
+      "end": 53.56
+    },
+    {
+      "text": "To get to something new\n",
+      "start": 53.56,
+      "end": 56.16
+    },
+    {
+      "text": "Now I play that half a song\n",
+      "start": 56.16,
+      "end": 59.42
+    },
+    {
+      "text": "For another minute with you\n",
+      "start": 59.42,
+      "end": 63.84
+    },
+    {
+      "text": "There’s a knock halfway through the second verse\n",
+      "start": 75.42,
+      "end": 79.28
+    },
+    {
+      "text": "Your brother wants his keys\n",
+      "start": 79.28,
+      "end": 81.52
+    },
+    {
+      "text": "You sing, “They’re underneath the blue coat”\n",
+      "start": 81.52,
+      "end": 84.56
+    },
+    {
+      "text": "Still in tune and right on beat\n",
+      "start": 84.56,
+      "end": 88.34
+    },
+    {
+      "text": "I’d forgotten you could do that\n",
+      "start": 88.34,
+      "end": 91.24
+    },
+    {
+      "text": "Make up lines and make them rhyme\n",
+      "start": 91.24,
+      "end": 94.42
+    },
+    {
+      "text": "Funny what a tape remembers\n",
+      "start": 94.42,
+      "end": 97.62
+    },
+    {
+      "text": "After all this time\n",
+      "start": 97.62,
+      "end": 101.4
+    },
+    {
+      "text": "Give me that half a song\n",
+      "start": 101.22,
+      "end": 104.32
+    },
+    {
+      "text": "The one we never got through\n",
+      "start": 104.34,
+      "end": 106.76
+    },
+    {
+      "text": "You came in on the wrong beat\n",
+      "start": 106.76,
+      "end": 110.4
+    },
+    {
+      "text": "And I came in laughing too\n",
+      "start": 110.4,
+      "end": 113.46
+    },
+    {
+      "text": "I used to skip that part\n",
+      "start": 113.46,
+      "end": 117.16
+    },
+    {
+      "text": "To get to something new\n",
+      "start": 117.16,
+      "end": 119.88
+    },
+    {
+      "text": "Now I play that half a song\n",
+      "start": 119.88,
+      "end": 123.14
+    },
+    {
+      "text": "For another minute with you\n",
+      "start": 123.14,
+      "end": 127.56
+    }
+  ]
+}

@@ -9,7 +9,8 @@ import { usePlayer } from './store'
 export function lyricsSource(audio: string) {
   let path: string
   try { path = new URL(audio, location.href).pathname } catch { return undefined }
-  if (Object.values(discoverMedia).some(track => 'audio' in track && track.audio === path)) return undefined
+  const discoverTrack = Object.values(discoverMedia).find(track => 'audio' in track && track.audio === path)
+  if (discoverTrack && !('synchronizedLyrics' in discoverTrack && discoverTrack.synchronizedLyrics)) return undefined
   const own = path.match(/\/app\/works\/([^/]+)\/audio\/([^/]+)$/)
   if (own) {
     try { return { kind: 'owner' as const, work: decodeURIComponent(own[1]!), asset: decodeURIComponent(own[2]!) } } catch { return undefined }

@@ -128,7 +128,15 @@ it('rejects non-audio and malformed recommendation paths instead of treating a c
   expect(lyricsSource('/media/recommendations/body-language-c251e80045fe-cover.jpg')).toBeUndefined()
   expect(lyricsSource('/media/recommendations/body-language-short-preview-128.mp3')).toBeUndefined()
   expect(lyricsSource('/media/recommendations/body-language-8e59749c37e9-preview-128.mp3/private')).toBeUndefined()
-  expect(lyricsSource(discoverMedia['cardboard-corners'].audio)).toBeUndefined()
+  expect(lyricsSource(discoverMedia['zui-hua-jazz'].audio)).toBeUndefined()
+})
+it('loads the version-bound synchronized lyrics for discover rock tracks', () => {
+  expect(lyricsSource(discoverMedia['bicycle-weather'].audio)).toEqual({
+    kind: 'public', path: 'public/hot-songs/bicycle-weather/lyrics?audioHash=efad57f38eeb',
+  })
+  expect(lyricsSource(discoverMedia['cardboard-corners'].audio)).toEqual({
+    kind: 'public', path: 'public/hot-songs/cardboard-corners/lyrics?audioHash=468267313021',
+  })
 })
 it('preparing public songs update automatically when the background timeline is ready', async () => {
   player.current={...track(),audio:'/api/public/artists/a/songs/b/2/audio'}

@@ -1,0 +1,264 @@
+{
+  "sourceKey": "sample:southbank-under-rain:f24870f2-2afa-3251-9463-91dcdc17bdaa",
+  "audioSha256": "d3e9a13d8ce0cf386c3c267a37655095dc55c9d7d9e0b824319930597470f903",
+  "recognition": "Whisper large-v3-turbo and small; reviewed against the playback recording; Qwen3 Forced Aligner for the first verse",
+  "duration": 277.1986875,
+  "warnings": [],
+  "words": [
+    {
+      "text": "Midnight spills along the parapet\n",
+      "start": 27.96,
+      "end": 30.76
+    },
+    {
+      "text": "Cold drizzle soaking through my coat\n",
+      "start": 31.72,
+      "end": 34.84
+    },
+    {
+      "text": "A single cigarette I haven't finished yet\n",
+      "start": 34.84,
+      "end": 38.12
+    },
+    {
+      "text": "Watching empty barges float\n",
+      "start": 39.08,
+      "end": 41.96
+    },
+    {
+      "text": "The sodium lamps are glowing amber-pale\n",
+      "start": 41.96,
+      "end": 44.6
+    },
+    {
+      "text": "Reflected on the wet black stone\n",
+      "start": 45.8,
+      "end": 48.2
+    },
+    {
+      "text": "The last tube rumbling through the rail\n",
+      "start": 48.84,
+      "end": 52.12
+    },
+    {
+      "text": "Leaves me standing here alone\n",
+      "start": 52.76,
+      "end": 55.16
+    },
+    {
+      "text": "You said we were made of something quiet\n",
+      "start": 55.46,
+      "end": 58.64
+    },
+    {
+      "text": "That wouldn't survive the daylight rush\n",
+      "start": 59.82,
+      "end": 62.88
+    },
+    {
+      "text": "Now the river breathes a heavy sigh\n",
+      "start": 62.88,
+      "end": 65.46
+    },
+    {
+      "text": "Breaking through the hollow hush\n",
+      "start": 65.46,
+      "end": 68.66
+    },
+    {
+      "text": "And I still look for you on every crossing bridge\n",
+      "start": 68.66,
+      "end": 72.88
+    },
+    {
+      "text": "Chasing the ghosts across the waterline\n",
+      "start": 72.88,
+      "end": 75.7
+    },
+    {
+      "text": "Every word we buried on the water's edge\n",
+      "start": 75.7,
+      "end": 79.94
+    },
+    {
+      "text": "Comes rushing back to break my mind\n",
+      "start": 79.94,
+      "end": 83.38
+    },
+    {
+      "text": "Through the mist and the London rain\n",
+      "start": 83.84,
+      "end": 86.78
+    },
+    {
+      "text": "I'm still calling out your name\n",
+      "start": 86.78,
+      "end": 90.74
+    },
+    {
+      "text": "I'm still calling out your name\n",
+      "start": 93.38,
+      "end": 97.18
+    },
+    {
+      "text": "Night bus rattles past an empty square\n",
+      "start": 102.94,
+      "end": 107.26
+    },
+    {
+      "text": "Wipers sweeping time away\n",
+      "start": 107.26,
+      "end": 110.52
+    },
+    {
+      "text": "Caught a sudden trace of you somewhere\n",
+      "start": 110.52,
+      "end": 113.94
+    },
+    {
+      "text": "In the bitter damp and grey\n",
+      "start": 113.94,
+      "end": 117.32
+    },
+    {
+      "text": "We drew our maps on paper napkins once\n",
+      "start": 117.34,
+      "end": 120.82
+    },
+    {
+      "text": "Believing every corner held a spark\n",
+      "start": 120.82,
+      "end": 123.48
+    },
+    {
+      "text": "Now seasons turn without a second glance\n",
+      "start": 123.48,
+      "end": 127.98
+    },
+    {
+      "text": "Leaving silhouettes in the dark\n",
+      "start": 127.98,
+      "end": 131.04
+    },
+    {
+      "text": "You said we were made of something quiet\n",
+      "start": 131.04,
+      "end": 134.08
+    },
+    {
+      "text": "That couldn't survive the daylight rush\n",
+      "start": 134.08,
+      "end": 138.26
+    },
+    {
+      "text": "Now the river breathes a heavy sigh\n",
+      "start": 138.26,
+      "end": 140.78
+    },
+    {
+      "text": "Breaking through the hollow hush\n",
+      "start": 140.78,
+      "end": 144.14
+    },
+    {
+      "text": "And I still look for you on every crossing bridge\n",
+      "start": 144.14,
+      "end": 148.26
+    },
+    {
+      "text": "Chasing the ghosts across the waterline\n",
+      "start": 148.26,
+      "end": 151.06
+    },
+    {
+      "text": "Every word we buried on the water's edge\n",
+      "start": 151.06,
+      "end": 155.16
+    },
+    {
+      "text": "Comes rushing back to break my mind\n",
+      "start": 155.16,
+      "end": 158.94
+    },
+    {
+      "text": "Through the mist and the London rain\n",
+      "start": 158.94,
+      "end": 162.1
+    },
+    {
+      "text": "I'm still calling out your name\n",
+      "start": 162.1,
+      "end": 165.72
+    },
+    {
+      "text": "Did you leave this city whole?\n",
+      "start": 171.82,
+      "end": 175.76
+    },
+    {
+      "text": "Or did it take a piece of you as well?\n",
+      "start": 175.76,
+      "end": 182.58
+    },
+    {
+      "text": "The bell strikes two from St Paul's dome\n",
+      "start": 182.58,
+      "end": 189.54
+    },
+    {
+      "text": "With a truth I cannot tell\n",
+      "start": 190.74,
+      "end": 196.14
+    },
+    {
+      "text": "And I still look for you on every crossing bridge\n",
+      "start": 198.02,
+      "end": 202.6
+    },
+    {
+      "text": "Chasing the ghosts across the waterline\n",
+      "start": 202.6,
+      "end": 205.52
+    },
+    {
+      "text": "Every word we buried on the water's edge\n",
+      "start": 205.52,
+      "end": 209.58
+    },
+    {
+      "text": "Comes rushing back to break my mind\n",
+      "start": 209.58,
+      "end": 213.18
+    },
+    {
+      "text": "Through the mist and the London rain\n",
+      "start": 213.18,
+      "end": 216.54
+    },
+    {
+      "text": "I'm still calling out your name\n",
+      "start": 216.54,
+      "end": 220.74
+    },
+    {
+      "text": "Still calling out your name\n",
+      "start": 223.12,
+      "end": 227.08
+    },
+    {
+      "text": "Beneath the archways, through the rain\n",
+      "start": 229.94,
+      "end": 233.88
+    },
+    {
+      "text": "Just the river and the rain\n",
+      "start": 236.58,
+      "end": 239.86
+    },
+    {
+      "text": "Just the river and the rain\n",
+      "start": 263.64,
+      "end": 267.7
+    }
+  ]
+}
