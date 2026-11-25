@@ -1,7 +1,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import type { Connect, Plugin } from 'vite'
-import { homeLocale, homeSeo, siteName, siteOrigin } from '../src/shared/i18n/home-seo'
+import { homeLocale, homePublicInfo, homeSeo, siteName, siteOrigin, type Locale } from '../src/shared/i18n/home-seo'
 import { discoverLocale, landingLinks, sitePage, sitePagePaths, socialMetadata, websiteSchema } from '../src/shared/i18n/site-seo'
 
 type SitePage = NonNullable<ReturnType<typeof sitePage>>
@@ -15,6 +15,18 @@ function seoTag(name: 'link' | 'meta', attributes: Record<string, string | undef
     .filter((entry): entry is [string, string] => entry[1] !== undefined)
     .map(([key, value]) => `${key}="${escapeHtml(value)}"`).join(' ')
   return `<${name} data-site-seo ${markup}>`
+}
+
+function publicHomeDetails(language: Locale) {
+  const copy = homePublicInfo[language]
+  const steps = copy.steps.map(step => `<li>${escapeHtml(step)}</li>`).join('')
+  const answers = copy.answers.map(([question, answer]) =>
+    `<details><summary>${escapeHtml(question)}</summary><p>${escapeHtml(answer)}</p></details>`,
+  ).join('')
+  return `<div class="home-public-info">
+    <section><h2>${escapeHtml(copy.how)}</h2><ol>${steps}</ol><a href="${copy.guidePath}">${escapeHtml(copy.guide)}</a></section>
+    <!--public-discover-links-->
+    <section><h2>${escapeHtml(copy.faq)}</h2>${answers}</section></div>`
 }
 
 export function renderSitePage(html: string, page: SitePage) {
@@ -39,11 +51,15 @@ export function renderSitePage(html: string, page: SitePage) {
   let initialContent = landing
   const home = page.path === '/' || homeLocale(page.path) !== undefined
   if (home || discoverLocale(page.path)) {
+    const introHeading = home && page.language === 'zh-CN'
+      ? `<h1 class="beta-access-brand">${escapeHtml(page.siteName!)}</h1><p class="beta-access-headline">${escapeHtml(homeSeo[page.language].tagline)}</p>`
+      : `<p class="beta-access-brand">${escapeHtml(page.siteName ?? siteName)}</p>${heading}`
     initialContent = `<main class="beta-access-entry"><section class="beta-access-dialog beta-access-card">
       <img class="beta-access-logo" src="/brand/logo-symbol.svg" alt="" width="56" height="56">
-      <p class="beta-access-brand">${escapeHtml(page.siteName ?? siteName)}</p>${heading}
+      ${introHeading}
       <p class="beta-access-intro">${escapeHtml(page.description)}</p>
       ${home ? `<div data-nosnippet><p class="beta-access-prompt">${escapeHtml(homeSeo[page.language].invitePrompt)}</p></div>` : ''}
+      ${home ? publicHomeDetails(page.language) : '<!--public-discover-links-->'}
       <div data-nosnippet><nav class="beta-access-guides">${links}</nav><footer class="beta-access-filing">${filing}</footer></div>
     </section></main>`
   }
@@ -120,12 +136,20 @@ export function siteSeoPlugin(): Plugin {
     writeBundle({ dir }, bundle) {
       const index = bundle['index.html']
       if (!dir || index?.type !== 'asset') return
+      // Discover loads on its own route. Fetch its module while the browser reads the public catalog.
+      const discoverModule = Object.values(bundle).find(asset =>
+        asset.type === 'chunk' && asset.isDynamicEntry && asset.name === 'DiscoverPage',
+      )
       for (const path of sitePagePaths) {
         const page = sitePage(path)
         if (!page) throw new Error(`Missing SEO content for ${path}`)
         const filename = resolve(dir, `.${htmlFile(path)}`)
         mkdirSync(dirname(filename), { recursive: true })
-        writeFileSync(filename, renderSitePage(index.source.toString(), page))
+        let shell = index.source.toString()
+        if (discoverLocale(path) && discoverModule) {
+          shell = shell.replace('</head>', `<link rel="modulepreload" crossorigin href="/${escapeHtml(discoverModule.fileName)}">\n</head>`)
+        }
+        writeFileSync(filename, renderSitePage(shell, page))
       }
       for (const [path, file] of Object.entries(crawlFiles)) {
         writeFileSync(resolve(dir, `.${path}`), file.content)

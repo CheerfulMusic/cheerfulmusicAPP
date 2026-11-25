@@ -8,6 +8,7 @@ import BrandLogo from '../../../shared/ui/BrandLogo.vue'
 import NavIcon from '../../../shared/ui/NavIcon.vue'
 import PlaybackIcon from '../../../shared/ui/PlaybackIcon.vue'
 import { discoverSongHref } from '../api/discover-song'
+import { readInviteStatus } from '../../beta-access/api'
 import ArtistAvatar from '../components/ArtistAvatar.vue'
 import DiscoverSongCard from '../components/DiscoverSongCard.vue'
 import DiscoverShelf from '../components/DiscoverShelf.vue'
@@ -31,6 +32,11 @@ import {
 import walkedFar from '../../../assets/discover/carousel-walked-far.webp'
 import christmasSky from '../../../assets/discover/carousel-christmas-sky.webp'
 import christmasCover from '../../../assets/discover/playlists/christmas.webp'
+
+const props = defineProps<{ publicEntry?: boolean }>()
+// Editorial audio without a discover publication remains in the previously invited experience.
+const editorialAccess = ref(!props.publicEntry)
+const checkingEditorialAccess = ref(!!props.publicEntry)
 
 const tabs = [
   { id: 'latest', label: '最新发布' },
@@ -69,8 +75,10 @@ const shelvesFailed = ref(false)
 const expanded = ref<'vocal' | 'today'>()
 const featuredSongs = ref<DiscoverSong[]>([])
 const popularSongs = ref<DiscoverSong[]>([])
+const firstPopularPending = ref(true)
 const supplementalHeroSong = ref<DiscoverSong>()
 const editorialLoading = ref(true)
+const waitingForEntry = computed(() => checkingEditorialAccess.value && editorialLoading.value)
 const selectedHeroTrackId = ref('')
 const heroPaused = ref(false)
 const heroHovered = ref(false)
@@ -119,14 +127,14 @@ const cumulativeHotSongs = computed(() => dailySongs.value.length || editorialLo
   ? [] : popularSongs.value.filter(item => (item.plays ?? 0) > 0).slice(0, 10))
 const rankedSongs = computed(() => cumulativeHotSongs.value.length ? cumulativeHotSongs.value : dailySongs.value)
 const rankingRows = computed(() => withTracks(rankedSongs.value))
-const vocalRows = computed(() => [...vocalPerformanceRows, ...withTracks(shelves.value?.vocal ?? [])])
+const vocalRows = computed(() => [...(editorialAccess.value ? vocalPerformanceRows : []), ...withTracks(shelves.value?.vocal ?? [])])
 const upcomingVocal = { title: '唯一的航线', cover: discoverSongArtwork[0].compact }
 const ranking = computed(() => rankingRows.value.slice(0, 5))
 const genreShelves = computed(() => discoverGenres.map(section => {
   const useEditorialCover = section.id === 'electronic' || section.id === 'rock' || section.id === 'jazz-soul'
   const publicRows = withTracks(shelves.value?.genres[section.id] ?? [])
   const publishedIds = new Set(publicRows.map(row => row.song.id))
-  const examples = previewTracks.value
+  const examples = (editorialAccess.value ? previewTracks.value : [])
     .filter(track => section.samples.some(genre => track.filters.includes(genre))
       && (!track.publication || !publishedIds.has(track.publication.song.id)))
     .map((preview): DiscoverShelfTrack => {
@@ -143,7 +151,7 @@ const genreShelves = computed(() => discoverGenres.map(section => {
   const tracks = [...publicRows, ...examples]
   const square = tracks.slice(0, 7)
   const wide = section.hasWideRow ? [...tracks.slice(7), ...tracks.slice(0, 7)].slice(0, 4) : []
-  return { ...section, square: section.id === 'jazz-soul' ? [...discoverJazzRows, ...square] : square, wide }
+  return { ...section, square: section.id === 'jazz-soul' && editorialAccess.value ? [...discoverJazzRows, ...square] : square, wide }
 }))
 const walkedFarRow = vocalPerformanceRows.find(row => row.track.id === 'vocal-zou-le-na-me-yuan')!
 const heroSlides = computed(() => {
@@ -151,7 +159,8 @@ const heroSlides = computed(() => {
   const candidates = popularSongs.value.filter(item =>
     item.song.id !== replacedHeroSongId && item.song.id !== streetlightSongId && item.song.id !== christmasSongId)
   if (streetlight) candidates.splice(1, 0, streetlight)
-  const visible = candidates.slice(0, discoverSongArtwork.length)
+  const releases = editorialAccess.value || candidates.length ? candidates : latestSongs.value
+  const visible = releases.slice(0, discoverSongArtwork.length)
   const invincible = visible.find(item => item.song.id === invincibleSongId)
   const micangshan = visible.find(item => item.song.id === micangshanSongId)
   let ordered = visible
@@ -162,7 +171,7 @@ const heroSlides = computed(() => {
   }
 
   const slides: { row: DiscoverShelfTrack; artwork: HeroArtwork }[] = [
-    { row: walkedFarRow, artwork: { desktop: walkedFar, compact: walkedFar, position: '68% center' } },
+    ...(editorialAccess.value ? [{ row: walkedFarRow, artwork: { desktop: walkedFar, compact: walkedFar, position: '68% center' } }] : []),
     ...withTracks(ordered).map((row, index) => ({ row, artwork: discoverSongArtwork[index]! })),
   ]
   const release = latestSongs.value.find(item => item.song.id === christmasSongId)
@@ -176,22 +185,22 @@ const heroSlides = computed(() => {
 })
 const heroSlideCount = computed(() => heroSlides.value.length)
 const heroIndex = computed(() => Math.max(0, heroSlides.value.findIndex(slide => slide.row.track.id === selectedHeroTrackId.value)))
-const hero = computed(() => heroSlides.value[heroIndex.value]!.row)
+const hero = computed(() => heroSlides.value[heroIndex.value]?.row)
 const heroRows = computed(() => heroSlides.value.map(slide => slide.row))
-const heroBackground = computed(() => heroSlides.value[heroIndex.value]!.artwork)
+const heroBackground = computed(() => heroSlides.value[heroIndex.value]?.artwork)
 function heroIndexAt(step: number) {
   return (heroIndex.value + step + heroSlideCount.value) % heroSlideCount.value
 }
 const heroBefore = computed(() => heroSlides.value[heroIndexAt(-1)]!.artwork)
 const heroAfter = computed(() => heroSlides.value[heroIndexAt(1)]!.artwork)
-const heroTitleLength = computed(() => Array.from(hero.value.track.title).length)
+const heroTitleLength = computed(() => Array.from(hero.value?.track.title ?? '').length)
 const visibleArtists = computed(() => {
   const found = artists.value ?? Array.from(new Map(latestSongs.value.map(song => [song.artistId, {
     artistId: song.artistId, stageName: song.stageName, avatarKey: null,
   }])).values())
   return showAllArtists.value ? found : found.slice(0, 3)
 })
-const playlists = computed<PreviewPlaylist[]>(() => [
+const playlists = computed<PreviewPlaylist[]>(() => editorialAccess.value ? [
   ...previewPlaylists.value.map(playlist => ({
     ...playlist, tracks: playlist.tracks.map(withDiscoverPreviewCover),
   })),
@@ -199,7 +208,7 @@ const playlists = computed<PreviewPlaylist[]>(() => [
     id: 'christmas', title: t('圣诞'), subtitle: 'CHRISTMAS', cover: christmasCover,
     tracks: christmasTracks.value,
   },
-])
+] : [])
 const visiblePlaylists = computed(() => {
   const keyword = query.value.toLocaleLowerCase()
   return playlists.value.filter(playlist => [playlist.title, playlist.subtitle]
@@ -263,13 +272,14 @@ async function loadEditorial() {
     }).catch(() => { if (active()) featuredFailed.value = true }),
     listDiscoverSongs('popular', 0, '', '').then(async page => {
       if (!active()) return
+      firstPopularPending.value = false
       popularSongs.value = page.songs
       supplementalHeroSong.value = undefined
       if (!page.songs.some(item => item.song.id === streetlightSongId)) {
         const result = await listDiscoverSongs('latest', 0, '', 'Streetlight')
         if (active()) supplementalHeroSong.value = result.songs.find(item => item.song.id === streetlightSongId)
       }
-    }).catch(() => { /* Keep the previous carousel if its refresh fails. */ }),
+    }).catch(() => { if (active()) firstPopularPending.value = false }),
     loadShelves(),
   ])
   if (active()) editorialLoading.value = false
@@ -397,7 +407,22 @@ async function play(row: DiscoverShelfTrack, queue: DiscoverShelfTrack[] = rows.
   }
 }
 
-onMounted(() => { initializeHeroRotation(); void loadEditorial(); void loadChristmasPlaylist() })
+async function loadInvitedEditorial() {
+  if (props.publicEntry) {
+    try {
+      const status = await readInviteStatus()
+      if (disposed || !status.admitted) return
+      editorialAccess.value = true
+    } catch {
+      return
+    } finally {
+      checkingEditorialAccess.value = false
+    }
+  }
+  await loadChristmasPlaylist()
+}
+
+onMounted(() => { initializeHeroRotation(); void loadInvitedEditorial(); void loadEditorial() })
 onActivated(() => { inactive = false; restartHeroRotation() })
 onDeactivated(() => { inactive = true; heroHovered.value = false; heroFocused.value = false; restartHeroRotation() })
 onBeforeUnmount(() => {
@@ -412,12 +437,12 @@ onBeforeUnmount(() => {
   <div class="discover">
     <header class="discover-header">
       <div class="discover-width discover-header-inner">
-        <RouterLink class="discover-brand" to="/" :aria-label="t('Cheerful Music 青风音乐首页')"><BrandLogo standalone /></RouterLink>
+        <RouterLink class="discover-brand" :to="discoverHref === '/en/discover' ? '/en/' : '/'" :aria-label="t('Cheerful Music 青风音乐首页')"><BrandLogo standalone /></RouterLink>
         <nav class="discover-nav" :aria-label="t('主导航')">
-          <RouterLink to="/">{{ t('首页') }}</RouterLink>
+          <RouterLink :to="discoverHref === '/en/discover' ? '/en/' : '/'">{{ t('首页') }}</RouterLink>
           <RouterLink :to="discoverHref" aria-current="page">{{ t('广场') }}</RouterLink>
           <a href="#discover-artists">{{ t('歌手') }}</a>
-          <a href="#discover-playlists">{{ t('歌单') }}</a>
+          <a v-if="editorialAccess" href="#discover-playlists">{{ t('歌单') }}</a>
         </nav>
         <form class="discover-search" role="search" @submit.prevent="submitSearch">
           <button type="submit" class="discover-search-submit" :aria-label="t('搜索')"><NavIcon name="search" /></button>
@@ -434,7 +459,7 @@ onBeforeUnmount(() => {
 
     <div class="discover-width discover-body">
       <h1 class="discover-page-heading">{{ discoverSeo[locale].heading }}</h1>
-      <section class="discover-hero" :aria-label="t('广场推荐')" :aria-roledescription="t('轮播')"
+      <section v-if="!waitingForEntry && hero && heroBackground" class="discover-hero" :aria-label="t('广场推荐')" :aria-roledescription="t('轮播')"
         @mouseenter="heroHovered = true" @mouseleave="heroHovered = false" @focusin="heroFocused = true" @focusout="heroFocusOut">
         <div v-if="heroSlideCount > 1" class="discover-hero-preview discover-hero-preview-before">
           <picture>
@@ -442,7 +467,7 @@ onBeforeUnmount(() => {
             <img :style="{ objectPosition: heroBefore.position }" alt="" loading="lazy" decoding="async" fetchpriority="low">
           </picture>
         </div>
-        <div class="discover-hero-main" :class="{ 'is-single': heroSlideCount === 1 }">
+        <div class="discover-hero-main" :class="{ 'is-single': heroSlideCount === 1 && !firstPopularPending }">
           <picture>
             <source media="(max-width: 760px)" :srcset="heroBackground.compact">
             <img class="discover-hero-background" :src="heroBackground.desktop"
@@ -473,11 +498,18 @@ onBeforeUnmount(() => {
           </div>
         </template>
       </section>
+      <div v-else class="discover-hero discover-introduction">
+        <div class="discover-intro-copy">
+          <strong>{{ discoverSeo[locale].heading }}</strong>
+          <p>{{ discoverSeo[locale].description }}</p>
+          <RouterLink v-if="latestSongs[0]" :to="discoverSongHref(latestSongs[0].song)">{{ latestSongs[0].song.title }}</RouterLink>
+        </div>
+      </div>
     </div>
 
-    <div class="discover-width discover-content">
+    <div v-if="!waitingForEntry || browseOpen" class="discover-width discover-content">
       <section class="discover-main" :aria-label="t('音乐广场')">
-        <section id="discover-playlists" class="discover-playlists" aria-labelledby="discover-playlists-title">
+        <section v-if="editorialAccess" id="discover-playlists" class="discover-playlists" aria-labelledby="discover-playlists-title">
           <header class="discover-section-heading">
             <h2 id="discover-playlists-title">{{ t('推荐歌单') }}</h2>
           </header>
@@ -546,7 +578,7 @@ onBeforeUnmount(() => {
               <button v-if="vocalRows.length" type="button" :aria-expanded="expanded === 'vocal'"
                 @click="expanded = expanded === 'vocal' ? undefined : 'vocal'">{{ t(expanded === 'vocal' ? '收起' : '查看全部') }} ›</button>
             </header>
-            <DiscoverShelf :label="t('真人演唱')" :rows="vocalRows" :upcoming="upcomingVocal" variant="wide"
+            <DiscoverShelf :label="t('真人演唱')" :rows="vocalRows" :upcoming="editorialAccess ? upcomingVocal : undefined" variant="wide"
               :expanded="expanded === 'vocal'" @play="play($event, vocalRows)" />
           </section>
           <section id="discover-today" class="discover-shelf">

@@ -60,7 +60,7 @@ class WebErrorPageIntegrationTest {
 
     @Test void unknownPageFallsBackToSpaInsteadOfWhitelabel() throws Exception {
         var response = get("/no-such-page-here", "text/html");
-        assertEquals(200, response.statusCode());
+        assertEquals(404, response.statusCode());
         assertTrue(response.body().contains("id=\"app\""));
         assertEquals("noindex", response.headers().firstValue("X-Robots-Tag").orElse(""));
         assertNoWhitelabel(response);

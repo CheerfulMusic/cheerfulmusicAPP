@@ -17,7 +17,9 @@ const route = useRoute()
 const discoverSong = computed(() => route.name === 'discover-song')
 const community = computed(() => route.name === 'artist-home' || route.name === 'discover' || discoverSong.value)
 const layout = computed(() => platform.kind === 'web' || community.value ? WebLayout : AppLayout)
-const publicListening = computed(() => route.name === 'gift' || route.name === 'artist-home' || discoverSong.value)
+const publicListening = computed(() =>
+  route.name === 'gift' || route.name === 'artist-home' || discoverSong.value ||
+  (platform.kind === 'web' && route.name === 'discover'))
 const standalonePreview = computed(() => import.meta.env.DEV && route.name === 'payment-preview')
 const publicPreview = computed(() => platform.kind === 'web' && route.name === 'help')
 </script>

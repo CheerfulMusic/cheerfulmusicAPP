@@ -56,7 +56,8 @@
   border:0;
 }
 .home-light-shell .home-creator-hero .p-intro { width:100%; max-width:810px; margin:0; padding:0; z-index:2; position:relative; }
-.home-light-shell .home-creator-hero .p-intro h1 { font-size:56px; letter-spacing:-2px; font-weight:400; font-synthesis:none; line-height:1.25; margin:0; color:#202020; }
+.home-light-shell .home-creator-hero .p-intro .bilingual-headline { font-size:56px; letter-spacing:-2px; font-weight:400; font-synthesis:none; line-height:1.25; margin:0; color:#202020; }
+.home-light-shell .home-creator-hero .p-intro .home-product-title { font-size:16px; line-height:1.4; font-weight:700; letter-spacing:0; margin:0 0 8px; }
 .home-light-shell .creator-main-title { display:block; letter-spacing:.01em; }
 .home-light-shell .creator-title-art { display:block; height:1em; width:auto; max-width:100%; }
 .home-light-shell .creator-title-text { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }
@@ -134,7 +135,7 @@
   .home-light-shell .consumer-header-actions { gap:14px; }
   .home-light-shell .consumer-create { min-width:0; }
   .home-light-shell .home-creator-hero { width:calc(100% - 80px); grid-template-columns:minmax(0,360px) minmax(0,min(500px,calc(110svh - 270px))); }
-  .home-light-shell .home-creator-hero .p-intro h1 { font-size:46px; }
+  .home-light-shell .home-creator-hero .p-intro .bilingual-headline { font-size:46px; }
   .home-light-shell .home-creator-hero .creator-tagline { margin-top:18px; }
   .home-light-shell .home-creator-hero .bilingual-description { font-size:14px; }
   .home-light-shell .home-creator-hero .p-button { min-width:215px; }
@@ -152,7 +153,7 @@
   .home-light-shell .consumer-header-actions { gap:12px; }
   .home-light-shell .home-creator-hero { width:calc(100% - 40px); grid-template-columns:minmax(0,1fr); gap:0; padding:28px 0; }
   .home-light-shell .home-creator-hero .p-intro { max-width:none; }
-  .home-light-shell .home-creator-hero .p-intro h1 { font-size:35px; letter-spacing:-1px; }
+  .home-light-shell .home-creator-hero .p-intro .bilingual-headline { font-size:35px; letter-spacing:-1px; }
   .home-light-shell .home-creator-hero .creator-tagline { font-size:18px; margin-top:18px; }
   .home-light-shell .home-creator-hero .bilingual-description { font-size:12px; margin-top:20px; line-height:1.9; }
   .home-light-shell .bilingual-description .description-translation { font-size:13px; line-height:1.75; width:auto; max-width:340px; margin-top:9px; }

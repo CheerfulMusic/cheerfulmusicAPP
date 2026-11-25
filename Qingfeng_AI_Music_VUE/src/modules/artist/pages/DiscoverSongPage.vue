@@ -3,7 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { platform } from '../../../platform'
 import { ApiError } from '../../../shared/http/api-client'
-import { discoverHref, formatDate, locale, t } from '../../../shared/i18n'
+import { discoverHref, formatDate, locale, t, updateDiscoverSongMetadata } from '../../../shared/i18n'
 import { siteOrigin } from '../../../shared/i18n/home-seo'
 import { showLoginDialog } from '../../../shared/identity/login-dialog'
 import { usePlayer } from '../../../shared/player/store'
@@ -66,10 +66,17 @@ async function load() {
     if (request !== epoch) return
     detail.value = result
     if (track.value) player.selectIfEmpty(track.value, result.durationSeconds)
-    document.title = `${result.release.song.title} · Cheerful Music`
+    if (platform.kind !== 'web') document.title = result.release.song.title + ' · Cheerful Music'
+    else if (track.value) updateDiscoverSongMetadata(route.path, {
+      title: result.release.song.title,
+      artist: result.release.stageName,
+      description: result.description,
+      image: new URL(track.value.cover, siteOrigin).href,
+    })
   } catch (error) {
     if (request !== epoch) return
     unavailable.value = error instanceof ApiError && error.status === 404
+    if (unavailable.value) updateDiscoverSongMetadata(route.path, null)
     loadError.value = !unavailable.value
     detail.value = undefined
   } finally {
@@ -217,7 +224,7 @@ function saveDescription() {
       </div>
       <article v-else-if="detail && track" aria-labelledby="discover-song-title">
         <div class="song-detail-hero">
-          <img class="song-detail-cover" :src="track.cover" alt="" width="272" height="272">
+          <img class="song-detail-cover" :src="track.cover" :alt="detail.release.song.title" width="272" height="272">
           <div class="song-detail-identity">
             <h1 id="discover-song-title">{{ track.title }}</h1>
             <RouterLink class="song-detail-artist" :to="{name:'artist-home', params:{id:detail.release.artistId}}"><NavIcon name="account" />{{ detail.release.stageName }}</RouterLink>

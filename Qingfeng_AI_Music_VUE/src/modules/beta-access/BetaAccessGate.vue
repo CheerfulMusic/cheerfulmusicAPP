@@ -6,6 +6,7 @@ import { homeSeo, siteName } from '../../shared/i18n/home-seo'
 import { discoverPaths, discoverSeo, landingLinks } from '../../shared/i18n/site-seo'
 import { platform } from '../../platform'
 import LanguageSwitcher from '../../shared/i18n/LanguageSwitcher.vue'
+import HomePublicInfo from '../home/components/HomePublicInfo.vue'
 import { enterInvite, InviteError, readInviteStatus, type InviteStatus } from './api'
 
 const props = defineProps<{ publicAccess?: boolean; publicPreview?: boolean; homeBrand?: string; discoverEntry?: boolean }>()
@@ -36,14 +37,14 @@ async function apply(value: InviteStatus) {
   if (value.admitted) {
     actionRequiresInvite.value = false; everAdmitted.value = true; dialog.value?.close(); code.value = ''; error.value = ''
     if (value.enabled) expiryTimer = setTimeout(required, Math.min(2147000000, Math.max(1000, Date.parse(value.expiresAt) - Date.now() + 1000)))
-  } else if (!accessible.value) { await show(); await nextTick(); input.value?.focus() }
+  } else if (!accessible.value) { await show() }
 }
 async function check() {
   if (busy.value && !checking.value) return
   checking.value = true; error.value = ''; lastCheck = Date.now()
   try { await apply(await readInviteStatus()) }
   catch { admitted.value = false; error.value = '暂时无法验证内测资格，请检查网络后重试。'; await show() }
-  finally { checking.value = false; await nextTick(); if (!accessible.value) input.value?.focus() }
+  finally { checking.value = false; await nextTick(); if (!accessible.value) input.value?.focus({ preventScroll: true }) }
 }
 async function submit() {
   if (busy.value || !status.value) return
@@ -85,8 +86,14 @@ onBeforeUnmount(() => { disposed = true; clearTimeout(expiryTimer); window.remov
     <section class="beta-access-card" :aria-busy="busy">
       <div class="beta-access-top" :data-nosnippet="entryCopy ? '' : undefined"><span class="beta-access-label">{{ t('内测体验') }}</span><LanguageSwitcher/></div>
       <img class="beta-access-logo" src="/brand/logo-symbol.svg" alt="" width="56" height="56">
-      <p class="beta-access-brand">{{ homeBrand ?? siteName }}</p>
-      <h1 id="beta-access-title">{{ entryCopy?.heading ?? t('让灵感，先在这里发声。') }}</h1>
+      <template v-if="homeBrand && locale === 'zh-CN'">
+        <h1 id="beta-access-title" class="beta-access-brand">{{ homeBrand }}</h1>
+        <p class="beta-access-headline">{{ homeSeo[locale].tagline }}</p>
+      </template>
+      <template v-else>
+        <p class="beta-access-brand">{{ homeBrand ?? siteName }}</p>
+        <h1 id="beta-access-title">{{ entryCopy?.heading ?? t('让灵感，先在这里发声。') }}</h1>
+      </template>
       <p id="beta-access-description" class="beta-access-intro">{{ entryCopy?.description ?? t('青风音乐正在内测，输入邀请码即可开始体验。') }}</p>
       <div data-nosnippet>
         <p v-if="homeBrand" class="beta-access-prompt">{{ homeSeo[locale].invitePrompt }}</p>
@@ -100,6 +107,7 @@ onBeforeUnmount(() => { disposed = true; clearTimeout(expiryTimer); window.remov
         <div v-else-if="error"><p class="beta-access-error" role="alert">{{ t(error) }}</p><button class="beta-access-primary" type="button" @click="check">{{ t('重新验证') }}</button></div>
         <p class="beta-access-note">{{ t('邀请码由内测邀请人提供。') }}</p>
       </div>
+      <HomePublicInfo v-if="homeBrand && !accessible && platform.kind === 'web'" show-steps />
       <div :data-nosnippet="entryCopy ? '' : undefined">
         <nav v-if="entryCopy && platform.kind === 'web'" class="beta-access-guides" :aria-label="locale === 'en' ? 'Music guides' : '音乐使用指南'">
           <a v-for="link in entryLinks" :key="link.href" :href="link.href">{{ link.text }}</a>
@@ -124,7 +132,7 @@ onBeforeUnmount(() => { disposed = true; clearTimeout(expiryTimer); window.remov
 .beta-access-label { font-size:12px; color:#ae432f; background:#ffede5; padding:5px 12px; border-radius:20px; }
 .beta-access-logo { display:block; margin-bottom:10px; }
 .beta-access-brand { font-size:16px; font-weight:750; margin:0 0 26px; }
-.beta-access-card h1 { font-size:27px; line-height:1.4; letter-spacing:-.6px; margin:0 0 14px; }
+.beta-access-card h1:not(.beta-access-brand),.beta-access-headline { font-size:27px; line-height:1.4; font-weight:700; letter-spacing:-.6px; margin:0 0 14px; }
 .beta-access-intro { font-size:14px; line-height:1.8; color:#7e6b60; margin:0 0 28px; }
 .beta-access-prompt { font-size:14px; margin:0 0 12px; }
 .beta-access-card label { display:block; font-size:13px; color:#51443c; margin-bottom:8px; }
@@ -142,5 +150,5 @@ onBeforeUnmount(() => { disposed = true; clearTimeout(expiryTimer); window.remov
 .beta-access-guides a { color:#914030; text-underline-offset:3px; }
 .beta-access-top .language-switch button,.beta-access-top .language-switch a { color:#645249; }
 .beta-access-top .language-switch > span { color:#a39185; }
-@media(max-width:480px) { .beta-access-card { padding:22px 24px 25px; } .beta-access-card h1 { font-size:24px; } }
+@media(max-width:480px) { .beta-access-card { padding:22px 24px 25px; } .beta-access-card h1:not(.beta-access-brand),.beta-access-headline { font-size:24px; } }
 </style>

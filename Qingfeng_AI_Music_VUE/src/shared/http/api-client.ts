@@ -42,7 +42,11 @@ async function decodeResponse<T>(response:Response,path:string,method:string):Pr
   if(!response.ok){
     const failure=data&&typeof data==='object'?data as {message?:unknown;code?:unknown}:{}
     const code=typeof failure.code==='string'?failure.code:undefined
-    if(code==='INVITE_REQUIRED'&&typeof window!=='undefined')window.dispatchEvent(new Event('qingfeng:invite-required'))
+    // Listening is public. Counting the play still follows the invitation policy.
+    const countingPlay = method === 'POST' && /^public\/discover\/songs\/[^/]+\/\d+\/play$/.test(path)
+    if (code === 'INVITE_REQUIRED' && !countingPlay && typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('qingfeng:invite-required'))
+    }
     throw new ApiError(typeof failure.message==='string'?failure.message:`请求失败（${response.status}），请检查服务状态`,response.status,code,retryAfterSeconds(response.headers.get('Retry-After')))
   }
   if(!raw.trim()&&!emptyResponseAllowed(path,method)||!validResponse(path,method,data,response.status))throw invalidResponse()

@@ -48,6 +48,12 @@ describe('crawlable site pages', () => {
     expect(productCopy?.textContent).toContain('青风音乐')
     expect(productCopy?.textContent).toContain('青妙Ai')
     expect(productCopy?.closest('[data-nosnippet]')).toBeNull()
+    expect(card?.querySelectorAll('.home-public-info h2')).toHaveLength(2)
+    expect(card?.querySelectorAll('.home-public-info ol li')).toHaveLength(3)
+    expect(card?.querySelectorAll('.home-public-info details summary')).toHaveLength(2)
+    for (const publicPath of [path, path === '/' ? '/discover' : '/en/discover']) {
+      expect(renderSitePage(shell, sitePage(publicPath)!).split('<!--public-discover-links-->')).toHaveLength(2)
+    }
     expect(card?.querySelector('[data-nosnippet]')?.textContent).toMatch(/邀请码|invitation code/)
     expect(page.querySelectorAll('h1')).toHaveLength(1)
     expect(card?.querySelectorAll('nav a[href*="/guide/"]')).toHaveLength(4)
@@ -58,7 +64,7 @@ describe('crawlable site pages', () => {
 
   it('publishes one site entity and the regional brand on each homepage', () => {
     expect(parsePage('/').documentElement.lang).toBe('zh-CN')
-    expect(parsePage('/').querySelector('h1')?.textContent).toBe('青妙Ai｜把你的歌词做成歌')
+    expect(parsePage('/').querySelector('h1')?.textContent).toBe('青妙Ai')
     expect(parsePage('/').querySelector('meta[property="og:title"]')?.getAttribute('content')).toBe('青妙Ai')
     const website = JSON.parse(parsePage('/').querySelector('script[type="application/ld+json"]')!.textContent!)
     expect(website.name).toBe('青妙Ai')
@@ -110,7 +116,7 @@ describe('crawlable site pages', () => {
     expect(page.querySelector('link[hreflang="zh-CN"]')?.getAttribute('href')).toBe(siteOrigin + guide.translations['zh-CN'])
     expect(page.querySelector('link[hreflang="en"]')?.getAttribute('href')).toBe(siteOrigin + guide.translations.en)
     const home = guide.language === 'en' ? '/en/' : '/'
-    expect(parsePage(home).querySelector(`a[href="${path}"]`)?.textContent).toBe(guide.label)
+    expect(parsePage(home).querySelector(`nav a[href="${path}"]`)?.textContent).toBe(guide.label)
     expect(page.querySelectorAll('nav a[hreflang]')).toHaveLength(2)
     expect(page.querySelector(`nav a[href="${path}"]:not([hreflang])`)).toBeNull()
   })

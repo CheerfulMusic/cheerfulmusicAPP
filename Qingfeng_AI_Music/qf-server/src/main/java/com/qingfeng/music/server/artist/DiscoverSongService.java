@@ -7,6 +7,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import org.springframework.context.annotation.Profile;
 import org.springframework.dao.DuplicateKeyException;
@@ -37,6 +38,7 @@ public class DiscoverSongService {
     public record CommentCount(long count) {}
     public record PostedComment(Comment comment, long count) {}
     public record Description(String text) {}
+    public record PublicPage(ArtistProfileService.CatalogSong song, String description) {}
     public record Detail(ArtistProfileService.DiscoverSong release, Double durationSeconds, String lyrics, String description,
                          boolean signedIn, boolean communityAvailable, boolean canEditDescription,
                          Likes likes, long commentCount, Comments comments) {}
@@ -64,11 +66,20 @@ public class DiscoverSongService {
             return new Detail(recording.release(), recording.durationSeconds(), lyrics, "", signedIn, false, false,
                     new Likes(0, false), 0, new Comments(List.of(), null));
         }
-        String description = db.query("SELECT body FROM discover_song_description WHERE release_id=? AND release_version=?",
-                (rs, row) -> rs.getString(1), song, version).stream().findFirst().orElse("");
-        return new Detail(recording.release(), recording.durationSeconds(), lyrics, description,
+        return new Detail(recording.release(), recording.durationSeconds(), lyrics, publishedDescription(song, version),
                 signedIn, true, signedIn && recording.owner().equals(viewer), likes(song, version, viewer), commentCount(song, version),
                 readComments(song, version, viewer, recording.owner(), null));
+    }
+
+    @Transactional(readOnly = true)
+    public Optional<PublicPage> publicPage(String song, long version) {
+        return profiles.catalogSong(song, version).map(publication ->
+                new PublicPage(publication, communityAvailable() ? publishedDescription(song, version) : ""));
+    }
+
+    private String publishedDescription(String song, long version) {
+        return db.query("SELECT body FROM discover_song_description WHERE release_id=? AND release_version=?",
+                (rs, row) -> rs.getString(1), song, version).stream().findFirst().orElse("");
     }
 
     @Transactional(readOnly = true)

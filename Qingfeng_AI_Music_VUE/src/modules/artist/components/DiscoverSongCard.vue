@@ -18,7 +18,7 @@ defineEmits<{ play: [] }>()
 <template>
   <li class="discover-song">
     <div class="discover-art">
-      <img :src="cover" alt="" loading="lazy" width="320" height="320">
+      <img :src="cover" :alt="song.song.hasCover ? song.song.title : ''" loading="lazy" width="320" height="320">
       <span v-if="duration" class="discover-duration">{{ duration }}</span>
       <button class="discover-play" type="button" :aria-pressed="playing"
         :aria-label="t(playing ? '暂停 {title}' : '试听 {title}', { title: song.song.title })" @click="$emit('play')">
