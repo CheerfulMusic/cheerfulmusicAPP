@@ -1,20 +1,21 @@
 export const siteName = 'Cheerful Music'
-export const homeSearchTitle = '青妙Ai'
 const creatorHeadline = 'Everyone Can Be a Creator'
 const chineseHomeHeadline = '青妙Ai｜把你的歌词做成歌'
 
 export const homeSeo = {
   'zh-CN': {
     path: '/',
+    brand: '青妙Ai',
     heading: chineseHomeHeadline,
     invitePrompt: '输入邀请码即可开始创作。',
-    description: '青妙Ai 是青风音乐（Cheerful Music）的 AI 音乐创作平台。写下歌词或故事，选好曲风和人声，就能生成、试听和分享自己的歌。',
+    description: '青妙Ai 是青风音乐（Cheerful Music）推出的 AI 音乐创作平台，英文名是 cheerfulmusic。写下歌词或故事，选好曲风和人声，就能创作、试听和分享自己的歌。',
   },
   en: {
     path: '/en/',
+    brand: 'cheerfulmusic',
     heading: creatorHeadline,
     invitePrompt: 'Enter your invitation code to start creating.',
-    description: 'Create a song with 青妙Ai, the AI music studio from Cheerful Music (青风音乐). Start with lyrics or a story, choose a style and voice, then listen and share.',
+    description: 'Create a song with cheerfulmusic (青妙Ai), the AI music studio from Cheerful Music (青风音乐). Start with lyrics or a story, choose a style and voice, then listen and share.',
   },
 } as const
 
@@ -28,12 +29,16 @@ export function homeLocale(path: string): Locale | undefined {
 
 export const homePaths = { 'zh-CN': homeSeo['zh-CN'].path, en: homeSeo.en.path }
 
-export function localizedSeoLinks(path: string, translations: Record<Locale, string>) {
+export function homeBrand(path: string) {
+  return homeSeo[homeLocale(path) ?? 'zh-CN'].brand
+}
+
+export function localizedSeoLinks(path: string, translations: Record<Locale, string>, defaultLanguage: Locale = 'zh-CN') {
   return [
     { rel: 'canonical', href: siteOrigin + path, hreflang: undefined },
     ...Object.entries(translations).map(([language, href]) => ({
       rel: 'alternate', hreflang: language, href: siteOrigin + href,
     })),
-    { rel: 'alternate', hreflang: 'x-default', href: siteOrigin + translations['zh-CN'] },
+    { rel: 'alternate', hreflang: 'x-default', href: siteOrigin + translations[defaultLanguage] },
   ]
 }

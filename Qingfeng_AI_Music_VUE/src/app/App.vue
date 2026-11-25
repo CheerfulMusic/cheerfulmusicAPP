@@ -12,6 +12,7 @@ import QuickCompletionNotice from '../modules/studio/components/QuickCompletionN
 import AnalyticsConsentBanner from '../modules/analytics/components/AnalyticsConsentBanner.vue'
 import SeoLanding from './layouts/SeoLanding.vue'
 import { t } from '../shared/i18n'
+import { homeBrand } from '../shared/i18n/home-seo'
 const route = useRoute()
 const discoverSong = computed(() => route.name === 'discover-song')
 const community = computed(() => route.name === 'artist-home' || route.name === 'discover' || discoverSong.value)
@@ -22,7 +23,7 @@ const publicPreview = computed(() => platform.kind === 'web' && route.name === '
 </script>
 <template>
   <RouterView v-if="standalonePreview || route.meta.publicGuide || route.name === 'native-listen'" />
-  <BetaAccessGate v-else :public-access="publicListening" :public-preview="publicPreview" :home-entry="route.name === 'home'" :discover-entry="route.name === 'discover'">
+  <BetaAccessGate v-else :public-access="publicListening" :public-preview="publicPreview" :home-brand="route.name === 'home' ? homeBrand(route.path) : undefined" :discover-entry="route.name === 'discover'">
     <template #public-preview="{ openInvite }">
       <SeoLanding :path="route.path">
         <button type="button" class="button" @click="openInvite">{{ t('请输入邀请码') }}</button>

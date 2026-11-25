@@ -1,4 +1,4 @@
-import { homeLocale, homePaths, homeSearchTitle, homeSeo, localizedSeoLinks, siteName, siteOrigin, type Locale } from './home-seo'
+import { homeBrand, homeLocale, homePaths, homeSeo, localizedSeoLinks, siteName, siteOrigin, type Locale } from './home-seo'
 import { siteGuide, siteGuideLinks, siteGuidePaths } from './site-guides'
 
 export const discoverPaths = { 'zh-CN': '/discover', en: '/en/discover' } as const
@@ -55,14 +55,15 @@ export function sitePage(path: string, preferredLocale?: Locale) {
   if (path === '/' || localized) {
     const canonical = localized ? homeSeo[localized].path : '/'
     const copy = homeSeo[language]
+    const brand = homeBrand(canonical)
     return {
       path: canonical,
       language,
       heading: copy.heading,
-      title: homeSearchTitle,
-      siteName: homeSearchTitle,
+      title: brand,
+      siteName: brand,
       description: copy.description,
-      links: localizedSeoLinks(canonical, homePaths),
+      links: localizedSeoLinks(canonical, homePaths, 'en'),
     }
   }
   const canonical = path.replace(/\/$/, '')
@@ -89,8 +90,8 @@ export function landingLinks(language: Locale, path = '/'): { href: string; text
   const onDiscover = discoverLocale(path) !== undefined
   const translations = guide?.translations ?? (onDiscover ? discoverPaths : homePaths)
   const homeLabels = {
-    en: `${homeSearchTitle} Home (Cheerful Music)`,
-    'zh-CN': `${homeSearchTitle} 首页（青风音乐 · Cheerful Music）`,
+    en: `${homeSeo.en.brand} Home (Cheerful Music)`,
+    'zh-CN': `${homeSeo['zh-CN'].brand} 首页（青风音乐 · Cheerful Music）`,
   }
   const topics: { href: string; text: string }[] = [
     { href: discoverPaths[language], text: discoverSeo[language].heading },
@@ -107,7 +108,7 @@ export function landingLinks(language: Locale, path = '/'): { href: string; text
 
 export function socialMetadata(page: NonNullable<ReturnType<typeof sitePage>>) {
   const image = siteOrigin + '/brand/share-default-cover.png'
-  const brand = homeSearchTitle
+  const brand = page.siteName ?? homeSeo['zh-CN'].brand
   const title = page.title
   return [
     { property: 'og:type', content: 'website' },
@@ -129,7 +130,7 @@ export function socialMetadata(page: NonNullable<ReturnType<typeof sitePage>>) {
 export const websiteSchema = {
   '@context': 'https://schema.org',
   '@type': 'WebSite',
-  name: homeSearchTitle,
-  alternateName: [siteName, '青风音乐', 'CheerfulMusic', 'Cheerful Music Ai', 'cheerfulmusicAI', 'cheerfulmusicai'],
+  name: homeSeo['zh-CN'].brand,
+  alternateName: [homeSeo.en.brand, siteName, '青风音乐', 'CheerfulMusic', 'Cheerful Music Ai', 'cheerfulmusicAI', 'cheerfulmusicai'],
   url: siteOrigin + '/',
 }

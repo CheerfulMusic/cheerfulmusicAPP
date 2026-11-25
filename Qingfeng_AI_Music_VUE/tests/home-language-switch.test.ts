@@ -27,7 +27,7 @@ it('switches both ways on the root without changing the URL or tab title', async
   setLocale('zh-CN')
   await router.push('/?utm_source=search#how')
   const wrapper = mount(LanguageSwitcher, { global: { plugins: [router] } })
-  const hero = mount(HomeHero, { global: { stubs: { RouterLink: true } } })
+  const hero = mount(HomeHero, { props: { brand: '青妙Ai' }, global: { stubs: { RouterLink: true } } })
   try {
     for (const language of ['en', 'zh-CN']) {
       const button = wrapper.get(`button[lang="${language}"]`)
@@ -37,6 +37,7 @@ it('switches both ways on the root without changing the URL or tab title', async
       expect(document.title).toBe('青妙Ai')
       expect(document.querySelector('meta[property="og:site_name"]')?.getAttribute('content')).toBe('青妙Ai')
       expect(button.attributes('aria-pressed')).toBe('true')
+      expect(hero.get('.p-intro-description').text()).toContain('青妙Ai')
       expect(hero.findAll('h1 > span').map(line => line.text())).toEqual(language === 'en'
         ? ['Everyone Can Be a Creator']
         : ['做自己的歌', 'Everyone Can Be a Creator'])
@@ -57,7 +58,7 @@ it('returns visitors from the English search landing page to the root when they 
   const wrapper = mount(LanguageSwitcher, { global: { plugins: [router] } })
   try {
     expect(locale.value).toBe('en')
-    expect(document.title).toBe('青妙Ai')
+    expect(document.title).toBe('cheerfulmusic')
     await wrapper.get('button[lang="zh-CN"]').trigger('click')
     await flushPromises()
     expect(router.currentRoute.value.fullPath).toBe('/?utm_source=search#how')
