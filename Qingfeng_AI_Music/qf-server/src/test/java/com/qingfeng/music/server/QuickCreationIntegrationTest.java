@@ -8,22 +8,38 @@ import com.qingfeng.music.lyrics.api.LyricsApi;
 import com.qingfeng.music.lyrics.application.*;
 import com.qingfeng.music.generation.api.GenerationApi;
 import com.qingfeng.music.generation.domain.GenerationStatus;
+import com.qingfeng.music.infrastructure.provider.OpenAiLyricsWriter;
+import com.qingfeng.music.infrastructure.provider.QwenLyricsWriter;
 import com.qingfeng.music.settings.MusicSettings;
 import com.qingfeng.music.server.query.WorkLibraryQuery;
+import com.sun.net.httpserver.HttpServer;
+import java.io.IOException;
+import java.net.InetSocketAddress;
+import java.net.URI;
+import java.net.http.HttpClient;
 import java.time.Instant;
 import java.util.*;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.*;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.*;
 import org.springframework.context.annotation.*;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import static org.junit.jupiter.api.Assertions.*;
 
 @SpringBootTest(properties={"qingfeng.lyrics.enabled=true","qingfeng.generation.scheduler-enabled=false","qingfeng.credits.enabled=false"})
 @ActiveProfiles("test") @Import(QuickCreationIntegrationTest.Offline.class)
 class QuickCreationIntegrationTest {
+    private static final ObjectMapper JSON = new ObjectMapper();
+    private static final String FIRST_LYRICS = "[Verse]\n门口的小碗装着橘子\n[Chorus]\n谢谢你留灯等我";
+    private static final String REFINED_LYRICS = "[Verse]\n一瓣橘香留在门边\n[Chorus]\n那盏灯为我亮到深夜";
+
     @BeforeAll static void ensureVideoProjectionFixture(@Autowired JdbcTemplate jdbc)throws Exception {
         // The MySQL subclass deliberately retains its isolated database between runs.
         // Install the canonical fixture only when both tables are absent; never
@@ -99,11 +115,119 @@ class QuickCreationIntegrationTest {
         assertFalse(service.runOnce());assertEquals(calls+1,writer.calls.get());
         writer.failureCode=null;service.retry(owner,work.id(),flow.id());service.runOnce();assertNotNull(service.get(owner,work.id(),flow.id()).taskId());
     }
-    private QuickCreationService withFallback(FakeWriter primary, FakeWriter backup) {
-        var fallbackComposer = new LyricsCompositionService(works, lyrics,
+    private QuickCreationService withWriter(LyricsWriter lyricWriter) {
+        var lyricComposer = new LyricsCompositionService(works, lyrics,
             new com.qingfeng.music.infrastructure.persistence.lyrics.MyBatisLyricsRepository(lyricsMapper),
-            new FallbackLyricsWriter(primary, backup), requests, true);
-        return new QuickCreationService(repository, works, lyrics, fallbackComposer, music, true);
+            lyricWriter, requests, true);
+        return new QuickCreationService(repository, works, lyrics, lyricComposer, music, true);
+    }
+    private QuickCreationService withFallback(FakeWriter primary, FakeWriter backup) {
+        return withWriter(new FallbackLyricsWriter(primary, backup));
+    }
+
+    @ParameterizedTest @ValueSource(strings = {"OPENAI", "QWEN"})
+    void oneClickSubmitsOnlyTheRefinedLyricsToMusic(String provider) throws Exception {
+        try (var model = new LoopbackLyricModel(provider, 200)) {
+            service = withWriter(model.writer());
+            int purchases = music.purchases.get();
+            String key = UUID.randomUUID().toString();
+            var flow = service.start(owner, work.id(), work.version(), key, "zh-CN");
+            assertTrue(service.runOnce());
+            var result = service.get(owner, work.id(), flow.id());
+            assertEquals("QUEUED", result.status());
+            assertNotNull(result.taskId());
+            assertEquals(2, model.requests.size());
+
+            var review = model.requests.get(1);
+            assertTrue(model.systemPrompt(review).contains("深度二次创作"));
+            var material = model.material(review);
+            assertEquals(FIRST_LYRICS, material.at("/candidate/lyrics").asText());
+            assertEquals(work.story(), material.at("/originalMaterial/story").asText());
+
+            var task = music.list(owner, work.id()).get(0);
+            assertEquals(result.taskId(), task.id());
+            assertEquals(result.revisionId(), task.revisionId());
+            var saved = lyrics.get(owner, work.id(), task.revisionId());
+            assertTrue(saved.confirmed());
+            assertEquals(REFINED_LYRICS, saved.lyrics());
+            assertEquals(List.of(saved), lyrics.list(owner, work.id()));
+
+            assertEquals(flow.id(), service.start(owner, work.id(), work.version(), key, "zh-CN").id());
+            assertFalse(service.runOnce());
+            assertEquals(2, model.requests.size());
+            assertEquals(purchases + 1, music.purchases.get());
+        }
+    }
+
+    @ParameterizedTest @ValueSource(ints = {503, 504})
+    void oneClickStopsBeforeMusicWhenRefinementFails(int refinementStatus) throws Exception {
+        try (var model = new LoopbackLyricModel("OPENAI", refinementStatus)) {
+            service = withWriter(model.writer());
+            int purchases = music.purchases.get();
+            var flow = start();
+            assertTrue(service.runOnce());
+            var result = service.get(owner, work.id(), flow.id());
+            assertEquals("FAILED", result.status());
+            assertEquals(refinementStatus == 504 ? "LYRICS_SUBMISSION_UNKNOWN" : "LYRICS_QUALITY_UNVERIFIED",
+                result.errorCode());
+            assertNull(result.revisionId());
+            assertNull(result.taskId());
+            assertTrue(lyrics.list(owner, work.id()).isEmpty());
+            assertFalse(service.runOnce());
+            assertEquals(2, model.requests.size());
+            assertEquals(purchases, music.purchases.get());
+        }
+    }
+
+    private static final class LoopbackLyricModel implements AutoCloseable {
+        private final HttpServer server;
+        private final boolean openAi;
+        private final List<JsonNode> requests = new CopyOnWriteArrayList<>();
+
+        LoopbackLyricModel(String provider, int refinementStatus) throws IOException {
+            openAi = "OPENAI".equals(provider);
+            String draft = JSON.writeValueAsString(Map.of("title", "小碗", "lyrics", FIRST_LYRICS, "plan", Map.of(
+                "requirements", "", "suggestedArrangement", "Warm folk", "negativeTags", "",
+                "summaryZh", "温暖民谣", "summaryEn", "Warm folk", "vocalGender", "AUTO")));
+            server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+            server.createContext("/", exchange -> {
+                try (exchange) {
+                    requests.add(JSON.readTree(exchange.getRequestBody().readAllBytes()));
+                    int call = requests.size();
+                    if (call > 2) {
+                        exchange.sendResponseHeaders(500, -1);
+                        return;
+                    }
+                    byte[] response = JSON.writeValueAsBytes(completion(call == 1 ? draft : REFINED_LYRICS));
+                    exchange.sendResponseHeaders(call == 1 ? 200 : refinementStatus, response.length);
+                    exchange.getResponseBody().write(response);
+                }
+            });
+            server.start();
+        }
+
+        LyricsWriter writer() {
+            var uri = URI.create("http://127.0.0.1:" + server.getAddress().getPort());
+            var client = HttpClient.newHttpClient();
+            return openAi ? new OpenAiLyricsWriter("offline-key", "offline-gpt", uri, client)
+                : new QwenLyricsWriter("offline-key", "offline-qwen", uri, client);
+        }
+
+        String systemPrompt(JsonNode request) {
+            return request.at(openAi ? "/instructions" : "/messages/0/content").asText();
+        }
+
+        JsonNode material(JsonNode request) {
+            return JSON.readTree(request.at(openAi ? "/input/0/content" : "/messages/1/content").asText());
+        }
+
+        private Map<String, Object> completion(String content) {
+            if (openAi) return Map.of("status", "completed", "output", List.of(Map.of("type", "message", "role", "assistant",
+                "status", "completed", "content", List.of(Map.of("type", "output_text", "text", content)))));
+            return Map.of("choices", List.of(Map.of("finish_reason", "stop", "message", Map.of("content", content))));
+        }
+
+        @Override public void close() { server.stop(0); }
     }
     private FakeWriter backupWriter() {
         return new FakeWriter() { @Override public String source() { return "QWEN"; } };
