@@ -1,8 +1,7 @@
 export const siteName = 'Cheerful Music'
-export const homeSearchTitle = 'Cheerful Music Ai'
+export const homeSearchTitle = '青妙Ai'
 const creatorHeadline = 'Everyone Can Be a Creator'
-const chineseHomeHeadline = '青风音乐｜把你的歌词做成歌'
-const englishHomeTitle = 'Cheerful Music | Turn Your Lyrics into a Song with AI'
+const chineseHomeHeadline = '青妙Ai｜把你的歌词做成歌'
 
 export const homeSeo = {
   'zh-CN': {
@@ -10,15 +9,15 @@ export const homeSeo = {
     heading: chineseHomeHeadline,
     invitePrompt: '输入邀请码即可开始创作。',
     searchTitle: homeSearchTitle,
-    description: '青风音乐（Cheerful Music）是 AI 音乐创作平台。写下歌词或故事，选好曲风和人声，就能生成、试听和分享自己的歌。',
+    description: '青妙Ai 是青风音乐（Cheerful Music）的 AI 音乐创作平台。写下歌词或故事，选好曲风和人声，就能生成、试听和分享自己的歌。',
   },
   en: {
     path: '/en/',
     heading: creatorHeadline,
     invitePrompt: 'Enter your invitation code to start creating.',
-    title: englishHomeTitle,
+    title: homeSearchTitle,
     searchTitle: homeSearchTitle,
-    description: 'Turn your lyrics or a story into a song with Cheerful Music. Choose a style and voice, then listen to your AI-generated track and share it with friends.',
+    description: 'Turn your lyrics or a story into a song with 青妙Ai (Cheerful Music). Choose a style and voice, then listen to your AI-generated track and share it with friends.',
   },
 } as const
 

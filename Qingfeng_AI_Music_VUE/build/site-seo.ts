@@ -49,7 +49,7 @@ export function renderSitePage(html: string, page: SitePage) {
   }
   return html
     .replace(/<html lang="[^"]*">/, `<html lang="${page.language}">`)
-    .replace(/<title>[^<]*<\/title>/, `<title>${escapeHtml(page.title)}</title>`)
+    .replace(/<title>[^<]*<\/title>/, `<title>${escapeHtml(page.searchTitle ?? page.title)}</title>`)
     .replace(/<meta name="description" content="[^"]*">/, `<meta name="description" content="${escapeHtml(page.description)}">`)
     .replace('</head>', `${metadata.join('\n')}\n</head>`)
     .replace('<div id="app"></div>', `<div id="app">${initialContent}</div>`)

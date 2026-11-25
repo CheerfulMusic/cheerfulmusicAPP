@@ -1,4 +1,4 @@
-import { homeLocale, homePaths, homeSeo, localizedSeoLinks, siteName, siteOrigin, type Locale } from './home-seo'
+import { homeLocale, homePaths, homeSearchTitle, homeSeo, localizedSeoLinks, siteName, siteOrigin, type Locale } from './home-seo'
 import { siteGuide, siteGuideLinks, siteGuidePaths } from './site-guides'
 
 export const discoverPaths = { 'zh-CN': '/discover', en: '/en/discover' } as const
@@ -104,7 +104,7 @@ export function landingLinks(language: Locale, path = '/'): { href: string; text
 
 export function socialMetadata(page: NonNullable<ReturnType<typeof sitePage>>) {
   const image = siteOrigin + '/brand/share-default-cover.png'
-  const brand = siteName
+  const brand = page.searchTitle ?? siteName
   const title = page.searchTitle ?? page.title
   return [
     { property: 'og:type', content: 'website' },
@@ -126,7 +126,7 @@ export function socialMetadata(page: NonNullable<ReturnType<typeof sitePage>>) {
 export const websiteSchema = {
   '@context': 'https://schema.org',
   '@type': 'WebSite',
-  name: siteName,
-  alternateName: ['青风音乐', 'CheerfulMusic', 'Cheerful Music Ai', 'cheerfulmusicAI', 'cheerfulmusicai'],
+  name: homeSearchTitle,
+  alternateName: [siteName, '青风音乐', 'CheerfulMusic', 'Cheerful Music Ai', 'cheerfulmusicAI', 'cheerfulmusicai'],
   url: siteOrigin + '/',
 }
