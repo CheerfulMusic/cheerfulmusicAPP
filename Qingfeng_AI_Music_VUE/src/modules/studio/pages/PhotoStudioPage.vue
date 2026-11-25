@@ -1,6 +1,8 @@
 <script setup lang="ts">
+import LyricLanguagePicker from '../components/LyricLanguagePicker.vue'
+import { lyricLanguageError, selectedLyricLanguage } from '../../../shared/i18n/lyric-language'
 import { lyricTimeoutMessage } from '../../works/model/lyric-recovery'
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ApiError, currentCreatorId, ensureCreator } from '../../../shared/http/api-client'
 import { getPhotoLyricsAvailable } from '../../../shared/http/system'
@@ -36,6 +38,7 @@ const outcomeUnknown = ref(false)
 const locked = ref(false)
 const error = ref('')
 const creditShort = ref(false)
+watch(language, () => { if (error.value === lyricLanguageError) error.value = '' })
 const storyInput = ref<HTMLTextAreaElement>()
 const storyLimit = 300
 const photoExamples = ['sea', 'mountains', 'tram', 'blossoms', 'cat']
@@ -77,7 +80,8 @@ function restore() {
   try {
     const saved = JSON.parse(sessionStorage.getItem(storageKey()) || 'null') as PhotoDraft | null
     if (!saved || !/^[a-f0-9-]{36}$/i.test(saved.id) || !/^[a-f0-9-]{36}$/i.test(saved.key)
-      || typeof saved.note !== 'string' || saved.note.length > storyLimit || !['zh-CN','en','mixed'].includes(saved.language)
+      || typeof saved.note !== 'string' || saved.note.length > storyLimit
+      || typeof saved.language !== 'string' || selectedLyricLanguage(saved.language) !== saved.language
       || typeof saved.submitted !== 'boolean') return
     draft = saved
     draftWorkId.value = saved.id
@@ -178,6 +182,8 @@ async function checkOriginal() {
 
 async function submit() {
   if (!canEditPhotos.value || !photos.value.length) return
+  const requestedLanguage = draft?.language ?? selectedLyricLanguage(language.value)
+  if (!requestedLanguage) { error.value = lyricLanguageError; return }
   const files = photos.value.map(photo => photo.file)
   busy.value = true
   error.value = ''
@@ -202,7 +208,7 @@ async function submit() {
       draft.submitted = false
       outcomeUnknown.value = false
     }
-    draft ??= { id: crypto.randomUUID(), key: crypto.randomUUID(), note: note.value.trim(), language: language.value, submitted: false }
+    draft ??= { id: crypto.randomUUID(), key: crypto.randomUUID(), note: note.value.trim(), language: requestedLanguage, submitted: false }
     locked.value = true
     remember()
     const work = await saveWork({ recipient: '', occasion: '', story: draft.note, message: '',
@@ -309,13 +315,7 @@ onBeforeUnmount(() => {
           <textarea ref="storyInput" v-model="note" rows="4" :maxlength="storyLimit" :disabled="busy || locked"
             :placeholder="t('例如：这是我第一次看海。')"/>
         </label>
-        <label class="photo-field">
-          <span>{{ t('歌词语言') }}</span>
-          <select v-model="language" :disabled="busy || locked">
-            <option value="zh-CN">{{ t('中文') }}</option><option value="en">English</option>
-            <option value="mixed">{{ t('中英混合') }}</option>
-          </select>
-        </label>
+        <LyricLanguagePicker v-model="language" :disabled="busy || locked" />
         <div class="photo-inspiration">
           <div class="photo-inspiration-heading">
             <NavIcon name="create"/>
@@ -502,7 +502,7 @@ onBeforeUnmount(() => {
 .photo-fields { display:flex; flex-direction:column; gap:16px; padding:27px clamp(22px,2.1vw,35px) 26px; }
 .photo-field { display:grid; gap:8px; color:var(--photo-ink); font-size:17px; font-weight:750; }
 .photo-field small { color:#5e525b; font-size:.86em; font-weight:450; }
-.photo-field textarea,.photo-field select {
+.photo-field textarea,.photo-field :deep(select),.photo-field :deep(input) {
   width:100%;
   border:1px solid #e7d8de;
   border-radius:14px;
@@ -513,8 +513,8 @@ onBeforeUnmount(() => {
 }
 .photo-field textarea { min-height:115px; padding:10px 14px; line-height:1.6; resize:vertical; }
 .photo-field textarea::placeholder { color:#796b75; }
-.photo-field select { min-height:44px; padding:7px 12px; }
-.photo-field textarea:focus,.photo-field select:focus { border-color:#d48085; }
+.photo-field :deep(select),.photo-field :deep(input) { min-height:44px; padding:7px 12px; }
+.photo-field textarea:focus,.photo-field :deep(select:focus),.photo-field :deep(input:focus) { border-color:#d48085; }
 .photo-inspiration { margin-top:16px; }
 .photo-inspiration-heading { display:flex; flex-wrap:wrap; align-items:center; gap:7px 10px; line-height:1.45; }
 .photo-inspiration-heading svg { flex:none; width:20px; height:20px; color:#e74b44; }

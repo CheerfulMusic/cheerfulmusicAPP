@@ -1,5 +1,6 @@
 package com.qingfeng.music.server.web.app;
 
+import com.qingfeng.music.lyrics.api.LyricLanguage;
 import com.qingfeng.music.lyrics.application.InspirationRewriteService;
 import com.qingfeng.music.server.security.CreatorPrincipal;
 import jakarta.validation.Valid;
@@ -13,7 +14,7 @@ import org.springframework.web.bind.annotation.*;
 public class InspirationController {
     private final InspirationRewriteService service;
     public InspirationController(InspirationRewriteService service) { this.service = service; }
-    public record RewriteRequest(@NotBlank @Size(max=4000) String text, @NotBlank @Pattern(regexp="zh-CN|en|mixed") String language, @NotBlank @Pattern(regexp="[0-9a-fA-F-]{36}") String requestKey) {}
+    public record RewriteRequest(@NotBlank @Size(max=4000) String text, @NotBlank @Size(max=LyricLanguage.MAX_LENGTH) @Pattern(regexp=LyricLanguage.REGEX) String language, @NotBlank @Pattern(regexp="[0-9a-fA-F-]{36}") String requestKey) {}
     public record RewriteResponse(String text) {}
     @PostMapping("/rewrite")
     public RewriteResponse rewrite(@AuthenticationPrincipal CreatorPrincipal creator, @Valid @RequestBody RewriteRequest request) {

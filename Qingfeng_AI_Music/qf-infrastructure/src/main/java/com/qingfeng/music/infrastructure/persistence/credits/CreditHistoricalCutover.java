@@ -468,7 +468,7 @@ public final class CreditHistoricalCutover {
             for (var resource : resources) {
                 String name = Objects.requireNonNull(resource.getFilename());
                 int version = Integer.parseInt(name.substring(1, name.indexOf("__")));
-                require(version >= 1 && version <= 56, "HISTORY_UNAPPROVED_RESOURCE_EXTENSION");
+                require(version >= 1 && version <= 57, "HISTORY_UNAPPROVED_RESOURCE_EXTENSION");
                 CRC32 crc = new CRC32();
                 String text;
                 try (var input = resource.getInputStream()) { text = new String(input.readAllBytes(), StandardCharsets.UTF_8); }
@@ -538,6 +538,12 @@ public final class CreditHistoricalCutover {
                     String normalized = text.replace("\r\n", "\n").replace('\r', '\n');
                     require("V56__discover_song_community.sql".equals(name) && (int) crc.getValue() == -827620177
                             && "3f3a64d35e5b57b508f51823ef90f5732e304cbfe080d026845bd41bdc6e056a".equals(digest(normalized.getBytes(StandardCharsets.UTF_8))),
+                            "HISTORY_UNAPPROVED_RESOURCE_EXTENSION");
+                }
+                if (version == 57) {
+                    String normalized = text.replace("\r\n", "\n").replace('\r', '\n');
+                    require("V57__extended_lyric_languages.sql".equals(name) && (int) crc.getValue() == -823088408
+                            && "1ca4736350a6f7d4af512e97858da6cfbe5859f8614bcd7b32626cb3e054c553".equals(digest(normalized.getBytes(StandardCharsets.UTF_8))),
                             "HISTORY_UNAPPROVED_RESOURCE_EXTENSION");
                 }
                 require(expected.put(version, new History(version, name, (int) crc.getValue())) == null, "DUPLICATE_CLASSPATH_MIGRATION");

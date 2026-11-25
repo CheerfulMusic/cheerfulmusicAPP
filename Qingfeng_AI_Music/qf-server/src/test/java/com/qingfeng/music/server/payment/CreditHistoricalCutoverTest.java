@@ -142,7 +142,7 @@ class CreditHistoricalCutoverTest {
         assertEquals("HISTORY_SCRIPT_OR_CHECKSUM_MISMATCH", assertThrows(IllegalStateException.class, () -> verifyHistory(reordered, resources)).getMessage());
     }
     @Test void approvedExtensionsMayCoexistWithoutChangingHistoricalSourceVersions() throws Exception {
-        var resources = classpathMigrations(); assertEquals(56, resources.size());
+        var resources = classpathMigrations(); assertEquals(57, resources.size());
         var optional = resources.stream().filter(item -> V47.equals(item.getFilename())).findFirst().orElseThrow();
         try (var stream = optional.getInputStream()) { assertEquals(-48314744, checksum(stream.readAllBytes())); }
         for (int limit : List.of(44, 45)) {
@@ -150,8 +150,8 @@ class CreditHistoricalCutoverTest {
             assertDoesNotThrow(() -> verifyHistory(actual, resources));
         }
     }
-    @Test void audioReferenceAndCommunityResourcesRejectChangesWithTheSameFlywayChecksum() throws Exception {
-        for (int version : List.of(55, 56)) {
+    @Test void laterResourcesRejectChangesWithTheSameFlywayChecksum() throws Exception {
+        for (int version : List.of(55, 56, 57)) {
             var resources = classpathMigrations();
             var actual = history(resources, 45);
             var reference = resources.stream().filter(r -> version(r) == version).findFirst().orElseThrow();

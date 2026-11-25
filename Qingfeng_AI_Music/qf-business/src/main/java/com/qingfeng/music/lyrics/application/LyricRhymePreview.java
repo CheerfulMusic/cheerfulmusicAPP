@@ -1,6 +1,7 @@
 package com.qingfeng.music.lyrics.application;
 
 import com.qingfeng.music.common.exception.DomainException;
+import com.qingfeng.music.lyrics.api.LyricLanguage;
 import java.text.Normalizer;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -8,7 +9,6 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
-import java.util.Set;
 import java.util.regex.Pattern;
 import java.util.stream.IntStream;
 
@@ -22,7 +22,6 @@ public final class LyricRhymePreview {
     public record Candidate(String text, Ending ending, LyricRhyme.Match match, Integer syllables) {}
     public record Result(Status status, Integer referenceIndex, Ending reference, Ending original, List<Candidate> candidates) {}
 
-    private static final Set<String> LANGUAGES = Set.of("zh-CN", "en", "mixed");
     private static final List<String> SCHEMES = List.of("AAAA", "AABB", "ABAB", "ABBA", "XAXA", "AXAX");
     private static final Pattern SPOKEN_SCRIPT = Pattern.compile("(\\p{IsHan})|\\p{IsLatin}");
 
@@ -32,10 +31,17 @@ public final class LyricRhymePreview {
         if (request.lines() == null || request.lines().isEmpty() || request.lines().size() > 40
             || !validIndex(request.lineIndex(), request.lines()) || !LyricLineRewriteService.isLyricLine(request.line())
             || request.lines().stream().anyMatch(line -> !LyricLineRewriteService.isLyricLine(line))
-            || request.language() == null || !LANGUAGES.contains(request.language())
+            || !LyricLanguage.isSupported(request.language())
             || request.referenceIndex() != null && (!validIndex(request.referenceIndex(), request.lines())
                 || request.referenceIndex() == request.lineIndex())) {
             throw new DomainException("INVALID_REWRITE_REQUEST", "请选择有效的歌词和参考句。");
+        }
+
+        if (!LyricLanguage.usesLocalRhymeDictionary(request.language())) {
+            Integer referenceIndex = request.referenceIndex();
+            if (referenceIndex == null && request.lines().size() == 2) referenceIndex = 1 - request.lineIndex();
+            if (referenceIndex == null) return new Analysis(new Result(Status.CHOOSE_REFERENCE, null, null, null, List.of()));
+            return new Analysis(request, referenceIndex, null, null, -1, null);
         }
 
         var original = LyricRhyme.tail(request.line()).orElse(null);
@@ -136,7 +142,7 @@ public final class LyricRhymePreview {
         }
 
         boolean alreadyRhymes() {
-            return LyricRhyme.match(original, reference, false) == LyricRhyme.Match.EXACT && !sameEnding(original, reference);
+            return original != null && LyricRhyme.match(original, reference, false) == LyricRhyme.Match.EXACT && !sameEnding(original, reference);
         }
 
         String prompt() {
@@ -148,8 +154,9 @@ public final class LyricRhymePreview {
             return "操作：RHYME_CANDIDATES\n待改写句：" + request.line()
                 + "\n待改写行号：" + (request.lineIndex() + 1)
                 + "\n参考行号：" + (referenceIndex + 1) + "\n参考句：" + request.lines().get(referenceIndex)
-                + "\n目标韵脚：" + reference.word() + "（" + reference.pronunciation() + "，韵组 " + reference.key() + "）"
-                + "\n原句尾音：" + original.word() + "（" + original.pronunciation() + "）"
+                + (reference == null ? "\n请根据指定语言的实际发音判断参考句韵脚。"
+                    : "\n目标韵脚：" + reference.word() + "（" + reference.pronunciation() + "，韵组 " + reference.key() + "）"
+                        + "\n原句尾音：" + original.word() + "（" + original.pronunciation() + "）")
                 + "\n原句音节数：" + (originalSyllables < 0 ? "沿用原句节奏" : originalSyllables)
                 + "\n允许同语言近韵：" + request.allowNear() + "；允许跨语言近韵：" + request.allowCrossLanguage()
                 + (alreadyRhymes() ? "\n原句已经与参考句同韵。保留同韵并换一种自然表达，可以保留原句尾词。" : "")
@@ -157,6 +164,7 @@ public final class LyricRhymePreview {
         }
 
         Result select(String output) {
+            if (original == null) return selectModelSuggestions(output);
             boolean preserveExact = alreadyRhymes();
             String originalLanguages = languageRuns(request.line());
             var originalMatch = LyricRhyme.match(original, reference, request.allowCrossLanguage());
@@ -184,6 +192,19 @@ public final class LyricRhymePreview {
                     ? Integer.MAX_VALUE : Math.abs(candidate.syllables() - originalSyllables)))
                 .limit(3).toList();
             return result(sorted.isEmpty() ? Status.NO_MATCH : Status.SUGGESTIONS, sorted);
+        }
+
+        private Result selectModelSuggestions(String output) {
+            var seen = new LinkedHashSet<String>();
+            seen.add(comparable(request.line()));
+            seen.add(comparable(request.lines().get(referenceIndex)));
+            var candidates = output.lines().map(String::strip)
+                .filter(LyricLineRewriteService::isLyricLine)
+                .filter(text -> seen.add(comparable(text)))
+                .limit(3)
+                .map(text -> new Candidate(text, null, LyricRhyme.Match.SUGGESTED, null))
+                .toList();
+            return result(candidates.isEmpty() ? Status.NO_MATCH : Status.SUGGESTIONS, candidates);
         }
     }
 }

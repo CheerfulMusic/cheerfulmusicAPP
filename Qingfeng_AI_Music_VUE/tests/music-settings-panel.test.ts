@@ -2,16 +2,18 @@
 import { readFileSync } from 'node:fs'
 import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import { ApiError } from '../src/shared/http/api-client'
+import { ApiError, currentCreatorId } from '../src/shared/http/api-client'
+import { recoveryKey, writeRecovery } from '../src/shared/drafts/recovery'
 import type { Work } from '../src/modules/studio'
 import type { GenerationTask, Revision } from '../src/modules/works/api/detail'
 import type { MusicCatalog, MusicPreferences } from '../src/modules/works/api/music-settings'
 import LyricsPanel from '../src/modules/works/components/LyricsPanel.vue'
 import MusicSettingsPanel from '../src/modules/works/components/MusicSettingsPanel.vue'
+import { rhymeLanguage } from '../src/modules/works/model/lyric-rhyme'
 
 const api = vi.hoisted(() => ({
   snapshot: vi.fn(), load: vi.fn(), preview: vi.fn(), rewrite: vi.fn(), rhyme: vi.fn(), rewriteSelection: vi.fn(),
-  compose: vi.fn(), requestState: vi.fn(), revisionById: vi.fn(), system: vi.fn(), replaceRoute: vi.fn(),
+  compose: vi.fn(), requestState: vi.fn(), revisionById: vi.fn(), listRevisions: vi.fn(), system: vi.fn(), replaceRoute: vi.fn(),
 }))
 const catalog = JSON.parse(readFileSync('../Qingfeng_AI_Music/qf-infrastructure/src/main/resources/music/catalog-v1.json', 'utf8')) as MusicCatalog
 vi.mock('../src/modules/works/api/music-settings', () => ({
@@ -30,7 +32,7 @@ vi.mock('../src/modules/works/api/detail', () => ({
   rewriteLyricLine: api.rewrite,
   rhymeLyricLine: api.rhyme,
   rewriteLyricSelection: api.rewriteSelection,
-  listRevisions: async () => [revision],
+  listRevisions: api.listRevisions,
   generateLyrics: api.compose,
   getLyricsRequest: api.requestState,
   getRevision: api.revisionById,
@@ -58,6 +60,7 @@ enableAutoUnmount(afterEach)
 beforeEach(() => {
   vi.clearAllMocks()
   localStorage.clear()
+  api.listRevisions.mockResolvedValue([revision])
   api.system.mockResolvedValue({ capabilities: { lyricsGeneration: true } })
   api.load.mockResolvedValue({ work, direction: { preferences: { ...preferences, vocalGender: 'MALE', choices: { genre: ['rock'] } } } })
   api.preview.mockImplementation(async (_work: string, selected: MusicPreferences) => ({ preferences: selected }))
@@ -230,6 +233,12 @@ it('uses the current English stanza, preserving inline section headers and unrel
   expect(editor.element.value).toBe(original.replace('I stayed awake till dawn', 'I stayed awake all night'))
 })
 
+it('keeps the chosen new or custom language for rhyme suggestions', () => {
+  const section = { lines: ['La luna canta sobre el mar', 'Espero verte regresar'], lineIndex: 1 }
+  expect(rhymeLanguage(section, 'es')).toBe('es')
+  expect(rhymeLanguage(section, 'custom:Português brasileiro')).toBe('custom:Português brasileiro')
+})
+
 it('keeps the creation tools below the textarea and targets the line at the caret', async () => {
   api.rewrite.mockResolvedValue({ text: '我还在等你' })
   const panel = mount(LyricsPanel, { props: { work } })
@@ -397,6 +406,31 @@ it('sends the live draft for a full rewrite and keeps it when a response only ch
     expect(editor.element.value).toBe(changed.lyrics)
     expect(api.replaceRoute).toHaveBeenCalledWith(expect.objectContaining({ query: expect.objectContaining({ revision: changed.id }) }))
   } finally { vi.unstubAllGlobals() }
+})
+
+it('uses the saved revision language for polishing and regeneration after a different-language cache', async () => {
+  const active = { ...revision, language: 'custom:Português brasileiro', lyrics: '[Verse]\nCanto perto do mar\nVolto quando a lua chegar' }
+  api.listRevisions.mockResolvedValueOnce([active])
+  api.compose.mockResolvedValueOnce({ ...active, id: 'new-version', lyrics: '[Verse]\nEu volto ao luar\nO mar me ensina a cantar' })
+  api.rewrite.mockResolvedValueOnce({ text: 'Canto à beira do mar' })
+  writeRecovery(recoveryKey(currentCreatorId(), 'lyrics', work.id), {
+    title: revision.title, lyrics: revision.lyrics, workVersion: work.version, baseId: 'older',
+    language: 'en', instructions: '', requestKey: '', dirty: false,
+  })
+  const panel = mount(LyricsPanel, { props: { work } })
+  await flushPromises()
+  const editor = panel.get<HTMLTextAreaElement>('textarea')
+  const start = active.lyrics.indexOf('Canto')
+  editor.element.setSelectionRange(start, start)
+  await editor.trigger('click')
+  await panel.findAll('button').find(button => button.text() === '改写选句')!.trigger('click')
+  await flushPromises()
+  expect(api.rewrite).toHaveBeenCalledWith(work.id, expect.objectContaining({ language: active.language }))
+
+  await panel.get('.lyric-rewrite-all').trigger('click')
+  await panel.get('.lyric-selection-dialog').findAll('button').find(button => button.text() === '全部重写')!.trigger('click')
+  await flushPromises()
+  expect(api.compose).toHaveBeenCalledWith(work.id, work.version, expect.any(String), active.language, '', active.id, expect.any(Object), active.lyrics)
 })
 
 it('recovers a full rewrite after timeout without resubmitting or discarding the submitted draft', async () => {

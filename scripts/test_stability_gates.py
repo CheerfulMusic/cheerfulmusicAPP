@@ -312,6 +312,13 @@ class GateTests(unittest.TestCase):
         self.assertEqual("50", gate.verify_migration_set(migrations)["discoverShelvesVersion"])
         reference_name = "V55__generation_audio_reference.sql"
         community_name = "V56__discover_song_community.sql"
+        language_name = "V57__extended_lyric_languages.sql"
+        self.assertEqual("57", gate.verify_migration_set(migrations)["extendedLyricLanguagesVersion"])
+        with self.assertRaises(gate.GateError):
+            gate.verify_migration_set({**migrations, language_name: "0" * 64})
+        with self.assertRaises(gate.GateError):
+            gate.verify_migration_set({k: v for k, v in migrations.items() if k != community_name})
+        migrations.pop(language_name)
         self.assertEqual("56", gate.verify_migration_set(migrations)["discoverSongCommunityVersion"])
         with self.assertRaises(gate.GateError):
             gate.verify_migration_set({**migrations, community_name: "0" * 64})

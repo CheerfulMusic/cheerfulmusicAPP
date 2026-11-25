@@ -68,6 +68,22 @@ class LyricRhymePreviewTest {
         assertEquals("goodbye", result.candidates().get(0).ending().word());
     }
 
+    @Test void offersModelSuggestionsForSpanishWithoutClaimingDictionaryVerification() {
+        var lines = List.of("La luna canta sobre el mar", "Espero que regreses pronto");
+        var service = service("Espero volverte a encontrar\nLa luna canta sobre el mar");
+        var request = new LyricRhymePreview.Request(lines.get(1), lines, 1, null, "es", false, false, false);
+
+        var result = preview(service, request);
+
+        assertEquals(SUGGESTIONS, result.status());
+        assertEquals(0, result.referenceIndex());
+        assertNull(result.reference());
+        assertEquals(1, result.candidates().size());
+        assertEquals("Espero volverte a encontrar", result.candidates().get(0).text());
+        assertEquals("SUGGESTED", result.candidates().get(0).match().name());
+        assertEquals(1, modelCalls.get());
+    }
+
     @Test void alreadyRhymingAndInvalidReferenceDoNotCallModel() {
         var service = service("unneeded");
         var lines = List.of("I watched the fading light", "I stayed awake all night");

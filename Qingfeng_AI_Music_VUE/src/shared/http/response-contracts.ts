@@ -45,7 +45,7 @@ const nonnegativeCount=(v:unknown)=>Number.isSafeInteger(v)&&Number(v)>=0
 const rhymeEnding=(v:unknown)=>obj(v)&&text(v.word)&&text(v.sound)
 const rhymeCandidate=(v:unknown)=>obj(v)&&text(v.text)&&String(v.text).length<=160
   &&!/[\r\n\u0085\u2028\u2029\v\f]/.test(String(v.text))
-  &&rhymeEnding(v.ending)&&['EXACT','NEAR','CROSS_LANGUAGE'].includes(String(v.match))
+  &&(v.match==='SUGGESTED'?v.ending==null:rhymeEnding(v.ending)&&['EXACT','NEAR','CROSS_LANGUAGE'].includes(String(v.match)))
   &&(v.syllables==null||nonnegativeCount(v.syllables))
 const lyricRhyme=(v:unknown)=>{
   if(!obj(v)||!Array.isArray(v.candidates)||v.candidates.length>3||!v.candidates.every(rhymeCandidate))return false

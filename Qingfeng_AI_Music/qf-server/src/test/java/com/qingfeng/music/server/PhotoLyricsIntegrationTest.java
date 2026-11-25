@@ -64,7 +64,7 @@ class PhotoLyricsIntegrationTest {
         @Bean @Primary PhotoLyricsWriter offlinePhotoWriter(AtomicInteger photoCalls, AtomicInteger qwenPhotoCalls){
             PhotoLyricsWriter primary = (work,language,images,direction)->{
                 photoCalls.incrementAndGet();
-                assertEquals("zh-CN",language);
+                assertEquals("法语照片".equals(work.story()) ? "custom:français canadien" : "zh-CN",language);
                 try{
                     for (byte[] image : images) {
                         var decoded=ImageIO.read(new ByteArrayInputStream(image));
@@ -295,10 +295,31 @@ class PhotoLyricsIntegrationTest {
     private HttpResponse<String> upload(Session session,String root,String key,byte[] photo) throws Exception {
         return uploadParts(session,root,key,"photo",photo);
     }
+    @Test void customPhotoLanguageReachesWriterAndIsPersisted() throws Exception {
+        new org.springframework.jdbc.datasource.init.ResourceDatabasePopulator(
+            new org.springframework.core.io.ClassPathResource("db/migration/V57__extended_lyric_languages.sql"))
+            .execute(jdbc.getDataSource());
+        var session = session();
+        String work = field(call(session, "POST", "/api/app/works", Map.of(
+            "recipient", "", "occasion", "", "story", "法语照片", "message", "", "style", "自动推荐", "title", "照片创作")), "id");
+        String root = "/api/app/works/" + work;
+        String key = UUID.randomUUID().toString();
+        var image = photo(Color.BLUE);
+        assertEquals(400, uploadInLanguage(session, root, key, "photo", "custom:", image).statusCode());
+        var created = uploadInLanguage(session, root, key, "photo", "custom:français canadien", image);
+        assertEquals("custom:français canadien", field(created, "language"));
+        assertEquals("custom:français canadien",
+            field(call(session, "GET", root + "/lyrics/" + field(created, "id"), null), "language"));
+    }
+
     private HttpResponse<String> uploadParts(Session session,String root,String key,String field,byte[]... photos) throws Exception {
+        return uploadInLanguage(session, root, key, field, "zh-CN", photos);
+    }
+
+    private HttpResponse<String> uploadInLanguage(Session session,String root,String key,String field,String language,byte[]... photos) throws Exception {
         String boundary="PhotoIntegrationBoundary";
         var prefix=new StringBuilder();
-        Map.of("workVersion","0","requestKey",key,"language","zh-CN").forEach((name,value)->
+        Map.of("workVersion","0","requestKey",key,"language",language).forEach((name,value)->
             prefix.append("--").append(boundary).append("\r\nContent-Disposition: form-data; name=\"").append(name)
                 .append("\"\r\n\r\n").append(value).append("\r\n"));
         var body=new ArrayList<HttpRequest.BodyPublisher>();

@@ -1,4 +1,5 @@
 package com.qingfeng.music.lyrics.application;
+import com.qingfeng.music.lyrics.api.LyricLanguage;
 import com.qingfeng.music.work.api.WorkApi;
 import com.qingfeng.music.lyrics.api.LyricsApi;
 import com.qingfeng.music.common.exception.DomainException;
@@ -79,7 +80,7 @@ public final class LyricsCompositionService {
                                        String baseRevisionId,LyricsStructure structure,LyricsWriter selectedWriter,List<byte[]> photos,
                                        String rewriteSource){
         var snapshot=works.get(owner,work);
-        if(key==null||!key.matches("[0-9a-fA-F-]{36}")||language==null||!java.util.Set.of("zh-CN","en","mixed").contains(language))throw new DomainException("INVALID_LYRICS_REQUEST","歌词生成参数无效，请刷新后重试");
+        if(key==null||!key.matches("[0-9a-fA-F-]{36}")||!LyricLanguage.isSupported(language))throw new DomainException("INVALID_LYRICS_REQUEST","歌词生成参数无效，请刷新后重试");
         String requirements=instructions==null?"":instructions.trim();
         if(requirements.length()>1000)throw new DomainException("INVALID_LYRICS_REQUEST","修改要求不能超过1000字");
         String structureInstruction=structure.instruction();

@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import LyricLanguagePicker from '../components/LyricLanguagePicker.vue'
+import { isLyricLanguageDraft, lyricLanguageError, selectedLyricLanguage } from '../../../shared/i18n/lyric-language'
 import { lyricTimeoutMessage } from '../../works/model/lyric-recovery'
 import CreationMusicChoices from '../components/CreationMusicChoices.vue'
 import InspirationPanel from '../components/InspirationPanel.vue'
@@ -38,7 +40,7 @@ const storyFlowVersion = 3
 interface Recovery { mode?:CreationMode;preferences?:MusicPreferences;structure?:LyricsStructure;lastSubmittedStructure?:LyricsStructure; songReference?:SongReference; flowVersion?:number; draft:DraftInput; language:string; part:number; draftKey:string; workId?:string; version?:number; dirty:boolean; conflict?:boolean }
 function validRecovery(value:unknown):value is Recovery {
   const v = value as Recovery
-  return !!v && !!v.draft && ['recipient','occasion','story','message','style','title'].every(k => typeof v.draft[k as keyof DraftInput] === 'string') && ['zh-CN','en','mixed'].includes(v.language) && /^[0-9a-f-]{36}$/i.test(v.draftKey)
+  return !!v && !!v.draft && ['recipient','occasion','story','message','style','title'].every(k => typeof v.draft[k as keyof DraftInput] === 'string') && isLyricLanguageDraft(v.language) && /^[0-9a-f-]{36}$/i.test(v.draftKey)
 }
 const route=useRoute(), router=useRouter(), initialized=ref(false), ready=ref(false), aiReady=ref(false), existing=ref<Work>(), baseline=ref(''), saving=ref(false), composing=ref(false), error=ref(''), notice=ref(''), conflict=ref(false), localSaved=ref(true), allowance=ref<Allowance>(), creditShort=ref(false)
 const language=ref<string>(locale.value)
@@ -215,6 +217,8 @@ async function initialize() {
       ])
       if(turn!==initSequence)return
       if(sourceRevision?.templateId)restoreTemplate(normalizeLyricsStructure(sourceRevision))
+      const sourceLanguage=selectedLyricLanguage(sourceRevision?.language)
+      if(!local&&sourceLanguage)language.value=sourceLanguage
       musicCatalog.value=catalog
       photoWork.value=!!music?.photoInspiration
       if(!query.style&&!existing.value&&!local&&!agentBrief)draft.style='自动推荐'
@@ -345,7 +349,8 @@ async function resolveConflict(useLocal:boolean){
   try{const latest=await loadWork(id);if(!alive||turn!==initSequence)return;existing.value=latest;baseline.value=JSON.stringify(asDraft(latest));if(!useLocal)Object.assign(draft,asDraft(latest));conflict.value=false;error.value='';remember(true);if(useLocal)await flush()}
   catch(e){if(alive&&turn===initSequence)error.value=e instanceof Error?e.message:'保存失败，请重试'}
 }
-watch(()=>[draft.story,draft.message],()=>{validationError.value='';continuationFailed.value=false})
+watch(()=>[draft.story,draft.message,language.value],()=>{validationError.value='';continuationFailed.value=false})
+watch(language,()=>{rewriteKey.value=''})
 function rejectAnswer(message:string){validationError.value=message;inspirationInput.value?.focus({preventScroll:true})}
 /**
  * 改写每次都会调用付费模型：每日免费额度内不扣积分，用完后每次扣一次积分。
@@ -360,7 +365,9 @@ async function blockedByRewrite(){
 async function rewriteIdea() {
   if(rewriting.value||composing.value||quickLocked.value||!initialized.value||resetting.value||conflict.value)return
   if(!draft.story.trim()){rejectAnswer('请先写下一点创作灵感，再使用AI改写。');return}
-  const source=draft.story, requestedLanguage=language.value, turn=initSequence, owner=currentCreatorId()
+  const requestedLanguage=selectedLyricLanguage(language.value)
+  if(!requestedLanguage){validationError.value=lyricLanguageError;return}
+  const source=draft.story, turn=initSequence, owner=currentCreatorId()
   rewriting.value=true;rewriteError.value='';rewriteStatus.value=''
   try {
     if(await blockedByRewrite())return
@@ -368,7 +375,7 @@ async function rewriteIdea() {
     const result=await rewriteInspiration(source,requestedLanguage,key)
     rewriteKey.value=''
     if(!alive||turn!==initSequence||owner!==currentCreatorId())return
-    if(draft.story!==source||language.value!==requestedLanguage||conflict.value){rewriteStatus.value='内容已修改，本次改写未覆盖当前输入，请重新改写。';return}
+    if(draft.story!==source||selectedLyricLanguage(language.value)!==requestedLanguage||conflict.value){rewriteStatus.value='内容已修改，本次改写未覆盖当前输入，请重新改写。';return}
     if(!checkpointRecovery(cacheKey,recoveryValue())){rewriteError.value='无法备份原文，本次改写未覆盖内容。';return}
     rewriteBackup.value={source,result:result.text};draft.story=result.text
     rewriteStatus.value='已优化创作描述，你可以继续编辑或恢复原文。'
@@ -411,6 +418,8 @@ async function next() {
 async function continueMaking() {
   if(composing.value || rewriting.value || quickLocked.value || !ready.value || referenceIssue.value)return
   if(!valid.value){rejectAnswer('请先写下一点创作灵感。');return}
+  const requestedLanguage=selectedLyricLanguage(language.value)
+  if(!requestedLanguage){validationError.value=lyricLanguageError;return}
   const chosenStructure=normalizeLyricsStructure(structure.value)
   composing.value=true;error.value='';notice.value='';creditShort.value=false
   continuationFailed.value=false
@@ -437,7 +446,7 @@ async function continueMaking() {
         })
       }finally{internalRoute=false;if(internalContext===target)internalContext=undefined}
       if(!alive||turn!==initSequence)return
-      await quickSession.submit(prepared.id,prepared.version,language.value,prepared.title)
+      await quickSession.submit(prepared.id,prepared.version,requestedLanguage,prepared.title)
       return
     }
     writing=true
@@ -446,29 +455,29 @@ async function continueMaking() {
     const previousKey=lyricsStructureKey(previousStructure)
     const structureKey=lyricsStructureKey(chosenStructure)
     if(previousKey!==structureKey){
-      const legacyKey=existingContinuationRequestKey(prepared.id,prepared.version,language.value,previousKey)
+      const legacyKey=existingContinuationRequestKey(prepared.id,prepared.version,requestedLanguage,previousKey)
       if(legacyKey){
         const legacy=await getLyricsRequest(prepared.id,legacyKey)
         if(!alive||turn!==initSequence)return
         // Older drafts without a stored selection can still reopen their original lyrics.
         if(!lastSubmittedStructure&&!legacyStructure&&structureKey===lyricsStructureKey(defaultStructure)&&legacy.status==='SUCCEEDED'&&legacy.revisionId){
-          await router.push({path:`/works/${work.id}`,query:{revision:legacy.revisionId,language:language.value,...lyricsStructureQuery(previousStructure)}})
+          await router.push({path:`/works/${work.id}`,query:{revision:legacy.revisionId,language:requestedLanguage,...lyricsStructureQuery(previousStructure)}})
           return
         }
         if(legacy.status==='PENDING')throw new Error('歌词仍在编写中，可以稍后刷新编写状态。')
       }
     }
-    let key=continuationRequestKey(prepared.id,prepared.version,language.value,structureKey)
+    let key=continuationRequestKey(prepared.id,prepared.version,requestedLanguage,structureKey)
     const previous=await getLyricsRequest(prepared.id,key)
-    if(previous.status==='SUCCEEDED'&&previous.revisionId){if(alive&&turn===initSequence)await router.push({path:`/works/${work.id}`,query:{revision:previous.revisionId,language:language.value,...lyricsStructureQuery(chosenStructure)}});return}
+    if(previous.status==='SUCCEEDED'&&previous.revisionId){if(alive&&turn===initSequence)await router.push({path:`/works/${work.id}`,query:{revision:previous.revisionId,language:requestedLanguage,...lyricsStructureQuery(chosenStructure)}});return}
     if(previous.status==='PENDING')throw new Error('歌词仍在编写中，可以稍后刷新编写状态。')
-    if(previous.status==='FAILED'||previous.status==='UNKNOWN'){retireContinuationRequestKey(prepared.id,prepared.version,language.value,structureKey);key=continuationRequestKey(prepared.id,prepared.version,language.value,structureKey)}
+    if(previous.status==='FAILED'||previous.status==='UNKNOWN'){retireContinuationRequestKey(prepared.id,prepared.version,requestedLanguage,structureKey);key=continuationRequestKey(prepared.id,prepared.version,requestedLanguage,structureKey)}
     await refreshCredits()
     if(!alive||turn!==initSequence||await blockedByCredits()||!alive||turn!==initSequence)return
     lastSubmittedStructure=chosenStructure
     remember(true)
-    const revision=await generateLyrics(prepared.id,prepared.version,key,language.value,'',undefined,chosenStructure)
-    if(alive&&turn===initSequence)await router.push({path:`/works/${work.id}`,query:{revision:revision.id,language:language.value,...lyricsStructureQuery(chosenStructure)}})
+    const revision=await generateLyrics(prepared.id,prepared.version,key,requestedLanguage,'',undefined,chosenStructure)
+    if(alive&&turn===initSequence)await router.push({path:`/works/${work.id}`,query:{revision:revision.id,language:requestedLanguage,...lyricsStructureQuery(chosenStructure)}})
   } catch(e){if(alive&&turn===initSequence){quickSession.abortPreparation();continuationFailed.value=writing;error.value=e instanceof ApiError&&['LYRICS_PROVIDER_TIMEOUT','LYRICS_PROVIDER_NETWORK_ERROR','LYRICS_REQUEST_INTERRUPTED'].includes(e.code||'')?lyricTimeoutMessage:e instanceof Error?e.message:'歌词生成失败，请稍后再试'}}
   finally{if(turn===initSequence){composing.value=false;void refreshCredits().catch(()=>{})}}
 }
@@ -577,10 +586,7 @@ onBeforeUnmount(()=>{
             <p v-if="omittedParams.length" class="studio-agent-omitted">{{ t('已省略') }}：{{ omittedParams.join('、') }}<small>{{ t('作品描述最多 80 字，放不下的参数没有提交。') }}</small></p>
             <div class="inspiration-input-footer">
               <span class="inspiration-counter">{{ draft.story.length }} / {{ inspirationLimit }}</span>
-              <label class="inspiration-language">
-                <span class="inspiration-language-title"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a17 17 0 0 1 0 18 17 17 0 0 1 0-18Z"/></svg>{{ t('歌词语言') }}</span>
-                <span class="inspiration-language-select"><select v-model="language" name="lyric-language" :aria-label="t('歌词语言')"><option value="zh-CN">{{ t('中文') }}</option><option value="en">English</option><option value="mixed">{{ t('中英混合') }}</option></select><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg></span>
-              </label>
+              <LyricLanguagePicker v-model="language" compact />
             </div>
             <p v-if="rewriteError" class="inspiration-rewrite-message error" role="alert">{{ t(rewriteError) }}</p>
             <p v-else-if="rewriteStatus" class="inspiration-rewrite-message" role="status">{{ t(rewriteStatus) }}</p>

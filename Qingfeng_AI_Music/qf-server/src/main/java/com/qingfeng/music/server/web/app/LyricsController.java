@@ -1,4 +1,5 @@
 package com.qingfeng.music.server.web.app;
+import com.qingfeng.music.lyrics.api.LyricLanguage;
 import com.qingfeng.music.lyrics.api.LyricsApi;
 import com.qingfeng.music.lyrics.application.LyricsCompositionService;
 import com.qingfeng.music.lyrics.application.LyricsStructure;
@@ -24,7 +25,7 @@ public class LyricsController {
  private final LyricSelectionRewriteService selectionRewrite;
  public LyricsController(LyricsApi lyrics,LyricsCompositionService composer,LyricLineRewriteService lineRewrite,LyricSelectionRewriteService selectionRewrite){this.lyrics=lyrics;this.composer=composer;this.lineRewrite=lineRewrite;this.selectionRewrite=selectionRewrite;}
  public record LineRewriteRequest(@NotNull UUID requestId,@NotNull LyricLineRewriteService.Action action,
-    @NotBlank @Size(max=160) String line,@Size(max=360) String context,@NotBlank @Pattern(regexp="zh-CN|en|mixed") String language){}
+    @NotBlank @Size(max=160) String line,@Size(max=360) String context,@NotBlank @Size(max=LyricLanguage.MAX_LENGTH) @Pattern(regexp=LyricLanguage.REGEX) String language){}
  public record LineRewriteResponse(String text){}
  @PostMapping("/rewrite-line")
  public LineRewriteResponse rewriteLine(@AuthenticationPrincipal CreatorPrincipal creator,@PathVariable String work,@Valid @RequestBody LineRewriteRequest request){
@@ -32,7 +33,7 @@ public class LyricsController {
  }
  public record RhymeLineRequest(@NotNull UUID requestId, @NotBlank @Size(max=160) String line,
      @NotEmpty @Size(max=40) List<@NotBlank @Size(max=160) String> lines, @NotNull @PositiveOrZero Integer lineIndex,
-     @PositiveOrZero Integer referenceIndex, @NotBlank @Pattern(regexp="zh-CN|en|mixed") String language,
+     @PositiveOrZero Integer referenceIndex, @NotBlank @Size(max=LyricLanguage.MAX_LENGTH) @Pattern(regexp=LyricLanguage.REGEX) String language,
      Boolean allowNear, Boolean allowCrossLanguage, Boolean rewriteIfAlreadyRhymes){}
  @PostMapping("/rhyme-line")
  public LyricRhymePreview.Result rhymeLine(@AuthenticationPrincipal CreatorPrincipal creator,@PathVariable String work,
@@ -44,7 +45,7 @@ public class LyricsController {
  }
  public record SelectionRewriteRequest(@NotNull UUID requestId, @NotNull @PositiveOrZero Long workVersion,
      @NotBlank @Size(max=12000) String lyrics, @NotEmpty @Size(max=12000) List<@NotNull @PositiveOrZero Integer> keptLines,
-     @NotBlank @Pattern(regexp="zh-CN|en|mixed") String language){}
+     @NotBlank @Size(max=LyricLanguage.MAX_LENGTH) @Pattern(regexp=LyricLanguage.REGEX) String language){}
  public record SelectionRewriteResponse(String lyrics){}
  @PostMapping("/rewrite-selection")
  public SelectionRewriteResponse rewriteSelection(@AuthenticationPrincipal CreatorPrincipal creator, @PathVariable String work,
@@ -54,7 +55,7 @@ public class LyricsController {
  }
  public record ComposeRequest(@NotNull @PositiveOrZero Long workVersion,
      @NotBlank @Pattern(regexp="[0-9a-fA-F-]{36}") String requestKey,
-     @NotBlank @Pattern(regexp="zh-CN|en|mixed") String language,
+     @NotBlank @Size(max=LyricLanguage.MAX_LENGTH) @Pattern(regexp=LyricLanguage.REGEX) String language,
      @Size(max=1000) String instructions, @Pattern(regexp="[0-9a-fA-F-]{36}") String baseRevisionId,
      @Pattern(regexp="AUTO|AAB|ABB|ABC|ABCD|CUSTOM") String templateId, boolean chorusFirst,
      @Size(max=LyricsStructure.MAX_CUSTOM_SECTIONS) List<String> customSections,
@@ -77,7 +78,7 @@ public class LyricsController {
  @PostMapping(value="/generate-photo", consumes="multipart/form-data")
  public LyricsApi.Revision composePhoto(@AuthenticationPrincipal CreatorPrincipal creator, @PathVariable String work,
      @RequestParam @PositiveOrZero long workVersion, @RequestParam UUID requestKey,
-     @RequestParam @Pattern(regexp="zh-CN|en|mixed") String language,
+     @RequestParam @Size(max=LyricLanguage.MAX_LENGTH) @Pattern(regexp=LyricLanguage.REGEX) String language,
      @RequestParam(name="photo", required=false) List<MultipartFile> photo,
      @RequestParam(name="photos", required=false) List<MultipartFile> photos) {
      return composer.composePhoto(creator.id(),work,workVersion,requestKey.toString(),language,PhotoLyricsImage.jpegs(photo,photos));

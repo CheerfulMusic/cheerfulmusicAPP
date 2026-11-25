@@ -1,4 +1,5 @@
 import { isLyricLine } from './lyric-line-edit'
+import { selectedLyricLanguage } from '../../../shared/i18n/lyric-language'
 
 export interface LyricRhymeSection {
   lines: string[]
@@ -13,14 +14,15 @@ export function lyricSectionPrefix(line: string) {
 }
 
 export function rhymeLanguage(section: LyricRhymeSection, language?: string | null) {
+  const selected = selectedLyricLanguage(language)
+  if (selected && selected !== 'zh-CN' && selected !== 'en' && selected !== 'mixed') return selected
   const text = section.lines.join('\n')
   const han = /\p{Script=Han}/u.test(text)
   const latin = /\p{Script=Latin}/u.test(text)
   if (han && latin) return 'mixed'
   if (han) return 'zh-CN'
   if (latin) return 'en'
-  if (language === 'zh-CN' || language === 'en' || language === 'mixed') return language
-  return 'zh-CN'
+  return selected ?? 'zh-CN'
 }
 
 export function rhymeSectionAt(source: string, selectedStart: number, draft?: string): LyricRhymeSection | undefined {

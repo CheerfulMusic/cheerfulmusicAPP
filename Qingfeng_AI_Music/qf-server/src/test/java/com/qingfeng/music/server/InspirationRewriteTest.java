@@ -214,6 +214,11 @@ class InspirationRewriteTest {
         assertEquals(json.readTree("[2,6]"), context.path("targetIndices"));
         assertEquals("mixed", context.path("lyricLanguage").asText());
 
+        writer.rewriteSelection("沿用原有场景", "custom:Português brasileiro", List.of(2, 6));
+        var customPayload = json.readTree(requestBody(requests.get(1)));
+        var customContext = json.readTree(customPayload.path("messages").path(1).path("content").asText());
+        assertEquals("Português brasileiro", customContext.path("lyricLanguage").asText());
+
         org.mockito.Mockito.when(response.body()).thenReturn(selectionResponse(json, List.of(Map.of("index", 2, "text", "新句"))));
         assertEquals(List.of(new InspirationRewriter.Replacement(2, "新句")), writer.rewriteSelection("场景", "mixed", List.of(2, 6)));
         for (Object invalidIndex : List.of("2", 2.5, Long.MAX_VALUE)) {

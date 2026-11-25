@@ -1,5 +1,6 @@
 package com.qingfeng.music.creation;
 
+import com.qingfeng.music.lyrics.api.LyricLanguage;
 import com.qingfeng.music.common.exception.DomainException;
 import com.qingfeng.music.generation.api.GenerationApi;
 import com.qingfeng.music.lyrics.api.LyricsApi;
@@ -26,7 +27,7 @@ public final class QuickCreationService {
     public View start(String owner,String work,long version,String key,String language){
         var current=works.get(owner,work);
         if(!enabled)throw new DomainException("QUICK_CREATION_UNAVAILABLE","一键创作暂不可用，可以切换自定义创作，先完善歌词。");
-        if(key==null||!key.matches("[0-9a-fA-F-]{36}")||!Set.of("zh-CN","en","mixed").contains(language==null?"":language))
+        if(key==null||!key.matches("[0-9a-fA-F-]{36}")||!LyricLanguage.isSupported(language))
             throw new DomainException("INVALID_QUICK_CREATION","创作参数无效，请刷新后重试。");
         if(current.version()!=version)throw new DomainException("WORK_VERSION_CONFLICT","作品已修改，请载入当前内容后继续。");
         if(current.story().isBlank()&&current.message().isBlank())throw new DomainException("INVALID_QUICK_CREATION","请先写下一点创作灵感。");
