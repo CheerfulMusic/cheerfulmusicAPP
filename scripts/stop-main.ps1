@@ -22,7 +22,8 @@ try {
         try {
             $running = Get-Process -Id ([int]$entry.id) -ErrorAction SilentlyContinue
             if ($running -and $running.StartTime.ToUniversalTime().Ticks -eq [long]$entry.started) {
-                Stop-Process -Id ([int]$entry.id) -ErrorAction Stop
+                if ($entry.kind -eq 'hot-update') { $running.Kill($true) }
+                else { Stop-Process -Id ([int]$entry.id) -ErrorAction Stop }
                 $running.WaitForExit(3000) | Out-Null
                 if (-not $running.HasExited) { $failed = $true } else { $stopped++ }
             }

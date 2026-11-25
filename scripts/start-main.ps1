@@ -1,6 +1,7 @@
 [CmdletBinding()]
 param([switch]$CheckOnly, [switch]$AllowProductionConnection)
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'LocalMainServerArguments.ps1')
 function Get-VerifiedFeatureWithdrawal($configuration) {
     $setting = $configuration.featureWithdrawal
     if ($null -eq $setting) { return $null }
@@ -104,7 +105,10 @@ function Stop-ThisRun {
     $failed = $false
     $entries = @($script:processes); [Array]::Reverse($entries)
     foreach ($entry in $entries) {
-        try { if (Test-TrackedProcess $entry) { Stop-Process -Id ([int]$entry.id) -ErrorAction Stop } }
+        try { if (Test-TrackedProcess $entry) {
+            if ($entry.kind -eq 'hot-update') { (Get-Process -Id ([int]$entry.id)).Kill($true) }
+            else { Stop-Process -Id ([int]$entry.id) -ErrorAction Stop }
+        } }
         catch { $failed = $true }
     }
     if (-not $failed -and (Test-Path -LiteralPath $statePath)) {
@@ -175,6 +179,13 @@ try {
     }
     $java = if(Test-Path -LiteralPath 'D:/jdk17/bin/java.exe'){'D:/jdk17/bin/java.exe'}else{(Get-Command java -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source}
     $node = (Get-Command node -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source
+    $hotSettingsPath = Join-Path $workspaceRoot '.secrets/local-hot-update.json'
+    if ($developmentFeatures -and (Test-Path -LiteralPath $hotSettingsPath)) {
+        $hotSettings = Get-Content -LiteralPath $hotSettingsPath -Raw | ConvertFrom-Json
+        $pin = Get-Content -LiteralPath (Join-Path $gitRoot '.node-toolchain.json') -Raw | ConvertFrom-Json
+        $node = Join-Path $hotSettings.nodeToolchains "$($pin.archiveRoot)/node.exe"
+        if ((Get-FileHash -LiteralPath $node).Hash -ine $pin.nodeExeSha256) { throw '日常前端的 Node 工具链校验失败。' }
+    }
     $ssh = (Get-Command ssh -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source
     $javaVersion = (& $java -version 2>&1) -join ' '
     if ($LASTEXITCODE -ne 0 -or $javaVersion -notmatch '(?:version\s+"|openjdk\s+|java\s+)17(?:[.\s"]|$)') { throw '此入口要求 Java 17，请先核对 PATH 指向的 Java。' }
@@ -185,7 +196,7 @@ try {
     $tunnel = Start-Tracked $ssh @('-N', '-T', '-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=yes', '-o', "UserKnownHostsFile=$knownHosts", '-o', 'ExitOnForwardFailure=yes', '-o', 'ConnectTimeout=10', '-o', 'ServerAliveInterval=30', '-o', 'ServerAliveCountMax=3', '-L', '127.0.0.1:13306:127.0.0.1:3306', '-i', $sshKey, 'qf-local-db@120.77.19.199') $runtimeRoot 'ssh'
     Wait-Ready $tunnel { Test-TunnelPort } 20 '主库 SSH 隧道启动失败，请查看 .cache/runtime/production-main/ssh.err.log。'
     $privateUri = ([Uri]$privatePath).AbsoluteUri
-    $serverArguments = @('-Xms64m', '-Xmx512m', '-jar', $runtimeJar, '--spring.profiles.active=mysql', '--spring.profiles.include=', '--spring.config.location=classpath:/', "--spring.config.additional-location=$privateUri", '--server.address=127.0.0.1', '--server.port=8080', '--spring.flyway.enabled=false', '--spring.sql.init.mode=never', '--qingfeng.quick.scheduler-enabled=false', '--qingfeng.quick.accept-enabled=false', '--qingfeng.lyrics.preparation.enabled=false', '--qingfeng.lyrics.preparation.scheduler-enabled=false', '--qingfeng.generation.scheduler-enabled=false', '--qingfeng.generation.vocal-adjustment-worker-enabled=false', '--qingfeng.cover.ai.scheduler-enabled=false', '--qingfeng.avatar.ai.scheduler-enabled=false', '--qingfeng.video.enabled=false', '--qingfeng.events.dispatcher-enabled=false', '--qingfeng.events.rabbit.enabled=false', '--qingfeng.events.rabbit.consumer-enabled=false', '--qingfeng.payment.inbox.scheduler-enabled=false', '--qingfeng.analytics.retention.enabled=false', '--qingfeng.analytics.retention.scheduler-enabled=false', '--qingfeng.agent.admission.recovery-enabled=false', '--qingfeng.agent.retrieval.enabled=false', '--qingfeng.agent.retrieval.scheduler-enabled=false', '--qingfeng.agent.legacy-pending.enabled=false', '--qingfeng.payment-demo.enabled=false', '--qingfeng.payments.enabled=false', '--qingfeng.paypal.enabled=false', '--qingfeng.paypal.live-enabled=false', '--qingfeng.paypal.reconciliation.enabled=false', '--qingfeng.auth.sms-bridge.enabled=false')
+    $serverArguments = Get-LocalMainServerArguments $runtimeJar $privateUri
     $removedEnvironment = @{}
     try {
         foreach ($item in Get-ChildItem Env: | Where-Object { $_.Name -match '^(SPRING[_.]|MYSQL_|QINGFENG[_.])|^(JAVA_TOOL_OPTIONS|JDK_JAVA_OPTIONS|_JAVA_OPTIONS)$' }) {
@@ -292,6 +303,9 @@ export default {
     foreach ($entry in $processes) { if (-not (Test-TrackedProcess $entry)) { throw '启动进程已退出，未宣告启动成功。' } }
     if (-not (Test-TunnelPort) -or -not (Test-BackendHealth)) { throw '最终隧道或后端健康检查未通过。' }
     Save-State
+    if ($developmentFeatures -and (Test-Path -LiteralPath $hotSettingsPath)) {
+        [void](Start-Tracked $gatePython @('-B', '-u', (Join-Path $PSScriptRoot 'local_hot_update.py'), 'watch', $workspaceRoot) $runtimeRoot 'hot-update')
+    }
     Write-Host '已启动线上主库日常入口：http://127.0.0.1:5173（API：http://127.0.0.1:8080）。'
     Write-Host '数据库经本机 SSH 隧道连接已确认的生产主库；停止请运行 scripts/stop-main.ps1。'
 } catch {

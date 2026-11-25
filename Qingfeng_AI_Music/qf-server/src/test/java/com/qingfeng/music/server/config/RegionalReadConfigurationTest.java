@@ -9,6 +9,7 @@ import java.time.Instant;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
+import org.springframework.mock.env.MockPropertySource;
 import org.springframework.mock.web.MockFilterChain;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
@@ -16,6 +17,18 @@ import org.springframework.scheduling.annotation.ScheduledAnnotationBeanPostProc
 
 class RegionalReadConfigurationTest {
     @TempDir Path directory;
+
+    @Test
+    void localHotUpdatesDoNotRunPrimaryBackgroundSchedules() {
+        try (var local = new AnnotationConfigApplicationContext()) {
+            local.getEnvironment().setActiveProfiles("mysql");
+            local.getEnvironment().getPropertySources().addFirst(
+                    new MockPropertySource().withProperty("qingfeng.scheduling.enabled", "false"));
+            local.register(PrimarySchedulingConfiguration.class);
+            local.refresh();
+            assertTrue(local.getBeansOfType(ScheduledAnnotationBeanPostProcessor.class).isEmpty());
+        }
+    }
 
     @Test
     void proofExpiresAndRejectsFutureTimestamps() throws Exception {
