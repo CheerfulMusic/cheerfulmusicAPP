@@ -2,7 +2,7 @@
 import FilingLink from "../../shared/ui/FilingLink.vue"
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { locale, t } from '../../shared/i18n'
-import { homeSeo, siteName } from '../../shared/i18n/home-seo'
+import { homeSeo, homeSearchTitle, siteName } from '../../shared/i18n/home-seo'
 import { discoverPaths, discoverSeo, landingLinks } from '../../shared/i18n/site-seo'
 import { platform } from '../../platform'
 import LanguageSwitcher from '../../shared/i18n/LanguageSwitcher.vue'
@@ -85,7 +85,7 @@ onBeforeUnmount(() => { disposed = true; clearTimeout(expiryTimer); window.remov
     <section class="beta-access-card" :aria-busy="busy">
       <div class="beta-access-top" :data-nosnippet="entryCopy ? '' : undefined"><span class="beta-access-label">{{ t('内测体验') }}</span><LanguageSwitcher/></div>
       <img class="beta-access-logo" src="/brand/logo-symbol.svg" alt="" width="56" height="56">
-      <p class="beta-access-brand">{{ siteName }}</p>
+      <p class="beta-access-brand">{{ homeEntry ? homeSearchTitle : siteName }}</p>
       <h1 id="beta-access-title">{{ entryCopy?.heading ?? t('让灵感，先在这里发声。') }}</h1>
       <p id="beta-access-description" class="beta-access-intro">{{ entryCopy?.description ?? t('青风音乐正在内测，输入邀请码即可开始体验。') }}</p>
       <div data-nosnippet>

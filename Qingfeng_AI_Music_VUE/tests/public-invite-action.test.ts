@@ -38,7 +38,7 @@ it('automatically opens the homepage invite with the localized product name', as
   setLocale('en')
   await nextTick()
   expect(host.querySelector('h1')?.textContent).toBe('Everyone Can Be a Creator')
-  expect(host.querySelector('.beta-access-brand')?.textContent).toBe('Cheerful Music')
+  expect(host.querySelector('.beta-access-brand')?.textContent).toBe('Cheerful Music Ai')
   expect(host.querySelector('.beta-access-intro')?.textContent).toBe(sitePage('/en/')!.description)
   expect(host.querySelector('.beta-access-intro')?.closest('[data-nosnippet]')).toBeNull()
   await flushPromises()

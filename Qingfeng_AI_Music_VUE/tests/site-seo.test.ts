@@ -57,7 +57,9 @@ describe('crawlable site pages', () => {
   it('publishes the Chinese search entry at the root and keeps the separate English search title', () => {
     expect(parsePage('/').documentElement.lang).toBe('zh-CN')
     expect(parsePage('/').querySelector('h1')?.textContent).toBe('青风音乐｜把你的歌词做成歌')
-    expect(parsePage('/').querySelector('meta[property="og:title"]')?.getAttribute('content')).toBe(parsePage('/').querySelector('h1')?.textContent)
+    expect(parsePage('/').querySelector('meta[property="og:title"]')?.getAttribute('content')).toBe('Cheerful Music Ai')
+    expect(JSON.parse(parsePage('/').querySelector('script[type="application/ld+json"]')!.textContent!).alternateName)
+      .toEqual(expect.arrayContaining(['青风音乐', 'CheerfulMusic', 'cheerfulmusicAI', 'cheerfulmusicai']))
     expect(parsePage('/').querySelector('link[rel="icon"][sizes="96x96"]')?.getAttribute('href')).toBe('/brand/favicon-96.png')
     expect(parsePage('/en/').title).toBe('Cheerful Music | Turn Your Lyrics into a Song with AI')
     expect(sitePage('/zh-CN/')).toBeUndefined()
