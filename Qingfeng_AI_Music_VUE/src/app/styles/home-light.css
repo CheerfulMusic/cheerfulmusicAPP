@@ -16,7 +16,7 @@
 }
 .home-light-shell .consumer-header { background:#fffaf8ed; border:0; }
 .home-light-shell .consumer-header-inner { height:var(--home-header-height); max-width:1280px; width:calc(100% - 128px); }
-.home-light-shell .consumer-header .brand-logo>img { width:48px; height:48px; }
+.home-light-shell .consumer-header .brand-logo { --brand-icon-size:48px; }
 .home-light-shell .brand-logo-type strong { font-size:24px; letter-spacing:-.8px; color:var(--ink); }
 .home-light-shell .brand-logo-type small { color:#837269; font-size:10px; margin-top:4px; }
 .home-light-shell .consumer-navigation { gap:31px; }
@@ -128,7 +128,7 @@
 @media(max-width:1100px) and (min-width:701px) {
   .home-light-shell .consumer-header-inner { width:calc(100% - 60px); gap:16px; }
   .home-light-shell .brand-logo-type strong { font-size:19px; }
-  .home-light-shell .consumer-header .brand-logo>img { width:40px; height:40px; }
+  .home-light-shell .consumer-header .brand-logo { --brand-icon-size:40px; }
   .home-light-shell .consumer-navigation { gap:17px; }
   .home-light-shell .consumer-navigation a,.home-light-shell .consumer-my-music { font-size:12px; }
   .home-light-shell .consumer-header-actions { gap:14px; }
@@ -144,7 +144,7 @@
 @media(max-width:700px) {
   .home-light-shell { --home-header-height:83px; }
   .home-light-shell .consumer-header-inner { width:calc(100% - 36px); }
-  .home-light-shell .consumer-header .brand-logo>img { width:37px; height:37px; }
+  .home-light-shell .consumer-header .brand-logo { --brand-icon-size:37px; }
   .home-light-shell .brand-logo-type strong { font-size:18px; }
   .home-light-shell .brand-logo-type small { font-size:9px; }
   .home-light-shell .mobile-menu-toggle { color:#4d3d36; border-color:#daccbf; }

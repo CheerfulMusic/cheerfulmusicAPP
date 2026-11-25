@@ -22,8 +22,7 @@
 .discover-header { border-bottom: 1px solid var(--discover-line); }
 .discover-header-inner { display: flex; align-items: center; gap: 42px; min-height: 68px; }
 .discover-brand { flex: none; }
-.discover-brand :deep(.brand-logo > img) { width: 34px; height: 34px; }
-.discover-brand :deep(.brand-wordmark) { height: 27px; }
+.discover-brand :deep(.brand-logo) { --brand-icon-size: 34px; --brand-wordmark-height: 27px; }
 .discover-nav { align-self: stretch; display: flex; align-items: stretch; gap: 29px; white-space: nowrap; }
 .discover-nav a { position: relative; display: grid; place-items: center; color: #4e534f; font-size: 14px; }
 .discover-nav a[aria-current='page'], .discover-nav a:hover { color: var(--discover-accent); }

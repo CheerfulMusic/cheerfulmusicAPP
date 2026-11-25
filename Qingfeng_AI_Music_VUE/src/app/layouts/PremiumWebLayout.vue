@@ -92,7 +92,7 @@ onBeforeUnmount(() => {
     <a class="skip-link" href="#main-content">{{ t('跳到主要内容') }}</a>
     <header v-if="!isDiscover" class="consumer-header">
       <div class="consumer-header-inner">
-        <RouterLink class="consumer-brand" :to="homePath" :aria-label="t('Cheerful Music 青风音乐首页')"><BrandLogo :compact="mobile || publicListening" standalone/></RouterLink>
+        <RouterLink class="consumer-brand" :to="homePath" :aria-label="t('Cheerful Music 青风音乐首页')"><BrandLogo :compact="mobile || publicListening"/></RouterLink>
         <nav v-if="!publicListening" class="consumer-navigation" :aria-label="t('主导航')">
           <template v-for="item in navigation" :key="item.to">
             <RouterLink v-if="item.agent" to="/agent" class="agent-nav-link" :class="{'is-active':isActive(item.to)}" :aria-current="isActive(item.to)?'page':undefined">
@@ -177,8 +177,7 @@ onBeforeUnmount(() => {
 @media(max-width:380px) {
   .consumer-shell .consumer-header-actions { gap:4px; }
   .consumer-header-inner { gap:6px; }
-  .consumer-brand :deep(.brand-logo) { gap:6px; }
-  .consumer-brand :deep(.brand-logo > img) { width:30px; height:30px; }
+  .consumer-brand :deep(.brand-logo) { --brand-gap:6px; --brand-icon-size:30px; }
   .consumer-brand :deep(.brand-logo-type strong) { font-size:13px; }
 }
 </style>

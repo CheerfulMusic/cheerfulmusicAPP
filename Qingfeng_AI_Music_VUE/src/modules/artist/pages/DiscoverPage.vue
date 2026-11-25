@@ -429,7 +429,7 @@ onBeforeUnmount(() => {
   <div class="discover">
     <header class="discover-header">
       <div class="discover-width discover-header-inner">
-        <RouterLink class="discover-brand" to="/" :aria-label="t('Cheerful Music 青风音乐首页')"><BrandLogo standalone /></RouterLink>
+        <RouterLink class="discover-brand" to="/" :aria-label="t('Cheerful Music 青风音乐首页')"><BrandLogo /></RouterLink>
         <nav class="discover-nav" :aria-label="t('主导航')">
           <RouterLink to="/">{{ t('首页') }}</RouterLink>
           <RouterLink :to="discoverHref" aria-current="page">{{ t('广场') }}</RouterLink>
