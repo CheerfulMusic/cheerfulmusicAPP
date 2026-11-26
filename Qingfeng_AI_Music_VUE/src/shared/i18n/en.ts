@@ -1,5 +1,12 @@
 /** Chinese source copy is the stable message key; business option values stay unchanged. */
 export const english: Record<string, string> = {
+  '当前版本仅自己可见 · 另一版本已上广场': 'This version is private · Another version is on Discover',
+  '当前版本仅自己可见 · 另一版本在主页展示': 'This version is private · Another version is on your artist page',
+  '查看广场版': 'View version on Discover',
+  '查看全部作品': 'View all works',
+  '预览并公开主页': 'Preview and publish your artist page',
+  '查看广场详情': 'View song on Discover',
+  '广场歌曲链接': 'Discover song link',
   "专辑列表暂时无法读取。": "Could not load your albums.",
   "专辑已公开。": "Album published.",
   "专辑已保存为草稿。": "Album saved as a draft.",

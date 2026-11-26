@@ -15,7 +15,7 @@ import {
 } from '../api/discover-song'
 import DiscoverSongShare from '../components/DiscoverSongShare.vue'
 import WechatSelfCard from '../../works/components/WechatSelfCard.vue'
-import { publicDiscoverTrack } from '../model/discover-shelves'
+import { publicDiscoverTrack, useDiscoverCoverFallback } from '../model/discover-shelves'
 
 const route = useRoute(), router = useRouter(), player = usePlayer()
 const brandSymbol = '/brand/favicon-96.png'
@@ -226,7 +226,8 @@ function saveDescription() {
       </div>
       <article v-else-if="detail && track" aria-labelledby="discover-song-title">
         <div class="song-detail-hero">
-          <img class="song-detail-cover" :src="track.cover" :alt="detail.release.song.title" width="272" height="272">
+          <img class="song-detail-cover" :src="track.cover" :alt="detail.release.song.title" width="272" height="272"
+            @error="useDiscoverCoverFallback">
           <div class="song-detail-identity">
             <h1 id="discover-song-title">{{ track.title }}</h1>
             <RouterLink class="song-detail-artist" :to="{name:'artist-home', params:{id:detail.release.artistId}}"><NavIcon name="account" />{{ detail.release.stageName }}</RouterLink>

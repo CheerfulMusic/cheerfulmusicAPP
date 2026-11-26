@@ -378,7 +378,7 @@ onBeforeUnmount(clearImageDrafts)
                 <span class="profile-visibility" :class="{ published: profile.published }">{{ t(profile.published ? '已公开' : '未公开') }}</span>
                 <button v-if="!profile.published && returnToSong && profile.stageName && !dirty" type="button"
                   class="profile-pill profile-save" @click="changeVisibility(true)">{{ t('发布歌手主页') }}</button>
-                <button type="button" class="profile-pill" @click="showPreview(true)">{{ t('预览歌手主页') }}</button>
+                <button type="button" class="profile-pill" @click="showPreview(true)">{{ t(profile.published ? '预览歌手主页' : '预览并公开主页') }}</button>
                 <template v-if="profile.published">
                   <RouterLink class="profile-pill" :to="homeRoute">{{ t('查看主页') }}</RouterLink>
                   <button type="button" class="profile-pill" @click="copyLink">{{ t('复制主页链接') }}</button>

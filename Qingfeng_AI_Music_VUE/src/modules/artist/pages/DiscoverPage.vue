@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { discoverHref, locale, t } from '../../../shared/i18n'
 import LanguageSwitcher from '../../../shared/i18n/LanguageSwitcher.vue'
 import { discoverSeo } from '../../../shared/i18n/site-seo'
@@ -17,7 +18,7 @@ import { withDiscoverEditorialCover } from '../model/discover-editorial-artwork'
 import { discoverSongArtwork, jixiangwuHeroArtwork, prayerHeroArtwork, type HeroArtwork } from '../model/discover-hero-artwork'
 import { discoverJazzRows, discoverRockRows, prayerBeneathTheStarsRow } from '../model/discover-genre-tracks'
 import {
-  christmasSongId, discoverGenres, globalPopWideCoverPositions, publicDiscoverTrack, withDiscoverPreviewCover,
+  christmasSongId, discoverGenres, globalPopWideCoverPositions, publicDiscoverTrack, useDiscoverCoverFallback, withDiscoverPreviewCover,
   type DiscoverShelfTrack, type PublishedShelfTrack,
 } from '../model/discover-shelves'
 import { vocalPerformanceRows } from '../model/vocal-performances'
@@ -27,7 +28,7 @@ import { usePreviewTracks, type PreviewTrack } from '../../home/model/tracks'
 import { accountState } from '../../../shared/identity/account-state'
 import { logtoState } from '../../../shared/identity/logto-state'
 import {
-  getDiscoverShelves, getPublicArtist, listDiscoverSongs, publicAvatarUrl, publicTrack, recordDiscoverPlay,
+  getDiscoverShelves, getPublicArtist, listDiscoverSongs, publicAvatarUrl, publicTrack,
   type DiscoverArtist, type DiscoverShelves, type DiscoverSong,
 } from '../api/artist'
 import walkedFar from '../../../assets/discover/carousel-walked-far.webp'
@@ -69,6 +70,8 @@ const christmasPlaylistSongIds = [
   '1cf20b2d-76cd-46de-9666-77a7303588a8', // Nochebuena en la Mesa
 ]
 const player = usePlayer()
+const route = useRoute()
+const router = useRouter()
 const previewPlaylists = usePreviewPlaylists()
 const previewTracks = usePreviewTracks()
 const christmasTracks = ref<PreviewTrack[]>([])
@@ -106,7 +109,6 @@ const failed = ref(false)
 const showAllArtists = ref(false)
 const selectedPlaylist = ref('')
 const durations = ref<Record<string, number>>({})
-const played = new Set<string>()
 let request = 0
 let offset = 0
 let disposed = false
@@ -329,7 +331,7 @@ function changeHero(direction: number) {
 function restartHeroRotation() {
   clearInterval(heroTimer)
   heroTimer = undefined
-  if (disposed || inactive || heroSlideCount.value < 2 || heroPaused.value || heroHovered.value || heroFocused.value
+  if (disposed || inactive || browseOpen.value || heroSlideCount.value < 2 || heroPaused.value || heroHovered.value || heroFocused.value
     || !pageVisible.value || reducedMotion.value || player.playing || player.starting) return
   heroTimer = setInterval(() => changeHero(1), heroRotationMs)
 }
@@ -338,7 +340,7 @@ function heroFocusOut(event: FocusEvent) {
 }
 function visibilityChanged() { pageVisible.value = document.visibilityState !== 'hidden' }
 function motionChanged() { reducedMotion.value = motionQuery?.matches ?? false }
-watch([heroSlideCount, heroIndex, heroPaused, heroHovered, heroFocused, pageVisible, reducedMotion,
+watch([browseOpen, heroSlideCount, heroIndex, heroPaused, heroHovered, heroFocused, pageVisible, reducedMotion,
   () => player.playing, () => player.starting], restartHeroRotation)
 
 function initializeHeroRotation() {
@@ -378,41 +380,80 @@ async function load(reset = false) {
 }
 
 function select(value: typeof tab.value) {
-  if (tab.value === value) return
-  tab.value = value
-  void load(true)
+  updateBrowse(value, genre.value, query.value)
 }
-function openBrowse(value: typeof tab.value, filter = '', keyword = '') {
+
+function applyBrowse(value: typeof tab.value, filter: string, keyword: string) {
+  const changed = !browseOpen.value || tab.value !== value || genre.value !== filter || query.value !== keyword
+  if (!browseOpen.value) {
+    heroHovered.value = false
+    heroFocused.value = false
+  }
   tab.value = value
   genre.value = filter
   query.value = keyword
   search.value = keyword
   browseOpen.value = true
-  void load(true)
+  if (changed) void load(true)
+}
+
+function writeBrowseUrl(active: boolean) {
+  const { view: _view, q: _q, genre: _genre, sort: _sort, ...params } = route.query
+  if (active) {
+    params.view = 'songs'
+    if (query.value) params.q = query.value
+    if (genre.value) params.genre = genre.value
+    if (tab.value !== 'latest') params.sort = tab.value
+  }
+  void router.replace({ path: route.path, query: params, hash: route.hash })
+}
+
+function updateBrowse(value: typeof tab.value, filter: string, keyword: string) {
+  applyBrowse(value, filter, keyword)
+  writeBrowseUrl(true)
+}
+
+function openBrowse(value: typeof tab.value, filter = '', keyword = '') {
+  updateBrowse(value, filter, keyword)
   requestAnimationFrame(() => document.getElementById('discover-tracks')?.scrollIntoView())
 }
-function returnToShelves() {
+
+function clearBrowse() {
   ++request
   browseOpen.value = false
   query.value = ''
   search.value = ''
-  requestAnimationFrame(() => document.getElementById('discover-playlists')?.scrollIntoView())
+}
+
+function readBrowseUrl() {
+  if (inactive || route.name !== 'discover') return
+  const params = route.query
+  const value = tabs.find(item => item.id === params.sort)?.id ?? 'latest'
+  const filter = genres.find(item => item.id === params.genre)?.id ?? ''
+  const keyword = typeof params.q === 'string' ? params.q.trim().slice(0, 100) : ''
+  if (params.view === 'songs' || keyword || filter || value !== 'latest') applyBrowse(value, filter, keyword)
+  else if (browseOpen.value) clearBrowse()
+}
+
+watch(() => [route.name, route.query.view, route.query.q, route.query.genre, route.query.sort], readBrowseUrl)
+
+function returnToShelves() {
+  clearBrowse()
+  writeBrowseUrl(false)
+  window.scrollTo({ top: 0 })
 }
 function showShelf(shelf: string) {
   if (browseOpen.value) {
-    ++request
-    browseOpen.value = false
-    query.value = ''
-    search.value = ''
+    clearBrowse()
+    writeBrowseUrl(false)
   }
   requestAnimationFrame(() => document.getElementById(shelf)?.scrollIntoView())
 }
 function submitSearch() {
-  openBrowse('latest', browseOpen.value ? genre.value : '', search.value.trim())
+  openBrowse(browseOpen.value ? tab.value : 'latest', browseOpen.value ? genre.value : '', search.value.trim())
 }
 function clearSearch() {
-  search.value = ''
-  submitSearch()
+  updateBrowse(tab.value, genre.value, '')
 }
 function playing(track: PlayableTrack) {
   return player.current?.audio === track.audio && (player.playing || player.starting)
@@ -428,22 +469,19 @@ async function play(row: DiscoverShelfTrack, queue: DiscoverShelfTrack[] = rows.
   await player.toggle(row.track)
   if (wasPlaying || player.current?.audio !== row.track.audio || !player.playing) return
   if (player.duration > 0) durations.value[row.track.audio] = player.duration
-  const release = row.song
-  if (!release || played.has(row.track.audio)) return
-  played.add(row.track.audio)
-  try {
-    await recordDiscoverPlay(release)
-    for (const list of [songs.value, featuredSongs.value, popularSongs.value, latestSongs.value]) {
-      const song = list.find(item => item.song.id === release.id && item.song.version === release.version)
-      if (song) song.plays = (song.plays ?? 0) + 1
-    }
-    const artist = artists.value?.find(item => item.artistId === row.artistId)
-    if (artist) artist.plays++
-    if (shelves.value?.listeningDataAvailable) void loadShelves()
-  } catch {
-    played.delete(row.track.audio)
-  }
 }
+
+watch(() => player.discoverPlay, publication => {
+  if (!publication) return
+  const release = publication.song
+  for (const list of [songs.value, featuredSongs.value, popularSongs.value, latestSongs.value]) {
+    const song = list.find(item => item.song.id === release.id && item.song.version === release.version)
+    if (song) song.plays = (song.plays ?? 0) + 1
+  }
+  const artist = artists.value?.find(item => item.artistId === publication.artistId)
+  if (artist) artist.plays++
+  if (shelves.value?.listeningDataAvailable) void loadShelves()
+}, { flush: 'sync' })
 
 async function loadInvitedEditorial() {
   if (props.publicEntry) {
@@ -460,8 +498,8 @@ async function loadInvitedEditorial() {
   await loadChristmasPlaylist()
 }
 
-onMounted(() => { initializeHeroRotation(); void loadInvitedEditorial(); void loadEditorial() })
-onActivated(() => { inactive = false; restartHeroRotation() })
+onMounted(() => { initializeHeroRotation(); readBrowseUrl(); void loadInvitedEditorial(); void loadEditorial() })
+onActivated(() => { inactive = false; readBrowseUrl(); restartHeroRotation() })
 onDeactivated(() => { inactive = true; heroHovered.value = false; heroFocused.value = false; restartHeroRotation() })
 onBeforeUnmount(() => {
   disposed = true; ++request; ++editorialRequest; ++shelvesRequest
@@ -497,7 +535,7 @@ onBeforeUnmount(() => {
 
     <div class="discover-width discover-body">
       <h1 class="discover-page-heading">{{ discoverSeo[locale].heading }}</h1>
-      <section v-if="!waitingForEntry && hero && heroBackground" class="discover-hero" :aria-label="t('广场推荐')" :aria-roledescription="t('轮播')"
+      <section v-if="!browseOpen && !waitingForEntry && hero && heroBackground" class="discover-hero" :aria-label="t('广场推荐')" :aria-roledescription="t('轮播')"
         @mouseenter="heroHovered = true" @mouseleave="heroHovered = false" @focusin="heroFocused = true" @focusout="heroFocusOut">
         <div v-if="heroSlideCount > 1" class="discover-hero-preview discover-hero-preview-before">
           <picture>
@@ -539,7 +577,7 @@ onBeforeUnmount(() => {
           </div>
         </template>
       </section>
-      <div v-else class="discover-hero discover-introduction">
+      <div v-else-if="!browseOpen" class="discover-hero discover-introduction">
         <div class="discover-intro-copy">
           <strong>{{ discoverSeo[locale].heading }}</strong>
           <p>{{ discoverSeo[locale].description }}</p>
@@ -549,7 +587,7 @@ onBeforeUnmount(() => {
     </div>
 
     <div v-if="!waitingForEntry || browseOpen" class="discover-width discover-content">
-      <section class="discover-main" :aria-label="t('音乐广场')">
+      <section class="discover-main" :class="{ 'is-browsing': browseOpen }" :aria-label="t('音乐广场')">
         <section v-if="editorialAccess" id="discover-playlists" class="discover-playlists" aria-labelledby="discover-playlists-title">
           <header class="discover-section-heading">
             <h2 id="discover-playlists-title">{{ t('推荐歌单') }}</h2>
@@ -571,7 +609,8 @@ onBeforeUnmount(() => {
               <button v-for="item in tabs" :key="item.id" type="button" :aria-pressed="tab === item.id"
                 @click="select(item.id)">{{ t(item.label) }}</button>
             </div>
-            <select v-model="genre" class="discover-genre" :aria-label="t('音乐风格')" @change="load(true)">
+            <select :value="genre" class="discover-genre" :aria-label="t('音乐风格')"
+              @change="updateBrowse(tab, ($event.target as HTMLSelectElement).value, query)">
               <option v-for="option in genres" :key="option.id" :value="option.id">{{ t(option.label) }}</option>
             </select>
           </div>
@@ -609,6 +648,9 @@ onBeforeUnmount(() => {
           <section id="discover-latest" class="discover-shelf">
             <header class="discover-section-heading">
               <h2>{{ t('今日新歌') }}</h2>
+              <button v-if="rankingRows.length" class="discover-mobile-ranking" type="button" @click="showShelf('discover-today')">
+                {{ t('今日热歌') }} <span aria-hidden="true">›</span>
+              </button>
             </header>
             <DiscoverShelf :label="t('今日新歌')" :rows="latestRows" variant="compact" :loading="editorialLoading"
               :failed="latestFailed" @retry="loadEditorial" @play="play($event, latestRows)" />
@@ -686,7 +728,8 @@ onBeforeUnmount(() => {
               <div class="discover-ranking-row">
                 <button type="button" class="discover-ranking-play" :aria-label="t(playing(row.track) ? '暂停 {title}' : '试听 {title}', { title: row.song.title })" @click="play(row, rankingRows)"></button>
                 <span class="discover-rank" aria-hidden="true">{{ String(index + 1).padStart(2, '0') }}</span>
-                <span v-if="index === 0" class="discover-ranking-cover"><img :src="row.track.cover" alt="" width="42" height="42" loading="lazy"></span>
+                <span v-if="index === 0" class="discover-ranking-cover"><img :src="row.track.cover" alt="" width="42" height="42"
+                  loading="lazy" @error="useDiscoverCoverFallback"></span>
                 <span class="discover-ranking-info">
                   <strong><RouterLink class="discover-song-title-link" :to="discoverSongHref(row.song)">{{ row.song.title }}</RouterLink></strong>
                   <RouterLink v-if="row.artistId && row.stageName" :to="{ name: 'artist-home', params: { id: row.artistId } }">{{ row.stageName }}</RouterLink>

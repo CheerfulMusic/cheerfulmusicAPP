@@ -10,16 +10,18 @@ import type { PlayableTrack } from '../src/shared/player/store'
 
 const mocks = vi.hoisted(() => ({
   invite: vi.fn(), list: vi.fn(), shelves: vi.fn(), profile: vi.fn(), record: vi.fn(), queue: vi.fn(), toggle: vi.fn(),
-  player: { current: null as PlayableTrack | null, playing: false, starting: false, duration: 0, time: 0 },
+  player: { current: null as PlayableTrack | null, playing: false, starting: false, duration: 0, time: 0, discoverPlay: undefined as PlayableTrack['publication'] },
 }))
 vi.mock('../src/modules/artist/api/artist', async original => ({
   ...await original<typeof import('../src/modules/artist/api/artist')>(),
   listDiscoverSongs: mocks.list, getDiscoverShelves: mocks.shelves, getPublicArtist: mocks.profile, recordDiscoverPlay: mocks.record,
 }))
 vi.mock('../src/modules/beta-access/api', () => ({ readInviteStatus: mocks.invite }))
-vi.mock('../src/shared/player/store', () => ({
-  usePlayer: () => Object.assign(mocks.player, { setQueue: mocks.queue, toggle: mocks.toggle }),
-}))
+vi.mock('../src/shared/player/store', async () => {
+  const { reactive } = await import('vue')
+  mocks.player = reactive(mocks.player)
+  return { usePlayer: () => Object.assign(mocks.player, { setQueue: mocks.queue, toggle: mocks.toggle }) }
+})
 vi.mock('../src/shared/ui/BrandLogo.vue', () => ({ default: { template: '<span>CHEERFUL MUSIC</span>' } }))
 vi.mock('../src/modules/home/components/PlaylistDetails.vue', () => ({
   default: { props: ['playlist'], emits: ['close'], template: '<div class="test-playlist">{{ playlist.title }}<span v-for="track in playlist.tracks" :key="track.id">{{ track.title }}</span><button @click="$emit(\'close\')">close</button></div>' },
@@ -39,15 +41,20 @@ function deferred<T>() {
   const promise = new Promise<T>(yes => { resolve = yes })
   return { promise, resolve }
 }
-async function open(publicEntry = false) {
-  const wrapper = mount(DiscoverPage, { props: { publicEntry }, global: { stubs: { RouterLink: { template: '<a><slot /></a>' } } } })
+async function open(publicEntry = false, url = '/discover') {
+  const router = createRouter({
+    history: createMemoryHistory(),
+    routes: [{ path: '/discover', name: 'discover', component: DiscoverPage }],
+  })
+  await router.push(url)
+  const wrapper = mount(DiscoverPage, { props: { publicEntry }, global: { plugins: [router], stubs: { RouterLink: { template: '<a><slot /></a>' } } } })
   wrappers.push(wrapper)
   await flushPromises()
   return wrapper
 }
 beforeEach(() => {
   vi.resetAllMocks()
-  Object.assign(mocks.player, { current: null, playing: false, starting: false, duration: 0 })
+  Object.assign(mocks.player, { current: null, playing: false, starting: false, duration: 0, discoverPlay: undefined })
   mocks.record.mockResolvedValue(undefined)
   mocks.shelves.mockResolvedValue(shelfData([song('popular')]))
   mocks.profile.mockResolvedValue({
@@ -60,9 +67,15 @@ beforeEach(() => {
       { id: '0485811c-0297-4513-9fb1-75f981af8707', version: 1, title: 'Gravity', hasCover: true },
     ],
   })
+  const counted = new Set<string>()
   mocks.toggle.mockImplementation(async (track: PlayableTrack) => {
     mocks.player.playing = !(mocks.player.current?.audio === track.audio && mocks.player.playing)
     mocks.player.current = track
+    if (mocks.player.playing && track.publication && !counted.has(track.audio)) {
+      counted.add(track.audio)
+      await mocks.record(track.publication.song)
+      mocks.player.discoverPlay = track.publication
+    }
   })
   mocks.list.mockImplementation(async (tab: string) => page([song(tab)]))
 })
@@ -81,6 +94,19 @@ it('browses published tracks without exposing the invited editorial catalog', as
   expect(wrapper.text()).not.toContain('走了那么远')
   expect(wrapper.find('#discover-playlists').exists()).toBe(false)
   expect(mocks.invite).toHaveBeenCalledOnce()
+})
+
+it('restores a shared browse URL and updates it as filters change', async () => {
+  const wrapper = await open(false, '/discover?view=songs&q=夜车&genre=folk&sort=popular&utm_source=test')
+  expect(mocks.list).toHaveBeenCalledWith('popular', 0, 'folk', '夜车')
+  expect(wrapper.get('input[type="search"]').element).toHaveProperty('value', '夜车')
+  await wrapper.get('.discover-genre').setValue('rock')
+  await flushPromises()
+  expect(wrapper.vm.$route.query).toEqual({ view: 'songs', q: '夜车', genre: 'rock', sort: 'popular', utm_source: 'test' })
+  expect(mocks.list).toHaveBeenCalledWith('popular', 0, 'rock', '夜车')
+  await wrapper.get('.discover-back').trigger('click')
+  await flushPromises()
+  expect(wrapper.vm.$route.query).toEqual({ utm_source: 'test' })
 })
 
 describe('Discover editorial layout with real content', () => {
@@ -264,7 +290,7 @@ describe('Discover editorial layout with real content', () => {
     expect(wrapper.get('#discover-featured .shelf-tracks').attributes('aria-label')).toBe(brand)
     expect(wrapper.find('#discover-playlists header a').exists()).toBe(false)
     expect(wrapper.findAll('.discover-shelf header button').map(button => button.element.closest('section')?.id))
-      .toEqual(['discover-vocal', 'discover-today'])
+      .toEqual(['discover-latest', 'discover-vocal', 'discover-today'])
     expect(wrapper.get('#discover-global-pop .shelf-square .track-artist').text()).toBe('SergioBeats')
     for (const variant of ['square', 'wide']) {
       const track = wrapper.findAll(`#discover-global-pop .shelf-${variant} .shelf-track`)
@@ -481,11 +507,13 @@ describe('Discover editorial layout with real content', () => {
     await flushPromises()
     expect(mocks.list).toHaveBeenLastCalledWith('latest', 1, 'folk', '海风')
     expect(wrapper.findAll('#discover-tracks .discover-song')).toHaveLength(2)
+    expect(wrapper.find('.discover-hero').exists()).toBe(false)
+    expect(wrapper.get('.discover-ranking').text()).toContain('歌曲popular')
+    expect(wrapper.find('#discover-featured').exists()).toBe(false)
+    await wrapper.get('.discover-back').trigger('click')
     expect(wrapper.get('.discover-hero h2').text()).toBe('走了那么远')
     await wrapper.get('[aria-label="下一张推荐"]').trigger('click')
     expect(wrapper.get('.discover-hero h2').text()).toBe('歌曲popular')
-    expect(wrapper.get('.discover-ranking').text()).toContain('歌曲popular')
-    expect(wrapper.find('#discover-featured').exists()).toBe(false)
   })
 
   it('ignores a late initial response after a newer search', async () => {

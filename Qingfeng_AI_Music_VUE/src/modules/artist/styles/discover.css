@@ -73,6 +73,10 @@
 
 .discover-content { display: grid; grid-template-columns: minmax(0, 1fr) 236px; align-items: start; column-gap: 44px; padding-top: 39px; }
 .discover-main { min-width: 0; }
+.discover-main.is-browsing { display: flex; flex-direction: column; }
+.discover-main.is-browsing .discover-playlists { order: 1; }
+.discover-main.is-browsing .discover-track-section { margin-top: 0; }
+.discover-mobile-ranking { display: none; }
 .discover-shelves { margin-top: 49px; }
 .discover-shelf, .discover-playlists, .discover-artists { scroll-margin-top: 24px; }
 .discover-shelf + .discover-shelf { margin-top: 49px; }
@@ -182,6 +186,11 @@
   .discover-hero-content { width: 100%; padding-inline: 22px; }
   .discover-hero-previous, .discover-hero-next { top: 93px; }
   .discover-content { grid-template-columns: minmax(0, 1fr); gap: 32px; padding-top: 28px; }
+  .discover-main:not(.is-browsing) { display: flex; flex-direction: column; gap: 32px; }
+  .discover-shelves { display: contents; }
+  .discover-shelves .discover-shelf + .discover-shelf { margin-top: 0; }
+  .discover-shelves #discover-latest { order: -1; }
+  .discover-mobile-ranking { display: inline-flex; align-items: center; gap: 4px; }
   .discover-sidebar { position: static; padding: 24px 0 0; border: 0; border-top: 1px solid var(--discover-line); }
 }
 @media (max-width: 520px) {

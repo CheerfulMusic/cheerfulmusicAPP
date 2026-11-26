@@ -5,7 +5,7 @@ import { usePlayer } from '../../../shared/player/store'
 import PlaybackIcon from '../../../shared/ui/PlaybackIcon.vue'
 import NavIcon from '../../../shared/ui/NavIcon.vue'
 import { discoverSongHref } from '../api/discover-song'
-import type { DiscoverShelfTrack } from '../model/discover-shelves'
+import { useDiscoverCoverFallback, type DiscoverShelfTrack } from '../model/discover-shelves'
 
 const props = defineProps<{
   rows: DiscoverShelfTrack[]
@@ -46,7 +46,7 @@ function clock(seconds: number) {
           :aria-label="t(isPlaying(row) ? '暂停 {title}' : '试听 {title}', { title: row.track.title })"
           @click="emit('play', row)"></button>
         <span class="track-art">
-          <img :src="row.track.cover" alt="" loading="lazy" decoding="async"
+          <img :src="row.track.cover" alt="" loading="lazy" decoding="async" @error="useDiscoverCoverFallback"
             :style="variant === 'wide' && row.wideCoverPosition ? { objectPosition: row.wideCoverPosition } : undefined">
           <span class="track-play" aria-hidden="true"><PlaybackIcon :playing="isPlaying(row)" /></span>
         </span>

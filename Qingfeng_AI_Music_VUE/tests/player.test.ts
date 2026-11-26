@@ -1,6 +1,9 @@
 import {afterEach,beforeEach,describe,expect,it,vi} from 'vitest'
 import {createPinia,setActivePinia} from 'pinia'
 import {usePlayer,type PlayableTrack} from '../src/shared/player/store'
+import { recordDiscoverPlay } from '../src/modules/artist/api/artist'
+
+vi.mock('../src/modules/artist/api/artist', () => ({ recordDiscoverPlay: vi.fn(async () => {}) }))
 class FakeAudio extends EventTarget {
  static instances:FakeAudio[]=[]
  static nextPlay:Promise<void>|undefined
@@ -17,6 +20,24 @@ const track=(id:string):PlayableTrack=>({id,title:id,cover:'/cover.svg',audio:'/
 beforeEach(()=>{setActivePinia(createPinia());FakeAudio.instances=[];FakeAudio.nextPlay=undefined;vi.stubGlobal('Audio',FakeAudio);vi.stubGlobal('fetch',vi.fn(()=>new Promise(()=>{})))})
 afterEach(()=>{usePlayer().reset();vi.useRealTimers();vi.restoreAllMocks();vi.unstubAllGlobals()})
 describe('分段起播与重复试听',()=>{
+ it('counts each public version on confirmed playback, including a queued next song', async () => {
+  vi.mocked(recordDiscoverPlay).mockClear()
+  const player = usePlayer()
+  const first = { ...track('public-one'), publication: { artistId: 'artist', stageName: 'Artist',
+    song: { id: 'public-one', version: 1, title: 'First', hasCover: true } } }
+  const next = { ...track('public-two'), publication: { ...first.publication,
+    song: { id: 'public-two', version: 2, title: 'Next', hasCover: true } } }
+  player.setQueue([first, next])
+  await player.toggle(first)
+  expect(recordDiscoverPlay).not.toHaveBeenCalled()
+  FakeAudio.current.dispatchEvent(new Event('playing'))
+  FakeAudio.current.dispatchEvent(new Event('playing'))
+  await player.next()
+  FakeAudio.current.dispatchEvent(new Event('playing'))
+  await Promise.resolve()
+  expect(vi.mocked(recordDiscoverPlay).mock.calls).toEqual([[first.publication.song], [next.publication.song]])
+  expect(player.discoverPlay).toEqual(next.publication)
+ })
  it('resumes a stalled public song at its saved position and retries only once', async () => {
   vi.useFakeTimers()
   const player = usePlayer()

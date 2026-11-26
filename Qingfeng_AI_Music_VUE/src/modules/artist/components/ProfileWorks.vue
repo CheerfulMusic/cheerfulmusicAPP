@@ -9,6 +9,7 @@ import { audioUrl } from '../../works/api/detail'
 import { listWorks, type LibraryItem } from '../../works/api/works'
 import { librarySongTitle } from '../../works/model/song-title'
 import { ownerTrack, type ArtistRelease } from '../api/artist'
+import { discoverSongHref } from '../api/discover-song'
 import { discoverReleaseCover } from '../model/discover-shelves'
 
 const props = defineProps<{ songs: ArtistRelease[]; busy: boolean; published: boolean }>()
@@ -34,6 +35,7 @@ interface WorkRow {
   updatedAt?: string
   label?: string
   release?: ArtistRelease
+  hasOtherPublicVersion?: boolean
 }
 
 const libraryRows = computed<WorkRow[]>(() => works.value.map(item => {
@@ -46,8 +48,11 @@ const libraryRows = computed<WorkRow[]>(() => works.value.map(item => {
   const track = item.audioId
     ? { id: item.audioId, title: songTitle, cover, audio: audioUrl(id, item.audioId), provenance: item.audioOrigin ?? undefined }
     : undefined
-  return { id, workId: id, title: songTitle, cover, track, updatedAt, release,
-    label: publicationLabel(release) }
+  const hasOtherPublicVersion = Boolean(props.published && release && release.assetId !== item.audioId)
+  const label = hasOtherPublicVersion
+    ? release?.onDiscover ? '当前版本仅自己可见 · 另一版本已上广场' : '当前版本仅自己可见 · 另一版本在主页展示'
+    : publicationLabel(release)
+  return { id, workId: id, title: songTitle, cover, track, updatedAt, release, label, hasOtherPublicVersion }
 }))
 const publishedRows = computed<WorkRow[]>(() => props.songs.map(song => {
   const track = ownerTrack(song)
@@ -137,7 +142,7 @@ onBeforeUnmount(() => {
           aria-controls="profile-works-list" :aria-expanded="allPublishedVisible" @click="allPublishedVisible = !allPublishedVisible">
           {{ t(allPublishedVisible ? '收起' : '更多') }}
         </button>
-        <RouterLink to="/works" class="profile-works-all">{{ t('全部作品') }}</RouterLink>
+        <RouterLink to="/works" class="profile-works-all">{{ t('查看全部作品') }}</RouterLink>
       </div>
     </header>
 
@@ -160,7 +165,7 @@ onBeforeUnmount(() => {
         </button>
         <div v-else class="profile-work-cover"><img :src="row.cover" alt="" loading="lazy"></div>
         <RouterLink :to="{ name: 'work-detail', params: { id: row.workId } }" class="profile-work-link"
-          :class="{ 'is-release': row.release }" :title="row.title">
+          :class="{ 'is-release': row.release, 'has-other-version': row.hasOtherPublicVersion }" :title="row.title">
           <span class="profile-work-copy">
             <strong>{{ row.title }}</strong>
             <time v-if="row.updatedAt" :datetime="row.updatedAt">{{ formatDate(row.updatedAt) }}</time>
@@ -169,13 +174,16 @@ onBeforeUnmount(() => {
           <NavIcon name="arrow" />
         </RouterLink>
         <div v-if="row.release" class="profile-work-actions">
-          <button v-if="row.release.onDiscover" type="button" class="profile-work-remove text-button" :disabled="busy" @click="emit('withdraw', row.release)">
+          <RouterLink v-if="published && row.release.onDiscover" class="text-button" :to="discoverSongHref(row.release)">
+            {{ t('查看广场版') }}
+          </RouterLink>
+          <button v-if="published && row.release.onDiscover && !row.hasOtherPublicVersion" type="button" class="profile-work-remove text-button" :disabled="busy" @click="emit('withdraw', row.release)">
             {{ t('从广场撤回') }}
           </button>
-          <button v-else-if="published" type="button" class="text-button" :disabled="busy" @click="emit('publish', row.release)">
+          <button v-else-if="published && !row.release.onDiscover && !row.hasOtherPublicVersion" type="button" class="text-button" :disabled="busy" @click="emit('publish', row.release)">
             {{ t('发布到广场') }}
           </button>
-          <button type="button" class="profile-work-remove text-button" :disabled="busy" @click="emit('remove', row.release)">
+          <button v-if="!row.hasOtherPublicVersion" type="button" class="profile-work-remove text-button" :disabled="busy" @click="emit('remove', row.release)">
             {{ t('移出主页') }}
           </button>
         </div>
@@ -301,6 +309,7 @@ onBeforeUnmount(() => {
 .profile-work-link:hover { color: var(--accent-text); }
 .profile-work-link > svg { width: 15px; height: 15px; justify-self: center; }
 .profile-work-link.is-release { grid-template-columns: minmax(0, 1fr) auto 18px; }
+.profile-work-link.has-other-version { grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr) 18px; }
 .profile-work-copy {
   display: grid;
   gap: 3px;
@@ -335,6 +344,7 @@ onBeforeUnmount(() => {
   white-space: nowrap;
 }
 .profile-work-actions { display: flex; flex-wrap: wrap; justify-content: end; gap: 2px 12px; font-size: .76rem; }
+.has-other-version .profile-work-label > span { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
 .profile-work-actions .text-button { font-size: inherit; }
 @media (max-width: 580px) {
   .profile-work-cover { width: 52px; }

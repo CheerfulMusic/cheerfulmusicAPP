@@ -2,7 +2,7 @@ import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 import { NativeAudioPool } from './audio-cache'
 import type { LyricLine } from '../../modules/works/api/detail'
-import type { DiscoverSong } from '../../modules/artist/api/artist'
+import { recordDiscoverPlay, type DiscoverSong } from '../../modules/artist/api/artist'
 export interface PlayableTrack {
   id: string
   title: string
@@ -16,6 +16,22 @@ export interface PlayableTrack {
 export type RepeatMode = 'default' | 'one' | 'list'
 export const usePlayer = defineStore('player', () => {
   const current=ref<PlayableTrack|null>(null),playing=ref(false),starting=ref(false),buffering=ref(false),time=ref(0),duration=ref(0),error=ref(''),queue=ref<PlayableTrack[]>([])
+  const discoverPlay = ref<PlayableTrack['publication']>()
+  const recordedDiscoverPlays = new Set<string>()
+
+  async function recordPublishedPlayback() {
+    const publication = current.value?.publication
+    if (!publication) return
+    const key = `${publication.song.id}:${publication.song.version}`
+    if (recordedDiscoverPlays.has(key)) return
+    recordedDiscoverPlays.add(key)
+    try {
+      await recordDiscoverPlay(publication.song)
+      discoverPlay.value = publication
+    } catch {
+      recordedDiscoverPlays.delete(key)
+    }
+  }
   const queueIndex=computed(()=>queue.value.findIndex(track=>track.id===current.value?.id&&track.audio===current.value?.audio))
   const hasQueue=computed(()=>queue.value.length>1&&queueIndex.value>=0)
   const tracks=computed(()=>Object.freeze(queue.value.map(track=>Object.freeze({...track}))))
@@ -153,7 +169,11 @@ export const usePlayer = defineStore('player', () => {
     element.addEventListener('loadedmetadata',()=>{if(active())readDuration()})
     element.addEventListener('durationchange',()=>{if(active())readDuration()})
     element.addEventListener('play',()=>{if(active())playing.value=true})
-    element.addEventListener('playing',()=>{if(active()&&!element.paused){playing.value=true;starting.value=false;stopWaiting()}})
+    element.addEventListener('playing',()=>{
+      if (!active() || element.paused) return
+      playing.value=true;starting.value=false;stopWaiting()
+      void recordPublishedPlayback()
+    })
     element.addEventListener('pause',()=>{if(active()){playing.value=false;stopWaiting()}})
     element.addEventListener('waiting',()=>{if(active()&&!pendingRestore&&(starting.value||!element.paused))waitForAudio()})
     element.addEventListener('stalled',()=>{if(active()&&!pendingRestore&&(starting.value||!element.paused)&&!buffering.value)waitForAudio()})
@@ -277,5 +297,5 @@ export const usePlayer = defineStore('player', () => {
   function close(){cancelReauth();operation++;segment.value=null;setRepeatMode('default');audio?.pause();if(audio)audio.preload='metadata';current.value=null;queue.value=[];time.value=0;duration.value=0;error.value='';starting.value=false;stopWaiting();playing.value=false}
   /** 身份切换和分享失效彻底释放，与普通收起播放器分开。 */
   function reset(){close();audio=undefined;pool.clear()}
-  return {volume,muted,setVolume,toggleMute,current,playing,starting,buffering,time,duration,error,hasQueue,tracks,repeatMode,setRepeatMode,repeatOne,toggleRepeat,seekVersion,adoptGiftPreview,selectIfEmpty,toggle,seek,close,reset,setQueue,next,updateCover,updateTitles,segment,playSegment,stopSegment}
+  return {volume,muted,setVolume,toggleMute,current,playing,starting,buffering,time,duration,error,hasQueue,tracks,repeatMode,setRepeatMode,repeatOne,toggleRepeat,seekVersion,adoptGiftPreview,selectIfEmpty,toggle,seek,close,reset,setQueue,next,updateCover,updateTitles,segment,playSegment,stopSegment,discoverPlay}
 })

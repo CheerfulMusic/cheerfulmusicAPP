@@ -1,7 +1,9 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import { discoverHref, t } from '../../../shared/i18n'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import { t } from '../../../shared/i18n'
+import { siteOrigin } from '../../../shared/i18n/home-seo'
 import { getSongPublication, ownerTrack, publishSong, publishSongToDiscover, type ArtistRelease, type SongPublication } from '../api/artist'
+import { discoverSongHref } from '../api/discover-song'
 
 const props = defineProps<{ source: SongPublication; cover: string; discover?: boolean }>()
 const emit = defineEmits<{
@@ -16,6 +18,9 @@ const saving = ref(false)
 const discover = ref(Boolean(props.discover))
 const notice = ref('')
 const error = ref('')
+const linkInput = ref<HTMLInputElement>()
+const showLink = ref(false)
+const copied = ref(false)
 const identical = computed(() => selection.value?.song?.assetId === props.source.assetId
   && selection.value.song.coverId === props.source.coverId && selection.value.song.title === props.source.title.trim())
 const artist = computed(() => selection.value?.publicId)
@@ -27,6 +32,22 @@ const confirmDiscover = computed(() => discover.value && discoverSupported.value
 const complete = computed(() => discover.value ? Boolean(selection.value?.song?.onDiscover) : identical.value)
 const profileRoute = computed(() => ({ name: 'artist-profile', query: { publishWork: props.source.workId } }))
 const discoverSong = computed(() => discover.value && selection.value?.song ? ownerTrack(selection.value.song) : null)
+const discoverPath = computed(() => selection.value?.published && selection.value.song?.onDiscover
+  ? discoverSongHref(selection.value.song) : '')
+const discoverUrl = computed(() => discoverPath.value ? new URL(discoverPath.value, siteOrigin).href : '')
+
+async function copyDiscoverLink() {
+  if (!discoverUrl.value) return
+  try {
+    await navigator.clipboard.writeText(discoverUrl.value)
+    copied.value = true
+  } catch {
+    showLink.value = true
+    await nextTick()
+    linkInput.value?.focus()
+    linkInput.value?.select()
+  }
+}
 
 async function load() {
   loading.value = true
@@ -92,6 +113,8 @@ onBeforeUnmount(() => dialog.value?.close())
         <p v-if="loading" role="status">{{ t('正在读取发布状态…') }}</p>
         <p v-if="error" class="notice error" role="alert">{{ t(error) }}</p>
         <p v-if="notice" role="status">{{ t(notice) }}</p>
+        <p v-if="copied" role="status">{{ t('链接已复制') }}</p>
+        <input v-if="showLink && discoverUrl" ref="linkInput" :value="discoverUrl" readonly :aria-label="t('广场歌曲链接')">
         <template v-if="selection && !loading">
           <p v-if="discoverUnavailable" role="status">{{ t('当前服务版本暂不支持发布到「广场」。请在功能上线后再试。') }}</p>
           <p v-else-if="needsProfile">{{ t(selection.profileReady ? '请先在「我的资料」公开歌手主页，再回来公开这首歌。' : '请先在「我的资料」保存艺名并公开歌手主页。') }}</p>
@@ -114,8 +137,9 @@ onBeforeUnmount(() => dialog.value?.close())
             </button>
             <template v-else-if="complete && !needsProfile">
               <RouterLink v-if="artist && !discover" :to="{ name: 'artist-home', params: { id: artist } }" class="button secondary" @click="close">{{ t('查看主页') }}</RouterLink>
-              <RouterLink v-if="selection.song?.onDiscover" :to="discoverHref" class="button" @click="close">{{ t('查看广场') }}</RouterLink>
+              <RouterLink v-if="discoverPath" :to="discoverPath" class="button" @click="close">{{ t('查看广场详情') }}</RouterLink>
               <button v-else class="button" type="button" @click="discover = true; notice = ''">{{ t('发布到广场') }}</button>
+              <button v-if="discoverPath" class="button secondary" type="button" @click="copyDiscoverLink">{{ t('复制链接') }}</button>
             </template>
           </template>
         </div>

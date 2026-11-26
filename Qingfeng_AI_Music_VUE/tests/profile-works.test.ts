@@ -82,6 +82,17 @@ it('shows the completed-works empty state when the library contains only drafts'
   expect(profile.get('.profile-works-message').text()).toContain('暂无已完成作品')
 })
 
+it('distinguishes the selected private audio from an older public Discover version', async () => {
+  const work = completed(published.workId)
+  vi.mocked(listWorks).mockResolvedValueOnce([work])
+  const profile = await open([{ ...published, onDiscover: true }])
+  expect(profile.get('.profile-work-label').text()).toBe('当前版本仅自己可见 · 另一版本已上广场')
+  expect(profile.get('.profile-work-actions').text()).toBe('查看广场版')
+  await profile.findAll('.profile-works-switch button')[1]!.trigger('click')
+  expect(profile.get('.profile-work-label').text()).toBe('已发布到广场')
+  expect(profile.get('.profile-work-actions').text()).toContain('从广场撤回')
+})
+
 it('uses the Discover artwork on both owner tabs for the published recording', async () => {
   const work = completed('Navidad')
   const release = {
