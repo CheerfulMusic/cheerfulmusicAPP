@@ -7,6 +7,7 @@ import { loadSongReference, songCreationRoute, type SongReference } from '../src
 import { saveWork } from '../src/modules/studio/api/works'
 import { generateLyrics, getLyricsRequest, getUsage, submitTask } from '../src/modules/works/api/detail'
 import { loadMusicCatalog, saveMusicSettings } from '../src/modules/works/api/music-settings'
+import { ApiError } from '../src/shared/http/api-client'
 
 vi.mock('../src/shared/http/api-client', async importOriginal => ({
   ...await importOriginal<typeof import('../src/shared/http/api-client')>(),
@@ -144,6 +145,36 @@ it.each([
     expect(router.currentRoute.value.query.revision).toBe('new-lyrics')
     expect(submitTask).not.toHaveBeenCalled()
   } finally { restored.unmount() }
+})
+
+it('checks the original custom lyric request on repeated clicks and opens a late result', async () => {
+  const { page, router } = await open()
+  vi.mocked(saveMusicSettings).mockImplementation(async (_id, _version, preferences) => ({
+    work: { ...vi.mocked(saveWork).mock.lastCall![0], ...saved, version: 1 },
+    direction: { preferences, style: '', negativeTags: '', summaryZh: '', summaryEn: '', catalogVersion: 1 },
+  }))
+  vi.mocked(generateLyrics).mockRejectedValueOnce(new ApiError('Disconnected', 0))
+  try {
+    await page.get('#inspiration-input').setValue('等待结果时保留这段创作描述')
+    await page.get('.creation-mode-switch button:nth-child(2)').trigger('click')
+    await flushPromises()
+    await page.get('form').trigger('submit')
+    await flushPromises()
+    const originalKey = vi.mocked(generateLyrics).mock.lastCall?.[2]
+    expect(originalKey).toBeTruthy()
+    expect(page.get('[role=alert]').text()).toContain('歌词结果尚未确认，请先核对原请求。')
+    vi.mocked(getLyricsRequest).mockResolvedValueOnce({ status: 'UNKNOWN', revisionId: null, errorCode: 'LYRICS_PROVIDER_NETWORK_ERROR' })
+    await page.get('form').trigger('submit')
+    await flushPromises()
+    expect(getLyricsRequest).toHaveBeenLastCalledWith(saved.id, originalKey)
+    expect(generateLyrics).toHaveBeenCalledTimes(1)
+    expect(page.get('[role=alert]').text()).toContain('另起一次编写')
+    vi.mocked(getLyricsRequest).mockResolvedValueOnce({ status: 'SUCCEEDED', revisionId: 'late-original', errorCode: null })
+    await page.findAll('button').find(button => button.text() === '核对歌词进度')!.trigger('click')
+    await flushPromises()
+    expect(router.currentRoute.value.query.revision).toBe('late-original')
+    expect(generateLyrics).toHaveBeenCalledTimes(1)
+  } finally { page.unmount() }
 })
 
 it('lets the user remove a failed reference and continue with a manual story', async () => {

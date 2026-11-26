@@ -87,16 +87,13 @@ public final class QwenLyricsWriter implements LyricsWriter {
             var result=LyricsWritingPrompt.jsonObject(outputText(response.body()));
             if (fallback != null) ProviderHttp.remaining(deadline);
             if (response.usedFallback()) {
-                var draft = OpenAiLyricsWriter.parseSong(result, false, ARK_SOURCE);
+                var draft = OpenAiLyricsWriter.parseSong(result, false, ARK_SOURCE, direction.vocalGender());
                 ProviderHttp.remaining(deadline);
                 return draft;
             }
-            var plan=result.path("plan");
-            if(!result.path("title").isString()||!result.path("lyrics").isString())throw invalidResponse();
-            if(!fullNew)return new Draft(result.path("title").asText(""),result.path("lyrics").asText(""),
-                plan.isObject()?json.treeToValue(plan,com.qingfeng.music.settings.CreativePlan.class):null);
-            var draft=OpenAiLyricsWriter.parseSong(result,false,null);
-            return review(draft,language,material,deadline);
+            var draft=OpenAiLyricsWriter.parseSong(result,false,null,direction.vocalGender());
+            if (fullNew) return review(draft,language,material,deadline);
+            return result.path("plan").isObject() ? draft : new Draft(draft.title(), draft.lyrics(), null);
         }catch(TextModelTransport.HttpFailure rejected) {
             LOG.log(System.Logger.Level.WARNING, "Lyrics model failed: model={0}, elapsedMs={1}, reason={2}",
                 model, TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started), "HTTP_" + rejected.status);
@@ -104,7 +101,7 @@ public final class QwenLyricsWriter implements LyricsWriter {
         }catch(InterruptedException interrupted){Thread.currentThread().interrupt();throw new DomainException("LYRICS_REQUEST_INTERRUPTED","歌词请求已中断，结果尚未确认，请先查看原请求进度。");}
         catch(HttpTimeoutException timeout){throw LyricsSectionRepair.timedOut();}
         catch(IOException network){throw LyricsSectionRepair.unknownConnection();}
-        catch(tools.jackson.core.JacksonException invalid){throw new DomainException("LYRICS_RESPONSE_INVALID","歌词生成结果不完整，请稍后重新发起");}
+        catch(tools.jackson.core.JacksonException invalid){throw LyricsWritingPrompt.invalidFormat();}
         catch(DomainException stopped){
             if("AGENT_DEADLINE_EXCEEDED".equals(stopped.code()))throw LyricsSectionRepair.timedOut();
             throw stopped;
@@ -197,7 +194,9 @@ public final class QwenLyricsWriter implements LyricsWriter {
     private String outputText(String body) {
         var choice = json.readTree(body).path("choices").path(0);
         var message = choice.path("message");
-        if (!"stop".equals(choice.path("finish_reason").asText()) || !message.path("content").isString()
+        String finish = choice.path("finish_reason").asText("");
+        if ("length".equals(finish)) throw LyricsWritingPrompt.truncated();
+        if (!"stop".equals(finish) || !message.path("content").isString()
                 || !message.path("refusal").asText("").isBlank()) throw invalidResponse();
         return message.path("content").asText();
     }

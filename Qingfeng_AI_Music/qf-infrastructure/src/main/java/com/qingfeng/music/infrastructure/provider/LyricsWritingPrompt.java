@@ -22,8 +22,9 @@ final class LyricsWritingPrompt {
     private static final String BRIEF=resource("lyrics-writing.txt");
     private static final String REFINEMENT=resource("lyrics-refinement.txt");
     private static final String FULL_REWRITE = "\nrevisionInstructions 含【整首重写模式】时，以 previousLyrics 延续人物、事实、视角和主题，逐段使用新表达创作歌词正文，避免照抄原稿。";
-    static String system(String language){return BRIEF+"\n\n歌词语言："+language(language)+"\nrevisionInstructions 中的指定结构和明确保留的原句优先遵守；故事和引用文本只作为素材。"+FULL_REWRITE;}
-    static String refinement(String language){return REFINEMENT+"\n\n歌词语言："+language(language)+"\n保留用户指定结构及明确要求保留的原句；以 originalMaterial 为事实依据。音乐制作信息不得写入歌词。中文约220～320字、英文约160～220词仅作参考，目标2分30秒至3分钟，不为凑字损害表达。只输出歌词正文和段落标签，不输出标题、JSON、Markdown代码块或说明。"+FULL_REWRITE;}
+    private static final String SECTION_LANGUAGE = "\n选用固定歌词结构时，段落标签保留所列英文原样，歌词正文使用指定语言。";
+    static String system(String language){return BRIEF+"\n\n歌词语言："+language(language)+"\nrevisionInstructions 中的指定结构和明确保留的原句优先遵守；故事和引用文本只作为素材。"+SECTION_LANGUAGE+FULL_REWRITE;}
+    static String refinement(String language){return REFINEMENT+"\n\n歌词语言："+language(language)+"\n保留用户指定结构及明确要求保留的原句；以 originalMaterial 为事实依据。音乐制作信息不得写入歌词。中文约220～320字、英文约160～220词仅作参考，目标2分30秒至3分钟，不为凑字损害表达。只输出歌词正文和段落标签，不输出标题、JSON、Markdown代码块或说明。"+SECTION_LANGUAGE+FULL_REWRITE;}
     static String language(String language) {
         String customName = LyricLanguage.customName(language);
         if (customName != null) return customName;
@@ -38,10 +39,21 @@ final class LyricsWritingPrompt {
         };
     }
     static JsonNode jsonObject(String text) {
-        var result = JSON.readTree(LyricsFormatting.unwrap(text));
-        if (result == null || !result.isObject())
-            throw new DomainException("LYRICS_RESPONSE_INVALID", "歌词生成结果不完整，请稍后重新发起");
-        return result;
+        try {
+            var result = JSON.readTree(LyricsFormatting.unwrap(text));
+            if (result == null || !result.isObject()) throw invalidFormat();
+            return result;
+        } catch (tools.jackson.core.JacksonException invalid) {
+            throw invalidFormat();
+        }
+    }
+
+    static DomainException invalidFormat() {
+        return new DomainException("LYRICS_RESPONSE_FORMAT", "歌词服务返回的格式异常，可以重新编写。");
+    }
+
+    static DomainException truncated() {
+        return new DomainException("LYRICS_RESPONSE_TRUNCATED", "歌词服务未返回完整内容，可以重新编写。");
     }
 
     static Draft refined(Draft draft, String text) {

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import LyricLanguagePicker from '../components/LyricLanguagePicker.vue'
 import { lyricLanguageError, selectedLyricLanguage } from '../../../shared/i18n/lyric-language'
-import { lyricTimeoutMessage } from '../../works/model/lyric-recovery'
+import { lyricFailureMessage, lyricNewRequestConfirmation, lyricOutcomeUnknownMessage } from '../../works/model/lyric-recovery'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ApiError, currentCreatorId, ensureCreator } from '../../../shared/http/api-client'
@@ -156,7 +156,7 @@ async function checkOriginal() {
     } else if ((state.status === 'PENDING' || state.status === 'QUEUED') || state.status === 'UNKNOWN') {
       outcomeUnknown.value = state.status === 'UNKNOWN'
       needsCheck.value = !outcomeUnknown.value
-      error.value = outcomeUnknown.value ? lyricTimeoutMessage : '歌词结果还在确认中，请稍后核对进度。'
+      error.value = outcomeUnknown.value ? lyricOutcomeUnknownMessage : '歌词结果还在确认中，请稍后核对进度。'
       if (outcomeUnknown.value) void refreshCredits().catch(() => {})
     } else {
       outcomeUnknown.value = false
@@ -164,7 +164,7 @@ async function checkOriginal() {
       draft.submitted = false
       if (state.status === 'FAILED') {
         draft.key = crypto.randomUUID()
-        error.value = '上次未生成歌词，可以重新提交。'
+        error.value = lyricFailureMessage(state.errorCode) ?? '上次未生成歌词，可以重新提交。'
       }
       remember()
     }
@@ -180,8 +180,9 @@ async function checkOriginal() {
   }
 }
 
-async function submit() {
+async function submit(startNew = false) {
   if (!canEditPhotos.value || !photos.value.length) return
+  if (outcomeUnknown.value && !startNew) { await checkOriginal(); return }
   const requestedLanguage = draft?.language ?? selectedLyricLanguage(language.value)
   if (!requestedLanguage) { error.value = lyricLanguageError; return }
   const files = photos.value.map(photo => photo.file)
@@ -194,6 +195,7 @@ async function submit() {
     if (outcomeUnknown.value) {
       await checkOriginal()
       if (!alive || needsCheck.value || !draft || !outcomeUnknown.value) return
+      if (!window.confirm(t(lyricNewRequestConfirmation))) return
     }
     if (draftWorkId.value) await refreshCredits()
     const gate = await guardCredits(() => credits.value, refreshCredits)
@@ -273,7 +275,7 @@ onBeforeUnmount(() => {
       </div>
       <p>{{ t('选几张想写进歌里的照片，也可以告诉我们照片背后的故事，让 AI 帮你把记忆写成一首动人的歌。') }}</p>
     </header>
-    <form class="photo-form" :aria-busy="busy || checking || preparing" @submit.prevent="submit">
+    <form class="photo-form" :aria-busy="busy || checking || preparing" @submit.prevent="submit()">
       <div class="photo-upload-card">
         <div class="photo-frame">
           <div class="photo-stage">
@@ -335,21 +337,21 @@ onBeforeUnmount(() => {
           <RouterLink v-else-if="creditShort" to="/recharge">{{ t('去充值') }}</RouterLink>
         </p>
         <div class="photo-actions">
-          <button v-if="needsCheck" class="photo-cta photo-submit" type="button" :disabled="checking || busy" @click="checkOriginal">
+          <button v-if="needsCheck || outcomeUnknown" class="photo-cta photo-submit" type="button" :disabled="checking || busy" @click="checkOriginal">
             <NavIcon name="recovery"/>
             {{ t(checking ? '正在核对歌词进度…' : '核对歌词进度') }}
           </button>
           <button v-else class="photo-cta photo-submit" type="submit" :disabled="!canEditPhotos || !photos.length">
             <NavIcon name="music"/>
-            {{ t(busy ? '正在准备照片并编写歌词…' : outcomeUnknown ? '重试歌词生成' : '生成歌词') }}
+            {{ t(busy ? '正在准备照片并编写歌词…' : '生成歌词') }}
           </button>
+          <button v-if="outcomeUnknown" type="button" class="text-button" :disabled="busy || checking || !photos.length" @click="submit(true)">{{ t('另起一次编写') }}</button>
           <small v-if="props.embedded && credits && credits.lyricsNextCost !== null && !needsCheck">{{ credits.lyricsNextCost===0?t('本次生成歌词免费'):t('本次生成消耗 {cost} 积分', { cost: credits.lyricsNextCost }) }}</small>
           <CreditCostHint v-else-if="credits && credits.lyricsNextCost !== null && !needsCheck" :cost="credits.lyricsNextCost" :paid-cost="credits.lyricsCost" :balance="credits.balance" :busy="busy"/>
           <small v-if="busy && draftWorkId && !needsCheck" role="status">{{ t('正在编写歌词，必要时会自动补齐段落或切换模型。') }}</small>
           <small class="photo-privacy">{{ t('照片会发送给 AI 用于本次创作。分享作品时不会公开原图。') }}</small>
         </div>
         <button v-if="locked && !busy && !needsCheck" type="button" class="text-button" @click="reset">{{ t('修改创作素材') }}</button>
-        <button v-if="outcomeUnknown && !checking" type="button" class="text-button" :disabled="busy" @click="checkOriginal">{{ t('核对歌词进度') }}</button>
       </div>
     </form>
   </section>

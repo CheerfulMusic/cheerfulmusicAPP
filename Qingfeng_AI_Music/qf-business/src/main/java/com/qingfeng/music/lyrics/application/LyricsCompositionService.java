@@ -169,6 +169,7 @@ public final class LyricsCompositionService {
             return null;
         }
         if (fromQueue ? !requests.startQueued(work, key) : !requests.claim(owner, work, key, hash)) throw pending();
+        long started = System.nanoTime();
         try(var ignored=LyricsRequestBudget.enter(Duration.ofSeconds(110))){
             var direction=settings==null?null:settings.resolve(owner,snapshot);
             var writingDirection=new LyricsWriter.Direction(direction==null?snapshot.style():direction.style(),direction==null?"":direction.negativeTags(),snapshot.vocalGender());
@@ -196,7 +197,10 @@ public final class LyricsCompositionService {
             String code=error instanceof DomainException domain?domain.code():"LYRICS_INTERNAL_ERROR";
             if(outcomeUnknown(code))requests.unknown(work,key,code);
             else requests.failed(work,key,code);
-            LOG.log(System.Logger.Level.WARNING,"Lyrics request failed: work={0}, request={1}, code={2}, type={3}",work,key,code,error.getClass().getSimpleName());
+            LOG.log(System.Logger.Level.WARNING,
+                "Lyrics request failed: work={0}, request={1}, code={2}, mode={3}, language={4}, template={5}, elapsedMs={6}",
+                work,key,code,command.mode(),language.startsWith("custom:") ? "CUSTOM" : language,structure.templateId(),
+                java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime()-started));
             throw error;
         }
     }

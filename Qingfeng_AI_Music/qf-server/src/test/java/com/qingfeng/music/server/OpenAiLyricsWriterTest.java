@@ -148,22 +148,40 @@ class OpenAiLyricsWriterTest {
         }
     }
 
-    @ParameterizedTest @ValueSource(strings = {"title", "lyrics", "plan"})
+    @ParameterizedTest @ValueSource(strings = {"title", "lyrics"})
     void rejectsMissingRequiredFields(String field) throws Exception {
         var invalid = result();invalid.remove(field);assertInvalid(JSON.writeValueAsString(completed(invalid)));
     }
 
-    @Test void rejectsInvalidPlansBlankOrOversizedLyricsAndMalformedResponses() throws Exception {
+    @Test void keepsCompleteLyricsWhenAuxiliaryPlanIsMissingOrInvalid() throws Exception {
+        var noPlan = result();
+        noPlan.remove("plan");
+        var partialPlan = result();
+        partialPlan.put("plan", Map.of("vocalGender", "UNKNOWN", "suggestedArrangement", 42,
+            "requirements", "写成民谣", "summaryZh", "字".repeat(201)));
+        for (var candidate : List.of(noPlan, partialPlan)) {
+            try (var fixture = new Fixture(200, JSON.writeValueAsString(completed(candidate)))) {
+                var draft = fixture.writer().write(WORK, "ja", "", "",
+                    new LyricsWriter.Direction("", "", "FEMALE"));
+                assertEquals(candidate.get("lyrics"), draft.lyrics());
+                assertEquals("", draft.plan().suggestedArrangement());
+                assertEquals("", draft.plan().summaryZh());
+                assertEquals("FEMALE", draft.plan().vocalGender());
+                assertEquals(candidate == noPlan ? "" : "写成民谣", draft.plan().requirements());
+                assertEquals(2, fixture.calls.get());
+            }
+        }
+    }
+
+    @Test void rejectsBlankOrOversizedLyricsAndDistinguishesMalformedResponses() throws Exception {
         for (Object lyrics : List.of(" ", "字".repeat(5001), 123)) {
             var invalid = result();invalid.put("lyrics", lyrics);assertInvalid(JSON.writeValueAsString(completed(invalid)));
         }
-        var invalid = result();invalid.put("plan", Map.of("vocalGender", "UNKNOWN"));
-        assertInvalid(JSON.writeValueAsString(completed(invalid)));
-        invalid.put("plan", Map.of("requirements", "", "suggestedArrangement", "", "negativeTags", "",
-            "summaryZh", "", "summaryEn", "", "vocalGender", "UNKNOWN"));
-        assertInvalid(JSON.writeValueAsString(completed(invalid)));
-        assertInvalid("not-json");assertInvalid("{\"status\":\"completed\",\"output\":[]}");
-        invalid=result();invalid.put("title","字".repeat(81));assertInvalid(JSON.writeValueAsString(completed(invalid)));
+        assertInvalid("not-json", "LYRICS_RESPONSE_FORMAT");
+        assertInvalid(JSON.writeValueAsString(completed("not-json")), "LYRICS_RESPONSE_FORMAT");
+        assertInvalid("{\"status\":\"incomplete\",\"incomplete_details\":{\"reason\":\"max_output_tokens\"}}", "LYRICS_RESPONSE_TRUNCATED");
+        assertInvalid("{\"status\":\"completed\",\"output\":[]}");
+        var invalid=result();invalid.put("title","字".repeat(81));assertInvalid(JSON.writeValueAsString(completed(invalid)));
     }
 
     @Test void configuredModelReachesRequestAndAdapterReportsOpenAiSource() throws Exception {
@@ -409,9 +427,13 @@ class OpenAiLyricsWriterTest {
     }
 
     private static void assertInvalid(String body) throws Exception {
+        assertInvalid(body, "LYRICS_RESPONSE_INVALID");
+    }
+
+    private static void assertInvalid(String body, String code) throws Exception {
         try (var fixture = new Fixture(200, body)) {
             var error = assertThrows(DomainException.class, () -> fixture.writer().write(WORK, "zh-CN"));
-            assertEquals("LYRICS_RESPONSE_INVALID", error.code());assertFalse(error.getMessage().contains("private"));
+            assertEquals(code, error.code());assertFalse(error.getMessage().contains("private"));
             assertEquals(1, fixture.calls.get());
         }
     }

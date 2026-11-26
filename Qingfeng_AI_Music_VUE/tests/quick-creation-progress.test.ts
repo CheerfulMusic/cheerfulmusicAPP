@@ -178,7 +178,7 @@ it('queries an uncertain submission without reopening a dialog dismissed during 
 it('shows the price before retrying timed-out lyrics and ignores a double click',async()=>{
  mocks.latest.mockResolvedValue(flow('FAILED',{errorCode:'LYRICS_SUBMISSION_UNKNOWN',canRetry:true}))
  mount(false,'navigate');await flush()
- expect(document.body.textContent).toContain('本次歌词生成超时，可以重试。')
+ expect(document.body.textContent).toContain('歌词结果尚未确认，请先核对原请求。')
  expect(document.body.textContent).toContain('重试预计消耗 15 积分')
  expect(mocks.retry).not.toHaveBeenCalled()
  click('重试歌词生成');click('重试歌词生成');await flush()

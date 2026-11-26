@@ -106,6 +106,6 @@ class QwenLyricsWriterTest {
  }
  @Test void rejectsIncompleteOutputInsteadOfSavingPartialLyrics()throws Exception{
   var server=HttpServer.create(new InetSocketAddress("127.0.0.1",0),0);server.createContext("/",exchange->{byte[] response="{\"choices\":[{\"finish_reason\":\"length\",\"message\":{\"content\":\"partial\"}}]}".getBytes(StandardCharsets.UTF_8);exchange.sendResponseHeaders(200,response.length);exchange.getResponseBody().write(response);exchange.close();});server.start();
-  try{var writer=new QwenLyricsWriter("test-only-key","qwen3.8-flash",URI.create("http://127.0.0.1:"+server.getAddress().getPort()),HttpClient.newHttpClient());assertThrows(DomainException.class,()->writer.write(new WorkApi.Work("id","朋友","生日","故事","祝福","民谣","",0,Instant.now(),Instant.now()),"en"));}finally{server.stop(0);}
+  try{var writer=new QwenLyricsWriter("test-only-key","qwen3.8-flash",URI.create("http://127.0.0.1:"+server.getAddress().getPort()),HttpClient.newHttpClient());assertEquals("LYRICS_RESPONSE_TRUNCATED",assertThrows(DomainException.class,()->writer.write(new WorkApi.Work("id","朋友","生日","故事","祝福","民谣","",0,Instant.now(),Instant.now()),"en")).code());}finally{server.stop(0);}
  }
 }

@@ -12,7 +12,7 @@ import java.util.function.Function;
 public final class FallbackLyricsWriter implements LyricsWriter {
     private static final System.Logger LOG = System.getLogger(FallbackLyricsWriter.class.getName());
     private static final Set<String> SAFE_FAILURES = Set.of("LYRICS_PROVIDER_CONNECT_FAILED", "LYRICS_PROVIDER_REJECTED",
-        "LYRICS_RESPONSE_INVALID", "LYRICS_STRUCTURE_MISMATCH");
+        "LYRICS_RESPONSE_INVALID", "LYRICS_RESPONSE_FORMAT", "LYRICS_RESPONSE_TRUNCATED", "LYRICS_STRUCTURE_MISMATCH");
     private static final Duration MINIMUM_BACKUP_TIME = Duration.ofSeconds(30);
     private final LyricsWriter primary;
     private final LyricsWriter backup;

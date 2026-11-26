@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { lyricTimeoutMessage } from '../../works/model/lyric-recovery'
+import { lyricFailureMessage, lyricOutcomeUnknownMessage } from '../../works/model/lyric-recovery'
 import {ref,onMounted,onBeforeUnmount,computed,watch} from 'vue'
 import {t} from '../../../shared/i18n'
 import {latestQuickCreation,retryQuickCreation,quickInProgress,type QuickCreation} from '../api/quick-creation'
@@ -36,9 +36,9 @@ const failureCopy=computed(()=>{
  if(archiveFailed.value)return archiveMessage.value||generationProblem(code)
  if(code==='INSUFFICIENT_CREDITS')return '积分不足 已有歌词已保留 充值后可继续生成音乐'
  if(code==='WORK_VERSION_CONFLICT')return '内容已经修改 请使用自定义创作继续完善当前作品'
- if(code==='LYRICS_SUBMISSION_UNKNOWN')return lyricTimeoutMessage
+ if(code==='LYRICS_SUBMISSION_UNKNOWN')return lyricOutcomeUnknownMessage
  if(code==='LYRICS_PROVIDER_CONNECT_FAILED')return '暂时连不上歌词服务，创作描述已保留，可以稍后重试。'
- if(code?.startsWith('LYRICS_'))return '歌词暂未生成，故事已保留。可以重试歌词生成，或切换到自定义创作。'
+ if(code?.startsWith('LYRICS_'))return lyricFailureMessage(code)??'歌词暂未生成，故事已保留。可以重试歌词生成，或切换到自定义创作。'
  if(code?.includes('QUOTA'))return '本次创作额度暂不可用 已有内容已保留'
  return '故事与已有歌词都已保留 可以继续制作'
 })

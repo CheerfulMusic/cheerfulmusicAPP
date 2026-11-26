@@ -192,7 +192,7 @@ it('rechecks a timed-out photo request and uses a new key on the same draft only
   })
   const { page, router } = await setup()
   try {
-    expect(page.get('[role=alert]').text()).toContain('本次歌词生成超时，可以重试。')
+    expect(page.get('[role=alert]').text()).toContain('歌词结果尚未确认，请先核对原请求。')
     expect(generatePhotoLyrics).not.toHaveBeenCalled()
     const file = new File(['picture'], 'sea.png', { type: 'image/png' })
     const input = page.get('input[type=file]')
@@ -201,7 +201,14 @@ it('rechecks a timed-out photo request and uses a new key on the same draft only
     await flushPromises()
     await page.get('form').trigger('submit')
     await flushPromises()
-    expect(vi.mocked(getLyricsRequest).mock.calls).toEqual([[id, key], [id, key]])
+    expect(generatePhotoLyrics).not.toHaveBeenCalled()
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    try {
+      await page.findAll('button').find(button => button.text() === '另起一次编写')!.trigger('click')
+      await flushPromises()
+      expect(confirm).toHaveBeenCalledOnce()
+    } finally { confirm.mockRestore() }
+    expect(vi.mocked(getLyricsRequest).mock.calls).toEqual([[id, key], [id, key], [id, key]])
     expect(generatePhotoLyrics).toHaveBeenCalledExactlyOnceWith(id, 0, expect.not.stringMatching(key), 'en', [file])
     expect(router.currentRoute.value.query.revision).toBe('retry-result')
   } finally { page.unmount() }

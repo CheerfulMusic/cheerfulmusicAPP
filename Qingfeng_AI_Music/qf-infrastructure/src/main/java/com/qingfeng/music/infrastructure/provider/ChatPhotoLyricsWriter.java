@@ -96,7 +96,7 @@ public final class ChatPhotoLyricsWriter implements PhotoLyricsWriter {
                     throw new DomainException("LYRICS_PROVIDER_REJECTED", "照片歌词服务暂时无法接受请求，请稍后再试。");
                 throw new DomainException("LYRICS_PROVIDER_UNAVAILABLE", "照片歌词服务无法处理这次请求，请调整素材后再试。");
             }
-            var draft = OpenAiLyricsWriter.parseSong(LyricsWritingPrompt.jsonObject(outputText(response.body())), true, source);
+            var draft = OpenAiLyricsWriter.parseSong(LyricsWritingPrompt.jsonObject(outputText(response.body())), true, source, direction.vocalGender());
             return refine(draft, language, material, deadline);
         } catch (HttpTimeoutException timeout) {
             throw new DomainException("LYRICS_PROVIDER_TIMEOUT", "等待照片歌词结果超时，请先查看原请求进度。");
@@ -106,7 +106,7 @@ public final class ChatPhotoLyricsWriter implements PhotoLyricsWriter {
             Thread.currentThread().interrupt();
             throw new DomainException("LYRICS_REQUEST_INTERRUPTED", "照片歌词请求已中断，请先查看原请求进度。");
         } catch (JacksonException invalid) {
-            throw incomplete();
+            throw LyricsWritingPrompt.invalidFormat();
         }
     }
 
@@ -159,7 +159,9 @@ public final class ChatPhotoLyricsWriter implements PhotoLyricsWriter {
         if ("content_filter".equals(choice.path("finish_reason").asText())
                 || message.path("refusal").isString() && !message.path("refusal").asText().isBlank())
             throw new DomainException("LYRICS_PROVIDER_UNAVAILABLE", "这次照片素材暂时无法用于写词，请调整后再试。");
-        if (!"stop".equals(choice.path("finish_reason").asText()) || !message.path("content").isString()) throw incomplete();
+        String finish = choice.path("finish_reason").asText("");
+        if ("length".equals(finish)) throw LyricsWritingPrompt.truncated();
+        if (!"stop".equals(finish) || !message.path("content").isString()) throw incomplete();
         return message.path("content").asText();
     }
 

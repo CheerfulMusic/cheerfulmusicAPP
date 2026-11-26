@@ -134,7 +134,8 @@ public final class OpenAiLyricsWriter implements LyricsWriter {
                     throw new DomainException("LYRICS_PROVIDER_NETWORK_ERROR", "歌词服务未确认结果，请先查看原请求进度。");
                 throw unavailable("歌词生成服务暂时不可用，请稍后再试；已有内容仍会保留。");
             }
-            var draft = parse(response.body(),photo);
+            var draft = parseSong(LyricsWritingPrompt.jsonObject(outputText(response.body())), photo,
+                photo ? source() : null, direction.vocalGender());
             // Targeted revisions keep their explicit preservation contract.
             if (!fullNew) return draft;
             return review(draft, language, material, work.id(), deadline);
@@ -146,7 +147,7 @@ public final class OpenAiLyricsWriter implements LyricsWriter {
         } catch (IOException network) {
             throw new DomainException("LYRICS_PROVIDER_NETWORK_ERROR", "歌词服务连接中断，结果尚未确认，请先查看原请求进度。");
         } catch (tools.jackson.core.JacksonException invalid) {
-            throw incomplete();
+            throw LyricsWritingPrompt.invalidFormat();
         } catch (DomainException stopped) {
             // The composition request was already claimed. Expiry cannot prove that a dispatched call was rejected.
             if ("AGENT_DEADLINE_EXCEEDED".equals(stopped.code()))
@@ -181,13 +182,11 @@ public final class OpenAiLyricsWriter implements LyricsWriter {
         return LyricsSectionRepair.post(client, endpoint, key, body, request, this::outputText);
     }
 
-    private Draft parse(String body,boolean photo) {
-        return parseSong(LyricsWritingPrompt.jsonObject(outputText(body)), photo, photo ? source() : null);
-    }
-
     private String outputText(String body) {
         var response = json.readTree(body);
-        if ("content_filter".equals(response.path("incomplete_details").path("reason").asText())) throw contentRejected();
+        String reason = response.path("incomplete_details").path("reason").asText("");
+        if ("content_filter".equals(reason)) throw contentRejected();
+        if ("max_output_tokens".equals(reason)) throw LyricsWritingPrompt.truncated();
         if (!"completed".equals(response.path("status").asText()) ||
             (!response.path("error").isMissingNode() && !response.path("error").isNull()))
             throw incomplete();
@@ -206,24 +205,29 @@ public final class OpenAiLyricsWriter implements LyricsWriter {
         return text.toString();
     }
 
-    static Draft parseSong(JsonNode result, boolean photo, String source) {
-        String title = requiredText(result, "title", 80, true);
-        String lyrics = requiredText(result, "lyrics", 5000, true);
+    static Draft parseSong(JsonNode result, boolean photo, String source, String requestedVoice) {
+        String title = requiredText(result, "title", 80);
+        String lyrics = requiredText(result, "lyrics", 5000);
         var plan = result.path("plan");
-        if (!Set.of("AUTO", "MALE", "FEMALE").contains(plan.path("vocalGender").asText())) throw incomplete();
-        var creative = new CreativePlan(requiredText(plan, "requirements", 600, false),
-            requiredText(plan, "suggestedArrangement", 240, photo), requiredText(plan, "negativeTags", 250, false),
-            requiredText(plan, "summaryZh", 200, false), requiredText(plan, "summaryEn", 300, false),
-            requiredText(plan, "vocalGender", 6, true),photo?requiredText(result,"photoSummary",400,true):"");
+        String voice = optionalText(plan, "vocalGender", 6);
+        if (!"AUTO".equals(requestedVoice) || !Set.of("AUTO", "MALE", "FEMALE").contains(voice)) voice = requestedVoice;
+        var creative = new CreativePlan(optionalText(plan, "requirements", 600),
+            optionalText(plan, "suggestedArrangement", 240), optionalText(plan, "negativeTags", 250),
+            optionalText(plan, "summaryZh", 200), optionalText(plan, "summaryEn", 300),
+            voice, photo ? requiredText(result, "photoSummary", 400) : "");
         return new Draft(title, lyrics, creative, source);
     }
 
-    private static String requiredText(JsonNode node, String name, int max, boolean nonblank) {
-        var field = node.path(name);
-        if (!field.isString()) throw incomplete();
-        String value = name.equals("lyrics") ? com.qingfeng.music.lyrics.application.LyricsFormatting.unwrap(field.asText()) : field.asText().trim();
-        if (value.length() > max || nonblank && value.isBlank()) throw incomplete();
+    private static String requiredText(JsonNode node, String name, int max) {
+        String text = node.path(name).stringValue("");
+        String value = name.equals("lyrics") ? com.qingfeng.music.lyrics.application.LyricsFormatting.unwrap(text) : text.trim();
+        if (value.length() > max || value.isBlank()) throw incomplete();
         return value;
+    }
+
+    private static String optionalText(JsonNode node, String name, int max) {
+        String text = node.path(name).stringValue("").trim();
+        return text.length() <= max ? text : "";
     }
 
     static Map<String, Object> schema(boolean photo) {

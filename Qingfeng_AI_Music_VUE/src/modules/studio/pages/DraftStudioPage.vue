@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import LyricLanguagePicker from '../components/LyricLanguagePicker.vue'
 import { isLyricLanguageDraft, lyricLanguageError, selectedLyricLanguage } from '../../../shared/i18n/lyric-language'
-import { lyricTimeoutMessage } from '../../works/model/lyric-recovery'
+import { lyricFailureMessage, lyricNeedsOriginalCheck, lyricNewRequestConfirmation, lyricOutcomeUnknownMessage } from '../../works/model/lyric-recovery'
 import CreationMusicChoices from '../components/CreationMusicChoices.vue'
 import InspirationPanel from '../components/InspirationPanel.vue'
 import {chooseInspiration,creationMode,chooseCreationStyle,inspirationLimit,type CreationMode} from '../model/creation-mode'
@@ -74,6 +74,8 @@ const rewriteKey=ref('')
 const rewriteBackup=ref<{source:string;result:string}>()
 const inspirationPlaceholder=computed(()=>t('写下你的故事、情绪、场景或主题……'))
 const continuationFailed=ref(false)
+type LyricAttempt = { workId: string; key: string; language: string; structure: LyricsStructure }
+const pendingLyrics = ref<LyricAttempt & { unknown: boolean }>()
 const resetting=ref(false)
 const draft=reactive<DraftInput>({recipient:'',occasion:String(route.query.occasion||''),story:'',message:'',style:styleFromInspiration(route.query.style),title:'',vocalGender:'AUTO'})
 const inspirationEditsDisabled=computed(()=>!initialized.value||resetting.value||composing.value||rewriting.value||quickLocked.value)
@@ -157,6 +159,7 @@ async function removeSongReference() {
 async function initialize() {
   remember()
   const turn=++initSequence,query={...route.query}
+  pendingLyrics.value=undefined
   quickSession.reset()
   // Agent 创作整理好的灵感只预填新建草稿；成功接手并写入本机副本后才清除，失败时保留供刷新重试。
   const referenceId=query.work?undefined:songReferenceId(query.reference)
@@ -415,16 +418,57 @@ async function next() {
   if(!photoWork.value&&!draft.story.trim()&&!draft.message.trim()){rejectAnswer('请先写下一点创作灵感。');return}
   await continueMaking()
 }
-async function continueMaking() {
+function lyricRoute(attempt: LyricAttempt, revision: string) {
+  return {path:`/works/${attempt.workId}`,query:{revision,language:attempt.language,...lyricsStructureQuery(attempt.structure)}}
+}
+function showPendingLyrics(attempt: LyricAttempt, unknown: boolean) {
+  pendingLyrics.value={...attempt,unknown}
+  error.value=unknown?lyricOutcomeUnknownMessage:'歌词仍在编写中，可以稍后刷新编写状态。'
+}
+async function checkOriginalLyrics() {
+  const attempt=pendingLyrics.value
+  if(!attempt||composing.value)return
+  const turn=initSequence
+  composing.value=true
+  error.value=''
+  try{
+    const state=await getLyricsRequest(attempt.workId,attempt.key)
+    if(!alive||turn!==initSequence)return
+    if(state.status==='SUCCEEDED'&&state.revisionId){
+      pendingLyrics.value=undefined
+      await router.push(lyricRoute(attempt,state.revisionId))
+    }else if(state.status==='PENDING'||state.status==='QUEUED'||state.status==='UNKNOWN'){
+      showPendingLyrics(attempt,state.status==='UNKNOWN')
+      return state.status==='UNKNOWN'
+    }else{
+      pendingLyrics.value=undefined
+      continuationFailed.value=true
+      error.value=state.status==='FAILED'
+        ? lyricFailureMessage(state.errorCode)??'本次歌词编写未完成，可以重新编写。'
+        : '暂未查到原请求，可以继续提交原请求。'
+    }
+  }catch(e){
+    if(alive&&turn===initSequence)error.value=e instanceof Error?e.message:lyricOutcomeUnknownMessage
+  }finally{if(turn===initSequence)composing.value=false}
+}
+async function continueMaking(startNew=false) {
   if(composing.value || rewriting.value || quickLocked.value || !ready.value || referenceIssue.value)return
+  if(pendingLyrics.value&&!startNew){await checkOriginalLyrics();return}
   if(!valid.value){rejectAnswer('请先写下一点创作灵感。');return}
   const requestedLanguage=selectedLyricLanguage(language.value)
   if(!requestedLanguage){validationError.value=lyricLanguageError;return}
+  const replaceKey=startNew&&pendingLyrics.value?.unknown?pendingLyrics.value.key:undefined
+  if(startNew){
+    if(!replaceKey||mode.value==='quick'&&!hasSongReference.value)return
+    if(!(await checkOriginalLyrics())||pendingLyrics.value?.key!==replaceKey)return
+    if(!window.confirm(t(lyricNewRequestConfirmation)))return
+  }
   const chosenStructure=normalizeLyricsStructure(structure.value)
   composing.value=true;error.value='';notice.value='';creditShort.value=false
   continuationFailed.value=false
   const turn=initSequence
   let writing=false
+  let attempt:LyricAttempt|undefined
   try {
     if(mode.value==='quick'&&!hasSongReference.value){
       if(await blockedQuickCreation()||!alive||turn!==initSequence)return
@@ -457,6 +501,7 @@ async function continueMaking() {
     if(previousKey!==structureKey){
       const legacyKey=existingContinuationRequestKey(prepared.id,prepared.version,requestedLanguage,previousKey)
       if(legacyKey){
+        attempt={workId:prepared.id,key:legacyKey,language:requestedLanguage,structure:previousStructure}
         const legacy=await getLyricsRequest(prepared.id,legacyKey)
         if(!alive||turn!==initSequence)return
         // Older drafts without a stored selection can still reopen their original lyrics.
@@ -464,21 +509,43 @@ async function continueMaking() {
           await router.push({path:`/works/${work.id}`,query:{revision:legacy.revisionId,language:requestedLanguage,...lyricsStructureQuery(previousStructure)}})
           return
         }
-        if((legacy.status==='PENDING'||legacy.status==='QUEUED'))throw new Error('歌词仍在编写中，可以稍后刷新编写状态。')
+        if(legacy.status==='PENDING'||legacy.status==='QUEUED'||legacy.status==='UNKNOWN'&&replaceKey!==legacyKey){
+          showPendingLyrics(attempt,legacy.status==='UNKNOWN');return
+        }
       }
     }
     let key=continuationRequestKey(prepared.id,prepared.version,requestedLanguage,structureKey)
+    attempt={workId:prepared.id,key,language:requestedLanguage,structure:chosenStructure}
     const previous=await getLyricsRequest(prepared.id,key)
-    if(previous.status==='SUCCEEDED'&&previous.revisionId){if(alive&&turn===initSequence)await router.push({path:`/works/${work.id}`,query:{revision:previous.revisionId,language:requestedLanguage,...lyricsStructureQuery(chosenStructure)}});return}
-    if(previous.status==='PENDING'||previous.status==='QUEUED')throw new Error('歌词仍在编写中，可以稍后刷新编写状态。')
-    if(previous.status==='FAILED'||previous.status==='UNKNOWN'){retireContinuationRequestKey(prepared.id,prepared.version,requestedLanguage,structureKey);key=continuationRequestKey(prepared.id,prepared.version,requestedLanguage,structureKey)}
+    if(!alive||turn!==initSequence)return
+    if(previous.status==='SUCCEEDED'&&previous.revisionId){pendingLyrics.value=undefined;await router.push(lyricRoute(attempt,previous.revisionId));return}
+    if(previous.status==='PENDING'||previous.status==='QUEUED'||previous.status==='UNKNOWN'&&replaceKey!==key){
+      showPendingLyrics(attempt,previous.status==='UNKNOWN');return
+    }
     await refreshCredits()
     if(!alive||turn!==initSequence||await blockedByCredits()||!alive||turn!==initSequence)return
+    if(previous.status==='FAILED'||previous.status==='UNKNOWN'){
+      retireContinuationRequestKey(prepared.id,prepared.version,requestedLanguage,structureKey)
+      key=continuationRequestKey(prepared.id,prepared.version,requestedLanguage,structureKey)
+      attempt.key=key
+    }
+    pendingLyrics.value=undefined
     lastSubmittedStructure=chosenStructure
     remember(true)
     const revision=await generateLyrics(prepared.id,prepared.version,key,requestedLanguage,'',undefined,chosenStructure)
-    if(alive&&turn===initSequence)await router.push({path:`/works/${work.id}`,query:{revision:revision.id,language:requestedLanguage,...lyricsStructureQuery(chosenStructure)}})
-  } catch(e){if(alive&&turn===initSequence){quickSession.abortPreparation();continuationFailed.value=writing;error.value=e instanceof ApiError&&['LYRICS_PROVIDER_TIMEOUT','LYRICS_PROVIDER_NETWORK_ERROR','LYRICS_REQUEST_INTERRUPTED'].includes(e.code||'')?lyricTimeoutMessage:e instanceof Error?e.message:'歌词生成失败，请稍后再试'}}
+    if(alive&&turn===initSequence)await router.push(lyricRoute(attempt,revision.id))
+  } catch(e){
+    if(alive&&turn===initSequence){
+      quickSession.abortPreparation()
+      if(attempt&&lyricNeedsOriginalCheck(e)){
+        pendingLyrics.value={...attempt,unknown:false}
+        error.value=lyricOutcomeUnknownMessage
+      }else{
+        continuationFailed.value=writing
+        error.value=(e instanceof ApiError?lyricFailureMessage(e.code):undefined)??(e instanceof Error?e.message:'歌词生成失败，请稍后再试')
+      }
+    }
+  }
   finally{if(turn===initSequence){composing.value=false;void refreshCredits().catch(()=>{})}}
 }
 async function returnToLyrics(){
@@ -550,6 +617,10 @@ onBeforeUnmount(()=>{
       <p v-if="notice" class="notice" role="status">{{ t(notice) }}</p>
       <div v-if="error" class="notice error" role="alert"><p>{{ t(error) }} <RouterLink v-if="creditShort" class="text-button" to="/recharge">{{ t('去充值') }}</RouterLink></p><div class="actions">
         <template v-if="conflict&&!quickLocked"><button class="button secondary" type="button" @click="resolveConflict(true)">{{ t('用本机内容继续') }}</button><button class="button secondary" type="button" @click="resolveConflict(false)">{{ t('载入服务器版本') }}</button></template>
+        <template v-else-if="pendingLyrics">
+          <button class="button secondary" type="button" :disabled="composing" @click="checkOriginalLyrics">{{ t('核对歌词进度') }}</button>
+          <button v-if="pendingLyrics.unknown && (mode==='custom'||hasSongReference)" class="text-button" type="button" :disabled="composing" @click="continueMaking(true)">{{ t('另起一次编写') }}</button>
+        </template>
         <button v-else-if="!quickLocked" class="button secondary" type="button" :disabled="saving||composing" @click="continuationFailed?continueMaking():retry()">{{ t(continuationFailed?'重新编写歌词':'重试保存') }}</button>
       </div></div>
       <p v-if="initialized&&!localSaved" class="save-info">{{ t('浏览器暂时无法保存草稿，请先复制你的创作描述再离开。') }}</p>

@@ -1,6 +1,7 @@
 import type { SongShareStatus } from '../model/song-sharing'
 import type { GenerationPublication } from '../model/generation-recovery'
 import type {LyricsStructure, LyricsTemplateId} from '../model/lyrics-structure'
+import { lyricFailureMessage, lyricOutcomeUnknownMessage } from '../model/lyric-recovery'
 import { ApiError, currentCreatorId, ensureCreator, requestJson, apiUrl, uploadForm } from '../../../shared/http/api-client'
 export interface Revision { id: string; workId: string; workVersion: number; title: string; lyrics: string; source: string; confirmed: boolean; createdAt: string; language?: string|null; templateId?: LyricsTemplateId|null; chorusFirst?: boolean|null; customSections?: string[]|null }
 export interface LyricsRequestState {status:'NOT_FOUND'|'QUEUED'|'PENDING'|'FAILED'|'SUCCEEDED'|'UNKNOWN';revisionId:string|null;errorCode:string|null}
@@ -36,8 +37,9 @@ async function finishLyrics(owner: string, work: string, key: string, initial: R
   let state = initial
   while (owner === currentCreatorId() && Date.now() < deadline) {
     if (state.status === 'SUCCEEDED' && state.revisionId) return getRevision(work, state.revisionId)
-    if (state.status === 'FAILED') throw new ApiError('编写未完成，请查看本次状态。', 409, state.errorCode ?? 'LYRICS_REQUEST_FAILED')
-    if (state.status === 'UNKNOWN' || state.status === 'NOT_FOUND') break
+    if (state.status === 'FAILED') throw new ApiError(lyricFailureMessage(state.errorCode) ?? '本次歌词编写未完成，可以重新编写。', 409, state.errorCode ?? 'LYRICS_REQUEST_FAILED')
+    if (state.status === 'UNKNOWN') throw new ApiError(lyricOutcomeUnknownMessage, 409, 'LYRICS_REQUEST_PENDING')
+    if (state.status === 'NOT_FOUND') break
     await new Promise(resolve => setTimeout(resolve, 2_000 + Math.random() * 1_000))
     if (owner !== currentCreatorId()) break
     state = await getLyricsRequest(work, key)

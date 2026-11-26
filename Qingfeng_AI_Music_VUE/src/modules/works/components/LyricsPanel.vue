@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { selectedLyricLanguage } from '../../../shared/i18n/lyric-language'
-import { lyricTimeoutMessage } from '../model/lyric-recovery'
+import { lyricFailureMessage, lyricNewRequestConfirmation, lyricOutcomeUnknownMessage } from '../model/lyric-recovery'
 import CreditCostHint from '../../../shared/credits/CreditCostHint.vue'
 import { useCredits } from '../../../shared/credits/useCredits'
 import { guardCredits } from '../../../shared/credits/credit-gate'
@@ -220,6 +220,7 @@ async function recoverRequest(){
       retryFullRewrite=!!pendingFullRewrite.value
       if(state.errorCode==='LYRICS_REWRITE_UNCHANGED'){reportUnchangedRewrite();return}
       clearComposeRequest();notice.value='上次歌词编写未完成，现已恢复。点击重新编写即可再试，已有内容会保留。'
+      error.value=lyricFailureMessage(state.errorCode)??error.value
     }else if(state.status==='SUCCEEDED'&&state.revisionId){
       const found=await getRevision(props.work.id,state.revisionId)
       if(!alive||key!==requestKey.value)return
@@ -234,13 +235,13 @@ async function recoverRequest(){
         await syncRoute(found.id)
       }
       clearComposeRequest();retryFullRewrite=false;error.value='';notice.value=sameDraft?'新歌词已生成，旧版本已保留。你可以继续修改。':'上次编写的歌词已找回，可在历史版本中查看。'
-    }else if(retryReleased.value){errorKind.value='compose';error.value=lyricTimeoutMessage;notice.value=''}
+    }else if(retryReleased.value){errorKind.value='compose';error.value=lyricOutcomeUnknownMessage;notice.value=''}
     else if(requestWaiting.value)notice.value='歌词仍在编写中，可以稍后刷新编写状态。'
     remember();void updateCredits()
   }finally{requestChecking.value=false}
 }
 async function refreshRequest(){try{await recoverRequest()}catch(e){errorKind.value='compose';error.value=e instanceof Error?e.message:'暂时无法确认编写状态，请稍后刷新。'}}
-async function retryError(){if(errorKind.value==='load'){window.location.reload();return}if(errorKind.value==='save')await save();else if(requestWaiting.value)await refreshRequest();else await compose(retryFullRewrite)}
+async function retryError(){if(errorKind.value==='load'){window.location.reload();return}if(errorKind.value==='save')await save();else if(requestWaiting.value||retryReleased.value)await refreshRequest();else await compose(retryFullRewrite)}
 onMounted(async()=>{
   try{
     const [history,system]=await Promise.all([listRevisions(props.work.id),getSystemInfo()]);versions.value=history
@@ -290,7 +291,7 @@ async function prepareForGeneration(saveChanges=false):Promise<Revision>{
   }catch(e){error.value=e instanceof Error?e.message:'保存失败，请重试';throw e}
   finally{preparing.value=false}
 }
-watch([language,instructions,structure],()=>{if(!composing.value&&!requestWaiting.value&&!requestChecking.value)clearComposeRequest()},{flush:'sync'})
+watch([language,instructions,structure],()=>{if(!composing.value&&!requestWaiting.value&&!requestChecking.value&&!retryReleased.value)clearComposeRequest()},{flush:'sync'})
 function startAiLyrics(){
   if(blocked.value||saving.value||lineBusy.value)return
   if(!editorText.value.trim()){void compose();return}
@@ -311,8 +312,9 @@ async function rewriteAll(){
   await nextTick()
   if(alive)void compose(true)
 }
-async function compose(rewrite=false){
+async function compose(rewrite=false,startNew=false){
   if(blocked.value||saving.value||lineBusy.value||!customLyricsReady.value)return
+  if(retryReleased.value&&!startNew){await refreshRequest();return}
   const attempt=requestKey.value?pendingFullRewrite.value:rewrite&&editorText.value.trim()?{source:editorText.value,title:draftValue().title,baseId:active.value?.id}:undefined
   if(rewrite&&!attempt)return
   if(dirty.value&&!window.confirm(t('生成新歌词后将显示新版本，当前未保存的修改会被替换，是否继续？')))return
@@ -322,6 +324,7 @@ async function compose(rewrite=false){
     if(retryReleased.value){
       await recoverRequest()
       if(!alive||!retryReleased.value)return
+      if(!window.confirm(t(lyricNewRequestConfirmation)))return
       // Keep the old key until the new request has passed the price check.
       error.value='';notice.value=''
       await refreshCredits()
@@ -356,7 +359,8 @@ async function preserveDraftForNavigation(){if(inflight)await inflight;if(dirty.
 defineExpose({prepareForGeneration,preserveDraftForNavigation,needsSave,canSave,save,saving})
 </script>
 <template><section class="detail-panel lyrics-panel">
-  <p v-if="error" class="notice error" role="alert">{{ t(error) }} <RouterLink v-if="creditShort" class="text-button" to="/recharge">{{ t('去充值') }}</RouterLink> <button class="text-button" :disabled="loading||composing||requestChecking||saving" @click="retryError">{{ t(errorKind==='load'?'刷新页面':errorKind==='save'?'重试保存':requestWaiting?'刷新编写状态':'重新编写歌词') }}</button></p>
+  <p v-if="error" class="notice error" role="alert">{{ t(error) }} <RouterLink v-if="creditShort" class="text-button" to="/recharge">{{ t('去充值') }}</RouterLink> <button class="text-button" :disabled="loading||composing||requestChecking||saving" @click="retryError">{{ t(errorKind==='load'?'刷新页面':errorKind==='save'?'重试保存':requestWaiting||retryReleased?'核对歌词进度':'重新编写歌词') }}</button>
+  <button v-if="retryReleased" class="text-button" type="button" :disabled="composing||requestChecking||saving" @click="compose(retryFullRewrite,true)">{{ t('另起一次编写') }}</button></p>
   <p v-if="notice" class="notice success" role="status">{{ t(notice) }}</p>
   <button v-if="requestWaiting&&!error" class="button secondary" :disabled="loading||composing||requestChecking" @click="refreshRequest">{{ t('刷新编写状态') }}</button>
   <p v-if="!loading&&!localSaved" class="save-info">{{ t('浏览器无法保存本机副本，请确认显示已保存后再离开。') }}</p>
