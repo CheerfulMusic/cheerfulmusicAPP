@@ -136,7 +136,7 @@ a.track-artist:is(:hover, :focus-visible), a.track-title:is(:hover, :focus-visib
 .track-play svg, .track-count svg { width: 12px; height: 12px; }
 .shelf-track:hover .track-play, .shelf-track-play:focus-visible + .track-art .track-play { opacity: 1; }
 @media (hover: none) {
-  .shelf-wide .track-play, .shelf-track.is-playing .track-play { opacity: 1; }
+  .shelf-wide .track-play, .shelf-compact .track-play, .shelf-track.is-playing .track-play { opacity: 1; }
 }
 .track-text { display: block; margin-top: 7px; }
 .track-title, .track-artist { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -146,7 +146,7 @@ a.track-artist:is(:hover, :focus-visible), a.track-title:is(:hover, :focus-visib
 .shelf-compact .shelf-track { display: grid; grid-template-columns: 44px minmax(0, 1fr); align-items: center; gap: 12px; height: 54px; border-bottom: 1px solid #eef0ee; }
 .shelf-compact .shelf-track-play { inset: 5px auto auto 0; width: 44px; height: 44px; border-radius: 6px; }
 .shelf-compact .track-art { width: 44px; height: 44px; }
-.shelf-compact .track-play { inset: auto 3px 3px auto; width: 22px; height: 22px; opacity: 1; }
+.shelf-compact .track-play { inset: auto 3px 3px auto; width: 22px; height: 22px; }
 .shelf-compact .track-text { margin: 0; padding-right: 4px; }
 .shelf-compact .track-title { font-size: 13px; }
 .shelf-compact .track-meta { margin-top: 2px; font-size: 11px; }
