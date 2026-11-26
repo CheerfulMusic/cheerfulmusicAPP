@@ -28,10 +28,12 @@ MANIFEST = {
     "icon": {"path": "/brand/favicon-symbol-96.png", "sha256": hashlib.sha256(ICON).hexdigest()},
     "pages": [
         {"path": "/", "language": "zh-CN", "title": "青妙Ai", "description": "中文描述", "brand": "青妙Ai",
-         "aliases": ["cheerfulmusic", "cheerfulmusicAi", "cheerfulmusicAI"]},
+         "aliases": ["cheerfulmusic", "cheerfulmusicAi", "cheerfulmusicAI"],
+         "intro": "青妙Ai（cheerfulmusicai）是 AI 音乐创作平台。"},
         {"path": "/en/", "language": "en", "title": "cheerfulmusic Ai | Everyone Can Be a Creator",
          "description": "Create your own song in just a few clicks. No music skills needed.",
-         "brand": "cheerfulmusic Ai", "lastModified": "2026-11-25"},
+         "brand": "cheerfulmusic Ai", "lastModified": "2026-11-25",
+         "intro": "Create a song with cheerfulmusic Ai (cheerfulmusicai)."},
     ],
 }
 
@@ -44,6 +46,7 @@ def fixture_files():
         title = escape(page["title"])
         description = escape(page["description"])
         brand = escape(page["brand"])
+        intro = escape(page["intro"])
         schema = ""
         if "aliases" in page:
             schema = '<script type="application/ld+json">' + json.dumps({
@@ -57,7 +60,7 @@ def fixture_files():
             <meta property="og:site_name" content="{brand}">
             <link rel="canonical" href="{seo.SITE + path}">
             <link rel="icon" href="{MANIFEST['icon']['path']}">
-            {schema}</head><body></body></html>""".encode())
+            {schema}</head><body><main><p class="beta-access-intro">{intro}</p></main></body></html>""".encode())
         modified = f"<lastmod>{page['lastModified']}</lastmod>" if "lastModified" in page else ""
         sitemap.append(f"<url><loc>{seo.SITE + path}</loc>{modified}</url>")
     sitemap_xml = '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' + "".join(sitemap) + "</urlset>"
@@ -137,6 +140,15 @@ class SeoReleaseTest(unittest.TestCase):
         status, report = self.run_release("--notify", "--receipt", str(self.receipt))
         self.assertEqual(status, 1)
         self.assertIn("title differs", report["verification"]["singapore"]["reason"])
+        self.assertEqual(report["verification"]["public"], "passed")
+        self.post.assert_not_called()
+
+    def test_stale_english_intro_prevents_notifications(self):
+        media, body = self.files["/en/"]
+        self.files["/en/"] = (media, body.replace(b"cheerfulmusicai", b"the song studio"))
+        status, report = self.run_release("--notify", "--receipt", str(self.receipt))
+        self.assertEqual(status, 1)
+        self.assertIn("visible product introduction differs", report["verification"]["shenzhen"]["reason"])
         self.assertEqual(report["verification"]["public"], "passed")
         self.post.assert_not_called()
 

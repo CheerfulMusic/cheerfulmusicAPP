@@ -62,7 +62,7 @@ export function sitePage(path: string, preferredLocale?: Locale) {
       heading: copy.heading,
       title: canonicalCopy.title,
       siteName: canonicalCopy.searchName,
-      description: 'searchDescription' in copy ? copy.searchDescription : copy.description,
+      description: copy.searchDescription,
       intro: copy.description,
       links: localizedSeoLinks(canonical, homePaths, 'en'),
     }

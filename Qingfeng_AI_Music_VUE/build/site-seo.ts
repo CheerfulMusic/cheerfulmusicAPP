@@ -82,6 +82,7 @@ const homeReleasePages = (Object.keys(homeSeo) as Locale[]).map(language => {
     language,
     title: page.title,
     description: page.description,
+    intro: copy.description,
     brand: copy.searchName,
     ...('lastModified' in copy ? { lastModified: copy.lastModified } : {}),
     ...(language === 'zh-CN' ? { aliases: websiteSchema.alternateName } : {}),

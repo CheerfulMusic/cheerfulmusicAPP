@@ -45,7 +45,8 @@ describe('crawlable site pages', () => {
     const productCopy = card?.querySelector('.beta-access-intro')
     expect(productCopy?.textContent).toBe(homeSeo[path === '/en/' ? 'en' : 'zh-CN'].description)
     expect(productCopy?.textContent).toContain('Cheerful Music')
-    expect(productCopy?.textContent).toContain('cheerfulmusic')
+    expect(productCopy?.textContent).toContain('cheerfulmusic Ai')
+    expect(productCopy?.textContent).toContain('cheerfulmusicai')
     expect(productCopy?.textContent).toContain('青风音乐')
     expect(productCopy?.textContent).toContain('青妙Ai')
     expect(productCopy?.closest('[data-nosnippet]')).toBeNull()
@@ -101,6 +102,7 @@ describe('crawlable site pages', () => {
       expect(record.title).toBe(html.title)
       expect(record.brand).toBe(html.querySelector('meta[property="og:site_name"]')?.getAttribute('content'))
       expect(record.description).toBe(html.querySelector('meta[name="description"]')?.getAttribute('content'))
+      expect(record.intro).toBe(html.querySelector('main .beta-access-intro')?.textContent)
     }
     expect(manifest.pages[0]?.aliases)
       .toEqual(JSON.parse(parsePage('/').querySelector('script[type="application/ld+json"]')!.textContent!).alternateName)

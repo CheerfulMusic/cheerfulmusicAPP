@@ -2,6 +2,7 @@ export const siteName = 'Cheerful Music'
 const creatorHeadline = 'Everyone Can Be a Creator'
 const chineseBrand = '青妙Ai'
 const englishSearchName = 'cheerfulmusic Ai'
+const compactEnglishName = 'cheerfulmusicai'
 
 export const siteFavicon = {
   path: '/brand/favicon-symbol-96.png',
@@ -15,12 +16,13 @@ export const homeSeo = {
     brand: chineseBrand,
     searchName: chineseBrand,
     title: chineseBrand,
+    searchDescription: '青妙Ai 是青风音乐（Cheerful Music）推出的 AI 音乐创作平台，英文名是 cheerfulmusic。写下歌词或故事，选好曲风和人声，就能创作、试听和分享自己的歌。',
     aliases: ['青风音乐'],
-    lastModified: '2026-11-25',
+    lastModified: '2026-11-26',
     heading: chineseBrand,
     tagline: '把你的歌词做成歌',
     invitePrompt: '输入邀请码即可开始创作。',
-    description: '青妙Ai 是青风音乐（Cheerful Music）推出的 AI 音乐创作平台，英文名是 cheerfulmusic。写下歌词或故事，选好曲风和人声，就能创作、试听和分享自己的歌。',
+    description: `青妙Ai 是青风音乐（Cheerful Music）推出的 AI 音乐创作平台，英文名为 ${englishSearchName}（${compactEnglishName}）。写下歌词或故事，选好曲风和人声，就能创作、试听和分享自己的歌。`,
   },
   en: {
     path: '/en/',
@@ -30,13 +32,13 @@ export const homeSeo = {
     searchDescription: 'Create your own song in just a few clicks. No music skills needed.',
     aliases: [
       siteName, 'CheerfulMusic', 'Cheerful Music Ai',
-      'cheerfulmusicai', 'cheerfulmusicAi', 'cheerfulmusicaI', 'cheerfulmusicAI',
+      compactEnglishName, 'cheerfulmusicAi', 'cheerfulmusicaI', 'cheerfulmusicAI',
     ],
-    lastModified: '2026-11-25',
+    lastModified: '2026-11-26',
     heading: creatorHeadline,
     tagline: creatorHeadline,
     invitePrompt: 'Enter your invitation code to start creating.',
-    description: 'Create a song with cheerfulmusic (青妙Ai), the AI music studio from Cheerful Music (青风音乐). Start with lyrics or a story, choose a style and voice, then listen and share.',
+    description: `Create a song with ${englishSearchName} (${compactEnglishName}), the AI music studio from Cheerful Music (青风音乐), known in Chinese as 青妙Ai. Start with lyrics or a story, choose a style and voice, then listen and share.`,
   },
 } as const
 

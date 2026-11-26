@@ -37,7 +37,7 @@ class RedirectsDisabled(HTTPRedirectHandler):
 HTTP = build_opener(ProxyHandler({}), RedirectsDisabled())
 
 
-class DocumentHead(HTMLParser):
+class HomeDocument(HTMLParser):
     def __init__(self, html):
         super().__init__()
         self.language = None
@@ -48,6 +48,8 @@ class DocumentHead(HTMLParser):
         self.links = []
         self.schema_open = False
         self.schemas = []
+        self.intro_open = False
+        self.intros = []
         self.feed(html)
         self.close()
 
@@ -58,6 +60,9 @@ class DocumentHead(HTMLParser):
         if tag == "head":
             self.head = True
         if not self.head:
+            if tag == "p" and "beta-access-intro" in (values.get("class") or "").split():
+                self.intros.append("")
+                self.intro_open = True
             return
         if tag == "title":
             self.titles.append("")
@@ -77,12 +82,16 @@ class DocumentHead(HTMLParser):
             self.title_open = False
         if tag == "script":
             self.schema_open = False
+        if tag == "p":
+            self.intro_open = False
 
     def handle_data(self, data):
         if self.title_open:
             self.titles[-1] += data
         if self.schema_open:
             self.schemas[-1] += data
+        if self.intro_open:
+            self.intros[-1] += data
 
     def meta(self, attr, key):
         return [value.get("content") for value in self.metadata if value.get(attr) == key]
@@ -106,6 +115,8 @@ def read_manifest(path):
     for page in pages:
         if not all(isinstance(page[key], str) and page[key].strip() for key in ("brand", "title", "description")):
             raise ValueError("Homepages require a brand, title and description")
+        if "intro" in page and not (isinstance(page["intro"], str) and page["intro"].strip()):
+            raise ValueError("The homepage intro must be nonempty text")
         if "lastModified" in page and not re.fullmatch(r"\d{4}-\d{2}-\d{2}", page["lastModified"]):
             raise ValueError("Invalid sitemap lastModified; use YYYY-MM-DD")
         if page["path"] == "/" and (
@@ -145,10 +156,12 @@ def get(base, path, expected_status=200):
 
 
 def verify_page(page, manifest, body, headers):
-    head = DocumentHead(body.decode("utf-8"))
+    head = HomeDocument(body.decode("utf-8"))
     canonical = SITE + page["path"]
     if head.language != page["language"] or head.titles != [page["title"]]:
         raise ValueError(f"{page['path']} language or title differs from the build")
+    if "intro" in page and head.intros != [page["intro"]]:
+        raise ValueError(f"{page['path']} visible product introduction differs from the build")
     for attr, key, field in (
         ("name", "description", "description"),
         ("property", "og:title", "title"),
