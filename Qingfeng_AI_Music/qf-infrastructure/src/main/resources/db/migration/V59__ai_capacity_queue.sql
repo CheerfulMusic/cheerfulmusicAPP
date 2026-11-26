@@ -18,9 +18,20 @@ CREATE TABLE ai_capacity_job (
   lease_until TIMESTAMP(6),
   lease_token VARCHAR(36),
   CONSTRAINT uq_ai_capacity_request UNIQUE(lane,scope_id,request_key),
-  CONSTRAINT uq_ai_capacity_owner UNIQUE(lane,active_owner),
-  CONSTRAINT fk_ai_capacity_owner FOREIGN KEY(owner_id) REFERENCES creator(id)
+  CONSTRAINT uq_ai_capacity_owner UNIQUE(lane,active_owner)
 );
+-- Older databases can have a different default collation from creator.id.
+-- Match the actual parent column before installing the foreign key on this empty table.
+/*!80000 SET @qf_ai_owner_column = (
+  SELECT CONCAT('ALTER TABLE ai_capacity_job MODIFY owner_id VARCHAR(36) CHARACTER SET ',
+                CHARACTER_SET_NAME, ' COLLATE ', COLLATION_NAME, ' NOT NULL')
+  FROM information_schema.columns
+  WHERE table_schema = DATABASE() AND table_name = 'creator' AND column_name = 'id'
+) */;
+/*!80000 PREPARE qf_ai_owner_ddl FROM @qf_ai_owner_column */;
+/*!80000 EXECUTE qf_ai_owner_ddl */;
+/*!80000 DEALLOCATE PREPARE qf_ai_owner_ddl */;
+ALTER TABLE ai_capacity_job ADD CONSTRAINT fk_ai_capacity_owner FOREIGN KEY(owner_id) REFERENCES creator(id);
 CREATE INDEX ix_ai_capacity_ready ON ai_capacity_job(lane,stage,state,next_attempt_at,id);
 CREATE INDEX ix_ai_capacity_lease ON ai_capacity_job(lane,state,lease_until,id);
 CREATE INDEX ix_ai_capacity_queue_expiry ON ai_capacity_job(lane,state,queue_until,id);

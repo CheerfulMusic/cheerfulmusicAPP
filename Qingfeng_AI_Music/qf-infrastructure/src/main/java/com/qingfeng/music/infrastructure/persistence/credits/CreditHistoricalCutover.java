@@ -554,8 +554,8 @@ public final class CreditHistoricalCutover {
                 }
                 if (version == 59) {
                     String normalized = text.replace("\r\n", "\n").replace('\r', '\n');
-                    require("V59__ai_capacity_queue.sql".equals(name) && (int) crc.getValue() == 1515664760
-                            && "371868410e537d7124b7d42e9453ae17d602708559d93bd97ebb0886b1672e2a".equals(digest(normalized.getBytes(StandardCharsets.UTF_8))),
+                    require("V59__ai_capacity_queue.sql".equals(name) && (int) crc.getValue() == 595702576
+                            && "9b26469a2be6556b1065a4f89204870caf9655bf6c1cbcfa6ccb8b2806dc99a1".equals(digest(normalized.getBytes(StandardCharsets.UTF_8))),
                             "HISTORY_UNAPPROVED_RESOURCE_EXTENSION");
                 }
                 require(expected.put(version, new History(version, name, (int) crc.getValue())) == null, "DUPLICATE_CLASSPATH_MIGRATION");

@@ -136,14 +136,22 @@ class AiCapacityQueueTest {
         String address = "jdbc:mysql://127.0.0.1:57857/";
         var bootstrap = new JdbcTemplate(new DriverManagerDataSource(address, "root", ""));
         assertThat(bootstrap.queryForObject("SELECT @@server_uuid", String.class)).isEqualToIgnoringCase(expectedUuid);
-        bootstrap.execute("CREATE DATABASE " + name);
+        bootstrap.execute("CREATE DATABASE " + name + " CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci");
         var config = new HikariConfig();
         config.setJdbcUrl(address + name + "?connectionTimeZone=SERVER");
         config.setUsername("root");
         config.setMaximumPoolSize(40);
         config.setMinimumIdle(12);
         try (var pool = new HikariDataSource(config)) {
-            var db = schema(pool);
+            var db = new JdbcTemplate(pool);
+            db.execute("CREATE TABLE creator(id VARCHAR(36) PRIMARY KEY) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
+            db.execute("CREATE TABLE reserved_credit(owner_id VARCHAR(36) PRIMARY KEY)");
+            var migration = org.flywaydb.core.Flyway.configure().dataSource(pool).locations("classpath:db/migration")
+                    .baselineVersion("57").target("59").cleanDisabled(true).load();
+            migration.baseline();
+            assertThat(migration.migrate().migrationsExecuted).isEqualTo(2);
+            assertThat(migration.migrate().migrationsExecuted).isZero();
+            assertThat(db.queryForObject("SELECT COUNT(*) FROM ai_capacity_slot", Long.class)).isEqualTo(9000);
             String[] owners = IntStream.range(0, 1003).mapToObj(i -> UUID.randomUUID().toString()).toArray(String[]::new);
             db.batchUpdate("INSERT INTO creator(id) VALUES(?)", List.of(owners).stream().map(id -> new Object[]{id}).toList());
             var nodes = new JdbcAiWorkQueue[]{queue(pool), queue(pool), queue(pool), queue(pool)};

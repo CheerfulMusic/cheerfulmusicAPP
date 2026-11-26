@@ -14,7 +14,7 @@ import time
 WEB = "Qingfeng_AI_Music_VUE"
 API = "Qingfeng_AI_Music"
 QUEUE_MIGRATION = "V59__ai_capacity_queue.sql"
-QUEUE_MIGRATION_HASH = "371868410e537d7124b7d42e9453ae17d602708559d93bd97ebb0886b1672e2a"
+QUEUE_MIGRATION_HASH = "9b26469a2be6556b1065a4f89204870caf9655bf6c1cbcfa6ccb8b2806dc99a1"
 
 
 def read(path):

@@ -89,7 +89,7 @@ FEATURE_MIGRATION_SHA256 = {
     "V56__discover_song_community.sql": "3f3a64d35e5b57b508f51823ef90f5732e304cbfe080d026845bd41bdc6e056a",
     "V57__extended_lyric_languages.sql": "1ca4736350a6f7d4af512e97858da6cfbe5859f8614bcd7b32626cb3e054c553",
     "V58__wechat_self_card.sql": "4a31e5debd6cd01e17d7827343916f63fea414d985c2416e75b1126af0268e7d",
-    "V59__ai_capacity_queue.sql": "371868410e537d7124b7d42e9453ae17d602708559d93bd97ebb0886b1672e2a",
+    "V59__ai_capacity_queue.sql": "9b26469a2be6556b1065a4f89204870caf9655bf6c1cbcfa6ccb8b2806dc99a1",
 }
 
 class GateError(ValueError):
