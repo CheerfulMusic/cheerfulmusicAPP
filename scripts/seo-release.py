@@ -146,12 +146,12 @@ def loopback_origin(value):
     raise argparse.ArgumentTypeError("Use a direct application forward such as http://127.0.0.1:18081")
 
 
-def get(base, path, expected_status=200):
+def get(base, path, expected_status=200, method="GET"):
     headers = {"Accept-Encoding": "identity", "User-Agent": "CheerfulMusic-SEO-Release/1.0"}
     if base != SITE:
         headers["Host"] = urlsplit(SITE).netloc
     try:
-        with HTTP.open(Request(base + path, headers=headers), timeout=TIMEOUT) as response:
+        with HTTP.open(Request(base + path, headers=headers, method=method), timeout=TIMEOUT) as response:
             body = response.read(MAX_BODY + 1)
             if response.status != expected_status or len(body) > MAX_BODY:
                 raise ValueError(f"{path} did not return a usable HTTP {expected_status} response")
@@ -218,6 +218,10 @@ def verify_icons(base, manifest):
             image, headers = get(base, icon["path"])
             if headers.get_content_type() not in media_types or hashlib.sha256(image).hexdigest() != icon["sha256"]:
                 raise ValueError(f"Site icon content differs from the build: {icon['path']}")
+            if "legacyIcon" in manifest:
+                _, head = get(base, icon["path"], method="HEAD")
+                if head.get_content_type() not in media_types:
+                    raise ValueError(f"Site icon HEAD returned the wrong media type: {icon['path']}")
 
 
 def verify_singapore(base, manifest):

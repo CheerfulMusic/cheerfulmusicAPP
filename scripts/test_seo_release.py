@@ -113,7 +113,10 @@ def running_site(files):
                 self.send_response(204 if self.path == "/internal/regional/ready" else 200)
             self.send_header("Content-Type", content_type)
             self.end_headers()
-            self.wfile.write(body)
+            if self.command == "GET":
+                self.wfile.write(body)
+
+        do_HEAD = do_GET
 
         def log_message(self, *_):
             pass

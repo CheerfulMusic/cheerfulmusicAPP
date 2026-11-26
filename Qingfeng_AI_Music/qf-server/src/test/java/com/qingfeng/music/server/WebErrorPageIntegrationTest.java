@@ -89,7 +89,7 @@ class WebErrorPageIntegrationTest {
         }
         assertEquals(403, get("/home.html", "text/html").statusCode());
         assertEquals(200, request("/brand/logo-mark.svg", "image/svg+xml", "HEAD").statusCode());
-        for (String path : List.of("/favicon.ico", "/brand/favicon-96.png")) {
+        for (String path : List.of("/favicon.ico", "/brand/favicon-96.png", "/brand/favicon-symbol-96.png")) {
             for (String method : List.of("GET", "HEAD")) {
                 var icon = request(path, "image/*", method);
                 assertEquals(200, icon.statusCode(), path);
