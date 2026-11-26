@@ -26,6 +26,7 @@ it('opens the invite input when a protected action is requested on a public page
   await new Promise(resolve => setTimeout(resolve, 0)); await nextTick()
   expect(host.querySelector('dialog')?.open).toBe(true)
   expect(host.querySelector('input')).not.toBeNull()
+  expect(host.querySelector('.beta-access-intro [data-nosnippet]')).toBeNull()
  } finally { app.unmount(); host.remove(); vi.restoreAllMocks() }
 })
 
@@ -65,13 +66,13 @@ it('opens the localized homepage invite when the server requires an invitation',
   expect(host.querySelectorAll('.home-public-info details')).toHaveLength(2)
   await flushPromises()
   expect(host.querySelector('a[href="/discover/songs/test-release/2"]')?.textContent).toBe('示例作品')
-  expect(host.querySelector('.beta-access-intro')?.textContent).toContain('青风音乐（Cheerful Music）')
+  expect(host.querySelector('.beta-access-intro > span[data-nosnippet]')?.textContent).toBe(homeSeo['zh-CN'].description)
   setLocale('en')
   await nextTick()
   expect(host.querySelector('h1')?.textContent).toBe('Everyone Can Be a Creator')
   expect(host.querySelector('.beta-access-brand')?.textContent).toBe('青妙Ai')
   expect(host.querySelector('.beta-access-intro')?.textContent).toBe(homeSeo.en.description)
-  expect(host.querySelector('.beta-access-intro')?.closest('[data-nosnippet]')).toBeNull()
+  expect(host.querySelector('.beta-access-intro > span[data-nosnippet]')?.textContent).toBe(homeSeo.en.description)
   await flushPromises()
   expect(host.querySelector('[data-nosnippet] #beta-invite-code')).not.toBeNull()
  } finally { app.unmount(); host.remove(); setLocale(previous); vi.restoreAllMocks() }

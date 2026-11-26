@@ -8,7 +8,7 @@ import HomePublicInfo from './HomePublicInfo.vue'
   <section id="how" class="simple-third p-width" aria-labelledby="creation-guide-title">
     <div class="simple-third-content">
       <h2 id="creation-guide-title">{{ t('你的第一首歌，只需三步。') }}</h2>
-      <p class="simple-third-description">{{ homeSeo[locale].description }}</p>
+      <p class="simple-third-description"><span data-nosnippet>{{ homeSeo[locale].description }}</span></p>
       <ol class="simple-third-steps">
         <li>
           <span aria-hidden="true">01</span>

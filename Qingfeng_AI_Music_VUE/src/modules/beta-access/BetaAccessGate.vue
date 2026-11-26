@@ -112,7 +112,10 @@ onBeforeUnmount(() => { disposed = true; clearTimeout(expiryTimer); window.remov
         <p class="beta-access-brand">{{ homeBrand ?? siteName }}</p>
         <h1 id="beta-access-title">{{ entryCopy?.heading ?? t('让灵感，先在这里发声。') }}</h1>
       </template>
-      <p id="beta-access-description" class="beta-access-intro">{{ entryCopy?.description ?? t('青风音乐正在内测，输入邀请码即可开始体验。') }}</p>
+      <p id="beta-access-description" class="beta-access-intro">
+        <span v-if="entryCopy && homeBrand && !discoverEntry" data-nosnippet>{{ entryCopy.description }}</span>
+        <template v-else>{{ entryCopy?.description ?? t('青风音乐正在内测，输入邀请码即可开始体验。') }}</template>
+      </p>
       <div data-nosnippet>
         <p v-if="homeBrand" class="beta-access-prompt">{{ homeSeo[locale].invitePrompt }}</p>
         <p v-if="checking" class="beta-access-checking" role="status">{{ t('正在验证内测资格…') }}</p>

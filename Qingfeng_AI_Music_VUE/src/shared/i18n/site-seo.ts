@@ -100,7 +100,7 @@ export function landingLinks(language: Locale, path = '/'): { href: string; text
   if (guide || onDiscover) topics.unshift({ href: homePaths[language], text: homeLabels[language] })
   return [
     { href: translations.en, text: path === '/help' ? homeLabels.en : 'English', lang: 'en' },
-    { href: translations['zh-CN'], text: path === '/help' ? homeLabels['zh-CN'] : '简体中文', lang: 'zh-CN' },
+    { href: translations['zh-CN'], text: path === '/' || path === '/help' ? homeLabels['zh-CN'] : '简体中文', lang: 'zh-CN' },
     ...topics,
   ]
 }

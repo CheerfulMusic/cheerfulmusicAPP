@@ -49,10 +49,11 @@ export function renderSitePage(html: string, page: SitePage) {
   const heading = `<h1>${escapeHtml(page.heading)}</h1>`
   const filing = '<a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer" lang="zh-CN">粤ICP备2023023949号</a>'
   const home = homeLocale(page.path) !== undefined
-  const intro = escapeHtml(page.intro ?? page.description)
+  const intro = escapeHtml(page.description)
   const navigation = `<nav>${links}</nav><footer>${filing}</footer>`
   const introClass = home ? ' class="beta-access-intro"' : ''
-  const content = home ? `${publicHomeDetails(page.language)}<div data-nosnippet>${navigation}</div>` : guideContent + navigation
+  const brandIntro = page.intro ? `<p><span data-nosnippet>${escapeHtml(page.intro)}</span></p>` : ''
+  const content = home ? `${brandIntro}${publicHomeDetails(page.language)}<div data-nosnippet>${navigation}</div>` : guideContent + navigation
   let initialContent = `<main class="seo-landing">${heading}<p${introClass}>${intro}</p>${content}</main>`
   if (discoverLocale(page.path)) {
     initialContent = `<main class="beta-access-entry"><section class="beta-access-dialog beta-access-card">
@@ -80,7 +81,7 @@ const homeReleasePages = (['en', 'zh-CN'] as const).map(language => {
     language,
     title: page.title,
     description: page.description,
-    intro: copy.description,
+    intro: page.description,
     brand: copy.searchName,
     ...('lastModified' in copy ? { lastModified: copy.lastModified } : {}),
     ...(page.path === '/' ? { aliases: websiteSchema.alternateName } : {}),
