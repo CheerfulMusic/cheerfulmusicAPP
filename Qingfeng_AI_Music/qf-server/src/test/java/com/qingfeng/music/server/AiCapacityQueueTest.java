@@ -269,7 +269,7 @@ class AiCapacityQueueTest {
         var db = new JdbcTemplate(data);
         db.execute("CREATE TABLE creator(id VARCHAR(36) PRIMARY KEY)");
         db.execute("CREATE TABLE reserved_credit(owner_id VARCHAR(36) PRIMARY KEY)");
-        new ResourceDatabasePopulator(new ClassPathResource("db/migration/V57__ai_capacity_queue.sql")).execute(data);
+        new ResourceDatabasePopulator(new ClassPathResource("db/migration/V59__ai_capacity_queue.sql")).execute(data);
         return db;
     }
 

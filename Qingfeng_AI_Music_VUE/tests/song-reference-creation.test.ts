@@ -62,17 +62,43 @@ afterEach(() => {
   vi.resetAllMocks()
 })
 
-async function open(id: string) {
+async function open(id?: string) {
   const router = createRouter({ history: createMemoryHistory(), routes: [
     { path: '/create', component: DraftStudioPage },
     { path: '/works/:id', component: { template: '<div />' } },
   ] })
-  await router.push(songCreationRoute({ id }))
+  await router.push(id ? songCreationRoute({ id }) : '/create?mode=quick')
   const mountPage = () => mount(RouterView, { global: { plugins: [router] } })
   const page = mountPage()
   await flushPromises()
   return { router, page, mountPage }
 }
+
+it('retains a custom language when switching from quick mode to custom composition and refreshing the draft', async () => {
+  const { page, mountPage, router } = await open()
+  vi.mocked(saveMusicSettings).mockImplementation(async (_id, _version, preferences) => ({
+    work: { ...vi.mocked(saveWork).mock.lastCall![0], ...saved, version: 1 },
+    direction: { preferences, style: '', negativeTags: '', summaryZh: '', summaryEn: '', catalogVersion: 1 },
+  }))
+  await page.get('#inspiration-input').setValue('用中文描述一次海边旅行')
+  const picker = page.get('select[name=lyric-language]')
+  expect(picker.findAll('option').map(option => option.element.value)).toEqual(['zh-CN','en','mixed','ja','ko','es','custom:'])
+  await picker.setValue('custom:')
+  await page.get('input[name=custom-lyric-language]').setValue('巴西葡萄牙语')
+  await page.get('.creation-mode-switch button:nth-child(2)').trigger('click')
+  await flushPromises()
+  expect(router.currentRoute.value.query.mode).toBe('custom')
+  page.unmount()
+  const restored = mountPage()
+  try {
+    await flushPromises()
+    expect(restored.get('input[name=custom-lyric-language]').element).toHaveProperty('value', '巴西葡萄牙语')
+    await restored.get('form').trigger('submit')
+    await flushPromises()
+    expect(vi.mocked(generateLyrics).mock.lastCall?.[3]).toBe('custom:巴西葡萄牙语')
+    expect(router.currentRoute.value.query.language).toBe('custom:巴西葡萄牙语')
+  } finally { restored.unmount() }
+})
 
 it.each([
   ['luo-yu-de-cao-chang', '落雨的操场', 'zh-CN', 'pop', ['Verse 1', 'Verse 2', 'Chorus', 'Verse', 'Chorus']],

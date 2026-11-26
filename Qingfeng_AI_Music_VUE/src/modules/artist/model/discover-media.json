@@ -1,0 +1,56 @@
+{
+  "christmas-feels-like-home": {
+    "audio": "/media/recommendations/christmas-feels-like-home-757a61943433-preview-128.mp3",
+    "cover": "/media/recommendations/christmas-feels-like-home-8c41c0110196-cover.jpg"
+  },
+  "prayer-beneath-the-stars": {
+    "audio": "/media/recommendations/prayer-beneath-the-stars-419248e9a652-preview-128.mp3",
+    "cover": "/media/recommendations/prayer-beneath-the-stars-5ed3738cf46d-cover.jpg"
+  },
+  "cardboard-corners": {
+    "audio": "/media/recommendations/cardboard-corners-468267313021-preview-128.mp3",
+    "cover": "/media/recommendations/cardboard-corners-ef3e80c9a905-cover.jpg",
+    "synchronizedLyrics": true
+  },
+  "snow-on-the-floor": {
+    "cover": "/media/recommendations/snow-on-the-floor-7cc079e30cdf-cover.jpg"
+  },
+  "navidad": {
+    "cover": "/media/recommendations/navidad-f76ea270de14-cover.jpg"
+  },
+  "zui-hua-jazz": {
+    "audio": "/media/recommendations/zui-hua-jazz-40bfdd86480a-preview-128.mp3",
+    "cover": "/media/recommendations/zui-hua-jazz-104265deb8d9-cover.jpg"
+  },
+  "nothing-left-to-lose": {
+    "audio": "/media/recommendations/nothing-left-to-lose-d4bfb6848fe8-preview-128.mp3",
+    "cover": "/media/recommendations/nothing-left-to-lose-9421622df894-cover.jpg",
+    "synchronizedLyrics": true
+  },
+  "your-side-of-the-tape": {
+    "audio": "/media/recommendations/your-side-of-the-tape-746cee268a24-preview-128.mp3",
+    "cover": "/media/recommendations/your-side-of-the-tape-3c8c5d8da93c-cover.jpg",
+    "synchronizedLyrics": true
+  },
+  "jixiangwu-hero": {
+    "cover": "/media/recommendations/jixiangwu-hero-361167958fda-cover.jpg"
+  },
+  "prayer-beneath-the-stars-hero": {
+    "cover": "/media/recommendations/prayer-beneath-the-stars-hero-7761229f5dee-cover.jpg"
+  },
+  "bicycle-weather": {
+    "audio": "/media/recommendations/bicycle-weather-efad57f38eeb-preview-128.mp3",
+    "cover": "/media/recommendations/bicycle-weather-3c00cac6dfa5-cover.jpg",
+    "synchronizedLyrics": true
+  },
+  "southbank-under-rain": {
+    "audio": "/media/recommendations/southbank-under-rain-d3e9a13d8ce0-preview-128.mp3",
+    "cover": "/media/recommendations/southbank-under-rain-6dfe4a29f8c1-cover.jpg",
+    "synchronizedLyrics": true
+  },
+  "town-hall-steps": {
+    "audio": "/media/recommendations/town-hall-steps-0cbb13d6a29b-preview-128.mp3",
+    "cover": "/media/recommendations/town-hall-steps-f239be1445e2-cover.jpg",
+    "synchronizedLyrics": true
+  }
+}

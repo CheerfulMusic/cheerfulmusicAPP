@@ -4,8 +4,9 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import { requestJson } from '../src/shared/http/api-client'
 import PublicArtistPage from '../src/modules/artist/pages/PublicArtistPage.vue'
-import { publicDiscoverTrack } from '../src/modules/artist/model/discover-shelves'
+import { ownerDiscoverCover, publicDiscoverTrack } from '../src/modules/artist/model/discover-shelves'
 import { discoverSongArtwork } from '../src/modules/artist/model/discover-hero-artwork'
+import discoverMedia from '../src/modules/artist/model/discover-media.json'
 
 const player = vi.hoisted(() => ({ current: null, setQueue: vi.fn(), toggle: vi.fn() }))
 
@@ -29,6 +30,17 @@ it('refreshes the public cover URL while keeping the song and audio version stab
 it('accepts public song data returned before cover identifiers were included', () => {
   expect(publicTrack('artist', { id: 'song', title: '歌名', version: 3, hasCover: true }).cover)
     .toBe('/api/public/artists/artist/songs/song/3/cover')
+})
+
+it.each([
+  { id: '1485ddee-9a1f-435b-bfc8-403cccb8c243', title: '吉祥物 （短剧插曲）', version: 5, coverId: 'previous-cover', filename: 'jixiangwu.webp' },
+  { id: '13165085-71ba-4bf9-bece-a5f0cc59d4b5', title: 'Let the Light Take Its Time', version: 1, coverId: null, filename: 'let-the-light-take-its-time.webp' },
+  { id: '1c5c325c-6a45-4607-a8e4-5baadabc2032', title: 'Navidad', version: 2, coverId: 'previous-cover', filename: discoverMedia.navidad.cover },
+])('uses the editorial cover for $title in Discover and the owner library', ({ filename, coverId, ...song }) => {
+  const track = publicDiscoverTrack({ artistId: 'artist', stageName: '艺人', song: { ...song, hasCover: !!coverId } })
+  const owner = ownerDiscoverCover({ ...song, coverId, workId: 'work', assetId: 'audio' })
+  expect(track.cover).toContain(filename)
+  expect(owner).toBe(track.cover)
 })
 
 it('uses the square artwork from Discover for the artist feature, list and playback', async () => {

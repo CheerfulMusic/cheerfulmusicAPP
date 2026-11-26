@@ -1,0 +1,244 @@
+{
+  "sourceKey": "sample:town-hall-steps:b36e5627-0700-3fc4-8f34-1d3baff15677",
+  "audioSha256": "0cbb13d6a29b361c53c10bae67ba2da63730757329f75cf0c4dab80bb316c90d",
+  "recognition": "Whisper large-v3-turbo and small; reviewed against the playback recording",
+  "duration": 217.9986875,
+  "warnings": [],
+  "words": [
+    {
+      "text": "rain comes sideways down the market square\n",
+      "start": 13.94,
+      "end": 17.4
+    },
+    {
+      "text": "ten cigarettes and nobody there\n",
+      "start": 18.0,
+      "end": 21.12
+    },
+    {
+      "text": "We spent our fivers on a cheap cassette\n",
+      "start": 21.12,
+      "end": 24.36
+    },
+    {
+      "text": "singing every line that we ain't lived yet\n",
+      "start": 24.36,
+      "end": 28.32
+    },
+    {
+      "text": "Staring down the terrace in the grey midday\n",
+      "start": 28.32,
+      "end": 31.76
+    },
+    {
+      "text": "Counting up the trains that are getting away\n",
+      "start": 31.76,
+      "end": 35.34
+    },
+    {
+      "text": "And we were loud, and we were totally right\n",
+      "start": 35.34,
+      "end": 38.94
+    },
+    {
+      "text": "Burning up the daylight to borrow the night\n",
+      "start": 38.94,
+      "end": 42.56
+    },
+    {
+      "text": "Nobody told us we had nowhere to go\n",
+      "start": 42.56,
+      "end": 46.14
+    },
+    {
+      "text": "So we turned it up on the radio\n",
+      "start": 46.14,
+      "end": 49.6
+    },
+    {
+      "text": "Meet me out on the town hall steps\n",
+      "start": 50.32,
+      "end": 53.5
+    },
+    {
+      "text": "Before the world takes back what it hasn't wrecked yet\n",
+      "start": 53.5,
+      "end": 57.12
+    },
+    {
+      "text": "Shouting at the clouds, singing out of tune\n",
+      "start": 57.12,
+      "end": 60.44
+    },
+    {
+      "text": "Waiting on a Friday afternoon, yeah\n",
+      "start": 60.44,
+      "end": 64.64
+    },
+    {
+      "text": "We got nothing and we take it too far\n",
+      "start": 64.64,
+      "end": 67.94
+    },
+    {
+      "text": "Just a pocket full of rain and an old guitar\n",
+      "start": 67.94,
+      "end": 72.06
+    },
+    {
+      "text": "Chip shop shutters rattling in the wind\n",
+      "start": 75.12,
+      "end": 78.6
+    },
+    {
+      "text": "Counting all the scrapes that we got caught in\n",
+      "start": 78.6,
+      "end": 82.08
+    },
+    {
+      "text": "You wore that jacket with the torn lapel\n",
+      "start": 82.08,
+      "end": 85.72
+    },
+    {
+      "text": "Swearing this estate was an oyster shell\n",
+      "start": 85.72,
+      "end": 89.5
+    },
+    {
+      "text": "Still chasing ghosts around the betting shop door\n",
+      "start": 89.5,
+      "end": 93.12
+    },
+    {
+      "text": "Wanting something better than before\n",
+      "start": 93.12,
+      "end": 96.16
+    },
+    {
+      "text": "And we were loud, and we were totally right\n",
+      "start": 96.16,
+      "end": 100.0
+    },
+    {
+      "text": "Burning up the daylight to borrow the night\n",
+      "start": 100.0,
+      "end": 103.44
+    },
+    {
+      "text": "Nobody told us we had nowhere to go\n",
+      "start": 103.44,
+      "end": 107.0
+    },
+    {
+      "text": "So we turned it up on the radio\n",
+      "start": 107.0,
+      "end": 110.5
+    },
+    {
+      "text": "Meet me out on the town hall steps\n",
+      "start": 110.5,
+      "end": 114.34
+    },
+    {
+      "text": "Before the world takes back what it hasn't wrecked yet\n",
+      "start": 114.34,
+      "end": 117.94
+    },
+    {
+      "text": "Shouting at the clouds, singing out of tune\n",
+      "start": 117.94,
+      "end": 121.38
+    },
+    {
+      "text": "Waiting on a Friday afternoon, yeah\n",
+      "start": 121.38,
+      "end": 125.34
+    },
+    {
+      "text": "We got nothing and we take it too far\n",
+      "start": 125.34,
+      "end": 128.64
+    },
+    {
+      "text": "Just a pocket full of rain and an old guitar\n",
+      "start": 128.64,
+      "end": 132.82
+    },
+    {
+      "text": "Years roll by like a commuter train\n",
+      "start": 148.24,
+      "end": 151.72
+    },
+    {
+      "text": "Washing every color straight down the drain\n",
+      "start": 151.72,
+      "end": 155.16
+    },
+    {
+      "text": "Still if you whistle down that empty lane\n",
+      "start": 155.16,
+      "end": 158.8
+    },
+    {
+      "text": "I turn around and do it all again\n",
+      "start": 158.8,
+      "end": 162.56
+    },
+    {
+      "text": "Meet me out on the town hall steps\n",
+      "start": 162.56,
+      "end": 166.04
+    },
+    {
+      "text": "Before the world takes back what it hasn't wrecked yet\n",
+      "start": 166.04,
+      "end": 169.68
+    },
+    {
+      "text": "Shouting at the clouds, singing out of tune\n",
+      "start": 169.68,
+      "end": 173.04
+    },
+    {
+      "text": "Waiting on a Friday afternoon, yeah\n",
+      "start": 173.04,
+      "end": 176.94
+    },
+    {
+      "text": "We got nothing and we take it too far\n",
+      "start": 176.94,
+      "end": 180.28
+    },
+    {
+      "text": "Just a pocket full of rain and an old guitar\n",
+      "start": 180.28,
+      "end": 184.42
+    },
+    {
+      "text": "Out on the town hall steps\n",
+      "start": 185.86,
+      "end": 190.1
+    },
+    {
+      "text": "Yeah, we take it too far\n",
+      "start": 190.1,
+      "end": 192.64
+    },
+    {
+      "text": "Just a pocket full of rain and an old guitar\n",
+      "start": 192.64,
+      "end": 196.8
+    },
+    {
+      "text": "Too far, too far\n",
+      "start": 196.8,
+      "end": 200.28
+    },
+    {
+      "text": "Out on the town hall steps\n",
+      "start": 200.28,
+      "end": 204.26
+    }
+  ]
+}

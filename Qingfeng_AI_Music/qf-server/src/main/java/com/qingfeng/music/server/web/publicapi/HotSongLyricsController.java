@@ -16,7 +16,7 @@ public class HotSongLyricsController {
     @GetMapping("/{track}/lyrics")
     public ResponseEntity<PlaybackLyrics.Snapshot> lyrics(@PathVariable String track,
             @RequestParam(name="audioHash",required=false) String audioHash) {
-        var song=RecommendationSamples.SONGS.stream().filter(item->item.id().equals(track)).findFirst()
+        var song=RecommendationSamples.playbackSong(track)
                 .orElseThrow(()->new ResponseStatusException(HttpStatus.NOT_FOUND));
         if(audioHash!=null){
             String key=RecommendationSamples.objectKey(song.audio().substring("/media/".length())).orElseThrow();

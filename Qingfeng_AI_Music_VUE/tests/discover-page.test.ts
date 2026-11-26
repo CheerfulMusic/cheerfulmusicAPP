@@ -3,6 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import type { DiscoverSong } from '../src/modules/artist/api/artist'
+import { prayerHeroArtwork } from '../src/modules/artist/model/discover-hero-artwork'
+import discoverMedia from '../src/modules/artist/model/discover-media.json'
 import { setLocale } from '../src/shared/i18n'
 import type { PlayableTrack } from '../src/shared/player/store'
 
@@ -51,8 +53,10 @@ beforeEach(() => {
   mocks.profile.mockResolvedValue({
     stageName: 'SergioBeats',
     songs: [
+      { id: '1cf20b2d-76cd-46de-9666-77a7303588a8', version: 1, title: 'Nochebuena en la Mesa', hasCover: true },
       { id: '752fa2d9-ec96-47c3-87a5-a1d49d0135af', version: 1, title: 'Snow on the Floor', hasCover: true },
       { id: 'd4b1ec5a-e68f-43e6-8624-226981ecef5c', version: 1, title: 'Christmas Sky', hasCover: true },
+      { id: '1c5c325c-6a45-4607-a8e4-5baadabc2032', version: 2, title: 'Navidad', hasCover: true },
       { id: '0485811c-0297-4513-9fb1-75f981af8707', version: 1, title: 'Gravity', hasCover: true },
     ],
   })
@@ -185,7 +189,7 @@ describe('Discover editorial layout with real content', () => {
     const tiles = wrapper.findAll('.discover-playlist-tiles button')
     expect(tiles.map(tile => tile.get('strong').text())).toEqual(['华语流行', '电子', '欧美流行', 'Hip-Hop&R&B', '圣诞'])
     expect(tiles.map(tile => tile.get('.discover-playlist-title > span').text())).toEqual([
-      '14 首作品', '12 首作品', '6 首作品', '6 首作品', '2 首作品',
+      '14 首作品', '12 首作品', '6 首作品', '6 首作品', '4 首作品',
     ])
     expect(tiles.map(tile => tile.get('img').attributes('src')?.split('/').at(-1))).toEqual([
       'mandopop.webp', 'electronic.webp', 'global-pop.webp', 'house.webp', 'christmas.webp',
@@ -198,19 +202,40 @@ describe('Discover editorial layout with real content', () => {
     expect(wrapper.findAll('.test-playlist span')).toHaveLength(6)
     expect(wrapper.get('.test-playlist').text()).toContain('WESTSIDE SUMMER')
     await tiles[4]!.trigger('click')
-    expect(wrapper.findAll('.test-playlist span').map(track => track.text())).toEqual(['Christmas Sky', 'Snow on the Floor'])
+    expect(wrapper.findAll('.test-playlist span').map(track => track.text())).toEqual([
+      'Christmas Sky', 'Snow on the Floor', 'Navidad', 'Nochebuena en la Mesa',
+    ])
   })
 
-  it('adds the two supplied recordings to jazz without displacing existing songs', async () => {
+  it.each([false, true])('adds the curated jazz and rock titles without displacing existing songs (already in jazz: %s)', async (alreadyInJazz) => {
+    const velvet = song('0fef4b09-77a8-489f-be7a-f61490a9d848')
+    velvet.song.title = 'Velvet Hours'
     const publishedJazz = Array.from({ length: 7 }, (_, index) => song(`jazz-${index + 1}`))
-    mocks.shelves.mockResolvedValue({ ...shelfData([]), genres: { 'jazz-soul': publishedJazz } })
+    const publishedRock = song('rock')
+    mocks.shelves.mockResolvedValue({
+      ...shelfData([]),
+      genres: { 'jazz-soul': alreadyInJazz ? [...publishedJazz, velvet] : publishedJazz, rock: [publishedRock] },
+    })
+    mocks.list.mockImplementation(async (_tab: string, _offset: number, _genre: string, query: string) =>
+      page(query === 'Velvet Hours' ? [velvet] : []))
     const wrapper = await open()
     const jazz = wrapper.get('#discover-jazz-soul .shelf-square')
     expect(jazz.findAll('.track-title').map(track => track.text())).toEqual([
-      'CHRISTMAS FEELS LIKE HOME', 'Prayer Beneath the Stars', ...publishedJazz.map(track => track.song.title),
+      'Velvet Hours', 'CHRISTMAS FEELS LIKE HOME', 'Prayer Beneath the Stars', '醉花 Jazz', ...publishedJazz.map(track => track.song.title),
     ])
-    await jazz.get('[aria-label="试听 Prayer Beneath the Stars"]').trigger('click')
-    expect(mocks.toggle).toHaveBeenCalledWith(expect.objectContaining({ id: 'prayer-beneath-the-stars' }))
+    const rock = wrapper.get('#discover-rock .shelf-square')
+    expect(rock.findAll('.track-title').slice(0, 7).map(track => track.text())).toEqual([
+      'Cardboard Corners', 'NOTHING LEFT TO LOSE', 'Your Side of the Tape',
+      'Bicycle Weather', 'Southbank Under Rain', 'Town Hall Steps', publishedRock.song.title,
+    ])
+    await jazz.get('[aria-label="试听 醉花 Jazz"]').trigger('click')
+    expect(mocks.toggle).toHaveBeenCalledWith(expect.objectContaining({
+      id: 'zui-hua-jazz', audio: expect.stringMatching(/^\/media\/recommendations\/zui-hua-jazz-/),
+    }))
+    await rock.get('[aria-label="试听 Bicycle Weather"]').trigger('click')
+    expect(mocks.toggle).toHaveBeenCalledWith(expect.objectContaining({
+      id: 'bicycle-weather', audio: expect.stringMatching(/^\/media\/recommendations\/bicycle-weather-/),
+    }))
     expect(mocks.record).not.toHaveBeenCalled()
   })
 
@@ -248,13 +273,14 @@ describe('Discover editorial layout with real content', () => {
     }
   })
 
-  it('replaces the introduction and cycles through both new songs and the five popular slides', async () => {
+  it('cycles through the vocal, ranked, curated, and Christmas slides', async () => {
     const popular = Array.from({ length: 6 }, (_, i) => song(`热门${i + 1}`, 600 - i * 100))
     mocks.shelves.mockResolvedValue(shelfData([song('今日一')]))
     mocks.list.mockImplementation(async (tab: string) => page(tab === 'featured' ? [song('精选一')] : tab === 'popular' ? popular : [song(tab)]))
     const wrapper = await open()
     expect(mocks.list.mock.calls).toEqual([
-      ['latest', 0, '', ''], ['featured', 0, '', ''], ['popular', 0, '', ''], ['latest', 0, '', 'Streetlight'],
+      ['latest', 0, '', ''], ['featured', 0, '', ''], ['popular', 0, '', ''],
+      ['latest', 0, '', '吉祥物'], ['latest', 0, '', 'Velvet Hours'], ['latest', 0, '', 'Streetlight'],
     ])
     expect(wrapper.get('.discover-hero h2').text()).toBe('走了那么远')
     const walkedFarBackground = wrapper.get('.discover-hero-background').attributes('src')
@@ -266,12 +292,12 @@ describe('Discover editorial layout with real content', () => {
     expect(wrapper.get('.discover-hero h2').text()).toBe('歌曲热门1')
     expect(wrapper.findAll('.discover-hero img')).toHaveLength(3)
     const songBackgrounds = new Set<string>()
-    for (let i = 1; i <= 5; i++) {
+    for (let i = 1; i <= 4; i++) {
       await wrapper.get(`[aria-label="查看推荐：歌曲热门${i}"]`).trigger('click')
       expect(wrapper.get('.discover-hero h2').text()).toBe(`歌曲热门${i}`)
       songBackgrounds.add(wrapper.get('.discover-hero-background').attributes('src')!)
     }
-    expect(songBackgrounds.size).toBe(5)
+    expect(songBackgrounds.size).toBe(4)
     expect(songBackgrounds.has(walkedFarBackground!)).toBe(false)
     await wrapper.get('[aria-label="下一张推荐"]').trigger('click')
     expect(wrapper.get('.discover-hero h2').text()).toBe('Christmas Sky')
@@ -280,7 +306,7 @@ describe('Discover editorial layout with real content', () => {
     expect(wrapper.get('.discover-hero-background').attributes('src')).toBe(walkedFarBackground)
     await wrapper.get('[aria-label="上一张推荐"]').trigger('click')
     expect(wrapper.get('.discover-hero h2').text()).toBe('Christmas Sky')
-    expect(wrapper.find('[aria-label="查看推荐：歌曲热门6"]').exists()).toBe(false)
+    expect(wrapper.find('[aria-label="查看推荐：歌曲热门5"]').exists()).toBe(false)
     expect(wrapper.get('#discover-featured').text()).toContain('歌曲精选一')
   })
 
@@ -293,7 +319,7 @@ describe('Discover editorial layout with real content', () => {
 
     expect(wrapper.get('.discover-hero h2').text()).toBe('走了那么远')
     expect(wrapper.get('.discover-hero-background').attributes('src')).toContain('carousel-walked-far.webp')
-    expect(wrapper.findAll('.discover-hero-dots button')).toHaveLength(2)
+    expect(wrapper.findAll('.discover-hero-dots button')).toHaveLength(3)
     expect(wrapper.find('[aria-label="查看音乐广场介绍"]').exists()).toBe(false)
     await wrapper.get('.discover-hero-listen').trigger('click')
     expect(mocks.toggle.mock.lastCall![0].id).toBe('vocal-zou-le-na-me-yuan')
@@ -334,32 +360,53 @@ describe('Discover editorial layout with real content', () => {
     expect(mocks.record).toHaveBeenCalledWith(streetlight.song)
   })
 
-  it('pairs the two songs with their carousel artwork and plays the matching track', async () => {
+  it.each([true, false])('pins both replacement slides and plays their matching media (mascot ranked: %s)', async (mascotRanked) => {
     const micangshan = song('09aaf684-2b68-438f-aa17-8730a352bf74')
     micangshan.song.title = '米仓山'
     const invincible = song('57bb7310-c64c-4873-b239-f2a268a7dedd')
     invincible.song.title = '无敌的歌'
     const streetlight = song('0f831f4b-1f3f-4d14-b6cf-b33534863622')
-    const popular = [song('航线'), micangshan, invincible, song('雨夜'), streetlight]
-    mocks.list.mockImplementation(async (tab: string) => page(tab === 'popular' ? popular : []))
+    streetlight.song.title = 'Streetlight'
+    const mascot = song('1485ddee-9a1f-435b-bfc8-403cccb8c243')
+    mascot.song.title = '吉祥物 （短剧插曲）'
+    const mascotMedia = `/api/public/artists/${mascot.artistId}/songs/${mascot.song.id}/1`
+    const prayerMedia = discoverMedia['prayer-beneath-the-stars']
+    const popular = [song('航线'), micangshan, invincible, song('雨夜'), streetlight, ...(mascotRanked ? [mascot] : [])]
+    mocks.list.mockImplementation(async (tab: string, _offset: number, _genre: string, query: string) =>
+      page(tab === 'popular' ? popular : query === '吉祥物' && !mascotRanked ? [song('同名作品'), mascot] : []))
     mocks.shelves.mockResolvedValue(shelfData(popular))
 
     const wrapper = await open()
     const dots = wrapper.findAll('.discover-hero-dots button')
-    expect(dots[3]!.attributes('aria-label')).toBe('查看推荐：无敌的歌')
-    expect(dots[4]!.attributes('aria-label')).toBe('查看推荐：米仓山')
-    for (const [dot, expected, artwork] of [
-      [dots[3]!, invincible, 'carousel-airport-guitar'],
-      [dots[4]!, micangshan, 'carousel-countryside'],
+    expect(dots.map(dot => dot.attributes('aria-label'))).toEqual([
+      '查看推荐：走了那么远', '查看推荐：歌曲航线', '查看推荐：Streetlight', '查看推荐：吉祥物 （短剧插曲）',
+      '查看推荐：Prayer Beneath the Stars', '查看推荐：歌曲雨夜', '查看推荐：Christmas Sky',
+    ])
+    for (const [dot, title, banner, cover, audio] of [
+      [dots[3]!, mascot.song.title, discoverMedia['jixiangwu-hero'].cover, `${mascotMedia}/cover`, `${mascotMedia}/audio`],
+      [dots[4]!, 'Prayer Beneath the Stars', discoverMedia['prayer-beneath-the-stars-hero'].cover, prayerMedia.cover, prayerMedia.audio],
     ] as const) {
       await dot.trigger('click')
-      expect(wrapper.get('.discover-hero h2').text()).toBe(expected.song.title)
-      expect(wrapper.get('.discover-hero-background').attributes('src')).toContain(artwork)
+      expect(wrapper.get('.discover-hero h2').text()).toBe(title)
+      expect(wrapper.get('.discover-hero-background').attributes('src')).toBe(banner)
+      expect(wrapper.get('.discover-hero-main source').attributes('srcset')).toBe(banner)
       await wrapper.get('.discover-hero-listen').trigger('click')
-      expect(mocks.toggle.mock.calls.at(-1)![0].id).toBe(expected.song.id)
+      expect(mocks.toggle.mock.lastCall![0]).toMatchObject({ title, cover, audio })
     }
     expect(wrapper.findAll('.discover-ranking-info strong').map(title => title.text()))
-      .toEqual(popular.map(item => item.song.title))
+      .toEqual(popular.slice(0, 5).map(item => item.song.title))
+  })
+
+  it('uses the same backup image in the side preview and the active slide when the CDN route fails', async () => {
+    const wrapper = await open()
+    await wrapper.get('[aria-label="查看推荐：歌曲popular"]').trigger('click')
+    const preview = wrapper.get('.discover-hero-preview-after')
+    expect(preview.get('source').attributes('srcset')).toBe(prayerHeroArtwork.compact)
+    await preview.get('img').trigger('error')
+    expect(preview.get('source').attributes('srcset')).toBe(prayerHeroArtwork.fallback)
+    await wrapper.get('[aria-label="查看推荐：Prayer Beneath the Stars"]').trigger('click')
+    expect(wrapper.get('.discover-hero-background').attributes('src')).toBe(prayerHeroArtwork.fallback)
+    expect(wrapper.get('.discover-hero-main source').attributes('srcset')).toBe(prayerHeroArtwork.fallback)
   })
 
   it('keeps the main songs usable when recommendations fail and recovers the side feed on retry', async () => {
@@ -377,7 +424,7 @@ describe('Discover editorial layout with real content', () => {
     expect(wrapper.get('#discover-latest').text()).toContain('歌曲latest')
     expect(wrapper.get('.discover-hero h2').text()).toBe('走了那么远')
     expect(wrapper.find('#discover-featured .shelf-tracks').exists()).toBe(false)
-    expect(wrapper.find('.discover-hero-next').exists()).toBe(false)
+    expect(wrapper.find('.discover-hero-next').exists()).toBe(true)
     expect(wrapper.get('.discover-sidebar').text()).toContain('今日播放排行暂不可用。')
     failed = false
     await wrapper.get('.discover-sidebar .text-button').trigger('click')
@@ -542,14 +589,14 @@ describe('Discover editorial layout with real content', () => {
   it('plays a hero song using all visible tracks as its queue without starting audio on slide changes', async () => {
     mocks.list.mockImplementation(async (tab: string) => page(tab === 'popular' ? Array.from({ length: 7 }, (_, i) => song(`热门${i + 1}`)) : [song(tab)]))
     const wrapper = await open()
-    await wrapper.get('[aria-label="查看推荐：歌曲热门5"]').trigger('click')
+    await wrapper.get('[aria-label="查看推荐：歌曲热门4"]').trigger('click')
     expect(mocks.toggle).not.toHaveBeenCalled()
     expect(mocks.record).not.toHaveBeenCalled()
     await wrapper.get('.discover-hero-listen').trigger('click')
     await flushPromises()
-    expect(mocks.toggle.mock.calls[0]![0].id).toBe('热门5')
+    expect(mocks.toggle.mock.calls[0]![0].id).toBe('热门4')
     expect(mocks.queue.mock.calls[0]![0].map((track: PlayableTrack) => track.id)).toEqual([
-      'vocal-zou-le-na-me-yuan', '热门1', '热门2', '热门3', '热门4', '热门5', 'd4b1ec5a-e68f-43e6-8624-226981ecef5c',
+      'vocal-zou-le-na-me-yuan', '热门1', '热门2', '热门3', 'prayer-beneath-the-stars', '热门4', 'd4b1ec5a-e68f-43e6-8624-226981ecef5c',
     ])
     expect(mocks.record).toHaveBeenCalledTimes(1)
   })
@@ -576,6 +623,8 @@ describe('Discover editorial layout with real content', () => {
     await vi.advanceTimersByTimeAsync(30_000)
     expect(wrapper.get('.discover-hero h2').text()).toBe('歌曲热门二')
     await wrapper.get('[aria-label="继续轮播"]').trigger('click')
+    await vi.advanceTimersByTimeAsync(10_000)
+    expect(wrapper.get('.discover-hero h2').text()).toBe('Prayer Beneath the Stars')
     await vi.advanceTimersByTimeAsync(10_000)
     expect(wrapper.get('.discover-hero h2').text()).toBe('Christmas Sky')
     expect(mocks.toggle).not.toHaveBeenCalled()
@@ -606,12 +655,14 @@ describe('Discover editorial layout with real content', () => {
     vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] })
     vi.spyOn(window, 'matchMedia').mockReturnValue({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() } as unknown as MediaQueryList)
     const wrapper = await open()
-    expect(wrapper.findAll('.discover-hero-dots button')).toHaveLength(2)
+    expect(wrapper.findAll('.discover-hero-dots button')).toHaveLength(3)
     expect(vi.getTimerCount()).toBe(0)
     await vi.advanceTimersByTimeAsync(60_000)
     expect(wrapper.get('.discover-hero h2').text()).toBe('走了那么远')
     await wrapper.get('[aria-label="下一张推荐"]').trigger('click')
     expect(wrapper.get('.discover-hero h2').text()).toBe('歌曲popular')
+    await wrapper.get('[aria-label="下一张推荐"]').trigger('click')
+    expect(wrapper.get('.discover-hero h2').text()).toBe('Prayer Beneath the Stars')
     await wrapper.get('[aria-label="下一张推荐"]').trigger('click')
     expect(wrapper.get('.discover-hero h2').text()).toBe('走了那么远')
   })

@@ -10,14 +10,28 @@ import countryside from '../../../assets/discover/responsive/carousel-countrysid
 import compactCountryside from '../../../assets/discover/responsive/carousel-countryside-960.webp'
 import mistyGarden from '../../../assets/discover/responsive/carousel-misty-garden-1536.webp'
 import compactMistyGarden from '../../../assets/discover/responsive/carousel-misty-garden-960.webp'
+import jixiangwuFallback from '../../../assets/discover/responsive/jixiangwu-hero-361167958fda-cover.jpg'
+import prayerFallback from '../../../assets/discover/responsive/prayer-beneath-the-stars-hero-7761229f5dee-cover.jpg'
+import discoverMedia from './discover-media.json'
 
 export interface HeroArtwork {
   desktop: string
   compact: string
   position?: string
+  fallback?: string
 }
 
 export const discoverIntroArtwork: HeroArtwork = { desktop: coast, compact: compactCoast }
+
+const jixiangwuHero = discoverMedia['jixiangwu-hero'].cover
+const prayerHero = discoverMedia['prayer-beneath-the-stars-hero'].cover
+export const jixiangwuHeroArtwork: HeroArtwork = {
+  desktop: jixiangwuHero, compact: jixiangwuHero, position: '70% center', fallback: jixiangwuFallback,
+}
+export const prayerHeroArtwork: HeroArtwork = {
+  desktop: prayerHero, compact: prayerHero, position: '70% center', fallback: prayerFallback,
+}
+
 export const discoverSongArtwork = [
   { desktop: seaStacks, compact: compactSeaStacks, position: '58% center' },
   { desktop: cactus, compact: compactCactus, position: '65% top' },

@@ -59,7 +59,7 @@ public class ArtistProfileService {
     public record DiscoverPage(List<DiscoverSong> songs, boolean hasMore, List<DiscoverArtist> artists) {}
     /** Public page metadata, independent of the viewer's account and creation inputs. */
     public record CatalogSong(String id, long version, String title, String artistId, String stageName,
-                              boolean hasCover, Instant publishedAt) {}
+                              boolean hasCover, String coverVersion, Instant publishedAt) {}
     public record DiscoverShelves(boolean listeningDataAvailable, List<DiscoverSong> today,
                                  List<DiscoverSong> vocal, Map<String, List<DiscoverSong>> genres) {}
     private record ProfileRow(String creatorId, String publicId, String stageName, String tagline,
@@ -127,7 +127,7 @@ public class ArtistProfileService {
             """ + DISCOVER_RELEASES;
     private static final RowMapper<CatalogSong> CATALOG_ROW = (rs, row) -> new CatalogSong(rs.getString("id"),
             rs.getLong("version"), rs.getString("title"), rs.getString("public_id"), rs.getString("stage_name"),
-            rs.getString("cover_id") != null, rs.getTimestamp("discover_published_at").toInstant());
+            rs.getString("cover_id") != null, publicCoverVersion(rs.getString("cover_id")), rs.getTimestamp("discover_published_at").toInstant());
     private static final RowMapper<DiscoverSong> DISCOVER_SONG_ROW = (rs, row) ->
             new DiscoverSong(rs.getString("public_id"), rs.getString("stage_name"),
                     new PublicSong(rs.getString("id"), rs.getLong("version"), rs.getString("title"),

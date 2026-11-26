@@ -1,5 +1,6 @@
 package com.qingfeng.music.server.web.app;
 
+import com.qingfeng.music.lyrics.api.LyricLanguage;
 import com.qingfeng.music.creation.QuickCreationService;
 import com.qingfeng.music.server.security.CreatorPrincipal;
 import com.qingfeng.music.server.config.LocalQuickCreation;
@@ -15,7 +16,7 @@ public class QuickCreationController {
     private final QuickCreationService service;
     private final ObjectProvider<LocalQuickCreation> local;
     public QuickCreationController(QuickCreationService service,ObjectProvider<LocalQuickCreation> local){this.service=service;this.local=local;}
-    public record Request(@NotNull @PositiveOrZero Long workVersion,@NotBlank @Pattern(regexp="[0-9a-fA-F-]{36}")String requestKey,@NotBlank @Pattern(regexp="zh-CN|en|mixed")String language){}
+    public record Request(@NotNull @PositiveOrZero Long workVersion,@NotBlank @Pattern(regexp="[0-9a-fA-F-]{36}")String requestKey,@NotBlank @Size(max=LyricLanguage.MAX_LENGTH) @Pattern(regexp=LyricLanguage.REGEX)String language){}
     @PostMapping public QuickCreationService.View start(@AuthenticationPrincipal CreatorPrincipal owner,@PathVariable String work,@Valid @RequestBody Request input){
         var executor=local.getIfAvailable();
         return executor==null?service.start(owner.id(),work,input.workVersion(),input.requestKey(),input.language()):

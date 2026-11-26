@@ -1,0 +1,139 @@
+{
+  "sourceKey": "sample:nothing-left-to-lose:70eb9f29-9529-3f63-bf4b-5591b6eae8f7",
+  "audioSha256": "d4bfb6848fe8a7c04c2e741623ed6a01a9b184df12e8a7672bc4eb334107fd49",
+  "recognition": "Whisper large-v3-turbo and small; reviewed against the playback recording",
+  "duration": 134.76,
+  "warnings": [],
+  "words": [
+    {
+      "text": "I've been sleeping with the lights on\n",
+      "start": 14.98,
+      "end": 18.08
+    },
+    {
+      "text": "Waiting for the fear to fade\n",
+      "start": 19.28,
+      "end": 21.88
+    },
+    {
+      "text": "Every road I took was dead wrong\n",
+      "start": 23.58,
+      "end": 26.56
+    },
+    {
+      "text": "Every promise came too late\n",
+      "start": 27.8,
+      "end": 30.58
+    },
+    {
+      "text": "I've got nothing left to lose\n",
+      "start": 31.88,
+      "end": 34.62
+    },
+    {
+      "text": "Nothing left to prove\n",
+      "start": 34.62,
+      "end": 36.5
+    },
+    {
+      "text": "Let the whole world fall apart\n",
+      "start": 36.5,
+      "end": 38.54
+    },
+    {
+      "text": "I'll find another way to move\n",
+      "start": 38.54,
+      "end": 40.76
+    },
+    {
+      "text": "I've got nothing left to hide\n",
+      "start": 40.76,
+      "end": 42.98
+    },
+    {
+      "text": "I'm still breathing, still alive\n",
+      "start": 42.98,
+      "end": 45.02
+    },
+    {
+      "text": "If the sky comes crashing down\n",
+      "start": 45.02,
+      "end": 47.56
+    },
+    {
+      "text": "I'll be standing on the other side\n",
+      "start": 48.9,
+      "end": 52.04
+    },
+    {
+      "text": "On the other side\n",
+      "start": 57.8,
+      "end": 60.86
+    },
+    {
+      "text": "There's a freedom in the silence\n",
+      "start": 67.38,
+      "end": 72.04
+    },
+    {
+      "text": "There's a beauty in the scars\n",
+      "start": 72.04,
+      "end": 75.86
+    },
+    {
+      "text": "I don't need another reason\n",
+      "start": 75.86,
+      "end": 80.44
+    },
+    {
+      "text": "To remember who we are\n",
+      "start": 80.44,
+      "end": 84.22
+    },
+    {
+      "text": "I've got nothing left to lose\n",
+      "start": 84.22,
+      "end": 86.36
+    },
+    {
+      "text": "Nothing left to prove\n",
+      "start": 86.36,
+      "end": 88.38
+    },
+    {
+      "text": "Let the whole world fall apart\n",
+      "start": 88.38,
+      "end": 90.32
+    },
+    {
+      "text": "I'll find another way to move\n",
+      "start": 90.32,
+      "end": 92.54
+    },
+    {
+      "text": "I've got nothing left to hide\n",
+      "start": 92.54,
+      "end": 94.72
+    },
+    {
+      "text": "I'm still breathing, still alive\n",
+      "start": 94.72,
+      "end": 96.78
+    },
+    {
+      "text": "If the sky comes crashing down\n",
+      "start": 96.78,
+      "end": 99.3
+    },
+    {
+      "text": "I'll be standing on the other side\n",
+      "start": 100.64,
+      "end": 103.84
+    },
+    {
+      "text": "On the other side\n",
+      "start": 113.84,
+      "end": 116.78
+    }
+  ]
+}

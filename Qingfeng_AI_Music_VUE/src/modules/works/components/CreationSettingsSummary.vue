@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { customLyricLanguageName, isPresetLyricLanguage, lyricLanguageLabels } from '../../../shared/i18n/lyric-language'
 import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue'
 import { t, locale } from '../../../shared/i18n'
 import type { Work } from '../../studio'
@@ -44,7 +45,7 @@ function choices(group:string){
 }
 const rows=computed(()=>{
  const prefs=direction.value?.preferences
- const labels:Record<string,string>={'zh-CN':'中文',en:'English',mixed:'中英混合'}
+ const language=props.revision?.language??''
  const structure=normalizeLyricsStructure(props.revision??undefined), timbre=choices('timbre')
  const template=structure.templateId==='CUSTOM'?t('自定义（{count} 段）',{count:structure.customSections.length})
    :structure.templateId==='AUTO'?t('让 AI 安排'):structure.templateId
@@ -54,7 +55,7 @@ const rows=computed(()=>{
   {label:'情绪',value:choices('mood'),icon:icons.mood},
   {label:'节奏',value:choices('tempo'),icon:icons.tempo},
   {label:'演唱声音',value:timbre?`${voice} (${timbre})`:voice,icon:icons.voice},
-  {label:'歌词语言',value:t(labels[props.revision?.language||'']||''),icon:icons.language},
+  {label:'歌词语言',value:isPresetLyricLanguage(language)?t(lyricLanguageLabels[language]):customLyricLanguageName(language)??'',icon:icons.language},
   {label:'歌词模板',value:props.revision?.templateId?template+(structure.chorusFirst?' · '+t('副歌先行'):''):'',icon:icons.template},
  ]
 })

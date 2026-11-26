@@ -3,6 +3,7 @@ package com.qingfeng.music.server.web;
 import com.qingfeng.music.server.artist.ArtistProfileService;
 import com.qingfeng.music.server.artist.ArtistProfileService.CatalogSong;
 import com.qingfeng.music.server.artist.DiscoverSongService;
+import com.qingfeng.music.server.web.util.SongShareTitle;
 import java.io.IOException;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
@@ -12,7 +13,7 @@ import java.util.Optional;
 import java.util.regex.Pattern;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Profile;
-import org.springframework.core.io.ClassPathResource;
+import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Component;
 import org.springframework.web.util.HtmlUtils;
 import tools.jackson.databind.ObjectMapper;
@@ -27,11 +28,14 @@ final class PublicDiscoverDocuments {
     private final ArtistProfileService artists;
     private final DiscoverSongService songs;
     private final String origin;
+    private final Resource index;
 
     PublicDiscoverDocuments(ArtistProfileService artists, DiscoverSongService songs,
-            @Value("${qingfeng.sharing.public-base-url:https://cheerfulmusic.com}") String origin) {
+            @Value("${qingfeng.sharing.public-base-url:https://cheerfulmusic.com}") String origin,
+            @Value("classpath:/static/index.html") Resource index) {
         this.artists = artists;
         this.songs = songs;
+        this.index = index;
         URI uri = URI.create(origin);
         if (!"https".equals(uri.getScheme()) || uri.getHost() == null || uri.getUserInfo() != null
                 || uri.getQuery() != null || uri.getFragment() != null
@@ -80,6 +84,8 @@ final class PublicDiscoverDocuments {
         String artistPath = "/artist/" + song.artistId();
         String media = "/api/public/artists/" + song.artistId() + "/songs/" + song.id() + "/" + song.version();
         String image = origin + (song.hasCover() ? media + "/cover" : "/brand/share-default-cover.png");
+        String thumbnail = origin + "/api/public" + path(song, false) + "/thumbnail.png"
+                + (song.coverVersion() == null ? "" : "?v=" + song.coverVersion());
         String schema = JSON.writeValueAsString(Map.of("@context", "https://schema.org", "@type", "MusicRecording",
                 "name", song.title(), "url", canonical, "image", image, "description", description,
                 "datePublished", song.publishedAt().toString(), "byArtist",
@@ -95,7 +101,8 @@ final class PublicDiscoverDocuments {
                 <meta data-site-seo property="og:url" content="%s"><meta data-site-seo property="og:image" content="%s">
                 <script data-site-seo type="application/ld+json">%s</script>
                 """.formatted(escape(title), escape(description), canonical, origin + path(song, false),
-                origin + path(song, true), site, escape(title), escape(description), canonical, escape(image), schema);
+                origin + path(song, true), SongShareTitle.SITE_NAME, escape(SongShareTitle.forTimeline(song.title(), song.stageName())),
+                escape(description), canonical, escape(thumbnail), schema);
         String cover = song.hasCover() ? "<img src=\"" + media + "/cover\" width=\"240\" height=\"240\" alt=\""
                 + escape(english ? "Cover of " + song.title() : "《" + song.title() + "》的封面") + "\">" : "";
         String body = """
@@ -104,7 +111,7 @@ final class PublicDiscoverDocuments {
                 <p><a href="%s">%s</a></p></main>
                 """.formatted(escape(song.title()), cover, artistPath, escape(song.stageName()), escape(description),
                 media, english ? "/en/discover" : "/discover", english ? "Explore more songs" : "更多广场作品");
-        String shell = new ClassPathResource("static/index.html").getContentAsString(StandardCharsets.UTF_8);
+        String shell = index.getContentAsString(StandardCharsets.UTF_8);
         String html = shell.replaceFirst("(?i)<html lang=\"[^\"]*\"", "<html lang=\"" + (english ? "en" : "zh-CN") + "\"")
                 .replaceAll("(?is)<title[^>]*>.*?</title>", "")
                 .replaceAll("(?is)<meta\\s+name=[\"']description[\"'][^>]*>", "")

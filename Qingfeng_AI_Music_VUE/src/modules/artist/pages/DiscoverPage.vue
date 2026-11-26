@@ -13,8 +13,8 @@ import ArtistAvatar from '../components/ArtistAvatar.vue'
 import DiscoverSongCard from '../components/DiscoverSongCard.vue'
 import DiscoverShelf from '../components/DiscoverShelf.vue'
 import { withDiscoverEditorialCover } from '../model/discover-editorial-artwork'
-import { discoverSongArtwork, type HeroArtwork } from '../model/discover-hero-artwork'
-import { discoverJazzRows } from '../model/discover-jazz-tracks'
+import { discoverSongArtwork, jixiangwuHeroArtwork, prayerHeroArtwork, type HeroArtwork } from '../model/discover-hero-artwork'
+import { discoverJazzRows, discoverRockRows, prayerBeneathTheStarsRow } from '../model/discover-genre-tracks'
 import {
   christmasSongId, discoverGenres, globalPopWideCoverPositions, publicDiscoverTrack, withDiscoverPreviewCover,
   type DiscoverShelfTrack, type PublishedShelfTrack,
@@ -26,7 +26,7 @@ import { usePreviewTracks, type PreviewTrack } from '../../home/model/tracks'
 import { accountState } from '../../../shared/identity/account-state'
 import { logtoState } from '../../../shared/identity/logto-state'
 import {
-  getDiscoverShelves, getPublicArtist, listDiscoverSongs, publicAvatarUrl, recordDiscoverPlay,
+  getDiscoverShelves, getPublicArtist, listDiscoverSongs, publicAvatarUrl, publicTrack, recordDiscoverPlay,
   type DiscoverArtist, type DiscoverShelves, type DiscoverSong,
 } from '../api/artist'
 import walkedFar from '../../../assets/discover/carousel-walked-far.webp'
@@ -55,8 +55,18 @@ const streetlightSongId = '0f831f4b-1f3f-4d14-b6cf-b33534863622'
 const replacedHeroSongId = 'acfaa9d5-ce74-477f-9db8-d3700311a26c'
 const invincibleSongId = '57bb7310-c64c-4873-b239-f2a268a7dedd'
 const micangshanSongId = '09aaf684-2b68-438f-aa17-8730a352bf74'
+const mascotSongId = '1485ddee-9a1f-435b-bfc8-403cccb8c243'
+const excludedRankedHeroIds = new Set([
+  replacedHeroSongId, streetlightSongId, christmasSongId, invincibleSongId, micangshanSongId, mascotSongId,
+])
+const velvetHoursSongId = '0fef4b09-77a8-489f-be7a-f61490a9d848'
 const christmasArtistId = '308036ef-8bef-486f-88cc-8266e5797768'
-const christmasPlaylistSongIds = [christmasSongId, '752fa2d9-ec96-47c3-87a5-a1d49d0135af']
+const christmasPlaylistSongIds = [
+  christmasSongId,
+  '752fa2d9-ec96-47c3-87a5-a1d49d0135af', // Snow on the Floor
+  '1c5c325c-6a45-4607-a8e4-5baadabc2032', // Navidad
+  '1cf20b2d-76cd-46de-9666-77a7303588a8', // Nochebuena en la Mesa
+]
 const player = usePlayer()
 const previewPlaylists = usePreviewPlaylists()
 const previewTracks = usePreviewTracks()
@@ -77,9 +87,12 @@ const featuredSongs = ref<DiscoverSong[]>([])
 const popularSongs = ref<DiscoverSong[]>([])
 const firstPopularPending = ref(true)
 const supplementalHeroSong = ref<DiscoverSong>()
+const mascotRelease = ref<DiscoverSong>()
+const velvetHours = ref<PublishedShelfTrack>()
 const editorialLoading = ref(true)
 const waitingForEntry = computed(() => checkingEditorialAccess.value && editorialLoading.value)
 const selectedHeroTrackId = ref('')
+const unavailableHeroImages = ref(new Set<string>())
 const heroPaused = ref(false)
 const heroHovered = ref(false)
 const heroFocused = ref(false)
@@ -148,31 +161,39 @@ const genreShelves = computed(() => discoverGenres.map(section => {
         wideCoverPosition: section.id === 'global-pop' ? globalPopWideCoverPositions[track.id] : undefined,
       }
     })
-  const tracks = [...publicRows, ...examples]
-  const square = tracks.slice(0, 7)
+  const jazzRelease = section.id === 'jazz-soul'
+    ? publicRows.find(row => row.song.id === velvetHoursSongId) ?? velvetHours.value
+    : undefined
+  const editorial = editorialAccess.value ? (section.id === 'jazz-soul' ? discoverJazzRows : section.id === 'rock' ? discoverRockRows : []) : []
+  const curated = jazzRelease ? [jazzRelease, ...editorial] : editorial
+  const tracks = [...publicRows.filter(row => row.song.id !== jazzRelease?.song.id), ...examples]
+  const square = [...curated, ...tracks.slice(0, 7)]
   const wide = section.hasWideRow ? [...tracks.slice(7), ...tracks.slice(0, 7)].slice(0, 4) : []
-  return { ...section, square: section.id === 'jazz-soul' && editorialAccess.value ? [...discoverJazzRows, ...square] : square, wide }
+  return { ...section, square, wide }
 }))
 const walkedFarRow = vocalPerformanceRows.find(row => row.track.id === 'vocal-zou-le-na-me-yuan')!
 const heroSlides = computed(() => {
   const streetlight = popularSongs.value.find(item => item.song.id === streetlightSongId) ?? supplementalHeroSong.value
-  const candidates = popularSongs.value.filter(item =>
-    item.song.id !== replacedHeroSongId && item.song.id !== streetlightSongId && item.song.id !== christmasSongId)
+  const mascot = popularSongs.value.find(item => item.song.id === mascotSongId) ?? mascotRelease.value
+  const candidates = popularSongs.value.filter(item => !excludedRankedHeroIds.has(item.song.id))
   if (streetlight) candidates.splice(1, 0, streetlight)
-  const releases = editorialAccess.value || candidates.length ? candidates : latestSongs.value
-  const visible = releases.slice(0, discoverSongArtwork.length)
-  const invincible = visible.find(item => item.song.id === invincibleSongId)
-  const micangshan = visible.find(item => item.song.id === micangshanSongId)
-  let ordered = visible
-  if (invincible && micangshan) {
-    // Match the airport guitar and countryside artwork slots, respectively.
-    ordered = visible.filter(item => item !== invincible && item !== micangshan)
-    ordered.splice(2, 0, invincible, micangshan)
+  const rankedSlots = discoverSongArtwork.length - Number(Boolean(mascot)) - Number(editorialAccess.value)
+  const releases = editorialAccess.value || candidates.length ? candidates : latestSongs.value.filter(item => !excludedRankedHeroIds.has(item.song.id))
+  const ordered: DiscoverShelfTrack[] = withTracks(releases.slice(0, rankedSlots))
+  if (mascot) {
+    const track = publicTrack(mascot.artistId, mascot.song)
+    ordered.splice(2, 0, { ...mascot, track: { ...track, publication: mascot } })
   }
+  if (editorialAccess.value) ordered.splice(3, 0, prayerBeneathTheStarsRow)
 
   const slides: { row: DiscoverShelfTrack; artwork: HeroArtwork }[] = [
     ...(editorialAccess.value ? [{ row: walkedFarRow, artwork: { desktop: walkedFar, compact: walkedFar, position: '68% center' } }] : []),
-    ...withTracks(ordered).map((row, index) => ({ row, artwork: discoverSongArtwork[index]! })),
+    ...ordered.map((row, index) => {
+      const artwork = row.track.id === mascotSongId ? jixiangwuHeroArtwork
+        : row === prayerBeneathTheStarsRow ? prayerHeroArtwork
+          : discoverSongArtwork[index]!
+      return { row, artwork }
+    }),
   ]
   const release = latestSongs.value.find(item => item.song.id === christmasSongId)
     ?? popularSongs.value.find(item => item.song.id === christmasSongId)
@@ -187,12 +208,20 @@ const heroSlideCount = computed(() => heroSlides.value.length)
 const heroIndex = computed(() => Math.max(0, heroSlides.value.findIndex(slide => slide.row.track.id === selectedHeroTrackId.value)))
 const hero = computed(() => heroSlides.value[heroIndex.value]?.row)
 const heroRows = computed(() => heroSlides.value.map(slide => slide.row))
-const heroBackground = computed(() => heroSlides.value[heroIndex.value]?.artwork)
+function displayedHeroArtwork(artwork: HeroArtwork): HeroArtwork {
+  const { desktop, fallback } = artwork
+  if (!fallback || !unavailableHeroImages.value.has(desktop)) return artwork
+  return { desktop: fallback, compact: fallback, position: artwork.position }
+}
+function useHeroImageFallback(artwork: HeroArtwork) {
+  if (artwork.fallback) unavailableHeroImages.value.add(artwork.desktop)
+}
+const heroBackground = computed(() => hero.value && displayedHeroArtwork(heroSlides.value[heroIndex.value]!.artwork))
 function heroIndexAt(step: number) {
   return (heroIndex.value + step + heroSlideCount.value) % heroSlideCount.value
 }
-const heroBefore = computed(() => heroSlides.value[heroIndexAt(-1)]!.artwork)
-const heroAfter = computed(() => heroSlides.value[heroIndexAt(1)]!.artwork)
+const heroBefore = computed(() => displayedHeroArtwork(heroSlides.value[heroIndexAt(-1)]!.artwork))
+const heroAfter = computed(() => displayedHeroArtwork(heroSlides.value[heroIndexAt(1)]!.artwork))
 const heroTitleLength = computed(() => Array.from(hero.value?.track.title ?? '').length)
 const visibleArtists = computed(() => {
   const found = artists.value ?? Array.from(new Map(latestSongs.value.map(song => [song.artistId, {
@@ -280,6 +309,14 @@ async function loadEditorial() {
         if (active()) supplementalHeroSong.value = result.songs.find(item => item.song.id === streetlightSongId)
       }
     }).catch(() => { if (active()) firstPopularPending.value = false }),
+    listDiscoverSongs('latest', 0, '', '吉祥物').then(page => {
+      if (active()) mascotRelease.value = page.songs.find(item => item.song.id === mascotSongId)
+    }).catch(() => { /* The ranked feed can still supply the release. */ }),
+    listDiscoverSongs('latest', 0, '', 'Velvet Hours').then(page => {
+      if (!active()) return
+      const release = page.songs.find(item => item.song.id === velvetHoursSongId)
+      velvetHours.value = release ? { ...release, track: publicDiscoverTrack(release) } : undefined
+    }).catch(() => { /* The genre rows are still available if this lookup fails. */ }),
     loadShelves(),
   ])
   if (active()) editorialLoading.value = false
@@ -437,7 +474,7 @@ onBeforeUnmount(() => {
   <div class="discover">
     <header class="discover-header">
       <div class="discover-width discover-header-inner">
-        <RouterLink class="discover-brand" :to="discoverHref === '/en/discover' ? '/en/' : '/'" :aria-label="t('Cheerful Music 青风音乐首页')"><BrandLogo standalone /></RouterLink>
+        <RouterLink class="discover-brand" :to="discoverHref === '/en/discover' ? '/en/' : '/'" :aria-label="t('Cheerful Music 青风音乐首页')"><BrandLogo /></RouterLink>
         <nav class="discover-nav" :aria-label="t('主导航')">
           <RouterLink :to="discoverHref === '/en/discover' ? '/en/' : '/'">{{ t('首页') }}</RouterLink>
           <RouterLink :to="discoverHref" aria-current="page">{{ t('广场') }}</RouterLink>
@@ -464,14 +501,16 @@ onBeforeUnmount(() => {
         <div v-if="heroSlideCount > 1" class="discover-hero-preview discover-hero-preview-before">
           <picture>
             <source media="(min-width: 521px)" :srcset="heroBefore.compact">
-            <img :style="{ objectPosition: heroBefore.position }" alt="" loading="lazy" decoding="async" fetchpriority="low">
+            <img :style="{ objectPosition: heroBefore.position }" alt="" loading="lazy" decoding="async" fetchpriority="low"
+              @error="useHeroImageFallback(heroBefore)">
           </picture>
         </div>
-        <div class="discover-hero-main" :class="{ 'is-single': heroSlideCount === 1 && !firstPopularPending }">
+        <div class="discover-hero-main" :class="{ 'is-single': heroSlideCount === 1 && !firstPopularPending, 'has-portrait': hero.track.id === mascotSongId }">
           <picture>
             <source media="(max-width: 760px)" :srcset="heroBackground.compact">
             <img class="discover-hero-background" :src="heroBackground.desktop"
-              :style="{ objectPosition: heroBackground.position }" alt="" width="1536" height="512" fetchpriority="high">
+              :style="{ objectPosition: heroBackground.position }" alt="" width="1536" height="512" fetchpriority="high"
+              @error="useHeroImageFallback(heroBackground)">
           </picture>
           <div class="discover-hero-content">
             <h2 :class="{ 'is-long-title': heroTitleLength > 10, 'is-very-long-title': heroTitleLength > 32 }" :title="hero.track.title"><RouterLink v-if="hero.song && hero.publishedAt" class="discover-song-title-link" :to="discoverSongHref(hero.song)">{{ hero.track.title }}</RouterLink><template v-else>{{ hero.track.title }}</template></h2>
@@ -482,7 +521,8 @@ onBeforeUnmount(() => {
         <div v-if="heroSlideCount > 1" class="discover-hero-preview discover-hero-preview-after">
           <picture>
             <source media="(min-width: 521px)" :srcset="heroAfter.compact">
-            <img :style="{ objectPosition: heroAfter.position }" alt="" loading="lazy" decoding="async" fetchpriority="low">
+            <img :style="{ objectPosition: heroAfter.position }" alt="" loading="lazy" decoding="async" fetchpriority="low"
+              @error="useHeroImageFallback(heroAfter)">
           </picture>
         </div>
         <template v-if="heroSlideCount > 1">

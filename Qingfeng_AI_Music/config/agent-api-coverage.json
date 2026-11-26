@@ -680,6 +680,7 @@
       "source": "com/qingfeng/music/server/web/publicapi/DiscoverSongController.java",
       "mappingDeclarations": [
         "@GetMapping(PUBLIC)",
+        "@GetMapping(value = PUBLIC + \"/thumbnail.png\", produces = \"image/png\")",
         "@GetMapping(PUBLIC + \"/comments\")",
         "@PutMapping(ACCOUNT + \"/like\")",
         "@PutMapping(ACCOUNT + \"/comments/{comment}\")",
@@ -869,6 +870,7 @@
       "mode": "protocol",
       "flows": [
         "SPA document",
+        "Public Discover song card metadata",
         "Public bilingual guide documents and canonical redirects",
         "Bilingual published recording pages, current listings and sitemap (InviteGateIntegrationTest)"
       ]
@@ -945,7 +947,8 @@
       ],
       "mode": "native",
       "flows": [
-        "open_feature:gift"
+        "open_feature:gift",
+        "open_feature:discover"
       ]
     }
   ]

@@ -889,6 +889,182 @@
       "key": "qingfeng/recommendation-samples/20261123/cover/3b0b2556d9e1/westside-summer-3b0b2556d9e1-cover.jpg",
       "bytes": 14022,
       "sha256": "3b0b2556d9e1a9add1793bddbb111b87daae82f6b2bc598708bd389f00ed2ea2"
+    },
+    {
+      "trackId": "christmas-feels-like-home",
+      "kind": "audio",
+      "path": "/media/recommendations/christmas-feels-like-home-757a61943433-preview-128.mp3",
+      "key": "qingfeng/recommendation-samples/20261125/audio/757a61943433/christmas-feels-like-home-757a61943433-preview-128.mp3",
+      "bytes": 3335469,
+      "sha256": "757a619434335da701960dc6b18cfd3c397e3ebdffea05f08ff53881df7c8e24"
+    },
+    {
+      "trackId": "prayer-beneath-the-stars",
+      "kind": "audio",
+      "path": "/media/recommendations/prayer-beneath-the-stars-419248e9a652-preview-128.mp3",
+      "key": "qingfeng/recommendation-samples/20261125/audio/419248e9a652/prayer-beneath-the-stars-419248e9a652-preview-128.mp3",
+      "bytes": 2852397,
+      "sha256": "419248e9a652457cb381c8695fbf1c334ee3b90e76f9dabe36aaae4db689e69a"
+    },
+    {
+      "trackId": "cardboard-corners",
+      "kind": "audio",
+      "path": "/media/recommendations/cardboard-corners-468267313021-preview-128.mp3",
+      "key": "qingfeng/recommendation-samples/20261125/audio/468267313021/cardboard-corners-468267313021-preview-128.mp3",
+      "bytes": 2752941,
+      "sha256": "4682673130213616e2e91cac6ab85a628fe9f3b6cf17f44347598c3a63ec6665"
+    },
+    {
+      "trackId": "christmas-feels-like-home",
+      "kind": "cover",
+      "path": "/media/recommendations/christmas-feels-like-home-8c41c0110196-cover.jpg",
+      "key": "qingfeng/recommendation-samples/20261125/cover/8c41c0110196/christmas-feels-like-home-8c41c0110196-cover.jpg",
+      "bytes": 12588,
+      "sha256": "8c41c0110196f74f35bb318f6e439d3f5793a8d1e05e3618e5192781fec1bb85"
+    },
+    {
+      "trackId": "prayer-beneath-the-stars",
+      "kind": "cover",
+      "path": "/media/recommendations/prayer-beneath-the-stars-5ed3738cf46d-cover.jpg",
+      "key": "qingfeng/recommendation-samples/20261125/cover/5ed3738cf46d/prayer-beneath-the-stars-5ed3738cf46d-cover.jpg",
+      "bytes": 18562,
+      "sha256": "5ed3738cf46da6e6f08fdd2c008ef8dcff5a277bab839f44e3aff68f05edcb36"
+    },
+    {
+      "trackId": "cardboard-corners",
+      "kind": "cover",
+      "path": "/media/recommendations/cardboard-corners-ef3e80c9a905-cover.jpg",
+      "key": "qingfeng/recommendation-samples/20261125/cover/ef3e80c9a905/cardboard-corners-ef3e80c9a905-cover.jpg",
+      "bytes": 34913,
+      "sha256": "ef3e80c9a905492ad9fda0dd0ac7f00eeaafd81e88b00f1d38e1106472d41d33"
+    },
+    {
+      "trackId": "snow-on-the-floor",
+      "kind": "cover",
+      "path": "/media/recommendations/snow-on-the-floor-7cc079e30cdf-cover.jpg",
+      "key": "qingfeng/recommendation-samples/20261125/cover/7cc079e30cdf/snow-on-the-floor-7cc079e30cdf-cover.jpg",
+      "bytes": 8426,
+      "sha256": "7cc079e30cdf587550438a82e7ebb562858f728097ab5cd8c16cecf2ae952267"
+    },
+    {
+      "trackId": "navidad",
+      "kind": "cover",
+      "path": "/media/recommendations/navidad-f76ea270de14-cover.jpg",
+      "key": "qingfeng/recommendation-samples/20261125/cover/f76ea270de14/navidad-f76ea270de14-cover.jpg",
+      "bytes": 239660,
+      "sha256": "f76ea270de14bbce078b7b58482a5540487a943b44ed250b1cc0d1421c9d2ffd"
+    },
+    {
+      "trackId": "zui-hua-jazz",
+      "kind": "audio",
+      "path": "/media/recommendations/zui-hua-jazz-40bfdd86480a-preview-128.mp3",
+      "key": "qingfeng/recommendation-samples/20261125/audio/40bfdd86480a/zui-hua-jazz-40bfdd86480a-preview-128.mp3",
+      "bytes": 3802029,
+      "sha256": "40bfdd86480a716730a0ecb766860a1779ed02dd118d27b4e3e688e4cc3cf110"
+    },
+    {
+      "trackId": "zui-hua-jazz",
+      "kind": "cover",
+      "path": "/media/recommendations/zui-hua-jazz-104265deb8d9-cover.jpg",
+      "key": "qingfeng/recommendation-samples/20261125/cover/104265deb8d9/zui-hua-jazz-104265deb8d9-cover.jpg",
+      "bytes": 74667,
+      "sha256": "104265deb8d9ed9a06801d2595f6458f0e5cf51490ea72c83e867d35fbcb4cd7"
+    },
+    {
+      "trackId": "nothing-left-to-lose",
+      "kind": "audio",
+      "path": "/media/recommendations/nothing-left-to-lose-d4bfb6848fe8-preview-128.mp3",
+      "key": "qingfeng/recommendation-samples/20261125/audio/d4bfb6848fe8/nothing-left-to-lose-d4bfb6848fe8-preview-128.mp3",
+      "bytes": 2156973,
+      "sha256": "d4bfb6848fe8a7c04c2e741623ed6a01a9b184df12e8a7672bc4eb334107fd49"
+    },
+    {
+      "trackId": "nothing-left-to-lose",
+      "kind": "cover",
+      "path": "/media/recommendations/nothing-left-to-lose-9421622df894-cover.jpg",
+      "key": "qingfeng/recommendation-samples/20261125/cover/9421622df894/nothing-left-to-lose-9421622df894-cover.jpg",
+      "bytes": 66139,
+      "sha256": "9421622df89413889b5494fb3f826d85ac1bb022d5054d618e0ec32dc8ff2204"
+    },
+    {
+      "trackId": "your-side-of-the-tape",
+      "kind": "audio",
+      "path": "/media/recommendations/your-side-of-the-tape-746cee268a24-preview-128.mp3",
+      "key": "qingfeng/recommendation-samples/20261125/audio/746cee268a24/your-side-of-the-tape-746cee268a24-preview-128.mp3",
+      "bytes": 2324013,
+      "sha256": "746cee268a2403d87f05669fb6b4f663307fcd771830b7236ce1ba5586ddacc0"
+    },
+    {
+      "trackId": "your-side-of-the-tape",
+      "kind": "cover",
+      "path": "/media/recommendations/your-side-of-the-tape-3c8c5d8da93c-cover.jpg",
+      "key": "qingfeng/recommendation-samples/20261125/cover/3c8c5d8da93c/your-side-of-the-tape-3c8c5d8da93c-cover.jpg",
+      "bytes": 101392,
+      "sha256": "3c8c5d8da93ca9497a99f8818966aefbf16267804915a1b0acee33f36fa954ac"
+    },
+    {
+      "trackId": "jixiangwu-hero",
+      "kind": "cover",
+      "path": "/media/recommendations/jixiangwu-hero-361167958fda-cover.jpg",
+      "key": "qingfeng/recommendation-samples/20261125/cover/361167958fda/jixiangwu-hero-361167958fda-cover.jpg",
+      "bytes": 222221,
+      "sha256": "361167958fdaf2cf7453b50e2db81983df36f0555bb331cd8c76a2ec7ee19257"
+    },
+    {
+      "trackId": "prayer-beneath-the-stars-hero",
+      "kind": "cover",
+      "path": "/media/recommendations/prayer-beneath-the-stars-hero-7761229f5dee-cover.jpg",
+      "key": "qingfeng/recommendation-samples/20261125/cover/7761229f5dee/prayer-beneath-the-stars-hero-7761229f5dee-cover.jpg",
+      "bytes": 264251,
+      "sha256": "7761229f5deeecc708dc7925122ff12761d70bc8618c9c6b134cc54b3849aac3"
+    },
+    {
+      "trackId": "bicycle-weather",
+      "kind": "audio",
+      "path": "/media/recommendations/bicycle-weather-efad57f38eeb-preview-128.mp3",
+      "key": "qingfeng/recommendation-samples/20261125/audio/efad57f38eeb/bicycle-weather-efad57f38eeb-preview-128.mp3",
+      "bytes": 3164973,
+      "sha256": "efad57f38eeb4be94d6e6a8c2039a4f902a24a9411633cec52389008103d7783"
+    },
+    {
+      "trackId": "bicycle-weather",
+      "kind": "cover",
+      "path": "/media/recommendations/bicycle-weather-3c00cac6dfa5-cover.jpg",
+      "key": "qingfeng/recommendation-samples/20261125/cover/3c00cac6dfa5/bicycle-weather-3c00cac6dfa5-cover.jpg",
+      "bytes": 36496,
+      "sha256": "3c00cac6dfa5200b88324501e802b6420e58ad3726274546f84ee31710c9426c"
+    },
+    {
+      "trackId": "southbank-under-rain",
+      "kind": "audio",
+      "path": "/media/recommendations/southbank-under-rain-d3e9a13d8ce0-preview-128.mp3",
+      "key": "qingfeng/recommendation-samples/20261125/audio/d3e9a13d8ce0/southbank-under-rain-d3e9a13d8ce0-preview-128.mp3",
+      "bytes": 4436013,
+      "sha256": "d3e9a13d8ce0cf386c3c267a37655095dc55c9d7d9e0b824319930597470f903"
+    },
+    {
+      "trackId": "southbank-under-rain",
+      "kind": "cover",
+      "path": "/media/recommendations/southbank-under-rain-6dfe4a29f8c1-cover.jpg",
+      "key": "qingfeng/recommendation-samples/20261125/cover/6dfe4a29f8c1/southbank-under-rain-6dfe4a29f8c1-cover.jpg",
+      "bytes": 38403,
+      "sha256": "6dfe4a29f8c11d33a11f39cc669cfc0a0ae26bdec85fb7e0604c347c2f2c2ed3"
+    },
+    {
+      "trackId": "town-hall-steps",
+      "kind": "audio",
+      "path": "/media/recommendations/town-hall-steps-0cbb13d6a29b-preview-128.mp3",
+      "key": "qingfeng/recommendation-samples/20261125/audio/0cbb13d6a29b/town-hall-steps-0cbb13d6a29b-preview-128.mp3",
+      "bytes": 3489069,
+      "sha256": "0cbb13d6a29b361c53c10bae67ba2da63730757329f75cf0c4dab80bb316c90d"
+    },
+    {
+      "trackId": "town-hall-steps",
+      "kind": "cover",
+      "path": "/media/recommendations/town-hall-steps-f239be1445e2-cover.jpg",
+      "key": "qingfeng/recommendation-samples/20261125/cover/f239be1445e2/town-hall-steps-f239be1445e2-cover.jpg",
+      "bytes": 30217,
+      "sha256": "f239be1445e2ae979efefef3d63a50b039f4e8171fe584521a7f4a08719d75a6"
     }
   ]
 }

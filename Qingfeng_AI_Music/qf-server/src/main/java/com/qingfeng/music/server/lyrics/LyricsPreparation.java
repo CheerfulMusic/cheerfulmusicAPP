@@ -80,7 +80,7 @@ public final class LyricsPreparation {
     }
     private static String key(String asset) { return "asset:"+asset; }
     public static String sampleKey(String sample) {
-        var song=RecommendationSamples.SONGS.stream().filter(s->s.id().equals(sample)).findFirst().orElseThrow();
+        var song=RecommendationSamples.playbackSong(sample).orElseThrow();
         String object=RecommendationSamples.objectKey(song.audio().substring("/media/".length())).orElseThrow();
         return "sample:"+sample+":"+UUID.nameUUIDFromBytes(object.getBytes(java.nio.charset.StandardCharsets.UTF_8));
     }

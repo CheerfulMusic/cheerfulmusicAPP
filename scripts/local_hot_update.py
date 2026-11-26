@@ -13,7 +13,7 @@ import time
 
 WEB = "Qingfeng_AI_Music_VUE"
 API = "Qingfeng_AI_Music"
-QUEUE_MIGRATION = "V57__ai_capacity_queue.sql"
+QUEUE_MIGRATION = "V59__ai_capacity_queue.sql"
 QUEUE_MIGRATION_HASH = "371868410e537d7124b7d42e9453ae17d602708559d93bd97ebb0886b1672e2a"
 
 
@@ -79,7 +79,7 @@ def compatible_migrations(baseline, candidate):
     if any(built.get(name) != digest for name, digest in deployed.items()):
         raise ValueError("Installed regional migration changed; keeping the current local services")
     additions = set(built) - set(deployed)
-    # The V57 capacity module and its startup check are disabled in the local launch arguments.
+    # The V59 capacity module and its startup check are disabled in the local launch arguments.
     if additions - {QUEUE_MIGRATION}:
         raise ValueError("Local update needs a newer database schema: " + ", ".join(sorted(additions)))
     if QUEUE_MIGRATION in additions and candidate["migrationContract"]["normalizedSha256"].get(QUEUE_MIGRATION) != QUEUE_MIGRATION_HASH:

@@ -1,4 +1,5 @@
 package com.qingfeng.music.lyrics.application;
+import com.qingfeng.music.lyrics.api.LyricLanguage;
 import com.qingfeng.music.credits.RewriteCharges;
 import com.qingfeng.music.common.exception.DomainException;
 import java.util.Set;
@@ -62,7 +63,7 @@ public final class InspirationRewriteService {
     private <T> String rewriteValidated(String owner, String text, String language, String requestKey, int inputLimit,
                                         Function<String, T> generate, Function<T, String> validateAndAssemble) {
         if (owner == null || owner.isBlank()) throw new DomainException("INVALID_REWRITE_REQUEST", "请刷新页面后重试改写。");
-        if (text == null || text.isBlank() || text.length() > inputLimit || !Set.of("zh-CN", "en", "mixed").contains(language == null ? "" : language))
+        if (text == null || text.isBlank() || text.length() > inputLimit || !LyricLanguage.isSupported(language))
             throw new DomainException("INVALID_REWRITE_REQUEST", inputLimit==4000 ? "请填写1至4000字的创作灵感后再改写。" : "歌词内容无效，请检查歌词后再重写。");
         if (!enabled || !writer.isConfigured()) throw new DomainException("REWRITE_PROVIDER_UNAVAILABLE", "AI改写暂不可用，请稍后再试；原文仍会保留。");
         if (requestKey == null || !requestKey.matches("[0-9a-fA-F-]{36}")) throw new DomainException("INVALID_REWRITE_REQUEST", "改写请求标识无效，请刷新后重试。");

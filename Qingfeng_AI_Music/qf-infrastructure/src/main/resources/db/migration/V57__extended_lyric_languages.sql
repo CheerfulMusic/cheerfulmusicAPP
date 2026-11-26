@@ -1,0 +1,2 @@
+ALTER TABLE quick_creation MODIFY COLUMN language VARCHAR(55) NOT NULL;
+ALTER TABLE lyric_revision MODIFY COLUMN language VARCHAR(55) NULL;

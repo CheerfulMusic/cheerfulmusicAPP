@@ -6,6 +6,7 @@ import {fileURLToPath} from 'node:url'
 import {previewMediaManifest} from '../build/preview-media'
 import {createHash} from 'node:crypto'
 import viteConfig from '../vite.config'
+import discoverMedia from '../src/modules/artist/model/discover-media.json'
 const directories:string[]=[]
 it('routes recommendation audio and covers through the normal development entry',async()=>{
  const config=await viteConfig({command:'serve',mode:'test'})
@@ -33,7 +34,10 @@ function fixture(audio:Buffer|null){
 it('verifies all local and CDN preview assets and produces byte/hash metadata',()=>{
  const manifest=previewMediaManifest(fileURLToPath(new URL('..',import.meta.url)))
  expect(manifest.assets).toEqual([])
- expect(manifest.remoteAssets).toHaveLength(73)
+ const discoverPaths=Object.values(discoverMedia).flatMap(track =>
+  'audio' in track ? [track.audio, track.cover] : [track.cover])
+ expect(manifest.remoteAssets).toHaveLength(73+discoverPaths.length)
+ expect(manifest.remoteAssets.map(asset=>asset.path)).toEqual(expect.arrayContaining(discoverPaths))
  const legacy=manifest.remoteAssets.filter(a=>a.key.startsWith('qingfeng/recommendation-samples/preview-128-v1/'))
  expect(legacy).toHaveLength(9)
  expect(legacy.every(a=>a.key.endsWith(a.path.split('/').pop()!))).toBe(true)

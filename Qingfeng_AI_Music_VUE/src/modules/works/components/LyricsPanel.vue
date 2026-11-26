@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { selectedLyricLanguage } from '../../../shared/i18n/lyric-language'
 import { lyricTimeoutMessage } from '../model/lyric-recovery'
 import CreditCostHint from '../../../shared/credits/CreditCostHint.vue'
 import { useCredits } from '../../../shared/credits/useCredits'
@@ -23,7 +24,7 @@ const versions=ref<Revision[]>([]),active=ref<Revision|null>(null),title=ref(pro
 const customLyricsReady=ref(false)
 const selectionRewriteReady=ref(false)
 const { credits, refreshCredits } = useCredits(() => props.work.id)
-const language=ref<string>(['zh-CN','en','mixed'].includes(String(route.query.language))?String(route.query.language):locale.value),instructions=ref(''),requestKey=ref('')
+const language=ref<string>(selectedLyricLanguage(route.query.language)??locale.value),instructions=ref(''),requestKey=ref('')
 const routeStructure=lyricsStructureFromQuery(route.query)
 const hasRouteStructure=route.query.templateId===routeStructure.templateId
 const structure=ref<LyricsStructure>(routeStructure)
@@ -112,7 +113,7 @@ function applyLine(chosen:LyricLineSelection,replacement:string){
 }
 let alive=true,inflight:Promise<Revision>|undefined,cacheKey=''
 interface Recovery {structure?:LyricsStructure;title:string;lyrics:string;workVersion:number;baseId:string|null;language:string;instructions:string;requestKey:string;dirty:boolean;fullRewrite?:FullRewriteAttempt;previews?:LyricSelectionInput[]}
-function validRecovery(v:unknown):v is Recovery {const r=v as Recovery;return !!r&&typeof r.title==='string'&&typeof r.lyrics==='string'&&r.title.length<=100&&r.lyrics.length<=12000&&['zh-CN','en','mixed'].includes(r.language)&&typeof r.instructions==='string'&&typeof r.requestKey==='string'}
+function validRecovery(v:unknown):v is Recovery {const r=v as Recovery;return !!r&&typeof r.title==='string'&&typeof r.lyrics==='string'&&r.title.length<=100&&r.lyrics.length<=12000&&typeof r.language==='string'&&selectedLyricLanguage(r.language)===r.language&&typeof r.instructions==='string'&&typeof r.requestKey==='string'}
 function recoveryValue():Recovery {
  return {...draftValue(),workVersion:props.work.version,baseId:active.value?.id||null,language:language.value,structure:{...structure.value},instructions:instructions.value,requestKey:requestKey.value,dirty:dirty.value,fullRewrite:pendingFullRewrite.value,previews:pendingPreviews.value.length?pendingPreviews.value:undefined}
 }
@@ -125,7 +126,7 @@ function restorePending(value:Recovery, key:string){
    const known=new Map(pendingPreviews.value.map(preview=>[preview.requestId,preview]))
    for(const preview of value.previews){
      if(preview?.workVersion===props.work.version&&typeof preview.requestId==='string'&&typeof preview.lyrics==='string'
-        &&preview.lyrics.length<=lyricsMaxLength&&['zh-CN','en','mixed'].includes(preview.language)
+        &&preview.lyrics.length<=lyricsMaxLength&&typeof preview.language==='string'&&selectedLyricLanguage(preview.language)===preview.language
         &&Array.isArray(preview.keptLines)&&preview.keptLines.length<=lyricsMaxLength
         &&preview.keptLines.every(index=>Number.isSafeInteger(index)&&index>=0)) known.set(preview.requestId,preview)
    }
@@ -149,7 +150,13 @@ watch(editorText,source=>{
  selection.value=undefined;linePreview.value=undefined;lineError.value='';rhymeOpen.value=false
 })
 watch(localSaved,value=>emit('recoverable',value),{immediate:true})
-function select(value:Revision|null){active.value=value;title.value=value?.title||props.work.title||(props.work.recipient?t('写给{recipient}的歌',{recipient:props.work.recipient}):t('我的原创歌曲'));text.value=value?.lyrics||'';baseline.value=JSON.stringify(draftValue());remember()}
+function select(value:Revision|null){
+ active.value=value
+ const storedLanguage=selectedLyricLanguage(value?.language)
+ if(storedLanguage)language.value=storedLanguage
+ title.value=value?.title||props.work.title||(props.work.recipient?t('写给{recipient}的歌',{recipient:props.work.recipient}):t('我的原创歌曲'))
+ text.value=value?.lyrics||'';baseline.value=JSON.stringify(draftValue());remember()
+}
 async function syncRoute(id:string){await nextTick();if(alive)await router.replace({query:{...route.query,revision:id,language:language.value,...lyricsStructureQuery(structure.value)}})}
 const historyId=ref('')
 const recentVersions=computed(()=>versions.value.slice(0,5))
@@ -161,7 +168,6 @@ async function loadHistory(saveCurrent=false){
    if(saveCurrent)await persist()
    if(!alive)return
    select(target);historyId.value='';error.value='';notice.value=''
-   if(target.language)language.value=target.language
    if(target.templateId)structure.value=normalizeLyricsStructure(target)
    await syncRoute(target.id)
  }catch{/* 当前编辑与保存错误留在表单中。 */}
@@ -243,14 +249,15 @@ onMounted(async()=>{
     select(history.find(v=>v.id===route.query.revision)||history[0]||null)
     cacheKey=recoveryKey(currentCreatorId(),'lyrics',props.work.id)
     const local=readRecovery(cacheKey,validRecovery)
-    if(active.value?.language)language.value=active.value.language
     if(!hasRouteStructure&&active.value?.templateId)structure.value=normalizeLyricsStructure(active.value)
     if(local){
-      language.value=local.language;instructions.value=local.instructions
+      instructions.value=local.instructions
       const sameRevision=local.baseId===(active.value?.id??null)
       if(!hasRouteStructure&&(local.dirty||sameRevision||!active.value?.templateId))structure.value=normalizeLyricsStructure(local.structure??structure.value)
-      restorePending(local,local.workVersion===props.work.version&&(local.dirty||sameRevision||!route.query.revision)?local.requestKey:'')
       if(local.dirty){select(versions.value.find(v=>v.id===local.baseId)||active.value);title.value=local.title;text.value=local.lyrics;notice.value=local.workVersion===props.work.version?'已恢复本机尚未保存的歌词。':'故事已更新，本机歌词已恢复，保存后将成为当前故事的新版本。'}
+      const recoverDraft=local.dirty||sameRevision||!route.query.revision
+      if(recoverDraft&&!selectedLyricLanguage(active.value?.language))language.value=local.language
+      restorePending(local,local.workVersion===props.work.version&&recoverDraft&&local.language===language.value?local.requestKey:'')
     }
     if(requestKey.value){requestWaiting.value=true;await refreshRequest()}
     void updateCredits()

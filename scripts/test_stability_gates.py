@@ -312,6 +312,17 @@ class GateTests(unittest.TestCase):
         self.assertEqual("50", gate.verify_migration_set(migrations)["discoverShelvesVersion"])
         reference_name = "V55__generation_audio_reference.sql"
         community_name = "V56__discover_song_community.sql"
+        for name, version, key in (
+            ("V59__ai_capacity_queue.sql", "59", "aiCapacityVersion"),
+            ("V58__wechat_self_card.sql", "58", "wechatSelfCardVersion"),
+            ("V57__extended_lyric_languages.sql", "57", "extendedLyricLanguagesVersion"),
+        ):
+            self.assertEqual(version, gate.verify_migration_set(migrations)[key])
+            with self.assertRaises(gate.GateError):
+                gate.verify_migration_set({**migrations, name: "0" * 64})
+            with self.assertRaises(gate.GateError):
+                gate.verify_migration_set({k: v for k, v in migrations.items() if k != community_name})
+            migrations.pop(name)
         self.assertEqual("56", gate.verify_migration_set(migrations)["discoverSongCommunityVersion"])
         with self.assertRaises(gate.GateError):
             gate.verify_migration_set({**migrations, community_name: "0" * 64})
@@ -319,15 +330,6 @@ class GateTests(unittest.TestCase):
             gate.verify_migration_set({k: v for k, v in migrations.items() if k != reference_name})
         with self.assertRaises(gate.GateError):
             gate.verify_migration_set({**migrations, "V57__unapproved.sql": migrations[community_name]})
-        self.assertEqual("57", gate.verify_migration_set(migrations)["aiCapacityVersion"])
-        with self.assertRaises(gate.GateError):
-            gate.verify_migration_set({**migrations, "V57__ai_capacity_queue.sql": "0" * 64})
-        card = "V58__wechat_self_card.sql"
-        self.assertEqual("58", gate.verify_migration_set(migrations)["wechatSelfCardVersion"])
-        with self.assertRaises(gate.GateError):
-            gate.verify_migration_set({**migrations, card: "0" * 64})
-        migrations.pop(card)
-        migrations.pop("V57__ai_capacity_queue.sql")
         migrations.pop(community_name)
         self.assertEqual("55", gate.verify_migration_set(migrations)["generationAudioReferenceVersion"])
         prior = {k: v for k, v in migrations.items() if k != reference_name}

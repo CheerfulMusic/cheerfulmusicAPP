@@ -468,7 +468,7 @@ public final class CreditHistoricalCutover {
             for (var resource : resources) {
                 String name = Objects.requireNonNull(resource.getFilename());
                 int version = Integer.parseInt(name.substring(1, name.indexOf("__")));
-                require(version >= 1 && version <= 58, "HISTORY_UNAPPROVED_RESOURCE_EXTENSION");
+                require(version >= 1 && version <= 59, "HISTORY_UNAPPROVED_RESOURCE_EXTENSION");
                 CRC32 crc = new CRC32();
                 String text;
                 try (var input = resource.getInputStream()) { text = new String(input.readAllBytes(), StandardCharsets.UTF_8); }
@@ -542,14 +542,20 @@ public final class CreditHistoricalCutover {
                 }
                 if (version == 57) {
                     String normalized = text.replace("\r\n", "\n").replace('\r', '\n');
-                    require("V57__ai_capacity_queue.sql".equals(name) && (int) crc.getValue() == 1515664760
-                            && "371868410e537d7124b7d42e9453ae17d602708559d93bd97ebb0886b1672e2a".equals(digest(normalized.getBytes(StandardCharsets.UTF_8))),
+                    require("V57__extended_lyric_languages.sql".equals(name) && (int) crc.getValue() == -823088408
+                            && "1ca4736350a6f7d4af512e97858da6cfbe5859f8614bcd7b32626cb3e054c553".equals(digest(normalized.getBytes(StandardCharsets.UTF_8))),
                             "HISTORY_UNAPPROVED_RESOURCE_EXTENSION");
                 }
                 if (version == 58) {
                     String normalized = text.replace("\r\n", "\n").replace('\r', '\n');
                     require("V58__wechat_self_card.sql".equals(name) && (int) crc.getValue() == -1001320552
                             && "4a31e5debd6cd01e17d7827343916f63fea414d985c2416e75b1126af0268e7d".equals(digest(normalized.getBytes(StandardCharsets.UTF_8))),
+                            "HISTORY_UNAPPROVED_RESOURCE_EXTENSION");
+                }
+                if (version == 59) {
+                    String normalized = text.replace("\r\n", "\n").replace('\r', '\n');
+                    require("V59__ai_capacity_queue.sql".equals(name) && (int) crc.getValue() == 1515664760
+                            && "371868410e537d7124b7d42e9453ae17d602708559d93bd97ebb0886b1672e2a".equals(digest(normalized.getBytes(StandardCharsets.UTF_8))),
                             "HISTORY_UNAPPROVED_RESOURCE_EXTENSION");
                 }
                 require(expected.put(version, new History(version, name, (int) crc.getValue())) == null, "DUPLICATE_CLASSPATH_MIGRATION");

@@ -71,8 +71,8 @@ export interface LyricRhymeRequest {
 export interface LyricRhymeEnding { word: string; sound: string }
 export interface LyricRhymeCandidate {
   text: string
-  ending: LyricRhymeEnding
-  match: 'EXACT' | 'NEAR' | 'CROSS_LANGUAGE'
+  ending: LyricRhymeEnding | null
+  match: 'EXACT' | 'NEAR' | 'CROSS_LANGUAGE' | 'SUGGESTED'
   syllables?: number | null
 }
 export interface LyricRhymeResult {

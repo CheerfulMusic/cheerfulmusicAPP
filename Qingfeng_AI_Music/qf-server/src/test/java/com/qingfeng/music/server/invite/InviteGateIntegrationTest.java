@@ -476,11 +476,18 @@ class InviteGateIntegrationTest {
         artistProfiles.setDiscoverFeatured(song.id(), true);
         assertTrue(send(owner.http(), "GET", feed + "?featured=true", null, null).body().contains(song.id()));
 
+        String thumbnail = feed + "/songs/" + song.id() + "/1/thumbnail.png";
+        var cardImage = readBytes(visitor, thumbnail);
+        assertEquals(200, cardImage.statusCode());
+        assertEquals("image/png", cardImage.headers().firstValue("content-type").orElseThrow());
+        assertNotNull(ImageIO.read(new ByteArrayInputStream(cardImage.body())));
+
         String audio = publicArtist + "/songs/" + song.id() + "/1/audio";
         assertEquals(200, readBytes(visitor, audio).statusCode());
         assertEquals(200, send(owner.http(), "DELETE", publishPath, null, owner.csrf()).statusCode());
         assertFalse(send(owner.http(), "GET", feed, null, null).body().contains(song.id()));
         assertEquals(404, send(owner.http(), "POST", playPath, null, null).statusCode());
+        assertEquals(404, readBytes(visitor, thumbnail).statusCode());
         assertEquals(200, readBytes(visitor, audio).statusCode());
         assertEquals(200, send(owner.http(), "PUT", publishPath, version, owner.csrf()).statusCode());
         assertFalse(send(owner.http(), "GET", feed + "?featured=true", null, null).body().contains(song.id()));

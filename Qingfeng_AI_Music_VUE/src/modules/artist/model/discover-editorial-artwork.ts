@@ -1,7 +1,9 @@
 import type { PlayableTrack } from '../../../shared/player/store'
+import discoverMedia from './discover-media.json'
 import sixEaredDebate from '../../../assets/discover/editorial/cover-17.webp'
 import awaitingDawn from '../../../assets/discover/editorial/cover-05.webp'
 import whenCitySleeps from '../../../assets/discover/song-covers/when-city-sleeps.webp'
+import jixiangwu from '../../../assets/discover/song-covers/jixiangwu.webp'
 import lookWhatYouDoToMe from '../../../assets/discover/song-covers/look-what-you-do-to-me.webp'
 import twoAmLosAngeles from '../../../assets/discover/editorial/cover-29.webp'
 import somethingAboutYou from '../../../assets/discover/editorial/cover-07.webp'
@@ -13,7 +15,6 @@ import brokenWindow from '../../../assets/discover/editorial/cover-03.webp'
 import milkAndGoodnight from '../../../assets/discover/editorial/cover-16.webp'
 import skinDeep from '../../../assets/discover/editorial/cover-13.webp'
 import amysShadow from '../../../assets/discover/editorial/cover-31.webp'
-import snowOnTheFloor from '../../../assets/discover/editorial/cover-11.webp'
 import windowAtNight from '../../../assets/discover/song-covers/window-at-night.webp'
 import engineOilSnow from '../../../assets/discover/song-covers/engine-oil-snow.webp'
 import umbrellaStarlight from '../../../assets/discover/editorial/cover-12.webp'
@@ -49,12 +50,14 @@ import tomorrowRock from '../../../assets/discover/editorial/cover-08.webp'
 import hometownElectronic from '../../../assets/discover/song-covers/hometown-electronic.webp'
 import dreamWings from '../../../assets/discover/song-covers/dream-wings.webp'
 import bodyLanguage from '../../../assets/discover/song-covers/body-language.webp'
+import letTheLightTakeItsTime from '../../../assets/discover/song-covers/let-the-light-take-its-time.webp'
 
 // Editorial shelves share song-specific artwork even when a song changes rank.
 const coversBySong = new Map<string, string>([
   ['5ea96e39-113b-4ae9-9579-19d85dc4b063', sixEaredDebate],
   ['be7e4adc-e671-45fb-afd0-b87f1ab915bc', awaitingDawn],
   ['375e3bb7-c6fb-460f-916e-5e86442c7d1c', whenCitySleeps],
+  ['1485ddee-9a1f-435b-bfc8-403cccb8c243', jixiangwu],
   ['9e42f15b-d819-48d8-bb51-1920ba981692', lookWhatYouDoToMe],
   ['24bdb016-c5b5-471d-b25d-a53f0bed489c', twoAmLosAngeles],
   ['68d6506a-194d-4f81-be6a-94404b258d7f', somethingAboutYou],
@@ -66,7 +69,7 @@ const coversBySong = new Map<string, string>([
   ['469e3e8b-1e4a-453b-8353-72f8cbb17f2c', milkAndGoodnight],
   ['0c223cc9-4b8b-4fe1-a1f8-a0062e847daa', skinDeep],
   ['d3e1fff9-c7a6-4171-9a5c-9649cb82ff73', amysShadow],
-  ['752fa2d9-ec96-47c3-87a5-a1d49d0135af', snowOnTheFloor],
+  ['752fa2d9-ec96-47c3-87a5-a1d49d0135af', discoverMedia['snow-on-the-floor'].cover],
   ['8ffd88c1-7f05-4867-abe8-74bfbdb9a2cb', windowAtNight],
   ['4d54b21d-90fc-4404-866c-7b0a0bc201c4', engineOilSnow],
   ['af021d33-1dff-48b9-bff6-41643f1bb58f', umbrellaStarlight],
@@ -97,6 +100,8 @@ const coversBySong = new Map<string, string>([
   ['aac14834-1b00-4016-936b-576fb73fb651', nextWave],
   ['cb0df61f-7814-440e-991e-fb29ab9905a2', airTastesSweet],
   ['6ce51e3c-7ff6-485d-9f82-bacb1a89e0c6', ninetyNine],
+  ['13165085-71ba-4bf9-bece-a5f0cc59d4b5', letTheLightTakeItsTime],
+  ['1c5c325c-6a45-4607-a8e4-5baadabc2032', discoverMedia.navidad.cover],
   ['rain-disco', rainDisco],
   ['tomorrow-rock', tomorrowRock],
   ['hometown-electronic', hometownElectronic],

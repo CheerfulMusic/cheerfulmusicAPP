@@ -17,9 +17,7 @@
 .agent-shell .consumer-navigation a { font-size: 14px; color: #332c49; }
 .agent-shell .consumer-navigation .agent-nav-link { color: #5831af; }
 .agent-shell .consumer-mobile-menu { top: calc(var(--studio-nav) + 4px); }
-.agent-shell .consumer-brand .brand-logo > img { width: 35px; height: 35px; }
-.agent-shell .consumer-brand .brand-wordmark { width: auto; height: 32px; }
-.agent-shell .consumer-brand .brand-logo { gap: 5px; }
+.agent-shell .consumer-brand .brand-logo { --brand-icon-size: 35px; --brand-wordmark-height: 32px; --brand-gap: 5px; }
 .agent-producer.agent-studio {
   box-sizing: border-box; display: grid;
   grid-template-columns: clamp(128px, 10.65%, 224px) minmax(0, 584fr) minmax(194px, 263fr) minmax(270px, 393fr);
@@ -332,7 +330,7 @@
   html[lang="en"] .agent-shell .consumer-navigation { gap: 10px; }
   html[lang="en"] .agent-shell .consumer-navigation a { font-size: 13px; }
   html[lang="en"] .agent-shell .consumer-header-actions { gap: 7px; }
-  html[lang="en"] .agent-shell .brand-wordmark { height: 26px; }
+  html[lang="en"] .agent-shell .brand-logo { --brand-wordmark-height: 26px; }
   html[lang="en"] .agent-shell .account-login { min-width: 0; min-height: 35px; padding-inline: 12px; }
 }
 @media (min-width: 1181px) and (max-height: 770px) {
@@ -363,8 +361,7 @@
   .consumer-shell.agent-shell { --studio-nav: 54px; }
   .agent-shell .consumer-header-inner { width: calc(100% - 22px); gap: 6px; }
   .agent-shell .consumer-brand { min-width: 0; flex-shrink: 1; }
-  .agent-shell .consumer-brand .brand-logo > img { width: 29px; height: 29px; }
-  .agent-shell .consumer-brand .brand-wordmark { max-width: 100%; height: 25px; object-fit: contain; }
+  .agent-shell .consumer-brand .brand-logo { --brand-icon-size: 29px; --brand-wordmark-height: 25px; max-width: 100%; }
   .agent-producer.agent-studio { width: min(650px, calc(100% - 20px)); gap: 9px; padding: 9px 0 18px; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto auto auto; grid-template-areas: "tools" "chat" "player" "collection"; }
   .agent-producer .producer-tools { scrollbar-width: thin; }
   .producer-tools > button { flex: none; padding-inline: 6px; }

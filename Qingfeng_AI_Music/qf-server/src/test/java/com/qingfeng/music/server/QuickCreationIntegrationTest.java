@@ -63,9 +63,9 @@ class QuickCreationIntegrationTest {
         @Bean @Primary FakeGeneration quickMusic(){return new FakeGeneration();}
     }
     static class FakeWriter implements LyricsWriter {
-        final AtomicInteger calls=new AtomicInteger();Direction direction;String failureCode;boolean malformedDraft;
+        final AtomicInteger calls=new AtomicInteger();Direction direction;String failureCode;boolean malformedDraft;String receivedLanguage;
         public boolean isConfigured(){return true;}
-        public Draft write(WorkApi.Work work,String language){calls.incrementAndGet();if(failureCode!=null)throw new DomainException(failureCode,"offline failure");return new Draft("小碗",malformedDraft?"":"[Verse]\n橘子放在门边\n[Chorus]\n谢谢你等我回家");}
+        public Draft write(WorkApi.Work work,String language){receivedLanguage=language;calls.incrementAndGet();if(failureCode!=null)throw new DomainException(failureCode,"offline failure");return new Draft("小碗",malformedDraft?"":"[Verse]\n橘子放在门边\n[Chorus]\n谢谢你等我回家");}
         public Draft write(WorkApi.Work work,String language,String instructions,String previous,Direction direction){this.direction=direction;return write(work,language);}
     }
     static class FakeGeneration implements GenerationApi {
@@ -94,6 +94,28 @@ class QuickCreationIntegrationTest {
     }
     QuickCreationService.View start(){return service.start(owner,work.id(),work.version(),UUID.randomUUID().toString(),"zh-CN");}
     void due(String id){jdbc.update("UPDATE quick_creation SET next_attempt_at=TIMESTAMPADD(SECOND,-1,CURRENT_TIMESTAMP),lease_until=NULL,lease_token=NULL WHERE id=?",id);}
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings={"ja", "ko", "es", "custom:Português brasileiro", "custom:巴西葡萄牙语"})
+    void selectedLanguageSurvivesQuickQueueAndLyricRegeneration(String language) {
+        new org.springframework.jdbc.datasource.init.ResourceDatabasePopulator(
+            new org.springframework.core.io.ClassPathResource("db/migration/V57__extended_lyric_languages.sql"))
+            .execute(jdbc.getDataSource());
+        var flow = service.start(owner, work.id(), work.version(), UUID.randomUUID().toString(), language);
+        assertTrue(service.runOnce());
+        var result = service.get(owner, work.id(), flow.id());
+        var base = lyrics.get(owner, work.id(), result.revisionId());
+        assertEquals("QUEUED", result.status());
+        assertEquals(language, writer.receivedLanguage);
+        assertEquals(language, base.language());
+
+        var offlineComposer = new LyricsCompositionService(works, lyrics,
+            new com.qingfeng.music.infrastructure.persistence.lyrics.MyBatisLyricsRepository(lyricsMapper), writer, requests, true);
+        var regenerated = offlineComposer.composeCustom(owner, work.id(), works.get(owner, work.id()).version(),
+            UUID.randomUUID().toString(), base.language(), "", base.id(), null, false);
+        assertEquals(language, writer.receivedLanguage);
+        assertEquals(language, lyrics.get(owner, work.id(), regenerated.id()).language());
+    }
 
     @Test void oneClickCompletesAndRepeatedRequestsReuseOneLyricAndOneMusicPurchase(){
         String key=UUID.randomUUID().toString();int words=writer.calls.get(),songs=music.purchases.get();

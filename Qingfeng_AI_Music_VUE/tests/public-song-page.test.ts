@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 const script = readFileSync('public/brand/song-share.js', 'utf8')
 const player = readFileSync('public/brand/song-player.js', 'utf8')
+const wechatCard = readFileSync('public/brand/wechat-card.js', 'utf8')
 const handoff = readFileSync('public/brand/wechat-handoff.js', 'utf8')
 const template = readFileSync('../Qingfeng_AI_Music/qf-server/src/main/resources/song.html', 'utf8')
 const description = '我在 Cheerful Music 创作了一首歌曲，邀请你来听听'
@@ -34,10 +35,11 @@ function openSong(id: string, inWechat = false, agent = 'WebTest', canShare = tr
   const assign = vi.fn()
   const browserLocation = Object.assign(location, { assign })
   const globals = {
-    window: { location: browserLocation, addEventListener: vi.fn() },
+    window: { location: browserLocation, wx, addEventListener: vi.fn() },
     document, navigator, location: browserLocation, URL, fetch, wx, console: { warn: vi.fn() },
   }
   runInNewContext(handoff, globals)
+  runInNewContext(wechatCard, globals)
   runInNewContext(script, globals)
   return { fields, api, navigator, location, assign, config, fetch, wx, globals }
 }

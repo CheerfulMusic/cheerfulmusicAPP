@@ -18,7 +18,7 @@ import java.util.zip.GZIPInputStream;
 
 /** Finds rhyme endings in written Mandarin and American English lyrics. */
 public final class LyricRhyme {
-    public enum Match { EXACT, NEAR, CROSS_LANGUAGE, NONE }
+    public enum Match { EXACT, NEAR, CROSS_LANGUAGE, SUGGESTED, NONE }
     public record Tail(String word, String pronunciation, String language, String key) {}
 
     private static final String MANDARIN = "zh-CN";

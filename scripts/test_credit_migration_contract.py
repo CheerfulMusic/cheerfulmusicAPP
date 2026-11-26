@@ -47,8 +47,8 @@ class CreditMigrationContractTests(unittest.TestCase):
         actual = {p.name: gate.normalized_migration_sha(p.read_bytes()) for p in SQL.glob("V*__*.sql")}
         contract = gate.verify_migration_set(actual)
         self.assertEqual("e6c351f21ece6fb096ff425ca4b690232632de21", contract["coreSourceCommit"])
-        self.assertEqual(57, len(actual))
-        self.assertEqual("57", contract["aiCapacityVersion"])
+        self.assertEqual(59, len(actual))
+        self.assertEqual("59", contract["aiCapacityVersion"])
         self.assertEqual("56", contract["discoverSongCommunityVersion"])
         self.assertEqual("49", contract["lyricsPreparationVersion"])
         self.assertEqual(44, len(gate.CORE_MIGRATION_SHA256))
@@ -109,8 +109,8 @@ class CreditMigrationContractTests(unittest.TestCase):
 
     def test_complete_packaged_chain_is_verified(self):
         actual = gate.inspect_artifact(self.fixture.jar())
-        self.assertEqual(57, len(actual["migrations"]))
-        self.assertEqual("57", actual["migrationContract"]["aiCapacityVersion"])
+        self.assertEqual(59, len(actual["migrations"]))
+        self.assertEqual("59", actual["migrationContract"]["aiCapacityVersion"])
         self.assertEqual("56", actual["migrationContract"]["discoverSongCommunityVersion"])
         self.assertEqual("45", actual["migrationContract"]["integrationVersion"])
         self.assertEqual("46", actual["migrationContract"]["agentAllowanceVersion"])

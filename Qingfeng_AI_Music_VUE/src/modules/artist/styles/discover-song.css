@@ -47,7 +47,7 @@
 .song-detail-meta dd { margin: 0; font-weight: 650; font-variant-numeric: tabular-nums; }
 
 .song-detail-actions { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 7px 16px; margin-top: 27px; }
-.song-detail-primary, .song-detail-action, .song-detail :deep(.artist-share-song .artist-action) {
+.song-detail-primary, .song-detail-action, .song-detail :deep(.discover-share-trigger) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -65,13 +65,10 @@
 .song-detail-primary:not(:disabled):hover { background: #961714; }
 .song-detail-primary:disabled { opacity: .55; }
 .song-detail-actions .song-detail-primary { min-width: 142px; min-height: 48px; border-radius: 999px; }
-.song-detail-actions .song-detail-action, .song-detail-actions :deep(.artist-share-song .artist-action) { min-height: 48px; }
+.song-detail-actions .song-detail-action, .song-detail-actions :deep(.discover-share-trigger) { min-height: 48px; }
 .song-detail-action:not(:disabled):hover, .song-detail :deep(.artist-share-song .artist-action:hover) { color: var(--song-red); background: #f8eeee; }
 .song-detail-like[aria-pressed='true'] { color: var(--song-red); }
 .song-detail-like[aria-pressed='true'] :deep(svg) { fill: currentColor; }
-.song-detail :deep(.artist-share-song) { min-width: 0; }
-.song-detail :deep(.artist-share-status), .song-detail :deep(.artist-share-manual) { color: var(--song-muted); }
-.song-detail :deep(.artist-share-manual) { max-width: 230px; }
 
 .song-detail button:focus-visible, .song-detail a:focus-visible, .song-detail textarea:focus-visible {
   outline: 2px solid var(--song-red);
@@ -135,7 +132,7 @@
   .song-detail-about { min-height: 0; padding: 15px 0 0; border-inline-start: 0; border-top: 1px solid var(--song-line); }
   .song-detail-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 17px; }
   .song-detail-actions .song-detail-primary { min-width: 0; }
-  .song-detail-actions .song-detail-action, .song-detail-actions :deep(.artist-share-song .artist-action) { border-color: var(--song-line); border-radius: 999px; width: 100%; }
+  .song-detail-actions .song-detail-action, .song-detail-actions :deep(.discover-share-trigger) { border-color: var(--song-line); border-radius: 999px; width: 100%; }
   .song-detail-reading, .song-detail-comments { margin-top: 25px; }
   .song-detail-comment-form { gap: 8px; }
   .song-detail-comment-form button { min-width: 0; }

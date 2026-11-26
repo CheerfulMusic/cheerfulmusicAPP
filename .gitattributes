@@ -1,6 +1,9 @@
 * text=auto
 *.sh text eol=lf
 Qingfeng_AI_Music/qf-infrastructure/src/main/resources/db/migration/V56__discover_song_community.sql text eol=lf
+Qingfeng_AI_Music/qf-infrastructure/src/main/resources/db/migration/V57__extended_lyric_languages.sql text eol=lf
+Qingfeng_AI_Music/qf-infrastructure/src/main/resources/db/migration/V58__wechat_self_card.sql text eol=lf
+Qingfeng_AI_Music/qf-infrastructure/src/main/resources/db/migration/V59__ai_capacity_queue.sql text eol=lf
 *.png binary
 *.jpg binary
 *.jpeg binary

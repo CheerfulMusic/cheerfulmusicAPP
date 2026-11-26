@@ -49,7 +49,7 @@ import static org.assertj.core.api.Assertions.assertThat;
     // The test profile runs the H2 financial bridge at V44; extensions here are isolated fixtures.
     "spring.sql.init.schema-locations=classpath:db/test/audio_version_annotations.sql,"
         + "classpath:db/migration/V46__agent_chat_allowance.sql,classpath:db/migration/V53__agent_admission_version.sql,"
-        + "classpath:db/migration/V54__song_share_statistics.sql,classpath:db/migration/V57__ai_capacity_queue.sql",
+        + "classpath:db/migration/V54__song_share_statistics.sql,classpath:db/migration/V59__ai_capacity_queue.sql",
     "qingfeng.ai.capacity.enabled=true",
     "qingfeng.ai.capacity.worker-lanes=lyrics,cover,agent",
     "qingfeng.ai.capacity.cover.callback-base=https://example.test",

@@ -68,7 +68,7 @@ public final class JdbcAiWorkQueue {
         db.queryForList("SELECT id,dependency_id FROM ai_capacity_job WHERE 1=0");
         db.queryForList("SELECT account_scope FROM ai_capacity_model_usage WHERE 1=0");
         if (executionSlots != 3000 || admissionSlots != 6000)
-            throw new IllegalStateException("AI capacity requires the complete V57 migration");
+            throw new IllegalStateException("AI capacity requires the complete V59 migration");
     }
 
     public Optional<Job> find(Lane lane, String owner, String scope, String requestKey) {

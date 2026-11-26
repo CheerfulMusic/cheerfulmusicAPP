@@ -34,7 +34,7 @@ const statuses = {
   UNKNOWN_PRONUNCIATION: '暂时无法确认韵脚读音，可以换一句参考。',
   SUGGESTIONS: '',
 }
-const matchLabels = { EXACT: '同韵', NEAR: '近韵', CROSS_LANGUAGE: '跨语言近韵' }
+const matchLabels = { EXACT: '同韵', NEAR: '近韵', CROSS_LANGUAGE: '跨语言近韵', SUGGESTED: 'AI 押韵建议' }
 let alive = true
 
 function clearResult() {
@@ -118,7 +118,7 @@ onBeforeUnmount(() => { alive = false })
         <ul v-if="result.candidates?.length" class="rhyme-candidates">
           <li v-for="candidate in result.candidates" :key="candidate.text">
             <span class="rhyme-candidate-text">{{ candidate.text }}</span>
-            <span class="rhyme-candidate-ending"><mark>{{ endingText(candidate.ending) }}</mark> {{ t(matchLabels[candidate.match]) }}</span>
+            <span class="rhyme-candidate-ending"><mark v-if="candidate.ending">{{ endingText(candidate.ending) }}</mark> {{ t(matchLabels[candidate.match]) }}</span>
             <button type="button" class="text-button" :disabled="!canApply(candidate.text)" @click="emit('apply', candidate.text)">{{ t('采用这句') }}</button>
           </li>
         </ul>
