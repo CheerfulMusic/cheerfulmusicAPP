@@ -144,8 +144,9 @@ a.track-artist:is(:hover, :focus-visible), a.track-title:is(:hover, :focus-visib
 .track-meta { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-top: 3px; color: var(--discover-muted); font-size: 12px; }
 .track-count { display: flex; flex: none; align-items: center; gap: 3px; font-size: 11px; }
 .shelf-compact .shelf-track { display: grid; grid-template-columns: 44px minmax(0, 1fr); align-items: center; gap: 12px; height: 54px; border-bottom: 1px solid #eef0ee; }
+.shelf-compact .shelf-track-play { inset: 5px auto auto 0; width: 44px; height: 44px; border-radius: 6px; }
 .shelf-compact .track-art { width: 44px; height: 44px; }
-.shelf-compact .track-play { inset: 0; width: 100%; height: 100%; border-radius: inherit; }
+.shelf-compact .track-play { inset: auto 3px 3px auto; width: 22px; height: 22px; opacity: 1; }
 .shelf-compact .track-text { margin: 0; padding-right: 4px; }
 .shelf-compact .track-title { font-size: 13px; }
 .shelf-compact .track-meta { margin-top: 2px; font-size: 11px; }
@@ -165,6 +166,9 @@ a.track-artist:is(:hover, :focus-visible), a.track-title:is(:hover, :focus-visib
 @media (max-width: 1100px) {
   .shelf-compact { grid-auto-columns: max(154px, (100% - 72px) / 5); }
   .shelf-wide { grid-auto-columns: max(200px, (100% - 66px) / 3.42); }
+}
+@media (max-width: 760px) {
+  .shelf-compact { grid-template-rows: 54px; }
 }
 @media (max-width: 600px) {
   .shelf-square { grid-auto-columns: 122px; gap: 16px; }

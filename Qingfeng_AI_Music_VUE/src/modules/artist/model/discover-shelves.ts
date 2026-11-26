@@ -11,13 +11,6 @@ import cantStopThisFeeling from '../../../assets/discover/song-covers/cant-stop-
 import midnightCall from '../../../assets/discover/song-covers/midnight-call.webp'
 import summerOnRepeat from '../../../assets/discover/song-covers/summer-on-repeat.webp'
 import crossroads from '../../../assets/discover/song-covers/lu-kou-xiang-feng.webp'
-
-export function useDiscoverCoverFallback(event: Event) {
-  const image = event.currentTarget
-  if (image instanceof HTMLImageElement && image.getAttribute('src') !== publicSongPlaceholder) {
-    image.setAttribute('src', publicSongPlaceholder)
-  }
-}
 import station from '../../../assets/discover/song-covers/wan-feng-che-zhan.webp'
 import canvasShoes from '../../../assets/discover/song-covers/fan-bu-xie-de-lv-xing.webp'
 import signedInInk from '../../../assets/discover/song-covers/signed-in-ink.webp'
@@ -80,6 +73,13 @@ export const globalPopWideCoverPositions: Partial<Record<string, string>> = {
 export function discoverReleaseCover(song: Pick<PublishedSong, 'id' | 'hasCover'>, original: string) {
   if (song.id === christmasSongId) return christmasSkyCover
   return discoverEditorialCover(song.id) ?? (song.hasCover ? original : releaseCoverFallbacks[song.id] ?? original)
+}
+
+export function useDiscoverCoverFallback(event: Event) {
+  const image = event.currentTarget
+  if (image instanceof HTMLImageElement && image.getAttribute('src') !== publicSongPlaceholder) {
+    image.setAttribute('src', publicSongPlaceholder)
+  }
 }
 
 export function ownerDiscoverCover(release: ArtistRelease) {
