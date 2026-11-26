@@ -1,7 +1,7 @@
 import { computed, readonly, ref } from 'vue'
 import { platform } from '../../platform'
 import { english } from './en'
-import { homeBrand, homeLocale, localizedSeoLinks, siteOrigin, type Locale } from './home-seo'
+import { homeLocale, homeSeo, localizedSeoLinks, siteOrigin, type Locale } from './home-seo'
 import { discoverLocale, discoverPaths, sitePage, socialMetadata, websiteSchema } from './site-seo'
 
 export type { Locale } from './home-seo'
@@ -12,8 +12,7 @@ function savedLocale(): Locale | undefined {
     return value === 'en' || value === 'zh-CN' ? value : undefined
   } catch { return undefined }
 }
-let preferredLocale = savedLocale()
-const selected = ref<Locale>(preferredLocale ?? 'en')
+const selected = ref<Locale>(savedLocale() ?? 'en')
 export const locale = readonly(selected)
 export const discoverHref = computed(() => platform.kind === 'web' ? discoverPaths[selected.value] : '/discover')
 
@@ -57,8 +56,8 @@ function updateDocument() {
   const songPage = songMetadata && songMatch ? {
     path: pagePath.replace(/\/$/, ''),
     language: songLanguage,
-    title: songMetadata.title + ' — ' + songMetadata.artist + ' | ' + homeBrand(songLanguage === 'en' ? '/en/' : '/'),
-    siteName: homeBrand(songLanguage === 'en' ? '/en/' : '/'),
+    title: songMetadata.title + ' — ' + songMetadata.artist + ' | ' + homeSeo[songLanguage].brand,
+    siteName: homeSeo[songLanguage].brand,
     heading: songMetadata.title,
     description: songMetadata.description.trim() || (songLanguage === 'en'
       ? 'Listen to “' + songMetadata.title + '” by ' + songMetadata.artist + ' on cheerfulmusic.'
@@ -109,7 +108,6 @@ function updateDocument() {
   if (page.path === '/') appendTag('script', { type: 'application/ld+json' }, JSON.stringify(websiteSchema))
 }
 export function setLocale(value: Locale) {
-  preferredLocale = value
   selected.value = value
   try { localStorage.setItem(localeStorageKey, value) } catch { /* Language switching still works without browser storage. */ }
   updateDocument()
@@ -120,7 +118,6 @@ export function updatePageLocale(path: string) {
   const songLocale = discoverSongPath.test(path) ? (path.startsWith('/en/') ? 'en' : 'zh-CN') : undefined
   const routeLanguage = homeLocale(path) ?? discoverLocale(path) ?? songLocale
   if (routeLanguage) selected.value = routeLanguage
-  else if (path === '/') selected.value = preferredLocale ?? 'zh-CN'
   updateDocument()
 }
 export function formatDate(value: string | number | Date): string {

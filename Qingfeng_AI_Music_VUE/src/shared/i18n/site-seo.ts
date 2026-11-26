@@ -35,7 +35,7 @@ const helpSeo = {
   },
 } as const
 
-export const sitePagePaths = [homeSeo['zh-CN'].path, homeSeo.en.path, ...Object.values(discoverPaths), '/help', ...siteGuidePaths] as const
+export const sitePagePaths = [homeSeo.en.path, homeSeo['zh-CN'].path, ...Object.values(discoverPaths), '/help', ...siteGuidePaths] as const
 
 export function sitePage(path: string, preferredLocale?: Locale) {
   const guide = siteGuide(path)
@@ -50,23 +50,21 @@ export function sitePage(path: string, preferredLocale?: Locale) {
       links: localizedSeoLinks(guide.path, guide.translations),
     }
   }
-  const localized = homeLocale(path)
-  const language = localized ?? preferredLocale ?? (path === '/' ? 'zh-CN' : 'en')
-  if (path === '/' || localized) {
-    const canonical = localized ? homeSeo[localized].path : '/'
-    const copy = homeSeo[language]
-    const canonicalCopy = homeSeo[localized ?? 'zh-CN']
+  const homeLanguage = homeLocale(path)
+  if (homeLanguage) {
+    const copy = homeSeo[homeLanguage]
     return {
-      path: canonical,
-      language,
+      path: copy.path,
+      language: homeLanguage,
       heading: copy.heading,
-      title: canonicalCopy.title,
-      siteName: canonicalCopy.searchName,
+      title: copy.title,
+      siteName: copy.searchName,
       description: copy.searchDescription,
       intro: copy.description,
-      links: localizedSeoLinks(canonical, homePaths, 'en'),
+      links: localizedSeoLinks(copy.path, homePaths, 'en'),
     }
   }
+  const language = preferredLocale ?? 'en'
   const canonical = path.replace(/\/$/, '')
   const discoverLanguage = discoverLocale(path)
   if (discoverLanguage) {
@@ -137,7 +135,7 @@ export function socialMetadata(page: {
 export const websiteSchema = {
   '@context': 'https://schema.org',
   '@type': 'WebSite',
-  name: homeSeo['zh-CN'].brand,
-  alternateName: [homeSeo.en.searchName, homeSeo.en.brand, ...homeSeo['zh-CN'].aliases, ...homeSeo.en.aliases],
+  name: homeSeo.en.searchName,
+  alternateName: [homeSeo.en.brand, homeSeo['zh-CN'].brand, ...homeSeo['zh-CN'].aliases, ...homeSeo.en.aliases],
   url: siteOrigin + '/',
 }

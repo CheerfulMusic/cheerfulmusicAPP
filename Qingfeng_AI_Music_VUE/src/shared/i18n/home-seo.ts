@@ -12,7 +12,7 @@ export const siteFavicon = {
 
 export const homeSeo = {
   'zh-CN': {
-    path: '/',
+    path: '/zh/',
     brand: chineseBrand,
     searchName: chineseBrand,
     title: chineseBrand,
@@ -25,7 +25,7 @@ export const homeSeo = {
     description: `青妙Ai 是青风音乐（Cheerful Music）推出的 AI 音乐创作平台，英文名为 ${englishSearchName}（${compactEnglishName}）。写下歌词或故事，选好曲风和人声，就能创作、试听和分享自己的歌。`,
   },
   en: {
-    path: '/en/',
+    path: '/',
     brand: 'cheerfulmusic',
     searchName: englishSearchName,
     title: englishSearchName + ' | ' + creatorHeadline,
@@ -78,12 +78,23 @@ export const homePublicInfo = {
   },
 } as const
 
-export function homeLocale(path: string): Locale | undefined {
-  // The root defaults to Chinese and allows visitors to switch in place.
-  if (path === homeSeo.en.path || path === homeSeo.en.path.slice(0, -1)) return 'en'
+export const homePaths = { 'zh-CN': homeSeo['zh-CN'].path, en: homeSeo.en.path }
+
+export const homeRedirects: Readonly<Record<string, string>> = {
+  '/en': homePaths.en,
+  '/en/': homePaths.en,
+  '/en/index.html': homePaths.en,
+  '/zh': homePaths['zh-CN'],
+  '/zh/index.html': homePaths['zh-CN'],
+  '/zh-CN': homePaths['zh-CN'],
+  '/zh-CN/': homePaths['zh-CN'],
+  '/zh-CN/index.html': homePaths['zh-CN'],
 }
 
-export const homePaths = { 'zh-CN': homeSeo['zh-CN'].path, en: homeSeo.en.path }
+export function homeLocale(path: string): Locale | undefined {
+  if (path === homePaths.en) return 'en'
+  if (path === homePaths['zh-CN']) return 'zh-CN'
+}
 
 export function homeBrand(path: string) {
   return homeSeo[homeLocale(path) ?? 'zh-CN'].brand

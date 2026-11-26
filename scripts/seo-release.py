@@ -19,7 +19,9 @@ from xml.etree import ElementTree
 from zipfile import BadZipFile, ZipFile
 
 SITE = "https://cheerfulmusic.com"
-HOME_LANGUAGES = {"/": "zh-CN", "/en/": "en"}
+HOME_LANGUAGES = {"/": "en", "/zh/": "zh-CN"}
+LEGACY_HOME_LANGUAGES = {"/": "zh-CN", "/en/": "en"}
+LEGACY_ENGLISH_PATHS = ("/en", "/en/", "/en/index.html")
 MANIFEST_ENTRY = "BOOT-INF/classes/static/seo-release.json"
 BING_API = "https://www.bing.com/indexnow"
 BAIDU_API = "https://data.zz.baidu.com/urls"
@@ -110,7 +112,8 @@ def read_manifest(path):
             or not re.fullmatch("[a-f0-9]{64}", icon["sha256"])):
         raise ValueError("Invalid path or digest for the built site icon")
     pages = value["pages"]
-    if len(pages) != len(HOME_LANGUAGES) or {page["path"]: page["language"] for page in pages} != HOME_LANGUAGES:
+    languages = {page["path"]: page["language"] for page in pages}
+    if len(pages) != len(HOME_LANGUAGES) or languages not in (HOME_LANGUAGES, LEGACY_HOME_LANGUAGES):
         raise ValueError("The SEO manifest must contain both canonical homepages")
     for page in pages:
         if not all(isinstance(page[key], str) and page[key].strip() for key in ("brand", "title", "description")):
@@ -150,9 +153,15 @@ def get(base, path, expected_status=200):
             return body, response.headers
     except HTTPError as exc:
         with exc:
+            if expected_status == exc.code == 308:
+                return b"", exc.headers
             raise ValueError(f"{path} returned HTTP {exc.code}") from None
     except (OSError, HTTPException):
         raise ValueError(f"{path} could not be fetched") from None
+
+
+def english_at_root(manifest):
+    return any(page["path"] == "/" and page["language"] == "en" for page in manifest["pages"])
 
 
 def verify_page(page, manifest, body, headers):
@@ -173,6 +182,13 @@ def verify_page(page, manifest, body, headers):
     links = [link.get("href") for link in head.links if link.get("rel") == "canonical"]
     if links != [canonical]:
         raise ValueError(f"{page['path']} canonical differs from the build")
+    if english_at_root(manifest):
+        expected = {language: SITE + path for path, language in HOME_LANGUAGES.items()}
+        expected["x-default"] = SITE + "/"
+        alternates = [(link["hreflang"], link.get("href")) for link in head.links
+                      if link.get("rel") == "alternate" and "hreflang" in link]
+        if len(alternates) != len(expected) or dict(alternates) != expected:
+            raise ValueError(f"{page['path']} homepage hreflang differs from the build")
     if not any("icon" in link.get("rel", "").split() and link.get("href") == manifest["icon"]["path"]
                for link in head.links):
         raise ValueError(f"{page['path']} is missing the build's site icon")
@@ -216,13 +232,20 @@ def verify_site(base, manifest):
         canonical = SITE + page["path"]
         if canonical not in entries or ("lastModified" in page and entries[canonical] != page["lastModified"]):
             raise ValueError(f"Sitemap entry for {page['path']} differs from the build")
+    redirected_paths = LEGACY_ENGLISH_PATHS if english_at_root(manifest) else ()
+    for path in redirected_paths:
+        if SITE + path in entries:
+            raise ValueError(f"Sitemap still advertises retired homepage {path}")
+        _, headers = get(base, path, expected_status=308)
+        if headers.get_all("Location", []) not in (["/"], [SITE + "/"]):
+            raise ValueError(f"{path} does not redirect to the canonical English homepage")
     robots, _ = get(base, "/robots.txt")
     rules = RobotFileParser()
     rules.parse(robots.decode("utf-8").splitlines())
     if f"{SITE}/sitemap.xml" not in (rules.site_maps() or []):
         raise ValueError("robots.txt does not advertise the canonical sitemap")
     for agent in ("Bingbot", "Googlebot", "Googlebot-Image", "Baiduspider", "Sogou", "360Spider"):
-        for path in (*HOME_LANGUAGES, manifest["icon"]["path"]):
+        for path in (*(page["path"] for page in manifest["pages"]), *redirected_paths, manifest["icon"]["path"]):
             if not rules.can_fetch(agent, SITE + path):
                 raise ValueError(f"robots.txt blocks {agent} from {path}")
 
@@ -232,6 +255,13 @@ def changed_urls(manifest, previous):
     icon_changed = previous is None or previous["icon"] != manifest["icon"]
     return [SITE + page["path"] for page in manifest["pages"]
             if icon_changed or old_pages.get(page["path"]) != page]
+
+
+def indexnow_urls(manifest, previous, urls):
+    # Only notify the old canonical URL when moving from the previous English homepage.
+    if english_at_root(manifest) and (previous is None or not english_at_root(previous)):
+        return [*urls, SITE + "/en/"]
+    return urls
 
 
 def post(url, body, content_type):
@@ -310,13 +340,15 @@ def submit(manifest, urls, path, report):
     try:
         previous = json.loads(path.read_bytes()) if path.exists() else {}
         release = fingerprint(manifest)
-        if previous and (previous.get("manifest_sha256") != release or previous.get("urls") != urls):
+        indexnow = report.get("indexnow_urls", urls)
+        if previous and (previous.get("manifest_sha256") != release or previous.get("urls") != urls
+                         or previous.get("indexnow_urls", previous.get("urls")) != indexnow):
             raise ValueError("Receipt belongs to a different SEO update; use a new path")
         report["manifest_sha256"] = release
         results = report["notifications"] = previous.get("notifications", {})
-        for name, notify, env in (
-            ("indexnow", notify_indexnow, "QF_SEO_INDEXNOW_KEY"),
-            ("baidu", notify_baidu, "QF_SEO_BAIDU_TOKEN"),
+        for name, notify, env, platform_urls in (
+            ("indexnow", notify_indexnow, "QF_SEO_INDEXNOW_KEY", indexnow),
+            ("baidu", notify_baidu, "QF_SEO_BAIDU_TOKEN", urls),
         ):
             if results.get(name, {}).get("state") in {"accepted", "pending_key_validation"}:
                 continue
@@ -324,7 +356,7 @@ def submit(manifest, urls, path, report):
             if results.get(name, {}).get("state") == "partial":
                 continue
             try:
-                results[name] = notify(os.environ.get(env), urls)
+                results[name] = notify(os.environ.get(env), platform_urls)
             except ssl.SSLCertVerificationError:
                 results[name] = {"state": "failed", "reason": "tls_certificate_verification"}
             write_receipt(path, report)
@@ -356,6 +388,9 @@ def main(argv=None):
             raise ValueError("The Shenzhen and Singapore release manifests differ")
         previous = read_manifest(args.previous) if args.previous else None
         report["urls"] = changed_urls(manifest, previous)
+        indexnow = indexnow_urls(manifest, previous, report["urls"])
+        if indexnow != report["urls"]:
+            report["indexnow_urls"] = indexnow
         for region, base, verify in (
             ("shenzhen", args.shenzhen_app, verify_site),
             ("singapore", args.singapore_app, verify_singapore),

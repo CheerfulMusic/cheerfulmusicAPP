@@ -13,26 +13,26 @@ beforeEach(() => {
 afterEach(() => { vi.unstubAllGlobals() })
 
 describe('Chinese and English interface', () => {
-  it('keeps the Chinese search homepage in Chinese for a first visit', async () => {
+  it('serves the language of each homepage URL on the first visit', async () => {
     document.documentElement.lang = 'zh-CN'
     const canonical = document.createElement('link')
     canonical.rel = 'canonical'
-    canonical.href = siteOrigin + '/'
+    canonical.href = siteOrigin + '/zh/'
     canonical.setAttribute('data-site-seo', '')
     document.head.append(canonical)
 
     const { locale, localeStorageKey, t, updatePageLocale } = await import('../src/shared/i18n')
-    updatePageLocale('/')
+    updatePageLocale('/zh/')
 
     expect(locale.value).toBe('zh-CN')
     expect(document.documentElement.lang).toBe('zh-CN')
     expect(document.title).toBe('青妙Ai')
     expect(t('保存草稿')).toBe('保存草稿')
     expect(localStorage.getItem(localeStorageKey)).toBeNull()
-    updatePageLocale('/en/')
+    updatePageLocale('/')
     expect(document.documentElement.lang).toBe('en')
     expect(document.title).toBe('cheerfulmusic Ai | Everyone Can Be a Creator')
-    updatePageLocale('/')
+    updatePageLocale('/zh/')
     expect(document.documentElement.lang).toBe('zh-CN')
   })
 
@@ -46,7 +46,7 @@ describe('Chinese and English interface', () => {
     expect(document.documentElement.lang).toBe('en')
   })
 
-  it.each(['en', 'zh-CN'] as const)('restores a manually selected %s preference after reload', async language => {
+  it.each(['en', 'zh-CN'] as const)('restores a manually selected %s preference on an unlocalized page after reload', async language => {
     const first = await import('../src/shared/i18n')
     first.setLocale(language === 'en' ? 'zh-CN' : 'en')
     first.setLocale(language)
@@ -54,7 +54,7 @@ describe('Chinese and English interface', () => {
 
     vi.resetModules()
     const restored = await import('../src/shared/i18n')
-    restored.updatePageLocale('/')
+    restored.updatePageLocale('/works')
     expect(restored.locale.value).toBe(language)
     expect(document.documentElement.lang).toBe(language)
   })

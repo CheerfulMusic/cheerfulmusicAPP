@@ -33,7 +33,7 @@ public class WebPageController {
 
     @GetMapping("/")
     public ResponseEntity<String> home() throws IOException {
-        return catalogLanding("home.html", false, true);
+        return catalogLanding("home.html", true, true);
     }
 
     @GetMapping({"/artist/{id}","/artist/{id}/albums/{album}"})
@@ -78,19 +78,19 @@ public class WebPageController {
         return "forward:/index.html";
     }
 
-    @GetMapping({"/zh-CN", "/zh-CN/", "/zh-CN/index.html"})
+    @GetMapping("/zh/")
+    public ResponseEntity<String> chineseHome() throws IOException {
+        return catalogLanding("zh/index.html", false, true);
+    }
+
+    @GetMapping({"/zh", "/zh/index.html", "/zh-CN", "/zh-CN/", "/zh-CN/index.html"})
     public ResponseEntity<Void> redirectChineseHome(HttpServletRequest request) {
-        return permanentRedirect(request, "/");
+        return permanentRedirect(request, "/zh/");
     }
 
-    @GetMapping("/en/")
-    public ResponseEntity<String> englishHome() throws IOException {
-        return catalogLanding("en/index.html", true, true);
-    }
-
-    @GetMapping({"/en","/en/index.html"})
+    @GetMapping({"/en", "/en/", "/en/index.html"})
     public ResponseEntity<Void> redirectEnglishHome(HttpServletRequest request) {
-        return permanentRedirect(request, "/en/");
+        return permanentRedirect(request, "/");
     }
 
     @GetMapping({"/discover", "/en/discover"})

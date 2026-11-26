@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto'
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import type { Connect, Plugin } from 'vite'
-import { homeLocale, homePublicInfo, homeSeo, siteFavicon, siteName, siteOrigin, type Locale } from '../src/shared/i18n/home-seo'
+import { homeLocale, homePublicInfo, homeRedirects, homeSeo, siteFavicon, siteName, siteOrigin, type Locale } from '../src/shared/i18n/home-seo'
 import { discoverLocale, landingLinks, sitePage, sitePagePaths, socialMetadata, websiteSchema } from '../src/shared/i18n/site-seo'
 
 type SitePage = NonNullable<ReturnType<typeof sitePage>>
@@ -48,7 +48,7 @@ export function renderSitePage(html: string, page: SitePage) {
     + `<p><a href="${guide.appPath}">${escapeHtml(guide.cta)}</a></p>` : ''
   const heading = `<h1>${escapeHtml(page.heading)}</h1>`
   const filing = '<a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer" lang="zh-CN">粤ICP备2023023949号</a>'
-  const home = page.path === '/' || homeLocale(page.path) !== undefined
+  const home = homeLocale(page.path) !== undefined
   const intro = escapeHtml(page.intro ?? page.description)
   const navigation = `<nav>${links}</nav><footer>${filing}</footer>`
   const introClass = home ? ' class="beta-access-intro"' : ''
@@ -72,7 +72,7 @@ export function renderSitePage(html: string, page: SitePage) {
     .replace('<div id="app"></div>', `<div id="app">${initialContent}</div>`)
 }
 
-const homeReleasePages = (Object.keys(homeSeo) as Locale[]).map(language => {
+const homeReleasePages = (['en', 'zh-CN'] as const).map(language => {
   const copy = homeSeo[language]
   const page = sitePage(copy.path)!
   return {
@@ -83,7 +83,7 @@ const homeReleasePages = (Object.keys(homeSeo) as Locale[]).map(language => {
     intro: copy.description,
     brand: copy.searchName,
     ...('lastModified' in copy ? { lastModified: copy.lastModified } : {}),
-    ...(language === 'zh-CN' ? { aliases: websiteSchema.alternateName } : {}),
+    ...(page.path === '/' ? { aliases: websiteSchema.alternateName } : {}),
   }
 })
 
@@ -125,13 +125,13 @@ function htmlFile(path: string) {
   return path === '/' ? '/home.html' : `${path.replace(/\/$/, '')}/index.html`
 }
 
-const redirectLegacyChineseHome: Connect.NextHandleFunction = (request, response, next) => {
+const redirectLegacyHome: Connect.NextHandleFunction = (request, response, next) => {
   if (request.method !== 'GET' && request.method !== 'HEAD') return next()
   const url = request.url ?? ''
   const path = url.split('?')[0] ?? ''
-  if (path !== '/zh-CN' && path !== '/zh-CN/' && path !== '/zh-CN/index.html') return next()
+  if (!Object.hasOwn(homeRedirects, path)) return next()
   response.statusCode = 308
-  response.setHeader('Location', '/' + url.slice(path.length))
+  response.setHeader('Location', homeRedirects[path] + url.slice(path.length))
   response.end()
 }
 
@@ -139,7 +139,7 @@ export function siteSeoPlugin(): Plugin {
   return {
     name: 'site-seo',
     configureServer(server) {
-      server.middlewares.use(redirectLegacyChineseHome)
+      server.middlewares.use(redirectLegacyHome)
       server.middlewares.use((request, response, next) => {
         const path = request.url?.split('?')[0]
         const file = Object.entries(crawlFiles).find(([url]) => url === path)?.[1]
@@ -149,7 +149,7 @@ export function siteSeoPlugin(): Plugin {
       })
     },
     configurePreviewServer(server) {
-      server.middlewares.use(redirectLegacyChineseHome)
+      server.middlewares.use(redirectLegacyHome)
       server.middlewares.use((request, _response, next) => {
         const path = request.url?.split('?')[0]
         const page = path && sitePage(path)

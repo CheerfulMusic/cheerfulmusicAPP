@@ -550,11 +550,19 @@ class InviteGateIntegrationTest {
             assertTrue(body.contains(audio));
             assertTrue(send(visitor, "HEAD", path, null, null).body().isEmpty());
         }
-        for (String listing : List.of("/", "/en/", "/discover", "/en/discover", "/sitemap.xml")) {
-            String body = send(visitor, "GET", listing, null, null).body();
-            assertTrue(body.contains(page), listing);
-            assertFalse(body.contains("/gift/") || body.contains("/song/"), listing);
+        for (String listing : List.of("/", "/zh/", "/discover", "/en/discover")) {
+            var response = send(visitor, "GET", listing, null, null);
+            assertEquals(200, response.statusCode(), listing);
+            String href = listing.equals("/") || listing.equals("/en/discover") ? "/en" + page : page;
+            assertTrue(response.body().contains("href=\"" + href + "\""), listing);
+            assertFalse(response.body().contains("/gift/") || response.body().contains("/song/"), listing);
         }
+        var sitemap = send(visitor, "GET", "/sitemap.xml", null, null);
+        assertEquals(200, sitemap.statusCode());
+        for (String path : List.of(page, "/en" + page)) {
+            assertTrue(sitemap.body().contains("<loc>https://cheerfulmusic.com" + path + "</loc>"), path);
+        }
+        assertFalse(sitemap.body().contains("/gift/") || sitemap.body().contains("/song/"));
         var request = HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + audio))
                 .header("Range", "bytes=0-3").GET().build();
         var range = visitor.send(request, HttpResponse.BodyHandlers.ofByteArray());
@@ -569,7 +577,7 @@ class InviteGateIntegrationTest {
         }
 
         jdbc.update("INSERT INTO media_asset_annotation(asset_id,deleted_at) VALUES (?,CURRENT_TIMESTAMP)", asset);
-        for (String listing : List.of("/", "/en/", "/discover", "/api/public/discover", "/api/public/discover?view=shelves",
+        for (String listing : List.of("/", "/zh/", "/discover", "/api/public/discover", "/api/public/discover?view=shelves",
                 "/sitemap.xml")) {
             assertFalse(send(visitor, "GET", listing, null, null).body().contains(release.id()), listing);
         }

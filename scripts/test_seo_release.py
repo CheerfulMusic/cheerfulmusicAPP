@@ -27,21 +27,29 @@ MANIFEST = {
     "origin": seo.SITE,
     "icon": {"path": "/brand/favicon-symbol-96.png", "sha256": hashlib.sha256(ICON).hexdigest()},
     "pages": [
-        {"path": "/", "language": "zh-CN", "title": "青妙Ai", "description": "中文描述", "brand": "青妙Ai",
-         "aliases": ["cheerfulmusic", "cheerfulmusicAi", "cheerfulmusicAI"],
-         "intro": "青妙Ai（cheerfulmusicai）是 AI 音乐创作平台。"},
-        {"path": "/en/", "language": "en", "title": "cheerfulmusic Ai | Everyone Can Be a Creator",
+        {"path": "/", "language": "en", "title": "cheerfulmusic Ai | Everyone Can Be a Creator",
          "description": "Create your own song in just a few clicks. No music skills needed.",
          "brand": "cheerfulmusic Ai", "lastModified": "2026-11-25",
+         "aliases": ["青妙Ai", "cheerfulmusic", "cheerfulmusicAi", "cheerfulmusicAI"],
          "intro": "Create a song with cheerfulmusic Ai (cheerfulmusicai)."},
+        {"path": "/zh/", "language": "zh-CN", "title": "青妙Ai", "description": "中文描述", "brand": "青妙Ai",
+         "lastModified": "2026-11-25", "intro": "青妙Ai（cheerfulmusicai）是 AI 音乐创作平台。"},
+    ],
+}
+OLD_MANIFEST = {
+    **MANIFEST,
+    "pages": [
+        {**MANIFEST["pages"][1], "path": "/", "aliases": MANIFEST["pages"][0]["aliases"]},
+        {field: "/en/" if field == "path" else value for field, value in MANIFEST["pages"][0].items()
+         if field != "aliases"},
     ],
 }
 
 
-def fixture_files():
+def fixture_files(manifest=MANIFEST):
     files = {}
     sitemap = []
-    for page in MANIFEST["pages"]:
+    for page in manifest["pages"]:
         path = page["path"]
         title = escape(page["title"])
         description = escape(page["description"])
@@ -52,6 +60,12 @@ def fixture_files():
             schema = '<script type="application/ld+json">' + json.dumps({
                 "@type": "WebSite", "name": page["brand"], "alternateName": page["aliases"],
             }) + "</script>"
+        alternates = [
+            f'<link rel="alternate" hreflang="{other["language"]}" href="{seo.SITE + other["path"]}">'
+            for other in manifest["pages"]
+        ]
+        default = next(other["path"] for other in manifest["pages"] if other["language"] == "en")
+        alternates.append(f'<link rel="alternate" hreflang="x-default" href="{seo.SITE + default}">')
         files[path] = ("text/html", f"""<html lang="{page['language']}"><head>
             <title>{title}</title>
             <meta name="description" content="{description}">
@@ -59,15 +73,19 @@ def fixture_files():
             <meta property="og:description" content="{description}">
             <meta property="og:site_name" content="{brand}">
             <link rel="canonical" href="{seo.SITE + path}">
-            <link rel="icon" href="{MANIFEST['icon']['path']}">
+            <link rel="icon" href="{manifest['icon']['path']}">
+            {"".join(alternates)}
             {schema}</head><body><main><p class="beta-access-intro">{intro}</p></main></body></html>""".encode())
         modified = f"<lastmod>{page['lastModified']}</lastmod>" if "lastModified" in page else ""
         sitemap.append(f"<url><loc>{seo.SITE + path}</loc>{modified}</url>")
     sitemap_xml = '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' + "".join(sitemap) + "</urlset>"
     files["/sitemap.xml"] = ("application/xml", sitemap_xml.encode())
     files["/robots.txt"] = ("text/plain", f"Sitemap: {seo.SITE}/sitemap.xml\n".encode())
-    files[MANIFEST["icon"]["path"]] = ("image/png", ICON)
+    files[manifest["icon"]["path"]] = ("image/png", ICON)
     files[f"/{KEY}.txt"] = ("text/plain", KEY.encode())
+    if seo.english_at_root(manifest):
+        for path in seo.LEGACY_ENGLISH_PATHS:
+            files[path] = ("text/plain", b"", 308, "/")
     return files
 
 
@@ -78,8 +96,13 @@ def running_site(files):
             if self.path not in files:
                 self.send_error(404)
                 return
-            content_type, body = files[self.path]
-            self.send_response(204 if self.path == "/internal/regional/ready" else 200)
+            content_type, body, *redirect = files[self.path]
+            if redirect:
+                status, location = redirect
+                self.send_response(status)
+                self.send_header("Location", location)
+            else:
+                self.send_response(204 if self.path == "/internal/regional/ready" else 200)
             self.send_header("Content-Type", content_type)
             self.end_headers()
             self.wfile.write(body)
@@ -136,7 +159,8 @@ class SeoReleaseTest(unittest.TestCase):
 
     def test_public_checks_cannot_mask_stale_singapore_html(self):
         media, body = self.regional_files["/"]
-        self.regional_files["/"] = (media, body.replace("青妙Ai".encode(), b"Previous brand"))
+        title = MANIFEST["pages"][0]["title"].encode()
+        self.regional_files["/"] = (media, body.replace(title, b"Previous brand"))
         status, report = self.run_release("--notify", "--receipt", str(self.receipt))
         self.assertEqual(status, 1)
         self.assertIn("title differs", report["verification"]["singapore"]["reason"])
@@ -144,8 +168,8 @@ class SeoReleaseTest(unittest.TestCase):
         self.post.assert_not_called()
 
     def test_stale_english_intro_prevents_notifications(self):
-        media, body = self.files["/en/"]
-        self.files["/en/"] = (media, body.replace(b"cheerfulmusicai", b"the song studio"))
+        media, body = self.files["/"]
+        self.files["/"] = (media, body.replace(b"cheerfulmusicai", b"the song studio"))
         status, report = self.run_release("--notify", "--receipt", str(self.receipt))
         self.assertEqual(status, 1)
         self.assertIn("visible product introduction differs", report["verification"]["shenzhen"]["reason"])
@@ -194,7 +218,8 @@ class SeoReleaseTest(unittest.TestCase):
         self.assertEqual(report["notifications"]["baidu"]["remaining_quota"], 8)
         self.assertEqual(json.loads(self.receipt.read_bytes()), report)
         _, data, _ = self.post.call_args_list[0].args
-        self.assertEqual(json.loads(data)["urlList"], report["urls"])
+        self.assertEqual(report["indexnow_urls"], report["urls"] + [seo.SITE + "/en/"])
+        self.assertEqual(json.loads(data)["urlList"], report["indexnow_urls"])
         _, data, _ = self.post.call_args_list[1].args
         self.assertEqual(data.decode().splitlines(), report["urls"])
         self.assertEqual(self.run_release(*args)[0], 0)
@@ -242,7 +267,44 @@ class SeoReleaseTest(unittest.TestCase):
         old["pages"][0]["aliases"].pop()
         self.assertEqual(seo.changed_urls(MANIFEST, old), [seo.SITE + "/"])
         old["icon"]["sha256"] = "0" * 64
-        self.assertEqual(seo.changed_urls(MANIFEST, old), [seo.SITE + "/", seo.SITE + "/en/"])
+        self.assertEqual(seo.changed_urls(MANIFEST, old), [seo.SITE + "/", seo.SITE + "/zh/"])
+
+    def test_previous_homepage_manifest_still_reads_and_verifies(self):
+        previous = Path(self.temp) / "previous.json"
+        previous.write_text(json.dumps(OLD_MANIFEST))
+        old = seo.read_manifest(previous)
+        self.assertEqual(old, OLD_MANIFEST)
+        legacy_site = self.enterContext(running_site(fixture_files(old)))
+        seo.verify_site(legacy_site, old)
+        urls = seo.changed_urls(MANIFEST, old)
+        self.assertEqual(urls, [seo.SITE + "/", seo.SITE + "/zh/"])
+        self.assertEqual(seo.indexnow_urls(MANIFEST, old, urls), urls + [seo.SITE + "/en/"])
+        self.assertEqual(seo.indexnow_urls(MANIFEST, MANIFEST, []), [])
+
+    def test_missing_legacy_homepage_redirect_prevents_notifications(self):
+        self.files["/en/"] = ("text/html", b"Retired English page")
+        status, report = self.run_release("--notify", "--receipt", str(self.receipt))
+        self.assertEqual(status, 1)
+        self.assertIn("/en/ did not return a usable HTTP 308 response",
+                      report["verification"]["shenzhen"]["reason"])
+        self.assertEqual(report["verification"]["public"], "passed")
+        self.post.assert_not_called()
+
+    def test_wrong_legacy_homepage_destination_prevents_notifications(self):
+        self.files["/en/index.html"] = ("text/plain", b"", 308, "/zh/")
+        status, report = self.run_release("--notify", "--receipt", str(self.receipt))
+        self.assertEqual(status, 1)
+        self.assertIn("does not redirect to the canonical English homepage",
+                      report["verification"]["shenzhen"]["reason"])
+        self.post.assert_not_called()
+
+    def test_stale_homepage_alternates_fail_the_check(self):
+        media, body = self.files["/"]
+        self.files["/"] = (media, body.replace(b'hreflang="en" href="https://cheerfulmusic.com/"',
+                                              b'hreflang="en" href="https://cheerfulmusic.com/en/"'))
+        status, report = self.run_release()
+        self.assertEqual(status, 1)
+        self.assertIn("homepage hreflang differs", report["verification"]["shenzhen"]["reason"])
 
     def test_reads_same_manifest_from_the_jar_layout(self):
         jar = Path(self.temp) / "app.jar"

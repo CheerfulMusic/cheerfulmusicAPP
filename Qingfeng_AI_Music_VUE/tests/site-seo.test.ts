@@ -20,7 +20,7 @@ describe('crawlable site pages', () => {
     expect(page.querySelector('meta[name="description"]')?.getAttribute('content')).toBe(metadata.description)
     expect(page.querySelector('link[rel="canonical"]')?.getAttribute('href')).toBe(siteOrigin + path)
     expect(page.querySelector('meta[property="og:url"]')?.getAttribute('content')).toBe(siteOrigin + path)
-    expect(page.querySelector('meta[property="og:site_name"]')?.getAttribute('content')).toBe(path === '/en/' ? 'cheerfulmusic Ai' : '青妙Ai')
+    expect(page.querySelector('meta[property="og:site_name"]')?.getAttribute('content')).toBe(path === '/' ? 'cheerfulmusic Ai' : '青妙Ai')
     expect(page.querySelector('meta[name="twitter:card"]')?.getAttribute('content')).toBe('summary_large_image')
     expect(page.querySelector('h1')?.textContent).toBe(metadata.heading)
     for (const alternate of page.querySelectorAll('link[hreflang="en"], link[hreflang="zh-CN"]')) {
@@ -30,20 +30,20 @@ describe('crawlable site pages', () => {
     expect(page.querySelectorAll('script[type="application/ld+json"]')).toHaveLength(path === '/' ? 1 : 0)
   })
 
-  it.each(['/', '/en/'])('publishes the same three alternates at %s', path => {
+  it.each(['/', '/zh/'])('publishes the same three alternates at %s', path => {
     const page = parsePage(path)
     const alternates = Object.fromEntries(Array.from(page.querySelectorAll('link[hreflang]'),
       link => [link.getAttribute('hreflang'), link.getAttribute('href')]))
-    expect(alternates).toEqual({ en: siteOrigin + '/en/', 'zh-CN': siteOrigin + '/', 'x-default': siteOrigin + '/en/' })
+    expect(alternates).toEqual({ en: siteOrigin + '/', 'zh-CN': siteOrigin + '/zh/', 'x-default': siteOrigin + '/' })
   })
 
-  it.each(['/', '/en/'])('serves the homepage introduction and guides before invitation status is known at %s', path => {
+  it.each(['/', '/zh/'])('serves the homepage introduction and guides before invitation status is known at %s', path => {
     const page = parsePage(path)
     page.querySelectorAll('noscript').forEach(node => node.remove())
     const landing = page.querySelector('#app > main.seo-landing')
     expect(landing?.querySelector('h1')?.textContent).toBe(sitePage(path)!.heading)
     const productCopy = landing?.querySelector('.beta-access-intro')
-    expect(productCopy?.textContent).toBe(homeSeo[path === '/en/' ? 'en' : 'zh-CN'].description)
+    expect(productCopy?.textContent).toBe(homeSeo[path === '/' ? 'en' : 'zh-CN'].description)
     expect(productCopy?.textContent).toContain('Cheerful Music')
     expect(productCopy?.textContent).toContain('cheerfulmusic Ai')
     expect(productCopy?.textContent).toContain('cheerfulmusicai')
@@ -53,7 +53,7 @@ describe('crawlable site pages', () => {
     expect(landing?.querySelectorAll('.home-public-info h2')).toHaveLength(2)
     expect(landing?.querySelectorAll('.home-public-info ol li')).toHaveLength(3)
     expect(landing?.querySelectorAll('.home-public-info details summary')).toHaveLength(2)
-    for (const publicPath of [path, path === '/' ? '/discover' : '/en/discover']) {
+    for (const publicPath of [path, path === '/' ? '/en/discover' : '/discover']) {
       expect(renderSitePage(shell, sitePage(publicPath)!).split('<!--public-discover-links-->')).toHaveLength(2)
     }
     expect(page.querySelectorAll('h1')).toHaveLength(1)
@@ -64,15 +64,15 @@ describe('crawlable site pages', () => {
   })
 
   it('publishes one site entity and the regional brand on each homepage', () => {
-    expect(parsePage('/').documentElement.lang).toBe('zh-CN')
-    expect(parsePage('/').querySelector('h1')?.textContent).toBe('做自己的歌')
-    expect(parsePage('/').querySelector('meta[property="og:title"]')?.getAttribute('content')).toBe('青妙Ai')
+    expect(parsePage('/zh/').documentElement.lang).toBe('zh-CN')
+    expect(parsePage('/zh/').querySelector('h1')?.textContent).toBe('做自己的歌')
+    expect(parsePage('/zh/').querySelector('meta[property="og:title"]')?.getAttribute('content')).toBe('青妙Ai')
     const website = JSON.parse(parsePage('/').querySelector('script[type="application/ld+json"]')!.textContent!)
-    expect(website.name).toBe('青妙Ai')
+    expect(website.name).toBe('cheerfulmusic Ai')
     expect(website.url).toBe(siteOrigin + '/')
     expect(website.alternateName)
-      .toEqual(expect.arrayContaining(['cheerfulmusic Ai', 'cheerfulmusic', 'Cheerful Music', '青风音乐', 'CheerfulMusic', 'cheerfulmusicAI', 'cheerfulmusicai']))
-    const english = parsePage('/en/')
+      .toEqual(expect.arrayContaining(['青妙Ai', 'cheerfulmusic', 'Cheerful Music', '青风音乐', 'CheerfulMusic', 'cheerfulmusicAI', 'cheerfulmusicai']))
+    const english = parsePage('/')
     const title = 'cheerfulmusic Ai | Everyone Can Be a Creator'
     const description = 'Create your own song in just a few clicks. No music skills needed.'
     expect(english.title).toBe(title)
@@ -83,6 +83,7 @@ describe('crawlable site pages', () => {
     expect(english.querySelector('meta[name="description"]')?.getAttribute('content')).toBe(description)
     expect(english.querySelector('meta[property="og:description"]')?.getAttribute('content')).toBe(description)
     expect(sitePage('/zh-CN/')).toBeUndefined()
+    expect(sitePage('/en/')).toBeUndefined()
   })
 
   it('builds a release manifest consistent with the two initial homepage documents', () => {
@@ -94,7 +95,7 @@ describe('crawlable site pages', () => {
     })
     expect(icon.readUInt32BE(16)).toBe(96)
     expect(icon.readUInt32BE(20)).toBe(96)
-    expect(manifest.pages.map(page => page.path)).toEqual(['/', '/en/'])
+    expect(manifest.pages.map(page => page.path)).toEqual(['/', '/zh/'])
     for (const record of manifest.pages) {
       const html = parsePage(record.path)
       expect(record.language).toBe(html.documentElement.lang)
@@ -105,12 +106,12 @@ describe('crawlable site pages', () => {
     }
     expect(manifest.pages[0]?.aliases)
       .toEqual(JSON.parse(parsePage('/').querySelector('script[type="application/ld+json"]')!.textContent!).alternateName)
-    expect(manifest.pages[1]?.lastModified).toBe(homeSeo.en.lastModified)
+    expect(manifest.pages[0]?.lastModified).toBe(homeSeo.en.lastModified)
   })
 
   it.each([
-    ['/discover', 'zh-CN', '青风音乐｜原创歌曲广场', '/'],
-    ['/en/discover', 'en', 'Cheerful Music | Discover Original AI Songs', '/en/'],
+    ['/discover', 'zh-CN', '青风音乐｜原创歌曲广场', '/zh/'],
+    ['/en/discover', 'en', 'Cheerful Music | Discover Original AI Songs', '/'],
   ] as const)('serves the linked music community in its URL language at %s', (path, language, title, home) => {
     const page = parsePage(path)
     page.querySelectorAll('noscript').forEach(node => node.remove())
@@ -141,7 +142,7 @@ describe('crawlable site pages', () => {
     expect(page.querySelector(`main a[href="${guide.appPath}"]`)?.textContent).toBe(guide.cta)
     expect(page.querySelector('link[hreflang="zh-CN"]')?.getAttribute('href')).toBe(siteOrigin + guide.translations['zh-CN'])
     expect(page.querySelector('link[hreflang="en"]')?.getAttribute('href')).toBe(siteOrigin + guide.translations.en)
-    const home = guide.language === 'en' ? '/en/' : '/'
+    const home = guide.language === 'en' ? '/' : '/zh/'
     expect(parsePage(home).querySelector(`nav a[href="${path}"]`)?.textContent).toBe(guide.label)
     expect(page.querySelectorAll('nav a[hreflang]')).toHaveLength(2)
     expect(page.querySelector(`nav a[href="${path}"]:not([hreflang])`)).toBeNull()
@@ -150,14 +151,14 @@ describe('crawlable site pages', () => {
   it.each([...siteGuidePaths, '/discover', '/en/discover', '/help'])('links back to the brand homepage at %s', path => {
     const page = parsePage(path)
     const english = page.documentElement.lang === 'en'
-    const home = english ? '/en/' : '/'
+    const home = english ? '/' : '/zh/'
     const links = page.querySelectorAll(`nav a[href="${home}"]`)
     expect(links).toHaveLength(1)
     expect(links[0]?.textContent).toContain(english ? 'cheerfulmusic' : '青妙Ai')
     expect(links[0]?.textContent).toContain('Cheerful Music')
     if (!english) expect(links[0]?.textContent).toContain('青风音乐')
     if (path === '/help') {
-      expect(page.querySelector('nav a[href="/"]')?.textContent).toContain('青风音乐')
+      expect(page.querySelector('nav a[href="/zh/"]')?.textContent).toContain('青风音乐')
       expect(page.querySelector('nav a[href="/help"]')).toBeNull()
     }
   })
@@ -168,27 +169,28 @@ describe('crawlable site pages', () => {
     expect(new Set(pages.map(page => page.description)).size).toBe(pages.length)
   })
 
-  it.each(['en', 'zh-CN'] as const)('uses only the brand in the root homepage title for %s', language => {
-    const html = renderSitePage(shell, sitePage('/', language)!)
-    const page = new DOMParser().parseFromString(html, 'text/html')
-    expect(page.title).toBe('青妙Ai')
+  it.each(['en', 'zh-CN'] as const)('keeps the %s home URL in its own language regardless of preference', language => {
+    const copy = homeSeo[language]
+    const otherLanguage = language === 'en' ? 'zh-CN' : 'en'
+    const page = parsePage(copy.path)
+    expect(sitePage(copy.path, otherLanguage)?.title).toBe(copy.title)
 
-    document.head.innerHTML = parsePage('/').head.innerHTML
-    setLocale(language)
-    updatePageLocale('/')
+    document.head.innerHTML = page.head.innerHTML
+    setLocale(otherLanguage)
+    updatePageLocale(copy.path)
     expect(document.documentElement.lang).toBe(language)
-    expect(document.title).toBe(page.title)
+    expect(document.title).toBe(copy.title)
     const description = document.querySelector('meta[name="description"]')?.getAttribute('content')
-    expect(description).toBe(sitePage(language === 'en' ? '/en/' : '/')!.description)
-    expect(page.querySelector('main .beta-access-intro')?.textContent).toBe(homeSeo[language].description)
+    expect(description).toBe(copy.searchDescription)
+    expect(page.querySelector('main .beta-access-intro')?.textContent).toBe(copy.description)
   })
 
   it('replaces metadata on client navigation and clears it on private destinations', () => {
     document.head.innerHTML = '<title>青风音乐</title><meta name="description">'
-    updatePageLocale('/en/')
-    expect(document.title).toBe(sitePage('/en/')!.title)
-    updatePageLocale('/')
+    updatePageLocale('/zh/')
     expect(document.title).toBe('青妙Ai')
+    updatePageLocale('/')
+    expect(document.title).toBe(sitePage('/')!.title)
     expect(document.querySelectorAll('link[rel="canonical"]')).toHaveLength(1)
     expect(document.querySelector('link[rel="canonical"]')?.getAttribute('href')).toBe(siteOrigin + '/')
     updatePageLocale('/account')

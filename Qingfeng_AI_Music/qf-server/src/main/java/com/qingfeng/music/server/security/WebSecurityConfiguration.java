@@ -21,7 +21,7 @@ import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
 public class WebSecurityConfiguration {
     private static final String[] SEO_PAGES = {
             "/robots.txt", "/sitemap.xml", "/favicon.ico", "/brand/favicon-96.png",
-            "/zh-CN", "/zh-CN/", "/zh-CN/index.html",
+            "/zh", "/zh/", "/zh/index.html", "/zh-CN", "/zh-CN/", "/zh-CN/index.html",
             "/en", "/en/", "/en/index.html",
             "/discover", "/discover/", "/discover/index.html",
             "/en/discover", "/en/discover/", "/en/discover/index.html",

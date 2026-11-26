@@ -3,6 +3,7 @@ import { computed, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, 
 import { discoverHref, locale, t } from '../../../shared/i18n'
 import LanguageSwitcher from '../../../shared/i18n/LanguageSwitcher.vue'
 import { discoverSeo } from '../../../shared/i18n/site-seo'
+import { homePaths } from '../../../shared/i18n/home-seo'
 import { usePlayer, type PlayableTrack } from '../../../shared/player/store'
 import BrandLogo from '../../../shared/ui/BrandLogo.vue'
 import NavIcon from '../../../shared/ui/NavIcon.vue'
@@ -474,9 +475,9 @@ onBeforeUnmount(() => {
   <div class="discover">
     <header class="discover-header">
       <div class="discover-width discover-header-inner">
-        <RouterLink class="discover-brand" :to="discoverHref === '/en/discover' ? '/en/' : '/'" :aria-label="t('Cheerful Music 青风音乐首页')"><BrandLogo /></RouterLink>
+        <RouterLink class="discover-brand" :to="homePaths[locale]" :aria-label="t('Cheerful Music 青风音乐首页')"><BrandLogo /></RouterLink>
         <nav class="discover-nav" :aria-label="t('主导航')">
-          <RouterLink :to="discoverHref === '/en/discover' ? '/en/' : '/'">{{ t('首页') }}</RouterLink>
+          <RouterLink :to="homePaths[locale]">{{ t('首页') }}</RouterLink>
           <RouterLink :to="discoverHref" aria-current="page">{{ t('广场') }}</RouterLink>
           <a href="#discover-artists">{{ t('歌手') }}</a>
           <a v-if="editorialAccess" href="#discover-playlists">{{ t('歌单') }}</a>

@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import FilingLink from "../../shared/ui/FilingLink.vue"
 import { defineAsyncComponent, ref } from 'vue'
-import { t } from '../../shared/i18n'
-import { homeSeo } from '../../shared/i18n/home-seo'
+import { locale, t } from '../../shared/i18n'
+import { homePaths, homeSeo } from '../../shared/i18n/home-seo'
 
 const PremiumStudioDialog = defineAsyncComponent(() => import('../../modules/works/components/PremiumStudioDialog.vue'))
 const premiumOpen = ref(false)
@@ -40,7 +40,7 @@ const legal = [
       <div class="footer-inner">
         <div class="footer-main">
           <section class="footer-brand" :aria-label="t('Cheerful Music 青风音乐首页')">
-            <RouterLink class="footer-brand-link" to="/" :aria-label="t('Cheerful Music 青风音乐首页')">
+            <RouterLink class="footer-brand-link" :to="homePaths[locale]" :aria-label="t('Cheerful Music 青风音乐首页')">
               <img src="/brand/logo-symbol.svg" alt="" width="42" height="42">
               <strong lang="en">Cheerful Music</strong>
             </RouterLink>

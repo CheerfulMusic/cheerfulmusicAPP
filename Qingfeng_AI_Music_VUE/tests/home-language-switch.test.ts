@@ -5,6 +5,7 @@ import { expect, it, vi } from 'vitest'
 import HomeHero from '../src/modules/home/components/HomeHero.vue'
 import LanguageSwitcher from '../src/shared/i18n/LanguageSwitcher.vue'
 import { locale, setLocale, updatePageLocale } from '../src/shared/i18n'
+import { homePaths, homeSeo } from '../src/shared/i18n/home-seo'
 
 vi.mock('/brand/headline-own-song-regular.svg', () => ({ default: '/brand/headline-own-song-regular.svg' }))
 
@@ -13,7 +14,7 @@ function createTestRouter() {
   const router = createRouter({
     history: createMemoryHistory(),
     routes: [
-      { path: '/', name: 'home', alias: '/en/', component },
+      { path: '/', name: 'home', alias: '/zh/', component },
       { path: '/discover', name: 'discover', alias: '/en/discover', component },
       { path: '/works', name: 'works', component },
     ],
@@ -22,22 +23,24 @@ function createTestRouter() {
   return router
 }
 
-it('switches both ways on the root without changing the URL or tab title', async () => {
+it('switches homepages in both directions while preserving the query and fragment', async () => {
   const router = createTestRouter()
   setLocale('zh-CN')
   await router.push('/?utm_source=search#how')
   const wrapper = mount(LanguageSwitcher, { global: { plugins: [router] } })
   const hero = mount(HomeHero, { props: { brand: '青妙Ai' }, global: { stubs: { RouterLink: true } } })
   try {
-    for (const language of ['en', 'zh-CN']) {
+    for (const language of ['zh-CN', 'en'] as const) {
       const button = wrapper.get(`button[lang="${language}"]`)
       await button.trigger('click')
-      expect(router.currentRoute.value.fullPath).toBe('/?utm_source=search#how')
+      await flushPromises()
+      await hero.setProps({ brand: homeSeo[language].brand })
+      expect(router.currentRoute.value.fullPath).toBe(homePaths[language] + '?utm_source=search#how')
       expect(document.documentElement.lang).toBe(language)
-      expect(document.title).toBe('青妙Ai')
-      expect(document.querySelector('meta[property="og:site_name"]')?.getAttribute('content')).toBe('青妙Ai')
+      expect(document.title).toBe(homeSeo[language].title)
+      expect(document.querySelector('meta[property="og:site_name"]')?.getAttribute('content')).toBe(homeSeo[language].searchName)
       expect(button.attributes('aria-pressed')).toBe('true')
-      expect(hero.get('.p-intro-description').text()).toContain('青妙Ai')
+      expect(hero.get('.p-intro-description').text()).toContain(homeSeo[language].brand)
       expect(hero.findAll('h1')).toHaveLength(1)
       expect(hero.get('h1').attributes('id')).toBe('home-hero-title')
       expect(hero.find('.home-product-title').exists()).toBe(false)
@@ -50,24 +53,6 @@ it('switches both ways on the root without changing the URL or tab title', async
     }
   } finally {
     hero.unmount()
-    wrapper.unmount()
-  }
-})
-
-it('returns visitors from the English search landing page to the root when they choose Chinese', async () => {
-  const router = createTestRouter()
-  setLocale('zh-CN')
-  await router.push('/en/?utm_source=search#how')
-  const wrapper = mount(LanguageSwitcher, { global: { plugins: [router] } })
-  try {
-    expect(locale.value).toBe('en')
-    expect(document.title).toBe('cheerfulmusic Ai | Everyone Can Be a Creator')
-    await wrapper.get('button[lang="zh-CN"]').trigger('click')
-    await flushPromises()
-    expect(router.currentRoute.value.fullPath).toBe('/?utm_source=search#how')
-    expect(locale.value).toBe('zh-CN')
-    expect(document.title).toBe('青妙Ai')
-  } finally {
     wrapper.unmount()
   }
 })

@@ -67,11 +67,16 @@ class WebErrorPageIntegrationTest {
     }
 
     @Test void searchEntryUrlsAreReadableWithoutAuthentication() throws Exception {
-        for (String path : List.of("/", "/en/", "/discover", "/en/discover", "/help", "/guide/create-song", "/en/guide/create-song")) {
+        var homeLanguages = Map.of("/", "en", "/zh/", "zh-CN");
+        for (String path : List.of("/", "/zh/", "/discover", "/en/discover", "/help", "/guide/create-song", "/en/guide/create-song")) {
             var response = get(path, "text/html");
             assertEquals(200, response.statusCode(), path);
             assertTrue(response.body().contains("id=\"app\""), path);
             assertTrue(response.headers().firstValue("X-Robots-Tag").isEmpty(), path);
+            if (homeLanguages.containsKey(path)) {
+                assertTrue(response.body().contains("<html lang=\"" + homeLanguages.get(path) + "\""), path);
+                assertTrue(response.body().contains("rel=\"canonical\" href=\"https://cheerfulmusic.com" + path + "\""), path);
+            }
             var head = request(path, "text/html", "HEAD");
             assertEquals(200, head.statusCode(), path);
             assertTrue(head.body().isEmpty(), path);
@@ -96,8 +101,9 @@ class WebErrorPageIntegrationTest {
 
     @Test void duplicateSearchEntryUrlsRedirectPermanentlyWithoutChangingTheQuery() throws Exception {
         var routes = Map.ofEntries(
-                Map.entry("/zh-CN", "/"), Map.entry("/zh-CN/", "/"), Map.entry("/zh-CN/index.html", "/"),
-                Map.entry("/en", "/en/"), Map.entry("/en/index.html", "/en/"),
+                Map.entry("/zh", "/zh/"), Map.entry("/zh/index.html", "/zh/"),
+                Map.entry("/zh-CN", "/zh/"), Map.entry("/zh-CN/", "/zh/"), Map.entry("/zh-CN/index.html", "/zh/"),
+                Map.entry("/en", "/"), Map.entry("/en/", "/"), Map.entry("/en/index.html", "/"),
                 Map.entry("/discover/", "/discover"), Map.entry("/discover/index.html", "/discover"),
                 Map.entry("/en/discover/", "/en/discover"), Map.entry("/en/discover/index.html", "/en/discover"),
                 Map.entry("/help/", "/help"), Map.entry("/help/index.html", "/help"),

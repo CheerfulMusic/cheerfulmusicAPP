@@ -854,9 +854,9 @@
         "@GetMapping({\"/discover/songs/{song}/{version}\", \"/en/discover/songs/{song}/{version}\"})",
         "@GetMapping({\"/discover/songs/{*tail}\", \"/en/discover/songs/{*tail}\"})",
         "@GetMapping({\"/create\",\"/create/photo\",\"/works\",\"/works/{id}\",\"/account\",\"/profile\",\"/recharge\",\"/analytics\",\"/agent\"})",
-        "@GetMapping({\"/zh-CN\", \"/zh-CN/\", \"/zh-CN/index.html\"})",
-        "@GetMapping(\"/en/\")",
-        "@GetMapping({\"/en\",\"/en/index.html\"})",
+        "@GetMapping(\"/zh/\")",
+        "@GetMapping({\"/zh\", \"/zh/index.html\", \"/zh-CN\", \"/zh-CN/\", \"/zh-CN/index.html\"})",
+        "@GetMapping({\"/en\", \"/en/\", \"/en/index.html\"})",
         "@GetMapping({\"/discover\", \"/en/discover\"})",
         "@GetMapping(\"/sitemap.xml\")",
         "@GetMapping({\"/discover/\", \"/discover/index.html\", \"/en/discover/\", \"/en/discover/index.html\"})",
@@ -870,6 +870,7 @@
       "mode": "protocol",
       "flows": [
         "SPA document",
+        "Public localized homepages and exact legacy redirects (WebErrorPageIntegrationTest)",
         "Public Discover song card metadata",
         "Public bilingual guide documents and canonical redirects",
         "Bilingual published recording pages, current listings and sitemap (InviteGateIntegrationTest)"

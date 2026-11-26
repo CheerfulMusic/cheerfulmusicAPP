@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { t, locale, discoverHref } from '../../shared/i18n/index'
-import { homeLocale, homeSeo } from '../../shared/i18n/home-seo'
+import { homePaths } from '../../shared/i18n/home-seo'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import GlobalPlayer from '../../shared/player/GlobalPlayer.vue'
@@ -23,10 +23,7 @@ const menuButton = ref<HTMLButtonElement>(), menu = ref<HTMLElement>()
 const isDiscoverSong = computed(() => route.name === 'discover-song')
 const publicListening = computed(() => route.name === 'gift' || route.name === 'artist-home' || route.name === 'discover' || isDiscoverSong.value)
 const isHome = computed(() => route.name === 'home')
-const homePath = computed(() => {
-  const language = homeLocale(route.path)
-  return language ? homeSeo[language].path : '/'
-})
+const homePath = computed(() => homePaths[locale.value])
 const isAgent = computed(() => route.name === 'agent')
 const isDiscover = computed(() => route.name === 'discover' || isDiscoverSong.value)
 const isPhotoStudio = computed(() => route.name === 'photo-studio')

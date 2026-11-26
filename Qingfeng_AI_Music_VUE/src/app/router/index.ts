@@ -2,7 +2,7 @@ import { installCreationLoginGate } from '../../shared/identity/creation-login-g
 import { createRouter, createWebHashHistory, createWebHistory } from 'vue-router'
 import { platform } from '../../platform'
 import { scrollBehavior } from './scroll'
-import { homeSeo } from '../../shared/i18n/home-seo'
+import { homePaths } from '../../shared/i18n/home-seo'
 import { discoverPaths } from '../../shared/i18n/site-seo'
 import { siteGuidePaths } from '../../shared/i18n/site-guides'
 import SeoLanding from '../layouts/SeoLanding.vue'
@@ -22,7 +22,7 @@ export const router = createRouter({
       { path: '/', redirect: { name: 'native-listen' } },
       { path: '/listen/:token?', name: 'native-listen', component: () => import('../../platform/native/NativeListeningPage.vue') },
     ]),
-    { path: platform.kind === 'web' ? '/' : '/home', name: 'home', alias: platform.kind === 'web' ? homeSeo.en.path : undefined, component: () => import('../../modules/home/pages/PremiumHomePage.vue') },
+    { path: platform.kind === 'web' ? '/' : '/home', name: 'home', alias: platform.kind === 'web' ? homePaths['zh-CN'] : undefined, component: () => import('../../modules/home/pages/PremiumHomePage.vue') },
     { path: '/create', name: 'studio', component: () => import('../../modules/studio/pages/DraftStudioPage.vue') },
     { path: '/create/photo', name: 'photo-studio', component: () => import('../../modules/studio/pages/PhotoStudioPage.vue') },
     { path: '/agent', name: 'agent', component: () => import('../../modules/agent/pages/AgentStudioPage.vue') },
