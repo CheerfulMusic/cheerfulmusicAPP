@@ -35,3 +35,35 @@ it.each([
     wrapper.unmount()
   }
 })
+
+it.each([
+  { locale: 'zh-CN', title: '基础版定制', features: ['提供录音棚', '专业修音', 'AI伴奏'] },
+  { locale: 'en', title: 'Basic custom production', features: ['Recording studio access', 'Professional vocal tuning', 'AI backing track'] },
+] as const)('shows the US$999 plan and uses its details in the consultation email in $locale', async ({ locale, title, features }) => {
+  setLocale(locale)
+  const wrapper = mount(PremiumStudioDialog, {
+    props: { open: true },
+    global: { plugins: [createPinia()] },
+  })
+
+  try {
+    const cards = wrapper.findAll('.premium-plan')
+    expect(cards.map(card => card.get('.premium-price').text())).toEqual([
+      'US$999', locale === 'zh-CN' ? 'US$4,000起' : 'US$4,000 and up', 'US$20,000',
+    ])
+    const basic = cards[0]!
+    expect(basic.get('.premium-plan-name').text()).toBe(title)
+    expect(basic.findAll('.premium-features > span').map(feature => feature.text())).toEqual(features)
+
+    await basic.get('input').setValue(true)
+    const href = wrapper.get('a.premium-primary').attributes('href') ?? ''
+    expect(href).toMatch(/^mailto:/)
+    const email = new URL(href)
+    const body = email.searchParams.get('body')
+    expect(body).toContain(title)
+    expect(body).toContain('US$999')
+    expect(body).toContain(features.join(' / '))
+  } finally {
+    wrapper.unmount()
+  }
+})

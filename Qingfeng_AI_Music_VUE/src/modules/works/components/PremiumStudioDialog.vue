@@ -11,8 +11,8 @@ const dialog = ref<HTMLDialogElement>(), content = ref<HTMLElement>()
 const selected = ref(''), notice = ref(''), copied = ref(false)
 const player = usePlayer()
 const plans = [
+  { id: 'basic', title: '基础版定制', price: 'US$999', suffix: '', features: ['提供录音棚', '专业修音', 'AI伴奏'] },
   { id: 'professional', title: '专业制作', price: 'US$4,000', suffix: '起', description: '让你的歌曲拥有完整的专业制作', features: ['专业编曲', '录音指导', '混音与母带', '音乐平台发行'] },
-  { id: 'producer', title: '高级制作人定制', price: 'US$10,000', suffix: '起', description: '与资深制作人一起打磨你的声音', features: ['资深制作人参与', '专属创作与编曲', '完整音乐制作'] },
   { id: 'bespoke', title: '顶级定制', price: 'US$20,000', suffix: '', description: '围绕你的音乐目标定制完整方案', features: ['制作人及团队定制', '录音棚与制作资源', '发行需求单独沟通', '全球音乐发行', '真人视频拍摄'] },
 ]
 const chosen = computed(() => plans.find(plan => plan.id === selected.value))
@@ -139,7 +139,7 @@ onBeforeUnmount(() => dialog.value?.close())
           <label v-for="plan in plans" :key="plan.id" class="premium-plan" :class="{ selected: selected === plan.id }">
             <input type="radio" name="premium-plan" :value="plan.id" :checked="selected === plan.id" @change="choose(plan.id)">
             <span class="premium-plan-name">{{ t(plan.title) }}</span><span class="premium-price">{{ plan.price }}<small v-if="plan.suffix">{{ t(plan.suffix) }}</small></span>
-            <span class="premium-plan-description">{{ t(plan.description) }}</span>
+            <span v-if="plan.description" class="premium-plan-description">{{ t(plan.description) }}</span>
             <span class="premium-features"><span v-for="feature in plan.features" :key="feature">{{ t(feature) }}</span></span>
           </label>
         </fieldset>
