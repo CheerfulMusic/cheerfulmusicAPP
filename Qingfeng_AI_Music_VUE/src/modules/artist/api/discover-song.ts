@@ -19,7 +19,7 @@ export interface DiscoverSongDetail {
 }
 
 const versionPath = (song: Pick<PublishedSong, 'id' | 'version'>) => `${encodeURIComponent(song.id)}/${song.version}`
-export const discoverSongHref = (song: PublishedSong) => `${discoverHref.value}/songs/${versionPath(song)}`
+export const discoverSongHref = (song: Pick<PublishedSong, 'id' | 'version'>) => `${discoverHref.value}/songs/${versionPath(song)}`
 const readPath = (song: Pick<PublishedSong, 'id' | 'version'>) => `public/discover/songs/${versionPath(song)}`
 const writePath = (song: PublishedSong) => `app/discover/songs/${versionPath(song)}`
 
