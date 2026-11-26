@@ -64,9 +64,12 @@ describe('crawlable site pages', () => {
   })
 
   it('publishes one site entity and the regional brand on each homepage', () => {
-    expect(parsePage('/zh/').documentElement.lang).toBe('zh-CN')
-    expect(parsePage('/zh/').querySelector('h1')?.textContent).toBe('做自己的歌')
-    expect(parsePage('/zh/').querySelector('meta[property="og:title"]')?.getAttribute('content')).toBe('青妙Ai')
+    const chinese = parsePage('/zh/')
+    expect(chinese.documentElement.lang).toBe('zh-CN')
+    expect(chinese.querySelector('h1')?.textContent).toBe('做自己的歌')
+    expect(chinese.title).toBe('青妙Ai｜人人都能成为创作者')
+    expect(chinese.querySelector('meta[property="og:title"]')?.getAttribute('content')).toBe(chinese.title)
+    expect(chinese.querySelector('meta[name="description"]')?.getAttribute('content')).toBe('只需几步，就能创作自己的歌曲。无需音乐基础。')
     const website = JSON.parse(parsePage('/').querySelector('script[type="application/ld+json"]')!.textContent!)
     expect(website.name).toBe('cheerfulmusic Ai')
     expect(website.url).toBe(siteOrigin + '/')
@@ -88,11 +91,19 @@ describe('crawlable site pages', () => {
 
   it('builds a release manifest consistent with the two initial homepage documents', () => {
     const icon = readFileSync('public' + siteFavicon.path)
-    const manifest = seoReleaseManifest(icon)
+    const legacyIcon = readFileSync('public/favicon.ico')
+    const manifest = seoReleaseManifest(icon, legacyIcon)
     expect(manifest.icon).toEqual({
       path: '/brand/favicon-symbol-96.png',
       sha256: createHash('sha256').update(icon).digest('hex'),
     })
+    expect(manifest.legacyIcon).toEqual({
+      path: '/favicon.ico',
+      sha256: createHash('sha256').update(legacyIcon).digest('hex'),
+    })
+    expect(legacyIcon.readUInt16LE(2)).toBe(1)
+    expect(legacyIcon.readUInt16LE(4)).toBe(3)
+    expect([legacyIcon[6], legacyIcon[22], legacyIcon[38]]).toEqual([16, 32, 48])
     expect(icon.readUInt32BE(16)).toBe(96)
     expect(icon.readUInt32BE(20)).toBe(96)
     expect(manifest.pages.map(page => page.path)).toEqual(['/', '/zh/'])

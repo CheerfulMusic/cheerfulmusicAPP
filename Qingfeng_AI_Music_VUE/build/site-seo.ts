@@ -87,11 +87,12 @@ const homeReleasePages = (['en', 'zh-CN'] as const).map(language => {
   }
 })
 
-export function seoReleaseManifest(icon: Uint8Array) {
+export function seoReleaseManifest(icon: Uint8Array, legacyIcon: Uint8Array) {
   return {
     version: 1,
     origin: siteOrigin,
     icon: { path: siteFavicon.path, sha256: createHash('sha256').update(icon).digest('hex') },
+    legacyIcon: { path: '/favicon.ico', sha256: createHash('sha256').update(legacyIcon).digest('hex') },
     pages: homeReleasePages,
   }
 }
@@ -183,7 +184,8 @@ export function siteSeoPlugin(): Plugin {
         writeFileSync(filename, renderSitePage(shell, page))
       }
       const icon = readFileSync(resolve(dir, `.${siteFavicon.path}`))
-      writeFileSync(resolve(dir, 'seo-release.json'), JSON.stringify(seoReleaseManifest(icon), null, 2) + '\n')
+      const legacyIcon = readFileSync(resolve(dir, 'favicon.ico'))
+      writeFileSync(resolve(dir, 'seo-release.json'), JSON.stringify(seoReleaseManifest(icon, legacyIcon), null, 2) + '\n')
       for (const [path, file] of Object.entries(crawlFiles)) {
         writeFileSync(resolve(dir, `.${path}`), file.content)
       }

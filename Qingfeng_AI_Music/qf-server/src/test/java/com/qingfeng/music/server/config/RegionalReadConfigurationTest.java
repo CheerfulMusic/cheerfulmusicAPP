@@ -69,6 +69,9 @@ class RegionalReadConfigurationTest {
     void acceptsOnlyExplicitReadRoutes() {
         assertFalse(RegionalReadConfiguration.allows("GET", "/api/public/discover"));
         assertTrue(RegionalReadConfiguration.allows("HEAD", "/assets/site.js"));
+        assertTrue(RegionalReadConfiguration.allows("GET", "/favicon.ico"));
+        assertTrue(RegionalReadConfiguration.allows("HEAD", "/favicon.ico"));
+        assertFalse(RegionalReadConfiguration.allows("POST", "/favicon.ico"));
         assertFalse(RegionalReadConfiguration.allows("POST", "/api/public/discover"));
         assertFalse(RegionalReadConfiguration.allows("GET", "/api/app/credits"));
         assertFalse(RegionalReadConfiguration.allows("GET", "/api/public/gifts/an-opaque-token"));

@@ -27,7 +27,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
 @Configuration(proxyBeanMethods = false)
 @Profile("mysql & sg-reader")
 public class RegionalReadConfiguration {
-    private static final Set<String> READ_PATHS = Set.of("/", "/actuator/health");
+    private static final Set<String> READ_PATHS = Set.of("/", "/actuator/health", "/favicon.ico");
     private static final String READY = "/internal/regional/ready";
     private static final Pattern GIFT = Pattern.compile("/gift/[A-Za-z0-9_-]{43}");
     private static final Duration PROOF_MAX_AGE = Duration.ofSeconds(8);

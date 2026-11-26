@@ -21,11 +21,13 @@ seo = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(seo)
 
 ICON = b"isolated PNG payload"
+LEGACY_ICON = b"isolated ICO payload"
 KEY = "test-only-key"
 MANIFEST = {
     "version": 1,
     "origin": seo.SITE,
     "icon": {"path": "/brand/favicon-symbol-96.png", "sha256": hashlib.sha256(ICON).hexdigest()},
+    "legacyIcon": {"path": "/favicon.ico", "sha256": hashlib.sha256(LEGACY_ICON).hexdigest()},
     "pages": [
         {"path": "/", "language": "en", "title": "cheerfulmusic Ai | Everyone Can Be a Creator",
          "description": "Create your own song in just a few clicks. No music skills needed.",
@@ -37,7 +39,7 @@ MANIFEST = {
     ],
 }
 OLD_MANIFEST = {
-    **MANIFEST,
+    **{field: value for field, value in MANIFEST.items() if field != "legacyIcon"},
     "pages": [
         {**MANIFEST["pages"][1], "path": "/", "aliases": MANIFEST["pages"][0]["aliases"]},
         {field: "/en/" if field == "path" else value for field, value in MANIFEST["pages"][0].items()
@@ -66,6 +68,10 @@ def fixture_files(manifest=MANIFEST):
         ]
         default = next(other["path"] for other in manifest["pages"] if other["language"] == "en")
         alternates.append(f'<link rel="alternate" hreflang="x-default" href="{seo.SITE + default}">')
+        icons = [
+            f'<link rel="icon" href="{manifest[field]["path"]}">' for field in ("icon", "legacyIcon")
+            if field in manifest
+        ]
         files[path] = ("text/html", f"""<html lang="{page['language']}"><head>
             <title>{title}</title>
             <meta name="description" content="{description}">
@@ -73,7 +79,7 @@ def fixture_files(manifest=MANIFEST):
             <meta property="og:description" content="{description}">
             <meta property="og:site_name" content="{brand}">
             <link rel="canonical" href="{seo.SITE + path}">
-            <link rel="icon" href="{manifest['icon']['path']}">
+            {"".join(icons)}
             {"".join(alternates)}
             {schema}</head><body><main><p class="beta-access-intro">{intro}</p></main></body></html>""".encode())
         modified = f"<lastmod>{page['lastModified']}</lastmod>" if "lastModified" in page else ""
@@ -82,6 +88,8 @@ def fixture_files(manifest=MANIFEST):
     files["/sitemap.xml"] = ("application/xml", sitemap_xml.encode())
     files["/robots.txt"] = ("text/plain", f"Sitemap: {seo.SITE}/sitemap.xml\n".encode())
     files[manifest["icon"]["path"]] = ("image/png", ICON)
+    if "legacyIcon" in manifest:
+        files[manifest["legacyIcon"]["path"]] = ("image/x-icon", LEGACY_ICON)
     files[f"/{KEY}.txt"] = ("text/plain", KEY.encode())
     if seo.english_at_root(manifest):
         for path in seo.LEGACY_ENGLISH_PATHS:
@@ -125,11 +133,13 @@ class SeoReleaseTest(unittest.TestCase):
         self.temp = self.enterContext(tempfile.TemporaryDirectory())
         self.files = fixture_files()
         icon = MANIFEST["icon"]["path"]
-        self.regional_files = {path: self.files[path] for path in ("/", icon)}
+        legacy_icon = MANIFEST["legacyIcon"]["path"]
+        self.regional_files = {path: self.files[path] for path in ("/", icon, legacy_icon)}
         self.regional_files["/internal/regional/ready"] = ("text/plain", b"")
         self.sz = self.enterContext(running_site(self.files))
         self.sg = self.enterContext(running_site(self.regional_files))
-        self.local_public = self.enterContext(running_site(dict(self.files)))
+        self.public_files = dict(self.files)
+        self.local_public = self.enterContext(running_site(self.public_files))
         self.manifest = Path(self.temp) / "seo-release.json"
         self.manifest.write_text(json.dumps(MANIFEST))
         self.receipt = Path(self.temp) / "receipt.json"
@@ -186,6 +196,25 @@ class SeoReleaseTest(unittest.TestCase):
         status, report = self.run_release()
         self.assertEqual(status, 1)
         self.assertIn("icon content", report["verification"]["singapore"]["reason"])
+
+    def test_stale_legacy_icon_prevents_notifications(self):
+        path = MANIFEST["legacyIcon"]["path"]
+        for region, files in (("shenzhen", self.files), ("singapore", self.regional_files), ("public", self.public_files)):
+            with self.subTest(region=region):
+                original = files[path]
+                files[path] = ("image/x-icon", b"previous version")
+                try:
+                    status, report = self.run_release("--notify", "--receipt", str(self.receipt))
+                    self.assertEqual(status, 1)
+                    self.assertIn("icon content differs from the build: /favicon.ico",
+                                  report["verification"][region]["reason"])
+                finally:
+                    files[path] = original
+        self.post.assert_not_called()
+
+    def test_legacy_icon_change_refreshes_both_homepages(self):
+        previous = {**MANIFEST, "legacyIcon": {**MANIFEST["legacyIcon"], "sha256": "0" * 64}}
+        self.assertEqual(seo.changed_urls(MANIFEST, previous), [seo.SITE + "/", seo.SITE + "/zh/"])
 
     def test_singapore_readiness_cannot_be_replaced_by_primary(self):
         status, report = self.run_release("--singapore-app", self.local_public)

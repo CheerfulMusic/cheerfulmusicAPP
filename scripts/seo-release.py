@@ -28,6 +28,7 @@ BAIDU_API = "https://data.zz.baidu.com/urls"
 TIMEOUT = 12
 MAX_BODY = 10 * 1024 * 1024
 SITEMAP = "{http://www.sitemaps.org/schemas/sitemap/0.9}"
+ICON_TYPES = {"icon": {"image/png"}, "legacyIcon": {"image/x-icon", "image/vnd.microsoft.icon"}}
 
 
 class RedirectsDisabled(HTTPRedirectHandler):
@@ -111,6 +112,10 @@ def read_manifest(path):
     if (not re.fullmatch(r"/brand/[A-Za-z0-9._-]+\.png", icon["path"])
             or not re.fullmatch("[a-f0-9]{64}", icon["sha256"])):
         raise ValueError("Invalid path or digest for the built site icon")
+    if "legacyIcon" in value:
+        legacy = value["legacyIcon"]
+        if legacy["path"] != "/favicon.ico" or not re.fullmatch("[a-f0-9]{64}", legacy["sha256"]):
+            raise ValueError("Invalid path or digest for the built legacy site icon")
     pages = value["pages"]
     languages = {page["path"]: page["language"] for page in pages}
     if len(pages) != len(HOME_LANGUAGES) or languages not in (HOME_LANGUAGES, LEGACY_HOME_LANGUAGES):
@@ -189,9 +194,10 @@ def verify_page(page, manifest, body, headers):
                       if link.get("rel") == "alternate" and "hreflang" in link]
         if len(alternates) != len(expected) or dict(alternates) != expected:
             raise ValueError(f"{page['path']} homepage hreflang differs from the build")
-    if not any("icon" in link.get("rel", "").split() and link.get("href") == manifest["icon"]["path"]
-               for link in head.links):
-        raise ValueError(f"{page['path']} is missing the build's site icon")
+    icon_links = {link.get("href") for link in head.links if "icon" in link.get("rel", "").split()}
+    for field in ICON_TYPES:
+        if field in manifest and manifest[field]["path"] not in icon_links:
+            raise ValueError(f"{page['path']} is missing the build's site icon {manifest[field]['path']}")
     robots = headers.get_all("X-Robots-Tag", [])
     for name in ("robots", "bingbot", "googlebot", "baiduspider", "sogou spider", "360spider"):
         robots.extend(head.meta("name", name))
@@ -205,11 +211,13 @@ def verify_page(page, manifest, body, headers):
             raise ValueError(f"{page['path']} is missing the build's WebSite brand aliases")
 
 
-def verify_icon(base, manifest):
-    icon = manifest["icon"]
-    image, headers = get(base, icon["path"])
-    if headers.get_content_type() != "image/png" or hashlib.sha256(image).hexdigest() != icon["sha256"]:
-        raise ValueError("Site icon content differs from the build")
+def verify_icons(base, manifest):
+    for field, media_types in ICON_TYPES.items():
+        if field in manifest:
+            icon = manifest[field]
+            image, headers = get(base, icon["path"])
+            if headers.get_content_type() not in media_types or hashlib.sha256(image).hexdigest() != icon["sha256"]:
+                raise ValueError(f"Site icon content differs from the build: {icon['path']}")
 
 
 def verify_singapore(base, manifest):
@@ -217,13 +225,13 @@ def verify_singapore(base, manifest):
     get(base, "/internal/regional/ready", expected_status=204)
     root = next(page for page in manifest["pages"] if page["path"] == "/")
     verify_page(root, manifest, *get(base, "/"))
-    verify_icon(base, manifest)
+    verify_icons(base, manifest)
 
 
 def verify_site(base, manifest):
     for page in manifest["pages"]:
         verify_page(page, manifest, *get(base, page["path"]))
-    verify_icon(base, manifest)
+    verify_icons(base, manifest)
     sitemap, _ = get(base, "/sitemap.xml")
     urls = ElementTree.fromstring(sitemap)
     entries = {entry.findtext(SITEMAP + "loc"): entry.findtext(SITEMAP + "lastmod")
@@ -244,15 +252,16 @@ def verify_site(base, manifest):
     rules.parse(robots.decode("utf-8").splitlines())
     if f"{SITE}/sitemap.xml" not in (rules.site_maps() or []):
         raise ValueError("robots.txt does not advertise the canonical sitemap")
+    icons = [manifest[field]["path"] for field in ICON_TYPES if field in manifest]
     for agent in ("Bingbot", "Googlebot", "Googlebot-Image", "Baiduspider", "Sogou", "360Spider"):
-        for path in (*(page["path"] for page in manifest["pages"]), *redirected_paths, manifest["icon"]["path"]):
+        for path in (*(page["path"] for page in manifest["pages"]), *redirected_paths, *icons):
             if not rules.can_fetch(agent, SITE + path):
                 raise ValueError(f"robots.txt blocks {agent} from {path}")
 
 
 def changed_urls(manifest, previous):
     old_pages = {page["path"]: page for page in previous["pages"]} if previous else {}
-    icon_changed = previous is None or previous["icon"] != manifest["icon"]
+    icon_changed = previous is None or any(previous.get(field) != manifest.get(field) for field in ICON_TYPES)
     return [SITE + page["path"] for page in manifest["pages"]
             if icon_changed or old_pages.get(page["path"]) != page]
 
