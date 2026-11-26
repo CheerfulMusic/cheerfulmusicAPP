@@ -30,14 +30,15 @@ it('switches homepages in both directions while preserving the query and fragmen
   const wrapper = mount(LanguageSwitcher, { global: { plugins: [router] } })
   const hero = mount(HomeHero, { props: { brand: '青妙Ai' }, global: { stubs: { RouterLink: true } } })
   try {
-    for (const language of ['zh-CN', 'en'] as const) {
+    for (const [language, tabTitle] of [['zh-CN', '青妙Ai'], ['en', 'cheerfulmusicAi']] as const) {
       const button = wrapper.get(`button[lang="${language}"]`)
       await button.trigger('click')
       await flushPromises()
       await hero.setProps({ brand: homeSeo[language].brand })
       expect(router.currentRoute.value.fullPath).toBe(homePaths[language] + '?utm_source=search#how')
       expect(document.documentElement.lang).toBe(language)
-      expect(document.title).toBe(homeSeo[language].title)
+      expect(document.title).toBe(tabTitle)
+      expect(document.querySelector('meta[property="og:title"]')?.getAttribute('content')).toBe(homeSeo[language].title)
       expect(document.querySelector('meta[property="og:site_name"]')?.getAttribute('content')).toBe(homeSeo[language].searchName)
       expect(button.attributes('aria-pressed')).toBe('true')
       expect(hero.get('.p-intro-description').text()).toContain(homeSeo[language].brand)
