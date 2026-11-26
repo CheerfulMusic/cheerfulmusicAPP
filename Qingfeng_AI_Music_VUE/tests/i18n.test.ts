@@ -57,6 +57,7 @@ describe('Chinese and English interface', () => {
     restored.updatePageLocale('/works')
     expect(restored.locale.value).toBe(language)
     expect(document.documentElement.lang).toBe(language)
+    expect(document.title).toBe(language === 'en' ? 'cheerfulmusicAi' : '青妙Ai')
   })
 
   it('still switches when browser storage is blocked and keeps inserted user text intact', async () => {

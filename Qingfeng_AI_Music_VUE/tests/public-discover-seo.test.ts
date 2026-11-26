@@ -23,18 +23,20 @@ it('keeps server-rendered metadata during the first load and replaces it on navi
   document.title = 'Server song metadata'
 
   updatePageLocale(path)
-  expect(document.title).toBe('Server song metadata')
+  expect(document.title).toBe('青妙Ai')
   expect(document.head.querySelector('link[rel=canonical]')).toBe(canonical)
 
   updateDiscoverSongMetadata(path, metadata)
-  expect(document.title).toBe('Featured song — Public artist | 青妙Ai')
+  expect(document.title).toBe('青妙Ai')
+  expect(document.querySelector('meta[property="og:title"]')?.getAttribute('content')).toBe('Featured song — Public artist | 青妙Ai')
   expect(document.querySelector('meta[name=description]')?.getAttribute('content')).toBe(metadata.description)
   expect(document.querySelector('link[rel=canonical]')?.getAttribute('href')).toBe(siteOrigin + path)
   expect(JSON.parse(document.querySelector('script[type="application/ld+json"]')!.textContent!).name).toBe(metadata.title)
 
   updatePageLocale('/en' + path)
   updateDiscoverSongMetadata('/en' + path, metadata)
-  expect(document.title).toBe('Featured song — Public artist | cheerfulmusic')
+  expect(document.title).toBe('cheerfulmusicAi')
+  expect(document.querySelector('meta[property="og:title"]')?.getAttribute('content')).toBe('Featured song — Public artist | cheerfulmusic')
   expect(document.querySelector('link[rel=alternate][hreflang=zh-CN]')?.getAttribute('href')).toBe(siteOrigin + path)
 
   updateDiscoverSongMetadata('/en' + path, null)

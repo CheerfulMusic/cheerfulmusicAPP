@@ -186,6 +186,29 @@ describe('crawlable site pages', () => {
     expect(page.querySelector('main .beta-access-intro')?.textContent).toBe(copy.description)
   })
 
+  it('uses the public guide language for the tab and keeps its share title', () => {
+    setLocale('en')
+    const path = '/guide/create-song'
+    updatePageLocale(path)
+    expect(document.title).toBe('青妙Ai')
+    expect(document.documentElement.lang).toBe('zh-CN')
+    expect(document.querySelector('meta[property="og:title"]')?.getAttribute('content')).toBe(sitePage(path)?.title)
+  })
+
+  it('updates gift tabs without overwriting the server share title', () => {
+    setLocale('zh-CN')
+    document.head.innerHTML = '<title>Server song</title><meta property="og:type" content="music.song"><meta property="og:title" content="Server song">'
+    try {
+      updatePageLocale('/gift/example')
+      expect(document.title).toBe('青妙Ai')
+      setLocale('en')
+      expect(document.title).toBe('cheerfulmusicAi')
+      expect(document.querySelector('meta[property="og:title"]')?.getAttribute('content')).toBe('Server song')
+    } finally {
+      document.head.replaceChildren()
+    }
+  })
+
   it('replaces metadata on client navigation and clears it on private destinations', () => {
     document.head.innerHTML = '<title>青风音乐</title><meta name="description">'
     updatePageLocale('/zh/')
@@ -195,6 +218,7 @@ describe('crawlable site pages', () => {
     expect(document.querySelectorAll('link[rel="canonical"]')).toHaveLength(1)
     expect(document.querySelector('link[rel="canonical"]')?.getAttribute('href')).toBe(siteOrigin + '/')
     updatePageLocale('/account')
+    expect(document.title).toBe('cheerfulmusicAi')
     expect(document.querySelectorAll('[data-site-seo]')).toHaveLength(0)
   })
 })

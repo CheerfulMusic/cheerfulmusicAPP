@@ -16,6 +16,7 @@ function createTestRouter() {
     routes: [
       { path: '/', name: 'home', alias: '/zh/', component },
       { path: '/discover', name: 'discover', alias: '/en/discover', component },
+      { path: '/create', name: 'studio', component },
       { path: '/works', name: 'works', component },
     ],
   })
@@ -70,6 +71,7 @@ it('uses the selected music community URL and preserves a search query and fragm
       await flushPromises()
       expect(router.currentRoute.value.fullPath).toBe(path + '?q=rock#discover-tracks')
       expect(document.documentElement.lang).toBe(language)
+      expect(document.title).toBe(homeSeo[language].tabTitle)
       expect(document.querySelector('link[rel="canonical"]')?.getAttribute('href')).toBe('https://cheerfulmusic.com' + path)
     }
   } finally {
@@ -77,18 +79,22 @@ it('uses the selected music community URL and preserves a search query and fragm
   }
 })
 
-it('changes the interface language in place on other pages', async () => {
+it.each(['/create?draft=test-draft', '/works?filter=all'])('keeps the localized tab title when leaving the homepage for %s', async path => {
   const router = createTestRouter()
-  await router.push('/works?filter=all')
-  setLocale('zh-CN')
+  await router.push('/zh/')
+  await router.push(path)
   const wrapper = mount(LanguageSwitcher, { global: { plugins: [router] } })
   try {
     expect(wrapper.find('a').exists()).toBe(false)
-    const english = wrapper.get('button[lang="en"]')
-    await english.trigger('click')
-    expect(router.currentRoute.value.fullPath).toBe('/works?filter=all')
-    expect(english.attributes('aria-pressed')).toBe('true')
-    expect(locale.value).toBe('en')
+    expect(document.title).toBe('青妙Ai')
+    for (const [language, tabTitle] of [['en', 'cheerfulmusicAi'], ['zh-CN', '青妙Ai']] as const) {
+      const button = wrapper.get(`button[lang="${language}"]`)
+      await button.trigger('click')
+      expect(router.currentRoute.value.fullPath).toBe(path)
+      expect(button.attributes('aria-pressed')).toBe('true')
+      expect(locale.value).toBe(language)
+      expect(document.title).toBe(tabTitle)
+    }
   } finally {
     wrapper.unmount()
     setLocale('zh-CN')
