@@ -64,7 +64,9 @@ class PhotoLyricsIntegrationTest {
         @Bean @Primary PhotoLyricsWriter offlinePhotoWriter(AtomicInteger photoCalls, AtomicInteger qwenPhotoCalls){
             PhotoLyricsWriter primary = (work,language,images,direction)->{
                 photoCalls.incrementAndGet();
-                assertEquals("法语照片".equals(work.story()) ? "custom:français canadien" : "zh-CN",language);
+                String expected = work.story().startsWith("粤语照片") ? "custom:粤语"
+                    : "法语照片".equals(work.story()) ? "custom:français canadien" : "zh-CN";
+                assertEquals(expected, language);
                 try{
                     for (byte[] image : images) {
                         var decoded=ImageIO.read(new ByteArrayInputStream(image));
@@ -91,6 +93,10 @@ class PhotoLyricsIntegrationTest {
                 if (work.story().equals("段落顺序不符")) {
                     return new LyricsWriter.Draft(draft.title(), "[Chorus]\n和你一起看海\n[Verse]\n风吹过海面", draft.plan(), draft.source());
                 }
+                if ("粤语照片合格".equals(work.story())) {
+                    return new LyricsWriter.Draft(draft.title(), draft.lyrics().replace("风吹过海面", "我喺佢屋企等"),
+                        draft.plan(), draft.source());
+                }
                 return draft;
             };
             return new FallbackPhotoLyricsWriter(primary, (work,language,images,direction)->{
@@ -98,7 +104,17 @@ class PhotoLyricsIntegrationTest {
                 if (work.story().equals("兜底也失败")) {
                     throw new DomainException("LYRICS_RESPONSE_INVALID", "千问测试拒绝");
                 }
-                return photoDraft("QWEN");
+                var draft = photoDraft("QWEN");
+                if ("粤语照片合格".equals(work.story())) {
+                    String colloquial = draft.lyrics()
+                        .replace("风吹过海面", "海風喺我耳邊吹過")
+                        .replace("把脚印留在沙滩", "我啲腳印留咗喺沙灘")
+                        .replace("和你一起看海", "同你一齊睇海，我唔捨得返去")
+                        .replace("等天边慢慢亮起来", "等到天邊慢慢光返")
+                        .replace("明天也记得这一刻", "聽日都會記得嗰一刻");
+                    return new LyricsWriter.Draft(draft.title(), colloquial, draft.plan(), draft.source());
+                }
+                return draft;
             });
         }
 
@@ -310,6 +326,33 @@ class PhotoLyricsIntegrationTest {
         assertEquals("custom:français canadien", field(created, "language"));
         assertEquals("custom:français canadien",
             field(call(session, "GET", root + "/lyrics/" + field(created, "id"), null), "language"));
+    }
+
+    @ParameterizedTest @ValueSource(booleans = {true, false})
+    void cantonesePhotoRejectsWrittenChineseAndUsesTheColloquialFallbackWhenAvailable(boolean fallbackMatches) throws Exception {
+        new org.springframework.jdbc.datasource.init.ResourceDatabasePopulator(
+            new org.springframework.core.io.ClassPathResource("db/migration/V57__extended_lyric_languages.sql"))
+            .execute(jdbc.getDataSource());
+        var session = session();
+        String work = createPaidWork(session, fallbackMatches ? "粤语照片合格" : "粤语照片不合格");
+        String root = "/api/app/works/" + work;
+        String key = UUID.randomUUID().toString();
+        long balanceBefore = credits.balance(owner(work));
+        int fallbackBefore = qwenPhotoCalls.get();
+
+        var response = uploadInLanguage(session, root, key, "photo", "custom:粤语", photo(Color.BLUE));
+        assertEquals(fallbackBefore + 1, qwenPhotoCalls.get());
+        if (fallbackMatches) {
+            assertEquals("QWEN", field(response, "source"));
+            assertEquals("custom:粤语", field(response, "language"));
+            assertTrue(field(response, "lyrics").contains("我啲腳印留咗喺沙灘"));
+            assertEquals(balanceBefore - 5, credits.balance(owner(work)));
+        } else {
+            assertTrue(response.statusCode() >= 400);
+            assertEquals("LYRICS_LANGUAGE_MISMATCH", JSON.readTree(response.body()).path("code").asText());
+            assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM lyric_revision WHERE work_id=?", Integer.class, work));
+            assertEquals(balanceBefore, credits.balance(owner(work)));
+        }
     }
 
     private HttpResponse<String> uploadParts(Session session,String root,String key,String field,byte[]... photos) throws Exception {

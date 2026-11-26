@@ -1307,6 +1307,7 @@ export const english: Record<string, string> = {
   '歌词生成暂不可用，请稍后再试或手动填写': 'AI lyrics are unavailable. Try later or write your own.',
   '请先在故事中填写一段回忆或祝福，再生成歌词': 'Add a memory or a personal message to your story before generating lyrics.',
   '歌词生成结果不完整，请稍后重新发起': 'The lyrics response was incomplete. Please start a new request later.',
+  '这次照片歌词未达到粤语口语要求，请重试。': 'The photo lyrics did not use enough colloquial Cantonese. Please try again.',
   '本次歌词未符合所选模板，原歌词已保留，可以重新生成。': 'The lyrics did not match the selected template. Your original lyrics are saved. You can try again.',
   '歌词服务认证失败，请检查后端千问密钥': 'Lyrics service authentication failed. Check the backend Qwen key.',
   '千问余额不足，请充值后重试': 'The Qwen account has insufficient balance. Add credit before trying again.',

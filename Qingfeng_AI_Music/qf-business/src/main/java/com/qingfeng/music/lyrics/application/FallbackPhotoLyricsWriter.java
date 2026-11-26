@@ -12,7 +12,8 @@ public final class FallbackPhotoLyricsWriter implements PhotoLyricsWriter {
     private static final System.Logger LOG = System.getLogger(FallbackPhotoLyricsWriter.class.getName());
     private static final Set<String> CONFIRMED_FAILURES = Set.of(
         "LYRICS_PROVIDER_CONNECT_FAILED", "LYRICS_PROVIDER_REJECTED", "LYRICS_RESPONSE_INVALID",
-        "LYRICS_RESPONSE_FORMAT", "LYRICS_RESPONSE_TRUNCATED", "LYRICS_STRUCTURE_MISMATCH");
+        "LYRICS_RESPONSE_FORMAT", "LYRICS_RESPONSE_TRUNCATED", "LYRICS_STRUCTURE_MISMATCH",
+        CantonesePhotoLyrics.LANGUAGE_MISMATCH);
     private static final Duration MINIMUM_BACKUP_TIME = Duration.ofSeconds(20);
     private final PhotoLyricsWriter doubao;
     private final PhotoLyricsWriter qwen;

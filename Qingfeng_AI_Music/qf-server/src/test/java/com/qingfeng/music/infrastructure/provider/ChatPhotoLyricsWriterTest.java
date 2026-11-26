@@ -89,6 +89,20 @@ class ChatPhotoLyricsWriterTest {
         }
     }
 
+    @ParameterizedTest @ValueSource(strings = {"custom:粤语", "custom:粵語"})
+    void describesColloquialCantoneseInBothPhotoWritingPasses(String language) throws Exception {
+        try (var model = new PhotoModel(SONG, new Reply(200, "[Verse]\n我喺岸邊等咗好耐\n海風都唔肯返嚟"))) {
+            model.writer("DOUBAO").write(WORK, language, PHOTOS, DIRECTION);
+            assertEquals(2, model.calls.size());
+            for (var request : model.calls) {
+                var prompt = request.at("/messages/0/content").asText();
+                assertTrue(prompt.contains("歌词语言：香港粤语口语"));
+                assertTrue(prompt.contains("粤语的用词、语序和语气"));
+            }
+            assertTrue(model.calls.get(1).at("/messages/0/content").asText().contains("用自然嘅廣東話逐段重寫歌詞"));
+        }
+    }
+
     private record Reply(int status, String content) {}
 
     private static final class PhotoModel implements AutoCloseable {

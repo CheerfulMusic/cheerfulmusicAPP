@@ -1,6 +1,7 @@
 package com.qingfeng.music.infrastructure.provider;
 
 import com.qingfeng.music.common.exception.DomainException;
+import com.qingfeng.music.lyrics.application.CantonesePhotoLyrics;
 import com.qingfeng.music.lyrics.application.LyricsWriter;
 import com.qingfeng.music.lyrics.application.PhotoLyricsWriter;
 import com.qingfeng.music.work.api.WorkApi;
@@ -40,6 +41,23 @@ public final class ChatPhotoLyricsWriter implements PhotoLyricsWriter {
         photoSummary 用 1～2 句写可见细节，不超过 400 字。
         plan 中 requirements、negativeTags、summaryZh、summaryEn 分别不超过 600、250、200、300 字，未知可填空字符串。
         """;
+    private static final String CANTONESE_BRIEF = """
+
+        【粤语口语写词】
+        歌词正文指定使用香港粤语口语。主歌、副歌和桥段都按粤语的用词、语序和语气写，
+        像用粤语唱出来的完整歌词。自然使用合适的粤语词，例如「喺、嘅、咗、唔、冇、佢、嗰、返嚟、屋企」。
+        用粤语口语重组整句，例如「那双鞋已经湿了」可以改为「嗰對鞋已經濕咗」。
+        所属关系用「嘅」，完成动作按语意用「咗」，能用「入面、嗰阵、仲有」时用粤语常用搭配。
+        把普通书面中文句子完整改写成粤语口语，避免仅换字形或只在少数句末加粤语字。
+        保留段落标签、画面事实和用户补充的故事，粤语示例词仅作语体参考。
+        """;
+    private static final String CANTONESE_REFINEMENT = """
+        歌词语言：香港粤语口语
+        你係香港嘅填詞人。睇住 originalMaterial 同 candidate.lyrics，用自然嘅廣東話逐段重寫歌詞。
+        遇到書面中文，成句按香港粵語口語嘅語序重寫，連副歌重複嘅句子都要一齊改。
+        每段用常見廣東話搭配，保持故事、可見畫面同語氣。句子短啲，唱起身自然，保留畫面同情緒。
+        保留原有英文段落標籤、次序同純音樂段落。每句歌詞另起一行，只輸出歌詞正文同段落標籤。
+        """ + CANTONESE_BRIEF;
 
     private final String source;
     private final String key;
@@ -74,16 +92,19 @@ public final class ChatPhotoLyricsWriter implements PhotoLyricsWriter {
     @Override
     public LyricsWriter.Draft write(WorkApi.Work work, String language, List<byte[]> photos, LyricsWriter.Direction direction) {
         long deadline = LyricsQualityReview.deadline();
+        boolean cantonese = CantonesePhotoLyrics.requested(language);
+        String modelLanguage = cantonese ? "custom:香港粤语口语" : language;
         var material = Map.of("recipient", work.recipient(), "occasion", work.occasion(), "story", work.story(),
             "message", work.message(), "style", work.style(), "musicDirection", direction.style(),
-            "musicExclusions", direction.exclusions(), "vocalGender", direction.vocalGender(), "lyricsLanguage", language);
+            "musicExclusions", direction.exclusions(), "vocalGender", direction.vocalGender(), "lyricsLanguage", modelLanguage);
         var content = new ArrayList<Map<String, Object>>(photos.size() + 1);
         content.add(Map.of("type", "text", "text", json.writeValueAsString(material)));
         for (byte[] photo : photos) {
             content.add(Map.of("type", "image_url", "image_url",
                 Map.of("url", "data:image/jpeg;base64," + Base64.getEncoder().encodeToString(photo))));
         }
-        String prompt = LyricsWritingPrompt.system(language) + PHOTO_BRIEF + DEFAULT_STRUCTURE.instruction();
+        String prompt = LyricsWritingPrompt.system(modelLanguage) + PHOTO_BRIEF + DEFAULT_STRUCTURE.instruction()
+            + (cantonese ? CANTONESE_BRIEF : "");
         try {
             var response = LyricsHttpTransport.post(client, endpoint, key, requestBody(prompt, content, 3800, true),
                 LyricsQualityReview.remaining(deadline, Duration.ofSeconds(50)), USER_AGENT);
@@ -97,7 +118,8 @@ public final class ChatPhotoLyricsWriter implements PhotoLyricsWriter {
                 throw new DomainException("LYRICS_PROVIDER_UNAVAILABLE", "照片歌词服务无法处理这次请求，请调整素材后再试。");
             }
             var draft = OpenAiLyricsWriter.parseSong(LyricsWritingPrompt.jsonObject(outputText(response.body())), true, source, direction.vocalGender());
-            return refine(draft, language, material, deadline);
+            String refinement = cantonese ? CANTONESE_REFINEMENT : LyricsWritingPrompt.refinement(modelLanguage);
+            return refine(draft, refinement, material, deadline);
         } catch (HttpTimeoutException timeout) {
             throw new DomainException("LYRICS_PROVIDER_TIMEOUT", "等待照片歌词结果超时，请先查看原请求进度。");
         } catch (IOException network) {
@@ -110,14 +132,14 @@ public final class ChatPhotoLyricsWriter implements PhotoLyricsWriter {
         }
     }
 
-    private LyricsWriter.Draft refine(LyricsWriter.Draft draft, String language, Map<String, String> material, long deadline)
+    private LyricsWriter.Draft refine(LyricsWriter.Draft draft, String prompt, Map<String, String> material, long deadline)
             throws IOException, InterruptedException {
         var originalMaterial = new LinkedHashMap<>(material);
         originalMaterial.put("photoSummary", draft.plan().photoSummary());
         originalMaterial.put("revisionInstructions", DEFAULT_STRUCTURE.instruction());
         String context = json.writeValueAsString(Map.of(
             "originalMaterial", originalMaterial, "candidate", LyricsQualityReview.candidate(draft)));
-        String body = requestBody(LyricsWritingPrompt.refinement(language), context, 4000, false);
+        String body = requestBody(prompt, context, 4000, false);
         try {
             var response = LyricsHttpTransport.post(client, endpoint, key, body, LyricsQualityReview.remaining(deadline), USER_AGENT);
             int status = response.statusCode();
@@ -138,7 +160,8 @@ public final class ChatPhotoLyricsWriter implements PhotoLyricsWriter {
         var material = new LinkedHashMap<String, Object>(LyricsSectionRepair.material(request));
         material.put("photoSummary", request.draft().plan().photoSummary());
         String prompt = LyricsSectionRepair.instructions(request.language())
-            + "\nphotoSummary 是已识别的画面素材。沿用可见细节和用户提供的事实，避免推断人物身份、关系或经历。";
+            + "\nphotoSummary 是已识别的画面素材。沿用可见细节和用户提供的事实，避免推断人物身份、关系或经历。"
+            + (CantonesePhotoLyrics.requested(request.language()) ? CANTONESE_BRIEF : "");
         String body = requestBody(prompt, json.writeValueAsString(material), 4000, true);
         return LyricsSectionRepair.post(client, endpoint, key, body, request, this::outputText);
     }

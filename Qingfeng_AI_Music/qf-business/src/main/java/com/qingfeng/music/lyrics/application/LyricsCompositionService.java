@@ -176,8 +176,12 @@ public final class LyricsCompositionService {
             String context=photoPlan==null?"":"\n【照片画面素材，仅用于创作】\n"+photoPlan.photoSummary();
             String writingRequirements=(rewriteSource==null?"":REWRITE_ALL_INSTRUCTION)+requirements+context+structureInstruction;
             var draft = photoRequest
-                ? photoWriter.writeValidated(snapshot, language, photos, writingDirection, (provider, candidate) ->
-                    validateDraft(owner, snapshot, language, writingRequirements, previous, structure, candidate, provider::repairSections))
+                ? photoWriter.writeValidated(snapshot, language, photos, writingDirection, (provider, candidate) -> {
+                    var validated = validateDraft(owner, snapshot, language, writingRequirements, previous,
+                        structure, candidate, provider::repairSections);
+                    if (CantonesePhotoLyrics.requested(language)) CantonesePhotoLyrics.requireColloquialBody(validated.lyrics());
+                    return validated;
+                })
                 : selectedWriter.writeValidated(snapshot, language, writingRequirements, previous, writingDirection, (provider, candidate) ->
                     validateDraft(owner, snapshot, language, writingRequirements, previous, structure, candidate, provider::repairSections));
             String completed = draft.lyrics();

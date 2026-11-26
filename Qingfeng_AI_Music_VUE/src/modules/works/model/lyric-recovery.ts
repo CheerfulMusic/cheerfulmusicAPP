@@ -9,6 +9,7 @@ export function lyricFailureMessage(code?: string | null) {
     case 'LYRICS_RESPONSE_TRUNCATED': return '歌词服务未返回完整内容，可以重新编写。'
     case 'LYRICS_RESPONSE_INVALID': return '歌名或歌词未通过校验，可以重新编写。'
     case 'LYRICS_STRUCTURE_MISMATCH': return '歌词未符合所选模板，可以重新编写或调整模板。'
+    case 'LYRICS_LANGUAGE_MISMATCH': return '这次照片歌词未达到粤语口语要求，请重试。'
     case 'LYRICS_QUALITY_UNVERIFIED': return '本次歌词润色未完成，已有内容会保留。'
   }
 }
