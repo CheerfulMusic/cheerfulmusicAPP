@@ -48,21 +48,19 @@ export function renderSitePage(html: string, page: SitePage) {
     + `<p><a href="${guide.appPath}">${escapeHtml(guide.cta)}</a></p>` : ''
   const heading = `<h1>${escapeHtml(page.heading)}</h1>`
   const filing = '<a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer" lang="zh-CN">粤ICP备2023023949号</a>'
-  const landing = `<main class="seo-landing">${heading}<p>${escapeHtml(page.description)}</p>${guideContent}<nav>${links}</nav><footer>${filing}</footer></main>`
-  let initialContent = landing
   const home = page.path === '/' || homeLocale(page.path) !== undefined
-  if (home || discoverLocale(page.path)) {
-    const intro = page.intro ?? page.description
-    const visibleBrand = home ? homeSeo[homeLocale(page.path) ?? 'zh-CN'].brand : siteName
-    const introHeading = home && page.language === 'zh-CN'
-      ? `<h1 class="beta-access-brand">${escapeHtml(visibleBrand)}</h1><p class="beta-access-headline">${escapeHtml(homeSeo[page.language].tagline)}</p>`
-      : `<p class="beta-access-brand">${escapeHtml(visibleBrand)}</p>${heading}`
+  const intro = escapeHtml(page.intro ?? page.description)
+  const navigation = `<nav>${links}</nav><footer>${filing}</footer>`
+  const introClass = home ? ' class="beta-access-intro"' : ''
+  const content = home ? `${publicHomeDetails(page.language)}<div data-nosnippet>${navigation}</div>` : guideContent + navigation
+  let initialContent = `<main class="seo-landing">${heading}<p${introClass}>${intro}</p>${content}</main>`
+  if (discoverLocale(page.path)) {
     initialContent = `<main class="beta-access-entry"><section class="beta-access-dialog beta-access-card">
       <img class="beta-access-logo" src="/brand/logo-symbol.svg" alt="" width="56" height="56">
-      ${introHeading}
-      <p class="beta-access-intro">${escapeHtml(intro)}</p>
-      ${home ? `<div data-nosnippet><p class="beta-access-prompt">${escapeHtml(homeSeo[page.language].invitePrompt)}</p></div>` : ''}
-      ${home ? publicHomeDetails(page.language) : '<!--public-discover-links-->'}
+      <p class="beta-access-brand">${escapeHtml(siteName)}</p>
+      ${heading}
+      <p class="beta-access-intro">${intro}</p>
+      <!--public-discover-links-->
       <div data-nosnippet><nav class="beta-access-guides">${links}</nav><footer class="beta-access-filing">${filing}</footer></div>
     </section></main>`
   }

@@ -11,7 +11,7 @@ import { enterInvite, InviteError, readInviteStatus, type InviteStatus } from '.
 
 const props = defineProps<{ publicAccess?: boolean; publicPreview?: boolean; homeBrand?: string; discoverEntry?: boolean }>()
 const dialog = ref<HTMLDialogElement>(), input = ref<HTMLInputElement>()
-const everAdmitted = ref(false), admitted = ref(false), checking = ref(true), submitting = ref(false)
+const everAdmitted = ref(false), admitted = ref(false), checking = ref(false), submitting = ref(false)
 const status = ref<InviteStatus>(), code = ref(''), error = ref('')
 const busy = computed(() => checking.value || submitting.value)
 const actionRequiresInvite = ref(false)
@@ -27,24 +27,36 @@ let disposed = false, lastCheck = 0, expiryTimer: ReturnType<typeof setTimeout> 
 
 async function show() {
   await nextTick()
-  if (disposed || accessible.value || dialog.value?.open || (props.publicPreview && !actionRequiresInvite.value)) return
+  if (disposed || accessible.value || dialog.value?.open ||
+      (!actionRequiresInvite.value && (checking.value || props.publicPreview))) return
   dialog.value?.showModal()
 }
-async function apply(value: InviteStatus) {
+function apply(value: InviteStatus) {
   if (disposed) return
   status.value = value; admitted.value = value.admitted
   clearTimeout(expiryTimer)
   if (value.admitted) {
     actionRequiresInvite.value = false; everAdmitted.value = true; dialog.value?.close(); code.value = ''; error.value = ''
     if (value.enabled) expiryTimer = setTimeout(required, Math.min(2147000000, Math.max(1000, Date.parse(value.expiresAt) - Date.now() + 1000)))
-  } else if (!accessible.value) { await show() }
+  }
 }
 async function check() {
-  if (busy.value && !checking.value) return
+  if (busy.value) return
   checking.value = true; error.value = ''; lastCheck = Date.now()
-  try { await apply(await readInviteStatus()) }
-  catch { admitted.value = false; error.value = '暂时无法验证内测资格，请检查网络后重试。'; await show() }
-  finally { checking.value = false; await nextTick(); if (!accessible.value) input.value?.focus({ preventScroll: true }) }
+  try {
+    apply(await readInviteStatus())
+  } catch {
+    if (disposed) return
+    status.value = undefined
+    admitted.value = false
+    error.value = '暂时无法验证内测资格，请检查网络后重试。'
+  } finally {
+    checking.value = false
+  }
+  if (!accessible.value) {
+    await show()
+    if (dialog.value?.open) input.value?.focus({ preventScroll: true })
+  }
 }
 async function submit() {
   if (busy.value || !status.value) return
@@ -54,7 +66,7 @@ async function submit() {
     await enterInvite(code.value, status.value.csrfToken)
     const confirmed = await readInviteStatus()
     if (!confirmed.admitted) { error.value = '浏览器未能保存验证状态，请允许 Cookie 后重试。'; return }
-    await apply(confirmed)
+    apply(confirmed)
   } catch (cause) {
     error.value = cause instanceof InviteError && cause.code === 'INVALID' ? '邀请码不正确，请检查后重试。'
       : cause instanceof InviteError && cause.code === 'RATE_LIMITED' ? '尝试次数较多，请一分钟后再试。' : '暂时无法验证内测资格，请检查网络后重试。'
@@ -71,16 +83,22 @@ function focus() { if (!props.publicAccess && !busy.value && Date.now() - lastCh
 watch(() => [props.publicAccess, props.publicPreview], ([value, preview]) => {
   actionRequiresInvite.value = false
   if (value || preview) dialog.value?.close()
-  if (!value) { void show(); void check() }
+  if (!value) void check()
 })
-onMounted(() => { if (!props.publicAccess) { void show(); void check() } else checking.value = false; window.addEventListener('qingfeng:invite-required', required); window.addEventListener('focus', focus) })
+onMounted(() => {
+  if (!props.publicAccess) void check()
+  window.addEventListener('qingfeng:invite-required', required)
+  window.addEventListener('focus', focus)
+})
 onBeforeUnmount(() => { disposed = true; clearTimeout(expiryTimer); window.removeEventListener('qingfeng:invite-required', required); window.removeEventListener('focus', focus) })
 </script>
 
 <template>
   <!-- Keep an open editor mounted if an invitation expires; never resend its API requests. -->
   <div v-if="everAdmitted || publicAccess" v-show="!showPreview" :inert="!accessible || undefined"><slot /></div>
-  <div v-else-if="!showPreview" class="beta-access-screen" aria-hidden="true"></div>
+  <div v-else-if="!showPreview" class="beta-access-screen">
+    <p v-if="checking" class="beta-access-checking" role="status">{{ t('加载中…') }}</p>
+  </div>
   <slot v-if="showPreview" name="public-preview" :open-invite="openInvite" />
   <dialog ref="dialog" class="beta-access-dialog" aria-labelledby="beta-access-title" aria-describedby="beta-access-description" @cancel.prevent="cancelInvite" @close="!accessible && show()">
     <section class="beta-access-card" :aria-busy="busy">
@@ -107,7 +125,7 @@ onBeforeUnmount(() => { disposed = true; clearTimeout(expiryTimer); window.remov
         <div v-else-if="error"><p class="beta-access-error" role="alert">{{ t(error) }}</p><button class="beta-access-primary" type="button" @click="check">{{ t('重新验证') }}</button></div>
         <p class="beta-access-note">{{ t('邀请码由内测邀请人提供。') }}</p>
       </div>
-      <HomePublicInfo v-if="homeBrand && !accessible && platform.kind === 'web'" show-steps />
+      <HomePublicInfo v-if="homeBrand && !accessible && (status || error || actionRequiresInvite) && platform.kind === 'web'" show-steps />
       <div :data-nosnippet="entryCopy ? '' : undefined">
         <nav v-if="entryCopy && platform.kind === 'web'" class="beta-access-guides" :aria-label="locale === 'en' ? 'Music guides' : '音乐使用指南'">
           <a v-for="link in entryLinks" :key="link.href" :href="link.href">{{ link.text }}</a>
@@ -123,7 +141,7 @@ onBeforeUnmount(() => { disposed = true; clearTimeout(expiryTimer); window.remov
 .beta-access-entry { display:grid; min-height:100dvh; place-items:center; }
 .beta-access-entry .beta-access-dialog { max-height:none; }
 .beta-access-filing { margin-top: 12px; text-align: center; color: #68594f; }
-.beta-access-screen { position:fixed; inset:0; background:#fffaf8; }
+.beta-access-screen { position:fixed; inset:0; display:grid; place-items:center; background:#fffaf8; }
 .beta-access-dialog { width:min(464px,calc(100% - 32px)); max-width:none; max-height:calc(100dvh - 32px); padding:0; border:1px solid #f2ded5; border-radius:28px; color:#282320; background:#fffaf8; color-scheme:light; box-shadow:0 24px 100px #6e3e1e1a; }
 .beta-access-entry,.beta-access-dialog::backdrop { background:radial-gradient(ellipse at 75% 20%,#ffe3d9ed,#fff8f3f5 65%); }
 .beta-access-dialog::backdrop { backdrop-filter:blur(16px); }

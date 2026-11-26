@@ -57,7 +57,6 @@
 }
 .home-light-shell .home-creator-hero .p-intro { width:100%; max-width:810px; margin:0; padding:0; z-index:2; position:relative; }
 .home-light-shell .home-creator-hero .p-intro .bilingual-headline { font-size:56px; letter-spacing:-2px; font-weight:400; font-synthesis:none; line-height:1.25; margin:0; color:#202020; }
-.home-light-shell .home-creator-hero .p-intro .home-product-title { font-size:16px; line-height:1.4; font-weight:700; letter-spacing:0; margin:0 0 8px; }
 .home-light-shell .creator-main-title { display:block; letter-spacing:.01em; }
 .home-light-shell .creator-title-art { display:block; height:1em; width:auto; max-width:100%; }
 .home-light-shell .creator-title-text { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }

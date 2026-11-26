@@ -37,12 +37,12 @@ describe('crawlable site pages', () => {
     expect(alternates).toEqual({ en: siteOrigin + '/en/', 'zh-CN': siteOrigin + '/', 'x-default': siteOrigin + '/en/' })
   })
 
-  it.each(['/', '/en/'])('shows one heading and the guide links in the initial invitation card at %s', path => {
+  it.each(['/', '/en/'])('serves the homepage introduction and guides before invitation status is known at %s', path => {
     const page = parsePage(path)
     page.querySelectorAll('noscript').forEach(node => node.remove())
-    const card = page.querySelector('#app > main.beta-access-entry')
-    expect(card?.querySelector('h1')?.textContent).toBe(sitePage(path)!.heading)
-    const productCopy = card?.querySelector('.beta-access-intro')
+    const landing = page.querySelector('#app > main.seo-landing')
+    expect(landing?.querySelector('h1')?.textContent).toBe(sitePage(path)!.heading)
+    const productCopy = landing?.querySelector('.beta-access-intro')
     expect(productCopy?.textContent).toBe(homeSeo[path === '/en/' ? 'en' : 'zh-CN'].description)
     expect(productCopy?.textContent).toContain('Cheerful Music')
     expect(productCopy?.textContent).toContain('cheerfulmusic Ai')
@@ -50,23 +50,22 @@ describe('crawlable site pages', () => {
     expect(productCopy?.textContent).toContain('青风音乐')
     expect(productCopy?.textContent).toContain('青妙Ai')
     expect(productCopy?.closest('[data-nosnippet]')).toBeNull()
-    expect(card?.querySelectorAll('.home-public-info h2')).toHaveLength(2)
-    expect(card?.querySelectorAll('.home-public-info ol li')).toHaveLength(3)
-    expect(card?.querySelectorAll('.home-public-info details summary')).toHaveLength(2)
+    expect(landing?.querySelectorAll('.home-public-info h2')).toHaveLength(2)
+    expect(landing?.querySelectorAll('.home-public-info ol li')).toHaveLength(3)
+    expect(landing?.querySelectorAll('.home-public-info details summary')).toHaveLength(2)
     for (const publicPath of [path, path === '/' ? '/discover' : '/en/discover']) {
       expect(renderSitePage(shell, sitePage(publicPath)!).split('<!--public-discover-links-->')).toHaveLength(2)
     }
-    expect(card?.querySelector('[data-nosnippet]')?.textContent).toMatch(/邀请码|invitation code/)
     expect(page.querySelectorAll('h1')).toHaveLength(1)
-    expect(card?.querySelectorAll('nav a[href*="/guide/"]')).toHaveLength(4)
-    expect(card?.querySelector('nav')?.closest('[data-nosnippet]')).not.toBeNull()
-    expect(card?.querySelector('footer')?.closest('[data-nosnippet]')).not.toBeNull()
-    expect(card?.querySelector('form')).toBeNull()
+    expect(landing?.querySelectorAll('nav a[href*="/guide/"]')).toHaveLength(4)
+    expect(landing?.querySelector('nav')?.closest('[data-nosnippet]')).not.toBeNull()
+    expect(landing?.querySelector('footer')?.closest('[data-nosnippet]')).not.toBeNull()
+    expect(page.querySelector('.beta-access-entry, .beta-access-prompt, form')).toBeNull()
   })
 
   it('publishes one site entity and the regional brand on each homepage', () => {
     expect(parsePage('/').documentElement.lang).toBe('zh-CN')
-    expect(parsePage('/').querySelector('h1')?.textContent).toBe('青妙Ai')
+    expect(parsePage('/').querySelector('h1')?.textContent).toBe('做自己的歌')
     expect(parsePage('/').querySelector('meta[property="og:title"]')?.getAttribute('content')).toBe('青妙Ai')
     const website = JSON.parse(parsePage('/').querySelector('script[type="application/ld+json"]')!.textContent!)
     expect(website.name).toBe('青妙Ai')
@@ -77,7 +76,7 @@ describe('crawlable site pages', () => {
     const title = 'cheerfulmusic Ai | Everyone Can Be a Creator'
     const description = 'Create your own song in just a few clicks. No music skills needed.'
     expect(english.title).toBe(title)
-    expect(english.querySelector('.beta-access-brand')?.textContent).toBe('cheerfulmusic')
+    expect(english.querySelector('main h1')?.textContent).toBe('Everyone Can Be a Creator')
     expect(english.querySelector('meta[property="og:site_name"]')?.getAttribute('content')).toBe('cheerfulmusic Ai')
     expect(english.querySelector('meta[property="og:title"]')?.getAttribute('content')).toBe(title)
     expect(english.querySelector('meta[name="twitter:title"]')?.getAttribute('content')).toBe(title)

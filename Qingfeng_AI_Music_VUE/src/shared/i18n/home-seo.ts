@@ -19,7 +19,7 @@ export const homeSeo = {
     searchDescription: '青妙Ai 是青风音乐（Cheerful Music）推出的 AI 音乐创作平台，英文名是 cheerfulmusic。写下歌词或故事，选好曲风和人声，就能创作、试听和分享自己的歌。',
     aliases: ['青风音乐'],
     lastModified: '2026-11-26',
-    heading: chineseBrand,
+    heading: '做自己的歌',
     tagline: '把你的歌词做成歌',
     invitePrompt: '输入邀请码即可开始创作。',
     description: `青妙Ai 是青风音乐（Cheerful Music）推出的 AI 音乐创作平台，英文名为 ${englishSearchName}（${compactEnglishName}）。写下歌词或故事，选好曲风和人声，就能创作、试听和分享自己的歌。`,

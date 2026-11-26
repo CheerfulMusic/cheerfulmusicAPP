@@ -3,6 +3,7 @@ import { createApp, h, nextTick } from 'vue'
 import { flushPromises } from '@vue/test-utils'
 import { expect, it, vi } from 'vitest'
 import Gate from '../src/modules/beta-access/BetaAccessGate.vue'
+import { readInviteStatus, type InviteStatus } from '../src/modules/beta-access/api'
 import { locale, setLocale } from '../src/shared/i18n'
 import { homeSeo } from '../src/shared/i18n/home-seo'
 vi.mock('../src/modules/artist/api/artist', async importOriginal => ({
@@ -30,15 +31,34 @@ it('opens the invite input when a protected action is requested on a public page
 
 vi.mock('/brand/logo-symbol.svg', () => ({ default: '/brand/logo-symbol.svg' }))
 
-it('automatically opens the homepage invite with the localized product name', async () => {
+it.each([true, false])('keeps the homepage invitation closed for admitted visitors (gate enabled: %s)', async enabled => {
+ const show = vi.spyOn(HTMLDialogElement.prototype, 'showModal').mockImplementation(function(this: HTMLDialogElement) { this.open = true })
+ let resolveStatus!: (status: InviteStatus) => void
+ vi.mocked(readInviteStatus).mockReturnValueOnce(new Promise(resolve => { resolveStatus = resolve }))
+ const host = document.createElement('div'); document.body.append(host)
+ const app = createApp({ render: () => h(Gate, { homeBrand: '青妙Ai' }, () => h('p', 'Protected app')) })
+ app.mount(host)
+ try {
+  await nextTick()
+  expect(show).not.toHaveBeenCalled()
+  expect(host.querySelector('.beta-access-screen [role="status"]')).not.toBeNull()
+  expect(host.textContent).not.toContain('Protected app')
+  resolveStatus({ enabled, admitted: true, csrfToken: 'test', expiresAt: enabled ? new Date(Date.now() + 60000).toISOString() : '' })
+  await flushPromises()
+  expect(show).not.toHaveBeenCalled()
+  expect(host.textContent).toContain('Protected app')
+ } finally { app.unmount(); host.remove(); vi.restoreAllMocks() }
+})
+
+it('opens the localized homepage invite when the server requires an invitation', async () => {
  const show = vi.spyOn(HTMLDialogElement.prototype, 'showModal').mockImplementation(function(this: HTMLDialogElement) { this.open = true })
  const host = document.createElement('div'); document.body.append(host)
  const previous = locale.value
  setLocale('zh-CN')
  const app = createApp(Gate, { homeBrand: '青妙Ai' }); app.mount(host)
  try {
-  await nextTick()
-  expect(show).toHaveBeenCalled()
+  await flushPromises()
+  expect(show).toHaveBeenCalledTimes(1)
   expect(host.querySelector('h1')?.textContent).toBe('青妙Ai')
   expect(host.querySelector('.beta-access-headline')?.textContent).toBe('把你的歌词做成歌')
   expect(host.querySelector('.home-public-info ol')?.children.length).toBe(3)

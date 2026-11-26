@@ -39,8 +39,9 @@ it('switches both ways on the root without changing the URL or tab title', async
       expect(button.attributes('aria-pressed')).toBe('true')
       expect(hero.get('.p-intro-description').text()).toContain('青妙Ai')
       expect(hero.findAll('h1')).toHaveLength(1)
-      expect(hero.get('h1').text()).toBe(language === 'en' ? 'Everyone Can Be a Creator' : '青妙Ai')
-      expect(hero.findAll('.bilingual-headline > span').map(line => line.text())).toEqual(language === 'en'
+      expect(hero.get('h1').attributes('id')).toBe('home-hero-title')
+      expect(hero.find('.home-product-title').exists()).toBe(false)
+      expect(hero.findAll('h1 > span').map(line => line.text())).toEqual(language === 'en'
         ? ['Everyone Can Be a Creator']
         : ['做自己的歌', 'Everyone Can Be a Creator'])
       expect(hero.get('.p-reassurance').text()).toBe(language === 'en'
