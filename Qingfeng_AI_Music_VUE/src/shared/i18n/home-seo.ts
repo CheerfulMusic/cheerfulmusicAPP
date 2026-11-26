@@ -28,7 +28,10 @@ export const homeSeo = {
     searchName: englishSearchName,
     title: englishSearchName + ' | ' + creatorHeadline,
     searchDescription: 'Create your own song in just a few clicks. No music skills needed.',
-    aliases: [siteName, 'CheerfulMusic', 'Cheerful Music Ai', 'cheerfulmusicAI', 'cheerfulmusicai'],
+    aliases: [
+      siteName, 'CheerfulMusic', 'Cheerful Music Ai',
+      'cheerfulmusicai', 'cheerfulmusicAi', 'cheerfulmusicaI', 'cheerfulmusicAI',
+    ],
     lastModified: '2026-11-25',
     heading: creatorHeadline,
     tagline: creatorHeadline,
