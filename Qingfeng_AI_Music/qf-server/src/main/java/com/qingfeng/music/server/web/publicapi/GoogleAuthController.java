@@ -26,7 +26,7 @@ public class GoogleAuthController {
     }
     @PostMapping("/start")public ResponseEntity<Map<String,String>> start(HttpServletRequest request,HttpServletResponse response){
         var google=flow.getIfAvailable();
-        if(google==null)return ResponseEntity.status(503).cacheControl(CacheControl.noStore()).body(Map.of("code","GOOGLE_LOGIN_DISABLED","message","Google登录暂未启用，请继续使用作品找回码"));
+        if(google==null)return ResponseEntity.status(503).cacheControl(CacheControl.noStore()).body(Map.of("code","GOOGLE_LOGIN_DISABLED","message","Google 登录暂未启用，请选择其他登录方式"));
         return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(Map.of("authorizationUrl",google.start(request,response)));
     }
 }

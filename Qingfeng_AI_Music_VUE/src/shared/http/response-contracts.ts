@@ -124,7 +124,7 @@ export function validResponse(path:string,method:string,value:unknown,httpStatus
  if(/^app\/agent\/conversations\/[^/]+\/messages\/[^/]+\/result$/.test(path))return method==='GET'&&(httpStatus===202?agentReceipt(value):agentSnapshot(value))
  if(/^app\/agent\/conversations\/[^/]+(?:\/reset)?$/.test(path))return ['POST','DELETE'].includes(method)&&obj(value)&&value.cleared===true
  if(path==='app/welcome')return obj(value)&&typeof value.show==='boolean'&&Number.isSafeInteger(value.amount)&&(value.show?Number(value.amount)>0:value.amount===0)
- if(path==='public/session'||path==='public/session/recover')return obj(value)&&text(value.creatorId)&&(value.associatedGuestCreatorId===undefined||text(value.associatedGuestCreatorId))
+ if(path==='public/session')return obj(value)&&text(value.creatorId)&&(value.associatedGuestCreatorId===undefined||text(value.associatedGuestCreatorId))
  if(path==='public/session/logout')return method==='POST'&&obj(value)&&value.loggedOut===true
  if(path==='public/auth/google/status')return method==='GET'&&obj(value)&&typeof value.enabled==='boolean'&&typeof value.authenticated==='boolean'&&(!value.authenticated||value.enabled)&&['email','name'].every(k=>!(k in value)||str(value[k]))
  if(path==='public/auth/google/start')return method==='POST'&&obj(value)&&googleAuthorizationUrl(value.authorizationUrl)
@@ -174,7 +174,6 @@ export function validResponse(path:string,method:string,value:unknown,httpStatus
  if(/^app\/song-listening\/[A-Za-z0-9_-]{43}\/story$/.test(path))return ['GET','PUT'].includes(method)&&obj(value)&&str(value.text)
  if(path==='app/hot-songs/reactions')return method==='GET'&&obj(value)&&list(value.liked,text)&&list(value.favorited,text)
  if(/^app\/hot-songs\/[^/]+\/(?:like|favorite)$/.test(path))return ['POST','DELETE'].includes(method)&&obj(value)&&hotStat(value.stat)&&typeof value.liked==='boolean'&&typeof value.favorited==='boolean'
- if(path==='app/identity/recovery')return obj(value)&&(method==='GET'?typeof value.configured==='boolean':text(value.code))
  if(path==='app/credits')return method==='GET'&&obj(value)&&typeof value.enabled==='boolean'&&num(value.balance)&&num(value.musicCost)
  if(path==='app/referrals')return method==='GET'&&obj(value)&&text(value.code)
  if(path==='app/referrals/accept')return method==='POST'&&obj(value)&&value.accepted===true

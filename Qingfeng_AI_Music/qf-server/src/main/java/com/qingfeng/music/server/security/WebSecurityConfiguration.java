@@ -71,7 +71,7 @@ public class WebSecurityConfiguration {
                 .requestMatchers(HttpMethod.GET,"/assets/**","/brand/**","/media/**","/gift/*","/song/*","/api/songs/*/public","/api/songs/*/community","/api/songs/*/audio","/api/songs/*/cover","/api/songs/*/thumbnail.png","/api/wechat/jssdk-config","/legal/**").permitAll()
                 .requestMatchers(HttpMethod.HEAD,"/gift/*","/song/*","/api/songs/*/public","/api/songs/*/community","/api/songs/*/audio","/api/songs/*/cover","/api/songs/*/thumbnail.png","/brand/share-default-cover.png","/brand/logo-mark.svg").permitAll()
                 .requestMatchers(request -> "HEAD".equals(request.getMethod()) && com.qingfeng.music.server.web.RecommendationOssRedirect.isSamplePath(request.getServletPath())).permitAll()
-                .requestMatchers("/api/public/system/info", "/api/public/csrf", "/api/public/session", "/api/public/session/recover", "/actuator/health").permitAll()
+                .requestMatchers("/api/public/system/info", "/api/public/csrf", "/api/public/session", "/actuator/health").permitAll()
                 .requestMatchers(org.springframework.http.HttpMethod.POST,"/api/public/events","/api/wechat/jssdk-error").permitAll()
                 .requestMatchers(HttpMethod.GET, WechatSelfCardController.AVAILABILITY, WechatSelfCardController.CALLBACK).permitAll()
                 .requestMatchers(HttpMethod.POST, WechatSelfCardController.CALLBACK).permitAll()

@@ -4,7 +4,7 @@ import java.time.*;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 class RateLimitTest {
-    @Test void attemptsAreBoundedAndSeparateActorsDoNotBlockEachOther(){var limiter=new ApiRateLimitFilter(Clock.fixed(Instant.parse("2026-10-31T00:00:00Z"),ZoneOffset.UTC));for(int i=0;i<5;i++)assertTrue(limiter.allow("recovery:one",5));assertFalse(limiter.allow("recovery:one",5));assertTrue(limiter.allow("recovery:two",5));}
+    @Test void attemptsAreBoundedAndSeparateActorsDoNotBlockEachOther(){var limiter=new ApiRateLimitFilter(Clock.fixed(Instant.parse("2026-10-31T00:00:00Z"),ZoneOffset.UTC));for(int i=0;i<5;i++)assertTrue(limiter.allow("write:one",5));assertFalse(limiter.allow("write:one",5));assertTrue(limiter.allow("write:two",5));}
     @Test void fullLocalWindowKeepsExistingLimitsAndReleasesCapacityOnRollover() {
         var clock = org.mockito.Mockito.mock(Clock.class);
         org.mockito.Mockito.when(clock.millis()).thenReturn(60_000L);

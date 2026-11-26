@@ -9,11 +9,7 @@ public class MyBatisIdentityRepository implements IdentityRepository {
     public MyBatisIdentityRepository(IdentityMapper mapper) { this.mapper = mapper; }
     public void create(String id, String hash, Instant now, Instant expires) { mapper.insertCreator(id, now); mapper.insertSession(hash,id,expires); }
     public Optional<String> findCreator(String hash, Instant now) { return Optional.ofNullable(mapper.find(hash, now)); }
-    public void setRecovery(String creator,String hash){mapper.recovery(creator,hash);}
-    public boolean hasRecovery(String creator){return mapper.hasRecovery(creator)>0;}
-    public Optional<String> lockRecovery(String hash){return Optional.ofNullable(mapper.lockRecovery(hash));}
     public void addSession(String creator,String hash,Instant expires){mapper.insertSession(hash,creator,expires);}
-    public boolean hasActiveSessions(String creator){return !mapper.activeSessions(creator).isEmpty();}
     public boolean lockCreator(String creator){return mapper.lockCreator(creator)!=null;}
     public Optional<String> googleCreator(String hash){return Optional.ofNullable(mapper.googleCreator(hash));}
     public Optional<com.qingfeng.music.identity.api.IdentityApi.GoogleIdentity> googleIdentity(String creator){return Optional.ofNullable(mapper.googleIdentity(creator));}
@@ -26,7 +22,7 @@ public class MyBatisIdentityRepository implements IdentityRepository {
         mapper.moveWorks(source,target);mapper.moveUsage(source,target);
         // Include bytes reserved by an in-flight audio archive, not just registered assets.
         mapper.addMediaBytes(target,mapper.mediaBytes(source));mapper.clearMediaBytes(source);
-        mapper.recovery(source,null);mapper.deleteCreatorSessions(source);
+        mapper.deleteCreatorSessions(source);
     }
     public void deleteSession(String hash){mapper.deleteSession(hash);}
 }

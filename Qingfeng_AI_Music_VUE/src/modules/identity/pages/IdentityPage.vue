@@ -3,7 +3,7 @@ import { t } from '../../../shared/i18n/index'
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { platform } from '../../../platform'
-import { ensureCreator, requestJson, resetCreatorSession } from '../../../shared/http/api-client'
+import { ensureCreator, requestJson } from '../../../shared/http/api-client'
 import { usePlayer } from '../../../shared/player/store'
 import { beginGoogleLogin } from '../api/google-login'
 import { accountLoggingOut, accountState, logoutAccount, refreshAccountState } from '../../../shared/identity/account-state'
@@ -16,14 +16,14 @@ import GoogleMark from '../components/GoogleMark.vue'
 import CreditsPanel from '../components/CreditsPanel.vue'
 const props = defineProps<{ embedded?: boolean }>()
 const emit = defineEmits<{ close: []; works: [] }>()
-const router = useRouter(), player = usePlayer(), busy = ref(true), configured = ref(false), secret = ref(''), restoreCode = ref(''), error = ref(''), notice = ref('')
+const router = useRouter(), player = usePlayer(), busy = ref(true), error = ref('')
 const route = useRoute()
 const googleStatus = accountState
 const googleBusy = ref(false), googleError = ref(''), googleNotice = ref(''), googleNoticeKind = ref<'success' | 'info'>('info')
 const logtoError = ref(''), logtoNotice = ref('')
 const inviteLink = ref(''), inviteNotice = ref('')
 const accountBusy = computed(() => busy.value || googleBusy.value || accountLoggingOut.value)
-let identityEpoch = 0, pageReady = false, recoveryRefreshPending = false, restoringIdentity = false
+let pageReady = false
 const accountInitials = computed(() => {
   const name = googleStatus.value.name?.trim()
   if (name) return name.split(/\s+/).slice(0, 2).map(part => Array.from(part)[0]).join('').toLocaleUpperCase()
@@ -31,24 +31,16 @@ const accountInitials = computed(() => {
 })
 watch(accountState, (current, previous) => {
   if (current.authenticated === previous.authenticated && current.email === previous.email && current.name === previous.name) return
-  identityEpoch++
-  // Never leave a previous account's one-time recovery code visible after a tab changes identity.
-  secret.value = ''; restoreCode.value = ''; configured.value = false
-  notice.value = ''; error.value = ''; googleNotice.value = ''; googleError.value = ''
-  if (pageReady && !googleBusy.value && !accountLoggingOut.value && !restoringIdentity) {
-    recoveryRefreshPending = true
-    finishRecoveryRefresh()
-  }
+  reloadForAccountChange()
 })
 watch(logtoState, (current, previous) => {
   if (current.authenticated === previous.authenticated && current.email === previous.email && current.phoneMasked === previous.phoneMasked && current.name === previous.name) return
-  identityEpoch++
-  secret.value = ''; restoreCode.value = ''; configured.value = false
-  if (pageReady && !accountLoggingOut.value && !restoringIdentity) { recoveryRefreshPending = true; finishRecoveryRefresh() }
+  reloadForAccountChange()
 })
-function finishRecoveryRefresh() {
-  if (!recoveryRefreshPending || busy.value) return
+function reloadForAccountChange() {
+  if (!pageReady || busy.value || googleBusy.value || accountLoggingOut.value) return
   busy.value = true
+  inviteLink.value = ''
   window.location.replace(props.embedded ? '/agent' : '/account')
 }
 onMounted(async () => {
@@ -67,10 +59,6 @@ onMounted(async () => {
     if (googleStatus.value.authenticated || logtoState.value.authenticated) {
       try { const result = await requestJson<{code:string}>('app/referrals'); inviteLink.value = `${window.location.origin}/account?invite=${encodeURIComponent(result.code)}` } catch { /* 登录状态变化时可刷新重试。 */ }
     }
-    const recoveryEpoch = identityEpoch
-    const recovery = await requestJson<{ configured: boolean }>('app/identity/recovery')
-    if (recoveryEpoch === identityEpoch) configured.value = recovery.configured
-    else recoveryRefreshPending = true
     const feedback = googleLoginFeedback(result, googleStatus.value.authenticated)
     if (feedback?.kind === 'error') googleError.value = feedback.message
     else if (feedback) { googleNotice.value = feedback.message; googleNoticeKind.value = feedback.kind }
@@ -81,7 +69,7 @@ onMounted(async () => {
     if (result === 'success' && googleStatus.value.authenticated) player.reset()
     if (logtoResult === 'success' && logtoState.value.authenticated) { logtoNotice.value = '登录成功，你的音乐已关联到当前账号。'; player.reset() }
     else if (logtoResult === 'success') logtoError.value = '登录状态尚未确认，请刷新后重试。'
-    else if (logtoResult === 'conflict') logtoError.value = '当前作品属于另一个账号。请先保存找回码，再切换账号。'
+    else if (logtoResult === 'conflict') logtoError.value = '当前作品属于另一个账号。请使用原账号登录查看。'
     else if (logtoResult === 'failed') logtoError.value = '登录未完成，请重试。'
     else if (logtoResult === 'cancelled') logtoNotice.value = '已取消登录，当前作品仍在此设备。'
   } catch (e) {
@@ -92,7 +80,6 @@ onMounted(async () => {
       const query = { ...route.query }; delete query.google; delete query.logto; delete query.session
       await router.replace({ query })
     }
-    finishRecoveryRefresh()
   }
 })
 async function loginWithGoogle() {
@@ -107,7 +94,6 @@ async function manageGoogleSession(action: 'switch' | 'logout') {
   googleBusy.value = true; googleError.value = ''; googleNotice.value = ''
   try {
     await logoutAccount()
-    configured.value = false; secret.value = ''; restoreCode.value = ''
     if (action === 'switch') window.location.assign(await beginGoogleLogin())
     else window.location.replace(props.embedded ? '/agent' : '/account?session=signed-out')
   } catch {
@@ -115,34 +101,7 @@ async function manageGoogleSession(action: 'switch' | 'logout') {
     googleBusy.value = false
   }
 }
-async function issue() {
-  if (accountBusy.value) return
-  if (configured.value && !window.confirm(t('重新生成会立即停用之前的找回码，是否继续？'))) return
-  busy.value = true; error.value = ''; notice.value = ''
-  const requestEpoch = identityEpoch
-  try {
-    await ensureCreator()
-    const result = await requestJson<{code: string}>('app/identity/recovery', 'POST', {})
-    if (requestEpoch !== identityEpoch) return
-    secret.value = result.code; configured.value = true
-    notice.value = '请保存到自己的密码管理器或下载留存。找回码仅显示这一次，使用后失效。'
-  } catch (e) {
-    if (requestEpoch === identityEpoch) error.value = e instanceof Error ? e.message : '生成找回码失败'
-  } finally { busy.value = false; finishRecoveryRefresh() }
-}
-function download() {
-  const url = URL.createObjectURL(new Blob([`${t('青风音乐作品找回码')}\n${secret.value}\n\n${t('请保密保存。此码可找回我的音乐，使用后失效。重新生成会停用旧码。')}\n`], {type:'text/plain;charset=utf-8'}))
-  const anchor = document.createElement('a'); anchor.href = url; anchor.download = t('青风音乐-作品找回码.txt'); anchor.click(); setTimeout(() => URL.revokeObjectURL(url), 1000)
-}
-async function copy() { try { await navigator.clipboard.writeText(secret.value); notice.value = '找回码已复制，请保密保存。' } catch { notice.value = '请手动复制，或下载找回码文件。' } }
 async function copyInvite() { try { await navigator.clipboard.writeText(inviteLink.value); inviteNotice.value = '邀请链接已复制' } catch { inviteNotice.value = '请手动复制邀请链接' } }
-async function recover() {
-  if (accountBusy.value) return
-  if (!restoreCode.value.trim() || !window.confirm(t('将打开找回码对应的音乐收藏。当前作品不会合并，请先保存自己的找回码，是否继续？'))) return
-  busy.value = true; restoringIdentity = true; error.value = ''
-  try { await ensureCreator(); await requestJson('public/session/recover', 'POST', {code:restoreCode.value.trim()}); resetCreatorSession(); player.reset(); secret.value = ''; restoreCode.value = ''; await Promise.all([refreshAccountState().catch(() => {}), refreshLogtoState().catch(() => {})]); if (props.embedded) { emit('close'); window.location.replace('/agent') } else await router.replace('/works') }
-  catch (e) { error.value = e instanceof Error ? e.message : '恢复失败，请检查找回码' } finally { restoringIdentity = false; busy.value = false; finishRecoveryRefresh() }
-}
 </script>
 <template>
   <div class="account-page">
@@ -151,10 +110,10 @@ async function recover() {
   <header class="account-intro">
     <p class="account-eyebrow"><span></span>{{ t('我的账号') }}</p>
     <h1>{{ t('账号与登录') }}</h1>
-    <p>{{ t('登录音乐账号，或使用找回码找回音乐。') }}</p>
+    <p>{{ t('登录音乐账号，在不同设备上访问你的作品。') }}</p>
   </header>
   <RouterLink v-if="!props.embedded && (logtoState.authenticated || googleStatus.authenticated)" class="button secondary" to="/profile">{{ t('我的资料') }}</RouterLink>
-  <p v-if="error" class="notice error" role="alert">{{ t(error) }}</p><p v-if="notice" class="notice success" role="status">{{ t(notice) }}</p>
+  <p v-if="error" class="notice error" role="alert">{{ t(error) }}</p>
   <p v-if="googleError" class="notice error" role="alert">{{ t(googleError) }}</p>
   <p v-if="googleNotice" class="notice" :class="googleNoticeKind" role="status">{{ t(googleNotice) }}</p>
   <p v-if="logtoError" class="notice error" role="alert">{{ t(logtoError) }}</p>
@@ -206,7 +165,6 @@ async function recover() {
         </div>
         <button type="button" class="google-sign-in" :disabled="accountBusy || !googleStatus.enabled" @click="loginWithGoogle"><GoogleMark />{{ googleBusy ? t('正在前往 Google…') : t('使用 Google 账号登录') }}</button>
       </div>
-      <p v-if="!googleStatus.enabled && !busy" class="google-unavailable" role="status">{{ t('Google 登录暂不可用，你仍可使用作品找回码。') }}</p>
       <div class="profile-footer"><NavIcon name="recovery" /><p>{{ t('首次登录会保留当前作品。不同账号的音乐收藏不会自动合并。') }}</p></div>
     </template>
   </section>
@@ -216,25 +174,6 @@ async function recover() {
     <template v-if="inviteLink"><p>邀请一位新用户首次登录，你将获得 19 积分。</p><label class="field">邀请链接<input :value="inviteLink" readonly @focus="($event.target as HTMLInputElement).select()"></label><button class="button secondary" type="button" @click="copyInvite">复制邀请链接</button></template>
   </section>
   <CreditsPanel :key="`${googleStatus.authenticated}:${googleStatus.email || ''}:${logtoState.authenticated}:${logtoState.email || ''}:${logtoState.phoneMasked || ''}:${logtoState.name || ''}`" />
-  <section class="recovery-section" :aria-label="t('备用找回方式')">
-    <div class="recovery-section-heading"><h2>{{ t('备用找回方式') }}</h2><p>{{ t('多一种找回方式，多一份安心。') }}</p></div>
-    <div class="account-recovery-grid">
-      <section class="recovery-card">
-        <div class="recovery-card-heading"><span class="recovery-icon"><NavIcon name="recovery" /></span><span class="recovery-state" :class="{ configured }">{{ t(configured ? '已设置' : '尚未设置') }}</span></div>
-        <h3>{{ t('保存作品找回码') }}</h3>
-        <p class="recovery-description">{{ configured ? t('你已设置找回码。如未保存，可以重新生成并使旧码失效。') : t('尚未设置找回码，请在清理浏览器或更换设备前保存。') }}</p>
-        <button class="button secondary recovery-issue" :disabled="accountBusy" @click="issue">{{ configured ? t('重新生成找回码') : t('生成找回码') }}<NavIcon name="arrow" /></button>
-        <template v-if="secret"><label class="field">{{ t('找回码（仅本次显示）') }}<textarea :value="secret" readonly rows="2" @focus="($event.target as HTMLTextAreaElement).select()"></textarea></label><div class="actions"><button class="button secondary" @click="copy">{{ t('复制') }}</button><button class="button secondary" @click="download">{{ t('下载留存') }}</button></div></template>
-        <p class="recovery-footnote">{{ t('找回码可访问你的私人作品，请只交给自己保管。礼物分享链接不能替代找回码。') }}</p>
-      </section>
-      <section class="recovery-card">
-        <div class="recovery-card-heading"><span class="recovery-icon"><NavIcon name="guide" /></span><span class="recovery-card-label">{{ t('从找回码继续') }}</span></div>
-        <h3>{{ t('找回已有作品') }}</h3>
-        <form @submit.prevent="recover"><label class="field recovery-code-field"><span class="sr-only">{{ t('输入之前保存的找回码') }}</span><input v-model="restoreCode" class="recovery-input" :disabled="accountBusy" maxlength="100" autocomplete="off" spellcheck="false" :placeholder="t('粘贴你的作品找回码')"></label><button class="button secondary recovery-submit" :disabled="accountBusy || !restoreCode.trim()">{{ t('找回我的音乐') }}<NavIcon name="arrow" /></button></form>
-        <p class="recovery-footnote">{{ t('找回码只能使用一次，恢复后请生成并保存新的找回码。多个身份的作品不会自动合并。') }}</p>
-      </section>
-    </div>
-  </section>
   <button v-if="props.embedded" type="button" class="account-back" @click="emit('close')">{{ t('返回对话') }}</button><RouterLink v-else class="account-back" to="/works"><NavIcon name="music" />{{ t('← 返回我的音乐') }}</RouterLink>
   </div>
 </template>
@@ -281,29 +220,6 @@ async function recover() {
 .google-sign-in { flex-shrink: 0; }
 .google-sign-in > svg { width: 18px; height: 18px; }
 .google-sign-in:disabled { opacity: .6; transform: none; cursor:not-allowed; }
-.google-unavailable { margin:0; padding:0 30px 20px; color:var(--warning); font-size:12px; line-height:1.8; }
-.recovery-section { margin-top: 34px; }
-.recovery-section-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin-bottom: 15px; }
-.recovery-section-heading h2 { margin: 0; color: var(--ink); font-size: 15px; font-weight: 550; }
-.recovery-section-heading p { margin: 0; color: var(--muted); font-size: 11px; }
-.account-recovery-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
-.recovery-card { min-width: 0; padding: 23px 25px 20px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); }
-.recovery-card-heading { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-bottom: 17px; }
-.recovery-icon { display: grid; place-items: center; width: 36px; height: 36px; border: 1px solid var(--accent-border); border-radius: 11px; color: var(--accent-text); background: var(--accent-soft); }
-.recovery-icon svg { width: 19px; height: 19px; }
-.recovery-state, .recovery-card-label { color: var(--muted); font-size: 10px; }
-.recovery-state { padding: 3px 8px; border: 1px solid var(--line); border-radius: 5px; background: var(--surface-raised); }
-.recovery-state.configured { border-color: var(--success-border); color: var(--success); background: var(--success-soft); }
-.recovery-card h3 { color:var(--ink); margin: 0 0 9px; font-size: 18px; font-weight: 600; letter-spacing: -.3px; }
-.recovery-card .recovery-description { min-height: 44px; margin: 0 0 16px; color: var(--muted); font-size: 12px; line-height: 1.8; }
-.account-page .recovery-card .button { min-height: 42px; border-color: var(--line); background: #fff8f6; padding: 10px 15px; color: var(--accent-text); font-size: 12px; gap: 14px; }
-.account-page .recovery-card .button:hover { border-color: var(--accent-border); background: var(--accent-soft); }
-.recovery-card .button svg { width: 16px; height: 16px; }
-.recovery-card .recovery-footnote { margin: 19px 0 0; padding-top: 15px; border-top: 1px solid var(--line); color: var(--muted); font-size: 10px; line-height: 1.8; }
-.account-page .recovery-code-field { margin: 15px 0 13px; }
-.account-page .recovery-code-field input { margin-top: 0; min-height: 44px; font-size: 13px; }
-.recovery-submit { width: 100%; justify-content: space-between !important; }
-.recovery-card .field textarea { min-height: 80px; }
 .account-back { display: flex; align-items: center; gap: 8px; width: fit-content; margin: 23px 0 0; color: var(--muted); font-size: 12px; }
 .account-back:hover { color: var(--accent-text); }
 .account-back svg { width: 16px; height: 16px; }
@@ -339,11 +255,5 @@ async function recover() {
   .google-avatar { width: 54px; height: 54px; border-radius: 15px; }
   .profile-sign-in .profile-copy h2 { font-size: 18px; }
   .profile-sign-in .google-sign-in { width: 100%; margin-left: 0; }
-  .recovery-section { margin-top: 29px; }
-  .recovery-section-heading { align-items: flex-start; flex-direction: column; gap: 3px; margin-bottom: 14px; }
-  .account-recovery-grid { grid-template-columns: minmax(0, 1fr); gap: 15px; }
-  .recovery-card { padding: 22px 21px 19px; }
-  .recovery-card .recovery-description { min-height: 0; }
-  .account-page .recovery-code-field input { font-size: 16px; }
 }
 </style>

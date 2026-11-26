@@ -62,14 +62,14 @@ class InviteGateIntegrationTest {
     }
     private HttpResponse<String> enter(Browser browser) throws Exception { return send(browser.http(), "POST", "/api/public/invite/enter", "{\"code\":\" qf-test-invitation-2026 \"}", browser.csrf()); }
 
-    @Test void noInvitationBlocksAccountRecoveryGoogleAndDirectMediaRequests() throws Exception {
+    @Test void noInvitationBlocksAccountGoogleAndDirectMediaRequests() throws Exception {
         var browser = browser();
         for (String path : List.of("/api/public/system/info", "/api/public/csrf", "/api/public/auth/google/status", "/api/app/works", "/api/public/gifts/some-token", "/media/sample-love-v2.mp3")) {
             var response = send(browser.http(), "GET", path, null, null);
             assertEquals(403, response.statusCode(), path); assertTrue(response.body().contains("INVITE_REQUIRED"), response.body());
             assertNotEquals(302, response.statusCode(), path + " 门禁下不得签发 302");
         }
-        for (String path : List.of("/api/public/session", "/api/public/session/recover", "/api/public/auth/google/start")) {
+        for (String path : List.of("/api/public/session", "/api/public/auth/google/start")) {
             var response = send(browser.http(), "POST", path, "{}", browser.csrf());
             assertEquals(403, response.statusCode(), path); assertTrue(response.body().contains("INVITE_REQUIRED"));
         }
@@ -87,6 +87,21 @@ class InviteGateIntegrationTest {
         var callback = send(browser.http(), "GET", "/api/public/auth/google/callback?code=not-real&state=not-real", null, null);
         assertEquals(302, callback.statusCode()); assertEquals("/account", callback.headers().firstValue("location").orElseThrow());
     }
+    @Test void retiredWorkRecoveryRoutesAreUnavailableAfterAdmission() throws Exception {
+        var browser = browser();
+        assertEquals(200, enter(browser).statusCode());
+        assertEquals(200, send(browser.http(), "POST", "/api/public/session", "{}", browser.csrf()).statusCode());
+
+        var recovery = send(browser.http(), "POST", "/api/public/session/recover", "{\"code\":\"old-code\"}", browser.csrf());
+        assertEquals(403, recovery.statusCode());
+        assertTrue(recovery.headers().allValues("set-cookie").stream().noneMatch(cookie -> cookie.startsWith("QF_SESSION=")));
+        for (String method : List.of("GET", "POST")) {
+            var response = send(browser.http(), method, "/api/app/identity/recovery",
+                method.equals("POST") ? "{}" : null, browser.csrf());
+            assertEquals(404, response.statusCode());
+        }
+    }
+
     @Test void invitationRequiresCsrfAndWrongCodeNeverCreatesAdmission() throws Exception {
         var browser = browser();
         assertEquals(403, send(browser.http(), "POST", "/api/public/invite/enter", "{\"code\":\"QF-TEST-INVITATION-2026\"}", null).statusCode());

@@ -28,14 +28,13 @@ class GuestHistoryAssociationTest {
         return google?identity.signInWithGoogle(browser.token(),browser.creatorId(),subject,null,null)
             :logto.signIn(browser.token(),browser.creatorId(),"https://provider.test/oidc",subject,null,null,null);
     }
-    @Test void retiredGuestCannotReserveQuotaOrIssueAnotherRecoveryCode() {
+    @Test void retiredGuestCannotReserveQuota() {
         var first=identity.create();String subject=UUID.randomUUID().toString();
         var account=login(first,subject,true);var guest=identity.create();var song=works.create(guest.creatorId(),draft);
         login(guest,subject,true);
         var failure=assertThrows(com.qingfeng.music.common.exception.DomainException.class,
             ()->budget.reserve(guest.creatorId(),song.id(),UUID.randomUUID().toString(),com.qingfeng.music.usage.UsageBudget.Kind.MUSIC));
         assertEquals("CREATOR_SESSION_CHANGED",failure.code());
-        assertThrows(com.qingfeng.music.common.exception.DomainException.class,()->identity.issueRecoveryCode(guest.creatorId()));
         assertEquals(0,db.queryForObject("SELECT COUNT(*) FROM model_usage_reservation WHERE work_id=?",Integer.class,song.id()));
         assertEquals(song.id(),works.get(account.creatorId(),song.id()).id());
     }
@@ -45,8 +44,10 @@ class GuestHistoryAssociationTest {
             var old=works.create(account.creatorId(),draft);
             var guest=identity.create();var song=works.create(guest.creatorId(),draft);
             var unrelated=identity.create();var unrelatedSong=works.create(unrelated.creatorId(),draft);
-            String recovery=identity.issueRecoveryCode(guest.creatorId());var guestDevice=identity.recover(recovery);
-            String outstandingRecovery=identity.issueRecoveryCode(guest.creatorId());
+            var guestDevice=identity.create();
+            assertEquals(1,db.update("UPDATE creator_session SET creator_id=? WHERE creator_id=?",
+                guest.creatorId(),guestDevice.creatorId()));
+            assertEquals(guest.creatorId(),identity.resolve(guestDevice.token()).orElseThrow());
             String asset=UUID.randomUUID().toString(),share=UUID.randomUUID().toString(),request=UUID.randomUUID().toString();
             var now=Timestamp.from(Instant.now());
             db.update("INSERT INTO media_asset(id,work_id,storage_key,origin,content_type,byte_size,sha256,created_at) VALUES(?,?,?,?,?,?,?,?)",
@@ -64,7 +65,6 @@ class GuestHistoryAssociationTest {
             assertEquals(unrelatedSong.id(),works.get(unrelated.creatorId(),unrelatedSong.id()).id());
             assertTrue(works.list(guest.creatorId(),0).isEmpty());
             assertTrue(identity.resolve(guest.token()).isEmpty());assertTrue(identity.resolve(guestDevice.token()).isEmpty());
-            assertThrows(RuntimeException.class,()->identity.recover(outstandingRecovery));
             assertEquals(asset,db.queryForObject("SELECT asset_id FROM share_link WHERE id=?",String.class,share));
             assertEquals(song.id(),db.queryForObject("SELECT work_id FROM media_asset WHERE id=?",String.class,asset));
             assertEquals(signed.creatorId(),db.queryForObject("SELECT owner_id FROM model_usage_reservation WHERE work_id=?",String.class,song.id()));

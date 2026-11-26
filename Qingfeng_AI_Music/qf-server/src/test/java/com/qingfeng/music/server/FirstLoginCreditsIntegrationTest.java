@@ -66,9 +66,8 @@ class FirstLoginCreditsIntegrationTest {
 
     }
 
-    @Test void anonymousSessionAndRecoveryDoNotGrantCredits() {
+    @Test void anonymousSessionDoesNotGrantCredits() {
         var guest = identity.create();
-        identity.recover(identity.issueRecoveryCode(guest.creatorId()));
         assertEquals(0, credits.balance(guest.creatorId()));
         assertEquals(0, grants(guest.creatorId()));
     }

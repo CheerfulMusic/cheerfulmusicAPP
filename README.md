@@ -17,9 +17,9 @@
 
 ## 账号与登录
 
-网页右上角常驻账号入口：未连接时显示“登录 / 账号”，已连接时点击头像展开菜单。选择“账号与登录”进入`/account`，可查看关联账号、切换Google账号、退出当前设备或使用作品找回码；手机顶栏和展开的导航同样提供入口。
+网页右上角常驻账号入口：未连接时显示“登录 / 账号”，已连接时点击头像展开菜单。选择“账号与登录”进入`/account`，可查看关联账号、切换Google账号或退出当前设备；手机顶栏和展开的导航同样提供入口。
 
-退出只撤销当前设备令牌，不删除Google绑定、作品、找回码或其他设备会话。首次Google关联保留当前匿名作品，不按邮箱自动合并收藏。切换Google账号会先退出本设备，再打开Google账号选择页。
+退出只撤销当前设备令牌，保留 Google 绑定、作品和其他设备会话。换设备后，登录同一个账号可继续访问作品。首次Google关联保留当前匿名作品，不按邮箱自动合并收藏。切换Google账号会先退出本设备，再打开Google账号选择页。
 
 Google登录默认关闭。启用时在服务端私有配置设置`qingfeng.auth.google.enabled/client-id/client-secret/redirect-uri`，生产回调固定为`https://cheerfulmusic.com/api/public/auth/google/callback`。密钥不得放到前端、提交到Git或写入公开日志。当前线上Google应用使用外部测试模式，是否正式向所有Google账号开放以Google Auth Platform配置为准。
 

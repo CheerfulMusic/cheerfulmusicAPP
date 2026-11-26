@@ -47,7 +47,7 @@ class AgentAccountActionsTest {
         assertEquals(1,result.items().size());assertTrue(result.items().get(0).subtitle().startsWith("-5"));
         assertFalse(result.toString().contains("private-job-reference"));assertFalse(result.toString().contains("secret-reference"));
     }
-    @Test void loginRechargeAndRecoveryOnlyReturnNativeCommands(){
+    @Test void loginRechargeAndAccountSettingsOnlyReturnNativeCommands(){
         assertEquals("login",run("login",Map.of()).commands().get(0).kind());
         assertEquals("recharge",run("recharge",Map.of()).commands().get(0).kind());
         assertEquals("account",run("account_settings",Map.of()).commands().get(0).kind());

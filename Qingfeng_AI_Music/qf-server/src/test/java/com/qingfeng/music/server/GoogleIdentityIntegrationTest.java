@@ -16,12 +16,11 @@ class GoogleIdentityIntegrationTest {
     @Autowired IdentityApi identity;
     @Autowired WorkApi works;
     private final WorkApi.Draft draft=new WorkApi.Draft("妈妈","生日祝福","一起做饭的回忆","谢谢你","民谣","回家的风");
-    @Test void firstGoogleBindingKeepsAnonymousWorksAndRotatesOnlyCurrentSession(){
-        var anonymous=identity.create();var work=works.create(anonymous.creatorId(),draft);String recovery=identity.issueRecoveryCode(anonymous.creatorId());
-        var otherDevice=identity.recover(recovery);
+    @Test void firstGoogleBindingKeepsAnonymousWorksAndRotatesSession(){
+        var anonymous=identity.create();var work=works.create(anonymous.creatorId(),draft);
         var google=identity.signInWithGoogle(anonymous.token(),anonymous.creatorId(),UUID.randomUUID().toString(),"one@example.test","用户");
         assertEquals(anonymous.creatorId(),google.creatorId());assertEquals(work.id(),works.get(google.creatorId(),work.id()).id());
-        assertTrue(identity.resolve(anonymous.token()).isEmpty());assertEquals(google.creatorId(),identity.resolve(otherDevice.token()).orElseThrow());
+        assertTrue(identity.resolve(anonymous.token()).isEmpty());
         assertEquals("one@example.test",identity.googleIdentity(google.creatorId()).orElseThrow().email());
     }
     @Test void existingGoogleLoginAssociatesGuestCollection(){
@@ -54,13 +53,15 @@ class GoogleIdentityIntegrationTest {
         Callable<Boolean> bind=()->{try{identity.signInWithGoogle(a.token(),a.creatorId(),sub,null,null);return true;}catch(DomainException error){return false;}};
         try{var first=pool.submit(bind);var second=pool.submit(bind);assertNotEquals(first.get(5,TimeUnit.SECONDS),second.get(5,TimeUnit.SECONDS));}finally{pool.shutdownNow();}
     }
-    @Test void logoutOnlyRevokesCurrentTokenAndKeepsGoogleWorksRecoveryAndOtherDevices(){
+    @Test void logoutOnlyRevokesCurrentTokenAndKeepsGoogleWorksAndOtherDevices(){
         var anonymous=identity.create();var work=works.create(anonymous.creatorId(),draft);
-        var google=identity.signInWithGoogle(anonymous.token(),anonymous.creatorId(),UUID.randomUUID().toString(),"kept@example.test","保留账户");
-        var otherDevice=identity.recover(identity.issueRecoveryCode(google.creatorId()));String recovery=identity.issueRecoveryCode(google.creatorId());
+        String subject=UUID.randomUUID().toString();
+        var google=identity.signInWithGoogle(anonymous.token(),anonymous.creatorId(),subject,"kept@example.test","保留账户");
+        var browser=identity.create();
+        var otherDevice=identity.signInWithGoogle(browser.token(),browser.creatorId(),subject,"kept@example.test","保留账户");
+        assertEquals(google.creatorId(),otherDevice.creatorId());
         identity.logout(google.token());identity.logout(google.token());identity.logout(null);identity.logout("invalid-token");
         assertTrue(identity.resolve(google.token()).isEmpty());assertEquals(google.creatorId(),identity.resolve(otherDevice.token()).orElseThrow());
         assertEquals("kept@example.test",identity.googleIdentity(google.creatorId()).orElseThrow().email());assertEquals(work.id(),works.get(google.creatorId(),work.id()).id());
-        assertTrue(identity.hasRecoveryCode(google.creatorId()));assertEquals(google.creatorId(),identity.recover(recovery).creatorId());
     }
 }

@@ -53,13 +53,6 @@ describe('Google sign-in', () => {
     }
   })
 
-  it('keeps recovery APIs independent when Google configuration is unavailable', async () => {
-    vi.stubGlobal('fetch', vi.fn(async (url: string) => url.endsWith('/google/status')
-      ? reply({ message: 'Not found' }, 404) : reply({ configured: true })))
-    await expect(readGoogleIdentityStatus()).rejects.toMatchObject({ status: 404 })
-    await expect(requestJson('app/identity/recovery')).resolves.toEqual({ configured: true })
-  })
-
   it('shows success only after the server confirms the connected identity', () => {
     expect(googleLoginFeedback('success', true)?.kind).toBe('success')
     expect(googleLoginFeedback('success', false)?.kind).toBe('error')

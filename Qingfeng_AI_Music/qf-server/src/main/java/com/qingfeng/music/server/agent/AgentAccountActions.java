@@ -53,7 +53,7 @@ public class AgentAccountActions implements AgentApplicationActions {
             cap("get_credits","查询当前账号积分余额和真实生成价格","{}","read"),
             cap("list_credit_entries","查看本人最近积分收支明细","{}","read"),
             cap("get_usage","查询音乐、歌词、封面等每日额度和在途数量","{}","read"),
-            cap("get_account","查看本人登录及恢复设置状态；不读取密码或恢复码","{}","read"),
+            cap("get_account","查看本人登录状态","{}","read"),
             cap("get_referral","获取本人的邀请链接","{}","read"),
             cap("accept_referral","使用邀请人提供的邀请码；仍按现有首次登录规则处理","{code:邀请码}","write"),
             cap("list_orders","查看本人充值订单，包含现有支付渠道","{}","read"),
@@ -64,7 +64,7 @@ public class AgentAccountActions implements AgentApplicationActions {
             cap("photo_song","在对话内打开真实照片写歌面板，用户选择图片、查看价格后提交；打开窗口不会生成或扣费","{}","native"),
             cap("login","打开登录窗口，由用户本人完成验证","{}","native"),
             cap("logout","打开账号窗口执行退出登录","{}","native"),
-            cap("account_settings","在对话中打开账号设置，可查看或生成恢复码、恢复账号；秘密仅在原生窗口显示","{}","native"),
+            cap("account_settings","在对话中打开账号设置，管理登录和当前设备","{}","native"),
             cap("privacy_settings","打开匿名分析同意设置","{}","native"),
             cap("erase_analytics","请求删除或匿名化本人历史分析数据，需确认且受服务开关限制","{}","destructive")
         );
@@ -95,7 +95,7 @@ public class AgentAccountActions implements AgentApplicationActions {
                 case "photo_song" -> result("请在照片写歌窗口选择图片，查看生成费用并提交。打开窗口不会开始生成；完成后可以返回对话继续创作。","photo",List.of(),List.of(new Command("打开照片写歌","","photo")),action);
                 case "login" -> nativeResult("请在登录窗口完成账号验证。","登录账号","login",action);
                 case "logout" -> nativeResult("可以在账号窗口退出当前账号。","打开账号窗口","account",action);
-                case "account_settings" -> nativeResult("账号设置将在独立窗口显示。请勿把密码、验证码或恢复码发送到聊天里。","打开账号设置","account",action);
+                case "account_settings" -> nativeResult("账号设置将在独立窗口显示。请勿把密码或验证码发送到聊天里。","打开账号设置","account",action);
                 case "privacy_settings" -> nativeResult("可以在这里调整匿名分析同意设置。","管理隐私设置","privacy",action);
                 case "erase_analytics" -> {
                     var erased=erasure.erase(owner);
@@ -134,7 +134,7 @@ public class AgentAccountActions implements AgentApplicationActions {
         Integer verified=db.queryForObject("SELECT (SELECT COUNT(*) FROM creator_google_identity WHERE creator_id=?) + (SELECT COUNT(*) FROM creator_oidc_identity WHERE creator_id=?)",Integer.class,owner,owner);
         boolean signedIn=verified!=null&&verified>0;
         String name=google.map(IdentityApi.GoogleIdentity::name).filter(v->v!=null&&!v.isBlank()).orElse(signedIn?"已登录账号":"访客账号");
-        return result("当前账号状态如下。","account",List.of(new Item("account",name,signedIn?"已登录":"尚未登录",Map.of()),new Item("recovery","账号恢复",identity.hasRecoveryCode(owner)?"已配置恢复码":"尚未配置恢复码",Map.of())),List.of(new Command(signedIn?"账号设置":"登录账号","",signedIn?"account":"login")),"get_account");
+        return result("当前账号状态如下。","account",List.of(new Item("account",name,signedIn?"已登录":"尚未登录",Map.of())),List.of(new Command(signedIn?"账号设置":"登录账号","",signedIn?"account":"login")),"get_account");
     }
     @SuppressWarnings("unchecked") private Result orders(String owner) {
         List<Item> items=new ArrayList<>();List<Command> commands=new ArrayList<>();

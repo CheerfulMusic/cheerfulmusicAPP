@@ -6,11 +6,7 @@ import java.util.Optional;
 public interface IdentityRepository {
     void create(String creatorId, String tokenHash, Instant createdAt, Instant expiresAt);
     Optional<String> findCreator(String tokenHash, Instant now);
-    void setRecovery(String creator,String hash);
-    boolean hasRecovery(String creator);
-    Optional<String> lockRecovery(String hash);
     void addSession(String creator,String hash,Instant expires);
-    boolean hasActiveSessions(String creator);
     boolean lockCreator(String creator);
     Optional<String> googleCreator(String subjectHash);
     Optional<com.qingfeng.music.identity.api.IdentityApi.GoogleIdentity> googleIdentity(String creator);

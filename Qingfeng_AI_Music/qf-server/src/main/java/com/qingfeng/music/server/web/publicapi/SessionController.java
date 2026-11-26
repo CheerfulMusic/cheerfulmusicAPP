@@ -27,8 +27,6 @@ public class SessionController {
         }
         return sessionResponse(identity.create(),request);
     }
-    public record RecoveryRequest(@jakarta.validation.constraints.NotBlank @jakarta.validation.constraints.Size(max=100)String code){}
-    @PostMapping("/session/recover") public ResponseEntity<Map<String,String>> recover(HttpServletRequest request,@jakarta.validation.Valid @RequestBody RecoveryRequest body){return sessionResponse(identity.recover(body.code()),request);}
     @PostMapping("/session/logout")public ResponseEntity<Map<String,Boolean>> logout(HttpServletRequest request){
         identity.logout(CreatorSessionFilter.token(request));
         var temporary=request.getSession(false);if(temporary!=null)temporary.invalidate();

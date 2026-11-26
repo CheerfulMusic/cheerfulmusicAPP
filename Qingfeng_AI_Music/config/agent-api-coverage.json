@@ -374,19 +374,6 @@
       ]
     },
     {
-      "controller": "IdentityController",
-      "source": "com/qingfeng/music/server/web/app/IdentityController.java",
-      "mappingDeclarations": [
-        "@RequestMapping(\"/api/app/identity/recovery\")",
-        "@GetMapping",
-        "@PostMapping"
-      ],
-      "mode": "native",
-      "flows": [
-        "account_settings"
-      ]
-    },
-    {
       "controller": "InspirationController",
       "source": "com/qingfeng/music/server/web/app/InspirationController.java",
       "mappingDeclarations": [
@@ -789,7 +776,6 @@
         "@RequestMapping(\"/api/public\")",
         "@GetMapping(\"/csrf\")",
         "@PostMapping(\"/session\")",
-        "@PostMapping(\"/session/recover\")",
         "@PostMapping(\"/session/logout\")"
       ],
       "mode": "native",

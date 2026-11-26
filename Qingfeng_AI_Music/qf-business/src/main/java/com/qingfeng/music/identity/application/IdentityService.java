@@ -41,20 +41,6 @@ public class IdentityService implements IdentityApi {
         try { return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(token.getBytes(StandardCharsets.UTF_8))); }
         catch (java.security.NoSuchAlgorithmException e) { throw new IllegalStateException(e); }
     }
-    @Transactional
-    public String issueRecoveryCode(String creator) {
-        if(!repository.lockCreator(creator)||!repository.hasActiveSessions(creator))throw new com.qingfeng.music.common.exception.DomainException("CREATOR_SESSION_CHANGED","登录身份已改变，请刷新后重试");
-        String code=randomToken();repository.setRecovery(creator,hash(code));return code;
-    }
-    public boolean hasRecoveryCode(String creator){return repository.hasRecovery(creator);}
-    @Transactional
-    public Session recover(String code) {
-        if(code==null||!code.matches("[A-Za-z0-9_-]{43}"))throw invalidRecovery();
-        String creator=repository.lockRecovery(hash(code)).orElseThrow(this::invalidRecovery);
-        repository.setRecovery(creator,null);
-        String token=randomToken();repository.addSession(creator,hash(token),Instant.now().plus(30,ChronoUnit.DAYS));
-        return new Session(token,creator);
-    }
     private String randomToken(){byte[] bytes=new byte[32];random.nextBytes(bytes);return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);}
     public Optional<GoogleIdentity> googleIdentity(String creatorId){return repository.googleIdentity(creatorId);}
     @Transactional
@@ -92,5 +78,4 @@ public class IdentityService implements IdentityApi {
 
     private String profile(String value,int limit){return value==null?null:value.substring(0,Math.min(value.length(),limit));}
     private com.qingfeng.music.common.exception.DomainException googleFailure(String code){return new com.qingfeng.music.common.exception.DomainException(code,"Google登录未完成，当前作品和身份已保留");}
-    private com.qingfeng.music.common.exception.DomainException invalidRecovery(){return new com.qingfeng.music.common.exception.DomainException("INVALID_RECOVERY_CODE","找回码无效或已使用，请检查后重试");}
 }

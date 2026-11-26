@@ -125,7 +125,7 @@ describe('conversation result cards', () => {
     const origin = window.location.origin
     expect(resultMediaUrl('/api/app/works/w1/covers/c1', 'image', origin)).toBe(`${origin}/api/app/works/w1/covers/c1`)
     expect(resultMediaUrl('/media/sample.mp3', 'audio', origin)).toBe(`${origin}/media/sample.mp3`)
-    for (const url of ['javascript:alert(1)', 'https://evil.example/media/song.mp3', '//evil.example/media/song.mp3', '/api/app/identity/recovery', '/media/../../account']) {
+    for (const url of ['javascript:alert(1)', 'https://evil.example/media/song.mp3', '//evil.example/media/song.mp3', '/api/app/referrals', '/media/../../account']) {
       expect(resultMediaUrl(url, 'audio', origin)).toBe('')
     }
     const result = assistantResult(message({ ...body, items: [{ id: 'w1', title: '<img src=x onerror=alert(1)>', data: { imageUrl: 'https://evil.example/a.png' } }] }))!
