@@ -880,6 +880,8 @@
       "mappingDeclarations": [
         "@GetMapping(\"/api/songs/{id}/public\")",
         "@GetMapping(value=\"/song/{id}\", produces=\"text/html;charset=UTF-8\")",
+        "@GetMapping(value=\"/s/{code}\", produces=\"text/html;charset=UTF-8\")",
+        "@GetMapping(value=\"/song/{id}/x-player\", produces=\"text/html;charset=UTF-8\")",
         "@GetMapping(\"/api/songs/{id}/audio\")",
         "@PostMapping(\"/api/songs/{id}/play\")",
         "@GetMapping(\"/api/songs/{id}/cover\")",
@@ -887,7 +889,9 @@
       ],
       "mode": "native",
       "flows": [
-        "open_feature:gift"
+        "open_feature:gift",
+        "X Player Card public preview (GiftWorkflowIntegrationTest.xCardUsesAnExplicitPlayerVariantAndTheExistingPublicGrant)",
+        "Short public song URL (GiftWorkflowIntegrationTest.shortSongLinksRenderTheExistingAuthorizedSong)"
       ]
     },
     {

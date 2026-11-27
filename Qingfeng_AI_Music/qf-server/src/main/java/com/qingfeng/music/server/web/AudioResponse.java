@@ -1,4 +1,5 @@
 package com.qingfeng.music.server.web;
+import com.qingfeng.music.common.exception.DomainException;
 import com.qingfeng.music.media.api.MediaApi.Content;
 import org.springframework.core.io.*;
 import org.springframework.http.*;
@@ -7,7 +8,18 @@ import java.net.URI;
 import java.nio.charset.StandardCharsets;
 
 public final class AudioResponse {
+ private static final int MAX_COVER_BYTES=5*1024*1024;
  private AudioResponse(){}
+ /** Read the bounded cover before emitting image headers, so missing objects can return their real error response. */
+ public static ResponseEntity<Resource> cover(Content content){
+  if(content.size()<=0 || content.size()>MAX_COVER_BYTES)throw unreadableCover();
+  try(var input=content.source().open()){
+   byte[] bytes=input.readNBytes((int)content.size());
+   if(bytes.length!=content.size())throw unreadableCover();
+   return from(new Content(bytes.length,content.contentType(),content.filename(),()->new ByteArrayInputStream(bytes)),false);
+  }catch(IOException failure){throw unreadableCover();}
+ }
+ private static DomainException unreadableCover(){return new DomainException("COVER_STORAGE_UNAVAILABLE","封面暂不可读取");}
  public static ResponseEntity<Resource> from(Content content,boolean download){return from(content,download,null);}
  public static ResponseEntity<Resource> from(Content content,boolean download,String range){return from(content,download,range,null);}
  public static ResponseEntity<Resource> from(Content content,boolean download,String range,String downloadFilename){

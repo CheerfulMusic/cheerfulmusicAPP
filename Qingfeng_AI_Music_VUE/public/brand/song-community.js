@@ -1,7 +1,8 @@
 (() => {
   const byId = id => document.getElementById(id)
-  const token = location.pathname.split('/').pop()
-  if (!/^[A-Za-z0-9_-]{43}$/.test(token)) return
+  const audioPath = byId('audio')?.getAttribute('src') || ''
+  const token = /^\/api\/songs\/([A-Za-z0-9_-]{43})\/audio$/.exec(audioPath)?.[1]
+  if (!token) return
   const publicBase = '/api/songs/' + token
   const privateBase = '/api/app/song-listening/' + token
   const artistId = document.body.dataset.artist

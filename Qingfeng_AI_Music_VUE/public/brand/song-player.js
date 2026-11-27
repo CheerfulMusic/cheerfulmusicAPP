@@ -127,7 +127,7 @@
       const artwork = byId('artwork')
       const blob = await renderer.renderSongPoster({
         title, cover: artwork.currentSrc || artwork.src, signature: byId('artist').textContent,
-        link: document.querySelector('meta[property="og:url"]').content,
+        link: byId('manual').value || document.querySelector('meta[property="og:url"]').content,
         quote: '', tagline: '邀请你来听听', scanLabel: '长按识别二维码试听', expiresLabel: '',
       })
       if (turn !== generation) return

@@ -7,12 +7,20 @@
   <title>{{timelineTitle}}</title>
   <meta name="description" content="{{description}}">
   <meta name="robots" content="noindex,nofollow">
-  <meta property="og:site_name" content="{{siteName}}">
-  <meta property="og:title" content="{{timelineTitle}}" data-song-credit="{{title}} · {{creator}}">
+  <link rel="canonical" href="{{canonical}}">
+  <meta property="og:site_name" content="{{shareSiteName}}">
+  <meta property="og:locale" content="{{shareLocale}}">
+  <meta property="og:title" content="{{shareTitle}}" data-song-credit="{{title}} · {{creator}}"
+    data-wechat-title="{{timelineTitle}}" data-wechat-url="{{wechatUrl}}" data-wechat-description="{{wechatDescription}}">
   <meta property="og:description" content="{{description}}">
   <meta property="og:image" content="{{thumbnail}}">
-  <meta property="og:url" content="{{url}}">
+  <meta property="og:url" content="{{canonical}}">
   <meta property="og:type" content="music.song">
+  <meta name="twitter:card" content="{{twitterCard}}">
+  <meta name="twitter:title" content="{{shareTitle}}">
+  <meta name="twitter:description" content="{{description}}">
+  <meta name="twitter:image" content="{{twitterImage}}">
+  {{xPlayerMeta}}
   <link rel="stylesheet" href="/brand/song-player.css">
   <link rel="stylesheet" href="/brand/share-destinations.css">
   <script defer src="/brand/wechat-handoff.js"></script>
@@ -53,7 +61,7 @@
           </div>
           <button id="lyric-preview" type="button" aria-label="查看完整歌词" hidden><span>歌词 ›</span><strong id="lyric-peek"></strong></button>
         </div>
-        <noscript><p>在微信右上角菜单中选择「发送给朋友」或「分享到朋友圈」。</p><a href="{{url}}">歌曲分享链接</a></noscript>
+        <noscript><p>在微信右上角菜单中选择「发送给朋友」或「分享到朋友圈」。</p><a href="{{shareUrl}}">歌曲分享链接</a></noscript>
       </div>
     </div>
     <div class="subpage">
@@ -136,7 +144,7 @@
       <details id="more-share" class="more-share">
         <summary>更多分享方式</summary>
         <div class="share-actions"><button id="system-share" type="button" hidden>系统分享</button><button id="copy" type="button">复制链接</button></div>
-        <input id="manual" hidden readonly aria-label="歌曲分享链接" value="{{url}}">
+        <input id="manual" hidden readonly aria-label="歌曲分享链接" value="{{shareUrl}}">
       </details>
     </div>
   </dialog>

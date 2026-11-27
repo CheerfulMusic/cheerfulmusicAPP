@@ -3,6 +3,9 @@ package com.qingfeng.music.server.security;
 import com.qingfeng.music.server.invite.InviteGateFilter;
 import com.qingfeng.music.server.web.publicapi.WechatSelfCardController;
 import jakarta.servlet.DispatcherType;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import java.util.regex.Pattern;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -15,10 +18,18 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.security.web.authentication.AnonymousAuthenticationFilter;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
+import org.springframework.security.web.header.writers.frameoptions.XFrameOptionsHeaderWriter;
 
 /** 公开引导与带令牌的礼物读取；个人写接口要求创建者会话与CSRF。 */
 @Configuration(proxyBeanMethods = false)
 public class WebSecurityConfiguration {
+    private static final Pattern X_PLAYER_PATH = Pattern.compile("/song/[A-Za-z0-9_-]{43}/x-player");
+    private static final String SHORT_SONG_PAGE = "/s/{code:[A-Za-z0-9_-]{22}}";
+    private static final XFrameOptionsHeaderWriter DENY_FRAMING = new XFrameOptionsHeaderWriter();
+    private static final String X_PLAYER_POLICY = "default-src 'none'; script-src 'self'; style-src 'self'; "
+            + "img-src 'self'; media-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; "
+            + "frame-ancestors https://x.com https://twitter.com https://platform.x.com https://platform.twitter.com";
+
     private static final String[] SEO_PAGES = {
             "/robots.txt", "/sitemap.xml", "/favicon.ico", "/brand/favicon-96.png", "/brand/favicon-symbol-96.png",
             "/zh", "/zh/", "/zh/index.html", "/zh-CN", "/zh-CN/", "/zh-CN/index.html",
@@ -51,7 +62,9 @@ public class WebSecurityConfiguration {
         if (filter!=null) http.addFilterAfter(new ApiRateLimitFilter(java.time.Clock.systemUTC(),env.getProperty("qingfeng.redis.enabled",Boolean.class,false)&&env.getProperty("qingfeng.redis.api-rate-limit-enabled",Boolean.class,true)?new RedisApiRateGate(redis.getObject()):null,env.getProperty("qingfeng.payment.webhook.rate-limit-per-minute",Integer.class,600)),CreatorSessionFilter.class);
         var coverNotice = org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher.withDefaults()
             .matcher(HttpMethod.POST, com.qingfeng.music.server.ai.CoverCapacityCallbacks.PATH);
-        return http.headers(headers -> headers.addHeaderWriter((request, response) -> {
+        return http.headers(headers -> headers.frameOptions(frame -> frame.disable())
+            .addHeaderWriter(WebSecurityConfiguration::writeFrameProtection)
+            .addHeaderWriter((request, response) -> {
                 if (request.getDispatcherType() == DispatcherType.REQUEST && "/index.html".equals(request.getServletPath())) {
                     response.setHeader("X-Robots-Tag", "noindex");
                 }
@@ -68,8 +81,12 @@ public class WebSecurityConfiguration {
                 .requestMatchers(HttpMethod.HEAD, SPA_PAGES).permitAll()
                 .requestMatchers(HttpMethod.GET, SEO_PAGES).permitAll()
                 .requestMatchers(HttpMethod.HEAD, SEO_PAGES).permitAll()
+                .requestMatchers(WebSecurityConfiguration::isXPlayerRequest).permitAll()
+                .requestMatchers(HttpMethod.GET, SHORT_SONG_PAGE).permitAll()
+                .requestMatchers(HttpMethod.HEAD, SHORT_SONG_PAGE).permitAll()
                 .requestMatchers(HttpMethod.GET,"/assets/**","/brand/**","/media/**","/gift/*","/song/*","/api/songs/*/public","/api/songs/*/community","/api/songs/*/audio","/api/songs/*/cover","/api/songs/*/thumbnail.png","/api/wechat/jssdk-config","/legal/**").permitAll()
                 .requestMatchers(HttpMethod.HEAD,"/gift/*","/song/*","/api/songs/*/public","/api/songs/*/community","/api/songs/*/audio","/api/songs/*/cover","/api/songs/*/thumbnail.png","/brand/share-default-cover.png","/brand/logo-mark.svg").permitAll()
+                .requestMatchers(HttpMethod.HEAD,"/brand/x-player.css","/brand/x-player.js","/brand/logo-symbol.svg").permitAll()
                 .requestMatchers(request -> "HEAD".equals(request.getMethod()) && com.qingfeng.music.server.web.RecommendationOssRedirect.isSamplePath(request.getServletPath())).permitAll()
                 .requestMatchers("/api/public/system/info", "/api/public/csrf", "/api/public/session", "/actuator/health").permitAll()
                 .requestMatchers(org.springframework.http.HttpMethod.POST,"/api/public/events","/api/wechat/jssdk-error").permitAll()
@@ -114,6 +131,24 @@ public class WebSecurityConfiguration {
             .logout(AbstractHttpConfigurer::disable)
             .requestCache(AbstractHttpConfigurer::disable)
             .build();
+    }
+
+    private static boolean isXPlayerRequest(HttpServletRequest request) {
+        if (request.getDispatcherType() != DispatcherType.REQUEST) return false;
+        String method = request.getMethod();
+        if (!"GET".equals(method) && !"HEAD".equals(method)) return false;
+        String path = request.getRequestURI().substring(request.getContextPath().length());
+        return X_PLAYER_PATH.matcher(path).matches();
+    }
+
+    static void writeFrameProtection(HttpServletRequest request, HttpServletResponse response) {
+        String type = response.getContentType();
+        if (isXPlayerRequest(request) && response.getStatus() == HttpServletResponse.SC_OK
+                && type != null && (type.equals("text/html") || type.startsWith("text/html;"))) {
+            response.setHeader("Content-Security-Policy", X_PLAYER_POLICY);
+        } else {
+            DENY_FRAMING.writeHeaders(request, response);
+        }
     }
 
     /**

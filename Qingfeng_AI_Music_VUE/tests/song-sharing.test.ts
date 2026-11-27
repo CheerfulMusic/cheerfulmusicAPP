@@ -2,6 +2,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { songShareUrl, lyricQuotes, posterFilename, localShareAddress, shareSongCard } from '../src/modules/works/model/song-sharing'
 import { textLines } from '../src/modules/works/model/song-poster'
+import { validResponse } from '../src/shared/http/response-contracts'
 
 afterEach(() => vi.unstubAllGlobals())
 describe('public song sharing', () => {
@@ -10,6 +11,26 @@ describe('public song sharing', () => {
     expect(songShareUrl(token, 'https://cheerfulmusic.com/works/private?secret=x')).toBe(`https://cheerfulmusic.com/song/${token}`)
     for (const bad of ['../works/secret', 'x?owner=1', 'A'.repeat(42)]) expect(() => songShareUrl(bad, location.origin)).toThrow()
     expect(() => songShareUrl(token, 'javascript:alert(1)')).toThrow()
+  })
+  it('builds a short URL only for the matching server-supplied code', () => {
+    const shortCode = 'grQVIB4zmKxV_ueWTppQgi'
+    const token = shortCode + 'A'.repeat(21)
+    const origin = 'https://cheerfulmusic.com/works/private?secret=x'
+    expect(songShareUrl(token, origin, shortCode)).toBe('https://cheerfulmusic.com/s/' + shortCode)
+    for (const unavailable of [undefined, null, '../etc/passwd', shortCode.toLowerCase()]) {
+      expect(songShareUrl(token, origin, unavailable)).toBe('https://cheerfulmusic.com/song/' + token)
+    }
+  })
+  it('accepts older status cards and checks a provided short code against the card ID', () => {
+    const token = 'A'.repeat(43)
+    const card = { songId: token, title: '歌曲', lyrics: '', hasCover: false, expiresAt: '2030-01-01T00:00:00Z' }
+    const status = { status: 'SHAREABLE', views: 0, plays: 0, card }
+    const path = 'app/works/work/shares/asset'
+    expect(validResponse(path, 'GET', status)).toBe(true)
+    for (const shortCode of [null, token.slice(0, 22)]) {
+      expect(validResponse(path, 'GET', { ...status, card: { ...card, shortCode } })).toBe(true)
+    }
+    expect(validResponse(path, 'GET', { ...status, card: { ...card, shortCode: 'a'.repeat(22) } })).toBe(false)
   })
   it('keeps original lyrics but omits section labels, empty lines and duplicate quotes', () => {
     expect(lyricQuotes('# 《薄荷》\n**[Verse 1]**\r\n窗台那盆薄荷\n\n【副歌】\nKeep the light on 🌙\n窗台那盆薄荷'))

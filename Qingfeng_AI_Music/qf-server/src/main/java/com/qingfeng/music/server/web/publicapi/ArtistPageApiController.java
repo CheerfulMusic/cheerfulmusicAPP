@@ -67,7 +67,7 @@ public class ArtistPageApiController {
             var location = signer.cover(profiles.publicCoverRef(artist, song, version).storageKey());
             if (location.isPresent()) return AudioResponse.redirect(location.get());
         }
-        return AudioResponse.from(profiles.publicCover(artist, song, version), false);
+        return AudioResponse.cover(profiles.publicCover(artist, song, version));
     }
 
     private static ResponseEntity<byte[]> jpeg(byte[] body) {

@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="{{lang}}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <title>{{title}} | Cheerful Music</title>
+  <link rel="stylesheet" href="/brand/x-player.css">
+  <script defer src="/brand/x-player.js"></script>
+</head>
+<body>
+  <main class="player" aria-labelledby="song-title">
+    <div class="brand"><img src="/brand/logo-symbol.svg" width="18" height="17" alt="">Cheerful Music</div>
+    <div class="song">
+      <img class="cover" src="{{cover}}" width="56" height="56" alt="">
+      <div class="song-name">
+        <h1 id="song-title">{{title}}</h1>
+        <p>{{artist}}</p>
+      </div>
+    </div>
+    <audio id="preview" controls playsinline preload="none" src="{{audio}}" data-play-url="{{play}}" aria-label="{{listenLabel}}"></audio>
+    <p id="player-status" role="status" hidden>{{errorLabel}}</p>
+    <a href="{{songUrl}}" target="_blank" rel="noopener noreferrer">{{openLabel}} <span aria-hidden="true">↗</span></a>
+  </main>
+</body>
+</html>

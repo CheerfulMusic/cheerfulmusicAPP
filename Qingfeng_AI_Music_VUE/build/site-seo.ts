@@ -105,6 +105,8 @@ const crawlFiles = {
       'User-agent: *',
       'Disallow: /api/',
       'Allow: /api/public/discover',
+      'Allow: /api/songs/*/thumbnail.png$',
+      'Allow: /api/songs/*/thumbnail.png?card=x$',
       'Allow: /api/public/artists/',
       'Allow: /api/public/invite/status',
       'Disallow: /actuator/',

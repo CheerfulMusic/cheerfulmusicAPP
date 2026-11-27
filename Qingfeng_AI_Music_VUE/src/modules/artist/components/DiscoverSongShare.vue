@@ -1,21 +1,26 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { t } from '../../../shared/i18n'
 import NavIcon from '../../../shared/ui/NavIcon.vue'
-import { wechatShareEntry, type WechatCardState, type WechatDestination } from '../../works/model/song-sharing'
+import { isWechatBrowser, wechatShareEntry, type WechatCardState, type WechatDestination } from '../../works/model/song-sharing'
+import { copyInternationalShareLink, shareInternationalSong } from '../../works/model/international-song-sharing'
 
-const props = defineProps<{ url: string; name: string; artist: string; cover: string; coverVersion?: string | null }>()
+const props = defineProps<{ url: string; name: string; artist: string; description?: string; cover: string; thumbnail: string }>()
 const dialog = ref<HTMLDialogElement>()
+const trigger = ref<HTMLButtonElement>(), linkInput = ref<HTMLInputElement>()
 const open = ref(false)
 const destination = ref<WechatDestination>()
 const qr = ref(''), qrError = ref(false)
 const sdkState = ref<WechatCardState>('loading')
-const inWechat = /MicroMessenger/i.test(navigator.userAgent)
-let qrRequest = 0
+const inWechat = isWechatBrowser(navigator.userAgent)
+const hasSystemShare = !inWechat && typeof navigator.share === 'function'
+const status = ref(''), sharing = ref(false)
+let qrRequest = 0, shareRequest = 0
 let stopPreparing: (() => void) | undefined
 
 const link = new URL(props.url)
 const friendTitle = computed(() => [props.name, props.artist].filter(Boolean).join(' · '))
+const description = computed(() => props.description?.trim() || t('在青风音乐广场收听这首歌。'))
 const brandCover = '/brand/share-default-cover.png'
 const cover = ref(props.cover)
 const guide = computed(() => {
@@ -32,14 +37,13 @@ function prepareCard() {
   if (!sdk) { sdkState.value = 'failed'; return }
   stopPreparing?.()
   sdkState.value = 'loading'
-  const thumbnail = new URL('/api/public' + link.pathname.replace(/^\/en\//, '/') + '/thumbnail.png', link.origin)
-  if (props.coverVersion) thumbnail.searchParams.set('v', props.coverVersion)
-  const artwork = new URL(cover.value || brandCover, link.origin)
-  const imgUrl = artwork.origin === link.origin && !artwork.pathname.startsWith('/api/')
-    && artwork.pathname !== brandCover ? artwork.href : thumbnail.href
-  stopPreparing = sdk.prepare({ link: link.href, imgUrl, friendTitle: friendTitle.value,
-    timelineTitle: '青风音乐 Cheerful Music｜' + friendTitle.value,
-    description: t('在青风音乐广场收听这首歌。') }, state => { sdkState.value = state })
+  try {
+    stopPreparing = sdk.prepare({ link: link.href, imgUrl: props.thumbnail, friendTitle: friendTitle.value,
+      timelineTitle: '青风音乐 Cheerful Music｜' + friendTitle.value,
+      description: description.value }, state => { sdkState.value = state })
+  } catch {
+    sdkState.value = 'failed'
+  }
 }
 
 function isSongEntry() {
@@ -54,21 +58,48 @@ function show() {
   if (inWechat && isSongEntry() && sdkState.value === 'failed') prepareCard()
   open.value = true
   if (dialog.value?.showModal) dialog.value.showModal()
-  else dialog.value?.setAttribute('open', '')
+  else {
+    dialog.value?.setAttribute('open', '')
+    dialog.value?.querySelector<HTMLElement>('h2')?.focus()
+  }
 }
 
-function reset() {
+function reset(restoreFocus = true) {
+  const wasOpen = open.value
   ++qrRequest
+  ++shareRequest
   open.value = false
   destination.value = undefined
   qr.value = ''
   qrError.value = false
+  status.value = ''
+  sharing.value = false
+  if (wasOpen && restoreFocus) trigger.value?.focus({ preventScroll: true })
 }
 
 function close() {
   if (dialog.value?.close) dialog.value.close()
   else dialog.value?.removeAttribute('open')
   reset()
+}
+
+async function copyLink(current = () => open.value) {
+  const copied = await copyInternationalShareLink(link.href, linkInput.value, current)
+  if (current()) status.value = copied ? '复制成功' : '请选中链接手动复制。'
+}
+
+async function share(useSystem: boolean) {
+  if (sharing.value || !open.value) return
+  const request = ++shareRequest
+  const current = () => open.value && shareRequest === request
+  sharing.value = true
+  status.value = ''
+  try {
+    if (useSystem && await shareInternationalSong({ title: friendTitle.value, text: description.value, url: link.href }) !== 'unavailable') return
+    if (current()) await copyLink(current)
+  } finally {
+    if (current()) sharing.value = false
+  }
 }
 
 async function choose(target: WechatDestination) {
@@ -96,6 +127,11 @@ async function choose(target: WechatDestination) {
   }
 }
 
+watch(() => props.cover, next => { cover.value = next })
+watch([friendTitle, description, () => props.thumbnail], () => {
+  if (inWechat && isSongEntry()) prepareCard()
+})
+
 onMounted(() => {
   if (!inWechat || !isSongEntry()) return
   prepareCard()
@@ -104,17 +140,18 @@ onMounted(() => {
   show()
   void choose(hash === '#share-friend' ? 'friend' : 'timeline')
 })
-onBeforeUnmount(() => { reset(); stopPreparing?.() })
+onBeforeUnmount(() => { reset(false); stopPreparing?.() })
 </script>
 
 <template>
-  <button type="button" class="discover-share-trigger" aria-haspopup="dialog" @click="show">
+  <button ref="trigger" type="button" class="discover-share-trigger" aria-haspopup="dialog" @click="show">
     <NavIcon name="share" />{{ t('分享') }}
   </button>
   <Teleport to="body">
-    <dialog ref="dialog" class="discover-share-dialog" aria-labelledby="discover-share-title" @close="reset">
+    <dialog ref="dialog" class="discover-share-dialog" aria-labelledby="discover-share-title" @close="reset()" @cancel.prevent="close"
+      @keydown.esc="!dialog?.showModal && close()">
       <header>
-        <h2 id="discover-share-title">{{ t('分享歌曲卡片') }}</h2>
+        <h2 id="discover-share-title" tabindex="-1">{{ t('分享歌曲卡片') }}</h2>
         <button class="discover-share-close" type="button" :aria-label="t('关闭')" @click="close">×</button>
       </header>
       <div class="discover-share-song">
@@ -139,6 +176,15 @@ onBeforeUnmount(() => { reset(); stopPreparing?.() })
           <p v-if="qr">{{ t('同一部手机上可截图，再从微信扫一扫的相册打开。') }}</p>
           <p v-if="qrError">{{ t('二维码暂时无法生成，可重新点选分享方式。') }}</p>
         </div>
+      </div>
+      <div class="discover-share-link">
+        <input ref="linkInput" :value="link.href" :aria-label="t('歌曲分享链接')" readonly
+          @focus="($event.target as HTMLInputElement).select()">
+        <div>
+          <button type="button" :disabled="sharing" @click="share(false)">{{ t('复制本曲链接') }}</button>
+          <button v-if="hasSystemShare" type="button" :disabled="sharing" @click="share(true)">{{ t('更多选项') }}</button>
+        </div>
+        <p v-if="status" role="status">{{ t(status) }}</p>
       </div>
     </dialog>
   </Teleport>
@@ -183,4 +229,9 @@ onBeforeUnmount(() => { reset(); stopPreparing?.() })
 .discover-share-song img { width: 52px; height: 52px; border-radius: 6px; object-fit: cover; }
 .discover-share-song span { display: block; color: #626467; font-size: .85rem; }
 .discover-share-dialog .share-destinations { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.discover-share-link { display: grid; gap: 8px; margin-top: 16px; }
+.discover-share-link input { min-width: 0; min-height: 44px; padding: 8px; border: 1px solid #dedfe0; border-radius: 8px; background: white; color: inherit; font: inherit; text-overflow: ellipsis; }
+.discover-share-link > div { display: flex; flex-wrap: wrap; gap: 8px; }
+.discover-share-link button { min-height: 44px; padding: 6px 10px; border: 1px solid #dedfe0; border-radius: 8px; background: white; color: inherit; font: inherit; cursor: pointer; }
+.discover-share-link p { margin: 0; }
 </style>

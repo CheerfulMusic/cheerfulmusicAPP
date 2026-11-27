@@ -73,10 +73,12 @@ public class SongCommunityController {
                        (SELECT COUNT(*) FROM listening_comment WHERE share_id=?),
                        EXISTS (SELECT 1 FROM listening_reaction WHERE share_id=? AND kind='like' AND creator_id=?),
                        EXISTS (SELECT 1 FROM listening_reaction WHERE share_id=? AND kind='favorite' AND creator_id=?),
-                       EXISTS (SELECT 1 FROM listening_artist_follow WHERE artist_id=? AND creator_id=?)
-                """, (r,n) -> new Community(story,g.plays(),r.getLong(1),r.getLong(2),r.getLong(3),r.getLong(4),
+                       EXISTS (SELECT 1 FROM listening_artist_follow WHERE artist_id=? AND creator_id=?),
+                       (SELECT COALESCE(SUM(playback_starts),0) FROM share_link WHERE public_song_id=? AND work_id=? AND asset_id=?)
+                """, (r,n) -> new Community(story,r.getLong(8),r.getLong(1),r.getLong(2),r.getLong(3),r.getLong(4),
                         r.getBoolean(5),r.getBoolean(6),r.getBoolean(7),comments.stream().limit(PAGE_SIZE).toList(),
-                        comments.size()>PAGE_SIZE),g.id(),g.id(),g.artist(),g.id(),g.id(),viewer,g.id(),viewer,g.artist(),viewer);
+                        comments.size()>PAGE_SIZE),g.id(),g.id(),g.artist(),g.id(),g.id(),viewer,g.id(),viewer,g.artist(),viewer,
+                        id,g.work(),g.asset());
         return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(result);
     }
 

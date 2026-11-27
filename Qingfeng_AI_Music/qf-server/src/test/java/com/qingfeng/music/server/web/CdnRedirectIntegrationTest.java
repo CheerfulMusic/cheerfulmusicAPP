@@ -22,6 +22,18 @@ import static org.mockito.Mockito.*;
  * 仅对领域接口打桩。不启动 Spring、不连数据库、不访问生产资源。
  */
 class CdnRedirectIntegrationTest {
+    @Test void coverResponsesAcceptTheStoredCoverLimitAndRejectLargerObjectsBeforeOpeningThem() {
+        int limit = 5 * 1024 * 1024;
+        var valid = new MediaApi.Content(limit, "image/jpeg", "cover.jpg",
+                () -> new ByteArrayInputStream(new byte[limit]));
+        assertEquals(limit, AudioResponse.cover(valid).getHeaders().getContentLength());
+
+        var source = mock(MediaApi.Source.class);
+        var oversized = new MediaApi.Content(limit + 1L, "image/jpeg", "cover.jpg", source);
+        assertEquals("COVER_STORAGE_UNAVAILABLE",
+                assertThrows(DomainException.class, () -> AudioResponse.cover(oversized)).code());
+        verifyNoInteractions(source);
+    }
     private static final String ID = "123e4567-e89b-12d3-a456-426614174000";
     private static final CreatorPrincipal OWNER = new CreatorPrincipal("creator-1");
 

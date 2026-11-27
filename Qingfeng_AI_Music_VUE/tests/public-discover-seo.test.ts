@@ -3,7 +3,10 @@ import { beforeEach, expect, it, vi } from 'vitest'
 import { siteOrigin } from '../src/shared/i18n/home-seo'
 
 const path = '/discover/songs/2397b14b-4b4a-45a0-bab2-798763ca7857/1'
-const metadata = { title: 'Featured song', artist: 'Public artist', description: 'Public description', image: siteOrigin + '/brand/share-default-cover.png' }
+const metadata = {
+  title: 'Featured song', artist: 'Public artist', description: 'Public description',
+  image: siteOrigin + '/brand/share-default-cover.png', thumbnail: siteOrigin + '/api/public' + path + '/thumbnail.png',
+}
 
 beforeEach(() => {
   vi.resetModules()
@@ -29,6 +32,9 @@ it('keeps server-rendered metadata during the first load and replaces it on navi
   updateDiscoverSongMetadata(path, metadata)
   expect(document.title).toBe('青妙Ai')
   expect(document.querySelector('meta[property="og:title"]')?.getAttribute('content')).toBe('Featured song — Public artist | 青妙Ai')
+  expect(document.querySelector('meta[property="og:image"]')?.getAttribute('content')).toBe(metadata.thumbnail)
+  expect(document.querySelector('meta[name="twitter:image"]')?.getAttribute('content')).toBe(metadata.thumbnail)
+  expect(document.querySelector('meta[name="twitter:card"]')?.getAttribute('content')).toBe('summary')
   expect(document.querySelector('meta[name=description]')?.getAttribute('content')).toBe(metadata.description)
   expect(document.querySelector('link[rel=canonical]')?.getAttribute('href')).toBe(siteOrigin + path)
   expect(JSON.parse(document.querySelector('script[type="application/ld+json"]')!.textContent!).name).toBe(metadata.title)

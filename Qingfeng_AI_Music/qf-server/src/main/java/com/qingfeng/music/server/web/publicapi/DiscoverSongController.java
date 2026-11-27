@@ -47,13 +47,18 @@ public class DiscoverSongController {
 
     @GetMapping(value = PUBLIC + "/thumbnail.png", produces = "image/png")
     public ResponseEntity<byte[]> thumbnail(@PathVariable UUID song, @PathVariable @Positive long version) throws IOException {
-        var release = songs.sharingRelease(song.toString(), version);
+        String songId = song.toString();
+        var release = songs.sharingRelease(songId, version);
         byte[] thumbnail = null;
         if (release.song().hasCover()) {
-            try (var source = profiles.publicCover(release.artistId(), song.toString(), version).source().open(0)) {
-                thumbnail = PublicSongController.thumbnailBytes(source);
+            try {
+                var cover = profiles.publicCover(release.artistId(), songId, version);
+                songs.sharingRelease(songId, version);
+                try (var source = cover.source().open(0)) {
+                    thumbnail = PublicSongController.thumbnailBytes(source);
+                }
             } catch (DomainException missing) {
-                if (!"COVER_NOT_FOUND".equals(missing.code()) && !"ARTIST_NOT_FOUND".equals(missing.code())) throw missing;
+                if (!"COVER_NOT_FOUND".equals(missing.code())) throw missing;
             } catch (IOException unreadable) {
                 // Use the default artwork when the cover cannot be decoded.
             }

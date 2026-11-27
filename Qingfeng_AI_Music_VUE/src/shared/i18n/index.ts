@@ -26,7 +26,7 @@ export function t(message: string, params: Record<string, string | number> = {})
   return copy.replace(/\{(\w+)\}/g, (placeholder, key: string) => String(params[key] ?? placeholder))
 }
 let pagePath = ''
-type SongMetadata = { title: string; artist: string; description: string; image: string }
+type SongMetadata = { title: string; artist: string; description: string; image: string; thumbnail: string }
 let discoverSong: SongMetadata | null | undefined
 
 const discoverSongPath = /^(?:\/en)?\/discover\/songs\/([^/]+)\/(\d+)\/?$/
@@ -95,7 +95,8 @@ function updateDocument() {
   for (const attributes of socialMetadata(page)) {
     if (songMetadata) {
       if (attributes.property === 'og:type') attributes.content = 'music.song'
-      if (attributes.property === 'og:image' || attributes.name === 'twitter:image') attributes.content = songMetadata.image
+      if (attributes.property === 'og:image' || attributes.name === 'twitter:image') attributes.content = songMetadata.thumbnail
+      if (attributes.name === 'twitter:card') attributes.content = 'summary'
       if (attributes.property === 'og:image:alt' || attributes.name === 'twitter:image:alt') attributes.content = songMetadata.title
     }
     appendTag('meta', attributes)

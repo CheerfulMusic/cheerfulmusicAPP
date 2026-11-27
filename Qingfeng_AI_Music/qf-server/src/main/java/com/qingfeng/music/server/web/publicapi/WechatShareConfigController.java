@@ -15,7 +15,7 @@ import org.springframework.web.server.ResponseStatusException;
 @Profile({"mysql","test"})
 public class WechatShareConfigController {
     private static final java.util.regex.Pattern SHARE_PATH = java.util.regex.Pattern.compile(
-            "/song/[A-Za-z0-9_-]{43}|(?:/en)?/discover/songs/"
+            "/song/[A-Za-z0-9_-]{43}|/s/[A-Za-z0-9_-]{22}|(?:/en)?/discover/songs/"
             + "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/[1-9][0-9]{0,18}");
     private final WechatOfficialClient client;
     private final String origin;

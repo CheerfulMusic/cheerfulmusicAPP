@@ -85,6 +85,11 @@ class WebErrorPageIntegrationTest {
             var response = get(document.getKey(), "*/*");
             assertEquals(200, response.statusCode(), document.getKey());
             assertTrue(response.body().contains(document.getValue()), document.getKey());
+            if ("/robots.txt".equals(document.getKey())) {
+                assertTrue(response.body().lines().anyMatch("Disallow: /api/"::equals));
+                assertEquals(List.of("Allow: /api/songs/*/thumbnail.png$", "Allow: /api/songs/*/thumbnail.png?card=x$"), response.body().lines()
+                        .filter(line -> line.startsWith("Allow: /api/songs")).toList());
+            }
             assertEquals(200, request(document.getKey(), "*/*", "HEAD").statusCode(), document.getKey());
         }
         assertEquals(403, get("/home.html", "text/html").statusCode());

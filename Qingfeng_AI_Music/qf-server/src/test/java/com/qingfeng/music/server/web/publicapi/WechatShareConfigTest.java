@@ -75,7 +75,8 @@ class WechatShareConfigTest {
         when(ticket.body()).thenReturn("{\"ticket\":\"ticket\",\"expires_in\":7200}");
         when(client.send(any(), org.mockito.ArgumentMatchers.<HttpResponse.BodyHandler<String>>any())).thenReturn(token).thenReturn(ticket);
         String discover = "/discover/songs/1485ddee-9a1f-435b-bfc8-403cccb8c243/";
-        for (String path : new String[]{"/song/" + "a".repeat(43), discover + "1", "/en" + discover + "2"}) {
+        String shortSong = "/s/Vm-" + "_".repeat(19);
+        for (String path : new String[]{"/song/" + "a".repeat(43), shortSong, discover + "1", "/en" + discover + "2"}) {
             String url = origin + path + "?from=timeline&name=a%20b";
             var config = signer.config(url).getBody();
             String canonical = "jsapi_ticket=ticket&noncestr=" + config.get("nonceStr") + "&timestamp=" + config.get("timestamp") + "&url=" + url;
@@ -84,7 +85,8 @@ class WechatShareConfigTest {
         }
         verify(client,times(2)).send(any(),any());
         for (String invalid : new String[]{"https://other.example" + discover + "1", origin + discover + "0",
-                origin + discover + "1#share-friend", origin + "/discover", origin + "/discover/songs/not-a-song/1"}) {
+                origin + discover + "1#share-friend", origin + "/discover", origin + "/discover/songs/not-a-song/1",
+                origin + shortSong + "/x-player", origin + shortSong + "e", origin + "/s/%41" + "a".repeat(21)}) {
             assertEquals(400, assertThrows(ResponseStatusException.class, () -> signer.config(invalid)).getStatusCode().value());
         }
     }

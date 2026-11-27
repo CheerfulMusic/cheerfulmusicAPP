@@ -1,6 +1,7 @@
 import { isAgentContinuation } from '../../modules/agent/model/conversation'
 import { isStripeMethod, validCreditPack, validStripeMethods } from '../../modules/identity/model/stripe-payment-methods'
 import { validCustomLyricSections } from '../../modules/works/model/lyrics-structure'
+import { matchesSongShortCode } from '../../modules/works/model/song-sharing'
 type Row=Record<string,unknown>
 const obj=(v:unknown):v is Row=>!!v&&typeof v==='object'&&!Array.isArray(v)
 const str=(v:unknown)=>typeof v==='string'
@@ -224,6 +225,7 @@ export function validResponse(path:string,method:string,value:unknown,httpStatus
   if (value.status !== 'SHAREABLE') return ['PRIVATE','REVOKED','EXPIRED'].includes(String(value.status)) && value.card === null
   const card = value.card
   return obj(card) && typeof card.songId === 'string' && /^[A-Za-z0-9_-]{43}$/.test(card.songId) &&
+    (card.shortCode === undefined || card.shortCode === null || matchesSongShortCode(card.songId, card.shortCode)) &&
     text(card.title) && (card.creator === undefined || str(card.creator)) && (card.timelineTitle === undefined || text(card.timelineTitle)) &&
     str(card.lyrics) && typeof card.hasCover === 'boolean' &&
     typeof card.expiresAt === 'string' && Number.isFinite(Date.parse(card.expiresAt))

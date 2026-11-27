@@ -34,6 +34,7 @@ class WechatSelfCardService {
     private static final long RESULT_RETENTION = Duration.ofDays(7).toSeconds();
     private static final long PENDING_LIFETIME = Duration.ofSeconds(45).toSeconds();
     private static final Pattern SONG = Pattern.compile("/song/([A-Za-z0-9_-]{43})");
+    private static final Pattern SHORT_SONG = Pattern.compile("/s/([A-Za-z0-9_-]{22})");
     private static final Pattern DISCOVER = Pattern.compile("(?:/en)?/discover/songs/([0-9a-f-]{36})/([1-9][0-9]{0,18})");
     private static final Pattern BIND_MESSAGE = Pattern.compile("绑定卡片[\\s　]+([A-Fa-f0-9]{16})");
     private final JdbcTemplate db;
@@ -192,12 +193,9 @@ class WechatSelfCardService {
 
     private WechatOfficialClient.News news(String path) {
         var song = SONG.matcher(path);
-        if (song.matches()) {
-            String id = song.group(1);
-            var grant = songs.require(id);
-            return new WechatOfficialClient.News(grant.title() + " · " + grant.creator(), PublicSongController.DESCRIPTION,
-                    origin + path, origin + "/api/songs/" + id + "/thumbnail.png");
-        }
+        if (song.matches()) return songNews(path, song.group(1));
+        var shortSong = SHORT_SONG.matcher(path);
+        if (shortSong.matches()) return songNews(path, songs.resolveShortCode(shortSong.group(1)));
         var publicRelease = DISCOVER.matcher(path);
         if (!publicRelease.matches()) throw PublicSongAccess.missing();
         String id;
@@ -213,6 +211,12 @@ class WechatSelfCardService {
                 : "/brand/share-default-cover.png");
         return new WechatOfficialClient.News(release.song().title() + " · " + release.stageName(),
                 "在青风音乐广场收听这首歌。", origin + path, thumbnail);
+    }
+
+    private WechatOfficialClient.News songNews(String path, String id) {
+        var grant = songs.require(id);
+        return new WechatOfficialClient.News(grant.title() + " · " + grant.creator(), PublicSongController.DESCRIPTION,
+                origin + path, origin + "/api/songs/" + id + "/thumbnail.png");
     }
 
     private long now() { return clock.instant().getEpochSecond(); }

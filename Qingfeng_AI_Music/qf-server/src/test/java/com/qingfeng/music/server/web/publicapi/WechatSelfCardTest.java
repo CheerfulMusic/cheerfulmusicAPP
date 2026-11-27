@@ -38,7 +38,7 @@ class WechatSelfCardTest {
         when(client.configured()).thenReturn(true);
         when(client.appId()).thenReturn("fixture-app");
         when(client.sendNews(anyString(), any())).thenReturn(WechatOfficialClient.Delivery.SENT);
-        when(songs.require(SONG)).thenReturn(new PublicSongAccess.Grant("id", "Moon", "Singer", "w", "a", "c", "owner", null, 0));
+        when(songs.require(SONG)).thenReturn(new PublicSongAccess.Grant("id", "Moon", "Singer", "w", "a", "c", "owner", null));
         service = new WechatSelfCardService(new JdbcTemplate(source), new DataSourceTransactionManager(source), client,
                 songs, discover, ORIGIN, clock);
     }
@@ -57,6 +57,20 @@ class WechatSelfCardTest {
                 () -> service.send("first", request, "/song/" + "B".repeat(43))).getStatusCode().value());
         verify(client).sendNews("wechat-first", new WechatOfficialClient.News("Moon · Singer",
                 PublicSongController.DESCRIPTION, ORIGIN + PATH, ORIGIN + "/api/songs/" + SONG + "/thumbnail.png"));
+    }
+
+    @Test void sendsTheShortSongUrlWithTheAuthorizedSongsThumbnail() {
+        String code = SONG.substring(0, 22);
+        String path = "/s/" + code;
+        when(songs.resolveShortCode(code)).thenReturn(SONG);
+        accept("wechat-first", service.challenge("first").command());
+        assertEquals(SENT, service.send("first", UUID.randomUUID(), path));
+        verify(client).sendNews("wechat-first", new WechatOfficialClient.News("Moon · Singer",
+                PublicSongController.DESCRIPTION, ORIGIN + path, ORIGIN + "/api/songs/" + SONG + "/thumbnail.png"));
+        when(songs.require(SONG)).thenThrow(PublicSongAccess.missing());
+        assertEquals(404, assertThrows(ResponseStatusException.class,
+                () -> service.send("first", UUID.randomUUID(), path)).getStatusCode().value());
+        verify(client, times(1)).sendNews(anyString(), any());
     }
 
     @Test void expiresTheCodeAndRejectsLinkingOneWechatToTwoAccounts() {

@@ -46,6 +46,7 @@ afterEach(() => {
   wrapper?.unmount()
   wrapper = undefined
   vi.restoreAllMocks()
+  vi.unstubAllGlobals()
   delete window.cheerfulWechatCard
   window.history.replaceState({}, '', '/')
 })
@@ -95,6 +96,7 @@ describe('Discover song detail', () => {
       link: resolvedUrl, friendTitle: '晚风车站 · 青风音乐',
       timelineTitle: '青风音乐 Cheerful Music｜晚风车站 · 青风音乐',
       imgUrl: `https://cheerfulmusic.com/api/public/discover/songs/${releasedSong.id}/${releasedSong.version}/thumbnail.png?v=stamp`,
+      description: '一首木吉他民谣。',
     })
     const panel = document.querySelector<HTMLDialogElement>('.discover-share-dialog')!
     expect(panel.open).toBe(true)
@@ -103,6 +105,36 @@ describe('Discover song detail', () => {
     view.unmount()
     wrapper = undefined
     expect(cleanup).toHaveBeenCalledOnce()
+  })
+
+  it('copies the canonical song version when device sharing is unavailable', async () => {
+    const writeText = vi.fn().mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error('Clipboard denied'))
+    const share = vi.fn().mockRejectedValue(new Error('No share target'))
+    vi.stubGlobal('navigator', { userAgent: 'Chromium', clipboard: { writeText }, share })
+    mocks.detail.mockResolvedValue(detail(false))
+    const view = await open()
+    const trigger = view.get('[aria-haspopup="dialog"]')
+    await trigger.trigger('click')
+    const panel = document.querySelector<HTMLDialogElement>('.discover-share-dialog')!
+    const actions = panel.querySelectorAll<HTMLButtonElement>('.discover-share-link button')
+    actions[1].click()
+    await flushPromises()
+    expect(share).toHaveBeenCalledExactlyOnceWith({ title: '晚风车站 · 青风音乐', text: '一首木吉他民谣。', url })
+    expect(writeText).toHaveBeenCalledExactlyOnceWith(url)
+    expect(panel.querySelector('.discover-share-link [role="status"]')?.textContent).toBe('复制成功')
+
+    actions[0].click()
+    await flushPromises()
+    const input = panel.querySelector<HTMLInputElement>('.discover-share-link input')!
+    expect(input.value).toBe(url)
+    expect(document.activeElement).toBe(input)
+    expect(input.selectionEnd! - input.selectionStart!).toBe(url.length)
+    expect(panel.querySelector('.discover-share-link [role="status"]')?.textContent).toBe('请选中链接手动复制。')
+    expect(mocks.login).not.toHaveBeenCalled()
+
+    panel.dispatchEvent(new Event('cancel', { cancelable: true }))
+    expect(panel.open).toBe(false)
+    expect(document.activeElement).toBe(trigger.element)
   })
 
   it('shows the song and playback while community storage is unavailable', async () => {

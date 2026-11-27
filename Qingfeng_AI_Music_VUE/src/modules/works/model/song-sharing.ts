@@ -1,4 +1,4 @@
-export interface SharedSong { songId: string; title: string; creator?: string; lyrics: string; hasCover: boolean; expiresAt: string; timelineTitle?: string }
+export interface SharedSong { songId: string; shortCode?: string | null; title: string; creator?: string; lyrics: string; hasCover: boolean; expiresAt: string; timelineTitle?: string }
 
 export function songTimelineTitle(song: SharedSong): string {
   return song.timelineTitle || `青风音乐 Cheerful Music｜${song.title}`
@@ -9,14 +9,24 @@ export interface SongShareStatus {
   views: number
   plays: number
 }
-export function songShareUrl(token: string, origin: string): string {
+export function matchesSongShortCode(token: string, code: unknown): code is string {
+  return typeof code === 'string' && /^[A-Za-z0-9_-]{22}$/.test(code) && token.startsWith(code)
+}
+export function songShareUrl(token: string, origin: string, shortCode?: string | null): string {
   if (!/^[A-Za-z0-9_-]{43}$/.test(token)) throw new Error('分享链接暂时无法创建，请重试。')
   const base = new URL(origin)
   if (!['https:', 'http:'].includes(base.protocol) || base.username || base.password) throw new Error('分享地址无效')
-  return new URL(`/song/${token}`, base.origin).href
+  const path = matchesSongShortCode(token, shortCode) ? `/s/${shortCode}` : `/song/${token}`
+  return new URL(path, base.origin).href
 }
 export type WechatDestination = 'friend' | 'timeline'
 export type WechatSongData = ShareData & { url: string }
+export function isWechatBrowser(userAgent: string): boolean {
+  return /MicroMessenger|WindowsWechat|MacWechat|\bWeChat\//i.test(userAgent)
+}
+export function isWindowsWechatBrowser(userAgent: string): boolean {
+  return isWechatBrowser(userAgent) && /Windows NT|WindowsWechat/i.test(userAgent)
+}
 export interface WechatCard {
   link: string
   imgUrl: string
@@ -57,7 +67,8 @@ export function localShareAddress(link: string): boolean {
   return /^(localhost$|127\.|10\.|192\.168\.|\[?::1\]?$)/.test(host) || /^172\.(1[6-9]|2\d|3[01])\./.test(host)
 }
 export function posterFilename(title: string): string {
-  return (title.replace(/[<>:"/\\|?*\u0000-\u001f]/g, '').trim().slice(0, 70) || 'Cheerful-Music') + '-poster.png'
+  const name = title.replace(/[<>:"/\\|?*\u0000-\u001f]/g, '').trim().slice(0, 70).replace(/[\uD800-\uDFFF]/gu, '')
+  return (name || 'Cheerful-Music') + '-poster.png'
 }
 export function shareCancelled(error: unknown): boolean {
   return !!error && typeof error === 'object' && 'name' in error && error.name === 'AbortError'

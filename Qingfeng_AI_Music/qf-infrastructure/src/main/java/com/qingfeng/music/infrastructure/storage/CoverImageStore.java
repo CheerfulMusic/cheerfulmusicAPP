@@ -2,6 +2,7 @@ package com.qingfeng.music.infrastructure.storage;
 import com.qingfeng.music.cover.application.CoverFileStore;
 import com.qingfeng.music.common.exception.DomainException;
 import com.aliyun.oss.OSS;
+import com.aliyun.oss.OSSException;
 import com.aliyun.oss.model.ObjectMetadata;
 import java.io.*;
 import java.nio.file.*;
@@ -31,9 +32,24 @@ public final class CoverImageStore implements CoverFileStore {
   if(cloud){var metadata=new ObjectMetadata();metadata.setContentType("image/jpeg");metadata.setContentLength(jpeg.length);oss.putObject(bucket,prefix+name,new ByteArrayInputStream(jpeg),metadata);return new Stored("oss:"+prefix+name,jpeg.length);}
   Path temp=Files.createTempFile(root,"cover-",".part");try{Files.write(temp,jpeg);try{Files.move(temp,root.resolve(name),StandardCopyOption.ATOMIC_MOVE);}catch(AtomicMoveNotSupportedException e){Files.move(temp,root.resolve(name));}}finally{Files.deleteIfExists(temp);}return new Stored("local:"+name,jpeg.length);
  }
- public InputStream open(String key)throws IOException{if(key.startsWith("oss:")){cloudKey(key);return oss.getObject(bucket,key.substring(4)).getObjectContent();}Path file=local(key);if(!file.toRealPath().startsWith(root)||!Files.isRegularFile(file,LinkOption.NOFOLLOW_LINKS))throw new FileNotFoundException("封面不存在");return Files.newInputStream(file,LinkOption.NOFOLLOW_LINKS);}
+ public InputStream open(String key)throws IOException{
+  if(key.startsWith("oss:")){
+   cloudKey(key);
+   try{return oss.getObject(bucket,key.substring(4)).getObjectContent();}
+   catch(OSSException failure){
+    if("NoSuchKey".equals(failure.getErrorCode()))throw missing();
+    throw failure;
+   }
+  }
+  Path file=local(key);
+  try{
+   if(!file.toRealPath().startsWith(root)||!Files.isRegularFile(file,LinkOption.NOFOLLOW_LINKS))throw missing();
+   return Files.newInputStream(file,LinkOption.NOFOLLOW_LINKS);
+  }catch(NoSuchFileException absent){throw missing();}
+ }
  public void discard(String key)throws IOException{if(key.startsWith("oss:")){cloudKey(key);oss.deleteObject(bucket,key.substring(4));}else Files.deleteIfExists(local(key));}
  private Path local(String key){if(key==null||!key.matches("local:[0-9a-f-]{36}\\.jpg"))throw invalid();return root.resolve(key.substring(6));}
  private void cloudKey(String key){if(oss==null||!key.matches("oss:"+java.util.regex.Pattern.quote(prefix)+"[0-9a-f-]{36}\\.jpg"))throw invalid();}
+ private DomainException missing(){return new DomainException("COVER_NOT_FOUND","封面不存在");}
  private DomainException invalid(){return new DomainException("INVALID_COVER_IMAGE","请上传有效的JPG或PNG图片，最大5MB、1600万像素");}
 }

@@ -10,7 +10,7 @@ import { usePlayer } from '../../../shared/player/store'
 import NavIcon from '../../../shared/ui/NavIcon.vue'
 import PlaybackIcon from '../../../shared/ui/PlaybackIcon.vue'
 import {
-  discoverSongHref, getDiscoverComments, getDiscoverSong, postDiscoverComment, removeDiscoverComment,
+  discoverSongHref, discoverThumbnailUrl, getDiscoverComments, getDiscoverSong, postDiscoverComment, removeDiscoverComment,
   setDiscoverDescription, setDiscoverLike, type DiscoverComment, type DiscoverSongDetail,
 } from '../api/discover-song'
 import DiscoverSongShare from '../components/DiscoverSongShare.vue'
@@ -47,9 +47,21 @@ const shownLyrics = computed(() => (expanded.value ? lyricLines.value : lyricLin
 const numberFormat = computed(() => new Intl.NumberFormat(locale.value))
 const shareUrl = computed(() => detail.value ? new URL(discoverSongHref(detail.value.release.song),
   siteOrigin).href : '')
+const shareThumbnail = computed(() => detail.value ? discoverThumbnailUrl(detail.value.release.song) : '')
 const sharePath = computed(() => shareUrl.value ? new URL(shareUrl.value).pathname : '')
 const busy = computed(() => Boolean(pending.value) || loadingMore.value)
 const communityAvailable = computed(() => detail.value?.communityAvailable !== false)
+
+function updateShareMetadata(value: DiscoverSongDetail) {
+  if (platform.kind !== 'web' || !track.value) return
+  updateDiscoverSongMetadata(route.path, {
+    title: value.release.song.title,
+    artist: value.release.stageName,
+    description: value.description,
+    image: new URL(track.value.cover, siteOrigin).href,
+    thumbnail: shareThumbnail.value,
+  })
+}
 
 async function load() {
   const request = ++epoch
@@ -69,12 +81,7 @@ async function load() {
     detail.value = result
     if (track.value) player.selectIfEmpty(track.value, result.durationSeconds)
     if (platform.kind !== 'web') document.title = result.release.song.title + ' · Cheerful Music'
-    else if (track.value) updateDiscoverSongMetadata(route.path, {
-      title: result.release.song.title,
-      artist: result.release.stageName,
-      description: result.description,
-      image: new URL(track.value.cover, siteOrigin).href,
-    })
+    else updateShareMetadata(result)
   } catch (error) {
     if (request !== epoch) return
     unavailable.value = error instanceof ApiError && error.status === 404
@@ -199,6 +206,7 @@ function saveDescription() {
     const result = await setDiscoverDescription(value.release.song, descriptionText.value)
     if (request !== epoch) return
     value.description = result.text
+    updateShareMetadata(value)
     editingDescription.value = false
   })
 }
@@ -240,7 +248,7 @@ function saveDescription() {
               <button type="button" class="song-detail-action song-detail-like" :aria-pressed="detail.likes.liked" :disabled="busy || !communityAvailable" @click="toggleLike"><NavIcon name="heart" />{{ t('点赞') }} <span v-if="communityAvailable">{{ numberFormat.format(detail.likes.count) }}</span></button>
               <button type="button" class="song-detail-action" aria-controls="discover-song-comments" @click="jumpToComments"><NavIcon name="comment" />{{ t('评论') }} <span v-if="communityAvailable">{{ numberFormat.format(detail.commentCount) }}</span></button>
               <DiscoverSongShare :key="shareUrl" :url="shareUrl" :name="track.title" :artist="detail.release.stageName"
-                                :cover="track.cover" :cover-version="detail.release.song.coverVersion" />
+                                :description="detail.description" :cover="track.cover" :thumbnail="shareThumbnail" />
               <WechatSelfCard v-if="sharePath" :key="sharePath" :path="sharePath" />
             </div>
           </div>

@@ -86,6 +86,7 @@ final class PublicDiscoverDocuments {
         String image = origin + (song.hasCover() ? media + "/cover" : "/brand/share-default-cover.png");
         String thumbnail = origin + "/api/public" + path(song, false) + "/thumbnail.png"
                 + (song.coverVersion() == null ? "" : "?v=" + song.coverVersion());
+        String shareTitle = SongShareTitle.forTimeline(song.title(), song.stageName());
         String schema = JSON.writeValueAsString(Map.of("@context", "https://schema.org", "@type", "MusicRecording",
                 "name", song.title(), "url", canonical, "image", image, "description", description,
                 "datePublished", song.publishedAt().toString(), "byArtist",
@@ -99,10 +100,13 @@ final class PublicDiscoverDocuments {
                 <meta data-site-seo property="og:type" content="music.song"><meta data-site-seo property="og:site_name" content="%s">
                 <meta data-site-seo property="og:title" content="%s"><meta data-site-seo property="og:description" content="%s">
                 <meta data-site-seo property="og:url" content="%s"><meta data-site-seo property="og:image" content="%s">
+                <meta data-site-seo name="twitter:card" content="summary">
+                <meta data-site-seo name="twitter:title" content="%s"><meta data-site-seo name="twitter:description" content="%s">
+                <meta data-site-seo name="twitter:image" content="%s">
                 <script data-site-seo type="application/ld+json">%s</script>
                 """.formatted(escape(title), escape(description), canonical, origin + path(song, false),
-                origin + path(song, true), SongShareTitle.SITE_NAME, escape(SongShareTitle.forTimeline(song.title(), song.stageName())),
-                escape(description), canonical, escape(thumbnail), schema);
+                origin + path(song, true), SongShareTitle.SITE_NAME, escape(shareTitle), escape(description),
+                canonical, escape(thumbnail), escape(shareTitle), escape(description), escape(thumbnail), schema);
         String cover = song.hasCover() ? "<img src=\"" + media + "/cover\" width=\"240\" height=\"240\" alt=\""
                 + escape(english ? "Cover of " + song.title() : "《" + song.title() + "》的封面") + "\">" : "";
         String body = """

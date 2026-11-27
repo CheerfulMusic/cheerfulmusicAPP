@@ -73,6 +73,21 @@ class GiftWorkflowIntegrationTest {
   assertTrue(page.contains("<title>" + timelineTitle + "</title>"));
   assertTrue(page.contains("property=\"og:title\" content=\"" + timelineTitle + "\""));
   assertTrue(page.contains("property=\"og:site_name\" content=\"青风音乐 Cheerful Music\""));
+  String canonical = "https://cheerfulmusic.com/song/" + songId;
+  String thumbnail = "https://cheerfulmusic.com" + songApi + "/thumbnail.png";
+  assertTrue(page.contains("rel=\"canonical\" href=\"" + canonical + "\""));
+  assertTrue(page.contains("property=\"og:url\" content=\"" + canonical + "\""));
+  assertTrue(page.contains("property=\"og:image\" content=\"" + thumbnail + "\""));
+  assertTrue(page.contains("property=\"og:description\" content=\"我在 Cheerful Music 创作了一首歌曲，邀请你来听听\""));
+  assertTrue(page.contains("name=\"twitter:card\" content=\"summary\""));
+  assertTrue(page.contains("name=\"twitter:image\" content=\"" + thumbnail + "\""));
+  var english = call(null, "GET", "/song/" + songId + "?lang=en&from=example", null);
+  assertEquals(200, english.statusCode());
+  String englishPage = text(english);
+  assertTrue(englishPage.contains("rel=\"canonical\" href=\"" + canonical + "?lang=en\""));
+  assertTrue(englishPage.contains("property=\"og:url\" content=\"" + canonical + "?lang=en\""));
+  assertTrue(englishPage.contains("property=\"og:title\" content=\"给你的歌\""));
+  assertTrue(englishPage.contains("name=\"twitter:description\" content=\"Come listen to “给你的歌” on Cheerful Music.\""));
   var anonymousCard = json(call(a,"GET","/api/app/works/"+w+"/shares/"+asset,null),200).path("card");
   assertEquals(timelineTitle,anonymousCard.path("timelineTitle").asString());
   assertEquals("匿名创作者",anonymousCard.path("creator").asString());
@@ -126,6 +141,9 @@ class GiftWorkflowIntegrationTest {
   jdbc.update("INSERT INTO artist_profile(creator_id,public_id,stage_name,tagline,published) VALUES(?,?,?,'',TRUE)",ownerId,artist,"公开艺名");
   String namedTitle = "青风音乐 Cheerful Music｜给你的歌 · 公开艺名";
   assertTrue(text(call(null,"GET","/song/"+id,null)).contains("property=\"og:title\" content=\"" + namedTitle + "\""));
+  String namedEnglish = text(call(null, "GET", "/song/" + id + "?lang=en", null));
+  assertTrue(namedEnglish.contains("property=\"og:title\" content=\"给你的歌 · 公开艺名\""));
+  assertTrue(namedEnglish.contains("property=\"og:description\" content=\"Come listen to “给你的歌” by 公开艺名 on Cheerful Music.\""));
   var namedCard = json(call(owner,"GET",api+"/shares/"+asset,null),200).path("card");
   assertEquals(namedTitle,namedCard.path("timelineTitle").asString());
   assertEquals("公开艺名",namedCard.path("creator").asString());
@@ -288,8 +306,12 @@ private String albumRelease(Session s,String work,String title)throws Exception 
   assertEquals(1, beforePlay.path("views").asLong());
   assertEquals(0, beforePlay.path("plays").asLong());
   assertEquals(204, call(null, "POST", publicA + "/play", null).statusCode());
+  assertEquals(1, json(call(null, "GET", publicA + "/community", null), 200).path("plays").asLong());
+  jdbc.update("UPDATE share_link SET created_at=? WHERE id=?", java.sql.Timestamp.from(Instant.now().minusSeconds(1)), grantA.path("id").asString());
   assertEquals(idA, json(call(owner, "POST", api + "/shares", consentA), 200).path("songId").asString());
   assertEquals(1, json(call(owner, "GET", stateA, null), 200).path("plays").asLong());
+  assertEquals(1, json(call(null, "GET", publicA + "/community", null), 200).path("plays").asLong());
+  assertEquals(0, json(call(null, "GET", "/api/songs/" + idB + "/community", null), 200).path("plays").asLong());
 
   assertEquals(404, call(other, "DELETE", stateA, null).statusCode());
   assertEquals(200, call(owner, "DELETE", stateA, null).statusCode());
@@ -298,6 +320,9 @@ private String albumRelease(Session s,String work,String title)throws Exception 
   assertTrue(revoked.path("card").isNull());
   assertEquals(200, call(null, "GET", giftPage, null).statusCode());
   assertEquals(404, call(null, "GET", "/song/" + idA, null).statusCode());
+  var revokedEnglish = call(null, "GET", "/song/" + idA + "?lang=en", null);
+  assertEquals(404, revokedEnglish.statusCode());
+  assertFalse(text(revokedEnglish).contains("og:title"));
   for (String path : java.util.List.of("/public", "/audio", "/cover", "/thumbnail.png"))
    assertEquals(404, call(null, "GET", publicA + path, null).statusCode(), path);
   assertEquals(404, call(null, "POST", publicA + "/play", null).statusCode());
@@ -306,10 +331,144 @@ private String albumRelease(Session s,String work,String title)throws Exception 
   jdbc.update("UPDATE share_link SET expires_at=? WHERE public_song_id=?",java.sql.Timestamp.from(Instant.now().minusSeconds(5)),idB);
   assertEquals("EXPIRED", json(call(owner, "GET", stateB, null), 200).path("status").asString());
   assertEquals(404, call(null, "GET", "/api/songs/" + idB + "/audio", null).statusCode());
+  var expiredEnglish = call(null, "GET", "/song/" + idB + "?lang=en", null);
+  assertEquals(404, expiredEnglish.statusCode());
+  assertFalse(text(expiredEnglish).contains("og:title"));
+  assertEquals(404, call(null, "HEAD", "/song/" + idB + "/x-player?lang=en", null).statusCode());
   assertEquals(idB, json(call(owner, "POST", api + "/shares", consentB), 200).path("songId").asString());
   assertEquals(200, call(owner, "DELETE", api + "?acknowledgeCompleted=true", null).statusCode());
   assertEquals(404, call(null, "GET", "/song/" + idB, null).statusCode());
   assertEquals(404, call(null, "GET", "/api/songs/" + idB + "/audio", null).statusCode());
+ }
+
+ @Test void xCardUsesAnExplicitPlayerVariantAndTheExistingPublicGrant() throws Exception {
+  var owner = session();
+  String work = work(owner), revision = lyrics(owner, work, "听见我的歌");
+  String api = "/api/app/works/" + work;
+  assertEquals(200, call(owner, "POST", api + "/lyrics/" + revision + "/confirm", "{}").statusCode());
+  String asset = field(text(upload(owner, work, wav())), "id");
+  String consent = "{\"assetId\":\"" + asset + "\",\"revisionId\":\"" + revision + "\",\"publicSong\":true}";
+  String id = json(call(owner, "POST", api + "/shares", consent), 200).path("songId").asString();
+  String song = "/song/" + id, media = "/api/songs/" + id, status = api + "/shares/" + asset;
+  String origin = "https://cheerfulmusic.com";
+
+  var ordinary = call(null, "GET", song + "?lang=en", null);
+  assertEquals(200, ordinary.statusCode());
+  assertEquals("DENY", ordinary.headers().firstValue("X-Frame-Options").orElseThrow());
+  assertTrue(text(ordinary).contains("name=\"twitter:card\" content=\"summary\""));
+  assertFalse(text(ordinary).contains("name=\"twitter:player\""));
+
+  var xCard = call(null, "GET", song + "?card=x&lang=en&tracking=example", null);
+  assertEquals(200, xCard.statusCode());
+  String markup = text(xCard);
+  assertTrue(markup.contains("name=\"twitter:card\" content=\"player\""));
+  assertTrue(markup.contains("name=\"twitter:player\" content=\"" + origin + song + "/x-player?lang=en\""));
+  assertTrue(markup.contains("name=\"twitter:player:width\" content=\"480\""));
+  assertTrue(markup.contains("name=\"twitter:player:height\" content=\"270\""));
+  assertTrue(markup.contains("name=\"twitter:image\" content=\"" + origin + media + "/thumbnail.png?card=x\""));
+  assertTrue(markup.contains("rel=\"canonical\" href=\"" + origin + song + "?lang=en&amp;card=x\""));
+  assertTrue(markup.contains("data-wechat-url=\"" + origin + song + "\""));
+  assertFalse(markup.contains("name=\"twitter:site\""));
+
+  var thumbnail = call(null, "GET", media + "/thumbnail.png?card=x", null);
+  assertEquals(200, thumbnail.statusCode());
+  var image = javax.imageio.ImageIO.read(new ByteArrayInputStream(thumbnail.body()));
+  assertEquals(480, image.getWidth());
+  assertEquals(270, image.getHeight());
+
+  long visits = json(call(owner, "GET", status, null), 200).path("views").asLong();
+  for (String method : java.util.List.of("GET", "HEAD")) {
+   var embed = call(null, method, song + "/x-player?lang=en", null);
+   assertEquals(200, embed.statusCode(), method);
+   assertEquals("no-store", embed.headers().firstValue("Cache-Control").orElseThrow());
+   assertTrue(embed.headers().firstValue("Content-Security-Policy").orElseThrow().contains("frame-ancestors https://x.com"));
+   assertTrue(embed.headers().firstValue("X-Frame-Options").isEmpty());
+   if (method.equals("GET")) {
+    String player = text(embed);
+    assertTrue(player.contains("<html lang=\"en\">"));
+    assertTrue(player.contains("controls playsinline preload=\"none\" src=\"" + media + "/audio\""));
+    assertTrue(player.contains("data-play-url=\"" + media + "/play\""));
+    assertTrue(player.contains("href=\"" + song + "?lang=en\""));
+    assertFalse(player.contains("autoplay"));
+   } else assertEquals(0, embed.body().length);
+  }
+  assertTrue(text(call(null, "GET", song + "/x-player", null)).contains("<html lang=\"zh-CN\">"));
+  var afterEmbed = json(call(owner, "GET", status, null), 200);
+  assertEquals(visits, afterEmbed.path("views").asLong());
+  assertEquals(0, afterEmbed.path("plays").asLong());
+
+  assertEquals(200, call(owner, "DELETE", status, null).statusCode());
+  var revoked = call(null, "GET", song + "/x-player?lang=en", null);
+  assertEquals(404, revoked.statusCode());
+  assertEquals("DENY", revoked.headers().firstValue("X-Frame-Options").orElseThrow());
+  assertEquals(404, call(null, "GET", media + "/thumbnail.png?card=x", null).statusCode());
+ }
+
+ @Test void shortSongLinksRenderTheExistingAuthorizedSong() throws Exception {
+  var owner = session();
+  String work = work(owner), revision = lyrics(owner, work, "给朋友的短链接");
+  String api = "/api/app/works/" + work;
+  assertEquals(200, call(owner, "POST", api + "/lyrics/" + revision + "/confirm", "{}").statusCode());
+  String asset = field(text(upload(owner, work, wav())), "id");
+  String consent = "{\"assetId\":\"" + asset + "\",\"revisionId\":\"" + revision + "\",\"publicSong\":true}";
+  String id = json(call(owner, "POST", api + "/shares", consent), 200).path("songId").asString();
+  assertEquals(id, json(call(owner, "POST", api + "/shares", consent), 200).path("songId").asString());
+  String code = id.substring(0, 22), path = "/s/" + code, status = api + "/shares/" + asset;
+  String url = "https://cheerfulmusic.com" + path;
+  var initial = json(call(owner, "GET", status, null), 200);
+  assertEquals(code, initial.path("card").path("shortCode").asString());
+  assertEquals(id, initial.path("card").path("songId").asString());
+  var head = call(null, "HEAD", path + "?card=x&lang=en", null);
+  assertEquals(200, head.statusCode());
+  assertEquals(0, head.body().length);
+  assertEquals("no-store", head.headers().firstValue("Cache-Control").orElseThrow());
+  var normal = call(null, "GET", path, null);
+  assertEquals(200, normal.statusCode());
+  assertEquals("DENY", normal.headers().firstValue("X-Frame-Options").orElseThrow());
+  assertTrue(text(normal).contains("rel=\"canonical\" href=\"" + url + "\""));
+  assertTrue(text(normal).contains("src=\"/api/songs/" + id + "/audio\""));
+  assertTrue(text(normal).contains("name=\"twitter:card\" content=\"summary\""));
+  var playerCard = call(null, "GET", path + "?card=x&lang=en&from=example", null);
+  assertEquals(200, playerCard.statusCode());
+  String markup = text(playerCard);
+  assertTrue(markup.contains("rel=\"canonical\" href=\"" + url + "?lang=en&amp;card=x\""));
+  assertTrue(markup.contains("property=\"og:url\" content=\"" + url + "?lang=en&amp;card=x\""));
+  assertTrue(markup.contains("data-wechat-url=\"" + url + "\""));
+  assertTrue(markup.contains("value=\"" + url + "?lang=en\""));
+  assertTrue(markup.contains("name=\"twitter:card\" content=\"player\""));
+  assertTrue(markup.contains("name=\"twitter:player\" content=\"https://cheerfulmusic.com/song/" + id + "/x-player?lang=en\""));
+  assertEquals(initial.path("views").asLong() + 2, json(call(owner, "GET", status, null), 200).path("views").asLong());
+  assertEquals(200, call(null, "HEAD", "/song/" + id, null).statusCode());
+  assertEquals(404, call(null, "GET", "/s/" + "A".repeat(22), null).statusCode());
+
+  jdbc.update("UPDATE share_link SET expires_at=? WHERE public_song_id=?",
+    java.sql.Timestamp.from(Instant.now().minusSeconds(5)), id);
+  assertEquals(404, call(null, "GET", path, null).statusCode());
+  assertEquals(id, json(call(owner, "POST", api + "/shares", consent), 200).path("songId").asString());
+  assertEquals(200, call(null, "HEAD", path, null).statusCode());
+  assertEquals(200, call(owner, "DELETE", status, null).statusCode());
+  assertEquals(404, call(null, "GET", path, null).statusCode());
+ }
+
+ @Test void ambiguityAcrossHistoricSharesDisablesTheShortLink() throws Exception {
+  var owner = session();
+  String work = work(owner), revision = lyrics(owner, work, "处理有歧义的短链接");
+  String api = "/api/app/works/" + work;
+  assertEquals(200, call(owner, "POST", api + "/lyrics/" + revision + "/confirm", "{}").statusCode());
+  String asset = field(text(upload(owner, work, wav())), "id");
+  String consent = "{\"assetId\":\"" + asset + "\",\"revisionId\":\"" + revision + "\",\"publicSong\":true}";
+  var older = json(call(owner, "POST", api + "/shares", consent), 200);
+  String id = json(call(owner, "POST", api + "/shares", consent), 200).path("songId").asString();
+  String code = id.substring(0, 22);
+  String conflict = code + (id.charAt(22) == 'A' ? 'B' : 'A') + id.substring(23);
+  jdbc.update("UPDATE share_link SET public_song_id=?,active=FALSE WHERE id=?", conflict, older.path("id").asString());
+
+  var status = json(call(owner, "GET", api + "/shares/" + asset, null), 200);
+  assertEquals(id, status.path("card").path("songId").asString());
+  var shortCode = status.path("card").path("shortCode");
+  assertTrue(shortCode.isNull() || shortCode.isMissingNode());
+  assertEquals(404, call(null, "GET", "/s/" + code, null).statusCode());
+  assertEquals(200, call(null, "HEAD", "/song/" + id, null).statusCode());
  }
 
  @Test void uploadedCoverRemainsPrivateUntilSharedAndGiftRevocationClosesItsRoute()throws Exception{
@@ -319,8 +478,53 @@ private String albumRelease(Session s,String work,String title)throws Exception 
   var uploaded=a.client().send(HttpRequest.newBuilder(URI.create("http://127.0.0.1:"+port+"/api/app/works/"+w+"/covers")).header("X-XSRF-TOKEN",a.csrf()).header("Content-Type","multipart/form-data; boundary="+boundary).POST(HttpRequest.BodyPublishers.ofByteArray(body)).build(),HttpResponse.BodyHandlers.ofByteArray());assertEquals(200,uploaded.statusCode(),text(uploaded));String cover=field(text(uploaded),"id");
   assertEquals(404,call(other,"GET","/api/app/works/"+w+"/covers/"+cover,null).statusCode());assertEquals(401,call(null,"GET","/api/app/works/"+w+"/covers/"+cover,null).statusCode());assertEquals(200,call(a,"PUT","/api/app/works/"+w+"/covers/selection","{\"coverId\":\""+cover+"\",\"expectedVersion\":0}").statusCode());
   String token=share(a,w,r,audio),publicPath="/api/public/gifts/"+token+"/cover";var publicCover=call(null,"GET",publicPath,null);assertEquals(200,publicCover.statusCode());assertEquals("image/jpeg",publicCover.headers().firstValue("Content-Type").orElse(""));assertEquals("nosniff",publicCover.headers().firstValue("X-Content-Type-Options").orElse(""));assertEquals(1024,javax.imageio.ImageIO.read(new java.io.ByteArrayInputStream(publicCover.body())).getWidth());
+  String request = "{\"assetId\":\"" + audio + "\",\"revisionId\":\"" + r + "\",\"publicSong\":true}";
+  var published = json(call(a, "POST", "/api/app/works/" + w + "/shares", request), 200);
+  String songApi = "/api/songs/" + published.path("songId").asString();
+  assertArrayEquals(publicCover.body(), call(null, "GET", songApi + "/cover", null).body());
+  var thumbnail = call(null, "GET", songApi + "/thumbnail.png", null);
+  assertEquals(200, thumbnail.statusCode());
+  assertEquals(240, javax.imageio.ImageIO.read(new java.io.ByteArrayInputStream(thumbnail.body())).getWidth());
+
+  jdbc.update("UPDATE cover_asset SET storage_key=? WHERE id=?", "local:" + UUID.randomUUID() + ".jpg", cover);
+  assertEquals(404, call(null, "GET", songApi + "/cover", null).statusCode());
+  assertEquals(404, call(null, "HEAD", songApi + "/cover", null).statusCode());
+  assertEquals(404, call(null, "GET", publicPath, null).statusCode());
+  var fallback = call(null, "GET", songApi + "/thumbnail.png", null);
+  assertEquals(200, fallback.statusCode());
+  assertEquals("image/png", fallback.headers().firstValue("Content-Type").orElse(""));
+  assertArrayEquals(new org.springframework.core.io.ClassPathResource("static/brand/share-default-cover.png").getContentAsByteArray(), fallback.body());
   call(a,"DELETE","/api/app/works/"+w+"/shares",null);assertEquals(404,call(null,"GET",publicPath,null).statusCode());
+  assertEquals(404, call(null, "GET", songApi + "/thumbnail.png", null).statusCode());
  }
+
+ @Test void deletedVersionCannotCreateOrAdvertisePublicPreview() throws Exception {
+  var owner = session();
+  String work = work(owner), revision = lyrics(owner, work, "两首版本");
+  String api = "/api/app/works/" + work;
+  assertEquals(200, call(owner, "POST", api + "/lyrics/" + revision + "/confirm", "{}").statusCode());
+  String firstAsset = json(upload(owner, work, wav()), 200).path("id").asString();
+  byte[] second = wav();
+  second[44] = 2;
+  String asset = field(text(upload(owner, work, second)), "id");
+  String selectionApi = api + "/audio/selection";
+  long selectionVersion = json(call(owner, "GET", selectionApi, null), 200).path("version").asLong();
+  String selectFirst = "{\"assetId\":\"" + firstAsset + "\",\"version\":" + selectionVersion + "}";
+  assertEquals(200, call(owner, "PUT", selectionApi, selectFirst).statusCode());
+  String consent = "{\"assetId\":\"" + asset + "\",\"revisionId\":\"" + revision + "\",\"publicSong\":true}";
+  var created = json(call(owner, "POST", api + "/shares", consent), 200);
+  String songId = created.path("songId").asString();
+  assertEquals("SHAREABLE", json(call(owner, "GET", api + "/shares/" + asset, null), 200).path("status").asString());
+
+  assertEquals(200, call(owner, "DELETE", api + "/audio/" + asset, null).statusCode());
+  assertEquals(404, call(owner, "GET", api + "/shares/" + asset, null).statusCode());
+  assertEquals(404, call(owner, "POST", api + "/shares", consent).statusCode());
+  assertEquals(404, call(null, "GET", "/song/" + songId, null).statusCode());
+  assertEquals(404, call(null, "GET", "/api/songs/" + songId + "/audio", null).statusCode());
+  assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM share_link WHERE work_id=? AND asset_id=?", Integer.class, work, asset));
+  assertArrayEquals(second, call(null, "GET", "/api/public/gifts/" + created.path("token").asString() + "/audio", null).body());
+ }
+
  @Test void eachGeneratedCandidateSharesItsOwnAudioAndTheOriginalLyrics() throws Exception {
   var owner = session();
   String workId = work(owner);

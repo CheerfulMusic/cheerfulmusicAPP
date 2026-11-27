@@ -5,25 +5,40 @@ import { describe, expect, it, vi } from 'vitest'
 
 const script = readFileSync('public/brand/song-share.js', 'utf8')
 const player = readFileSync('public/brand/song-player.js', 'utf8')
+const community = readFileSync('public/brand/song-community.js', 'utf8')
 const wechatCard = readFileSync('public/brand/wechat-card.js', 'utf8')
 const handoff = readFileSync('public/brand/wechat-handoff.js', 'utf8')
 const template = readFileSync('../Qingfeng_AI_Music/qf-server/src/main/resources/song.html', 'utf8')
 const description = '我在 Cheerful Music 创作了一首歌曲，邀请你来听听'
 
-function openSong(id: string, inWechat = false, agent = 'WebTest', canShare = true) {
+function openSong(id: string, inWechat = false, agent = 'WebTest', canShare = true, englishShare = false,
+  { shortCode, xCard = false }: { shortCode?: string; xCard?: boolean } = {}) {
   const site = 'https://cheerfulmusic.com'
-  const url = site + '/song/' + id
+  const url = site + (shortCode ? '/s/' + shortCode : '/song/' + id)
   const api = site + '/api/songs/' + id
   const fields: Record<string, string> = {
     title: '歌曲 ' + id, creator: '青风', url, image: api + '/cover',
     siteName: '青风音乐 Cheerful Music', timelineTitle: '青风音乐 Cheerful Music｜歌曲 ' + id + ' · 青风',
     lyricLines: '<p>第一句</p>', duration: '', durationLabel: '–:––', artistId: '',
-    thumbnail: api + '/thumbnail.png', audio: api + '/audio', description,
+    thumbnail: api + '/thumbnail.png', audio: api + '/audio',
+    wechatUrl: url, wechatDescription: description,
+    shareUrl: englishShare ? url + '?lang=en' : url,
+    shareLocale: englishShare ? 'en_US' : 'zh_CN',
+    description: englishShare ? 'Come listen to this song on Cheerful Music.' : description,
   }
+  fields.shareSiteName = englishShare ? 'Cheerful Music' : fields.siteName
+  fields.shareTitle = englishShare ? fields.title + ' · ' + fields.creator : fields.timelineTitle
+  fields.canonical = fields.shareUrl + (xCard ? (englishShare ? '&card=x' : '?card=x') : '')
+  fields.twitterCard = 'summary'
+  fields.twitterImage = fields.thumbnail
+  fields.xPlayerMeta = ''
   const page = new DOMParser().parseFromString(template.replace(/\{\{(\w+)}}/g, (_, key) => fields[key]), 'text/html')
   document.head.innerHTML = page.head.innerHTML
   document.body.innerHTML = page.body.innerHTML
-  const location = new URL(url + '?from=timeline&isappinstalled=0#player')
+  const location = new URL(fields.canonical)
+  location.searchParams.set('from', 'timeline')
+  location.searchParams.set('isappinstalled', '0')
+  location.hash = 'player'
   const config = { appId: 'fixture', timestamp: 9, nonceStr: 'nonce', signature: 'signature' }
   const fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => config })
   const navigator = {
@@ -37,6 +52,7 @@ function openSong(id: string, inWechat = false, agent = 'WebTest', canShare = tr
   const globals = {
     window: { location: browserLocation, wx, addEventListener: vi.fn() },
     document, navigator, location: browserLocation, URL, fetch, wx, console: { warn: vi.fn() },
+    setTimeout: vi.fn((_handler: () => void, _milliseconds: number) => 1), clearTimeout: vi.fn(),
   }
   runInNewContext(handoff, globals)
   runInNewContext(wechatCard, globals)
@@ -209,6 +225,12 @@ describe('public song listener page', () => {
       expect(button('timeline').getAttribute('aria-pressed')).toBe('true')
       expect(button('friend').getAttribute('aria-pressed')).toBe('false')
       expect((document.getElementById('more-share') as HTMLDetailsElement).open).toBe(false)
+      const feedback = document.getElementById('wechat-feedback')
+      expect(feedback?.textContent).toContain('正在准备歌曲卡片')
+      friend.success()
+      expect(feedback?.textContent).toContain('正在准备歌曲卡片')
+      timeline.success()
+      expect(feedback?.textContent).toBe('')
       wx.error.mock.calls[0][0]({ errMsg: 'config:invalid signature' })
       timeline.fail({ errMsg: 'updateTimelineShareData:permission denied' })
       expect(fetch.mock.calls.slice(1).map(([url]) => url)).toEqual([
@@ -217,8 +239,61 @@ describe('public song listener page', () => {
     }
   })
 
+  it('uses the WeChat title and link when an English preview is opened in WeChat', async () => {
+    const { fields, location, wx, fetch } = openSong('song-a', true, 'WebTest', true, true)
+    const sdk = document.querySelector<HTMLScriptElement>('script[src*="jweixin"]')!
+    await sdk.onload?.call(sdk, new Event('load'))
+    expect(fetch).toHaveBeenCalledWith('/api/wechat/jssdk-config?url=' + encodeURIComponent(location.href.split('#')[0]))
+    wx.ready.mock.calls[0][0]()
+    expect(wx.updateAppMessageShareData).toHaveBeenCalledWith(expect.objectContaining({
+      title: fields.shareTitle, link: fields.url, imgUrl: fields.thumbnail, desc: description,
+    }))
+    expect(wx.updateTimelineShareData).toHaveBeenCalledWith(expect.objectContaining({
+      title: fields.timelineTitle, link: fields.url, imgUrl: fields.thumbnail,
+    }))
+    expect(document.querySelector<HTMLMetaElement>('meta[property="og:url"]')?.content).toBe(fields.shareUrl)
+  })
+
+  it('reports configuration failure when a WeChat card acknowledgment times out', async () => {
+    const { fetch, globals, wx } = openSong('song-timeout', true)
+    const sdk = document.querySelector<HTMLScriptElement>('script[src*="jweixin"]')!
+    await sdk.onload?.call(sdk, new Event('load'))
+    wx.ready.mock.calls[0][0]()
+    clickDestination('timeline')
+    const feedback = document.getElementById('wechat-feedback')!
+    wx.updateAppMessageShareData.mock.calls[0][0].success()
+    expect(feedback.textContent).toContain('正在准备歌曲卡片')
+    const [deadline, ms] = globals.setTimeout.mock.calls[0]
+    expect(ms).toBe(12000)
+    deadline()
+    expect(feedback.textContent).toContain('歌曲卡片暂时无法准备')
+    expect(fetch).toHaveBeenCalledWith('/api/wechat/jssdk-error?reason=CONFIG_FAILED', expect.anything())
+    wx.updateTimelineShareData.mock.calls[0][0].success()
+    expect(feedback.textContent).toContain('歌曲卡片暂时无法准备')
+  })
+
+  it('disposes a WeChat card without accepting callbacks from the previous song', async () => {
+    const { fields, globals, wx, fetch } = openSong('song-cleanup')
+    const update = vi.fn()
+    const bridge = (globals.window as unknown as Window).cheerfulWechatCard!
+    const cleanup = bridge.prepare({ link: fields.url, imgUrl: fields.thumbnail,
+      friendTitle: fields.title, timelineTitle: fields.timelineTitle, description }, update)
+    const sdk = document.querySelector<HTMLScriptElement>('script[src*="jweixin"]')!
+    await sdk.onload?.call(sdk, new Event('load'))
+    wx.ready.mock.calls[0][0]()
+    cleanup()
+    expect(sdk.isConnected).toBe(false)
+    expect(globals.clearTimeout).toHaveBeenCalledWith(1)
+    wx.updateAppMessageShareData.mock.calls[0][0].success()
+    wx.updateTimelineShareData.mock.calls[0][0].success()
+    globals.setTimeout.mock.calls[0][0]()
+    expect(update).not.toHaveBeenCalled()
+    expect(fetch).toHaveBeenCalledTimes(1)
+  })
+
   it('offers system sharing and copying outside WeChat, with a manual fallback', async () => {
     const { fields, navigator } = openSong('song-c')
+    document.getElementById('share-sheet')!.setAttribute('open', '')
     expect(document.querySelector('script[src*="jweixin"]')).toBeNull()
     expect(document.getElementById('wechat-actions')?.hidden).toBe(false)
     expect(button('copy').closest('details')?.open).toBe(false)
@@ -235,5 +310,54 @@ describe('public song listener page', () => {
     button('copy').click()
     await vi.waitFor(() => expect(document.getElementById('manual')?.hidden).toBe(false))
     expect((document.getElementById('manual') as HTMLInputElement).value).toBe(fields.url)
+  })
+
+  it('copies the English preview address and retains a selected fallback if the clipboard is denied', async () => {
+    const { fields, navigator } = openSong('song-c', false, 'WebTest', true, true)
+    document.getElementById('share-sheet')!.setAttribute('open', '')
+    navigator.clipboard.writeText.mockRejectedValueOnce(new Error('clipboard unavailable'))
+    button('copy').click()
+    const manual = document.getElementById('manual') as HTMLInputElement
+    await vi.waitFor(() => expect(document.getElementById('status')?.textContent).toBe('Select and copy the link manually.'))
+    expect(manual.hidden).toBe(false)
+    expect(manual.value).toBe(fields.shareUrl)
+    expect(manual.selectionEnd! - manual.selectionStart!).toBe(manual.value.length)
+    button('copy').click()
+    await vi.waitFor(() => expect(document.getElementById('status')?.textContent).toBe('Link copied.'))
+    expect(navigator.clipboard.writeText).toHaveBeenLastCalledWith(fields.shareUrl)
+    expect(manual.hidden).toBe(true)
+  })
+
+  it('copies and shares the localized short song link from an X card preview', () => {
+    const id = 'X'.repeat(43)
+    const { fields, navigator } = openSong(id, false, 'WebTest', true, true, { shortCode: id.slice(0, 22), xCard: true })
+    document.getElementById('share-sheet')!.setAttribute('open', '')
+    button('system-share').click()
+    expect(navigator.share).toHaveBeenCalledWith({ title: fields.shareTitle, url: fields.shareUrl, text: fields.description })
+    button('copy').click()
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith(fields.shareUrl)
+    expect(document.querySelector<HTMLMetaElement>('meta[property="og:url"]')?.content).toBe(fields.shareUrl + '&card=x')
+  })
+
+  it('prepares a WeChat card pointing to the short page and full-song cover', async () => {
+    const id = 'X'.repeat(43)
+    const { fields, location, wx, fetch } = openSong(id, true, 'WebTest', true, true, { shortCode: id.slice(0, 22) })
+    const sdk = document.querySelector<HTMLScriptElement>('script[src*="jweixin"]')!
+    await sdk.onload?.call(sdk, new Event('load'))
+    expect(fetch).toHaveBeenCalledWith('/api/wechat/jssdk-config?url=' + encodeURIComponent(location.href.split('#')[0]))
+    wx.ready.mock.calls[0][0]()
+    expect(wx.updateAppMessageShareData).toHaveBeenCalledWith(expect.objectContaining({
+      link: fields.url, imgUrl: fields.thumbnail,
+    }))
+  })
+
+  it('loads interactions by the complete song ID from a short page', () => {
+    const id = 'X'.repeat(43)
+    const { globals } = openSong(id, false, 'WebTest', true, true, { shortCode: id.slice(0, 22) })
+    const audio = document.getElementById('audio')!
+    audio.setAttribute('src', '/api/songs/' + id + '/audio')
+    const fetch = vi.fn(() => new Promise(() => {}))
+    runInNewContext(community, { ...globals, fetch })
+    expect(fetch).toHaveBeenCalledExactlyOnceWith('/api/songs/' + id + '/community?sort=hot&page=0', { cache: 'no-store' })
   })
 })

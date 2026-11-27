@@ -70,7 +70,7 @@ class WechatSelfCardHttpTest {
         }
         @Bean @Primary PublicSongAccess shareFixture() {
             var access = mock(PublicSongAccess.class);
-            when(access.require(SONG)).thenReturn(new PublicSongAccess.Grant("id", "测试歌曲", "测试歌手", "w", "a", "c", "owner", null, 0));
+            when(access.require(SONG)).thenReturn(new PublicSongAccess.Grant("id", "测试歌曲", "测试歌手", "w", "a", "c", "owner", null));
             return access;
         }
     }
