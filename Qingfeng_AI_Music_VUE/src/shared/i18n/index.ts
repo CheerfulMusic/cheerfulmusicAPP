@@ -42,7 +42,9 @@ function updateDocument() {
   const landingPage = sitePage(pagePath, selected.value)
   const pageLanguage = landingPage?.guide ? landingPage.language : selected.value
   document.documentElement.lang = pageLanguage
-  if (platform.kind === 'web') document.title = homeSeo[pageLanguage].tabTitle
+  if (platform.kind === 'web') {
+    document.title = landingPage?.path === '/' ? landingPage.title : homeSeo[pageLanguage].tabTitle
+  }
   const songMatch = pagePath.match(discoverSongPath)
   const matchingServerDocument = songMatch && discoverSong === undefined &&
     document.head.querySelector('link[data-site-seo][rel="canonical"]')?.getAttribute('href') ===

@@ -17,6 +17,7 @@ const busy = computed(() => checking.value || submitting.value)
 const actionRequiresInvite = ref(false)
 const accessible = computed(() => admitted.value || (props.publicAccess && !actionRequiresInvite.value))
 const showPreview = computed(() => props.publicPreview && !accessible.value)
+const englishWebHome = computed(() => platform.kind === 'web' && locale.value === 'en' && Boolean(props.homeBrand) && !props.discoverEntry)
 const entryCopy = computed(() => {
   if (props.discoverEntry) return discoverSeo[locale.value]
   if (props.homeBrand) return homeSeo[locale.value]
@@ -109,13 +110,15 @@ onBeforeUnmount(() => { disposed = true; clearTimeout(expiryTimer); window.remov
         <p class="beta-access-headline">{{ homeSeo[locale].tagline }}</p>
       </template>
       <template v-else>
-        <p class="beta-access-brand">{{ homeBrand ?? siteName }}</p>
+        <p class="beta-access-brand">{{ englishWebHome ? homeSeo.en.searchName : homeBrand ?? siteName }}</p>
         <h1 id="beta-access-title">{{ entryCopy?.heading ?? t('让灵感，先在这里发声。') }}</h1>
       </template>
       <p id="beta-access-description" class="beta-access-intro">
-        <span v-if="entryCopy && homeBrand && !discoverEntry" data-nosnippet>{{ entryCopy.description }}</span>
+        <template v-if="englishWebHome">{{ homeSeo.en.searchDescription }}</template>
+        <span v-else-if="entryCopy && homeBrand && !discoverEntry" data-nosnippet>{{ entryCopy.description }}</span>
         <template v-else>{{ entryCopy?.description ?? t('青风音乐正在内测，输入邀请码即可开始体验。') }}</template>
       </p>
+      <p v-if="englishWebHome" class="beta-access-intro"><span data-nosnippet>{{ homeSeo.en.description }}</span></p>
       <div data-nosnippet>
         <p v-if="homeBrand" class="beta-access-prompt">{{ homeSeo[locale].invitePrompt }}</p>
         <p v-if="checking" class="beta-access-checking" role="status">{{ t('正在验证内测资格…') }}</p>

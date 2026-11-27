@@ -61,6 +61,7 @@
 .home-light-shell .creator-title-art { display:block; height:1em; width:auto; max-width:100%; }
 .home-light-shell .creator-title-text { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }
 .home-light-shell .home-creator-hero .creator-tagline { display:block; font-size:22px; line-height:1.4; font-weight:400; color:#f93822; letter-spacing:0; margin-top:22px; }
+.home-light-shell .home-creator-hero .creator-tagline.english-creator-brand { margin:0 0 .45em; }
 .home-light-shell .home-creator-hero .bilingual-description { font-size:16px; line-height:1.85; max-width:690px; margin:22px 0 0; color:#615652; }
 .home-light-shell .bilingual-description .description-translation { font-size:16px; line-height:1.7; color:#796b65; margin-top:10px; width:520px; max-width:calc(100vw - 40px); }
 .home-light-shell .description-translation > span { display:inline-block; white-space:nowrap; }

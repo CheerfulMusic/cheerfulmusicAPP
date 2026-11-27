@@ -70,9 +70,11 @@ it('opens the localized homepage invite when the server requires an invitation',
   setLocale('en')
   await nextTick()
   expect(host.querySelector('h1')?.textContent).toBe('Everyone Can Be a Creator')
-  expect(host.querySelector('.beta-access-brand')?.textContent).toBe('青妙Ai')
-  expect(host.querySelector('.beta-access-intro')?.textContent).toBe(homeSeo.en.description)
+  expect(host.querySelector('.beta-access-brand')?.textContent).toBe('cheerfulmusic Ai')
+  expect(host.querySelector('.beta-access-intro')?.textContent).toBe(homeSeo.en.searchDescription)
+  expect(host.querySelector('.beta-access-intro')?.closest('[data-nosnippet]')).toBeNull()
   expect(host.querySelector('.beta-access-intro > span[data-nosnippet]')?.textContent).toBe(homeSeo.en.description)
+  expect(host.textContent?.match(/cheerfulmusicai/gi)).toHaveLength(1)
   await flushPromises()
   expect(host.querySelector('[data-nosnippet] #beta-invite-code')).not.toBeNull()
  } finally { app.unmount(); host.remove(); setLocale(previous); vi.restoreAllMocks() }

@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { globSync, readFileSync } from 'node:fs'
 import { english } from '../src/shared/i18n/en'
-import { siteOrigin } from '../src/shared/i18n/home-seo'
+import { homeSeo, siteOrigin } from '../src/shared/i18n/home-seo'
 
 beforeEach(() => {
   localStorage.clear()
@@ -31,7 +31,7 @@ describe('Chinese and English interface', () => {
     expect(localStorage.getItem(localeStorageKey)).toBeNull()
     updatePageLocale('/')
     expect(document.documentElement.lang).toBe('en')
-    expect(document.title).toBe('cheerfulmusicAi')
+    expect(document.title).toBe(homeSeo.en.title)
     updatePageLocale('/zh/')
     expect(document.documentElement.lang).toBe('zh-CN')
   })

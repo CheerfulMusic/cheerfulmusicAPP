@@ -49,10 +49,16 @@ describe('crawlable site pages', () => {
     const productCopy = landing?.querySelector('p > span[data-nosnippet]')
     expect(productCopy?.textContent).toBe(copy.description)
     expect(productCopy?.textContent).toContain('Cheerful Music')
-    expect(productCopy?.textContent).toContain('cheerfulmusic Ai')
-    expect(productCopy?.textContent).toContain('cheerfulmusicai')
-    expect(productCopy?.textContent).toContain('青风音乐')
-    expect(productCopy?.textContent).toContain('青妙Ai')
+    if (path === '/') {
+      expect(productCopy?.textContent).toContain('cheerfulmusic Ai')
+      expect(productCopy?.textContent?.match(/cheerfulmusicai/gi)).toHaveLength(1)
+      expect(productCopy?.textContent).not.toMatch(/\p{Script=Han}/u)
+    } else {
+      expect(productCopy?.textContent).toContain('青风音乐')
+      expect(productCopy?.textContent).toContain('青妙Ai')
+      expect(productCopy?.textContent).not.toMatch(/cheerfulmusicai/i)
+      expect(landing?.querySelector('nav a[href="/"][lang="en"]')?.textContent).toBe('cheerfulmusic Ai Home')
+    }
     expect(landing?.querySelectorAll('.home-public-info h2')).toHaveLength(2)
     expect(landing?.querySelectorAll('.home-public-info ol li')).toHaveLength(3)
     expect(landing?.querySelectorAll('.home-public-info details summary')).toHaveLength(2)
@@ -82,7 +88,7 @@ describe('crawlable site pages', () => {
     const title = 'cheerfulmusic Ai | Everyone Can Be a Creator'
     const description = 'Create your own song in just a few clicks. No music skills needed.'
     expect(english.title).toBe(title)
-    expect(english.querySelector('main h1')?.textContent).toBe('Everyone Can Be a Creator')
+    expect(english.querySelector('main h1')?.textContent).toBe('cheerfulmusic Ai — Everyone Can Be a Creator')
     expect(english.querySelector('meta[property="og:site_name"]')?.getAttribute('content')).toBe('cheerfulmusic Ai')
     expect(english.querySelector('meta[property="og:title"]')?.getAttribute('content')).toBe(title)
     expect(english.querySelector('meta[name="twitter:title"]')?.getAttribute('content')).toBe(title)
@@ -169,9 +175,7 @@ describe('crawlable site pages', () => {
     const home = english ? '/' : '/zh/'
     const links = page.querySelectorAll(`nav a[href="${home}"]`)
     expect(links).toHaveLength(1)
-    expect(links[0]?.textContent).toContain(english ? 'cheerfulmusic' : '青妙Ai')
-    expect(links[0]?.textContent).toContain('Cheerful Music')
-    if (!english) expect(links[0]?.textContent).toContain('青风音乐')
+    expect(links[0]?.textContent).toBe(english ? 'cheerfulmusic Ai Home' : '青妙Ai 首页（青风音乐 · Cheerful Music）')
     if (path === '/help') {
       expect(page.querySelector('nav a[href="/zh/"]')?.textContent).toContain('青风音乐')
       expect(page.querySelector('nav a[href="/help"]')).toBeNull()
@@ -195,7 +199,7 @@ describe('crawlable site pages', () => {
     updatePageLocale(copy.path)
     expect(document.documentElement.lang).toBe(language)
     expect(page.title).toBe(copy.title)
-    expect(document.title).toBe(copy.tabTitle)
+    expect(document.title).toBe(language === 'en' ? copy.title : copy.tabTitle)
     const description = document.querySelector('meta[name="description"]')?.getAttribute('content')
     expect(description).toBe(copy.searchDescription)
     expect(page.querySelector('main .beta-access-intro')?.textContent).toBe(copy.searchDescription)
@@ -229,7 +233,7 @@ describe('crawlable site pages', () => {
     updatePageLocale('/zh/')
     expect(document.title).toBe('青妙Ai')
     updatePageLocale('/')
-    expect(document.title).toBe('cheerfulmusicAi')
+    expect(document.title).toBe(homeSeo.en.title)
     expect(document.querySelectorAll('link[rel="canonical"]')).toHaveLength(1)
     expect(document.querySelector('link[rel="canonical"]')?.getAttribute('href')).toBe(siteOrigin + '/')
     updatePageLocale('/account')

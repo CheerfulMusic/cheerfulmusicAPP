@@ -11,13 +11,16 @@ defineProps<{ brand: string }>()
       <h1 id="home-hero-title" class="bilingual-headline" :class="{ 'chinese-creator-headline': locale !== 'en' }">
         <template v-if="locale !== 'en'">
           <span class="creator-main-title" lang="zh-CN"><img class="creator-title-art" src="/brand/headline-own-song-regular.svg" alt="" aria-hidden="true"><span class="creator-title-text">{{ homeSeo['zh-CN'].heading }}</span></span>
-          <span class="creator-tagline" lang="en">{{ homeSeo.en.heading }}</span>
+          <span class="creator-tagline" lang="en">{{ homeSeo.en.tagline }}</span>
         </template>
-        <span v-else lang="en">{{ homeSeo.en.heading }}</span>
+        <template v-else>
+          <span class="creator-tagline english-creator-brand" lang="en">{{ homeSeo.en.searchName }}</span>
+          <span lang="en">{{ homeSeo.en.tagline }}</span>
+        </template>
       </h1>
       <p class="p-intro-description bilingual-description">
         <span v-if="locale !== 'en'" lang="zh-CN">用{{ brand }}把你的想法写成歌，无需音乐基础。</span>
-        <span v-else lang="en">Create your own song with {{ brand }}. No music skills needed.</span>
+        <span v-else lang="en">{{ homeSeo.en.searchDescription }}</span>
         <span v-if="locale !== 'en'" class="description-translation" lang="en"><span>Create your own song in just a few clicks.</span> <span>No music skills needed</span></span>
       </p>
       <div class="p-hero-actions">

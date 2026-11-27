@@ -31,7 +31,7 @@ it('switches homepages in both directions while preserving the query and fragmen
   const wrapper = mount(LanguageSwitcher, { global: { plugins: [router] } })
   const hero = mount(HomeHero, { props: { brand: '青妙Ai' }, global: { stubs: { RouterLink: true } } })
   try {
-    for (const [language, tabTitle] of [['zh-CN', '青妙Ai'], ['en', 'cheerfulmusicAi']] as const) {
+    for (const [language, tabTitle] of [['zh-CN', '青妙Ai'], ['en', homeSeo.en.title]] as const) {
       const button = wrapper.get(`button[lang="${language}"]`)
       await button.trigger('click')
       await flushPromises()
@@ -42,12 +42,12 @@ it('switches homepages in both directions while preserving the query and fragmen
       expect(document.querySelector('meta[property="og:title"]')?.getAttribute('content')).toBe(homeSeo[language].title)
       expect(document.querySelector('meta[property="og:site_name"]')?.getAttribute('content')).toBe(homeSeo[language].searchName)
       expect(button.attributes('aria-pressed')).toBe('true')
-      expect(hero.get('.p-intro-description').text()).toContain(homeSeo[language].brand)
+      expect(hero.get('.p-intro-description').text()).toContain(language === 'en' ? homeSeo.en.searchDescription : homeSeo[language].brand)
       expect(hero.findAll('h1')).toHaveLength(1)
       expect(hero.get('h1').attributes('id')).toBe('home-hero-title')
       expect(hero.find('.home-product-title').exists()).toBe(false)
       expect(hero.findAll('h1 > span').map(line => line.text())).toEqual(language === 'en'
-        ? ['Everyone Can Be a Creator']
+        ? ['cheerfulmusic Ai', 'Everyone Can Be a Creator']
         : ['做自己的歌', 'Everyone Can Be a Creator'])
       expect(hero.get('.p-reassurance').text()).toBe(language === 'en'
         ? 'Start with an idea Choose your style Create your own music'

@@ -20,11 +20,11 @@ export const homeSeo = {
     tabTitle: chineseBrand,
     searchDescription: '只需几步，就能创作自己的歌曲。无需音乐基础。',
     aliases: ['青风音乐'],
-    lastModified: '2026-11-26',
+    lastModified: '2026-11-27',
     heading: '做自己的歌',
     tagline: '把你的歌词做成歌',
     invitePrompt: '输入邀请码即可开始创作。',
-    description: `青妙Ai 是青风音乐（Cheerful Music）推出的 AI 音乐创作平台，英文名为 ${englishSearchName}（${compactEnglishName}）。写下歌词或故事，选好曲风和人声，就能创作、试听和分享自己的歌。`,
+    description: '青妙Ai 是青风音乐（Cheerful Music）推出的 AI 音乐创作平台。写下歌词或故事，选好曲风和人声，就能创作、试听和分享自己的歌。',
   },
   en: {
     path: '/',
@@ -37,11 +37,11 @@ export const homeSeo = {
       siteName, 'CheerfulMusic', 'Cheerful Music Ai',
       compactEnglishName, englishTabTitle, 'cheerfulmusicaI', 'cheerfulmusicAI',
     ],
-    lastModified: '2026-11-26',
+    lastModified: '2026-11-27',
     heading: creatorHeadline,
     tagline: creatorHeadline,
     invitePrompt: 'Enter your invitation code to start creating.',
-    description: `Create a song with ${englishSearchName} (${compactEnglishName}), the AI music studio from Cheerful Music (青风音乐), known in Chinese as 青妙Ai. Start with lyrics or a story, choose a style and voice, then listen and share.`,
+    description: `${englishSearchName} (${compactEnglishName}) is an AI music studio from Cheerful Music. Turn your lyrics or story into a song, choose a style and voice, then listen and share.`,
   },
 } as const
 

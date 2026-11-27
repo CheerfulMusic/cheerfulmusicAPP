@@ -56,7 +56,7 @@ export function sitePage(path: string, preferredLocale?: Locale) {
     return {
       path: copy.path,
       language: homeLanguage,
-      heading: copy.heading,
+      heading: homeLanguage === 'en' ? `${copy.searchName} — ${copy.heading}` : copy.heading,
       title: copy.title,
       siteName: copy.searchName,
       description: copy.searchDescription,
@@ -89,7 +89,7 @@ export function landingLinks(language: Locale, path = '/'): { href: string; text
   const onDiscover = discoverLocale(path) !== undefined
   const translations = guide?.translations ?? (onDiscover ? discoverPaths : homePaths)
   const homeLabels = {
-    en: `${homeSeo.en.brand} Home (Cheerful Music)`,
+    en: `${homeSeo.en.searchName} Home`,
     'zh-CN': `${homeSeo['zh-CN'].brand} 首页（青风音乐 · Cheerful Music）`,
   }
   const topics: { href: string; text: string }[] = [
@@ -99,7 +99,7 @@ export function landingLinks(language: Locale, path = '/'): { href: string; text
   ].filter(link => link.href !== path)
   if (guide || onDiscover) topics.unshift({ href: homePaths[language], text: homeLabels[language] })
   return [
-    { href: translations.en, text: path === '/help' ? homeLabels.en : 'English', lang: 'en' },
+    { href: translations.en, text: path === '/zh/' || path === '/help' ? homeLabels.en : 'English', lang: 'en' },
     { href: translations['zh-CN'], text: path === '/' || path === '/help' ? homeLabels['zh-CN'] : '简体中文', lang: 'zh-CN' },
     ...topics,
   ]
