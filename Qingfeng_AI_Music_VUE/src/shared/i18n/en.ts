@@ -2721,4 +2721,6 @@ export const english: Record<string, string> = {
   '列表循环': 'Repeat playlist',
   '播放此歌单后可切换模式': 'Start playing this playlist to change its playback mode',
   '当前作品属于另一个账号。请使用原账号登录查看。': 'These works belong to another account. Sign in to that account to view them.',
+  '账号已切换，请重新下载。': 'Your account has changed. Please start the download again.',
+  '下载解锁结果尚未确认，请稍后重试；已解锁的作品不会重复扣费。': 'The download unlock is still unconfirmed. Please retry shortly; unlocked songs will not be charged again.',
 }

@@ -3,21 +3,70 @@ package com.qingfeng.music.server;
 import com.aliyun.oss.OSS;
 import com.aliyun.oss.ClientException;
 import com.aliyun.oss.OSSException;
+import com.aliyun.oss.OSSClientBuilder;
+import com.aliyun.oss.ClientBuilderConfiguration;
+import com.sun.net.httpserver.HttpServer;
 import com.aliyun.oss.model.*;
 import com.qingfeng.music.infrastructure.storage.*;
+import com.qingfeng.music.media.api.MediaApi;
+import com.qingfeng.music.media.application.MediaRepository;
+import com.qingfeng.music.media.application.MediaService;
+import com.qingfeng.music.work.api.WorkApi;
+import com.qingfeng.music.credits.CreditsLedger;
+import com.qingfeng.music.server.download.DownloadEntitlements;
+import org.springframework.jdbc.core.JdbcTemplate;
 import java.io.*;
 import java.lang.reflect.Proxy;
 import java.net.URI;
+import java.net.InetSocketAddress;
 import java.nio.*;
 import java.nio.file.*;
 import java.util.*;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.*;
+import static org.mockito.ArgumentMatchers.*;
 
 class StorageBoundaryTest {
     @TempDir Path root;
     byte[] wav(){var b=ByteBuffer.allocate(48).order(ByteOrder.LITTLE_ENDIAN);b.put("RIFF".getBytes()).putInt(40).put("WAVEfmt ".getBytes()).putInt(16).putShort((short)1).putShort((short)1).putInt(8000).putInt(16000).putShort((short)2).putShort((short)16).put("data".getBytes()).putInt(4).putInt(0);return b.array();}
+    @Test void unlockProbeRequestsOnlyOneByteFromTheCloudOverHttp()throws Exception{
+        List<String> ranges=new ArrayList<>();
+        List<String> requests=new ArrayList<>();
+        var server=HttpServer.create(new InetSocketAddress("127.0.0.1",0),0);
+        server.createContext("/",exchange->{
+            requests.add(exchange.getRequestMethod()+" "+exchange.getRequestURI()+" Range="+exchange.getRequestHeaders().getFirst("Range"));
+            exchange.getResponseHeaders().set("Connection","close");
+            if("HEAD".equals(exchange.getRequestMethod())){exchange.getResponseHeaders().set("Content-Length","6730414");exchange.sendResponseHeaders(200,-1);exchange.close();return;}
+            ranges.add(exchange.getRequestHeaders().getFirst("Range"));
+            if(!"bytes=0-0".equals(exchange.getRequestHeaders().getFirst("Range"))){exchange.sendResponseHeaders(400,-1);exchange.close();return;}
+            exchange.getResponseHeaders().set("Content-Range","bytes 0-0/6730414");
+            exchange.sendResponseHeaders(206,1);
+            try(var output=exchange.getResponseBody()){output.write(42);}
+        });
+        server.start();
+        var config=new ClientBuilderConfiguration();config.setMaxErrorRetry(0);config.setSocketTimeout(1000);config.setConnectionTimeout(1000);
+        OSS client=new OSSClientBuilder().build("http://127.0.0.1:"+server.getAddress().getPort(),"test-access","test-secret",config);
+        try{
+            var local=new LocalMediaFileStore(root);
+            var cloud=new OssMediaFileStore(client,"qingfeng-test","qingfeng/audio/",local);
+            var route=new RoutingMediaFileStore(local,cloud,true);
+            var repository=mock(MediaRepository.class);
+            var asset=new MediaApi.Asset("asset","work","GENERATED","audio/mpeg",6_730_414,"sha",java.time.Instant.now());
+            when(repository.find("work","asset")).thenReturn(Optional.of(new MediaRepository.Stored(asset,"oss:7bb302ab-b803-4bf6-b507-7ad96fdf90ad.mp3")));
+            var media=new MediaService(mock(WorkApi.class),repository,route,40L*1024*1024);
+            var db=mock(JdbcTemplate.class);var ledger=mock(CreditsLedger.class);
+            when(db.queryForObject(anyString(),eq(Integer.class),any(),any(),any(),any())).thenReturn(0);
+            try{new DownloadEntitlements(db,ledger).unlock("owner","work",media.open("owner","work","asset"));}
+            catch(RuntimeException failure){throw new AssertionError("Storage requests: "+requests,failure);}
+            verify(ledger).debit(eq("owner"),eq(15L),startsWith("download-v1:"));
+            assertEquals(List.of("bytes=0-0"),ranges);
+            var saved=local.save(new ByteArrayInputStream(wav()));
+            assertTrue(route.readable("local:"+saved.key()));
+            assertEquals(1,ranges.size(),"legacy local probes must not contact OSS");
+        }finally{client.shutdown();server.stop(0);}
+    }
     @Test void cloudAdapterKeepsObjectsPrivateAndLegacyLocalFilesReadable()throws Exception{
         Map<String,byte[]> objects=new HashMap<>();List<Object> acls=new ArrayList<>();
         OSS client=(OSS)Proxy.newProxyInstance(OSS.class.getClassLoader(),new Class[]{OSS.class},(proxy,method,args)->switch(method.getName()){

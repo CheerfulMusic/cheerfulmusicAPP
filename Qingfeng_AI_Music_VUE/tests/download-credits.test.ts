@@ -1,13 +1,13 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-const api=vi.hoisted(()=>({ensure:vi.fn(),request:vi.fn(),login:vi.fn()}))
-vi.mock('../src/shared/http/api-client',()=>({ensureCreator:api.ensure,requestJson:api.request,ApiError:class ApiError extends Error {constructor(message:string,public status:number,public code?:string){super(message)}}}))
+const api=vi.hoisted(()=>({ensure:vi.fn(),request:vi.fn(),login:vi.fn(),owner:vi.fn(),credits:vi.fn()}))
+vi.mock('../src/shared/http/api-client',()=>({currentCreatorId:api.owner,ensureCreator:api.ensure,requestJson:api.request,ApiError:class ApiError extends Error {constructor(message:string,public status:number,public code?:string){super(message)}}}))
 vi.mock('../src/shared/identity/login-dialog',()=>({showLoginDialog:api.login}))
-vi.mock('../src/shared/identity/credit-balance',()=>({loadCredits:vi.fn(async()=>undefined)}))
+vi.mock('../src/shared/identity/credit-balance',()=>({loadCredits:api.credits}))
 import { downloadSong } from '../src/modules/works/api/download'
 import { ApiError } from '../src/shared/http/api-client'
 describe('download unlock',()=>{
- afterEach(()=>vi.unstubAllGlobals())
+ afterEach(()=>{vi.unstubAllGlobals();vi.useRealTimers()})
  it.each(['Mozilla/5.0 (Linux; Android 14) MicroMessenger/8.0', 'Mozilla/5.0 (iPhone; CPU iPhone OS 18) MicroMessenger/8.0',
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) MicroMessenger/7.0.20 WindowsWechat/3.9.12',
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) MicroMessenger/6.8.0 MacWechat/3.8.9',
@@ -21,12 +21,12 @@ describe('download unlock',()=>{
   expect(api.ensure).not.toHaveBeenCalled();expect(api.request).not.toHaveBeenCalled();expect(click).not.toHaveBeenCalled()
   closeBrowserDownloadHelp()
  })
- beforeEach(()=>{vi.restoreAllMocks();vi.resetAllMocks();api.ensure.mockResolvedValue(undefined);Object.defineProperty(window,'confirm',{value:vi.fn(),configurable:true});Object.defineProperty(window,'alert',{value:vi.fn(),configurable:true})})
+ beforeEach(()=>{vi.restoreAllMocks();vi.resetAllMocks();api.ensure.mockResolvedValue(undefined);api.owner.mockReturnValue('creator');api.credits.mockResolvedValue(undefined);Object.defineProperty(window,'confirm',{value:vi.fn(),configurable:true});Object.defineProperty(window,'alert',{value:vi.fn(),configurable:true})})
  it('confirms first charge and starts download after unlock',async()=>{
   api.request.mockResolvedValueOnce({unlocked:false,price:15}).mockResolvedValueOnce({unlocked:true,price:15})
   vi.spyOn(window,'confirm').mockReturnValue(true);const click=vi.spyOn(HTMLAnchorElement.prototype,'click').mockImplementation(()=>{})
   expect(await downloadSong('app/works/w/audio/a/download','/song?download=true','song.mp3')).toBe(true)
-  expect(api.request).toHaveBeenNthCalledWith(2,'app/works/w/audio/a/download','POST',{})
+  expect(api.request).toHaveBeenNthCalledWith(2,'app/works/w/audio/a/download','POST',{},30000)
   expect(window.confirm).toHaveBeenCalledWith(expect.stringContaining('15'))
   expect(click).toHaveBeenCalledOnce()
  })
@@ -39,7 +39,7 @@ describe('download unlock',()=>{
   api.request.mockResolvedValueOnce({unlocked:false,price:0}).mockResolvedValueOnce({unlocked:true,price:0})
   const confirm=vi.spyOn(window,'confirm');const click=vi.spyOn(HTMLAnchorElement.prototype,'click').mockImplementation(()=>{})
   expect(await downloadSong('path','/song','song.mp3')).toBe(true)
-  expect(confirm).not.toHaveBeenCalled();expect(api.request).toHaveBeenNthCalledWith(2,'path','POST',{});expect(click).toHaveBeenCalledOnce()
+  expect(confirm).not.toHaveBeenCalled();expect(api.request).toHaveBeenNthCalledWith(2,'path','POST',{},30000);expect(click).toHaveBeenCalledOnce()
  })
  it('does not download after cancelled confirmation or insufficient credits',async()=>{
   api.request.mockResolvedValueOnce({unlocked:false,price:10});vi.spyOn(window,'confirm').mockReturnValue(false)
@@ -53,5 +53,65 @@ describe('download unlock',()=>{
   api.request.mockRejectedValueOnce(new ApiError('请先登录',403,'DOWNLOAD_LOGIN_REQUIRED'))
   const click=vi.spyOn(HTMLAnchorElement.prototype,'click').mockImplementation(()=>{})
   expect(await downloadSong('path','/song','song.mp3')).toBe(false);expect(api.login).toHaveBeenCalledOnce();expect(click).not.toHaveBeenCalled()
+ })
+ it.each([0,408,502])('recovers a committed unlock after an uncertain POST outcome (%i)',async status=>{
+  api.request.mockResolvedValueOnce({unlocked:false,price:15})
+   .mockRejectedValueOnce(new ApiError('connection lost',status))
+   .mockResolvedValueOnce({unlocked:true,price:15})
+  vi.spyOn(window,'confirm').mockReturnValue(true)
+  const click=vi.spyOn(HTMLAnchorElement.prototype,'click').mockImplementation(()=>{})
+  expect(await downloadSong('path','/song','song.mp3')).toBe(true)
+  expect(api.request.mock.calls.filter(([,method])=>method==='POST')).toHaveLength(1)
+  expect(api.request).toHaveBeenNthCalledWith(3,'path','GET',undefined,expect.any(Number))
+  expect(click).toHaveBeenCalledOnce();expect(api.credits).toHaveBeenCalledOnce();expect(window.alert).not.toHaveBeenCalled()
+ })
+ it('waits for a late commit without resubmitting the paid operation',async()=>{
+  vi.useFakeTimers()
+  api.request.mockResolvedValueOnce({unlocked:false,price:15})
+   .mockRejectedValueOnce(new ApiError('timeout',408))
+   .mockResolvedValueOnce({unlocked:false,price:15})
+   .mockRejectedValueOnce(new ApiError('status unavailable',502))
+   .mockResolvedValueOnce({unlocked:true,price:15})
+  vi.spyOn(window,'confirm').mockReturnValue(true)
+  const click=vi.spyOn(HTMLAnchorElement.prototype,'click').mockImplementation(()=>{})
+  const pending=downloadSong('path','/song','song.mp3')
+  await vi.advanceTimersByTimeAsync(1)
+  expect(click).not.toHaveBeenCalled()
+  await vi.runAllTimersAsync()
+  expect(await pending).toBe(true)
+  expect(click).toHaveBeenCalledOnce()
+  expect(api.request.mock.calls.filter(([,method])=>method==='POST')).toHaveLength(1)
+ })
+ it('stops after bounded recovery and allows a free retry when the unlock later appears',async()=>{
+  vi.useFakeTimers()
+  api.request.mockResolvedValueOnce({unlocked:false,price:15})
+   .mockRejectedValueOnce(new ApiError('timeout',408))
+   .mockResolvedValue({unlocked:false,price:15})
+  vi.spyOn(window,'confirm').mockReturnValue(true)
+  const click=vi.spyOn(HTMLAnchorElement.prototype,'click').mockImplementation(()=>{})
+  const pending=downloadSong('path','/song','song.mp3')
+  await vi.runAllTimersAsync()
+  expect(await pending).toBe(false);expect(click).not.toHaveBeenCalled()
+  expect(window.alert).toHaveBeenCalledWith(expect.stringContaining('已解锁的作品不会重复扣费'))
+  api.request.mockResolvedValueOnce({unlocked:true,price:15})
+  expect(await downloadSong('path','/song','song.mp3')).toBe(true)
+  expect(api.request.mock.calls.filter(([,method])=>method==='POST')).toHaveLength(1)
+ })
+ it('coalesces repeated clicks into one confirmation, unlock and file request',async()=>{
+  api.request.mockResolvedValueOnce({unlocked:false,price:15}).mockResolvedValueOnce({unlocked:true,price:15})
+  vi.spyOn(window,'confirm').mockReturnValue(true)
+  const click=vi.spyOn(HTMLAnchorElement.prototype,'click').mockImplementation(()=>{})
+  expect(await Promise.all([downloadSong('path','/song','song.mp3'),downloadSong('path','/song','song.mp3')])).toEqual([true,true])
+  expect(window.confirm).toHaveBeenCalledOnce();expect(click).toHaveBeenCalledOnce()
+  expect(api.request.mock.calls.filter(([,method])=>method==='POST')).toHaveLength(1)
+ })
+ it('does not continue downloading into a different signed-in account',async()=>{
+  api.request.mockResolvedValueOnce({unlocked:false,price:15}).mockImplementationOnce(async()=>{
+   api.owner.mockReturnValue('other-creator');return {unlocked:true,price:15}
+  })
+  vi.spyOn(window,'confirm').mockReturnValue(true)
+  const click=vi.spyOn(HTMLAnchorElement.prototype,'click').mockImplementation(()=>{})
+  expect(await downloadSong('path','/song','song.mp3')).toBe(false)
+  expect(click).not.toHaveBeenCalled();expect(window.alert).toHaveBeenCalledWith('账号已切换，请重新下载。')
  })
 })

@@ -68,6 +68,12 @@ public final class OssMediaFileStore implements MediaFileStore {
             };
         }catch(RuntimeException e){throw new IOException("云端音频暂不可用",e);}
     }
+    @Override public boolean readable(String value)throws IOException{
+        // Closing a whole-object response may drain the remaining audio. Bound the HTTP response itself.
+        var request=new GetObjectRequest(bucket,key(value));request.setRange(0,0);
+        try(var object=client.getObject(request)){return object.getObjectContent().read()!=-1;}
+        catch(RuntimeException e){throw new IOException("云端音频暂不可用",e);}
+    }
     public boolean exists(String value){try{return client.doesObjectExist(bucket,key(value));}catch(RuntimeException e){throw new DomainException("MEDIA_STORAGE_UNAVAILABLE","云端音频暂不可用");}}
     public void discard(String value)throws IOException{try{client.deleteObject(bucket,key(value));}catch(RuntimeException e){throw new IOException("云端音频清理失败");}}
     private String key(String value){if(value==null||!value.matches("[0-9a-f-]{36}\\.(wav|mp3)"))throw new IllegalArgumentException("非法存储标识");return prefix+value;}

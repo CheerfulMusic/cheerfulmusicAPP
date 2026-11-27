@@ -44,8 +44,8 @@ public class DownloadEntitlements {
     public void unlock(String owner, String work, MediaApi.Content content) {
         if (unlocked(owner, work)) return;
         if (content == null || content.size() <= 0) throw unavailable();
-        try (var stream = content.source().open()) {
-            if (stream.read() == -1) throw unavailable();
+        try {
+            if (!content.source().readable()) throw unavailable();
         } catch (IOException e) {
             throw unavailable();
         }

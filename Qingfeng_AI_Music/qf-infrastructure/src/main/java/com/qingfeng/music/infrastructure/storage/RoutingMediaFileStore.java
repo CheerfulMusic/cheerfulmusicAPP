@@ -15,6 +15,7 @@ public final class RoutingMediaFileStore implements MediaFileStore {
     private String value(String key){return key.startsWith("oss:")?key.substring(4):key.startsWith("local:")?key.substring(6):key;}
     public InputStream open(String key)throws IOException{return store(key).open(value(key));}
     public InputStream open(String key,long offset)throws IOException{return store(key).open(value(key),offset);}
+    public boolean readable(String key)throws IOException{return store(key).readable(value(key));}
     public boolean exists(String key){return store(key).exists(value(key));}
     public void discard(String key)throws IOException{store(key).discard(value(key));}
 }

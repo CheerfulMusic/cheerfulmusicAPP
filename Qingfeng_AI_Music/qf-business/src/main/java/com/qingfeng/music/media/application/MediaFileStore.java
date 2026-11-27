@@ -8,6 +8,8 @@ public interface MediaFileStore {
         public UploadFailure(Throwable cause){super("云端音频保存失败",cause);}
     }
     InputStream open(String key)throws IOException;
+    /** Check readable bytes without transferring a whole remote recording. */
+    default boolean readable(String key)throws IOException{try(var input=open(key)){return input.read()!=-1;}}
     default InputStream open(String key,long offset)throws IOException{var input=open(key);try{input.skipNBytes(offset);return input;}catch(IOException e){input.close();throw e;}}
     boolean exists(String key);
     void discard(String key)throws IOException;

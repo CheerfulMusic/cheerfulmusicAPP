@@ -28,5 +28,7 @@ public interface MediaApi {
     @FunctionalInterface interface Source{
         InputStream open()throws IOException;
         default InputStream open(long offset)throws IOException{var input=open();try{input.skipNBytes(offset);return input;}catch(IOException e){input.close();throw e;}}
+        /** Availability check; remote sources should request only the first byte. */
+        default boolean readable()throws IOException{try(var input=open()){return input.read()!=-1;}}
     }
 }
